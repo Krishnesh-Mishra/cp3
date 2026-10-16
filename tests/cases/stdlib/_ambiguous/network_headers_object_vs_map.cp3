@@ -1,0 +1,2 @@
+import { fetch } from "std/network";
+let res = await fetch("https://example.com", { headers: { "X-Test": "1" } });

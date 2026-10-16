@@ -1,0 +1,4 @@
+import console from "std/console";
+async function f(): Promise<void> { return; }
+await f();
+console.log("done");

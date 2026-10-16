@@ -1,0 +1,2 @@
+class A { function m(): number { return 1; } }
+class B extends A { function m(): number { return super.m() + 1; } }

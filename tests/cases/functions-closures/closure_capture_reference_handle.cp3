@@ -1,0 +1,7 @@
+import console from "std/console";
+function make(): () => number {
+  let box = { v: 1 };
+  return () => box.v;
+}
+let f = make();
+console.log(`${f()}`);

@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: is an out-of-bounds array access a catchable thrown error or a hard runtime panic (CLI §2 calls it a runtime crash)?"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: the local-vs-UTC behavior of getDate() on a Z-suffixed ISO string (which can shift the day) is not pinned."
+  }
+}

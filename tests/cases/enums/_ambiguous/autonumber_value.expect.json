@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: the underlying numeric value of an auto-incremented member after an explicit initializer is not observable through any spec-pinned operation"
+  }
+}

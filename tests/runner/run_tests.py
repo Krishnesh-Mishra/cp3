@@ -10,9 +10,19 @@
 # exits with code 3 and prints the "not implemented" marker is reported as
 # SKIPPED, never a crash. When nothing is runnable the harness exits 0.
 #
+# Cases living under a `_ambiguous/` directory are *open-question markers*, not
+# assertions (see DECISIONS.md, "Harness policy for `_ambiguous/` cases"). They
+# are discovered and reported in their own `ambiguous` bucket with the question
+# text pulled from `error.contains`, and are never counted as pass/fail and
+# never affect the exit code. Pass --strict-ambiguous to run them as ordinary
+# cases instead (used when a resolution lands and a marker is promoted into its
+# parent category).
+#
 # Usage:
 #   python tests/runner/run_tests.py [--cp3c PATH] [--cases DIR]
 #                                    [--filter SUBSTR] [--json] [--verbose]
+#                                    [--strict-ambiguous]
+#                                    [--write-registry [PATH]]
 #
 # Exit code: 0 when no case failed (all passed or all skipped), 1 otherwise.
 # =============================================================================
@@ -32,6 +42,14 @@ from typing import Optional
 # --- Exit codes shared with src/cli/include/cp3/cli.hpp ----------------------
 STUB_EXIT_CODE = 3
 STUB_MARKER = "not implemented"
+
+# --- Open-question markers ---------------------------------------------------
+# Any path with this directory segment is a marker, not an assertion.
+AMBIGUOUS_DIR = "_ambiguous"
+# The question text is carried verbatim in `error.contains`, prefixed with
+# "AMBIGUOUS:". Strip that prefix for display/registry purposes.
+_AMBIGUOUS_PREFIX = re.compile(r"^\s*AMBIGUOUS\s*[:\-]\s*", re.IGNORECASE)
+DEFAULT_REGISTRY = "AMBIGUITIES.md"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -142,6 +160,88 @@ def diagnostic_matches(expected: dict, diag: Diagnostic) -> bool:
     return True
 
 
+def is_ambiguous_parts(parts: tuple[str, ...]) -> bool:
+    """True when a relative path contains an exact `_ambiguous` segment."""
+    return AMBIGUOUS_DIR in parts
+
+
+def extract_question(spec: dict) -> str:
+    """Pull the open question out of a marker's `error.contains`.
+
+    The spec-test agents wrote `{"error": {"contains": "AMBIGUOUS: <question>"}}`.
+    Returns the question text with the `AMBIGUOUS:` prefix removed, or a
+    descriptive placeholder when the marker is malformed.
+    """
+    err = spec.get("error")
+    raw = ""
+    if isinstance(err, dict) and err.get("contains") is not None:
+        raw = str(err.get("contains"))
+    elif isinstance(err, str):
+        raw = err
+    elif err is not None:
+        raw = str(err)
+    text = _AMBIGUOUS_PREFIX.sub("", raw).strip()
+    return text or "(no question text)"
+
+
+def _md_cell(text: str) -> str:
+    """Make text safe for a single Markdown table cell."""
+    return " ".join(text.split()).replace("|", "\\|")
+
+
+def render_registry(markers: list["Case"], cases_dir: Path) -> str:
+    """Render the AMBIGUITIES.md registry, grouped by category."""
+    groups: dict[str, list[tuple[str, str]]] = {}
+    for case in markers:
+        try:
+            rel = case.expect_path.relative_to(cases_dir).as_posix()
+        except ValueError:  # pragma: no cover - defensive
+            rel = case.expect_path.as_posix()
+        # Category = the marker's parent folder chain minus the `_ambiguous` part.
+        parent = [p for p in Path(rel).parts[:-1] if p != AMBIGUOUS_DIR]
+        group = "/".join(parent) or "(root)"
+        groups.setdefault(group, []).append((rel, case.question))
+
+    out: list[str] = []
+    out.append("# cp3c open spec questions (`_ambiguous/` registry)")
+    out.append("")
+    out.append(
+        "Every file below is an **open-question marker**, not a conformance "
+        "assertion: it records a point the spec does not pin down. The harness "
+        "(`tests/runner/run_tests.py`) discovers them, reports them in a separate "
+        "`ambiguous` bucket, and never counts them as pass or fail."
+    )
+    out.append("")
+    out.append(
+        "This file is generated. Regenerate it with:"
+    )
+    out.append("")
+    out.append("```bash")
+    out.append("python tests/runner/run_tests.py --write-registry")
+    out.append("```")
+    out.append("")
+    out.append(f"**Total markers: {len(markers)}** across {len(groups)} categor"
+               f"{'y' if len(groups) == 1 else 'ies'}.")
+    out.append("")
+    out.append("| Category | Markers |")
+    out.append("| --- | ---: |")
+    for group in sorted(groups):
+        out.append(f"| `{group}` | {len(groups[group])} |")
+    out.append(f"| **Total** | **{len(markers)}** |")
+    out.append("")
+
+    for group in sorted(groups):
+        out.append(f"## `{group}`")
+        out.append("")
+        out.append("| case file | question |")
+        out.append("| --- | --- |")
+        for rel, question in sorted(groups[group]):
+            out.append(f"| `{rel}` | {_md_cell(question)} |")
+        out.append("")
+
+    return "\n".join(out).rstrip() + "\n"
+
+
 # --- Case model --------------------------------------------------------------
 @dataclass
 class Case:
@@ -150,6 +250,8 @@ class Case:
     cp3_path: Path
     expect_path: Path
     spec: dict = field(default_factory=dict)
+    ambiguous: bool = False
+    question: str = ""
 
     @property
     def display(self) -> str:
@@ -159,7 +261,7 @@ class Case:
 @dataclass
 class Outcome:
     case: Case
-    status: str  # "passed" | "failed" | "skipped"
+    status: str  # "passed" | "failed" | "skipped" | "ambiguous"
     detail: str = ""
 
 
@@ -192,7 +294,11 @@ def discover_cases(cases_dir: Path, filter_substr: Optional[str]) -> tuple[list[
         except (OSError, ValueError) as exc:
             warnings.append(f"{rel_str}: could not read/parse expect JSON ({exc})")
 
-        cases.append(Case(category, stem, cp3_path, expect_path, spec))
+        ambiguous = is_ambiguous_parts(rel.parts)
+        question = extract_question(spec) if ambiguous else ""
+        cases.append(
+            Case(category, stem, cp3_path, expect_path, spec, ambiguous, question)
+        )
     return cases, warnings
 
 
@@ -311,39 +417,78 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="print every case, not just failures")
+    parser.add_argument("--strict-ambiguous", dest="strict_ambiguous", action="store_true",
+                        help="run `_ambiguous/` markers as ordinary cases (opt-in; they "
+                             "then count as pass/fail and can affect the exit code)")
+    parser.add_argument("--write-registry", dest="write_registry", nargs="?", const="",
+                        default=None, metavar="PATH",
+                        help="write the `_ambiguous/` marker registry and exit "
+                             "(default: tests/cases/AMBIGUITIES.md)")
     parser.add_argument("--timeout", type=float, default=60.0,
                         help="per-case timeout in seconds (default: 60)")
     args = parser.parse_args(argv)
 
     cases_dir = Path(args.cases)
     cases, warnings = discover_cases(cases_dir, args.filter_substr)
+
+    # --- registry generation (opt-in side effect, then exit) ------------------
+    if args.write_registry is not None:
+        markers = [c for c in cases if c.ambiguous]
+        dest = Path(args.write_registry) if args.write_registry else cases_dir / DEFAULT_REGISTRY
+        try:
+            dest.write_text(render_registry(markers, cases_dir), encoding="utf-8")
+        except OSError as exc:
+            print(f"error: could not write registry to {dest} ({exc})", file=sys.stderr)
+            return 1
+        print(f"wrote {len(markers)} ambiguity marker(s) to {dest}")
+        return 0
+
     compiler = _resolve_compiler(args.cp3c)
+    compiler_missing = compiler is None or not compiler.is_file()
+    missing_reason = "cp3c executable not found"
+
+    def run_as_ordinary(selected: list[Case], sink: list[Outcome]) -> None:
+        for case in selected:
+            if compiler_missing:
+                sink.append(Outcome(case, "skipped", missing_reason))
+            else:
+                sink.append(evaluate(case, compiler, args.timeout))
 
     outcomes: list[Outcome] = []
-    compiler_missing = compiler is None or not compiler.is_file()
-    if compiler_missing:
-        reason = "cp3c executable not found"
-        outcomes = [Outcome(c, "skipped", reason) for c in cases]
+    if args.strict_ambiguous:
+        # Opt-in: markers run like any other case (they may pass, fail, or skip).
+        run_as_ordinary(cases, outcomes)
     else:
+        # Default: markers are discovered and reported, never asserted against.
         for case in cases:
-            outcomes.append(evaluate(case, compiler, args.timeout))
+            if case.ambiguous:
+                outcomes.append(Outcome(case, "ambiguous", case.question))
+        run_as_ordinary([c for c in cases if not c.ambiguous], outcomes)
 
     passed = sum(1 for o in outcomes if o.status == "passed")
     failed = sum(1 for o in outcomes if o.status == "failed")
     skipped = sum(1 for o in outcomes if o.status == "skipped")
+    ambiguous = sum(1 for o in outcomes if o.status == "ambiguous")
 
     if args.json:
         payload = {
             "compiler": str(compiler) if compiler else None,
             "casesDir": str(cases_dir),
+            "strictAmbiguous": args.strict_ambiguous,
             "found": len(cases),
             "passed": passed,
             "failed": failed,
             "skipped": skipped,
+            "ambiguous": ambiguous,
             "runnable": passed + failed > 0,
             "warnings": warnings,
             "results": [
-                {"case": o.case.display, "status": o.status, "detail": o.detail}
+                {
+                    "case": o.case.display,
+                    "status": o.status,
+                    "detail": o.detail,
+                    **({"question": o.case.question} if o.status == "ambiguous" else {}),
+                }
                 for o in outcomes
             ],
         }
@@ -366,16 +511,21 @@ def main(argv: Optional[list[str]] = None) -> int:
                 print(f"  ok   {c}")
         elif outcome.status == "failed":
             print(f"  FAIL {c}: {outcome.detail}")
+        elif outcome.status == "ambiguous":
+            # Always reported: this is the lead's worklist of open questions.
+            print(f"  amb  {c}: {outcome.detail}")
         else:  # skipped
             if args.verbose or (passed + failed == 0):
                 print(f"  skip {c} ({outcome.detail})")
 
     print()
+    summary = (f"{len(cases)} found, {passed} passed, {failed} failed, "
+               f"{skipped} skipped, {ambiguous} ambiguous")
     if passed + failed == 0:
-        print(f"{len(cases)} found, nothing runnable yet "
-              f"({skipped} skipped); treating as success while cp3c is a scaffold.")
+        print(f"{summary}; nothing runnable yet, treating as success while cp3c "
+              f"is a scaffold.")
     else:
-        print(f"{len(cases)} found, {passed} passed, {failed} failed, {skipped} skipped.")
+        print(f"{summary}.")
 
     return 0 if failed == 0 else 1
 

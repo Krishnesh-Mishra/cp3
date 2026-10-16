@@ -1,0 +1,4 @@
+import { WebSocketServer } from "std/network";
+let wss = new WebSocketServer({ port: 8080 });
+wss.on("connection", (ws) => { ws.send("echo"); });
+wss.close();

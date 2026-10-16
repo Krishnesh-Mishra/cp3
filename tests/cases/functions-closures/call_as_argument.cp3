@@ -1,0 +1,4 @@
+import console from "std/console";
+function add(a: number, b: number): number { return a + b; }
+function twice(f: (a: number, b: number) => number): number { return f(2, 3) * 2; }
+console.log(`${twice(add)}`);

@@ -1,0 +1,3 @@
+import console from "std/console";
+import { Buffer } from "std/buffer";
+console.log(Buffer.from("hello").toString("base64"));

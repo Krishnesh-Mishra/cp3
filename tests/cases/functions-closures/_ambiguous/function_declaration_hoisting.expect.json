@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: Are function declarations hoisted so they may be called before their textual definition (JS behavior), or must they be defined first?"
+  }
+}

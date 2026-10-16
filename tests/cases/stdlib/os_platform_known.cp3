@@ -1,0 +1,3 @@
+import console from "std/console";
+import os from "std/os";
+console.log(["windows", "macos", "linux"].includes(os.platform()) ? "ok" : "bad");

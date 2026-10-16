@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: Can a generic class's type argument be inferred from later usage (`new Box()` with no `<T>`), or must it always be written explicitly (`new Box<number>()` as every spec example does)?"
+  }
+}

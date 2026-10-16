@@ -53,6 +53,7 @@ add_library(cp3_common STATIC
     "${CP3_SRC_DIR}/common/src/token.cpp"
     "${CP3_SRC_DIR}/common/src/ast.cpp"
     "${CP3_SRC_DIR}/common/src/module.cpp"
+    "${CP3_SRC_DIR}/common/src/types.cpp"
     "${CP3_SRC_DIR}/common/src/version.cpp"
 )
 target_include_directories(cp3_common PUBLIC "${CP3_SRC_DIR}/common/include")

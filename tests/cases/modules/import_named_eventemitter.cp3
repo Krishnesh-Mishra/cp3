@@ -1,0 +1,4 @@
+import { EventEmitter } from "std/events";
+import console from "std/console";
+let e = new EventEmitter();
+console.log("ok");

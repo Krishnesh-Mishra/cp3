@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: Is a `super` keyword provided to call a parent method? The spec documents single `extends` but never mentions `super`."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: what does `await` on a non-Promise value do (JS unwraps it)? Not specified."
+  }
+}

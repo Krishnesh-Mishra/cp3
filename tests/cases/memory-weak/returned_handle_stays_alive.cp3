@@ -1,0 +1,4 @@
+import console from "std/console";
+function inner(): { data: number } { return { data: 123 }; }
+let d = inner();
+console.log(`${d.data}`);

@@ -1,0 +1,2 @@
+import { env } from "std/env";
+env.load("./some/.env");

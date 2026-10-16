@@ -1,0 +1,4 @@
+import console from "std/console";
+import process from "std/process";
+let result = await process.exec("git", ["--version"]);
+console.log(`${result.exitCode}`);

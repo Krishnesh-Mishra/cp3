@@ -1,0 +1,4 @@
+import console from "std/console";
+let squares = [0, 0, 0, 0];
+parallel.for(0..squares.length, (i) => { squares[i] = i * i; });
+console.log(squares.join(","));

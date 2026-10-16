@@ -1,0 +1,6 @@
+import console from "std/console";
+try {
+  try {
+    try { throw "x"; } catch (e) { console.log("level3"); throw e; }
+  } catch (e) { console.log("level2"); throw e; }
+} catch (e) { console.log("level1"); }

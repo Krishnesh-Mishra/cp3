@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: Local module specifier form: bare `base.cp3` (as the spec's own `import worker from \"worker.cp3\"` example) vs. ES-relative `./base.cp3`. The spec says 'plain ES module semantics' but its example is bare."
+  }
+}

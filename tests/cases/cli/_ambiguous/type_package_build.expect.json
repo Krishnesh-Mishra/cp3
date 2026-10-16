@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: producing a .cp3pak from a package project is an artifact/tooling behavior, not a .cp3 case."
+  }
+}

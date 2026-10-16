@@ -1,0 +1,8 @@
+import console from "std/console";
+import crypto from "std/crypto";
+try {
+  crypto.AES256Decrypt("wrongkey", crypto.AES256("somekey", "secret"));
+  console.log("no");
+} catch (e) {
+  console.log("bad");
+}

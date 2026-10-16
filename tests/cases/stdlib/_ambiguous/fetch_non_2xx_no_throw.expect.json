@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: fetch not throwing on 4xx/5xx is pinned, but observing it needs a live server plus a network round trip the single-file harness cannot pin deterministically."
+  }
+}

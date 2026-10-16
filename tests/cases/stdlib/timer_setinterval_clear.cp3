@@ -1,0 +1,5 @@
+import console from "std/console";
+let n = 0;
+let id = setInterval(() => { n = n + 1; if (n === 2) { clearInterval(id); } }, 1);
+await sleep(20);
+console.log(`${n}`);

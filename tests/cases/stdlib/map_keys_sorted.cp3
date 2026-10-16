@@ -1,0 +1,5 @@
+import console from "std/console";
+import { Map, Set } from "std/collections";
+let m = new Map<string, number>();
+m.set("b", 2); m.set("a", 1);
+console.log(m.keys().sort().join(","));

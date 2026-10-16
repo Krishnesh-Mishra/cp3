@@ -1,0 +1,4 @@
+import console from "std/console";
+enum Status { Active = "active", Inactive = "inactive" }
+let s: Status = Status.Inactive;
+console.log(s === Status.Inactive);

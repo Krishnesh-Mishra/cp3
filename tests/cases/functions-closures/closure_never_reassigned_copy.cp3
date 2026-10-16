@@ -1,0 +1,7 @@
+import console from "std/console";
+function make(): (x: number) => number {
+  let base = 100;
+  return (x) => base + x;
+}
+let add100 = make();
+console.log(`${add100(1)} ${add100(2)}`);

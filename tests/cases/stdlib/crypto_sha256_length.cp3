@@ -1,0 +1,3 @@
+import console from "std/console";
+import crypto from "std/crypto";
+console.log(`${crypto.sha256("abc").length}`);

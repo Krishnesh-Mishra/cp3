@@ -1,0 +1,6 @@
+import fs from "std/fs";
+let rs = fs.readFileStream("x.txt");
+rs.on("data", (chunk) => { chunk.toString(); });
+let ws = fs.writeFileStream("y.txt");
+ws.write("data");
+ws.end();

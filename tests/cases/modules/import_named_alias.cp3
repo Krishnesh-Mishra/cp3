@@ -1,0 +1,5 @@
+import { Map as M } from "std/collections";
+import console from "std/console";
+let m = new M<string, number>();
+m.set("a", 1);
+console.log(`${m.get("a")}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+import { fetch } from "std/network";
+let res = await fetch("https://example.com");
+console.log(`${res.status}`);

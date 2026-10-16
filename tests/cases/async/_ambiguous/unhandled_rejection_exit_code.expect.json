@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: the process terminating on an unhandled rejection is pinned, but the exact exit code and printed diagnostics are not."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: whether `typeof` narrowing works directly on the `unknown` result of untyped JSON.parse is not shown."
+  }
+}

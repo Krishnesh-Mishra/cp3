@@ -1,0 +1,5 @@
+import console from "std/console";
+for (let i = 0; i < 3; i++) {
+  await sleep(0);
+  console.log(`${i}`);
+}

@@ -1,0 +1,5 @@
+import console from "std/console";
+function appendBang(ref s: string): void { s = s + "!"; }
+let t = "hi";
+appendBang(t);
+console.log(t);

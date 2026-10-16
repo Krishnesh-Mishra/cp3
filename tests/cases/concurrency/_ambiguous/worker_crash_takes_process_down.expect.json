@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: the spec says a worker-thread crash can take the whole program down, but the observable exit code/output is not pinned."
+  }
+}

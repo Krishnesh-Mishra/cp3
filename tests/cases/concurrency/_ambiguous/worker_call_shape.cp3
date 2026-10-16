@@ -1,0 +1,2 @@
+// import worker from "x.cp3"; let r = await worker(1);
+// Is `worker(...)` the called default export of an imported .cp3 file?

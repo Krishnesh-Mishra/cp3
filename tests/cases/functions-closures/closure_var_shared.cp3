@@ -1,0 +1,9 @@
+import console from "std/console";
+function make(): () => number {
+  var n = 0;
+  return () => { n = n + 1; return n; };
+}
+let f = make();
+f();
+f();
+console.log(`${f()}`);

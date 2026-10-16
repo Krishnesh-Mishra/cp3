@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "level3\nlevel2\nlevel1\n",
+  "exitCode": 0
+}

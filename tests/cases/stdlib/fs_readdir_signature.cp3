@@ -1,0 +1,2 @@
+import fs from "std/fs";
+let files: string[] = fs.readdirSync(".");

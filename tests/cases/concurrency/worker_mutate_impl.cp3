@@ -1,0 +1,4 @@
+export default (data: { value: number }): number => {
+  data.value = 99;
+  return data.value;
+};

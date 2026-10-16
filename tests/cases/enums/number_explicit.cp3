@@ -1,4 +1,0 @@
-import console from "std/console";
-enum E { A = 5, B = 10 }
-console.log(E.A);
-console.log(E.B);

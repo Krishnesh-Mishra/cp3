@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: cp3 install's network/registry behavior is not expressible as a .cp3 case."
+  }
+}

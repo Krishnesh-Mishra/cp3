@@ -1,0 +1,4 @@
+import console from "std/console";
+import Math from "std/math";
+let r = Math.random();
+console.log(r >= 0 && r < 1 ? "ok" : "bad");

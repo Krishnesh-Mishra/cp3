@@ -1,0 +1,6 @@
+import console from "std/console";
+import fs from "std/fs";
+await fs.writeFile("__cp3_fs_async__.txt", "async-hello");
+let s = await fs.readFile("__cp3_fs_async__.txt");
+console.log(s);
+await fs.unlink("__cp3_fs_async__.txt");

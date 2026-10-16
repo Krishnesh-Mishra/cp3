@@ -1,0 +1,2 @@
+import console from "std/console";
+console.log("5".padEnd(3, "0"));

@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: ordering between a 0ms timer and an already-resolved await (microtask vs macrotask) is not pinned."
+  }
+}

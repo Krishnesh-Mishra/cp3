@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: Is a missing `return` in a function declared to return `number` a compile error, or does it return a default value? Not addressed by the spec."
+  }
+}

@@ -1,0 +1,5 @@
+import console from "std/console";
+class Parent { name: string; }
+class Child { weak parent: Parent | undefined; }
+let c = new Child();
+console.log(c.parent.name);

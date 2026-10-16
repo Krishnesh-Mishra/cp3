@@ -1,0 +1,2 @@
+import process from "std/process";
+process.exit(3);

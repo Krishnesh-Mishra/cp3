@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: what is the observable exit code / output of an uncaught top-level `throw`? Only unhandled *rejections* are pinned to terminate the process."
+  }
+}

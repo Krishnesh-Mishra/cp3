@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: npm-style pre*/post* lifecycle hooks run around CLI commands, not inside a .cp3 program."
+  }
+}

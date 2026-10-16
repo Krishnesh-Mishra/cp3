@@ -1,0 +1,6 @@
+import console from "std/console";
+import fs from "std/fs";
+fs.writeFileSync("__cp3_fs_roundtrip__.txt", "hello");
+let s = fs.readFileSync("__cp3_fs_roundtrip__.txt");
+console.log(s);
+fs.unlinkSync("__cp3_fs_roundtrip__.txt");

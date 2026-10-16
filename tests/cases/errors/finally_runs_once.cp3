@@ -1,0 +1,4 @@
+import console from "std/console";
+let n = 0;
+try { console.log("t"); } catch (e) { } finally { n = n + 1; }
+console.log(`finally-count=${n}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+enum Color { Red, Green, Blue }
+let c: Color = Color.Red;
+console.log(c === Color.Blue);

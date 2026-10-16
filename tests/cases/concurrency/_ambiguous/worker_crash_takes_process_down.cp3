@@ -1,0 +1,1 @@
+// a worker whose default export throws: crash can take the whole process down

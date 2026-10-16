@@ -1,0 +1,4 @@
+import console from "std/console";
+let a: number[] = [];
+parallel.for(0..0, (i) => { a[i] = i; });
+console.log(`${a.length}`);

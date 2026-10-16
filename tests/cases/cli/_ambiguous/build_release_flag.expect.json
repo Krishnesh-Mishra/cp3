@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: the --release build profile (whole-program LTO) has no observable effect inside a .cp3 program."
+  }
+}

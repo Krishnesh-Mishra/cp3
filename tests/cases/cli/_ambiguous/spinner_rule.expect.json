@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: the spinner rule is a CLI UX property with no .cp3-observable semantics."
+  }
+}

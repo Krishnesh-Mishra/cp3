@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: the spec pins that a captured-let reassignment inside parallel.* is a compile error, but not the diagnostic wording/code."
+  }
+}

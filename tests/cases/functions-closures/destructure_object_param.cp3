@@ -1,0 +1,5 @@
+import console from "std/console";
+function greet({ name, age }: { name: string, age: number }): string {
+  return name + age.toString();
+}
+console.log(greet({ name: "Ada", age: 36 }));

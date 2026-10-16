@@ -1,0 +1,3 @@
+import console from "std/console";
+let obj = { double: (n: number): number => n * 2 };
+console.log(`${obj.double(5)}`);

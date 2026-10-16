@@ -1,0 +1,4 @@
+import console from "std/console";
+async function f(n: number, t: number): Promise<number> { await sleep(t); return n; }
+let r = await Promise.race([f(1, 5), f(2, 50)]);
+console.log(`${r}`);

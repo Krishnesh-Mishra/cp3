@@ -1,0 +1,2 @@
+import fs from "std/fs";
+fs.mkdirSync("__cp3_dir__", true);

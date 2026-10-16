@@ -1,0 +1,4 @@
+import console from "std/console";
+interface Fn { run: (n: number) => number; }
+let f: Fn = { run: (n) => n * 3 };
+console.log(`${f.run(2)}`);

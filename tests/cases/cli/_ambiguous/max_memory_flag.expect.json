@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: the --max-memory codegen cap is a CLI flag with no .cp3-observable semantics."
+  }
+}

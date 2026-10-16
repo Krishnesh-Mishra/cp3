@@ -1,0 +1,4 @@
+import console from "std/console";
+for (let i = 0; i < 3; i++) {
+  try { if (i === 1) { break; } console.log(`i=${i}`); } finally { console.log("fin"); }
+}

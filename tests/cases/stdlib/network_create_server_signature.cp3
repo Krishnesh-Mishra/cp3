@@ -1,0 +1,5 @@
+import console from "std/console";
+import { createServer } from "std/network";
+const app = createServer();
+app.get("/", (req, res) => { res.text("hi"); });
+app.listen(3000, () => { console.log("up"); });

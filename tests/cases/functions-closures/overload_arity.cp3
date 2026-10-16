@@ -1,0 +1,5 @@
+import console from "std/console";
+function f(a: number): string { return "one"; }
+function f(a: number, b: number): string { return "two"; }
+console.log(f(1));
+console.log(f(1, 2));

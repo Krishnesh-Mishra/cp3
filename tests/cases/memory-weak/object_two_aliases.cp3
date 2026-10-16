@@ -1,0 +1,6 @@
+import console from "std/console";
+let a = { n: 1 };
+let b = a;
+let d = a;
+b.n = 2;
+console.log(`${d.n}`);

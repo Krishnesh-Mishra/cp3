@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: how does the `{ weak: value }` object-literal wrapper (§11) type-check against a declared field? The spec example assigns it to a field inferred as `null`."
+  }
+}

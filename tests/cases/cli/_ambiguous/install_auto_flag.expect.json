@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: the --auto compatibility-selection behavior is not expressible as a .cp3 case."
+  }
+}

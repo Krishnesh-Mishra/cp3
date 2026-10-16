@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: array.slice is not in the explicit array-method list in §09 (only string slice/substring are listed)."
+  }
+}

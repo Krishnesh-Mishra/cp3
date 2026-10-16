@@ -1,0 +1,5 @@
+import console from "std/console";
+import Date from "std/date";
+let a = Date.fromISOString("2020-01-02T12:00:00Z");
+let b = a.addHours(1);
+console.log(`${b.diffMs(a)}`);

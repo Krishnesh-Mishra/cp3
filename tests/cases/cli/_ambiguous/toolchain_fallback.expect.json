@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: toolchain selection/fallback and multi-toolchain error grouping are CLI behaviors, not .cp3 cases."
+  }
+}

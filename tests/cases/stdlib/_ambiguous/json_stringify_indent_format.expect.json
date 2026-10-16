@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: the exact whitespace/indentation produced by `JSON.stringify(value, indent)` is not pinned."
+  }
+}

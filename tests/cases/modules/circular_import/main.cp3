@@ -1,0 +1,4 @@
+import console from "std/console";
+import { getB } from "./a.cp3";
+import { getA } from "./b.cp3";
+console.log(`${getA()} ${getB()}`);

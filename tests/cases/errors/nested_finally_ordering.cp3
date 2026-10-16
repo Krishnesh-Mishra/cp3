@@ -1,0 +1,4 @@
+import console from "std/console";
+try {
+  try { throw "x"; } catch (e) { console.log("inner"); } finally { console.log("inner-finally"); }
+} catch (e) { console.log("outer"); } finally { console.log("outer-finally"); }

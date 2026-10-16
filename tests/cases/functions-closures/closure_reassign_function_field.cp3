@@ -1,0 +1,5 @@
+import console from "std/console";
+interface Handler { onEvent: (s: string) => string; }
+let h: Handler = { onEvent: (s) => "a" + s };
+h.onEvent = (s) => "b" + s;
+console.log(h.onEvent("x"));

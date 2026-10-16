@@ -1,0 +1,8 @@
+import console from "std/console";
+function run(): number {
+  let v = 1;
+  let bump = () => { v = v + 10; };
+  bump();
+  return v;
+}
+console.log(`${run()}`);

@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: Math is \"Node/JS-style\" but JS rounds -2.5 to -2 while C++ round() gives -3; the negative-half case is not pinned."
+  }
+}

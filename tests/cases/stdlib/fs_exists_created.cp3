@@ -1,0 +1,5 @@
+import console from "std/console";
+import fs from "std/fs";
+fs.writeFileSync("__cp3_fs_exists__.txt", "x");
+console.log(fs.existsSync("__cp3_fs_exists__.txt") ? "yes" : "no");
+fs.unlinkSync("__cp3_fs_exists__.txt");

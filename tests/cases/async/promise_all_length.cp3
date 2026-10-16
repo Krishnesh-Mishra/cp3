@@ -1,0 +1,5 @@
+import console from "std/console";
+async function a(): Promise<number> { return 1; }
+async function b(): Promise<number> { return 2; }
+let r = await Promise.all([a(), b()]);
+console.log(`${r.length}`);

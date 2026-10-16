@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: What does console.log print for a number-backed enum member (underlying int 1, or the name 'Green')? The spec pins the enum->enum class mapping but not the printed form."
+  }
+}

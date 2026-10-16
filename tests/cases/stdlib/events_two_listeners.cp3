@@ -1,0 +1,8 @@
+import console from "std/console";
+import { EventEmitter } from "std/events";
+let e = new EventEmitter();
+let fired = 0;
+e.on("go", () => { fired = fired + 1; });
+e.on("go", () => { fired = fired + 1; });
+e.emit("go");
+console.log(`${fired}`);

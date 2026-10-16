@@ -1,0 +1,5 @@
+class Box {
+  private v: number = 0;
+  get value(): number { return this.v; }
+  set value(x: number) { this.v = x; }
+}

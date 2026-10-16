@@ -1,0 +1,8 @@
+import console from "std/console";
+function callTwice(f: () => number): number { return f() + f(); }
+function make(): () => number {
+  let n = 0;
+  return () => { n = n + 1; return n; };
+}
+let c = make();
+console.log(`${callTwice(c)}`);

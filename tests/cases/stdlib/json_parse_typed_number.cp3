@@ -1,0 +1,4 @@
+import console from "std/console";
+import JSON from "std/json";
+let v = JSON.parse<number>("5");
+console.log(`${v}`);

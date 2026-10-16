@@ -1,0 +1,6 @@
+// AMBIGUOUS: what is the observable effect when `_prelude.cp3` (strong) and
+// `_prelude.weak.cp3` both sit in the same folder? The spec fixes injection
+// order (_prelude.same, then strong, then weak) but not what a program can
+// observe when both inject the same/different imports.
+import console from "std/console";
+console.log("stacked preludes");

@@ -1,0 +1,5 @@
+import console from "std/console";
+import worker from "worker_mutate_impl.cp3";
+let data = { value: 1 };
+let r = await worker(data);
+console.log(`${data.value}`);

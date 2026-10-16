@@ -1,0 +1,7 @@
+import console from "std/console";
+function make(): () => number {
+  const c = 5;
+  return () => c;
+}
+let f = make();
+console.log(`${f()}`);

@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: is the catch binding visible after the catch block? Not specified."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: is `catch { }` (optional catch binding) allowed? The spec always shows `catch (e)`."
+  }
+}

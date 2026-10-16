@@ -1,3 +1,0 @@
-import console from "std/console";
-enum E { A = -1 }
-console.log(E.A);

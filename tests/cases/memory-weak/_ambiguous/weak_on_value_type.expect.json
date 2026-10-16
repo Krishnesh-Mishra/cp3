@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: is `weak` allowed on a value-type (non-reference) field? §11 says it breaks reference cycles; behavior on primitives is not stated."
+  }
+}

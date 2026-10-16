@@ -1,0 +1,2 @@
+import console from "std/console";
+let name = await console.input("Name? ");

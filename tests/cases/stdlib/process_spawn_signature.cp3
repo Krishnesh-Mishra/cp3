@@ -1,0 +1,4 @@
+import console from "std/console";
+import process from "std/process";
+let p = process.spawn("git", ["--version"]);
+p.on("exit", (code) => { console.log(`${code}`); });

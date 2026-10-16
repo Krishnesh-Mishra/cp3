@@ -1,0 +1,4 @@
+import console from "std/console";
+let base = 10;
+let r = parallel.run(() => base + 1, () => base + 2);
+console.log(`${r[0]},${r[1]}`);

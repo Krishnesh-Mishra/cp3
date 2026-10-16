@@ -1,0 +1,9 @@
+import console from "std/console";
+import JSON from "std/json";
+interface User { id: number; name: string; }
+try {
+  let u = JSON.parse<User>('{"id":1}');
+  console.log("no-throw");
+} catch (e) {
+  console.log("bad-shape");
+}

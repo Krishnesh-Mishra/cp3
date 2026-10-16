@@ -1,0 +1,4 @@
+import console from "std/console";
+setTimeout(() => console.log("timer"), 0);
+await sleep(0);
+console.log("await");

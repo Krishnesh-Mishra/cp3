@@ -1,0 +1,6 @@
+class Parent { child: Child | undefined; }
+class Child { weak parent: Parent | undefined; }
+let p = new Parent();
+let c = new Child();
+p.child = c;
+c.parent = p;

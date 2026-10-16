@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: cp3 clean --all deleting .cp3/packages/ cannot be expressed as a .cp3 case."
+  }
+}

@@ -1,0 +1,2 @@
+import path from "std/path";
+let p = path.normalize("a/b");

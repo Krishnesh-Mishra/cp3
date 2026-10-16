@@ -1,0 +1,6 @@
+import console from "std/console";
+import { fetch } from "std/network";
+interface User { id: number; }
+let res = await fetch("https://example.com");
+let u = await res.json<User>();
+console.log(`${u.id}`);

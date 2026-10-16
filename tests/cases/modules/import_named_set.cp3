@@ -1,0 +1,6 @@
+import { Set } from "std/collections";
+import console from "std/console";
+let s = new Set<number>();
+s.add(1);
+s.add(2);
+console.log(`${s.has(1)}`);

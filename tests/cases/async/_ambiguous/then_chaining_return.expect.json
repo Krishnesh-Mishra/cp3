@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: whether `.then` returns a new Promise that chains (JS semantics) is not stated."
+  }
+}

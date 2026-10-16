@@ -1,0 +1,7 @@
+import console from "std/console";
+function make(): () => number {
+  let count = 0;
+  return () => { count = count + 1; return count; };
+}
+let c = make();
+console.log(`${c()} ${c()} ${c()}`);

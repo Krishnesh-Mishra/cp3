@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: cp3 fmt's output and the package.json \"format\" overrides are not expressible as a .cp3 case."
+  }
+}
