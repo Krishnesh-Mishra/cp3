@@ -1,0 +1,4 @@
+import console from "std/console";
+const s = "x";
+s = "y";
+console.log(s);

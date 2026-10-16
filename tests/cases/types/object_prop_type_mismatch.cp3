@@ -1,0 +1,2 @@
+interface T { id: number; }
+let x: T = { id: "s" };

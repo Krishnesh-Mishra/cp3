@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: `find` return value when nothing matches (undefined vs other)"
+  }
+}

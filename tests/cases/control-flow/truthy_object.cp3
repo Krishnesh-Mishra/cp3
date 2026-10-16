@@ -1,0 +1,7 @@
+import console from "std/console";
+let o = { a: 1 };
+if (o) {
+  console.log("t");
+} else {
+  console.log("f");
+}

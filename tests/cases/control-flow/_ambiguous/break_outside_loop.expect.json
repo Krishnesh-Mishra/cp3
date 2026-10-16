@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: diagnostic/behavior for `break` outside a loop or switch is not specified"
+  }
+}

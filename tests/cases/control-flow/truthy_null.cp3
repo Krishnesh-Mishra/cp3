@@ -1,0 +1,7 @@
+import console from "std/console";
+let n: number | null = null;
+if (n) {
+  console.log("t");
+} else {
+  console.log("f");
+}

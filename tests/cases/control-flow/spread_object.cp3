@@ -1,0 +1,4 @@
+import console from "std/console";
+let o1 = { a: 1 };
+let o2 = { ...o1, b: 2 };
+console.log(o2.a + o2.b);

@@ -1,0 +1,5 @@
+import console from "std/console";
+class Box<T> { value: T; }
+let boxes: Box<number>[] = [new Box<number>()];
+boxes[0].value = 3;
+console.log(`${boxes[0].value}`);

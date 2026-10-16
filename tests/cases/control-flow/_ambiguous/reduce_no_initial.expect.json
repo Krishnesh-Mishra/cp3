@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: `reduce` with no initial accumulator value is not specified"
+  }
+}

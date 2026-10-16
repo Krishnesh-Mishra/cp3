@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = [1, 1, 1, 2, 3, 3];
+a.unique();
+console.log(a.join(","));

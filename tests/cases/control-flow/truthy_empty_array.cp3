@@ -1,0 +1,7 @@
+import console from "std/console";
+let a: number[] = [];
+if (a) {
+  console.log("t");
+} else {
+  console.log("f");
+}

@@ -1,0 +1,6 @@
+import console from "std/console";
+if (0) {
+  console.log("t");
+} else {
+  console.log("f");
+}

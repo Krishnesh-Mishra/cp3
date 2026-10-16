@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: assigning a raw number to a numeric-enum-typed variable (`let c: Color = 1`)"
+  }
+}

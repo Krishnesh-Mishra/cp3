@@ -1,0 +1,4 @@
+import console from "std/console";
+enum Color { Red, Green, Blue }
+let arr: Color[] = [Color.Red, Color.Blue];
+console.log(arr[1]);

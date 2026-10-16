@@ -1,0 +1,4 @@
+import console from "std/console";
+let age: number = 18;
+age = "hello";
+console.log(`${age}`);

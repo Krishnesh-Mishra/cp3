@@ -1,0 +1,4 @@
+import console from "std/console";
+function wrap<T>(x: T): T[] { return [x]; }
+let a = wrap<number>(5);
+console.log(`${a[0]}`);

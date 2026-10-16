@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: `console.log` rendering of a whole array/object value (fmt representation)"
+  }
+}

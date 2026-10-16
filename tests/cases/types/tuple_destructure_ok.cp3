@@ -1,0 +1,4 @@
+let t: [string, number] = ["a", 1];
+let [s, n] = t;
+let s2: string = s;
+let n2: number = n;

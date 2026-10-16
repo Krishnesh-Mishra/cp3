@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = [3.5, 1.25, 2];
+a.sort();
+console.log(a.join(","));

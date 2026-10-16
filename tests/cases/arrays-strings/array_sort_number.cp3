@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = [10, 9, 2];
+a.sort();
+console.log(a.join(","));

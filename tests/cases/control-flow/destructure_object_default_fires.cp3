@@ -1,0 +1,6 @@
+import console from "std/console";
+interface Person { name: string; age?: number; }
+let person: Person = { name: "Ada" };
+let { name: n, age: a = 18 } = person;
+console.log(n);
+console.log(a);

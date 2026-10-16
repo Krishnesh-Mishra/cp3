@@ -1,0 +1,4 @@
+import console from "std/console";
+let x: number | string = "1";
+console.log(x === "1");
+console.log(x == 1);

@@ -1,0 +1,4 @@
+import console from "std/console";
+let d = { a: 1 };
+d["b"] = 2;
+console.log(`${d.a}`);

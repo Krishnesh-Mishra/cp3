@@ -1,0 +1,5 @@
+import console from "std/console";
+for (const x of [1, 2, 3, 4]) {
+  if (x === 3) { break; }
+  console.log(x);
+}

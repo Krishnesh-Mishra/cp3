@@ -1,0 +1,8 @@
+import console from "std/console";
+let i = 0;
+outer:
+while (i < 3) {
+  i++;
+  if (i === 2) { continue outer; }
+  console.log(i);
+}

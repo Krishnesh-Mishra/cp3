@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: unary `+` numeric coercion of a string operand"
+  }
+}

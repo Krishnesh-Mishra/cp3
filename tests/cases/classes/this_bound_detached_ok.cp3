@@ -1,0 +1,5 @@
+import console from "std/console";
+class C { x: number = 5; function getX(): number { return this.x; } }
+let c = new C();
+let f = c.getX;
+console.log(`${f()}`);

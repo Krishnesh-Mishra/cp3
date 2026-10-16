@@ -1,0 +1,5 @@
+import console from "std/console";
+interface Named { name: string; }
+class P { name: string = "Ada"; }
+function describe<T extends Named>(x: T): string { return x.name; }
+console.log(describe(new P()));

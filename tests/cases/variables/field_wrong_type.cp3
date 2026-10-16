@@ -1,0 +1,4 @@
+import console from "std/console";
+let o = { a: 1 };
+o.a = "s";
+console.log(`${o.a}`);

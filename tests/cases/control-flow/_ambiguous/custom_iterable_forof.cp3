@@ -1,0 +1,5 @@
+import console from "std/console";
+class LinkedList<T> {
+  function begin(): Iterator<T> { }
+  function end(): Iterator<T> { }
+}

@@ -1,0 +1,4 @@
+import console from "std/console";
+let numbers: number[] = [1, 2, 3];
+numbers.push("hello");
+console.log(numbers.length);

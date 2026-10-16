@@ -1,0 +1,2 @@
+let x: unknown = 5;
+let y: number = x;

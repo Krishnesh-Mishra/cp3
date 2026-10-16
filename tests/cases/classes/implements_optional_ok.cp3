@@ -1,0 +1,2 @@
+interface Shape { function area(): number; }
+class Circle implements Shape { function area(): number { return 3; } }

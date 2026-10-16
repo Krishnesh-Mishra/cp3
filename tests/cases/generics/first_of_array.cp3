@@ -1,0 +1,4 @@
+import console from "std/console";
+function first<T>(a: T[]): T { return a[0]; }
+let n: number = first<number>([1, 2, 3]);
+console.log(`${n}`);

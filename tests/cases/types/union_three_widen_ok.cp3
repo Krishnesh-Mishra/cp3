@@ -1,0 +1,1 @@
+let v: number | string | boolean = true;

@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = ["banana", "apple", "cherry"];
+a.sort();
+console.log(a.join(","));

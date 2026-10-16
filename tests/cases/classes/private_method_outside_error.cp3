@@ -1,0 +1,3 @@
+class C { private function hidden(): number { return 1; } }
+let c = new C();
+c.hidden();

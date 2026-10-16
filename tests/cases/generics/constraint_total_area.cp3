@@ -1,0 +1,9 @@
+import console from "std/console";
+interface Shape { function area(): number; }
+class Circle { function area(): number { return 3; } }
+function totalArea<T extends Shape>(items: T[]): number {
+  let s = 0;
+  for (let it of items) { s = s + it.area(); }
+  return s;
+}
+console.log(`${totalArea<Circle>([new Circle(), new Circle()])}`);

@@ -1,0 +1,3 @@
+interface Shape { function area(): number; }
+function f<T extends Shape>(x: T): void { }
+f<number>(5);

@@ -1,0 +1,4 @@
+import console from "std/console";
+class C { protected v: number = 1; }
+let c = new C();
+console.log(`${c.v}`);

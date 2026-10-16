@@ -1,0 +1,7 @@
+import console from "std/console";
+function setVal(o: { n: number }): void {
+  o.n = 9;
+}
+let a = { n: 1 };
+setVal(a);
+console.log(`${a.n}`);

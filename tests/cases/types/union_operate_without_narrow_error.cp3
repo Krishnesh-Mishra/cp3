@@ -1,0 +1,2 @@
+let v: number | string = 5;
+let w = v + 1;

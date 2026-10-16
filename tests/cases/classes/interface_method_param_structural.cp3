@@ -1,0 +1,5 @@
+import console from "std/console";
+interface Greeter { function greet(name: string): string; }
+class Formal { function greet(name: string): string { return "Hello " + name; } }
+function run(g: Greeter): string { return g.greet("Ada"); }
+console.log(run(new Formal()));

@@ -1,0 +1,4 @@
+import console from "std/console";
+let name = "John";
+name = 5;
+console.log(name);

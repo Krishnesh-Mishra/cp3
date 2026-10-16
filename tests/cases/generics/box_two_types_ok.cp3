@@ -1,0 +1,5 @@
+class Box<T> { value: T; }
+let a = new Box<number>(); a.value = 1;
+let b = new Box<string>(); b.value = "s";
+let n: number = a.value;
+let s: string = b.value;

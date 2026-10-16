@@ -1,0 +1,3 @@
+class Box<T> { value: T; }
+let b = new Box<number>();
+b.value = "s";

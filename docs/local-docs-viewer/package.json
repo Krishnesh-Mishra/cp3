@@ -1,0 +1,15 @@
+{
+  "name": "cp3-local-docs-viewer",
+  "private": true,
+  "version": "1.0.0",
+  "description": "A tiny local web viewer for the C+++ docs generated in the parent directory.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "build:docs": "node scripts/split-docs.mjs"
+  },
+  "dependencies": {
+    "highlight.js": "^11.12.0",
+    "marked": "^18.1.1"
+  }
+}

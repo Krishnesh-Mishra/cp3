@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: stdout rendering of NaN (JS 'NaN' vs fmt 'nan')"
+  }
+}

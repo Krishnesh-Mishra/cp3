@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: string `.length` units: bytes (std::string) vs characters (JS UTF-8-aware)"
+  }
+}

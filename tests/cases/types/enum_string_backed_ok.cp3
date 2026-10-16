@@ -1,0 +1,2 @@
+enum Status { Active = "active", Inactive = "inactive" }
+let s: Status = Status.Active;

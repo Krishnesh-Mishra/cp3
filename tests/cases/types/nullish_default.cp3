@@ -1,0 +1,4 @@
+import console from "std/console";
+let v: number | null = null;
+let w = v ?? 0;
+console.log(`${w}`);

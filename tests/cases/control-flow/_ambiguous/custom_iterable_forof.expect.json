@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: custom-iterable `for...of` needs `begin()`/`end()` returning `Iterator<T>`, but the `Iterator<T>` type is not otherwise specified"
+  }
+}

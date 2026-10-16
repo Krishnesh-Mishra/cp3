@@ -1,0 +1,5 @@
+import console from "std/console";
+interface HasId { id: number; }
+function idOf<T extends HasId>(x: T): number { return x.id; }
+class User { id: number = 7; }
+console.log(`${idOf(new User())}`);

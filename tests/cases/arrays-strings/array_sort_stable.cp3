@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = ["b", "a", "c"];
+a.sort((x, y) => 0);
+console.log(a.join(","));

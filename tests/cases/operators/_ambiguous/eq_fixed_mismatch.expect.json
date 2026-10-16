@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: `==`/`===` between two fixed mismatched types (number vs boolean): §3 says any two different-type values may be compared, §5 says a mismatched-type comparison between two fixed types would not compile"
+  }
+}

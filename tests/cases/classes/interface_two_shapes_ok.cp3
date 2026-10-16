@@ -1,0 +1,7 @@
+import console from "std/console";
+interface Shape { function area(): number; }
+interface Sized { function size(): number; }
+class Both { function area(): number { return 1; } function size(): number { return 2; } }
+let s: Shape = new Both();
+let z: Sized = new Both();
+console.log(`${s.area()} ${z.size()}`);

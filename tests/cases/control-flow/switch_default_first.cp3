@@ -1,0 +1,10 @@
+import console from "std/console";
+let x = 5;
+switch (x) {
+  default:
+    console.log("def");
+    break;
+  case 1:
+    console.log("one");
+    break;
+}

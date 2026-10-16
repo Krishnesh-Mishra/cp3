@@ -1,0 +1,4 @@
+import console from "std/console";
+/* a multi-line
+   comment */
+console.log("ok");

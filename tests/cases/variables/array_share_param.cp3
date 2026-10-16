@@ -1,0 +1,7 @@
+import console from "std/console";
+function addItem(a: number[]): void {
+  a.push(3);
+}
+let arr = [1, 2];
+addItem(arr);
+console.log(`${arr.length}`);

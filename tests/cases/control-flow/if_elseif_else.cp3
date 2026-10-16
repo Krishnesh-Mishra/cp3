@@ -1,0 +1,9 @@
+import console from "std/console";
+let x = 2;
+if (x === 1) {
+  console.log("one");
+} else if (x === 2) {
+  console.log("two");
+} else {
+  console.log("other");
+}

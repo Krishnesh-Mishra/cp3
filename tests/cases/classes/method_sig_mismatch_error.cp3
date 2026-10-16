@@ -1,0 +1,3 @@
+interface Shape { function area(): number; }
+class Bad { function area(): string { return "x"; } }
+let s: Shape = new Bad();

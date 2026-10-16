@@ -1,0 +1,4 @@
+import console from "std/console";
+interface SomeType { id: number; value: number[]; }
+let abc: SomeType = { id: 123, value: [1, 2, 3] };
+console.log(`${abc.value.length}`);

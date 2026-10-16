@@ -1,0 +1,6 @@
+import { Map } from "std/collections";
+import console from "std/console";
+let m = new Map<string, number>();
+m.set("a", 1);
+m.set("b", 2);
+console.log(`${m.keys().length}`);

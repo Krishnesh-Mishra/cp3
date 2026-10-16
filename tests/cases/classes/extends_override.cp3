@@ -1,0 +1,5 @@
+import console from "std/console";
+class Animal { function speak(): string { return "..."; } }
+class Dog extends Animal { function speak(): string { return "Woof"; } }
+let d = new Dog();
+console.log(d.speak());

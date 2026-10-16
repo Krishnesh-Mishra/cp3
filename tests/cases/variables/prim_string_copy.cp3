@@ -1,0 +1,5 @@
+import console from "std/console";
+let a = "x";
+let b = a;
+b = "y";
+console.log(a + b);

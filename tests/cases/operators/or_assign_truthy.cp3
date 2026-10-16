@@ -1,0 +1,4 @@
+import console from "std/console";
+let x = 3;
+x ||= 7;
+console.log(x);

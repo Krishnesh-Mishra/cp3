@@ -1,0 +1,6 @@
+import console from "std/console";
+try {
+  throw "boom";
+} catch (e) {
+  console.log("caught");
+}

@@ -1,0 +1,4 @@
+import console from "std/console";
+interface Point2 { x: number; }
+function getX<T extends Point2>(p: T): number { return p.x; }
+console.log(`${getX({ x: 5 })}`);

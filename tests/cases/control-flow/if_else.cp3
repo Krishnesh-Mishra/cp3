@@ -1,0 +1,6 @@
+import console from "std/console";
+if (false) {
+  console.log("y");
+} else {
+  console.log("n");
+}

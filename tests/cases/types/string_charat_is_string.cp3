@@ -1,0 +1,2 @@
+let s = "abc";
+let t: string = s.charAt(0);

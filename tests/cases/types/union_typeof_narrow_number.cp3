@@ -1,0 +1,7 @@
+import console from "std/console";
+let v: number | string = 5;
+if (typeof v === "number") {
+  console.log("num");
+} else {
+  console.log("str");
+}

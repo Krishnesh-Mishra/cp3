@@ -1,0 +1,5 @@
+import console from "std/console";
+interface Point { x: number; y: number; }
+class P { x: number = 1; y: number = 2; }
+let q: Point = new P();
+console.log(`${q.x + q.y}`);

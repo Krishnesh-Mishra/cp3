@@ -1,0 +1,4 @@
+import console from "std/console";
+enum Color { Red, Green, Blue }
+enum Status { Active = "active" }
+let c: Color = Status.Active;

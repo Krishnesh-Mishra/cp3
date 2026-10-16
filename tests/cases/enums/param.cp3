@@ -1,0 +1,4 @@
+import console from "std/console";
+enum Color { Red, Green, Blue }
+function id(c: Color): Color { return c; }
+console.log(id(Color.Blue));

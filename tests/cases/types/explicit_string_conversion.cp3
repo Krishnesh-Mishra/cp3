@@ -1,0 +1,4 @@
+import console from "std/console";
+let n = 1;
+let s = "1";
+console.log(s + String(n));

@@ -1,0 +1,4 @@
+import console from "std/console";
+class Person { public age: number = 30; }
+let p = new Person();
+console.log(`${p.age}`);

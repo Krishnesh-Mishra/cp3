@@ -1,0 +1,7 @@
+import console from "std/console";
+let a = [1];
+let b = a;
+let c = a;
+b.push(2);
+c.push(3);
+console.log(`${a.length}`);

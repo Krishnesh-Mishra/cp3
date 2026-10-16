@@ -1,0 +1,45 @@
+# ---- cp3 tooling / generated output ----
+build/
+.cp3/
+*.cp3pak
+
+# ---- node / docs viewer ----
+node_modules/
+docs/local-docs-viewer/node_modules/
+
+# ---- native build artifacts ----
+*.o
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.lib
+*.a
+*.so
+*.dylib
+*.dll
+
+# ---- CMake ----
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeUserPresets.json
+Makefile
+*.ninja
+compile_commands.json
+
+# ---- editors / OS ----
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# ---- python (test harness) ----
+__pycache__/
+*.pyc
+
+# ---- test scratch ----
+/tests/**/.tmp/

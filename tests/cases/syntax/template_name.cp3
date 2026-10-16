@@ -1,0 +1,3 @@
+import console from "std/console";
+let name = "Ada";
+console.log(`Hello, ${name}!`);

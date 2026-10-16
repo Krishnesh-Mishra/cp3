@@ -1,0 +1,7 @@
+import console from "std/console";
+function inc(x: number): void {
+  x = x + 1;
+}
+let a = 5;
+inc(a);
+console.log(`${a}`);

@@ -1,0 +1,8 @@
+import console from "std/console";
+let i = 0;
+let s = 0;
+while (i < 5) {
+  s = s + i;
+  i++;
+}
+console.log(s);

@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: spreading a `number[]` into fixed-arity parameters: whether a tuple type is required is unspecified"
+  }
+}

@@ -1,0 +1,5 @@
+import console from "std/console";
+interface Shape { function area(): number; }
+function areaOf<T extends Shape>(s: T): number { return s.area(); }
+class Sq { function area(): number { return 4; } }
+console.log(`${areaOf(new Sq())}`);

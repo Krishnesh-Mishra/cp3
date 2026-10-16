@@ -1,0 +1,2 @@
+class P { private name: string = "a"; }
+let x: P = { name: "b" };

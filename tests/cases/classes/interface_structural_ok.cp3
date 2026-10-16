@@ -1,0 +1,5 @@
+import console from "std/console";
+interface Shape { function area(): number; }
+class Circle { function area(): number { return 3; } }
+function printArea(s: Shape): void { console.log(`${s.area()}`); }
+printArea(new Circle());

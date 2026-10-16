@@ -1,0 +1,3 @@
+interface SomeType { id: number; value: number[]; }
+let extra = { id: 1, value: [1], another: true };
+let abc: SomeType = extra;

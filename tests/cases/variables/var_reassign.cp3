@@ -1,0 +1,4 @@
+import console from "std/console";
+var y = 20;
+y = 30;
+console.log(`${y}`);

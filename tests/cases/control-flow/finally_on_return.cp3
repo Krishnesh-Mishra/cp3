@@ -1,0 +1,9 @@
+import console from "std/console";
+function f(): string {
+  try {
+    return "a";
+  } finally {
+    console.log("cleanup");
+  }
+}
+console.log(f());

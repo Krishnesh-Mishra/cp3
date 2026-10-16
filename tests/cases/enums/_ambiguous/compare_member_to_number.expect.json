@@ -1,0 +1,6 @@
+{
+  "mode": "check",
+  "error": {
+    "contains": "AMBIGUOUS: comparing an enum member to a raw number (Color.Red === 0)"
+  }
+}

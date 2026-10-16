@@ -1,0 +1,7 @@
+import console from "std/console";
+function make(): number {
+  class P { x: number = 3; }
+  let p = new P();
+  return p.x;
+}
+console.log(`${make()}`);
