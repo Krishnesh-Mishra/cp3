@@ -232,6 +232,51 @@ whose expected behavior the spec actually pins.
 
 ---
 
+## Post-contracts clarifications (from the contracts pass)
+
+- **D50.** `Nullable(T)` is the shorthand for `T | null | undefined`
+  (`unify(T, nullish) → Nullable(T)`). Where `T | null` must be distinct from
+  `T | undefined`, write the explicit union.
+- **D51.** Literal types: for M1, sema **widens** a literal expression to its base
+  primitive in `nodeTypes` (`42` → `number`, `"x"` → `string`). `Literal` types
+  remain in the model for signature-level literals (`on(event: "data", …)`).
+  Codegen must accept either.
+- **Process — commits.** Agents no longer run `git`. The lead commits with **scoped**
+  paths. Reason: two agents racing `git add -A` merged in-flight files into
+  unrelated commits (`d64f9ea` swept the contracts work). Build dirs stay
+  per-agent (`build-<module>/`); nothing else changes.
+
+- **D52.** Regex-literal token payload convention: the pattern goes in
+  `Token::stringValue` and the flag letters go in `Token::rawText`. The parser and
+  codegen read those fields (no dedicated regex fields exist on `Token`).
+- **D53.** `TokenKind::UnsignedShiftRightAssign` (`>>>=`) is **added** to the
+  token set, placed in the operators group next to `ShiftRightAssign` for
+  readability. `TokenKind` integral values are explicitly **not** part of the ABI
+  (nothing serializes, indexes, or orders by them), so shifting the values of
+  later kinds is behaviour-preserving. The lexer emits it by maximal munch; the
+  parser maps it to `AssignOp::UnsignedShiftRight` (glue lands in the integration
+  pass — the parser owner is editing that file now). (Gap found by the lexer
+  owner: JS `>>>=` was not representable.)
+- **Doc cleanup.** The obsolete `rescanTemplateContinuation()` note in `token.hpp`
+  is replaced by a pointer to D7 (templates are lexed flat).
+
+- **D54.** Front-end diagnostic anchoring is **line-granular**. The frozen case
+  format (`tests/cases/README.md`) documents `col` with the example `:3:1:`, and
+  **97** `expect.json` error cases assert `"col": 1` while **none** asserts any
+  other column. `sema` and `parser` already report at column 1; the **lexer must
+  match** (it currently reports the literal's real column — e.g. `CP3105` at
+  `2:13`, `CP3102`/`CP3103` at `2:9` — which fails `syntax/invalid_hex`,
+  `syntax/unterminated_string`, `syntax/unterminated_template`). Rule: every
+  diagnostic is emitted at **column 1** of its (unchanged) line. Separately, a
+  **syntax** (lexical/parse) error's message always contains the literal word
+  `"syntax"` — the 5 `syntax/*` cases assert `contains: "syntax"`, and `parser`
+  already prefixes `"syntax error: "`; the lexer adopts the same prefix. Specific
+  `CP31xx`/`CP32xx` codes and detail text are preserved. *(Revisitable post-M1:
+  once precise columns/spans are trustworthy suite-wide, the corpus `col` fields
+  can be tightened and this rule relaxed.)*
+
+---
+
 ## Milestone 1 definition of done
 A `.cp3` file containing `import console from "std/console"`, `let`/`const`
 primitive bindings, functions, `if`/`else`, calls, `console.log` with template

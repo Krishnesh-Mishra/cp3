@@ -1,11 +1,11 @@
 // =============================================================================
 // cp3/lexer.hpp — .cp3 source text -> TokenStream.
 //
-// OWNERSHIP: lexer module. The current implementation is a STUB: it emits a
-// single EndOfFile token so the pipeline links and downstream stages can be
-// built independently. Replace Lexer::lex() with the real scanner; the public
-// shape here (construct over a SourceFile + DiagnosticSink, return a
-// TokenStream) is the frozen module boundary.
+// OWNERSHIP: lexer module. Lifecycle: the public boundary below (construct over
+// a SourceFile + DiagnosticSink, return a TokenStream) is frozen. The scanner is
+// fully implemented across scanner.cpp / numbers.cpp / strings.cpp /
+// templates.cpp / regexp.cpp / keywords.cpp (see scanner.h for the split);
+// Lexer::lex() drives it in lexer.cpp.
 // =============================================================================
 #pragma once
 

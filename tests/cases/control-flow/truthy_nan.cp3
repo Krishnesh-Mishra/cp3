@@ -1,3 +1,4 @@
+import console from "std/console";
 import Math from "std/math";
 if (Math.sqrt(-1)) {
   console.log("t");

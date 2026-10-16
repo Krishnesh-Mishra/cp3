@@ -1,146 +1,156 @@
 #include "cp3/token.hpp"
 
+#include <cstddef>
+
 namespace cp3 {
 
+// Lookup table for tokenKindName(): one name per TokenKind, listed in
+// declaration order (src/common/include/cp3/token.hpp). It is indexed by the
+// enum's underlying value; any out-of-range value yields "Unknown", exactly
+// as the previous switch's default did. The enum is a frozen interface, so
+// keep this table in lockstep if TokenKind ever gains or renames a member.
+constexpr const char* kTokenKindNames[] = {
+    "EndOfFile",  // EndOfFile
+    "Unknown",  // Unknown
+    "Invalid",  // Invalid
+    "NumericLiteral",  // NumericLiteral
+    "StringLiteral",  // StringLiteral
+    "RegExpLiteral",  // RegExpLiteral
+    "TemplateString",  // TemplateString
+    "TemplateHead",  // TemplateHead
+    "TemplateMiddle",  // TemplateMiddle
+    "TemplateTail",  // TemplateTail
+    "Identifier",  // Identifier
+    "PrivateIdentifier",  // PrivateIdentifier
+    "LineComment",  // LineComment
+    "BlockComment",  // BlockComment
+    "let",  // KwLet
+    "var",  // KwVar
+    "const",  // KwConst
+    "function",  // KwFunction
+    "return",  // KwReturn
+    "if",  // KwIf
+    "else",  // KwElse
+    "while",  // KwWhile
+    "do",  // KwDo
+    "for",  // KwFor
+    "of",  // KwOf
+    "in",  // KwIn
+    "switch",  // KwSwitch
+    "case",  // KwCase
+    "default",  // KwDefault
+    "break",  // KwBreak
+    "continue",  // KwContinue
+    "throw",  // KwThrow
+    "try",  // KwTry
+    "catch",  // KwCatch
+    "finally",  // KwFinally
+    "class",  // KwClass
+    "interface",  // KwInterface
+    "extends",  // KwExtends
+    "implements",  // KwImplements
+    "abstract",  // KwAbstract
+    "static",  // KwStatic
+    "public",  // KwPublic
+    "private",  // KwPrivate
+    "protected",  // KwProtected
+    "enum",  // KwEnum
+    "new",  // KwNew
+    "this",  // KwThis
+    "import",  // KwImport
+    "export",  // KwExport
+    "from",  // KwFrom
+    "as",  // KwAs
+    "native",  // KwNative
+    "async",  // KwAsync
+    "await",  // KwAwait
+    "weak",  // KwWeak
+    "ref",  // KwRef
+    "typeof",  // KwTypeof
+    "get",  // KwGet
+    "set",  // KwSet
+    "true",  // KwTrue
+    "false",  // KwFalse
+    "null",  // KwNull
+    "undefined",  // KwUndefined
+    "void",  // KwVoid
+    "unknown",  // KwUnknown
+    "type",  // KwType
+    "any",  // KwAny
+    "delete",  // KwDelete
+    "yield",  // KwYield
+    "(",  // LParen
+    ")",  // RParen
+    "{",  // LBrace
+    "}",  // RBrace
+    "[",  // LBracket
+    "]",  // RBracket
+    ";",  // Semicolon
+    ",",  // Comma
+    ".",  // Dot
+    "..",  // DotDot
+    "...",  // Ellipsis
+    "=>",  // Arrow
+    ":",  // Colon
+    "?",  // Question
+    "?.",  // QuestionDot
+    "??",  // QuestionQuestion
+    "+",  // Plus
+    "-",  // Minus
+    "*",  // Star
+    "/",  // Slash
+    "%",  // Percent
+    "**",  // StarStar
+    "++",  // PlusPlus
+    "--",  // MinusMinus
+    "=",  // Assign
+    "+=",  // PlusAssign
+    "-=",  // MinusAssign
+    "*=",  // StarAssign
+    "/=",  // SlashAssign
+    "%=",  // PercentAssign
+    "**=",  // StarStarAssign
+    "&=",  // AmpersandAssign
+    "|=",  // PipeAssign
+    "^=",  // CaretAssign
+    "<<=",  // ShiftLeftAssign
+    ">>=",  // ShiftRightAssign
+    ">>>=",  // UnsignedShiftRightAssign
+    "&&=",  // AndAndAssign
+    "||=",  // OrOrAssign
+    "??=",  // QuestionQuestionAssign
+    "==",  // Equal
+    "!=",  // NotEqual
+    "===",  // StrictEqual
+    "!==",  // StrictNotEqual
+    "<",  // Less
+    ">",  // Greater
+    "<=",  // LessEqual
+    ">=",  // GreaterEqual
+    "&&",  // AndAnd
+    "||",  // OrOr
+    "!",  // Bang
+    "&",  // Ampersand
+    "|",  // Pipe
+    "^",  // Caret
+    "~",  // Tilde
+    "<<",  // ShiftLeft
+    ">>",  // ShiftRight
+    ">>>",  // UnsignedShiftRight
+    "@",  // At
+    "\\",  // Backslash
+};
+
+constexpr std::size_t kTokenKindCount =
+    static_cast<std::size_t>(TokenKind::Backslash) + 1;
+
+static_assert(sizeof(kTokenKindNames) / sizeof(kTokenKindNames[0]) ==
+                  kTokenKindCount,
+              "kTokenKindNames must have one entry per TokenKind");
+
 const char* tokenKindName(TokenKind kind) noexcept {
-    switch (kind) {
-        case TokenKind::EndOfFile: return "EndOfFile";
-        case TokenKind::Unknown: return "Unknown";
-        case TokenKind::Invalid: return "Invalid";
-
-        case TokenKind::NumericLiteral: return "NumericLiteral";
-        case TokenKind::StringLiteral: return "StringLiteral";
-        case TokenKind::RegExpLiteral: return "RegExpLiteral";
-        case TokenKind::TemplateString: return "TemplateString";
-        case TokenKind::TemplateHead: return "TemplateHead";
-        case TokenKind::TemplateMiddle: return "TemplateMiddle";
-        case TokenKind::TemplateTail: return "TemplateTail";
-
-        case TokenKind::Identifier: return "Identifier";
-        case TokenKind::PrivateIdentifier: return "PrivateIdentifier";
-
-        case TokenKind::LineComment: return "LineComment";
-        case TokenKind::BlockComment: return "BlockComment";
-
-        case TokenKind::KwLet: return "let";
-        case TokenKind::KwVar: return "var";
-        case TokenKind::KwConst: return "const";
-        case TokenKind::KwFunction: return "function";
-        case TokenKind::KwReturn: return "return";
-        case TokenKind::KwIf: return "if";
-        case TokenKind::KwElse: return "else";
-        case TokenKind::KwWhile: return "while";
-        case TokenKind::KwDo: return "do";
-        case TokenKind::KwFor: return "for";
-        case TokenKind::KwOf: return "of";
-        case TokenKind::KwIn: return "in";
-        case TokenKind::KwSwitch: return "switch";
-        case TokenKind::KwCase: return "case";
-        case TokenKind::KwDefault: return "default";
-        case TokenKind::KwBreak: return "break";
-        case TokenKind::KwContinue: return "continue";
-        case TokenKind::KwThrow: return "throw";
-        case TokenKind::KwTry: return "try";
-        case TokenKind::KwCatch: return "catch";
-        case TokenKind::KwFinally: return "finally";
-        case TokenKind::KwClass: return "class";
-        case TokenKind::KwInterface: return "interface";
-        case TokenKind::KwExtends: return "extends";
-        case TokenKind::KwImplements: return "implements";
-        case TokenKind::KwAbstract: return "abstract";
-        case TokenKind::KwStatic: return "static";
-        case TokenKind::KwPublic: return "public";
-        case TokenKind::KwPrivate: return "private";
-        case TokenKind::KwProtected: return "protected";
-        case TokenKind::KwEnum: return "enum";
-        case TokenKind::KwNew: return "new";
-        case TokenKind::KwThis: return "this";
-        case TokenKind::KwImport: return "import";
-        case TokenKind::KwExport: return "export";
-        case TokenKind::KwFrom: return "from";
-        case TokenKind::KwAs: return "as";
-        case TokenKind::KwNative: return "native";
-        case TokenKind::KwAsync: return "async";
-        case TokenKind::KwAwait: return "await";
-        case TokenKind::KwWeak: return "weak";
-        case TokenKind::KwRef: return "ref";
-        case TokenKind::KwTypeof: return "typeof";
-        case TokenKind::KwGet: return "get";
-        case TokenKind::KwSet: return "set";
-        case TokenKind::KwTrue: return "true";
-        case TokenKind::KwFalse: return "false";
-        case TokenKind::KwNull: return "null";
-        case TokenKind::KwUndefined: return "undefined";
-        case TokenKind::KwVoid: return "void";
-        case TokenKind::KwUnknown: return "unknown";
-        case TokenKind::KwType: return "type";
-        case TokenKind::KwAny: return "any";
-        case TokenKind::KwDelete: return "delete";
-        case TokenKind::KwYield: return "yield";
-
-        case TokenKind::LParen: return "(";
-        case TokenKind::RParen: return ")";
-        case TokenKind::LBrace: return "{";
-        case TokenKind::RBrace: return "}";
-        case TokenKind::LBracket: return "[";
-        case TokenKind::RBracket: return "]";
-        case TokenKind::Semicolon: return ";";
-        case TokenKind::Comma: return ",";
-        case TokenKind::Dot: return ".";
-        case TokenKind::DotDot: return "..";
-        case TokenKind::Ellipsis: return "...";
-        case TokenKind::Arrow: return "=>";
-        case TokenKind::Colon: return ":";
-        case TokenKind::Question: return "?";
-        case TokenKind::QuestionDot: return "?.";
-        case TokenKind::QuestionQuestion: return "??";
-
-        case TokenKind::Plus: return "+";
-        case TokenKind::Minus: return "-";
-        case TokenKind::Star: return "*";
-        case TokenKind::Slash: return "/";
-        case TokenKind::Percent: return "%";
-        case TokenKind::StarStar: return "**";
-        case TokenKind::PlusPlus: return "++";
-        case TokenKind::MinusMinus: return "--";
-        case TokenKind::Assign: return "=";
-        case TokenKind::PlusAssign: return "+=";
-        case TokenKind::MinusAssign: return "-=";
-        case TokenKind::StarAssign: return "*=";
-        case TokenKind::SlashAssign: return "/=";
-        case TokenKind::PercentAssign: return "%=";
-        case TokenKind::StarStarAssign: return "**=";
-        case TokenKind::AmpersandAssign: return "&=";
-        case TokenKind::PipeAssign: return "|=";
-        case TokenKind::CaretAssign: return "^=";
-        case TokenKind::ShiftLeftAssign: return "<<=";
-        case TokenKind::ShiftRightAssign: return ">>=";
-        case TokenKind::AndAndAssign: return "&&=";
-        case TokenKind::OrOrAssign: return "||=";
-        case TokenKind::QuestionQuestionAssign: return "??=";
-        case TokenKind::Equal: return "==";
-        case TokenKind::NotEqual: return "!=";
-        case TokenKind::StrictEqual: return "===";
-        case TokenKind::StrictNotEqual: return "!==";
-        case TokenKind::Less: return "<";
-        case TokenKind::Greater: return ">";
-        case TokenKind::LessEqual: return "<=";
-        case TokenKind::GreaterEqual: return ">=";
-        case TokenKind::AndAnd: return "&&";
-        case TokenKind::OrOr: return "||";
-        case TokenKind::Bang: return "!";
-        case TokenKind::Ampersand: return "&";
-        case TokenKind::Pipe: return "|";
-        case TokenKind::Caret: return "^";
-        case TokenKind::Tilde: return "~";
-        case TokenKind::ShiftLeft: return "<<";
-        case TokenKind::ShiftRight: return ">>";
-        case TokenKind::UnsignedShiftRight: return ">>>";
-
-        case TokenKind::At: return "@";
-        case TokenKind::Backslash: return "\\";
-    }
-    return "Unknown";
+    const std::size_t index = static_cast<std::size_t>(kind);
+    return index < kTokenKindCount ? kTokenKindNames[index] : "Unknown";
 }
 
 bool isKeyword(TokenKind kind) noexcept {

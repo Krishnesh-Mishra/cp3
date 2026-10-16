@@ -20,6 +20,8 @@ docs/local-docs-viewer/node_modules/
 *.dll
 
 # ---- CMake ----
+# private per-module build dirs created by parallel authors (build-build/, build-cli/, ...)
+build-*/
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake

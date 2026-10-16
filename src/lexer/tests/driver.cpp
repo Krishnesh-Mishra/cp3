@@ -3,12 +3,16 @@
 //
 // Not part of the CMake build (see the lexer owner's report). Compile directly:
 //
-//   g++ -std=c++20 -I src/common/include -I src/lexer/include \
-//       src/lexer/tests/driver.cpp src/lexer/lexer.cpp src/common/src/*.cpp \
+//   g++ -std=c++20 -I src/common/include -I src/lexer/include <sources>
 //       -o <tmp>
+//   (sources: this driver, src/lexer/lexer.cpp, src/common/src/*.cpp)
 //
 // Prints every token (kind, span, payload) and every diagnostic for a set of
 // representative snippets, or for a file given as argv[1].
+//
+// It also runs a focused assertion pass at the end (verifyGap()) that checks the
+// exact token-kind sequence for `>>>=` and its neighbours; the process exits
+// nonzero if any of those checks fails.
 // =============================================================================
 #include "cp3/lexer.hpp"
 
@@ -48,8 +52,8 @@ void runCase(const std::string& name, const std::string& src) {
 
     for (std::size_t i = 0; i < toks.size(); ++i) {
         const Token& t = toks[i];
-        std::printf("%3zu %-20s %u:%u-%u:%u off[%u,%u) nl=%d",
-                    i, tokenKindName(t.kind),
+        std::printf("%3d %-20s %u:%u-%u:%u off[%u,%u) nl=%d",
+                    static_cast<int>(i), tokenKindName(t.kind),
                     t.span.begin.line, t.span.begin.column,
                     t.span.end.line, t.span.end.column,
                     t.span.begin.offset, t.span.end.offset,
@@ -75,6 +79,95 @@ void runCase(const std::string& name, const std::string& src) {
     }
     std::printf("\n");
 }
+
+// -----------------------------------------------------------------------------
+// Focused assertion checks (added for DECISIONS D53): prove the exact token-kind
+// sequence produced for `>>>=` and that the neighbouring `>>>`, `>>=`, `>=`,
+// `>>` operators are unchanged. Returns the number of failed checks; main()
+// exits nonzero when any check fails.
+// -----------------------------------------------------------------------------
+std::string joinKinds(const std::vector<TokenKind>& kinds) {
+    std::string s;
+    for (std::size_t i = 0; i < kinds.size(); ++i) {
+        if (i != 0) s += ", ";
+        s += tokenKindName(kinds[i]);
+    }
+    return s;
+}
+
+// C++ enum spelling for the kinds exercised by the gap check (falls back to
+// tokenKindName for anything else). Lets the proof read as the required
+// `Identifier, UnsignedShiftRightAssign, Identifier, EndOfFile`.
+std::string joinEnumNames(const std::vector<TokenKind>& kinds) {
+    std::string s;
+    for (std::size_t i = 0; i < kinds.size(); ++i) {
+        if (i != 0) s += ", ";
+        switch (kinds[i]) {
+            case TokenKind::UnsignedShiftRightAssign: s += "UnsignedShiftRightAssign"; break;
+            case TokenKind::UnsignedShiftRight: s += "UnsignedShiftRight"; break;
+            case TokenKind::ShiftRightAssign: s += "ShiftRightAssign"; break;
+            case TokenKind::ShiftRight: s += "ShiftRight"; break;
+            case TokenKind::GreaterEqual: s += "GreaterEqual"; break;
+            default: s += tokenKindName(kinds[i]); break;
+        }
+    }
+    return s;
+}
+
+int checkSequence(const char* src, const std::vector<TokenKind>& expected) {
+    SourceManager sm;
+    SourceFile* file = sm.addFile("<seq>.cp3", src);
+    CollectingDiagnosticSink sink;
+    Lexer lexer(*file, sink);
+    TokenStream stream = lexer.lex();
+
+    std::vector<TokenKind> actual;
+    for (const Token& t : stream.tokens()) actual.push_back(t.kind);
+
+    std::printf("%-10s -> %s\n", src, joinEnumNames(actual).c_str());
+    if (!actual.empty()) {
+        std::printf("           (tokenKindName: %s)\n", joinKinds(actual).c_str());
+    }
+    if (actual == expected && sink.diagnostics().empty()) {
+        std::printf("           PASS\n");
+        return 0;
+    }
+    std::printf("           FAIL: expected %s\n", joinEnumNames(expected).c_str());
+    for (const auto& d : sink.diagnostics()) {
+        std::printf("           DIAG %s  %s\n", d.code.c_str(), d.message.c_str());
+    }
+    return 1;
+}
+
+int verifyGap() {
+    std::printf("==== >>>= token-set gap check (DECISIONS D53) ====\n");
+    int failures = 0;
+    // The new four-byte operator.
+    failures += checkSequence("a >>>= b",
+                              {TokenKind::Identifier, TokenKind::UnsignedShiftRightAssign,
+                               TokenKind::Identifier, TokenKind::EndOfFile});
+    // Neighbouring operators must be untouched.
+    failures += checkSequence("a >>> b",
+                              {TokenKind::Identifier, TokenKind::UnsignedShiftRight,
+                               TokenKind::Identifier, TokenKind::EndOfFile});
+    failures += checkSequence("a >>= b",
+                              {TokenKind::Identifier, TokenKind::ShiftRightAssign,
+                               TokenKind::Identifier, TokenKind::EndOfFile});
+    failures += checkSequence("a >= b",
+                              {TokenKind::Identifier, TokenKind::GreaterEqual,
+                               TokenKind::Identifier, TokenKind::EndOfFile});
+    failures += checkSequence("a >> b",
+                              {TokenKind::Identifier, TokenKind::ShiftRight,
+                               TokenKind::Identifier, TokenKind::EndOfFile});
+    std::printf("==== %d failure(s) ====\n\n", failures);
+    return failures;
+}
+
+// Kept out of `main` to keep it within the function-length budget; the literal
+// is too long to sit on one line.
+const char* const kCommentsNewlines =
+    "let a = 1; // line\n/* block\n comment */ let b = 2;\n/* unterminated\n"
+    "let c = 3;\n";
 
 }  // namespace
 
@@ -117,7 +210,7 @@ let bad = /abc/gg;
 let u = /unterminated
 )CP3");
 
-    runCase("comments-newlines", "let a = 1; // line\n/* block\n comment */ let b = 2;\n/* unterminated\nlet c = 3;\n");
+    runCase("comments-newlines", kCommentsNewlines);
 
     runCase("operators", R"CP3(a >>>= 1; a >>> b; a >>= 1; a === b; a !== b; a **= 2;
 a ??= b; a?.b; a ?? b; f(...args); 0..n; x => x; a?.5:b;
@@ -129,5 +222,12 @@ type interface class async await weak ref from as of get set
 
     runCase("unterminated", "\"abc\nlet x = 1;\n`open ${ y\n");
 
-    return 0;
+    runCase("invalid-chars", "a \\ b # #ok\n");
+
+    runCase("escapes2", R"CP3("\01" "\u{}" "\u{0}" "\u{10FFFF}" "\u{110000}"
+)CP3");
+
+    runCase("comment-inline", "let a=1;/*c*/let b=2;\n");
+
+    return verifyGap() == 0 ? 0 : 1;
 }

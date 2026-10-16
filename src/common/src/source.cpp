@@ -23,8 +23,10 @@ SourcePos SourceFile::positionAt(std::uint32_t offset) const {
     }
     // Greatest line start <= offset.
     auto it = std::upper_bound(lineStarts.begin(), lineStarts.end(), offset);
-    std::size_t index = (it == lineStarts.begin()) ? 0
-                                                    : static_cast<std::size_t>(it - lineStarts.begin() - 1);
+    std::size_t index = 0;
+    if (it != lineStarts.begin()) {
+        index = static_cast<std::size_t>(it - lineStarts.begin() - 1);
+    }
     pos.line = static_cast<std::uint32_t>(index + 1);
     pos.column = offset - lineStarts[index] + 1;
     return pos;
@@ -35,7 +37,8 @@ std::string_view SourceFile::slice(const SourceSpan& span) const {
         return {};
     }
     std::uint32_t begin = span.begin.offset;
-    std::uint32_t end = std::min<std::uint32_t>(span.end.offset, static_cast<std::uint32_t>(text.size()));
+    const auto textSize = static_cast<std::uint32_t>(text.size());
+    std::uint32_t end = std::min<std::uint32_t>(span.end.offset, textSize);
     if (end < begin) {
         return {};
     }

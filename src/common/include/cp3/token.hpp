@@ -105,6 +105,7 @@ enum class TokenKind {
     Assign,                                         // =
     PlusAssign, MinusAssign, StarAssign, SlashAssign, PercentAssign, StarStarAssign,
     AmpersandAssign, PipeAssign, CaretAssign, ShiftLeftAssign, ShiftRightAssign,
+    UnsignedShiftRightAssign,                       // >>>=  (appended; DECISIONS D53)
     AndAndAssign, OrOrAssign, QuestionQuestionAssign,  // &&= ||= ??=
     Equal, NotEqual,                                // == !=
     StrictEqual, StrictNotEqual,                    // === !==
@@ -170,11 +171,10 @@ public:
     Token advance();
     const Token& previous() const noexcept;
 
-    // Parser-driven re-lexing hook for template literals: when the parser sees
-    // a TemplateHead/TemplateMiddle it advances past the interpolated
-    // expression and calls rescanTemplateContinuation(), which asks the lexer
-    // (via the callback installed by the parser) to produce the next
-    // TemplateMiddle/TemplateTail at the current offset.
+    // Template literals are lexed flat (DECISIONS.md D7): the lexer emits the
+    // whole TemplateHead / interpolation tokens / TemplateMiddle… /
+    // TemplateTail sequence itself, so TokenStream has no re-lex callback and
+    // the parser never asks the lexer to rescan a template continuation.
     std::size_t cursor() const noexcept { return cursor_; }
     void setCursor(std::size_t c) noexcept { cursor_ = c; }
     std::size_t size() const noexcept { return tokens_.size(); }

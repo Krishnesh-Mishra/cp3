@@ -28,7 +28,7 @@ flow downward only; there are no cycles.
 | `cp3_cli` | `src/cli/` | `src/cli/include/` | Command surface, argument parsing, all rendering. | Scaffold |
 | `cp3c` | `src/main.cpp` | — | Executable; forwards `argv` to `runCli`. | Complete |
 
-Dependency edges (declared in `CMakeLists.txt`):
+Dependency edges (declared in each module's `src/<module>/CMakeLists.txt`):
 
 ```
 cp3c -> cp3_cli -> { cp3_common, cp3_lexer, cp3_parser, cp3_sema, cp3_codegen }
@@ -92,15 +92,92 @@ cmake --build build      # build all targets
 The executable lands at `build/bin/cp3c` (`build\bin\cp3c.exe` on Windows).
 In this environment the configure step selected **Ninja + GNU 16.1.0**.
 
-If Python 3 is found at configure time, a convenience target is also wired up:
+### 3.1 Where the build is described
+
+Module source lists live **with the module**, never in a shared file: adding a
+`.cpp` to a module means editing **only that module's `CMakeLists.txt`**
+(STYLE.md §3). That is what lets module owners refactor in parallel without
+colliding in the repository root.
+
+| File | Owns |
+| --- | --- |
+| `CMakeLists.txt` (root) | CMake floor, `project()`, the C++20 settings, the output directories, the `cp3_set_warnings()` helper, `find_package(Python3)`, `add_subdirectory(src)`, and the two repository-level convenience targets (`cp3c-tests`, `lint`). It lists **no module sources**. |
+| `src/CMakeLists.txt` | `add_subdirectory()` of every module in *dependency order*, then the `cp3c` executable (`src/main.cpp`, linking `cp3_cli`). |
+| `src/<module>/CMakeLists.txt` | That module's library target, its **source list**, its include directory, and its links. |
+
+```
+CMakeLists.txt                # root: toolchain floor, warnings, convenience targets
+src/CMakeLists.txt            # modules in dependency order + the cp3c executable
+src/common/CMakeLists.txt     # cp3_common  (links nothing)
+src/lexer/CMakeLists.txt      # cp3_lexer   -> cp3_common
+src/parser/CMakeLists.txt     # cp3_parser  -> cp3_lexer  (-> cp3_common)
+src/sema/CMakeLists.txt       # cp3_sema    -> cp3_parser
+src/codegen/CMakeLists.txt    # cp3_codegen -> cp3_sema
+src/runtime/CMakeLists.txt    # cp3_runtime -> cp3_common (+ Threads; not in cp3c yet)
+src/cli/CMakeLists.txt        # cp3_cli     -> common, lexer, parser, sema, codegen
+```
+
+Each module file has the same shape — declare the list, create the target, add
+the include root, link the dependencies, apply the shared warnings:
+
+```cmake
+set(cp3_parser_sources
+    src/parser.cpp
+    src/statements.cpp
+    # ... one line per unit (STYLE.md §8); this is the only file to edit
+)
+add_library(cp3_parser STATIC ${cp3_parser_sources})
+target_include_directories(cp3_parser PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(cp3_parser PUBLIC cp3_common cp3_lexer)
+cp3_set_warnings(cp3_parser)
+```
+
+The resulting dependency edges are exactly the ones in §1. `add_subdirectory`
+order in `src/CMakeLists.txt` is what enforces "link only modules already
+added", so the map above and that file must stay in sync. A module may add
+opt-in unit-test targets of its own (e.g. `cp3_runtime`'s
+`-DCP3_RUNTIME_TESTS=ON`, which builds `src/runtime/tests/*`); those are off by
+default so the normal build stays lean.
+
+### 3.2 Convenience targets
+
+```bash
+cmake --build build --target cp3c-tests   # Python 3 required (see below)
+cmake --build build --target lint         # advisory STYLE.md check (see 3.4)
+```
+
+If Python 3 is found at configure time, `cp3c-tests` runs the conformance
+harness over `tests/cases/`:
 
 ```bash
 cmake --build build --target cp3c-tests
 ```
 
+### 3.3 Warnings
+
 Warnings are enabled (`-Wall -Wextra`, or `/W4 /permissive-` on MSVC) but
 **`-Werror` is deliberately never set**, so one module author's warning cannot
 block another's build. (See §11 for the one known warning.)
+
+### 3.4 Layout lint (advisory)
+
+The `lint` target runs `python tools/lint_layout.py`, which enforces the STYLE.md
+§2 hard budgets (file, function, type, line length, parameters, nesting) and the
+§4 naming spot-checks (file names, macro names) over `src/**`. It is **advisory
+by design**: it is not part of the default build (not in `ALL`), never depends
+on `cp3c`, and never sets `-Werror` — a violation in one module must not block
+another module's build (STYLE.md §9). The script exits non-zero when a hard
+budget is exceeded and prints a per-file report with line numbers; run it
+directly for the same result, or `--warn-only` to report without failing:
+
+```bash
+python tools/lint_layout.py
+python tools/lint_layout.py --warn-only
+```
+
+Hard violations must be fixed before a module is considered done; the
+suppression marker and the documented allow-list are described in the script
+header.
 
 ---
 

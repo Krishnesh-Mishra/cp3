@@ -196,38 +196,45 @@ bool isPrimitive(const Type& t) noexcept {
 
 // --- describe -----------------------------------------------------------------
 
+namespace {
+
+// `(P0, P1, ...) => R`: the parameters are every part but the last; the last
+// part (if any) is the return type.
+std::string describeFunction(const Type& t) {
+    std::string out = "(";
+    if (t.parts.size() >= 2) {
+        const std::size_t params = t.parts.size() - 1;
+        for (std::size_t i = 0; i < params; ++i) {
+            if (i != 0) out += ", ";
+            out += describe(t.parts[i]);
+        }
+    }
+    out += ") => ";
+    out += t.parts.empty() ? "unknown" : describe(t.parts.back());
+    return out;
+}
+
+// `A | B | ...`; an empty union is the bottom type `never`.
+std::string describeUnion(const Type& t) {
+    if (t.parts.empty()) return "never";
+    std::string out;
+    for (std::size_t i = 0; i < t.parts.size(); ++i) {
+        if (i != 0) out += " | ";
+        out += describe(t.parts[i]);
+    }
+    return out;
+}
+
+}  // namespace
+
 std::string describe(const Type& t) {
     switch (t.kind) {
         case TypeKind::Array:
             return t.parts.empty() ? "array" : describe(t.parts.front()) + "[]";
-        case TypeKind::Function: {
-            std::string out = "(";
-            if (t.parts.size() >= 2) {
-                const std::size_t params = t.parts.size() - 1;
-                for (std::size_t i = 0; i < params; ++i) {
-                    if (i != 0) {
-                        out += ", ";
-                    }
-                    out += describe(t.parts[i]);
-                }
-            }
-            out += ") => ";
-            out += t.parts.empty() ? "unknown" : describe(t.parts.back());
-            return out;
-        }
-        case TypeKind::Union: {
-            if (t.parts.empty()) {
-                return "never";
-            }
-            std::string out;
-            for (std::size_t i = 0; i < t.parts.size(); ++i) {
-                if (i != 0) {
-                    out += " | ";
-                }
-                out += describe(t.parts[i]);
-            }
-            return out;
-        }
+        case TypeKind::Function:
+            return describeFunction(t);
+        case TypeKind::Union:
+            return describeUnion(t);
         case TypeKind::Nullable: {
             std::string out = t.parts.empty() ? "unknown" : describe(t.parts.front());
             out += " | null | undefined";
