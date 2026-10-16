@@ -53,10 +53,10 @@ need a change across a boundary, ask the owner.
 | `src/common/src/**` | scaffolding/architecture | Implementations *behind* the frozen headers. |
 | `src/lexer/**` | lexer owner | Replace the stub body; keep the `Lexer` boundary. |
 | `src/parser/**` | parser owner | Replace the stub body; keep the `Parser` boundary. |
-| `src/sema/**` | sema owner | Replace the stub body; keep the `SemanticAnalyzer` boundary. |
-| `src/codegen/**` | codegen owner | Replace the stub body; keep the `CodeGenerator` boundary. |
+| `src/sema/**` | sema owner | Replace the stub body; keep the `SemanticAnalyzer` boundary and the frozen `src/sema/include/**` shape. |
+| `src/codegen/**` | codegen owner | Replace the stub body; keep the `CodeGenerator` boundary and the frozen `src/codegen/include/**` shape. |
 | `src/cli/**` | CLI/pipeline owner | Commands, flags, diagnostic rendering. |
-| `src/runtime/**` | runtime owner | Runtime support surface. |
+| `src/runtime/**` | runtime owner | Runtime support surface; the generated-code ABI in `src/runtime/include/**` is frozen. |
 | `src/main.cpp` | scaffolding/architecture | Trivial; keep it trivial. |
 | `ARCHITECTURE.md` | scaffolding/architecture | This file. |
 | `tests/runner/**` | scaffolding/architecture | The harness. |
@@ -67,6 +67,14 @@ need a change across a boundary, ask the owner.
 everything else. Frozen interfaces (`src/common/include/cp3/**`) and the case
 format (`tests/cases/README.md`) are not to be reshaped — extend them only by
 the documented mechanisms (see §7 and §8).
+
+**Frozen by the contracts pass (DECISIONS D14):** the lead owns
+`src/common/include/cp3/**`, and the *public interface shape* of the stage
+headers — `src/sema/include/**`, `src/codegen/include/**`,
+`src/runtime/include/**` — was extended and frozen by the contracts pass. Stage
+owners implement *against* that shape (fill in the `.cpp` bodies and the
+algorithms) and do not reshape the headers. If a stage needs a different shape,
+that is an open question for the lead (§13), not a unilateral header edit.
 
 ---
 
@@ -182,12 +190,14 @@ These headers are the stable contract every stage codes against. One line each:
 | `cp3/diagnostic_codes.hpp` | The canonical `CP3xxx` code table, grouped by owning stage. |
 | `cp3/module.hpp` | `ModuleResolution`, `PreludeKind`, `CompilationUnit`, `ModuleDependency`, `ModuleGraph`. |
 | `cp3/options.hpp` | `TypeSystem`, `BuildProfile`, `CompileOptions`. |
+| `cp3/types.hpp` | `TypeKind`, `Type` (the cp3 value-type model) + `typeKindName`/`describe`/`isPrimitive`/`isAssignable`/`unify`. |
+| `cp3/analysis.hpp` | `SymbolInfo`, `FunctionInfo`, `SemaResult` — sema's nodeId-keyed side tables. |
 | `cp3/version.hpp` | `kCompilerName`, `kVersion`, `kVersionStage`, `versionString()`. |
 | `cp3/lexer.hpp` | `Lexer` (scan a `SourceFile` into a `TokenStream`). |
 | `cp3/parser.hpp` | `Parser` (parse a `TokenStream` into a `Program`). |
-| `cp3/sema.hpp` | `SemanticAnalyzer` (analyze a `Program`, report to a sink). |
-| `cp3/codegen.hpp` | `CodeGenerator` + `GeneratedModule` (AST → `.hpp`/`.cpp` pair). |
-| `cp3/runtime.hpp` | Runtime placeholder surface. |
+| `cp3/sema.hpp` | `SemanticAnalyzer` (analyze a `Program` into diagnostics + a `SemaResult`). |
+| `cp3/codegen.hpp` | `CodeGenerator` + `GeneratedModule` (`Program` + `SemaResult` → `.hpp`/`.cpp` pair). |
+| `cp3/runtime.hpp` | The generated-code ABI: `Undefined`, `toString`/`print`/`println`, `cp3::Error`, plus `name()`/`version()`. |
 | `cp3/cli.hpp` | `runCli`, the exit-code constants, and the scaffold marker. |
 
 ---
@@ -332,6 +342,31 @@ guessed silently** — each is a place where the spec/docs do not decide a
 question this code must answer, or where two parts of the frozen surface
 disagree. Until a lead answers, the scaffold takes the most conservative
 non-committal position.
+
+### Resolved by lead (see DECISIONS.md)
+
+All thirteen items below were resolved by the lead in
+[`DECISIONS.md`](DECISIONS.md). The numbered list is kept for provenance; the
+resolution for each item is the linked decision, which is binding and is not
+re-litigated by stage agents.
+
+| # | Question (short) | Decision |
+| --- | --- | --- |
+| 1 | Compiler internal architecture / IR | **D1** — no IR; AST + nodeId side tables only. |
+| 2 | Canonical machine-readable diagnostic line | **D2** — `<path>:<line>:<col>: <severity>: <CODE>: <message>`. |
+| 3 | Command name `cp3` vs `cp3c` | **D3** — binary is `cp3c`; `cp3` is a future frontend alias. |
+| 4 | Module-specifier classification | **D4** — `./`,`../`,`.cp3`→Local; `std/`→Std; `cpp/`→Cpp; `native`→Native; else Package. |
+| 5 | Prelude graph semantics | **D5** — file-level Same→Strong→Weak; cross-folder composition deferred. |
+| 6 | `nodeId` allocation contract | **D6** — 1-based, pre-order, `Program` root numbered, `0` = unassigned. |
+| 7 | Template-literal re-lexing hook | **D7** — lexer scans templates flat; `rescanTemplateContinuation()` is obsolete. |
+| 8 | `+` overloading | **D8** — strict; only `number+number`/`string+string`; else `CP3411`. |
+| 9 | `number` printing format | **D9** — ECMAScript `Number::toString`, exact. |
+| 10 | Entry point / top-level execution | **D10** — top-level statements become a synthesized `int main()`. |
+| 11 | `console.log` backing | **D11** — cp3 runtime with standard C++; no `fmt` in M1. |
+| 12 | Toolchain order vs. environment | **D12** — documented per-platform order, then `g++`/`clang++` fallback. |
+| 13 | Object-property shorthand representation | **D13** — `{ a }` stores `value = Identifier("a")`; `nullptr` is recovery-only. |
+
+### Original questions (provenance only)
 
 1. **Compiler internal architecture / IR (largest open item).**
    [`docs/cli-tooling/06-open-tooling-questions.md`](docs/cli-tooling/06-open-tooling-questions.md)

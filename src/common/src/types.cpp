@@ -30,6 +30,22 @@ bool isJoinContainer(const Type& t) noexcept {
     return t.kind == TypeKind::Union || t.kind == TypeKind::Nullable;
 }
 
+// True when a container type admits the `null` / `undefined` values
+// (Nullable, a union containing a nullish member, or a bare nullish type).
+bool acceptsNullish(const Type& t) noexcept {
+    if (t.isNullish() || t.isNullable()) {
+        return true;
+    }
+    if (t.isUnion()) {
+        for (const Type& member : t.parts) {
+            if (member.isNullish()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 // Format a finite double for a diagnostic without depending on the runtime's
 // ECMAScript formatter (that lives in cp3/runtime.hpp). Diagnostics are
 // best-effort; %g keeps it short and stable.
@@ -257,6 +273,29 @@ bool isAssignable(const Type& from, const Type& to) {
         return false;
     }
 
+    // Narrowing out of a union / nullable: every member must fit. This is
+    // checked before widening so union-to-union is decided member-wise.
+    if (from.isUnion()) {
+        for (const Type& member : from.parts) {
+            if (!isAssignable(member, to)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (from.isNullable()) {
+        // null | undefined are only assignable to a container that admits them.
+        if (!acceptsNullish(to)) {
+            return false;
+        }
+        for (const Type& member : from.parts) {
+            if (!isAssignable(member, to)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // Widening into a union / nullable container.
     if (to.isUnion()) {
         for (const Type& member : to.parts) {
@@ -276,25 +315,6 @@ bool isAssignable(const Type& from, const Type& to) {
             }
         }
         return false;
-    }
-
-    // Narrowing out of a union / nullable: every member must fit.
-    if (from.isUnion()) {
-        for (const Type& member : from.parts) {
-            if (!isAssignable(member, to)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    if (from.isNullable()) {
-        // null | undefined are only assignable to a container, handled above.
-        for (const Type& member : from.parts) {
-            if (!isAssignable(member, to)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     // Every remaining kind (primitives with different kinds, structural
@@ -324,6 +344,14 @@ Type unify(const Type& a, const Type& b) {
     }
     if (a.isVoid() || b.isVoid()) {
         return Type::voidType();
+    }
+
+    // A literal expression widens to its base primitive when unified.
+    if (a.isLiteral()) {
+        return unify(a.literalBaseType(), b);
+    }
+    if (b.isLiteral()) {
+        return unify(a, b.literalBaseType());
     }
 
     // nullish joins collapse to the Nullable shorthand (T | null | undefined).

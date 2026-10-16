@@ -161,6 +161,7 @@ bool isAssignable(const Type& from, const Type& to);
 //   * Unknown absorbs to the other side;
 //   * Void on either side -> void;
 //   * a nullish type unified with a non-nullish T -> Nullable(T);
+//   * a Literal widens to its base primitive;
 //   * otherwise the distinct members become a Union (flattened).
 // DEFERRED: numeric widening across integer widths, class hierarchy joins.
 Type unify(const Type& a, const Type& b);

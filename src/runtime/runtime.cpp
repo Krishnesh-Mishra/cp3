@@ -38,7 +38,11 @@ std::string numberToString(double value) {
     }
 
     char buf[64];
-    const std::to_chars_result res = std::to_chars(buf, buf + sizeof(buf), value);
+    // NOTE: the default (general) formatter in some libstdc++ versions returns
+    // a non-shortest exact value for large magnitudes; the scientific shortest
+    // form does not have that problem, and we re-place the decimal point below.
+    const std::to_chars_result res =
+        std::to_chars(buf, buf + sizeof(buf), value, std::chars_format::scientific);
     std::string repr;
     if (res.ec == std::errc()) {
         repr.assign(buf, res.ptr);
