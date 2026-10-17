@@ -180,6 +180,55 @@ limitations documented, not corpus-asserted). Durable facts:
   deviation, fix queued for wave 1), zero-arg `.then` handler fails to compile
   (bug 7 above).
 
+## Perf wave (queued behind wave 1) — performance
+
+Lead probe, 2026-10-17 (`build/scratch/perf-probe/`, g++ 16.1.0 `-O2`): the
+compute-single loop lowered three ways — `std::fmod(n, 2)` **1080 ms** (= cp3c's
+current shape; reproduces compute-single's measured 1.13–1.18 s, so fmod is
+essentially the whole sink), inline cast-based `%` in the exact double domain
+**385 ms**, int64 **135 ms** ≈ C++/Rust entries (147/132 ms). Not flags
+(`toolchain.cpp` already passes `-O2`), not startup (hello-world exe 6–8 ms =
+blank-process floor; the prelude is DCE'd), not the simple statements (the rest
+of the loop is fine double code). Targets and binding rules: **D64**.
+
+Ordered work items (same ownership as wave 1 — `src/codegen/**`,
+`src/runtime/**`; land wave 1 first):
+1. `%` lowering: inline helper + literal-divisor specialization; `std::fmod`
+   only as out-of-range fallback. No observable change; corpus stays
+   byte-identical. Expected compute-single ≈ 0.39 s (≈3x faster than Node).
+2. Integral fast path: static integrality/range analysis → guarded int64
+   lowering. Expected ≈ 0.15 s — beats Go (0.20 s), at C++/Rust parity.
+3. Hygiene: string literals without `std::string(...)` wrap, usage-pruned
+   prelude, runtime-TU pruning with D56 (cold hello-world build is 5.2 s
+   because all five TUs compile every time).
+4. After landing: re-run the suite, refresh the competitions tables and the
+   root README numbers with the new labeled run (D60/D64).
+
+Acceptance: corpus 0 failed + suite rerun meets the D64 targets.
+
+## Native type systems wave (queued — spec §3)
+
+`docs/language-spec/03-type-system.md`: TS type names stay the default;
+`package.json` may set `"typeSystem": "rust" | "cpp"` so plain names (`u32`,
+`i64`, `long long`) are native machine types; the non-active system stays
+reachable inline by prefix (`r_'u32'`, `c_'long long'`, `ts_'number'`);
+numeric literals and the `null`/`undefined` keywords never change; mixed
+integer types follow C++ implicit widening, with Rust-style `strictNumericCasts`
+as an opt-in flag. Scope: parser (prefixed quoted type names), sema
+(project-level name mapping + native type metadata), codegen (type_map binding
+to int32/int64/uint64/double/…), `cp3 init`'s fourth question, docs.
+
+Relationship to performance (**D64**/**D65**): this is the explicit fast path —
+declared native types are C++/Rust-equal by construction; D64's integral fast
+path makes the TS-typed default competitive without learning types. Keep both.
+
+Competitions (**D60**/**D65**): the cp3 entry stays TS-typed; when this wave
+lands, add a second clearly-labeled cp3 entry (`compute-single` with `r_'u64'`)
+that auto-fills like any pending entry.
+
+Scheduling: queued behind the perf wave and wave 2 (classes); mid-size wave
+(parser + sema + codegen + cli). Move up on request.
+
 ## Corpus weight at M2 open (runnable = 843)
 
 stdlib 190 (16 passed, 173 skipped) · types 86 (66) · arrays-strings 82 (13) ·

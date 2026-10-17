@@ -402,3 +402,40 @@ real pass/fail. Anything in the AST beyond that must produce a clean
   2. **`NaN` and `Infinity` resolve as `number` globals** — D9 pins NaN's
      rendering, but `console.log(NaN)` currently fails with CP3301 (wave-1
      fix).
+- **D64.** Performance doctrine and the `number` fast path (evidence:
+  `build/scratch/perf-probe/` — the exact compute-single workload lowered three
+  ways at g++ 16.1.0 `-O2`: `std::fmod` **1080 ms** = the shape cp3c emits today
+  and the sink behind compute-single's 1.16 s; inline cast-based `%` in the
+  exact double domain **385 ms**; int64 **135 ms** ≈ the C++/Rust entries'
+  132–147 ms):
+  1. **Targets.** The `examples/competitions/` suite is the judge (D60 — numbers
+     refresh from real runs, never invented): compute-single **≤ Go (0.20 s)** is
+     the hard target, **C++/Rust parity (≈0.15 s)** the stretch. Matching/beating
+     the native entries on hot integer loops is the language's core promise, so
+     it is a tracked requirement, not a nicety.
+  2. **No libm calls in generated scalar hot paths.** `%` must lower to an
+     inline exact-integer fast path with a `std::fmod` fallback (and
+     literal-divisor specialization), never to a bare `std::fmod` call. Same
+     rule for every libm-backed operator as it appears (`**`, etc.).
+  3. **Integer fast path for `number`.** Observable semantics stay exactly IEEE
+     double / JS; where static analysis proves a value integral and in range,
+     codegen may carry it as int64, with a guard/fallback the moment it cannot
+     prove. This is the static-language dividend JS engines buy back with
+     runtime speculation; the correctness bar is the corpus staying
+     byte-identical.
+  4. **Generated-code hygiene** (compile-time, not runtime — hello-world is
+     already DCE-clean: 6–8 ms startup = blank-process floor): emit string
+     literals without `std::string(...)` wrapping, prune the per-file prelude to
+     used helpers, and (with D56) link only the runtime TUs a program needs —
+     today every build compiles/links all five.
+- **D65.** Native type systems (spec §3: per-project `typeSystem` in
+  `package.json`, inline `r_'u32'`/`c_'long long'`/`ts_'number'` prefixes,
+  C++-style implicit widening with opt-in `strictNumericCasts`) are the
+  **explicit** fast path — declared native types are C++/Rust-equal by
+  construction. D64's fast path and this feature are complementary: the
+  TS-default must stay fast without changing type names, and native types must
+  exist for guaranteed native codegen. Competitions policy: the cp3 row stays
+  TS-typed (the flagship "same readable code" contract); once this feature
+  lands, a second, clearly-labeled cp3 entry (e.g. compute-single with
+  `r_'u64'`) joins it — written-to-spec and pending until then, per the
+  suite's normal contract.
