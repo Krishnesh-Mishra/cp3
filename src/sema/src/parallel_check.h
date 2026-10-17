@@ -1,11 +1,13 @@
 // =============================================================================
 // src/sema/src/parallel_check.h — PRIVATE parallel.* capture-safety model.
 //
-// Declares the implementation-private closure scanner used by the parallel.*
+// Declares the implementation-private scanner used by the parallel.*
 // capture-safety check (docs/language-spec §13, "Capture safety, precisely:"):
 // it walks one closure body and records writes to captured state (CP3902) and
 // unsafe computed-index writes (CP3901). The class is defined across
-// parallel_check.cpp (statements) and parallel_expr_check.cpp (expressions).
+// parallel_check.cpp (statements + the `Analyzer` hook) and
+// parallel_expr_check.cpp (expressions + scope tracking); the small AST
+// predicates below are shared by both walks and therefore live here.
 //
 // Implementation detail: lives under `src/sema/src/` and is never included by
 // another module (STYLE.md §3).
@@ -32,6 +34,8 @@ struct Finding {
     std::string message;
 };
 
+// --- AST predicates shared by the statement and expression walks -------------
+
 // The base identifier a member/index chain is rooted at (`a.b[i]` -> `a`), or
 // nullptr when the chain does not start at a simple identifier.
 inline Identifier* rootIdentifier(Expr* e) {
@@ -46,7 +50,7 @@ inline Identifier* rootIdentifier(Expr* e) {
     return nullptr;
 }
 
-// `parallel` is a core builtin (D34), used bare as in §13.
+// `parallel` is a core builtin (D34), used bare as in §13: `parallel.for(...)`.
 inline bool isParallelRoot(Expr* e) {
     return e && e->kind == NodeKind::Identifier &&
            static_cast<Identifier&>(*e).name == "parallel";
@@ -56,8 +60,8 @@ inline bool isParallelRoot(Expr* e) {
 // captured object is an unsynchronized write to shared state (CP3902).
 inline bool isMutatingMethod(const std::string& name) {
     static const char* const kMutators[] = {
-        "push",   "unshift", "pop",        "shift", "splice", "sort",
-        "reverse", "fill",   "copyWithin", "add",   "delete", "clear",
+        "push",    "unshift", "pop",        "shift", "splice", "sort",
+        "reverse", "fill",    "copyWithin", "add",   "delete", "clear",
         "set",
     };
     for (const char* m : kMutators) {
@@ -67,7 +71,8 @@ inline bool isMutatingMethod(const std::string& name) {
 }
 
 // The name bound by a (possibly defaulted) binding pattern when it names a
-// single identifier; empty otherwise. Used to read the induction variable.
+// single identifier; empty otherwise. Used to read parallel.for's induction
+// variable off its first parameter.
 inline std::string boundName(Node* node) {
     if (!node) return {};
     if (node->kind == NodeKind::Identifier) {
@@ -95,7 +100,11 @@ public:
     std::vector<Finding> take() { return std::move(findings_); }
 
 private:
-    // --- scope tracking (parallel_expr_check.cpp) ----------------------------
+    // --- shared child-walk primitives (parallel_expr_check.cpp) --------------
+    void scanMaybeExpr(Expr* e);
+    void scanAll(std::initializer_list<Expr*> items);
+
+    // --- closure-local scope tracking (parallel_expr_check.cpp) --------------
     void pushScope();
     void popScope();
     void declareName(const std::string& name);
@@ -105,21 +114,29 @@ private:
     bool throughInduction(const IndexExpr& ix) const;
     void addCaptured(const std::string& name, const SourceSpan& span);
     void addIndex(const SourceSpan& span);
-    void scanAll(std::initializer_list<Expr*> items);
 
     // --- statements (parallel_check.cpp) -------------------------------------
     void scanStmt(Stmt& s);
+    void scanControlStmt(Stmt& s);
     void scanBlock(BlockStatement& b);
+    void scanIf(IfStatement& is);
+    void scanWhile(WhileStatement& w);
+    void scanDoWhile(DoWhileStatement& d);
+    void scanFor(ForStatement& f);
     void scanVarDecl(VariableDeclaration& vd);
     void scanForInit(Node& init);
     void scanForEach(Node* left, Expr* right, Stmt* body);
     void scanSwitch(SwitchStatement& sw);
     void scanTry(TryStatement& ts);
     void scanFunctionBody(Stmt* body, ParamList& params);
+    void scanExport(ExportDeclaration& e);
 
     // --- expressions (parallel_expr_check.cpp) -------------------------------
     void scanExpr(Expr& e);
-    void scanChildExprs(Expr& e);
+    void scanExprChildren(Expr& e);
+    void scanOperatorExprs(Expr& e);
+    void scanSingleChildExprs(Expr& e);
+    void scanContainerExprs(Expr& e);
     void scanCall(CallExpr& c);
     void scanTarget(Expr& target);
     void scanMemberTarget(MemberExpr& m);

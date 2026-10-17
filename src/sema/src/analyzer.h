@@ -20,6 +20,8 @@
 //   stmt_check.cpp         statements, control flow, return analysis
 //   symbols.cpp            SymbolInfo/FunctionInfo/nodeTypes publishing
 //   banned.cpp             banned-pattern diagnostics (delete/arguments/for-in/any)
+//   parallel_check.cpp      parallel.* capture safety: statements + hook
+//   parallel_expr_check.cpp parallel.* capture safety: expressions + scopes
 //
 // This header is implementation detail: it lives under `src/sema/src/` and is
 // never included by another module (STYLE.md §3).
