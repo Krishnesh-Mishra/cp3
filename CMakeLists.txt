@@ -23,8 +23,7 @@
 #   * the single `cp3_set_warnings` helper,
 #   * `find_package(Python3)` for the repository-level Python tooling targets,
 #   * `add_subdirectory(src)`,
-#   * the three top-level convenience targets (`cp3c-tests`, `example-checks`,
-#     `lint`).
+#   * the two top-level convenience targets (`cp3c-tests`, `lint`).
 # =============================================================================
 cmake_minimum_required(VERSION 3.20)
 
@@ -89,26 +88,6 @@ if(Python3_Interpreter_FOUND)
     add_dependencies(cp3c-tests cp3c)
 else()
     message(STATUS "Python3 not found — 'cp3c-tests' target disabled (run tests/runner/run_tests.py manually).")
-endif()
-
-# -----------------------------------------------------------------------------
-# Example checks (Python).  Optional: only wired up if Python is available.
-# Runs examples/<category>/<name>/main.cp3 through the compiler and compares
-# each result against that example's own expect.json: "active" examples must
-# pass, "pending" ones only report what they are still waiting for (and shout
-# READY when they start compiling and running).
-# -----------------------------------------------------------------------------
-if(Python3_Interpreter_FOUND)
-    add_custom_target(example-checks
-        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_examples.py"
-                --cp3c "$<TARGET_FILE:cp3c>"
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        USES_TERMINAL
-        COMMENT "Running cp3c example programs"
-    )
-    add_dependencies(example-checks cp3c)
-else()
-    message(STATUS "Python3 not found — 'example-checks' target disabled (run tools/run_examples.py manually).")
 endif()
 
 # -----------------------------------------------------------------------------

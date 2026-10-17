@@ -6,12 +6,14 @@ reconnaissance pass (all 547 skips attributed to their first blocking feature).
 **This file is a roadmap, not a contract** — `DECISIONS.md` wins on any
 conflict. Waves update it as they land.
 
-## Critical path to the pending examples
+## Critical path (revised — see D59/D60)
 
-`method calls (wave 1) + arrays (wave 3)` → `async/event loop (wave 4, in
-flight)` → `collections (wave 5)` → `std/network` → all 6 pending
-`examples/**` flip to READY (`parallel-sum` additionally needs wave 3 +
-`parallel.*`; the two games need waves 1+4).
+Examples are showcase-only now (D59): no auto-run, no statuses — the corpus in
+`tests/cases/` is the only automated oracle. The wave order below is the plan;
+`examples/**` and the new cross-language `examples/competitions/` suite (D60:
+health-server + compute benchmarks) become fully runnable as their features
+land (servers wait on `std/network`; multi-thread entries on `parallel.*`; the
+games on waves 1+4).
 
 ## Ranked waves (cases-unblocked × dependency-criticality)
 
@@ -66,6 +68,32 @@ are promotable into real cases; ~23 are CLI/tooling markers (not `.cp3` cases);
    `generics/decorator_banned` pass on a real diagnostic but also carry a
    `CP3002: class declarations`; re-audit when wave 2 lands.
 5. Marker mechanics — see D58.
+
+## Wave 4 salvage notes (first attempt cancelled mid-design, zero `src/**` edits)
+
+The first async-wave attempt was stopped after validating the runtime ABI with
+live probes (`build/scratch/probe/probe*.cpp` + built `error.o`/`promise.o`/
+`eventloop.o`). Durable findings — evidence in the probe sources; verify before
+relying:
+
+- Runtime TUs to link via the CLI driver: `runtime.cpp`, `promise.cpp`,
+  `eventloop.cpp`, `error.cpp`; MinGW g++ 16, `-std=c++20`, no extra libs.
+- A coroutine body with **no `co_return` at all silently swallows a `throw`**
+  (probe3) — codegen must always append a trailing `co_return`.
+- `.catch` lowering: `catchError(h)` with a void-returning `h` on
+  `Promise<T≠void>` fails to compile against the frozen ABI (probe6 shape A);
+  the working lowering is `p.then([](auto&&...){}, h)` (shape B, compiled+ran).
+- Unhandled rejection → stderr `cp3: error: unhandled promise rejection: …`,
+  exit 1 (matches `errors/unhandled_rejection_exits`).
+- Skipped = all diagnostics CP3002 is required for exit 3; expected flips when
+  wave 4 lands: 18/22 `async/*`, 5 `stdlib/timer_*`, 4 control-flow
+  (`try_catch`, `try_catch_finally`, `try_finally`, `finally_on_return`), 19
+  non-ambiguous `errors/*`. Array-typed promise cases (`promise_all_length`,
+  `promise_all_values`, `promise_all_preserves_order`, `allsettled_length`)
+  stay skipped pending wave 3.
+- CP3301 fix site: `src/sema/src/declarations.cpp` — the binding must be
+  visible to nested closures while typing its initializer (self-reference
+  allowed inside nested function/arrow bodies only).
 
 ## Corpus weight at M2 open (runnable = 843)
 

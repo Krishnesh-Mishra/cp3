@@ -338,3 +338,31 @@ real pass/fail. Anything in the AST beyond that must produce a clean
   real `expect.json` and removes it from `/_ambiguous/` and
   `AMBIGUITIES.md`; fixtures with broken or missing scenario files are
   repaired at that time (three are known and listed in `M2-PLAN.md` §bugs).
+- **D59.** `examples/` is **showcase-only for humans**: readable programs a
+  person can open and run manually (`cp3c run main.cp3` from the example's
+  folder). Examples are **never run automatically** — `expect.json` files,
+  active/pending statuses, the promotion workflow, `tools/run_examples.py`,
+  and the `example-checks` CMake target are all removed. Automated
+  verification of program behavior lives **only** in `tests/cases/` (the
+  corpus oracle). The earlier "living end-to-end checks" framing is
+  superseded; examples no longer gate waves. What is not runnable yet (games,
+  servers, `parallel.*`, async) is labeled in prose in `examples/README.md`
+  until its wave lands.
+- **D60.** `examples/competitions/` is the **cross-language comparison
+  suite** — cp3 vs C++ vs Rust vs Go vs JS/Node vs Python, the same task
+  implemented per language: health-server boot time + `/healthz` latency +
+  req/s stress, single-thread compute, multi-thread compute. Every number
+  shown is a real measurement from an actual run (labeled machine/date);
+  invented numbers are forbidden. This is seed material for a future README
+  "advertisement" section. Layout: `examples/competitions/<task>/` with a
+  `README.md` + one folder per language, plus a suite runner and a
+  dependency-free bench/load script; cp3 entries that need unlanded features
+  are written to spec and marked in prose.
+- **D61.** CLI artifact layout: `.cp3/build/` holds **intermediates only** —
+  generated `.cpp`/`.hpp`, object files, the manifest, and (per D56) the
+  materialized runtime sources. The final executable lands in
+  **`.cp3/out/<entry-stem>` (`.exe` on Windows)**; `cp3 run` executes it from
+  there and `cp3 clean` removes `.cp3/build/` and `.cp3/out/` (`--all` still
+  also wipes `.cp3/packages/`). Supersedes `cache.cpp`'s current
+  exe-in-`build/` behavior; fix queued behind the async wave because
+  `src/cli` is single-writer until then.

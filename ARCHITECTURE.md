@@ -162,7 +162,6 @@ default so the normal build stays lean.
 
 ```bash
 cmake --build build --target cp3c-tests   # Python 3 required (see below)
-cmake --build build --target example-checks  # examples/ showcase runner
 cmake --build build --target lint         # advisory STYLE.md check (see 3.4)
 ```
 
