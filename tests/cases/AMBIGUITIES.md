@@ -8,12 +8,12 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 110** across 15 categories.
+**Total markers: 108** across 15 categories.
 
 | Category | Markers |
 | --- | ---: |
-| `arrays-strings` | 10 |
-| `async` | 6 |
+| `arrays-strings` | 9 |
+| `async` | 5 |
 | `classes` | 4 |
 | `cli` | 23 |
 | `concurrency` | 6 |
@@ -27,7 +27,7 @@ python tests/runner/run_tests.py --write-registry
 | `operators` | 6 |
 | `stdlib` | 16 |
 | `types` | 4 |
-| **Total** | **110** |
+| **Total** | **108** |
 
 ## `arrays-strings`
 
@@ -41,7 +41,6 @@ python tests/runner/run_tests.py --write-registry
 | `arrays-strings/_ambiguous/indexof_not_found.expect.json` | `indexOf` return value when the element is not found (-1 vs other) |
 | `arrays-strings/_ambiguous/slice_negative.expect.json` | negative index arguments to `slice` (JS wraps from the end; std::substr does not) |
 | `arrays-strings/_ambiguous/str_index_type.expect.json` | typed and printed form of `str[i]` (raw byte): native byte type vs number vs 1-char string |
-| `arrays-strings/_ambiguous/str_length_utf8.expect.json` | string `.length` units: bytes (std::string) vs characters (JS UTF-8-aware) |
 | `arrays-strings/_ambiguous/substring_swap.expect.json` | `substring(a, b)` when a > b (JS swaps the arguments; std::substr does not) |
 
 ## `async`
@@ -50,7 +49,6 @@ python tests/runner/run_tests.py --write-registry
 | --- | --- |
 | `async/_ambiguous/async_arrow_function.expect.json` | is `async () => {}` (async arrow function) supported? The spec only shows `async function`. |
 | `async/_ambiguous/await_non_promise.expect.json` | what does `await` on a non-Promise value do (JS unwraps it)? Not specified. |
-| `async/_ambiguous/microtask_macrotask_order.expect.json` | ordering between a 0ms timer and an already-resolved await (microtask vs macrotask) is not pinned. |
 | `async/_ambiguous/promise_resolve_reject.expect.json` | are the static `Promise.resolve`/`Promise.reject` present? The spec lists only all/race/allSettled. |
 | `async/_ambiguous/then_chaining_return.expect.json` | whether `.then` returns a new Promise that chains (JS semantics) is not stated. |
 | `async/_ambiguous/unhandled_rejection_exit_code.expect.json` | the process terminating on an unhandled rejection is pinned, but the exact exit code and printed diagnostics are not. |

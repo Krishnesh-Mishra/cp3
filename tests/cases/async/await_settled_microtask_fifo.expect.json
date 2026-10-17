@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "microtask\nresolved-await\ntimer\nsleep-await\n",
+  "exitCode": 0
+}

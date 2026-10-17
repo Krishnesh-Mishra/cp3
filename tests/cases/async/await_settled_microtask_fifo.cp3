@@ -1,0 +1,8 @@
+import console from "std/console";
+async function g(): Promise<number> { return 1; }
+setTimeout(() => console.log("timer"), 0);
+g().then((v: number) => console.log("microtask"));
+await g();
+console.log("resolved-await");
+await sleep(0);
+console.log("sleep-await");
