@@ -14,8 +14,8 @@ attempted like everything else and reported with the compiler's own `CP3xxx`
 diagnostic instead of a timing — when a feature lands, the row fills in by
 itself.
 
-This is seed material for a future README "advertisement" section: honest
-side-by-side numbers for the tasks where cp3 claims to compete.
+This suite is featured in the repository's root `README.md`; every number is
+a real measurement, and re-running the suite refreshes them.
 
 ## Layout
 

@@ -61,9 +61,9 @@ PORT=4000 npm start
 docs/
 ├── index.md                    # landing page
 ├── getting-started/            # hand-written — the 2-day TS→cp3 migration guide
-├── language-spec/              # from README (6).md      — the core language
-├── cli-tooling/                # from CLI-README (5).md  — cp3 CLI & tooling
-├── standard-library/           # from STDLIB-README (4).md — std/* modules
+├── language-spec/              # from docs/rough/README (6).md         — the core language
+├── cli-tooling/                # from docs/rough/CLI-README (5).md     — cp3 CLI & tooling
+├── standard-library/           # from docs/rough/STDLIB-README (4).md — std/* modules
 └── local-docs-viewer/          # this viewer
 ```
 

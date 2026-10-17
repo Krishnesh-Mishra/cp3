@@ -5,9 +5,9 @@ source to C++20 (one `.cpp`/`.hpp` pair per `.cp3` file) and drives a system C++
 toolchain. This document is the map of the repository: what exists, who owns it,
 how to build and run it, what is frozen, and what is still open.
 
-> The language and tooling specifications live in [`docs/`](docs/).
-> The key ones: [`docs/language-spec/`](docs/language-spec/) and
-> [`docs/cli-tooling/`](docs/cli-tooling/). This file does not restate them; it
+> The language and tooling specifications live in [`docs/`](../).
+> The key ones: [`docs/language-spec/`](../language-spec/) and
+> [`docs/cli-tooling/`](../cli-tooling/). This file does not restate them; it
 > says how *this* codebase is put together.
 
 ---
@@ -62,7 +62,7 @@ need a change across a boundary, ask the owner.
 | `src/cli/**` | CLI/pipeline owner | Commands, flags, diagnostic rendering. |
 | `src/runtime/**` | runtime owner | Runtime support surface; the generated-code ABI in `src/runtime/include/**` is frozen. |
 | `src/main.cpp` | scaffolding/architecture | Trivial; keep it trivial. |
-| `ARCHITECTURE.md` | scaffolding/architecture | This file. |
+| `docs/rough/**` | scaffolding/architecture | Internal process docs and original spec sources: `ARCHITECTURE.md` (this file), `DECISIONS.md`, `M2-PLAN.md`, `STYLE.md`. The root stays lean (`README.md`, `.gitignore`, `CMakeLists.txt`). |
 | `tests/runner/**` | scaffolding/architecture | The harness. |
 | `tests/cases/README.md` | scaffolding/architecture | The frozen case format. |
 | `tests/cases/<category>/**` | that category's owner | Each `tests/cases/<category>/` directory has one owner. `variables/` is owned by the variables owner and already holds 42 cases. |
@@ -86,7 +86,7 @@ that is an open question for the lead (§13), not a unilateral header edit.
 
 Requires CMake ≥ 3.20 and a C++20 compiler. `cp3c` itself is built with CMake;
 cp3 *projects* never are (the compiler drives `cl.exe`/`clang++`/`g++` directly,
-per [`docs/cli-tooling/01-compilation-pipeline.md`](docs/cli-tooling/01-compilation-pipeline.md)).
+per [`docs/cli-tooling/01-compilation-pipeline.md`](../cli-tooling/01-compilation-pipeline.md)).
 
 ```bash
 cmake -B build -S .      # configure
@@ -248,7 +248,7 @@ compile commands come online.
 
 * **Language:** C++20, no compiler extensions (`CMAKE_CXX_EXTENSIONS OFF`).
   C++20 is the floor, not C++23 — chosen for coroutines
-  ([`docs/cli-tooling/01-...`](docs/cli-tooling/01-compilation-pipeline.md)).
+  ([`docs/cli-tooling/01-...`](../cli-tooling/01-compilation-pipeline.md)).
 * **No exceptions across module boundaries.** Every stage reports problems
   through a `DiagnosticSink`; it does not throw and does not print. Functions
   that can fail return `nullptr`, `bool`, or a status, never a thrown error.
@@ -346,7 +346,7 @@ directed import edges (`ModuleDependency`). `addUnit()` assigns a stable
 `compilationOrder()` is a depth-first **post-order** from the entry unit: each
 unit is emitted *after* the units it depends on, each unit appears at most once,
 and cycles are tolerated (ES-module semantics,
-[`docs/language-spec/18-modules-imports.md`](docs/language-spec/18-modules-imports.md)).
+[`docs/language-spec/18-modules-imports.md`](../language-spec/18-modules-imports.md)).
 It is implemented iteratively so long import chains cannot overflow the stack.
 
 Prelude files inject imports into every file in scope. The three variants
@@ -368,7 +368,7 @@ preludes actually injected into a unit, in application order.
 
 All stages report through `DiagnosticSink`; the CLI owns rendering. `cp3`
 never shows a raw C++ error to the user
-([`docs/cli-tooling/02-...`](docs/cli-tooling/02-error-diagnostics-source-mapping.md)).
+([`docs/cli-tooling/02-...`](../cli-tooling/02-error-diagnostics-source-mapping.md)).
 
 For tests to assert on a diagnostic, the harness (`tests/runner/run_tests.py`)
 reads the combined stdout/stderr and looks for lines in this canonical shape:
@@ -380,7 +380,7 @@ reads the combined stdout/stderr and looks for lines in this canonical shape:
 e.g. `src/main.cp3:3:1: error: CP3408: cannot reassign to const 'z'`.
 
 The case format and the `CP3xxxx` wildcard rules are frozen in
-[`tests/cases/README.md`](tests/cases/README.md). Run the harness with:
+[`tests/cases/README.md`](../../tests/cases/README.md). Run the harness with:
 
 ```bash
 python tests/runner/run_tests.py --cp3c build/bin/cp3c
@@ -410,7 +410,7 @@ In scope:
 * **Bindings:** `let` / `const` (and `var`) with primitive initializers
   (`number`, `string`, `boolean`), type inference, `const`-reassignment is an
   error (`CP3408`). Language rule:
-  [`docs/language-spec/08-variable-bindings.md`](docs/language-spec/08-variable-bindings.md).
+  [`docs/language-spec/08-variable-bindings.md`](../language-spec/08-variable-bindings.md).
 * **Functions:** `function name(params) { ... }`, calls, `return`.
 * **`console.log(...)`**: prints to **stdout** (this is what tests compare),
   including template literals (`` `${age}` ``) and multiple arguments.
@@ -465,7 +465,7 @@ re-litigated by stage agents.
 ### Original questions (provenance only)
 
 1. **Compiler internal architecture / IR (largest open item).**
-   [`docs/cli-tooling/06-open-tooling-questions.md`](docs/cli-tooling/06-open-tooling-questions.md)
+   [`docs/cli-tooling/06-open-tooling-questions.md`](../cli-tooling/06-open-tooling-questions.md)
    lists "Compiler implementation architecture itself (transpiler internals, IR
    if any, pass structure)" as genuinely open. Does the frontend lower to an IR,
    or go AST → C++ directly? This decides whether `sema`/`codegen` share a
@@ -474,7 +474,7 @@ re-litigated by stage agents.
    decided.*
 
 2. **Canonical machine-readable diagnostic line format.**
-   [`docs/cli-tooling/02-...`](docs/cli-tooling/02-error-diagnostics-source-mapping.md)
+   [`docs/cli-tooling/02-...`](../cli-tooling/02-error-diagnostics-source-mapping.md)
    shows human-oriented examples (`src/utils.cp3:14:8 — type mismatch: ...`) that
    carry **no error code and no severity token**, yet the frozen test schema
    asserts `{ code, line, col, contains }` and `diagnostic_codes.hpp` defines
@@ -546,7 +546,7 @@ re-litigated by stage agents.
     formatter) until fmt is wired in, or is fmt a hard M1 dependency?
 
 12. **Toolchain order vs. this environment.**
-    [`docs/cli-tooling/01-...`](docs/cli-tooling/01-compilation-pipeline.md) fixes
+    [`docs/cli-tooling/01-...`](../cli-tooling/01-compilation-pipeline.md) fixes
     Windows preference to **MSVC → Clang**, but the only toolchain present here
     is **MinGW g++ (GNU 16.1.0)**. Should M1 implement the documented order and
     fail on this machine, or extend the Windows fallback chain to include

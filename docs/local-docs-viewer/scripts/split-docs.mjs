@@ -2,7 +2,7 @@
 /**
  * split-docs.mjs
  * ----------------------------------------------------------------------------
- * Turns the monolithic source documents at the repo root into a browsable
+ * Turns the monolithic source documents in `docs/rough/` into a browsable
  * `docs/` tree:
  *
  *   docs/
@@ -41,7 +41,7 @@ const DOCS_ROOT = path.resolve(__dirname, "..", "..");
 /** The source documents, and the folder each becomes. */
 const SOURCES = [
   {
-    file: "README (6).md",
+    file: "docs/rough/README (6).md",
     dir: "language-spec",
     label: "Language Spec",
     blurb:
@@ -49,7 +49,7 @@ const SOURCES = [
     aliases: ["README.md", "README"],
   },
   {
-    file: "CLI-README (5).md",
+    file: "docs/rough/CLI-README (5).md",
     dir: "cli-tooling",
     label: "CLI & Tooling",
     blurb:
@@ -57,7 +57,7 @@ const SOURCES = [
     aliases: ["CLI-README.md"],
   },
   {
-    file: "STDLIB-README (4).md",
+    file: "docs/rough/STDLIB-README (4).md",
     dir: "standard-library",
     label: "Standard Library",
     blurb:

@@ -11,7 +11,7 @@
 # SKIPPED, never a crash. When nothing is runnable the harness exits 0.
 #
 # Cases living under a `_ambiguous/` directory are *open-question markers*, not
-# assertions (see DECISIONS.md, "Harness policy for `_ambiguous/` cases"). They
+# assertions (see docs/rough/DECISIONS.md, "Harness policy for `_ambiguous/` cases"). They
 # are discovered and reported in their own `ambiguous` bucket with the question
 # text pulled from `error.contains`, and are never counted as pass/fail and
 # never affect the exit code. Pass --strict-ambiguous to run them as ordinary
