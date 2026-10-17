@@ -3,7 +3,7 @@
 **TypeScript you already know — compiled to native code.** C+++ (`.cp3`) is a
 statically-typed, JavaScript/TypeScript-flavored language that compiles to
 C++20: no garbage collector, no pointers, no manual memory management, no
-CMake — and no JIT runtime underneath your Express-shaped code.
+CMake — and no JIT runtime underneath your JS-shaped code.
 
 The design goal, in the spec's own words: *"a competent JS/TS developer can be
 productive in roughly two days, without learning pointers, manual memory
@@ -152,9 +152,11 @@ spec-conformance corpus (1,200+ case pairs in
 
 - **Landed:** the full pipeline (lexer → parser → sema → codegen → CLI), the
   diagnostic model, error handling, `async`/`await` + timers + the event
-  loop, `std/console`.
-- **In flight / next:** builtin method calls (strings, `Math`, `JSON`),
-  classes, arrays, then `std/network` (servers) and `parallel.*`.
+  loop, `std/console`, and builtin methods — `Math`, strings, `path`, `os`,
+  `JSON.stringify`, `process`, `String(x)`.
+- **In flight / next:** a performance wave (`%`/`number` lowering — see the
+  benchmark section), then classes, arrays, `std/network` (servers) and
+  `parallel.*`.
 
 ## Build and run it
 

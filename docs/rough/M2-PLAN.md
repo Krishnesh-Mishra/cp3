@@ -38,7 +38,7 @@ and the two pending cp3 rows (`health-server`, `compute-multi`) auto-fill when
 
 | # | Wave | First-blocker cases (latent) | Key dependency |
 |---|---|---:|---|
-| 1 | Method-call codegen + per-receiver runtime (string, array, Math, Date/Buffer, JSON, fs/path/os/process, crypto/env) — **IN FLIGHT** | 132 (223) | arrays for array methods; classes for Date/Buffer/Map receivers |
+| 1 | Method-call codegen + per-receiver runtime (string, array, Math, Date/Buffer, JSON, fs/path/os/process, crypto/env) — **LANDED** (d409e33; 141 flips) | 132 (223) | arrays for array methods; classes for Date/Buffer/Map receivers |
 | 2 | Classes + object model (§15, incl. generic classes, `memory-weak`) | 63 (68) | sema `declarations.cpp` wall first, then codegen |
 | 3 | Array literals + indexing + array `.length` (§09) | 52 + 19 | prerequisite for `parallel.for` |
 | 4 | **Async/await + event loop + timers (§14)** — **LANDED** (D62; 54 flips, 0 regressions) | ~35 | flips the only failing case; unblocks workers + network |
@@ -180,7 +180,25 @@ limitations documented, not corpus-asserted). Durable facts:
   deviation, fix queued for wave 1), zero-arg `.then` handler fails to compile
   (bug 7 above).
 
-## Perf wave (queued behind wave 1) — performance
+## Wave 1 landing record
+
+Committed **d409e33** (source). Part A: builtin method/member codegen +
+header-only runtime — `Math` 48 flips, strings 53, `path` 6, `os` 7,
+`JSON.stringify` scalars 8, `process.exit/argv/env.get` 4, `String(x)` 3,
+module imports 4, `truthy_nan` 1. Part B: six reds green (var hoisting,
+module-level `let`/`const` globals, statically-nullish short-circuit,
+default-param `undefined`, `Maybe<T>` keeps `null`/`undefined` distinct,
+settled-await microtask FIFO per D62.1). Part C: `Promise.resolve/reject`
+statics, zero-arg `.then()` handler, settled-await deferral. Runtime additions
+header-only; required runtime TU set unchanged. Lead verification: canonical
+rebuild, six reds + category sample fresh-run green, lint 157 files/0 errors,
+runtime units 82/82. Report + evidence: `build/scratch/methods/`. Known
+limitations (report §9): ASCII-only case mapping, slice/substring/charAt
+clamp out-of-range, `JSON.stringify` scalars-only, `[…].includes` literal-set
+stopgap, minimal `process.argv()`; fs/env, `JSON.parse`, Date/Buffer/crypto,
+arrays/objects, Map/Set remain with their waves.
+
+## Perf wave (in flight — launched after d409e33) — performance
 
 Lead probe, 2026-10-17 (`build/scratch/perf-probe/`, g++ 16.1.0 `-O2`): the
 compute-single loop lowered three ways — `std::fmod(n, 2)` **1080 ms** (= cp3c's
@@ -191,8 +209,9 @@ essentially the whole sink), inline cast-based `%` in the exact double domain
 blank-process floor; the prelude is DCE'd), not the simple statements (the rest
 of the loop is fine double code). Targets and binding rules: **D64**.
 
-Ordered work items (same ownership as wave 1 — `src/codegen/**`,
-`src/runtime/**`; land wave 1 first):
+Ordered work items (sole writer of `src/sema/**`, `src/codegen/**`,
+`src/runtime/**`, `src/cli/src/util.cpp`; acceptance baseline: 657 passed /
+0 failed):
 1. `%` lowering: inline helper + literal-divisor specialization; `std::fmod`
    only as out-of-range fallback. No observable change; corpus stays
    byte-identical. Expected compute-single ≈ 0.39 s (≈3x faster than Node).
@@ -243,3 +262,7 @@ Growth since wave 4 (current, pre-wave-1): `arrays-strings/` +74 (35 pass /
 functions-closures, syntax, types; promotions (above). Running total:
 **1236 found — 516 passed / 6 failed / 606 skipped / 108 ambiguous** (the six
 reds are §5).
+
+Post-wave-1 (d409e33): **1236 found — 657 passed / 0 failed / 471 skipped /
+108 ambiguous** (+141 flips — 6 failed→passed, 135 skipped→passed, 0
+regressions; evidence: `build/scratch/methods/WAVE1-REPORT.md`).
