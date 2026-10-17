@@ -4,7 +4,9 @@
 // OWNERSHIP: cli module (src/cli/**). Implements
 // cp3::cli::detail::buildWithToolchain, used by `cp3c build` and `cp3c run`.
 //
-// Behaviour (DECISIONS D12 + docs/cli-tooling/01-compilation-pipeline.md):
+// Behaviour (DECISIONS D12 + D61 + docs/cli-tooling/01-compilation-pipeline.md):
+//   * .cp3/build/ holds intermediates only (generated C++/hpp, objects,
+//     manifest); the linked executable is written to .cp3/out/<entry-stem>;
 //   * --release wipes the build directory and ignores the manifest;
 //   * otherwise each translation unit (the generated module plus every runtime
 //     source) is recompiled only when its content hash or profile changed;
@@ -143,6 +145,7 @@ int buildWithToolchain(const CliOptions& opt, const fs::path& entry,
         fs::remove_all(layout.buildDir, ec);  // --release: clean whole-program
     }
     fs::create_directories(layout.buildDir, ec);
+    fs::create_directories(layout.outDir, ec);  // D61: final artifact lives here
 
     const fs::path cppPath = layout.buildDir / fs::path(moduleName + ".cpp");
     const fs::path hppPath = layout.buildDir / fs::path(moduleName + ".hpp");

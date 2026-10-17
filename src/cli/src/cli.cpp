@@ -44,7 +44,7 @@ void printUsage(std::FILE* out) {
         "  check <file.cp3>   Frontend only: parse + type-check (no C++ generation)\n"
         "  dev [file.cp3]     Watch mode: re-check on save (--once for a single pass)\n"
         "  fmt <file.cp3>     Zero-config formatter\n"
-        "  clean              Remove the .cp3/build cache (--all also clears .cp3/packages)\n"
+        "  clean              Remove .cp3/build and .cp3/out (--all clears .cp3/packages)\n"
         "  init [dir]         Scaffold a new project (package.json + src/main.cp3)\n"
         "  exec <pkg> [args]  Run a package's bundled tool\n"
         "  version            Print the compiler version\n"

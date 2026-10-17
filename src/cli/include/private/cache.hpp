@@ -3,15 +3,16 @@
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //
-// Definitions live in src/cache.cpp (STYLE.md §3/§8: headers declare, `.cpp`
-// defines).
+// Definitions live in src/cli/src/cache.cpp (STYLE.md §3/§8: headers declare,
+// `.cpp` defines).
 //
-// Layout (docs/cli-tooling/01-compilation-pipeline.md):
+// Layout (docs/cli-tooling/01-compilation-pipeline.md, DECISIONS D61):
 //   <projectRoot>/.cp3/build/            persistent intermediate directory
 //     <module>.cpp / <module>.hpp        generated C++ (one pair per .cp3)
 //     <module>.o                         per-TU object file
 //     _cp3_runtime_<tu>.o               compiled runtime support (one per TU)
 //     build-manifest.txt                 change-detection state
+//   <projectRoot>/.cp3/out/              final artifacts
 //     <entry><exe-suffix>                linked executable
 //
 // A build only regenerates and recompiles translation units whose inputs
@@ -33,7 +34,8 @@ namespace cp3::cli {
 
 struct BuildLayout {
     fs::path projectRoot;
-    fs::path buildDir;
+    fs::path buildDir;    // intermediates only (generated C++, objects, manifest)
+    fs::path outDir;      // final artifacts (the linked executable)
     fs::path manifestPath;
     fs::path exePath;
     std::vector<fs::path> includeDirs;
@@ -52,7 +54,7 @@ struct CacheEntry {
 // a package.json, or the entry file's own directory.
 fs::path findProjectRoot(const fs::path& entryFile);
 
-// Assembles the build directory, manifest, executable and include roots.
+// Assembles the build/out directories, manifest, executable and include roots.
 BuildLayout makeBuildLayout(const fs::path& entryFile);
 
 // Logical module name for generated-code include guards / output naming.

@@ -33,13 +33,16 @@ BuildLayout makeBuildLayout(const fs::path& entryFile) {
     BuildLayout layout;
     layout.projectRoot = findProjectRoot(entryFile);
     layout.buildDir = layout.projectRoot / ".cp3" / "build";
+    layout.outDir = layout.projectRoot / ".cp3" / "out";
     layout.manifestPath = layout.buildDir / "build-manifest.txt";
 #if defined(_WIN32)
     const std::string suffix = ".exe";
 #else
     const std::string suffix = "";
 #endif
-    layout.exePath = layout.buildDir / (entryFile.stem().string() + suffix);
+    // D61: .cp3/build/ holds intermediates only; the executable lives in
+    // .cp3/out/<entry-stem>.
+    layout.exePath = layout.outDir / (entryFile.stem().string() + suffix);
     layout.includeDirs = compilerIncludeRoots();
     layout.runtimeSources = runtimeSourcePaths();
     return layout;

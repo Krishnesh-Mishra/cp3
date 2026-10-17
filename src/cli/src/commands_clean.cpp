@@ -3,7 +3,8 @@
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdClean.
 //
-// Removes the local .cp3/build cache; --all also removes .cp3/packages.
+// Removes the local .cp3/build intermediate cache and the .cp3/out executable
+// (D61); --all also removes .cp3/packages.
 // =============================================================================
 #include <cstdio>
 #include <system_error>
@@ -16,14 +17,16 @@ namespace cp3::cli {
 int cmdClean(const CliOptions& opt) {
     std::error_code ec;
     const fs::path root = fs::current_path(ec);
-    const fs::path buildDir = root / ".cp3" / "build";
+    const fs::path dirs[] = {root / ".cp3" / "build", root / ".cp3" / "out"};
 
-    if (fs::exists(buildDir, ec)) {
-        removeTree(buildDir);
-        std::fprintf(stderr, "cp3c: removed %s\n", buildDir.string().c_str());
-    } else if (opt.verbose) {
-        std::fprintf(stderr, "cp3c: nothing to remove (%s)\n",
-                     buildDir.string().c_str());
+    for (const fs::path& dir : dirs) {
+        if (fs::exists(dir, ec)) {
+            removeTree(dir);
+            std::fprintf(stderr, "cp3c: removed %s\n", dir.string().c_str());
+        } else if (opt.verbose) {
+            std::fprintf(stderr, "cp3c: nothing to remove (%s)\n",
+                         dir.string().c_str());
+        }
     }
 
     if (opt.all) {
