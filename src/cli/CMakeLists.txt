@@ -30,5 +30,5 @@ set(cp3_cli_sources
 add_library(cp3_cli STATIC ${cp3_cli_sources})
 target_include_directories(cp3_cli PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(cp3_cli PUBLIC
-    cp3_common cp3_lexer cp3_parser cp3_sema cp3_codegen)
+    cp3_common cp3_lexer cp3_parser cp3_modules cp3_sema cp3_codegen)
 cp3_set_warnings(cp3_cli)

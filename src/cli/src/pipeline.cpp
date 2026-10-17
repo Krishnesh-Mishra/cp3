@@ -4,51 +4,36 @@
 // OWNERSHIP: cli module (src/cli/**). Implements private/pipeline.hpp.
 //
 // Stages communicate only through the frozen boundaries:
-//   SourceManager -> Lexer -> Parser -> SemanticAnalyzer -> CodeGenerator
-// and every stage reports through a DiagnosticSink; the CLI renders.
+//   SourceManager -> ModuleLoader -> SemanticAnalyzer -> CodeGenerator
+// and every stage reports through a DiagnosticSink; the CLI renders. The
+// module loader owns §18 prelude injection and import resolution; sema's
+// nodeId-keyed side tables (SemaResult) are threaded into the three-argument
+// generator (DECISIONS D1/D14) — this file is the single change site.
 // =============================================================================
 #include "private/pipeline.hpp"
 
 #include <string>
-#include <utility>
 
-#include "cp3/lexer.hpp"
-#include "cp3/parser.hpp"
+#include "cp3/modules.hpp"
 #include "cp3/sema.hpp"
 
 namespace cp3::cli {
 
-ProgramPtr parseFile(const SourceFile& file, DiagnosticSink& sink) {
-    Lexer lexer(file, sink);
-    TokenStream tokens = lexer.lex();
-    Parser parser(std::move(tokens), sink);
-    return parser.parseProgram();
+std::unique_ptr<ModuleGraph> loadModuleGraph(SourceManager& sm, const SourceFile& entry,
+                                             DiagnosticSink& sink) {
+    ModuleLoader loader(sink);
+    return loader.load(sm, entry);
 }
 
-bool analyzeProgram(Program& program, DiagnosticSink& sink) {
+bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink) {
     SemanticAnalyzer analyzer(sink);
-    return analyzer.analyze(program);
+    return analyzer.analyze(program, out);
 }
 
-// -----------------------------------------------------------------------------
-// TODO(contracts): SemaResult threading.
-//
-// A concurrent contracts agent is moving the pipeline to share sema's side
-// tables with codegen. When that lands, this is the SINGLE place to change:
-//
-//     SemaResult sema;
-//     analyzer.analyze(program, sema);             // 2-arg analyze
-//     codegen.generate(program, sema, moduleName); // 3-arg generate
-//
-// Both extended overloads already exist in the frozen headers
-// (cp3/sema.hpp, cp3/codegen.hpp); they are intentionally NOT used yet — the
-// CLI codes against the current signatures until the contracts pass is
-// announced, so nothing here half-implements the shared side-table flow.
-// -----------------------------------------------------------------------------
-GeneratedModule generateModule(Program& program, DiagnosticSink& sink,
-                               const std::string& moduleName) {
+GeneratedModule generateModule(const Program& program, const SemaResult& sema,
+                               const std::string& moduleName, DiagnosticSink& sink) {
     CodeGenerator codegen(sink);
-    return codegen.generate(program, moduleName);
+    return codegen.generate(program, sema, moduleName);
 }
 
 }  // namespace cp3::cli

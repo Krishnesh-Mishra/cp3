@@ -92,6 +92,45 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
     return true;
 }
 
+// Compiles the generated module plus every runtime TU and persists the
+// manifest for the next (incremental) run.
+bool compileProgram(BuildState& st, const fs::path& cppPath, const fs::path& objPath,
+                    const std::string& entryKey) {
+    if (!compileTU(st, entryKey, cppPath, objPath)) return false;
+    for (const fs::path& rt : st.layout.runtimeSources) {
+        const fs::path rtObj =
+            st.layout.buildDir / ("_cp3_runtime_" + rt.stem().string() + ".o");
+        if (!compileTU(st, rt.string(), rt, rtObj)) return false;
+    }
+    saveManifest(st.layout.manifestPath, st.manifest);
+    return true;
+}
+
+// Links when anything was (re)compiled or the executable is missing; otherwise
+// the cached executable is reused as-is.
+bool linkProgram(BuildState& st, const fs::path& exePath) {
+    std::error_code ec;
+    const bool needLink = st.anyCompiled || st.force || !fs::exists(exePath, ec);
+    if (!needLink) {
+        if (st.opt.verbose) {
+            std::fprintf(stderr, "cp3c: up to date, reusing %s\n",
+                         exePath.string().c_str());
+        }
+        return true;
+    }
+    const std::vector<std::string> args =
+        linkArgs(st.tc, st.opt.compile.profile, st.objects, exePath);
+    if (st.opt.verbose) {
+        std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
+    }
+    const int rc = runProcess(args);
+    if (rc != 0) {
+        std::fprintf(stderr, "cp3c: linking failed (exit %d)\n", rc);
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 int buildWithToolchain(const CliOptions& opt, const fs::path& entry,
@@ -132,32 +171,11 @@ int buildWithToolchain(const CliOptions& opt, const fs::path& entry,
     std::vector<fs::path> objects;
     BuildState state{opt, tc, layout, profile, force, manifest, objects};
 
-    if (!compileTU(state, entry.string(), cppPath, objPath)) {
+    if (!compileProgram(state, cppPath, objPath, entry.string())) {
         return kExitCompileError;
     }
-    for (const fs::path& rt : layout.runtimeSources) {
-        const fs::path rtObj =
-            layout.buildDir / ("_cp3_runtime_" + rt.stem().string() + ".o");
-        if (!compileTU(state, rt.string(), rt, rtObj)) return kExitCompileError;
-    }
-    saveManifest(layout.manifestPath, manifest);
-
-    const bool needLink =
-        state.anyCompiled || force || !fs::exists(layout.exePath, ec);
-    if (needLink) {
-        const std::vector<std::string> args =
-            linkArgs(tc, opt.compile.profile, objects, layout.exePath);
-        if (opt.verbose) {
-            std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
-        }
-        const int rc = runProcess(args);
-        if (rc != 0) {
-            std::fprintf(stderr, "cp3c: linking failed (exit %d)\n", rc);
-            return kExitCompileError;
-        }
-    } else if (opt.verbose) {
-        std::fprintf(stderr, "cp3c: up to date, reusing %s\n",
-                     layout.exePath.string().c_str());
+    if (!linkProgram(state, layout.exePath)) {
+        return kExitCompileError;
     }
 
     if (!execute) {

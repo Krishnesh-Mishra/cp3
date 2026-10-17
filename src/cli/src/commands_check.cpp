@@ -3,13 +3,17 @@
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdCheck.
 //
-// Parses + type-checks the entry file and renders diagnostics; no C++ generation
-// and no toolchain involvement.
+// Loads the entry file plus its module graph (prelude injection, import
+// resolution), type-checks the entry unit and renders diagnostics; no C++
+// generation and no toolchain involvement.
 // =============================================================================
 #include <cstdio>
+#include <memory>
 #include <string>
 
+#include "cp3/analysis.hpp"
 #include "cp3/diagnostic.hpp"
+#include "cp3/module.hpp"
 #include "cp3/source.hpp"
 
 #include "private/commands.hpp"
@@ -28,8 +32,12 @@ int cmdCheck(const CliOptions& opt) {
     }
 
     CollectingDiagnosticSink sink;
-    ProgramPtr program = parseFile(*file, sink);
-    analyzeProgram(*program, sink);
+    const std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sm, *file, sink);
+    SemaResult sema;
+    CompilationUnit* entry = graph->entry();
+    if (entry != nullptr && entry->ast) {
+        analyzeProgram(*entry->ast, sema, sink);
+    }
 
     renderDiagnostics(sink.diagnostics(), makeRenderOptions(opt, file->path),
                       stderr);

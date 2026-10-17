@@ -7,32 +7,40 @@
 // `.cpp` defines).
 //
 // Stages communicate only through the frozen boundaries:
-//   SourceManager -> Lexer -> Parser -> SemanticAnalyzer -> CodeGenerator
-// and every stage reports through a DiagnosticSink; the CLI renders.
+//   SourceManager -> ModuleLoader -> (Parser) -> SemanticAnalyzer -> CodeGenerator
+// and every stage reports through a DiagnosticSink; the CLI renders. The
+// module loader (cp3_modules) owns prelude injection and import resolution;
+// sema and codegen share the nodeId-keyed `SemaResult` side tables
+// (DECISIONS D1/D14).
 // =============================================================================
 #pragma once
 
+#include <memory>
 #include <string>
 
+#include "cp3/analysis.hpp"
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic.hpp"
-#include "cp3/parser.hpp"
+#include "cp3/module.hpp"
 #include "cp3/source.hpp"
 
 namespace cp3::cli {
 
-// Lexes + parses one SourceFile. Always returns a non-null Program (the parser
-// recovers); lexical/syntax problems land in `sink`.
-ProgramPtr parseFile(const SourceFile& file, DiagnosticSink& sink);
+// Loads the entry file (already registered with `sm`) and every module it
+// reaches, applying §18 prelude injection and D4 import resolution. Returns a
+// graph whose entry unit always carries a parsed `ast`; `sm` must outlive the
+// returned graph (token lexemes and spans view its files).
+std::unique_ptr<ModuleGraph> loadModuleGraph(SourceManager& sm, const SourceFile& entry,
+                                             DiagnosticSink& sink);
 
-// Runs sema with the CURRENT one-argument signature. Returns true when no
-// error/fatal diagnostic was reported.
-bool analyzeProgram(Program& program, DiagnosticSink& sink);
+// Runs sema with the extended two-argument signature, publishing the
+// nodeId-keyed side tables into `out`. Returns true when no error/fatal
+// diagnostic was reported.
+bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink);
 
-// Emits C++ for one program, using the CURRENT two-argument CodeGenerator
-// signature (empty SemaResult internally). See the TODO in src/pipeline.cpp for
-// the single place the future SemaResult threading lands.
-GeneratedModule generateModule(Program& program, DiagnosticSink& sink,
-                               const std::string& moduleName);
+// Emits C++20 for one checked program through the three-argument generator,
+// consulting `sema` for inferred types and resolved bindings.
+GeneratedModule generateModule(const Program& program, const SemaResult& sema,
+                               const std::string& moduleName, DiagnosticSink& sink);
 
 }  // namespace cp3::cli

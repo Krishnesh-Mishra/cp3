@@ -20,10 +20,11 @@ flow downward only; there are no cycles.
 | CMake target | Source | Include root | Role | Status |
 | --- | --- | --- | --- | --- |
 | `cp3_common` | `src/common/src/` | `src/common/include/` | **Frozen interfaces**: source/positions, tokens, AST, visitor, diagnostics, diagnostic codes, module graph, options, version. | Complete |
-| `cp3_lexer` | `src/lexer/` | `src/lexer/include/` | `.cp3` text → `TokenStream`. | Stub (EOF only) |
-| `cp3_parser` | `src/parser/` | `src/parser/include/` | `TokenStream` → AST (`Program`). | Stub (empty `Program`) |
-| `cp3_sema` | `src/sema/` | `src/sema/include/` | AST → diagnostics + nodeId-keyed side tables. | Stub (no checks) |
-| `cp3_codegen` | `src/codegen/` | `src/codegen/include/` | Checked AST → generated C++20 (+ source map). | Stub (empty output) |
+| `cp3_lexer` | `src/lexer/` | `src/lexer/include/` | `.cp3` text → `TokenStream`. | Implemented (full token set) |
+| `cp3_parser` | `src/parser/` | `src/parser/include/` | `TokenStream` → AST (`Program`). | Implemented (full grammar) |
+| `cp3_modules` | `src/modules/` | `src/modules/include/` | Module discovery, §18 prelude injection, D4 import resolution + validation (`cp3::ModuleLoader`). | Complete (M1 scope) |
+| `cp3_sema` | `src/sema/` | `src/sema/include/` | AST → diagnostics + nodeId-keyed side tables. | M1 subset (beyond-M1 features report CP3002) |
+| `cp3_codegen` | `src/codegen/` | `src/codegen/include/` | Checked AST → generated C++20 (+ source map). | M1 subset (beyond-M1 features report CP3002) |
 | `cp3_runtime` | `src/runtime/` | `src/runtime/include/` | Placeholder for generated-code runtime support. | Minimal |
 | `cp3_cli` | `src/cli/` | `src/cli/include/` | Command surface, argument parsing, all rendering. | Scaffold |
 | `cp3c` | `src/main.cpp` | — | Executable; forwards `argv` to `runCli`. | Complete |
@@ -31,11 +32,13 @@ flow downward only; there are no cycles.
 Dependency edges (declared in each module's `src/<module>/CMakeLists.txt`):
 
 ```
-cp3c -> cp3_cli -> { cp3_common, cp3_lexer, cp3_parser, cp3_sema, cp3_codegen }
-                        cp3_parser -> cp3_lexer -> cp3_common
-                        cp3_sema   -> cp3_parser
-                        cp3_codegen-> cp3_sema
-                        cp3_runtime-> cp3_common   (not yet linked into cp3c)
+cp3c -> cp3_cli -> { cp3_common, cp3_lexer, cp3_parser, cp3_modules,
+                     cp3_sema, cp3_codegen }
+                        cp3_parser  -> cp3_lexer -> cp3_common
+                        cp3_modules -> cp3_parser (-> cp3_lexer -> cp3_common)
+                        cp3_sema    -> cp3_parser
+                        cp3_codegen -> cp3_sema
+                        cp3_runtime -> cp3_common   (not yet linked into cp3c)
 ```
 
 ---
@@ -53,6 +56,7 @@ need a change across a boundary, ask the owner.
 | `src/common/src/**` | scaffolding/architecture | Implementations *behind* the frozen headers. |
 | `src/lexer/**` | lexer owner | Replace the stub body; keep the `Lexer` boundary. |
 | `src/parser/**` | parser owner | Replace the stub body; keep the `Parser` boundary. |
+| `src/modules/**` | modules owner | Module discovery, §18 prelude injection, import resolution + validation; keep the `ModuleLoader` boundary. Does not link sema/codegen. |
 | `src/sema/**` | sema owner | Replace the stub body; keep the `SemanticAnalyzer` boundary and the frozen `src/sema/include/**` shape. |
 | `src/codegen/**` | codegen owner | Replace the stub body; keep the `CodeGenerator` boundary and the frozen `src/codegen/include/**` shape. |
 | `src/cli/**` | CLI/pipeline owner | Commands, flags, diagnostic rendering. |
@@ -125,10 +129,11 @@ src/CMakeLists.txt            # modules in dependency order + the cp3c executabl
 src/common/CMakeLists.txt     # cp3_common  (links nothing)
 src/lexer/CMakeLists.txt      # cp3_lexer   -> cp3_common
 src/parser/CMakeLists.txt     # cp3_parser  -> cp3_lexer  (-> cp3_common)
+src/modules/CMakeLists.txt    # cp3_modules -> cp3_parser (preludes, imports)
 src/sema/CMakeLists.txt       # cp3_sema    -> cp3_parser
 src/codegen/CMakeLists.txt    # cp3_codegen -> cp3_sema
 src/runtime/CMakeLists.txt    # cp3_runtime -> cp3_common (+ Threads; not in cp3c yet)
-src/cli/CMakeLists.txt        # cp3_cli     -> common, lexer, parser, sema, codegen
+src/cli/CMakeLists.txt        # cp3_cli     -> common, lexer, parser, modules, sema, codegen
 ```
 
 Each module file has the same shape — declare the list, create the target, add
@@ -157,6 +162,7 @@ default so the normal build stays lean.
 
 ```bash
 cmake --build build --target cp3c-tests   # Python 3 required (see below)
+cmake --build build --target example-checks  # examples/ showcase runner
 cmake --build build --target lint         # advisory STYLE.md check (see 3.4)
 ```
 

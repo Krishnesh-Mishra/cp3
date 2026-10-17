@@ -12,8 +12,9 @@
 #   2. Defines the `cp3c` executable from `src/main.cpp`.
 #
 # Dependency edges (do not introduce cycles):
-#   cp3c -> cp3_cli -> { common, lexer, parser, sema, codegen }
+#   cp3c -> cp3_cli -> { common, lexer, parser, modules, sema, codegen }
 #                       cp3_parser  -> cp3_lexer -> cp3_common
+#                       cp3_modules -> cp3_parser  (prelude/import resolution)
 #                       cp3_sema    -> cp3_parser
 #                       cp3_codegen -> cp3_sema
 #                       cp3_runtime -> cp3_common   (not yet linked into cp3c)
@@ -22,10 +23,11 @@
 add_subdirectory(common)   # frozen interfaces — links nothing
 add_subdirectory(lexer)    # -> cp3_common
 add_subdirectory(parser)   # -> cp3_lexer  (-> cp3_common)
+add_subdirectory(modules)  # -> cp3_parser (prelude injection, import resolution)
 add_subdirectory(sema)     # -> cp3_parser (-> cp3_lexer -> cp3_common)
 add_subdirectory(codegen)  # -> cp3_sema
 add_subdirectory(runtime)  # -> cp3_common (kept out of cp3c for now)
-add_subdirectory(cli)      # -> common, lexer, parser, sema, codegen
+add_subdirectory(cli)      # -> common, lexer, parser, modules, sema, codegen
 
 # -----------------------------------------------------------------------------
 # cp3c executable
