@@ -92,6 +92,20 @@ cmake --build build      # build all targets
 The executable lands at `build/bin/cp3c` (`build\bin\cp3c.exe` on Windows).
 In this environment the configure step selected **Ninja + GNU 16.1.0**.
 
+**One build tree, always under `build/` (D55).** There is exactly one canonical
+tree — `cmake -S . -B build`, the directory the test harness defaults to
+(`build/bin/cp3c`). A parallel author who needs an isolated tree configures a
+private scratch tree *inside* it:
+
+```bash
+cmake -S . -B build/scratch/<name>    # private, ignored, deleted at will
+```
+
+Root-level `build-*` directories are **not allowed**; the old `build-*/` ignore
+pattern was removed on purpose, so a stray one shows up as untracked in
+`git status`. (This is a location rule only — module source lists stay
+per-module, §3.1, which is what keeps parallel authors from colliding.)
+
 ### 3.1 Where the build is described
 
 Module source lists live **with the module**, never in a shared file: adding a

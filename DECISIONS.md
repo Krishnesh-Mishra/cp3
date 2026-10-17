@@ -275,6 +275,33 @@ whose expected behavior the spec actually pins.
   once precise columns/spans are trustworthy suite-wide, the corpus `col` fields
   can be tightened and this rule relaxed.)*
 
+- **D55.** Build trees live **only** under the repository's single `build/`
+  directory. Canonical: `cmake -S . -B build` → `build/bin/cp3c` (the harness's
+  default resolution, unchanged). Parallel authors isolate with
+  `cmake -S . -B build/scratch/<name>`, which the `build/` ignore rule covers.
+  Root-level `build-*` directories are retired — the `build-*/` ignore pattern
+  is removed so a stray one is visible in `git status`. `build-modules/` and
+  `build-semacomp/` are grandfathered only while their agents are in flight;
+  the lead deletes them at wave end and never touches them before. Supersedes
+  the "(build dirs stay per-agent `build-<module>/`)" note in the D-process
+  entry above, which it amends. This is a *location* rule only: module source
+  lists stay per-module (STYLE.md §3).
+- **D56.** **Single-binary guarantee.** The shipped artifact is exactly one
+  `cp3c` executable, and it must be relocatable: copying `cp3c`/`cp3c.exe` to
+  any directory and running `cp3c run hello.cp3` must work with no repository
+  and no sibling files; compiling a `.cp3` file yields exactly one executable.
+  Today this is violated at one point: `runtimeSourcePaths()` /
+  `compilerIncludeRoots()` (`src/cli/src/util.cpp`) resolve the runtime through
+  the compile-time `__FILE__` path into `src/runtime/**` — correct for
+  development, not shippable. Planned fix (M2 wave, one agent owns it): a
+  build-time generator embeds the runtime sources and the runtime include tree
+  (whatever generated code `#include`s) as string tables inside `cp3c`; when
+  compiling a user program, the driver materializes them into that program's
+  `.cp3/build/` cache and points the system compiler there (embedded copy
+  preferred; the repo path stays as a development fallback). Acceptance test:
+  copy `cp3c.exe` alone into an empty temp directory, `cp3c run` a prelude-using
+  hello `.cp3` there, expect correct stdout and no read under the checkout.
+
 ---
 
 ## Milestone 1 definition of done
