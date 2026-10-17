@@ -1,0 +1,27 @@
+import console from "std/console";
+
+// fizzbuzz -- the classic, built from the pieces that run today:
+// a while loop, a function, if/else, % and template literals.
+//
+// The helper uses early returns (a "fall off the end" analysis note: an
+// if/else-if/else chain where every branch returns is reported today as
+// CP3504 by mistake, so the early-return shape is the one to copy).
+
+function label(n: number): string {
+  if (n % 15 === 0) {
+    return "FizzBuzz";
+  }
+  if (n % 3 === 0) {
+    return "Fizz";
+  }
+  if (n % 5 === 0) {
+    return "Buzz";
+  }
+  return `${n}`;
+}
+
+let i = 1;
+while (i <= 15) {
+  console.log(label(i));
+  i = i + 1;
+}

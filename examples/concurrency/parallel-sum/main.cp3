@@ -1,0 +1,38 @@
+import console from "std/console";
+
+// parallel-sum -- data parallelism from spec 13, using only the patterns the
+// capture-safety rules bless:
+//
+//  * a parallel.* call is synchronous, so a captured value is borrowed for
+//    the whole call; reading a captured `const` from several closures is safe;
+//  * parallel.run returns its results instead of mutating captured state -
+//    the rule for every kind of parallel work that is not reducible to an
+//    index or a private accumulator;
+//  * parallel.for's own loop index is the one allowed shared write: every
+//    iteration gets a distinct `i`, so no two closures can ever touch the
+//    same element;
+//  * parallel.reduce shares nothing: each worker accumulates privately and
+//    the partial results are merged at the end.
+
+// Several independent computations at once. `scale` is only read, never
+// written, so capturing it is safe.
+const scale = 2;
+const results = parallel.run(
+  () => 21 * scale,
+  () => 3 * 7 * scale,
+  () => 100 - 58
+);
+console.log(`parallel.run returned: ${results[0]}, ${results[1]}, ${results[2]}`);
+
+let numbers = [1, 2, 3, 4, 5, 6, 7, 8];
+
+// Square every element in place: the spec's canonical parallel.for shape.
+parallel.for(0..numbers.length, (i) => {
+  numbers[i] = numbers[i] * numbers[i];
+});
+console.log(`last square: ${numbers[7]}`);
+
+// Combine a whole array; the range is over the array's own indexes, so it
+// covers every element and nothing past the end.
+const total = parallel.reduce(0..numbers.length, 0, (sum, i) => sum + numbers[i]);
+console.log(`sum of the squares: ${total}`);

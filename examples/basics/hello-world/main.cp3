@@ -1,0 +1,8 @@
+import console from "std/console";
+
+// hello-world -- the smallest cp3 program that does something.
+//
+// `console` is not built into the language: it is the std/console module
+// (spec 20), imported by name. console.log writes to stdout.
+
+console.log("Hello, world!");

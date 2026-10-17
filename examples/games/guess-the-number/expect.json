@@ -1,0 +1,10 @@
+{
+  "status": "pending",
+  "mode": "run",
+  "expect": {
+    "stdout": "I am thinking of a number between 1 and 100.\nType a guess and press Enter, or \"quit\" to give up.\nNo more input on stdin - bye!\n",
+    "exitCode": 0
+  },
+  "requires": "async/await + console.input (stdin) + std/math Math.random/Math.floor + parseInt",
+  "observed": "main.cp3:17:1: error: CP3002: not implemented yet: async functions"
+}

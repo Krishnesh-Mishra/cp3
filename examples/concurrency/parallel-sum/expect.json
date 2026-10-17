@@ -1,0 +1,10 @@
+{
+  "status": "pending",
+  "mode": "run",
+  "expect": {
+    "stdout": "parallel.run returned: 42, 42, 42\nlast square: 64\nsum of the squares: 204\n",
+    "exitCode": 0
+  },
+  "requires": "parallel.run / parallel.for / parallel.reduce (spec 13) + arrays and indexing",
+  "observed": "main.cp3:20:17: error: CP3002: codegen: CallExpr ('parallel.*') is not implemented in M1"
+}

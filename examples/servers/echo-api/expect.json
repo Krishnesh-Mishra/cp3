@@ -1,0 +1,10 @@
+{
+  "status": "pending",
+  "mode": "run",
+  "expect": {
+    "stdout": "echo api listening on http://localhost:3000\n",
+    "exitCode": 0
+  },
+  "requires": "std/network server + async handlers + req.json<T>() typed JSON body + route params + counters",
+  "observed": "main.cp3:42:1: error: CP3002: not implemented yet: async arrow functions"
+}

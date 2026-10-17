@@ -1,0 +1,68 @@
+import console from "std/console";
+import Math from "std/math";
+
+// rock-paper-scissors -- play best-of-nothing against the computer.
+//
+// Same I/O contract as guess-the-number: console.input() reads one line per
+// move (EOF resolves to ""), and the computer's move is only chosen after a
+// valid line, so a run with stdin closed has a reproducible transcript.
+// line.toLowerCase() is a core string method (spec 09).
+
+function beats(player: string, computer: string): boolean {
+  if (player === "rock") {
+    return computer === "scissors";
+  }
+  if (player === "paper") {
+    return computer === "rock";
+  }
+  if (player === "scissors") {
+    return computer === "paper";
+  }
+  return false;
+}
+
+function moveName(pick: number): string {
+  if (pick === 1) {
+    return "paper";
+  }
+  if (pick === 2) {
+    return "scissors";
+  }
+  return "rock";
+}
+
+async function main(): Promise<void> {
+  let wins = 0;
+  let losses = 0;
+  let draws = 0;
+
+  console.log('Rock, paper, scissors. Type a move, or "quit".');
+
+  while (true) {
+    const line = await console.input();
+    if (line === "quit" || line === "") {
+      console.log(`Final score: ${wins} win(s), ${losses} loss(es), ${draws} draw(s).`);
+      return;
+    }
+
+    const player = line.toLowerCase();
+    if (player !== "rock" && player !== "paper" && player !== "scissors") {
+      console.log("Type rock, paper or scissors.");
+      continue;
+    }
+
+    const computer = moveName(Math.floor(Math.random() * 3));
+    if (player === computer) {
+      draws = draws + 1;
+      console.log(`Draw - we both picked ${player}.`);
+    } else if (beats(player, computer)) {
+      wins = wins + 1;
+      console.log(`You win - ${player} beats ${computer}.`);
+    } else {
+      losses = losses + 1;
+      console.log(`You lose - ${computer} beats ${player}.`);
+    }
+  }
+}
+
+main();

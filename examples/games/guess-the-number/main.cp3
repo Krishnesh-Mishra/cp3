@@ -1,0 +1,54 @@
+import console from "std/console";
+import Math from "std/math";
+
+// guess-the-number -- an interactive game over stdin/stdout.
+//
+// Spec notes:
+//  * Math.random() is std/math (STDLIB-README "Math"): a number in [0, 1).
+//  * stdin is read through console.input(), a Promise (STDLIB-README
+//    "console"); on EOF it resolves with an empty string. It is called
+//    without the optional prompt argument so that the transcript stays
+//    reproducible when stdin is closed (tools/run_examples.py runs it that
+//    way and the EOF path below is what it observes).
+//  * parseInt is a core-language global builtin, no import needed.
+//
+// Waiting on async/await + std/math, so it is `pending` today.
+
+async function main(): Promise<void> {
+  const secret = Math.floor(Math.random() * 100) + 1;
+  let attempts = 0;
+
+  console.log("I am thinking of a number between 1 and 100.");
+  console.log('Type a guess and press Enter, or "quit" to give up.');
+
+  while (true) {
+    const line = await console.input();
+    if (line === "quit") {
+      console.log("Giving up already? Bye!");
+      return;
+    }
+    if (line === "") {
+      console.log("No more input on stdin - bye!");
+      return;
+    }
+
+    const guess = parseInt(line);
+    if (!(guess >= 1 && guess <= 100)) {
+      console.log("That is not a number between 1 and 100 - try again.");
+      continue;
+    }
+
+    attempts = attempts + 1;
+    if (guess === secret) {
+      console.log(`Correct! You found it in ${attempts} attempt(s).`);
+      return;
+    }
+    if (guess < secret) {
+      console.log("Too low.");
+    } else {
+      console.log("Too high.");
+    }
+  }
+}
+
+main();

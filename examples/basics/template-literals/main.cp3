@@ -1,0 +1,26 @@
+import console from "std/console";
+
+// template-literals -- `${expression}` interpolation, string building and the
+// exact way numbers print.
+//
+// Numbers follow ECMAScript Number::toString rules (spec 23, decision D9):
+// 24.25 prints as `24.25`, and a whole number prints without a trailing `.0`.
+
+const item = "mechanical keyboard";
+const qty = 3;
+const unitPrice = 24.25;
+const shipping = 7.5;
+
+function lineTotal(quantity: number, price: number): number {
+  return quantity * price;
+}
+
+const subtotal = lineTotal(qty, unitPrice);
+const total = subtotal + shipping;
+
+console.log(`Order: ${qty} x ${item}`);
+console.log(`Subtotal: $${subtotal}`);
+console.log(`Shipping: $${shipping}`);
+console.log(`Total:    $${total}`);
+console.log("");
+console.log("Thanks for shopping with " + "cp3!");

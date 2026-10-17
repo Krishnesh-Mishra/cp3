@@ -1,0 +1,37 @@
+import console from "std/console";
+
+// timers-demo -- async/await plus the timer builtins.
+//
+// setTimeout / clearTimeout / sleep are core-language builtins, not imports
+// (spec 20 and STDLIB-README "Built into the language") because they are
+// concrete uses of the event loop the language itself provides (spec 14).
+//
+// Two things to watch in the output:
+//  * an async function runs synchronously until its first real await;
+//  * the process stays alive while the event loop still has pending work, so
+//    the countdown always finishes before the program exits.
+
+async function countdown(from: number): Promise<void> {
+  let n = from;
+  while (n > 0) {
+    console.log(`tick ${n}`);
+    await sleep(100);
+    n = n - 1;
+  }
+  console.log("liftoff");
+}
+
+// A cancelled timeout never fires - and, being cleared, it does not hold the
+// event loop open either.
+const cancelled = setTimeout(() => {
+  console.log("you should never see this");
+}, 5000);
+clearTimeout(cancelled);
+
+setTimeout(() => {
+  console.log("0 ms timeout fired - the event loop is alive");
+}, 0);
+
+console.log("scheduling countdown...");
+countdown(3);
+console.log("top level done; the runtime waits for pending timer work");

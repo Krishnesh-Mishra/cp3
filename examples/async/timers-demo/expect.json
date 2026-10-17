@@ -1,0 +1,10 @@
+{
+  "status": "pending",
+  "mode": "run",
+  "expect": {
+    "stdout": "scheduling countdown...\ntick 3\ntop level done; the runtime waits for pending timer work\n0 ms timeout fired - the event loop is alive\ntick 2\ntick 1\nliftoff\n",
+    "exitCode": 0
+  },
+  "requires": "async/await + setTimeout/clearTimeout/sleep (event loop, spec 14)",
+  "observed": "main.cp3:14:1: error: CP3002: not implemented yet: async functions"
+}

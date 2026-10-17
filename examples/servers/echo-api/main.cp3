@@ -1,0 +1,79 @@
+import { createServer } from "std/network";
+import console from "std/console";
+
+// echo-api -- a slightly bigger HTTP service: middleware, live counters,
+// route params and JSON in/out.
+//
+//   GET  /healthz       -> 200 "ok"
+//   GET  /stats         -> 200 {"requests": n, "echoes": n}
+//   GET  /greet/:name   -> 200 "Hello, <name>!"
+//   POST /echo          -> 200 {"message": "echo: <text>", "length": n}
+//                          400 when "message" is empty
+//
+// Run it:   cp3c run main.cp3
+// Check it:
+//   curl http://localhost:3000/healthz
+//   curl http://localhost:3000/greet/Ada
+//   curl -X POST http://localhost:3000/echo \
+//        -H "Content-Type: application/json" -d "{\"message\":\"hi\"}"
+//
+// API shape: STDLIB-README "network". A malformed or wrongly-shaped JSON body
+// makes req.json<T>() throw; std/network answers that one request with a 500
+// and keeps serving - see spec 14's per-request error boundary.
+//
+// The handlers share this file's own state (`requests`, `echoes`); all of it
+// runs on the single event loop from spec 14, so no locking is needed.
+
+interface EchoRequest {
+  message: string;
+}
+
+interface EchoReply {
+  message: string;
+  length: number;
+}
+
+const PORT = 3000;
+const app = createServer();
+
+let requests = 0;
+let echoes = 0;
+
+app.use(async (req, res, next) => {
+  requests = requests + 1;
+  console.log(`${req.method} ${req.path}`);
+  await next();
+});
+
+app.get("/healthz", (req, res) => {
+  res.text("ok");
+});
+
+app.get("/stats", (req, res) => {
+  res.json({ requests: requests, echoes: echoes });
+});
+
+app.get("/greet/:name", (req, res) => {
+  const name = req.params.get("name");
+  res.text(`Hello, ${name}!`);
+});
+
+app.post("/echo", async (req, res) => {
+  const body = await req.json<EchoRequest>();
+  if (body.message === "") {
+    res.json({ error: "message must not be empty" }, 400);
+    return;
+  }
+  echoes = echoes + 1;
+  const reply: EchoReply = { message: `echo: ${body.message}`, length: body.message.length };
+  res.json(reply);
+});
+
+// Anything that reached this last middleware matched no route above.
+app.use((req, res, next) => {
+  res.status(404).json({ error: "not found", path: req.path });
+});
+
+app.listen(PORT, () => {
+  console.log(`echo api listening on http://localhost:${PORT}`);
+});
