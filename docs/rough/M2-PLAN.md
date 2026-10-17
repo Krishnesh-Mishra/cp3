@@ -51,10 +51,14 @@ and the two pending cp3 rows (`health-server`, `compute-multi`) auto-fill when
 | 11 | Module local function linkage (codegen emits local functions around calls) | 6 (14) | closes the remaining `modules/` skips |
 | 12 | Grammar tail sweep (switch 7, untyped params 7, arrows 6, compound assign 6, rest 5, bitwise 5, destructuring 5, for-of 4, console methods 4, labels 3, `parseInt` 3, `parseFloat` 2, `typeof` 2, …) | ~95 | mostly independent, S each |
 
-Parallel lanes: the **D61 CLI lane** (exe → `.cp3/out/`, `clean` semantics;
-`src/cli` + `tests/cases/cli` only) runs alongside wave 1; the **D56
-runtime-embedding lane** (single-binary guarantee) is queued behind wave 1 so
-the embedded runtime TU set finalizes once.
+Parallel lanes (status 2026-10-17): the **C1 CLI + package-manager lane** is in
+flight alongside the perf wave — D61 exe → `.cp3/out/` layout + `clean`,
+`cp3 init` spec parity, `.cp3pak` pack/install + `.cp3/lock.json`; sole writer
+`src/cli/**` minus `src/cli/src/util.cpp` (perf-owned). The **D56
+runtime-embedding lane** (single-binary guarantee) is queued behind the perf
+wave so the embedded runtime TU set finalizes once. std/network, parallel/worker,
+crypto, Date/Buffer, and the fs/env leftovers are post-perf runtime waves — they
+sit in perf-owned paths today.
 
 ## Marker rulings owed (the 16 genuinely open)
 
@@ -222,6 +226,10 @@ Ordered work items (sole writer of `src/sema/**`, `src/codegen/**`,
    because all five TUs compile every time).
 4. After landing: re-run the suite, refresh the benchmark tables and the
    root README numbers with the new labeled run (D60/D64).
+5. Post-landing priority (user directive, 2026-10-17): finish the remaining
+   product surface first — CLI/init/package manager (lane C1, in flight), then
+   std/crypto/network/parallel and the rest of the wave list — before the next
+   perf push; perf then continues as an ongoing loop judged by the benchmarks.
 
 Acceptance: corpus 0 failed + suite rerun meets the D64 targets.
 

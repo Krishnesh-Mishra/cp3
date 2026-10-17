@@ -410,11 +410,12 @@ real pass/fail. Anything in the AST beyond that must produce a clean
   132–147 ms):
   1. **Targets.** The `examples/benchmarks/` suite is the judge (D60 — numbers
      refresh from real runs, never invented). Standing goal (user directive,
-     2026-10-17): **beat Go/JS/CPython on every completion-time table** and
-     **match Rust/C++ on most**; for compute-single specifically, **≤ Go
-     (0.20 s)** is the hard target and **C++/Rust parity (≈0.15 s)** the
-     stretch. Matching/beating the native entries on hot integer loops is the
-     language's core promise, so it is a tracked requirement, not a nicety.
+     2026-10-17): on every completion-time table **come within ~5% of C++/Rust**
+     (parity is the aim; ≤5% behind is acceptable, more is not) and **beat
+     Go/JS/CPython**. For compute-single that means **≤ C++/Rust + 5 %
+     (≈0.15–0.16 s)**; ≤ Go (0.20 s) is only the floor. Matching the native
+     entries on hot integer loops is the language's core promise, so it is a
+     tracked requirement, not a nicety.
   2. **No libm calls in generated scalar hot paths.** `%` must lower to an
      inline exact-integer fast path with a `std::fmod` fallback (and
      literal-divisor specialization), never to a bare `std::fmod` call. Same
