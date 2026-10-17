@@ -312,3 +312,29 @@ program that the system toolchain builds and runs, printing the exact expected
 `stdout`. The `tests/cases/variables/` corpus (42 cases) flips from "skipped" to
 real pass/fail. Anything in the AST beyond that must produce a clean
 "not implemented" diagnostic (`CP3002`), never a crash.
+
+---
+
+## Milestone 2 (opened 2026-10-17)
+
+- **D57.** M2 opens with a full reconnaissance of the 547 skips: every one is
+  attributed to its first blocking feature (exact counts in `M2-PLAN.md`,
+  which is the living milestone roadmap — lead-owned, updated as waves land;
+  `DECISIONS.md` wins on any conflict). The adopted default wave order is:
+  (1) method-call codegen + per-receiver runtime, (2) classes/object model,
+  (3) arrays/indexing, (4) async/event loop/timers (in flight), (5) Map/Set/
+  EventEmitter, (6) enums, (7) try/throw/finally, (8) non-primitive
+  locals/returns, (9) object literals/interfaces, (10) generic functions,
+  (11) module local function linkage, (12) grammar tail sweep. Rank is a
+  default, not a lock: the lead re-ranks as waves land. Each wave's brief
+  must carry the lead's rulings for any marker its feature touches
+  (the 18 genuinely open markers are listed in `M2-PLAN.md`).
+- **D58.** Ambiguity markers are **inert documentation, never run as cases**:
+  each marker's `expect.json` carries its question text in `error.contains`,
+  so `--strict-ambiguous` (which runs them as ordinary cases) serves only as a
+  crash-safety probe — its pass/fail numbers are not a signal, and it is never
+  a promotion gate. **Promotion** = the lead rules (new D-entry), then an
+  agent rewrites the marker into a real case in the parent category with a
+  real `expect.json` and removes it from `/_ambiguous/` and
+  `AMBIGUITIES.md`; fixtures with broken or missing scenario files are
+  repaired at that time (three are known and listed in `M2-PLAN.md` §bugs).
