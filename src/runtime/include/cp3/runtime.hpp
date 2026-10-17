@@ -83,3 +83,8 @@ const char* name() noexcept;
 std::string version();
 
 }  // namespace cp3::runtime
+
+// The three-way nullish value (`T | null | undefined`). Included last: it
+// builds on the `Undefined` value and `toString` declarations above. Additive
+// to the frozen surface (no existing signature changed).
+#include "cp3/maybe.hpp"

@@ -164,7 +164,7 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
     }
 
     CppInfo ci = declared ? classify(*declared) : CppInfo{};
-    if (ci.shape == Shape::Optional) {
+    if (ci.shape == Shape::Optional || ci.shape == Shape::Maybe) {
         return cv + ci.cpp + " " + name;
     }
     if (ci.representable && ci.shape != Shape::Void) {

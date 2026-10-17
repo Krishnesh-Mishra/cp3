@@ -63,6 +63,8 @@ private:
                     std::string& defs, std::string& mainBody);
     void addFunction(const FunctionDeclaration& fd, std::string& decls,
                      std::string& defs);
+    void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
+                       std::string& mainBody);
     std::optional<Type> parameterType(const Parameter& p,
                                       const FunctionDeclaration& fd,
                                       std::size_t index) const;
@@ -105,10 +107,29 @@ private:
 
     // --- calls + console.* (emit_call.cpp) -----------------------------------
     std::string emitCall(const CallExpr& c);
+    // Lowers a user-function call's argument list, applying the callee's
+    // optional/default parameters to arguments that are explicit `undefined`.
+    std::vector<std::string> emitCallArgs(const CallExpr& c,
+                                          const FunctionDeclaration* decl);
     bool isConsoleMember(const CallExpr& c) const;
     bool isConsoleCall(const CallExpr& c, const char* method) const;
     std::string emitConsoleLog(const CallExpr& c);
     std::string emitConsoleMethod(const CallExpr& c, const char* method);
+
+    // --- std namespaces + primitive methods (emit_builtin.cpp) ----------------
+    // Lower `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*` calls, the
+    // `string` method surface, and builtin property reads (`Math.PI`,
+    // `path.sep`, `process.argv`, `s.length`). Each returns "" when the form
+    // is not implemented, so the caller can report CP3002.
+    std::string emitBuiltinCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitBuiltinMember(const MemberExpr& m);
+    std::string emitMathCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitPathCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitOsCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitJsonCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitProcessCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
+    std::vector<std::string> emitPlainArgs(const CallExpr& c);
 
     // --- async / promises / errors (emit_async.cpp) --------------------------
     std::string emitAwait(const AwaitExpr& a);
@@ -120,6 +141,8 @@ private:
     std::string emitTimerBuiltin(const CallExpr& c, const std::string& name);
     std::string emitPromiseMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitPromiseStatic(const CallExpr& c, const MemberExpr& m);
+    std::string emitPromiseResolve(const CallExpr& c);
+    std::string emitPromiseReject(const CallExpr& c);
 
     // --- statements (emit_stmt.cpp) ------------------------------------------
     void stmt(const Stmt& s, std::string& out, int indent);
@@ -146,6 +169,12 @@ private:
     bool consoleImported_ = false;
     bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
     bool needsEventLoop_ = false;  // async/timers: emit runEventLoop() in main
+    bool needsMath_ = false;       // Math.* -> cp3/math.hpp include
+    bool needsString_ = false;     // string methods -> cp3/string.hpp include
+    bool needsPath_ = false;       // path.* -> cp3/path.hpp include
+    bool needsOs_ = false;         // os.* -> cp3/os.hpp include
+    bool needsJson_ = false;       // JSON.stringify -> cp3/json.hpp include
+    bool needsProcess_ = false;    // process.* -> cp3/process.hpp include
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)
@@ -154,6 +183,7 @@ private:
 
     std::vector<std::unordered_map<std::string, Type>> env_;
     std::unordered_set<std::string> functions_;
+    std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
     std::unordered_set<std::string> asyncFunctions_;   // `async function` names
     std::vector<std::string> thrownBindings_;          // active `catch (e)` names
     std::unordered_set<std::uint32_t> reported_;

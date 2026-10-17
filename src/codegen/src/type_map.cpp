@@ -15,6 +15,7 @@
 //   undefined -> cp3::runtime::Undefined        (value cp3::runtime::undefined)
 //   null      -> std::nullptr_t                 (value nullptr)
 //   T | null / T | undefined (T primitive) -> std::optional<T>
+//   T | null | undefined (T primitive)     -> cp3::runtime::Maybe<T>
 // =============================================================================
 #include "generator.h"
 
@@ -92,6 +93,34 @@ static CppInfo classifyPromise(const Type& t) {
     return info;
 }
 
+// `T | null` / `T | undefined` / the `T?` shorthand / `T | null | undefined`
+// over a primitive `T` -> `std::optional<T>`, or the two-flavor `Maybe<T>`
+// when both nullish kinds are present (an implementation detail of
+// `classify`). Any other union has no M1 spelling.
+static void classifyNullishUnion(const Type& t, CppInfo& info) {
+    std::vector<Type> nonNullish;
+    for (const Type& part : t.parts) {
+        if (!part.isNullish()) {
+            nonNullish.push_back(part);
+        }
+    }
+    if (nonNullish.size() != 1) return;
+    const CppInfo inner = classify(nonNullish.front());
+    if (!inner.representable || !isPrimitiveShape(inner.shape)) return;
+    info.representable = true;
+    info.emptyKind = nullishKindOf(t);
+    if (info.emptyKind == NullishKind::Mixed) {
+        // `T | null | undefined` must keep the two nullish flavors apart
+        // (JS `null !== undefined`), which no `std::optional` can: use the
+        // flavored Maybe<T>.
+        info.shape = Shape::Maybe;
+        info.cpp = "cp3::runtime::Maybe<" + inner.cpp + ">";
+    } else {
+        info.shape = Shape::Optional;
+        info.cpp = "std::optional<" + inner.cpp + ">";
+    }
+}
+
 Type promiseOf(const Type& value) {
     Type p(TypeKind::Class, "Promise");
     p.parts.push_back(value);
@@ -145,23 +174,9 @@ CppInfo classify(const Type& raw) {
             }
             return info;
         }
-        case TypeKind::Union: {
-            std::vector<Type> nonNullish;
-            for (const Type& part : t.parts) {
-                if (!part.isNullish()) {
-                    nonNullish.push_back(part);
-                }
-            }
-            if (nonNullish.size() == 1) {
-                CppInfo inner = classify(nonNullish.front());
-                if (inner.representable && isPrimitiveShape(inner.shape)) {
-                    info.shape = Shape::Optional; info.representable = true;
-                    info.cpp = "std::optional<" + inner.cpp + ">";
-                    info.emptyKind = nullishKindOf(t);
-                }
-            }
+        case TypeKind::Union:
+            classifyNullishUnion(t, info);
             return info;
-        }
         case TypeKind::Class: {
             // `Promise<T>` is the only class type with a spelling (M1).
             if (!isPromiseType(t)) {
@@ -242,6 +257,19 @@ Type stripNullish(const Type& t) {
         return Type::unionOf(std::move(kept));
     }
     return t;
+}
+
+// `null`, `undefined`, or a union of only nullish members: a value that is
+// always nullish, so `??` can drop it outright.
+bool isStaticallyNullish(const Type& t) {
+    if (t.isNullish()) return true;
+    if (t.isUnion() && !t.parts.empty()) {
+        for (const Type& part : t.parts) {
+            if (!part.isNullish()) return false;
+        }
+        return true;
+    }
+    return false;
 }
 
 }  // namespace detail
@@ -370,6 +398,7 @@ Type Generator::inferLogical(const LogicalExpr& l) const {
     const Type left = effectiveType(*l.left);
     const Type right = effectiveType(*l.right);
     if (l.op == LogicalOp::Nullish) {
+        if (isStaticallyNullish(left)) return right;
         return unify(stripNullish(left), right);
     }
     return unify(left, right);

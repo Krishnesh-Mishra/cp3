@@ -36,7 +36,64 @@ bool isTimerBuiltinName(const std::string& name) {
            name == "clearTimeout" || name == "clearInterval" || name == "sleep";
 }
 
+// A parameter that may absorb an explicit `undefined` argument: it carries a
+// default expression, or is declared optional (`a?: T` lowers to
+// `std::optional<T> = std::nullopt`).
+bool optionalParamAt(const FunctionDeclaration& decl, std::size_t i) {
+    if (i >= decl.params.size()) return false;
+    const Parameter* p = decl.params[i].get();
+    return p && (p->optional || p->defaultValue != nullptr);
+}
+
+const Parameter* paramAt(const FunctionDeclaration& decl, std::size_t i) {
+    if (i >= decl.params.size()) return nullptr;
+    return decl.params[i].get();
+}
+
 }  // namespace
+
+// Lowers a user-function call's argument list against the callee's declared
+// parameters. An explicit `undefined` for an optional/default parameter is the
+// JS "argument absent" value: it lowers to the parameter's default expression
+// (or `std::nullopt`) when a later argument follows, and is dropped when
+// trailing, so the C++ default applies.
+std::vector<std::string> Generator::emitCallArgs(const CallExpr& c,
+                                                 const FunctionDeclaration* decl) {
+    const std::size_t count = c.arguments.size();
+    std::vector<std::string> raw(count);
+    std::vector<bool> drop(count, false);
+    for (std::size_t i = 0; i < count; ++i) {
+        const Expr* arg = c.arguments[i].get();
+        if (!arg) { raw[i] = "0.0"; continue; }
+        if (arg->kind == NodeKind::SpreadElement) {
+            notImplemented(*arg, "spread argument");
+            continue;
+        }
+        if (arg->kind == NodeKind::UndefinedLiteral && decl &&
+            optionalParamAt(*decl, i)) {
+            drop[i] = true;
+            continue;
+        }
+        raw[i] = expr(*arg);
+    }
+    std::size_t passed = count;  // one past the last argument that must be passed
+    while (passed > 0 && drop[passed - 1]) --passed;
+    std::vector<std::string> args;
+    args.reserve(passed);
+    for (std::size_t i = 0; i < passed; ++i) {
+        if (!drop[i]) {
+            args.push_back(std::move(raw[i]));
+            continue;
+        }
+        const Parameter* p = paramAt(*decl, i);
+        if (p && p->defaultValue) {
+            args.push_back(expr(*p->defaultValue));
+        } else {
+            args.push_back("std::nullopt");
+        }
+    }
+    return args;
+}
 
 std::string Generator::emitCall(const CallExpr& c) {
     if (isConsoleCall(c, "log") || isConsoleCall(c, "info")) {
@@ -54,6 +111,17 @@ std::string Generator::emitCall(const CallExpr& c) {
         const std::string name = static_cast<const Identifier&>(*c.callee).name;
         if (functions_.find(name) == functions_.end() && isTimerBuiltinName(name)) {
             return emitTimerBuiltin(c, name);
+        }
+        // `String(value)` (bug 9 surface): the scalar conversion global. A
+        // user-declared `String` function wins (checked above).
+        if (name == "String" && functions_.find(name) == functions_.end()) {
+            if (c.arguments.size() == 1 && c.arguments.front() &&
+                c.arguments.front()->kind != NodeKind::SpreadElement) {
+                return "::cp3::runtime::toString(" + expr(*c.arguments.front()) +
+                       ")";
+            }
+            notImplemented(c, "String(...)");
+            return "0.0";
         }
         if (name == "worker") {
             notImplemented(c, "worker(...)");
@@ -75,16 +143,10 @@ std::string Generator::emitCall(const CallExpr& c) {
             // only run when the loop does.
             needsEventLoop_ = true;
         }
-        std::vector<std::string> args;
-        for (const auto& arg : c.arguments) {
-            if (!arg) { args.push_back("0.0"); continue; }
-            if (arg->kind == NodeKind::SpreadElement) {
-                notImplemented(*arg, "spread argument");
-                continue;
-            }
-            args.push_back(expr(*arg));
-        }
-        return mapIdent(name) + "(" + joinStrings(args, ", ") + ")";
+        const auto declIt = functionDecls_.find(name);
+        const FunctionDeclaration* decl =
+            declIt != functionDecls_.end() ? declIt->second : nullptr;
+        return mapIdent(name) + "(" + joinStrings(emitCallArgs(c, decl), ", ") + ")";
     }
     if (c.callee->kind == NodeKind::MemberExpr) {
         const auto& m = static_cast<const MemberExpr&>(*c.callee);
@@ -101,6 +163,11 @@ std::string Generator::emitCall(const CallExpr& c) {
         // `p.then(...)` / `p.catch(...)` / `p.finally(...)` on a Promise.
         if (m.object && detail::isPromiseType(effectiveType(*m.object))) {
             return emitPromiseMemberCall(c, m);
+        }
+        // `Math.*`, `path.*`, `os.*`, `JSON.stringify`, `process.*`, and the
+        // primitive `string` method surface (emit_builtin.cpp).
+        if (std::string builtin = emitBuiltinCall(c, m); !builtin.empty()) {
+            return builtin;
         }
         notImplemented(c, "method call");
         return "0.0";

@@ -69,6 +69,17 @@ Type stripNullish(const Type& t) {
     return t;
 }
 
+bool isStaticallyNullish(const Type& t) {
+    if (t.isNullish()) return true;
+    if (t.isUnion() && !t.parts.empty()) {
+        for (const Type& m : t.parts) {
+            if (!m.isNullish()) return false;
+        }
+        return true;
+    }
+    return false;
+}
+
 bool hasNullish(const Type& t) {
     if (t.isNullish()) return true;
     if (t.isNullable()) return true;

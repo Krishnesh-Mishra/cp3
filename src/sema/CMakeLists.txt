@@ -8,8 +8,9 @@
 # lists the target decomposition: semantic_analyzer.cpp, scopes.cpp,
 # declarations.cpp, type_check.cpp, expr_check.cpp, stmt_check.cpp, symbols.cpp,
 # banned.cpp; the expression/assignability concerns are split further to stay
-# within the 500-line hard budget: member_check.cpp, ops_check.cpp,
-# assignability.cpp, parallel_check.cpp, parallel_expr_check.cpp).
+# within the 500-line hard budget: member_check.cpp, call_check.cpp,
+# ops_check.cpp, assignability.cpp, parallel_check.cpp, parallel_expr_check.cpp,
+# std_check.cpp).
 # =============================================================================
 
 set(cp3_sema_sources
@@ -20,12 +21,14 @@ set(cp3_sema_sources
     src/assignability.cpp
     src/expr_check.cpp
     src/member_check.cpp
+    src/call_check.cpp
     src/ops_check.cpp
     src/stmt_check.cpp
     src/symbols.cpp
     src/banned.cpp
     src/parallel_check.cpp
     src/parallel_expr_check.cpp
+    src/std_check.cpp
 )
 
 add_library(cp3_sema STATIC ${cp3_sema_sources})

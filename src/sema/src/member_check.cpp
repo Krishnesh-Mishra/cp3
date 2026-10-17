@@ -1,10 +1,11 @@
 // =============================================================================
-// src/sema/src/member_check.cpp — member / index / call expression inference.
+// src/sema/src/member_check.cpp — member / index expression inference.
 //
-// Owns property access (`inferMember` / `memberOf` / `memberOfProbe`),
+// Owns property access (`inferMember` / `memberOf` / `memberOfProbe`) and
 // subscript access (`inferIndex` / `indexOf` / `indexOfObject` /
-// `tupleIndexAt`) and call inference (`inferCall` + argument arity/type
-// checking). Primary expressions live in expr_check.cpp (STYLE.md §8).
+// `tupleIndexAt`). Call inference (`inferCall` + argument arity/type
+// checking) lives in call_check.cpp; primary expressions live in
+// expr_check.cpp (STYLE.md §8).
 // =============================================================================
 #include "analyzer.h"
 
@@ -22,6 +23,19 @@ namespace cp3 {
 // =============================================================================
 Type Analyzer::inferMember(MemberExpr& m) {
     Type ot = m.object ? inferExpr(*m.object) : Type::unknown();
+    // Ambient std namespaces (Math / path / os / process): type the member
+    // from the std tables instead of the permissive ambient shape
+    // (std_check.cpp). A user binding that shadows the name is not ambient,
+    // so it keeps its own shape.
+    if (m.object && m.object->kind == NodeKind::Identifier) {
+        const auto& id = static_cast<Identifier&>(*m.object);
+        Binding b;
+        if (lookup(id.name, b) && b.isAmbient) {
+            if (auto t = stdNamespaceMember(id.name, m.property)) {
+                return withType(m, *t);
+            }
+        }
+    }
     Type result = memberOf(ot, m.property, m.span, m.optional);
     return withType(m, result);
 }
@@ -122,6 +136,12 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
     }
     if (prop == "pop" || prop == "shift") return Type::function({}, elem);
     if (prop == "join") return Type::function({Type::string()}, Type::string());
+    if (prop == "includes") {
+        // `includes(searchElement, fromIndex?)` — the literal-set form the
+        // emitter can lower today (emit_builtin.cpp).
+        return withOptionalTail(
+            Type::function({elem, Type::number()}, Type::boolean()));
+    }
     return ambient();
 }
 
@@ -138,13 +158,23 @@ Type Analyzer::stringMember(const std::string& prop) {
     }
     if (prop == "repeat") return Type::function({Type::number()}, Type::string());
     if (prop == "padStart" || prop == "padEnd") {
-        return Type::function({Type::number(), Type::string()}, Type::string());
+        return withOptionalTail(
+            Type::function({Type::number(), Type::string()}, Type::string()));
     }
-    if (prop == "toUpperCase" || prop == "toLowerCase" || prop == "trim") {
+    if (prop == "toUpperCase" || prop == "toLowerCase" || prop == "trim" ||
+        prop == "trimStart" || prop == "trimEnd") {
         return Type::function({}, Type::string());
     }
     if (prop == "indexOf" || prop == "lastIndexOf") {
-        return Type::function({Type::string()}, Type::number());
+        return withOptionalTail(
+            Type::function({Type::string(), Type::number()}, Type::number()));
+    }
+    if (prop == "slice" || prop == "substring") {
+        return withOptionalTail(
+            Type::function({Type::number(), Type::number()}, Type::string()));
+    }
+    if (prop == "replace" || prop == "replaceAll") {
+        return Type::function({Type::string(), Type::string()}, Type::string());
     }
     return ambient();
 }
@@ -216,270 +246,6 @@ Type Analyzer::tupleIndexAt(const Shape& sh, IndexExpr& ix) {
     }
     std::vector<Type> es = sh.tupleElems;
     return es.empty() ? Type::unknown() : Type::unionOf(std::move(es));
-}
-
-// =============================================================================
-// Calls
-// =============================================================================
-Type Analyzer::inferCall(CallExpr& call) {
-    Type ct = Type::unknown();
-    FuncSig localSig;
-    const FuncSig* sig = nullptr;
-    if (call.callee && call.callee->kind == NodeKind::Identifier) {
-        auto& id = static_cast<Identifier&>(*call.callee);
-        Binding b;
-        if (!lookup(id.name, b)) {
-            reportUndefinedCall(call, id);
-            return withType(call, Type::error());
-        }
-        ct = b.type;
-        setType(id, ct);
-        if (isAmbientType(b.type)) {
-            Type builtin;
-            if (tryTimerBuiltinCall(call, id, builtin)) {
-                return withType(call, builtin);
-            }
-        }
-        if (b.overloads.size() >= 2) {
-            return inferOverloadCall(call, b, id);
-        }
-        if (b.isFunction) {
-            localSig = b.sig;
-            sig = &localSig;
-        }
-    } else if (call.callee) {
-        ct = inferExpr(*call.callee);
-        // JSON.parse returns `unknown`: the shape is only known at runtime, so
-        // callers must narrow before use (spec §20).
-        if (call.callee->kind == NodeKind::MemberExpr) {
-            checkParallelCall(call);
-            Type json;
-            if (tryInferJsonCall(call, static_cast<MemberExpr&>(*call.callee),
-                                 json)) {
-                return json;
-            }
-        }
-    }
-
-    for (auto& ta : call.typeArgs) {
-        if (ta) resolveType(*ta);
-    }
-
-    if (ct.isError()) {
-        inferArgs(call);
-        return withType(call, Type::error());
-    }
-
-    if (sig == nullptr && ct.kind == TypeKind::Function) {
-        sig = &localSig;
-        sigFromFunctionType(ct, localSig);
-    }
-
-    if (sig != nullptr) {
-        checkArgs(*sig, call);
-        return withType(call, sig->ret);
-    }
-
-    // Ambient / unknown callables are permissive.
-    if (isAmbientType(ct) || ct.isUnknown()) {
-        inferArgs(call);
-        return withType(call, ambient());
-    }
-
-    report(diagcode::kNotCallable, call.span,
-           "value of type '" + pretty(ct) + "' is not callable");
-    inferArgs(call);
-    return withType(call, Type::error());
-}
-
-// Core timer builtins (spec §14, STDLIB docs §03): honest result types so
-// `let id = setInterval(...)`, `clearTimeout(id)` and `await sleep(...)` type
-// correctly (the ambient table is permissive by default). Returns true when
-// `id` is one of them and `out` is set.
-bool Analyzer::tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& out) {
-    if (id.name == "setTimeout" || id.name == "setInterval") {
-        inferArgs(call);
-        out = Type::number();
-        return true;
-    }
-    if (id.name == "sleep") {
-        inferArgs(call);
-        out = promiseOf(Type::voidType());
-        return true;
-    }
-    if (id.name == "clearTimeout" || id.name == "clearInterval") {
-        inferArgs(call);
-        out = Type::voidType();
-        return true;
-    }
-    return false;
-}
-
-void Analyzer::reportUndefinedCall(CallExpr& call, Identifier& id) {
-    if (id.name == "arguments") {
-        reportBannedArguments(id.span);
-    } else {
-        report(diagcode::kUndefinedIdentifier, id.span,
-               "cannot find name '" + id.name + "'");
-    }
-    inferArgs(call);
-}
-
-bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
-    if ((m.property == "parse" || m.property == "stringify") && m.object &&
-        m.object->kind == NodeKind::Identifier &&
-        static_cast<Identifier&>(*m.object).name == "JSON") {
-        inferArgs(call);
-        // JSON.parse<T>(...) returns T (explicit) or `unknown` (callers must
-        // narrow); JSON.stringify yields a string.
-        Type t = Type::unknown();
-        if (m.property == "stringify") {
-            t = Type::string();
-        } else if (!call.typeArgs.empty() && call.typeArgs.front()) {
-            t = resolveType(*call.typeArgs.front());
-        }
-        out = withType(call, t);
-        return true;
-    }
-    return false;
-}
-
-void Analyzer::inferArgs(CallExpr& call) {
-    for (auto& a : call.arguments) inferArg(a.get());
-}
-
-void Analyzer::sigFromFunctionType(const Type& ct, FuncSig& localSig) {
-    localSig.name = "";
-    localSig.annotatedReturn = true;
-    if (!ct.parts.empty()) {
-        localSig.ret = ct.parts.back();
-        for (std::size_t i = 0; i + 1 < ct.parts.size(); ++i) {
-            localSig.params.push_back(ct.parts[i]);
-            localSig.optional.push_back(false);
-        }
-    }
-    if (ct.name == kVariadicLabel) localSig.rest = true;
-}
-
-void Analyzer::inferArg(Expr* a) {
-    if (!a) return;
-    if (a->kind == NodeKind::SpreadElement) {
-        auto& sp = static_cast<SpreadElement&>(*a);
-        if (sp.argument) inferExpr(*sp.argument);
-        return;
-    }
-    inferExpr(*a);
-}
-
-void Analyzer::checkArgs(const FuncSig& sig, CallExpr& call) {
-    bool hasSpread = false;
-    for (auto& a : call.arguments) {
-        if (a && a->kind == NodeKind::SpreadElement) hasSpread = true;
-    }
-    std::size_t required = 0;
-    for (std::size_t i = 0; i < sig.params.size(); ++i) {
-        if (i < sig.optional.size() && sig.optional[i]) continue;
-        ++required;
-    }
-    const std::size_t given = call.arguments.size();
-    const std::size_t maxArgs =
-        sig.rest ? static_cast<std::size_t>(-1) : sig.params.size();
-    if (!hasSpread && (given < required || given > maxArgs)) {
-        report(diagcode::kArityMismatch, call.span,
-               "arity mismatch: expected " +
-                   arityText(required, maxArgs, sig.rest) + ", got " +
-                   std::to_string(given) + " argument" +
-                   (given == 1 ? "" : "s"));
-    }
-    for (std::size_t i = 0; i < call.arguments.size(); ++i) {
-        Expr* a = call.arguments[i].get();
-        if (!a) continue;
-        if (a->kind == NodeKind::SpreadElement) {
-            auto& sp = static_cast<SpreadElement&>(*a);
-            if (sp.argument) inferExpr(*sp.argument);
-            continue;
-        }
-        Type at = inferExpr(*a);
-        Type pt = Type::unknown();
-        if (sig.rest && sig.params.size() > 0 && i >= sig.params.size()) {
-            pt = sig.params.back();
-        } else if (i < sig.params.size()) {
-            pt = sig.params[i];
-        }
-        checkAssign(at, pt, a->span, false);
-    }
-}
-
-std::string Analyzer::arityText(std::size_t required, std::size_t maxArgs,
-                                bool rest) const {
-    if (rest) return "at least " + std::to_string(required);
-    if (maxArgs == required) return std::to_string(required);
-    return std::to_string(required) + " to " + std::to_string(maxArgs);
-}
-
-// =============================================================================
-// Overload resolution (spec §17)
-// =============================================================================
-Type Analyzer::inferOverloadCall(CallExpr& call, const Binding& binding,
-                                 Identifier& id) {
-    std::vector<Type> argTypes;
-    bool hasSpread = false;
-    collectArgTypes(call, argTypes, hasSpread);
-    for (const FuncSig& sig : binding.overloads) {
-        if (overloadViable(sig, argTypes, hasSpread)) {
-            // A viable overload is accepted permissively (M1 does not yet
-            // implement overload-dispatch typing); the ambient type keeps the
-            // rest of the file from cascading, exactly as before.
-            return withType(call, ambient());
-        }
-    }
-    report(diagcode::kNoMatchingOverload, call.span,
-           "no overload of '" + id.name +
-               "' matches the supplied arguments");
-    return withType(call, Type::error());
-}
-
-void Analyzer::collectArgTypes(CallExpr& call, std::vector<Type>& out,
-                               bool& hasSpread) {
-    out.reserve(call.arguments.size());
-    for (auto& a : call.arguments) {
-        if (!a) {
-            out.push_back(Type::unknown());
-            continue;
-        }
-        if (a->kind == NodeKind::SpreadElement) {
-            hasSpread = true;
-            auto& sp = static_cast<SpreadElement&>(*a);
-            if (sp.argument) inferExpr(*sp.argument);
-            out.push_back(Type::unknown());
-            continue;
-        }
-        out.push_back(inferExpr(*a));
-    }
-}
-
-bool Analyzer::overloadViable(const FuncSig& sig,
-                              const std::vector<Type>& argTypes,
-                              bool hasSpread) {
-    std::size_t required = 0;
-    for (std::size_t i = 0; i < sig.params.size(); ++i) {
-        if (i < sig.optional.size() && sig.optional[i]) continue;
-        ++required;
-    }
-    const std::size_t given = argTypes.size();
-    const std::size_t maxArgs =
-        sig.rest ? static_cast<std::size_t>(-1) : sig.params.size();
-    if (!hasSpread && (given < required || given > maxArgs)) return false;
-    for (std::size_t i = 0; i < argTypes.size(); ++i) {
-        Type pt = Type::unknown();
-        if (sig.rest && !sig.params.empty() && i >= sig.params.size()) {
-            pt = sig.params.back();
-        } else if (i < sig.params.size()) {
-            pt = sig.params[i];
-        }
-        if (!wouldAccept(argTypes[i], pt, false)) return false;
-    }
-    return true;
 }
 
 }  // namespace cp3

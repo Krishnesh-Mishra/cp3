@@ -24,14 +24,16 @@ struct TypeNode;
 namespace detail {
 
 enum class Shape {
-    Number, String, Bool, Undefined, Null, Void, Optional, Promise, Unknown,
-    Unsupported
+    Number, String, Bool, Undefined, Null, Void, Optional, Maybe, Promise,
+    Unknown, Unsupported
 };
 
 // Which nullish value an empty `std::optional<T>` denotes. `number | null`,
 // `number | undefined` and `number | null | undefined` (the `T?` shorthand,
 // folded to TypeKind::Nullable) all lower to `std::optional<T>`, but they print
-// and compare differently, so the emitter tracks the flavor.
+// and compare differently, so the emitter tracks the flavor. The explicit
+// three-way union `T | null | undefined` needs both flavors at once and lowers
+// to `cp3::runtime::Maybe<T>` instead (Shape::Maybe).
 enum class NullishKind { None, Null, Undefined, Mixed };
 
 bool isPrimitiveShape(Shape s);

@@ -30,6 +30,7 @@ void Generator::collectFunctionNames(const Stmt& s) {
     if (s.kind == NodeKind::FunctionDeclaration) {
         const auto& fd = static_cast<const FunctionDeclaration&>(s);
         functions_.insert(fd.name);
+        functionDecls_[fd.name] = &fd;
         if (fd.isAsync) {
             asyncFunctions_.insert(fd.name);
         }
@@ -46,6 +47,12 @@ void Generator::emitTopLevel(const Stmt& s, std::string& decls, std::string& def
             return;
         case NodeKind::FunctionDeclaration:
             addFunction(static_cast<const FunctionDeclaration&>(s), decls, defs);
+            return;
+        case NodeKind::VariableDeclaration:
+            // Module-scope bindings are namespace-scope globals: functions
+            // declared around them must be able to read them (S1).
+            emitModuleVar(static_cast<const VariableDeclaration&>(s), decls,
+                          mainBody);
             return;
         case NodeKind::ExportDeclaration:
             emitExport(static_cast<const ExportDeclaration&>(s), decls, defs, mainBody);
@@ -73,6 +80,81 @@ void Generator::emitExport(const ExportDeclaration& ed, std::string& decls,
         return;
     }
     notImplemented(ed, "re-export");
+}
+
+// Module-scope `let`/`const`/`var` lowers to a namespace-scope global so that
+// functions declared in the unit can read it (a `main`-local cannot be seen by
+// them, S1). The declaration moves to the decls section; a non-const
+// initializer runs at the statement's original position in `main` (JS order),
+// while a const must initialize in place.
+void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
+                              std::string& mainBody) {
+    const bool isConst = vd.kind == VarKind::Const;
+    const std::string cv = isConst ? "const " : "";
+    for (const auto& declPtr : vd.declarations) {
+        const VariableDeclarator* d = declPtr.get();
+        if (!d || !d->id || d->id->kind != NodeKind::Identifier) {
+            if (d && d->id) notImplemented(*d->id, "destructuring binding");
+            continue;
+        }
+        const std::string name =
+            mapIdent(static_cast<const Identifier&>(*d->id).name);
+        // A declared type M1 cannot represent (`number | string`, an object /
+        // array / class type, ...) keeps the unit "not implemented" instead of
+        // being quietly mis-typed (same contract as local declarations).
+        if (d->type) {
+            if (auto dt = typeFromTypeNode(*d->type)) {
+                if (!classify(*dt).representable && !dt->isUnknown() &&
+                    !dt->isError()) {
+                    notImplemented(*d, "declared type outside M1");
+                }
+            }
+        }
+        const std::optional<Type> declared = resolvedBindingType(*d);
+        CppInfo ci = declared ? classify(*declared) : CppInfo{};
+        if (d->init && !ci.representable) {
+            const CppInfo fromInit = info(*d->init);
+            if (fromInit.representable) ci = fromInit;
+        }
+        if (!ci.representable) {
+            // No namespace-scope spelling (e.g. an arrow binding, or a
+            // top-level `await` initializer that needs the coroutine context):
+            // keep the binding a `main`-local, the pre-globals lowering.
+            line(mainBody, 1, declaratorText(*d, vd.kind) + ";");
+            if (d->id && d->id->kind == NodeKind::Identifier) {
+                declare(static_cast<const Identifier&>(*d->id).name,
+                        resolvedBindingType(*d));
+            }
+            continue;
+        }
+        if (!d->init) {
+            if (ci.representable && ci.shape != Shape::Void) {
+                line(decls, 1, cv + ci.cpp + " " + name + "{};");
+            } else {
+                line(decls, 1,
+                     cv + "auto " + name + " = cp3::runtime::undefined;");
+            }
+            continue;
+        }
+        std::string initText = expr(*d->init);
+        if (ci.shape == Shape::Optional && isNullishLiteral(*d->init)) {
+            initText = "std::nullopt";
+        }
+        if (isConst && initText.find("co_await") != std::string::npos) {
+            // A const initializer that awaits only compiles inside the entry
+            // coroutine: keep the binding a `main`-local (no static init).
+            line(mainBody, 1, declaratorText(*d, vd.kind) + ";");
+            declare(static_cast<const Identifier&>(*d->id).name,
+                    resolvedBindingType(*d));
+            continue;
+        }
+        if (isConst) {
+            line(decls, 1, cv + ci.cpp + " " + name + " = " + initText + ";");
+            continue;
+        }
+        line(decls, 1, ci.cpp + " " + name + "{};");
+        line(mainBody, 1, name + " = " + initText + ";");
+    }
 }
 
 void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,

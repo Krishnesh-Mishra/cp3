@@ -40,6 +40,19 @@ const char* binaryOpSpelling(BinaryOp op) {
     }
 }
 
+// `maybe <op> nullish` for a Shape::Maybe operand: strict `===` requires the
+// flavor to match, loose `==` treats both nullish flavors as equal (JS).
+std::string maybeNullishCompare(const std::string& mb, Shape nullish,
+                                bool isEqual, bool isStrict) {
+    std::string cond;
+    if (isStrict) {
+        cond = mb + ((nullish == Shape::Null) ? ".isNull()" : ".isUndefined()");
+    } else {
+        cond = mb + ".isNullish()";
+    }
+    return isEqual ? "(" + cond + ")" : "(! " + cond + ")";
+}
+
 }  // namespace
 
 std::string Generator::expr(const Expr& e) {
@@ -79,6 +92,15 @@ std::string Generator::expr(const Expr& e) {
             return emitCall(static_cast<const CallExpr&>(e));
         case NodeKind::AwaitExpr:
             return emitAwait(static_cast<const AwaitExpr&>(e));
+        case NodeKind::MemberExpr: {
+            // Builtin property reads (`Math.PI`, `path.sep`, `process.argv`,
+            // `s.length`); anything else stays CP3002 (emit_builtin.cpp).
+            const auto& m = static_cast<const MemberExpr&>(e);
+            std::string value = emitBuiltinMember(m);
+            if (!value.empty()) return value;
+            notImplemented(e, "expression");
+            return "0.0";
+        }
         default:
             notImplemented(e, "expression");
             return "0.0";
@@ -92,6 +114,14 @@ std::string Generator::emitIdentifier(const Identifier& id) {
     if (id.name == "Infinity") return "std::numeric_limits<double>::infinity()";
     if (id.name == "true") return "true";
     if (id.name == "false") return "false";
+    // A `var` read that precedes its declaration (the binding is hoisted and
+    // sema typed the read `undefined`): the C++ declaration does not exist yet,
+    // so emit the value the binding holds at that point in JS.
+    if (!lookup(id.name)) {
+        if (const Type* t = sema_.typeOf(id.nodeId); t && t->isUndefined()) {
+            return "cp3::runtime::undefined";
+        }
+    }
     return mapIdent(id.name);
 }
 
@@ -214,11 +244,28 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
         return isEqual ? "(! " + rhs + ".has_value())" : "(" + rhs + ".has_value())";
     }
 
+    // Maybe (three-way nullable) <-> nullish: the flavor is stored, so strict
+    // `===` can match exactly and loose `==` matches either flavor.
+    if (L.shape == Shape::Maybe && rNullish) {
+        return maybeNullishCompare(lhs, R.shape, isEqual, isStrict);
+    }
+    if (R.shape == Shape::Maybe && lNullish) {
+        return maybeNullishCompare(rhs, L.shape, isEqual, isStrict);
+    }
+
     // optional vs optional, or optional vs T: compare the unwrapped value.
     if (L.shape == Shape::Optional || R.shape == Shape::Optional) {
         const std::string opt = (L.shape == Shape::Optional) ? lhs : rhs;
         const std::string val = (L.shape == Shape::Optional) ? rhs : lhs;
         return "((" + opt + ".has_value()) && (*" + opt + " " + op + " " + val + "))";
+    }
+
+    // Maybe vs Maybe, or Maybe vs T: compare the unwrapped value (a nullish
+    // side never equals a non-nullish value, so the guard is required).
+    if (L.shape == Shape::Maybe || R.shape == Shape::Maybe) {
+        const std::string mb = (L.shape == Shape::Maybe) ? lhs : rhs;
+        const std::string val = (L.shape == Shape::Maybe) ? rhs : lhs;
+        return "((" + mb + ".hasValue()) && (" + mb + ".value() " + op + " " + val + "))";
     }
 
     // Same representation: compare directly. D15 keeps loose `==` same-type.
@@ -258,6 +305,11 @@ std::string Generator::emitNullish(const LogicalExpr& l) {
     const std::string lhs = expr(*l.left);
     const std::string rhs = expr(*l.right);
 
+    // A statically nullish left side (`null ?? x`) never produces a value: the
+    // result is the right operand; the left is evaluated only for side effects.
+    if (L.shape == Shape::Null || L.shape == Shape::Undefined) {
+        return "((" + lhs + "), (" + rhs + "))";
+    }
     // `x ?? <nullish>` is `x` (with x evaluated exactly once).
     if (R.shape == Shape::Null || R.shape == Shape::Undefined) {
         return "(" + lhs + ")";
@@ -266,8 +318,9 @@ std::string Generator::emitNullish(const LogicalExpr& l) {
         return "([&]{ auto cp3_l = (" + lhs +
                "); return cp3_l.has_value() ? *cp3_l : (" + rhs + "); }())";
     }
-    if (L.shape == Shape::Null || L.shape == Shape::Undefined) {
-        return "((" + lhs + "), (" + rhs + "))";
+    if (L.shape == Shape::Maybe) {
+        return "([&]{ auto cp3_l = (" + lhs +
+               "); return cp3_l.hasValue() ? cp3_l.value() : (" + rhs + "); }())";
     }
     return "(" + lhs + ")";
 }

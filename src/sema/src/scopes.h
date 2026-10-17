@@ -37,6 +37,18 @@ constexpr const char* kAmbientLabel = "$ambient";
 // corresponding signature's `rest` flag in `inferCall`.
 constexpr const char* kVariadicLabel = "$variadic";
 
+// Function-type marker for a signature whose *last* declared parameter is
+// optional (`slice(start, end?)`, `basename(p, ext?)`, `indexOf(needle,
+// from?)`): `Type::function` cannot carry per-parameter optionality, so the
+// tag marks the trailing parameter in `sigFromFunctionType` (member_check.cpp).
+constexpr const char* kOptionalTailLabel = "$optionalTail";
+
+// Marks the final declared parameter of a function type optional.
+inline Type withOptionalTail(Type fn) {
+    fn.name = kOptionalTailLabel;
+    return fn;
+}
+
 // One field of an object/tuple shape (name, value type, `?` optionality).
 struct Field {
     std::string name;
@@ -80,6 +92,10 @@ struct Binding {
     bool isFunction = false;
     bool isAmbient = false;
     bool publish = true;  // false for builtins / narrowing overrides
+    // `var`-related: `isVar` marks a real `var` declaration, `hoistedVar` the
+    // `undefined`-typed placeholder `hoistVars` inserts before the declaration.
+    bool isVar = false;
+    bool hoistedVar = false;
     std::uint32_t declNodeId = 0;
     SourceSpan span{};
     FuncSig sig;
@@ -95,6 +111,8 @@ struct Binding {
 struct BindingSpec {
     bool isConst = false;
     bool isFunction = false;
+    bool isVar = false;       // a `var` declaration (function-scoped)
+    bool hoistedVar = false;  // the `undefined` placeholder hoistVars inserts
     bool publish = true;
     std::uint32_t declNodeId = 0;
     const FuncSig* sig = nullptr;  // borrowed; only read to seed Binding::sig
@@ -110,6 +128,7 @@ bool isNumberish(const Type& t);
 bool isStringish(const Type& t);
 bool isPermissive(const Type& t);
 Type stripNullish(const Type& t);
+bool isStaticallyNullish(const Type& t);
 bool hasNullish(const Type& t);
 bool isTupleType(const Type& t);
 std::string pretty(const Type& t);

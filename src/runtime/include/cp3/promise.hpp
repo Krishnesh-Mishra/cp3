@@ -145,10 +145,27 @@ struct unwrap<Promise<U>> {
 template <class R>
 using unwrap_t = typename unwrap<std::remove_cvref_t<R>>::type;
 
+/// Invoke a promise handler with its contextual argument (the fulfilment value
+/// for `then`, the rejection reason for a rejection handler). JS always hands
+/// the argument over, but a handler may declare fewer parameters and ignore it
+/// (`g().then(() => …)`, M2-PLAN bug 7): the nullary form below keeps that
+/// compilable without knowing the handler's arity up front. Invocation and
+/// `HandlerResult` below must agree, so both go through here.
+template <class F, class A>
+auto invokeHandler(F& f, const A& arg) {
+    if constexpr (std::is_invocable_v<F&, const A&>) {
+        return f(arg);
+    } else {
+        (void)arg;  // the handler ignores the value, exactly like JS
+        return f();
+    }
+}
+
 /// The result type of calling a then-handler for a promise of value type T.
 template <class T, class F, bool IsVoid = std::is_void_v<T>>
 struct HandlerResult {
-    using type = std::invoke_result_t<F, T>;
+    using type = decltype(
+        invokeHandler(std::declval<F&>(), std::declval<const T&>()));
 };
 template <class T, class F>
 struct HandlerResult<T, F, true> {
@@ -374,14 +391,14 @@ struct PromiseCoroutine<void> {
 // Awaiter
 // =============================================================================
 
-/// `co_await awaitValue(promise)`. An already-settled promise resumes
-/// synchronously (no loop turn); otherwise the coroutine suspends and a
-/// microtask resumes it when the promise settles.
+/// `co_await awaitValue(promise)`. The coroutine always suspends: a settled
+/// promise resumes from the microtask queue (behind already-queued
+/// continuations, like JS `await`); a pending one resumes when it settles.
 template <class T>
 struct PromiseAwaiter {
     Promise<T> promise;
 
-    bool await_ready() const noexcept { return promise.settled(); }
+    bool await_ready() const noexcept { return false; }
 
     void await_suspend(std::coroutine_handle<> handle) {
         const std::shared_ptr<detail::PromiseState<T>> st = promise.sharedState();
@@ -395,9 +412,8 @@ struct PromiseAwaiter {
     /// into a rejection (PromiseCoroutine::unhandled_exception).
     T await_resume() {
         if (promise.rejected()) {
-            // A settled rejection resumes synchronously, so `await_suspend`
-            // (which registers the observation) never runs; the `await` itself
-            // still observes the rejection (DECISIONS D43).
+            // The `await` itself observes the rejection (DECISIONS D43); the
+            // registration in `await_suspend` already did for settled ones.
             detail::markObserved(promise.sharedState());
             throw promise.reason();
         }

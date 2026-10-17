@@ -30,6 +30,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -84,17 +85,20 @@ private:
     void declareBuiltins();
     void hoistType(Stmt& s);
     void hoistFunction(FunctionDeclaration& fn);
+    void hoistVars(StmtList& body);
+    void hoistVarsIn(Stmt& s);
+    void hoistVarBody(StmtPtr& body);
     void registerTypeParams(TypeParamList& typeParams);
 
     // --- declarations (declarations.cpp) -------------------------------------
     FuncSig buildSig(const std::string& name, ParamList& params, TypePtr& retType,
                      const SourceSpan* spanForTypeParams);
     void declareVariableDeclaration(VariableDeclaration& vd);
-    void declareDeclarator(VariableDeclarator& d, bool isConst);
+    void declareDeclarator(VariableDeclarator& d, VarKind kind);
     bool isMixedArray(const Type& t) const;
     void checkArrayLiteral(ArrayLiteral& lit, const Type& target);
     void declarePattern(Node* id, const Type& type, bool isConst,
-                        std::uint32_t declNodeId);
+                        std::uint32_t declNodeId, bool isVar = false);
     void declareRestPattern(RestElement& re, const Type& type, bool isConst,
                             std::uint32_t declNodeId);
     void declareArrayPattern(ArrayPattern& ap, const Type& type, bool isConst,
@@ -163,6 +167,15 @@ private:
                        const SourceSpan& span);
     Type arrayMember(const Type& arr, const std::string& prop);
     Type stringMember(const std::string& prop);
+    // Typed views of the ambient std namespaces + the `String(x)` global
+    // (std_check.cpp; STDLIB docs §04).
+    std::optional<Type> stdNamespaceMember(const std::string& ns,
+                                           const std::string& prop);
+    std::optional<Type> mathMember(const std::string& prop);
+    std::optional<Type> pathMember(const std::string& prop);
+    std::optional<Type> osMember(const std::string& prop);
+    std::optional<Type> processMember(const std::string& prop);
+    bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
     Type inferIndex(IndexExpr& ix);
     Type indexOf(const Type& ot, IndexExpr& ix);
     Type indexOfProbe(const Type& ot, IndexExpr& ix);
@@ -172,6 +185,7 @@ private:
     bool tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
     void reportUndefinedCall(CallExpr& call, Identifier& id);
     bool tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out);
+    bool tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out);
     void inferArgs(CallExpr& call);
     void sigFromFunctionType(const Type& ct, FuncSig& localSig);
     void inferArg(Expr* a);

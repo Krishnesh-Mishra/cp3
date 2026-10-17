@@ -59,6 +59,14 @@ inline std::string cp3_ts_null(const std::optional<std::string>& v) {
 inline std::string cp3_ts_null(const std::optional<bool>& v) {
     return v.has_value() ? cp3::runtime::toString(*v) : std::string("null");
 }
+// A three-way nullable (`T | null | undefined`): Maybe stores the flavor, so
+// the empty case prints the flavor itself.
+template <class T>
+inline std::string cp3_ts(const cp3::runtime::Maybe<T>& v) {
+    if (v.isNull()) return std::string("null");
+    if (v.isUndefined()) return std::string("undefined");
+    return cp3::runtime::toString(v.value());
+}
 // A boxed erroneous value (cp3/error.hpp): `catch (e)` binds one, and cp3
 // renders it as the thrown value itself.
 inline std::string cp3_ts(const ::cp3::runtime::Thrown& v) { return v.toString(); }
@@ -79,6 +87,10 @@ inline bool cp3_truthy(const std::optional<std::string>& v) {
 }
 inline bool cp3_truthy(const std::optional<bool>& v) {
     return v.has_value() && cp3_truthy(*v);
+}
+template <class T>
+inline bool cp3_truthy(const cp3::runtime::Maybe<T>& v) {
+    return v.hasValue() && cp3_truthy(v.value());
 }
 
 // ----- cp3 `finally` (spec §07, DECISIONS D37) -------------------------------
@@ -234,6 +246,12 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (consoleStderr_) {
         out += "#include \"cp3/console.hpp\"\n";  // console.warn/.error
     }
+    if (needsMath_) out += "#include \"cp3/math.hpp\"\n";
+    if (needsString_) out += "#include \"cp3/string.hpp\"\n";
+    if (needsPath_) out += "#include \"cp3/path.hpp\"\n";
+    if (needsOs_) out += "#include \"cp3/os.hpp\"\n";
+    if (needsJson_) out += "#include \"cp3/json.hpp\"\n";
+    if (needsProcess_) out += "#include \"cp3/process.hpp\"\n";
     out += "\n";
     out += kHelperBlock;
     out += "\nnamespace " + namesp_ + " {\n\n";

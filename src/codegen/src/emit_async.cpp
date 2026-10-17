@@ -91,6 +91,8 @@ std::string Generator::emitTimerBuiltin(const CallExpr& c, const std::string& na
 std::string Generator::emitPromiseStatic(const CallExpr& c, const MemberExpr& m) {
     needsEventLoop_ = true;
     const std::string prop = m.property;
+    if (prop == "resolve") return emitPromiseResolve(c);
+    if (prop == "reject") return emitPromiseReject(c);
     if (prop != "all" && prop != "race" && prop != "allSettled") {
         notImplemented(c, "Promise." + prop);
         return "0.0";
@@ -124,6 +126,50 @@ std::string Generator::emitPromiseStatic(const CallExpr& c, const MemberExpr& m)
            joinStrings(elems, ", ") + "})";
 }
 
+// `Promise.resolve(v)` (DECISIONS D40, codegen contract in cp3/promise.hpp).
+// An existing promise passes through unchanged (JS identity); otherwise the
+// promise is born settled with a copy of the value. The C++ `Promise<T>` comes
+// from sema's type for the call, so it always agrees with the type the
+// surrounding declaration uses.
+std::string Generator::emitPromiseResolve(const CallExpr& c) {
+    const Expr* arg = c.arguments.empty() ? nullptr : c.arguments.front().get();
+    if (arg && arg->kind == NodeKind::SpreadElement) {
+        notImplemented(*arg, "spread argument");
+        return "0.0";
+    }
+    if (arg && detail::isPromiseType(effectiveType(*arg))) {
+        return expr(*arg);  // `Promise.resolve(p)` is `p` itself in JS
+    }
+    // `Promise<T>` has a spelling only for the M1 value types (void included);
+    // `Promise<undefined>` (a no-argument resolve) stays not-implemented.
+    const CppInfo info = classify(effectiveType(c));
+    if (!info.representable) {
+        notImplemented(c, "Promise.resolve over a value with no C++ spelling");
+        return "0.0";
+    }
+    const std::string value = arg ? expr(*arg) : "::cp3::runtime::undefined";
+    return info.cpp + "::resolve(" + value + ")";
+}
+
+// `Promise.reject(reason)` (DECISIONS D40): a rejection carries no observable
+// value, so the C++ promise is `Promise<void>` and the reason is boxed as a
+// `Thrown` (the `.catch` handler unboxes it). Sema types the call the same way.
+std::string Generator::emitPromiseReject(const CallExpr& c) {
+    const Expr* arg = c.arguments.empty() ? nullptr : c.arguments.front().get();
+    if (arg && arg->kind == NodeKind::SpreadElement) {
+        notImplemented(*arg, "spread argument");
+        return "0.0";
+    }
+    const CppInfo info = classify(detail::promiseValue(effectiveType(c)));
+    if (!info.representable || info.shape != Shape::Void) {
+        notImplemented(c, "Promise.reject whose value type is not void");
+        return "0.0";
+    }
+    const std::string reason = arg ? expr(*arg) : "::cp3::runtime::undefined";
+    return "::cp3::runtime::Promise<void>::reject(::cp3::runtime::Thrown::make(" +
+           reason + "))";
+}
+
 std::string Generator::emitPromiseMemberCall(const CallExpr& c, const MemberExpr& m) {
     needsEventLoop_ = true;
     std::string method;
@@ -139,14 +185,18 @@ std::string Generator::emitPromiseMemberCall(const CallExpr& c, const MemberExpr
     }
 
     // Handler parameter types: the receiver's value for `then`, a `Thrown` for
-    // `catchError`, none for `finally`.
+    // `catchError`, none for `finally`. `Promise<void>` has no value to hand
+    // over, and a `void` parameter is not a C++ type — a handler there is
+    // called nullary (cp3/promise.hpp's handler arity adaptation).
     std::vector<std::string> context;
     if (method == "catchError") {
         context.push_back("::cp3::runtime::Thrown");
     } else if (method == "then") {
         const CppInfo valueInfo =
             classify(detail::promiseValue(effectiveType(*m.object)));
-        if (valueInfo.representable) context.push_back(valueInfo.cpp);
+        if (valueInfo.representable && valueInfo.shape != Shape::Void) {
+            context.push_back(valueInfo.cpp);
+        }
     }
 
     std::vector<std::string> args;

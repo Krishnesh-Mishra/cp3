@@ -195,7 +195,12 @@ Type Analyzer::inferLogical(LogicalExpr& le) {
             break;
         case LogicalOp::Nullish: {
             Type left = stripNullish(l);
-            if (isPermissive(left) || isPermissive(r)) {
+            // A statically nullish left side (`null ?? x`) never produces a
+            // value, so the result is the right operand. `stripNullish` folds
+            // nullish literals to `unknown` too, so test the source type.
+            if (isStaticallyNullish(l)) {
+                t = isPermissive(r) ? ambient() : widen(r);
+            } else if (isPermissive(left) || isPermissive(r)) {
                 t = ambient();
             } else {
                 t = unify(widen(left), widen(r));

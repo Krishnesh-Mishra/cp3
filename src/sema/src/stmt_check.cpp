@@ -32,6 +32,8 @@ void Analyzer::checkStmts(StmtList& body) {
             hoistFunction(static_cast<FunctionDeclaration&>(*s));
         }
     }
+    // `var` names are visible (as `undefined`) before their declaration.
+    hoistVars(body);
     for (auto& s : body) {
         if (s) visitStmt(*s);
     }

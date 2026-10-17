@@ -181,6 +181,9 @@ void rejectFromCurrentException(Promise<D> derived) noexcept {
 
 // --- handler invocation ----------------------------------------------------
 
+// `R` is the handler's (adapted) result type — see `detail::invokeHandler` and
+// `detail::handler_result_t` in cp3/promise.hpp.
+
 template <class T, class R, class D, class F>
 void invokeFulfilled(const std::shared_ptr<PromiseState<T>>& st, Promise<D> derived,
                      F& onFulfilled) {
@@ -193,34 +196,34 @@ void invokeFulfilled(const std::shared_ptr<PromiseState<T>>& st, Promise<D> deri
         }
     } else {
         if constexpr (std::is_void_v<R>) {
-            onFulfilled(st->slot.value);
+            (void)invokeHandler(onFulfilled, st->slot.value);
             resolveVoid<D>(derived);
         } else {
-            resolveWith<D>(derived, onFulfilled(st->slot.value));
+            resolveWith<D>(derived, invokeHandler(onFulfilled, st->slot.value));
         }
     }
 }
 
 template <class D, class F>
 void invokeRejected(Promise<D> derived, const Thrown& reason, F& onRejected) {
-    using RR = std::invoke_result_t<F, Thrown>;
+    using RR = handler_result_t<Thrown, F>;
     if constexpr (std::is_void_v<RR>) {
         // A void rejection handler fulfills the derived promise. For a void
         // derived that is a plain fulfilment; for a non-void derived JS parity
         // says "undefined", which cp3 approximates with a value-initialised D.
-        onRejected(reason);
+        (void)invokeHandler(onRejected, reason);
         if constexpr (std::is_void_v<D>) {
             derived.fulfill();
         } else {
             derived.fulfill(D{});
         }
     } else if constexpr (is_promise_v<RR>) {
-        resolveWith<D>(derived, onRejected(reason));
+        resolveWith<D>(derived, invokeHandler(onRejected, reason));
     } else if constexpr (std::is_void_v<D>) {
-        (void)onRejected(reason);
+        (void)invokeHandler(onRejected, reason);
         derived.fulfill();
     } else {
-        derived.fulfill(onRejected(reason));
+        derived.fulfill(invokeHandler(onRejected, reason));
     }
 }
 

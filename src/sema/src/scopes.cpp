@@ -41,11 +41,15 @@ void Analyzer::declareBinding(const std::string& name, const Type& type,
     auto& scope = scopes_.back();
     auto existing = scope.find(name);
     if (existing != scope.end()) {
-        // Function overloading (spec §17): a second function with the same
-        // name in the same scope is an overload set, not a duplicate. Record
-        // every candidate signature so the call site can resolve against the
-        // set; expose the name permissively otherwise.
-        if (existing->second.isFunction && spec.isFunction) {
+        // A `var` declaration replaces the `undefined`-typed placeholder the
+        // hoisting pass inserted for it in this scope (spec §03).
+        if (existing->second.hoistedVar && spec.isVar) {
+            scope.erase(existing);
+        } else if (existing->second.isFunction && spec.isFunction) {
+            // Function overloading (spec §17): a second function with the same
+            // name in the same scope is an overload set, not a duplicate. Record
+            // every candidate signature so the call site can resolve against the
+            // set; expose the name permissively otherwise.
             if (existing->second.overloads.empty() &&
                 existing->second.sig.declNodeId != 0) {
                 existing->second.overloads.push_back(existing->second.sig);
@@ -56,16 +60,19 @@ void Analyzer::declareBinding(const std::string& name, const Type& type,
             existing->second.type = ambient();
             existing->second.isFunction = false;
             return;
+        } else {
+            report(diagcode::kDuplicateDeclaration, span,
+                   "duplicate declaration of '" + name + "'");
+            return;
         }
-        report(diagcode::kDuplicateDeclaration, span,
-               "duplicate declaration of '" + name + "'");
-        return;
     }
     Binding b;
     b.name = name;
     b.type = type;
     b.isConst = spec.isConst;
     b.isFunction = spec.isFunction;
+    b.isVar = spec.isVar;
+    b.hoistedVar = spec.hoistedVar;
     b.isAmbient = isAmbientType(type);
     b.publish = spec.publish;
     b.declNodeId = spec.declNodeId;
@@ -190,6 +197,97 @@ void Analyzer::registerTypeParams(TypeParamList& typeParams) {
     for (auto& tp : typeParams) {
         if (!tp) continue;
         typeNames_.emplace(tp->name, Type::named(TypeKind::TypeParam, tp->name));
+    }
+}
+
+// =============================================================================
+// `var` hoisting (spec §03)
+//
+// A `var` binding belongs to the enclosing function scope (the module scope at
+// the top level) and a read before its declaration sees `undefined`. This pass
+// pre-declares every `var` name in the statement list — descending through
+// nested blocks, loops and try/switch bodies, but never into nested functions —
+// with type `undefined`. The real declaration later takes the placeholder's
+// place (same scope) or shadows it (nested block); see declareBinding.
+// =============================================================================
+void Analyzer::hoistVars(StmtList& body) {
+    for (auto& s : body) {
+        if (s) hoistVarsIn(*s);
+    }
+}
+
+void Analyzer::hoistVarBody(StmtPtr& body) {
+    if (body) hoistVarsIn(*body);
+}
+
+void Analyzer::hoistVarsIn(Stmt& s) {
+    switch (s.kind) {
+        case NodeKind::VariableDeclaration: {
+            auto& vd = static_cast<VariableDeclaration&>(s);
+            if (vd.kind != VarKind::Var) return;
+            for (auto& d : vd.declarations) {
+                if (!d || !d->id || d->id->kind != NodeKind::Identifier) continue;
+                auto& id = static_cast<Identifier&>(*d->id);
+                if (scopes_.back().count(id.name) != 0) continue;
+                declareBinding(id.name, Type::undefined(), id.span,
+                               BindingSpec{.isVar = true, .hoistedVar = true,
+                                           .publish = false});
+            }
+            return;
+        }
+        case NodeKind::BlockStatement:
+            return hoistVars(static_cast<BlockStatement&>(s).body);
+        case NodeKind::IfStatement: {
+            auto& is = static_cast<IfStatement&>(s);
+            hoistVarBody(is.thenBranch);
+            hoistVarBody(is.elseBranch);
+            return;
+        }
+        case NodeKind::WhileStatement:
+            return hoistVarBody(static_cast<WhileStatement&>(s).body);
+        case NodeKind::DoWhileStatement:
+            return hoistVarBody(static_cast<DoWhileStatement&>(s).body);
+        case NodeKind::ForStatement: {
+            auto& f = static_cast<ForStatement&>(s);
+            if (f.init && f.init->kind == NodeKind::VariableDeclaration) {
+                hoistVarsIn(static_cast<Stmt&>(*f.init));
+            }
+            return hoistVarBody(f.body);
+        }
+        case NodeKind::ForOfStatement: {
+            auto& f = static_cast<ForOfStatement&>(s);
+            if (f.left && f.left->kind == NodeKind::VariableDeclaration) {
+                hoistVarsIn(static_cast<Stmt&>(*f.left));
+            }
+            return hoistVarBody(f.body);
+        }
+        case NodeKind::ForInStatement: {
+            auto& f = static_cast<ForInStatement&>(s);
+            if (f.left && f.left->kind == NodeKind::VariableDeclaration) {
+                hoistVarsIn(static_cast<Stmt&>(*f.left));
+            }
+            return hoistVarBody(f.body);
+        }
+        case NodeKind::TryStatement: {
+            auto& t = static_cast<TryStatement&>(s);
+            hoistVarBody(t.tryBlock);
+            if (t.handler) hoistVarBody(t.handler->body);
+            hoistVarBody(t.finallyBlock);
+            return;
+        }
+        case NodeKind::SwitchStatement: {
+            for (auto& c : static_cast<SwitchStatement&>(s).cases) {
+                if (!c) continue;
+                for (auto& st : c->statements) {
+                    if (st) hoistVarsIn(*st);
+                }
+            }
+            return;
+        }
+        case NodeKind::LabeledStatement:
+            return hoistVarBody(static_cast<LabeledStatement&>(s).body);
+        default:
+            return;  // expression/return/etc. have no nested statements
     }
 }
 

@@ -65,13 +65,14 @@ FuncSig Analyzer::buildSig(const std::string& name, ParamList& params,
 // Variables + patterns
 // =============================================================================
 void Analyzer::declareVariableDeclaration(VariableDeclaration& vd) {
-    const bool isConst = vd.kind == VarKind::Const;
     for (auto& d : vd.declarations) {
-        if (d) declareDeclarator(*d, isConst);
+        if (d) declareDeclarator(*d, vd.kind);
     }
 }
 
-void Analyzer::declareDeclarator(VariableDeclarator& d, bool isConst) {
+void Analyzer::declareDeclarator(VariableDeclarator& d, VarKind kind) {
+    const bool isConst = kind == VarKind::Const;
+    const bool isVar = kind == VarKind::Var;
     bool hasAnn = d.type != nullptr;
     Type annType = hasAnn ? resolveType(*d.type) : Type::unknown();
 
@@ -127,7 +128,7 @@ void Analyzer::declareDeclarator(VariableDeclarator& d, bool isConst) {
     // Drop the pre-declared placeholder (only if we inserted it: a shadowing
     // inner-scope name must stay intact) and declare the real binding.
     if (preDeclared) scopes_.back().erase(preDeclaredName);
-    declarePattern(d.id.get(), varType, isConst, d.nodeId);
+    declarePattern(d.id.get(), varType, isConst, d.nodeId, isVar);
 
     // Preserve an arrow literal's optional/rest parameter shape so calls
     // through the binding get correct arity checking: the frozen `Type` cannot
@@ -192,14 +193,14 @@ void Analyzer::checkArrayLiteral(ArrayLiteral& lit, const Type& target) {
 }
 
 void Analyzer::declarePattern(Node* id, const Type& type, bool isConst,
-                              std::uint32_t declNodeId) {
+                              std::uint32_t declNodeId, bool isVar) {
     if (!id) return;
     switch (id->kind) {
         case NodeKind::Identifier: {
             auto& ident = static_cast<Identifier&>(*id);
             setType(ident, type);
             declareBinding(ident.name, type, ident.span,
-                           BindingSpec{.isConst = isConst,
+                           BindingSpec{.isConst = isConst, .isVar = isVar,
                                        .declNodeId = declNodeId});
             return;
         }
@@ -207,7 +208,7 @@ void Analyzer::declarePattern(Node* id, const Type& type, bool isConst,
             auto& ap = static_cast<AssignmentPattern&>(*id);
             Type t = type;
             if (t.isUnknown() && ap.right) t = widen(inferExpr(*ap.right));
-            declarePattern(ap.left.get(), t, isConst, declNodeId);
+            declarePattern(ap.left.get(), t, isConst, declNodeId, isVar);
             return;
         }
         case NodeKind::RestElement:
@@ -277,11 +278,12 @@ void Analyzer::declareForBinding(Node* left, const Type& elemType) {
     if (left->kind == NodeKind::VariableDeclaration) {
         auto& vd = static_cast<VariableDeclaration&>(*left);
         const bool isConst = vd.kind == VarKind::Const;
+        const bool isVar = vd.kind == VarKind::Var;
         for (auto& d : vd.declarations) {
             if (!d) continue;
             Type t = d->type ? resolveType(*d->type) : elemType;
             setType(*d, t);
-            declarePattern(d->id.get(), t, isConst, d->nodeId);
+            declarePattern(d->id.get(), t, isConst, d->nodeId, isVar);
         }
     } else if (auto* e = dynamicExpr(*left)) {
         inferExpr(*e);

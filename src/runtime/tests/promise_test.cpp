@@ -92,6 +92,22 @@ void testFinally() {
     CP3_CHECK_EQ(observed, 9);
 }
 
+// JS hands the value to a handler that declares no parameters and the handler
+// simply ignores it (`g().then(() => …)`, M2-PLAN bug 7); the ABI adapts the
+// arity in `detail::invokeHandler` instead of failing in `HandlerResult`.
+void testNullaryHandlers() {
+    int thenRan = 0;
+    Promise<int>::resolve(3).then([&thenRan]() { ++thenRan; });
+    runEventLoop();
+    CP3_CHECK_EQ(thenRan, 1);
+
+    int catchRan = 0;
+    Promise<int>::reject(Thrown::make(std::string("boom")))
+        .catchError([&catchRan]() { ++catchRan; });
+    runEventLoop();
+    CP3_CHECK_EQ(catchRan, 1);
+}
+
 void testPromiseVoid() {
     bool done = false;
     Promise<void>::resolve().then([&done]() { done = true; });
@@ -133,6 +149,7 @@ int main() {
     testCatchError();
     testErrorPropagation();
     testFinally();
+    testNullaryHandlers();
     testPromiseVoid();
     testCoroutines();
     testMicrotasksBeforeTimers();
