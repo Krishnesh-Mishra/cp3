@@ -42,10 +42,17 @@ void Analyzer::declareBinding(const std::string& name, const Type& type,
     auto existing = scope.find(name);
     if (existing != scope.end()) {
         // Function overloading (spec §17): a second function with the same
-        // name in the same scope is an overload set, not a duplicate. Expose
-        // the name permissively so overload calls type-check without M1
-        // implementing overload resolution.
+        // name in the same scope is an overload set, not a duplicate. Record
+        // every candidate signature so the call site can resolve against the
+        // set; expose the name permissively otherwise.
         if (existing->second.isFunction && spec.isFunction) {
+            if (existing->second.overloads.empty() &&
+                existing->second.sig.declNodeId != 0) {
+                existing->second.overloads.push_back(existing->second.sig);
+            }
+            if (spec.sig) {
+                existing->second.overloads.push_back(*spec.sig);
+            }
             existing->second.type = ambient();
             existing->second.isFunction = false;
             return;

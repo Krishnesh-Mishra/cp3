@@ -68,6 +68,7 @@ inline constexpr const char* kConstraintNotSatisfied = "CP3412";
 inline constexpr const char* kCannotInstantiateAbstract = "CP3413";
 inline constexpr const char* kUnknownType       = "CP3414";
 inline constexpr const char* kInvalidCondition  = "CP3415";
+inline constexpr const char* kNoMatchingOverload = "CP3416";
 
 // --- statements / control flow (sema) ----------------------------------------
 inline constexpr const char* kReturnOutsideFunction = "CP3501";

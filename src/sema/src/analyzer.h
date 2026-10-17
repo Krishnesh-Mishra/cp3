@@ -176,6 +176,22 @@ private:
     std::string arityText(std::size_t required, std::size_t maxArgs,
                           bool rest) const;
 
+    // --- overload resolution (member_check.cpp) ------------------------------
+    // Resolves a call whose callee names an overload set (Binding::overloads):
+    // accepts the call when a signature is viable and reports CP3416 otherwise.
+    Type inferOverloadCall(CallExpr& call, const Binding& binding,
+                           Identifier& id);
+    void collectArgTypes(CallExpr& call, std::vector<Type>& out,
+                         bool& hasSpread);
+    bool overloadViable(const FuncSig& sig, const std::vector<Type>& argTypes,
+                        bool hasSpread);
+
+    // --- parallel.* capture safety (parallel_check.cpp) ----------------------
+    // Walks the closures passed to a `parallel.*` entry point and reports a
+    // captured-state write (CP3902) or an unsafe computed-index write (CP3901);
+    // writes through parallel.for's own induction variable are allowed.
+    void checkParallelCall(CallExpr& call);
+
     // --- operators (ops_check.cpp) -------------------------------------------
     Type inferUnary(UnaryExpr& u);
     Type arithmeticUnaryResult(UnaryExpr& u, const Type& ot);
@@ -241,6 +257,9 @@ private:
     std::unordered_set<std::uint32_t> declaredTypes_;
     std::unordered_map<std::uint32_t, FuncSig> arrowSigs_;
     std::vector<std::string> labels_;
+    // Call nodes already checked for parallel.* capture safety, so a node that
+    // is inferred more than once is never reported twice.
+    std::unordered_set<std::uint32_t> parallelChecked_;
 
     struct FuncCtx {
         bool annotated = false;

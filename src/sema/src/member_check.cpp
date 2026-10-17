@@ -215,6 +215,9 @@ Type Analyzer::inferCall(CallExpr& call) {
         }
         ct = b.type;
         setType(id, ct);
+        if (b.overloads.size() >= 2) {
+            return inferOverloadCall(call, b, id);
+        }
         if (b.isFunction) {
             localSig = b.sig;
             sig = &localSig;
@@ -224,6 +227,7 @@ Type Analyzer::inferCall(CallExpr& call) {
         // JSON.parse returns `unknown`: the shape is only known at runtime, so
         // callers must narrow before use (spec §20).
         if (call.callee->kind == NodeKind::MemberExpr) {
+            checkParallelCall(call);
             Type json;
             if (tryInferJsonCall(call, static_cast<MemberExpr&>(*call.callee),
                                  json)) {
@@ -363,6 +367,71 @@ std::string Analyzer::arityText(std::size_t required, std::size_t maxArgs,
     if (rest) return "at least " + std::to_string(required);
     if (maxArgs == required) return std::to_string(required);
     return std::to_string(required) + " to " + std::to_string(maxArgs);
+}
+
+// =============================================================================
+// Overload resolution (spec §17)
+// =============================================================================
+Type Analyzer::inferOverloadCall(CallExpr& call, const Binding& binding,
+                                 Identifier& id) {
+    std::vector<Type> argTypes;
+    bool hasSpread = false;
+    collectArgTypes(call, argTypes, hasSpread);
+    for (const FuncSig& sig : binding.overloads) {
+        if (overloadViable(sig, argTypes, hasSpread)) {
+            // A viable overload is accepted permissively (M1 does not yet
+            // implement overload-dispatch typing); the ambient type keeps the
+            // rest of the file from cascading, exactly as before.
+            return withType(call, ambient());
+        }
+    }
+    report(diagcode::kNoMatchingOverload, call.span,
+           "no overload of '" + id.name +
+               "' matches the supplied arguments");
+    return withType(call, Type::error());
+}
+
+void Analyzer::collectArgTypes(CallExpr& call, std::vector<Type>& out,
+                               bool& hasSpread) {
+    out.reserve(call.arguments.size());
+    for (auto& a : call.arguments) {
+        if (!a) {
+            out.push_back(Type::unknown());
+            continue;
+        }
+        if (a->kind == NodeKind::SpreadElement) {
+            hasSpread = true;
+            auto& sp = static_cast<SpreadElement&>(*a);
+            if (sp.argument) inferExpr(*sp.argument);
+            out.push_back(Type::unknown());
+            continue;
+        }
+        out.push_back(inferExpr(*a));
+    }
+}
+
+bool Analyzer::overloadViable(const FuncSig& sig,
+                              const std::vector<Type>& argTypes,
+                              bool hasSpread) {
+    std::size_t required = 0;
+    for (std::size_t i = 0; i < sig.params.size(); ++i) {
+        if (i < sig.optional.size() && sig.optional[i]) continue;
+        ++required;
+    }
+    const std::size_t given = argTypes.size();
+    const std::size_t maxArgs =
+        sig.rest ? static_cast<std::size_t>(-1) : sig.params.size();
+    if (!hasSpread && (given < required || given > maxArgs)) return false;
+    for (std::size_t i = 0; i < argTypes.size(); ++i) {
+        Type pt = Type::unknown();
+        if (sig.rest && !sig.params.empty() && i >= sig.params.size()) {
+            pt = sig.params.back();
+        } else if (i < sig.params.size()) {
+            pt = sig.params[i];
+        }
+        if (!wouldAccept(argTypes[i], pt, false)) return false;
+    }
+    return true;
 }
 
 }  // namespace cp3

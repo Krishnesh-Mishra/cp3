@@ -77,6 +77,11 @@ struct Binding {
     std::uint32_t declNodeId = 0;
     SourceSpan span{};
     FuncSig sig;
+    // When two or more function declarations share a name in one scope the
+    // binding becomes an overload set: `sig` holds only the first and every
+    // candidate signature is collected here (size >= 2). Call resolution walks
+    // this set and reports CP3416 when none is viable (member_check.cpp).
+    std::vector<FuncSig> overloads;
 };
 
 // The declaration-shape flags for `Analyzer::declareBinding`, bundled so the

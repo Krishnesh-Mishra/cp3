@@ -24,6 +24,7 @@ set(cp3_sema_sources
     src/stmt_check.cpp
     src/symbols.cpp
     src/banned.cpp
+    src/parallel_check.cpp
 )
 
 add_library(cp3_sema STATIC ${cp3_sema_sources})
