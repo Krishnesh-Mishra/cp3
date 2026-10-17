@@ -63,6 +63,12 @@ struct FuncSig {
     bool annotatedReturn = false;
     Type ret;
     std::uint32_t declNodeId = 0;
+    // `async function` / `async () =>` (spec §14): the callable's `ret` is the
+    // Promise the call yields, while `asyncValueRet` is the (unwrapped) type the
+    // body's `return` statements are checked against. For `Promise<void>` the
+    // value type is Void.
+    bool isAsync = false;
+    Type asyncValueRet;
 };
 
 // A name in the scope stack. `publish` is false for builtins / narrowing
@@ -108,6 +114,20 @@ bool hasNullish(const Type& t);
 bool isTupleType(const Type& t);
 std::string pretty(const Type& t);
 std::string prettyFunction(const Type& t);
+
+// --- the Promise<T> model (spec §14) -----------------------------------------
+//
+// `Promise<T>` is a nominal class type: kind == Class, name == "Promise",
+// parts == { T }. There is no user-visible Promise class in M1, so the type is
+// created only by `resolveNamedType`, by `await`'s unwrap, and by async
+// function/arrow signatures.
+bool isPromiseType(const Type& t);
+
+// `Promise<T>` for a value type `T`.
+Type promiseOf(const Type& value);
+
+// The value type of a `Promise<T>` (Unknown for a non-Promise type).
+Type promiseValue(const Type& t);
 
 // A canonical key for a type used to build object/tuple shape labels.
 std::string typeKey(const Type& t);

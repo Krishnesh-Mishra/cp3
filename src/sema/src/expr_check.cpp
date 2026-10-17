@@ -187,9 +187,11 @@ Type Analyzer::inferNew(NewExpr& n) {
 }
 
 Type Analyzer::inferAwait(AwaitExpr& a) {
-    notImplemented(a.span, "await expressions");
-    if (a.argument) inferExpr(*a.argument);
-    return withType(a, ambient());
+    Type arg = a.argument ? inferExpr(*a.argument) : Type::unknown();
+    if (arg.isError()) return withType(a, Type::error());
+    // `Promise<T>` unwraps to T; DECISIONS D41: any other value yields itself.
+    if (isPromiseType(arg)) return withType(a, promiseValue(arg));
+    return withType(a, arg);
 }
 
 Type Analyzer::inferRange(RangeExpr& r) {
@@ -239,7 +241,6 @@ Expr* Analyzer::dynamicExpr(Node& n) {
 // Arrow functions
 // =============================================================================
 Type Analyzer::inferArrow(ArrowFunction& arrow) {
-    if (arrow.isAsync) notImplemented(arrow.span, "async arrow functions");
     if (!arrow.typeParams.empty()) notImplemented(arrow.span, "generic arrows");
     registerTypeParams(arrow.typeParams);
 
@@ -247,12 +248,18 @@ Type Analyzer::inferArrow(ArrowFunction& arrow) {
     std::vector<bool> optional;
     buildArrowParamTypes(arrow, params, optional);
     Type ret = inferArrowReturn(arrow, params);
+    if (arrow.isAsync && !isPromiseType(ret)) {
+        // spec §14 / D40: calling an async arrow yields a Promise.
+        ret = promiseOf(ret);
+    }
     Type ft = Type::function(params, ret);
     if (arrow.nodeId != 0) {
         FuncSig as;
         as.params = params;
         as.optional = optional;
         as.ret = ret;
+        as.isAsync = arrow.isAsync;
+        as.asyncValueRet = isPromiseType(ret) ? promiseValue(ret) : ret;
         as.declNodeId = arrow.nodeId;
         publishFunction(as, "");
         arrowSigs_[arrow.nodeId] = std::move(as);

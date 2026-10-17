@@ -169,6 +169,7 @@ private:
     Type indexOfObject(const Type& ot, IndexExpr& ix);
     Type tupleIndexAt(const Shape& sh, IndexExpr& ix);
     Type inferCall(CallExpr& call);
+    bool tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
     void reportUndefinedCall(CallExpr& call, Identifier& id);
     bool tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out);
     void inferArgs(CallExpr& call);

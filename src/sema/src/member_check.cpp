@@ -81,6 +81,25 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
         }
         case TypeKind::Array:
             return arrayMember(ot, prop);
+        case TypeKind::Class:
+            // Promise members (spec §14): `.then` yields a new promise of the
+            // handler's result (unknowable here, so `Promise<unknown>`), while
+            // `.catch`/`.catchError`/`.finally` preserve the value type. Codegen
+            // re-derives the exact C++ handler types from the receiver.
+            if (isPromiseType(ot)) {
+                const Type value = promiseValue(ot);
+                if (prop == "then") {
+                    return Type::function({ambient()}, promiseOf(Type::unknown()));
+                }
+                if (prop == "catch" || prop == "catchError") {
+                    return Type::function({ambient()}, promiseOf(value));
+                }
+                if (prop == "finally") {
+                    return Type::function({ambient()}, promiseOf(value));
+                }
+                return ambient();
+            }
+            return ambient();
         case TypeKind::String:
             return stringMember(prop);
         case TypeKind::Number:
@@ -215,6 +234,12 @@ Type Analyzer::inferCall(CallExpr& call) {
         }
         ct = b.type;
         setType(id, ct);
+        if (isAmbientType(b.type)) {
+            Type builtin;
+            if (tryTimerBuiltinCall(call, id, builtin)) {
+                return withType(call, builtin);
+            }
+        }
         if (b.overloads.size() >= 2) {
             return inferOverloadCall(call, b, id);
         }
@@ -265,6 +290,29 @@ Type Analyzer::inferCall(CallExpr& call) {
            "value of type '" + pretty(ct) + "' is not callable");
     inferArgs(call);
     return withType(call, Type::error());
+}
+
+// Core timer builtins (spec §14, STDLIB docs §03): honest result types so
+// `let id = setInterval(...)`, `clearTimeout(id)` and `await sleep(...)` type
+// correctly (the ambient table is permissive by default). Returns true when
+// `id` is one of them and `out` is set.
+bool Analyzer::tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& out) {
+    if (id.name == "setTimeout" || id.name == "setInterval") {
+        inferArgs(call);
+        out = Type::number();
+        return true;
+    }
+    if (id.name == "sleep") {
+        inferArgs(call);
+        out = promiseOf(Type::voidType());
+        return true;
+    }
+    if (id.name == "clearTimeout" || id.name == "clearInterval") {
+        inferArgs(call);
+        out = Type::voidType();
+        return true;
+    }
+    return false;
 }
 
 void Analyzer::reportUndefinedCall(CallExpr& call, Identifier& id) {

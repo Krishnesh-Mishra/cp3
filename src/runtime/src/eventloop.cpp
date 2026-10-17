@@ -29,8 +29,12 @@ void EventLoop::postFromThread(Task task) {
 }
 
 EventLoop::TimerId EventLoop::addTimer(std::int64_t delayMs, Task task) {
+    // A negative delay keeps its (past) deadline instead of collapsing to
+    // "now": a repeating timer re-arms against a fixed schedule and its overdue
+    // firings must sort ahead of later-deadlined timers by true deadline, the
+    // way `uv__run_timers` heaps them (see `setInterval` below).
     const TimerId id = nextTimerId_++;
-    const std::int64_t deadline = nowMs() + (delayMs > 0 ? delayMs : 0);
+    const std::int64_t deadline = nowMs() + delayMs;
     timers_.emplace(std::make_pair(deadline, id), std::move(task));
     return id;
 }
@@ -184,20 +188,20 @@ bool EventLoop::pumpReadyTasks() {
 }
 
 bool EventLoop::pumpDueTimers() {
-    const std::int64_t now = nowMs();
-    if (timers_.empty() || timers_.begin()->first.first > now) {
-        return false;
-    }
-    std::vector<Task> due;
-    while (!timers_.empty() && timers_.begin()->first.first <= now) {
-        due.push_back(std::move(timers_.begin()->second));
+    bool didWork = false;
+    // Re-check "due" after every fired timer, the shape of libuv's
+    // `uv__run_timers`: a repeating timer re-armed on its fixed schedule can
+    // still be overdue (the loop woke late), and its catch-up firing must
+    // happen in this same phase, ahead of later-deadlined timers that are also
+    // due (e.g. an `await sleep(...)` that expired while the loop was blocked).
+    while (!timers_.empty() && timers_.begin()->first.first <= nowMs()) {
+        Task task = std::move(timers_.begin()->second);
         timers_.erase(timers_.begin());
-    }
-    for (Task& task : due) {
         task();
         drainMicrotasks();
+        didWork = true;
     }
-    return true;
+    return didWork;
 }
 
 bool EventLoop::waitForNext() {
@@ -289,7 +293,8 @@ namespace {
 struct IntervalState {
     EventLoop* loop = nullptr;
     EventLoop::Task fn;
-    double periodMs = 0;
+    std::int64_t periodMs = 1;
+    std::int64_t nextDeadline = 0;
     EventLoop::TimerId current = 0;
     bool active = true;
     std::function<void()> arm;
@@ -306,18 +311,30 @@ TimerHandle setInterval(EventLoop::Task fn, double intervalMs) {
     auto state = std::make_shared<IntervalState>();
     state->loop = &loop;
     state->fn = std::move(fn);
-    state->periodMs = intervalMs > 0 ? intervalMs : 0;
+    // libuv/Node clamp a timer's period to at least 1 ms; a zero period would
+    // re-arm on a never-advancing deadline and spin without yielding.
+    state->periodMs = static_cast<std::int64_t>(intervalMs) < 1
+                          ? 1
+                          : static_cast<std::int64_t>(intervalMs);
+    state->nextDeadline = EventLoop::nowMs() + state->periodMs;
     state->arm = [state]() {
-        state->current = state->loop->addTimer(static_cast<std::int64_t>(state->periodMs),
-                                               [state]() {
-                                                   if (!state->active) {
-                                                       return;
-                                                   }
-                                                   state->fn();
-                                                   if (state->active) {
-                                                       state->arm();
-                                                   }
-                                               });
+        // Fixed schedule: every firing is due `periodMs` after the previous
+        // *deadline*, not after the previous firing, so a late wake-up (coarse
+        // OS timer granularity, a busy loop) never shifts the phase. `addTimer`
+        // keeps the overdue deadline, so missed slots fire back-to-back in the
+        // current timer phase, ahead of later timers — the no-drift catch-up
+        // `uv__run_timers` gives a repeating timer.
+        const std::int64_t delay = state->nextDeadline - EventLoop::nowMs();
+        state->current = state->loop->addTimer(delay, [state]() {
+            if (!state->active) {
+                return;
+            }
+            state->nextDeadline += state->periodMs;
+            state->fn();
+            if (state->active) {
+                state->arm();
+            }
+        });
     };
 
     std::lock_guard<std::mutex> lock(intervalMutex);

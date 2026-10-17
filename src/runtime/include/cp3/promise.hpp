@@ -207,6 +207,17 @@ void trackUnhandled(const std::shared_ptr<bool>& flag, const Thrown& reason);
 void clearUnhandled(const std::shared_ptr<bool>& flag);
 void installUnhandledRejectionHook(EventLoop& loop);
 
+/// Record that `state` has been observed by a rejection handler / `await`, so
+/// it must not be reported as an unhandled rejection (DECISIONS D43).
+template <class T>
+void markObserved(const std::shared_ptr<PromiseState<T>>& state) {
+    if (state->unhandled) {
+        *state->unhandled = false;
+        clearUnhandled(state->unhandled);
+        state->unhandled.reset();
+    }
+}
+
 // --- chaining machinery (defined in cp3/promise_impl.hpp) -----------------
 template <class T, class F>
 auto thenImpl(const Promise<T>& self, F onFulfilled)
@@ -384,6 +395,10 @@ struct PromiseAwaiter {
     /// into a rejection (PromiseCoroutine::unhandled_exception).
     T await_resume() {
         if (promise.rejected()) {
+            // A settled rejection resumes synchronously, so `await_suspend`
+            // (which registers the observation) never runs; the `await` itself
+            // still observes the rejection (DECISIONS D43).
+            detail::markObserved(promise.sharedState());
             throw promise.reason();
         }
         return detail::ValueAccess<T>::get(*promise.sharedState());

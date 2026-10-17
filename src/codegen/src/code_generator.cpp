@@ -59,6 +59,9 @@ inline std::string cp3_ts_null(const std::optional<std::string>& v) {
 inline std::string cp3_ts_null(const std::optional<bool>& v) {
     return v.has_value() ? cp3::runtime::toString(*v) : std::string("null");
 }
+// A boxed erroneous value (cp3/error.hpp): `catch (e)` binds one, and cp3
+// renders it as the thrown value itself.
+inline std::string cp3_ts(const ::cp3::runtime::Thrown& v) { return v.toString(); }
 
 // ----- JS truthiness ---------------------------------------------------------
 inline bool cp3_truthy(double v) { return v != 0.0 && !std::isnan(v); }
@@ -78,9 +81,60 @@ inline bool cp3_truthy(const std::optional<bool>& v) {
     return v.has_value() && cp3_truthy(*v);
 }
 
+// ----- cp3 `finally` (spec §07, DECISIONS D37) -------------------------------
+// Runs the finally block on every exit of the enclosing scope — normal
+// completion, `break`/`continue`/`return`, or a propagating throw — exactly
+// once. The normal path calls `runNow()`, which deactivates the guard before
+// invoking the block, so a throw from `finally` propagates instead of being
+// silently repeated. The destructor is `noexcept(false)` for the same reason
+// on a `return`/`break` path (JS replaces that completion with the throw); a
+// throw while another exception is already in flight terminates the process.
+template <class F>
+class cp3_finally_guard {
+public:
+    explicit cp3_finally_guard(F fn) : fn_(fn) {}
+    cp3_finally_guard(const cp3_finally_guard&) = delete;
+    cp3_finally_guard& operator=(const cp3_finally_guard&) = delete;
+    ~cp3_finally_guard() noexcept(false) {
+        if (active_) {
+            active_ = false;
+            fn_();
+        }
+    }
+    void runNow() {
+        if (active_) {
+            active_ = false;
+            fn_();
+        }
+    }
+
+private:
+    F fn_;
+    bool active_ = true;
+};
+
 }  // namespace
 
 )CP3HELPERS";
+
+// Prefix every line of `text` with `pad`. Used to re-indent the top-level
+// statements when they are wrapped in the top-level-`await` coroutine.
+std::string indentText(const std::string& text, const std::string& pad) {
+    std::string out;
+    out.reserve(text.size());
+    bool atLineStart = true;
+    for (char c : text) {
+        if (atLineStart && c != '\n') {
+            out += pad;
+            atLineStart = false;
+        }
+        out += c;
+        if (c == '\n') {
+            atLineStart = true;
+        }
+    }
+    return out;
+}
 
 }  // namespace
 
@@ -145,7 +199,13 @@ std::string Generator::buildHeader(const std::string& decls) const {
     out += "#define " + guard + "\n\n";
     out += "#include <optional>\n";
     out += "#include <string>\n\n";
-    out += "#include \"cp3/runtime.hpp\"\n\n";
+    out += "#include \"cp3/runtime.hpp\"\n";
+    if (needsEventLoop_) {
+        // A declared `async function` returns `Promise<T>` (spec §14), so the
+        // alias must be complete for callers of this header.
+        out += "#include \"cp3/promise.hpp\"\n";
+    }
+    out += "\n";
     out += "namespace " + namesp_ + " {\n\n";
     out += decls;
     out += "\n}  // namespace " + namesp_ + "\n\n";
@@ -161,8 +221,20 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     out += "#include <cstddef>\n";
     out += "#include <limits>\n";
     out += "#include <optional>\n";
-    out += "#include <string>\n\n";
-    out += "#include \"cp3/runtime.hpp\"\n\n";
+    out += "#include <string>\n";
+    if (needsEventLoop_) {
+        out += "#include <vector>\n";  // Promise.all/race/allSettled inputs
+    }
+    out += "\n";
+    out += "#include \"cp3/runtime.hpp\"\n";
+    out += "#include \"cp3/error.hpp\"\n";
+    if (needsEventLoop_) {
+        out += "#include \"cp3/promise.hpp\"\n";  // Promise/await/timers
+    }
+    if (consoleStderr_) {
+        out += "#include \"cp3/console.hpp\"\n";  // console.warn/.error
+    }
+    out += "\n";
     out += kHelperBlock;
     out += "\nnamespace " + namesp_ + " {\n\n";
     out += decls;
@@ -171,7 +243,20 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     out += "\n}  // namespace " + namesp_ + "\n\n";
     out += "using namespace " + namesp_ + ";\n\n";
     out += "int main() {\n";
-    out += mainBody;
+    if (topLevelAwait_) {
+        // Top-level `await` (spec §14): the entry unit's statements run inside
+        // an eagerly-started coroutine, driven to completion by the loop below.
+        out += "    auto cp3_top_level = [&]() -> ::cp3::runtime::Promise<void> {\n";
+        out += indentText(mainBody, "    ");
+        out += "        co_return;\n";
+        out += "    };\n";
+        out += "    cp3_top_level();\n";
+    } else {
+        out += mainBody;
+    }
+    if (needsEventLoop_) {
+        out += "    ::cp3::runtime::runEventLoop();\n";
+    }
     out += "    return 0;\n";
     out += "}\n";
     return out;

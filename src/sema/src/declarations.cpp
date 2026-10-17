@@ -74,6 +74,30 @@ void Analyzer::declareVariableDeclaration(VariableDeclaration& vd) {
 void Analyzer::declareDeclarator(VariableDeclarator& d, bool isConst) {
     bool hasAnn = d.type != nullptr;
     Type annType = hasAnn ? resolveType(*d.type) : Type::unknown();
+
+    // Block scoping (spec §03): the name is visible inside its own
+    // initializer, so a closure created there may refer to it
+    // (`let id = setInterval(() => clearInterval(id), 1)`). Pre-declare the
+    // binding with the annotation (or `unknown`) so that reference resolves,
+    // then replace it with the fully inferred binding below.
+    bool preDeclared = false;
+    std::string preDeclaredName;
+    if (d.id && d.id->kind == NodeKind::Identifier) {
+        const auto& ident = static_cast<const Identifier&>(*d.id);
+        preDeclaredName = ident.name;
+        if (!ident.name.empty() &&
+            scopes_.back().find(ident.name) == scopes_.back().end()) {
+            Binding b;
+            b.name = ident.name;
+            b.type = hasAnn ? annType : Type::unknown();
+            b.publish = false;
+            b.span = ident.span;
+            b.isAmbient = isAmbientType(b.type);
+            scopes_.back().emplace(ident.name, std::move(b));
+            preDeclared = true;
+        }
+    }
+
     bool hasInit = d.init != nullptr;
     Type initType = Type::unknown();
     if (hasInit) initType = inferExpr(*d.init);
@@ -100,6 +124,9 @@ void Analyzer::declareDeclarator(VariableDeclarator& d, bool isConst) {
     }
 
     setType(d, varType);
+    // Drop the pre-declared placeholder (only if we inserted it: a shadowing
+    // inner-scope name must stay intact) and declare the real binding.
+    if (preDeclared) scopes_.back().erase(preDeclaredName);
     declarePattern(d.id.get(), varType, isConst, d.nodeId);
 
     // Preserve an arrow literal's optional/rest parameter shape so calls

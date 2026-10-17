@@ -5,7 +5,9 @@
 // Top-level dispatch, exported declarations, and function emission: forward
 // declarations + definitions (default arguments live on the forward declaration
 // only), parameter type spelling, and return-type resolution (annotated, sema,
-// then the first `return` in the body). Out-of-scope declarations report CP3002.
+// then the first `return` in the body). `async function` bodies lower to C++20
+// coroutines whose promise type is the runtime's `Promise<T>` (spec §14).
+// Out-of-scope declarations report CP3002.
 // =============================================================================
 #include "generator.h"
 
@@ -26,7 +28,11 @@ using namespace detail;
 // so a call can be checked against them.
 void Generator::collectFunctionNames(const Stmt& s) {
     if (s.kind == NodeKind::FunctionDeclaration) {
-        functions_.insert(static_cast<const FunctionDeclaration&>(s).name);
+        const auto& fd = static_cast<const FunctionDeclaration&>(s);
+        functions_.insert(fd.name);
+        if (fd.isAsync) {
+            asyncFunctions_.insert(fd.name);
+        }
     } else if (s.kind == NodeKind::ExportDeclaration) {
         const auto& ed = static_cast<const ExportDeclaration&>(s);
         if (ed.declaration) collectFunctionNames(*ed.declaration);
@@ -72,7 +78,10 @@ void Generator::emitExport(const ExportDeclaration& ed, std::string& decls,
 void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
                             std::string& defs) {
     if (fd.isAsync) {
-        notImplemented(fd, "async function");
+        // spec §14: `async function f(): T` is a coroutine returning
+        // `Promise<T>`; the loop must be driven before the process exits so its
+        // continuations (and any rejection report) run.
+        needsEventLoop_ = true;
     }
     if (!fd.typeParams.empty()) {
         notImplemented(fd, "generic function");
@@ -95,7 +104,20 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
     line(decls, 1, signatureDecl + ";");
 
     const std::string savedReturn = currentReturn_;
-    currentReturn_ = ret;
+    if (fd.isAsync) {
+        // Inside the coroutine `return expr` yields the promise's VALUE type
+        // (`co_return expr`), not the C++ signature's `Promise<T>` spelling.
+        const CppInfo value = classify(asyncValueType(fd));
+        currentReturn_ = (value.representable && value.shape != Shape::Void)
+                             ? value.cpp
+                             : "void";
+    } else {
+        currentReturn_ = ret;
+    }
+
+    const bool savedInAsync = inAsyncBody_;
+    inAsyncBody_ = fd.isAsync;
+    ++nestingDepth_;
 
     std::string body;
     pushScope();
@@ -107,11 +129,19 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
     }
     if (fd.body) {
         stmt(*fd.body, body, 1);
+        if (fd.isAsync) {
+            // A coroutine must not fall off its end (sema already proved the
+            // cp3 body returns on every path); this keeps the C++ valid for the
+            // paths a `throw` guards, e.g. a body ending in `throw`.
+            line(body, 1, currentReturn_ == "void" ? "co_return;" : "co_return {};");
+        }
     } else {
         line(body, 1, "// declaration without a body");
     }
     popScope();
 
+    --nestingDepth_;
+    inAsyncBody_ = savedInAsync;
     currentReturn_ = savedReturn;
 
     defs += signatureDef + " {\n" + body + "}\n\n";
@@ -174,6 +204,14 @@ std::string Generator::parameterText(const Parameter& p, const FunctionDeclarati
 }
 
 std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
+    if (fd.isAsync) {
+        // An `async function` never returns its annotated value type directly:
+        // the C++ signature is the coroutine's promise type (spec §14).
+        const CppInfo ci = classify(detail::promiseOf(asyncValueType(fd)));
+        if (ci.representable) return ci.cpp;
+        notImplemented(fd, "async function whose value type is outside M1");
+        return "void";
+    }
     if (fd.returnType) {
         if (auto t = typeFromTypeNode(*fd.returnType)) {
             CppInfo ci = classify(*t);
@@ -202,6 +240,24 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
         }
     }
     return "void";
+}
+
+// The cp3 value type an `async function` yields (the `Promise<T>`'s `T`).
+// An annotation wins (`Promise<T>` or the permissive plain `T`); otherwise the
+// sema side table carries it: for an async function `FunctionInfo.returnType`
+// is the `Promise<T>` the call yields, resolved after the body was checked.
+Type Generator::asyncValueType(const FunctionDeclaration& fd) const {
+    if (fd.returnType) {
+        if (auto t = typeFromTypeNode(*fd.returnType)) {
+            if (detail::isPromiseType(*t)) return detail::promiseValue(*t);
+            return *t;
+        }
+    }
+    auto it = sema_.functions.find(fd.nodeId);
+    if (it != sema_.functions.end() && detail::isPromiseType(it->second.returnType)) {
+        return detail::promiseValue(it->second.returnType);
+    }
+    return Type::unknown();
 }
 
 const Expr* Generator::firstReturnedExpr(const Stmt& s) const {

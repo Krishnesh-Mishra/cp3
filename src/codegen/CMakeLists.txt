@@ -6,7 +6,8 @@
 #
 # ADDING A SOURCE FILE: append one line to `cp3_codegen_sources` below (STYLE.md §8
 # lists the target decomposition: code_generator.cpp, emit_expr.cpp,
-# emit_stmt.cpp, emit_decl.cpp, cpp_writer.cpp, mangle.cpp).
+# emit_call.cpp, emit_async.cpp, emit_stmt.cpp, emit_decl.cpp, cpp_writer.cpp,
+# mangle.cpp).
 # =============================================================================
 
 set(cp3_codegen_sources
@@ -15,6 +16,8 @@ set(cp3_codegen_sources
     src/cpp_writer.cpp
     src/type_map.cpp
     src/emit_expr.cpp
+    src/emit_call.cpp
+    src/emit_async.cpp
     src/emit_stmt.cpp
     src/emit_decl.cpp
 )

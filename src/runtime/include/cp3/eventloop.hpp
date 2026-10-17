@@ -61,7 +61,9 @@ public:
     void postFromThread(Task task);
 
     // Run `task` once, when at least `delayMs` milliseconds have elapsed.
-    // Returns a handle for `cancelTimer`. `delayMs <= 0` runs on the next turn.
+    // Returns a handle for `cancelTimer`. `delayMs <= 0` runs on the next turn;
+    // a negative delay keeps its past deadline, so it orders ahead of
+    // later-deadlined timers (repeating timers re-arm this way to catch up).
     TimerId addTimer(std::int64_t delayMs, Task task);
 
     // Cancel a pending timer. Returns true if it was still pending.

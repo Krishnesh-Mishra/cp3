@@ -112,11 +112,7 @@ void addRejectedContinuation(const std::shared_ptr<PromiseState<T>>& state,
                              std::function<void()> fn) {
     switch (state->status) {
         case PromiseStatus::Rejected:
-            if (state->unhandled) {
-                *state->unhandled = false;
-                clearUnhandled(state->unhandled);
-                state->unhandled.reset();
-            }
+            markObserved(state);
             currentLoop().post(std::move(fn));
             break;
         case PromiseStatus::Pending:
@@ -209,8 +205,15 @@ template <class D, class F>
 void invokeRejected(Promise<D> derived, const Thrown& reason, F& onRejected) {
     using RR = std::invoke_result_t<F, Thrown>;
     if constexpr (std::is_void_v<RR>) {
+        // A void rejection handler fulfills the derived promise. For a void
+        // derived that is a plain fulfilment; for a non-void derived JS parity
+        // says "undefined", which cp3 approximates with a value-initialised D.
         onRejected(reason);
-        resolveVoid<D>(derived);
+        if constexpr (std::is_void_v<D>) {
+            derived.fulfill();
+        } else {
+            derived.fulfill(D{});
+        }
     } else if constexpr (is_promise_v<RR>) {
         resolveWith<D>(derived, onRejected(reason));
     } else if constexpr (std::is_void_v<D>) {

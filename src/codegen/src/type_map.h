@@ -23,7 +23,10 @@ struct TypeNode;
 
 namespace detail {
 
-enum class Shape { Number, String, Bool, Undefined, Null, Void, Optional, Unknown, Unsupported };
+enum class Shape {
+    Number, String, Bool, Undefined, Null, Void, Optional, Promise, Unknown,
+    Unsupported
+};
 
 // Which nullish value an empty `std::optional<T>` denotes. `number | null`,
 // `number | undefined` and `number | null | undefined` (the `T?` shorthand,
@@ -43,6 +46,12 @@ struct CppInfo {
 
 // Which of `null` / `undefined` a union's empty case denotes (see NullishKind).
 NullishKind nullishKindOf(const Type& t);
+
+// The cp3 `Promise<T>` model (spec §14), mirroring sema's: a nominal class
+// type with name "Promise" whose single part is the value type.
+bool isPromiseType(const Type& t);
+Type promiseOf(const Type& value);
+Type promiseValue(const Type& t);
 
 // Does an empty optional of `kind` compare strictly equal to `nullishShape`?
 bool optionalEmptyMatches(NullishKind kind, Shape nullishShape);

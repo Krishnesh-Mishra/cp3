@@ -145,23 +145,6 @@ void Analyzer::hoistFunction(FunctionDeclaration& fn) {
     if (declaredFns_.count(fn.nodeId) != 0) return;
     declaredFns_.insert(fn.nodeId);
 
-    if (fn.isAsync) {
-        // async/await is out of scope for M1: report CP3002 once and expose a
-        // permissive callable so the rest of the file does not cascade into
-        // spurious diagnostics.
-        notImplemented(fn.span, "async functions");
-        TypePtr noReturn;
-        FuncSig sig = buildSig(fn.name, fn.params, noReturn, nullptr);
-        sig.annotatedReturn = false;
-        sig.ret = Type::unknown();
-        sig.declNodeId = fn.nodeId;
-        sigs_[fn.nodeId] = sig;
-        declareBinding(fn.name, ambient(), fn.span,
-                       BindingSpec{.declNodeId = fn.nodeId});
-        setType(fn, ambient());
-        return;
-    }
-
     if (!fn.typeParams.empty()) {
         notImplemented(fn.span, "generic functions");
         // Register the type parameters so `T` resolves to a TypeParam rather
@@ -171,6 +154,23 @@ void Analyzer::hoistFunction(FunctionDeclaration& fn) {
 
     FuncSig sig = buildSig(fn.name, fn.params, fn.returnType, &fn.span);
     sig.declNodeId = fn.nodeId;
+    if (fn.isAsync) {
+        // spec §14: calling an async function yields a Promise. The annotation
+        // is `Promise<T>`, and the body's `return` statements are checked
+        // against T (the unwrapped value type).
+        sig.isAsync = true;
+        if (sig.annotatedReturn && isPromiseType(sig.ret)) {
+            sig.asyncValueRet = promiseValue(sig.ret);
+        } else if (sig.annotatedReturn && !sig.ret.isUnknown() && !sig.ret.isError()) {
+            // Permissive: `async function f(): T` behaves like `Promise<T>`.
+            sig.asyncValueRet = sig.ret;
+            sig.ret = promiseOf(sig.ret);
+        } else {
+            sig.annotatedReturn = false;
+            sig.ret = promiseOf(Type::unknown());
+            sig.asyncValueRet = Type::unknown();
+        }
+    }
     if (!fn.typeParams.empty()) {
         // Generic function bodies are out of scope for M1. Keep the resolved
         // return type for callers but do not enforce return statements against

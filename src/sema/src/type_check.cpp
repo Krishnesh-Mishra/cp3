@@ -84,6 +84,21 @@ bool isTupleType(const Type& t) {
     return t.kind == TypeKind::Object && t.name.rfind("$t", 0) == 0;
 }
 
+bool isPromiseType(const Type& t) {
+    return t.kind == TypeKind::Class && t.name == "Promise";
+}
+
+Type promiseOf(const Type& value) {
+    Type p(TypeKind::Class, "Promise");
+    p.parts.push_back(value);
+    return p;
+}
+
+Type promiseValue(const Type& t) {
+    if (!isPromiseType(t) || t.parts.empty()) return Type::unknown();
+    return t.parts.front();
+}
+
 std::string pretty(const Type& t) {
     switch (t.kind) {
         case TypeKind::Error: return "error";
@@ -114,7 +129,14 @@ std::string pretty(const Type& t) {
             if (t.name == kAmbientLabel) return "object";
             if (isTupleType(t)) return "tuple";
             return "object";
-        case TypeKind::Class: return t.name.empty() ? "class" : t.name;
+        case TypeKind::Class:
+            if (isPromiseType(t)) {
+                return "Promise<" +
+                       (t.parts.empty() ? std::string("unknown")
+                                        : pretty(t.parts.front())) +
+                       ">";
+            }
+            return t.name.empty() ? "class" : t.name;
         case TypeKind::Enum: return t.name.empty() ? "enum" : t.name;
         case TypeKind::TypeParam: return t.name.empty() ? "type parameter" : t.name;
         case TypeKind::Literal:
@@ -252,9 +274,17 @@ Type Analyzer::resolveType(TypeNode& node) {
 }
 
 Type Analyzer::resolveNamedType(NamedType& nt) {
-    // Explicit type arguments are ignored in M1 (permissive).
+    // Type arguments are resolved eagerly (both for their own diagnostics and
+    // for the generic types M1 does model, `Promise<T>`).
+    Type firstArg = Type::unknown();
+    bool hasArg = false;
     for (auto& ta : nt.typeArgs) {
-        if (ta) resolveType(*ta);
+        if (!ta) continue;
+        Type resolved = resolveType(*ta);
+        if (!hasArg) {
+            firstArg = resolved;
+            hasArg = true;
+        }
     }
     if (nt.name == "any") {
         checkBannedAny(nt.span);
@@ -269,6 +299,11 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
     if (nt.name == "unknown") return Type::unknown();
     if (nt.name == "never") return Type::unknown();
     if (nt.name == "object") return ambient();
+    // `Promise<T>` is the one built-in generic (spec §14): a nominal class type
+    // carrying its value type. A bare `Promise` is `Promise<unknown>`.
+    if (nt.name == "Promise") {
+        return promiseOf(hasArg ? firstArg : Type::unknown());
+    }
     const auto it = typeNames_.find(nt.name);
     if (it != typeNames_.end()) return it->second;
     report(diagcode::kUndefinedType, nt.span,

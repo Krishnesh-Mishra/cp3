@@ -48,18 +48,9 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
         case NodeKind::VariableDeclaration:
             emitVarDecl(static_cast<const VariableDeclaration&>(s), out, indent);
             return;
-        case NodeKind::IfStatement: {
-            const auto& is = static_cast<const IfStatement&>(s);
-            const std::string condition = is.condition ? cond(*is.condition) : "false";
-            line(out, indent, "if (" + condition + ") {");
-            if (is.thenBranch) emitBranch(*is.thenBranch, out, indent + 1);
-            if (is.elseBranch) {
-                line(out, indent, "} else {");
-                emitBranch(*is.elseBranch, out, indent + 1);
-            }
-            line(out, indent, "}");
+        case NodeKind::IfStatement:
+            emitIf(static_cast<const IfStatement&>(s), out, indent);
             return;
-        }
         case NodeKind::WhileStatement: {
             const auto& ws = static_cast<const WhileStatement&>(s);
             const std::string condition = ws.condition ? cond(*ws.condition) : "false";
@@ -90,6 +81,12 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
         case NodeKind::ContinueStatement:
             line(out, indent, "continue;");
             return;
+        case NodeKind::ThrowStatement:
+            emitThrow(static_cast<const ThrowStatement&>(s), out, indent);
+            return;
+        case NodeKind::TryStatement:
+            emitTry(static_cast<const TryStatement&>(s), out, indent);
+            return;
         default:
             notImplemented(s, "statement");
             line(out, indent, "/* CP3002: unsupported statement */");
@@ -105,6 +102,17 @@ void Generator::emitBranch(const Stmt& s, std::string& out, int indent) {
     } else {
         stmt(s, out, indent);
     }
+}
+
+void Generator::emitIf(const IfStatement& is, std::string& out, int indent) {
+    const std::string condition = is.condition ? cond(*is.condition) : "false";
+    line(out, indent, "if (" + condition + ") {");
+    if (is.thenBranch) emitBranch(*is.thenBranch, out, indent + 1);
+    if (is.elseBranch) {
+        line(out, indent, "} else {");
+        emitBranch(*is.elseBranch, out, indent + 1);
+    }
+    line(out, indent, "}");
 }
 
 void Generator::emitVarDecl(const VariableDeclaration& vd, std::string& out, int indent) {
@@ -195,6 +203,9 @@ void Generator::emitFor(const ForStatement& f, std::string& out, int indent) {
 }
 
 void Generator::emitReturn(const ReturnStatement& r, std::string& out, int indent) {
+    // Inside an `async function` body the generated C++ is a coroutine
+    // (spec §14), so cp3 `return` lowers to `co_return`.
+    const std::string keyword = inAsyncBody_ ? "co_return" : "return";
     if (r.argument) {
         // Always lower the returned expression so its own out-of-scope
         // parts report CP3002 instead of being silently dropped.
@@ -206,16 +217,87 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
             // keep the emitted C++ valid.
             notImplemented(r, "returning a value from a void/unrepresentable signature");
             line(out, indent, "(void)(" + value + ");");
-            line(out, indent, "return;");
+            line(out, indent, keyword + ";");
             return;
         }
-        line(out, indent, "return " + value + ";");
+        line(out, indent, keyword + " " + value + ";");
         return;
     }
     if (currentReturn_ == "void") {
-        line(out, indent, "return;");
+        line(out, indent, keyword + ";");
     } else {
-        line(out, indent, "return {};");
+        line(out, indent, keyword + " {};");
+    }
+}
+
+void Generator::emitThrow(const ThrowStatement& t, std::string& out, int indent) {
+    if (!t.argument) {
+        line(out, indent, "throw;");
+        return;
+    }
+    // `throw e;` where `e` is a live `catch (e)` binding re-throws the value
+    // being handled (cp3/promise.hpp's `Thrown` is handle-like, so the plain
+    // C++ rethrow is exactly the cp3 semantics).
+    if (t.argument->kind == NodeKind::Identifier) {
+        const std::string& name = static_cast<const Identifier&>(*t.argument).name;
+        for (const std::string& bound : thrownBindings_) {
+            if (bound == name) {
+                line(out, indent, "throw;");
+                return;
+            }
+        }
+    }
+    line(out, indent,
+         "throw ::cp3::runtime::Thrown::make(" + expr(*t.argument) + ");");
+}
+
+void Generator::emitTry(const TryStatement& ts, std::string& out, int indent) {
+    const bool hasCatch = ts.handler != nullptr;
+    const bool hasFinally = ts.finallyBlock != nullptr;
+
+    std::string guard;
+    if (hasFinally) {
+        // `finally` must run on every exit — normal completion, `break`,
+        // `continue`, `return`, or a propagating throw — exactly once
+        // (spec §07, DECISIONS D37). An RAII guard gives all of that for free;
+        // the explicit `runNow()` below covers the normal path.
+        guard = "cp3_fin" + std::to_string(uniqueCounter_++);
+        line(out, indent, "{");
+        ++indent;
+        line(out, indent, "cp3_finally_guard " + guard + "([&]() {");
+        emitBranch(*ts.finallyBlock, out, indent + 1);
+        line(out, indent, "});");
+    }
+
+    if (hasCatch) {
+        line(out, indent, "try {");
+        if (ts.tryBlock) emitBranch(*ts.tryBlock, out, indent + 1);
+        const CatchClause& cc = *ts.handler;
+        line(out, indent, "} catch (...) {");
+        // Box whatever was thrown (`Thrown` values pass through unchanged),
+        // so a cp3 `catch (e)` binds any value (DECISIONS D39).
+        bool bound = cc.param && cc.param->kind == NodeKind::Identifier;
+        std::string boundName;
+        if (bound) {
+            boundName = static_cast<const Identifier&>(*cc.param).name;
+            line(out, indent + 1,
+                 "auto " + mapIdent(boundName) +
+                     " = ::cp3::runtime::Thrown::fromCurrentException();");
+            thrownBindings_.push_back(boundName);
+        }
+        if (cc.body) emitBranch(*cc.body, out, indent + 1);
+        if (bound) thrownBindings_.pop_back();
+        line(out, indent, "}");
+    } else if (ts.tryBlock) {
+        // `try { } finally { }` (no handler): the guard's destructor runs the
+        // finally block if the body throws; nothing else is needed here.
+        emitBranch(*ts.tryBlock, out, indent);
+    }
+
+    if (hasFinally) {
+        line(out, indent, guard + ".runNow();");
+        --indent;
+        line(out, indent, "}");
     }
 }
 

@@ -13,7 +13,9 @@
 //   mangle.cpp          identifier/namespace mangling (free helpers)
 //   cpp_writer.cpp      indentation buffer + low-level literal/string helpers
 //   type_map.cpp        cp3 type -> C++ type mapping + type resolution
-//   emit_expr.cpp       expression lowering (incl. ?? / && / || / console.log)
+//   emit_expr.cpp       expression lowering (operators, literals, tsCall/cond)
+//   emit_call.cpp       call lowering + console.*
+//   emit_async.cpp      await / arrow functions / timers / Promise.*
 //   emit_stmt.cpp       statement lowering
 //   emit_decl.cpp       forward decls, function signatures, declarations
 //
@@ -67,6 +69,7 @@ private:
     std::string parameterText(const Parameter& p, const FunctionDeclaration& fd,
                               std::size_t index, bool includeDefault);
     std::string functionReturnType(const FunctionDeclaration& fd);
+    Type asyncValueType(const FunctionDeclaration& fd) const;
     const Expr* firstReturnedExpr(const Stmt& s) const;
 
     // --- declaration-type environment + type resolution (type_map.cpp) -------
@@ -99,18 +102,35 @@ private:
     std::string emitUpdate(const UpdateExpr& u);
     std::string emitConditional(const ConditionalExpr& c);
     std::string emitAssignment(const AssignmentExpr& a);
+
+    // --- calls + console.* (emit_call.cpp) -----------------------------------
     std::string emitCall(const CallExpr& c);
     bool isConsoleMember(const CallExpr& c) const;
     bool isConsoleCall(const CallExpr& c, const char* method) const;
     std::string emitConsoleLog(const CallExpr& c);
+    std::string emitConsoleMethod(const CallExpr& c, const char* method);
+
+    // --- async / promises / errors (emit_async.cpp) --------------------------
+    std::string emitAwait(const AwaitExpr& a);
+    std::string emitArrow(const ArrowFunction& a,
+                          const std::vector<std::string>& contextParams);
+    std::vector<std::string> arrowParamText(
+        const ArrowFunction& a, const std::vector<std::string>& contextParams);
+    std::string arrowReturnType(const ArrowFunction& a);
+    std::string emitTimerBuiltin(const CallExpr& c, const std::string& name);
+    std::string emitPromiseMemberCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitPromiseStatic(const CallExpr& c, const MemberExpr& m);
 
     // --- statements (emit_stmt.cpp) ------------------------------------------
     void stmt(const Stmt& s, std::string& out, int indent);
     void emitBranch(const Stmt& s, std::string& out, int indent);
+    void emitIf(const IfStatement& is, std::string& out, int indent);
     void emitVarDecl(const VariableDeclaration& vd, std::string& out, int indent);
     std::string declaratorText(const VariableDeclarator& d, VarKind kind);
     void emitFor(const ForStatement& f, std::string& out, int indent);
     void emitReturn(const ReturnStatement& r, std::string& out, int indent);
+    void emitThrow(const ThrowStatement& t, std::string& out, int indent);
+    void emitTry(const TryStatement& ts, std::string& out, int indent);
 
     // --- assembly (code_generator.cpp) ---------------------------------------
     std::string buildHeader(const std::string& decls) const;
@@ -124,10 +144,18 @@ private:
     std::string namesp_;
 
     bool consoleImported_ = false;
+    bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
+    bool needsEventLoop_ = false;  // async/timers: emit runEventLoop() in main
+    bool topLevelAwait_ = false;   // an `await` appeared at top level
+    bool inAsyncBody_ = false;     // current function body lowers to a coroutine
+    int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)
+    int uniqueCounter_ = 0;        // fresh names for generated scaffolding
     std::string currentReturn_ = "int";
 
     std::vector<std::unordered_map<std::string, Type>> env_;
     std::unordered_set<std::string> functions_;
+    std::unordered_set<std::string> asyncFunctions_;   // `async function` names
+    std::vector<std::string> thrownBindings_;          // active `catch (e)` names
     std::unordered_set<std::uint32_t> reported_;
 };
 

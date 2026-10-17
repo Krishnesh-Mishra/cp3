@@ -421,7 +421,8 @@ void Analyzer::analyzeFunctionBody(FunctionDeclaration& fn) {
     }
     FuncCtx ctx;
     ctx.annotated = sig.annotatedReturn;
-    ctx.ret = sig.ret;
+    // An async function's `return` yields the Promise's value type (spec §14).
+    ctx.ret = sig.isAsync ? sig.asyncValueRet : sig.ret;
     funcStack_.push_back(ctx);
     if (fn.body) visitStmt(*fn.body);
     FuncCtx finalCtx = funcStack_.back();
@@ -434,9 +435,10 @@ void Analyzer::analyzeFunctionBody(FunctionDeclaration& fn) {
                           ? Type::voidType()
                           : Type::unionOf(finalCtx.returnTypes);
     }
-    updateFunctionReturnType(fn.nodeId, inferredRet);
-    if (sig.annotatedReturn && !sig.ret.isVoid() && !sig.ret.isUndefined() &&
-        sig.ret.kind != TypeKind::Unknown) {
+    updateFunctionReturnType(fn.nodeId,
+                             sig.isAsync ? promiseOf(inferredRet) : inferredRet);
+    if (sig.annotatedReturn && !inferredRet.isVoid() && !inferredRet.isUndefined() &&
+        inferredRet.kind != TypeKind::Unknown) {
         if (fn.body && !allPathsReturn(fn.body.get())) {
             report(diagcode::kMissingReturn, fn.span,
                    "function '" + fn.name +

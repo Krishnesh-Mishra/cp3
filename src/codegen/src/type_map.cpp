@@ -69,6 +69,40 @@ bool optionalEmptyMatches(NullishKind kind, Shape nullishShape) {
     }
 }
 
+bool isPromiseType(const Type& t) {
+    return t.kind == TypeKind::Class && t.name == "Promise";
+}
+
+// `Promise<T>` -> `::cp3::runtime::Promise<T>` (cp3/promise.hpp). Only
+// M1-representable value types (primitives and `void`) have a spelling;
+// anything else stays not-implemented. Implementation detail of `classify`.
+static CppInfo classifyPromise(const Type& t) {
+    CppInfo info;
+    const Type inner = promiseValue(t);
+    if (inner.isVoid()) {
+        info.shape = Shape::Promise; info.representable = true;
+        info.cpp = "::cp3::runtime::Promise<void>";
+        return info;
+    }
+    const CppInfo ic = classify(inner);
+    if (ic.representable && isPrimitiveShape(ic.shape)) {
+        info.shape = Shape::Promise; info.representable = true;
+        info.cpp = "::cp3::runtime::Promise<" + ic.cpp + ">";
+    }
+    return info;
+}
+
+Type promiseOf(const Type& value) {
+    Type p(TypeKind::Class, "Promise");
+    p.parts.push_back(value);
+    return p;
+}
+
+Type promiseValue(const Type& t) {
+    if (!isPromiseType(t) || t.parts.empty()) return Type::unknown();
+    return t.parts.front();
+}
+
 CppInfo classify(const Type& raw) {
     CppInfo info;
     Type t = raw;
@@ -128,8 +162,15 @@ CppInfo classify(const Type& raw) {
             }
             return info;
         }
+        case TypeKind::Class: {
+            // `Promise<T>` is the only class type with a spelling (M1).
+            if (!isPromiseType(t)) {
+                return info;
+            }
+            return classifyPromise(t);
+        }
         default:
-            return info;  // Array/Object/Function/Class/Enum/TypeParam: out of M1
+            return info;  // Array/Object/Function/Enum/TypeParam: out of M1
     }
 }
 
@@ -144,6 +185,18 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn) {
             if (nt.name == "undefined") return Type::undefined();
             if (nt.name == "null") return Type::nullType();
             if (nt.name == "unknown") return Type::unknown();
+            if (nt.name == "Promise") {
+                // `Promise<T>` (spec §14); a bare `Promise` is `Promise<unknown>`.
+                Type p(TypeKind::Class, "Promise");
+                Type inner = Type::unknown();
+                if (!nt.typeArgs.empty() && nt.typeArgs.front()) {
+                    auto mapped = typeFromTypeNode(*nt.typeArgs.front());
+                    if (!mapped) return std::nullopt;
+                    inner = *mapped;
+                }
+                p.parts.push_back(inner);
+                return p;
+            }
             return Type::named(TypeKind::Class, nt.name);
         }
         case NodeKind::UnionType: {

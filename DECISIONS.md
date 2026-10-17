@@ -366,3 +366,39 @@ real pass/fail. Anything in the AST beyond that must produce a clean
   also wipes `.cp3/packages/`). Supersedes `cache.cpp`'s current
   exe-in-`build/` behavior; fix queued behind the async wave because
   `src/cli` is single-writer until then.
+- **D62.** Wave-4 JS-parity rulings (spec §14/§20 pin libuv/Node as the model
+  but are silent on specifics; evidence: `build/scratch/async/WAVE4-REPORT.md`
+  §9 — these bind future async/timer work):
+  1. **Microtask/macrotask order**: microtasks drain fully in FIFO order before
+     the next macrotask, and again after each fired timer. **`await` always
+     defers its continuation to the microtask queue — even for an
+     already-settled promise** (JS parity). The runtime currently resumes
+     settled awaits inline; that deviation is a wave-1 fix (pinning case:
+     `async/await_settled_microtask_fifo`). Promotes
+     `async/_ambiguous/microtask_macrotask_order` → real case (passes).
+  2. **`setInterval`** is fixed-deadline: each firing is due `periodMs` after
+     the previous *deadline* (never after the previous firing); missed slots
+     catch up back-to-back inside the same timer phase; overdue re-arms sort by
+     true deadline ahead of later timers; period clamps to ≥1 ms (libuv/Node).
+  3. **Timer ordering within a phase**: `(deadline, insertion id)` — a
+     zero-delay `setTimeout` is due on the next turn.
+  4. **Negative delays**: `sleep`/`setTimeout` clamp to 0 (due now);
+     `setInterval` negative/zero periods clamp to 1 ms.
+  5. **Caught rejection observation**: awaiting a rejected promise and catching
+     the rejection marks it observed — a caught `await` never triggers the D43
+     unhandled-rejection exit (JS-observable; mechanism may change).
+  6. **`async` arrows** (D40) remain `CP3002` until the arrows-as-values
+     cluster (wave 12) lands; only `async function` declarations are
+     implemented today.
+  7. **`Promise.all/race/allSettled`** take array-literal operands only (array
+     forms land with wave 3). `Promise.resolve/reject` (D40) are wired in
+     wave 1.
+- **D63.** String/member rulings (wave-1 scope):
+  1. **String `.length` is UTF-8 bytes** (`std::string::size`, O(1)) — the same
+     byte model as `str[i]` (spec §09) and the Rust/Go convention the spec
+     cites; `charAt(i)` remains the character-aware accessor. Resolves
+     `arrays-strings/_ambiguous/str_length_utf8` (marker retired; coverage:
+     `arrays-strings/str_length_accent_bytes`, which flips with wave 1).
+  2. **`NaN` and `Infinity` resolve as `number` globals** — D9 pins NaN's
+     rendering, but `console.log(NaN)` currently fails with CP3301 (wave-1
+     fix).

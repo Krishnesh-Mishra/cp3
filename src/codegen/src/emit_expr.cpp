@@ -1,11 +1,14 @@
 // =============================================================================
 // src/codegen/src/emit_expr.cpp — codegen expression lowering (STYLE.md §8).
 //
-// The expression emitter: literals, identifiers, templates, calls (including
-// `console.log`/`console.info` lowering onto the D9 runtime formatter), and the
-// operator forms. Logical operators use JS truthiness (`cp3_truthy` lambdas);
-// `??` uses a real nullish (not truthiness) test. Out-of-scope nodes report
-// CP3002 and emit a compilable stub (never throw, never abort).
+// The expression emitter: literals, identifiers, templates, the `tsCall`/
+// `cond` value-vs-condition adapters, and the operator forms. Logical operators
+// use JS truthiness (`cp3_truthy` lambdas); `??` uses a real nullish (not
+// truthiness) test. Out-of-scope nodes report CP3002 and emit a compilable stub
+// (never throw, never abort).
+//
+// Calls (including `console.*`) live in emit_call.cpp; the async / promise /
+// timer surface lives in emit_async.cpp.
 // =============================================================================
 #include "generator.h"
 
@@ -74,6 +77,8 @@ std::string Generator::expr(const Expr& e) {
             return emitAssignment(static_cast<const AssignmentExpr&>(e));
         case NodeKind::CallExpr:
             return emitCall(static_cast<const CallExpr&>(e));
+        case NodeKind::AwaitExpr:
+            return emitAwait(static_cast<const AwaitExpr&>(e));
         default:
             notImplemented(e, "expression");
             return "0.0";
@@ -366,84 +371,6 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
             notImplemented(a, "compound assignment operator");
             return "0.0";
     }
-}
-
-std::string Generator::emitCall(const CallExpr& c) {
-    if (isConsoleCall(c, "log") || isConsoleCall(c, "info")) {
-        return emitConsoleLog(c);
-    }
-    if (isConsoleMember(c)) {
-        notImplemented(c, "console method (only log/info are supported in M1)");
-        return "0.0";
-    }
-    if (c.callee->kind == NodeKind::Identifier) {
-        const std::string name = static_cast<const Identifier&>(*c.callee).name;
-        if (name == "worker") {
-            notImplemented(c, "worker(...)");
-            return "0.0";
-        }
-        if (!c.typeArgs.empty()) {
-            notImplemented(c, "generic call");
-            return "0.0";
-        }
-        if (functions_.find(name) == functions_.end()) {
-            // Not a function declared in this unit and not an intrinsic we
-            // lower (console.* is handled above): treat it as out of scope
-            // rather than emitting a call to an undeclared C++ name.
-            notImplemented(c, "call to function '" + name + "' not declared in this unit");
-            return "0.0";
-        }
-        std::vector<std::string> args;
-        for (const auto& arg : c.arguments) {
-            if (!arg) { args.push_back("0.0"); continue; }
-            if (arg->kind == NodeKind::SpreadElement) {
-                notImplemented(*arg, "spread argument");
-                continue;
-            }
-            args.push_back(expr(*arg));
-        }
-        return mapIdent(name) + "(" + joinStrings(args, ", ") + ")";
-    }
-    if (c.callee->kind == NodeKind::MemberExpr) {
-        const auto& m = static_cast<const MemberExpr&>(*c.callee);
-        if (m.object && m.object->kind == NodeKind::Identifier &&
-            static_cast<const Identifier&>(*m.object).name == "parallel") {
-            notImplemented(c, "parallel.*");
-            return "0.0";
-        }
-        notImplemented(c, "method call");
-        return "0.0";
-    }
-    notImplemented(c, "call expression");
-    return "0.0";
-}
-
-bool Generator::isConsoleMember(const CallExpr& c) const {
-    if (c.callee->kind != NodeKind::MemberExpr) return false;
-    const auto& m = static_cast<const MemberExpr&>(*c.callee);
-    return m.object && m.object->kind == NodeKind::Identifier &&
-           static_cast<const Identifier&>(*m.object).name == "console";
-}
-
-bool Generator::isConsoleCall(const CallExpr& c, const char* method) const {
-    if (c.callee->kind != NodeKind::MemberExpr) return false;
-    const auto& m = static_cast<const MemberExpr&>(*c.callee);
-    return isConsoleMember(c) && m.property == method;
-}
-
-std::string Generator::emitConsoleLog(const CallExpr& c) {
-    if (!consoleImported_) {
-        notImplemented(c, "console used without `import console from \"std/console\"`");
-        return "0.0";
-    }
-    if (c.arguments.empty()) {
-        return "cp3::runtime::println(std::string())";
-    }
-    std::string joined = tsCall(*c.arguments.front());
-    for (std::size_t i = 1; i < c.arguments.size(); ++i) {
-        joined += " + std::string(\" \") + " + tsCall(*c.arguments[i]);
-    }
-    return "cp3::runtime::println(" + joined + ")";
 }
 
 }  // namespace cp3

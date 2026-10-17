@@ -282,14 +282,23 @@ std::vector<fs::path> runtimeSourcePaths() {
 
     // Keep only the required, documented set, in a stable order.
     //
-    //   runtime.cpp — toString / print / println / Undefined (cp3/runtime.hpp).
-    //                 M1 `console.log` lowers onto `println`, so no
-    //                 `cp3::runtime::console::*` symbol is emitted yet and
-    //                 console.cpp is deliberately not compiled. Sibling TUs such
-    //                 as promise.cpp / parallel.cpp / eventloop.cpp require
-    //                 flags (e.g. threads) the driver does not pass, so pulling
-    //                 them in unconditionally would break the link.
-    static const char* const kRequired[] = {"runtime.cpp"};
+    //   runtime.cpp   — toString / print / println / Undefined (cp3/runtime.hpp);
+    //                   M1 `console.log` lowers onto `println`.
+    //   error.cpp     — `Thrown` (cp3/error.hpp): `throw` boxing and the
+    //                   unhandled-rejection report.
+    //   eventloop.cpp — the single-threaded loop + the timer builtins
+    //                   (cp3/eventloop.hpp): `setTimeout`/`setInterval`/... and
+    //                   the `runEventLoop()` every generated `main()` ends with
+    //                   when the unit uses async (§14).
+    //   promise.cpp   — `Promise<T>` + `await`/`sleep` (cp3/promise.hpp).
+    //   console.cpp   — `console.warn`/`.error` (stdout-only programs never
+    //                   reference it, but the TU is cheap and self-contained).
+    //
+    // Deliberately NOT compiled: parallel.cpp / worker.cpp pull in threads and
+    // stay behind `parallel.*`'s CP3002 (spec §13, unchanged this wave).
+    static const char* const kRequired[] = {"runtime.cpp", "error.cpp",
+                                            "eventloop.cpp", "promise.cpp",
+                                            "console.cpp"};
     std::vector<fs::path> sources;
     for (const char* name : kRequired) {
         for (const std::string& file : present) {

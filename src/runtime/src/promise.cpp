@@ -17,7 +17,9 @@ namespace detail {
 namespace {
 
 struct UnhandledEntry {
-    std::weak_ptr<bool> flag;
+    // Held strongly on purpose: the entry must keep the flag alive even if the
+    // promise state that produced it is destroyed before the loop drains (D43).
+    std::shared_ptr<bool> flag;
     Thrown reason;
 };
 
@@ -39,8 +41,7 @@ void reportUnhandledRejections() {
         std::lock_guard<std::mutex> lock(registryMutex());
         std::vector<UnhandledEntry>& entries = registry();
         for (UnhandledEntry& entry : entries) {
-            const std::shared_ptr<bool> flag = entry.flag.lock();
-            if (flag && *flag) {
+            if (entry.flag && *entry.flag) {
                 stillUnhandled.push_back(entry.reason);
             }
         }
@@ -66,8 +67,7 @@ void clearUnhandled(const std::shared_ptr<bool>& flag) {
     std::vector<UnhandledEntry>& entries = registry();
     entries.erase(std::remove_if(entries.begin(), entries.end(),
                                  [&](const UnhandledEntry& entry) {
-                                     const std::shared_ptr<bool> live = entry.flag.lock();
-                                     return !live || live == flag;
+                                     return entry.flag == flag;
                                  }),
                   entries.end());
 }
