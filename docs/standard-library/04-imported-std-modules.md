@@ -4,7 +4,7 @@ Everything below requires an explicit import, since each one reaches beyond core
 
 ## console
 
-JS-style console object — the single core I/O surface.
+JS-style console object - the single core I/O surface.
 
 ```cp3
 const console: {
@@ -32,16 +32,16 @@ console.assert(value > 0, "value should be positive, got:", value);
 let key = await console.readKey();   // e.g. "ArrowUp", "ArrowDown", "Enter", or a plain character
 ```
 
-**Routing, decided:** `.log` / `.info` → stdout. `.warn` / `.error` → stderr. Matches Node exactly — no ambiguity left here.
+**Routing, decided:** `.log` / `.info` → stdout. `.warn` / `.error` → stderr. Matches Node exactly - no ambiguity left here.
 
-`console.log(...args)`'s variadic parameter list is not a runtime heterogeneous array — it compiles to a zero-cost C++ variadic template, monomorphized per call site (the same mechanism generics already use, [README.md §16](../language-spec/16-generics.md)), since the concrete argument types are always known at compile time. This matters for how `Printable` actually gets resolved, split two ways:
+`console.log(...args)`'s variadic parameter list is not a runtime heterogeneous array - it compiles to a zero-cost C++ variadic template, monomorphized per call site (the same mechanism generics already use, [README.md §16](../language-spec/16-generics.md)), since the concrete argument types are always known at compile time. This matters for how `Printable` actually gets resolved, split two ways:
 
-- **Built-in primitive types** (`number`, `string`, `boolean`, arrays of them) are formatted by routing directly into `fmt` (the library already backing `console.log`, [CLI-README.md §3](../cli-tooling/03-internal-library-wrapping.md)) — no `toString()` call, no synthesized method, no interface check at all. This is the common case, and it's genuinely free.
-- **User-defined classes** *may* implement `toString(): string` — an ordinary structural interface ([README.md §15](../language-spec/15-classes.md)) — to control their own printed form. If a class never implements it, printing it falls back to a plain default representation, generated **only for the specific classes that are actually ever passed to `console.log` (or `.warn`/`.info`/`.error`) somewhere in the program** — the same usage-based reification approach already used for `JSON.parse<T>` ([README.md §16](../language-spec/16-generics.md)), not a `toString()` proactively synthesized for every class in the codebase whether it's ever printed or not. `Printable` is this interface, used as the compile-time constraint on the variadic template — not a special compiler-only case, and not a reintroduction of `any`.
+- **Built-in primitive types** (`number`, `string`, `boolean`, arrays of them) are formatted by routing directly into `fmt` (the library already backing `console.log`, [CLI-README.md §3](../cli-tooling/03-internal-library-wrapping.md)) - no `toString()` call, no synthesized method, no interface check at all. This is the common case, and it's genuinely free.
+- **User-defined classes** *may* implement `toString(): string` - an ordinary structural interface ([README.md §15](../language-spec/15-classes.md)) - to control their own printed form. If a class never implements it, printing it falls back to a plain default representation, generated **only for the specific classes that are actually ever passed to `console.log` (or `.warn`/`.info`/`.error`) somewhere in the program** - the same usage-based reification approach already used for `JSON.parse<T>` ([README.md §16](../language-spec/16-generics.md)), not a `toString()` proactively synthesized for every class in the codebase whether it's ever printed or not. `Printable` is this interface, used as the compile-time constraint on the variadic template - not a special compiler-only case, and not a reintroduction of `any`.
 
-- `.input` returns a `Promise<string>` that resolves once a line (up to `\n`) has been read; on EOF, it resolves with an empty string rather than rejecting. It must not be a blocking/synchronous call — cp3's async model is a single event loop ([README.md §14](../language-spec/14-async.md)), so a truly blocking stdin read would stall every other pending async task in the program, not just the input call. This keeps `console.input` consistent with every other I/O primitive in std (`fs.readFile`, `process.exec`), which are already Promise-based for the same reason.
-- `.assert` never throws and never exits the program — it's a diagnostic aid (log-if-false), not a control-flow mechanism; reach for `throw` if a failed condition should actually stop execution.
-- `.readKey` is async for the same reason `.input` is — it puts the terminal into raw mode via libuv's TTY handling and resolves with the next keypress (a named key like `"ArrowUp"`/`"Enter"`, or the literal character typed), without blocking the event loop while waiting.
+- `.input` returns a `Promise<string>` that resolves once a line (up to `\n`) has been read; on EOF, it resolves with an empty string rather than rejecting. It must not be a blocking/synchronous call - cp3's async model is a single event loop ([README.md §14](../language-spec/14-async.md)), so a truly blocking stdin read would stall every other pending async task in the program, not just the input call. This keeps `console.input` consistent with every other I/O primitive in std (`fs.readFile`, `process.exec`), which are already Promise-based for the same reason.
+- `.assert` never throws and never exits the program - it's a diagnostic aid (log-if-false), not a control-flow mechanism; reach for `throw` if a failed condition should actually stop execution.
+- `.readKey` is async for the same reason `.input` is - it puts the terminal into raw mode via libuv's TTY handling and resolves with the next keypress (a named key like `"ArrowUp"`/`"Enter"`, or the literal character typed), without blocking the event loop while waiting.
 
 ## JSON
 
@@ -60,7 +60,7 @@ let s = JSON.stringify(obj);
 let obj = JSON.parse(s);
 ```
 
-`unknown` (not `any`) is the return type of the untyped `.parse` — it must be narrowed (via `typeof`, a type guard, or an explicit cast) before its fields can be accessed, consistent with the "no `any`" design goal (§1 of the core README). Reaching for `.parse` without `<T>` should be the exception, not the default path — prefer `.parse<T>` wherever the expected shape is known.
+`unknown` (not `any`) is the return type of the untyped `.parse` - it must be narrowed (via `typeof`, a type guard, or an explicit cast) before its fields can be accessed, consistent with the "no `any`" design goal (§1 of the core README). Reaching for `.parse` without `<T>` should be the exception, not the default path - prefer `.parse<T>` wherever the expected shape is known.
 
 Generic `.parse<T>` with runtime shape validation, TS-flavored but with a real runtime check:
 
@@ -72,7 +72,7 @@ try {
 }
 ```
 
-If the parsed JSON's actual shape doesn't match `T`, `.parse<T>` throws — an ordinary catchable error, same as any other throw/catch ([README.md §7](../language-spec/07-error-handling.md)), not a new error mechanism. Real engineering requirement this creates: validating against `T` at runtime means `T`'s shape has to exist at runtime at all — unlike C++ templates, which are normally fully erased at compile time. This means classes/interfaces used with `.parse<T>` need reified type metadata kept around by the compiler. **Decided ([README.md §23](../language-spec/23-open-design-questions.md)):** reification is *usage-based*, not universal — the compiler emits a shape descriptor (field names + type tags) only for the specific classes/interfaces that actually appear as `T` in a `JSON.parse<T>` call somewhere in the compiled program. A type never used with `.parse<T>` stays fully compile-time-erased, exactly like a plain C++ template — there is no blanket "all generics become reified" cost.
+If the parsed JSON's actual shape doesn't match `T`, `.parse<T>` throws - an ordinary catchable error, same as any other throw/catch ([README.md §7](../language-spec/07-error-handling.md)), not a new error mechanism. Real engineering requirement this creates: validating against `T` at runtime means `T`'s shape has to exist at runtime at all - unlike C++ templates, which are normally fully erased at compile time. This means classes/interfaces used with `.parse<T>` need reified type metadata kept around by the compiler. **Decided ([README.md §23](../language-spec/23-open-design-questions.md)):** reification is *usage-based*, not universal - the compiler emits a shape descriptor (field names + type tags) only for the specific classes/interfaces that actually appear as `T` in a `JSON.parse<T>` call somewhere in the compiled program. A type never used with `.parse<T>` stays fully compile-time-erased, exactly like a plain C++ template - there is no blanket "all generics become reified" cost.
 
 ## Math
 
@@ -120,7 +120,7 @@ Math.clamp(150, 0, 100);   // 100
 Math.lerp(0, 10, 0.5);     // 5
 ```
 
-Backed directly by `<numeric>`/`<cmath>` — plain standard C++, not a linear-algebra library like Eigen (which is for matrices/vectors, a different problem than these scalar helpers). `gcd`/`lcm` operate on `number` (a 64-bit double, [README.md §3](../language-spec/03-type-system.md)) rather than a true integer type, matching every other `Math` function's type — reaching for an exact-integer `gcd` on very large values means using the `r_'...'`/`c_'...'` integer escape hatches directly ([README.md §3](../language-spec/03-type-system.md)), same as any other case needing real integer semantics.
+Backed directly by `<numeric>`/`<cmath>` - plain standard C++, not a linear-algebra library like Eigen (which is for matrices/vectors, a different problem than these scalar helpers). `gcd`/`lcm` operate on `number` (a 64-bit double, [README.md §3](../language-spec/03-type-system.md)) rather than a true integer type, matching every other `Math` function's type - reaching for an exact-integer `gcd` on very large values means using the `r_'...'`/`c_'...'` integer escape hatches directly ([README.md §3](../language-spec/03-type-system.md)), same as any other case needing real integer semantics.
 
 ## fs
 
@@ -147,7 +147,7 @@ interface WriteStream {
 }
 
 const fs: {
-  // sync — throws on failure
+  // sync - throws on failure
   readFileSync(path: string, encoding?: string): string;
   writeFileSync(path: string, data: string): void;
   appendFileSync(path: string, data: string): void;
@@ -157,7 +157,7 @@ const fs: {
   statSync(path: string): FileStats;
   unlinkSync(path: string): void;
 
-  // async — Promise-based, rejects on failure
+  // async - Promise-based, rejects on failure
   readFile(path: string, encoding?: string): Promise<string>;
   writeFile(path: string, data: string): Promise<void>;
   appendFile(path: string, data: string): Promise<void>;
@@ -183,19 +183,19 @@ let contents = await fs.readFile("file.txt"); // async, promise-based
 let stream = fs.readFileStream("bigfile.txt"); // streaming reads
 ```
 
-All `*Sync` functions throw a catchable error on failure ([README.md §7](../language-spec/07-error-handling.md) — plain `try`/`catch`, no separate exception hierarchy). All async functions reject their promise the same way, so `await` inside `try`/`catch` works exactly as a JS developer would expect.
+All `*Sync` functions throw a catchable error on failure ([README.md §7](../language-spec/07-error-handling.md) - plain `try`/`catch`, no separate exception hierarchy). All async functions reject their promise the same way, so `await` inside `try`/`catch` works exactly as a JS developer would expect.
 
 ## network
 
-Unified networking module — JS-native `fetch`, WebSockets, and an HTTP server, all under one import, backed internally by **uWebSockets** (built on uSockets) for the server/WebSocket side. Replaces what earlier drafts of this doc had as two separate pieces (an axios-style `std/fetch` module, and a `std/server` module with no WebSocket support) — consolidated here because "everything network-related" being one import removes a question an implementer would otherwise have to guess at (why is `fetch` a separate module from the HTTP server it talks to?).
+Unified networking module - JS-native `fetch`, WebSockets, and an HTTP server, all under one import, backed internally by **uWebSockets** (built on uSockets) for the server/WebSocket side. Replaces what earlier drafts of this doc had as two separate pieces (an axios-style `std/fetch` module, and a `std/server` module with no WebSocket support) - consolidated here because "everything network-related" being one import removes a question an implementer would otherwise have to guess at (why is `fetch` a separate module from the HTTP server it talks to?).
 
-### `fetch` — exact JS shape, not an axios-style wrapper
+### `fetch` - exact JS shape, not an axios-style wrapper
 
-An earlier draft gave `fetch` an axios-style `.get()`/`.post()`/`.custom()` shape. That's replaced here with the real JS `fetch(url, options)` signature directly — a JS developer's existing `fetch` snippets should paste into cp3 with zero adaptation:
+An earlier draft gave `fetch` an axios-style `.get()`/`.post()`/`.custom()` shape. That's replaced here with the real JS `fetch(url, options)` signature directly - a JS developer's existing `fetch` snippets should paste into cp3 with zero adaptation:
 
 ```cp3
 interface RequestInit {
-  method?: string;                 // "GET", "POST", etc. — default "GET"
+  method?: string;                 // "GET", "POST", etc. - default "GET"
   headers?: Map<string, string>;
   body?: string | Buffer;
   timeout?: number;                // milliseconds
@@ -229,9 +229,9 @@ if (res.ok) {
 }
 ```
 
-A non-2xx response does **not** throw — check `.ok`/`.status` yourself, same as real JS `fetch`. Only a network-level failure (DNS, timeout, connection refused) rejects the promise. `fetch` hooks directly into the existing libuv event loop for DNS/TCP ([README.md §14](../language-spec/14-async.md)) — it doesn't need uWebSockets at all, since that library's real value is on the server side; a plain client request is just libuv.
+A non-2xx response does **not** throw - check `.ok`/`.status` yourself, same as real JS `fetch`. Only a network-level failure (DNS, timeout, connection refused) rejects the promise. `fetch` hooks directly into the existing libuv event loop for DNS/TCP ([README.md §14](../language-spec/14-async.md)) - it doesn't need uWebSockets at all, since that library's real value is on the server side; a plain client request is just libuv.
 
-### WebSocket / WebSocketServer — backed by uWebSockets
+### WebSocket / WebSocketServer - backed by uWebSockets
 
 ```cp3
 class WebSocket {
@@ -271,7 +271,7 @@ wss.on("connection", (ws) => {
 });
 ```
 
-### HTTP server — Express-like API, with middleware and streaming
+### HTTP server - Express-like API, with middleware and streaming
 
 ```cp3
 interface HttpRequest {
@@ -280,9 +280,9 @@ interface HttpRequest {
   params: Map<string, string>;    // route params, e.g. :id
   query: Map<string, string>;     // query string, e.g. ?key=value
   headers: Map<string, string>;
-  body: ReadStream;                // the raw request body as a stream — same interface as fs.readFileStream, for large uploads without buffering the whole thing into RAM
+  body: ReadStream;                // the raw request body as a stream - same interface as fs.readFileStream, for large uploads without buffering the whole thing into RAM
 
-  json<T>(): Promise<T>;           // buffers and parses the body as JSON; fine for typical API payloads, avoid for large uploads — use .body directly instead
+  json<T>(): Promise<T>;           // buffers and parses the body as JSON; fine for typical API payloads, avoid for large uploads - use .body directly instead
   text(): Promise<string>;         // buffers the body as text; same caveat as .json<T>()
 }
 
@@ -308,7 +308,7 @@ const network: {
 };
 
 interface HttpServer {
-  use(handler: Middleware): void;   // global middleware — auth, logging, CORS, etc.
+  use(handler: Middleware): void;   // global middleware - auth, logging, CORS, etc.
 
   get(path: string, handler: RouteHandler): void;
   post(path: string, handler: RouteHandler): void;
@@ -328,7 +328,7 @@ app.use(async (req, res, next) => {
   let token = req.headers.get("authorization");
   if (!token) {
     res.status(401).json({ error: "Unauthorized" });
-    return;   // stops the chain — next() is never called
+    return;   // stops the chain - next() is never called
   }
   await next();   // continues to the route
 });
@@ -354,15 +354,15 @@ app.listen(3000, () => {
 });
 ```
 
-**Every request handler's errors are caught by `std/network` itself, never left to become a program-level unhandled rejection.** A handler that throws (sync or via a rejected `await`) gets turned into a plain `500` response for that one request — the server keeps running and every other in-flight request, and every open WebSocket connection, is unaffected. This is a deliberate, documented exception to [README.md](../language-spec/00-overview.md)'s "unhandled rejection kills the process" default (§14) — the right boundary for a module explicitly built to keep running across many independent, unrelated pieces of work. A middleware calling `next()` propagates the same way — a rejected `next()` is caught at the same boundary.
+**Every request handler's errors are caught by `std/network` itself, never left to become a program-level unhandled rejection.** A handler that throws (sync or via a rejected `await`) gets turned into a plain `500` response for that one request - the server keeps running and every other in-flight request, and every open WebSocket connection, is unaffected. This is a deliberate, documented exception to [README.md](../language-spec/00-overview.md)'s "unhandled rejection kills the process" default (§14) - the right boundary for a module explicitly built to keep running across many independent, unrelated pieces of work. A middleware calling `next()` propagates the same way - a rejected `next()` is caught at the same boundary.
 
 **Included in beta one:** `fetch` (exact JS shape), `WebSocket`/`WebSocketServer`, `.get`/`.post`/`.put`/`.delete`, route params (`:id`), query string parsing, JSON/text/streaming request and response bodies, basic middleware (`app.use`), status codes and headers, `.listen(port)`, async handlers, and the per-request 500-on-throw behavior above.
 
-**Explicitly out of scope for beta one** (not started, not partially done — don't build against these): nested/sub-routers, regex path matching, HTTPS/TLS (would mean wrapping OpenSSL/mbedTLS — a real, separate scope of work and security liability), server-side template engines, `multipart/form-data` file-upload parsing, response compression (gzip). Every one of these is a realistic third-party `.cp3pak` addition post-beta-one (an eventual `@cp3/tls`, `@cp3/multer`, `@cp3/compression`, etc.), not forgotten — matching how Node ships a barebones `http` module and lets the community build Express, or how Go ships barebones `net/http` and lets the community build Gin.
+**Explicitly out of scope for beta one** (not started, not partially done - don't build against these): nested/sub-routers, regex path matching, HTTPS/TLS (would mean wrapping OpenSSL/mbedTLS - a real, separate scope of work and security liability), server-side template engines, `multipart/form-data` file-upload parsing, response compression (gzip). Every one of these is a realistic third-party `.cp3pak` addition post-beta-one (an eventual `@cp3/tls`, `@cp3/multer`, `@cp3/compression`, etc.), not forgotten - matching how Node ships a barebones `http` module and lets the community build Express, or how Go ships barebones `net/http` and lets the community build Gin.
 
 ## Date
 
-Immutable — every "change" operation returns a new Date rather than mutating in place, deliberately avoiding JS's well-known confusing/mutable Date behavior (similar in spirit to Rust's chrono or JS's newer Temporal proposal).
+Immutable - every "change" operation returns a new Date rather than mutating in place, deliberately avoiding JS's well-known confusing/mutable Date behavior (similar in spirit to Rust's chrono or JS's newer Temporal proposal).
 
 ```cp3
 class Date {
@@ -421,10 +421,10 @@ const process: {
   env: Map<string, string>;
   exit(code: number): void;
 
-  // buffered — resolves once, after the process finishes; rejects if the process can't be started at all
+  // buffered - resolves once, after the process finishes; rejects if the process can't be started at all
   exec(cmd: string, args: string[]): Promise<ExecResult>;
 
-  // streaming — returns immediately with a live handle
+  // streaming - returns immediately with a live handle
   spawn(cmd: string, args: string[]): SpawnHandle;
 };
 ```
@@ -436,16 +436,16 @@ process.argv;
 process.env;
 process.exit(0);
 
-// buffered — resolves once, with the full result, after the process finishes
+// buffered - resolves once, with the full result, after the process finishes
 let result = await process.exec("git", ["status", "--porcelain"]);
 
-// streaming — returns an event-emitting handle for long-running/streaming output
+// streaming - returns an event-emitting handle for long-running/streaming output
 let p = process.spawn("git", ["log", "--follow"]);
 p.on("data", (chunk) => console.log(chunk));
 p.on("exit", (code) => console.log("done:", code));
 ```
 
-`exec` deliberately does **not** reject on a non-zero exit code — check `result.exitCode` yourself. A rejection is reserved for the command failing to launch at all (bad path, permissions, etc.), not for the command running and simply returning failure.
+`exec` deliberately does **not** reject on a non-zero exit code - check `result.exitCode` yourself. A rejection is reserved for the command failing to launch at all (bad path, permissions, etc.), not for the command running and simply returning failure.
 
 ## path
 
@@ -500,7 +500,7 @@ os.tmpdir();
 
 ## events
 
-JS-style EventEmitter. Pure cp3 — no native dependency at all, since this is just a data structure (event name → list of listener callbacks), not something that needs to reach the OS.
+JS-style EventEmitter. Pure cp3 - no native dependency at all, since this is just a data structure (event name → list of listener callbacks), not something that needs to reach the OS.
 
 ```cp3
 class EventEmitter {
@@ -524,7 +524,7 @@ Every other std module's event-emitting handle (`fs`'s `ReadStream`/`WriteStream
 
 ## crypto
 
-libsodium-backed — chosen over raw OpenSSL for a smaller footprint and a "hard to misuse" API, consistent with the project's broader safety-by-default stance.
+libsodium-backed - chosen over raw OpenSSL for a smaller footprint and a "hard to misuse" API, consistent with the project's broader safety-by-default stance.
 
 ```cp3
 const crypto: {
@@ -548,13 +548,13 @@ let encrypted = crypto.AES256("somekey", "somedatatoencrypt");
 let plain = crypto.AES256Decrypt("somekey", encrypted);
 ```
 
-`AES256Decrypt` throws (catchable, [README.md §7](../language-spec/07-error-handling.md)) if the auth tag doesn't verify — a tampered or wrong-key ciphertext is a decrypt failure, never silently-wrong plaintext.
+`AES256Decrypt` throws (catchable, [README.md §7](../language-spec/07-error-handling.md)) if the auth tag doesn't verify - a tampered or wrong-key ciphertext is a decrypt failure, never silently-wrong plaintext.
 
-AES256 defaults to authenticated encryption (AES-256-GCM), with the nonce and auth tag bundled into the returned value automatically — nobody has to think about IV/nonce management themselves; that's handled safely by default.
+AES256 defaults to authenticated encryption (AES-256-GCM), with the nonce and auth tag bundled into the returned value automatically - nobody has to think about IV/nonce management themselves; that's handled safely by default.
 
 ## env
 
-Built on top of process (a std module composed from another std module, same pattern as any other layered package) — a convenience wrapper for .env-style config files.
+Built on top of process (a std module composed from another std module, same pattern as any other layered package) - a convenience wrapper for .env-style config files.
 
 ```cp3
 const env: {
@@ -573,7 +573,7 @@ let port = env.get<number>("PORT", default: 3000);
 
 ## Map / Set
 
-Included. 1:1 mapping to standard C++ containers — `Map<K, V>` wraps `std::unordered_map<K, V>` directly, `Set<T>` wraps `std::unordered_set<T>` directly, same pattern as array→vector. Method names match JS's Map/Set API closely enough that there's no meaningful design gap here.
+Included. 1:1 mapping to standard C++ containers - `Map<K, V>` wraps `std::unordered_map<K, V>` directly, `Set<T>` wraps `std::unordered_set<T>` directly, same pattern as array→vector. Method names match JS's Map/Set API closely enough that there's no meaningful design gap here.
 
 ```cp3
 class Map<K, V> {
@@ -616,7 +616,7 @@ s.has(1);
 
 ## buffer
 
-Included as its own module — raw binary data handling, used internally by fs/crypto/fetch regardless, but exposed as a user-facing module too rather than staying purely internal, since leaving it out risks each module inventing its own separate way to handle raw bytes.
+Included as its own module - raw binary data handling, used internally by fs/crypto/fetch regardless, but exposed as a user-facing module too rather than staying purely internal, since leaving it out risks each module inventing its own separate way to handle raw bytes.
 
 ```cp3
 class Buffer {

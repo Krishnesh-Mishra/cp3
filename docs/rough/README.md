@@ -1,10 +1,10 @@
-# docs/rough — internal process docs
+# docs/rough - internal process docs
 
 Everything in this folder is project-internal **rough work**: process
 documents and the original sources the published `docs/` tree is split from.
-It lives here — not in the repository root — on purpose: the root holds only
-`README.md`, `.gitignore` and `CMakeLists.txt`, and **new rough work, notes
-and plans go here too**.
+It lives here - not in the repository root - on purpose: the root holds only
+`README.md`, `.gitignore`, `CMakeLists.txt` and `benchmarks/` (the one tooling
+exception, D66), and **new rough work, notes and plans go here too**.
 
 | File | What it is |
 | --- | --- |
@@ -22,5 +22,8 @@ The three spec sources are split into `docs/language-spec/`,
 `docs/local-docs-viewer/scripts/split-docs.mjs` (run from
 `docs/local-docs-viewer/`).
 
-Code comments cite these files by bare name — e.g. "STYLE.md §8",
-"DECISIONS.md D55" — that means this folder.
+Code comments cite these files by bare name - e.g. "STYLE.md §8",
+"DECISIONS.md D55" - that means this folder.
+
+**House style (D66.4):** no em dashes (U+2014) or en dashes (U+2013) anywhere
+in repo text: docs, code comments, agent instructions. Write `-` or rephrase.

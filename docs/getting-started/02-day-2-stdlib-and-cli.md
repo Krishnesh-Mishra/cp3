@@ -1,13 +1,13 @@
-# Day 2 — the std library & the CLI
+# Day 2 - the std library & the CLI
 
 **Goal for today:** stop looking things up. Know which standard-library module to import for a given job, know the five CLI commands you'll actually type, and ship a small working tool.
 
-## Part 1 — the standard library you'll use every day
+## Part 1 - the standard library you'll use every day
 
 Two rules to internalize before the module list:
 
 1. **Array, string, regex, and timer built-ins need no import.** They're core language features (Part 2).
-2. **Everything that touches the OS or runtime needs an explicit `import`.** A module is imported as a namespaced object — no global `std::` dumping.
+2. **Everything that touches the OS or runtime needs an explicit `import`.** A module is imported as a namespaced object - no global `std::` dumping.
 
 ```cp3
 import console from "std/console";
@@ -33,7 +33,7 @@ let x = Math.sqrt(25);        // 5
 A few exact signatures worth committing to memory:
 
 ```cp3
-// console — note it's an imported object, not a language global
+// console - note it's an imported object, not a language global
 console.log(...args);                 // stdout
 console.error(...args);               // stderr
 console.warn(...args);                // stderr
@@ -52,19 +52,19 @@ if (fs.existsSync("data")) { /* ... */ }
 let args = process.argv;
 ```
 
-> **Why you'd read this later:** the complete, signature-level reference is [stdlib §04 Imported std modules](../standard-library/04-imported-std-modules.md). It's long — use it as a lookup table, not a read-through.
+> **Why you'd read this later:** the complete, signature-level reference is [stdlib §04 Imported std modules](../standard-library/04-imported-std-modules.md). It's long - use it as a lookup table, not a read-through.
 
-## Part 2 — built-ins that need no import
+## Part 2 - built-ins that need no import
 
 These are part of the language, not modules:
 
-- **Array methods** — `push`, `pop`, `map`, `filter`, `reduce`, `sort`, `find`, `includes`, `flat`, and the rest.
-- **String methods** — `split`, `trim`, `replace`, `padStart`/`padEnd`, `toUpperCase`/`toLowerCase`, `charAt`, etc.
-- **Regex** — native `/pattern/flags` literals, like JS.
-- **Timers** — `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` as global builtins tied to the event loop.
-- **`sleep(ms)`** — returns `Promise<void>`; the idiomatic `await sleep(1000)`.
-- **`parseInt(str)` / `parseFloat(str)`** — globals (not string methods), returning `number`.
-- **`Object.keys` / `Object.values` / `Object.entries`** — supported, implemented as compile-time macros.
+- **Array methods** - `push`, `pop`, `map`, `filter`, `reduce`, `sort`, `find`, `includes`, `flat`, and the rest.
+- **String methods** - `split`, `trim`, `replace`, `padStart`/`padEnd`, `toUpperCase`/`toLowerCase`, `charAt`, etc.
+- **Regex** - native `/pattern/flags` literals, like JS.
+- **Timers** - `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` as global builtins tied to the event loop.
+- **`sleep(ms)`** - returns `Promise<void>`; the idiomatic `await sleep(1000)`.
+- **`parseInt(str)` / `parseFloat(str)`** - globals (not string methods), returning `number`.
+- **`Object.keys` / `Object.values` / `Object.entries`** - supported, implemented as compile-time macros.
 
 ```cp3
 await sleep(500);                       // no import
@@ -75,7 +75,7 @@ let keys = Object.keys(someObject);
 
 > **Why you'd read this later:** [stdlib §03 Built into the language](../standard-library/03-built-into-the-language-no-import-needed.md) is the one-page list.
 
-## Part 3 — networking in one import
+## Part 3 - networking in one import
 
 Everything network-related comes from `std/network`, tree-shaken by what you actually import:
 
@@ -88,15 +88,15 @@ if (res.status === 200) {
 }
 ```
 
-- `fetch` mirrors the JS API. **Gotcha:** it does *not* throw on a non-2xx status — check `res.status` yourself, exactly like the browser.
+- `fetch` mirrors the JS API. **Gotcha:** it does *not* throw on a non-2xx status - check `res.status` yourself, exactly like the browser.
 - **Servers:** `import { createServer } from "std/network"`.
 - **WebSockets:** `import { WebSocket, WebSocketServer } from "std/network"`.
 
-Because `async`/`await` is the JS model over a single event loop, all your promise intuition transfers directly. The one cp3-specific rule to remember: **an unhandled promise rejection terminates the process** — attach a `.catch` or wrap in `try`/`catch`.
+Because `async`/`await` is the JS model over a single event loop, all your promise intuition transfers directly. The one cp3-specific rule to remember: **an unhandled promise rejection terminates the process** - attach a `.catch` or wrap in `try`/`catch`.
 
 > **Why you'd read this later:** [§14 Async](../language-spec/14-async.md) for the full async/await contract, plus [stdlib §04](../standard-library/04-imported-std-modules.md) for `fetch`/server/WebSocket signatures.
 
-## Part 4 — the `cp3` CLI you'll actually type
+## Part 4 - the `cp3` CLI you'll actually type
 
 You met `run`/`check`/`dev` on Day 1. Here's the full set, grouped by when you'd use it.
 
@@ -118,7 +118,7 @@ You met `run`/`check`/`dev` on Day 1. Here's the full set, grouped by when you'd
 | --- | --- |
 | `cp3 install <name-or-url>` | Install a published package (pure cp3, or one with native bindings baked in) |
 | `cp3 install` | Install everything listed in `package.json` |
-| `cp3 native-install <sdk>` | *Author-side:* generate bindings from a C/C++ SDK. Not the everyday path — most people just `cp3 install` a package someone already published |
+| `cp3 native-install <sdk>` | *Author-side:* generate bindings from a C/C++ SDK. Not the everyday path - most people just `cp3 install` a package someone already published |
 | `cp3 exec <package> [args]` | Run a package's bundled CLI tool |
 | `cp3 publish` | Publish your package |
 | `cp3 link <file.cp3pak>` | Link a local package (your `npm link`) |
@@ -151,14 +151,14 @@ my-app/
 ```
 
 - `"type": "application"` → `cp3 build` makes a `.exe`. `"type": "package"` → makes a `.cp3pak`.
-- `"main"` — entry point; defaults to `index.cp3`/`main.cp3`. The compiler starts here and bundles only what's reachable through `import`.
-- `"typeSystem"` — the project's type vocabulary (default `"typescript"`).
+- `"main"` - entry point; defaults to `index.cp3`/`main.cp3`. The compiler starts here and bundles only what's reachable through `import`.
+- `"typeSystem"` - the project's type vocabulary (default `"typescript"`).
 
 The only thing you add to `.gitignore` is `.cp3/`.
 
 > **Why you'd read this later:** [CLI §1 pipeline](../cli-tooling/01-compilation-pipeline.md), [CLI §4 package manager](../cli-tooling/04-package-manager.md), and [CLI §5 package format](../cli-tooling/05-package-format-authoring-cp3pak.md) are your reference when you publish or wire up CI.
 
-## Part 5 — put it together: a small CLI tool
+## Part 5 - put it together: a small CLI tool
 
 Everything from today in one ~20-line program. This counts the words in each file passed on the command line:
 
@@ -194,7 +194,7 @@ function main(): void {
 main();
 ```
 
-Notice what *isn't* there: no `any`, no dynamic object, no coercion, no memory management, no build config. It reads like the TypeScript you already write — and it compiles to a native executable.
+Notice what *isn't* there: no `any`, no dynamic object, no coercion, no memory management, no build config. It reads like the TypeScript you already write - and it compiles to a native executable.
 
 Run it:
 
@@ -205,10 +205,10 @@ cp3 build            # → a standalone .exe you can ship
 
 ## Where to go next
 
-- **Daily reference:** [stdlib §04 Imported std modules](../standard-library/04-imported-std-modules.md) — bookmark it.
+- **Daily reference:** [stdlib §04 Imported std modules](../standard-library/04-imported-std-modules.md) - bookmark it.
 - **Depth on the language:** start from the [language spec overview](../language-spec/00-overview.md).
 - **When you ship:** [CLI §4](../cli-tooling/04-package-manager.md) and [CLI §5](../cli-tooling/05-package-format-authoring-cp3pak.md).
-- **Still curious about the "how":** [§19 C/C++ interop](../language-spec/19-c-cpp-interoperability.md) and the pipeline doc are there whenever you want them — but you never *needed* them to be productive.
+- **Still curious about the "how":** [§19 C/C++ interop](../language-spec/19-c-cpp-interoperability.md) and the pipeline doc are there whenever you want them - but you never *needed* them to be productive.
 
 ## Checkpoint: you're done with Day 2 when…
 

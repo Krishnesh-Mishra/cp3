@@ -1,32 +1,32 @@
 # C+++
 
-**TypeScript you already know — compiled to native code.** C+++ (`.cp3`) is a
+**TypeScript you already know - compiled to native code.** C+++ (`.cp3`) is a
 statically-typed, JavaScript/TypeScript-flavored language that compiles to
 C++20: no garbage collector, no pointers, no manual memory management, no
-CMake — and no JIT runtime underneath your JS-shaped code.
+CMake - and no JIT runtime underneath your JS-shaped code.
 
 The design goal, in the spec's own words: *"a competent JS/TS developer can be
 productive in roughly two days, without learning pointers, manual memory
-management, or CMake."* That is the whole bet — `let`/`const`, `interface`,
+management, or CMake."* That is the whole bet - `let`/`const`, `interface`,
 classes, generics, `async`/`await`, template literals and `console.log` keep
 their TS shape; what changes is that the output is a native binary.
 
 ## Why it exists
 
 - **The syntax tax is the real barrier.** C++, Rust, Go and Java all make a
-  JS/TS developer relearn declarations, loops, classes and arrays — the same
+  JS/TS developer relearn declarations, loops, classes and arrays - the same
   concepts in a different spelling. That relearning cost keeps people away,
   not the concepts themselves.
 - **JS/TS pays a runtime tax.** A trivial Express server can sit at hundreds
   of MB of RAM because a full JIT runtime (GC, dynamic typing machinery,
   warmup, object shapes) runs underneath even the simplest handler.
 - **Go kept the garbage collector.** GC pauses and GC overhead are exactly
-  the cost C+++ avoids — not relocates.
+  the cost C+++ avoids - not relocates.
 - **Rust and C++ removed the GC but kept the steep syntax** (ownership and
   borrow-checking, manual memory and pointers).
 - **C+++ targets the gap:** JS/TS syntax, native compilation, no GC. The
   genuinely hard C++ (Unreal, Qt, OpenCV internals) stays C++ behind the
-  native-interop boundary — you don't write it to ship an app.
+  native-interop boundary - you don't write it to ship an app.
 
 *(The full argument: [Why C+++?](docs/language-spec/00b-why-cp3.md) · [What C+++ combines](docs/language-spec/22-what-cp3-combines.md).)*
 
@@ -39,7 +39,7 @@ and prints comparison tables. One real run (2026-10-17, Intel Core i7-12700H,
 Windows 11; g++ 16.1.0, rustc 1.95.0, go 1.26.4, node v24.15.0, python 3.14.5,
 cp3c 0.1.0-beta.1):
 
-**One integer workload** — total Collatz steps for `1..1,000,000` (answer
+**One integer workload** - total Collatz steps for `1..1,000,000` (answer
 `131434424`, byte-identical in every language), single-threaded, best of two
 runs:
 
@@ -49,11 +49,11 @@ runs:
 
 The cp3 row runs today, no asterisk: it prints the same integer, matches
 Node's JIT-assisted 1.13 s, and beats CPython ≈8.7×. The ≈8× gap to Rust/C++
-is codegen maturity — closing it is roadmap work on the generated C++, not a
+is codegen maturity - closing it is roadmap work on the generated C++, not a
 language redesign.
 
 Same total split across all cores: Rust 19 ms · C++ 24 ms · Go 33 ms ·
-Node 262 ms · Python 1.34 s — the cp3 entry joins that table when
+Node 262 ms · Python 1.34 s - the cp3 entry joins that table when
 `parallel.*` lands.
 
 **The Express comparison.** The same health server, five runtimes measured at
@@ -66,7 +66,7 @@ Node 262 ms · Python 1.34 s — the cp3 entry joins that table when
 
 On a trivial handler the load client and loopback dominate, so those rows
 cluster; the compute tables are where the runtimes separate. The cp3 entry is
-already written against the frozen `std/network` API — when the module lands,
+already written against the frozen `std/network` API - when the module lands,
 its row fills itself in, unchanged.
 
 Full methodology, caveats and the raw runner output:
@@ -75,7 +75,7 @@ Full methodology, caveats and the raw runner output:
 ## This is the language
 
 ```ts
-// hello — the smallest program
+// hello - the smallest program
 import console from "std/console";
 
 console.log("Hello, world!");
@@ -97,7 +97,7 @@ countdown(3);
 ```
 
 ```ts
-// the compute-single benchmark — same workload as the table above
+// the compute-single benchmark - same workload as the table above
 function collatzSteps(start: number): number {
   let n = start;
   let steps = 0;
@@ -152,9 +152,9 @@ spec-conformance corpus (1,200+ case pairs in
 
 - **Landed:** the full pipeline (lexer → parser → sema → codegen → CLI), the
   diagnostic model, error handling, `async`/`await` + timers + the event
-  loop, `std/console`, and builtin methods — `Math`, strings, `path`, `os`,
+  loop, `std/console`, and builtin methods - `Math`, strings, `path`, `os`,
   `JSON.stringify`, `process`, `String(x)`.
-- **In flight / next:** a performance wave (`%`/`number` lowering — see the
+- **In flight / next:** a performance wave (`%`/`number` lowering - see the
   benchmark section), then classes, arrays, `std/network` (servers) and
   `parallel.*`.
 
@@ -178,8 +178,8 @@ python examples/competitions/bench/run_suite.py
 | Path | What |
 | --- | --- |
 | `docs/` | the browsable docs: `getting-started/` (TS → C+++ in two days), `language-spec/`, `cli-tooling/`, `standard-library/` |
-| `docs/rough/` | internal process docs — `DECISIONS.md`, `M2-PLAN.md`, `STYLE.md`, `ARCHITECTURE.md` and the original single-file spec sources. **All rough work goes here; the repo root stays lean.** |
-| `src/` | the compiler — `lexer`, `parser`, `sema`, `codegen`, `cli`, `runtime`, `modules`, `common` |
+| `docs/rough/` | internal process docs - `DECISIONS.md`, `M2-PLAN.md`, `STYLE.md`, `ARCHITECTURE.md` and the original single-file spec sources. **All rough work goes here; the repo root stays lean.** |
+| `src/` | the compiler - `lexer`, `parser`, `sema`, `codegen`, `cli`, `runtime`, `modules`, `common` |
 | `tests/` | `cases/` (the conformance corpus) + `runner/` (the harness) |
 | `examples/` | showcase programs + `competitions/` (the benchmark suite above) |
 | `tools/` | layout linter and helpers |
@@ -191,5 +191,5 @@ the [full documentation index](docs/index.md).
 ---
 
 *Every performance number in this README is a real measurement from a labeled
-run recorded in [`examples/competitions/README.md`](examples/competitions/README.md) —
+run recorded in [`examples/competitions/README.md`](examples/competitions/README.md) -
 nothing here is estimated or extrapolated.*

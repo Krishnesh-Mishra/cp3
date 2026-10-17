@@ -23,7 +23,7 @@ docs/local-docs-viewer/node_modules/
 # One build tree, always under build/ (docs/rough/DECISIONS.md D55): the canonical tree is
 # `cmake -S . -B build`; parallel authors use `cmake -S . -B build/scratch/<name>`
 # (covered by the `build/` rule above). Root-level `build-*` directories are
-# forbidden, so there is deliberately no ignore pattern for them — a stray one
+# forbidden, so there is deliberately no ignore pattern for them - a stray one
 # must be visible as untracked in `git status`.
 CMakeCache.txt
 CMakeFiles/

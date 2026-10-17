@@ -1,7 +1,7 @@
 # C+++ Local Docs Viewer
 
 A tiny local web app for reading the C+++ documentation in the parent `docs/`
-folder. Zero build step — it renders the Markdown on the fly with
+folder. Zero build step - it renders the Markdown on the fly with
 [`marked`](https://github.com/markedjs/marked) and highlights code with
 [`highlight.js`](https://highlightjs.org/).
 
@@ -28,7 +28,7 @@ PORT=4000 npm start
 
 - A **landing page** with a **"From TypeScript to C+++ in 2 days"** starter band up
   top, then one card per topic previewing its sections.
-- A **collapsible sidebar** — topic groups expand only for the page you're on
+- A **collapsible sidebar** - topic groups expand only for the page you're on
   (and the **Start Here** group stays open), so the nav stays short instead of
   listing all 48 pages at once.
 - A **sticky top bar** with breadcrumbs, previous/next page buttons, a "view raw
@@ -40,10 +40,10 @@ PORT=4000 npm start
 - **Syntax-highlighted code** with a hover **Copy** button, anchor links on
   headings, and back-to-top.
 - **Light/dark theme** that remembers your choice and respects your OS setting.
-- **Apple system palette** — the light/dark colours are Apple's own tokens
+- **Apple system palette** - the light/dark colours are Apple's own tokens
   (`systemBackground` `#ffffff` / `#000000`, surfaces `#f5f5f7` / `#1c1c1e`,
   labels `#1d1d1f` / `#f5f5f7`, and `systemBlue` `#0071e3` → `#2997ff`).
-- **Translucent materials & scroll edges** — the top bar and sidebar are frosted
+- **Translucent materials & scroll edges** - the top bar and sidebar are frosted
   layers (`backdrop-filter`) that content scrolls under, rather than opaque bars.
 - **A fluid, interruptible navigation drawer** on mobile: it tracks your finger
   1:1 (respecting where you grabbed it), carries its release velocity into a
@@ -60,10 +60,10 @@ PORT=4000 npm start
 ```
 docs/
 ├── index.md                    # landing page
-├── getting-started/            # hand-written — the 2-day TS→cp3 migration guide
-├── language-spec/              # from docs/rough/README (6).md         — the core language
-├── cli-tooling/                # from docs/rough/CLI-README (5).md     — cp3 CLI & tooling
-├── standard-library/           # from docs/rough/STDLIB-README (4).md — std/* modules
+├── getting-started/            # hand-written - the 2-day TS→cp3 migration guide
+├── language-spec/              # from docs/rough/README (6).md         - the core language
+├── cli-tooling/                # from docs/rough/CLI-README (5).md     - cp3 CLI & tooling
+├── standard-library/           # from docs/rough/STDLIB-README (4).md - std/* modules
 └── local-docs-viewer/          # this viewer
 ```
 

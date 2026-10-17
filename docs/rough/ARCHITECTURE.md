@@ -27,7 +27,7 @@ flow downward only; there are no cycles.
 | `cp3_codegen` | `src/codegen/` | `src/codegen/include/` | Checked AST → generated C++20 (+ source map). | M1 subset (beyond-M1 features report CP3002) |
 | `cp3_runtime` | `src/runtime/` | `src/runtime/include/` | Placeholder for generated-code runtime support. | Minimal |
 | `cp3_cli` | `src/cli/` | `src/cli/include/` | Command surface, argument parsing, all rendering. | Scaffold |
-| `cp3c` | `src/main.cpp` | — | Executable; forwards `argv` to `runCli`. | Complete |
+| `cp3c` | `src/main.cpp` | - | Executable; forwards `argv` to `runCli`. | Complete |
 
 Dependency edges (declared in each module's `src/<module>/CMakeLists.txt`):
 
@@ -69,13 +69,13 @@ need a change across a boundary, ask the owner.
 
 **Rule:** an owner may freely edit files under their path; they may *read*
 everything else. Frozen interfaces (`src/common/include/cp3/**`) and the case
-format (`tests/cases/README.md`) are not to be reshaped — extend them only by
+format (`tests/cases/README.md`) are not to be reshaped - extend them only by
 the documented mechanisms (see §7 and §8).
 
 **Frozen by the contracts pass (DECISIONS D14):** the lead owns
 `src/common/include/cp3/**`, and the *public interface shape* of the stage
-headers — `src/sema/include/**`, `src/codegen/include/**`,
-`src/runtime/include/**` — was extended and frozen by the contracts pass. Stage
+headers - `src/sema/include/**`, `src/codegen/include/**`,
+`src/runtime/include/**` - was extended and frozen by the contracts pass. Stage
 owners implement *against* that shape (fill in the `.cpp` bodies and the
 algorithms) and do not reshape the headers. If a stage needs a different shape,
 that is an open question for the lead (§13), not a unilateral header edit.
@@ -97,7 +97,7 @@ The executable lands at `build/bin/cp3c` (`build\bin\cp3c.exe` on Windows).
 In this environment the configure step selected **Ninja + GNU 16.1.0**.
 
 **One build tree, always under `build/` (D55).** There is exactly one canonical
-tree — `cmake -S . -B build`, the directory the test harness defaults to
+tree - `cmake -S . -B build`, the directory the test harness defaults to
 (`build/bin/cp3c`). A parallel author who needs an isolated tree configures a
 private scratch tree *inside* it:
 
@@ -107,7 +107,7 @@ cmake -S . -B build/scratch/<name>    # private, ignored, deleted at will
 
 Root-level `build-*` directories are **not allowed**; the old `build-*/` ignore
 pattern was removed on purpose, so a stray one shows up as untracked in
-`git status`. (This is a location rule only — module source lists stay
+`git status`. (This is a location rule only - module source lists stay
 per-module, §3.1, which is what keeps parallel authors from colliding.)
 
 ### 3.1 Where the build is described
@@ -136,7 +136,7 @@ src/runtime/CMakeLists.txt    # cp3_runtime -> cp3_common (+ Threads; not in cp3
 src/cli/CMakeLists.txt        # cp3_cli     -> common, lexer, parser, modules, sema, codegen
 ```
 
-Each module file has the same shape — declare the list, create the target, add
+Each module file has the same shape - declare the list, create the target, add
 the include root, link the dependencies, apply the shared warnings:
 
 ```cmake
@@ -184,7 +184,7 @@ The `lint` target runs `python tools/lint_layout.py`, which enforces the STYLE.m
 §2 hard budgets (file, function, type, line length, parameters, nesting) and the
 §4 naming spot-checks (file names, macro names) over `src/**`. It is **advisory
 by design**: it is not part of the default build (not in `ALL`), never depends
-on `cp3c`, and never sets `-Werror` — a violation in one module must not block
+on `cp3c`, and never sets `-Werror` - a violation in one module must not block
 another module's build (STYLE.md §9). The script exits non-zero when a hard
 budget is exceeded and prints a per-file report with line numbers; run it
 directly for the same result, or `--warn-only` to report without failing:
@@ -235,7 +235,7 @@ Options:
 | `0` | success |
 | `1` | compile error (diagnostics were printed) |
 | `2` | usage error (bad flag/command; usage printed to stderr) |
-| `3` | **not implemented** — this is the scaffold build; a marker line containing `not implemented` is printed to stderr |
+| `3` | **not implemented** - this is the scaffold build; a marker line containing `not implemented` is printed to stderr |
 
 The `3` + marker convention is what lets `tests/runner/run_tests.py` tell "the
 scaffold ran" apart from a genuine failure, so real test cases are *skipped*
@@ -247,12 +247,12 @@ compile commands come online.
 ## 5. C++ conventions
 
 * **Language:** C++20, no compiler extensions (`CMAKE_CXX_EXTENSIONS OFF`).
-  C++20 is the floor, not C++23 — chosen for coroutines
+  C++20 is the floor, not C++23 - chosen for coroutines
   ([`docs/cli-tooling/01-...`](../cli-tooling/01-compilation-pipeline.md)).
 * **No exceptions across module boundaries.** Every stage reports problems
   through a `DiagnosticSink`; it does not throw and does not print. Functions
   that can fail return `nullptr`, `bool`, or a status, never a thrown error.
-  (Generated cp3 code may use C++ exceptions — that is a codegen concern and is
+  (Generated cp3 code may use C++ exceptions - that is a codegen concern and is
   invisible to the compiler's own modules.)
 * **Plain structs + `unique_ptr` ABI.** AST/semantic data are plain structs with
   public fields; tree ownership is `std::unique_ptr`. There are no private
@@ -281,13 +281,13 @@ These headers are the stable contract every stage codes against. One line each:
 | `cp3/source.hpp` | `SourcePos`, `SourceSpan`, `SourceFile`, `SourceManager`; 1-based line/col, 0-based byte offsets. |
 | `cp3/token.hpp` | `TokenKind` (the complete token set), `Token`, `TokenStream`. |
 | `cp3/ast.hpp` | The complete Beta One AST and the `CP3_AST_NODE_LIST` node registry. |
-| `cp3/visitor.hpp` | `AstVisitor`/`ConstAstVisitor`, `dispatch()`, `AstWalker` — generated from the node registry. |
+| `cp3/visitor.hpp` | `AstVisitor`/`ConstAstVisitor`, `dispatch()`, `AstWalker` - generated from the node registry. |
 | `cp3/diagnostic.hpp` | `Severity`, `Diagnostic`, `DiagnosticSink`, `CollectingDiagnosticSink`, `NullDiagnosticSink`. |
 | `cp3/diagnostic_codes.hpp` | The canonical `CP3xxx` code table, grouped by owning stage. |
 | `cp3/module.hpp` | `ModuleResolution`, `PreludeKind`, `CompilationUnit`, `ModuleDependency`, `ModuleGraph`. |
 | `cp3/options.hpp` | `TypeSystem`, `BuildProfile`, `CompileOptions`. |
 | `cp3/types.hpp` | `TypeKind`, `Type` (the cp3 value-type model) + `typeKindName`/`describe`/`isPrimitive`/`isAssignable`/`unify`. |
-| `cp3/analysis.hpp` | `SymbolInfo`, `FunctionInfo`, `SemaResult` — sema's nodeId-keyed side tables. |
+| `cp3/analysis.hpp` | `SymbolInfo`, `FunctionInfo`, `SemaResult` - sema's nodeId-keyed side tables. |
 | `cp3/version.hpp` | `kCompilerName`, `kVersion`, `kVersionStage`, `versionString()`. |
 | `cp3/lexer.hpp` | `Lexer` (scan a `SourceFile` into a `TokenStream`). |
 | `cp3/parser.hpp` | `Parser` (parse a `TokenStream` into a `Program`). |
@@ -326,14 +326,14 @@ To add a node:
 2. Define `struct MyNewNode : <base> { ... }` whose constructor calls the base
    with `NodeKind::MyNewNode`.
 3. That is all. `nodeKindName()`, `AstVisitor`, `ConstAstVisitor`, and both
-   `dispatch()` overloads pick it up automatically — there is no second list to
+   `dispatch()` overloads pick it up automatically - there is no second list to
    update and no way for them to drift.
 
 `<base>` is `Expr`, `Stmt`/`Decl`, `TypeNode`, `ClassMember`,
 `SignatureMember`, or `Node`. Because `ast.hpp` is a frozen header, adding a
 node requires **lead sign-off**; if the build fails after adding one, the cause
 is almost always a switch that was hand-written instead of generated from the
-registry — fix the consumer, not the registry.
+registry - fix the consumer, not the registry.
 
 ---
 
@@ -393,7 +393,7 @@ the compiler is still a scaffold) and `1` if any case failed.
 
 ## 11. Known build warnings
 
-* `src/common/src/token.cpp` — `tokenKindName()` returns the string literal
+* `src/common/src/token.cpp` - `tokenKindName()` returns the string literal
   `"??="`, which GCC reports as a trigraph (`-Wtrigraphs`). Harmless (GCC
   ignores trigraphs by default); it is left as-is because `token.cpp` is a frozen
   implementation. Revisit only if a toolchain is configured with `-trigraphs`.
@@ -402,7 +402,7 @@ the compiler is still a scaffold) and `1` if any case failed.
 
 ## 12. Milestone 1 scope
 
-**Goal:** a minimal but *real* end-to-end slice — take a `.cp3` file all the way
+**Goal:** a minimal but *real* end-to-end slice - take a `.cp3` file all the way
 to a running native executable. Nothing fancier than that earns its keep yet.
 
 In scope:
@@ -426,7 +426,7 @@ harness flips from "42 skipped" to real pass/fail.
 Out of scope for M1 (explicitly deferred): classes/interfaces/generics, async
 and `await`, the memory model and `weak`, preludes and module resolution beyond
 `std/console`, `parallel.*` / `worker`, native interop, and the full diagnostics
-translation subsystem. The compiler must not choke on them — it should report a
+translation subsystem. The compiler must not choke on them - it should report a
 "not implemented yet" diagnostic rather than crash.
 
 ---
@@ -434,7 +434,7 @@ translation subsystem. The compiler must not choke on them — it should report 
 ## 13. Open questions for the lead
 
 These are genuine ambiguities found while scaffolding. **Nothing here has been
-guessed silently** — each is a place where the spec/docs do not decide a
+guessed silently** - each is a place where the spec/docs do not decide a
 question this code must answer, or where two parts of the frozen surface
 disagree. Until a lead answers, the scaffold takes the most conservative
 non-committal position.
@@ -448,19 +448,19 @@ re-litigated by stage agents.
 
 | # | Question (short) | Decision |
 | --- | --- | --- |
-| 1 | Compiler internal architecture / IR | **D1** — no IR; AST + nodeId side tables only. |
-| 2 | Canonical machine-readable diagnostic line | **D2** — `<path>:<line>:<col>: <severity>: <CODE>: <message>`. |
-| 3 | Command name `cp3` vs `cp3c` | **D3** — binary is `cp3c`; `cp3` is a future frontend alias. |
-| 4 | Module-specifier classification | **D4** — `./`,`../`,`.cp3`→Local; `std/`→Std; `cpp/`→Cpp; `native`→Native; else Package. |
-| 5 | Prelude graph semantics | **D5** — file-level Same→Strong→Weak; cross-folder composition deferred. |
-| 6 | `nodeId` allocation contract | **D6** — 1-based, pre-order, `Program` root numbered, `0` = unassigned. |
-| 7 | Template-literal re-lexing hook | **D7** — lexer scans templates flat; `rescanTemplateContinuation()` is obsolete. |
-| 8 | `+` overloading | **D8** — strict; only `number+number`/`string+string`; else `CP3411`. |
-| 9 | `number` printing format | **D9** — ECMAScript `Number::toString`, exact. |
-| 10 | Entry point / top-level execution | **D10** — top-level statements become a synthesized `int main()`. |
-| 11 | `console.log` backing | **D11** — cp3 runtime with standard C++; no `fmt` in M1. |
-| 12 | Toolchain order vs. environment | **D12** — documented per-platform order, then `g++`/`clang++` fallback. |
-| 13 | Object-property shorthand representation | **D13** — `{ a }` stores `value = Identifier("a")`; `nullptr` is recovery-only. |
+| 1 | Compiler internal architecture / IR | **D1** - no IR; AST + nodeId side tables only. |
+| 2 | Canonical machine-readable diagnostic line | **D2** - `<path>:<line>:<col>: <severity>: <CODE>: <message>`. |
+| 3 | Command name `cp3` vs `cp3c` | **D3** - binary is `cp3c`; `cp3` is a future frontend alias. |
+| 4 | Module-specifier classification | **D4** - `./`,`../`,`.cp3`→Local; `std/`→Std; `cpp/`→Cpp; `native`→Native; else Package. |
+| 5 | Prelude graph semantics | **D5** - file-level Same→Strong→Weak; cross-folder composition deferred. |
+| 6 | `nodeId` allocation contract | **D6** - 1-based, pre-order, `Program` root numbered, `0` = unassigned. |
+| 7 | Template-literal re-lexing hook | **D7** - lexer scans templates flat; `rescanTemplateContinuation()` is obsolete. |
+| 8 | `+` overloading | **D8** - strict; only `number+number`/`string+string`; else `CP3411`. |
+| 9 | `number` printing format | **D9** - ECMAScript `Number::toString`, exact. |
+| 10 | Entry point / top-level execution | **D10** - top-level statements become a synthesized `int main()`. |
+| 11 | `console.log` backing | **D11** - cp3 runtime with standard C++; no `fmt` in M1. |
+| 12 | Toolchain order vs. environment | **D12** - documented per-platform order, then `g++`/`clang++` fallback. |
+| 13 | Object-property shorthand representation | **D13** - `{ a }` stores `value = Identifier("a")`; `nullptr` is recovery-only. |
 
 ### Original questions (provenance only)
 
@@ -475,11 +475,11 @@ re-litigated by stage agents.
 
 2. **Canonical machine-readable diagnostic line format.**
    [`docs/cli-tooling/02-...`](../cli-tooling/02-error-diagnostics-source-mapping.md)
-   shows human-oriented examples (`src/utils.cp3:14:8 — type mismatch: ...`) that
+   shows human-oriented examples (`src/utils.cp3:14:8 - type mismatch: ...`) that
    carry **no error code and no severity token**, yet the frozen test schema
    asserts `{ code, line, col, contains }` and `diagnostic_codes.hpp` defines
    `CP3xxx` codes. The scaffold invents and documents the format
-   `<path>:<line>:<col>: <severity>: <CODE>: <message>` — the lead must confirm
+   `<path>:<line>:<col>: <severity>: <CODE>: <message>` - the lead must confirm
    it (or replace it), because every error test depends on it.
 
 3. **Command name: `cp3` or `cp3c`?**
@@ -492,7 +492,7 @@ re-litigated by stage agents.
    `ModuleResolution` (`Local`/`Std`/`Package`/`Native`/`Cpp`/`Unknown`) exists,
    but §18 gives no algorithm mapping a specifier to a category. In particular:
    is every bare specifier (`"mathkit"`) automatically `Package`, and how should
-   `import "cpp/iostream" as io` classify — `Cpp` or `Native`? The lead should
+   `import "cpp/iostream" as io` classify - `Cpp` or `Native`? The lead should
    pin the exact rule before module resolution is implemented.
 
 5. **Prelude graph semantics across folders.**
@@ -520,7 +520,7 @@ re-litigated by stage agents.
 8. **`+` overloading: string concatenation vs mixed-type arithmetic.**
    §23 says mixed-type arithmetic "requires explicit conversion"
    (`CP3411`), but the `string_concat` case (and JS parity, which the spec
-   repeatedly promises) implies `"a" + "b"` — and likely `"x" + 1` — must work.
+   repeatedly promises) implies `"a" + "b"` - and likely `"x" + 1` - must work.
    Is `+` with one string operand special-cased (JS semantics), or is
    `string + number` an error? This is a real semantic fork for M1's binary-op
    handling.
@@ -568,6 +568,6 @@ field or a function the frozen header does not have, that is an **open question
 for the lead** (§13), not a license to edit `src/common/include/cp3/**`. The two
 sanctioned extension mechanisms are:
 
-* **New AST nodes** — one line in `CP3_AST_NODE_LIST` (§8).
-* **New diagnostic codes** — appended inside an existing stage range in
+* **New AST nodes** - one line in `CP3_AST_NODE_LIST` (§8).
+* **New diagnostic codes** - appended inside an existing stage range in
   `diagnostic_codes.hpp` (never renumbered).

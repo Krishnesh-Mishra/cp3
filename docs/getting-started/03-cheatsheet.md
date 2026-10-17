@@ -11,10 +11,10 @@ One page. Keep it open while you port code.
 | Type inference | `let age = 18;` → `number` |
 | Functions | Arrow fns, defaults, rest (`...args`), destructuring, overloading by type |
 | Classes | `public`/`private`/`protected`, `static`, `extends`, abstract, `this`, getters/setters |
-| Interfaces | **Structural** — no `implements` needed |
+| Interfaces | **Structural** - no `implements` needed |
 | `switch` fall-through, `for`/`for...of`/`for...in`, `while`/`do...while` | Unchanged |
 | `==`/`===`, `?.`, `??`, ternary, bitwise, spread | Unchanged |
-| Truthy/falsy coercion | `0`, `""`, `null`, `undefined`, `NaN` falsy — like JS |
+| Truthy/falsy coercion | `0`, `""`, `null`, `undefined`, `NaN` falsy - like JS |
 | `try`/`catch`/`finally`, `throw` | Same model, no exception hierarchy |
 | `async`/`await`, `Promise.all`/`race`/`allSettled` | Same event-loop model |
 | Enums | Number- and string-backed |
@@ -30,7 +30,7 @@ One page. Keep it open while you port code.
 | --- | --- | --- |
 | `any` | `unknown` + narrow | `any` doesn't exist |
 | `const u = {}; u.x = 1;` | Declare the shape: `class U { x: number }` | Plain objects have a fixed shape |
-| `delete obj.prop` | — | Banned |
+| `delete obj.prop` | - | Banned |
 | `obj["dynamicKey"]` to build a dict | `import { Map } from "std/collections"` | No index-signature object type |
 | `arguments` | Rest params `...args` | Banned |
 | `for (k in plainObject)` | `Map`/`Set`, or `Object.keys/values/entries` | Banned on plain objects |
@@ -38,7 +38,7 @@ One page. Keep it open while you port code.
 | `count + ""` | `String(count)` | Mixed-type `+` is a compile error |
 | `str[i]` as a character | `charAt(i)` for a character | Strings are UTF-8; `str[i]` is a byte |
 | `sort()` string-coercing | `sort()` is numeric & stable | Type-aware |
-| `function*` / `yield`, decorators | — | Out of v1 |
+| `function*` / `yield`, decorators | - | Out of v1 |
 | Unhandled promise rejection | Exits the process | Attach `.catch` or `try`/`catch` |
 | `fetch` throwing on 4xx/5xx | Check `res.status` yourself | Browser-like |
 
@@ -47,9 +47,9 @@ One page. Keep it open while you port code.
 | Thing | Do you need it on day one? |
 | --- | --- |
 | `unknown` as the safe `any` | Yes |
-| Explicit unions `(number \| string)` | Yes — this is your "one of a few types" |
-| `ref` / `weak` keywords | **No** — advanced reference handling; skip [§10](../language-spec/10-memory-management.md)–[§12](../language-spec/12-pointers-references.md) for now |
-| Configurable type vocabulary (`"typeSystem": "rust" \| "cpp"`) | No — default is TypeScript |
+| Explicit unions `(number \| string)` | Yes - this is your "one of a few types" |
+| `ref` / `weak` keywords | **No** - advanced reference handling; skip [§10](../language-spec/10-memory-management.md)-[§12](../language-spec/12-pointers-references.md) for now |
+| Configurable type vocabulary (`"typeSystem": "rust" \| "cpp"`) | No - default is TypeScript |
 | Automatic memory management, native binary output | You get it for free; you don't operate it |
 
 ## Standard library quick map
@@ -98,4 +98,4 @@ my-app/
 
 ---
 
-**Full references:** [Day 1 — the language](01-day-1-the-language.md) · [Day 2 — stdlib & CLI](02-day-2-stdlib-and-cli.md) · [language spec](../language-spec/00-overview.md) · [stdlib §04](../standard-library/04-imported-std-modules.md) · [CLI §1](../cli-tooling/01-compilation-pipeline.md)
+**Full references:** [Day 1 - the language](01-day-1-the-language.md) · [Day 2 - stdlib & CLI](02-day-2-stdlib-and-cli.md) · [language spec](../language-spec/00-overview.md) · [stdlib §04](../standard-library/04-imported-std-modules.md) · [CLI §1](../cli-tooling/01-compilation-pipeline.md)

@@ -10,5 +10,5 @@ function createPerson(): Person {
 }
 ```
 
-No C++-style declaration complexity; the compiler determines the efficient underlying representation. Function overloading (multiple functions with the same name, different parameter types) is supported directly — C++ already handles this natively.
+No C++-style declaration complexity; the compiler determines the efficient underlying representation. Function overloading (multiple functions with the same name, different parameter types) is supported directly - C++ already handles this natively.
 

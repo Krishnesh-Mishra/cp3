@@ -1,6 +1,6 @@
 # cp3c examples
 
-Nine small, self-contained C+++ programs — the ones to read first after the
+Nine small, self-contained C+++ programs - the ones to read first after the
 language overview. Each lives in its own folder as a single `main.cp3`.
 
 Run any of them from the repo root with `cp3c run <path>`; the command builds
@@ -25,7 +25,7 @@ is the next step up (middleware + live counters + JSON in/out + a typed body).
 ## What runs today
 
 Checked against the `build/bin/cp3c.exe` on this machine (2026-10-17,
-`cp3c 0.1.0-beta.1`, after the async/timer wave landed) — run each of these;
+`cp3c 0.1.0-beta.1`, after the async/timer wave landed) - run each of these;
 they print and exit cleanly:
 
 * `basics/hello-world` -> `Hello, world!`
@@ -39,7 +39,7 @@ std-lib features that are still landing, so `cp3c run` reports `CP3002: not
 implemented yet` today:
 
 * `games/*` need **builtin method calls** (`Math.random`, string methods),
-  **`console.input`**, and `parseInt` — the member/method wave plus the
+  **`console.input`**, and `parseInt` - the member/method wave plus the
   grammar tail.
 * `servers/*` need **`std/network`** plus method calls, interfaces and async
   middleware/handlers.
@@ -59,7 +59,7 @@ labeled as such.
 
 * **Range `..` endpoint inclusivity is not pinned anywhere.** The only usage in
   the spec is `parallel.for(0..numbers.length, ...)`
-  (docs/language-spec/13), which is only coherent as *end-exclusive* — an
+  (docs/language-spec/13), which is only coherent as *end-exclusive* - an
   inclusive end would index one past the array. `parallel-sum` follows that
   reading.
 * **`console.input(prompt?)` prompt display is unspecified.** Whether the
@@ -68,7 +68,7 @@ labeled as such.
   instructions, so their output stays reproducible for a given input stream.
 * **`if` / `else if` / `else` where every branch returns** is currently
   diagnosed as a (false) `CP3504: may fall off the end of its body`. The
-  examples use early returns plus a final return instead of the chain —
+  examples use early returns plus a final return instead of the chain -
   spec-correct either way.
 * **Servers** are written against the pinned `std/network` surface in
   STDLIB-README: `createServer()`, `.use(async (req, res, next) => ...)`,

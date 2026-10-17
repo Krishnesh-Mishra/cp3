@@ -1,4 +1,4 @@
-# C+++ (`.cp3`) — Documentation
+# C+++ (`.cp3`) - Documentation
 
 A browsable, section-by-section breakdown of the C+++ language, its CLI and tooling, and its standard library.
 
@@ -6,16 +6,16 @@ A browsable, section-by-section breakdown of the C+++ language, its CLI and tool
 
 ## Start Here
 
-New from TypeScript? Get productive in cp3 in about two days — what stays the same, what changes, what's new, plus the std library and CLI commands you actually need.
+New from TypeScript? Get productive in cp3 in about two days - what stays the same, what changes, what's new, plus the std library and CLI commands you actually need.
 
 - [From TypeScript to C+++ in two days](getting-started/00-overview.md)
-- [Day 1 — the language](getting-started/01-day-1-the-language.md)
-- [Day 2 — the std library & the CLI](getting-started/02-day-2-stdlib-and-cli.md)
+- [Day 1 - the language](getting-started/01-day-1-the-language.md)
+- [Day 2 - the std library & the CLI](getting-started/02-day-2-stdlib-and-cli.md)
 - [TypeScript → C+++ cheat sheet](getting-started/03-cheatsheet.md)
 
 ## Language Spec
 
-The C+++ core language — syntax, the type system, memory model, concurrency, classes, and everything else you write in a `.cp3` file.
+The C+++ core language - syntax, the type system, memory model, concurrency, classes, and everything else you write in a `.cp3` file.
 
 - [C+++ (`.cp3`)](language-spec/00-overview.md)
 - [Status](language-spec/00a-status.md)
@@ -46,26 +46,26 @@ The C+++ core language — syntax, the type system, memory model, concurrency, c
 
 ## CLI & Tooling
 
-The `cp3` command-line tool itself — the build/run pipeline, diagnostics and crash reporting, the package manager, the `.cp3pak` format, and native-library bindgen.
+The `cp3` command-line tool itself - the build/run pipeline, diagnostics and crash reporting, the package manager, the `.cp3pak` format, and native-library bindgen.
 
-- [C+++ (`.cp3`) — CLI, Compiler & Tooling Reference](cli-tooling/00-overview.md)
+- [C+++ (`.cp3`) - CLI, Compiler & Tooling Reference](cli-tooling/00-overview.md)
 - [Status](cli-tooling/00a-status.md)
 - [1. Compilation pipeline](cli-tooling/01-compilation-pipeline.md)
 - [2. Error diagnostics & source mapping](cli-tooling/02-error-diagnostics-source-mapping.md)
 - [3. Internal library wrapping](cli-tooling/03-internal-library-wrapping.md)
 - [4. Package manager](cli-tooling/04-package-manager.md)
 - [5. Package format: authoring & `.cp3pak`](cli-tooling/05-package-format-authoring-cp3pak.md)
-- [Post-beta-one roadmap (not beta-one requirements — captured so good thinking isn't lost)](cli-tooling/05a-post-beta-one-roadmap-not-beta-one-requirements-captured.md)
+- [Post-beta-one roadmap (not beta-one requirements - captured so good thinking isn't lost)](cli-tooling/05a-post-beta-one-roadmap-not-beta-one-requirements-captured.md)
 - [6. Open tooling questions](cli-tooling/06-open-tooling-questions.md)
 
 ## Standard Library
 
-The `std/*` modules — `console`, `JSON`, `Math`, `fs`, `network`, `Date`, `process`, `path`, `os`, `events`, `crypto`, `env`, `Map`/`Set`, `buffer` — with exact function signatures.
+The `std/*` modules - `console`, `JSON`, `Math`, `fs`, `network`, `Date`, `process`, `path`, `os`, `events`, `crypto`, `env`, `Map`/`Set`, `buffer` - with exact function signatures.
 
-- [C+++ (.cp3) — Standard Library](standard-library/00-overview.md)
+- [C+++ (.cp3) - Standard Library](standard-library/00-overview.md)
 - [Status](standard-library/01-status.md)
 - [Architecture (see `README.md` §20 for full detail)](standard-library/02-architecture-see-readme-md-20-for-full-detail.md)
-- [Built into the language — no import needed](standard-library/03-built-into-the-language-no-import-needed.md)
+- [Built into the language - no import needed](standard-library/03-built-into-the-language-no-import-needed.md)
 - [Imported std modules](standard-library/04-imported-std-modules.md)
 - [Explicitly deferred / out of scope](standard-library/05-explicitly-deferred-out-of-scope.md)
 - [Streaming: fs and process stay separate implementations](standard-library/06-streaming-fs-and-process-stay-separate-implementations.md)

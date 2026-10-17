@@ -4,7 +4,7 @@
 `tools/lint_layout.py` (run via the CMake `lint` target). This is a compiler
 meant to be maintained for years by many engineers; it must read like a
 professional C++ codebase, not a generated blob. Small, single-purpose units are
-how defects stay findable — **structure is part of correctness.**
+how defects stay findable - **structure is part of correctness.**
 
 Specifications: `docs/`. Decisions: `DECISIONS.md`. Module map: `ARCHITECTURE.md`.
 
@@ -15,7 +15,7 @@ Specifications: `docs/`. Decisions: `DECISIONS.md`. Module map: `ARCHITECTURE.md
 * **C++20**, no compiler extensions (`CMAKE_CXX_EXTENSIONS OFF`).
 * **No exceptions across module boundaries.** A stage reports through
   `DiagnosticSink`; it never throws and never prints. (Generated cp3 code may use
-  exceptions — that is a codegen concern, invisible to the compiler's modules.)
+  exceptions - that is a codegen concern, invisible to the compiler's modules.)
 * **RAII only.** No raw `new`/`delete`; no owning raw pointers. Use values,
   `std::unique_ptr`, `std::vector`. Pass by value or `const&`.
 * **No third-party libraries.** Standard C++20 only.
@@ -38,7 +38,7 @@ A file at the cap is split **by concern, not by line count.** A genuine exceptio
 (e.g. a data-definition header) must carry an explicit suppression:
 
 ```cpp
-// cp3-lint: allow-file-size — <required reason>
+// cp3-lint: allow-file-size - <required reason>
 ```
 
 Suppressions are for interface/data headers only. **Logic files are never
@@ -51,7 +51,7 @@ split, not suppressed).
 src/<module>/
   CMakeLists.txt          # this module owns its target + source list
   include/cp3/<name>.hpp  # the module's PUBLIC boundary (frozen)
-  src/<unit>.cpp          # implementation — one concern per file
+  src/<unit>.cpp          # implementation - one concern per file
   src/detail/<helper>.h   # PRIVATE headers (never included cross-module)
   tests/<unit>_test.cpp   # unit tests (lightweight, no third party)
 ```
@@ -62,10 +62,10 @@ src/<module>/
   another module.
 * **One primary concern per file**; the file name is the unit name
   (`snake_case`). A 2,700-line translation unit is a bug in the layout.
-* Adding a file means editing **only that module's `CMakeLists.txt`** — never a
+* Adding a file means editing **only that module's `CMakeLists.txt`** - never a
   shared root file. This is what lets modules be worked on in parallel.
 
-## 4. Naming (codified from the existing code — keep it consistent)
+## 4. Naming (codified from the existing code - keep it consistent)
 
 | Entity | Convention | Example |
 | --- | --- | --- |
@@ -84,7 +84,7 @@ src/<module>/
 * Every file opens with a banner: purpose, ownership, and the spec/decision
   references it implements.
 * Public headers: Doxygen `///` on every public type and function.
-* No commented-out code — delete it; git remembers.
+* No commented-out code - delete it; git remembers.
 * `TODO(<owner>):` with a concrete owner, never a bare `TODO`.
 
 ## 6. Error handling & diagnostics
@@ -96,7 +96,7 @@ src/<module>/
 
 ## 7. Testing
 
-* Each module ships `src/<module>/tests/*_test.cpp` — a tiny assert-based harness
+* Each module ships `src/<module>/tests/*_test.cpp` - a tiny assert-based harness
   (no third-party framework), runnable by direct compile.
 * The conformance corpus `tests/cases/` (843 real cases + 110 ambiguity markers)
   is the **integration oracle**; unit tests cover internals.
@@ -106,21 +106,21 @@ src/<module>/
 Each module below is split into the listed units. This is the target layout; the
 refactor passes bring existing code to it.
 
-* **common** — already small: `source.cpp`, `diagnostic.cpp`, `token.cpp`,
+* **common** - already small: `source.cpp`, `diagnostic.cpp`, `token.cpp`,
   `ast.cpp`, `module.cpp`, `types.cpp`, `version.cpp` (keep).
-* **lexer** — `lexer.cpp` (entry/driver), `scanner.cpp/.h` (cursor, trivia,
+* **lexer** - `lexer.cpp` (entry/driver), `scanner.cpp/.h` (cursor, trivia,
   positions, recovery), `numbers.cpp`, `strings.cpp`, `templates.cpp`,
   `regexp.cpp`, `keywords.cpp/.h` (keyword table).
-* **parser** — `parser.cpp` (entry/orchestration), `statements.cpp`,
+* **parser** - `parser.cpp` (entry/orchestration), `statements.cpp`,
   `expressions.cpp`, `declarations.cpp`, `types.cpp`, `patterns.cpp`,
   `tokens.cpp/.h` (cursor + error recovery helpers), `precedence.h`.
-* **sema** — `semantic_analyzer.cpp` (entry), `scopes.cpp/.h`, `type_check.cpp`,
+* **sema** - `semantic_analyzer.cpp` (entry), `scopes.cpp/.h`, `type_check.cpp`,
   `expr_check.cpp`, `stmt_check.cpp`, `symbols.cpp`, `banned.cpp`.
-* **codegen** — `code_generator.cpp` (entry), `emit_expr.cpp`, `emit_stmt.cpp`,
+* **codegen** - `code_generator.cpp` (entry), `emit_expr.cpp`, `emit_stmt.cpp`,
   `emit_decl.cpp`, `cpp_writer.cpp/.h` (indent buffer), `mangle.cpp/.h`.
-* **runtime** — already multi-file; keep the policy (headers declare, `.cpp`
+* **runtime** - already multi-file; keep the policy (headers declare, `.cpp`
   defines).
-* **cli** — already multi-file; move any substantial logic out of
+* **cli** - already multi-file; move any substantial logic out of
   `include/private/*.hpp` into `.cpp` (headers declare, never define).
 
 ## 9. Enforcement

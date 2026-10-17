@@ -2,13 +2,13 @@
 
 ## `switch`
 
-Exact JS behavior — fall-through by default, `break` required to stop it:
+Exact JS behavior - fall-through by default, `break` required to stop it:
 
 ```cp3
 switch (x) {
   case 1:
     console.log("one");
-    // no break — falls through into case 2
+    // no break - falls through into case 2
   case 2:
     console.log("two");
     break;
@@ -27,19 +27,19 @@ for (let key in object) { }         // loop over keys/indices
 
 ## `while` and `do...while`
 
-Both kept, mapping directly to C++'s own `while`/`do...while` — no new engineering, same as the `for` variants above:
+Both kept, mapping directly to C++'s own `while`/`do...while` - no new engineering, same as the `for` variants above:
 
 ```cp3
-while (condition) { }          // standard — checks before each iteration
+while (condition) { }          // standard - checks before each iteration
 
 do {
   // ...
 } while (condition);            // runs the body once first, then checks
 ```
 
-## Custom iterables — `for...of` on your own classes
+## Custom iterables - `for...of` on your own classes
 
-A user-defined class can make itself work with `for...of` by exposing `begin()`/`end()` methods, matching C++'s own range-based `for` mechanism directly — not a custom bolt-on feature:
+A user-defined class can make itself work with `for...of` by exposing `begin()`/`end()` methods, matching C++'s own range-based `for` mechanism directly - not a custom bolt-on feature:
 
 ```cp3
 class LinkedList<T> {
@@ -48,14 +48,14 @@ class LinkedList<T> {
 }
 
 let list = new LinkedList<number>();
-for (let item of list) { }   // works — compiles to real C++ range-based for underneath
+for (let item of list) { }   // works - compiles to real C++ range-based for underneath
 ```
 
-This maps directly to C++'s existing, mature `begin()`/`end()` + iterator convention (the same mechanism every STL container already uses) — no new engineering required, just exposing what C++ already provides through a cp3-friendly method pair.
+This maps directly to C++'s existing, mature `begin()`/`end()` + iterator convention (the same mechanism every STL container already uses) - no new engineering required, just exposing what C++ already provides through a cp3-friendly method pair.
 
 ## Destructuring
 
-Full JS/TS destructuring feature set — array and object, renaming, default values, rest pattern, and destructuring in both variable declarations and function parameters:
+Full JS/TS destructuring feature set - array and object, renaming, default values, rest pattern, and destructuring in both variable declarations and function parameters:
 
 ```cp3
 let [a, b] = [1, 2];
@@ -77,7 +77,7 @@ function sum(...nums: number[]) { }  // rest
 myFunc(...args);                     // spread into call
 ```
 
-## Arrays stay dense — no true "holes"
+## Arrays stay dense - no true "holes"
 
 Unlike JS's sparse arrays (a genuine missing slot, not even `undefined`), cp3 arrays are always dense: any unfilled slot is explicitly `null`/`undefined` (a real stored value, `T | null` / `T | undefined`), and `.length` always matches the actual number of stored slots. If person directly creates a array with million objects where middle ones he didnt defined then they will be filled with `null`.
 
