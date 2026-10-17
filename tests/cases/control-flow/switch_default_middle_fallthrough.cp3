@@ -1,0 +1,3 @@
+import console from "std/console";
+let x = 9;
+switch (x) { case 1: console.log("one"); default: console.log("def"); case 2: console.log("two"); }

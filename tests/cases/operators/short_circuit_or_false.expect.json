@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "called\ntrue\n",
+  "exitCode": 0
+}

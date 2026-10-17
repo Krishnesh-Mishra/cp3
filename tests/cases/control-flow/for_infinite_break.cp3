@@ -1,0 +1,4 @@
+import console from "std/console";
+let n = 0;
+for (;;) { n = n + 1; if (n === 3) { break; } }
+console.log(n);

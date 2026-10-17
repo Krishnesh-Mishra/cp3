@@ -1,0 +1,4 @@
+import console from "std/console";
+let x: number | null = null;
+console.log(x === undefined);
+console.log(x);

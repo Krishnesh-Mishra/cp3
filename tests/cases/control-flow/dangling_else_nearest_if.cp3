@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = true;
+let b = false;
+if (a) if (b) console.log("ab"); else console.log("a-not-b");

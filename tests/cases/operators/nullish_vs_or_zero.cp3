@@ -1,0 +1,4 @@
+import console from "std/console";
+let z = 0;
+console.log(z ?? 5);
+console.log(z || 5);

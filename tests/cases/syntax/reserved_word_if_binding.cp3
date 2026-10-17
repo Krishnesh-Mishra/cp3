@@ -1,0 +1,2 @@
+import console from "std/console";
+let if = 1;

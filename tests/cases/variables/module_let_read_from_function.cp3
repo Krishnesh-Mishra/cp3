@@ -1,0 +1,4 @@
+import console from "std/console";
+let g = 5;
+function f(): number { return g; }
+console.log(f());

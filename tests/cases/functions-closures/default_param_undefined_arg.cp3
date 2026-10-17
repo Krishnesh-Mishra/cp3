@@ -1,0 +1,3 @@
+import console from "std/console";
+function f(a: number = 7): number { return a; }
+console.log(f(undefined));

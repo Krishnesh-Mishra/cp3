@@ -1,0 +1,10 @@
+import console from "std/console";
+let f0: () => number = (): number => -1;
+let f1: () => number = (): number => -1;
+let f2: () => number = (): number => -1;
+for (let i = 0; i < 3; i++) {
+  if (i === 0) { f0 = (): number => i; }
+  else if (i === 1) { f1 = (): number => i; }
+  else { f2 = (): number => i; }
+}
+console.log(`${f0()} ${f1()} ${f2()}`);

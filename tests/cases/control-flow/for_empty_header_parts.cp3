@@ -1,0 +1,4 @@
+import console from "std/console";
+let i = 0;
+for (; i < 2;) { i = i + 1; }
+console.log(i);

@@ -1,0 +1,4 @@
+import console from "std/console";
+function double(n: number): number { return n * 2; }
+function apply(f: (n: number) => number, x: number): number { return f(x); }
+console.log(apply(double, 21));

@@ -1,0 +1,6 @@
+import console from "std/console";
+function find(): number {
+  for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) { if (i === 1 && j === 2) { return i * 10 + j; } } }
+  return -1;
+}
+console.log(find());

@@ -1,0 +1,5 @@
+import console from "std/console";
+let x = 9;
+let r = "none";
+if (x === 1) { r = "one"; } else if (x === 2) { r = "two"; } else if (x === 9) { r = "nine"; }
+console.log(r);

@@ -1,0 +1,4 @@
+import console from "std/console";
+function adder(n: number): (x: number) => number { return (x: number): number => x + n; }
+let add5 = adder(5);
+console.log(add5(2));

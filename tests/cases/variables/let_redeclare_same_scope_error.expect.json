@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3xxxx",
+    "line": 3,
+    "col": 1,
+    "contains": "duplicate"
+  }
+}

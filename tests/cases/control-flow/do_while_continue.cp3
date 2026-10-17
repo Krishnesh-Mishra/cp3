@@ -1,0 +1,5 @@
+import console from "std/console";
+let i = 0;
+let s = 0;
+do { i = i + 1; if (i % 2 === 0) { continue; } s = s + i; } while (i < 5);
+console.log(s);
