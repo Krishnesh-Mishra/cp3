@@ -1,0 +1,35 @@
+import console from "std/console";
+
+// compute-multi (cp3 entry) -- the compute-single workload split across all
+// cores via parallel.reduce (spec 13).
+//
+// parallel.reduce gives every worker its own private accumulator and merges
+// the partials safely at the end, which is exactly the capture-safety rule
+// for combining results: nothing is shared mutably, so nothing needs
+// synchronizing. The range 1..1000001 is end-exclusive, i.e. 1..1,000,000
+// (the same reading parallel-sum in examples/ uses).
+//
+// Prints the same single integer as every other entry (single or multi), so
+// the outputs cross-check each other.
+//
+// NOT RUNNABLE TODAY: parallel.* codegen is not implemented in the current
+// compiler (CP3002: "CallExpr ('parallel.*') is not implemented in M1"), so
+// the bench runner records that diagnostic instead of a timing. The entry is
+// otherwise written to the frozen spec.
+
+function collatzSteps(start: number): number {
+  let n = start;
+  let steps = 0;
+  while (n !== 1) {
+    if (n % 2 === 0) {
+      n = n / 2;
+    } else {
+      n = 3 * n + 1;
+    }
+    steps = steps + 1;
+  }
+  return steps;
+}
+
+const total = parallel.reduce(1..1000001, 0, (sum, i) => sum + collatzSteps(i));
+console.log(total);

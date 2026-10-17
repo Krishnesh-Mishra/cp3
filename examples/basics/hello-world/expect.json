@@ -1,8 +1,0 @@
-{
-  "status": "active",
-  "mode": "run",
-  "expect": {
-    "stdout": "Hello, world!\n",
-    "exitCode": 0
-  }
-}

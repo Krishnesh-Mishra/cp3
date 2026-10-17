@@ -7,12 +7,12 @@ import Math from "std/math";
 //  * Math.random() is std/math (STDLIB-README "Math"): a number in [0, 1).
 //  * stdin is read through console.input(), a Promise (STDLIB-README
 //    "console"); on EOF it resolves with an empty string. It is called
-//    without the optional prompt argument so that the transcript stays
-//    reproducible when stdin is closed (tools/run_examples.py runs it that
-//    way and the EOF path below is what it observes).
+//    without the optional prompt argument so that a run with stdin closed
+//    prints a reproducible EOF transcript (the path below).
 //  * parseInt is a core-language global builtin, no import needed.
 //
-// Waiting on async/await + std/math, so it is `pending` today.
+// Needs async/await + std/math, which the current compiler build does not
+// implement yet (CP3002), so this one does not compile today.
 
 async function main(): Promise<void> {
   const secret = Math.floor(Math.random() * 100) + 1;

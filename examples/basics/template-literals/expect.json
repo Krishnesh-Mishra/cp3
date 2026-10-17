@@ -1,8 +1,0 @@
-{
-  "status": "active",
-  "mode": "run",
-  "expect": {
-    "stdout": "Order: 3 x mechanical keyboard\nSubtotal: $72.75\nShipping: $7.5\nTotal:    $80.25\n\nThanks for shopping with cp3!\n",
-    "exitCode": 0
-  }
-}

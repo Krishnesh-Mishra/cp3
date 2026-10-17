@@ -27,6 +27,13 @@ health-server + compute benchmarks) become fully runnable as their features
 land (servers wait on `std/network`; multi-thread entries on `parallel.*`; the
 games on wave 1 — wave 4 already landed).
 
+**Status: the showcase rewrite + the competitions suite are landed (D59/D60).**
+All tables in `examples/competitions/README.md` are real measured runs
+(2026-10-17); cp3 `compute-single` already runs (lead reproduced `131434424`
+on the post-wave-4 canonical binary — ~1.2 s vs cpp 0.2 s on this machine),
+and the two pending cp3 rows (`health-server`, `compute-multi`) auto-fill when
+`std/network` and `parallel.*` land. `async/timers-demo` runs (wave 4).
+
 ## Ranked waves (cases-unblocked × dependency-criticality)
 
 | # | Wave | First-blocker cases (latent) | Key dependency |

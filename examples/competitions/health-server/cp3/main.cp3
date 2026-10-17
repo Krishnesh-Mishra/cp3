@@ -1,0 +1,41 @@
+import { createServer } from "std/network";
+import console from "std/console";
+
+// health-server (cp3 entry) -- written to the frozen std/network API
+// (STDLIB-README "network"): createServer(), .get(), res.text(), .use() as a
+// 404 fallback, .listen(port, cb). Handlers may be synchronous; there is no
+// per-request state here to share.
+//
+// Contract, identical in every language entry:
+//   GET /healthz  -> 200 text/plain "ok"
+//   GET /         -> 200 text/plain "health-server ok"
+//   anything else -> 404 text/plain "not found"
+//
+// NOT RUNNABLE TODAY: std/network has not landed in the compiler, and the
+// server side also needs async (spec 14) and the map type behind
+// req.params/req.headers. The bench runner attempts to build every cp3 entry
+// and records the compiler's own diagnostic when the feature is missing.
+//
+// Unlike the other entries this one takes no port argument -- the cp3 process
+// API surface for argv is not part of the beta-one std spec, so the port is
+// the constant below. The runner expects the cp3 server on 8080.
+
+const PORT = 8080;
+const app = createServer();
+
+app.get("/healthz", (req, res) => {
+  res.text("ok");
+});
+
+app.get("/", (req, res) => {
+  res.text("health-server ok");
+});
+
+// Anything that matched no route above.
+app.use((req, res, next) => {
+  res.status(404).text("not found");
+});
+
+app.listen(PORT, () => {
+  console.log(`listening on http://127.0.0.1:${PORT}`);
+});

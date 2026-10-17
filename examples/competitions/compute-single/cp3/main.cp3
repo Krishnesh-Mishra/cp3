@@ -1,0 +1,32 @@
+import console from "std/console";
+
+// compute-single (cp3 entry) -- total Collatz steps for every start value in
+// 1..1,000,000, printed as one integer. Same workload and same output as the
+// C++, Rust, Go, JavaScript and Python entries.
+//
+// This entry is written to compile and run today: it sticks to what the
+// current compiler implements (functions, while, if/else, %, comparisons,
+// arithmetic and template-free console.log).
+
+function collatzSteps(start: number): number {
+  let n = start;
+  let steps = 0;
+  while (n !== 1) {
+    if (n % 2 === 0) {
+      n = n / 2;
+    } else {
+      n = 3 * n + 1;
+    }
+    steps = steps + 1;
+  }
+  return steps;
+}
+
+let total = 0;
+let start = 1;
+while (start <= 1000000) {
+  total = total + collatzSteps(start);
+  start = start + 1;
+}
+
+console.log(total);
