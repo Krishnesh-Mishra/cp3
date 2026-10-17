@@ -1,0 +1,4 @@
+import console from "std/console";
+let n = 0;
+let all = [1, 2, 3].every(x => { n = n + 1; return x < 3; });
+console.log(`${all}:${n}`);

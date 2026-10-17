@@ -1,0 +1,4 @@
+import console from "std/console";
+let m: (number | string)[] = [1, "two"];
+m[0] = "one";
+console.log(m[0] === "one");

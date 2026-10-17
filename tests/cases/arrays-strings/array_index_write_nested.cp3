@@ -1,0 +1,4 @@
+import console from "std/console";
+let m: number[][] = [[1, 2], [3, 4]];
+m[1][0] = 9;
+console.log(m[1][0]);

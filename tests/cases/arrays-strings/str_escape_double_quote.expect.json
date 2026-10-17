@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "say \"hi\"\n",
+  "exitCode": 0
+}

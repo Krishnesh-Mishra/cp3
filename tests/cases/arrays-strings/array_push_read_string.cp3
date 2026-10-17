@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = ["x"];
+a.push("y");
+console.log(a[1]);

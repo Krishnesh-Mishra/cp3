@@ -1,0 +1,5 @@
+import console from "std/console";
+let a = [1, 2, 3];
+let s = 0;
+for (let i = 0; i < a.length; i = i + 1) { s = s + a[i]; }
+console.log(`${s}`);

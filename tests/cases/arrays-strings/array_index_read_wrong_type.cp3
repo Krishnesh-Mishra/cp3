@@ -1,0 +1,4 @@
+import console from "std/console";
+let a: number[] = [1, 2];
+let s: string = a[0];
+console.log(s);
