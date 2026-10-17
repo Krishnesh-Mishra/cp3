@@ -348,13 +348,13 @@ real pass/fail. Anything in the AST beyond that must produce a clean
   superseded; examples no longer gate waves. What is not runnable yet (games,
   servers, `parallel.*`, async) is labeled in prose in `examples/README.md`
   until its wave lands.
-- **D60.** `examples/competitions/` is the **cross-language comparison
+- **D60.** `examples/benchmarks/` is the **cross-language comparison
   suite** — cp3 vs C++ vs Rust vs Go vs JS/Node vs Python, the same task
   implemented per language: health-server boot time + `/healthz` latency +
   req/s stress, single-thread compute, multi-thread compute. Every number
   shown is a real measurement from an actual run (labeled machine/date);
   invented numbers are forbidden. This is seed material for a future README
-  "advertisement" section. Layout: `examples/competitions/<task>/` with a
+  "advertisement" section. Layout: `examples/benchmarks/<task>/` with a
   `README.md` + one folder per language, plus a suite runner and a
   dependency-free bench/load script; cp3 entries that need unlanded features
   are written to spec and marked in prose.
@@ -408,11 +408,13 @@ real pass/fail. Anything in the AST beyond that must produce a clean
   and the sink behind compute-single's 1.16 s; inline cast-based `%` in the
   exact double domain **385 ms**; int64 **135 ms** ≈ the C++/Rust entries'
   132–147 ms):
-  1. **Targets.** The `examples/competitions/` suite is the judge (D60 — numbers
-     refresh from real runs, never invented): compute-single **≤ Go (0.20 s)** is
-     the hard target, **C++/Rust parity (≈0.15 s)** the stretch. Matching/beating
-     the native entries on hot integer loops is the language's core promise, so
-     it is a tracked requirement, not a nicety.
+  1. **Targets.** The `examples/benchmarks/` suite is the judge (D60 — numbers
+     refresh from real runs, never invented). Standing goal (user directive,
+     2026-10-17): **beat Go/JS/CPython on every completion-time table** and
+     **match Rust/C++ on most**; for compute-single specifically, **≤ Go
+     (0.20 s)** is the hard target and **C++/Rust parity (≈0.15 s)** the
+     stretch. Matching/beating the native entries on hot integer loops is the
+     language's core promise, so it is a tracked requirement, not a nicety.
   2. **No libm calls in generated scalar hot paths.** `%` must lower to an
      inline exact-integer fast path with a `std::fmod` fallback (and
      literal-divisor specialization), never to a bare `std::fmod` call. Same

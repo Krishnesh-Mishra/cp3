@@ -22,13 +22,13 @@ marker retired (D63). Running total (pre-wave-1): **1236 found — 516 passed /
 
 Examples are showcase-only now (D59): no auto-run, no statuses — the corpus in
 `tests/cases/` is the only automated oracle. The wave order below is the plan;
-`examples/**` and the new cross-language `examples/competitions/` suite (D60:
+`examples/**` and the new cross-language `examples/benchmarks/` suite (D60:
 health-server + compute benchmarks) become fully runnable as their features
 land (servers wait on `std/network`; multi-thread entries on `parallel.*`; the
 games on wave 1 — wave 4 already landed).
 
-**Status: the showcase rewrite + the competitions suite are landed (D59/D60).**
-All tables in `examples/competitions/README.md` are real measured runs
+**Status: the showcase rewrite + the benchmark suite are landed (D59/D60).**
+All tables in `examples/benchmarks/README.md` are real measured runs
 (2026-10-17); cp3 `compute-single` already runs (lead reproduced `131434424`
 on the post-wave-4 canonical binary — ~1.2 s vs cpp 0.2 s on this machine),
 and the two pending cp3 rows (`health-server`, `compute-multi`) auto-fill when
@@ -220,7 +220,7 @@ Ordered work items (sole writer of `src/sema/**`, `src/codegen/**`,
 3. Hygiene: string literals without `std::string(...)` wrap, usage-pruned
    prelude, runtime-TU pruning with D56 (cold hello-world build is 5.2 s
    because all five TUs compile every time).
-4. After landing: re-run the suite, refresh the competitions tables and the
+4. After landing: re-run the suite, refresh the benchmark tables and the
    root README numbers with the new labeled run (D60/D64).
 
 Acceptance: corpus 0 failed + suite rerun meets the D64 targets.
