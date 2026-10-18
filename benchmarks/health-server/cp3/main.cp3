@@ -11,14 +11,8 @@ import console from "std/console";
 //   GET /         -> 200 text/plain "health-server ok"
 //   anything else -> 404 text/plain "not found"
 //
-// NOT RUNNABLE TODAY: std/network has not landed in the compiler, and the
-// server side also needs async (spec 14) and the map type behind
-// req.params/req.headers. The bench runner attempts to build every cp3 entry
-// and records the compiler's own diagnostic when the feature is missing.
-//
-// Unlike the other entries this one takes no port argument -- the cp3 process
-// API surface for argv is not part of the beta-one std spec, so the port is
-// the constant below. The runner expects the cp3 server on 8080.
+// Unlike the other entries this one takes no port argument: the bench runner
+// expects the cp3 server on 8080, so the port stays the constant below.
 
 const PORT = 8080;
 const app = createServer();

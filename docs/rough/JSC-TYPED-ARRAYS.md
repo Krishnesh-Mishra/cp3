@@ -341,7 +341,7 @@ message text stays spec prose.
 | `float64_ctor_negative_zero` | `1 / new Float64Array([-0])[0] === -Infinity`. |
 | `bigint64_ctor_wide_exact` | writing 2^40 and reading back prints `1099511627776`. |
 | `bigint64_ctor_beyond_2_53_rounds` | the literal `9007199254740993` prints `9007199254740992` (number-domain caveat). |
-| `biguint64_ctor_negative_wraps` | `[-1]` prints `18446744073709551616` (u64 2^64-1 read back through a double). |
+| `biguint64_ctor_negative_wraps` | `[-1]` prints `18446744073709552000` (u64 2^64-1 read back through a double; D9 renders the double with ECMAScript Number::toString). |
 
 ### 6.3 Constructors, views, properties (`typed-arrays/`)
 

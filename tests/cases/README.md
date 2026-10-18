@@ -17,10 +17,11 @@ A case is the **pair** `<category>/<name>.cp3` + `<category>/<name>.expect.json`
 The `.expect.json` file is what the harness discovers (`tests/cases/**/*.expect.json`);
 the sibling `.cp3` is derived from the JSON filename.
 
-> **Ownership:** each `<category>/` folder belongs to a single feature owner.
-> `variables/` already contains 42 cases and is owned by the variables agent.
-> The scaffold/architecture owner owns only *this* README and `tests/runner/`.
-> Never edit a category folder you do not own.
+> **Ownership:** each `<category>/` folder maps to one feature area; a wave
+> adds new cases inside the areas it touches. Crossing into another area needs
+> a lead grant recorded here: the typed-arrays landing (2026-10-18) added 20
+> new files to `arrays-strings/` under such a grant (new files only, no
+> existing case edited).
 
 ## `.expect.json` schema
 

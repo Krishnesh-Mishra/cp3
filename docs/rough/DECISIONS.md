@@ -672,3 +672,34 @@ Rules:
    (never move files under a running agent), before the nothing-missing audit
    and the perf work. Acceptance: canonical rebuild, lint 0 errors, cold full
    corpus 0 failed, crypto and network native smoke programs still link.
+
+## D73 - std/network transport and request-error rulings (network wave, 2026-10-18)
+
+The network wave implemented `std/network` against D71 and the frozen std docs.
+Four spots the spec leaves to the implementation, decided in-wave, recorded in
+code comments and pinned by run cases:
+
+1. **Request error isolation.** A synchronous handler that throws is caught by
+   the route dispatch and answers `500` + `internal server error` for that
+   request only; the server keeps serving. This is the spec's deliberate
+   carve-out from the global unhandled-rejection rule, pinned by
+   `network_handler_throw_500` (500, then a second request still 200).
+2. **Fetch transport.** One TCP connection per request (`Connection: close`),
+   the body fully buffered before the promise settles so `text()`/`json<T>()`
+   never suspend, plus a per-request timeout. Redirects, keep-alive pooling and
+   request streaming are missing surface (the round 4 network completion), not
+   policy.
+3. **`https://` fetch and `wss://`** reject with a clear runtime message
+   instead of hanging or half-working (TLS is off, D70); no TLS backend is
+   vendored.
+4. **WebSocket handles.** The `on("connection")` listener receives a
+   `WebSocket&` referencing stable per-server storage (a runtime-side
+   deviation from a by-value reading of `(ws) => {}`, invisible in cp3
+   source); client masking keys come from `std::mt19937_64` and are not
+   crypto-grade (follow-up, not correctness-critical for beta one). One
+   connection listener per server and one handler per event per socket,
+   matching the documented examples.
+
+Evidence: `build/scratch/network/WAVE-NETWORK-REPORT.md` sections 4-6; run
+cases `network_fetch_local`, `network_fetch_404`, `network_websocket_echo`,
+`network_handler_throw_500` in `tests/cases/stdlib/`.

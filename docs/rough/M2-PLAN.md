@@ -418,6 +418,70 @@ cases flipped. Lead verification: canonical rebuild exit 0, lint 207 files
 `--filter crypto` 25/25 passed 0 failed, no dashes, no shared-file edits.
 Report: `build/scratch/crypto/WAVE-CRYPTO-REPORT.md`.
 
+## network wave landing record (2026-10-18)
+
+Committed `44a7c37` (one commit with the typed-arrays wave). `std/network` is
+real on libuv + uWS (D73): one event loop per thread, never a second loop; the
+request-isolation contract (a throwing handler is a 500 for that request only,
+the next request still answers); the fetch transport (one connection per
+request, buffered body, per-request timeout, clear `https://`/`wss://`
+rejection with TLS off per D70); WebSocket with per-server stable `WebSocket&`
+storage, the hand-rolled RFC6455 client (masking from `mt19937_64`) and close
+slots. The contract header carries no uWS/libuv types, and every handle method
+is `const` so the documented spellings compile. Sema models the documented
+surface (marker object types, named-import inference, the `network.x` namespace
+corner); codegen lowers members and calls with handler-typed lambdas; the event
+loop gained the external-source contract with zero behavior change when no
+source is installed (async filter identical: 31/21/0/5/5). 4 new run cases
+(ports 48101-48104) plus the health-server fixture, which now builds and
+serves as written. Focused: 11 found / 10 passed / 0 failed / 1 ambiguous (the
+pinned `headers` ambiguity, unchanged). Spec-pinned deferrals: TLS off (D70),
+no deflate (`-DUWS_NO_ZLIB`), no raw TCP/UDP. Remaining surface (fetch
+headers, `req.params/query/headers`, `res.json<T>` object codecs, `next()`
+statement lowering, async handlers) is scheduled in the std completion rounds.
+Open item: the registry row also accepts a default import
+(`import network from "std/network"`); the spec shows named imports only, so
+round 3 either pins the surface or records the extension. D67: the wave's
+queued health-server BIG WARNs (7275 req/s) were measured while three agent
+builds ran concurrently. On an idle machine the landing bench records
+0 BIG WARNs and stays ahead of go/js/python; the stable 10 s window
+(`--seconds 10`; evidence `build/scratch/lead-verify/landing-bench10/`) reads
+11366 req/s, 1.11x cpp, 1.07x rust, 1 WARN (the 1.10x cpp watch line). Idle
+3 s-window samples on the same build span 1.09x-1.17x cpp and 1.05x-1.07x
+rust, so the cpp margin sits inside the short window's noise; D67.4 scorecards
+should quote the longer window. Report:
+`build/scratch/network/WAVE-NETWORK-REPORT.md`.
+
+## typed-arrays wave landing record (2026-10-18)
+
+Committed `44a7c37` (the same commit as network). The JS-compat typed-array
+family (D69) is real: the 11 element tags on fixed-size backing,
+`TypedArrayData`/`TypedArray<Tag>` views (byteOffset/length/buffer, storage
+shared across views, set/fill/subarray/slice/copyWithin, index coercion with
+out-of-range no-ops), `ArrayBuffer`/`SharedArrayBuffer`/`DataView` (unaligned
+access, big-endian default with the explicit little-endian flag), and the
+regular-array extras (`Array(n)`, `.fill`, `.of`/`.from`, `.join` with the
+element-text contract). Codegen emits the family block (include plus the
+formatter/truthiness helpers) only for units that use the family; sema owns
+the constructor grammar, the member tables and the read-only guard. 114 new
+cases (94 typed-arrays, 20 arrays-strings) land with it.
+
+Lead cold verification (the wave's 94/94 was measured on warm artifacts;
+evidence `build/scratch/lead-verify/tarrays/`): the first cold run was 12/94
+and three runtime-header fixes (the `typedArraySetFrom` call shape, the
+`array_buffer.hpp` declaration ordering, the `arrayBufferSlice` default) took
+it to 93/94 and then 94/94; the serialized cold full corpus then caught two
+revealed regular-array gaps (`if (a)` truthiness of an empty array and
+whole-array `console.log` rendering) - fixed as the family block's
+`cp3_ts(Array<E>)` / `cp3_truthy` overloads plus a type-driven family flag in
+`tsCall`/`cond` (`noteFamilyUse`). Final cold focused: typed-arrays 94/94,
+arrays-strings 185/120/0, types 110/85/0, variables 58/43/0. Report:
+`build/scratch/tarrays/WAVE-TARRAYS-REPORT.md`.
+
+Combined landing effect: cold full corpus 1372 found / 823 passed / 0 failed /
+441 skipped / 108 ambiguous (before the waves: 1236 / 657 / 0 / 471 / 108);
+lint 223 files, 0 errors.
+
 ## Perf wave (landed as `5c88ead`; plan below kept as written) - performance
 
 Lead probe, 2026-10-17 (`build/scratch/perf-probe/`, g++ 16.1.0 `-O2`): the
