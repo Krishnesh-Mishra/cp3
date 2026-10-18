@@ -51,10 +51,10 @@ and the two pending cp3 rows (`health-server`, `compute-multi`) auto-fill when
 | 11 | Module local function linkage (codegen emits local functions around calls) | 6 (14) | closes the remaining `modules/` skips |
 | 12 | Grammar tail sweep (switch 7, untyped params 7, arrows 6, compound assign 6, rest 5, bitwise 5, destructuring 5, for-of 4, console methods 4, labels 3, `parseInt` 3, `parseFloat` 2, `typeof` 2, …) | ~95 | mostly independent, S each |
 
-Parallel lanes (status 2026-10-17): the **C1 CLI + package-manager lane** is in
-flight alongside the perf wave - D61 exe → `.cp3/out/` layout + `clean`,
-`cp3 init` spec parity, `.cp3pak` pack/install + `.cp3/lock.json`; sole writer
-`src/cli/**` minus `src/cli/src/util.cpp` (perf-owned). The **D56
+Parallel lanes: the **C1 CLI + package-manager lane** landed 2026-10-18 (record
+below): D61 exe → `.cp3/out/` layout + `clean`, `cp3 init` spec parity,
+`.cp3pak` pack/install + `.cp3/lock.json`; scope was `src/cli/**` minus
+`src/cli/src/util.cpp` (perf-owned). The **D56
 runtime-embedding lane** (single-binary guarantee) is queued behind the perf
 wave so the embedded runtime TU set finalizes once. The **benchmark expansion
 (B1)** is in flight with the senior Tier-1 task set (compute-single-int,
@@ -206,6 +206,35 @@ limitations (report §9): ASCII-only case mapping, slice/substring/charAt
 clamp out-of-range, `JSON.stringify` scalars-only, `[…].includes` literal-set
 stopgap, minimal `process.argv()`; fs/env, `JSON.parse`, Date/Buffer/crypto,
 arrays/objects, Map/Set remain with their waves.
+
+## C1 landing record (2026-10-18)
+
+Committed `4556017` (src/cli only; `src/cli/src/util.cpp` untouched). Scope:
+
+- D61 artifact layout verified end to end (`build` -> `.cp3/build/`
+  intermediates, exe at `.cp3/out/<entry>.exe`, `clean` / `clean --all`
+  semantics, exit codes 0/1/2/3, diagnostic machine line byte-stable).
+- `init` spec parity: `src/index.cp3`, full package.json (dev/build/start/check
+  scripts + build block), package flavor with a spec-shaped export entry +
+  README, `--yes` non-interactive, `--type application|package` flag added for
+  scripted use (report deviation).
+- Package manager core: `pack` -> `.cp3/out/<name>.cp3pak` (own DEFLATE/gzip/
+  tar/SHA-256/CRC-32; deterministic; bsdtar interop verified both directions);
+  `install` (local `.cp3pak`, unpacked dir, `file:` deps) -> `.cp3/packages/` +
+  `.cp3/lock.json` (`sha256:`/`dir-sha256:` integrity, `engines` warnings,
+  reinstall overwrites). Lead re-verified: pack + install round trip, archive
+  listing, lock integrity == Get-FileHash.
+- Scripts: `pre<name>`/`post<name>` hooks for run/build/check/dev/fmt/clean/
+  install with a `CP3_SCRIPT_GUARD` re-entry guard; four scenarios smoke-tested.
+- Gates: `--filter cli` 27 found / 4 passed / 0 failed / 23 ambiguous; lint
+  0 errors. Report: `build/scratch/cli/WAVE-C1-REPORT.md`.
+- Deferred with named errors (exit 3, per-dep failure): GitHub repo installs,
+  registry-style specs, `build.excludeSource`, `build.cacheBinary` (warning
+  only); `exec` stays a stub until `bin` resolution lands.
+- Blocker outside the lane: the spec-shaped package scaffold
+  (`export default { add }`) hits codegen's missing `ObjectLiteral` (CP3002)
+  until the classes/object-literal waves land; the pack pipeline itself is
+  proven with `export default add;` (lead reproduced both).
 
 ## Perf wave (in flight - launched after d409e33) - performance
 
