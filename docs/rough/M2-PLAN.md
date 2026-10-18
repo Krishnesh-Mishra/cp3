@@ -193,6 +193,17 @@ From the core-semantics growth pass:
     `async/promise_all_length|promise_all_values|promise_all_preserves_order|
     allsettled_length` stay skipped pending wave 3 arrays.
 11. Marker mechanics - see D58.
+12. **parallel.* / worker lowering wave requirements (D71 clarification)** -
+    when the lowering wave lands, an `async` closure or an `await` inside a
+    closure passed to `parallel.for`/`reduce`/`run` must become a clean
+    compile-time diagnostic, never a silently broken program: pool threads are
+    loopless and `parallel.*` is synchronous by contract (spec §13 Rule 1), so
+    an async closure breaks the borrow-safety foundation and its `await`s
+    would have no loop to drive them. `worker` keeps its own-thread single loop
+    and must hand results back with `postFromThread` (contract already written
+    in `cp3/parallel/worker.hpp`). Add the corpus cases with that wave:
+    async-closure-into-parallel rejection, worker cross-thread result, worker
+    async body awaiting on its own loop.
 
 ## Wave 4 landing record
 
