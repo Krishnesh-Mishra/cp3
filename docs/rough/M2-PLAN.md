@@ -524,7 +524,7 @@ and `include/cp3/std/<name>.hpp`; typed-arrays keeps two units per phase
 (`sema.cpp` + `sema_methods.cpp`, `codegen.cpp` + `codegen_methods.cpp`) and
 its four headers under `include/cp3/`. The compiler core stays phase-first;
 `src/codegen/src/emit/std/common.cpp` remains the codegen dispatch core (the
-per-family table extraction is stage 2, spec in
+per-family table extraction landed in stage 2, record below; spec in
 `build/scratch/restructure/STAGE2-DEFERRALS.md`).
 
 Generated code still spells `#include "cp3/std/<name>.hpp"`: the quoted
@@ -542,6 +542,33 @@ control-flow 75/41/0/28/6, types 110/85/0/20/5, async 31/21/0/5/5, stdlib
 296/170/0/110/16 (the four port-binding network run cases included) - every
 total identical to the stage-1 report's table. Report:
 `build/scratch/restructure/WAVE-RESTRUCTURE-STAGE1-REPORT.md`.
+
+## std package restructure stage-2 landing record (2026-10-18)
+
+Committed `b8b5077` - stage 2 of D72: the per-family extraction out of the two
+dispatch cores, behavior-free. Member tables and candidate lists now live in
+`src/std/<family>/sema.cpp` (math, path, os, process, console, json; crypto
+already owned its table, network needs none), the shared row machinery
+(`MemberRow`, `lookupMember`, `memberNames`, the single cross-family factory
+`zeroToNumber`) in `src/sema/src/detail/std_tables.hpp`, and the codegen
+member reads in the family units (`emitMathMember`, `emitPathMember`,
+`emitProcessMember`; an empty result means "not this family").
+`src/sema/src/checks/std_check.cpp` (289 -> 113 lines) and
+`src/codegen/src/emit/std/common.cpp` (117 -> 106 lines) keep only the
+dispatch cores plus the string `.length` case; dispatch precedence and the
+CP3305 candidate order are preserved. CMake rows, analyzer/generator
+declarations and the comment-only sweep (13 files) ride the same change.
+Spec: `build/scratch/restructure/STAGE2-DEFERRALS.md`; report:
+`build/scratch/stage2/WAVE-STAGE2-REPORT.md`.
+
+Lead verification (cold, ccache, canonical Debug build): rebuild exit 0; lint
+240 files 0 errors (64 soft); filters crypto 25/25/0/0/0, typed-arrays
+94/94/0/0/0, arrays-strings 185/120/0/56/9, control-flow 75/41/0/28/6, types
+110/85/0/20/5, async 31/21/0/5/5 and the stdlib sub-filters math 48/48, os
+7/7, path 9/9, process 6/6, console 28/25/0/3/0, json 25/10/0/15/0 - every
+total identical to the stage-1 table and to the pre-stage-2 canonical binary.
+Wave evidence: generated C++ byte-identical for 10 representative cases and
+CP3305 stderr byte-identical for 3 diagnostics cases.
 
 ## Perf wave (landed as `5c88ead`; plan below kept as written) - performance
 
