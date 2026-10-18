@@ -57,13 +57,22 @@ below): D61 exe → `.cp3/out/` layout + `clean`, `cp3 init` spec parity,
 `src/cli/src/util.cpp` (perf-owned). The **D56
 runtime-embedding lane** (single-binary guarantee) is queued behind the perf
 wave so the embedded runtime TU set finalizes once. The **benchmark expansion
-(B1)** landed 2026-10-18 (record below; Tier-1 set, ratio/RSS/size columns,
-the 1.2x gate) per D66. The **source-comment dash sweep** (D66.4 leftovers:
-part 1 covers everything the perf wave does not own, in flight now; the rest
-rides with the structure sweep) is in flight. The **source-tree structure
-sweep** (D66.5: `src/codegen`, then `src/lexer`/`src/parser`; behavior-neutral,
-corpus byte-identical) is queued immediately after the perf wave. std/network, parallel/worker,
-crypto, Date/Buffer, and the fs/env leftovers are post-perf runtime waves - they
+(B1)** landed 2026-10-18 (record below; Tier-1 set, ratio/RSS/size columns);
+the **D67 tiered gate + auto-run** (B1b) is in flight. The **source-comment
+dash sweep** (D66.4 leftovers): part 1 landed (`dbc1c96`): everything the perf
+wave does not own, minus the two `tests/runner/run_tests.py` fixes that ride
+with the B1b landing; part 2 (src/sema, src/codegen, src/runtime,
+`src/cli/src/util.cpp`, the `tests/cases/README.md` prose) is queued behind the
+perf wave. The **source-tree structure sweep** (D66.5: `src/codegen`, then
+`src/lexer`/`src/parser`; behavior-neutral, corpus byte-identical) is queued
+immediately after the perf wave. Post-perf runtime waves, explicitly
+prioritized by the user directive of 2026-10-18 ("implement server parallel
+and other remaining std lib things"): std/network (**server**), parallel/worker
+(lights up the compute-multi and health-server cp3 rows), crypto, Date/Buffer,
+and the fs/env leftovers; then the **JS-compat typed-array surface** from the
+same directive (`Array(n).fill`, `new Float64Array([...])`, `Int8Array`
+through `BigUint64Array`, `ArrayBuffer`/`SharedArrayBuffer`/`DataView`), which
+needs spec text + corpus cases (the oracle) before implementation. All of these
 sit in perf-owned paths today.
 
 ## Marker rulings owed (the 16 genuinely open)
@@ -297,9 +306,15 @@ Ordered work items (sole writer of `src/sema/**`, `src/codegen/**`,
 4. After landing: re-run the suite, refresh the benchmark tables and the
    root README numbers with the new labeled run (D60/D64).
 5. Post-landing priority (user directive, 2026-10-17): finish the remaining
-   product surface first - CLI/init/package manager (lane C1, in flight), then
+   product surface first - CLI/init/package manager (lane C1, landed), then
    std/crypto/network/parallel and the rest of the wave list - before the next
    perf push; perf then continues as an ongoing loop judged by the benchmarks.
+
+Ongoing objective after P1 (user directive, 2026-10-18): per task, match the
+**fastest** reference row, not only cpp/rust - the D67 gate tiers are the todo
+list and the warning rows are the queue. First target: string-churn (the
+labeled run measures rust ~7x ahead of both cpp and cp3 there; profile whether
+the generated string ops, the cpp entry, or both carry that gap).
 
 Acceptance: corpus 0 failed + suite rerun meets the D64 targets.
 

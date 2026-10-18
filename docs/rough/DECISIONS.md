@@ -465,3 +465,21 @@ real pass/fail. Anything in the AST beyond that must produce a clean
      needed (folder structure, private-header layout, nomenclature per
      STYLE.md), queued immediately after the perf wave; the corpus stays
      byte-identical.
+
+## D67 - Perf-gate tiers + benchmarks on every test run (user directive, 2026-10-18)
+
+Amends D66.2 and extends D64:
+
+1. Every runnable benchmark row is graded against all five references:
+   **BIG WARN** when cp3 is slower than any of Go, JS, or Python at all (time
+   ratio > 1.00), or more than 20% slower than C++ or Rust (ratio > 1.20);
+   plain **WARN** when more than 10% slower than C++ or Rust (ratio > 1.10).
+   BIG WARN lines read as fix-me items; `--strict` fails the run on any tier,
+   and the summary footer counts both. The D64 "within ~5%" target stays the
+   aspiration, not the trigger.
+2. `tests/runner/run_tests.py` runs the benchmark suite automatically after
+   the corpus pass (default on; `--no-bench` opts out; `--json` still skips
+   with a note) and re-prints the gate warning block so it cannot scroll away.
+3. Rationale: perf is the product; the warning list is the todo list. Rows
+   behind Go/JS/Python are never acceptable; 10% and 20% versus the native
+   pack are the staged fix thresholds.
