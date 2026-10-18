@@ -76,10 +76,16 @@ bool jsonBool(const std::string& text);
 // =============================================================================
 // fetch
 // =============================================================================
-/// The `fetch(url, init)` options an object literal can spell today. `headers`
-/// would need the Map type (MISSING); `method`, `body` and `timeout` are
-/// carried. `timeoutMs` of 0 means "no timeout" (JS omits it; a call that never
-/// answers keeps the loop alive, exactly like a never-settled timer).
+/// The `fetch(url, init)` options an object literal can spell today. `method`,
+/// `body` and `timeout` are carried. `timeoutMs` of 0 means "no timeout" (JS
+/// omits it; a call that never answers keeps the loop alive, exactly like a
+/// never-settled timer).
+///
+/// SEAM(collections): RequestInit.headers is `Map<string, string>` (docs 04
+/// §network). The swap is a `std::vector<std::pair<std::string, std::string>>
+/// headers;` field here, `buildRequest` (runtime_fetch.cpp) appending one
+/// `Name: value` line per pair, and fetchInitText (codegen) filling it from the
+/// Map. Nothing else changes; the object-literal key stays `headers`.
 struct FetchInit {
     std::string method = "GET";
     std::string body;
@@ -98,8 +104,13 @@ public:
           statusText(std::move(statusText_)),
           body_(std::move(body)) {}
 
-    /// `res.ok` / `res.status` / `res.statusText`. `res.headers` needs the Map
-    /// type (MISSING; see the wave report).
+    /// `res.ok` / `res.status` / `res.statusText`.
+    ///
+    /// SEAM(collections): `res.headers` is `Map<string, string>` (docs 04
+    /// §network). parseHead (runtime_fetch.cpp) already walks the header block;
+    /// the swap is a `std::vector<std::pair<std::string, std::string>> headers`
+    /// member filled there and exposed as the Map once it lands. Until then a
+    /// `res.headers` read stays the CP3002 skip (codegen emits no member).
     bool ok = false;
     double status = 0.0;
     std::string statusText;
@@ -107,12 +118,24 @@ public:
     /// `await res.text()`.
     Promise<std::string> text() const { return Promise<std::string>::resolve(body_); }
 
-    /// `await res.arrayBuffer()`; Buffer is a string in M1, so this is the same
-    /// bytes as `text()`.
+    /// `await res.arrayBuffer()`.
+    ///
+    /// SEAM(buffer): the documented return is `Promise<Buffer>`. Buffer is the
+    /// in-flight std family; until it lands this hands back the same bytes as a
+    /// `std::string` (the M1 stand-in the crypto family also used), and the
+    /// swap is the return type plus `Buffer::from(body_)` once Buffer exists.
     Promise<std::string> arrayBuffer() const { return Promise<std::string>::resolve(body_); }
 
-    /// `await res.json<T>()` for T = number | string | boolean; any other T is
-    /// not representable (JSON.parse is a later wave).
+    /// `await res.json<T>()`.
+    ///
+    /// The M1 surface: T = number | string | boolean, parsed by the scalar
+    /// readers in runtime.cpp. SEAM(json): for a class/interface T the payload
+    /// must be validated against T's shape by the same usage-based reification
+    /// `JSON.parse<T>` uses (descriptors emitted only for the T's that appear
+    /// in the program). The swap point is the non-scalar arm below, which
+    /// starts calling the landed json entry point instead of the
+    /// `static_assert`; codegen's networkTypeArgsText then stops rejecting a
+    /// named T (see the SEAM(json) marker in src/std/network/codegen.cpp).
     template <class T>
     Promise<T> json() const {
         if constexpr (std::is_same_v<T, std::string>) {
@@ -144,8 +167,22 @@ class Next;
 class HttpRequest {
 public:
     /// `req.method` (upper case, as received) and `req.path` (query string
-    /// stripped). `req.params` / `req.query` / `req.headers` need the Map type
-    /// (MISSING); the runtime parses them internally already.
+    /// stripped; the server splits `?` off before dispatch).
+    ///
+    /// SEAM(collections): the documented Map-shaped request fields. The server
+    /// already receives the native query string, the `:name` parameters and the
+    /// header block; the swap is one `Map<string, string>` member per field,
+    /// filled in onRequest (runtime_server.cpp) from `req->getQuery()`, the
+    /// route match and `req->getHeader(...)`, plus the matching names in the
+    /// codegen member tables (src/std/network/codegen.cpp).
+    ///   params: Map<string, string>   route params, e.g. :id
+    ///   query:  Map<string, string>   query string, e.g. ?key=value
+    ///   headers: Map<string, string>
+    ///
+    /// SEAM(readstream/fs): `body: ReadStream` is the raw request as a stream
+    /// (the same interface as fs.readFileStream). Until the fs family lands,
+    /// the body is buffered before the chain runs and `text()`/`json<T>()` read
+    /// that buffer; exposing `body` is the buffered bytes behind a ReadStream.
     std::string method;
     std::string path;
 
@@ -187,8 +224,12 @@ public:
 
     /// `res.text(data, status?)`.
     void text(const std::string& data, double status = 0.0);
-    /// `res.json(data, status?)`; the payload is a scalar here (an object
-    /// literal is not representable yet).
+    /// `res.json(data, status?)`; the payload is a scalar here.
+    ///
+    /// SEAM(json): an object/array payload needs json's serializer (the landed
+    /// `JSON.stringify` object machinery); the swap is an overload taking the
+    /// generated type and calling it. Until then an object literal stays the
+    /// codegen CP3002 skip.
     void json(double data, double status = 0.0);
     void json(const std::string& data, double status = 0.0);
     void json(bool data, double status = 0.0);
@@ -235,7 +276,16 @@ public:
     void get(const std::string& path, RouteHandler handler) const;
     void post(const std::string& path, RouteHandler handler) const;
     void put(const std::string& path, RouteHandler handler) const;
+    /// `app.delete(...)`; codegen maps the cp3 `delete` onto this `del` member
+    /// (`delete` is a C++ keyword). The docs' beta-one list is the four verbs
+    /// get/post/put/delete; patch/head/options/any exist because the sema table
+    /// already names them and a route that lowers must have a real member.
     void del(const std::string& path, RouteHandler handler) const;
+    void patch(const std::string& path, RouteHandler handler) const;
+    void head(const std::string& path, RouteHandler handler) const;
+    void options(const std::string& path, RouteHandler handler) const;
+    /// `app.any(path, handler)`: every method (the wildcard method row).
+    void any(const std::string& path, RouteHandler handler) const;
     void use(Middleware middleware) const;
     /// `app.listen(port, callback?)`; the callback runs once the port is bound.
     void listen(double port, std::function<void()> callback = {}) const;
@@ -272,12 +322,22 @@ public:
     ///   "close"   -> (code: number, reason: string) => void
     ///   "error"   -> (err: unknown) => void
     /// (One handler per event; a later registration replaces the earlier one.)
+    ///
+    /// SEAM(buffer): the documented message data is `string | Buffer`. Once the
+    /// buffer family lands, a `function<void(const Buffer&)>` overload takes the
+    /// binary frames (WS opcode BINARY, see runtime_ws.cpp/runtime_ws_client.cpp)
+    /// while text frames keep this string overload.
     void on(const std::string& event, std::function<void()> handler) const;
     void on(const std::string& event, std::function<void(std::string)> handler) const;
     void on(const std::string& event, std::function<void(double, std::string)> handler) const;
     void on(const std::string& event, std::function<void(Thrown)> handler) const;
 
     /// `ws.send(data)` (string data in beta one).
+    ///
+    /// SEAM(buffer): the documented parameter is `string | Buffer`. Once the
+    /// buffer family lands this gains a `send(const Buffer&)` overload that
+    /// forwards the bytes with `uWS::OpCode::BINARY` (and client framing in
+    /// runtime_ws_client.cpp); the string path here is unchanged.
     void send(const std::string& data) const;
     /// `ws.close(code?, reason?)`.
     void close(double code = 1000.0, const std::string& reason = "") const;

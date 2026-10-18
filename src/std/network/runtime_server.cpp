@@ -305,7 +305,14 @@ void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
     pending->server = server;
     pending->context.server = server.get();
     pending->context.request.method = std::string(req->getCaseSensitiveMethod());
-    pending->context.request.path = std::string(req->getUrl());
+    // `req.path` excludes the query string (docs 04 §network): patterns match
+    // against the path half only. SEAM(collections): the query half is parsed
+    // into the documented `query: Map<string, string>` right here once the
+    // collections family lands (the native side already hands us the raw text).
+    const std::string target(req->getUrl());
+    const std::size_t queryAt = target.find('?');
+    pending->context.request.path =
+        queryAt == std::string::npos ? target : target.substr(0, queryAt);
     pending->context.response.bindNative(res);
     res->onAborted([pending] { pending->aborted = true; });
     res->onData([pending](std::string_view chunk, bool isLast) {
@@ -339,6 +346,22 @@ void HttpServer::put(const std::string& path, RouteHandler handler) const {
 
 void HttpServer::del(const std::string& path, RouteHandler handler) const {
     addRoute(impl_, "DELETE", path, handler);
+}
+
+void HttpServer::patch(const std::string& path, RouteHandler handler) const {
+    addRoute(impl_, "PATCH", path, handler);
+}
+
+void HttpServer::head(const std::string& path, RouteHandler handler) const {
+    addRoute(impl_, "HEAD", path, handler);
+}
+
+void HttpServer::options(const std::string& path, RouteHandler handler) const {
+    addRoute(impl_, "OPTIONS", path, handler);
+}
+
+void HttpServer::any(const std::string& path, RouteHandler handler) const {
+    addRoute(impl_, "*", path, handler);
 }
 
 void HttpServer::use(Middleware middleware) const {

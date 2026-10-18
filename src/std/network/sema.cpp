@@ -8,10 +8,13 @@
 //     their call and construct sites are typed here (call_check.cpp and
 //     expr_check.cpp hook `tryInferNetworkCall` / `inferNetworkConstruct`).
 //
-// The object shapes are OPEN on purpose. The pinned signature surface is the
-// documented member set; everything outside it (`headers` / `params` / `query`
-// Maps, the streaming body, the event-loop-free request readers) stays ambient
-// instead of reporting, exactly like the rest of the not-yet-typed std surface.
+// The marker objects are OPEN on purpose (round-2 network report, decision
+// 10): they carry a `$network:` name and no shape table, so a member outside
+// the documented set stays ambient instead of reporting, exactly like the rest
+// of the not-yet-typed std surface. The Field rows below are declarative then:
+// they are the documented member set (docs 04 §network), kept complete so that
+// closing these shapes later is a table-only change, but they do not gate
+// member usage today.
 // Marker names are shared with codegen (src/std/network/codegen.cpp), which
 // uses them to decide which receivers it lowers.
 // =============================================================================
@@ -45,61 +48,122 @@ Type callbackOf(std::size_t arity) {
 
 Type eventListener() { return callbackOf(2); }
 
+// -----------------------------------------------------------------------------
+// The documented field rows per receiver (docs 04 §network). Declarative: the
+// marker shapes stay open, so these rows never gate a member (file header);
+// SEAM comments mark the in-flight-family swap points.
+// -----------------------------------------------------------------------------
+std::vector<Field> fetchResponseFields() {
+    return {
+        Field{"ok", Type::boolean(), false},
+        Field{"status", Type::number(), false},
+        Field{"statusText", Type::string(), false},
+        // SEAM(collections): `headers: Map<string, string>`; the runtime
+        // already buffers the header block (runtime_fetch.cpp parseHead).
+        Field{"headers", ambient(), false},
+        Field{"text", Type::function({}, promiseOf(Type::string())), false},
+        // SEAM(json): non-scalar T needs the json reification (see codegen's
+        // networkTypeArgsText); the ambient return stands in until then.
+        Field{"json", Type::function({}, promiseOf(ambient())), false},
+        // SEAM(buffer): the documented return is `Promise<Buffer>`; the
+        // runtime hands the buffered bytes back as a string until Buffer lands.
+        Field{"arrayBuffer", Type::function({}, promiseOf(Type::string())), false},
+    };
+}
+
+std::vector<Field> httpRequestFields() {
+    return {
+        Field{"method", Type::string(), false},
+        Field{"path", Type::string(), false},
+        // SEAM(collections): the three Map<string, string> fields; the server
+        // already receives the query string, the route params and the header
+        // block natively (runtime_server.cpp onRequest).
+        Field{"params", ambient(), false},
+        Field{"query", ambient(), false},
+        Field{"headers", ambient(), false},
+        // SEAM(readstream/fs): `body: ReadStream`; the runtime buffers the
+        // body before the chain runs, so nothing stream-shaped exists yet.
+        Field{"body", ambient(), false},
+        Field{"text", Type::function({}, promiseOf(Type::string())), false},
+        Field{"json", Type::function({}, promiseOf(ambient())), false},
+    };
+}
+
+std::vector<Field> httpResponseFields() {
+    return {
+        // `status` / `header` chain; the terminal writers return nothing.
+        Field{"status", Type::function(permissiveParams(1), ambient()), false},
+        Field{"header", Type::function(permissiveParams(2), ambient()), false},
+        // SEAM(json): an object/array payload needs json's serializer; the
+        // runtime overloads take a scalar today (cp3/std/network.hpp).
+        Field{"text", withOptionalTail(callbackOf(2)), false},
+        Field{"json", withOptionalTail(callbackOf(2)), false},
+        Field{"send", withOptionalTail(callbackOf(1)), false},
+        Field{"write", callbackOf(1), false},
+        Field{"end", Type::function({}, Type::voidType()), false},
+    };
+}
+
+std::vector<Field> httpServerFields() {
+    std::vector<Field> fields;
+    const Type route = callbackOf(2);
+    // The documented four verbs plus the Express-style extras the runtime grew
+    // so this table stays truthful; codegen maps the cp3 `delete` onto the
+    // runtime `del` member (`delete` is a C++ keyword).
+    for (const char* verb : {"get", "post", "put", "delete", "patch", "head", "options",
+                             "any"}) {
+        fields.push_back(Field{verb, Type::function({Type::string(), route}, Type::voidType()),
+                               false});
+    }
+    fields.push_back(Field{"use", Type::function({callbackOf(3)}, Type::voidType()), false});
+    fields.push_back(
+        Field{"listen",
+              withOptionalTail(
+                  Type::function({Type::number(), callbackOf(0)}, Type::voidType())),
+              false});
+    fields.push_back(Field{"close", Type::function({}, Type::voidType()), false});
+    return fields;
+}
+
+std::vector<Field> webSocketFields() {
+    return {
+        Field{"on", Type::function({Type::string(), eventListener()}, Type::voidType()),
+              false},
+        // SEAM(buffer): the documented parameter is `string | Buffer`.
+        Field{"send", callbackOf(1), false},
+        Field{"close", withOptionalTail2(callbackOf(2)), false},
+    };
+}
+
+std::vector<Field> webSocketServerFields() {
+    return {
+        Field{"on", Type::function({Type::string(), eventListener()}, Type::voidType()),
+              false},
+        Field{"close", Type::function({}, Type::voidType()), false},
+    };
+}
+
 }  // namespace
 
 Type Analyzer::networkObjectType(const std::string& name) {
     std::vector<Field> fields;
     if (name == kFetchResponse) {
-        fields.push_back(Field{"ok", Type::boolean(), false});
-        fields.push_back(Field{"status", Type::number(), false});
-        fields.push_back(Field{"statusText", Type::string(), false});
-        fields.push_back(Field{"text", Type::function({}, promiseOf(Type::string())), false});
-        fields.push_back(
-            Field{"arrayBuffer", Type::function({}, promiseOf(Type::string())), false});
-        fields.push_back(Field{"json", Type::function({}, promiseOf(ambient())), false});
+        fields = fetchResponseFields();
     } else if (name == kHttpRequest) {
-        fields.push_back(Field{"method", Type::string(), false});
-        fields.push_back(Field{"path", Type::string(), false});
-        fields.push_back(Field{"text", Type::function({}, promiseOf(Type::string())), false});
-        fields.push_back(Field{"json", Type::function({}, promiseOf(ambient())), false});
+        fields = httpRequestFields();
     } else if (name == kHttpResponse) {
-        // `status` / `header` chain; the terminal writers return nothing.
-        fields.push_back(Field{"status", Type::function(permissiveParams(1), ambient()), false});
-        fields.push_back(Field{"header", Type::function(permissiveParams(2), ambient()), false});
-        fields.push_back(Field{"text", callbackOf(2), false});
-        fields.push_back(Field{"json", callbackOf(2), false});
-        fields.push_back(Field{"send", callbackOf(1), false});
-        fields.push_back(Field{"write", callbackOf(1), false});
-        fields.push_back(Field{"end", Type::function({}, Type::voidType()), false});
+        fields = httpResponseFields();
     } else if (name == kHttpServer) {
-        const Type route = callbackOf(2);
-        for (const char* verb : {"get", "post", "put", "delete_", "patch", "head", "options",
-                                 "any"}) {
-            fields.push_back(Field{verb, Type::function({Type::string(), route},
-                                                        Type::voidType()),
-                                   false});
-        }
-        fields.push_back(Field{"del", Type::function({Type::string(), route}, Type::voidType()),
-                               false});
-        fields.push_back(Field{"use", Type::function({callbackOf(3)}, Type::voidType()), false});
-        fields.push_back(
-            Field{"listen", Type::function({Type::number(), callbackOf(0)}, Type::voidType()),
-                  false});
-        fields.push_back(Field{"close", Type::function({}, Type::voidType()), false});
+        fields = httpServerFields();
     } else if (name == kWebSocket) {
-        fields.push_back(Field{"on", Type::function({Type::string(), eventListener()},
-                                                    Type::voidType()),
-                               false});
-        fields.push_back(Field{"send", callbackOf(1), false});
-        fields.push_back(Field{"close", callbackOf(2), false});
+        fields = webSocketFields();
     } else if (name == kWebSocketServer) {
-        fields.push_back(Field{"on", Type::function({Type::string(), eventListener()},
-                                                    Type::voidType()),
-                               false});
-        fields.push_back(Field{"close", Type::function({}, Type::voidType()), false});
+        fields = webSocketServerFields();
     } else {
         return Type::unknown();
     }
+    // The open flag drops the shape: what sema keeps is the marker name (see
+    // the file header). The rows above are the audit surface for a later round.
     Type object = makeObjectType(std::move(fields), true, false, {});
     object.name = name;
     return object;
@@ -107,8 +171,11 @@ Type Analyzer::networkObjectType(const std::string& name) {
 
 std::optional<Type> Analyzer::networkMember(const std::string& prop) {
     if (prop == "fetch") {
-        return Type::function({Type::string(), ambient()},
-                              promiseOf(networkObjectType(kFetchResponse)));
+        // `network.fetch(url, init?)`: the init is ambient until RequestInit
+        // has a shape; the trailing optional keeps the documented one-argument
+        // call from reporting an arity mismatch.
+        return withOptionalTail(Type::function(
+            {Type::string(), ambient()}, promiseOf(networkObjectType(kFetchResponse))));
     }
     if (prop == "createServer") return Type::function({}, networkObjectType(kHttpServer));
     if (prop == "WebSocket") {
