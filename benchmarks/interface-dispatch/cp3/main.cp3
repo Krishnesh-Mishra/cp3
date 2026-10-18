@@ -1,0 +1,93 @@
+import console from "std/console";
+
+// interface-dispatch (cp3 entry) -- fill an array with 2,000,000 shapes of
+// three concrete types behind an interface, sum every area() through the
+// interface, then repeat the hot loop as direct calls on a concrete type and
+// print both sums on one line. Same workload and same output as the C++, Rust,
+// Go, JavaScript and Python entries (expected line in the task README).
+//
+// NOT RUNNABLE TODAY: classes and interfaces have not landed (wave 2), so the
+// compiler stops at the interface declaration and the runner records that
+// diagnostic instead of a timing. The entry is written to the frozen spec and
+// its row fills in when the wave lands.
+
+interface Shape {
+  area(): number;
+}
+
+class Circle implements Shape {
+  radius: number;
+
+  constructor(radius: number) {
+    this.radius = radius;
+  }
+
+  area(): number {
+    return 3 * this.radius * this.radius;
+  }
+}
+
+class Square implements Shape {
+  side: number;
+
+  constructor(side: number) {
+    this.side = side;
+  }
+
+  area(): number {
+    return this.side * this.side;
+  }
+}
+
+class Rect implements Shape {
+  width: number;
+  height: number;
+
+  constructor(width: number, height: number) {
+    this.width = width;
+    this.height = height;
+  }
+
+  area(): number {
+    return this.width * this.height;
+  }
+}
+
+const COUNT = 2000000;
+
+const shapes: Shape[] = [];
+let i = 0;
+while (i < COUNT) {
+  const kind = i % 3;
+  if (kind === 0) {
+    shapes.push(new Circle(i % 5 + 1));
+  } else if (kind === 1) {
+    shapes.push(new Square(i % 4 + 1));
+  } else {
+    shapes.push(new Rect(i % 3 + 1, i % 6 + 2));
+  }
+  i = i + 1;
+}
+
+let totalDispatch = 0;
+i = 0;
+while (i < shapes.length) {
+  totalDispatch = totalDispatch + shapes[i].area();
+  i = i + 1;
+}
+
+const circles: Circle[] = [];
+i = 0;
+while (i < COUNT) {
+  circles.push(new Circle(i % 5 + 1));
+  i = i + 1;
+}
+
+let totalControl = 0;
+i = 0;
+while (i < circles.length) {
+  totalControl = totalControl + circles[i].area();
+  i = i + 1;
+}
+
+console.log(totalDispatch, totalControl);

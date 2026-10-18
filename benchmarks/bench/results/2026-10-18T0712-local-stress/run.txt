@@ -1,0 +1,38 @@
+benchmarks bench suite -- 2026-10-18T07:12:11
+machine: Intel64 Family 6 Model 154 Stepping 3, GenuineIntel | 20 logical CPUs | Windows-11-10.0.26200-SP0
+runner:  python 3.14.5 (C:\Program Files\Python314\python.exe)
+  g++     g++ (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r2) 16.1.0
+  rustc   rustc 1.95.0 (59807616e 2026-04-14)
+  go      go version go1.26.4 windows/amd64
+  node    v24.15.0
+  python  Python 3.14.5
+  cp3c    cp3c 0.1.0-beta.1
+every number below is a wall-clock measurement from this run; load phases use persistent keep-alive connections (one per client)
+[run ] string-churn: cpp ...
+[run ] string-churn: rust ...
+[run ] string-churn: go ...
+[run ] string-churn: js ...
+[run ] string-churn: python ...
+[run ] string-churn: cp3 ...
+
+== string-churn == expected = 254546 | scale: stress (300000 iterations)
+lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+cpp           510     13334 13334/13661          254546                     ref            -         -         4.4        23  
+rust          231      1267 1449/1267            254546                     ok             -         -         3.9       165  
+go            544     23164 23164/23399          254546                     ok             -         -       138.6      1764  
+js              -     21462 23144/21462          254546                     ok             -         -        70.0         -  
+python          -     10796 10796/11579          254546                     ok             -         -        11.5         -  
+cp3          5264     13819 13819/13844          254546                     ok         1.04x    10.90x         4.5       115  
+
+== summary: cp3 vs native ==
+task                   cp3/cpp   cp3/rust
+------------------------------------------
+string-churn             1.04x     10.90x
+------------------------------------------
+geomean over runnable rows     1.04x (n=1)    10.90x (n=1)
+ratios are cp3 time divided by the reference time; lower is better
+
+== performance gate == D64 target: cp3 within about 5% of cpp/rust; tripwire: WARN above 1.2x
+WARN string-churn: cp3 13819 ms is 10.90x rust (1267 ms), gate 1.2x
+gate: 1 warning(s); rerun with --strict to fail on warnings

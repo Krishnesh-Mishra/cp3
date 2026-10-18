@@ -49,11 +49,13 @@ implemented yet` today:
 The `games/*` programs read stdin. Play them interactively, or redirect an
 empty input; on EOF they print their goodbye line and exit.
 
-There is also [`competitions/`](competitions/README.md): the same small task
-implemented side by side in cp3, C++, Rust, Go, JavaScript (Node) and Python,
-with a dependency-free bench runner that measures boot time, request latency
-and wall-clock compute time. Pending cp3 entries there are written to spec and
-labeled as such.
+There is also the cross-language benchmark suite at
+[`../benchmarks/`](../benchmarks/README.md): the same small tasks implemented
+side by side in cp3, C++, Rust, Go, JavaScript (Node) and Python, with a
+dependency-free runner that measures boot time, request latency, wall-clock
+compute time, peak memory and binary size, and prints per-task cp3-vs-native
+ratios with a regression gate. Pending cp3 entries there are written to spec
+and labeled as such.
 
 ## Notes on the spec
 

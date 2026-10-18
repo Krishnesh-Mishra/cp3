@@ -1,0 +1,35 @@
+import console from "std/console";
+
+// compute-single-int (cp3 entry) -- total Collatz steps for every start value
+// in 1..1,000,000, printed as one integer. Same workload and output as the
+// C++, Rust, Go, JavaScript and Python entries.
+//
+// This is the native-integer tier (D65): r_'i64' is a real Rust i64 in native
+// type systems, not a 64-bit double, so the arithmetic stays integral end to
+// end. NOT RUNNABLE TODAY: native type systems have not landed, so the
+// compiler stops at the r_'i64' prefix (CP3002) and the runner records that
+// diagnostic instead of a timing. The entry is written to the frozen spec and
+// its row fills in when the wave lands.
+
+function collatzSteps(start: r_'i64'): r_'i64' {
+  let n: r_'i64' = start;
+  let steps: r_'i64' = 0;
+  while (n !== 1) {
+    if (n % 2 === 0) {
+      n = n / 2;
+    } else {
+      n = 3 * n + 1;
+    }
+    steps = steps + 1;
+  }
+  return steps;
+}
+
+let total: r_'i64' = 0;
+let start: r_'i64' = 1;
+while (start <= 1000000) {
+  total = total + collatzSteps(start);
+  start = start + 1;
+}
+
+console.log(total);

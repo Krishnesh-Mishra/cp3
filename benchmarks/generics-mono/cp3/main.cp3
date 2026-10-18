@@ -1,0 +1,61 @@
+import console from "std/console";
+
+// generics-mono (cp3 entry) -- the same 2,000,000-iteration sum run twice:
+// once through a generic wrapper type plus a generic function, once through a
+// hand-written concrete type. Prints both sums on one line. Same workload and
+// same output as the C++, Rust, Go, JavaScript and Python entries (expected
+// line in the task README).
+//
+// NOT RUNNABLE TODAY: generic classes and functions have not landed (wave 10),
+// so the compiler stops at the Box<T> declaration and the runner records that
+// diagnostic instead of a timing. The entry is written to the frozen spec and
+// its row fills in when the wave lands.
+
+class Box<T> {
+  value: T;
+
+  constructor(value: T) {
+    this.value = value;
+  }
+
+  get(): T {
+    return this.value;
+  }
+}
+
+function sumBox<T>(box: Box<T>): T {
+  return box.get();
+}
+
+class NumberBox {
+  value: number;
+
+  constructor(value: number) {
+    this.value = value;
+  }
+
+  get(): number {
+    return this.value;
+  }
+}
+
+const ITERATIONS = 2000000;
+const MOD = 1000000007;
+
+let totalGeneric = 0;
+let i = 0;
+while (i < ITERATIONS) {
+  const box = new Box<number>(i);
+  totalGeneric = (totalGeneric + sumBox(box)) % MOD;
+  i = i + 1;
+}
+
+let totalConcrete = 0;
+i = 0;
+while (i < ITERATIONS) {
+  const box = new NumberBox(i);
+  totalConcrete = (totalConcrete + box.get()) % MOD;
+  i = i + 1;
+}
+
+console.log(totalGeneric, totalConcrete);

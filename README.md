@@ -32,12 +32,13 @@ their TS shape; what changes is that the output is a native binary.
 
 ## Measured, not estimated
 
-[`examples/competitions/`](examples/competitions/README.md) implements the
-same small programs side by side in **cp3, C++, Rust, Go, JavaScript and
-Python**; a stdlib-only runner builds, starts, measures and stops everything
-and prints comparison tables. One real run (2026-10-17, Intel Core i7-12700H,
-Windows 11; g++ 16.1.0, rustc 1.95.0, go 1.26.4, node v24.15.0, python 3.14.5,
-cp3c 0.1.0-beta.1):
+[`benchmarks/`](benchmarks/README.md) implements the same small programs side
+by side in **cp3, C++, Rust, Go, JavaScript and Python**; a stdlib-only runner
+builds, starts, measures and stops everything, prints per-task `cp3/cpp` and
+`cp3/rust` ratios plus measured peak memory and stripped binary size, and
+gates on a 1.2x regression tripwire. One real run (2026-10-18, Intel Core
+i7-12700H, Windows 11; g++ 16.1.0, rustc 1.95.0, go 1.26.4, node v24.15.0,
+python 3.14.5, cp3c 0.1.0-beta.1):
 
 **One integer workload** - total Collatz steps for `1..1,000,000` (answer
 `131434424`, byte-identical in every language), single-threaded, best of two
@@ -45,32 +46,39 @@ runs:
 
 | Rust | C++ | Go | JS (Node) | **cp3** | Python |
 |---:|---:|---:|---:|---:|---:|
-| 0.13 s | 0.15 s | 0.20 s | 1.13 s | **1.16 s** | 10.13 s |
+| 0.13 s | 0.15 s | 0.20 s | 1.08 s | **1.15 s** | 10.13 s |
 
-The cp3 row runs today, no asterisk: it prints the same integer, matches
-Node's JIT-assisted 1.13 s, and beats CPython ≈8.7×. The ≈8× gap to Rust/C++
-is codegen maturity - closing it is roadmap work on the generated C++, not a
-language redesign.
+The cp3 row runs today, no asterisk: it prints the same integer, lands in the
+same second as Node's JIT-assisted 1.08 s, and beats CPython ≈8.8×. The ≈8×
+gap to Rust/C++ is codegen maturity - closing it is roadmap work on the
+generated C++, not a language redesign, and it is exactly what the suite's
+gate now flags row by row.
 
-Same total split across all cores: Rust 19 ms · C++ 24 ms · Go 33 ms ·
-Node 262 ms · Python 1.34 s - the cp3 entry joins that table when
+Where cp3 stands on everything that runs today (same run): **hello-world
+6.2 ms best (suite ratios: 0.73x C++, 1.00x Rust)**, process start to exit;
+**string-churn 1.07x C++**, eight case/slice rounds over a 4 KiB buffer per
+iteration. Entries whose features have not landed yet are attempted every run
+and reported with the compiler's own diagnostic instead of a number.
+
+Same total split across all cores: Rust 18 ms · C++ 26 ms · Go 28 ms ·
+Node 275 ms · Python 1.58 s - the cp3 entry joins that table when
 `parallel.*` lands.
 
 **The Express comparison.** The same health server, five runtimes measured at
 8 keep-alive clients for 3 s (sources side-by-side in
-[`health-server/`](examples/competitions/health-server/)):
+[`health-server/`](benchmarks/health-server/)):
 
-| C++ | Rust | Python | Express | Go | **cp3** |
+| Rust | C++ | Python | Go | Express | **cp3** |
 |---:|---:|---:|---:|---:|---:|
-| 10,498 req/s | 9,675 req/s | 9,491 req/s | 9,336 req/s | 9,284 req/s | *pending `std/network`* |
+| 12,888 req/s | 12,531 req/s | 9,489 req/s | 9,001 req/s | 8,645 req/s | *pending `std/network`* |
 
 On a trivial handler the load client and loopback dominate, so those rows
 cluster; the compute tables are where the runtimes separate. The cp3 entry is
 already written against the frozen `std/network` API - when the module lands,
 its row fills itself in, unchanged.
 
-Full methodology, caveats and the raw runner output:
-[`examples/competitions/README.md`](examples/competitions/README.md).
+Full methodology, the fairness contract, the gate and the raw runner output:
+[`benchmarks/README.md`](benchmarks/README.md).
 
 ## This is the language
 
@@ -114,15 +122,15 @@ function collatzSteps(start: number): number {
 ```
 
 Same function, other languages:
-[C++](examples/competitions/compute-single/cpp/main.cpp) ·
-[Rust](examples/competitions/compute-single/rust/main.rs) ·
-[Go](examples/competitions/compute-single/go/main.go) ·
-[JavaScript](examples/competitions/compute-single/js/main.mjs) ·
-[Python](examples/competitions/compute-single/python/main.py).
+[C++](benchmarks/compute-single/cpp/main.cpp) ·
+[Rust](benchmarks/compute-single/rust/main.rs) ·
+[Go](benchmarks/compute-single/go/main.go) ·
+[JavaScript](benchmarks/compute-single/js/main.mjs) ·
+[Python](benchmarks/compute-single/python/main.py).
 
 And the Express-vs-cp3 shape, in code
-([JS](examples/competitions/health-server/js/express/server.mjs) vs
-[cp3](examples/competitions/health-server/cp3/main.cp3)):
+([JS](benchmarks/health-server/js/express/server.mjs) vs
+[cp3](benchmarks/health-server/cp3/main.cp3)):
 
 ```js
 // Express (JavaScript)
@@ -170,7 +178,7 @@ build/bin/cp3c run examples/basics/hello-world/main.cp3   # cp3c.exe on Windows
 Run the whole cross-language suite yourself (Python 3 only, no packages):
 
 ```bash
-python examples/competitions/bench/run_suite.py
+python benchmarks/run_benchmark.py
 ```
 
 ## Repository map
@@ -181,7 +189,8 @@ python examples/competitions/bench/run_suite.py
 | `docs/rough/` | internal process docs - `DECISIONS.md`, `M2-PLAN.md`, `STYLE.md`, `ARCHITECTURE.md` and the original single-file spec sources. **All rough work goes here; the repo root stays lean.** |
 | `src/` | the compiler - `lexer`, `parser`, `sema`, `codegen`, `cli`, `runtime`, `modules`, `common` |
 | `tests/` | `cases/` (the conformance corpus) + `runner/` (the harness) |
-| `examples/` | showcase programs + `competitions/` (the benchmark suite above) |
+| `examples/` | showcase programs: `basics/`, `games/`, `servers/`, `concurrency/`, `async/` |
+| `benchmarks/` | the cross-language benchmark suite (cp3 vs C++/Rust/Go/JS/Python), with its own README and raw run results |
 | `tools/` | layout linter and helpers |
 
 Start reading at
@@ -191,5 +200,5 @@ the [full documentation index](docs/index.md).
 ---
 
 *Every performance number in this README is a real measurement from a labeled
-run recorded in [`examples/competitions/README.md`](examples/competitions/README.md) -
+run recorded in [`benchmarks/README.md`](benchmarks/README.md) -
 nothing here is estimated or extrapolated.*

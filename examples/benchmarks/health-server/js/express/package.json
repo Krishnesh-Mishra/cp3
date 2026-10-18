@@ -1,9 +1,0 @@
-{
-  "name": "cp3-competition-health-server-express",
-  "private": true,
-  "type": "module",
-  "description": "Optional express variant of the competitions health-server. The suite runner uses this variant only when node_modules exists (i.e. npm install succeeded); otherwise it falls back to the zero-dependency node:http variant in ../main.mjs.",
-  "dependencies": {
-    "express": "^5.0.0"
-  }
-}

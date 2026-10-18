@@ -1,0 +1,30 @@
+import console from "std/console";
+
+// array-growth (cp3 entry) -- push 20,000,000 numbers into a growing array
+// while summing them, pop half of them back off, then print the sum. Same
+// workload and same output as the C++, Rust, Go, JavaScript and Python entries
+// (expected value in the task README).
+//
+// NOT RUNNABLE TODAY: dynamic arrays have not landed (wave 3), so the compiler
+// stops at the array literal and the runner records that diagnostic instead of
+// a timing. The entry is written to the frozen spec and its row fills in when
+// the wave lands.
+
+const PUSHES = 20000000;
+
+const values: number[] = [];
+let total = 0;
+let i = 1;
+while (i <= PUSHES) {
+  values.push(i);
+  total = total + i;
+  i = i + 1;
+}
+
+let k = 0;
+while (k < PUSHES / 2) {
+  values.pop();
+  k = k + 1;
+}
+
+console.log(total);

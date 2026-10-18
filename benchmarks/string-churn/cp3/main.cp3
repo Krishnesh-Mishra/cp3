@@ -1,0 +1,44 @@
+import console from "std/console";
+
+// string-churn (cp3 entry) -- build a 4 KiB string, then repeatedly rebuild
+// strings from it: uppercase, slice, lowercase + re-concatenate, re-slice.
+//
+// Same workload and same output as the C++, Rust, Go, JavaScript and Python
+// entries. Every round allocates new strings, which is what makes this task
+// exercise allocators and GCs. The per-iteration fold (checksum * 31 + first
+// 'c' position + length) depends on the exact string contents, so all six
+// languages must print the same number.
+//
+// The beta-one compiler has no argv / stdin / env surface, so the workload
+// size is the constant below. The suite runner substitutes a different value
+// for the "stress" preset by building a copy of this file with only the
+// ITERATIONS line changed (see bench/run_suite.py).
+
+const ITERATIONS = 50000;
+
+function churnChecksum(iterations: number): number {
+  const seed = "abcXYZ0123456789";
+  let data = "";
+  while (data.length < 4096) {
+    data = data + seed;
+  }
+
+  let checksum = 0;
+  let k = 0;
+  while (k < iterations) {
+    let s = data;
+    let round = 0;
+    while (round < 8) {
+      s = s.toUpperCase();
+      s = s.slice(3, s.length - 1);
+      s = s.toLowerCase() + s.slice(0, 8);
+      s = s.slice(2);
+      round = round + 1;
+    }
+    checksum = (checksum * 31 + s.indexOf("c") + s.length) % 1000003;
+    k = k + 1;
+  }
+  return checksum;
+}
+
+console.log(churnChecksum(ITERATIONS));
