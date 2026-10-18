@@ -269,6 +269,8 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsOs_) out += "#include \"cp3/std/os.hpp\"\n";
     if (needsJson_) out += "#include \"cp3/std/json.hpp\"\n";
     if (needsProcess_) out += "#include \"cp3/std/process.hpp\"\n";
+    if (needsCrypto_) out += "#include \"cp3/std/crypto.hpp\"\n";
+    if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
     out += "\n";
     out += kHelperBlock;
     out += "\nnamespace " + namesp_ + " {\n\n";

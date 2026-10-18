@@ -222,13 +222,13 @@ std::uint64_t totalPhysicalMemoryMb() noexcept {
 // Repository-relative include roots
 // -----------------------------------------------------------------------------
 
-namespace {
-
 // Repo root discovered from this translation unit's compile-time path
-// (.../src/cli/src/toolchain/util.cpp): walk up until the directory that owns both src/cli
-// and src/runtime. This mirrors the historical `__FILE__`-relative computation
-// without depending on this file's exact depth under src/.
-fs::path repoRootFromHere() {
+// (.../src/cli/src/toolchain/util.cpp): walk up until the directory that owns
+// both src/cli and src/runtime. This mirrors the historical `__FILE__`-relative
+// computation without depending on this file's exact depth under src/. Public
+// to the cli module because the native-backend rows (detail/native_packages.hpp)
+// resolve third_party/** against it.
+fs::path repositoryRoot() {
     std::error_code ec;
     fs::path probe = fs::path(__FILE__).parent_path();
     while (!probe.empty()) {
@@ -243,11 +243,9 @@ fs::path repoRootFromHere() {
     return {};
 }
 
-}  // namespace
-
 std::vector<fs::path> compilerIncludeRoots() {
     std::vector<fs::path> roots;
-    const fs::path repo = repoRootFromHere();
+    const fs::path repo = repositoryRoot();
     for (const char* rel : {"src/runtime/include", "src/common/include"}) {
         const fs::path candidate = repo / rel;
         std::error_code ec;
@@ -257,7 +255,7 @@ std::vector<fs::path> compilerIncludeRoots() {
 }
 
 std::vector<fs::path> runtimeSourcePaths() {
-    const fs::path repo = repoRootFromHere();
+    const fs::path repo = repositoryRoot();
 
     // Prefer the refactored layout; fall back to the legacy flat directory.
     std::error_code ec;

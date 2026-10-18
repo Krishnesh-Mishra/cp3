@@ -97,8 +97,7 @@ std::string describeToolchain(const Toolchain& tc) {
 }
 
 std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
-                                     const std::vector<fs::path>& includes,
-                                     const fs::path& cpp, const fs::path& obj) {
+                                     const CompileStep& step) {
     std::vector<std::string> args;
     args.push_back(tc.program);
     if (tc.msvc) {
@@ -106,9 +105,11 @@ std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
         args.push_back("/std:c++20");
         args.push_back("/EHsc");
         args.push_back("/c");
-        args.push_back(cpp.string());
-        args.push_back("/Fo" + obj.string());
-        for (const fs::path& inc : includes) args.push_back("/I" + inc.string());
+        args.push_back(step.cpp.string());
+        args.push_back("/Fo" + step.obj.string());
+        for (const fs::path& inc : step.includes) {
+            args.push_back("/I" + inc.string());
+        }
         for (std::string& f : profileCompileFlags(profile, true)) {
             args.push_back(std::move(f));
         }
@@ -118,34 +119,41 @@ std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
         // exceptions stay enabled - that is the default for g++/clang++, and we
         // deliberately do not pass -fno-exceptions.
         args.push_back("-c");
-        args.push_back(cpp.string());
+        args.push_back(step.cpp.string());
         args.push_back("-o");
-        args.push_back(obj.string());
-        for (const fs::path& inc : includes) args.push_back("-I" + inc.string());
+        args.push_back(step.obj.string());
+        for (const fs::path& inc : step.includes) {
+            args.push_back("-I" + inc.string());
+        }
         for (std::string& f : profileCompileFlags(profile, false)) {
             args.push_back(std::move(f));
         }
     }
+    // Native-backend flags last: register-level defines (e.g. UWS_NO_ZLIB)
+    // apply to every TU of a program that imports the module.
+    for (const std::string& f : step.extraFlags) args.push_back(f);
     return args;
 }
 
 std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
-                                  const std::vector<fs::path>& objects,
-                                  const fs::path& exe) {
+                                  const LinkStep& step) {
     std::vector<std::string> args;
     if (tc.msvc) {
         args.push_back("link");
         args.push_back("/nologo");
-        args.push_back("/OUT:" + exe.string());
-        for (const fs::path& obj : objects) args.push_back(obj.string());
+        args.push_back("/OUT:" + step.exe.string());
+        for (const fs::path& obj : step.objects) args.push_back(obj.string());
         if (profile == BuildProfile::Release) args.push_back("/LTCG");
     } else {
         args.push_back(tc.program);
         args.push_back("-o");
-        args.push_back(exe.string());
-        for (const fs::path& obj : objects) args.push_back(obj.string());
+        args.push_back(step.exe.string());
+        for (const fs::path& obj : step.objects) args.push_back(obj.string());
         if (profile == BuildProfile::Release) args.push_back("-flto");
     }
+    // Native-backend libraries last: -L dirs then -l archives, after every
+    // object, so static-archive resolution order is correct.
+    for (const std::string& f : step.extraFlags) args.push_back(f);
     return args;
 }
 

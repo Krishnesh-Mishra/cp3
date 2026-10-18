@@ -84,6 +84,13 @@ std::vector<fs::path> compilerIncludeRoots();
 // minimum set is returned (see src/toolchain/util.cpp).
 std::vector<fs::path> runtimeSourcePaths();
 
+// Repository root: the ancestor directory that owns both `src/cli` and
+// `src/runtime` (normally also `third_party/`), discovered from this module's
+// compile-time path. Empty when the layout cannot be recognised. The std
+// modules' native backends (detail/native_packages.hpp, DECISIONS D68/D70)
+// resolve their vendored paths against this root.
+fs::path repositoryRoot();
+
 // -----------------------------------------------------------------------------
 // Misc
 // -----------------------------------------------------------------------------

@@ -12,8 +12,13 @@
 //     source) is recompiled only when its content hash or profile changed;
 //   * the link step reruns when anything was compiled or the executable is
 //     missing; otherwise the cached executable is reused.
+//
+// DECISIONS D68: std modules with a vendored native backend (third_party/**)
+// add include roots, compile flags, runtime TUs and link libraries, selected by
+// the program's `std/...` imports (applyNativePackages below).
 // =============================================================================
 #include <cstdio>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -22,6 +27,7 @@
 
 #include "detail/cache.hpp"
 #include "detail/commands.hpp"
+#include "detail/native_packages.hpp"
 #include "detail/toolchain.hpp"
 #include "detail/util.hpp"
 
@@ -29,12 +35,19 @@ namespace cp3::cli::detail {
 
 namespace {
 
+// Flags the native backends selected for one program contribute (D68).
+struct NativeBuildFlags {
+    std::vector<std::string> compile;
+    std::vector<std::string> link;
+};
+
 // Mutable state threaded through one build's translation units.
 struct BuildState {
     const CliOptions& opt;
     const Toolchain& tc;
     const BuildLayout& layout;
     const std::string& profile;
+    const NativeBuildFlags& nativeFlags;
     bool force;
     std::vector<CacheEntry>& manifest;
     std::vector<fs::path>& objects;
@@ -69,8 +82,9 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
         return true;
     }
 
-    const std::vector<std::string> args = compileArgs(
-        st.tc, st.opt.compile.profile, st.layout.includeDirs, cpp, obj);
+    const CompileStep step{st.layout.includeDirs, cpp, obj, st.nativeFlags.compile};
+    const std::vector<std::string> args =
+        compileArgs(st.tc, st.opt.compile.profile, step);
     if (st.opt.verbose) {
         std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
     }
@@ -120,8 +134,9 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
         }
         return true;
     }
+    const LinkStep step{st.objects, exePath, st.nativeFlags.link};
     const std::vector<std::string> args =
-        linkArgs(st.tc, st.opt.compile.profile, st.objects, exePath);
+        linkArgs(st.tc, st.opt.compile.profile, step);
     if (st.opt.verbose) {
         std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
     }
@@ -133,11 +148,85 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
     return true;
 }
 
+// D68: every std module the program imports that has a vendored native backend
+// (third_party/**, D70) contributes include roots and runtime TUs to `layout`
+// plus compile/link flags, so a program that never imports std/network pays
+// nothing for uWebSockets. Returns nullopt after reporting on a missing packed
+// path, or on an MSVC toolchain (the vendored archives are GCC/Clang builds).
+std::optional<NativeBuildFlags> applyNativePackages(
+    const CliOptions& opt, const Toolchain& tc,
+    const std::vector<std::string>& importedStdModules, BuildLayout& layout) {
+    NativeBuildFlags flags;
+    const std::vector<const NativePackage*> natives =
+        selectNativePackages(importedStdModules);
+    if (natives.empty()) return flags;
+
+    if (tc.msvc) {
+        std::fprintf(stderr,
+                     "cp3c: '%s' needs its native backend, which is built for "
+                     "GCC/Clang (MinGW-w64); MSVC cannot link it in beta one\n",
+                     natives.front()->specifier);
+        std::fprintf(stderr, "      install g++ or clang++ and re-run.\n");
+        return std::nullopt;
+    }
+    auto reportBroken = [](const char* spec, const char* what,
+                           const fs::path& path) {
+        std::fprintf(stderr,
+                     "cp3c: native backend for '%s' is incomplete: missing "
+                     "%s '%s'\n",
+                     spec, what, path.string().c_str());
+    };
+    std::error_code ec;
+    const fs::path repo = repositoryRoot();
+    for (const NativePackage* pkg : natives) {
+        auto resolve = [&](const std::string& rel) {
+            return repo.empty() ? fs::path(rel) : repo / rel;
+        };
+        for (const std::string& rel : pkg->includeDirs) {
+            const fs::path dir = resolve(rel);
+            if (!fs::is_directory(dir, ec)) {
+                reportBroken(pkg->specifier, "include directory", dir);
+                return std::nullopt;
+            }
+            layout.includeDirs.push_back(dir);
+        }
+        for (const std::string& rel : pkg->runtimeSources) {
+            const fs::path src = resolve(rel);
+            if (!fs::is_regular_file(src, ec)) {
+                reportBroken(pkg->specifier, "runtime source", src);
+                return std::nullopt;
+            }
+            layout.runtimeSources.push_back(src);
+        }
+        for (const std::string& flag : pkg->compileFlags) {
+            flags.compile.push_back(flag);
+        }
+        for (const std::string& rel : pkg->libDirs) {
+            const fs::path dir = resolve(rel);
+            if (!fs::is_directory(dir, ec)) {
+                reportBroken(pkg->specifier, "library directory", dir);
+                return std::nullopt;
+            }
+            flags.link.push_back("-L" + dir.string());
+        }
+        for (const std::string& flag : pkg->linkFlags) {
+            flags.link.push_back(flag);
+        }
+        if (opt.verbose) {
+            std::fprintf(stderr, "cp3c: native backend: %s\n", pkg->specifier);
+        }
+    }
+    return flags;
+}
+
 }  // namespace
 
-int buildWithToolchain(const CliOptions& opt, const fs::path& entry,
-                       const std::string& moduleName, const GeneratedModule& mod,
-                       bool execute) {
+int buildWithToolchain(const BuildRequest& request) {
+    const CliOptions& opt = *request.opt;
+    const fs::path& entry = *request.entry;
+    const std::string& moduleName = *request.moduleName;
+    const GeneratedModule& mod = *request.module;
+
     BuildLayout layout = makeBuildLayout(entry);
     std::error_code ec;
 
@@ -167,12 +256,17 @@ int buildWithToolchain(const CliOptions& opt, const fs::path& entry,
                      describeToolchain(tc).c_str());
     }
 
+    const std::optional<NativeBuildFlags> nativeFlags =
+        applyNativePackages(opt, tc, *request.importedStdModules, layout);
+    if (!nativeFlags.has_value()) return kExitCompileError;
+
     std::vector<CacheEntry> manifest = loadManifest(layout.manifestPath);
     const std::string profile = profileNameOf(opt.compile.profile);
     const bool force = (opt.compile.profile == BuildProfile::Release);
 
     std::vector<fs::path> objects;
-    BuildState state{opt, tc, layout, profile, force, manifest, objects};
+    BuildState state{opt, tc,        layout,   profile,
+                     *nativeFlags, force, manifest, objects};
 
     if (!compileProgram(state, cppPath, objPath, entry.string())) {
         return kExitCompileError;
@@ -181,7 +275,7 @@ int buildWithToolchain(const CliOptions& opt, const fs::path& entry,
         return kExitCompileError;
     }
 
-    if (!execute) {
+    if (!request.execute) {
         if (opt.verbose) {
             std::fprintf(stderr, "cp3c: built %s\n",
                          layout.exePath.string().c_str());

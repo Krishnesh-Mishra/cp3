@@ -43,15 +43,34 @@ const Toolchain& detectToolchain();
 // Human-readable summary for --verbose and failure messages.
 std::string describeToolchain(const Toolchain& tc);
 
+// One compilation step: the TU, its object, the program's include roots and any
+// native-backend compile flags (DECISIONS D68, detail/native_packages.hpp).
+struct CompileStep {
+    std::vector<fs::path> includes;
+    fs::path cpp;
+    fs::path obj;
+    std::vector<std::string> extraFlags;
+};
+
+// One link step: every object of the program, the output executable and any
+// native-backend flags (-L directories then -l archives, D68).
+struct LinkStep {
+    std::vector<fs::path> objects;
+    fs::path exe;
+    std::vector<std::string> extraFlags;
+};
+
 // Command line for compiling one generated/real C++ translation unit to an
 // object file. The working directory is irrelevant (all paths are explicit).
+// `step.extraFlags` is appended verbatim (register-level defines such as
+// UWS_NO_ZLIB must apply to every TU of an std/network program).
 std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
-                                     const std::vector<fs::path>& includes,
-                                     const fs::path& cpp, const fs::path& obj);
+                                     const CompileStep& step);
 
 // Command line for linking every object into the final executable.
+// `step.extraFlags` is appended after the objects, so `-l` resolution order
+// stays correct.
 std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
-                                  const std::vector<fs::path>& objects,
-                                  const fs::path& exe);
+                                  const LinkStep& step);
 
 }  // namespace cp3::cli

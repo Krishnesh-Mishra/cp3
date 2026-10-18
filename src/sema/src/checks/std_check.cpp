@@ -44,6 +44,8 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
     if (ns == "path") return pathMember(prop);
     if (ns == "os") return osMember(prop);
     if (ns == "process") return processMember(prop);
+    if (ns == "crypto") return cryptoMember(prop);
+    if (ns == "network") return networkMember(prop);
     return std::nullopt;
 }
 

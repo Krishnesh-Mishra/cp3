@@ -13,6 +13,7 @@ set(cp3_cli_sources
     src/cli.cpp
     src/toolchain/util.cpp
     src/pkg/cache.cpp
+    src/detail/native_packages.cpp
     src/toolchain/toolchain.cpp
     src/toolchain/diagnostics.cpp
     src/toolchain/pipeline.cpp

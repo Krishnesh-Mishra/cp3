@@ -141,7 +141,23 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
         input.execute = execute;
         return detail::packProject(input);
     }
-    return detail::buildWithToolchain(opt, entryPath, moduleName, mod, execute);
+
+    // Every resolved "std/..." specifier in the whole graph (any unit, not just
+    // the entry) selects that module's native backend for this build (D68).
+    std::vector<std::string> importedStdModules;
+    for (const ModuleDependency& dep : frontend.graph->dependencies()) {
+        if (dep.resolution == ModuleResolution::Std) {
+            importedStdModules.push_back(dep.specifier);
+        }
+    }
+    detail::BuildRequest request;
+    request.opt = &opt;
+    request.entry = &entryPath;
+    request.moduleName = &moduleName;
+    request.module = &mod;
+    request.importedStdModules = &importedStdModules;
+    request.execute = execute;
+    return detail::buildWithToolchain(request);
 }
 
 }  // namespace cp3::cli

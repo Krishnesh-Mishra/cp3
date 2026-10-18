@@ -177,6 +177,11 @@ private:
     std::optional<Type> pathMember(const std::string& prop);
     std::optional<Type> osMember(const std::string& prop);
     std::optional<Type> processMember(const std::string& prop);
+    // Native-backed std modules: each returns nullopt until its wave lands, so
+    // member access keeps the permissive ambient shape meanwhile. Definitions
+    // live in the per-module checks/std_<module>.cpp units.
+    std::optional<Type> cryptoMember(const std::string& prop);
+    std::optional<Type> networkMember(const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
     Type inferIndex(IndexExpr& ix);
     Type indexOf(const Type& ot, IndexExpr& ix);

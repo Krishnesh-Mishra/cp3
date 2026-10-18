@@ -80,12 +80,23 @@ int cmdInstall(const CliOptions& opt);
 
 namespace detail {
 
+// Everything buildWithToolchain needs from the frontend half of cmdBuildOrRun:
+// pointers into the caller's locals (valid for the duration of the call).
+struct BuildRequest {
+    const CliOptions* opt = nullptr;
+    const fs::path* entry = nullptr;         // as resolved by the CLI
+    const std::string* moduleName = nullptr;  // e.g. "src/index"
+    const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
+    const std::vector<std::string>* importedStdModules = nullptr;  // D68 selection
+    bool execute = false;                     // `cp3c run` was requested
+};
+
 // Compiles + links the generated module through the detected toolchain,
 // reusing cached objects when nothing changed. `execute` runs the produced
-// binary and propagates its exit code.
-int buildWithToolchain(const CliOptions& opt, const fs::path& entry,
-                       const std::string& moduleName, const GeneratedModule& mod,
-                       bool execute);
+// binary and propagates its exit code. `importedStdModules` carries the
+// program's resolved "std/..." import specifiers (as written), which select
+// the native backends (D68) wired into the build.
+int buildWithToolchain(const BuildRequest& request);
 
 // Everything `packProject` needs from the frontend half of cmdBuildOrRun:
 // pointers into the caller's locals (valid for the duration of the call).

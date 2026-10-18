@@ -23,10 +23,21 @@ set(cp3_runtime_sources
     src/parallel/parallel.cpp
     src/async/promise.cpp
     src/core/runtime.cpp
+    src/std/crypto.cpp
+    src/std/network.cpp
 )
 
 add_library(cp3_runtime STATIC ${cp3_runtime_sources})
 target_include_directories(cp3_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+# Native backends (D68/D70): the crypto/network TUs include the vendored
+# headers; the static archives themselves are linked by cp3c at program link
+# time (src/cli/src/detail/native_packages.hpp), not into this library.
+target_include_directories(cp3_runtime PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/libsodium/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/libuv/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/uWebSockets/include"
+)
+target_compile_definitions(cp3_runtime PRIVATE UWS_NO_ZLIB)
 target_link_libraries(cp3_runtime PUBLIC cp3_common Threads::Threads)
 cp3_set_warnings(cp3_runtime)
 

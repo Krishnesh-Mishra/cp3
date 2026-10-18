@@ -140,6 +140,11 @@ private:
     std::string emitJsonCall(const CallExpr& c, const MemberExpr& m);
     std::string emitProcessCall(const CallExpr& c, const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
+    // Native-backed std modules (emit/std/crypto.cpp, emit/std/network.cpp):
+    // one per-module lowering unit. Each returns "" until its wave lands, so
+    // the caller keeps reporting CP3002 meanwhile.
+    std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
     std::vector<std::string> emitPlainArgs(const CallExpr& c);
 
     // --- async / promises / errors (emit_async.cpp) --------------------------
@@ -249,6 +254,8 @@ private:
     bool needsOs_ = false;         // os.* -> cp3/std/os.hpp include
     bool needsJson_ = false;       // JSON.stringify -> cp3/std/json.hpp include
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
+    bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
+    bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)

@@ -28,6 +28,8 @@ set(cp3_codegen_sources
     src/emit/std/process.cpp
     src/emit/std/json.cpp
     src/emit/std/string.cpp
+    src/emit/std/crypto.cpp
+    src/emit/std/network.cpp
 )
 
 add_library(cp3_codegen STATIC ${cp3_codegen_sources})

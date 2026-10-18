@@ -51,6 +51,10 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     if (isNamespaceObject(m.object.get(), "path")) return emitPathCall(c, m);
     if (isNamespaceObject(m.object.get(), "os")) return emitOsCall(c, m);
     if (isNamespaceObject(m.object.get(), "JSON")) return emitJsonCall(c, m);
+    if (isNamespaceObject(m.object.get(), "crypto")) return emitCryptoCall(c, m);
+    if (isNamespaceObject(m.object.get(), "network")) {
+        return emitNetworkCall(c, m);
+    }
     // `process.*` plus the one nested member this wave lowers:
     // `process.env.get(name)`.
     if (isNamespaceObject(m.object.get(), "process") ||

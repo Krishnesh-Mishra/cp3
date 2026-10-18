@@ -25,6 +25,8 @@ set(cp3_sema_sources
     src/checks/parallel_check.cpp
     src/checks/parallel_expr_check.cpp
     src/checks/std_check.cpp
+    src/checks/std_crypto.cpp
+    src/checks/std_network.cpp
 )
 
 add_library(cp3_sema STATIC ${cp3_sema_sources})
