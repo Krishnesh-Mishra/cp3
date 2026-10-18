@@ -198,6 +198,12 @@ void ProgramLoader::applyReExportAll(const ExportDeclaration& decl, CompilationU
 
 const ExportSurface* ProgramLoader::stdSurface(const std::string& specifier,
                                                const SourceSpan& span) {
+    // A specifier that left the table (D74: `std/events`) is not importable:
+    // report the builtin that replaced it, in the kModuleNotFound family.
+    if (const char* removed = removedModuleMessage(specifier)) {
+        reportOnce(diagcode::kModuleNotFound, span, removed);
+        return nullptr;
+    }
     const ExportSurface* surface = stdModuleSurface(specifier);
     if (surface == nullptr) {
         reportOnce(diagcode::kModuleNotFound, span,

@@ -19,6 +19,8 @@ find_package(Threads REQUIRED)
 
 set(cp3_runtime_sources
     ../std/console/runtime.cpp
+    ../std/console/runtime_pump.cpp
+    ../std/console/runtime_pump_read.cpp
     src/core/error.cpp
     src/async/eventloop.cpp
     src/parallel/parallel.cpp

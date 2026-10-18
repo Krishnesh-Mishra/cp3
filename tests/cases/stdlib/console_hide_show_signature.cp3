@@ -1,0 +1,6 @@
+import console from "std/console";
+
+// D76 surface. Check mode by design: run mode would hide the console that the
+// harness itself is running in.
+console.hide();
+console.show();

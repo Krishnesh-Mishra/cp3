@@ -37,6 +37,9 @@ set(cp3_sema_sources
     ../std/process/sema.cpp
     ../std/console/sema.cpp
     ../std/json/sema.cpp
+    ../std/collections/sema.cpp
+    ../std/date/sema.cpp
+    ../std/buffer/sema.cpp
 )
 
 add_library(cp3_sema STATIC ${cp3_sema_sources})

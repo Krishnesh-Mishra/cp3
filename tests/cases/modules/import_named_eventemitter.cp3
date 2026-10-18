@@ -1,4 +1,4 @@
-import { EventEmitter } from "std/events";
+import { fetch } from "std/network";
 import console from "std/console";
 let e = new EventEmitter();
 console.log("ok");

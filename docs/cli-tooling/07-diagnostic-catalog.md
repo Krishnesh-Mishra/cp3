@@ -123,7 +123,7 @@ Candidates come from what is actually visible at the reference: names in scope, 
 | Code | Name | Meaning | Example message | Fix |
 | ---- | ---- | ------- | --------------- | --- |
 | CP3601 | `kModuleNotFound` | An import specifier resolves to no local file, installed package or standard module (or exists but cannot be read). | `cannot find module 'std/mathx'` | Check the specifier, the path, or the package; standard modules have a fixed, documented name list. |
-| CP3604 | `kMissingDefaultExport` | `import x from "..."` was used where the module has no default export; only named exports exist. | ``module 'std/events' has no default export; named exports: 'EventEmitter'; use a named import: `import { EventEmitter } from "std/events";` `` | Use the named import form shown, or import the default of a default-only module. |
+| CP3604 | `kMissingDefaultExport` | `import x from "..."` was used where the module has no default export; only named exports exist. | ``module 'std/collections' has no default export; named exports: 'Map' or 'Set'`` | Use a named import (``import { Map } from "std/collections";``), or import the default of a default-only module. |
 | CP3605 | `kPreludeError` | An internal support file shipped with the toolchain could not be read; usually a damaged install or cache. | `cannot read prelude file '...'` | Repair or reinstall the toolchain; report it if it persists. |
 
 ## Banned JS patterns (3800-3899)

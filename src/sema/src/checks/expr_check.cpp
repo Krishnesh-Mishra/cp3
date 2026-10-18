@@ -179,6 +179,20 @@ Type Analyzer::inferNew(NewExpr& n) {
     if (n.callee && n.callee->kind == NodeKind::Identifier) {
         auto& id = static_cast<Identifier&>(*n.callee);
         Binding b;
+        // `new EventEmitter()` (D74, spec §14): a language builtin, always in
+        // scope. The type is nominal; its members are typed in
+        // member_check.cpp and codegen lowers the construction to the runtime.
+        if (lookup(id.name, b) && isAmbientType(b.type) &&
+            id.name == "EventEmitter") {
+            setType(id, b.type);
+            for (auto& a : n.arguments) {
+                if (a) inferExpr(*a);
+            }
+            if (!n.arguments.empty()) {
+                notImplemented(n.span, "new EventEmitter(...) with arguments");
+            }
+            return withType(n, Type::named(TypeKind::Class, "EventEmitter"));
+        }
         if (lookup(id.name, b) && isAmbientType(b.type) &&
             isFamilyCtorName(id.name)) {
             setType(id, b.type);
@@ -191,6 +205,13 @@ Type Analyzer::inferNew(NewExpr& n) {
             setType(id, b.type);
             Type net = inferNetworkConstruct(id.name, n.arguments, n.span);
             if (!net.isUnknown()) return withType(n, net);
+        }
+        if (lookup(id.name, b) && isAmbientType(b.type)) {
+            // `new Map<string, number>()` / `new Set<number>()`: the
+            // std/collections family (src/std/collections/sema.cpp).
+            setType(id, b.type);
+            Type coll = inferCollectionsConstruct(id.name, n.typeArgs);
+            if (!coll.isUnknown()) return withType(n, coll);
         }
     }
     if (n.callee) inferExpr(*n.callee);

@@ -20,4 +20,9 @@ namespace cp3::modules {
 // The returned pointer is stable for the lifetime of the process.
 const ExportSurface* stdModuleSurface(std::string_view specifier);
 
+// The "this specifier is now a language builtin" message for a removed std
+// module (D74: `std/events`), or nullptr when the specifier was never one.
+// The returned pointer is stable for the lifetime of the process.
+const char* removedModuleMessage(std::string_view specifier);
+
 }  // namespace cp3::modules
