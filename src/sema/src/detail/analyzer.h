@@ -287,6 +287,15 @@ private:
     Type collectionsMember(const Type& recv, const std::string& prop,
                            const SourceSpan& span);
 
+    // --- the std/buffer `Buffer` family (src/std/buffer/sema.cpp) ------------
+    // The documented member table (`length`/`toString`/`slice`), the
+    // `Buffer.from`/`Buffer.alloc` statics, the instance-member calls and the
+    // D47 literal-encoding check.
+    Type byteBufferMember(const Type& recv, const std::string& prop);
+    bool tryInferBufferStaticCall(CallExpr& call, MemberExpr& m, Type& out);
+    bool tryInferBufferCall(CallExpr& call, MemberExpr& m, Type& out);
+    bool checkByteBufferEncoding(const Expr* arg);
+
     // --- parallel.* capture safety (parallel_check.cpp) ----------------------
     // Walks the closures passed to a `parallel.*` entry point and reports a
     // captured-state write (CP3902) or an unsafe computed-index write (CP3901);

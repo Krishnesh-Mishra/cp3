@@ -20,11 +20,17 @@
 // SEMANTICS / LIMITATIONS
 // -----------------------------------------------------------------------------
 //   * `randomBytes` returns the raw bytes as a `std::string`. The docs type it
-//     `Buffer`, but beta one has no nominal Buffer type yet; the raw-byte
-//     string is the stand-in (it already behaves like one for `.length` and
-//     for feeding the value straight back into `sha256`/`sha512`).
+//     `Buffer`; the nominal Buffer now exists (std/buffer), but retyping
+//     `randomBytes` is blocked by the pinned crypto_signatures_check.cp3:4
+//     (`let b: string = crypto.randomBytes(16)`), so it keeps the raw-byte
+//     string stand-in (which already behaves like one for `.length` and for
+//     feeding the value straight back into `sha256`/`sha512`; the R1 buffer
+//     wave report records the conflict and the one-line pin fix).
 //   * `randomUUID` is the RFC 4122 version 4 form: 36 lowercase chars.
-//   * `sha256`/`sha512` are lowercase hex over the byte input.
+//   * `sha256`/`sha512` take `string | Buffer` in the cp3 surface; a Buffer
+//     argument lowers to its bytes (`::cp3::runtime::buffer::bytes`) and this
+//     C++ surface stays `const std::string&`. The result is lowercase hex over
+//     the byte input.
 //   * AES-256-GCM envelope: one base64 string of nonce (12 bytes) ||
 //     ciphertext || tag (16 bytes), so the value is opaque to callers. The
 //     `key` string is stretched to 32 bytes with BLAKE2b-256 before use (the

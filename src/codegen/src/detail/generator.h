@@ -232,6 +232,13 @@ private:
     // std/date (src/std/date/codegen.cpp): the `Date.*` statics and the Date
     // value's instance methods; pure family, backed by cp3/std/date.hpp.
     std::string emitDateCall(const CallExpr& c, const MemberExpr& m);
+    // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): the
+    // `Buffer.from`/`Buffer.alloc` statics, the `buf.toString`/`buf.slice`
+    // methods and the `buf.length` read. Each returns "" when the form is not
+    // one of them.
+    std::string emitByteBufferStaticCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitByteBufferMethodCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitByteBufferMember(const MemberExpr& m);
     // `std/network` receivers are recognised by the sema marker names
     // ("$network:*"), so the hooks live on the receiver, not on the member:
     // named imports (identifier calls), `new` forms, member calls/reads.
@@ -371,6 +378,7 @@ private:
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
+    bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)

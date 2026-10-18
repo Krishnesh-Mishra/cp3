@@ -31,6 +31,7 @@ enum class Shape {
     ArrayBuffer, // ArrayBuffer / SharedArrayBuffer
     DataView,
     Collections, // Map<K, V> / Set<T> (std/collections)
+    Buffer,      // the nominal std/buffer `Buffer` byte sequence
     Unknown, Unsupported
 };
 
@@ -84,6 +85,10 @@ bool classifyCollections(const Type& t, CppInfo& info);
 // named "Date" lowering to `::cp3::runtime::date::Date`. Returns false for
 // every other type.
 bool classifyDate(const Type& t, CppInfo& info);
+
+// The nominal `Buffer` of std/buffer (src/std/buffer/codegen.cpp): a
+// `TypeKind::Class` named "Buffer" -> `::cp3::runtime::buffer::Buffer`.
+bool classifyByteBuffer(const Type& t, CppInfo& info);
 
 // Structural fallback: a type annotation -> a cp3 Type (when sema is absent).
 std::optional<Type> typeFromTypeNode(const TypeNode& tn);

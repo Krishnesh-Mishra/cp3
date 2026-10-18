@@ -178,6 +178,8 @@ CppInfo classify(const Type& raw) {
             classifyNullishUnion(t, info);
             return info;
         case TypeKind::Class: {
+            // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp).
+            if (classifyByteBuffer(t, info)) return info;
             // The JS-compat family (typed views, buffers, DataView).
             if (classifyFamily(t, info)) return info;
             // The std/collections family (`Map<K, V>` / `Set<T>`).

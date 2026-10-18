@@ -135,6 +135,8 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
                 reportMemberMiss("Date", prop, span, dateInstanceMemberNames());
                 return Type::unknown();
             }
+            // The nominal std/buffer `Buffer` (src/std/buffer/sema.cpp).
+            if (isByteBufferClass(ot)) return byteBufferMember(ot, prop);
             return ambient();
         case TypeKind::String:
             return stringMember(prop);
