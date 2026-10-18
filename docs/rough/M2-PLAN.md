@@ -80,8 +80,10 @@ needs spec text + corpus cases (the oracle) before implementation. Backing
 storage is fixed-size (an owned heap block + stored length for runtime sizes;
 the native fixed-array mapping when sizes are compile-time known), never a
 resizing vector: typed arrays have no delete and no resize, and `const` keeps
-its JS meaning (no rebinding; contents mutable). All of these
-sit in perf-owned paths today.
+its JS meaning (no rebinding; contents mutable). The reviewed surface and the
+five resolved open questions are **D69** plus `docs/rough/JSC-TYPED-ARRAYS.md`
+(JS0); implementation is corpus-first and needs the array indexing path. All of
+these sit in perf-owned paths today.
 
 ## Marker rulings owed (the 16 genuinely open)
 

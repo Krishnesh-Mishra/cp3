@@ -507,3 +507,29 @@ Clarifies the answer to "are the std modules codegen things?":
    pure-logic modules may move to cp3-source implementations shipped with the
    compiler; perf-critical families (crypto, network, JSON, strings) stay
    native under the no-runtime-overhead rule and the D67 gate.
+
+## D69 - JS-compat typed arrays accepted (JS0 proposal, 2026-10-18)
+
+Accepts `docs/rough/JSC-TYPED-ARRAYS.md` (JS0) as the surface to specify and
+implement, with the five open questions resolved as recommended there:
+
+1. `BigInt64Array`/`BigUint64Array` land now over i64/u64 storage with the
+   documented 2^53 number-domain caveat (JS would return `BigInt`; the surface
+   upgrades in place if a BigInt primitive lands later).
+2. `SharedArrayBuffer` lands now as a distinct class with
+   ArrayBuffer-identical semantics; true sharing and any synchronization
+   surface defer to the worker/parallel ruling.
+3. `DataView` defaults to **big-endian** when the `littleEndian` argument is
+   omitted (JS parity; this corrects the wave brief, which had it backwards).
+   Typed arrays themselves use platform byte order, as in JS.
+4. `Array(n)` is dense with element-type zero/default values; no hole state
+   exists (resolves the parked `dense_array_holes` marker when the wave
+   lands).
+5. Typed-array index reads type as `number | undefined` (JS-exact) with the
+   in-range literal refinement; out-of-range writes are ignored.
+
+Fixed-size backing stays as recorded (never a resizing vector). Spec
+amendments and the ~90-case corpus list land corpus-first in the typed-array
+wave, queued after the std runtime waves; the wave owner first closes whatever
+array indexing path it needs (ranked wave 3). The marker promotions listed in
+the proposal ride that wave.
