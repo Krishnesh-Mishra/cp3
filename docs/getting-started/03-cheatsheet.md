@@ -65,13 +65,13 @@ One page. Keep it open while you port code.
 | Dates | `import Date from "std/date"` |
 | Dictionary / set | `import { Map, Set } from "std/collections"` |
 | HTTP, servers, WebSockets | `import { fetch, createServer, WebSocket, WebSocketServer } from "std/network"` |
-| Events | `import { EventEmitter } from "std/events"` |
+| Events | no import - `EventEmitter` is a language builtin (see §14) |
 | Crypto | `import crypto from "std/crypto"` |
 | Env vars (typed) | `import { env } from "std/env"` |
 | Binary data | `import { Buffer } from "std/buffer"` |
 | OS info | `import os from "std/os"` |
 
-**No import needed:** array methods, string methods, regex, `setTimeout`/`setInterval`/`clearTimeout`/`clearInterval`, `sleep(ms)`, `parseInt`/`parseFloat`, `Object.keys`/`values`/`entries`.
+**No import needed:** array methods, string methods, regex, `setTimeout`/`setInterval`/`clearTimeout`/`clearInterval`, `sleep(ms)`, `parseInt`/`parseFloat`, `Object.keys`/`values`/`entries`, `new EventEmitter()`.
 
 ## CLI quick map
 

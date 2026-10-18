@@ -51,6 +51,28 @@ A rejected `Promise` that's never `await`ed or `.catch()`'d anywhere terminates 
 
 A cp3 program exits once the event loop has no pending work left (no outstanding timers, no in-flight I/O) - or immediately, via `process.exit()`. Same rule as Node.
 
+## `EventEmitter` - built into the language
+
+The event loop's other core type, alongside `Promise` and the timer globals: `EventEmitter` is a language builtin, always in scope, no import. There is no `std/events` module - `import { EventEmitter } from "std/events"` is an error (the compiler points back here), because the type is part of the language, not a library surface. It is a global builtin exactly like `setTimeout` ([§03](../standard-library/03-built-into-the-language-no-import-needed.md)).
+
+```cp3
+class EventEmitter {
+  function on(event: string, listener: (...args: unknown[]) => void): void;
+  function once(event: string, listener: (...args: unknown[]) => void): void;
+  function off(event: string, listener: (...args: unknown[]) => void): void;
+  function emit(event: string, ...args: unknown[]): void;
+}
+```
+
+```cp3
+let emitter = new EventEmitter();
+emitter.on("greet", (name) => console.log("hello", name));
+emitter.emit("greet", "world");
+emitter.off("greet", handler);
+```
+
+Pure cp3 - no native dependency at all, since this is just a data structure (event name → list of listener callbacks), not something that needs to reach the OS; it adds no linkage of its own, the same "no runtime tax if you don't use it" rule as every other builtin. Every other std module's event-emitting handle (`fs`'s `ReadStream`/`WriteStream`, `process`'s `SpawnHandle`, `worker`'s error surface) follows this same `.on`/`.off`/`.emit` shape for consistency, even where it isn't literally built on top of this class internally.
+
 ## Explicitly deferred, not silently missing
 
 No `AbortController`-style cancellation in beta one - a started async operation runs to completion or failure, it can't be told to stop early from outside. This is a real gap for some use cases (a fetch you want to abandon on user navigation, say) and is on the post-beta-one list, not forgotten.

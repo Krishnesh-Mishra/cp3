@@ -703,3 +703,20 @@ code comments and pinned by run cases:
 Evidence: `build/scratch/network/WAVE-NETWORK-REPORT.md` sections 4-6; run
 cases `network_fetch_local`, `network_fetch_404`, `network_websocket_echo`,
 `network_handler_throw_500` in `tests/cases/stdlib/`.
+
+## D74 - EventEmitter is a language builtin, not a std module (user directive, 2026-10-18)
+
+`EventEmitter` joins `Promise`, the timer globals and the other core runtime
+types: always in scope, no import, and no `std/events` module at all -
+`import { EventEmitter } from "std/events"` is an error (the loader reports
+that the module is not importable and points at the builtin). Rationale: the
+type needs no OS/native surface (it is a data structure over listener
+callbacks), and event handling is core to the language's own event loop the
+same way timers are, so gating it behind an import would sit oddly next to
+`async`/`await`, `Promise` and `setTimeout`. Docs: taught in the
+language-spec async chapter next to the event loop material, listed under
+"built into the language - no import needed", removed from the
+imported-std-modules doc and the std overview list. Implementation: no
+`std/events` registry row, an import-illegal diagnostic, and the six pinned
+`events_*` cases flipped - all landing with the std completion round that
+implements the builtin (R2, the date/json round).

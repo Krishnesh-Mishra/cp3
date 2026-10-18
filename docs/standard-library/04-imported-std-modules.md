@@ -498,30 +498,6 @@ os.cpus();
 os.tmpdir();
 ```
 
-## events
-
-JS-style EventEmitter. Pure cp3 - no native dependency at all, since this is just a data structure (event name → list of listener callbacks), not something that needs to reach the OS.
-
-```cp3
-class EventEmitter {
-  function on(event: string, listener: (...args: unknown[]) => void): void;
-  function once(event: string, listener: (...args: unknown[]) => void): void;
-  function off(event: string, listener: (...args: unknown[]) => void): void;
-  function emit(event: string, ...args: unknown[]): void;
-}
-```
-
-```cp3
-import { EventEmitter } from "std/events";
-
-let emitter = new EventEmitter();
-emitter.on("greet", (name) => console.log("hello", name));
-emitter.emit("greet", "world");
-emitter.off("greet", handler);
-```
-
-Every other std module's event-emitting handle (`fs`'s `ReadStream`/`WriteStream`, `process`'s `SpawnHandle`, `worker`'s error surface) follows this same `.on`/`.off`/`.emit` shape for consistency, even where it isn't literally built on top of this class internally.
-
 ## crypto
 
 libsodium-backed - chosen over raw OpenSSL for a smaller footprint and a "hard to misuse" API, consistent with the project's broader safety-by-default stance.
