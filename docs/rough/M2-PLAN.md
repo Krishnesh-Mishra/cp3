@@ -482,6 +482,36 @@ Combined landing effect: cold full corpus 1372 found / 823 passed / 0 failed /
 441 skipped / 108 ambiguous (before the waves: 1236 / 657 / 0 / 471 / 108);
 lint 223 files, 0 errors.
 
+## diagnostics wave landing record (2026-10-18)
+
+Committed `1efa7f5`. Wave 0 (user priority, landed right after network and
+typed-arrays). The suggestion engine (`src/common/include/cp3/suggest.hpp` +
+`src/common/src/suggest.cpp`) ranks candidates case-first with a length-scaled
+threshold, an affix bonus and at most three results; the best candidate is
+folded into the message text, so "did you mean 'log'?" shows on a pipe, not
+only on a TTY. Reporting sites: CP3301 (undefined name: visible names, plus
+the exact import statement for a bare std binding), CP3305 (member miss on the
+closed families Math / path / os / crypto / console / JSON; open families keep
+the pinned permissive shape), CP3601/CP3604 (import hints: the usable named
+imports, or the default-import form for a default-only module), and the
+CP3002 texts now read "not implemented yet: <what>" (the skip marker is
+unchanged). `Math` and `JSON` leave `kGlobals` because
+docs/standard-library/04 requires the explicit import; a bare use is CP3301
+with the statement. Console is surface-aware: log/info/warn/error are
+implemented and suggested; assert/clear/input/readKey keep their CP3002 skip
+and stay out of the candidate list. `docs/cli-tooling/07-diagnostic-catalog.md`
+documents all 65 live codes plus 19 reserved; `tools/check_diagnostics.py`
+cross-checks the header, the catalog and `src/**` (0 findings). 8 new pins in
+`tests/cases/diagnostics/` (7 pass, 1 skip marker);
+`variables/undeclared_property` re-pinned to CP3305.
+
+Lead acceptance (cold, canonical Debug build under ccache, parallel runner):
+focused diagnostics 8/7/0/1/0, variables 58/43/0/15/0, console 32/27/0/4/1;
+cold full corpus 1380 found / 830 passed / 0 failed / 442 skipped / 108
+ambiguous (the predicted baseline exactly); layout lint 225 files, 0 errors
+(64 soft); checker 65 defined / 65 documented / 224 sources / 0 findings.
+Report: `build/scratch/diagnostics/WAVE-DIAGNOSTICS-REPORT.md`.
+
 ## Perf wave (landed as `5c88ead`; plan below kept as written) - performance
 
 Lead probe, 2026-10-17 (`build/scratch/perf-probe/`, g++ 16.1.0 `-O2`): the
