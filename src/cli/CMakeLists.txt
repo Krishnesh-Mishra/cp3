@@ -19,6 +19,7 @@ set(cp3_cli_sources
     src/toolchain/pipeline.cpp
     src/commands/common.cpp
     src/commands/check.cpp
+    src/commands/lsp.cpp
     src/commands/run.cpp
     src/commands/build.cpp
     src/commands/dev.cpp
@@ -46,6 +47,32 @@ add_library(cp3_cli STATIC ${cp3_cli_sources})
 target_include_directories(cp3_cli PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 # Private headers resolve as `detail/...` from every unit subdirectory.
 target_include_directories(cp3_cli PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+# -----------------------------------------------------------------------------
+# cp3c lsp - the language server module (src/lsp/**, PKG-CONTRACTS sec.2/sec.5).
+#
+# The module keeps its own directory, public header and private detail headers,
+# but its translation units are compiled into cp3_cli: the contract says ONE
+# product binary (`cp3c lsp`, never a second executable) and src/CMakeLists.txt
+# (where a new module target would be registered) is outside the LSP
+# workstream's file scope. The include dir makes `cp3/lsp.hpp` resolvable from
+# both src/lsp and src/cli.
+# -----------------------------------------------------------------------------
+set(cp3_lsp_dir "${CMAKE_CURRENT_SOURCE_DIR}/../lsp")
+target_sources(cp3_cli PRIVATE
+    "${cp3_lsp_dir}/src/json.cpp"
+    "${cp3_lsp_dir}/src/framing.cpp"
+    "${cp3_lsp_dir}/src/text.cpp"
+    "${cp3_lsp_dir}/src/protocol.cpp"
+    "${cp3_lsp_dir}/src/server.cpp"
+)
+# src/lsp/src resolves the module's `detail/...` private headers. It is
+# appended AFTER src/cli/src so CLI units keep resolving their own `detail/...`
+# headers first; the two sets collide only if an LSP header were named exactly
+# like a CLI one, which the lsp_*/no-overlap names deliberately prevent.
+target_include_directories(cp3_cli PRIVATE "${cp3_lsp_dir}/include"
+                                           "${cp3_lsp_dir}/src")
+
 target_link_libraries(cp3_cli PUBLIC
     cp3_common cp3_lexer cp3_parser cp3_modules cp3_sema cp3_codegen)
 cp3_set_warnings(cp3_cli)
