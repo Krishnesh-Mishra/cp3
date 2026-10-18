@@ -1,0 +1,2 @@
+import JSON from "std/json";
+let text = JSON.stringfy(42);

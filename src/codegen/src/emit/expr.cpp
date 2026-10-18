@@ -159,11 +159,11 @@ std::string Generator::exprPlain(const Expr& e) {
             const auto& m = static_cast<const MemberExpr&>(e);
             std::string value = emitBuiltinMember(m);
             if (!value.empty()) return value;
-            notImplemented(e, "expression");
+            notImplemented(e, "this property access");
             return "0.0";
         }
         default:
-            notImplemented(e, "expression");
+            notImplemented(e, "this expression");
             return "0.0";
     }
 }
@@ -270,7 +270,7 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
         case BinaryOp::StrictNotEqual:
             return emitEquality(b, L, R, lhs, rhs);
         default:
-            notImplemented(b, "binary operator");
+            notImplemented(b, "this binary operator");
             return "0.0";
     }
 }
@@ -403,7 +403,7 @@ std::string Generator::emitUnary(const UnaryExpr& u) {
         case UnaryOp::Typeof:
             return emitTypeof(u);
         default:
-            notImplemented(u, "unary operator");
+            notImplemented(u, "this unary operator");
             return "0.0";
     }
 }

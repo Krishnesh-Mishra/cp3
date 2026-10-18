@@ -280,7 +280,7 @@ std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
 std::string Generator::emitIndexExpr(const IndexExpr& ix) {
     std::string value = emitFamilyIndexRead(ix);
     if (!value.empty()) return value;
-    notImplemented(ix, "expression");
+    notImplemented(ix, "this index access");
     return "0.0";
 }
 

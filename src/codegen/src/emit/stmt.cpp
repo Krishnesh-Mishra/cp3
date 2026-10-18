@@ -94,7 +94,7 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
             emitTry(static_cast<const TryStatement&>(s), out, indent);
             return;
         default:
-            notImplemented(s, "statement");
+            notImplemented(s, "this statement");
             line(out, indent, "/* CP3002: unsupported statement */");
             return;
     }
@@ -143,7 +143,7 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
     if (d.type) {
         if (auto dt = typeFromTypeNode(*d.type)) {
             if (!classify(*dt).representable && !dt->isUnknown() && !dt->isError()) {
-                notImplemented(d, "declared type outside M1");
+                notImplemented(d, "this declared type");
             }
         }
     }

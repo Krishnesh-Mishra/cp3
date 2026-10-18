@@ -108,8 +108,7 @@ Type Analyzer::inferIdentifier(Identifier& id) {
     }
     Binding b;
     if (!lookup(id.name, b)) {
-        report(diagcode::kUndefinedIdentifier, id.span,
-               "cannot find name '" + id.name + "'");
+        reportUndefinedName(id.span, id.name);
         return withType(id, Type::error());
     }
     return withType(id, b.type);
@@ -162,8 +161,7 @@ Type Analyzer::inferObject(ObjectLiteral& ol) {
             if (lookup(name, b)) {
                 vt = widen(b.type);
             } else {
-                report(diagcode::kUndefinedIdentifier, p->span,
-                       "cannot find name '" + name + "'");
+                reportUndefinedName(p->span, name);
             }
         }
         if (!name.empty() && !hasFieldNamed(fields, name)) {
@@ -262,7 +260,7 @@ Expr* Analyzer::dynamicExpr(Node& n) {
 // Arrow functions
 // =============================================================================
 Type Analyzer::inferArrow(ArrowFunction& arrow) {
-    if (!arrow.typeParams.empty()) notImplemented(arrow.span, "generic arrows");
+    if (!arrow.typeParams.empty()) notImplemented(arrow.span, "generic arrow functions");
     registerTypeParams(arrow.typeParams);
 
     std::vector<Type> params;

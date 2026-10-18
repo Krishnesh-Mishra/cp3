@@ -19,7 +19,7 @@
 namespace cp3::cli {
 
 int notImplemented(const std::string& command) {
-    std::fprintf(stderr, "cp3c: '%s' is %s in this build (CP3002)\n",
+    std::fprintf(stderr, "cp3c: the '%s' command is %s in this build yet (CP3002)\n",
                  command.c_str(), kNotImplementedMarker);
     return kExitNotImplemented;
 }

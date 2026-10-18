@@ -74,8 +74,7 @@ Type Analyzer::inferUpdate(UpdateExpr& up) {
             auto& id = static_cast<Identifier&>(*up.operand);
             Binding b;
             if (!lookup(id.name, b)) {
-                report(diagcode::kUndefinedIdentifier, id.span,
-                       "cannot find name '" + id.name + "'");
+                reportUndefinedName(id.span, id.name);
             } else if (b.isConst) {
                 report(diagcode::kConstReassignment, up.span,
                        "cannot reassign to const '" + id.name + "'");
@@ -293,8 +292,7 @@ Type Analyzer::targetTypeOf(Expr& target) {
             auto& id = static_cast<Identifier&>(target);
             Binding b;
             if (!lookup(id.name, b)) {
-                report(diagcode::kUndefinedIdentifier, id.span,
-                       "cannot find name '" + id.name + "'");
+                reportUndefinedName(id.span, id.name);
                 return Type::error();
             }
             setType(id, b.type);
@@ -326,8 +324,7 @@ void Analyzer::checkAssignToTarget(Expr& target, const Type& valType,
             auto& id = static_cast<Identifier&>(target);
             Binding b;
             if (!lookup(id.name, b)) {
-                report(diagcode::kUndefinedIdentifier, id.span,
-                       "cannot find name '" + id.name + "'");
+                reportUndefinedName(id.span, id.name);
                 return;
             }
             setType(id, b.type);

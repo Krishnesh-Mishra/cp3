@@ -65,7 +65,21 @@ private:
     // Anchors diagnostics to column 1 of the offending node's begin line (D2).
     SourceSpan anchorSpan(const SourceSpan& s) const;
     void report(const char* code, const SourceSpan& span, std::string message);
+    // Like report(), plus `help:` entries for the pretty renderer.
+    void reportSuggestive(const char* code, const SourceSpan& span,
+                          std::string message,
+                          std::vector<std::string> suggestions);
     void notImplemented(const SourceSpan& span, const std::string& what);
+    // CP3301 for a name that resolves nowhere: suggests the closest visible
+    // names and, when the name is a std module, its exact import statement.
+    void reportUndefinedName(const SourceSpan& span, const std::string& name);
+    // CP3305 for a miss on a known receiver (`'console'` / `object` text, the
+    // member accessed, and the implemented member names to rank).
+    void reportMemberMiss(const std::string& receiver, const std::string& prop,
+                          const SourceSpan& span,
+                          const std::vector<std::string>& candidates);
+    // Every name bound in the current scope stack (suggestion candidates).
+    std::vector<std::string> visibleNames() const;
 
     // --- banned patterns (banned.cpp) ----------------------------------------
     void checkBannedAny(const SourceSpan& span);
@@ -178,6 +192,8 @@ private:
     std::optional<Type> pathMember(const std::string& prop);
     std::optional<Type> osMember(const std::string& prop);
     std::optional<Type> processMember(const std::string& prop);
+    std::optional<Type> consoleMember(const std::string& prop);
+    std::optional<Type> jsonMember(const std::string& prop);
     // Native-backed std modules: each returns nullopt until its wave lands, so
     // member access keeps the permissive ambient shape meanwhile. Definitions
     // live in the per-module checks/std_<module>.cpp units.
@@ -339,5 +355,22 @@ private:
     int loopDepth_ = 0;
     int switchDepth_ = 0;
 };
+
+// --- std-namespace surface helpers (std_check.cpp) ---------------------------
+//
+// The closed families (Math / path / os / crypto / console / JSON) report
+// CP3305 for an unknown member (member_check.cpp); the open ones (network,
+// process, fs, ...) keep the permissive ambient fallthrough.
+bool isClosedStdNamespace(const std::string& ns);
+
+// The implemented member names of `ns`, used as CP3305 candidates.
+std::vector<std::string> stdNamespaceMemberNames(const std::string& ns);
+
+// The implemented member names of the `std/crypto` table (std_crypto.cpp).
+std::vector<std::string> cryptoMemberNames();
+
+// The exact default-import statement for a missing std module binding (e.g.
+// `import Math from "std/math";`), or "" when `name` names no std module.
+std::string stdImportHint(const std::string& name);
 
 }  // namespace cp3

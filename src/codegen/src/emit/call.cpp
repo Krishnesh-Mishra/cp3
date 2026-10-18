@@ -128,7 +128,7 @@ std::string Generator::emitCall(const CallExpr& c) {
             return "0.0";
         }
         if (!c.typeArgs.empty()) {
-            notImplemented(c, "generic call");
+            notImplemented(c, "calls with type arguments");
             return "0.0";
         }
         // A name that is not a function declared in this unit.
@@ -166,10 +166,10 @@ std::string Generator::emitCall(const CallExpr& c) {
         if (std::string builtin = emitBuiltinCall(c, m); !builtin.empty()) {
             return builtin;
         }
-        notImplemented(c, "method call");
+        notImplemented(c, "this method call");
         return "0.0";
     }
-    notImplemented(c, "call expression");
+    notImplemented(c, "this call");
     return "0.0";
 }
 

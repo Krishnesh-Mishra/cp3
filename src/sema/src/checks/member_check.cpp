@@ -34,6 +34,14 @@ Type Analyzer::inferMember(MemberExpr& m) {
             if (auto t = stdNamespaceMember(id.name, m.property)) {
                 return withType(m, *t);
             }
+            // Closed std families: an unknown member is a real error here,
+            // not a codegen CP3002 skip. Open families (process, network,
+            // fs, ...) keep the permissive ambient fallthrough.
+            if (isClosedStdNamespace(id.name)) {
+                reportMemberMiss("'" + id.name + "'", m.property, m.span,
+                                 stdNamespaceMemberNames(id.name));
+                return withType(m, Type::unknown());
+            }
         }
     }
     Type result = memberOf(ot, m.property, m.span, m.optional);
@@ -74,7 +82,7 @@ Type Analyzer::memberOf(const Type& ot, const std::string& prop,
     return memberOfProbe(ot, prop, span);
 }
 
-// Same as memberOf but for a single (non-union) type; emits CP3802 for a
+// Same as memberOf but for a single (non-union) type; emits CP3305 for a
 // genuinely missing property on a fixed-shape object.
 Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
                              const SourceSpan& span) {
@@ -88,9 +96,10 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
                 return ambient();
             }
             if (const Field* f = findField(sh, prop)) return f->type;
-            report(diagcode::kUndeclaredProperty, span,
-                   "undeclared property '" + prop +
-                       "' on a fixed-shape object");
+            std::vector<std::string> candidates;
+            candidates.reserve(sh->fields.size());
+            for (const Field& field : sh->fields) candidates.push_back(field.name);
+            reportMemberMiss("object", prop, span, candidates);
             return Type::unknown();
         }
         case TypeKind::Array:

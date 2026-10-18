@@ -100,7 +100,7 @@ std::string Generator::emitFamilyNew(const NewExpr& n) {
                                       arrayElemOf(effectiveType(n)), n);
         }
     }
-    notImplemented(n, "new expression");
+    notImplemented(n, "this new expression");
     return "0.0";
 }
 

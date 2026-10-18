@@ -15,28 +15,54 @@
 //   AES256(key: string, data: string): string
 //   AES256Decrypt(key: string, encrypted: string): string
 //
-// Members outside the table stay CP3002 at codegen (the emitter reports the
-// call as not implemented), so an undocumented member never lowers silently.
+// The family is CLOSED (std_check.cpp isClosedStdNamespace): a member outside
+// the table is CP3305 with these names as candidates instead of a CP3002 skip.
 // =============================================================================
 #include "detail/analyzer.h"
 
+#include <cstddef>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace cp3 {
 
+namespace {
+
+// One implemented member: the name and its type factory. Same table drives
+// member typing and the CP3305 candidate list.
+struct CryptoRow {
+    const char* name;
+    Type (*make)();
+};
+
+Type zeroToString() { return Type::function({}, Type::string()); }
+Type numberToString() { return Type::function({Type::number()}, Type::string()); }
+Type stringToString() { return Type::function({Type::string()}, Type::string()); }
+Type twoStringToString() {
+    return Type::function({Type::string(), Type::string()}, Type::string());
+}
+
+const CryptoRow kRows[] = {
+    {"randomUUID", zeroToString},      {"randomBytes", numberToString},
+    {"sha256", stringToString},        {"sha512", stringToString},
+    {"AES256", twoStringToString},     {"AES256Decrypt", twoStringToString},
+};
+
+}  // namespace
+
 std::optional<Type> Analyzer::cryptoMember(const std::string& prop) {
-    if (prop == "randomUUID") return Type::function({}, Type::string());
-    if (prop == "randomBytes") {
-        return Type::function({Type::number()}, Type::string());
-    }
-    if (prop == "sha256" || prop == "sha512") {
-        return Type::function({Type::string()}, Type::string());
-    }
-    if (prop == "AES256" || prop == "AES256Decrypt") {
-        return Type::function({Type::string(), Type::string()}, Type::string());
+    for (const CryptoRow& row : kRows) {
+        if (prop == row.name) return row.make();
     }
     return std::nullopt;
+}
+
+std::vector<std::string> cryptoMemberNames() {
+    std::vector<std::string> names;
+    names.reserve(std::size(kRows));
+    for (const CryptoRow& row : kRows) names.push_back(row.name);
+    return names;
 }
 
 }  // namespace cp3

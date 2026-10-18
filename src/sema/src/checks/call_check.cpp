@@ -128,8 +128,7 @@ void Analyzer::reportUndefinedCall(CallExpr& call, Identifier& id) {
     if (id.name == "arguments") {
         reportBannedArguments(id.span);
     } else {
-        report(diagcode::kUndefinedIdentifier, id.span,
-               "cannot find name '" + id.name + "'");
+        reportUndefinedName(id.span, id.name);
     }
     inferArgs(call);
 }

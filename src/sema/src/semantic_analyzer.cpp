@@ -15,6 +15,7 @@
 
 #include "cp3/diagnostic_codes.hpp"
 #include "cp3/sema.hpp"
+#include "cp3/suggest.hpp"
 
 namespace cp3 {
 
@@ -40,8 +41,50 @@ void Analyzer::report(const char* code, const SourceSpan& span,
     sink_.error(code, anchorSpan(span), std::move(message));
 }
 
+void Analyzer::reportSuggestive(const char* code, const SourceSpan& span,
+                                std::string message,
+                                std::vector<std::string> suggestions) {
+    Diagnostic d(code, Severity::Error, anchorSpan(span), std::move(message));
+    d.suggestions = std::move(suggestions);
+    sink_.report(std::move(d));
+}
+
 void Analyzer::notImplemented(const SourceSpan& span, const std::string& what) {
     report(diagcode::kNotImplemented, span, "not implemented yet: " + what);
+}
+
+void Analyzer::reportUndefinedName(const SourceSpan& span,
+                                   const std::string& name) {
+    std::string message = "cannot find name '" + name + "'";
+    std::vector<std::string> suggestions;
+    // `Math` / `console` / ... without their import: hand over the exact
+    // statement instead of only naming the problem (works without a TTY).
+    const std::string hint = stdImportHint(name);
+    if (!hint.empty()) {
+        message += "; add `" + hint + "`";
+        suggestions.push_back("Add `" + hint + "`");
+    }
+    const std::vector<std::string> ranked = suggestNames(name, visibleNames());
+    if (!ranked.empty()) {
+        message += "; did you mean '" + ranked.front() + "'?";
+        suggestions.push_back(didYouMeanPhrase(ranked));
+    }
+    reportSuggestive(diagcode::kUndefinedIdentifier, span, std::move(message),
+                     std::move(suggestions));
+}
+
+void Analyzer::reportMemberMiss(const std::string& receiver,
+                                const std::string& prop, const SourceSpan& span,
+                                const std::vector<std::string>& candidates) {
+    std::string message = receiver + " has no member '" + prop + "'";
+    std::vector<std::string> suggestions;
+    const std::vector<std::string> ranked = suggestNames(prop, candidates);
+    if (!ranked.empty()) {
+        message += "; did you mean '" + ranked.front() + "'?";
+        suggestions.push_back(didYouMeanPhrase(ranked));
+    }
+    reportSuggestive(diagcode::kMemberNotFound, span, std::move(message),
+                     std::move(suggestions));
 }
 
 // =============================================================================

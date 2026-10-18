@@ -106,7 +106,7 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
             if (auto dt = typeFromTypeNode(*d->type)) {
                 if (!classify(*dt).representable && !dt->isUnknown() &&
                     !dt->isError()) {
-                    notImplemented(*d, "declared type outside M1");
+                    notImplemented(*d, "this declared type");
                 }
             }
         }
@@ -317,7 +317,7 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
         // the C++ signature is the coroutine's promise type (spec §14).
         const CppInfo ci = classify(detail::promiseOf(asyncValueType(fd)));
         if (ci.representable) return ci.cpp;
-        notImplemented(fd, "async function whose value type is outside M1");
+        notImplemented(fd, "this async function's value type");
         return "void";
     }
     if (fd.returnType) {
@@ -328,7 +328,7 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
             // type `() => T`, an object/array, a non-primitive union).
             // Report CP3002 so the unit is treated as not-implemented rather
             // than emitting a `void` signature with a dropped `return`.
-            notImplemented(fd, "return type outside M1");
+            notImplemented(fd, "this return type");
         }
     }
     auto it = sema_.functions.find(fd.nodeId);
@@ -336,7 +336,7 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
         CppInfo ci = classify(it->second.returnType);
         if (ci.representable) return ci.cpp;
         if (!it->second.returnType.isUnknown()) {
-            notImplemented(fd, "return type outside M1");
+            notImplemented(fd, "this return type");
         }
     }
     // Fallback: infer from the first `return <expr>` in the body.
@@ -344,7 +344,7 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
         if (const Expr* returned = firstReturnedExpr(*fd.body)) {
             CppInfo ci = info(*returned);
             if (ci.representable) return ci.cpp;
-            notImplemented(*returned, "returned value outside M1");
+            notImplemented(*returned, "this returned value");
         }
     }
     return "void";

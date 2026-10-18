@@ -50,7 +50,8 @@ private:
     CompilationUnit* addUnitFor(const SourceFile& file, bool isEntry);
     CompilationUnit* ensureUnit(const fs::path& path);
     void reportOnce(const std::string& code, const SourceSpan& span,
-                    const std::string& message);
+                    const std::string& message,
+                    const std::vector<std::string>& suggestions = {});
     fs::path folderOfSource(const SourceFile& file);
 
     // --- unit_loader.cpp -----------------------------------------------------

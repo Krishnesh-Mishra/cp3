@@ -210,8 +210,7 @@ void Generator::notImplemented(const Node& node, const std::string& what) {
         }
     }
     sink_.error(diagcode::kNotImplemented, node.span,
-                std::string("codegen: ") + nodeKindName(node.kind) + " ('" + what +
-                    "') is not implemented in M1");
+                "not implemented yet: " + what);
 }
 
 GeneratedModule Generator::run(const Program& program) {

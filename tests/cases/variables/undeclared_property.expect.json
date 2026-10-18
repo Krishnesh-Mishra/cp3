@@ -6,6 +6,6 @@
     "code": "CP3xxxx",
     "line": 3,
     "col": 1,
-    "contains": "undeclared"
+    "contains": "no member"
   }
 }

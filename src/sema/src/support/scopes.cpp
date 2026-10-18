@@ -10,7 +10,9 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "cp3/diagnostic_codes.hpp"
 
@@ -34,6 +36,17 @@ bool Analyzer::lookup(const std::string& name, Binding& out) const {
         }
     }
     return false;
+}
+
+std::vector<std::string> Analyzer::visibleNames() const {
+    std::vector<std::string> names;
+    std::unordered_set<std::string> seen;
+    for (auto scope = scopes_.rbegin(); scope != scopes_.rend(); ++scope) {
+        for (const auto& entry : *scope) {
+            if (seen.insert(entry.first).second) names.push_back(entry.first);
+        }
+    }
+    return names;
 }
 
 void Analyzer::declareBinding(const std::string& name, const Type& type,
@@ -101,8 +114,12 @@ void Analyzer::overrideBinding(const std::string& name, const Type& type,
 }
 
 void Analyzer::declareBuiltins() {
+    // Math and JSON are deliberately NOT here: docs/standard-library/04
+    // requires `import Math from "std/math"` (and the JSON twin), the same as
+    // every other std surface, so a bare `Math` is CP3301 with the exact
+    // import statement as a suggestion (stdImportHint, std_check.cpp).
     static const char* const kGlobals[] = {
-        "Object", "Math",    "JSON",   "String",   "Number",   "Boolean",
+        "Object", "String",   "Number",   "Boolean",
         "Array",  "parseInt", "parseFloat", "isNaN", "isFinite",
         "print",  "worker",  "parallel", "Promise", "Symbol",   "BigInt",
         // Core-language builtins tied to the event loop (spec §20, std/03):

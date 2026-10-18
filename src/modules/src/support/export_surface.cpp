@@ -14,11 +14,15 @@
 // =============================================================================
 #include "detail/loader.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "cp3/ast.hpp"
 #include "cp3/diagnostic_codes.hpp"
+#include "cp3/suggest.hpp"
 
 #include "detail/file_paths.h"
 #include "detail/specifier.h"
@@ -27,6 +31,38 @@
 namespace cp3::modules {
 
 namespace {
+
+// The default-import / named-import / misspelling hint text shares one shape
+// with sema's member misses: a single quoted list with an Oxford "or".
+std::string quotedNames(const std::vector<std::string>& names) {
+    std::string out;
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        if (i > 0) {
+            const bool last = i + 1 == names.size();
+            out += last ? ((names.size() == 2) ? " or " : ", or ") : ", ";
+        }
+        out += '\'';
+        out += names[i];
+        out += '\'';
+    }
+    return out;
+}
+
+// At most three names for a message hint (the full list would bury the point).
+std::vector<std::string> firstThree(const std::vector<std::string>& names) {
+    return std::vector<std::string>(names.begin(),
+                                    names.begin() + static_cast<std::ptrdiff_t>(
+                                                         std::min<std::size_t>(3, names.size())));
+}
+
+// The named export to import instead: the closest to `binding`, or the only
+// export when the module has exactly one.
+std::string pickNamedExport(const std::string& binding,
+                            const std::vector<std::string>& exports) {
+    const std::vector<std::string> ranked = suggestNames(binding, exports, 1);
+    if (!ranked.empty()) return ranked.front();
+    return exports.size() == 1 ? exports.front() : std::string();
+}
 
 // Every identifier a binding pattern introduces (`{a, b: c, ...rest}`, `[x]`).
 void collectPatternNames(const Node& node, ExportSurface& out) {
@@ -172,16 +208,53 @@ const ExportSurface* ProgramLoader::stdSurface(const std::string& specifier,
 
 void ProgramLoader::validateImport(const ImportDeclaration& decl,
                                    const ExportSurface& surface) {
+    const std::vector<std::string> exports(surface.named.begin(),
+                                           surface.named.end());
     if (!decl.defaultBinding.empty() && !surface.hasDefault) {
-        reportOnce(diagcode::kMissingDefaultExport, decl.span,
-                   "module '" + decl.source + "' has no default export");
+        std::string message =
+            "module '" + decl.source + "' has no default export";
+        std::vector<std::string> suggestions;
+        if (!exports.empty()) {
+            message += "; named exports: " + quotedNames(firstThree(exports));
+            const std::string pick = pickNamedExport(decl.defaultBinding, exports);
+            if (!pick.empty()) {
+                const std::string form =
+                    "import { " + pick + " } from \"" + decl.source + "\";";
+                message += "; use a named import: `" + form + "`";
+                suggestions.push_back("Use a named import: `" + form + "`");
+            }
+        }
+        reportOnce(diagcode::kMissingDefaultExport, decl.span, message,
+                   suggestions);
     }
     for (const ImportSpecifierPtr& spec : decl.specifiers) {
         if (!spec) continue;
         if (surface.named.count(spec->imported) == 0) {
-            reportOnce(diagcode::kUnresolvedImport, decl.span,
-                       "module '" + decl.source + "' does not export '" +
-                           spec->imported + "'");
+            const std::string binding =
+                spec->local.empty() ? spec->imported : spec->local;
+            std::string message = "module '" + decl.source + "' does not export '" +
+                                  spec->imported + "'";
+            std::vector<std::string> suggestions;
+            if (surface.hasDefault && exports.empty()) {
+                // A default-only module (`std/console`): the named form is the
+                // mistake, so hand over the default-import statement.
+                const std::string form =
+                    "import " + binding + " from \"" + decl.source + "\";";
+                message += "; use the default import: `" + form + "`";
+                suggestions.push_back("Use the default import: `" + form + "`");
+            } else {
+                const std::vector<std::string> ranked =
+                    suggestNames(spec->imported, exports);
+                if (!ranked.empty()) {
+                    message += "; did you mean '" + ranked.front() + "'?";
+                    suggestions.push_back(didYouMeanPhrase(ranked));
+                }
+                if (!exports.empty()) {
+                    message += "; named exports: " + quotedNames(firstThree(exports));
+                }
+            }
+            reportOnce(diagcode::kUnresolvedImport, decl.span, message,
+                       suggestions);
         }
     }
 }

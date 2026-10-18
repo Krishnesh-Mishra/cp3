@@ -91,7 +91,8 @@ CompilationUnit* ProgramLoader::ensureUnit(const fs::path& path) {
 }
 
 void ProgramLoader::reportOnce(const std::string& code, const SourceSpan& span,
-                               const std::string& message) {
+                               const std::string& message,
+                               const std::vector<std::string>& suggestions) {
     std::string key = code;
     key += '|';
     key += span.file != nullptr ? span.file->canonicalPath : std::string();
@@ -100,7 +101,9 @@ void ProgramLoader::reportOnce(const std::string& code, const SourceSpan& span,
     key += '|';
     key += message;
     if (!reported_.insert(std::move(key)).second) return;
-    sink_.error(code, span, message);
+    Diagnostic d(code, Severity::Error, span, message);
+    d.suggestions = suggestions;
+    sink_.report(std::move(d));
 }
 
 fs::path ProgramLoader::folderOfSource(const SourceFile& file) {

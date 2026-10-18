@@ -356,13 +356,13 @@ void Analyzer::visitDeclStmt(Stmt& s) {
 }
 
 void Analyzer::visitClassDecl(ClassDeclaration& c) {
-    notImplemented(c.span, "class declarations");
+    notImplemented(c.span, "classes");
     typeNames_[c.name] = ambient();
     declareAmbient(c.name, c.span, c.nodeId);
 }
 
 void Analyzer::visitEnumDecl(EnumDeclaration& e) {
-    notImplemented(e.span, "enum declarations");
+    notImplemented(e.span, "enums");
     // Declare the enum name as an open/ambient type so that later member
     // accesses and annotations do not produce *spurious* follow-on type errors
     // (CP3002 is the only diagnostic).
@@ -371,7 +371,7 @@ void Analyzer::visitEnumDecl(EnumDeclaration& e) {
 }
 
 void Analyzer::visitTypeAlias(TypeAliasDeclaration& t) {
-    notImplemented(t.span, "type alias declarations");
+    notImplemented(t.span, "type aliases");
     typeNames_[t.name] = t.type ? resolveType(*t.type) : Type::unknown();
 }
 
