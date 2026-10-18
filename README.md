@@ -47,22 +47,23 @@ runs:
 
 | Rust | C++ | Go | JS (Node) | **cp3** | Python |
 |---:|---:|---:|---:|---:|---:|
-| 0.13 s | 0.15 s | 0.20 s | 1.08 s | **1.15 s** | 10.13 s |
+| 0.13 s | 0.15 s | 0.19 s | 1.08 s | **0.16 s** | 9.62 s |
 
-The cp3 row runs today, no asterisk: it prints the same integer, lands in the
-same second as Node's JIT-assisted 1.08 s, and beats CPython ≈8.8×. The ≈8×
-gap to Rust/C++ is codegen maturity - closing it is roadmap work on the
-generated C++, not a language redesign, and it is exactly what the suite's
-gate now flags row by row.
+The cp3 row runs today, no asterisk: it prints the same integer and lands
+just behind the native pack (suite ratios: 1.08x C++, 1.25x Rust), 6.7×
+faster than Node's JIT-assisted 1.08 s and ≈59× faster than CPython. The
+remaining 8% to C++ and 25% to Rust is codegen maturity - closing it is
+roadmap work on the generated C++, not a language redesign, and it is exactly
+what the suite's gate now flags row by row.
 
 Where cp3 stands on everything that runs today (same run): **hello-world
-6.2 ms best (suite ratios: 0.73x C++, 1.00x Rust)**, process start to exit;
-**string-churn 1.07x C++**, eight case/slice rounds over a 4 KiB buffer per
+5.9 ms best (suite ratios: 0.89x C++, 0.99x Rust)**, process start to exit;
+**string-churn 1.10x C++**, eight case/slice rounds over a 4 KiB buffer per
 iteration. Entries whose features have not landed yet are attempted every run
 and reported with the compiler's own diagnostic instead of a number.
 
-Same total split across all cores: Rust 18 ms · C++ 26 ms · Go 28 ms ·
-Node 275 ms · Python 1.58 s - the cp3 entry joins that table when
+Same total split across all cores: Rust 19 ms · C++ 23 ms · Go 30 ms ·
+Node 261 ms · Python 1.34 s - the cp3 entry joins that table when
 `parallel.*` lands.
 
 **The Express comparison.** The same health server, five runtimes measured at
@@ -71,7 +72,7 @@ Node 275 ms · Python 1.58 s - the cp3 entry joins that table when
 
 | Rust | C++ | Python | Go | Express | **cp3** |
 |---:|---:|---:|---:|---:|---:|
-| 12,888 req/s | 12,531 req/s | 9,489 req/s | 9,001 req/s | 8,645 req/s | *pending `std/network`* |
+| 12,828 req/s | 11,525 req/s | 11,978 req/s | 8,424 req/s | 10,746 req/s | *pending `std/network`* |
 
 On a trivial handler the load client and loopback dominate, so those rows
 cluster; the compute tables are where the runtimes separate. The cp3 entry is

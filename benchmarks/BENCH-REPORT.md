@@ -29,7 +29,8 @@ lives, and what is deliberately left for later tiers.
   D64 target is cp3 within about 5% of the native pack for the native-type
   tiers. `--strict` makes the run exit 1 when any WARN printed.
 - **Raw results, committed.** `--results DIR` tees the verbatim output to
-  `DIR/run.txt` with `DIR/meta.txt` beside it (machine, argv, toolchains).
+  `DIR/run.txt` with `DIR/meta.txt` beside it (machine, argv, scale, and
+  the cp3c SHA-256 since the post-P1 refresh).
   Both labeled runs are committed under `bench/results/`.
 - **Six Tier-1 tasks, authored in full** for all five runnable languages plus
   spec-written cp3 pending entries: `compute-single-int`, `object-churn`,
@@ -441,3 +442,96 @@ cp3 test harness
 
 Exit code: 0. The output ends with the corpus summary; no benchmark section
 follows.
+
+## 11. Post-P1 scorecard (2026-10-18)
+
+P1 (the `%` lowering without libm plus the guarded int64 `number` fast path)
+landed, the canonical compiler was rebuilt from it, and the full labeled
+suite was rerun against that binary (`bench/.build/` cleared immediately
+before; no `--strict`; exit 0). Raw output:
+`benchmarks/bench/results/2026-10-18T0803-local/run.txt` with `meta.txt`
+beside it, plus the stress run at
+`benchmarks/bench/results/2026-10-18T0808-local-stress/`. Compiler:
+`build/bin/cp3c.exe`, SHA-256
+`C051967809915DAE897618FC9F5CC0D5C4516329E991DC3C190DE9CC37257432`, mtime
+2026-10-18 07:53:27, verified identical before and after both runs. The cp3c
+lines in the 0803 `meta.txt` were appended right after that run from the
+verified binary (the runner now writes them inline; the 0808 `meta.txt`
+shows the native format). Baseline for the deltas below: the pre-P1
+`2026-10-18T0705-local` run (cp3c SHA-256 `C8864FCE...`, the
+single-tripwire gate).
+
+Gate block, verbatim (every WARN and BIG WARN line, plus the footer):
+
+```
+== performance gate == D64 target: cp3 within about 5% of cpp/rust; BIG WARN over 1.20x cpp/rust or slower than go/js/python at all; WARN over 1.10x cpp/rust
+BIG WARN (fix this): compute-single: cp3 162 ms is 1.25x rust (130 ms), tripwire 1.20x
+WARN string-churn: cp3 1596 ms is 1.10x cpp (1445 ms), watch 1.10x
+BIG WARN (fix this): string-churn: cp3 1596 ms is 7.46x rust (214 ms), tripwire 1.20x
+BIG WARN (fix this): string-churn: cp3 1596 ms is 1.30x python (1229 ms), tripwire 1.00x
+note: hello-world: cp3 5.9 ms vs go 5.8 ms is noise-scale, ratio not gated
+gate: 3 BIG WARN(s), 1 WARN(s); rerun with --strict to fail on warnings
+```
+
+Suite summary, verbatim (all 12 tasks):
+
+```
+== summary: cp3 vs native ==
+task                   cp3/cpp   cp3/rust
+------------------------------------------
+health-server                -          -
+compute-single           1.08x      1.25x
+compute-single-int           -          -
+compute-multi                -          -
+hello-world              0.89x      0.99x
+string-churn             1.10x      7.46x
+word-frequency               -          -
+object-churn                 -          -
+array-growth                 -          -
+closure-capture              -          -
+interface-dispatch           -          -
+generics-mono                -          -
+------------------------------------------
+geomean over runnable rows     1.02x (n=3)     2.10x (n=3)
+ratios are cp3 time divided by the reference time; lower is better
+```
+
+Runnable rows, same run (the other nine tasks are pending cp3 entries with
+compiler diagnostics and `-` ratios):
+
+| task | cp3 best_ms (all runs) | cp3/cpp | cp3/rust |
+| --- | --- | --- | --- |
+| compute-single | 162 (180/162) | 1.08x | 1.25x |
+| hello-world | 5.9 ms best, 7.7 ms median of 15 | 0.89x | 0.99x |
+| string-churn | 1596 (1596/1603) | 1.10x | 7.46x |
+
+Before/after deltas, `2026-10-18T0705-local` to `2026-10-18T0803-local`:
+
+| metric | before | after | change |
+| --- | --- | --- | --- |
+| compute-single cp3 best_ms | 1154 | 162 | 7.1x faster |
+| compute-single cp3/cpp | 7.59x | 1.08x | |
+| compute-single cp3/rust | 8.60x | 1.25x | |
+| hello-world cp3 best_ms | 6.2 | 5.9 | about 5% faster |
+| hello-world cp3/cpp | 0.73x | 0.89x | still ahead of cpp |
+| hello-world cp3/rust | 1.00x | 0.99x | at parity |
+| string-churn cp3 best_ms | 1681 | 1596 | about 5% faster |
+| string-churn cp3/cpp | 1.07x | 1.10x | cpp gained more (8.4%) |
+| string-churn cp3/rust | 7.38x | 7.46x | rust gained more (6.1%) |
+| geomean cp3/cpp | 1.80x (n=3) | 1.02x (n=3) | |
+| geomean cp3/rust | 3.99x (n=3) | 2.10x (n=3) | |
+| string-churn stress cp3 best_ms | 13819 | 13435 | 2.8% faster |
+| string-churn stress cp3/cpp | 1.04x | 1.01x | |
+| string-churn stress cp3/rust | 10.90x | 11.83x | rust gained more (10.4%) |
+
+Read: P1 moved compute-single from 1154 ms to 162 ms (7.59x/8.60x to
+1.08x/1.25x), and the only remaining native BIG WARN on that row is 1.25x
+rust. string-churn improved in absolute time (default about 5%, stress 2.8%)
+but its ratios ticked up because cpp and rust improved faster; its gate lines
+are now 7.46x rust, 1.30x python (a scripted runtime ahead of cp3 in the
+default run; 1.32x at stress) and 1.10x cpp. hello-world landed at 5.9 ms
+best and sits under the 10 ms noise floor, so the gate prints one
+noise-scale note (cp3 5.9 ms vs go 5.8 ms) instead of tiers. No reruns were
+needed for machine noise: no row was wildly off its siblings, and the
+first-run spikes (hello-world run 1: cpp 35 ms, go 126 ms, cp3 44 ms) are the
+documented loader/AV pattern that best + median + all runs exist to absorb.

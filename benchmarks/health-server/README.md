@@ -64,7 +64,7 @@ the **express** row; with no `node_modules` the runner falls back to the
 zero-dep row and says so in the `variant` column. `npm install` requires
 network access; the zero-dep variant never does.
 
-## Verification record (2026-10-18, cp3c 0.1.0-beta.1)
+## Verification record (2026-10-18, post-P1, cp3c 0.1.0-beta.1)
 
 All five runnable entries were built, started on ports >= 18080, hit with real
 HTTP GETs, and stopped by exact process id. Observed, in every case:
@@ -75,16 +75,16 @@ HTTP GETs, and stopped by exact process id. Observed, in every case:
 * startup line `listening on http://127.0.0.1:<port>` on stdout
 
 From the labeled run in `../README.md`
-(`bench/results/2026-10-18T0705-local/`, 100 warmup requests, 300 latency
+(`bench/results/2026-10-18T0803-local/`, 100 warmup requests, 300 latency
 requests, 8 keep-alive connections x 3 s):
 
 | entry | boot_ms | p50_ms | req/s |
 | --- | --- | --- | --- |
-| rust | 544.5 | 0.07 | 12888.0 |
-| cpp | 542.2 | 0.06 | 12530.8 |
-| python | 518.2 | 0.14 | 9488.6 |
-| go | 516.5 | 0.08 | 9001.1 |
-| js/express | 522.1 | 0.13 | 8645.3 |
+| rust | 524.3 | 0.06 | 12827.6 |
+| python | 538.7 | 0.10 | 11977.5 |
+| cpp | 545.8 | 0.05 | 11524.6 |
+| js/express | 521.6 | 0.12 | 10746.4 |
+| go | 509.0 | 0.10 | 8424.0 |
 
 The uniform ~half-second boot is Windows Defender scanning each freshly
 spawned process on this box, not the languages - see the methodology caveats

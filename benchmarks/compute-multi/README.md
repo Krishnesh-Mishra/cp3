@@ -39,19 +39,19 @@ All five runnable entries print `131434424`, the same integer as every
 single-threaded entry, which is the correctness check built into the suite
 (`match` column).
 
-## Verification record (2026-10-18, cp3c 0.1.0-beta.1)
+## Verification record (2026-10-18, post-P1, cp3c 0.1.0-beta.1)
 
 cpp, rust, go, js and python were built and run: all printed `131434424`.
 Wall-clock best-of-2 from the labeled run in `../README.md`
-(`bench/results/2026-10-18T0705-local/`, process startup included):
+(`bench/results/2026-10-18T0803-local/`, process startup included):
 
 | language | best wall time | vs its single-thread run |
 | --- | --- | --- |
-| rust | 18 ms | ~7.4x faster |
-| cpp | 26 ms | ~5.8x faster |
-| go | 28 ms | ~7x faster |
-| js (node) | 275 ms | ~3.9x faster |
-| python | 1583 ms | ~6.4x faster |
+| rust | 19 ms | ~6.8x faster |
+| cpp | 23 ms | ~6.6x faster |
+| go | 30 ms | ~6.4x faster |
+| js (node) | 261 ms | ~4.1x faster |
+| python | 1343 ms | ~7.2x faster |
 
 (The speedup column is computed from the two tables of that run; absolute
 numbers are machine-specific.)

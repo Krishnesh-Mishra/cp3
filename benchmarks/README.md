@@ -45,7 +45,7 @@ in PowerShell, `.\run.ps1 --only word-frequency` does the same.
 | `--churn-scale V` | string-churn scale: `default` (50,000), `stress` (300,000) or an integer |
 | `--cp3c PATH` | cp3 compiler (default `build/bin/cp3c.exe`) |
 | `--strict` | exit code 1 when the performance gate prints any WARN or BIG WARN |
-| `--results DIR` | tee the raw output to `DIR/run.txt` plus `DIR/meta.txt` |
+| `--results DIR` | tee the raw output to `DIR/run.txt` plus `DIR/meta.txt` (provenance, incl. the cp3c SHA-256) |
 | `--seconds S`, `--concurrency C`, `--latency N`, `--warmup N` | server load phases (defaults 3 s, 8 connections, 300 latency requests, 100 warmup) |
 
 The test harness runs the suite for you automatically (D67): after the
@@ -219,23 +219,24 @@ the next labeled refresh will show the tier format.
 * **Versions are pinned per run.** The header prints the exact toolchain
   versions used, and the labeled run below records them again.
 
-## Labeled run (2026-10-18)
+## Labeled run (2026-10-18, post-P1)
 
 Machine: Intel Core i7-12700H (12th Gen, 6P+8E), 20 logical CPUs, Windows 11
 (10.0.26200). Toolchains: g++ 16.1.0 (MinGW-W64 UCRT), rustc 1.95.0, go
-1.26.4, node v24.15.0, python 3.14.5, cp3c 0.1.0-beta.1 (the compiler binary
-in `build/bin/` that day, SHA-256
-`C8864FCEF7801EA102D0BA8C87A7744525FC9C9B5FAA160BD7D02344CD770D04`, verified
-unchanged across both runs below). Command: `python benchmarks/run_benchmark.py
---reps 2 --hello-reps 15 --results benchmarks/bench/results/2026-10-18T0705-local`
-from the repo root, with `bench/.build/` cleared immediately before, so every
-native build below is a fresh compile. The raw file is committed verbatim at
-`bench/results/2026-10-18T0705-local/run.txt` (with `meta.txt` beside it); the
+1.26.4, node v24.15.0, python 3.14.5, cp3c 0.1.0-beta.1 (the canonical binary
+rebuilt after the P1 codegen wave, SHA-256
+`C051967809915DAE897618FC9F5CC0D5C4516329E991DC3C190DE9CC37257432`, recorded
+in `meta.txt`; verified unchanged across both runs below). Command: `python
+benchmarks/run_benchmark.py --reps 2 --hello-reps 15 --results
+benchmarks/bench/results/2026-10-18T0803-local` from the repo root, with
+`bench/.build/` cleared immediately before, so every native build below is a
+fresh compile. The raw file is committed verbatim at
+`bench/results/2026-10-18T0803-local/run.txt` (with `meta.txt` beside it); the
 `[run ] ...` progress lines are removed here for readability, everything else
 is verbatim output.
 
 ```
-benchmarks bench suite -- 2026-10-18T07:05:38
+benchmarks bench suite -- 2026-10-18T08:03:13
 machine: Intel64 Family 6 Model 154 Stepping 3, GenuineIntel | 20 logical CPUs | Windows-11-10.0.26200-SP0
 runner:  python 3.14.5 (C:\Program Files\Python314\python.exe)
   g++     g++ (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r2) 16.1.0
@@ -249,132 +250,132 @@ every number below is a wall-clock measurement from this run; load phases use pe
 == health-server ==
 lang    variant                         build_ms  boot_ms   p50_ms   p95_ms     req/s  cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp     hand-rolled sockets (Winsock2)      2242    542.2     0.06     0.10   12530.8        -         -         5.3        60  warmup 100, 300 latency reqs, 8 conns x 3s
-rust    std::net, no crates                  313    544.5     0.07     0.13   12888.0        -         -         4.5       174  warmup 100, 300 latency reqs, 8 conns x 3s
-go      net/http                           10906    516.5     0.08     0.11    9001.1        -         -        18.1      6205  warmup 100, 300 latency reqs, 8 conns x 3s
-js      express (installed)                    -    522.1     0.13     0.26    8645.3        -         -        62.7         -  warmup 100, 300 latency reqs, 8 conns x 3s
-python  http.server (threaded)                 -    518.2     0.14     0.24    9488.6        -         -        23.6         -  warmup 100, 300 latency reqs, 8 conns x 3s
-cp3     -                                     15        -        -        -         -        -         -           -         -  not runnable yet: main.cp3:24:13: error: CP3002: codegen: CallExpr ('call to function 'createServer' not declared in this unit') is not implemented in M1
+cpp     hand-rolled sockets (Winsock2)      1347    545.8     0.05     0.07   11524.6        -         -         5.4        60  warmup 100, 300 latency reqs, 8 conns x 3s
+rust    std::net, no crates                  353    524.3     0.06     0.10   12827.6        -         -         4.6       174  warmup 100, 300 latency reqs, 8 conns x 3s
+go      net/http                            1205    509.0     0.10     0.14    8424.0        -         -        55.7      6205  warmup 100, 300 latency reqs, 8 conns x 3s
+js      express (installed)                    -    521.6     0.12     0.23   10746.4        -         -        63.7         -  warmup 100, 300 latency reqs, 8 conns x 3s
+python  http.server (threaded)                 -    538.7     0.10     0.14   11977.5        -         -        23.4         -  warmup 100, 300 latency reqs, 8 conns x 3s
+cp3     -                                     13        -        -        -         -        -         -           -         -  not runnable yet: main.cp3:24:13: error: CP3002: codegen: CallExpr ('call to function 'createServer' not declared in this unit') is not implemented in M1
 
 == compute-single == expected = 131434424 (total Collatz steps for 1..1,000,000)
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           425       152 181/152              131434424                  ref            -         -         4.0        19  
-rust          163       134 214/134              131434424                  ok             -         -         4.0       122  
-go            557       197 313/197              131434424                  ok             -         -         5.6      1750  
-js              -      1075 1075/1109            131434424                  ok             -         -        38.4         -  
-python          -     10128 10128/12886          131434424                  ok             -         -        11.6         -  
-cp3          2371      1154 1194/1154            131434424                  ok         7.59x     8.60x         4.2       107  
+cpp           411       151 163/151              131434424                  ref            -         -         4.0        19  
+rust          148       130 208/130              131434424                  ok             -         -         3.6       122  
+go            486       193 312/193              131434424                  ok             -         -         5.7      1750  
+js              -      1081 1110/1081            131434424                  ok             -         -        38.3         -  
+python          -      9622 9622/9642            131434424                  ok             -         -        11.5         -  
+cp3          4944       162 180/162              131434424                  ok         1.08x     1.25x         4.1       108  
 
 == compute-single-int == expected = 131434424 (total Collatz steps for 1..1,000,000)
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           483       142 188/142              131434424                  ref            -         -         4.0        19  
-rust          356       132 216/132              131434424                  ok             -         -         3.6       123  
-go          13574       195 314/195              131434424                  ok             -         -         5.5      1750  
-js              -      1138 1197/1138            131434424                  ok             -         -        36.8         -  
-python          -      9540 9540/10249           131434424                  ok             -         -        11.5         -  
-cp3            14         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:25:10: error: CP3002: codegen: Identifier ('returned value outside M1') is not implemented in M1
+cpp           400       145 173/145              131434424                  ref            -         -         4.0        19  
+rust          141       131 213/131              131434424                  ok             -         -         3.7       123  
+go            494       196 311/196              131434424                  ok             -         -         5.5      1750  
+js              -      1099 1122/1099            131434424                  ok             -         -        38.2         -  
+python          -      9490 9490/9710            131434424                  ok             -         -        11.4         -  
+cp3            13         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:25:10: error: CP3002: codegen: Identifier ('returned value outside M1') is not implemented in M1
 
 == compute-multi == expected = 131434424 (same total split across all cores)
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           770        26 58/26                131434424                  ref            -         -         5.3        21  
-rust          316        18 92/18                131434424                  ok             -         -         4.7       154  
-go            607        28 142/28               131434424                  ok             -         -         7.1      1759  
-js              -       275 275/285              131434424                  ok             -         -       281.8         -  
-python          -      1583 1642/1583            131434424                  ok             -         -        21.0         -  
+cpp           651        23 58/23                131434424                  ref            -         -         4.8        21  
+rust          274        19 67/19                131434424                  ok             -         -         4.2       154  
+go            535        30 152/30               131434424                  ok             -         -         6.8      1759  
+js              -       261 261/262              131434424                  ok             -         -       282.2         -  
+python          -      1343 1343/1400            131434424                  ok             -         -        21.0         -  
 cp3            14         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:34:15: error: CP3002: codegen: CallExpr ('parallel.*') is not implemented in M1
 
 == hello-world == expected = Hello, world! | spawn -> exit wall time, best and median of 15 runs
 lang     build_ms   best_ms median_ms all_runs_ms          output           match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           459       8.6       9.2 41/10/9/10/9/9/10/10/9/9/9/9/10/9/9 Hello, world!    ref            -         -         4.5        19  
-rust          163       6.2       6.6 42/8/7/7/8/8/7/6/7/6/6/6/6/7/7 Hello, world!    ok             -         -         4.0       122  
-go            573       7.6       8.2 135/10/10/8/8/8/9/8/8/8/8/9/9/8/9 Hello, world!    ok             -         -         5.7      1750  
-js              -      44.4      47.8 49/48/48/46/47/47/49/51/47/44/46/53/48/48/51 Hello, world!    ok             -         -        35.1         -  
-python          -      26.7      29.0 41/29/27/29/30/29/28/29/28/29/30/29/28/28/28 Hello, world!    ok             -         -        11.5         -  
-cp3            51       6.2       7.9 21/8/8/10/8/8/8/8/7/8/7/8/6/7/7 Hello, world!    ok         0.73x     1.00x         4.6       106  
+cpp           414       6.7       8.8 35/10/7/7/7/7/7/8/9/8/10/10/9/9/10 Hello, world!    ref            -         -         3.0        19  
+rust          139       6.0       6.2 41/6/6/6/6/6/6/6/6/7/6/6/6/8/7 Hello, world!    ok             -         -         2.6       122  
+go            509       5.8       6.3 126/6/6/6/6/8/6/6/7/6/6/7/12/8/6 Hello, world!    ok             -         -         5.7      1750  
+js              -      37.8      42.4 48/42/45/44/46/41/43/39/41/38/42/38/43/40/43 Hello, world!    ok             -         -        35.1         -  
+python          -      22.4      23.8 30/24/24/24/23/24/28/23/23/26/23/22/24/23/27 Hello, world!    ok             -         -        11.5         -  
+cp3          5336       5.9       7.7 44/7/6/6/7/7/9/8/8/8/9/8/7/8/8 Hello, world!    ok         0.89x     0.99x         3.1       106  
 
 == string-churn == expected = 852167 | scale: default (50000 iterations)
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           553      1578 1608/1578            852167                     ref            -         -         4.4        23  
-rust          276       228 421/228              852167                     ok             -         -         3.9       165  
-go            801      2189 2369/2189            852167                     ok             -         -        58.3      1764  
-js              -      2031 2031/2035            852167                     ok             -         -        45.0         -  
-python          -      1440 1440/1455            852167                     ok             -         -        11.5         -  
-cp3          6488      1681 1716/1681            852167                     ok         1.07x     7.38x         5.0       115  
+cpp           549      1445 1591/1445            852167                     ref            -         -         4.4        23  
+rust          244       214 434/214              852167                     ok             -         -         3.9       165  
+go            504      2216 2378/2216            852167                     ok             -         -        80.7      1764  
+js              -      1910 1954/1910            852167                     ok             -         -        46.3         -  
+python          -      1229 1253/1229            852167                     ok             -         -        11.6         -  
+cp3          5292      1596 1596/1603            852167                     ok         1.10x     7.46x         4.5       115  
 
 == word-frequency == expected = 37425343
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           667        50 81/50                37425343                   ref            -         -         4.1        23  
-rust          292        50 75/50                37425343                   ok             -         -         3.8       130  
-go            553        36 117/36               37425343                   ok             -         -         5.6      1762  
-js              -       180 180/204              37425343                   ok             -         -        37.0         -  
-python          -       531 541/531              37425343                   ok             -         -        11.5         -  
-cp3            12         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:27:1: error: CP3302: cannot find type name 'Map'
+cpp           588        45 74/45                37425343                   ref            -         -         4.1        23  
+rust          248        49 72/49                37425343                   ok             -         -         3.8       130  
+go            485        33 152/33               37425343                   ok             -         -         5.6      1762  
+js              -       169 169/177              37425343                   ok             -         -        37.0         -  
+python          -       509 512/509              37425343                   ok             -         -        11.5         -  
+cp3            14         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:27:1: error: CP3302: cannot find type name 'Map'
 
 == object-churn == expected = 90641269
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           574       118 149/118              90641269                   ref            -         -        61.8        20  
-rust          194       115 338/115              90641269                   ok             -         -        61.4       124  
-go            503        61 173/61               90641269                   ok             -         -        45.2      1751  
-js              -       330 361/330              90641269                   ok             -         -       247.1         -  
-python          -      1543 1561/1543            90641269                   ok             -         -       235.0         -  
-cp3            14         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:17:1: error: CP3002: not implemented yet: class declarations
+cpp           562       119 135/119              90641269                   ref            -         -        61.8        20  
+rust          189       115 341/115              90641269                   ok             -         -        61.4       124  
+go            515        52 163/52               90641269                   ok             -         -        45.8      1751  
+js              -       314 341/314              90641269                   ok             -         -       303.6         -  
+python          -      1405 1405/1427            90641269                   ok             -         -       235.0         -  
+cp3            11         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:17:1: error: CP3002: not implemented yet: class declarations
 
 == array-growth == expected = 200000010000000
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           508       108 143/108              200000010000000            ref            -         -       260.8        20  
-rust          187       121 143/121              200000010000000            ok             -         -       260.6       124  
-go            553       249 380/249              200000010000000            ok             -         -       615.8      1750  
-js              -       333 333/334              200000010000000            ok             -         -       353.1         -  
-python          -      1584 1599/1584            200000010000000            ok             -         -       830.3         -  
+cpp           471        93 120/93               200000010000000            ref            -         -       215.6        20  
+rust          169        95 132/95               200000010000000            ok             -         -       260.6       124  
+go            504       183 276/183              200000010000000            ok             -         -       455.7      1750  
+js              -       278 278/286              200000010000000            ok             -         -       363.1         -  
+python          -      1458 1458/1485            200000010000000            ok             -         -       830.3         -  
 cp3            12         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:15:7: error: CP3002: codegen: VariableDeclarator ('declared type outside M1') is not implemented in M1
 
 == closure-capture == expected = 16666688333331 998521500000
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           716        85 115/85               16666688333331 998521500000 ref            -         -       182.1        21  
-rust          216        15 99/15                16666688333331 998521500000 ok             -         -         3.6       125  
-go            560        20 134/20               16666688333331 998521500000 ok             -         -         5.6      1752  
-js              -       674 693/674              16666688333331 998521500000 ok             -         -       293.1         -  
-python          -      1240 1242/1240            16666688333331 998521500000 ok             -         -        11.9         -  
-cp3            14         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:20:7: error: CP3002: codegen: VariableDeclarator ('declared type outside M1') is not implemented in M1
+cpp           628        73 105/73               16666688333331 998521500000 ref            -         -       182.1        21  
+rust          195        13 114/13               16666688333331 998521500000 ok             -         -         2.7       125  
+go            499        16 129/16               16666688333331 998521500000 ok             -         -         4.8      1752  
+js              -       630 630/644              16666688333331 998521500000 ok             -         -       293.0         -  
+python          -      1175 1208/1175            16666688333331 998521500000 ok             -         -        11.8         -  
+cp3            16         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:20:7: error: CP3002: codegen: VariableDeclarator ('declared type outside M1') is not implemented in M1
 
 == interface-dispatch == expected = 37999986 66000000
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           746       134 166/134              37999986 66000000          ref            -         -       111.4        22  
-rust          258       110 366/110              37999986 66000000          ok             -         -        90.6       126  
-go            529        48 161/48               37999986 66000000          ok             -         -        52.4      1754  
-js              -       467 477/467              37999986 66000000          ok             -         -       388.7         -  
-python          -      1456 1458/1456            37999986 66000000          ok             -         -       236.2         -  
-cp3            14         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:18:1: error: CP3207: syntax error: expected ';'
+cpp           619       117 145/117              37999986 66000000          ref            -         -       111.4        22  
+rust          223       102 334/102              37999986 66000000          ok             -         -        90.6       126  
+go            484        39 151/39               37999986 66000000          ok             -         -        59.9      1754  
+js              -       429 444/429              37999986 66000000          ok             -         -       388.3         -  
+python          -      1277 1301/1277            37999986 66000000          ok             -         -       237.5         -  
+cp3            15         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:18:1: error: CP3207: syntax error: expected ';'
 
 == generics-mono == expected = 998986007 998986007
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           447        19 51/19                998986007 998986007        ref            -         -         4.0        19  
-rust          180        20 92/20                998986007 998986007        ok             -         -         4.0       124  
-go            545        21 142/21               998986007 998986007        ok             -         -         5.5      1750  
-js              -        63 67/63                998986007 998986007        ok             -         -        40.2         -  
-python          -       530 530/557              998986007 998986007        ok             -         -        11.5         -  
-cp3            14         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:14:1: error: CP3207: syntax error: expected ';'
+cpp           432        17 38/17                998986007 998986007        ref            -         -         4.3        19  
+rust          154        20 93/20                998986007 998986007        ok             -         -         3.9       124  
+go            476        19 139/19               998986007 998986007        ok             -         -         5.6      1750  
+js              -        62 67/62                998986007 998986007        ok             -         -        40.0         -  
+python          -       500 528/500              998986007 998986007        ok             -         -        11.5         -  
+cp3            13         - -                    -                          -              -         -           -         -  not runnable yet: main.cp3:14:1: error: CP3207: syntax error: expected ';'
 
 == summary: cp3 vs native ==
 task                   cp3/cpp   cp3/rust
 ------------------------------------------
 health-server                -          -
-compute-single           7.59x      8.60x
+compute-single           1.08x      1.25x
 compute-single-int           -          -
 compute-multi                -          -
-hello-world              0.73x      1.00x
-string-churn             1.07x      7.38x
+hello-world              0.89x      0.99x
+string-churn             1.10x      7.46x
 word-frequency               -          -
 object-churn                 -          -
 array-growth                 -          -
@@ -382,29 +383,33 @@ closure-capture              -          -
 interface-dispatch           -          -
 generics-mono                -          -
 ------------------------------------------
-geomean over runnable rows     1.80x (n=3)     3.99x (n=3)
+geomean over runnable rows     1.02x (n=3)     2.10x (n=3)
 ratios are cp3 time divided by the reference time; lower is better
 
-== performance gate == D64 target: cp3 within about 5% of cpp/rust; tripwire: WARN above 1.2x
-WARN compute-single: cp3 1154 ms is 7.59x cpp (152 ms), gate 1.2x
-WARN compute-single: cp3 1154 ms is 8.60x rust (134 ms), gate 1.2x
-WARN string-churn: cp3 1681 ms is 7.38x rust (228 ms), gate 1.2x
-gate: 3 warning(s); rerun with --strict to fail on warnings
+== performance gate == D64 target: cp3 within about 5% of cpp/rust; BIG WARN over 1.20x cpp/rust or slower than go/js/python at all; WARN over 1.10x cpp/rust
+BIG WARN (fix this): compute-single: cp3 162 ms is 1.25x rust (130 ms), tripwire 1.20x
+WARN string-churn: cp3 1596 ms is 1.10x cpp (1445 ms), watch 1.10x
+BIG WARN (fix this): string-churn: cp3 1596 ms is 7.46x rust (214 ms), tripwire 1.20x
+BIG WARN (fix this): string-churn: cp3 1596 ms is 1.30x python (1229 ms), tripwire 1.00x
+note: hello-world: cp3 5.9 ms vs go 5.8 ms is noise-scale, ratio not gated
+gate: 3 BIG WARN(s), 1 WARN(s); rerun with --strict to fail on warnings
 ```
 
-## Stress preset (2026-10-18)
+## Stress preset (2026-10-18, post-P1)
 
 The `stress` scale of `string-churn` exists to stretch the fast runtimes: at
-300,000 iterations the fast pack runs for roughly 10-24 seconds, so GC cycles
+300,000 iterations the fast pack runs for roughly 10-21 seconds, so GC cycles
 and allocator behavior have time to show up instead of hiding in startup
 noise. Command: `python benchmarks/run_benchmark.py --only string-churn
 --churn-scale stress --reps 2 --results
-benchmarks/bench/results/2026-10-18T0712-local-stress`, fresh builds. Raw
-output committed at
-`bench/results/2026-10-18T0712-local-stress/run.txt`.
+benchmarks/bench/results/2026-10-18T0808-local-stress`. The five non-cp3
+entries take the scale as a runtime argument and reused their builds from the
+labeled run above (`build: cached` in the table); the cp3 entry re-bakes the
+scale into its source and was compiled fresh (4839 ms). Raw output committed
+at `bench/results/2026-10-18T0808-local-stress/run.txt`.
 
 ```
-benchmarks bench suite -- 2026-10-18T07:12:11
+benchmarks bench suite -- 2026-10-18T08:08:32
 machine: Intel64 Family 6 Model 154 Stepping 3, GenuineIntel | 20 logical CPUs | Windows-11-10.0.26200-SP0
 runner:  python 3.14.5 (C:\Program Files\Python314\python.exe)
   g++     g++ (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r2) 16.1.0
@@ -418,24 +423,25 @@ every number below is a wall-clock measurement from this run; load phases use pe
 == string-churn == expected = 254546 | scale: stress (300000 iterations)
 lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
-cpp           510     13334 13334/13661          254546                     ref            -         -         4.4        23  
-rust          231      1267 1449/1267            254546                     ok             -         -         3.9       165  
-go            544     23164 23164/23399          254546                     ok             -         -       138.6      1764  
-js              -     21462 23144/21462          254546                     ok             -         -        70.0         -  
-python          -     10796 10796/11579          254546                     ok             -         -        11.5         -  
-cp3          5264     13819 13819/13844          254546                     ok         1.04x    10.90x         4.5       115  
+cpp             -     13277 13277/13451          254546                     ref            -         -         4.4        23  build: cached
+rust            -      1135 1135/1156            254546                     ok             -         -         3.9       165  build: cached
+go              -     20956 21081/20956          254546                     ok             -         -        84.7      1764  build: cached
+js              -     20105 20105/20615          254546                     ok             -         -        71.1         -  
+python          -     10147 10147/10340          254546                     ok             -         -        11.5         -  
+cp3          4839     13435 13435/13439          254546                     ok         1.01x    11.83x         4.5       115  
 
 == summary: cp3 vs native ==
 task                   cp3/cpp   cp3/rust
 ------------------------------------------
-string-churn             1.04x     10.90x
+string-churn             1.01x     11.83x
 ------------------------------------------
-geomean over runnable rows     1.04x (n=1)    10.90x (n=1)
+geomean over runnable rows     1.01x (n=1)    11.83x (n=1)
 ratios are cp3 time divided by the reference time; lower is better
 
-== performance gate == D64 target: cp3 within about 5% of cpp/rust; tripwire: WARN above 1.2x
-WARN string-churn: cp3 13819 ms is 10.90x rust (1267 ms), gate 1.2x
-gate: 1 warning(s); rerun with --strict to fail on warnings
+== performance gate == D64 target: cp3 within about 5% of cpp/rust; BIG WARN over 1.20x cpp/rust or slower than go/js/python at all; WARN over 1.10x cpp/rust
+BIG WARN (fix this): string-churn: cp3 13435 ms is 11.83x rust (1135 ms), tripwire 1.20x
+BIG WARN (fix this): string-churn: cp3 13435 ms is 1.32x python (10147 ms), tripwire 1.00x
+gate: 2 BIG WARN(s), 0 WARN(s); rerun with --strict to fail on warnings
 ```
 
 Rust stays well under two seconds at this scale because its string handling

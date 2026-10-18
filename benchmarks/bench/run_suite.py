@@ -41,6 +41,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import http.client
 import math
 import os
@@ -948,6 +949,23 @@ def print_gate_and_summary() -> None:
         print("gate: no warnings")
 
 
+def cp3c_provenance() -> list[str]:
+    """Provenance lines for the compiler binary, recorded in meta.txt.
+
+    The SHA-256 pins the exact compiler that produced a labeled run (uppercase
+    to match the convention in the README and the report); the mtime uses the
+    same local timestamp shape as the `invoked` line."""
+    if CP3C is None or not Path(CP3C).is_file():
+        return [f"cp3c: {CP3C}", "cp3c sha256: (not found)", "cp3c mtime: (not found)"]
+    digest = hashlib.sha256()
+    with open(CP3C, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    mtime = datetime.fromtimestamp(Path(CP3C).stat().st_mtime).isoformat(timespec="seconds")
+    return [f"cp3c: {CP3C}", f"cp3c sha256: {digest.hexdigest().upper()}",
+            f"cp3c mtime: {mtime}"]
+
+
 # --------------------------------------------------------------------------
 # main
 # --------------------------------------------------------------------------
@@ -1030,6 +1048,7 @@ def main() -> int:
             f"runner: python {platform.python_version()} ({sys.executable})",
             f"machine: {platform.platform()}",
             f"string-churn scale: {churn_label} ({churn_iterations} iterations)",
+            *cp3c_provenance(),
         ]
         (results_dir / "meta.txt").write_text("\n".join(meta) + "\n", encoding="utf-8")
         results_log = open(results_dir / "run.txt", "w", encoding="utf-8", newline="")
