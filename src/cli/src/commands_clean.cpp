@@ -36,6 +36,16 @@ int cmdClean(const CliOptions& opt) {
             std::fprintf(stderr, "cp3c: removed %s\n",
                          packages.string().c_str());
         }
+        // The lock describes installed packages; wiping the packages without
+        // the lock would leave a record of state that no longer exists.
+        const fs::path lock = root / ".cp3" / "lock.json";
+        if (fs::exists(lock, ec)) {
+            std::error_code rmEc;
+            fs::remove(lock, rmEc);
+            if (!rmEc) {
+                std::fprintf(stderr, "cp3c: removed %s\n", lock.string().c_str());
+            }
+        }
     }
     return kExitSuccess;
 }

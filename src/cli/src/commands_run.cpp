@@ -20,10 +20,84 @@
 #include "private/cache.hpp"
 #include "private/commands.hpp"
 #include "private/diagnostics.hpp"
+#include "private/package_json.hpp"
 #include "private/pipeline.hpp"
 #include "private/util.hpp"
 
 namespace cp3::cli {
+
+namespace {
+
+// Everything the frontend + codegen steps need beyond the source itself.
+struct BuildContext {
+    const CliOptions* opt = nullptr;
+    const RenderOptions* render = nullptr;
+    const std::string* moduleName = nullptr;  // e.g. "src/index"
+    bool execute = false;                     // `cp3c run` was requested
+};
+
+// The load+sema half of the pipeline. exitCode is kExitSuccess when `graph`
+// carries an analyzed entry unit to hand to codegen.
+struct FrontendResult {
+    std::unique_ptr<ModuleGraph> graph;
+    SemaResult sema;
+    int exitCode = kExitSuccess;
+};
+
+FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
+                          const BuildContext& ctx) {
+    FrontendResult result;
+    CollectingDiagnosticSink feSink;
+    result.graph = loadModuleGraph(sm, file, feSink);
+    CompilationUnit* entry = result.graph->entry();
+    if (entry != nullptr && entry->ast) {
+        analyzeProgram(*entry->ast, result.sema, feSink);
+    }
+    renderDiagnostics(feSink.diagnostics(), *ctx.render, stderr);
+    if (feSink.hasErrors()) {
+        result.exitCode = onlyNotImplemented(feSink.diagnostics())
+                              ? notImplemented(ctx.execute ? "run" : "build")
+                              : kExitCompileError;
+    } else if (entry == nullptr || !entry->ast) {
+        // The loader always yields a parsed entry unit; guard anyway so a
+        // future loader change can never turn into a crash here.
+        result.exitCode = notImplemented(ctx.execute ? "run" : "build");
+    }
+    return result;
+}
+
+// The codegen half. Returns kExitSuccess when `mod` holds real generated code
+// (an empty module keeps the not-implemented marker for the harness).
+int codegenEntry(const CompilationUnit& entry, const SemaResult& sema,
+                 const BuildContext& ctx, GeneratedModule& mod) {
+    CollectingDiagnosticSink cgSink;
+    mod = generateModule(*entry.ast, sema, *ctx.moduleName, cgSink);
+    renderDiagnostics(cgSink.diagnostics(), *ctx.render, stderr);
+    if (cgSink.hasErrors()) {
+        return onlyNotImplemented(cgSink.diagnostics())
+                   ? notImplemented(ctx.execute ? "run" : "build")
+                   : kExitCompileError;
+    }
+    if (mod.source.empty() && mod.header.empty()) {
+        return notImplemented(ctx.execute ? "run" : "build");
+    }
+    return kExitSuccess;
+}
+
+int runOnPackageError(const std::string& entry) {
+    // CLI-README §5.1: a package build produces a .cp3pak - there is nothing
+    // to run, so `run` is a usage error for a package project.
+    std::fprintf(stderr,
+                 "cp3c: '%s' is a 'type: package' project; packages have "
+                 "no runnable output\n",
+                 entry.c_str());
+    std::fprintf(stderr,
+                 "cp3c: use 'cp3c build' to produce the .cp3pak, or "
+                 "'cp3c exec <pkg>' to run a package tool\n");
+    return kExitUsageError;
+}
+
+}  // namespace
 
 int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     SourceManager sm;
@@ -33,52 +107,39 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
         std::fprintf(stderr, "cp3c: %s\n", err.c_str());
         return kExitUsageError;
     }
-    const RenderOptions ro = makeRenderOptions(opt, file->path);
-
-    CollectingDiagnosticSink feSink;
-    const std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sm, *file, feSink);
-    CompilationUnit* entry = graph->entry();
-    SemaResult sema;
-    if (entry != nullptr && entry->ast) {
-        analyzeProgram(*entry->ast, sema, feSink);
-    }
-    renderDiagnostics(feSink.diagnostics(), ro, stderr);
-    if (feSink.hasErrors()) {
-        if (onlyNotImplemented(feSink.diagnostics())) {
-            return notImplemented(execute ? "run" : "build");
-        }
-        return kExitCompileError;
-    }
-
-    // The loader always yields an entry unit with a parsed AST; guard anyway
-    // so a future loader change can never turn into a crash here.
-    if (entry == nullptr || !entry->ast) {
-        return notImplemented(execute ? "run" : "build");
-    }
 
     const fs::path entryPath(opt.file);
-    const std::string moduleName = moduleNameFor(entryPath, findProjectRoot(entryPath));
+    const fs::path projectRoot = findProjectRoot(entryPath);
+    const std::string moduleName = moduleNameFor(entryPath, projectRoot);
+    const bool packageProject = isPackageProject(projectRoot);
+    if (packageProject && execute) return runOnPackageError(opt.file);
 
-    CollectingDiagnosticSink cgSink;
-    const GeneratedModule mod = generateModule(*entry->ast, sema, moduleName, cgSink);
-    renderDiagnostics(cgSink.diagnostics(), ro, stderr);
-    if (cgSink.hasErrors()) {
-        if (onlyNotImplemented(cgSink.diagnostics())) {
-            return notImplemented(execute ? "run" : "build");
-        }
-        return kExitCompileError;
-    }
+    const RenderOptions ro = makeRenderOptions(opt, file->path);
+    const BuildContext ctx{&opt, &ro, &moduleName, execute};
 
-    // The codegen stage is still a stub (or produced no output): report the
-    // scaffold marker so the test harness skips instead of failing while the
-    // stage is unimplemented (ARCHITECTURE §4).
-    if (mod.source.empty() && mod.header.empty()) {
-        return notImplemented(execute ? "run" : "build");
-    }
+    FrontendResult frontend = runFrontend(sm, *file, ctx);
+    if (frontend.exitCode != kExitSuccess) return frontend.exitCode;
+    CompilationUnit* entry = frontend.graph->entry();
+
+    GeneratedModule mod;
+    const int cgExit = codegenEntry(*entry, frontend.sema, ctx, mod);
+    if (cgExit != kExitSuccess) return cgExit;
 
     if (opt.verbose && opt.compile.maxMemoryMb != 0) {
         std::fprintf(stderr, "cp3c: --max-memory cap: %llu MB (codegen phase)\n",
                      static_cast<unsigned long long>(opt.compile.maxMemoryMb));
+    }
+
+    if (packageProject) {
+        detail::PackInput input;
+        input.opt = &opt;
+        input.entryPath = &entryPath;
+        input.moduleName = &moduleName;
+        input.module = &mod;
+        input.source = file;
+        input.program = entry->ast.get();
+        input.execute = execute;
+        return detail::packProject(input);
     }
     return detail::buildWithToolchain(opt, entryPath, moduleName, mod, execute);
 }

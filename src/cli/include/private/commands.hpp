@@ -16,6 +16,8 @@
 #include <vector>
 
 #include "cp3/cli.hpp"
+#include "cp3/ast.hpp"
+#include "cp3/codegen.hpp"
 #include "cp3/diagnostic.hpp"
 #include "cp3/options.hpp"
 #include "cp3/source.hpp"
@@ -38,6 +40,8 @@ struct CliOptions {
     bool all = false;                     // clean --all
     bool yes = false;                     // init non-interactive
     bool once = false;                    // dev --once (run one pass then exit)
+    bool autoSelect = false;              // install --auto (GitHub selector)
+    std::string initType;                 // init --type application|package
 };
 
 // -----------------------------------------------------------------------------
@@ -72,6 +76,7 @@ int cmdFmt(const CliOptions& opt);
 int cmdClean(const CliOptions& opt);
 int cmdInit(const CliOptions& opt);
 int cmdExec(const CliOptions& opt);
+int cmdInstall(const CliOptions& opt);
 
 namespace detail {
 
@@ -81,6 +86,24 @@ namespace detail {
 int buildWithToolchain(const CliOptions& opt, const fs::path& entry,
                        const std::string& moduleName, const GeneratedModule& mod,
                        bool execute);
+
+// Everything `packProject` needs from the frontend half of cmdBuildOrRun:
+// pointers into the caller's locals (valid for the duration of the call).
+struct PackInput {
+    const CliOptions* opt = nullptr;
+    const fs::path* entryPath = nullptr;      // as resolved by the CLI
+    const std::string* moduleName = nullptr;  // e.g. "src/index"
+    const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
+    const SourceFile* source = nullptr;       // entry source file
+    const Program* program = nullptr;         // parsed entry AST
+    bool execute = false;                     // `cp3c run` was requested
+};
+
+// `cp3c build` for a `"type": "package"` project (CLI-README §5): validates the
+// mandatory `export default`, writes intermediates under .cp3/build/, and
+// produces .cp3/out/<name>.cp3pak carrying package.json + generated index.cp3
+// + the transpiled C++ under pak/ + any build.files. No toolchain involved.
+int packProject(const PackInput& input);
 
 }  // namespace detail
 

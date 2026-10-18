@@ -25,6 +25,20 @@ set(cp3_cli_sources
     src/commands_clean.cpp
     src/commands_init.cpp
     src/commands_exec.cpp
+    src/commands_pack.cpp
+    src/commands_install.cpp
+    src/package_json.cpp
+    src/signatures.cpp
+    src/lockfile.cpp
+    src/scripts.cpp
+    src/json.cpp
+    src/checksum.cpp
+    src/inflate.cpp
+    src/deflate.cpp
+    src/gzip.cpp
+    src/tar.cpp
+    src/cp3pak.cpp
+    src/semver.cpp
 )
 
 add_library(cp3_cli STATIC ${cp3_cli_sources})

@@ -26,6 +26,7 @@
 #include "cp3/version.hpp"
 
 #include "private/commands.hpp"
+#include "private/scripts.hpp"
 #include "private/util.hpp"
 
 namespace cp3 {
@@ -40,12 +41,13 @@ void printUsage(std::FILE* out) {
         "\n"
         "Commands:\n"
         "  run <file.cp3>     Build then execute a program\n"
-        "  build [file.cp3]   Transpile + link without executing\n"
+        "  build [file.cp3]   Transpile + link, or pack (\"type\": \"package\")\n"
         "  check <file.cp3>   Frontend only: parse + type-check (no C++ generation)\n"
         "  dev [file.cp3]     Watch mode: re-check on save (--once for a single pass)\n"
         "  fmt <file.cp3>     Zero-config formatter\n"
         "  clean              Remove .cp3/build and .cp3/out (--all clears .cp3/packages)\n"
-        "  init [dir]         Scaffold a new project (package.json + src/main.cp3)\n"
+        "  init [dir]         Scaffold a new project (package.json + src/index.cp3)\n"
+        "  install [src]      Install a .cp3pak / package dir (bare: package.json deps)\n"
         "  exec <pkg> [args]  Run a package's bundled tool\n"
         "  version            Print the compiler version\n"
         "  help               Print this help\n"
@@ -59,6 +61,8 @@ void printUsage(std::FILE* out) {
         "      --max-memory <MB|N%>  Cap codegen-phase memory (default: 70% of system RAM)\n"
         "      --all             (clean) also remove .cp3/packages\n"
         "      --yes, -y         (init) accept defaults, never prompt\n"
+        "      --type <t>        (init) pre-select project type (application|package)\n"
+        "      --auto            (install) auto-pick a GitHub release asset\n"
         "      --once            (dev) run one watch pass and exit\n"
         "\n"
         "Exit codes:\n"
@@ -150,6 +154,69 @@ std::string defaultEntryFile() {
     return {};
 }
 
+// Simple boolean flags shared by every command. Returns true when `t` matched.
+bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease,
+               bool& sawDebug) {
+    if (t == "--release") {
+        sawRelease = true;
+        opt.compile.profile = cp3::BuildProfile::Release;
+        return true;
+    }
+    if (t == "--debug") {
+        sawDebug = true;
+        opt.compile.profile = cp3::BuildProfile::Debug;
+        return true;
+    }
+    if (t == "--verbose" || t == "-v") { opt.verbose = true; return true; }
+    if (t == "--all") { opt.all = true; return true; }
+    if (t == "--yes" || t == "-y") { opt.yes = true; return true; }
+    if (t == "--once") { opt.once = true; return true; }
+    if (t == "--auto") { opt.autoSelect = true; return true; }
+    return false;
+}
+
+// Handles the value-taking options (--max-memory, --type). Returns true when
+// `t` was recognized; a malformed value is reported through `err` (the caller
+// aborts). `i` is advanced past a separate value token.
+bool parseValueOption(const std::vector<std::string>& tokens, std::size_t& i,
+                      cp3::cli::CliOptions& opt, std::string& err) {
+    const std::string& t = tokens[i];
+    if (t == "--max-memory" || cp3::cli::startsWith(t, "--max-memory=")) {
+        std::string value;
+        if (t == "--max-memory") {
+            if (i + 1 >= tokens.size()) {
+                err = "--max-memory requires a value (<MB> or <N%>)";
+                return true;
+            }
+            value = tokens[++i];
+        } else {
+            value = t.substr(std::strlen("--max-memory="));
+        }
+        std::uint64_t mb = 0;
+        if (!parseMaxMemory(value, mb)) {
+            err = "invalid --max-memory value '" + value + "'";
+            return true;
+        }
+        opt.compile.maxMemoryMb = mb;
+        return true;
+    }
+    if (t == "--type") {
+        if (i + 1 >= tokens.size()) {
+            err = "--type requires a value (application|package)";
+            return true;
+        }
+        const std::string value = tokens[++i];
+        if (value != "application" && value != "package") {
+            err = "invalid --type '" + value +
+                  "' (expected application or package)";
+            return true;
+        }
+        opt.initType = value;
+        return true;
+    }
+    return false;
+}
+
 // Parses the tokens following the command word into `opt`. Returns an empty
 // string on success or an error message on a usage problem.
 std::string parseOptions(const std::string& command,
@@ -170,50 +237,11 @@ std::string parseOptions(const std::string& command,
             afterSeparator = true;
             continue;
         }
-        if (t == "--release") {
-            sawRelease = true;
-            opt.compile.profile = cp3::BuildProfile::Release;
-            continue;
-        }
-        if (t == "--debug") {
-            sawDebug = true;
-            opt.compile.profile = cp3::BuildProfile::Debug;
-            continue;
-        }
-        if (t == "--verbose" || t == "-v") {
-            opt.verbose = true;
-            continue;
-        }
-        if (t == "--all") {
-            opt.all = true;
-            continue;
-        }
-        if (t == "--yes" || t == "-y") {
-            opt.yes = true;
-            continue;
-        }
-        if (t == "--once") {
-            opt.once = true;
-            continue;
-        }
-        if (t == "--max-memory") {
-            if (i + 1 >= tokens.size()) {
-                return "--max-memory requires a value (<MB> or <N%>)";
-            }
-            std::uint64_t mb = 0;
-            if (!parseMaxMemory(tokens[++i], mb)) {
-                return "invalid --max-memory value '" + tokens[i] + "'";
-            }
-            opt.compile.maxMemoryMb = mb;
-            continue;
-        }
-        if (cp3::cli::startsWith(t, "--max-memory=")) {
-            std::uint64_t mb = 0;
-            const std::string value = t.substr(std::strlen("--max-memory="));
-            if (!parseMaxMemory(value, mb)) {
-                return "invalid --max-memory value '" + value + "'";
-            }
-            opt.compile.maxMemoryMb = mb;
+        if (matchFlag(t, opt, sawRelease, sawDebug)) continue;
+
+        std::string err;
+        if (parseValueOption(tokens, i, opt, err)) {
+            if (!err.empty()) return err;
             continue;
         }
         if (startsWithDash(t)) {
@@ -239,7 +267,7 @@ bool resolveCommand(const std::string& first, std::string& command,
     }
     if (first == "run" || first == "build" || first == "check" ||
         first == "dev" || first == "fmt" || first == "clean" ||
-        first == "init" || first == "exec") {
+        first == "init" || first == "exec" || first == "install") {
         command = first;
         return true;
     }
@@ -276,11 +304,44 @@ std::string resolveFile(const std::string& command, bool filePreseeded,
         }
     } else if (command == "clean" && !opt.positionals.empty()) {
         return "'clean' takes no file argument";
+    } else if (command == "install" && opt.positionals.size() > 1) {
+        return "'install' takes at most one path or URL";
     }
     return {};
 }
 
+int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt);
+
+int reportHookFailure(const std::string& name, int rc) {
+    if (rc == -2) {
+        std::fprintf(stderr, "cp3c: could not start a shell for script '%s'\n",
+                     name.c_str());
+        return cp3::kExitCompileError;
+    }
+    std::fprintf(stderr, "cp3c: script '%s' failed (exit %d)\n", name.c_str(),
+                 rc);
+    return rc;
+}
+
+// Runs the package.json lifecycle hooks around the built-in command
+// (CLI-README §3). A failing `pre` hook aborts the command; `post` runs only
+// after a successful command, so a failed build never triggers a follow-up.
 int dispatchCommand(const std::string& command, cp3::cli::CliOptions& opt) {
+    const bool hooks =
+        cp3::cli::hookableCommand(command) && !cp3::cli::hooksSuppressed();
+    if (hooks) {
+        const int rc = cp3::cli::runScriptHook("pre" + command);
+        if (rc == -2 || rc > 0) return reportHookFailure("pre" + command, rc);
+    }
+    const int result = dispatchBuiltin(command, opt);
+    if (hooks && result == cp3::kExitSuccess) {
+        const int rc = cp3::cli::runScriptHook("post" + command);
+        if (rc == -2 || rc > 0) return reportHookFailure("post" + command, rc);
+    }
+    return result;
+}
+
+int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     if (command == "check") {
         if (opt.file.empty()) {
             std::fprintf(stderr, "cp3c: check needs a .cp3 file\n");
@@ -319,6 +380,9 @@ int dispatchCommand(const std::string& command, cp3::cli::CliOptions& opt) {
     }
     if (command == "init") {
         return cp3::cli::cmdInit(opt);
+    }
+    if (command == "install") {
+        return cp3::cli::cmdInstall(opt);
     }
     if (command == "exec") {
         return cp3::cli::cmdExec(opt);
