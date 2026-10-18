@@ -111,6 +111,9 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     if (std::string family = emitFamilyMember(m); !family.empty()) {
         return family;
     }
+    // A JSON record field read (`u.id` on a `JSON.parse<T>` result,
+    // src/std/json/codegen.cpp).
+    if (std::string json = emitJsonMember(m); !json.empty()) return json;
     return std::string();
 }
 

@@ -209,6 +209,17 @@ private:
     std::string emitPathMember(const MemberExpr& m);
     std::string emitOsCall(const CallExpr& c, const MemberExpr& m);
     std::string emitJsonCall(const CallExpr& c, const MemberExpr& m);
+    // The JSON record surface (STDLIB docs §04 / docs/language-spec §23): the
+    // unit's interface declarations are registered up front (collectJsonShapes)
+    // and a record shape is reified only when some `JSON.parse<T>` names it.
+    // A registered declaration emits nothing by itself.
+    void collectJsonShapes(const Program& program);
+    void emitJsonInterface(const InterfaceDeclaration& i);
+    std::string emitJsonStringify(const CallExpr& c);
+    std::string emitJsonParse(const CallExpr& c);
+    std::string jsonRecordParse(const std::string& shape, const std::string& text);
+    std::string jsonValueText(const Expr& e);
+    std::string emitJsonMember(const MemberExpr& m);
     std::string emitProcessCall(const CallExpr& c, const MemberExpr& m);
     std::string emitProcessMember(const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
@@ -343,7 +354,17 @@ private:
     bool needsString_ = false;     // string methods -> cp3/std/string.hpp include
     bool needsPath_ = false;       // path.* -> cp3/std/path.hpp include
     bool needsOs_ = false;         // os.* -> cp3/std/os.hpp include
-    bool needsJson_ = false;       // JSON.stringify -> cp3/std/json.hpp include
+    bool needsJson_ = false;       // JSON.stringify/parse -> cp3/std/json.hpp include
+    // The registered JSON record shapes (usage-based reification): per
+    // interface name the C++ struct text, the generated builder body and the
+    // declared field names, plus the sema shape label -> interface name. The
+    // structs materialize into the decls section on first use only.
+    std::unordered_map<std::string, std::string> jsonShapeStructs_;
+    std::unordered_map<std::string, std::string> jsonShapeBuilders_;
+    std::unordered_map<std::string, std::vector<std::string>> jsonShapeFields_;
+    std::unordered_map<std::string, std::string> jsonShapeByLabel_;
+    std::unordered_set<std::string> jsonShapeUsed_;
+    std::string jsonShapeDecls_;
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
