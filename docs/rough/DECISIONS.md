@@ -621,3 +621,17 @@ Enforcement: the network wave is currently implemented against this shape
 network_loop.hpp). The merge gate confirms the single-loop property before the
 wave lands, and every future async module (fs, worker messaging, and so on)
 inherits the same rule.
+
+Clarification for `parallel.*` and `worker` (user question, 2026-10-18). A
+`parallel.*` closure runs on the shared CPU pool and gets no loop at all:
+`parallel.*` is synchronous by contract (spec SS13 Rule 1, the calling thread
+blocks until every closure finishes), so `await` inside a parallel closure has
+nothing that could drive it and is rejected as a diagnostic when the parallel
+lowering wave lands. Fanning out over async work has two sanctioned shapes and
+neither adds a loop: I/O concurrency inside the one loop is `Promise.all`
+over fetch/timers (libuv multiplexes, no extra threads), and isolated work per
+thread is `worker`, whose thread runs its own single loop per this decision
+and hands its result to the caller's loop with `postFromThread` (the only
+sanctioned cross-thread channel: queue a task on the target loop, then wake
+it; the loop drains the queue between macrotasks, and after this decision the
+wake also nudges libuv out of a blocking turn).
