@@ -138,13 +138,16 @@ std::string Generator::exprPlain(const Expr& e) {
             return emitCallOrFamily(static_cast<const CallExpr&>(e));
         case NodeKind::NewExpr: {
             // std/network + std/collections constructors first, then the
-            // JS-compat family and its error report.
+            // builtin `new EventEmitter()` (D74), then the JS-compat family
+            // constructors; anything else reports.
             if (std::string net = emitNetworkNew(static_cast<const NewExpr&>(e));
                 !net.empty()) {
                 return net;
             }
             if (std::string coll = emitCollectionsNew(static_cast<const NewExpr&>(e));
                 !coll.empty()) return coll;
+            if (std::string em = emitEventEmitterNew(static_cast<const NewExpr&>(e));
+                !em.empty()) return em;
             return emitFamilyNew(static_cast<const NewExpr&>(e));
         }
         case NodeKind::ArrayLiteral:
@@ -162,6 +165,7 @@ std::string Generator::exprPlain(const Expr& e) {
             notImplemented(e, "this property access");
             return "0.0";
         }
+        case NodeKind::ArrowFunction: return emitListenerValue(e);  // D74
         default:
             notImplemented(e, "this expression");
             return "0.0";

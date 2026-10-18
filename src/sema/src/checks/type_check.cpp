@@ -99,6 +99,10 @@ bool isPromiseType(const Type& t) {
     return t.kind == TypeKind::Class && t.name == "Promise";
 }
 
+bool isEventEmitterType(const Type& t) {
+    return t.kind == TypeKind::Class && t.name == "EventEmitter";
+}
+
 Type promiseOf(const Type& value) {
     Type p(TypeKind::Class, "Promise");
     p.parts.push_back(value);

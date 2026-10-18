@@ -122,6 +122,31 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
                 }
                 return ambient();
             }
+            // `EventEmitter` (D74, spec §14): the documented on/once/off/emit
+            // surface, all returning void. A listener is
+            // `(...args: unknown[]) => void`; `emit`'s rest parameter is
+            // `unknown`, so it accepts any trailing arguments.
+            if (isEventEmitterType(ot)) {
+                Type listener(TypeKind::Function);
+                listener.parts.push_back(Type::unknown());
+                listener.parts.push_back(Type::voidType());
+                listener.name = kVariadicLabel;
+                if (prop == "on" || prop == "once" || prop == "off") {
+                    return Type::function({Type::string(), listener},
+                                          Type::voidType());
+                }
+                if (prop == "emit") {
+                    // `emit(event, ...args)`: at least `event`, any tail (only
+                    // the first value reaches a listener; see emitter.hpp).
+                    Type f = Type::function({Type::string(), Type::unknown()},
+                                            Type::voidType());
+                    f.name = kVariadicOptionalTailLabel;
+                    return f;
+                }
+                reportMemberMiss("EventEmitter", prop, span,
+                                 {"on", "once", "off", "emit"});
+                return Type::unknown();
+            }
             // The JS-compat family (src/std/typed-arrays/sema.cpp): typed
             // views, the buffer classes and DataView have their own tables.
             if (isTypedArrayClass(ot)) return typedArrayMember(ot, prop);

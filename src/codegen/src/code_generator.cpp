@@ -184,6 +184,25 @@ inline bool cp3_truthy(const ::cp3::runtime::buffer::Buffer&) { return true; }
 
 )CP3HELPERS";
 
+// The builtin EventEmitter's per-TU helpers (D74), added only when the unit
+// uses the builtin: `EventValue` exists only with the cp3/async/emitter.hpp
+// include, and a listener parameter arrives as one.
+const char* const kEventEmitterHelperBlock = R"CP3HELPERS(namespace {
+
+// ----- the builtin EventEmitter (D74) -----------------------------------------
+// A listener parameter is the erased emitted value; formatting and truthiness
+// follow the value it carries.
+inline std::string cp3_ts(const cp3::runtime::EventValue& v) {
+    return v.toString();
+}
+inline bool cp3_truthy(const cp3::runtime::EventValue& v) {
+    return v.truthy();
+}
+
+}  // namespace
+
+)CP3HELPERS";
+
 // Prefix every line of `text` with `pad`. Used to re-indent the top-level
 // statements when they are wrapped in the top-level-`await` coroutine.
 std::string indentText(const std::string& text, const std::string& pad) {
@@ -279,6 +298,13 @@ GeneratedModule Generator::run(const Program& program) {
     if (familyUse.find("::cp3::runtime::buffer::Buffer") != std::string::npos) {
         needsBuffer_ = true;
     }
+    // The builtin EventEmitter (D74): a module-scope binding or a signature can
+    // name `Ref<EventEmitter>`/`Listener` without the emitter having been
+    // lowered in this unit's own statements.
+    if (familyUse.find("::cp3::runtime::EventEmitter") != std::string::npos ||
+        familyUse.find("::cp3::runtime::Listener") != std::string::npos) {
+        needsEventEmitter_ = true;
+    }
 
     GeneratedModule module;
     module.header = buildHeader(decls);
@@ -319,6 +345,11 @@ std::string Generator::buildHeader(const std::string& decls) const {
         // std/buffer: a signature or module-scope binding can name `Buffer`.
         out += "#include \"cp3/std/buffer.hpp\"\n";
     }
+    if (needsEventEmitter_) {
+        // The builtin EventEmitter (D74): a signature or module-scope binding
+        // can name `Ref<EventEmitter>`/`Listener`.
+        out += "#include \"cp3/async/emitter.hpp\"\n";
+    }
     out += "\n";
     out += "namespace " + namesp_ + " {\n\n";
     out += decls;
@@ -352,6 +383,9 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsTypedArray_) {
         out += "#include \"cp3/typed_array.hpp\"\n";  // the family (D69)
     }
+    if (needsEventEmitter_) {
+        out += "#include \"cp3/async/emitter.hpp\"\n";  // the builtin (D74)
+    }
     if (consoleStderr_) {
         out += "#include \"cp3/std/console.hpp\"\n";  // console.warn/.error
     }
@@ -375,6 +409,9 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     }
     if (needsBuffer_) {
         out += kBufferHelperBlock;
+    }
+    if (needsEventEmitter_) {
+        out += kEventEmitterHelperBlock;
     }
     out += "\nnamespace " + namesp_ + " {\n\n";
     out += decls;

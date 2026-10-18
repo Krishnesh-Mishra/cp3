@@ -139,6 +139,15 @@ private:
     std::string emitConsoleLog(const CallExpr& c);
     std::string emitConsoleMethod(const CallExpr& c, const char* method);
 
+    // --- the builtin EventEmitter (D74, cp3/async/emitter.hpp) ----------------
+    // `new EventEmitter()`; the boxed-listener value form (`let h = () => {}`,
+    // an inline arrow argument, a function-typed local passed on); and the
+    // on/once/off/emit method calls. Each returns "" when the form is not one
+    // of them, so the caller keeps its other paths.
+    std::string emitEventEmitterNew(const NewExpr& n);
+    std::string emitListenerValue(const Expr& e);
+    std::string emitEventEmitterCall(const CallExpr& c, const MemberExpr& m);
+
     // --- the JS-compat typed-array family (src/std/typed-arrays/codegen.cpp) ---
     // Constructors with and without `new` (`Array(2)`, `Int8Array([1])`,
     // `DataView(buf)`), the `Array.of`/`Array.from` statics, the method tables
@@ -379,6 +388,7 @@ private:
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
     bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
+    bool needsEventEmitter_ = false;  // EventEmitter/Listener -> cp3/async/emitter.hpp
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)

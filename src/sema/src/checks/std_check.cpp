@@ -79,8 +79,8 @@ std::string stdImportHint(const std::string& name) {
         const char* specifier;
     };
     // The default-exported std modules (std_registry.cpp) whose import line a
-    // bare name follows from. Named-only modules (std/events, std/env, ...)
-    // are handled by import validation instead.
+    // bare name follows from. Named-only modules (std/env, std/collections,
+    // ...) are handled by import validation instead.
     static const ModuleHint kHints[] = {
         {"Math", "std/math"},       {"JSON", "std/json"},
         {"console", "std/console"}, {"path", "std/path"},

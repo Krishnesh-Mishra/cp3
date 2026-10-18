@@ -32,6 +32,8 @@ enum class Shape {
     DataView,
     Collections, // Map<K, V> / Set<T> (std/collections)
     Buffer,      // the nominal std/buffer `Buffer` byte sequence
+    EventEmitter, // the builtin event type (D74): Ref<EventEmitter>
+    Listener,     // a function-typed value (D74): the boxed callable
     Unknown, Unsupported
 };
 
@@ -61,6 +63,10 @@ NullishKind nullishKindOf(const Type& t);
 bool isPromiseType(const Type& t);
 Type promiseOf(const Type& value);
 Type promiseValue(const Type& t);
+
+// The builtin `EventEmitter` (D74): a nominal class type with name
+// "EventEmitter"; codegen lowers it to cp3/async/emitter.hpp.
+bool isEventEmitterType(const Type& t);
 
 // Does an empty optional of `kind` compare strictly equal to `nullishShape`?
 bool optionalEmptyMatches(NullishKind kind, Shape nullishShape);
