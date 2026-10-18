@@ -57,9 +57,10 @@ below): D61 exe → `.cp3/out/` layout + `clean`, `cp3 init` spec parity,
 `src/cli/src/util.cpp` (perf-owned). The **D56
 runtime-embedding lane** (single-binary guarantee) is queued behind the perf
 wave so the embedded runtime TU set finalizes once. The **benchmark expansion
-(B1)** is in flight with the senior Tier-1 task set (compute-single-int,
-object-churn, array-growth, closure-capture, interface-dispatch, generics-mono;
-ratio/RSS/size columns; the 20% gate) per D66. The **source-tree structure
+(B1)** landed 2026-10-18 (record below; Tier-1 set, ratio/RSS/size columns,
+the 1.2x gate) per D66. The **source-comment dash sweep** (D66.4 leftovers:
+part 1 covers everything the perf wave does not own, in flight now; the rest
+rides with the structure sweep) is in flight. The **source-tree structure
 sweep** (D66.5: `src/codegen`, then `src/lexer`/`src/parser`; behavior-neutral,
 corpus byte-identical) is queued immediately after the perf wave. std/network, parallel/worker,
 crypto, Date/Buffer, and the fs/env leftovers are post-perf runtime waves - they
@@ -235,6 +236,41 @@ Committed `4556017` (src/cli only; `src/cli/src/util.cpp` untouched). Scope:
   (`export default { add }`) hits codegen's missing `ObjectLiteral` (CP3002)
   until the classes/object-literal waves land; the pack pipeline itself is
   proven with `export default add;` (lead reproduced both).
+
+## B1 landing record (2026-10-18)
+
+Committed `f23e728` (104 files): suite moved to the repo root `benchmarks/`
+(D66.1) and overhauled per D66.2/D66.3. Scope:
+
+- Single entry point `benchmarks/run_benchmark.py` forwarding to the engine
+  `bench/run_suite.py` (`--only/--reps/--cp3c/--strict/--results`, plus
+  `--hello-reps`, `--churn-scale`).
+- Columns: per-row cp3/cpp + cp3/rust time ratios, `peak_rss_mb` (Windows
+  `PeakWorkingSetSize`, honest `-` elsewhere), stripped `binary_kb`; summary
+  table with a geomean footer; 1.2x regression tripwire prints WARN (D66.2)
+  and `--strict` exits 1.
+- Six Tier-1 tasks authored for all five runnable languages
+  (compute-single-int, object-churn, array-growth, closure-capture,
+  interface-dispatch, generics-mono); cp3 entries are spec-written and their
+  pending rows show the compiler's own CP3xxx diagnostic verbatim, filling in
+  when the waves land. hello-world (best + median of 15+), string-churn
+  (default + stress), word-frequency finished; independent oracle
+  `bench/oracle.py` derives every embedded expected value.
+- Harness: `tests/runner/run_tests.py --bench` / `--bench-args` (additive, off
+  by default; `--json` skips with a note). Lead-smoked end to end.
+- Labeled runs committed: `bench/results/2026-10-18T0705-local` (12 tasks,
+  every runnable row oracle-matched; hello 0.73x cpp / 1.00x rust,
+  string-churn 1.07x cpp, compute-single 7.59x / 8.60x pre-perf-wave; 3
+  designed WARNs; geomean 1.80x cpp / 3.99x rust) and
+  `2026-10-18T0712-local-stress` (churn 300k: 1.04x cpp / 10.90x rust). One
+  compiler binary pinned by SHA-256 in both `meta.txt`.
+- Fairness fixes: the cpp/go string-churn entries no longer compare locale or
+  library tables. Docs: `benchmarks/README.md` (methodology, fairness
+  contract, gate, refresh policy), root README tables from the same run,
+  `examples/README.md` pointer, per-task READMEs, `benchmarks/BENCH-REPORT.md`
+  (audit, Tier-1 pending diagnostics, Tier-2 staging, deviations).
+- Refreshed tables land after the perf wave: rerun, paste verbatim, never
+  hand-edit (refresh policy in `benchmarks/README.md`).
 
 ## Perf wave (in flight - launched after d409e33) - performance
 
