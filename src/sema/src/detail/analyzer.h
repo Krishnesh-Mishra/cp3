@@ -350,6 +350,9 @@ private:
     void analyzeTry(TryStatement& stmt);
     void analyzeFunctionBody(FunctionDeclaration& fn);
     bool allPathsReturn(Node* body);
+    // True when a switch has a `default` and every non-empty clause
+    // terminates, so it cannot fall through to the end of the function.
+    bool switchCannotFallThrough(const SwitchStatement& sw);
 
     // --- publishing (symbols.cpp) --------------------------------------------
     void setType(const Node& n, const Type& t);
