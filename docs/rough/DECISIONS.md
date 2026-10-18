@@ -483,3 +483,7 @@ Amends D66.2 and extends D64:
 3. Rationale: perf is the product; the warning list is the todo list. Rows
    behind Go/JS/Python are never acceptable; 10% and 20% versus the native
    pack are the staged fix thresholds.
+4. Every perf wave closes with the scorecard step: canonical rebuild, full
+   labeled suite run, and a verbatim dated paste into `benchmarks/README.md`
+   plus the root README tables (never hand-edit). The table diff is the
+   wave's report card, kept per wave.
