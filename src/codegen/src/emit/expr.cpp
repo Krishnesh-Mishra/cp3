@@ -456,7 +456,8 @@ std::string Generator::emitConditional(const ConditionalExpr& c) {
 std::string Generator::emitAssignment(const AssignmentExpr& a) {
     if (a.target->kind != NodeKind::Identifier) {
         // Array/typed-view element writes (`a[1] = 9`, `u8[0] = 5`) lower to
-        // the family's checked writes first (emit/tarrays_methods.cpp).
+        // the family's checked writes first
+        // (src/std/typed-arrays/codegen_methods.cpp).
         if (a.target->kind == NodeKind::IndexExpr) {
             if (std::string w = emitFamilyIndexWrite(a); !w.empty()) return w;
         }

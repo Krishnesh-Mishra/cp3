@@ -174,8 +174,8 @@ Type Analyzer::inferObject(ObjectLiteral& ol) {
 Type Analyzer::inferNew(NewExpr& n) {
     // The JS-compat family constructors (`new Int8Array(...)`, `new Array(2)`,
     // `new DataView(buf)`): nominal types from the family grammar
-    // (tarrays_check.cpp). A name the program shadowed is not ambient, so user
-    // declarations keep the generic path below.
+    // (src/std/typed-arrays/sema.cpp). A name the program shadowed is not
+    // ambient, so user declarations keep the generic path below.
     if (n.callee && n.callee->kind == NodeKind::Identifier) {
         auto& id = static_cast<Identifier&>(*n.callee);
         Binding b;
@@ -187,7 +187,7 @@ Type Analyzer::inferNew(NewExpr& n) {
         }
         if (lookup(id.name, b) && isAmbientType(b.type)) {
             // `new WebSocket(url)` / `new WebSocketServer({ port })`: an
-            // ambient name the network table knows (std_network.cpp).
+            // ambient name the network table knows (src/std/network/sema.cpp).
             setType(id, b.type);
             Type net = inferNetworkConstruct(id.name, n.arguments, n.span);
             if (!net.isUnknown()) return withType(n, net);

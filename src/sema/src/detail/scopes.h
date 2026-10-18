@@ -160,7 +160,7 @@ Type promiseOf(const Type& value);
 // The value type of a `Promise<T>` (Unknown for a non-Promise type).
 Type promiseValue(const Type& t);
 
-// --- the JS-compat typed-array family (D69; tarrays_check.cpp) ---------------
+// --- the JS-compat typed-array family (D69; src/std/typed-arrays/sema.cpp) ---
 //
 // The 11 typed-array class names, the buffer classes and DataView are nominal
 // `TypeKind::Class` types with no extra metadata; codegen owns the C++ mapping

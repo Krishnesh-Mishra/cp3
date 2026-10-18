@@ -127,7 +127,7 @@ void Analyzer::declareBuiltins() {
         "setTimeout", "setInterval", "clearTimeout", "clearInterval", "sleep",
         // The JS-compat typed-array family (D69): ambient constructors, no
         // import required. The constructors themselves are checked in
-        // tarrays_check.cpp; codegen maps them to cp3/typed_array.hpp.
+        // src/std/typed-arrays/sema.cpp; codegen maps them to cp3/typed_array.hpp.
         "Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array",
         "Uint16Array", "Int32Array", "Uint32Array", "Float32Array",
         "Float64Array", "BigInt64Array", "BigUint64Array", "ArrayBuffer",

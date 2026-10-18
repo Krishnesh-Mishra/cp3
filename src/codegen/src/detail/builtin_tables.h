@@ -1,12 +1,12 @@
 // =============================================================================
 // src/codegen/src/detail/builtin_tables.h - PRIVATE shared dispatch helpers for
-// the `emit/std/` family lowering units.
+// the `src/std/` family lowering units.
 //
-// The stable surface every `emit/std/<family>.cpp` shares: the namespace-shape
-// predicates (`isNamespaceObject`, `isNsMember`) and the table membership
-// helper (`inTable` / `CP3_IN_TABLE`). Keeping them here lets a new std family
-// (network, crypto) land as one new `emit/std/<family>.cpp` plus one dispatch
-// arm in `emit/std/common.cpp`, without touching this header.
+// The stable surface every `src/std/<family>/codegen.cpp` shares: the
+// namespace-shape predicates (`isNamespaceObject`, `isNsMember`) and the table
+// membership helper (`inTable` / `CP3_IN_TABLE`). Keeping them here lets a new
+// std family (network, crypto) land as one new `src/std/<family>/codegen.cpp`
+// plus one dispatch arm in `emit/std/common.cpp`, without touching this header.
 //
 // The per-family `needs*` flags (`needsMath_`, `needsString_`, ...) stay on
 // `Generator` (detail/generator.h): each family sets its own and

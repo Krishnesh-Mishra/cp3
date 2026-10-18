@@ -31,6 +31,12 @@ set(cp3_sema_sources
     ../std/network/sema.cpp
     ../std/typed-arrays/sema.cpp
     ../std/typed-arrays/sema_methods.cpp
+    ../std/math/sema.cpp
+    ../std/path/sema.cpp
+    ../std/os/sema.cpp
+    ../std/process/sema.cpp
+    ../std/console/sema.cpp
+    ../std/json/sema.cpp
 )
 
 add_library(cp3_sema STATIC ${cp3_sema_sources})

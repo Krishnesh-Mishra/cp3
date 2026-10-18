@@ -5,9 +5,9 @@
 // Lowers the `import ... from "std/..."` / builtin surface whose receivers sema
 // models as ambient (STDLIB docs §04): `Math.*`, `path.*`, `os.*`,
 // `JSON.stringify`, `process.*`, the `String(x)` global, and the `string`
-// method surface + `.length`. Per-family lowering lives in the sibling
-// `emit/std/<family>.cpp` units; the `needs*` flags they record drive the
-// include assembly in code_generator.cpp's buildSource.
+// method surface + `.length`. Per-family lowering (calls and member reads)
+// lives in the `src/std/<family>/codegen.cpp` units; the `needs*` flags they
+// record drive the include assembly in code_generator.cpp's buildSource.
 //
 // A member call/property that is not part of a family's table reports CP3002
 // (the caller falls through to notImplemented), so unsupported std surface
@@ -63,7 +63,7 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     }
     // `std/network` receivers (`res.status(404).text(...)`, `app.get(...)`,
     // `ws.send(...)`, `wss.on(...)`): the documented members lower to the plain
-    // C++ member call on the runtime object (emit/std/network.cpp).
+    // C++ member call on the runtime object (src/std/network/codegen.cpp).
     if (isNetworkObject(m.object.get())) return emitNetworkMemberCall(c, m);
     if (m.object && m.object->kind == NodeKind::ArrayLiteral) {
         std::string literal = emitStringMethodCall(c, m);
@@ -71,8 +71,9 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     } else if (m.object && info(*m.object).shape == Shape::String) {
         return emitStringMethodCall(c, m);
     }
-    // The JS-compat typed-array family (emit/tarrays.cpp): `Array.of/from`,
-    // the array/typed-view method tables, the buffer `.slice` and DataView.
+    // The JS-compat typed-array family (src/std/typed-arrays/codegen.cpp):
+    // `Array.of/from`, the array/typed-view method tables, the buffer `.slice`
+    // and DataView.
     if (std::string family = emitFamilyMemberCall(c, m); !family.empty()) {
         return family;
     }
@@ -80,20 +81,10 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
 }
 
 std::string Generator::emitBuiltinMember(const MemberExpr& m) {
-    if (isNamespaceObject(m.object.get(), "Math")) {
-        if (m.property == "PI") { needsMath_ = true; return "::cp3::runtime::math::kPi"; }
-        if (m.property == "E") { needsMath_ = true; return "::cp3::runtime::math::kE"; }
-    }
+    if (std::string math = emitMathMember(m); !math.empty()) return math;
     // `std/network` field reads (`res.status`, `res.ok`, `req.method`, ...).
     if (std::string net = emitNetworkMemberRead(m); !net.empty()) return net;
-    if (isNsMember(&m, "path", "sep")) {
-        needsPath_ = true;
-        return "std::string(::cp3::runtime::path::kSep)";
-    }
-    if (isNsMember(&m, "process", "argv")) {
-        needsProcess_ = true;
-        return "::cp3::runtime::process::argv()";
-    }
+    if (std::string sep = emitPathMember(m); !sep.empty()) return sep;
     if (m.property == "length" && m.object) {
         if (info(*m.object).shape == Shape::String) {
             // D63: `.length` is the UTF-8 byte count; a double keeps the
@@ -101,13 +92,11 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
             // would be ambiguous for size_t).
             return "static_cast<double>((" + expr(*m.object) + ").size())";
         }
-        if (isNsMember(m.object.get(), "process", "argv")) {
-            needsProcess_ = true;
-            return "static_cast<double>(::cp3::runtime::process::argv().size())";
-        }
     }
-    // The JS-compat typed-array family (emit/tarrays.cpp): `.length` of a cp3
-    // array, typed-view/buffer/DataView members, `X.BYTES_PER_ELEMENT`.
+    if (std::string proc = emitProcessMember(m); !proc.empty()) return proc;
+    // The JS-compat typed-array family (src/std/typed-arrays/codegen.cpp):
+    // `.length` of a cp3 array, typed-view/buffer/DataView members,
+    // `X.BYTES_PER_ELEMENT`.
     if (std::string family = emitFamilyMember(m); !family.empty()) {
         return family;
     }

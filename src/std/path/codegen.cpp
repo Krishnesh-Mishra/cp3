@@ -2,7 +2,8 @@
 // src/std/path/codegen.cpp - `path.*` call lowering.
 //
 // Every listed `path` member lowers 1:1 onto cp3::runtime::path
-// (`path.sep` lowers in emit/std/common.cpp's emitBuiltinMember).
+// (`path.sep` lowers in emitPathMember below; the namespace dispatch stays in
+// emit/std/common.cpp).
 // =============================================================================
 #include "detail/generator.h"
 
@@ -30,6 +31,14 @@ std::string Generator::emitPathCall(const CallExpr& c, const MemberExpr& m) {
     needsPath_ = true;
     return "::cp3::runtime::path::" + m.property + "(" +
            joinStrings(emitPlainArgs(c), ", ") + ")";
+}
+
+// The `path.sep` property read. Returns "" when `m` is not it, so the caller
+// keeps the CP3002 fallthrough.
+std::string Generator::emitPathMember(const MemberExpr& m) {
+    if (!isNsMember(&m, "path", "sep")) return std::string();
+    needsPath_ = true;
+    return "std::string(::cp3::runtime::path::kSep)";
 }
 
 }  // namespace cp3

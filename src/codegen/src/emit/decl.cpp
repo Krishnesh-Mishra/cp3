@@ -138,7 +138,7 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         }
         // `let a: number[] = Array(3)` / `let a: number[] = []`: the
         // annotation fixes an otherwise unknowable element type
-        // (emit/tarrays.cpp).
+        // (src/std/typed-arrays/codegen.cpp).
         std::string initText = declaratorInitText(*d, ci.type);
         if (initText.empty()) initText = expr(*d->init);
         if (ci.shape == Shape::Optional && isNullishLiteral(*d->init)) {

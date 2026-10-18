@@ -2,7 +2,8 @@
 // src/std/math/codegen.cpp - `Math.*` call/property lowering.
 //
 // The variadic `min`/`max` go through the runtime's initializer_list overload;
-// everything else is a 1:1 name. `Math.PI`/`Math.E` lower in
+// everything else is a 1:1 name. The `Math.PI`/`Math.E` property reads lower
+// in emitMathMember below; the namespace dispatch stays in
 // emit/std/common.cpp's emitBuiltinMember.
 // =============================================================================
 #include "detail/generator.h"
@@ -49,6 +50,21 @@ std::string Generator::emitMathCall(const CallExpr& c, const MemberExpr& m) {
     }
     return "::cp3::runtime::math::" + m.property + "(" +
            joinStrings(args, ", ") + ")";
+}
+
+// The two `Math` property reads. Returns "" when `m` is not one of them, so
+// the caller keeps the CP3002 fallthrough.
+std::string Generator::emitMathMember(const MemberExpr& m) {
+    if (!isNamespaceObject(m.object.get(), "Math")) return std::string();
+    if (m.property == "PI") {
+        needsMath_ = true;
+        return "::cp3::runtime::math::kPi";
+    }
+    if (m.property == "E") {
+        needsMath_ = true;
+        return "::cp3::runtime::math::kE";
+    }
+    return std::string();
 }
 
 }  // namespace cp3

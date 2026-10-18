@@ -188,7 +188,8 @@ CppInfo classify(const Type& raw) {
         }
         case TypeKind::Array:
             // Regular arrays have a spelling when their element type does
-            // (tarrays.cpp); otherwise they stay out of M1.
+            // (src/std/typed-arrays/codegen.cpp); otherwise they stay out of
+            // M1.
             classifyFamily(t, info);
             return info;
         default:

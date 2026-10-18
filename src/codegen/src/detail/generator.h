@@ -21,9 +21,11 @@
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
 //   emit/decl.cpp          forward decls, function signatures, declarations
-//   emit/tarrays.cpp       the JS-compat typed-array family (D69)
-//   emit/std/common.cpp    ambient std surface: shared helpers + dispatch
-//   emit/std/<family>.cpp  Math / path / os / process / JSON / string lowering
+//   src/std/typed-arrays/codegen.cpp  the JS-compat typed-array family (D69)
+//   emit/std/common.cpp               ambient std surface: shared helpers +
+//                                     dispatch
+//   src/std/<family>/codegen.cpp      Math / path / os / process / JSON /
+//                                     string lowering
 //
 // This header is implementation detail: it lives under
 // `src/codegen/src/detail/` and is never included by another module
@@ -137,7 +139,7 @@ private:
     std::string emitConsoleLog(const CallExpr& c);
     std::string emitConsoleMethod(const CallExpr& c, const char* method);
 
-    // --- the JS-compat typed-array family (emit/tarrays.cpp) ------------------
+    // --- the JS-compat typed-array family (src/std/typed-arrays/codegen.cpp) ---
     // Constructors with and without `new` (`Array(2)`, `Int8Array([1])`,
     // `DataView(buf)`), the `Array.of`/`Array.from` statics, the method tables
     // (`fill`/`join`/... on arrays and typed views, `get*`/`set*` on DataView,
@@ -179,23 +181,29 @@ private:
     std::string declaratorInitText(const VariableDeclarator& d,
                                    const Type& declared);
 
-    // --- std namespaces + primitive methods (emit/std/*.cpp) ------------------
+    // --- std namespaces + primitive methods (src/std/*/codegen.cpp) ----------
     // Lower `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*` calls, the
     // `string` method surface, and builtin property reads (`Math.PI`,
     // `path.sep`, `process.argv`, `s.length`). Each returns "" when the form
-    // is not implemented, so the caller can report CP3002. The shared dispatch
-    // helpers live in detail/builtin_tables.h.
+    // is not implemented, so the caller can report CP3002. The per-family
+    // member reads live with their lowering units too; the namespace dispatch
+    // (emitBuiltinCall / emitBuiltinMember) and the shared helpers
+    // (detail/builtin_tables.h) stay in emit/std/common.cpp.
     std::string emitBuiltinCall(const CallExpr& c, const MemberExpr& m);
     std::string emitBuiltinMember(const MemberExpr& m);
     std::string emitMathCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitMathMember(const MemberExpr& m);
     std::string emitPathCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitPathMember(const MemberExpr& m);
     std::string emitOsCall(const CallExpr& c, const MemberExpr& m);
     std::string emitJsonCall(const CallExpr& c, const MemberExpr& m);
     std::string emitProcessCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitProcessMember(const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
-    // Native-backed std modules (emit/std/crypto.cpp, emit/std/network.cpp):
-    // one per-module lowering unit. Each returns "" until its wave lands, so
-    // the caller keeps reporting CP3002 meanwhile.
+    // Native-backed std modules (src/std/crypto/codegen.cpp,
+    // src/std/network/codegen.cpp): one per-module lowering unit. Each returns
+    // "" when the form is not implemented, so the caller keeps reporting
+    // CP3002 meanwhile.
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
     // `std/network` receivers are recognised by the sema marker names

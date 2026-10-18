@@ -21,8 +21,10 @@
 //   checks/ops_check.cpp    operator expression inference
 //   checks/stmt_check.cpp   statements, control flow, return analysis
 //   checks/banned.cpp       banned-pattern diagnostics (delete/arguments/for-in/any)
-//   checks/std_check.cpp    std-namespace member tables + `String(x)`
-//   checks/tarrays_check.cpp the JS-compat typed-array family (D69)
+//   checks/std_check.cpp    std-namespace dispatch + `String(x)`
+//   src/std/<family>/sema.cpp per-family std member tables (math / path / os /
+//                           process / console / JSON)
+//   src/std/typed-arrays/sema.cpp the JS-compat typed-array family (D69)
 //   checks/parallel_check.cpp      parallel.* capture safety: statements + hook
 //   checks/parallel_expr_check.cpp parallel.* capture safety: expressions + scopes
 //
@@ -185,7 +187,8 @@ private:
     Type arrayMember(const Type& arr, const std::string& prop);
     Type stringMember(const std::string& prop);
     // Typed views of the ambient std namespaces + the `String(x)` global
-    // (std_check.cpp; STDLIB docs §04).
+    // (the per-family tables live in src/std/<family>/sema.cpp; STDLIB docs
+    // §04).
     std::optional<Type> stdNamespaceMember(const std::string& ns,
                                            const std::string& prop);
     std::optional<Type> mathMember(const std::string& prop);
@@ -194,14 +197,14 @@ private:
     std::optional<Type> processMember(const std::string& prop);
     std::optional<Type> consoleMember(const std::string& prop);
     std::optional<Type> jsonMember(const std::string& prop);
-    // Native-backed std modules: each returns nullopt until its wave lands, so
-    // member access keeps the permissive ambient shape meanwhile. Definitions
-    // live in the per-module checks/std_<module>.cpp units.
+    // Native-backed std modules: a member outside the documented surface
+    // returns nullopt, so member access keeps the permissive ambient shape.
+    // Definitions live in the per-module src/std/<module>/sema.cpp units.
     std::optional<Type> cryptoMember(const std::string& prop);
     std::optional<Type> networkMember(const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
 
-    // --- std/network (std_network.cpp) ---------------------------------------
+    // --- std/network (src/std/network/sema.cpp) ------------------------------
     // One documented object shape per member table entry ("$network:<name>").
     Type networkObjectType(const std::string& name);
     // Named-import call sites: `fetch(...)` / `createServer()`.
@@ -236,7 +239,7 @@ private:
     bool overloadViable(const FuncSig& sig, const std::vector<Type>& argTypes,
                         bool hasSpread);
 
-    // --- the JS-compat typed-array family (tarrays_check.cpp) ----------------
+    // --- the JS-compat typed-array family (src/std/typed-arrays/sema.cpp) ----
     // Constructors registered by `declareBuiltins` (D69): `Array` extras plus
     // the 11 typed classes, the buffer classes and DataView. Family types are
     // nominal `TypeKind::Class` values; codegen owns the C++ mapping.
@@ -366,7 +369,14 @@ bool isClosedStdNamespace(const std::string& ns);
 // The implemented member names of `ns`, used as CP3305 candidates.
 std::vector<std::string> stdNamespaceMemberNames(const std::string& ns);
 
-// The implemented member names of the `std/crypto` table (std_crypto.cpp).
+// The implemented member names of one family's table, the CP3305 candidate
+// list `stdNamespaceMemberNames` (std_check.cpp) forwards to. Each family unit
+// (src/std/<family>/sema.cpp) defines its own next to the table.
+std::vector<std::string> mathMemberNames();
+std::vector<std::string> pathMemberNames();
+std::vector<std::string> osMemberNames();
+std::vector<std::string> consoleMemberNames();
+std::vector<std::string> jsonMemberNames();
 std::vector<std::string> cryptoMemberNames();
 
 // The exact default-import statement for a missing std module binding (e.g.
