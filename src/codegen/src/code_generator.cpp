@@ -225,6 +225,11 @@ GeneratedModule Generator::run(const Program& program) {
         }
     }
 
+    // Usage-based reification (STDLIB docs §04): register the unit's interface
+    // record shapes before the emit walk, so a `JSON.parse<T>` use can name T
+    // even when the declaration comes later in the unit.
+    collectJsonShapes(program);
+
     std::string decls;   // function forward declarations
     std::string defs;    // function definitions
     std::string mainBody;
@@ -234,6 +239,11 @@ GeneratedModule Generator::run(const Program& program) {
             emitTopLevel(*stmtPtr, decls, defs, mainBody);
         }
     }
+
+    // The record structs of the shapes actually used as `JSON.parse<T>`
+    // materialize ahead of everything else (they must precede the builders and
+    // the bindings that read them).
+    decls = jsonShapeDecls_ + decls;
 
     // The family include (D69) is needed wherever a generated declaration or
     // definition names its C++ spellings, including signatures whose array
