@@ -69,21 +69,24 @@ perf wave. The **source-tree structure sweep** (D66.5: `src/codegen`, then
 immediately after the perf wave and now runs before the post-perf std waves
 (user architecture note, 2026-10-18; D68), so the new module families land in
 the final layout as runtime units behind per-module tables. Post-perf runtime
-waves, explicitly
-prioritized by the user directive of 2026-10-18 ("implement server parallel
-and other remaining std lib things"): std/network (**server**), parallel/worker
-(lights up the compute-multi and health-server cp3 rows), crypto, Date/Buffer,
-and the fs/env leftovers; then the **JS-compat typed-array surface** from the
-same directive (`Array(n).fill`, `new Float64Array([...])`, `Int8Array`
-through `BigUint64Array`, `ArrayBuffer`/`SharedArrayBuffer`/`DataView`), which
-needs spec text + corpus cases (the oracle) before implementation. Backing
-storage is fixed-size (an owned heap block + stored length for runtime sizes;
-the native fixed-array mapping when sizes are compile-time known), never a
-resizing vector: typed arrays have no delete and no resize, and `const` keeps
-its JS meaning (no rebinding; contents mutable). The reviewed surface and the
-five resolved open questions are **D69** plus `docs/rough/JSC-TYPED-ARRAYS.md`
-(JS0); implementation is corpus-first and needs the array indexing path. All of
-these sit in perf-owned paths today.
+waves: the roadmap was revised by the user directive of 2026-10-18 (latest):
+(1) the **structure sweep** lands first (running now); (2) then **three
+parallel implementation waves**, each with its own dedicated agent, because
+server alone is a big topic: **server** (`std/network`: fetch, createServer,
+WebSocket; lights the health-server row), **crypto** (`std/crypto`), and the
+**JS-compat typed arrays** (D69 + `docs/rough/JSC-TYPED-ARRAYS.md`;
+corpus-first, needs the array indexing path); each agent skips whatever is
+already done and reports missing vs landed per path ownership; the parallel
+`worker` wave and the Date/Buffer/fs/env leftovers follow the server wave;
+(3) the lead then runs a full verification audit ("nothing missing") over the
+merged result; (4) the performance program resumes (string-churn first, then
+every flagged row, across server, crypto and codegen). Backing storage stays
+fixed-size (an owned heap block + stored length for runtime sizes; the native
+fixed-array mapping when sizes are compile-time known), never a resizing
+vector: typed arrays have no delete and no resize, and `const` keeps its JS
+meaning (no rebinding; contents mutable). The reviewed typed-array surface and
+the five resolved open questions are **D69** plus `docs/rough/JSC-TYPED-ARRAYS.md`.
+All of these sit in perf-owned paths today.
 
 ## Marker rulings owed (the 16 genuinely open)
 
