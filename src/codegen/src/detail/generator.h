@@ -254,8 +254,8 @@ private:
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
     // `std/fs` (src/std/fs/codegen.cpp): the namespace table plus the
-    // ReadStream / WriteStream / chunk receivers, recognised by the `$fs:`
-    // marker names.
+    // FileStats / ReadStream / WriteStream receivers, recognised by the
+    // `$fs:` marker names.
     std::string emitFsCall(const CallExpr& c, const MemberExpr& m);
     bool isFsReceiver(const Expr* e) const;
     std::string emitFsMemberCall(const CallExpr& c, const MemberExpr& m);

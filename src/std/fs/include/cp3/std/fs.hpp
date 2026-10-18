@@ -26,19 +26,13 @@
 // native row only when a program imports "std/fs" (src/std/fs/native.hpp, D68).
 //
 // -----------------------------------------------------------------------------
-// CROSS-FAMILY SEAMS (round 3 launched before rounds 1 and 2 landed; see
-// build/scratch/rounds/WAVE-STD-R3-FS-REPORT.md "PENDING DEPENDENCIES")
+// CROSS-FAMILY NOTES (round 3 launched before std/buffer and std/date landed;
+// the marked seams were closed in the finish phase after the master merge)
 // -----------------------------------------------------------------------------
-//   * `FileStats.modifiedAt: Date` (docs 04) is ABSENT until `std/date`
-//     lands; add `double modifiedAt` (Date) + the field here, then re-verify.
-//   * A data chunk is a `std::string` until `std/buffer` lands; `Chunk` and
-//     `chunkText` below are the single swap point (`chunk.toString()` lowers
-//     onto `chunkText`). Swapping means: `using Chunk = Buffer;` the two
-//     `on("data", ...)` signatures pick up Buffer, and codegen's listener
-//     context type swaps from `std::string` to the Buffer spelling.
-//   * `write(chunk: string | Buffer)`: the runtime keeps ONE overload over the
-//     chunk representation, so a Buffer argument compiles as soon as the chunk
-//     representation has that conversion (it is a string today).
+//   * `FileStats.modifiedAt` is the real `std/date` value (cp3/std/date.hpp).
+//   * A data chunk is the real `std/buffer` `Buffer` (`Chunk` below); codegen
+//     lowers `chunk.toString()` onto `::cp3::runtime::buffer::toString`.
+//   * `write(chunk: string | Buffer)` is two overloads over the same bytes.
 // =============================================================================
 #pragma once
 
@@ -50,6 +44,8 @@
 #include "cp3/async/promise.hpp"
 #include "cp3/core/error.hpp"
 #include "cp3/core/value.hpp"
+#include "cp3/std/buffer.hpp"
+#include "cp3/std/date.hpp"
 
 namespace cp3::runtime::fs {
 
@@ -64,32 +60,27 @@ struct WriteStreamImpl;
 // FileStats
 // =============================================================================
 /// `fs.statSync(path)` / `await fs.stat(path)`. The docs surface is
-/// `FileStats { size, isFile, isDirectory, modifiedAt }`; `modifiedAt` is a
-/// SEAM (see the header note) and lands with `std/date`.
+/// `FileStats { size, isFile, isDirectory, modifiedAt }` with `modifiedAt` the
+/// real std/date value.
 struct FileStats {
     double size = 0.0;
     bool isFile = false;
     bool isDirectory = false;
+    ::cp3::runtime::date::Date modifiedAt;
 };
 
 // =============================================================================
-// Chunk representation (the Buffer seam)
+// Chunk representation
 // =============================================================================
-/// A byte chunk handed to a `"data"` listener. `std/buffer` is in flight, so
-/// the representation is the byte string itself; `chunkText` is the one
-/// function the generated `chunk.toString()` call lowers onto.
-using Chunk = std::string;
-
-/// `chunk.toString()`. The single swap point behind `Chunk`: with a real
-/// Buffer this decodes its bytes; today the chunk already IS the text.
-inline std::string chunkText(const Chunk& chunk) { return chunk; }
+/// A byte chunk handed to a `"data"` listener: the std/buffer `Buffer`.
+using Chunk = ::cp3::runtime::buffer::Buffer;
 
 // =============================================================================
 // Sync surface (throws `Thrown` on failure)
 // =============================================================================
 /// `fs.readFileSync(path, encoding?)`. Reads the file as bytes; the encoding
-/// parameter is accepted and ignored (utf8 is the only meaningful value, and a
-/// Buffer-as-string chunk means no decoding step).
+/// parameter is accepted and ignored (utf8 is the only meaningful value for a
+/// cp3 string).
 std::string readFileSync(const std::string& path, std::string encoding = "");
 void writeFileSync(const std::string& path, const std::string& data);
 void appendFileSync(const std::string& path, const std::string& data);
@@ -130,7 +121,11 @@ public:
     /// Internal: created by `readFileStream` only.
     explicit ReadStream(std::shared_ptr<detail::ReadStreamImpl> impl);
 
+    /// `"data"`: the chunk is the std/buffer `Buffer`.
     void on(const std::string& event, std::function<void(Chunk)> handler) const;
+    /// `"error"`: the message is the rendered `Thrown` text.
+    void on(const std::string& event, std::function<void(std::string)> handler) const;
+    /// `"end"`, or a listener that ignores its payload.
     void on(const std::string& event, std::function<void()> handler) const;
 
 private:
@@ -154,6 +149,7 @@ public:
     explicit WriteStream(std::shared_ptr<detail::WriteStreamImpl> impl);
 
     void write(const std::string& chunk) const;
+    void write(const Chunk& chunk) const;
     void end() const;
     void on(const std::string& event, std::function<void(std::string)> handler) const;
     void on(const std::string& event, std::function<void()> handler) const;

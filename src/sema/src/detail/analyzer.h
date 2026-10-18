@@ -208,6 +208,11 @@ private:
     std::optional<Type> dateInstanceMember(const Type& recv,
                                            const std::string& prop);
     std::optional<Type> fsMember(const std::string& prop);
+    // std/fs receiver field reads (src/std/fs/sema.cpp): the documented
+    // `FileStats` fields (`stat.modifiedAt` types as the nominal Date class);
+    // nullopt keeps the permissive ambient fallthrough for every other member.
+    std::optional<Type> fsReceiverMember(const Type& recv,
+                                         const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
 
     // --- std/network (src/std/network/sema.cpp) ------------------------------

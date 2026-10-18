@@ -89,6 +89,9 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
     switch (ot.kind) {
         case TypeKind::Object: {
             if (isAmbientType(ot)) return ambient();
+            // std/fs receiver fields (`stat.size`, `stat.modifiedAt`, ...):
+            // src/std/fs/sema.cpp; a miss keeps the ambient fallthrough.
+            if (auto fs = fsReceiverMember(ot, prop)) return *fs;
             Shape* sh = shapeOf(ot);
             if (!sh) return ambient();
             if (sh->open) return ambient();

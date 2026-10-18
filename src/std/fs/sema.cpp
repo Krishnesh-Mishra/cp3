@@ -29,16 +29,13 @@
 // old permissive behavior instead of cascading. Codegen recognises receivers by
 // these marker names, which are shared with src/std/fs/codegen.cpp.
 //
-// CROSS-FAMILY SEAMS (round 3 launched before rounds 1 and 2 landed; see
-// build/scratch/rounds/WAVE-STD-R3-FS-REPORT.md "PENDING DEPENDENCIES"):
-//   * `FileStats.modifiedAt: Date` (docs 04) - the `std/date` Date class is
-//     still in flight, so the field is not in this table yet: the object marker
-//     above types member reads permissively, and the field lands with the date
-//     family. No pinned case reads it.
-//   * `ReadStream`'s `data` listener parameter is `chunk: Buffer` in the docs;
-//     Buffer is still in flight, so the listener parameter stays permissive
-//     here (sema never consults the chunk type) and codegen types the lambda's
-//     own parameter name with a marked seam type.
+// CROSS-FAMILY NOTES (round 3 launched before std/buffer and std/date landed;
+// the marked seams closed in the finish phase):
+//   * `FileStats.modifiedAt: Date` types as the nominal `Date` class below, so
+//     Date methods chain on the read; codegen lowers the field read.
+//   * `ReadStream`'s `data` listener parameter is `chunk: Buffer` in the docs,
+//     but sema never consults callback parameter types (codegen types the
+//     lambda's own parameter name with the nominal `Buffer` class).
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -64,8 +61,9 @@ const char* const kWriteStream = "$fs:WriteStream";
 //
 // A named open object: no shape is registered, so member access on it stays
 // permissive (the std/network convention) and codegen can recognise the
-// receiver by name. `modifiedAt` (docs 04, a `Date`) is deliberately not part
-// of any field list yet - SEAM (date), see the file header.
+// receiver by name. The documented `FileStats` fields are typed by
+// `fsReceiverMember` below; every other member keeps the permissive ambient
+// fallthrough, exactly like the network receivers.
 
 Type fsStatsObject() { return Type::named(TypeKind::Object, kFileStats); }
 Type fsReadStreamObject() { return Type::named(TypeKind::Object, kReadStream); }
@@ -121,6 +119,24 @@ const MemberRow kFsRows[] = {
 
 std::optional<Type> Analyzer::fsMember(const std::string& prop) {
     return lookupMember(kFsRows, prop);
+}
+
+// =============================================================================
+// Receiver field reads
+// =============================================================================
+// The documented FileStats fields (docs 04). A known field gets its real type,
+// so `stats.modifiedAt.toISOString()` chains into the date family; any other
+// property returns nullopt and keeps the permissive ambient fallthrough. The
+// matching codegen read is emitFsMemberRead (src/std/fs/codegen.cpp).
+std::optional<Type> Analyzer::fsReceiverMember(const Type& recv,
+                                               const std::string& prop) {
+    if (recv.kind != TypeKind::Object || recv.name != kFileStats) {
+        return std::nullopt;
+    }
+    if (prop == "size") return Type::number();
+    if (prop == "isFile" || prop == "isDirectory") return Type::boolean();
+    if (prop == "modifiedAt") return Type::named(TypeKind::Class, "Date");
+    return std::nullopt;
 }
 
 std::vector<std::string> fsMemberNames() { return memberNames(kFsRows); }

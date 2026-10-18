@@ -19,6 +19,7 @@
 #include "cp3/std/fs.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -46,6 +47,19 @@ std::filesystem::path toPath(const std::string& path) {
     return std::filesystem::path(std::u8string(path.begin(), path.end()));
 }
 
+/// `FileStats.modifiedAt` as milliseconds since the epoch. There is no
+/// portable `clock_cast` on every toolchain, so the file time is shifted by the
+/// current difference of the file and system clocks (the classic offset trick).
+std::int64_t modifiedMillis(std::filesystem::file_time_type when) {
+    const auto offset =
+        std::chrono::duration_cast<std::chrono::system_clock::duration>(
+            when - std::filesystem::file_time_type::clock::now());
+    const auto system = std::chrono::system_clock::now() + offset;
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               system.time_since_epoch())
+        .count();
+}
+
 }  // namespace
 
 // =============================================================================
@@ -64,7 +78,7 @@ struct ReadStreamImpl {
     bool finished = false;
     bool endDelivered = false;
     bool failed = false;
-    std::function<void(std::string)> onData;
+    std::function<void(Chunk)> onData;
     std::function<void()> onEnd;
     std::function<void(std::string)> onError;
 };
@@ -127,7 +141,7 @@ void pumpRead(const std::shared_ptr<detail::ReadStreamImpl>& impl) {
         return;
     }
     chunk.resize(static_cast<std::size_t>(got));
-    if (impl->onData) impl->onData(chunk);
+    if (impl->onData) impl->onData(Chunk(std::move(chunk)));
     currentLoop().post([impl]() { pumpRead(impl); });
 }
 
@@ -153,22 +167,25 @@ ReadStream::ReadStream(std::shared_ptr<detail::ReadStreamImpl> impl)
 
 void ReadStream::on(const std::string& event,
                     std::function<void(Chunk)> handler) const {
-    if (event == "data") {
-        impl_->onData = std::move(handler);
-    } else if (event == "error") {
-        impl_->onError = std::move(handler);
-    } else if (event == "end") {
-        impl_->onEnd = [handler = std::move(handler)]() { handler(std::string()); };
-    } else {
-        fail("readFileStream: unknown event '" + event + "'");
+    if (event != "data") {
+        fail("readFileStream: '" + event + "' is not a chunk event");
     }
+    impl_->onData = std::move(handler);
     startRead(impl_);
-    if (event == "end") deliverEnd(impl_);
+}
+
+void ReadStream::on(const std::string& event,
+                    std::function<void(std::string)> handler) const {
+    if (event != "error") {
+        fail("readFileStream: '" + event + "' is not an error event");
+    }
+    impl_->onError = std::move(handler);
+    startRead(impl_);
 }
 
 void ReadStream::on(const std::string& event, std::function<void()> handler) const {
     if (event == "data") {
-        impl_->onData = [handler = std::move(handler)](std::string) { handler(); };
+        impl_->onData = [handler = std::move(handler)](Chunk) { handler(); };
     } else if (event == "error") {
         impl_->onError = [handler = std::move(handler)](std::string) { handler(); };
     } else if (event == "end") {
@@ -243,6 +260,9 @@ WriteStream::WriteStream(std::shared_ptr<detail::WriteStreamImpl> impl)
     : impl_(std::move(impl)) {}
 
 void WriteStream::write(const std::string& chunk) const { writeChunk(impl_, chunk); }
+
+// `write(chunk: Buffer)`: the buffer's bytes, same path as a string chunk.
+void WriteStream::write(const Chunk& chunk) const { writeChunk(impl_, chunk.bytes()); }
 
 void WriteStream::end() const { endWrite(impl_); }
 
@@ -332,6 +352,12 @@ FileStats statSync(const std::string& path) {
         std::error_code sizeEc;
         const std::uintmax_t size = std::filesystem::file_size(toPath(path), sizeEc);
         if (!sizeEc) out.size = static_cast<double>(size);
+    }
+    std::error_code timeEc;
+    const std::filesystem::file_time_type modified =
+        std::filesystem::last_write_time(toPath(path), timeEc);
+    if (!timeEc) {
+        out.modifiedAt = ::cp3::runtime::date::Date{modifiedMillis(modified)};
     }
     return out;
 }

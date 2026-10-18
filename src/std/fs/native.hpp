@@ -7,8 +7,12 @@
 //
 // Backend: the C++ standard library only (`std::filesystem` + `std::fstream`,
 // see src/std/fs/runtime.cpp). No vendored library, no extra compile flags, no
-// extra link flags: the row supplies the generated-code include tree and the
+// extra link flags: the row supplies the generated-code include trees and the
 // one runtime TU, selected when a program imports "std/fs".
+//
+// The header (cp3/std/fs.hpp) carries the real std/buffer `Buffer` chunk and
+// the std/date `FileStats.modifiedAt` value (the round-3 seams closed in the
+// finish phase), so the two header-only family trees are include roots too.
 // =============================================================================
 #pragma once
 
@@ -18,7 +22,7 @@ namespace cp3::cli::detail {
 
 inline const NativePackage kFsNativePackage{
     "std/fs",
-    {"src/std/fs/include"},
+    {"src/std/fs/include", "src/std/buffer/include", "src/std/date/include"},
     {},
     {"src/std/fs/runtime.cpp"},
     {},

@@ -10,25 +10,25 @@
 //   stat.isDirectory        -> (stat).isDirectory            (FileStats reads,
 //   stat.size               -> static_cast<double>((stat).size)  and the
 //                              nullary `isFile()` / `isDirectory()` call form)
-//   rs.on("data", (chunk) => ...) -> (rs).on("data", [](std::string chunk){...})
-//   ws.write(chunk)         -> (ws).write(chunk)
+//   stat.modifiedAt         -> (stat).modifiedAt            (a std/date value)
+//   rs.on("data", (chunk) => ...) -> (rs).on("data", [](Buffer chunk){...})
+//   ws.write(chunk)         -> (ws).write(chunk)  (string or Buffer overload)
 //   ws.end()                -> (ws).end()
-//   chunk.toString()        -> ::cp3::runtime::fs::chunkText(chunk)
+//   chunk.toString()        -> ::cp3::runtime::buffer::toString(chunk)
 //
 // Receivers are recognised by the `$fs:` marker names sema publishes
 // (src/std/fs/sema.cpp). The listener lambda is emitted with declared parameter
 // types (contextParams), because sema keeps callback parameters permissive;
-// its `chunk` is declared in a temporary scope as the `$fs:Chunk` marker, so a
-// member call inside the body still reaches this unit.
+// its `chunk` is declared in a temporary scope as the nominal `Buffer` class,
+// so member calls inside the body lower through the std/buffer unit.
 //
 // Every async member and every stream use sets needsEventLoop_: promise
 // continuations and the stream pump are microtasks, so `main` must drive the
 // loop even when the unit has no `await`.
 //
-// CROSS-FAMILY SEAMS (see cp3/std/fs.hpp and the wave report):
-//   * chunk = std::string until `std/buffer` lands; `chunkText` (below) is the
-//     single swap point for the `$fs:Chunk` receiver lowering.
-//   * `write(chunk: string | Buffer)` lowers to the one string overload.
+// CROSS-FAMILY NOTES (see cp3/std/fs.hpp and the wave report): the round-3
+// Buffer seam is closed - chunks are the nominal `Buffer` and every chunk
+// member lowers through src/std/buffer/codegen.cpp.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -49,7 +49,6 @@ namespace {
 constexpr const char* kFileStats = "$fs:FileStats";
 constexpr const char* kReadStream = "$fs:ReadStream";
 constexpr const char* kWriteStream = "$fs:WriteStream";
-constexpr const char* kChunk = "$fs:Chunk";
 
 constexpr const char* kRuntimeNs = "::cp3::runtime::fs::";
 
@@ -76,7 +75,7 @@ bool isStreamMember(const std::string& prop) {
 
 /// The sema marker behind a listener's first declared parameter, or Unknown.
 Type listenerParamType(const std::string& event) {
-    if (event == "data") return Type::named(TypeKind::Object, kChunk);
+    if (event == "data") return Type::named(TypeKind::Class, "Buffer");
     if (event == "error") return Type::string();
     return Type::unknown();
 }
@@ -86,8 +85,7 @@ Type listenerParamType(const std::string& event) {
 bool Generator::isFsReceiver(const Expr* e) const {
     if (e == nullptr) return false;
     const std::string& name = effectiveType(*e).name;
-    return name == kFileStats || name == kReadStream || name == kWriteStream ||
-           name == kChunk;
+    return name == kFileStats || name == kReadStream || name == kWriteStream;
 }
 
 // =============================================================================
@@ -110,13 +108,6 @@ std::string Generator::emitFsMemberCall(const CallExpr& c, const MemberExpr& m) 
     if (m.object == nullptr) return std::string();
     const std::string& receiver = effectiveType(*m.object).name;
     needsFs_ = true;
-    if (receiver == kChunk) {
-        // SEAM (Buffer): the one chunk method; swaps to a Buffer decode.
-        if (m.property == "toString" && c.arguments.empty()) {
-            return std::string(kRuntimeNs) + "chunkText(" + expr(*m.object) + ")";
-        }
-        return std::string();
-    }
     if (receiver == kFileStats) {
         // `isFile` / `isDirectory` are interface fields (docs 04); the call
         // form lowers to the same field read for surface tolerance.
@@ -143,7 +134,8 @@ std::string Generator::emitFsMemberCall(const CallExpr& c, const MemberExpr& m) 
 std::string Generator::emitFsMemberRead(const MemberExpr& m) {
     if (m.object == nullptr) return std::string();
     if (effectiveType(*m.object).name != kFileStats) return std::string();
-    if (m.property != "size" && m.property != "isFile" && m.property != "isDirectory") {
+    if (m.property != "size" && m.property != "isFile" &&
+        m.property != "isDirectory" && m.property != "modifiedAt") {
         return std::string();
     }
     needsFs_ = true;
@@ -166,9 +158,13 @@ std::string Generator::emitFsStreamOn(const CallExpr& c, const MemberExpr& m) {
         return "0.0";
     }
     const std::string event = static_cast<const StringLiteral&>(first).value;
+    const Type param = listenerParamType(event);
     std::vector<std::string> context;
-    if (event == "data" || event == "error") {
-        context = {std::string("std::string")};  // SEAM (Buffer): chunk spelling
+    if (!param.isUnknown()) {
+        // The chunk is the nominal std/buffer `Buffer`; the error message is a
+        // string. Handing the spelling to emitArrow also types the lambda's
+        // parameter for callers of this unit.
+        context = {classify(param).cpp};
     } else if (event != "end") {
         notImplemented(c, "stream event '" + event + "'");
         return "0.0";
@@ -181,10 +177,9 @@ std::string Generator::emitFsStreamOn(const CallExpr& c, const MemberExpr& m) {
     const auto& arrow = static_cast<const ArrowFunction&>(listener);
     // Type the lambda's own parameter names for the body emission only: sema
     // keeps callback parameters permissive, so `chunk.toString()` inside the
-    // body would not reach this unit without the marker. The temporary scope
-    // keeps the names out of the enclosing scope.
+    // body needs this declaration to lower through the std/buffer unit. The
+    // temporary scope keeps the names out of the enclosing scope.
     pushScope();
-    const Type param = listenerParamType(event);
     if (!arrow.params.empty()) {
         const Parameter* p = arrow.params.front().get();
         if (p && p->name && p->name->kind == NodeKind::Identifier && !param.isUnknown()) {
