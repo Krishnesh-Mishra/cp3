@@ -13,7 +13,7 @@ Useful flags (documented in benchmarks/README.md):
     --only <task[,task...]>   run a subset of tasks
     --reps N                  compute repetitions per entry (best is reported)
     --cp3c PATH               cp3 compiler binary (default build/bin/cp3c.exe)
-    --strict                  exit 1 when the performance gate prints any WARN
+    --strict                  exit 1 when the gate prints any WARN or BIG WARN
     --hello-reps N            hello-world runs (default 15; best and median)
     --churn-scale VALUE       string-churn scale: default, stress or an integer
     --results DIR             tee the raw output into DIR/run.txt + DIR/meta.txt

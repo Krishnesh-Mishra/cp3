@@ -61,10 +61,11 @@ included):
 | python | 10128 ms |
 
 The cp3 row: the same second as V8, 7.59x C++ and 8.60x Rust, ≈8.8x faster
-than CPython. The two native ratios are what the performance gate flags with
-`WARN` (tripwire 1.2x); closing them is the performance wave's checklist -
-this table is the honest state of the beta-one codegen for number-heavy
-loops, not an implementation trick. Pure CPython bytecode being ~67x behind
+than CPython. The two native ratios are what the performance gate flags as
+`BIG WARN (fix this)` (D67 tiering); closing them is the performance wave's
+checklist - this table is the honest state of the beta-one codegen for
+number-heavy loops, not an implementation trick. Pure CPython bytecode being
+~67x behind
 C++ here is also the result, not a flaw in the entry. Rerun it on your
 machine - `python ../run_benchmark.py --only compute-single` - before quoting
 any of it.

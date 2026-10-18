@@ -29,10 +29,12 @@
 # Compute tables and the final summary carry cp3/cpp and cp3/rust time ratios
 # (lower is better) plus a geomean footer over the runnable rows.
 #
-# Performance gate: a WARN line is printed for every runnable row where cp3 is
-# more than 1.2x slower than cpp or rust (time ratio > 1.2). D64 targets cp3
-# within about 5% of cpp/rust for the native-type tiers; the 1.2x WARN is the
-# regression tripwire, and --strict turns warnings into exit code 1.
+# Performance gate (D67): every runnable row is gated against all five
+# references as a time ratio (lower is better for cp3). BIG WARN: cp3 over
+# 1.20x cpp/rust, or slower than any of go/js/python at all. WARN: cp3 over
+# 1.10x cpp/rust but under the big tier. Compute references under 10 ms are
+# noise-scale and not gated. D64 targets cp3 within about 5% of cpp/rust for
+# the native-type tiers; --strict turns any tier line into exit code 1.
 #
 # Python 3 stdlib only. Usage:  python run_suite.py [options]
 # =============================================================================
@@ -116,10 +118,17 @@ CHURN_EXPECTED = {
     CHURN_STRESS_ITERATIONS: "254546",
 }
 
-GATE_RATIO = 1.2  # WARN when cp3 is more than this multiple of cpp/rust time
-GATE_TARGET = "D64 target: cp3 within about 5% of cpp/rust; tripwire: WARN above 1.2x"
+GATE_BIG_NATIVE = 1.20   # BIG WARN when cp3 is over this multiple of cpp/rust time
+GATE_WARN_NATIVE = 1.10  # WARN when cp3 is over this multiple, under the big tier
+GATE_SCRIPT = 1.00       # BIG WARN when cp3 is slower than go/js/python at all
+NOISE_FLOOR_MS = 10.0    # compute references faster than this are noise-scale
+GATE_REFERENCES = ("cpp", "rust", "go", "js", "python")
+NATIVE_REFERENCES = ("cpp", "rust")
+GATE_TARGET = ("D64 target: cp3 within about 5% of cpp/rust; BIG WARN over 1.20x "
+               "cpp/rust or slower than go/js/python at all; WARN over 1.10x cpp/rust")
 
-GATE_WARNINGS: list[str] = []   # filled during reporting, printed at the end
+GATE_WARNINGS: list[str] = []   # tier lines (BIG WARN / WARN), printed at the end
+GATE_NOTES: list[str] = []      # noise-scale notes, printed with the gate block
 SUMMARY_ROWS: list[dict] = []   # one {"task", "cpp", "rust"} ratio row per task
 
 
@@ -701,20 +710,62 @@ def best_ms_of(rows: list[dict], language: str) -> float | None:
     return min(row["runs_ms"])
 
 
-def register_ratios(task: str, cp3_value: float | None,
-                    cpp_value: float | None, rust_value: float | None):
-    """Fill the summary table and the performance gate for one task row.
+def gate_row(task: str, cp3_value: float | None,
+             references: dict[str, float | None], unit: str) -> None:
+    """Fill the tiered performance gate for one runnable task row (D67).
 
-    Values are times (ms); the ratio is cp3 / reference, lower is better."""
+    Values are milliseconds (unit "ms") or requests per second (unit "rps").
+    Ratios are time ratios, lower is better for cp3. BIG WARN when cp3 is over
+    1.20x cpp/rust or slower than any of go/js/python at all; WARN when cp3 is
+    over 1.10x cpp/rust but under the big tier. Compute rows whose reference
+    best is under NOISE_FLOOR_MS are noted "noise-scale, ratio not gated"
+    instead of tiered, so spawn jitter cannot flap the gate."""
+    if cp3_value is None:
+        return
+    for language in GATE_REFERENCES:
+        reference = references.get(language)
+        if not reference:
+            continue
+        ratio = reference / cp3_value if unit == "rps" else cp3_value / reference
+        if unit == "ms" and reference < NOISE_FLOOR_MS:
+            if ratio > GATE_SCRIPT:
+                GATE_NOTES.append(
+                    f"note: {task}: cp3 {cp3_value:.1f} ms vs {language} "
+                    f"{reference:.1f} ms is noise-scale, ratio not gated")
+            continue
+        if unit == "ms":
+            subject = (f"cp3 {cp3_value:.0f} ms is {ratio:.2f}x {language} "
+                       f"({reference:.0f} ms)")
+        else:
+            subject = (f"cp3 {cp3_value:.0f} req/s is {ratio:.2f}x slower than "
+                       f"{language} ({reference:.0f} req/s)")
+        if language in NATIVE_REFERENCES:
+            if ratio > GATE_BIG_NATIVE:
+                GATE_WARNINGS.append(
+                    f"BIG WARN (fix this): {task}: {subject}, tripwire {GATE_BIG_NATIVE:.2f}x")
+            elif ratio > GATE_WARN_NATIVE:
+                GATE_WARNINGS.append(
+                    f"WARN {task}: {subject}, watch {GATE_WARN_NATIVE:.2f}x")
+        elif ratio > GATE_SCRIPT:
+            GATE_WARNINGS.append(
+                f"BIG WARN (fix this): {task}: {subject}, tripwire {GATE_SCRIPT:.2f}x")
+
+
+def register_ratios(task: str, cp3_value: float | None, cpp_value: float | None,
+                    rust_value: float | None, go_value: float | None = None,
+                    js_value: float | None = None,
+                    python_value: float | None = None):
+    """Fill the summary table and the tiered gate for one compute row.
+
+    Visible summary columns stay cp3/cpp and cp3/rust; the gate additionally
+    checks go/js/python (D67). Values are times (ms); the ratio is cp3 /
+    reference, lower is better."""
     cpp_ratio = cp3_value / cpp_value if (cp3_value and cpp_value) else None
     rust_ratio = cp3_value / rust_value if (cp3_value and rust_value) else None
     SUMMARY_ROWS.append({"task": task, "cpp": cpp_ratio, "rust": rust_ratio})
-    for language, reference, ratio in (("cpp", cpp_value, cpp_ratio),
-                                       ("rust", rust_value, rust_ratio)):
-        if ratio is not None and ratio > GATE_RATIO:
-            GATE_WARNINGS.append(
-                f"WARN {task}: cp3 {cp3_value:.0f} ms is {ratio:.2f}x {language} "
-                f"({reference:.0f} ms), gate {GATE_RATIO:.1f}x")
+    gate_row(task, cp3_value, {"cpp": cpp_value, "rust": rust_value,
+                               "go": go_value, "js": js_value,
+                               "python": python_value}, unit="ms")
     return cpp_ratio, rust_ratio
 
 
@@ -747,12 +798,13 @@ def print_server_table(rows: list[dict]) -> None:
     cpp_ratio = cpp_rps / cp3_rps if (cpp_rps and cp3_rps) else None
     rust_ratio = rust_rps / cp3_rps if (rust_rps and cp3_rps) else None
     SUMMARY_ROWS.append({"task": "health-server", "cpp": cpp_ratio, "rust": rust_ratio})
-    for language, reference, ratio in (("cpp", cpp_rps, cpp_ratio),
-                                       ("rust", rust_rps, rust_ratio)):
-        if ratio is not None and ratio > GATE_RATIO:
-            GATE_WARNINGS.append(
-                f"WARN health-server: cp3 {cp3_rps:.0f} req/s is {ratio:.2f}x slower than "
-                f"{language} ({reference:.0f} req/s), gate {GATE_RATIO:.1f}x")
+    go_rps = next((r["rps"] for r in rows if r["language"] == "go" and r["rps"]), None)
+    js_rps = next((r["rps"] for r in rows if r["language"] == "js" and r["rps"]), None)
+    python_rps = next((r["rps"] for r in rows
+                       if r["language"] == "python" and r["rps"]), None)
+    gate_row("health-server", cp3_rps,
+             {"cpp": cpp_rps, "rust": rust_rps, "go": go_rps, "js": js_rps,
+              "python": python_rps}, unit="rps")
     for row in rows:
         build_cell = f"{row['build_ms']:>9.0f}" if row["build_ms"] is not None else f"{'-':>9}"
         ratio_cpp = ratio_cell(cpp_ratio) if row["language"] == "cp3" else "-"
@@ -785,7 +837,8 @@ def print_compute_table(task: str, rows: list[dict], header_text: str,
     print("-" * 165)
     cp3_best = best_ms_of(rows, "cp3")
     cpp_ratio, rust_ratio = register_ratios(
-        task, cp3_best, best_ms_of(rows, "cpp"), best_ms_of(rows, "rust"))
+        task, cp3_best, best_ms_of(rows, "cpp"), best_ms_of(rows, "rust"),
+        best_ms_of(rows, "go"), best_ms_of(rows, "js"), best_ms_of(rows, "python"))
     reference = None
     for row in rows:
         build_cell = f"{row['build_ms']:>9.0f}" if row["build_ms"] is not None else f"{'-':>9}"
@@ -828,7 +881,8 @@ def print_hello_table(task: str, rows: list[dict], header_text: str,
     print("-" * 170)
     cp3_best = best_ms_of(rows, "cp3")
     cpp_ratio, rust_ratio = register_ratios(
-        task, cp3_best, best_ms_of(rows, "cpp"), best_ms_of(rows, "rust"))
+        task, cp3_best, best_ms_of(rows, "cpp"), best_ms_of(rows, "rust"),
+        best_ms_of(rows, "go"), best_ms_of(rows, "js"), best_ms_of(rows, "python"))
     reference = None
     for row in rows:
         build_cell = f"{row['build_ms']:>9.0f}" if row["build_ms"] is not None else f"{'-':>9}"
@@ -881,10 +935,15 @@ def print_gate_and_summary() -> None:
 
     print()
     print(f"== performance gate == {GATE_TARGET}")
+    for warning in GATE_WARNINGS:
+        print(warning)
+    for note in GATE_NOTES:
+        print(note)
     if GATE_WARNINGS:
-        for warning in GATE_WARNINGS:
-            print(warning)
-        print(f"gate: {len(GATE_WARNINGS)} warning(s); rerun with --strict to fail on warnings")
+        big = sum(1 for warning in GATE_WARNINGS if warning.startswith("BIG WARN "))
+        plain = len(GATE_WARNINGS) - big
+        print(f"gate: {big} BIG WARN(s), {plain} WARN(s); "
+              f"rerun with --strict to fail on warnings")
     else:
         print("gate: no warnings")
 
@@ -937,7 +996,7 @@ def main() -> int:
     parser.add_argument("--cp3c", default=str(ROOT / "build" / "bin" / f"cp3c{EXE}"),
                         help="path to cp3c (default: build/bin/cp3c.exe)")
     parser.add_argument("--strict", action="store_true",
-                        help="exit 1 when the performance gate prints any WARN")
+                        help="exit 1 when the performance gate prints any WARN or BIG WARN")
     parser.add_argument("--results", default="",
                         help="directory to tee the raw output into (run.txt + meta.txt)")
     args = parser.parse_args()

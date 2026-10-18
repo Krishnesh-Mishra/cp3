@@ -36,7 +36,8 @@ their TS shape; what changes is that the output is a native binary.
 by side in **cp3, C++, Rust, Go, JavaScript and Python**; a stdlib-only runner
 builds, starts, measures and stops everything, prints per-task `cp3/cpp` and
 `cp3/rust` ratios plus measured peak memory and stripped binary size, and
-gates on a 1.2x regression tripwire. One real run (2026-10-18, Intel Core
+gates on a tiered tripwire: BIG WARN over 1.20x C++/Rust or any loss to
+Go/Node/Python. One real run (2026-10-18, Intel Core
 i7-12700H, Windows 11; g++ 16.1.0, rustc 1.95.0, go 1.26.4, node v24.15.0,
 python 3.14.5, cp3c 0.1.0-beta.1):
 

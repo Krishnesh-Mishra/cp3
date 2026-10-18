@@ -29,7 +29,7 @@ python benchmarks/run_benchmark.py --only hello-world,string-churn
 python benchmarks/run_benchmark.py --reps 3         # compute reps (best reported)
 python benchmarks/run_benchmark.py --churn-scale stress
 python benchmarks/run_benchmark.py --cp3c build/bin/cp3c.exe
-python benchmarks/run_benchmark.py --strict         # exit 1 on any gate WARN
+python benchmarks/run_benchmark.py --strict         # exit 1 on any gate WARN or BIG WARN
 python benchmarks/run_benchmark.py --results DIR    # tee raw output to DIR
 ```
 
@@ -44,21 +44,24 @@ in PowerShell, `.\run.ps1 --only word-frequency` does the same.
 | `--hello-reps N` | hello-world runs; best and median are reported (default 15) |
 | `--churn-scale V` | string-churn scale: `default` (50,000), `stress` (300,000) or an integer |
 | `--cp3c PATH` | cp3 compiler (default `build/bin/cp3c.exe`) |
-| `--strict` | exit code 1 when the performance gate prints any WARN |
+| `--strict` | exit code 1 when the performance gate prints any WARN or BIG WARN |
 | `--results DIR` | tee the raw output to `DIR/run.txt` plus `DIR/meta.txt` |
 | `--seconds S`, `--concurrency C`, `--latency N`, `--warmup N` | server load phases (defaults 3 s, 8 connections, 300 latency requests, 100 warmup) |
 
-The test harness can also run the suite for you (opt-in, additive):
+The test harness runs the suite for you automatically (D67): after the
+conformance corpus pass it invokes `benchmarks/run_benchmark.py`, streams its
+output, and re-prints the performance-gate `WARN` and `BIG WARN` lines at the
+end.
 
 ```bash
-python tests/runner/run_tests.py --bench
-python tests/runner/run_tests.py --bench --bench-args "--only hello-world"
+python tests/runner/run_tests.py                    # corpus, then the full suite
+python tests/runner/run_tests.py --bench-args "--only hello-world"
+python tests/runner/run_tests.py --no-bench         # corpus only
 ```
 
-`--bench` runs the conformance corpus first, then invokes
-`benchmarks/run_benchmark.py`, streams its output, and re-prints the
-performance-gate WARN lines at the end. Without `--bench` the harness behaves
-exactly as before.
+`--bench` is still accepted as an explicit (now redundant) request;
+`--no-bench` skips the bench pass; `--json` skips it with a note so machine
+output stays parseable. The harness exit code stays `max(corpus, bench)`.
 
 The runner needs Python 3 only. It never stops a process it did not start:
 servers are launched with `subprocess.Popen`, measured, and killed by exact
@@ -125,15 +128,31 @@ geomean footer over every runnable pair.
 
 ## The performance gate
 
-The runner prints a WARN line for every runnable row where cp3 is more than
-1.2x slower than cpp or rust (time ratio above 1.2). The D64 target is cp3
-within about 5% of the native pack for the native-type tiers; 1.2x is the
-regression tripwire, not the goal. `--strict` makes the runner exit 1 when any
-WARN printed, so CI or a wave landing can gate on it.
+Every runnable task row is gated against all five references (D67). Ratios
+are time ratios, lower is better for cp3:
+
+| tier | when it fires | lines |
+| --- | --- | --- |
+| BIG WARN | cp3 is over 1.20x cpp or rust, or slower than go/js/python at all (a native compiler should not lose to a scripted runtime) | one per reference, starting `BIG WARN (fix this):` |
+| WARN | cp3 is over 1.10x cpp or rust but under the big tier | one per reference, starting `WARN ` |
+
+The footer counts both tiers, and `--strict` makes the runner exit 1 when any
+WARN or BIG WARN fired, so CI or a wave landing can gate on it. The D64
+target stays cp3 within about 5% of the native pack for the native-type
+tiers; 1.20x is the regression tripwire, not the goal.
+
+Noise floor: compute rows whose reference best is under 10 ms are not gated,
+because spawn jitter at that scale can exceed the ratio itself. When cp3 is
+slower than such a reference, the runner prints a `note:` line saying the
+ratio is noise-scale instead. hello-world, with every reference in the
+single-digit milliseconds, is the row the floor exists for.
 
 The gate deliberately fires on rows where the beta-one compiler is genuinely
-behind (see the labeled run below): those WARN lines are the performance
-wave's checklist, and they should only ever become shorter and quieter.
+behind (see the labeled run below): those lines are the performance wave's
+checklist, and they should only ever become shorter and quieter. The labeled
+runs below were recorded before the tiered gate landed and still show the
+older single 1.2x `WARN` format; their raw files are kept as recorded, and
+the next labeled refresh will show the tier format.
 
 ## The fairness contract
 
@@ -451,5 +470,6 @@ their rows in the labeled run are real timings.
 * Raw results live under `bench/results/<timestamp>/` and are committed;
   `bench/.build/` is machine state and is gitignored.
 * The collaboration rule for the gate: a wave that lands performance work
-  should reduce the number of WARN lines or the ratios behind them. If a wave
-  makes a WARN worse, that is the regression the gate exists to catch.
+  should reduce the number of gate lines or the ratios behind them. If a wave
+  makes a WARN or BIG WARN worse, that is the regression the gate exists to
+  catch.

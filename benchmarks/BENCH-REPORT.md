@@ -222,3 +222,222 @@ with a dated header, never hand-edit a number. See the tail of
 - Number noise on this machine is real (antivirus scans, first-run JIT
   behavior); every table prints all runs so the noise is visible rather than
   averaged away.
+
+## 10. Addendum (D67): tiered gate and benchmarks on every test run
+
+Date: 2026-10-18, same day as the labeled run above; the labeled tables stay
+as recorded.
+
+The lead superseded the single 1.2x tripwire with a tiered gate and made the
+benchmark suite part of every test harness run. What changed:
+
+- **Tiered gate (`bench/run_suite.py`).** Every runnable task row is gated
+  against all five references as a time ratio (lower is better for cp3):
+  - **BIG WARN** when cp3 is over 1.20x cpp or rust, or slower than any of
+    go/js/python at all (ratio over 1.00), one line per reference. Lines read
+    `BIG WARN (fix this): ...` and start with `BIG WARN `.
+  - **WARN** when cp3 is over 1.10x cpp or rust but under the big tier, one
+    line per reference, starting with `WARN `.
+  - The footer counts both tiers; `--strict` exits 1 when any WARN or
+    BIG WARN fired.
+  - Noise floor: compute rows whose reference best is under 10 ms print a
+    `note:` line ("noise-scale, ratio not gated") instead of a tier, so
+    hello-world spawn jitter cannot flap the gate.
+- **Auto-run (`tests/runner/run_tests.py`).** After the corpus pass the suite
+  runs by default; `--no-bench` skips it; `--bench` stays as an explicit (now
+  redundant) request; `--bench-args` still forwards; `--json` skips the bench
+  pass with a note; the exit code stays `max(corpus, bench)`.
+- **Docs.** The gate section and harness paragraph of `benchmarks/README.md`,
+  the gate one-liner in the root `README.md`, and this addendum describe the
+  tiered policy. The labeled tables earlier in this report are unchanged.
+- The two committed labeled runs
+  (`benchmarks/bench/results/2026-10-18T0705-local` and
+  `benchmarks/bench/results/2026-10-18T0712-local-stress`) are untouched and
+  remain the labeled record; they show the older single-tripwire format. The
+  next labeled refresh, after the performance wave lands and cp3c is rebuilt,
+  will show the tier format.
+
+Evidence below is verbatim output from the current `build/bin/cp3c.exe`
+(unchanged since the labeled run; see the provenance notes above).
+
+### 10.1 Tier lines fire as designed
+
+```
+$ python benchmarks/run_benchmark.py --only compute-single --reps 2
+benchmarks bench suite -- 2026-10-18T07:34:21
+machine: Intel64 Family 6 Model 154 Stepping 3, GenuineIntel | 20 logical CPUs | Windows-11-10.0.26200-SP0
+runner:  python 3.14.5 (C:\Program Files\Python314\python.exe)
+  g++     g++ (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r2) 16.1.0
+  rustc   rustc 1.95.0 (59807616e 2026-04-14)
+  go      go version go1.26.4 windows/amd64
+  node    v24.15.0
+  python  Python 3.14.5
+  cp3c    cp3c 0.1.0-beta.1
+every number below is a wall-clock measurement from this run; load phases use persistent keep-alive connections (one per client)
+[run ] compute-single: cpp ...
+[run ] compute-single: rust ...
+[run ] compute-single: go ...
+[run ] compute-single: js ...
+[run ] compute-single: python ...
+[run ] compute-single: cp3 ...
+
+== compute-single == expected = 131434424 (total Collatz steps for 1..1,000,000)
+lang     build_ms   best_ms all_runs_ms          output                     match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+cpp             -       151 154/151              131434424                  ref            -         -         4.0        19  build: cached
+rust            -       135 141/135              131434424                  ok             -         -         3.5       122  build: cached
+go              -       206 228/206              131434424                  ok             -         -         5.5      1750  build: cached
+js              -      1123 1123/1134            131434424                  ok             -         -        36.8         -  
+python          -      9835 9901/9835            131434424                  ok             -         -        11.4         -  
+cp3           671      1171 1211/1171            131434424                  ok         7.77x     8.67x         4.1       107  
+
+== summary: cp3 vs native ==
+task                   cp3/cpp   cp3/rust
+------------------------------------------
+compute-single           7.77x      8.67x
+------------------------------------------
+geomean over runnable rows     7.77x (n=1)     8.67x (n=1)
+ratios are cp3 time divided by the reference time; lower is better
+
+== performance gate == D64 target: cp3 within about 5% of cpp/rust; BIG WARN over 1.20x cpp/rust or slower than go/js/python at all; WARN over 1.10x cpp/rust
+BIG WARN (fix this): compute-single: cp3 1171 ms is 7.77x cpp (151 ms), tripwire 1.20x
+BIG WARN (fix this): compute-single: cp3 1171 ms is 8.67x rust (135 ms), tripwire 1.20x
+BIG WARN (fix this): compute-single: cp3 1171 ms is 5.68x go (206 ms), tripwire 1.00x
+BIG WARN (fix this): compute-single: cp3 1171 ms is 1.04x js (1123 ms), tripwire 1.00x
+gate: 4 BIG WARN(s), 0 WARN(s); rerun with --strict to fail on warnings
+```
+
+Exit code: 0, because warnings do not fail a default run. compute-single is
+slower than cpp (7.77x), rust (8.67x), go (5.68x) and js (1.04x), so four
+BIG WARN lines fire; python (0.12x) stays silent. Those four lines are the
+performance wave's checklist.
+
+A follow-up strict run of the same task exited 1 as designed:
+`python benchmarks/run_benchmark.py --only compute-single --reps 1 --strict`
+printed three BIG WARN lines (js landed at or above cp3's time in that single
+run) and `EXITCODE=1`.
+
+### 10.2 Bench pass runs by default
+
+```
+$ python tests/runner/run_tests.py --filter cli --bench-args "--only hello-world --hello-reps 3"
+cp3 test harness
+  compiler : C:\Users\Krishnesh\dev\cp3\build\bin\cp3c.exe
+  cases dir: C:\Users\Krishnesh\dev\cp3\tests\cases
+  found    : 27 case(s)
+
+  amb  cli/_ambiguous/build_debug_flag: the --debug build profile is a toolchain flag with no .cp3-observable semantics.
+  amb  cli/_ambiguous/build_release_flag: the --release build profile (whole-program LTO) has no observable effect inside a .cp3 program.
+  amb  cli/_ambiguous/clean_all_wipes_packages: cp3 clean --all deleting .cp3/packages/ cannot be expressed as a .cp3 case.
+  amb  cli/_ambiguous/clean_wipes_build: cp3 clean deleting .cp3/build/ cannot be expressed as a .cp3 case.
+  amb  cli/_ambiguous/dev_watch_mode: cp3 dev's watch/rebuild behavior is not expressible as a .cp3 case.
+  amb  cli/_ambiguous/dot_cp3_layout: the generated .cp3/ directory layout is a project-tooling artifact, not observable from a .cp3 program.
+  amb  cli/_ambiguous/exec_package_bin: cp3 exec resolving and running a package's bin tool is not expressible as a .cp3 case.
+  amb  cli/_ambiguous/fmt_formatter: cp3 fmt's output and the package.json "format" overrides are not expressible as a .cp3 case.
+  amb  cli/_ambiguous/init_generates_layout: the generated project layout from cp3 init is not observable through `cp3c run/check <file>`.
+  amb  cli/_ambiguous/init_prompts: cp3 init's four interactive prompts and generated files cannot be expressed as a single .cp3 case.
+  amb  cli/_ambiguous/install_auto_flag: the --auto compatibility-selection behavior is not expressible as a .cp3 case.
+  amb  cli/_ambiguous/install_dependencies: cp3 install's network/registry behavior is not expressible as a .cp3 case.
+  amb  cli/_ambiguous/install_github_url: installing from a GitHub release URL (single/multiple/none .cp3pak assets) is not expressible as a .cp3 case.
+  amb  cli/_ambiguous/lifecycle_postbuild_hook: npm-style pre*/post* lifecycle hooks run around CLI commands, not inside a .cp3 program.
+  amb  cli/_ambiguous/lifecycle_prebuild_hook: npm-style pre*/post* lifecycle hooks run around CLI commands, not inside a .cp3 program.
+  amb  cli/_ambiguous/max_memory_flag: the --max-memory codegen cap is a CLI flag with no .cp3-observable semantics.
+  amb  cli/_ambiguous/recompile_cp3pak: recompiling an existing .cp3pak is a tooling operation, not a .cp3 case.
+  amb  cli/_ambiguous/run_vs_check: the distinction between `cp3 run` and `cp3 check` is a CLI-invocation property, not a property of a .cp3 program.
+  amb  cli/_ambiguous/spinner_rule: the spinner rule is a CLI UX property with no .cp3-observable semantics.
+  amb  cli/_ambiguous/static_link_single_binary: the static-link output shape is a build-artifact property, not a .cp3 case.
+  amb  cli/_ambiguous/toolchain_fallback: toolchain selection/fallback and multi-toolchain error grouping are CLI behaviors, not .cp3 cases.
+  amb  cli/_ambiguous/type_package_build: producing a .cp3pak from a package project is an artifact/tooling behavior, not a .cp3 case.
+  amb  cli/_ambiguous/version_flag: the version command's output is a CLI property, not a .cp3 case.
+
+27 found, 4 passed, 0 failed, 0 skipped, 23 ambiguous.
+
+== benchmarks ==
+  command: C:\Program Files\Python314\python.exe C:\Users\Krishnesh\dev\cp3\benchmarks\run_benchmark.py --only hello-world --hello-reps 3
+
+benchmarks bench suite -- 2026-10-18T07:35:12
+machine: Intel64 Family 6 Model 154 Stepping 3, GenuineIntel | 20 logical CPUs | Windows-11-10.0.26200-SP0
+runner:  python 3.14.5 (C:\Program Files\Python314\python.exe)
+  g++     g++ (MinGW-W64 x86_64-ucrt-posix-seh, built by Brecht Sanders, r2) 16.1.0
+  rustc   rustc 1.95.0 (59807616e 2026-04-14)
+  go      go version go1.26.4 windows/amd64
+  node    v24.15.0
+  python  Python 3.14.5
+  cp3c    cp3c 0.1.0-beta.1
+every number below is a wall-clock measurement from this run; load phases use persistent keep-alive connections (one per client)
+[run ] hello-world: cpp ...
+[run ] hello-world: rust ...
+[run ] hello-world: go ...
+[run ] hello-world: js ...
+[run ] hello-world: python ...
+[run ] hello-world: cp3 ...
+
+== hello-world == expected = Hello, world! | spawn -> exit wall time, best and median of 3 runs
+lang     build_ms   best_ms median_ms all_runs_ms          output           match    cp3/cpp  cp3/rust peak_rss_mb binary_kb  note
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+cpp             -       6.8       7.2 12/7/7               Hello, world!    ref            -         -         4.5        19  build: cached
+rust            -       5.0       5.1 9/5/5                Hello, world!    ok             -         -         4.0       122  build: cached
+go              -       6.1       6.6 10/7/6               Hello, world!    ok             -         -         2.0      1750  build: cached
+js              -      40.2      42.5 48/43/40             Hello, world!    ok             -         -        35.1         -  
+python          -      25.6      26.3 28/26/26             Hello, world!    ok             -         -        11.4         -  
+cp3            24       6.6       7.1 12/7/7               Hello, world!    ok         0.97x     1.33x         4.6       106  
+
+== summary: cp3 vs native ==
+task                   cp3/cpp   cp3/rust
+------------------------------------------
+hello-world              0.97x      1.33x
+------------------------------------------
+geomean over runnable rows     0.97x (n=1)     1.33x (n=1)
+ratios are cp3 time divided by the reference time; lower is better
+
+== performance gate == D64 target: cp3 within about 5% of cpp/rust; BIG WARN over 1.20x cpp/rust or slower than go/js/python at all; WARN over 1.10x cpp/rust
+note: hello-world: cp3 6.6 ms vs rust 5.0 ms is noise-scale, ratio not gated
+note: hello-world: cp3 6.6 ms vs go 6.1 ms is noise-scale, ratio not gated
+gate: no warnings
+
+  bench gate: no warnings
+```
+
+Exit code: 0. The corpus ran first, then the suite, with no `--bench` flag
+anywhere. Note the noise floor doing its job: with three reps, rust's best
+was 5.0 ms and go's 6.1 ms, so cp3's ratios against them (1.33x rust, 1.08x
+go) printed as noise-scale notes, not tiers.
+
+### 10.3 Opt-out
+
+```
+$ python tests/runner/run_tests.py --filter cli --no-bench
+cp3 test harness
+  compiler : C:\Users\Krishnesh\dev\cp3\build\bin\cp3c.exe
+  cases dir: C:\Users\Krishnesh\dev\cp3\tests\cases
+  found    : 27 case(s)
+
+  amb  cli/_ambiguous/build_debug_flag: the --debug build profile is a toolchain flag with no .cp3-observable semantics.
+  amb  cli/_ambiguous/build_release_flag: the --release build profile (whole-program LTO) has no observable effect inside a .cp3 program.
+  amb  cli/_ambiguous/clean_all_wipes_packages: cp3 clean --all deleting .cp3/packages/ cannot be expressed as a .cp3 case.
+  amb  cli/_ambiguous/clean_wipes_build: cp3 clean deleting .cp3/build/ cannot be expressed as a .cp3 case.
+  amb  cli/_ambiguous/dev_watch_mode: cp3 dev's watch/rebuild behavior is not expressible as a .cp3 case.
+  amb  cli/_ambiguous/dot_cp3_layout: the generated .cp3/ directory layout is a project-tooling artifact, not observable from a .cp3 program.
+  amb  cli/_ambiguous/exec_package_bin: cp3 exec resolving and running a package's bin tool is not expressible as a .cp3 case.
+  amb  cli/_ambiguous/fmt_formatter: cp3 fmt's output and the package.json "format" overrides are not expressible as a .cp3 case.
+  amb  cli/_ambiguous/init_generates_layout: the generated project layout from cp3 init is not observable through `cp3c run/check <file>`.
+  amb  cli/_ambiguous/init_prompts: cp3 init's four interactive prompts and generated files cannot be expressed as a single .cp3 case.
+  amb  cli/_ambiguous/install_auto_flag: the --auto compatibility-selection behavior is not expressible as a .cp3 case.
+  amb  cli/_ambiguous/install_dependencies: cp3 install's network/registry behavior is not expressible as a .cp3 case.
+  amb  cli/_ambiguous/install_github_url: installing from a GitHub release URL (single/multiple/none .cp3pak assets) is not expressible as a .cp3 case.
+  amb  cli/_ambiguous/lifecycle_postbuild_hook: npm-style pre*/post* lifecycle hooks run around CLI commands, not inside a .cp3 program.
+  amb  cli/_ambiguous/lifecycle_prebuild_hook: npm-style pre*/post* lifecycle hooks run around CLI commands, not inside a .cp3 program.
+  amb  cli/_ambiguous/max_memory_flag: the --max-memory codegen cap is a CLI flag with no .cp3-observable semantics.
+  amb  cli/_ambiguous/recompile_cp3pak: recompiling an existing .cp3pak is a tooling operation, not a .cp3 case.
+  amb  cli/_ambiguous/run_vs_check: the distinction between `cp3 run` and `cp3 check` is a CLI-invocation property, not a property of a .cp3 program.
+  amb  cli/_ambiguous/spinner_rule: the spinner rule is a CLI UX property with no .cp3-observable semantics.
+  amb  cli/_ambiguous/static_link_single_binary: the static-link output shape is a build-artifact property, not a .cp3 case.
+  amb  cli/_ambiguous/toolchain_fallback: toolchain selection/fallback and multi-toolchain error grouping are CLI behaviors, not .cp3 cases.
+  amb  cli/_ambiguous/type_package_build: producing a .cp3pak from a package project is an artifact/tooling behavior, not a .cp3 case.
+  amb  cli/_ambiguous/version_flag: the version command's output is a CLI property, not a .cp3 case.
+
+27 found, 4 passed, 0 failed, 0 skipped, 23 ambiguous.
+```
+
+Exit code: 0. The output ends with the corpus summary; no benchmark section
+follows.

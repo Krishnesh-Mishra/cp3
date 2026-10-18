@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # =============================================================================
-# tests/runner/run_tests.py — the cp3c test harness.
+# tests/runner/run_tests.py - the cp3c test harness.
 #
 # Discovers every tests/cases/**/<name>.expect.json, pairs it with the sibling
 # <name>.cp3, runs cp3c, and compares the result against the frozen schema
@@ -23,12 +23,13 @@
 #                                    [--filter SUBSTR] [--json] [--verbose]
 #                                    [--strict-ambiguous]
 #                                    [--write-registry [PATH]]
-#                                    [--bench [--bench-args "ARGS"]]
+#                                    [--no-bench] [--bench-args "ARGS"]
 #
-# --bench runs the cross-language benchmark suite
-# (benchmarks/run_benchmark.py) after the corpus pass, streams its output, and
-# re-prints the performance-gate WARN lines at the end. It is off by default;
-# without it this harness behaves exactly as before.
+# After the corpus pass the cross-language benchmark suite
+# (benchmarks/run_benchmark.py) runs automatically (D67), streams its output,
+# and re-prints the performance-gate WARN / BIG WARN lines at the end.
+# --no-bench skips the bench pass; --bench is still accepted as an explicit
+# (now redundant) request; --json skips the bench pass with a note.
 #
 # Exit code: 0 when no case failed (all passed or all skipped), 1 otherwise.
 # =============================================================================
@@ -125,7 +126,7 @@ def parse_diagnostics(output: str) -> list[Diagnostic]:
 
 def _code_pattern_to_regex(pattern: str) -> re.Pattern[str]:
     # 'x'/'X'/'?' match one character; '*' matches any run. A run of two or
-    # more wildcard characters is treated as "any run" — this is what makes the
+    # more wildcard characters is treated as "any run" - this is what makes the
     # frozen placeholder code "CP3xxxx" match a real code such as "CP3408"
     # (which has only three digits). Everything else is literal.
     out = []
@@ -410,15 +411,15 @@ def evaluate(case: Case, compiler: Path, timeout: float) -> Outcome:
 
 
 def run_benchmarks(extra_args: str) -> int:
-    """Run benchmarks/run_benchmark.py, stream its output, re-print WARN lines.
+    """Run benchmarks/run_benchmark.py, stream its output, re-print gate lines.
 
     The benchmark suite is a separate, long-running measurement pass: it builds
-    and runs every language entry, so it is opt-in and never runs unless
-    --bench is given. Its output is streamed live; WARN lines from the
-    performance gate are collected and re-printed in a compact block at the end
-    so gate regressions cannot scroll away. extra_args is split shell-style;
-    it is empty unless --bench-args was given. Returns the bench exit code
-    (0 for a clean run, 1 for a gate/error failure).
+    and runs every language entry, so it runs by default after the corpus pass
+    (D67) and --no-bench skips it. Its output is streamed live; WARN and
+    BIG WARN lines from the performance gate are collected and re-printed in a
+    compact block at the end so gate regressions cannot scroll away.
+    extra_args is split shell-style; it is empty unless --bench-args was given.
+    Returns the bench exit code (0 for a clean run, 1 for a gate/error failure).
     """
     script = REPO_ROOT / "benchmarks" / "run_benchmark.py"
     argv = [sys.executable, str(script)] + shlex.split(extra_args)
@@ -443,12 +444,14 @@ def run_benchmarks(extra_args: str) -> int:
     assert process.stdout is not None
     for line in process.stdout:
         print(line, end="")
-        if line.startswith("WARN "):
+        if line.startswith(("WARN ", "BIG WARN ")):
             warnings.append(line.rstrip("\n"))
     exit_code = process.wait()
     print()
     if warnings:
-        print(f"  bench gate: {len(warnings)} warning(s) "
+        big = sum(1 for w in warnings if w.startswith("BIG WARN "))
+        plain = len(warnings) - big
+        print(f"  bench gate: {big} BIG WARN(s), {plain} WARN(s) "
               f"(performance gate, see benchmarks/README.md)")
         for warning in warnings:
             print(f"    {warning}")
@@ -484,12 +487,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--timeout", type=float, default=60.0,
                         help="per-case timeout in seconds (default: 60)")
     parser.add_argument("--bench", action="store_true",
-                        help="after the corpus pass, run benchmarks/run_benchmark.py, "
-                             "stream its output, and re-print its performance-gate "
-                             "WARN lines (off by default)")
+                        help="run the benchmark suite after the corpus pass (now the "
+                             "default; kept as an explicit, redundant request)")
+    parser.add_argument("--no-bench", dest="no_bench", action="store_true",
+                        help="skip the benchmark suite pass (it runs by default "
+                             "after the corpus pass)")
     parser.add_argument("--bench-args", dest="bench_args", default="", metavar="ARGS",
                         help="extra arguments forwarded to benchmarks/run_benchmark.py "
-                             "when --bench is given (e.g. --only hello-world)")
+                             "when the bench pass runs (e.g. --only hello-world)")
     args = parser.parse_args(argv)
 
     cases_dir = Path(args.cases)
@@ -558,8 +563,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         }
         json.dump(payload, sys.stdout, indent=2)
         sys.stdout.write("\n")
-        if args.bench:
-            print("note: --bench has no effect with --json (JSON output stays parseable)",
+        if not args.no_bench:
+            print("note: bench pass skipped with --json (JSON output stays parseable)",
                   file=sys.stderr)
         return 0 if failed == 0 else 1
 
@@ -595,7 +600,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"{summary}.")
 
     exit_code = 0 if failed == 0 else 1
-    if args.bench:
+    if not args.no_bench:
         bench_exit = run_benchmarks(args.bench_args)
         exit_code = max(exit_code, bench_exit)
     return exit_code
