@@ -289,7 +289,35 @@ Committed `f23e728` (104 files): suite moved to the repo root `benchmarks/`
 - Refreshed tables land after the perf wave: rerun, paste verbatim, never
   hand-edit (refresh policy in `benchmarks/README.md`).
 
-## Perf wave (in flight - launched after d409e33) - performance
+## P1 landing record (2026-10-18)
+
+Committed `5c88ead` (14 files; `src/codegen` + `src/runtime` only). Scope: the
+three D64 deliverables.
+
+- `%` lowering without libm: `cp3/arith.hpp` (`mod`, `modConst`, guard
+  helpers); `std::fmod` owns every edge (negatives, zero divisor,
+  `|x| >= 2^53`, `-0.0`, NaN, infinities, fractions, `x % 0` signs). Codegen
+  emits `modConst<K>` for literal divisors.
+- Guarded int64 `number` fast path: functions that lower cleanly in integer
+  mode get an extra body plus a wrapper that bails to the always-correct
+  double body (`int_mode.cpp`, `int_reads.*`).
+- compute-single: 182 ms entry (1.22x cpp / 1.46x rust in-suite) to 150 ms
+  best (1.08x cpp / 1.21x rust on a quiet machine; 1.17x / 1.38x loaded);
+  Go 192-200 ms, so the D64 floor (<= 0.20 s) holds with margin. The hot loop
+  disassembly has no `call`, no libm and no division (report section 4).
+- Report: `build/scratch/perf/WAVE-P1-REPORT.md`. Lead acceptance: canonical
+  rebuild `build/bin/cp3c.exe` SHA-256
+  `C051967809915DAE897618FC9F5CC0D5C4516329E991DC3C190DE9CC37257432`; cold
+  corpus (caches deleted first) `1236 found / 657 passed / 0 failed / 471
+  skipped / 108 ambiguous`, exit 0; `arith_test` 502170 checks, 0 failures;
+  layout lint 0 errors.
+- Deferred hygiene (report section 7): the string-literal `std::string(...)`
+  wrap removal and the D56 prelude/TU pruning ride the D56 runtime-embedding
+  lane.
+- Scorecard: the post-P1 labeled suite refresh follows D67.4; the flagged rows
+  it prints are the standing todo queue (string-churn first).
+
+## Perf wave (landed as `5c88ead`; plan below kept as written) - performance
 
 Lead probe, 2026-10-17 (`build/scratch/perf-probe/`, g++ 16.1.0 `-O2`): the
 compute-single loop lowered three ways - `std::fmod(n, 2)` **1080 ms** (= cp3c's
