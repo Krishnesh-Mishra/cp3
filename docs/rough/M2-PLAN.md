@@ -361,6 +361,32 @@ Two stale boundary prose refs intentionally left (`cp3/async/eventloop.hpp`,
 `cp3/lexer.hpp` comments) and queued for the next touch of those files.
 Report: `build/scratch/sweep2/WAVE-SWEEP-REPORT.md`.
 
+## D68 native wiring landing record (2026-10-18)
+
+Committed `fb64ee8` (28 files). The std-module native backends are wired end
+to end ahead of the three feature waves: `src/cli/src/detail/native_packages.hpp`
+declares one row per std module with a vendored backend (include dirs, compile
+flags, runtime TUs, `-L` directories, `-l` archives), the rows live
+per-module in `native_std_<family>.hpp` (crypto: libsodium; network: uSockets
++ libuv + the six Windows system libraries each archive needs), and
+`cmdBuildOrRun` selects rows from the module graph's resolved `std/...`
+specifiers (`ModuleDependency`, any unit), so a program that imports neither
+module compiles the same 5 runtime TUs and links no third-party archive.
+`compileArgs`/`linkArgs` moved onto `CompileStep`/`LinkStep` and the build
+entry point onto `BuildRequest` (layout-lint budgets: 0 errors). Extension
+stubs that compile today and keep the previous CP3002 behavior landed for
+both modules: runtime TU + header per module (runtime CMake source entries +
+third_party include roots added), sema `std_check` dispatch into
+`checks/std_crypto.cpp` / `std_network.cpp`, codegen `emit/std/crypto.cpp` /
+`network.cpp` with `needsCrypto_`/`needsNetwork_` include wiring. Lead
+acceptance: canonical rebuild exit 0; layout lint 207 files 0 errors 52
+warnings; cold corpus 1236/657/0/471/108 exit 0 twice (before and after the
+toolchain refactor); crypto/network scratch programs build with their native
+flags, link `-lsodium` / `-luv -luSockets`, run and exit 0; a non-importing
+program links neither. The three parallel feature waves (crypto, network,
+typed arrays) fill the stubs; each reports in
+`build/scratch/<wave>/WAVE-<WAVE>-REPORT.md`.
+
 ## Perf wave (landed as `5c88ead`; plan below kept as written) - performance
 
 Lead probe, 2026-10-17 (`build/scratch/perf-probe/`, g++ 16.1.0 `-O2`): the
