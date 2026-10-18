@@ -6,6 +6,8 @@
 //   f(...)                     -> `f(...)` (functions declared in this unit)
 //   setTimeout/sleep/...        -> emit_async.cpp's timer/promise lowering
 //   Promise.all/... / p.then()  -> emit_async.cpp's promise lowering
+//   new EventEmitter() / e.on/once/off/emit(...)  -> the builtin's lowering
+//                                 (cp3/async/emitter.hpp, D74)
 //   console.log/info(...)      -> `cp3::runtime::println(...)`   (stdout)
 //   console.warn/error(...)    -> `::cp3::runtime::console::warn/error(...)`
 //                                 (stderr, STDLIB docs §07)
@@ -157,9 +159,12 @@ std::string Generator::emitCall(const CallExpr& c) {
             static_cast<const Identifier&>(*m.object).name == "Promise") {
             return emitPromiseStatic(c, m);
         }
-        // `p.then(...)` / `p.catch(...)` / `p.finally(...)` on a Promise.
+        // A Promise method (`then`/`catch`/`finally`); `on/once/off/emit` (D74).
         if (m.object && detail::isPromiseType(effectiveType(*m.object))) {
             return emitPromiseMemberCall(c, m);
+        }
+        if (m.object && detail::isEventEmitterType(effectiveType(*m.object))) {
+            return emitEventEmitterCall(c, m);
         }
         // `Math.*`, `path.*`, `os.*`, `JSON.stringify`, `process.*`, and the
         // primitive `string` method surface (emit_builtin.cpp).
@@ -220,6 +225,93 @@ std::string Generator::emitConsoleMethod(const CallExpr& c, const char* method) 
     }
     return "::cp3::runtime::console::" + std::string(method) + "(" +
            joinStrings(args, ", ") + ")";
+}
+
+// -----------------------------------------------------------------------------
+// The builtin EventEmitter (D74): construction, listener values, method calls
+// -----------------------------------------------------------------------------
+
+std::string Generator::emitEventEmitterNew(const NewExpr& n) {
+    if (!n.callee || n.callee->kind != NodeKind::Identifier) return std::string();
+    if (static_cast<const Identifier&>(*n.callee).name != "EventEmitter") {
+        return std::string();
+    }
+    needsEventEmitter_ = true;
+    if (!n.arguments.empty()) {
+        notImplemented(n, "new EventEmitter(...) with arguments");
+    }
+    return "::cp3::runtime::makeRef<::cp3::runtime::EventEmitter>()";
+}
+
+// A function-typed value is boxed once into a `Listener`
+// (cp3/async/emitter.hpp), so every copy of the value shares one identity -
+// what makes `off("go", h)` remove the earlier `on("go", h)` for the same
+// local. An inline arrow is a fresh box per evaluation, so two inline arrows
+// never match (JS function identity).
+std::string Generator::emitListenerValue(const Expr& e) {
+    if (e.kind == NodeKind::ArrowFunction) {
+        const CppInfo ci = info(e);
+        if (!ci.representable || ci.shape != Shape::Listener) {
+            // A value-returning arrow has no boxed spelling (type_map.cpp).
+            notImplemented(e, "this function value");
+            return "::cp3::runtime::Listener()";
+        }
+        needsEventEmitter_ = true;
+        return "::cp3::runtime::Listener::box(" +
+               emitArrow(static_cast<const ArrowFunction&>(e), {}) + ")";
+    }
+    const CppInfo ci = info(e);
+    if (ci.representable && ci.shape == Shape::Listener) {
+        // A function-typed local (or a parameter, or a call returning one):
+        // the value already is a box, so hand over the same identity. A named
+        // function declaration is not a boxed value and stays out of M1 (its
+        // C++ name is a function, not a `Listener`).
+        if (e.kind == NodeKind::Identifier &&
+            functions_.count(static_cast<const Identifier&>(e).name) != 0) {
+            notImplemented(e, "a named function used as a listener value");
+            return "::cp3::runtime::Listener()";
+        }
+        needsEventEmitter_ = true;
+        return expr(e);
+    }
+    notImplemented(e, "this listener argument");
+    return "::cp3::runtime::Listener()";
+}
+
+std::string Generator::emitEventEmitterCall(const CallExpr& c,
+                                            const MemberExpr& m) {
+    needsEventEmitter_ = true;
+    const std::string recv = "(" + expr(*m.object) + ")";
+    if (m.property == "on" || m.property == "once" || m.property == "off") {
+        if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1] ||
+            c.arguments[0]->kind == NodeKind::SpreadElement ||
+            c.arguments[1]->kind == NodeKind::SpreadElement) {
+            notImplemented(c, "this method call");
+            return "0.0";
+        }
+        return recv + "->" + m.property + "(" + expr(*c.arguments[0]) + ", " +
+               emitListenerValue(*c.arguments[1]) + ")";
+    }
+    if (m.property == "emit") {
+        if (c.arguments.empty() || !c.arguments.front() ||
+            c.arguments.front()->kind == NodeKind::SpreadElement) {
+            notImplemented(c, "this method call");
+            return "0.0";
+        }
+        std::string text = recv + "->emit(" + expr(*c.arguments.front());
+        // The listener surface is arity-fixed in C++: at most one emitted
+        // value reaches a listener (cp3/async/emitter.hpp), so a wider emit
+        // reports instead of truncating silently.
+        if (c.arguments.size() == 2 && c.arguments[1] &&
+            c.arguments[1]->kind != NodeKind::SpreadElement) {
+            text += ", ::cp3::runtime::EventValue(" + expr(*c.arguments[1]) + ")";
+        } else if (c.arguments.size() > 1) {
+            notImplemented(c, "emit() with more than one argument");
+        }
+        return text + ")";
+    }
+    notImplemented(c, "this method call");
+    return "0.0";
 }
 
 }  // namespace cp3

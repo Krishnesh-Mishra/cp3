@@ -218,8 +218,14 @@ void Analyzer::sigFromFunctionType(const Type& ct, FuncSig& localSig) {
             localSig.optional.push_back(false);
         }
     }
-    if (ct.name == kVariadicLabel) localSig.rest = true;
+    if (ct.name == kVariadicLabel ||
+        ct.name == kVariadicOptionalTailLabel) {
+        localSig.rest = true;
+    }
     if (ct.name == kOptionalTailLabel && !localSig.optional.empty()) {
+        localSig.optional.back() = true;
+    }
+    if (ct.name == kVariadicOptionalTailLabel && !localSig.optional.empty()) {
         localSig.optional.back() = true;
     }
     if (ct.name == kOptionalTail2Label && localSig.optional.size() >= 2) {

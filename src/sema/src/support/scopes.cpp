@@ -122,6 +122,9 @@ void Analyzer::declareBuiltins() {
         "Object", "String",   "Number",   "Boolean",
         "Array",  "parseInt", "parseFloat", "isNaN", "isFinite",
         "print",  "worker",  "parallel", "Promise", "Symbol",   "BigInt",
+        // The core-language event type (D74, spec §14): a global builtin
+        // exactly like `Promise` and the timers, no import required.
+        "EventEmitter",
         // Core-language builtins tied to the event loop (spec §20, std/03):
         // no import required.
         "setTimeout", "setInterval", "clearTimeout", "clearInterval", "sleep",
@@ -146,6 +149,10 @@ void Analyzer::declareBuiltins() {
     for (const std::string& name : familyTypeNames()) {
         typeNames_.emplace(name, Type::named(TypeKind::Class, name));
     }
+    // `EventEmitter` resolves as a type annotation too: the ambient binding is
+    // a constructor value, the nominal class type is what `new` produces
+    // (D74; the members are typed in member_check.cpp).
+    typeNames_.emplace("EventEmitter", Type::named(TypeKind::Class, "EventEmitter"));
 }
 
 // =============================================================================

@@ -16,6 +16,8 @@
 //   null      -> std::nullptr_t                 (value nullptr)
 //   T | null / T | undefined (T primitive) -> std::optional<T>
 //   T | null | undefined (T primitive)     -> cp3::runtime::Maybe<T>
+//   EventEmitter (D74)                     -> cp3::runtime::Ref<cp3::runtime::EventEmitter>
+//   (...args: unknown[]) => void (D74)     -> cp3::runtime::Listener
 // =============================================================================
 #include "detail/generator.h"
 
@@ -72,6 +74,10 @@ bool optionalEmptyMatches(NullishKind kind, Shape nullishShape) {
 
 bool isPromiseType(const Type& t) {
     return t.kind == TypeKind::Class && t.name == "Promise";
+}
+
+bool isEventEmitterType(const Type& t) {
+    return t.kind == TypeKind::Class && t.name == "EventEmitter";
 }
 
 // `Promise<T>` -> `::cp3::runtime::Promise<T>` (cp3/async/promise.hpp). Only
@@ -180,12 +186,28 @@ CppInfo classify(const Type& raw) {
         case TypeKind::Class: {
             // The JS-compat family (typed views, buffers, DataView).
             if (classifyFamily(t, info)) return info;
-            // `Promise<T>` is the only class type with a spelling (M1).
+            // The builtin EventEmitter (D74): a reference type, so its C++
+            // spelling is `Ref<EventEmitter>` (cp3/async/emitter.hpp).
+            if (t.name == "EventEmitter") {
+                info.shape = Shape::EventEmitter;
+                info.representable = true;
+                info.cpp = "::cp3::runtime::Ref<::cp3::runtime::EventEmitter>";
+                return info;
+            }
+            // `Promise<T>` is the only other class type with a spelling (M1).
             if (!isPromiseType(t)) {
                 return info;
             }
             return classifyPromise(t);
         }
+        case TypeKind::Function:
+            // A function-typed value (D74): boxed as `Listener` so every copy
+            // shares one identity; only void-returning functions have one.
+            if (t.parts.empty() || !t.parts.back().isVoid()) return info;
+            info.shape = Shape::Listener;
+            info.representable = true;
+            info.cpp = "::cp3::runtime::Listener";
+            return info;
         case TypeKind::Array:
             // Regular arrays have a spelling when their element type does
             // (src/std/typed-arrays/codegen.cpp); otherwise they stay out of
@@ -193,7 +215,7 @@ CppInfo classify(const Type& raw) {
             classifyFamily(t, info);
             return info;
         default:
-            return info;  // Object/Function/Enum/TypeParam: out of M1
+            return info;  // Object/Enum/TypeParam: out of M1
     }
 }
 

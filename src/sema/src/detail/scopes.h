@@ -49,6 +49,12 @@ inline Type withOptionalTail(Type fn) {
     return fn;
 }
 
+// Function-type marker for a signature whose last declared parameter is
+// optional AND which accepts further trailing arguments (`emit(event, ...)`):
+// `Type::function` carries only one marker, so the combined tag sets both the
+// optional tail and `rest` in `sigFromFunctionType` (call_check.cpp).
+constexpr const char* kVariadicOptionalTailLabel = "$variadicOptionalTail";
+
 // Function-type marker for a signature whose last *two* declared parameters
 // are optional (`fill(value, start?, end?)`, `slice(start?, end?)`,
 // `copyWithin(target, start?, end?)`): the tag marks the trailing pair in
@@ -159,6 +165,14 @@ Type promiseOf(const Type& value);
 
 // The value type of a `Promise<T>` (Unknown for a non-Promise type).
 Type promiseValue(const Type& t);
+
+// --- the EventEmitter builtin (D74, spec §14) ---------------------------------
+//
+// `EventEmitter` is a nominal class type: kind == Class, name == "EventEmitter".
+// The ambient binding is declared in `declareBuiltins` (kGlobals); `new`
+// produces this type (expr_check.cpp) and the members are typed in
+// member_check.cpp. Codegen maps it onto cp3/async/emitter.hpp.
+bool isEventEmitterType(const Type& t);
 
 // --- the JS-compat typed-array family (D69; src/std/typed-arrays/sema.cpp) ---
 //
