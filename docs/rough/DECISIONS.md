@@ -578,3 +578,46 @@ Evidence: `build/scratch/vend/WAVE-VEND-REPORT.md` and
 consumer link flags). Pins as delivered: libsodium 1.0.22 (tag 1.0.22-RELEASE),
 libuv v1.53.0, uWebSockets v20.80.0 including its in-tree uSockets, oneTBB
 v2023.1.0.
+
+## D71 - One event loop per thread, never a second loop (user directive, 2026-10-18)
+
+The user flagged the classic mistake this project must never make: a second
+event loop for `std/network` (libuv/uWebSockets) running next to the language
+runtime's own loop. Two loops on one thread fight each other: one blocks or
+starves the other, timers fire late while the server turns, the exit rule
+forks, and every cross-loop hop adds latency for nothing.
+
+Ruling:
+
+1. **One loop instance per thread, always.** The runtime `EventLoop`
+   (cp3/async/eventloop.hpp) is the single loop of its thread. Timers,
+   promises and microtasks, fetch, server and WebSockets are all driven by
+   that one loop; no module may run a second loop of its own. `worker`
+   threads each get their own single loop (spec SS14 is one loop per thread,
+   not per process); that is one loop per thread, not two.
+2. **libuv is subordinate, never a peer.** `std/network` creates one
+   `uv_loop_t` per thread and installs it on the runtime loop as an external
+   event source through three opaque callbacks (`setExternalSource(poll,
+   waitTurn, wake)`; the loop itself never sees a libuv type, and generated
+   code never includes uv.h). `run()` drives libuv with non-blocking turns
+   while it has its own work, and with bounded blocking turns when it has
+   none; the source arms its own wake timer so runtime timers still fire on
+   time while the loop sits inside libuv, and `postFromThread` wakes libuv so
+   worker results are serviced promptly.
+3. **uWebSockets rides the same libuv loop.** The network module hands uWS
+   its loop with `uWS::Loop::get(uvLoop)` (a borrowed alien loop uSockets
+   never frees), so every server, socket and client handle uWS creates lives
+   on the one libuv loop the runtime loop drives. Fetch uses that same loop
+   directly.
+4. **D62 semantics unchanged.** A live fetch, listening server or open socket
+   is pending work (`retainExternal`/`releaseExternal`); microtask order and
+   timer ordering stay exactly as the D62 corpus pins them.
+5. **Zero cost without the import.** A program that does not import
+   `std/network` installs no external source and never links libuv; its loop
+   behaves exactly as before.
+
+Enforcement: the network wave is currently implemented against this shape
+(verified in the working tree: eventloop.hpp event source callbacks +
+network_loop.hpp). The merge gate confirms the single-loop property before the
+wave lands, and every future async module (fs, worker messaging, and so on)
+inherits the same rule.
