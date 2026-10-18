@@ -127,6 +127,12 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             if (isTypedArrayClass(ot)) return typedArrayMember(ot, prop);
             if (isBufferClass(ot)) return bufferMember(ot, prop);
             if (isDataViewClass(ot)) return dataViewMember(prop);
+            // `std/date` values: a closed surface (miss -> CP3305 below).
+            if (isDateClass(ot)) {
+                if (auto t = dateInstanceMember(ot, prop)) return *t;
+                reportMemberMiss("Date", prop, span, dateInstanceMemberNames());
+                return Type::unknown();
+            }
             return ambient();
         case TypeKind::String:
             return stringMember(prop);

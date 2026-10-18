@@ -180,6 +180,8 @@ CppInfo classify(const Type& raw) {
         case TypeKind::Class: {
             // The JS-compat family (typed views, buffers, DataView).
             if (classifyFamily(t, info)) return info;
+            // The `std/date` value type (src/std/date/codegen.cpp).
+            if (classifyDate(t, info)) return info;
             // `Promise<T>` is the only class type with a spelling (M1).
             if (!isPromiseType(t)) {
                 return info;

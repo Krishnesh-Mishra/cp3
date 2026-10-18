@@ -73,6 +73,11 @@ CppInfo classify(const Type& raw);
 // type is left for `classify`'s own arms.
 bool classifyFamily(const Type& t, CppInfo& info);
 
+// The Date value type (std/date; src/std/date/codegen.cpp): a nominal class
+// named "Date" lowering to `::cp3::runtime::date::Date`. Returns false for
+// every other type.
+bool classifyDate(const Type& t, CppInfo& info);
+
 // Structural fallback: a type annotation -> a cp3 Type (when sema is absent).
 std::optional<Type> typeFromTypeNode(const TypeNode& tn);
 

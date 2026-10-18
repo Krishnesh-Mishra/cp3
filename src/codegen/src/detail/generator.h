@@ -206,6 +206,9 @@ private:
     // CP3002 meanwhile.
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
+    // std/date (src/std/date/codegen.cpp): the `Date.*` statics and the Date
+    // value's instance methods; pure family, backed by cp3/std/date.hpp.
+    std::string emitDateCall(const CallExpr& c, const MemberExpr& m);
     // `std/network` receivers are recognised by the sema marker names
     // ("$network:*"), so the hooks live on the receiver, not on the member:
     // named imports (identifier calls), `new` forms, member calls/reads.
@@ -331,6 +334,7 @@ private:
     bool needsJson_ = false;       // JSON.stringify -> cp3/std/json.hpp include
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
+    bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool topLevelAwait_ = false;   // an `await` appeared at top level
