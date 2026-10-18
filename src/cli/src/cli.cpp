@@ -49,6 +49,7 @@ void printUsage(std::FILE* out) {
         "  init [dir]         Scaffold a new project (package.json + src/index.cp3)\n"
         "  install [src]      Install a .cp3pak / package dir (bare: package.json deps)\n"
         "  exec <pkg> [args]  Run a package's bundled tool\n"
+        "  lsp [--stdio]      Language server on stdio (for editor integrations)\n"
         "  version            Print the compiler version\n"
         "  help               Print this help\n"
         "\n"
@@ -267,7 +268,8 @@ bool resolveCommand(const std::string& first, std::string& command,
     }
     if (first == "run" || first == "build" || first == "check" ||
         first == "dev" || first == "fmt" || first == "clean" ||
-        first == "init" || first == "exec" || first == "install") {
+        first == "init" || first == "exec" || first == "install" ||
+        first == "lsp") {
         command = first;
         return true;
     }
@@ -308,6 +310,21 @@ std::string resolveFile(const std::string& command, bool filePreseeded,
         return "'install' takes at most one path or URL";
     }
     return {};
+}
+
+// `lsp` owns a tiny argument surface (PKG-CONTRACTS sec.2): `--stdio` is the
+// only accepted token (the transport is stdio with or without it) and anything
+// else is a usage error. It bypasses the package.json hooks on purpose: an
+// editor-spawned server must never run project scripts.
+int runLsp(const std::vector<std::string>& args) {
+    for (std::size_t i = 1; i < args.size(); ++i) {
+        if (args[i] == "--stdio") continue;
+        std::fprintf(stderr, "cp3c: unknown option '%s'\n", args[i].c_str());
+        std::fputs("usage: cp3c lsp [--stdio]\n", stderr);
+        return kExitUsageError;
+    }
+    cp3::cli::CliOptions opt;
+    return cp3::cli::cmdLsp(opt);
 }
 
 int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt);
@@ -425,6 +442,11 @@ int runCli(int argc, char** argv) {
                      startsWithDash(first) ? "option" : "command", first.c_str());
         printUsage(stderr);
         return kExitUsageError;
+    }
+
+    // `lsp` validates its own flags and never runs package.json hooks.
+    if (command == "lsp") {
+        return runLsp(args);
     }
 
     std::vector<std::string> rest(args.begin() + 1, args.end());

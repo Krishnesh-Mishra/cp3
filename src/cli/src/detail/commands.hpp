@@ -77,6 +77,7 @@ int cmdClean(const CliOptions& opt);
 int cmdInit(const CliOptions& opt);
 int cmdExec(const CliOptions& opt);
 int cmdInstall(const CliOptions& opt);
+int cmdLsp(const CliOptions& opt);
 
 namespace detail {
 
