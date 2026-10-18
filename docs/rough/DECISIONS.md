@@ -720,3 +720,19 @@ imported-std-modules doc and the std overview list. Implementation: no
 `std/events` registry row, an import-illegal diagnostic, and the six pinned
 `events_*` cases flipped - all landing with the std completion round that
 implements the builtin (R2, the date/json round).
+
+## D75 - console gains continuous event listening: on/off (user directive, 2026-10-18)
+
+`console.on(event, listener)` / `console.off(event, listener)` join the
+console surface so a program can keep listening instead of asking once:
+`"keypress"` (same vocabulary as `readKey`: named keys like
+`"ArrowUp"`/`"Enter"`, or the literal character), `"line"` (each completed
+line, terminator removed), and `"close"` (once, with `""`, at stdin EOF).
+Listeners persist until removed and use the same on/off listener model as the
+language's built-in `EventEmitter` (D74); the input pump starts with the first
+listener and stops with the last, never blocking the event loop (D71). Lines
+and keys fan out: a pending `input()`/`readKey()` and the matching listeners
+both see the same line or key. Docs: surface block and prose in
+`docs/standard-library/04`, member list in the day-2 guide. Implementation:
+the round-1 console wave owns the stdin pump; the listener bookkeeping is
+console-internal, so there is no round dependency on the events wave.

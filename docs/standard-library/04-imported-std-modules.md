@@ -16,6 +16,8 @@ const console: {
   clear(): void;                              // clears the terminal screen
   assert(condition: boolean, ...args: Printable[]): void;  // logs to stderr only if condition is false; does not throw or exit
   readKey(): Promise<string>;                 // async read of a single keypress, including arrow keys, for interactive CLI menus
+  on(event: "keypress" | "line" | "close", listener: (value: string) => void): void;   // keep listening: every key / completed line / once at EOF
+  off(event: "keypress" | "line" | "close", listener: (value: string) => void): void;  // stop listening
 };
 ```
 
@@ -30,6 +32,9 @@ let name = await console.input("Your name: ");
 console.clear();
 console.assert(value > 0, "value should be positive, got:", value);
 let key = await console.readKey();   // e.g. "ArrowUp", "ArrowDown", "Enter", or a plain character
+console.on("line", (line) => console.log("you typed:", line));   // keeps listening
+console.on("keypress", (key) => { /* every key, until off */ });
+console.off("line", handler);
 ```
 
 **Routing, decided:** `.log` / `.info` → stdout. `.warn` / `.error` → stderr. Matches Node exactly - no ambiguity left here.
@@ -42,6 +47,7 @@ let key = await console.readKey();   // e.g. "ArrowUp", "ArrowDown", "Enter", or
 - `.input` returns a `Promise<string>` that resolves once a line (up to `\n`) has been read; on EOF, it resolves with an empty string rather than rejecting. It must not be a blocking/synchronous call - cp3's async model is a single event loop ([README.md §14](../language-spec/14-async.md)), so a truly blocking stdin read would stall every other pending async task in the program, not just the input call. This keeps `console.input` consistent with every other I/O primitive in std (`fs.readFile`, `process.exec`), which are already Promise-based for the same reason.
 - `.assert` never throws and never exits the program - it's a diagnostic aid (log-if-false), not a control-flow mechanism; reach for `throw` if a failed condition should actually stop execution.
 - `.readKey` is async for the same reason `.input` is - it puts the terminal into raw mode via libuv's TTY handling and resolves with the next keypress (a named key like `"ArrowUp"`/`"Enter"`, or the literal character typed), without blocking the event loop while waiting.
+- `.on`/`.off` keep listening instead of asking once: `"keypress"` delivers what `.readKey` returns for every key (raw mode; named keys or the literal character), `"line"` delivers each completed line without its terminator, and `"close"` fires once with `""` when stdin reaches EOF. Listeners persist until `.off` removes them, using the same on/off listener model as the language's built-in `EventEmitter` ([README.md §14](../language-spec/14-async.md)). Nothing blocks the event loop: the input pump starts when the first listener is registered and stops when the last one is removed. Lines and keys fan out - a pending `.input()`/`.readKey()` and the matching listeners both see the same line or key, so a listener is an observation tap, not a competing consumer.
 
 ## JSON
 
