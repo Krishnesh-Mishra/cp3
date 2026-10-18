@@ -185,6 +185,29 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
     const std::string signatureDef = head + joinStrings(paramsDef, ", ") + ")";
     line(decls, 1, signatureDecl + ";");
 
+    // int64 fast path (D64, int_mode.cpp): attempt the body once with every
+    // `number` lowered to a guarded std::int64_t. A discarded attempt leaves
+    // the ordinary double body below as the only lowering; a kept one is
+    // emitted next to it, and the wrapper guards the arguments once and calls
+    // it, falling through to the ordinary body when a guard bails.
+    const bool tryFast = fd.body && intEligible(fd, ret);
+    std::string fastBody;
+    bool fastKept = false;
+    if (tryFast) fastBody = intBody(fd, fastKept);
+
+    const std::string body = plainBody(fd, ret);
+    if (fastKept) {
+        line(decls, 1, intSignature(fd) + ";");
+        defs += intSignature(fd) + " {\n" + fastBody + "}\n\n";
+    }
+    const std::string prologue = fastKept ? intWrapperPrologue(fd) : std::string();
+    defs += signatureDef + " {\n" + prologue + body + "}\n\n";
+}
+
+// The ordinary lowering of a function body: cp3 `number` stays a double. This
+// is the definition of record (the CP3002 reports happen here, once, whether or
+// not an int64 fast path was kept) and the fallback the wrapper re-runs.
+std::string Generator::plainBody(const FunctionDeclaration& fd, const std::string& ret) {
     const std::string savedReturn = currentReturn_;
     if (fd.isAsync) {
         // Inside the coroutine `return expr` yields the promise's VALUE type
@@ -225,8 +248,7 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
     --nestingDepth_;
     inAsyncBody_ = savedInAsync;
     currentReturn_ = savedReturn;
-
-    defs += signatureDef + " {\n" + body + "}\n\n";
+    return body;
 }
 
 std::optional<Type> Generator::parameterType(const Parameter& p,

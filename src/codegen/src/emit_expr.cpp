@@ -40,6 +40,24 @@ const char* binaryOpSpelling(BinaryOp op) {
     }
 }
 
+// A comparison sees two numbers as equal when their difference is zero,
+// so the sign of a zero operand is unobservable to it (IEEE -0 == +0).
+bool isComparisonOp(BinaryOp op) {
+    switch (op) {
+        case BinaryOp::LessThan:
+        case BinaryOp::GreaterThan:
+        case BinaryOp::LessThanEqual:
+        case BinaryOp::GreaterThanEqual:
+        case BinaryOp::Equal:
+        case BinaryOp::NotEqual:
+        case BinaryOp::StrictEqual:
+        case BinaryOp::StrictNotEqual:
+            return true;
+        default:
+            return false;
+    }
+}
+
 // `maybe <op> nullish` for a Shape::Maybe operand: strict `===` requires the
 // flavor to match, loose `==` treats both nullish flavors as equal (JS).
 std::string maybeNullishCompare(const std::string& mb, Shape nullish,
@@ -55,7 +73,37 @@ std::string maybeNullishCompare(const std::string& mb, Shape nullish,
 
 }  // namespace
 
+// The expression entry point: inside an int64 fast-path attempt a node whose
+// type is `number` is lowered by the fast path (int_mode.cpp); everything else
+// uses the ordinary emitter below, whose operands still route through here, so
+// a `number` operand of a non-number expression (a truthiness test, a
+// comparison, a template hole) is the int64 value.
 std::string Generator::expr(const Expr& e) {
+    if (intOn() && numberTyped(e)) return intNumberExpr(e);
+    return exprPlain(e);
+}
+
+// A comparison operand. `x % y` is the one expression whose zero-sign bail is
+// droppable here: `imod` exists to reproduce `-0.0`, and a comparison cannot
+// tell `-0` from `+0`, so the exact integer remainder is observed identically.
+std::string Generator::exprCmp(const Expr& e) {
+    if (!intOn() || e.kind != NodeKind::BinaryExpr) return expr(e);
+    const auto& b = static_cast<const BinaryExpr&>(e);
+    if (b.op != BinaryOp::Modulo || !b.left || !b.right || !numberTyped(*b.left) ||
+        !numberTyped(*b.right)) {
+        return expr(e);
+    }
+    const std::string lhs = expr(*b.left);
+    const std::string rhs = expr(*b.right);
+    // A known non-zero divisor needs no check at all. Anything else keeps the
+    // divisor test (`x % 0` must still reach the double body's NaN).
+    if (auto k = integralLiteralValue(*b.right); k && *k != 0) {
+        return "(" + lhs + " % " + std::to_string(*k) + ")";
+    }
+    return "::cp3::runtime::arith::imodCmp(" + lhs + ", " + rhs + ")";
+}
+
+std::string Generator::exprPlain(const Expr& e) {
     switch (e.kind) {
         case NodeKind::NumberLiteral:
             return numberLiteralText(static_cast<const NumberLiteral&>(e).value);
@@ -167,8 +215,10 @@ std::string Generator::cond(const Expr& e) {
 }
 
 std::string Generator::emitBinary(const BinaryExpr& b) {
-    const std::string lhs = expr(*b.left);
-    const std::string rhs = expr(*b.right);
+    // A comparison may lower a `%` operand without the `-0.0` bail (exprCmp).
+    const bool cmp = isComparisonOp(b.op);
+    const std::string lhs = cmp ? exprCmp(*b.left) : expr(*b.left);
+    const std::string rhs = cmp ? exprCmp(*b.right) : expr(*b.right);
     const CppInfo L = info(*b.left);
     const CppInfo R = info(*b.right);
 
@@ -186,7 +236,7 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
             return "(" + lhs + " " + op + " " + rhs + ")";
         }
         case BinaryOp::Modulo:
-            return "std::fmod(" + lhs + ", " + rhs + ")";
+            return modCall(lhs, *b.right, rhs);
         case BinaryOp::Power:
             return "std::pow(" + lhs + ", " + rhs + ")";
         case BinaryOp::LessThan:
@@ -417,7 +467,7 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
             return "(" + target + " " + op + " " + value + ")";
         }
         case AssignOp::Modulo:
-            return "(" + target + " = std::fmod(" + target + ", " + value + "))";
+            return "(" + target + " = " + modCall(target, *a.value, value) + ")";
         case AssignOp::Power:
             return "(" + target + " = std::pow(" + target + ", " + value + "))";
         default:

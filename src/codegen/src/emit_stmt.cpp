@@ -38,11 +38,17 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
             return;
         case NodeKind::ExpressionStatement: {
             const auto& es = static_cast<const ExpressionStatement&>(s);
-            if (es.expression) {
-                line(out, indent, expr(*es.expression) + ";");
-            } else {
+            if (!es.expression) {
                 line(out, indent, ";");
+                return;
             }
+            // Only a statement's own expression may defer a bound check: its
+            // value is discarded, so it is never observed (see intAssignText).
+            const bool wasStmt = intOn() && intMode_->stmtExpr;
+            if (intOn()) intMode_->stmtExpr = true;
+            const std::string text = expr(*es.expression);
+            if (intOn()) intMode_->stmtExpr = wasStmt;
+            line(out, indent, text + ";");
             return;
         }
         case NodeKind::VariableDeclaration:
@@ -120,9 +126,7 @@ void Generator::emitVarDecl(const VariableDeclaration& vd, std::string& out, int
         if (!decl) continue;
         std::string text = declaratorText(*decl, vd.kind);
         line(out, indent, text + ";");
-        if (decl->id && decl->id->kind == NodeKind::Identifier) {
-            declare(static_cast<const Identifier&>(*decl->id).name, resolvedBindingType(*decl));
-        }
+        declareBinding(*decl);
     }
 }
 
@@ -143,17 +147,15 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
             }
         }
     }
-    const std::optional<Type> declared = resolvedBindingType(d);
-
+    const CppInfo ci = bindingCpp(d);
+    // Inside an int64 attempt a `number` binding is a std::int64_t, and its
+    // initializer must therefore be a region value: a `number` in C++ that the
+    // fast path cannot account for would make the two bodies disagree.
+    const bool asInt = intBinding(ci);
+    const std::string typeSpelling =
+        asInt ? "std::int64_t" : (ci.representable ? ci.cpp : "auto");
     if (d.init) {
-        CppInfo ci = declared ? classify(*declared) : CppInfo{};
-        if (!ci.representable) {
-            CppInfo fromInit = info(*d.init);
-            if (fromInit.representable) {
-                ci = fromInit;
-            }
-        }
-        std::string typeSpelling = ci.representable ? ci.cpp : "auto";
+        if (asInt && !numberTyped(*d.init)) intFail();
         std::string initText;
         if (ci.shape == Shape::Optional && isNullishLiteral(*d.init)) {
             initText = "std::nullopt";
@@ -163,12 +165,11 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
         return cv + typeSpelling + " " + name + " = " + initText;
     }
 
-    CppInfo ci = declared ? classify(*declared) : CppInfo{};
     if (ci.shape == Shape::Optional || ci.shape == Shape::Maybe) {
         return cv + ci.cpp + " " + name;
     }
     if (ci.representable && ci.shape != Shape::Void) {
-        return cv + ci.cpp + " " + name + "{}";
+        return cv + typeSpelling + " " + name + "{}";
     }
     return cv + "auto " + name + " = cp3::runtime::undefined";
 }
@@ -185,10 +186,7 @@ void Generator::emitFor(const ForStatement& f, std::string& out, int indent) {
             }
             init = joinStrings(parts, ", ");
             for (const auto& d : vd.declarations) {
-                if (d && d->id && d->id->kind == NodeKind::Identifier) {
-                    declare(static_cast<const Identifier&>(*d->id).name,
-                            resolvedBindingType(*d));
-                }
+                if (d) declareBinding(*d);
             }
         } else if (auto exp = dynamic_cast<const Expr*>(f.init.get())) {
             init = expr(*exp);
@@ -207,6 +205,9 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
     // (spec §14), so cp3 `return` lowers to `co_return`.
     const std::string keyword = inAsyncBody_ ? "co_return" : "return";
     if (r.argument) {
+        // A `number` function's fast body returns std::int64_t, so the
+        // returned value must be a region value.
+        if (intOn() && !numberTyped(*r.argument)) intFail();
         // Always lower the returned expression so its own out-of-scope
         // parts report CP3002 instead of being silently dropped.
         const std::string value = expr(*r.argument);
@@ -231,6 +232,9 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
 }
 
 void Generator::emitThrow(const ThrowStatement& t, std::string& out, int indent) {
+    // A throw would observe a value (and the fast body must have no side
+    // effects before a bail), so it stays in the double body.
+    if (intOn()) intFail();
     if (!t.argument) {
         line(out, indent, "throw;");
         return;
@@ -252,6 +256,10 @@ void Generator::emitThrow(const ThrowStatement& t, std::string& out, int indent)
 }
 
 void Generator::emitTry(const TryStatement& ts, std::string& out, int indent) {
+    // A `catch` binding is a boxed value and a `finally` guard may run while a
+    // bail is in flight: both are observed side effects, so try stays in the
+    // double body.
+    if (intOn()) intFail();
     const bool hasCatch = ts.handler != nullptr;
     const bool hasFinally = ts.finallyBlock != nullptr;
 

@@ -15,6 +15,8 @@ set(cp3_codegen_sources
     src/mangle.cpp
     src/cpp_writer.cpp
     src/type_map.cpp
+    src/int_mode.cpp
+    src/int_reads.cpp
     src/emit_expr.cpp
     src/emit_call.cpp
     src/emit_builtin.cpp

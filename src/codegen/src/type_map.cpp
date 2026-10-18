@@ -245,6 +245,40 @@ bool isNullishLiteral(const Expr& e) {
     return e.kind == NodeKind::NullLiteral || e.kind == NodeKind::UndefinedLiteral;
 }
 
+namespace {
+
+// 2^53: the largest magnitude at which every integer is exact in both the
+// int64 and the double domain (the int64 fast path's invariant, D64).
+constexpr double kIntegralLimit = 9007199254740992.0;
+
+// The value of a `NumberLiteral`, possibly negated by a unary `-` (the parser
+// keeps `-5` as `-(5)`), or nullopt when `e` is not a number literal.
+std::optional<double> literalNumber(const Expr& e) {
+    if (e.kind == NodeKind::NumberLiteral) {
+        return static_cast<const NumberLiteral&>(e).value;
+    }
+    if (e.kind == NodeKind::UnaryExpr) {
+        const auto& u = static_cast<const UnaryExpr&>(e);
+        if (u.op == UnaryOp::Negate && u.operand) {
+            if (auto v = literalNumber(*u.operand)) return -*v;
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+std::optional<std::int64_t> integralLiteralValue(const Expr& e) {
+    const auto v = literalNumber(e);
+    if (!v) return std::nullopt;
+    // The range tests are false for NaN, so a NaN literal is rejected here.
+    if (!(*v >= -kIntegralLimit && *v <= kIntegralLimit)) return std::nullopt;
+    const std::int64_t i = static_cast<std::int64_t>(*v);
+    // The conversion truncates, so this also proves the literal is integral.
+    if (static_cast<double>(i) != *v) return std::nullopt;
+    return i;
+}
+
 Type stripNullish(const Type& t) {
     if (t.isNullish()) return Type::unknown();
     if (t.isUnion() || t.isNullable()) {

@@ -26,6 +26,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -63,6 +64,7 @@ private:
                     std::string& defs, std::string& mainBody);
     void addFunction(const FunctionDeclaration& fd, std::string& decls,
                      std::string& defs);
+    std::string plainBody(const FunctionDeclaration& fd, const std::string& ret);
     void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
                        std::string& mainBody);
     std::optional<Type> parameterType(const Parameter& p,
@@ -88,7 +90,9 @@ private:
     detail::CppInfo info(const Expr& e) const;
 
     // --- expressions (emit_expr.cpp) -----------------------------------------
+    std::string exprPlain(const Expr& e);
     std::string expr(const Expr& e);
+    std::string exprCmp(const Expr& e);
     std::string emitIdentifier(const Identifier& id);
     std::string emitTemplate(const TemplateLiteral& tl);
     std::string tsCall(const Expr& e);
@@ -155,12 +159,73 @@ private:
     void emitThrow(const ThrowStatement& t, std::string& out, int indent);
     void emitTry(const TryStatement& ts, std::string& out, int indent);
 
+    // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
+    // The fast path is emitted per function: a body with every `number`
+    // lowered to a guarded std::int64_t, plus a double wrapper that guards the
+    // arguments once and re-runs the ordinary body when a guard bails.
+    bool intEligible(const FunctionDeclaration& fd, const std::string& ret) const;
+    std::string intBody(const FunctionDeclaration& fd, bool& kept);
+    std::string intSignature(const FunctionDeclaration& fd) const;
+    std::string intWrapperPrologue(const FunctionDeclaration& fd) const;
+    bool intOn() const;
+    void intFail();
+    bool numberTyped(const Expr& e) const;
+    std::string intNumberExpr(const Expr& e);
+    std::string intLiteral(const Expr& e);
+    std::string intIdentifier(const Identifier& id);
+    std::string intBinary(const BinaryExpr& b);
+    std::string intProduct(const BinaryExpr& b);
+    std::string intUnary(const UnaryExpr& u);
+    std::string intUpdate(const UpdateExpr& u);
+    std::string intAssignment(const AssignmentExpr& a);
+    std::string intConditional(const ConditionalExpr& c);
+    std::string intLogical(const LogicalExpr& l);
+    // `a % b`: `modConst<K>` for an integral literal divisor, else `mod`.
+    std::string modCall(const std::string& lhs, const Expr& rhs,
+                        const std::string& rhsText);
+    // The C++ type source of a local binding (declared, else inferred from the
+    // initializer) and whether int mode lowers it to std::int64_t.
+    detail::CppInfo bindingCpp(const VariableDeclarator& d) const;
+    bool intBinding(const detail::CppInfo& ci) const;
+    void declareBinding(const VariableDeclarator& d);
+    // A fresh binding: a name with a deferred bound check may not be shadowed
+    // (the marks are keyed by name), so shadowing fails the attempt.
+    void intNewBinding(const std::string& name);
+    // `name` is read only inside `return`s, so its bound check may be deferred.
+    bool intDeferable(const std::string& name) const;
+    // The text of `a` for the identifier target `id` (checked or deferred).
+    std::string intAssignText(const AssignmentExpr& a, const Identifier& id);
+    // The value of a deferred assignment: `x +/- <small literal>`, or empty.
+    std::string intAssignValue(const Expr& e);
+    // An operand of a raw `+`/`-`: a deferred read stays unchecked.
+    std::string intRawOperand(const Expr& e);
+
     // --- assembly (code_generator.cpp) ---------------------------------------
     std::string buildHeader(const std::string& decls) const;
     std::string buildSource(const std::string& decls, const std::string& defs,
                             const std::string& mainBody) const;
 
     // --- state ----------------------------------------------------------------
+    // The int64 fast-path state (D64): non-null exactly while a function's fast
+    // body is being attempted. `failed` means the attempt cannot be proven
+    // exact and must be discarded, in which case the ordinary double body is
+    // the only lowering.
+    struct IntMode {
+        bool failed = false;
+        // Names read somewhere outside a `return` argument (int_reads.cpp);
+        // `nullopt` when that walk could not see the whole body. A name absent
+        // here is read only by `return`, so its bound check can be deferred
+        // from the operation to that single observation point.
+        std::optional<std::unordered_set<std::string>> readOutsideReturns;
+        // Locals whose bound check is currently deferred: their value may sit
+        // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
+        std::unordered_set<std::string> deferred;
+        // Set while emitting a statement's own expression: the one position
+        // where an assignment's value is discarded, so a raw store is allowed.
+        bool stmtExpr = false;
+    };
+    std::unique_ptr<IntMode> intMode_;
+
     DiagnosticSink& sink_;
     const SemaResult& sema_;
     std::string moduleName_;
@@ -169,6 +234,8 @@ private:
     bool consoleImported_ = false;
     bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
     bool needsEventLoop_ = false;  // async/timers: emit runEventLoop() in main
+    bool needsArith_ = false;      // `%`/int64 lowering -> cp3/arith.hpp include
+    bool suppressDiagnostics_ = false;  // an int64 attempt must not report
     bool needsMath_ = false;       // Math.* -> cp3/math.hpp include
     bool needsString_ = false;     // string methods -> cp3/string.hpp include
     bool needsPath_ = false;       // path.* -> cp3/path.hpp include

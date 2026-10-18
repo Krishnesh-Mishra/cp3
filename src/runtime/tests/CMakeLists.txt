@@ -6,6 +6,7 @@
 
 set(cp3_runtime_test_units
     format_test
+    arith_test
     parallel_test
     promise_all_test
     promise_test
