@@ -347,6 +347,12 @@ void Analyzer::checkAssignToTarget(Expr& target, const Type& valType,
                            "' of a typed array is read-only");
                 return;
             }
+            if (isByteBufferReadOnlyProp(ot, m.property)) {
+                report(diagcode::kTypeMismatch, span,
+                       "property '" + m.property +
+                           "' of a Buffer is read-only");
+                return;
+            }
             if (mt.isError()) return;
             checkAssign(valType, mt, span, false);
             return;

@@ -12,6 +12,7 @@
 
 #include <algorithm>
 
+#include "../../../std/buffer/native.hpp"
 #include "../../../std/console/native.hpp"
 #include "../../../std/crypto/native.hpp"
 #include "../../../std/json/native.hpp"
@@ -37,6 +38,7 @@ const std::vector<const NativePackage*>& nativePackages() {
         &kCryptoNativePackage,
         &kNetworkNativePackage,
         &kTypedArraysNativePackage,
+        &kBufferNativePackage,
     };
     return rows;
 }

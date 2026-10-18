@@ -30,6 +30,7 @@ enum class Shape {
     TypedArray,  // Int8Array .. BigUint64Array
     ArrayBuffer, // ArrayBuffer / SharedArrayBuffer
     DataView,
+    Buffer,      // the nominal std/buffer `Buffer` byte sequence
     Unknown, Unsupported
 };
 
@@ -72,6 +73,10 @@ CppInfo classify(const Type& raw);
 // DataView. Fills `info` and returns true when `t` is one of them; every other
 // type is left for `classify`'s own arms.
 bool classifyFamily(const Type& t, CppInfo& info);
+
+// The nominal `Buffer` of std/buffer (src/std/buffer/codegen.cpp): a
+// `TypeKind::Class` named "Buffer" -> `::cp3::runtime::buffer::Buffer`.
+bool classifyByteBuffer(const Type& t, CppInfo& info);
 
 // Structural fallback: a type annotation -> a cp3 Type (when sema is absent).
 std::optional<Type> typeFromTypeNode(const TypeNode& tn);

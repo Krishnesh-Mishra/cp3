@@ -177,6 +177,20 @@ bool isFamilyCtorName(const std::string& name);
 // The 14 class names the family registers as type annotations.
 const std::vector<std::string>& familyTypeNames();
 
+// --- the std/buffer family (src/std/buffer/sema.cpp) -------------------------
+//
+// `Buffer` is a nominal `TypeKind::Class` value, like the typed-array classes.
+// Its value binding comes from `import { Buffer } from "std/buffer"`; the type
+// annotation resolves only while that ambient binding is in scope, so the name
+// never leaks into a program that does not import the module.
+Type byteBufferType();
+bool isByteBufferClass(const Type& t);
+bool isByteBufferTypeName(const std::string& name);
+
+// The read-only members of a Buffer (`buf.length`), rejected by the assignment
+// checker (`checkAssignToTarget`).
+bool isByteBufferReadOnlyProp(const Type& ot, const std::string& prop);
+
 // A canonical key for a type used to build object/tuple shape labels.
 std::string typeKey(const Type& t);
 

@@ -68,11 +68,11 @@ Type Analyzer::inferCall(CallExpr& call) {
                 return promise;
             }
             if (Type family; tryInferFamilyMethodCall(call, member, family)) return family;
+            if (Type buffer; tryInferBufferCall(call, member, buffer)) return buffer;
         }
     }
 
-    for (auto& ta : call.typeArgs)
-        if (ta) resolveType(*ta);
+    for (auto& ta : call.typeArgs) if (ta) resolveType(*ta);
 
     if (ct.isError()) {
         inferArgs(call);

@@ -77,6 +77,14 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     if (std::string family = emitFamilyMemberCall(c, m); !family.empty()) {
         return family;
     }
+    // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): the
+    // `Buffer.from/alloc` statics first, then the instance methods.
+    if (std::string buf = emitByteBufferStaticCall(c, m); !buf.empty()) {
+        return buf;
+    }
+    if (std::string buf = emitByteBufferMethodCall(c, m); !buf.empty()) {
+        return buf;
+    }
     return std::string();
 }
 
@@ -100,6 +108,8 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     if (std::string family = emitFamilyMember(m); !family.empty()) {
         return family;
     }
+    // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): `.length`.
+    if (std::string buf = emitByteBufferMember(m); !buf.empty()) return buf;
     return std::string();
 }
 

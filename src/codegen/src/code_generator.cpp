@@ -168,6 +168,22 @@ inline bool cp3_truthy(const cp3::runtime::Array<E>&) { return true; }
 
 )CP3HELPERS";
 
+// std/buffer's per-TU helpers: `console.log(buf)` renders the Node form and a
+// Buffer is always truthy. Added only when the unit uses the module (the
+// overloads name ::cp3::runtime::buffer::Buffer, which exists only with the
+// cp3/std/buffer.hpp include).
+const char* const kBufferHelperBlock = R"CP3HELPERS(namespace {
+
+// ----- std/buffer (the nominal Buffer) ---------------------------------------
+inline std::string cp3_ts(const ::cp3::runtime::buffer::Buffer& b) {
+    return ::cp3::runtime::buffer::inspect(b);
+}
+inline bool cp3_truthy(const ::cp3::runtime::buffer::Buffer&) { return true; }
+
+}  // namespace
+
+)CP3HELPERS";
+
 // Prefix every line of `text` with `pad`. Used to re-indent the top-level
 // statements when they are wrapped in the top-level-`await` coroutine.
 std::string indentText(const std::string& text, const std::string& pad) {
@@ -246,6 +262,10 @@ GeneratedModule Generator::run(const Program& program) {
         familyUse.find("::cp3::runtime::DataView") != std::string::npos) {
         needsTypedArray_ = true;
     }
+    // The nominal std/buffer `Buffer` follows the same rule.
+    if (familyUse.find("::cp3::runtime::buffer::Buffer") != std::string::npos) {
+        needsBuffer_ = true;
+    }
 
     GeneratedModule module;
     module.header = buildHeader(decls);
@@ -276,6 +296,10 @@ std::string Generator::buildHeader(const std::string& decls) const {
         // The JS-compat typed-array family (D69): a signature or module-scope
         // binding can name `Array<T>`/the typed views.
         out += "#include \"cp3/typed_array.hpp\"\n";
+    }
+    if (needsBuffer_) {
+        // std/buffer: a signature or module-scope binding can name `Buffer`.
+        out += "#include \"cp3/std/buffer.hpp\"\n";
     }
     out += "\n";
     out += "namespace " + namesp_ + " {\n\n";
@@ -321,10 +345,14 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsProcess_) out += "#include \"cp3/std/process.hpp\"\n";
     if (needsCrypto_) out += "#include \"cp3/std/crypto.hpp\"\n";
     if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
+    if (needsBuffer_) out += "#include \"cp3/std/buffer.hpp\"\n";
     out += "\n";
     out += kHelperBlock;
     if (needsTypedArray_) {
         out += kTypedArrayHelperBlock;
+    }
+    if (needsBuffer_) {
+        out += kBufferHelperBlock;
     }
     out += "\nnamespace " + namesp_ + " {\n\n";
     out += decls;
