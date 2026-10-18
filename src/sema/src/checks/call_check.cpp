@@ -67,6 +67,10 @@ Type Analyzer::inferCall(CallExpr& call) {
             if (tryInferPromiseStaticCall(call, member, promise)) {
                 return promise;
             }
+            Type env;
+            if (tryInferEnvCall(call, member, env)) {
+                return env;
+            }
             if (Type family; tryInferFamilyMethodCall(call, member, family)) return family;
         }
     }
