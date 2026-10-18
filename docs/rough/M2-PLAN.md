@@ -58,7 +58,8 @@ below): D61 exe → `.cp3/out/` layout + `clean`, `cp3 init` spec parity,
 runtime-embedding lane** (single-binary guarantee) is queued behind the perf
 wave so the embedded runtime TU set finalizes once. The **benchmark expansion
 (B1)** landed 2026-10-18 (record below; Tier-1 set, ratio/RSS/size columns);
-the **D67 tiered gate + auto-run** (B1b) is in flight. The **source-comment
+the **D67 tiered gate + auto-run** (B1b) landed 2026-10-18 (`905acf6`; 10 ms
+noise floor so hello-world spawn jitter cannot flap the gate). The **source-comment
 dash sweep** (D66.4 leftovers): part 1 landed (`dbc1c96`): everything the perf
 wave does not own, minus the two `tests/runner/run_tests.py` fixes that ride
 with the B1b landing; part 2 (src/sema, src/codegen, src/runtime,
@@ -72,7 +73,11 @@ and other remaining std lib things"): std/network (**server**), parallel/worker
 and the fs/env leftovers; then the **JS-compat typed-array surface** from the
 same directive (`Array(n).fill`, `new Float64Array([...])`, `Int8Array`
 through `BigUint64Array`, `ArrayBuffer`/`SharedArrayBuffer`/`DataView`), which
-needs spec text + corpus cases (the oracle) before implementation. All of these
+needs spec text + corpus cases (the oracle) before implementation. Backing
+storage is fixed-size (an owned heap block + stored length for runtime sizes;
+the native fixed-array mapping when sizes are compile-time known), never a
+resizing vector: typed arrays have no delete and no resize, and `const` keeps
+its JS meaning (no rebinding; contents mutable). All of these
 sit in perf-owned paths today.
 
 ## Marker rulings owed (the 16 genuinely open)
