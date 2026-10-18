@@ -14,7 +14,7 @@
 // family unit without touching core.
 //
 // Two shapes of namespace:
-//   * CLOSED families (Math / path / os / crypto / console / JSON /
+//   * CLOSED families (Math / path / os / crypto / console / JSON / Date /
 //     process / env): every member is listed in the family's table, and an
 //     unknown member is CP3305 with "did you mean" candidates from the
 //     implemented names (member_check.cpp consults isClosedStdNamespace).
@@ -48,6 +48,7 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
     if (ns == "network") return networkMember(prop);
     if (ns == "console") return consoleMember(prop);
     if (ns == "JSON") return jsonMember(prop);
+    if (ns == "Date") return dateMember(prop);
     return std::nullopt;
 }
 
@@ -57,7 +58,8 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
 
 bool isClosedStdNamespace(const std::string& ns) {
     return ns == "Math" || ns == "path" || ns == "os" || ns == "crypto" ||
-           ns == "console" || ns == "JSON" || ns == "process" || ns == "env";
+           ns == "console" || ns == "JSON" || ns == "process" || ns == "env" ||
+           ns == "Date";
 }
 
 // The CP3305 candidate lists come from the family units, which own the tables.
@@ -70,6 +72,7 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns) {
     if (ns == "JSON") return jsonMemberNames();
     if (ns == "crypto") return cryptoMemberNames();
     if (ns == "console") return consoleMemberNames();
+    if (ns == "Date") return dateMemberNames();
     return {};
 }
 
@@ -79,8 +82,8 @@ std::string stdImportHint(const std::string& name) {
         const char* specifier;
     };
     // The default-exported std modules (std_registry.cpp) whose import line a
-    // bare name follows from. Named-only modules (std/events, std/env, ...)
-    // are handled by import validation instead.
+    // bare name follows from. Named-only modules (std/env, std/collections,
+    // ...) are handled by import validation instead.
     static const ModuleHint kHints[] = {
         {"Math", "std/math"},       {"JSON", "std/json"},
         {"console", "std/console"}, {"path", "std/path"},

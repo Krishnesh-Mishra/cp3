@@ -65,17 +65,33 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     // `ws.send(...)`, `wss.on(...)`): the documented members lower to the plain
     // C++ member call on the runtime object (src/std/network/codegen.cpp).
     if (isNetworkObject(m.object.get())) return emitNetworkMemberCall(c, m);
+    // `std/date` (src/std/date/codegen.cpp): the `Date.*` statics and the Date
+    // value's instance methods (`d.addDays(1)`, `d.getFullYear()`).
+    if (std::string date = emitDateCall(c, m); !date.empty()) return date;
     if (m.object && m.object->kind == NodeKind::ArrayLiteral) {
         std::string literal = emitStringMethodCall(c, m);
         if (!literal.empty()) return literal;
     } else if (m.object && info(*m.object).shape == Shape::String) {
         return emitStringMethodCall(c, m);
     }
+    // The std/collections Map/Set member calls (`m.set(...)`, `s.add(...)`,
+    // `forEach(...)`): src/std/collections/codegen.cpp.
+    if (std::string coll = emitCollectionsMemberCall(c, m); !coll.empty()) {
+        return coll;
+    }
     // The JS-compat typed-array family (src/std/typed-arrays/codegen.cpp):
     // `Array.of/from`, the array/typed-view method tables, the buffer `.slice`
     // and DataView.
     if (std::string family = emitFamilyMemberCall(c, m); !family.empty()) {
         return family;
+    }
+    // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): the
+    // `Buffer.from/alloc` statics first, then the instance methods.
+    if (std::string buf = emitByteBufferStaticCall(c, m); !buf.empty()) {
+        return buf;
+    }
+    if (std::string buf = emitByteBufferMethodCall(c, m); !buf.empty()) {
+        return buf;
     }
     return std::string();
 }
@@ -94,12 +110,20 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
         }
     }
     if (std::string proc = emitProcessMember(m); !proc.empty()) return proc;
+    // `std/collections` `m.size` / `s.size` reads and the `entries().length`
+    // case (src/std/collections/codegen.cpp).
+    if (std::string coll = emitCollectionsMember(m); !coll.empty()) return coll;
     // The JS-compat typed-array family (src/std/typed-arrays/codegen.cpp):
     // `.length` of a cp3 array, typed-view/buffer/DataView members,
     // `X.BYTES_PER_ELEMENT`.
     if (std::string family = emitFamilyMember(m); !family.empty()) {
         return family;
     }
+    // A JSON record field read (`u.id` on a `JSON.parse<T>` result,
+    // src/std/json/codegen.cpp).
+    if (std::string json = emitJsonMember(m); !json.empty()) return json;
+    // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): `.length`.
+    if (std::string buf = emitByteBufferMember(m); !buf.empty()) return buf;
     return std::string();
 }
 

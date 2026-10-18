@@ -6,8 +6,10 @@
 // module.
 //
 // Pure runtime module: no vendored library. The row supplies the family ABI
-// tree and its runtime TU (console.warn/.error); both are selected only when a
-// program imports "std/console" (D68).
+// tree and its runtime TUs (console.warn/.error plus the D71 stdin pump); both
+// are selected only when a program imports "std/console" (D68). libuv is never
+// linked; D76's ShowWindow resolves through the toolchain's default system
+// libraries (verified in the wave report's link evidence).
 // =============================================================================
 #pragma once
 
@@ -19,7 +21,8 @@ inline const NativePackage kConsoleNativePackage{
     "std/console",
     {"src/std/console/include"},
     {},
-    {"src/std/console/runtime.cpp"},
+    {"src/std/console/runtime.cpp", "src/std/console/runtime_pump.cpp",
+     "src/std/console/runtime_pump_read.cpp"},
     {},
     {},
 };

@@ -49,6 +49,12 @@ inline Type withOptionalTail(Type fn) {
     return fn;
 }
 
+// Function-type marker for a signature whose last declared parameter is
+// optional AND which accepts further trailing arguments (`emit(event, ...)`):
+// `Type::function` carries only one marker, so the combined tag sets both the
+// optional tail and `rest` in `sigFromFunctionType` (call_check.cpp).
+constexpr const char* kVariadicOptionalTailLabel = "$variadicOptionalTail";
+
 // Function-type marker for a signature whose last *two* declared parameters
 // are optional (`fill(value, start?, end?)`, `slice(start?, end?)`,
 // `copyWithin(target, start?, end?)`): the tag marks the trailing pair in
@@ -160,6 +166,14 @@ Type promiseOf(const Type& value);
 // The value type of a `Promise<T>` (Unknown for a non-Promise type).
 Type promiseValue(const Type& t);
 
+// --- the EventEmitter builtin (D74, spec §14) ---------------------------------
+//
+// `EventEmitter` is a nominal class type: kind == Class, name == "EventEmitter".
+// The ambient binding is declared in `declareBuiltins` (kGlobals); `new`
+// produces this type (expr_check.cpp) and the members are typed in
+// member_check.cpp. Codegen maps it onto cp3/async/emitter.hpp.
+bool isEventEmitterType(const Type& t);
+
 // --- the JS-compat typed-array family (D69; src/std/typed-arrays/sema.cpp) ---
 //
 // The 11 typed-array class names, the buffer classes and DataView are nominal
@@ -170,12 +184,33 @@ bool isTypedArrayClass(const Type& t);
 bool isBufferClass(const Type& t);
 bool isDataViewClass(const Type& t);
 
+// --- the std/collections family (src/std/collections/sema.cpp) --------------
+//
+// `Map<K, V>` and `Set<T>` are nominal `TypeKind::Class` types carrying their
+// type arguments (parts == { K, V } / { T }); the member table and the CP3305
+// candidates live in the family unit.
+bool isCollectionsClass(const Type& t);
+
 // True for every constructor name the family registers (`Array` included);
 // scopes.cpp declares them as ambient builtins and type names.
 bool isFamilyCtorName(const std::string& name);
 
 // The 14 class names the family registers as type annotations.
 const std::vector<std::string>& familyTypeNames();
+
+// --- the std/buffer family (src/std/buffer/sema.cpp) -------------------------
+//
+// `Buffer` is a nominal `TypeKind::Class` value, like the typed-array classes.
+// Its value binding comes from `import { Buffer } from "std/buffer"`; the type
+// annotation resolves only while that ambient binding is in scope, so the name
+// never leaks into a program that does not import the module.
+Type byteBufferType();
+bool isByteBufferClass(const Type& t);
+bool isByteBufferTypeName(const std::string& name);
+
+// The read-only members of a Buffer (`buf.length`), rejected by the assignment
+// checker (`checkAssignToTarget`).
+bool isByteBufferReadOnlyProp(const Type& ot, const std::string& prop);
 
 // A canonical key for a type used to build object/tuple shape labels.
 std::string typeKey(const Type& t);
