@@ -1,0 +1,289 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "cp3",
+  "scopeName": "source.cp3",
+  "fileTypes": [
+    "cp3"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#builtins"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.cp3",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.begin.cp3"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.end.cp3"
+            }
+          }
+        },
+        {
+          "name": "comment.line.double-slash.cp3",
+          "begin": "//",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.cp3"
+            }
+          },
+          "end": "$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "include": "#template-literal"
+        },
+        {
+          "include": "#string-single"
+        },
+        {
+          "include": "#string-double"
+        }
+      ]
+    },
+    "string-double": {
+      "name": "string.quoted.double.cp3",
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.cp3"
+        }
+      },
+      "end": "\"",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.cp3"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#string-escapes"
+        }
+      ]
+    },
+    "string-single": {
+      "name": "string.quoted.single.cp3",
+      "begin": "'",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.cp3"
+        }
+      },
+      "end": "'",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.cp3"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#string-escapes"
+        }
+      ]
+    },
+    "template-literal": {
+      "name": "string.template.cp3",
+      "begin": "`",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.begin.cp3"
+        }
+      },
+      "end": "`",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.end.cp3"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#template-expression"
+        },
+        {
+          "include": "#string-escapes"
+        }
+      ]
+    },
+    "template-expression": {
+      "name": "meta.template.expression.cp3",
+      "begin": "\\$\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.begin.cp3"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.end.cp3"
+        }
+      },
+      "patterns": [
+        {
+          "include": "$self"
+        }
+      ]
+    },
+    "string-escapes": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.cp3",
+          "match": "\\\\[\\\\`'\"bfnrtv0]|\\\\x[0-9A-Fa-f]{2}|\\\\u[0-9A-Fa-f]{4}|\\\\u\\{[0-9A-Fa-f]+\\}"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.cp3",
+          "match": "\\b0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*\\b"
+        },
+        {
+          "name": "constant.numeric.binary.cp3",
+          "match": "\\b0[bB][01](?:_?[01])*\\b"
+        },
+        {
+          "name": "constant.numeric.octal.cp3",
+          "match": "\\b0[oO][0-7](?:_?[0-7])*\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.cp3",
+          "match": "(?<![\\w$.])\\d(?:_?\\d)*(?:\\.(?:_?\\d)*)?(?:[eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.cp3",
+          "match": "(?<![\\w$.])\\.\\d(?:_?\\d)*(?:[eE][+-]?\\d+)?\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "constant.language.cp3",
+          "match": "\\b(?:true|false|null|undefined|NaN|Infinity)\\b"
+        },
+        {
+          "name": "storage.type.cp3",
+          "match": "\\b(?:let|var|const|function|class|interface|enum|type)\\b"
+        },
+        {
+          "name": "storage.modifier.cp3",
+          "match": "\\b(?:static|abstract|public|private|protected|async|get|set|weak|ref)\\b"
+        },
+        {
+          "name": "storage.modifier.extends.cp3",
+          "match": "\\b(?:extends|implements)\\b"
+        },
+        {
+          "name": "keyword.control.cp3",
+          "match": "\\b(?:if|else|while|do|for|of|in|switch|case|default|break|continue|return|throw|try|catch|finally|await)\\b"
+        },
+        {
+          "name": "keyword.control.import.cp3",
+          "match": "\\b(?:import|export|from|as|native)\\b"
+        },
+        {
+          "name": "keyword.operator.new.cp3",
+          "match": "\\bnew\\b"
+        },
+        {
+          "name": "keyword.operator.typeof.cp3",
+          "match": "\\btypeof\\b"
+        },
+        {
+          "name": "variable.language.this.cp3",
+          "match": "\\bthis\\b"
+        },
+        {
+          "name": "keyword.reserved.cp3",
+          "match": "\\b(?:any|delete|yield)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.cp3",
+          "match": "\\b(?:number|string|boolean|void|unknown)\\b"
+        },
+        {
+          "name": "support.type.prefixed.cp3",
+          "match": "\\b(?:r|ts|c)_'[^']*'"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.cp3",
+          "match": "\\b(?:parseInt|parseFloat|isNaN|isFinite|print|sleep|setTimeout|setInterval|clearTimeout|clearInterval|worker)\\b"
+        },
+        {
+          "name": "support.class.builtin.cp3",
+          "match": "\\b(?:Promise|EventEmitter|Symbol|BigInt|Object|String|Number|Boolean|Array|Int8Array|Uint8Array|Uint8ClampedArray|Int16Array|Uint16Array|Int32Array|Uint32Array|Float32Array|Float64Array|BigInt64Array|BigUint64Array|ArrayBuffer|SharedArrayBuffer|DataView)\\b"
+        },
+        {
+          "name": "support.namespace.cp3",
+          "match": "\\b(?:console|Math|JSON|Date|Map|Set|RegExp|Error|parallel)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.spread.cp3",
+          "match": "\\.\\.\\."
+        },
+        {
+          "name": "keyword.operator.range.cp3",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.cp3",
+          "match": ">>>=|>>>|>>=|<<=|\\*\\*=|&&=|\\|\\|=|\\?\\?=|===|!==|==|!=|<=|>=|&&|\\|\\||\\?\\?|\\?\\.|\\+\\+|--|\\*\\*|<<|>>|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|=>|[-+*/%&|^~!<>=?]"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.cp3",
+          "match": "[;,.]"
+        }
+      ]
+    }
+  }
+}

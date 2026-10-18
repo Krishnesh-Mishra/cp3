@@ -1,0 +1,14 @@
+# The shipped extension is the esbuild bundle in dist/, so the sources,
+# build scripts and node_modules are not part of the .vsix.
+.vscode/**
+src/**
+scripts/**
+out/**
+node_modules/**
+.gitignore
+.vscodeignore
+esbuild.mjs
+tsconfig.json
+package-lock.json
+**/*.ts
+**/*.map

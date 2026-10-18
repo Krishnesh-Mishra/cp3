@@ -1,0 +1,82 @@
+{
+  "name": "cp3-vscode",
+  "displayName": "cp3",
+  "description": "cp3 language support for VS Code: syntax highlighting, comments/brackets, and live compiler diagnostics through the cp3c language server.",
+  "version": "0.1.0",
+  "publisher": "cp3",
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "cp3",
+    "language-server",
+    "lsp",
+    "cpp"
+  ],
+  "activationEvents": [
+    "onLanguage:cp3"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "cp3",
+        "aliases": [
+          "cp3",
+          "CP3"
+        ],
+        "extensions": [
+          ".cp3"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cp3",
+        "scopeName": "source.cp3",
+        "path": "./syntaxes/cp3.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "cp3.restartServer",
+        "title": "cp3: Restart Language Server"
+      }
+    ],
+    "configuration": {
+      "title": "cp3",
+      "properties": {
+        "cp3.compilerPath": {
+          "type": "string",
+          "default": "cp3c",
+          "markdownDescription": "Path to the cp3 compiler executable used as the language server. A bare name (the default, `cp3c`) is resolved on PATH, also trying `cp3c.exe` on Windows; an absolute path is used as-is. The extension runs `<path> lsp --stdio`."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "node esbuild.mjs --production",
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "smoke:resolve": "node scripts/resolve-smoke.mjs",
+    "smoke:grammar": "node scripts/grammar-smoke.mjs",
+    "smoke": "npm run typecheck && npm run smoke:resolve && npm run smoke:grammar",
+    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^10.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/vscode": "~1.91.0",
+    "esbuild": "^0.28.2",
+    "typescript": "~5.9.3",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  }
+}
