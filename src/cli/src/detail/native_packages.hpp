@@ -12,8 +12,8 @@
 // imports the module compiles the same 5 runtime TUs as before and links no
 // third-party archives.
 //
-// The rows live in the per-family headers `native_std_<family>.hpp` - one file
-// per module, so a feature wave only edits its own row - and this unit
+// The rows live in the per-family headers `src/std/<family>/native.hpp` - one
+// file per module, so a feature wave only edits its own row - and this unit
 // aggregates them. All paths are repository-relative and are resolved against
 // `repositoryRoot()` at build time.
 //

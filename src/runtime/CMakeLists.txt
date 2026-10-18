@@ -10,26 +10,27 @@
 #
 # ADDING A SOURCE FILE: append one line to `cp3_runtime_sources` below. Policy:
 # headers declare, `.cpp` defines (STYLE.md §3). Since the structure sweep the
-# headers live under `include/cp3/{core,async,parallel,std}/` and the sources
-# under `src/{core,async,parallel,std}/`.
+# headers live under `include/cp3/{core,async,parallel}/` and the sources under
+# `src/{core,async,parallel}/`; since D72 the std families live under
+# `src/std/<family>/` (ABI headers in `include/cp3/**`, TUs in `runtime*.cpp`).
 # =============================================================================
 
 find_package(Threads REQUIRED)
 
 set(cp3_runtime_sources
-    src/std/console.cpp
+    ../std/console/runtime.cpp
     src/core/error.cpp
     src/async/eventloop.cpp
     src/parallel/parallel.cpp
     src/async/promise.cpp
     src/core/runtime.cpp
-    src/std/crypto.cpp
-    src/std/network.cpp
-    src/std/network_fetch.cpp
-    src/std/network_server.cpp
-    src/std/network_ws.cpp
-    src/std/network_ws_client.cpp
-    src/std/network_ws_frames.cpp
+    ../std/crypto/runtime.cpp
+    ../std/network/runtime.cpp
+    ../std/network/runtime_fetch.cpp
+    ../std/network/runtime_server.cpp
+    ../std/network/runtime_ws.cpp
+    ../std/network/runtime_ws_client.cpp
+    ../std/network/runtime_ws_frames.cpp
 )
 
 add_library(cp3_runtime STATIC ${cp3_runtime_sources})
@@ -41,6 +42,15 @@ target_include_directories(cp3_runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/libsodium/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/libuv/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/uWebSockets/include"
+)
+# Since D72 the std family ABI headers (cp3/std/*.hpp) and the typed-array
+# headers live in each family's include/ tree under src/std/; the moved TUs
+# include them directly, so the compiler needs those roots here.
+target_include_directories(cp3_runtime PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../std/console/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../std/crypto/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../std/json/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../std/network/include"
 )
 target_compile_definitions(cp3_runtime PRIVATE UWS_NO_ZLIB)
 target_link_libraries(cp3_runtime PUBLIC cp3_common Threads::Threads)

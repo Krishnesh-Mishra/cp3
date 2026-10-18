@@ -3,24 +3,40 @@
 //
 // OWNERSHIP: cli module (src/cli/**). Implements detail/native_packages.hpp.
 //
-// Aggregates the per-family rows (native_std_<family>.hpp) into the selection
-// table the build driver consults. Adding a backend for a new module means
-// adding its row header + one include + one row pointer here; no other file in
-// the cli module changes.
+// Aggregates the per-family rows (src/std/<family>/native.hpp) into the
+// selection table the build driver consults. Adding a backend for a new module
+// means adding its row header + one include + one row pointer here; no other
+// file in the cli module changes.
 // =============================================================================
 #include "detail/native_packages.hpp"
 
 #include <algorithm>
 
-#include "detail/native_std_crypto.hpp"
-#include "detail/native_std_network.hpp"
+#include "../../../std/console/native.hpp"
+#include "../../../std/crypto/native.hpp"
+#include "../../../std/json/native.hpp"
+#include "../../../std/math/native.hpp"
+#include "../../../std/network/native.hpp"
+#include "../../../std/os/native.hpp"
+#include "../../../std/path/native.hpp"
+#include "../../../std/process/native.hpp"
+#include "../../../std/string/native.hpp"
+#include "../../../std/typed-arrays/native.hpp"
 
 namespace cp3::cli::detail {
 
 const std::vector<const NativePackage*>& nativePackages() {
     static const std::vector<const NativePackage*> rows = {
+        &kConsoleNativePackage,
+        &kJsonNativePackage,
+        &kMathNativePackage,
+        &kOsNativePackage,
+        &kPathNativePackage,
+        &kProcessNativePackage,
+        &kStringNativePackage,
         &kCryptoNativePackage,
         &kNetworkNativePackage,
+        &kTypedArraysNativePackage,
     };
     return rows;
 }

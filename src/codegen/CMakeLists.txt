@@ -5,8 +5,10 @@
 # `include/cp3/codegen.hpp`.
 #
 # ADDING A SOURCE FILE: append one line to `cp3_codegen_sources` below (STYLE.md §8
-# lists the target decomposition: code_generator.cpp, emit/*.cpp, emit/std/*.cpp,
-# support/*.cpp; private headers live under src/detail/).
+# lists the target decomposition: code_generator.cpp, emit/*.cpp, support/*.cpp;
+# private headers live under src/detail/). Since D72 the std family lowering
+# units live under ../std/<family>/ (codegen.cpp / codegen_methods.cpp) and
+# emit/std/ keeps only the shared dispatch (common.cpp).
 # =============================================================================
 
 set(cp3_codegen_sources
@@ -21,17 +23,17 @@ set(cp3_codegen_sources
     src/emit/async.cpp
     src/emit/stmt.cpp
     src/emit/decl.cpp
-    src/emit/tarrays.cpp
-    src/emit/tarrays_methods.cpp
+    ../std/typed-arrays/codegen.cpp
+    ../std/typed-arrays/codegen_methods.cpp
     src/emit/std/common.cpp
-    src/emit/std/math.cpp
-    src/emit/std/os.cpp
-    src/emit/std/path.cpp
-    src/emit/std/process.cpp
-    src/emit/std/json.cpp
-    src/emit/std/string.cpp
-    src/emit/std/crypto.cpp
-    src/emit/std/network.cpp
+    ../std/math/codegen.cpp
+    ../std/os/codegen.cpp
+    ../std/path/codegen.cpp
+    ../std/process/codegen.cpp
+    ../std/json/codegen.cpp
+    ../std/string/codegen.cpp
+    ../std/crypto/codegen.cpp
+    ../std/network/codegen.cpp
 )
 
 add_library(cp3_codegen STATIC ${cp3_codegen_sources})

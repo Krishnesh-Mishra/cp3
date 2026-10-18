@@ -23,10 +23,10 @@ flow downward only; there are no cycles.
 | `cp3_lexer` | `src/lexer/` | `src/lexer/include/` | `.cp3` text → `TokenStream`. | Implemented (full token set) |
 | `cp3_parser` | `src/parser/` | `src/parser/include/` | `TokenStream` → AST (`Program`). | Implemented (full grammar) |
 | `cp3_modules` | `src/modules/` | `src/modules/include/` | Module discovery, §18 prelude injection, D4 import resolution + validation (`cp3::ModuleLoader`). | Complete (M1 scope) |
-| `cp3_sema` | `src/sema/` | `src/sema/include/` | AST → diagnostics + nodeId-keyed side tables. | M1 subset (beyond-M1 features report CP3002) |
-| `cp3_codegen` | `src/codegen/` | `src/codegen/include/` | Checked AST → generated C++20 (+ source map). | M1 subset (beyond-M1 features report CP3002) |
-| `cp3_runtime` | `src/runtime/` | `src/runtime/include/` | Placeholder for generated-code runtime support. | Minimal |
-| `cp3_cli` | `src/cli/` | `src/cli/include/` | Command surface, argument parsing, all rendering. | Scaffold |
+| `cp3_sema` | `src/sema/`, `src/std/*/sema*.cpp` | `src/sema/include/` | AST → diagnostics + nodeId-keyed side tables. | M1 subset (beyond-M1 features report CP3002) |
+| `cp3_codegen` | `src/codegen/`, `src/std/*/codegen*.cpp` | `src/codegen/include/` | Checked AST → generated C++20 (+ source map). | M1 subset (beyond-M1 features report CP3002) |
+| `cp3_runtime` | `src/runtime/`, `src/std/*/runtime*.cpp` | `src/runtime/include/`, `src/std/*/include/` | Generated-code runtime support (std family TUs included, D72). | Minimal |
+| `cp3_cli` | `src/cli/`, `src/std/*/native.hpp` | `src/cli/include/` | Command surface, argument parsing, all rendering. | Scaffold |
 | `cp3c` | `src/main.cpp` | - | Executable; forwards `argv` to `runCli`. | Complete |
 
 Dependency edges (declared in each module's `src/<module>/CMakeLists.txt`):
@@ -60,7 +60,8 @@ need a change across a boundary, ask the owner.
 | `src/sema/**` | sema owner | Replace the stub body; keep the `SemanticAnalyzer` boundary and the frozen `src/sema/include/**` shape. |
 | `src/codegen/**` | codegen owner | Replace the stub body; keep the `CodeGenerator` boundary and the frozen `src/codegen/include/**` shape. |
 | `src/cli/**` | CLI/pipeline owner | Commands, flags, diagnostic rendering. |
-| `src/runtime/**` | runtime owner | Runtime support surface; the generated-code ABI in `src/runtime/include/**` is frozen. |
+| `src/runtime/**` | runtime owner | Runtime support surface; the core ABI in `src/runtime/include/**` is frozen (std families: `src/std/<family>/include/**`, D72). |
+| `src/std/<family>/**` | that std family | Every phase slice of one std module (D72): `sema*.cpp`, `codegen*.cpp`, `runtime*.cpp`, `native.hpp`, `include/cp3/**`. |
 | `src/main.cpp` | scaffolding/architecture | Trivial; keep it trivial. |
 | `docs/rough/**` | scaffolding/architecture | Internal process docs and original spec sources: `ARCHITECTURE.md` (this file), `DECISIONS.md`, `M2-PLAN.md`, `STYLE.md`. The root stays lean (`README.md`, `.gitignore`, `CMakeLists.txt`). |
 | `tests/runner/**` | scaffolding/architecture | The harness. |
@@ -261,7 +262,10 @@ compile commands come online.
 * **No third-party libraries.** Standard C++20 only.
 * **Namespaces:** everything is in `cp3` (`cp3::runtime` for the runtime header).
 * **Headers:** one public header per module at `src/<module>/include/cp3/<name>.hpp`,
-  included as `#include "cp3/<name>.hpp"`. Use `#pragma once`.
+  included as `#include "cp3/<name>.hpp"`. The std families' generated-code ABI
+  headers live in each family's tree (`src/std/<family>/include/cp3/**`, D72)
+  and keep their established include spellings (`cp3/std/<name>.hpp`,
+  `cp3/typed_array.hpp`). Use `#pragma once`.
 * **`noexcept`** on trivial accessors and helpers; the `Node` hierarchy has a
   virtual destructor (so `dynamic_cast`/`static_cast` by `kind` both work).
 * **Determinism:** iteration orders that affect output are sorted or

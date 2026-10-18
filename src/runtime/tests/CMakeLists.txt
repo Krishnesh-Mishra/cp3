@@ -15,7 +15,8 @@ set(cp3_runtime_test_units
 
 foreach(unit IN LISTS cp3_runtime_test_units)
     add_executable(${unit} "${unit}.cpp")
-    target_include_directories(${unit} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_include_directories(${unit} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../std/console/include")
     target_link_libraries(${unit} PRIVATE cp3_runtime)
     cp3_set_warnings(${unit})
 endforeach()

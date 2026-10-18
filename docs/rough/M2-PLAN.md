@@ -564,15 +564,16 @@ Per-module mapping (crypto shown; identical shape for every module):
 | `src/sema/src/checks/std_crypto.cpp` | `src/std/crypto/sema.cpp` |
 | `src/codegen/src/emit/std/crypto.cpp` | `src/std/crypto/codegen.cpp` |
 | `src/runtime/src/std/crypto.cpp` | `src/std/crypto/runtime.cpp` |
-| `src/runtime/include/cp3/std/crypto.hpp` | `src/std/crypto/crypto.hpp` |
+| `src/runtime/include/cp3/std/crypto.hpp` | `src/std/crypto/include/cp3/std/crypto.hpp` |
 | `src/cli/src/detail/native_std_crypto.hpp` | `src/std/crypto/native.hpp` |
 
 - network: same, with the runtime split preserved (`runtime.cpp`,
   `runtime_loop.hpp`, `runtime_fetch.cpp`, `runtime_server.cpp`,
   `runtime_ws*.cpp`).
 - typed-arrays: `typed_array.hpp`, `array_buffer.hpp`, `data_view.hpp`,
-  `array_extras.hpp`, `sema.cpp` (`tarrays_check` + `tarrays_methods`),
-  `codegen.cpp` (`emit/tarrays` + `tarrays_methods`).
+  `array_extras.hpp`, `sema.cpp` + `sema_methods.cpp` (`tarrays_check` +
+  `tarrays_methods`), `codegen.cpp` + `codegen_methods.cpp` (`emit/tarrays` +
+  `tarrays_methods`).
 - console, json, math, os, path, process, string: same shape, one folder each.
 
 Steps and checks:

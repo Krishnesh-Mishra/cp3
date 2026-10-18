@@ -127,17 +127,20 @@ subdirectory (`emit/`, `checks/`, `support/`, `commands/`, `pkg/`, `archive/`,
   `detail/scopes.h`, `detail/parallel_check.h`.
 * **codegen** - `code_generator.cpp` (entry); `emit/` - `expr.cpp`, `stmt.cpp`,
   `decl.cpp`, `call.cpp`, `async.cpp`; `emit/std/` - `common.cpp` (shared
-  dispatch) plus one unit per std family (`math.cpp`, `os.cpp`, `path.cpp`,
-  `process.cpp`, `json.cpp`, `string.cpp`); `support/` - `cpp_writer.cpp`,
-  `mangle.cpp`, `type_map.cpp`, `int_reads.cpp`, `int_mode.cpp`; private
-  headers `detail/generator.h`, `detail/cpp_writer.h`, `detail/mangle.h`,
-  `detail/type_map.h`, `detail/int_reads.h`, `detail/builtin_tables.h`.
-* **runtime** - public headers in `include/cp3/{core,async,parallel,std}/`
+  dispatch; the per-family lowering units are `src/std/<family>/codegen*.cpp`,
+  D72); `support/` - `cpp_writer.cpp`, `mangle.cpp`, `type_map.cpp`,
+  `int_reads.cpp`, `int_mode.cpp`; private headers `detail/generator.h`,
+  `detail/cpp_writer.h`, `detail/mangle.h`, `detail/type_map.h`,
+  `detail/int_reads.h`, `detail/builtin_tables.h`.
+* **runtime** - public headers in `include/cp3/{core,async,parallel}/`
   (`core/`: runtime, value, error, maybe, arith; `async/`: promise,
-  promise_impl, promise_combinators, eventloop; `parallel/`: parallel, worker;
-  `std/`: console, json, math, os, path, process, string); implementation
-  `.cpp` files under `src/{core,async,parallel,std}/` mirroring those
-  families; tests stay in `tests/`.
+  promise_impl, promise_combinators, eventloop; `parallel/`: parallel,
+  worker); implementation `.cpp` files under `src/{core,async,parallel}/`;
+  tests stay in `tests/`.
+* **std families** - `src/std/<family>/` holds every phase slice of one std
+  module (D72): `sema*.cpp`, `codegen*.cpp`, `runtime*.cpp`, `native.hpp` and
+  the generated-code ABI tree `include/cp3/**`; the compiler core stays
+  phase-first.
 * **cli** - `cli.cpp` (entry); `commands/` - `build.cpp`, `check.cpp`,
   `clean.cpp`, `common.cpp`, `dev.cpp`, `exec.cpp`, `fmt.cpp`, `init.cpp`,
   `install.cpp`, `pack.cpp`, `run.cpp`; `pkg/` - `cache.cpp`, `checksum.cpp`,

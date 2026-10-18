@@ -5,8 +5,10 @@
 # `include/cp3/sema.hpp`.
 #
 # ADDING A SOURCE FILE: append one line to `cp3_sema_sources` below (STYLE.md §8
-# lists the target decomposition: semantic_analyzer.cpp plus checks/*.cpp
-# and support/*.cpp; private headers live under src/detail/).
+# lists the target decomposition: semantic_analyzer.cpp plus checks/*.cpp and
+# support/*.cpp; private headers live under src/detail/). Since D72 the std
+# family slices live under ../std/<family>/ and keep their phase names
+# (sema.cpp / sema_methods.cpp).
 # =============================================================================
 
 set(cp3_sema_sources
@@ -25,10 +27,10 @@ set(cp3_sema_sources
     src/checks/parallel_check.cpp
     src/checks/parallel_expr_check.cpp
     src/checks/std_check.cpp
-    src/checks/std_crypto.cpp
-    src/checks/std_network.cpp
-    src/checks/tarrays_check.cpp
-    src/checks/tarrays_methods.cpp
+    ../std/crypto/sema.cpp
+    ../std/network/sema.cpp
+    ../std/typed-arrays/sema.cpp
+    ../std/typed-arrays/sema_methods.cpp
 )
 
 add_library(cp3_sema STATIC ${cp3_sema_sources})

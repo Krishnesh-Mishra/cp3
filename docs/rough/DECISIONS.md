@@ -649,7 +649,7 @@ package becomes feature-first. One folder per std module family under
 - `codegen.cpp` - the lowering (was `codegen/src/emit/std/<name>.cpp`)
 - `runtime*.cpp` plus private headers - the implementation
 - `native.hpp` - the toolchain rows (was `cli/src/detail/native_std_<name>.hpp`)
-- `<name>.hpp` - the generated-code ABI header (was
+- `include/cp3/std/<name>.hpp` - the generated-code ABI header (was
   `runtime/include/cp3/std/<name>.hpp`)
 
 Rules:

@@ -10,7 +10,7 @@
 //   <projectRoot>/.cp3/build/            persistent intermediate directory
 //     <module>.cpp / <module>.hpp        generated C++ (one pair per .cp3)
 //     <module>.o                         per-TU object file
-//     _cp3_runtime_<tu>.o               compiled runtime support (one per TU)
+//     _cp3_runtime_<dir>_<tu>.o         compiled runtime support (one per TU, D72)
 //     build-manifest.txt                 change-detection state
 //   <projectRoot>/.cp3/out/              final artifacts
 //     <entry><exe-suffix>                linked executable

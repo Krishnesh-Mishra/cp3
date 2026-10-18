@@ -114,8 +114,13 @@ bool compileProgram(BuildState& st, const fs::path& cppPath, const fs::path& obj
                     const std::string& entryKey) {
     if (!compileTU(st, entryKey, cppPath, objPath)) return false;
     for (const fs::path& rt : st.layout.runtimeSources) {
+        // D72: parent-qualify the object name - the std families bring TUs that
+        // share a stem with the core ones (src/std/crypto/runtime.cpp and
+        // src/runtime/src/core/runtime.cpp both stem to "runtime").
         const fs::path rtObj =
-            st.layout.buildDir / ("_cp3_runtime_" + rt.stem().string() + ".o");
+            st.layout.buildDir /
+            ("_cp3_runtime_" + rt.parent_path().filename().string() + "_" +
+             rt.stem().string() + ".o");
         if (!compileTU(st, rt.string(), rt, rtObj)) return false;
     }
     saveManifest(st.layout.manifestPath, st.manifest);

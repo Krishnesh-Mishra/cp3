@@ -73,8 +73,10 @@ std::uint64_t totalPhysicalMemoryMb() noexcept;
 // The generated C++ includes the frozen runtime header (cp3/core/runtime.hpp) and
 // may include common headers. `__FILE__` inside util.cpp identifies the
 // repository, letting us locate src/runtime/include and src/common/include
-// without any build-time define. Only directories that actually exist are
-// returned.
+// without any build-time define. Since D72 the always-available std families
+// (string, typed-arrays) contribute their ABI trees here; every other family's
+// tree is added by its native row when imported. Only directories that actually
+// exist are returned.
 std::vector<fs::path> compilerIncludeRoots();
 
 // Absolute paths of the runtime translation units that generated code links

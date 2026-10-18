@@ -246,7 +246,12 @@ fs::path repositoryRoot() {
 std::vector<fs::path> compilerIncludeRoots() {
     std::vector<fs::path> roots;
     const fs::path repo = repositoryRoot();
-    for (const char* rel : {"src/runtime/include", "src/common/include"}) {
+    // D72: the always-available std families' ABI trees (string methods and
+    // typed arrays need no import); every other family's tree is added by its
+    // native row when the program imports it (native_packages.cpp).
+    for (const char* rel : {"src/runtime/include", "src/common/include",
+                            "src/std/string/include",
+                            "src/std/typed-arrays/include"}) {
         const fs::path candidate = repo / rel;
         std::error_code ec;
         if (fs::is_directory(candidate, ec)) roots.push_back(candidate);
@@ -271,7 +276,7 @@ std::vector<fs::path> runtimeSourcePaths() {
 
     // What the tree actually contains, so discovery tracks the layout. Since
     // the structure sweep the sources live in per-family subdirectories
-    // (core/, async/, std/), so the walk is recursive; the legacy flat
+    // (core/, async/, parallel/), so the walk is recursive; the legacy flat
     // directory still works.
     std::vector<fs::path> present;
     for (const fs::directory_entry& entry :
@@ -293,14 +298,16 @@ std::vector<fs::path> runtimeSourcePaths() {
     //                   the `runEventLoop()` every generated `main()` ends with
     //                   when the unit uses async (§14).
     //   promise.cpp   - `Promise<T>` + `await`/`sleep` (cp3/async/promise.hpp).
-    //   console.cpp   - `console.warn`/`.error` (stdout-only programs never
-    //                   reference it, but the TU is cheap and self-contained).
+    //
+    // Since D72 `console.cpp` is the console family's runtime TU
+    // (src/std/console/runtime.cpp), selected by the console native row when a
+    // program imports "std/console" (native_packages.cpp), so it is not
+    // discovered here.
     //
     // Deliberately NOT compiled: parallel.cpp / worker.cpp pull in threads and
     // stay behind `parallel.*`'s CP3002 (spec §13, unchanged this wave).
     static const char* const kRequired[] = {"runtime.cpp", "error.cpp",
-                                            "eventloop.cpp", "promise.cpp",
-                                            "console.cpp"};
+                                            "eventloop.cpp", "promise.cpp"};
     std::vector<fs::path> sources;
     for (const char* name : kRequired) {
         for (const fs::path& file : present) {
