@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/json.hpp — a minimal JSON reader/writer for the CLI DECLARATIONS.
+// cli/private/json.hpp - a minimal JSON reader/writer for the CLI DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

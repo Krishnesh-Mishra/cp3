@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/diagnostic_codes.hpp — the canonical diagnostic code table.
+// cp3/diagnostic_codes.hpp - the canonical diagnostic code table.
 //
 // FROZEN INTERFACE (Beta One). See ARCHITECTURE.md.
 //
@@ -92,7 +92,7 @@ inline constexpr const char* kInvalidOverride   = "CP3704";
 inline constexpr const char* kDuplicateMember   = "CP3705";
 inline constexpr const char* kMixedEnumBacking  = "CP3706";
 
-// --- banned JS patterns (sema) — language-spec 08 / 23 -----------------------
+// --- banned JS patterns (sema) - language-spec 08 / 23 -----------------------
 inline constexpr const char* kDeleteBanned      = "CP3801";
 inline constexpr const char* kUndeclaredProperty = "CP3802";
 inline constexpr const char* kIndexSignatureBanned = "CP3803";
@@ -102,7 +102,7 @@ inline constexpr const char* kAnyTypeBanned     = "CP3806";
 inline constexpr const char* kGeneratorsUnsupported = "CP3807";
 inline constexpr const char* kDecoratorsUnsupported = "CP3808";
 
-// --- concurrency (sema) — language-spec 13 -----------------------------------
+// --- concurrency (sema) - language-spec 13 -----------------------------------
 inline constexpr const char* kParallelSharedMutation = "CP3901";
 inline constexpr const char* kParallelCaptureReassign = "CP3902";
 inline constexpr const char* kUnknownWorkerFile = "CP3903";

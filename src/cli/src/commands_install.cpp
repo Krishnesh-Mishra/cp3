@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/commands_install.cpp — `cp3c install [<path-or-url>]`.
+// cli/commands_install.cpp - `cp3c install [<path-or-url>]`.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdInstall.
 //

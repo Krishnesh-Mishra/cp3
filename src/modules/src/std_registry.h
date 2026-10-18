@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/std_registry.h — the known `std/...` module surfaces (PRIVATE).
+// modules/std_registry.h - the known `std/...` module surfaces (PRIVATE).
 //
 // OWNERSHIP: modules module (src/modules/**). Never included cross-module.
 //

@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/json.cpp — a minimal JSON reader/writer for the CLI DEFINITIONS.
+// cli/json.cpp - a minimal JSON reader/writer for the CLI DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/json.hpp.
 //

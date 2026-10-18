@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/package_json.cpp — package.json helpers DEFINITIONS.
+// cli/package_json.cpp - package.json helpers DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/package_json.hpp.
 // =============================================================================

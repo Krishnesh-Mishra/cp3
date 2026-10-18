@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/tar.cpp — minimal POSIX ustar archive DEFINITIONS.
+// cli/tar.cpp - minimal POSIX ustar archive DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/tar.hpp.
 //

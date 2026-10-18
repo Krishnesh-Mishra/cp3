@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/ast.hpp — the COMPLETE Beta One abstract syntax tree.
+// cp3/ast.hpp - the COMPLETE Beta One abstract syntax tree.
 //
 // FROZEN INTERFACE (Beta One). See ARCHITECTURE.md.
 //
@@ -8,14 +8,14 @@
 //   * Nodes are plain structs (public fields) in an is-a hierarchy rooted at
 //     `Node`; ownership is via std::unique_ptr.
 //   * The single source of truth for "which nodes exist" is
-//     CP3_AST_NODE_LIST — it generates NodeKind, the forward declarations, and
+//     CP3_AST_NODE_LIST - it generates NodeKind, the forward declarations, and
 //     (in visitor.hpp) exhaustive visitor dispatch. To ADD a node: add one
 //     line there and define the struct. Nothing else.
 //   * Nodes hold NO semantic results (resolved types, symbol bindings). sema/
 //     codegen keep side tables keyed by nodeId, so the AST stays a pure parse
 //     product. Fields reserved for later use are documented as such.
 //
-// Coverage note — constructs the spec expresses without a dedicated node are
+// Coverage note - constructs the spec expresses without a dedicated node are
 // modelled by composition and MUST be documented in ARCHITECTURE.md:
 //   * `parallel.for(...)` / `parallel.reduce(...)` / `parallel.run(...)`
 //        -> CallExpr{ callee = MemberExpr{ Identifier("parallel"), "for" }, ... }
@@ -317,14 +317,14 @@ struct TemplateElement : Node {
     explicit TemplateElement(SourceSpan s) : Node(NodeKind::TemplateElement, std::move(s)) {}
 };
 
-// `head${e0}mid${e1}tail` — quasis.size() == expressions.size() + 1.
+// `head${e0}mid${e1}tail` - quasis.size() == expressions.size() + 1.
 struct TemplateLiteral : Expr {
     std::vector<TemplateElementPtr> quasis;
     ExprList expressions;
     explicit TemplateLiteral(SourceSpan s) : Expr(NodeKind::TemplateLiteral, std::move(s)) {}
 };
 
-// Native regex literal: /pattern/flags (core language, no import — spec §20/§3).
+// Native regex literal: /pattern/flags (core language, no import - spec §20/§3).
 struct RegExpLiteral : Expr {
     std::string pattern;
     std::string flags;
@@ -465,7 +465,7 @@ struct AwaitExpr : Expr {
     explicit AwaitExpr(SourceSpan s) : Expr(NodeKind::AwaitExpr, std::move(s)) {}
 };
 
-// `start..end` — used by parallel.for / parallel.reduce ranges.
+// `start..end` - used by parallel.for / parallel.reduce ranges.
 struct RangeExpr : Expr {
     ExprPtr start;
     ExprPtr end;
@@ -876,7 +876,7 @@ struct LiteralType : TypeNode {
     explicit LiteralType(SourceSpan s) : TypeNode(NodeKind::LiteralType, std::move(s)) {}
 };
 
-// `(T)` — kept for faithful reprinting/formatting.
+// `(T)` - kept for faithful reprinting/formatting.
 struct ParenthesizedType : TypeNode {
     TypePtr inner;
     explicit ParenthesizedType(SourceSpan s)

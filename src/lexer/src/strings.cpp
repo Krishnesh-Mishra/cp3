@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/src/strings.cpp — string literals and escape sequences.
+// src/lexer/src/strings.cpp - string literals and escape sequences.
 //
 // Implements `Scanner::scanString` / `scanEscape` and the escape helpers
 // (declared in scanner.h). Both quote styles are supported; the cooked value is

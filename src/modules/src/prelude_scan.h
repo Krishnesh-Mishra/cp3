@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/prelude_scan.h — §18 prelude discovery (PRIVATE header).
+// modules/prelude_scan.h - §18 prelude discovery (PRIVATE header).
 //
 // OWNERSHIP: modules module (src/modules/**). Never included cross-module.
 //

@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/cli.cpp — the `cp3c` command surface: entry, dispatch, top-level usage.
+// cli/cli.cpp - the `cp3c` command surface: entry, dispatch, top-level usage.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::runCli (cp3/cli.hpp).
 //

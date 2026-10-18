@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/cache.hpp — incremental build layout + manifest DECLARATIONS.
+// cli/private/cache.hpp - incremental build layout + manifest DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

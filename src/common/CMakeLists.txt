@@ -1,5 +1,5 @@
 # =============================================================================
-# cp3_common — FROZEN shared interfaces (source/positions, tokens, AST, visitor,
+# cp3_common - FROZEN shared interfaces (source/positions, tokens, AST, visitor,
 # diagnostics, diagnostic codes, module graph, options, version, value types).
 #
 # Every other module links against this library; it links nothing itself.

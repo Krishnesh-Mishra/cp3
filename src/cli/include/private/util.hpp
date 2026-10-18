@@ -1,7 +1,7 @@
 // =============================================================================
-// cli/private/util.hpp — platform/IO/string helper DECLARATIONS for cp3c.
+// cli/private/util.hpp - platform/IO/string helper DECLARATIONS for cp3c.
 //
-// OWNERSHIP: cli module (src/cli/**). PRIVATE header — not part of the frozen
+// OWNERSHIP: cli module (src/cli/**). PRIVATE header - not part of the frozen
 // public surface (cp3/cli.hpp).
 //
 // Definitions live in src/util.cpp (STYLE.md §3/§8: headers declare, `.cpp`
@@ -35,7 +35,7 @@ bool writeTextFile(const fs::path& path, std::string_view content,
                    bool* changed = nullptr);
 
 // -----------------------------------------------------------------------------
-// Hashing (FNV-1a 64) — used only for change detection, never for security.
+// Hashing (FNV-1a 64) - used only for change detection, never for security.
 // -----------------------------------------------------------------------------
 std::uint64_t fnv1a64(std::string_view data) noexcept;
 

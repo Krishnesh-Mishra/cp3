@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/commands_dev.cpp — `cp3c dev` (watch + re-check).
+// cli/commands_dev.cpp - `cp3c dev` (watch + re-check).
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdDev.
 //

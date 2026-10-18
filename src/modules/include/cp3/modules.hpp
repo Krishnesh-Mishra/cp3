@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/modules.hpp — module discovery, prelude injection and import resolution.
+// cp3/modules.hpp - module discovery, prelude injection and import resolution.
 //
 // OWNERSHIP: modules module (src/modules/**). This header is the module's
 // public boundary (STYLE.md §3).

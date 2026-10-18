@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/parser.cpp — parser entry point and statement dispatch.
+// src/parser/src/parser.cpp - parser entry point and statement dispatch.
 //
 // Owns the frozen `Parser::parseProgram()` boundary (cp3/parser.hpp), the
 // top-level `ParserImpl::run()` loop, module-level statement dispatch
@@ -28,7 +28,7 @@ ProgramPtr Parser::parseProgram() {
 }
 
 // =============================================================================
-// ParserImpl — module / statements
+// ParserImpl - module / statements
 // =============================================================================
 ProgramPtr ParserImpl::run() {
     SourceSpan programSpan = peek().span;

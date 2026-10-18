@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/src/keywords.cpp — keyword and operator tables.
+// src/lexer/src/keywords.cpp - keyword and operator tables.
 //
 // Implements `keywordFor` (keywords.h) and `Scanner::scanPunctuation` plus its
 // per-operator helpers (declared in scanner.h). Multi-byte operators use

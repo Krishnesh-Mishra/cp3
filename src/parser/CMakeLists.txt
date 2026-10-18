@@ -1,5 +1,5 @@
 # =============================================================================
-# cp3_parser — Token stream -> AST.
+# cp3_parser - Token stream -> AST.
 #
 # OWNERSHIP: parser owner. Keep the frozen `Parser` boundary declared in
 # `include/cp3/parser.hpp`.

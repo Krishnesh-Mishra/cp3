@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/export_surface.h — a module's export surface (PRIVATE header).
+// modules/export_surface.h - a module's export surface (PRIVATE header).
 //
 // OWNERSHIP: modules module (src/modules/**). Never included cross-module.
 //

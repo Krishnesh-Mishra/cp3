@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/token.hpp — the complete TokenKind enumeration and Token type.
+// cp3/token.hpp - the complete TokenKind enumeration and Token type.
 //
 // FROZEN INTERFACE (Beta One). See ARCHITECTURE.md.
 //

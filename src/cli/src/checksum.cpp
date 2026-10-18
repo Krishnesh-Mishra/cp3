@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/checksum.cpp — SHA-256 and CRC-32 DEFINITIONS.
+// cli/checksum.cpp - SHA-256 and CRC-32 DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/checksum.hpp.
 //

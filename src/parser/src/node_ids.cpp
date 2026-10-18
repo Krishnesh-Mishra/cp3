@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/node_ids.cpp — nodeId assignment (DECISIONS.md D6).
+// src/parser/src/node_ids.cpp - nodeId assignment (DECISIONS.md D6).
 //
 // Every node (including `Program`) receives a 1-based id in pre-order: a node
 // is numbered before its children, and template-literal quasis/expressions are
@@ -18,7 +18,7 @@ namespace {
 constexpr int kOf(NodeKind k) noexcept { return static_cast<int>(k); }
 
 // CP3_AST_NODE_LIST groups kinds as: expressions, patterns, statements
-// (incl. modules), members/params, types — in that order.
+// (incl. modules), members/params, types - in that order.
 static_assert(kOf(NodeKind::RangeExpr) < kOf(NodeKind::ArrayPattern));
 static_assert(kOf(NodeKind::AssignmentPattern) < kOf(NodeKind::ExpressionStatement));
 static_assert(kOf(NodeKind::ExportSpecifier) < kOf(NodeKind::PropertyDeclaration));

@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/cp3pak.cpp — the `.cp3pak` container DEFINITIONS.
+// cli/cp3pak.cpp - the `.cp3pak` container DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/cp3pak.hpp.
 //

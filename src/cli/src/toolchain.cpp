@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/toolchain.cpp — system C++ toolchain detection and driving (DECISIONS D12).
+// cli/toolchain.cpp - system C++ toolchain detection and driving (DECISIONS D12).
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/toolchain.hpp.
 //
@@ -115,7 +115,7 @@ std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
     } else {
         args.push_back("-std=c++20");
         // Generated code may throw (cp3/Error derives from std::exception), so
-        // exceptions stay enabled — that is the default for g++/clang++, and we
+        // exceptions stay enabled - that is the default for g++/clang++, and we
         // deliberately do not pass -fno-exceptions.
         args.push_back("-c");
         args.push_back(cpp.string());

@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/gzip.cpp — RFC 1952 gzip container DEFINITIONS.
+// cli/gzip.cpp - RFC 1952 gzip container DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/gzip.hpp.
 //

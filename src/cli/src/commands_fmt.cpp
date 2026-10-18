@@ -1,15 +1,15 @@
 // =============================================================================
-// cli/commands_fmt.cpp — `cp3c fmt`, a conservative non-destructive formatter.
+// cli/commands_fmt.cpp - `cp3c fmt`, a conservative non-destructive formatter.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdFmt.
 //
 // LIMITATIONS (deliberate, documented): this is NOT the canonical cp3
-// formatter — that is a later job. It never reflows code or rewrites tokens; it
+// formatter - that is a later job. It never reflows code or rewrites tokens; it
 // only normalizes line endings, strips trailing whitespace, ensures a single
 // trailing newline, and re-indents code lines by brace depth (2 spaces per
 // level). Interiors of multi-line comments, template literals, and lines that
 // begin inside one of those are left byte-for-byte untouched, and no
-// non-whitespace character is ever changed — so it can never corrupt a file.
+// non-whitespace character is ever changed - so it can never corrupt a file.
 // Known imprecision: braces inside regular-expression literals or inside a
 // template interpolation that spans lines can throw off the indentation depth
 // (indentation only).

@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/parser.hpp — TokenStream -> AST.
+// cp3/parser.hpp - TokenStream -> AST.
 //
 // OWNERSHIP: parser module. The current implementation is a STUB: parseProgram()
 // returns an empty Program. Replace the body; the public shape (construct over

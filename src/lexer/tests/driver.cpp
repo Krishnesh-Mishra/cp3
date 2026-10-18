@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/tests/driver.cpp — standalone lexer verification driver.
+// src/lexer/tests/driver.cpp - standalone lexer verification driver.
 //
 // Not part of the CMake build (see the lexer owner's report). Compile directly:
 //

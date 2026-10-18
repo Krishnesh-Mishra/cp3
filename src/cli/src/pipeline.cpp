@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/pipeline.cpp — wiring the frozen frontend stages together.
+// cli/pipeline.cpp - wiring the frozen frontend stages together.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/pipeline.hpp.
 //
@@ -8,7 +8,7 @@
 // and every stage reports through a DiagnosticSink; the CLI renders. The
 // module loader owns §18 prelude injection and import resolution; sema's
 // nodeId-keyed side tables (SemaResult) are threaded into the three-argument
-// generator (DECISIONS D1/D14) — this file is the single change site.
+// generator (DECISIONS D1/D14) - this file is the single change site.
 // =============================================================================
 #include "private/pipeline.hpp"
 

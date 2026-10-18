@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/types.cpp — type syntax.
+// src/parser/src/types.cpp - type syntax.
 //
 // Implements the type grammar: union types, postfix array types, and primary
 // types (parenthesized / function types, tuples, object type literals, literal

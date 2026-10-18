@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/patterns.cpp — binding patterns (destructuring targets).
+// src/parser/src/patterns.cpp - binding patterns (destructuring targets).
 //
 // Implements the binding targets accepted after `let`/`var`/`const`, in
 // parameters, and in `catch (…)`: identifiers, array patterns, object patterns

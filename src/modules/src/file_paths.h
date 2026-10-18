@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/file_paths.h — filesystem path helpers (PRIVATE header).
+// modules/file_paths.h - filesystem path helpers (PRIVATE header).
 //
 // OWNERSHIP: modules module (src/modules/**). Never included cross-module.
 //

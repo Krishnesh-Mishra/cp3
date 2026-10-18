@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/tokens.cpp — token cursor helpers + syntax-error recovery.
+// src/parser/src/tokens.cpp - token cursor helpers + syntax-error recovery.
 //
 // Implements the small set of shared helpers declared in tokens.h:
 //   * free predicates used across parser units (statement starts, assignable
@@ -7,7 +7,7 @@
 //   * ParserImpl diagnostic/recovery primitives (`report`, `expect`,
 //     `expectName`, `expectGreater`, `synchronize`, `consumeSemicolon`).
 //
-// Diagnostics use codes CP3201–CP3207 (cp3/diagnostic_codes.hpp) and are
+// Diagnostics use codes CP3201-CP3207 (cp3/diagnostic_codes.hpp) and are
 // emitted through the DiagnosticSink; the parser never throws (STYLE.md §1/§6).
 // =============================================================================
 #include "tokens.h"

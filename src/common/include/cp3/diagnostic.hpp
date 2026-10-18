@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/diagnostic.hpp — severities, diagnostics, and the DiagnosticSink.
+// cp3/diagnostic.hpp - severities, diagnostics, and the DiagnosticSink.
 //
 // FROZEN INTERFACE (Beta One). See ARCHITECTURE.md and diagnostic_codes.hpp.
 //
@@ -74,7 +74,7 @@ public:
     std::uint32_t errorCount() const noexcept { return errorCount_; }
     std::uint32_t warningCount() const noexcept { return warningCount_; }
 
-    // Convenience helpers — keep call sites short.
+    // Convenience helpers - keep call sites short.
     void error(std::string code, const SourceSpan& span, std::string message) {
         report(Diagnostic(std::move(code), Severity::Error, span, std::move(message)));
     }

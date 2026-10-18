@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/commands_check.cpp — `cp3c check` (frontend only).
+// cli/commands_check.cpp - `cp3c check` (frontend only).
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdCheck.
 //

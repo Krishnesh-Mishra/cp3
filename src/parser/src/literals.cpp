@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/literals.cpp — array, object and template literals.
+// src/parser/src/literals.cpp - array, object and template literals.
 //
 // Parses `[...]` (including holes and spreads), `{ ... }` (computed keys,
 // shorthand values per DECISIONS.md D13, spreads, and the `{ weak: value }`

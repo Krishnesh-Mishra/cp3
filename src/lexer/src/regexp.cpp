@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/src/regexp.cpp — regular-expression literals and flags.
+// src/lexer/src/regexp.cpp - regular-expression literals and flags.
 //
 // Implements `Scanner::regexAllowed`, `Scanner::scanRegex` and
 // `Scanner::scanRegexFlags` (declared in scanner.h). Per DECISIONS.md D52 there

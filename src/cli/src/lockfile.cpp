@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/lockfile.cpp — `.cp3/lock.json` DEFINITIONS.
+// cli/lockfile.cpp - `.cp3/lock.json` DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/lockfile.hpp.
 //

@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/commands.hpp — the command surface behind runCli (DECLARATIONS).
+// cli/private/commands.hpp - the command surface behind runCli (DECLARATIONS).
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

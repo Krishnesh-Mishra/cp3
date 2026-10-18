@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/semver.hpp — semver parsing + npm-style range matching.
+// cli/private/semver.hpp - semver parsing + npm-style range matching.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

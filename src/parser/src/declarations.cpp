@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/declarations.cpp — declarations, members, and parameters.
+// src/parser/src/declarations.cpp - declarations, members, and parameters.
 //
 // Implements variable/function/class/interface/enum/type-alias declarations,
 // class & interface members (methods, accessors, constructors, properties),

@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/tar.hpp — minimal POSIX ustar archive DECLARATIONS.
+// cli/private/tar.hpp - minimal POSIX ustar archive DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

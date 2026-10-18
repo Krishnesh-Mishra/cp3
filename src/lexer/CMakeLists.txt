@@ -1,5 +1,5 @@
 # =============================================================================
-# cp3_lexer — .cp3 source text -> Token stream.
+# cp3_lexer - .cp3 source text -> Token stream.
 #
 # OWNERSHIP: lexer owner. Keep the frozen `Lexer` boundary declared in
 # `include/cp3/lexer.hpp`.

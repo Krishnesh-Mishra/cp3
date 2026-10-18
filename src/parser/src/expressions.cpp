@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/expressions.cpp — operator-precedence expression chain.
+// src/parser/src/expressions.cpp - operator-precedence expression chain.
 //
 // Implements the expression grammar as a descending chain of functions, one
 // per precedence level (assignment > conditional > nullish > || > && >

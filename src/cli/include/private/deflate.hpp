@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/deflate.hpp — raw DEFLATE (RFC 1951) DECLARATIONS.
+// cli/private/deflate.hpp - raw DEFLATE (RFC 1951) DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

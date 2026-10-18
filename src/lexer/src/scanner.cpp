@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/src/scanner.cpp — lexer cursor, byte classes, trivia, dispatch.
+// src/lexer/src/scanner.cpp - lexer cursor, byte classes, trivia, dispatch.
 //
 // Implements the core of the internal `Scanner` declared in scanner.h:
 //   * byte classification and UTF-8 encoding;
@@ -58,7 +58,7 @@ void appendUtf8(std::string& out, std::uint32_t cp) {
 }
 
 // =============================================================================
-// Scanner — entry / helpers
+// Scanner - entry / helpers
 // =============================================================================
 TokenStream Scanner::run() {
     while (i_ < n_) {
@@ -141,7 +141,7 @@ bool Scanner::isLineTermAt(std::size_t i) const noexcept {
 }
 
 // =============================================================================
-// Scanner — trivia
+// Scanner - trivia
 // =============================================================================
 void Scanner::skipTrivia() {
     bool newline = false;
@@ -214,7 +214,7 @@ void Scanner::skipBlockComment(bool& newline) {
 }
 
 // =============================================================================
-// Scanner — token dispatch / identifiers
+// Scanner - token dispatch / identifiers
 // =============================================================================
 void Scanner::scanToken() {
     const char c = text_[i_];

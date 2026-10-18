@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/types.cpp — the cp3 value-type model (see cp3/types.hpp).
+// cp3/types.cpp - the cp3 value-type model (see cp3/types.hpp).
 //
 // Only the primitive rules are load-bearing in M1; the compound-kind branches
 // below are shape-frozen and honest, not complete.
@@ -325,7 +325,7 @@ bool isAssignable(const Type& from, const Type& to) {
     }
 
     // Every remaining kind (primitives with different kinds, structural
-    // objects, classes, enums, generics) matches only itself — which the
+    // objects, classes, enums, generics) matches only itself - which the
     // `from == to` check above already covered. Stay honest: no claim of
     // compatibility for deferred kinds.
     return false;

@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/import_resolver.cpp — import classification, resolution, edges.
+// modules/import_resolver.cpp - import classification, resolution, edges.
 //
 // OWNERSHIP: modules module (src/modules/**). Implements the import_resolver
 // concern declared in loader.h.

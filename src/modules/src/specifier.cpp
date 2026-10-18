@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/specifier.cpp — module specifier classification.
+// modules/specifier.cpp - module specifier classification.
 //
 // OWNERSHIP: modules module (src/modules/**). Implements specifier.h.
 // =============================================================================

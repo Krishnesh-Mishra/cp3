@@ -1,7 +1,7 @@
 // =============================================================================
-// cp3/types.hpp — the cp3 value-type model.
+// cp3/types.hpp - the cp3 value-type model.
 //
-// FROZEN INTERFACE (Beta One, frozen by the contracts pass — DECISIONS D14).
+// FROZEN INTERFACE (Beta One, frozen by the contracts pass - DECISIONS D14).
 //
 // This is the *semantic* type of a cp3 expression/binding, not the C++ spelling.
 // sema computes it and publishes it in nodeId-keyed side tables (cp3/analysis.hpp);
@@ -13,7 +13,7 @@
 //   * M1 correctness bar: the primitive kinds (Number/String/Boolean/
 //     Undefined/Null/Void/Unknown/Error) and the Literal→base rule are exact.
 //     Array/Function/Object/Class/Enum/Union/Nullable/TypeParam are *shape-frozen*
-//     but their inference/assignability rules are explicitly DEFERRED — see the
+//     but their inference/assignability rules are explicitly DEFERRED - see the
 //     notes on isAssignable()/unify() below. Deferred rules must stay honest:
 //     they never claim two different deferred kinds are compatible.
 //
@@ -41,15 +41,15 @@ enum class TypeKind {
     Undefined,  // the `undefined` value type
     Null,       // the `null` value type
     Void,       // return type of a function that yields nothing
-    Array,      // T[]           — parts = { element }
-    Function,    // (A, B) => R   — parts = { A, B, R } (return type is last)
-    Object,      // structural object literal type — name holds a printable label
-    Class,       // nominal class type           — name is the class name
-    Enum,        // enum type                    — name is the enum name
-    Union,       // A | B | ...   — parts = members
-    Nullable,    // T | null | undefined — parts = { T }  (the optional shorthand)
-    TypeParam,   // a generic type parameter     — name is the parameter name
-    Literal,     // a literal type "data"/42/true — see literalBase + payload
+    Array,      // T[]           - parts = { element }
+    Function,    // (A, B) => R   - parts = { A, B, R } (return type is last)
+    Object,      // structural object literal type - name holds a printable label
+    Class,       // nominal class type           - name is the class name
+    Enum,        // enum type                    - name is the enum name
+    Union,       // A | B | ...   - parts = members
+    Nullable,    // T | null | undefined - parts = { T }  (the optional shorthand)
+    TypeParam,   // a generic type parameter     - name is the parameter name
+    Literal,     // a literal type "data"/42/true - see literalBase + payload
 };
 
 // Stable printable name of a kind ("number", "union", ...). Never null.

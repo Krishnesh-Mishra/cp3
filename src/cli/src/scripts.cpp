@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/scripts.cpp — package.json lifecycle hooks DEFINITIONS.
+// cli/scripts.cpp - package.json lifecycle hooks DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/scripts.hpp.
 //

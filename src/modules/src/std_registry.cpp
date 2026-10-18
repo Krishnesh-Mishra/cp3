@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/std_registry.cpp — the known `std/...` module surfaces.
+// modules/std_registry.cpp - the known `std/...` module surfaces.
 //
 // OWNERSHIP: modules module (src/modules/**). Implements std_registry.h.
 //

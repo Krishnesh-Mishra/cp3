@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/export_surface.cpp — export surfaces + import validation.
+// modules/export_surface.cpp - export surfaces + import validation.
 //
 // OWNERSHIP: modules module (src/modules/**). Implements the export_surface
 // concern declared in loader.h.

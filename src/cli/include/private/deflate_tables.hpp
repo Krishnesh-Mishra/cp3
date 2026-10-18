@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/deflate_tables.hpp — RFC 1951 length/distance tables.
+// cli/private/deflate_tables.hpp - RFC 1951 length/distance tables.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header, shared by inflate.cpp
 // and deflate.cpp so the two halves of the DEFLATE codec cannot drift apart.

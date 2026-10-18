@@ -1,12 +1,12 @@
 # =============================================================================
-# cp3_cli — command surface (init/run/check/dev/build/fmt/clean/exec/version).
+# cp3_cli - command surface (init/run/check/dev/build/fmt/clean/exec/version).
 #
 # OWNERSHIP: CLI/pipeline owner. All rendering of diagnostics happens here, and
 # the exit-code contract (ARCHITECTURE.md §4) lives here.
 #
 # ADDING A SOURCE FILE: append one line to `cp3_cli_sources` below. Substantial
 # logic currently declared in `include/private/*.hpp` moves into `.cpp` files
-# (STYLE.md §8) — headers declare, `.cpp` defines.
+# (STYLE.md §8) - headers declare, `.cpp` defines.
 # =============================================================================
 
 set(cp3_cli_sources

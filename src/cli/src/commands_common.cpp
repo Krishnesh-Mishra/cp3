@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/commands_common.cpp — helpers shared by the command implementations.
+// cli/commands_common.cpp - helpers shared by the command implementations.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements part of private/commands.hpp:
 // the not-implemented convention, render-option construction, and entry-source

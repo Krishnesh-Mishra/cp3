@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/diagnostics.hpp — diagnostic rendering DECLARATIONS (DECISIONS D2).
+// cli/private/diagnostics.hpp - diagnostic rendering DECLARATIONS (DECISIONS D2).
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //
@@ -36,7 +36,7 @@ struct RenderOptions {
 // Renders every diagnostic. Machine lines always; pretty blocks when requested.
 // Notes are emitted as their own machine lines (severity `note`) carrying the
 // parent diagnostic's code, per D2's severity set. Suggestions are rendered in
-// the pretty layer only — they are advisory prose, not machine-parseable
+// the pretty layer only - they are advisory prose, not machine-parseable
 // assertions, and adding them as machine lines would only add matching noise.
 void renderDiagnostics(const std::vector<Diagnostic>& diagnostics,
                        const RenderOptions& opts, std::FILE* out);

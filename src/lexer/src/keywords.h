@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/src/keywords.h — PRIVATE keyword-table declarations.
+// src/lexer/src/keywords.h - PRIVATE keyword-table declarations.
 //
 // The identifier->keyword classification used by the lexer's identifier
 // scanner (scanner.cpp). Kept separate from `scanner.h` so the table can change

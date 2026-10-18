@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/module.cpp — CompilationUnit ownership + the module graph.
+// cp3/module.cpp - CompilationUnit ownership + the module graph.
 //
 // The graph is intentionally small: ModuleGraph owns every unit and the import
 // edges, and compilationOrder() produces a depth-first post-order that mirrors
@@ -91,7 +91,7 @@ std::vector<CompilationUnit*> ModuleGraph::compilationOrder() const {
             }
             CompilationUnit* imported = unit(dep.imported);
             if (imported == nullptr || visited[imported->id]) {
-                continue;  // already scheduled — cycle tolerated
+                continue;  // already scheduled - cycle tolerated
             }
             next = imported;
             break;

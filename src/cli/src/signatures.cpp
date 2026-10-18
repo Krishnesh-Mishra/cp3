@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/signatures.cpp — `index.cp3` generation DEFINITIONS.
+// cli/signatures.cpp - `index.cp3` generation DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/signatures.hpp.
 //

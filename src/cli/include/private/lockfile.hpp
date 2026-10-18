@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/lockfile.hpp — `.cp3/lock.json` DECLARATIONS.
+// cli/private/lockfile.hpp - `.cp3/lock.json` DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/unit_loader.cpp — prelude token injection + parsing.
+// modules/unit_loader.cpp - prelude token injection + parsing.
 //
 // OWNERSHIP: modules module (src/modules/**). Implements the unit_loader
 // concern declared in loader.h.

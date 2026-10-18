@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/tests/prelude_scan_test.cpp — §18 discovery + D4 classification.
+// modules/tests/prelude_scan_test.cpp - §18 discovery + D4 classification.
 //
 // OWNERSHIP: modules module (src/modules/tests/**). Opt-in driver:
 //   cmake -B build/scratch/modules -S . -DCP3_MODULES_TESTS=ON

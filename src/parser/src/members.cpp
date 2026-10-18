@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/members.cpp — class and interface members.
+// src/parser/src/members.cpp - class and interface members.
 //
 // Parses class-body members (methods, accessors, constructors and properties,
 // with their public/private/protected/static/abstract/weak/readonly modifiers)

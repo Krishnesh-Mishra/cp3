@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/tokens.h — PRIVATE parser state-machine header.
+// src/parser/src/tokens.h - PRIVATE parser state-machine header.
 //
 // Declares `ParserImpl` (all parser state) together with the token-cursor and
 // error-recovery helpers shared by the parser's translation units:
@@ -64,7 +64,7 @@ struct MemberModifiers {
 };
 
 // -----------------------------------------------------------------------------
-// ParserImpl — all parser state lives here so the frozen `Parser` class shape
+// ParserImpl - all parser state lives here so the frozen `Parser` class shape
 // (which only owns the TokenStream and the sink) stays untouched.
 // -----------------------------------------------------------------------------
 class ParserImpl {

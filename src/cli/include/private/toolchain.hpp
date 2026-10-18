@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/toolchain.hpp — system C++ toolchain DECLARATIONS for cp3c.
+// cli/private/toolchain.hpp - system C++ toolchain DECLARATIONS for cp3c.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

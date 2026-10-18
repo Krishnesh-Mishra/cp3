@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/ast.cpp — out-of-line AST helpers declared in cp3/ast.hpp.
+// cp3/ast.cpp - out-of-line AST helpers declared in cp3/ast.hpp.
 //
 // Everything here is DERIVED from CP3_AST_NODE_LIST; there is deliberately no
 // second list of node names to drift out of sync. To add a node, edit ast.hpp's
@@ -9,7 +9,7 @@
 
 namespace cp3 {
 
-// nodeKindName — generated directly from the single source of truth. The
+// nodeKindName - generated directly from the single source of truth. The
 // switch is exhaustive by construction: CP3_AST_NODE_LIST defines every
 // enumerator of NodeKind.
 const char* nodeKindName(NodeKind kind) noexcept {

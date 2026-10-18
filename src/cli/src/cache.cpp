@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/cache.cpp — incremental build layout + manifest DEFINITIONS.
+// cli/cache.cpp - incremental build layout + manifest DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/cache.hpp.
 //

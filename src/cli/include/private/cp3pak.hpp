@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/cp3pak.hpp — the `.cp3pak` container DECLARATIONS.
+// cli/private/cp3pak.hpp - the `.cp3pak` container DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

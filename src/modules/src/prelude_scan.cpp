@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/prelude_scan.cpp — §18 prelude discovery.
+// modules/prelude_scan.cpp - §18 prelude discovery.
 //
 // OWNERSHIP: modules module (src/modules/**). Implements prelude_scan.h.
 // =============================================================================
@@ -91,7 +91,7 @@ std::vector<PreludeRef> preludesForFolder(const fs::path& folder) {
     }
 
     // Weak: an ancestor's weak prelude cascades down unless a folder strictly
-    // below it (and at or above `folder`) contains a prelude of its own — the
+    // below it (and at or above `folder`) contains a prelude of its own - the
     // "wall". A weak prelude is never stopped from reaching its own folder.
     for (std::size_t i = 0; i < chain.size(); ++i) {
         const fs::path weak = preludeInFolder(chain[i], PreludeKind::Weak);

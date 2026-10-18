@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/src/templates.cpp — template literal scanning.
+// src/lexer/src/templates.cpp - template literal scanning.
 //
 // Implements `Scanner::scanTemplateChunk` (declared in scanner.h). Per
 // DECISIONS.md D7 the scanner consumes a template literal *fully* using an

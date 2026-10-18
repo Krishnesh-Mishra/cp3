@@ -1,14 +1,14 @@
 // =============================================================================
-// modules/loader.h — the ProgramLoader state machine (PRIVATE header).
+// modules/loader.h - the ProgramLoader state machine (PRIVATE header).
 //
 // OWNERSHIP: modules module (src/modules/**). Never included cross-module.
 //
 // ProgramLoader implements cp3::ModuleLoader (cp3/modules.hpp). The class
 // declaration lives here; definitions are split by concern across
-//   module_loader.cpp   — orchestration, unit registry, diagnostics
-//   unit_loader.cpp     — prelude token injection + one Parser pass per unit
-//   import_resolver.cpp — D4 classification, local resolution, graph edges
-//   export_surface.cpp  — export surfaces + import validation
+//   module_loader.cpp   - orchestration, unit registry, diagnostics
+//   unit_loader.cpp     - prelude token injection + one Parser pass per unit
+//   import_resolver.cpp - D4 classification, local resolution, graph edges
+//   export_surface.cpp  - export surfaces + import validation
 // (STYLE.md §3: headers declare, `.cpp` defines; one concern per file).
 // =============================================================================
 #pragma once

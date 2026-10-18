@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/gzip.hpp — RFC 1952 gzip container DECLARATIONS.
+// cli/private/gzip.hpp - RFC 1952 gzip container DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

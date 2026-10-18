@@ -1,5 +1,5 @@
 # =============================================================================
-# cp3_modules — module discovery, §18 prelude injection, import resolution.
+# cp3_modules - module discovery, §18 prelude injection, import resolution.
 #
 # OWNERSHIP: modules owner. The public boundary is `include/cp3/modules.hpp`
 # (`cp3::ModuleLoader`); everything under `src/` is private.

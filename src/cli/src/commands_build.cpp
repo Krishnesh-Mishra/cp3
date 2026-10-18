@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/commands_build.cpp — the incremental compile/link/execute driver.
+// cli/commands_build.cpp - the incremental compile/link/execute driver.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements
 // cp3::cli::detail::buildWithToolchain, used by `cp3c build` and `cp3c run`.

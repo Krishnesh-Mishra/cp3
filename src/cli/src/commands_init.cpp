@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/commands_init.cpp — `cp3c init [dir]`.
+// cli/commands_init.cpp - `cp3c init [dir]`.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdInit.
 //

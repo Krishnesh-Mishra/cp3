@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/module_loader.cpp — ProgramLoader orchestration + public boundary.
+// modules/module_loader.cpp - ProgramLoader orchestration + public boundary.
 //
 // OWNERSHIP: modules module (src/modules/**). Defines cp3::ModuleLoader
 // (cp3/modules.hpp) and the ProgramLoader state machine (loader.h):

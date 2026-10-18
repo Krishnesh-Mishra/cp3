@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/semver.cpp — semver parsing + npm-style range matching DEFINITIONS.
+// cli/semver.cpp - semver parsing + npm-style range matching DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/semver.hpp.
 //

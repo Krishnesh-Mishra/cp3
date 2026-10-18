@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/module.hpp — compilation units and the module graph.
+// cp3/module.hpp - compilation units and the module graph.
 //
 // FROZEN INTERFACE (Beta One). See ARCHITECTURE.md.
 //
@@ -35,9 +35,9 @@ const char* moduleResolutionName(ModuleResolution r) noexcept;
 // A prelude file variant (docs/language-spec/18-modules-imports.md).
 enum class PreludeKind {
     None,
-    Same,    // _prelude.same.cp3  — same folder only
-    Strong,  // _prelude.cp3       — recursive, unstoppable
-    Weak,    // _prelude.weak.cp3  — recursive, stopped by any nested prelude
+    Same,    // _prelude.same.cp3  - same folder only
+    Strong,  // _prelude.cp3       - recursive, unstoppable
+    Weak,    // _prelude.weak.cp3  - recursive, stopped by any nested prelude
 };
 
 const char* preludeKindName(PreludeKind k) noexcept;
@@ -93,7 +93,7 @@ public:
 
     // Depth-first post-order over the import graph starting at the entry unit;
     // each unit appears after the units it depends on. Cycles are tolerated
-    // (ES-module semantics, §23) — a unit is emitted at most once.
+    // (ES-module semantics, §23) - a unit is emitted at most once.
     std::vector<CompilationUnit*> compilationOrder() const;
 
 private:

@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/commands_clean.cpp — `cp3c clean [--all]`.
+// cli/commands_clean.cpp - `cp3c clean [--all]`.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdClean.
 //

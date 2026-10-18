@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/visitor.hpp — exhaustive AST visitor dispatch.
+// cp3/visitor.hpp - exhaustive AST visitor dispatch.
 //
 // FROZEN INTERFACE (Beta One). See ARCHITECTURE.md.
 //
@@ -70,7 +70,7 @@ inline void dispatch(const Node& node, ConstAstVisitor& visitor) {
 // `visitChildren` is regenerated from the node set. Stage authors who want a
 // bespoke traversal should subclass AstVisitor directly instead.
 //
-// NOTE: walkChildren is intentionally NOT auto-generated here — the shapes of
+// NOTE: walkChildren is intentionally NOT auto-generated here - the shapes of
 // e.g. optional children vs. lists differ enough that a hand-written walker in
 // sema/codegen is clearer and less error-prone. This class exists only to make
 // "visit every node once" trivial when that is all that is needed.

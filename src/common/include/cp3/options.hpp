@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/options.hpp — compilation options shared by every stage.
+// cp3/options.hpp - compilation options shared by every stage.
 //
 // FROZEN INTERFACE (Beta One). See ARCHITECTURE.md.
 // Mirrors package.json fields documented in docs/language-spec/03-type-system.md

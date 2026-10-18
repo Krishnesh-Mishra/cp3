@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/src/lexer.cpp — lexer entry point (frozen `Lexer::lex`).
+// src/lexer/src/lexer.cpp - lexer entry point (frozen `Lexer::lex`).
 //
 // The only translation unit that knows the frozen public boundary
 // (cp3/lexer.hpp). All scanning lives in the internal `Scanner`

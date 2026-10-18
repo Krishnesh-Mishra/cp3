@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/diagnostics.cpp — diagnostic rendering DEFINITIONS (DECISIONS D2).
+// cli/diagnostics.cpp - diagnostic rendering DEFINITIONS (DECISIONS D2).
 //
 // OWNERSHIP: cli module (src/cli/**). Implements private/diagnostics.hpp.
 //

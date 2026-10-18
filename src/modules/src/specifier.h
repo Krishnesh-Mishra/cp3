@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/specifier.h — module specifier classification (PRIVATE header).
+// modules/specifier.h - module specifier classification (PRIVATE header).
 //
 // OWNERSHIP: modules module (src/modules/**). Never included cross-module.
 //

@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/src/scanner.h — PRIVATE lexer implementation header.
+// src/lexer/src/scanner.h - PRIVATE lexer implementation header.
 //
 // Declares `Scanner`, the internal cursor/state machine that turns one
 // SourceFile into a TokenStream, plus the byte-classification and UTF-8 helpers
@@ -10,7 +10,7 @@
 //                  token dispatch, identifiers, error recovery  (this header)
 //   numbers.cpp    numeric literals
 //   strings.cpp    string literals and escape sequences
-//   templates.cpp  template literals (lexed flat — DECISIONS.md D7)
+//   templates.cpp  template literals (lexed flat - DECISIONS.md D7)
 //   regexp.cpp     regular-expression literals and flags (DECISIONS.md D52)
 //   keywords.cpp   keyword / operator tables
 //
@@ -43,7 +43,7 @@ bool isIdentContinue(unsigned char c) noexcept;
 void appendUtf8(std::string& out, std::uint32_t cp);
 
 // -----------------------------------------------------------------------------
-// Scanner — all lexer state. `run()` produces the token stream; `Lexer::lex`
+// Scanner - all lexer state. `run()` produces the token stream; `Lexer::lex`
 // (lexer.cpp) is its only caller.
 // -----------------------------------------------------------------------------
 class Scanner {

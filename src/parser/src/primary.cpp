@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/primary.cpp — primary and postfix (call/member) expressions.
+// src/parser/src/primary.cpp - primary and postfix (call/member) expressions.
 //
 // Implements the leaf expressions (literals, identifiers, template literals),
 // array/object literals, `new`, calls and member/index access (including

@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/package_json.hpp — package.json helpers DECLARATIONS.
+// cli/private/package_json.hpp - package.json helpers DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

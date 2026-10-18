@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/signatures.hpp — `index.cp3` generation DECLARATIONS.
+// cli/private/signatures.hpp - `index.cp3` generation DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

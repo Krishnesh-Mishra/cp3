@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/src/numbers.cpp — numeric literal scanning.
+// src/lexer/src/numbers.cpp - numeric literal scanning.
 //
 // Implements `Scanner::scanNumber` and its helpers (declared in scanner.h):
 // decimal/float literals with `_` separators and an exponent, plus the

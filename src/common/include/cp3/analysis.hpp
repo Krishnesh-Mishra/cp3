@@ -1,19 +1,19 @@
 // =============================================================================
-// cp3/analysis.hpp — the sema side-table contract (DECISIONS D1, D6, D14).
+// cp3/analysis.hpp - the sema side-table contract (DECISIONS D1, D6, D14).
 //
 // FROZEN INTERFACE (Beta One, frozen by the contracts pass).
 //
 // Sema does NOT mutate the AST (see ast.hpp design rules). It publishes every
 // result it computes into a `SemaResult`, keyed by `Node::nodeId`:
-//   * nodeTypes  — inferred type of an expression / declared type of a binding;
-//   * symbols    — the binding table (one entry per declaration site);
-//   * functions  — resolved signature of every function-like declaration.
+//   * nodeTypes  - inferred type of an expression / declared type of a binding;
+//   * symbols    - the binding table (one entry per declaration site);
+//   * functions  - resolved signature of every function-like declaration.
 //
 // nodeId contract (D6): ids are 1-based, assigned by the parser in source
 // (pre-order) order; `0` means "unassigned". The Program root is numbered too.
-// A lookup that misses returns nullptr / a default — never throws.
+// A lookup that misses returns nullptr / a default - never throws.
 //
-// DELIBERATELY DEFERRED side tables (do not half-implement — leave the room):
+// DELIBERATELY DEFERRED side tables (do not half-implement - leave the room):
 //   * classInfo  : resolved class shapes, base types, member tables (M2+).
 //   * enumInfo   : enum member values / underlying type (M2+).
 //   * genericInst: monomorphisation / type-argument bindings (M2+).

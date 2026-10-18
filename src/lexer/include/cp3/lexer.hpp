@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/lexer.hpp — .cp3 source text -> TokenStream.
+// cp3/lexer.hpp - .cp3 source text -> TokenStream.
 //
 // OWNERSHIP: lexer module. Lifecycle: the public boundary below (construct over
 // a SourceFile + DiagnosticSink, return a TokenStream) is frozen. The scanner is

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # =============================================================================
-# tools/lint_layout.py — STYLE.md layout/budget linter for `src/**`.
+# tools/lint_layout.py - STYLE.md layout/budget linter for `src/**`.
 #
 # Run directly, or through the advisory CMake target:
 #
@@ -21,7 +21,7 @@
 #   * §4 naming spot-checks:
 #       - file names are `snake_case.{cpp,hpp,h}`
 #       - project macros are `CP3_UPPER_SNAKE`
-#   * §2 suppression: a file may carry `// cp3-lint: allow-file-size — <reason>`
+#   * §2 suppression: a file may carry `// cp3-lint: allow-file-size - <reason>`
 #     with a NON-EMPTY reason; that waives only the file-size check for that
 #     file, and the marker is itself reported when the reason is missing.
 #
@@ -38,8 +38,8 @@
 #     CP3_AST_NODE_LIST / CP3_DISPATCH_CASE tables) from being reported as
 #     giant functions. Braces inside a macro body are therefore invisible to
 #     depth tracking: do not write unbalanced braces in a macro.
-#  3. A FUNCTION body is a `{` whose accumulated header — the text since the
-#     previous `;`, `{` or `}` — matches
+#  3. A FUNCTION body is a `{` whose accumulated header - the text since the
+#     previous `;`, `{` or `}` - matches
 #         [<pre>] <name> ( <params> ) <tail>
 #     where `<name>` is an identifier (optionally `A::B`-qualified or
 #     `operator()`) and `<tail>` holds qualifiers / a ctor init list. The header
@@ -60,7 +60,7 @@
 #     and are skipped rather than mis-counted.
 #  6. NESTING DEPTH is the maximum brace depth inside the function body, where
 #     depth 1 is the body itself. Brace-less control flow (`if (x) return;`) is
-#     not counted — only braces are, cheaply and deterministically.
+#     not counted - only braces are, cheaply and deterministically.
 #  7. TYPE size is measured the same way for `class`/`struct`/`union`/`enum`
 #     bodies.
 #  8. FILE size is the number of lines (newline-separated, trailing newline not
@@ -71,7 +71,7 @@
 # ----------
 # Some files legitimately break a *size* budget by being a single-source data
 # definition. They are listed in ALLOW_LIST below with a mandatory reason and
-# the exact checks that are waived — editing the file instead of the list is not
+# the exact checks that are waived - editing the file instead of the list is not
 # an option for a frozen header. Entries are the only sanctioned exceptions;
 # §2's "logic files are never exempt" rule still holds (the linter does not
 # waive function-size for anything).

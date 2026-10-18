@@ -1,7 +1,7 @@
 # =============================================================================
-# src/CMakeLists.txt — module wiring for the cp3c compiler.
+# src/CMakeLists.txt - module wiring for the cp3c compiler.
 #
-# Layout rule (STYLE.md §3): every module owns its own build file —
+# Layout rule (STYLE.md §3): every module owns its own build file -
 # `src/<module>/CMakeLists.txt` declares that module's target, source list,
 # include directories and links. Adding a `.cpp` to a module means editing ONLY
 # that module's CMakeLists.txt: never this file, never the repository root.
@@ -20,7 +20,7 @@
 #                       cp3_runtime -> cp3_common   (not yet linked into cp3c)
 # =============================================================================
 
-add_subdirectory(common)   # frozen interfaces — links nothing
+add_subdirectory(common)   # frozen interfaces - links nothing
 add_subdirectory(lexer)    # -> cp3_common
 add_subdirectory(parser)   # -> cp3_lexer  (-> cp3_common)
 add_subdirectory(modules)  # -> cp3_parser (prelude injection, import resolution)

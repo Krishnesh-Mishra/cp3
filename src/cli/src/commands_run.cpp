@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/commands_run.cpp — `cp3c build` / `cp3c run`.
+// cli/commands_run.cpp - `cp3c build` / `cp3c run`.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdBuildOrRun.
 //

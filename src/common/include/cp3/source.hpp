@@ -1,11 +1,11 @@
 // =============================================================================
-// cp3/source.hpp — source text, positions, spans, and the SourceManager.
+// cp3/source.hpp - source text, positions, spans, and the SourceManager.
 //
 // FROZEN INTERFACE (Beta One). See ARCHITECTURE.md.
 //
 // Conventions:
 //   * offsets are 0-based BYTE offsets into SourceFile::text (cp3 strings are
-//     UTF-8 — see docs/language-spec/09-arrays-strings.md — so "column" is
+//     UTF-8 - see docs/language-spec/09-arrays-strings.md - so "column" is
 //     measured in bytes, documented rather than silently assumed).
 //   * line and column are 1-based, matching every editor and the diagnostics
 //     examples in docs/cli-tooling/02-error-diagnostics-source-mapping.md.

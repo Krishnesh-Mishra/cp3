@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/cli.hpp — the command surface for the `cp3c` binary.
+// cp3/cli.hpp - the command surface for the `cp3c` binary.
 //
 // OWNERSHIP: cli module. The CLI owns argument parsing and all rendering; the
 // frontend stages report through DiagnosticSink and never print themselves.
@@ -8,7 +8,7 @@
 //   0  success
 //   1  compile error (diagnostics were printed)
 //   2  usage error (bad flag/command; usage was printed to stderr)
-//   3  not implemented — this build is still a scaffold (a marker line
+//   3  not implemented - this build is still a scaffold (a marker line
 //      containing kNotImplementedMarker is printed to stderr)
 // =============================================================================
 #pragma once

@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/commands_pack.cpp — `cp3c build` for `"type": "package"` projects.
+// cli/commands_pack.cpp - `cp3c build` for `"type": "package"` projects.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements detail::packProject.
 //

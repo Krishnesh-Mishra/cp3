@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/pipeline.hpp — wiring the frozen frontend stages DECLARATIONS.
+// cli/private/pipeline.hpp - wiring the frozen frontend stages DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/file_paths.cpp — filesystem path helpers.
+// modules/file_paths.cpp - filesystem path helpers.
 //
 // OWNERSHIP: modules module (src/modules/**). Implements file_paths.h.
 //

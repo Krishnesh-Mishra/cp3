@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/src/statements.cpp — control-flow and simple statements.
+// src/parser/src/statements.cpp - control-flow and simple statements.
 //
 // Implements the statement forms dispatched by ParserImpl::parseStatement()
 // (parser.cpp): if/while/do-while/for/for-of/for-in/switch, break/continue/

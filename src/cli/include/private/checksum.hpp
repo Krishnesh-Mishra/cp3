@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/private/checksum.hpp — SHA-256 and CRC-32 for the package manager.
+// cli/private/checksum.hpp - SHA-256 and CRC-32 for the package manager.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //

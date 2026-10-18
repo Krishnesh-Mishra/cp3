@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/deflate.cpp — raw DEFLATE compressor DEFINITIONS (RFC 1951).
+// cli/deflate.cpp - raw DEFLATE compressor DEFINITIONS (RFC 1951).
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cli::deflateRaw
 // (private/deflate.hpp).

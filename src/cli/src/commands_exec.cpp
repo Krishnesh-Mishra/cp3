@@ -1,5 +1,5 @@
 // =============================================================================
-// cli/commands_exec.cpp — `cp3c exec <pkg> [args]`.
+// cli/commands_exec.cpp - `cp3c exec <pkg> [args]`.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdExec.
 //

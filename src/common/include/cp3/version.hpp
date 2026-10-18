@@ -1,4 +1,4 @@
-// cp3/version.hpp — compiler identity/version. FROZEN INTERFACE.
+// cp3/version.hpp - compiler identity/version. FROZEN INTERFACE.
 #pragma once
 
 #include <string>
