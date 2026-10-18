@@ -106,6 +106,7 @@ python tests/runner/run_tests.py [--cp3c <path>] [--cases <dir>] \
 | `--cp3c <path>` | Path to the `cp3c` executable (default: `build/bin/cp3c`). |
 | `--cases <dir>` | Cases root (default: `tests/cases`). |
 | `--filter <substr>` | Only run cases whose relative path contains `<substr>`. |
+| `--jobs N` | Run up to `N` cases concurrently during the corpus pass (default: one per logical CPU minus one; `--jobs 1` is the strictly sequential runner). |
 | `--json` | Emit a machine-readable JSON summary instead of text. |
 | `--verbose` / `-v` | Print a line for every case, not just failures. |
 | `--timeout <sec>` | Per-case timeout (default 60). |

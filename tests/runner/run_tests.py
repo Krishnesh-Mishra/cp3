@@ -24,6 +24,24 @@
 #                                    [--strict-ambiguous]
 #                                    [--write-registry [PATH]]
 #                                    [--no-bench] [--bench-args "ARGS"]
+#                                    [--jobs N]
+#
+# --jobs N runs the corpus pass with up to N cp3c subprocesses in flight at
+# once (stdlib only, ThreadPoolExecutor plus a small dispatcher). The default
+# is one per logical CPU minus one; --jobs 1 is the unchanged sequential path
+# and any N >= 1 is accepted. Each case still runs exactly the same command
+# with the same cwd and timeout, and per-case outcomes
+# are buffered and printed in the same order the sequential runner prints them,
+# so the per-case lines, the `_ambiguous/` listing and the summary stay
+# deterministic and each case's output is attributable to that case. Run-mode
+# cases are parallelised across project roots only: cp3c writes its build
+# intermediates (shared runtime objects, build manifest) into
+# `<projectRoot>/.cp3/`, so two building cases from the same root are never in
+# flight together (that would race on those files); check-mode cases are
+# frontend-only and never occupy a root, and different roots are fully
+# independent. The bench pass stays sequential
+# (`benchmarks/run_benchmark.py` is a pinned measurement suite), so --jobs only
+# affects the corpus pass.
 #
 # After the corpus pass the cross-language benchmark suite
 # (benchmarks/run_benchmark.py) runs automatically (D67), streams its output,
@@ -43,6 +61,7 @@ import re
 import shlex
 import subprocess
 import sys
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -410,6 +429,27 @@ def evaluate(case: Case, compiler: Path, timeout: float) -> Outcome:
     return Outcome(case, "passed")
 
 
+def project_root_of(case: Case) -> Path:
+    """The directory cp3c treats as the case's project root.
+
+    Mirrors cp3::cli::findProjectRoot(): the nearest ancestor of the case file
+    (starting with its own directory) that holds a package.json, or the case's
+    own directory when there is none. cp3c writes its build intermediates to
+    `<projectRoot>/.cp3/` (shared runtime objects, build manifest), so the
+    parallel runner schedules at most one case per returned directory at a
+    time.
+    """
+    first = case.cp3_path.parent
+    probe = first
+    while True:
+        if (probe / "package.json").is_file():
+            return probe
+        parent = probe.parent
+        if parent == probe:
+            return first
+        probe = parent
+
+
 def run_benchmarks(extra_args: str) -> int:
     """Run benchmarks/run_benchmark.py, stream its output, re-print gate lines.
 
@@ -486,6 +526,17 @@ def main(argv: Optional[list[str]] = None) -> int:
                              "(default: tests/cases/AMBIGUITIES.md)")
     parser.add_argument("--timeout", type=float, default=60.0,
                         help="per-case timeout in seconds (default: 60)")
+    default_jobs = max(1, (os.cpu_count() or 1) - 1)
+    parser.add_argument("--jobs", type=int, default=default_jobs, metavar="N",
+                        help="run up to N cases concurrently during the corpus "
+                             "pass (default: %(default)s, one per logical CPU "
+                             "minus one; pass 1 for the strictly sequential "
+                             "runner, or any larger N). Run-mode cases that "
+                             "share a project root run one at a time (cp3c "
+                             "builds into a shared .cp3/ there); check cases "
+                             "and different roots run in parallel. Output "
+                             "order and content do not depend on N; the bench "
+                             "pass always runs sequentially.")
     parser.add_argument("--bench", action="store_true",
                         help="run the benchmark suite after the corpus pass (now the "
                              "default; kept as an explicit, redundant request)")
@@ -496,6 +547,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="extra arguments forwarded to benchmarks/run_benchmark.py "
                              "when the bench pass runs (e.g. --only hello-world)")
     args = parser.parse_args(argv)
+
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
 
     cases_dir = Path(args.cases)
     cases, warnings = discover_cases(cases_dir, args.filter_substr)
@@ -516,23 +570,95 @@ def main(argv: Optional[list[str]] = None) -> int:
     compiler_missing = compiler is None or not compiler.is_file()
     missing_reason = "cp3c executable not found"
 
-    def run_as_ordinary(selected: list[Case], sink: list[Outcome]) -> None:
+    def run_as_ordinary_serial(selected: list[Case]) -> list[Outcome]:
+        sink: list[Outcome] = []
         for case in selected:
             if compiler_missing:
                 sink.append(Outcome(case, "skipped", missing_reason))
             else:
                 sink.append(evaluate(case, compiler, args.timeout))
+        return sink
 
-    outcomes: list[Outcome] = []
+    def run_as_ordinary_parallel(selected: list[Case]) -> list[Outcome]:
+        # Bounded pool, one cp3c subprocess per case - the same command, cwd
+        # and timeout the sequential path uses. Cases are parallelised across
+        # build roots: cp3c writes shared intermediates (runtime objects,
+        # build manifest) into `<projectRoot>/.cp3/`, so two run-mode cases
+        # from the same root must not overlap (ld would read an object file
+        # while another cp3c writes it); `check` cases write nothing and never
+        # occupy a root. Within a root run cases therefore run one after
+        # another, exactly as in the sequential runner; different roots run
+        # fully in parallel. Workers only return Outcome records (they never
+        # print), and outcomes are collected per submission index, so the
+        # emitted lines are byte-identical to a sequential run no matter which
+        # case finishes first.
+        count = len(selected)
+        if compiler_missing:
+            return [Outcome(case, "skipped", missing_reason) for case in selected]
+        if args.jobs <= 1 or count <= 1:
+            return run_as_ordinary_serial(selected)
+        timeout = args.timeout
+        # Only `run` cases involve the toolchain and the shared `<root>/.cp3/`
+        # build directory; `check` cases are frontend-only (pure reads) and
+        # never occupy a root. A `None` root therefore means "always free".
+        root_cache: dict[Path, Path] = {}
+
+        def root_of(case: Case) -> Path:
+            parent = case.cp3_path.parent
+            root = root_cache.get(parent)
+            if root is None:
+                root = project_root_of(case)
+                root_cache[parent] = root
+            return root
+
+        roots = [
+            root_of(case) if case.spec.get("mode", "check") == "run" else None
+            for case in selected
+        ]
+        pending = list(range(count))
+        busy_roots: set[Path] = set()
+        inflight: dict = {}
+        collected: dict[int, Outcome] = {}
+
+        def start_more(pool: ThreadPoolExecutor) -> None:
+            scan = 0
+            while len(inflight) < args.jobs and scan < len(pending):
+                index = pending[scan]
+                root = roots[index]
+                if root is not None and root in busy_roots:
+                    scan += 1
+                    continue
+                pending.pop(scan)
+                if root is not None:
+                    busy_roots.add(root)
+                future = pool.submit(evaluate, selected[index], compiler, timeout)
+                inflight[future] = index
+
+        with ThreadPoolExecutor(max_workers=min(args.jobs, count)) as pool:
+            start_more(pool)
+            while inflight:
+                done, _ = wait(list(inflight), return_when=FIRST_COMPLETED)
+                for future in done:
+                    index = inflight.pop(future)
+                    root = roots[index]
+                    if root is not None:
+                        busy_roots.discard(root)
+                    collected[index] = future.result()
+                start_more(pool)
+        return [collected[i] for i in range(count)]
+
+    def run_as_ordinary(selected: list[Case]) -> list[Outcome]:
+        if args.jobs > 1:
+            return run_as_ordinary_parallel(selected)
+        return run_as_ordinary_serial(selected)
+
     if args.strict_ambiguous:
         # Opt-in: markers run like any other case (they may pass, fail, or skip).
-        run_as_ordinary(cases, outcomes)
+        outcomes = run_as_ordinary(cases)
     else:
         # Default: markers are discovered and reported, never asserted against.
-        for case in cases:
-            if case.ambiguous:
-                outcomes.append(Outcome(case, "ambiguous", case.question))
-        run_as_ordinary([c for c in cases if not c.ambiguous], outcomes)
+        outcomes = [Outcome(c, "ambiguous", c.question) for c in cases if c.ambiguous]
+        outcomes += run_as_ordinary([c for c in cases if not c.ambiguous])
 
     passed = sum(1 for o in outcomes if o.status == "passed")
     failed = sum(1 for o in outcomes if o.status == "failed")
