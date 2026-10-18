@@ -14,6 +14,7 @@
 
 #include "../../../std/console/native.hpp"
 #include "../../../std/crypto/native.hpp"
+#include "../../../std/fs/native.hpp"
 #include "../../../std/json/native.hpp"
 #include "../../../std/math/native.hpp"
 #include "../../../std/network/native.hpp"
@@ -28,6 +29,7 @@ namespace cp3::cli::detail {
 const std::vector<const NativePackage*>& nativePackages() {
     static const std::vector<const NativePackage*> rows = {
         &kConsoleNativePackage,
+        &kFsNativePackage,
         &kJsonNativePackage,
         &kMathNativePackage,
         &kOsNativePackage,

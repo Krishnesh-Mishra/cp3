@@ -206,6 +206,14 @@ private:
     // CP3002 meanwhile.
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
+    // `std/fs` (src/std/fs/codegen.cpp): the namespace table plus the
+    // ReadStream / WriteStream / chunk receivers, recognised by the `$fs:`
+    // marker names.
+    std::string emitFsCall(const CallExpr& c, const MemberExpr& m);
+    bool isFsReceiver(const Expr* e) const;
+    std::string emitFsMemberCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitFsMemberRead(const MemberExpr& m);
+    std::string emitFsStreamOn(const CallExpr& c, const MemberExpr& m);
     // `std/network` receivers are recognised by the sema marker names
     // ("$network:*"), so the hooks live on the receiver, not on the member:
     // named imports (identifier calls), `new` forms, member calls/reads.
@@ -332,6 +340,7 @@ private:
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
+    bool needsFs_ = false;         // std/fs -> cp3/std/fs.hpp include
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine

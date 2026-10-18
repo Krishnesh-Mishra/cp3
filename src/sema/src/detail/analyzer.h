@@ -202,6 +202,7 @@ private:
     // Definitions live in the per-module src/std/<module>/sema.cpp units.
     std::optional<Type> cryptoMember(const std::string& prop);
     std::optional<Type> networkMember(const std::string& prop);
+    std::optional<Type> fsMember(const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
 
     // --- std/network (src/std/network/sema.cpp) ------------------------------
@@ -361,9 +362,9 @@ private:
 
 // --- std-namespace surface helpers (std_check.cpp) ---------------------------
 //
-// The closed families (Math / path / os / crypto / console / JSON) report
+// The closed families (Math / path / os / crypto / console / JSON / fs) report
 // CP3305 for an unknown member (member_check.cpp); the open ones (network,
-// process, fs, ...) keep the permissive ambient fallthrough.
+// process, ...) keep the permissive ambient fallthrough.
 bool isClosedStdNamespace(const std::string& ns);
 
 // The implemented member names of `ns`, used as CP3305 candidates.
@@ -378,6 +379,7 @@ std::vector<std::string> osMemberNames();
 std::vector<std::string> consoleMemberNames();
 std::vector<std::string> jsonMemberNames();
 std::vector<std::string> cryptoMemberNames();
+std::vector<std::string> fsMemberNames();
 
 // The exact default-import statement for a missing std module binding (e.g.
 // `import Math from "std/math";`), or "" when `name` names no std module.

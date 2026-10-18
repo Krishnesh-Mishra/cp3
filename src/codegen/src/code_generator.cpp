@@ -321,6 +321,7 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsProcess_) out += "#include \"cp3/std/process.hpp\"\n";
     if (needsCrypto_) out += "#include \"cp3/std/crypto.hpp\"\n";
     if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
+    if (needsFs_) out += "#include \"cp3/std/fs.hpp\"\n";
     out += "\n";
     out += kHelperBlock;
     if (needsTypedArray_) {
