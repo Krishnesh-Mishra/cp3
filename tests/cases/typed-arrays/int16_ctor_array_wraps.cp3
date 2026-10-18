@@ -1,0 +1,2 @@
+import console from "std/console";
+console.log(new Int16Array([40000, -40000]).join(","));

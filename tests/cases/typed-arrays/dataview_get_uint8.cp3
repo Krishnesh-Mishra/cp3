@@ -1,0 +1,6 @@
+import console from "std/console";
+let buf = new ArrayBuffer(2);
+let u8 = new Uint8Array(buf);
+u8[1] = 7;
+let dv = new DataView(buf);
+console.log(dv.getUint8(1));

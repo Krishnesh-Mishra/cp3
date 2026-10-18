@@ -1,0 +1,10 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 3,
+    "contains": "read-only"
+  }
+}

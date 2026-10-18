@@ -136,7 +136,11 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
             }
             continue;
         }
-        std::string initText = expr(*d->init);
+        // `let a: number[] = Array(3)` / `let a: number[] = []`: the
+        // annotation fixes an otherwise unknowable element type
+        // (emit/tarrays.cpp).
+        std::string initText = declaratorInitText(*d, ci.type);
+        if (initText.empty()) initText = expr(*d->init);
         if (ci.shape == Shape::Optional && isNullishLiteral(*d->init)) {
             initText = "std::nullopt";
         }

@@ -1,0 +1,22 @@
+﻿import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+const app = createServer();
+app.get("/boom", (req, res) => {
+  throw "handler failed";
+});
+app.get("/ok", (req, res) => {
+  res.text("still ok");
+});
+app.listen(48104, () => {});
+
+// The throwing handler is one 500 for that request only.
+let boom = await fetch("http://127.0.0.1:48104/boom");
+console.log(`${boom.status}`);
+console.log(await boom.text());
+
+// The same server keeps serving.
+let ok = await fetch("http://127.0.0.1:48104/ok");
+console.log(`${ok.status}`);
+console.log(await ok.text());
+app.close();

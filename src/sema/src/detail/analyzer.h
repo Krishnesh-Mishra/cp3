@@ -22,6 +22,7 @@
 //   checks/stmt_check.cpp   statements, control flow, return analysis
 //   checks/banned.cpp       banned-pattern diagnostics (delete/arguments/for-in/any)
 //   checks/std_check.cpp    std-namespace member tables + `String(x)`
+//   checks/tarrays_check.cpp the JS-compat typed-array family (D69)
 //   checks/parallel_check.cpp      parallel.* capture safety: statements + hook
 //   checks/parallel_expr_check.cpp parallel.* capture safety: expressions + scopes
 //
@@ -183,6 +184,15 @@ private:
     std::optional<Type> cryptoMember(const std::string& prop);
     std::optional<Type> networkMember(const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
+
+    // --- std/network (std_network.cpp) ---------------------------------------
+    // One documented object shape per member table entry ("$network:<name>").
+    Type networkObjectType(const std::string& name);
+    // Named-import call sites: `fetch(...)` / `createServer()`.
+    bool tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& out);
+    // `new WebSocket(url)` / `new WebSocketServer({ port })`; unknown -> unknown.
+    Type inferNetworkConstruct(const std::string& name, ExprList& args,
+                               const SourceSpan& span);
     Type inferIndex(IndexExpr& ix);
     Type indexOf(const Type& ot, IndexExpr& ix);
     Type indexOfProbe(const Type& ot, IndexExpr& ix);
@@ -209,6 +219,40 @@ private:
                          bool& hasSpread);
     bool overloadViable(const FuncSig& sig, const std::vector<Type>& argTypes,
                         bool hasSpread);
+
+    // --- the JS-compat typed-array family (tarrays_check.cpp) ----------------
+    // Constructors registered by `declareBuiltins` (D69): `Array` extras plus
+    // the 11 typed classes, the buffer classes and DataView. Family types are
+    // nominal `TypeKind::Class` values; codegen owns the C++ mapping.
+    Type inferFamilyConstruct(const std::string& cls, ExprList& args,
+                              const SourceSpan& span);
+    // `inferCall`'s family wrapper (the `new`-less constructor spelling types
+    // like `new`) and the member-side statics (`Array.of/from`) + `arr.fill`.
+    Type inferCallOrFamily(CallExpr& call);
+    bool tryInferFamilyMethodCall(CallExpr& call, MemberExpr& member, Type& out);
+    Type inferArrayConstruct(const ExprList& args,
+                             const std::vector<Type>& types,
+                             const SourceSpan& span);
+    Type inferBufferConstruct(const std::string& cls, const ExprList& args,
+                              const std::vector<Type>& types,
+                              const SourceSpan& span);
+    Type inferDataViewConstruct(const ExprList& args,
+                                const std::vector<Type>& types,
+                                const SourceSpan& span);
+    Type inferTypedViewConstruct(const std::string& cls, const ExprList& args,
+                                 const std::vector<Type>& types,
+                                 const SourceSpan& span);
+    bool tryInferArrayStaticCall(CallExpr& call, MemberExpr& m, Type& out);
+    bool tryInferFillCall(CallExpr& call, MemberExpr& m, Type& out);
+    Type typedArrayMember(const Type& recv, const std::string& prop);
+    Type bufferMember(const Type& recv, const std::string& prop);
+    Type dataViewMember(const std::string& prop);
+    Type typedIndexRead(IndexExpr& ix);
+    // True when `d` is the `Array(n)` length form (the family check owns its
+    // element typing, so the generic assign check must stand down).
+    bool checkArrayCtorDeclarator(const VariableDeclarator& d, bool hasAnn,
+                                  const Type& annType, const Type& initType);
+    bool isReadOnlyFamilyProp(const Type& ot, const std::string& prop) const;
 
     // --- parallel.* capture safety (parallel_check.cpp) ----------------------
     // Walks the closures passed to a `parallel.*` entry point and reports a

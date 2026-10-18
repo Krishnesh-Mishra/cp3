@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "500\ninternal server error\n200\nstill ok\n",
+  "exitCode": 0
+}

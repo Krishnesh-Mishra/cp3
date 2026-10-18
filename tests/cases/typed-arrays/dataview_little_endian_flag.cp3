@@ -1,0 +1,6 @@
+import console from "std/console";
+let buf = new ArrayBuffer(4);
+let dv = new DataView(buf);
+let u8 = new Uint8Array(buf);
+dv.setInt32(0, 1, true);
+console.log(u8.join(","));

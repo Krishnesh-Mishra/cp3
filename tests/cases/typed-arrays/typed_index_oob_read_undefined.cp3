@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = new Uint8Array(3);
+let v: number | undefined = a[5];
+console.log(v === undefined);

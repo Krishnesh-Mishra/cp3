@@ -49,6 +49,18 @@ inline Type withOptionalTail(Type fn) {
     return fn;
 }
 
+// Function-type marker for a signature whose last *two* declared parameters
+// are optional (`fill(value, start?, end?)`, `slice(start?, end?)`,
+// `copyWithin(target, start?, end?)`): the tag marks the trailing pair in
+// `sigFromFunctionType` (call_check.cpp).
+constexpr const char* kOptionalTail2Label = "$optionalTail2";
+
+// Marks the final two declared parameters of a function type optional.
+inline Type withOptionalTail2(Type fn) {
+    fn.name = kOptionalTail2Label;
+    return fn;
+}
+
 // One field of an object/tuple shape (name, value type, `?` optionality).
 struct Field {
     std::string name;
@@ -147,6 +159,23 @@ Type promiseOf(const Type& value);
 
 // The value type of a `Promise<T>` (Unknown for a non-Promise type).
 Type promiseValue(const Type& t);
+
+// --- the JS-compat typed-array family (D69; tarrays_check.cpp) ---------------
+//
+// The 11 typed-array class names, the buffer classes and DataView are nominal
+// `TypeKind::Class` types with no extra metadata; codegen owns the C++ mapping
+// (cp3/typed_array.hpp).
+bool isTypedArrayName(const std::string& name);
+bool isTypedArrayClass(const Type& t);
+bool isBufferClass(const Type& t);
+bool isDataViewClass(const Type& t);
+
+// True for every constructor name the family registers (`Array` included);
+// scopes.cpp declares them as ambient builtins and type names.
+bool isFamilyCtorName(const std::string& name);
+
+// The 14 class names the family registers as type annotations.
+const std::vector<std::string>& familyTypeNames();
 
 // A canonical key for a type used to build object/tuple shape labels.
 std::string typeKey(const Type& t);

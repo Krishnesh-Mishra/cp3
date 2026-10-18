@@ -35,7 +35,7 @@ const StdModuleDef kStdModules[] = {
     {"std/path", true, {}},
     {"std/os", true, {}},
     {"std/crypto", true, {}},
-    {"std/network", false, {"fetch", "WebSocket", "WebSocketServer", "createServer"}},
+    {"std/network", true, {"fetch", "WebSocket", "WebSocketServer", "createServer"}},
     {"std/events", false, {"EventEmitter"}},
     {"std/env", false, {"env"}},
     {"std/collections", false, {"Map", "Set"}},

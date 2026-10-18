@@ -1,0 +1,4 @@
+import console from "std/console";
+let view = new Uint8Array([1, 2, 3, 4]);
+let copy = view.buffer.slice(-2);
+console.log(new Uint8Array(copy).join(","));

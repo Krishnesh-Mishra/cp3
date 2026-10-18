@@ -108,10 +108,26 @@ void Analyzer::declareBuiltins() {
         // Core-language builtins tied to the event loop (spec §20, std/03):
         // no import required.
         "setTimeout", "setInterval", "clearTimeout", "clearInterval", "sleep",
+        // The JS-compat typed-array family (D69): ambient constructors, no
+        // import required. The constructors themselves are checked in
+        // tarrays_check.cpp; codegen maps them to cp3/typed_array.hpp.
+        "Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array",
+        "Uint16Array", "Int32Array", "Uint32Array", "Float32Array",
+        "Float64Array", "BigInt64Array", "BigUint64Array", "ArrayBuffer",
+        "SharedArrayBuffer", "DataView",
     };
     const SourceSpan none{};
     for (const char* name : kGlobals) {
         declareBinding(name, ambient(), none, BindingSpec{.publish = false});
+    }
+    // The numeric constants the coercion rules are pinned against.
+    declareBinding("NaN", Type::number(), none, BindingSpec{.publish = false});
+    declareBinding("Infinity", Type::number(), none,
+                   BindingSpec{.publish = false});
+    // The family class names also resolve as type annotations (`Int8Array`,
+    // `ArrayBuffer`, `DataView`, ...).
+    for (const std::string& name : familyTypeNames()) {
+        typeNames_.emplace(name, Type::named(TypeKind::Class, name));
     }
 }
 

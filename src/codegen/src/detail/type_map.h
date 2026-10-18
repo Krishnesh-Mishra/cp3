@@ -26,6 +26,10 @@ namespace detail {
 
 enum class Shape {
     Number, String, Bool, Undefined, Null, Void, Optional, Maybe, Promise,
+    Array,       // number[] / string[] / boolean[] / nested arrays
+    TypedArray,  // Int8Array .. BigUint64Array
+    ArrayBuffer, // ArrayBuffer / SharedArrayBuffer
+    DataView,
     Unknown, Unsupported
 };
 
@@ -61,6 +65,13 @@ bool optionalEmptyMatches(NullishKind kind, Shape nullishShape);
 
 // The C++ lowering of `raw`, including the optional/nullish flavor.
 CppInfo classify(const Type& raw);
+
+// The JS-compat typed-array family (D69; emit/tarrays.cpp): regular arrays
+// with a value-like element type (`number`, `string`, `boolean` or a nested
+// array), the 11 typed views, the buffer classes and DataView. Fills `info`
+// and returns true when `t` is one of them; every other type is left for
+// `classify`'s own arms.
+bool classifyFamily(const Type& t, CppInfo& info);
 
 // Structural fallback: a type annotation -> a cp3 Type (when sema is absent).
 std::optional<Type> typeFromTypeNode(const TypeNode& tn);

@@ -1,0 +1,5 @@
+import console from "std/console";
+let buf = new ArrayBuffer(9);
+let dv = new DataView(buf);
+dv.setFloat64(1, 1.1);
+console.log(dv.getFloat64(1));

@@ -178,14 +178,21 @@ CppInfo classify(const Type& raw) {
             classifyNullishUnion(t, info);
             return info;
         case TypeKind::Class: {
+            // The JS-compat family (typed views, buffers, DataView).
+            if (classifyFamily(t, info)) return info;
             // `Promise<T>` is the only class type with a spelling (M1).
             if (!isPromiseType(t)) {
                 return info;
             }
             return classifyPromise(t);
         }
+        case TypeKind::Array:
+            // Regular arrays have a spelling when their element type does
+            // (tarrays.cpp); otherwise they stay out of M1.
+            classifyFamily(t, info);
+            return info;
         default:
-            return info;  // Array/Object/Function/Enum/TypeParam: out of M1
+            return info;  // Object/Function/Enum/TypeParam: out of M1
     }
 }
 

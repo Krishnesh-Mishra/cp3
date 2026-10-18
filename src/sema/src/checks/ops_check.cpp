@@ -344,6 +344,12 @@ void Analyzer::checkAssignToTarget(Expr& target, const Type& valType,
             Type ot = m.object ? inferExpr(*m.object) : Type::unknown();
             Type mt = memberOf(ot, m.property, m.span, m.optional);
             setType(m, mt);
+            if (isReadOnlyFamilyProp(ot, m.property)) {
+                report(diagcode::kTypeMismatch, span,
+                       "property '" + m.property +
+                           "' of a typed array is read-only");
+                return;
+            }
             if (mt.isError()) return;
             checkAssign(valType, mt, span, false);
             return;
@@ -351,6 +357,16 @@ void Analyzer::checkAssignToTarget(Expr& target, const Type& valType,
         case NodeKind::IndexExpr: {
             auto& ix = static_cast<IndexExpr&>(target);
             Type ot = ix.object ? inferExpr(*ix.object) : Type::unknown();
+            if (isTypedArrayClass(ot)) {
+                // A typed-array element target is `number`: out-of-range
+                // stores are ignored at runtime (JS semantics), and a
+                // non-number write is CP3401 (tarrays_check.cpp owns the
+                // read refinement).
+                if (ix.index) inferExpr(*ix.index);
+                setType(ix, Type::number());
+                checkAssign(valType, Type::number(), span, false);
+                return;
+            }
             Type mt = indexOf(ot, ix);
             setType(ix, mt);
             if (mt.isError()) return;

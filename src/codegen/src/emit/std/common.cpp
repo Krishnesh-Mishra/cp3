@@ -61,11 +61,20 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
         isNsMember(m.object.get(), "process", "env")) {
         return emitProcessCall(c, m);
     }
+    // `std/network` receivers (`res.status(404).text(...)`, `app.get(...)`,
+    // `ws.send(...)`, `wss.on(...)`): the documented members lower to the plain
+    // C++ member call on the runtime object (emit/std/network.cpp).
+    if (isNetworkObject(m.object.get())) return emitNetworkMemberCall(c, m);
     if (m.object && m.object->kind == NodeKind::ArrayLiteral) {
+        std::string literal = emitStringMethodCall(c, m);
+        if (!literal.empty()) return literal;
+    } else if (m.object && info(*m.object).shape == Shape::String) {
         return emitStringMethodCall(c, m);
     }
-    if (m.object && info(*m.object).shape == Shape::String) {
-        return emitStringMethodCall(c, m);
+    // The JS-compat typed-array family (emit/tarrays.cpp): `Array.of/from`,
+    // the array/typed-view method tables, the buffer `.slice` and DataView.
+    if (std::string family = emitFamilyMemberCall(c, m); !family.empty()) {
+        return family;
     }
     return std::string();
 }
@@ -75,6 +84,8 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
         if (m.property == "PI") { needsMath_ = true; return "::cp3::runtime::math::kPi"; }
         if (m.property == "E") { needsMath_ = true; return "::cp3::runtime::math::kE"; }
     }
+    // `std/network` field reads (`res.status`, `res.ok`, `req.method`, ...).
+    if (std::string net = emitNetworkMemberRead(m); !net.empty()) return net;
     if (isNsMember(&m, "path", "sep")) {
         needsPath_ = true;
         return "std::string(::cp3::runtime::path::kSep)";
@@ -94,6 +105,11 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
             needsProcess_ = true;
             return "static_cast<double>(::cp3::runtime::process::argv().size())";
         }
+    }
+    // The JS-compat typed-array family (emit/tarrays.cpp): `.length` of a cp3
+    // array, typed-view/buffer/DataView members, `X.BYTES_PER_ELEMENT`.
+    if (std::string family = emitFamilyMember(m); !family.empty()) {
+        return family;
     }
     return std::string();
 }

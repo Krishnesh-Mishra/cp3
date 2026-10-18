@@ -1,0 +1,2 @@
+import console from "std/console";
+let a = new Int8Array("5");

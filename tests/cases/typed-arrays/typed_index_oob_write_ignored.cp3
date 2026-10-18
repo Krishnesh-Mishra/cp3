@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = new Uint8Array(2);
+a[9] = 7;
+console.log(a.join(","));

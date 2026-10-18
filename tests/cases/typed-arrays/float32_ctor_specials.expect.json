@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "Infinity,-Infinity,NaN\n",
+  "exitCode": 0
+}

@@ -1,0 +1,5 @@
+import console from "std/console";
+let src = [1, 2];
+let copy = Array.from(src);
+copy[0] = 9;
+console.log(src.join(","));

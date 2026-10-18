@@ -1,0 +1,4 @@
+import console from "std/console";
+let buf = new ArrayBuffer(4);
+let view = new Uint8Array(buf);
+console.log(view.join(","));

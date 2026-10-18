@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "Uint8ClampedArray(2) [255, 0]\n",
+  "exitCode": 0
+}

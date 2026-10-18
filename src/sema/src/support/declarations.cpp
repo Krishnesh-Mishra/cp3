@@ -111,6 +111,12 @@ void Analyzer::declareDeclarator(VariableDeclarator& d, VarKind kind) {
                "(annotate the array with a union type)");
     }
 
+    // The `Array(n)` dense form (tarrays_check.cpp): the element type must be
+    // inferable from an annotation and default-initializable. Once handled, the
+    // generic assign check must not re-report `unknown[]` -> `T[]`.
+    const bool arrayCtorForm =
+        hasInit && checkArrayCtorDeclarator(d, hasAnn, annType, initType);
+
     Type varType =
         hasAnn ? annType : (hasInit ? widen(initType) : Type::undefined());
 
@@ -118,7 +124,7 @@ void Analyzer::declareDeclarator(VariableDeclarator& d, VarKind kind) {
         if (d.init->kind == NodeKind::ArrayLiteral &&
             (annType.kind == TypeKind::Array || isTupleType(annType))) {
             checkArrayLiteral(static_cast<ArrayLiteral&>(*d.init), annType);
-        } else {
+        } else if (!arrayCtorForm) {
             checkAssign(initType, annType, d.init->span,
                         d.init->kind == NodeKind::ObjectLiteral);
         }

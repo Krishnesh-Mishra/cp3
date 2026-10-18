@@ -1,0 +1,6 @@
+import console from "std/console";
+let buf = new ArrayBuffer(4);
+let f = new Float32Array(buf);
+let u = new Uint8Array(buf);
+f[0] = 1;
+console.log(u.join(","));

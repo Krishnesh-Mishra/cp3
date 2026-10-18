@@ -21,6 +21,8 @@ set(cp3_codegen_sources
     src/emit/async.cpp
     src/emit/stmt.cpp
     src/emit/decl.cpp
+    src/emit/tarrays.cpp
+    src/emit/tarrays_methods.cpp
     src/emit/std/common.cpp
     src/emit/std/math.cpp
     src/emit/std/os.cpp

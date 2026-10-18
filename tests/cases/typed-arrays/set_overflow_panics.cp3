@@ -1,0 +1,6 @@
+import console from "std/console";
+let n = 3;
+let src = new Int8Array(n);
+let a = new Int8Array(2);
+a.set(src);
+console.log(a.join(","));

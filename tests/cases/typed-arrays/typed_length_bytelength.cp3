@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = new Float32Array(4);
+console.log(a.length);
+console.log(a.byteLength);

@@ -159,6 +159,11 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
         std::string initText;
         if (ci.shape == Shape::Optional && isNullishLiteral(*d.init)) {
             initText = "std::nullopt";
+        } else if (std::string special = declaratorInitText(d, ci.type);
+                   !special.empty()) {
+            // `let a: number[] = Array(3)` / `let a: number[] = []` (the
+            // annotation fixes the element type; emit/tarrays.cpp).
+            initText = special;
         } else {
             initText = expr(*d.init);
         }

@@ -1,0 +1,21 @@
+import console from "std/console";
+import { WebSocket, WebSocketServer } from "std/network";
+
+const wss = new WebSocketServer({ port: 48103 });
+wss.on("connection", (ws) => {
+  ws.on("message", (message) => {
+    ws.send("echo:" + message);
+  });
+});
+
+const ws = new WebSocket("ws://127.0.0.1:48103/");
+ws.on("open", () => {
+  ws.send("hello");
+});
+ws.on("message", (message) => {
+  console.log(message);
+  ws.close();
+  wss.close();
+});
+
+await sleep(500);

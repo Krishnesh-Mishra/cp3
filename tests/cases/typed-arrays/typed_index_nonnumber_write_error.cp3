@@ -1,0 +1,3 @@
+import console from "std/console";
+let u8 = new Uint8Array(1);
+u8[0] = undefined;

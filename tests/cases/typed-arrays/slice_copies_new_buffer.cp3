@@ -1,0 +1,5 @@
+import console from "std/console";
+let a = new Int8Array([1, 2, 3]);
+let b = a.slice(1);
+b[0] = 9;
+console.log(a.join(","));

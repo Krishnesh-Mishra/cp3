@@ -104,6 +104,34 @@ public:
     void retainExternal() noexcept;
     void releaseExternal() noexcept;
 
+    // --- external event sources ---------------------------------------------
+    //
+    // `std/network` (cp3/std/network.hpp) needs libuv driven from this loop. The
+    // network module owns its libuv loop and installs three opaque callbacks
+    // here; the loop itself never sees a libuv type (generated code must not
+    // include uv.h), and a program that does not import std/network installs
+    // nothing, so timers/promises keep their exact old behavior.
+    //
+    //   * `poll`     - one non-blocking turn (uv_run(UV_RUN_NOWAIT)); its result
+    //                  is advisory (the loop's exit rule does not consult it -
+    //                  libuv stays "alive" for its own unref'd uWS timers).
+    //   * `waitTurn` - one blocking turn, bounded by `maxWaitMs` (-1 means no
+    //                  runtime deadline: the source's own timeout applies). The
+    //                  source arms its own wake timer so a runtime timer still
+    //                  fires on time while the loop blocks in libuv.
+    //   * `wake`     - nudges libuv out of a blocking turn (thread-safe). Called
+    //                  by `postFromThread`, so a `worker` result is serviced
+    //                  promptly even while the loop is inside libuv.
+    //
+    // `run()` stays alive while `external_` is non-zero (the network module
+    // retains/releases per live server, socket or in-flight fetch), so the exit
+    // rule ("no pending work") is unchanged: an open server IS pending work.
+    using ExternalPoll = std::function<bool()>;
+    using ExternalWait = std::function<void(std::int64_t maxWaitMs)>;
+    using ExternalWake = std::function<void()>;
+    void setExternalSource(ExternalPoll poll, ExternalWait waitTurn,
+                           ExternalWake wake);
+
     // Pending timers + tasks currently queued (not counting microtasks).
     std::size_t pending() const noexcept;
     // Queued microtasks (for tests / diagnostics).
@@ -135,6 +163,12 @@ private:
     mutable std::condition_variable wakeCv_;  // signalled by postFromThread
     std::deque<Task> incoming_;               // cross-thread tasks
     std::size_t external_ = 0;                // in-flight external producers
+
+    // The installed external event source (see setExternalSource). Read under
+    // `mutex_` so `postFromThread` may use `externalWake_` from any thread.
+    ExternalPoll externalPoll_;
+    ExternalWait externalWait_;
+    ExternalWake externalWake_;
 
     bool stopped_ = false;
     bool inRun_ = false;

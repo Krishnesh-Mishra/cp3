@@ -21,11 +21,14 @@ EventLoop::~EventLoop() = default;
 void EventLoop::post(Task task) { microtasks_.push_back(std::move(task)); }
 
 void EventLoop::postFromThread(Task task) {
+    ExternalWake wake;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         incoming_.push_back(std::move(task));
+        wake = externalWake_;  // nudge libuv too, if a source is installed
     }
     wakeCv_.notify_all();
+    if (wake) wake();
 }
 
 EventLoop::TimerId EventLoop::addTimer(std::int64_t delayMs, Task task) {
@@ -72,6 +75,14 @@ void EventLoop::releaseExternal() noexcept {
 bool EventLoop::hasExternalWork() const noexcept {
     std::lock_guard<std::mutex> lock(mutex_);
     return external_ != 0;
+}
+
+void EventLoop::setExternalSource(ExternalPoll poll, ExternalWait waitTurn,
+                                  ExternalWake wake) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    externalPoll_ = std::move(poll);
+    externalWait_ = std::move(waitTurn);
+    externalWake_ = std::move(wake);
 }
 
 // --- driving ----------------------------------------------------------------
@@ -205,15 +216,44 @@ bool EventLoop::pumpDueTimers() {
 }
 
 bool EventLoop::waitForNext() {
+    // The nearest runtime timer deadline (unset when there are no timers).
+    std::int64_t timerWait = -1;
     if (!timers_.empty()) {
-        const std::int64_t deadline = timers_.begin()->first.first;
-        const std::int64_t now = nowMs();
-        if (deadline <= now) {
+        timerWait = timers_.begin()->first.first - nowMs();
+        if (timerWait <= 0) {
             return true;  // already due; pump it on the next turn
         }
+    }
+
+    ExternalPoll poll;
+    ExternalWait waitTurn;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        poll = externalPoll_;
+        waitTurn = externalWait_;
+    }
+
+    if (poll) {
+        // A std/network event source is installed: one non-blocking libuv
+        // turn. Its callbacks may queue microtasks/timers on this loop.
+        poll();
+        if (!microtasks_.empty() || !readyTasks_.empty()) {
+            return true;  // work arrived: run it on the next turn
+        }
+    }
+
+    if (waitTurn && hasExternalWork()) {
+        // An in-flight fetch, a listening server or an open socket IS pending
+        // work (spec §14): block inside the source for one turn, bounded by
+        // the nearest runtime timer so a cp3 timer still fires on time.
+        waitTurn(timerWait);
+        return true;
+    }
+
+    if (timerWait >= 0) {
         // Wait for the deadline, or wake early on a cross-thread post.
         std::unique_lock<std::mutex> lock(mutex_);
-        wakeCv_.wait_for(lock, std::chrono::milliseconds(deadline - now),
+        wakeCv_.wait_for(lock, std::chrono::milliseconds(timerWait),
                          [this] { return !incoming_.empty() || stopped_; });
         return true;
     }

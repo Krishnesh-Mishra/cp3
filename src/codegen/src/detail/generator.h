@@ -21,6 +21,7 @@
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
 //   emit/decl.cpp          forward decls, function signatures, declarations
+//   emit/tarrays.cpp       the JS-compat typed-array family (D69)
 //   emit/std/common.cpp    ambient std surface: shared helpers + dispatch
 //   emit/std/<family>.cpp  Math / path / os / process / JSON / string lowering
 //
@@ -103,6 +104,16 @@ private:
     std::string emitTemplate(const TemplateLiteral& tl);
     std::string tsCall(const Expr& e);
     std::string cond(const Expr& e);
+    // A whole array in a formatter or truthiness test pulls the arr family
+    // block (D69), even when this unit never spells the C++ type itself (a
+    // cross-module call's result, say).
+    void noteFamilyUse(const Expr& e) {
+        const detail::CppInfo ci = info(e);
+        if (ci.shape == detail::Shape::Array ||
+            ci.shape == detail::Shape::TypedArray) {
+            needsTypedArray_ = true;
+        }
+    }
     std::string emitBinary(const BinaryExpr& b);
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
                              const detail::CppInfo& R, const std::string& lhs,
@@ -126,6 +137,48 @@ private:
     std::string emitConsoleLog(const CallExpr& c);
     std::string emitConsoleMethod(const CallExpr& c, const char* method);
 
+    // --- the JS-compat typed-array family (emit/tarrays.cpp) ------------------
+    // Constructors with and without `new` (`Array(2)`, `Int8Array([1])`,
+    // `DataView(buf)`), the `Array.of`/`Array.from` statics, the method tables
+    // (`fill`/`join`/... on arrays and typed views, `get*`/`set*` on DataView,
+    // `slice` on the buffer classes), indexed reads/writes, and the declarator
+    // forms whose element type comes from the binding. Each entry point
+    // returns "" when the form is not one of them.
+    std::string emitFamilyCtorCall(const CallExpr& c, const std::string& name);
+    // `emitCall` with the `new`-less constructor spelling tried first.
+    std::string emitCallOrFamily(const CallExpr& c);
+    std::string emitFamilyCtorText(const std::string& cls, const ExprList& args,
+                                   const Type& resultElem, const Node& site);
+    std::string emitFamilyNew(const NewExpr& n);
+    std::string emitFamilyMemberCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitFamilyMember(const MemberExpr& m);
+    std::string emitFamilyIndexRead(const IndexExpr& ix);
+    // The `IndexExpr` dispatch: the family read when the receiver is one,
+    // otherwise the ordinary not-implemented report.
+    std::string emitIndexExpr(const IndexExpr& ix);
+    std::string emitFamilyIndexWrite(const AssignmentExpr& a);
+    // The receiver text of a family method: an `Array(n)` constructor or an
+    // array literal takes the element type the call fixed (`elem`).
+    std::string familyReceiverText(const Expr& obj, const Type& elem,
+                                   const Node& site);
+    std::string arrayCtorText(const ExprList& args, const Type& elem,
+                              const Node& site);
+    std::string typedCtorText(const std::string& cls, const ExprList& args,
+                              const Node& site);
+    std::string arrayStaticCallText(const CallExpr& c,
+                                    const std::string& prop);
+    std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m,
+                                  const Type& recv);
+    std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m,
+                                  const Type& recv);
+    std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m,
+                                    const char* tag);
+    std::string dataViewCallText(const CallExpr& c, const MemberExpr& m);
+    std::string arrayLiteralText(const ArrayLiteral& lit,
+                                 const Type& elemOverride);
+    std::string declaratorInitText(const VariableDeclarator& d,
+                                   const Type& declared);
+
     // --- std namespaces + primitive methods (emit/std/*.cpp) ------------------
     // Lower `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*` calls, the
     // `string` method surface, and builtin property reads (`Math.PI`,
@@ -145,6 +198,21 @@ private:
     // the caller keeps reporting CP3002 meanwhile.
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
+    // `std/network` receivers are recognised by the sema marker names
+    // ("$network:*"), so the hooks live on the receiver, not on the member:
+    // named imports (identifier calls), `new` forms, member calls/reads.
+    bool isNetworkObject(const Expr* e) const;
+    std::string emitNetworkIdentifier(const CallExpr& c, const std::string& name);
+    std::string emitUnresolvedCall(const CallExpr& c, const std::string& name);
+    std::string emitNetworkNew(const NewExpr& n);
+    std::string emitNetworkMemberCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitNetworkMemberRead(const MemberExpr& m);
+    std::string emitNetworkFetch(const CallExpr& c, const ExprList& args);
+    std::string fetchInitText(const Expr& init);
+    std::string networkArg(const Type& receiver, const std::string& property,
+                           const CallExpr& c, const Expr& arg, std::size_t index);
+    std::string networkArgs(const Type& receiver, const std::string& property,
+                            const CallExpr& c);
     std::vector<std::string> emitPlainArgs(const CallExpr& c);
 
     // --- async / promises / errors (emit_async.cpp) --------------------------
@@ -256,6 +324,7 @@ private:
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
+    bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)

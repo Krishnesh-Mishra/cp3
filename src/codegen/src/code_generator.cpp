@@ -137,6 +137,37 @@ private:
 
 )CP3HELPERS";
 
+// The family's per-TU helpers (formatter + truthiness), added only when the
+// unit uses the family: the templates name cp3::runtime types that exist only
+// with the cp3/typed_array.hpp include.
+const char* const kTypedArrayHelperBlock = R"CP3HELPERS(namespace {
+
+// ----- the JS-compat typed-array family (D69) --------------------------------
+// A whole typed view formats as `Int8Array(2) [1, 0]`. The overload must be a
+// member template: a Ref<T> would otherwise bind to `cp3_ts(bool)` through the
+// pointer conversion.
+template <class Tag>
+inline std::string cp3_ts(const cp3::runtime::TypedArray<Tag>& a) {
+    return cp3::runtime::typedArrayText(a);
+}
+// A whole regular array formats as `[1, 2, 3]` (the pinned corpus form:
+// element text in ", " spacing, no class prefix and no inner padding).
+template <class E>
+inline std::string cp3_ts(const cp3::runtime::Array<E>& a) {
+    return "[" + cp3::runtime::arrayJoin(a, std::string(", ")) + "]";
+}
+// Every array is an object: JS truthiness is always true, the empty array
+// included. Without these, `if (a)` finds no overload (Ref's bool conversion
+// is explicit).
+template <class Tag>
+inline bool cp3_truthy(const cp3::runtime::TypedArray<Tag>&) { return true; }
+template <class E>
+inline bool cp3_truthy(const cp3::runtime::Array<E>&) { return true; }
+
+}  // namespace
+
+)CP3HELPERS";
+
 // Prefix every line of `text` with `pad`. Used to re-indent the top-level
 // statements when they are wrapped in the top-level-`await` coroutine.
 std::string indentText(const std::string& text, const std::string& pad) {
@@ -205,6 +236,18 @@ GeneratedModule Generator::run(const Program& program) {
         }
     }
 
+    // The family include (D69) is needed wherever a generated declaration or
+    // definition names its C++ spellings, including signatures whose array
+    // type was resolved from a body rather than an annotation.
+    const std::string familyUse = decls + defs + mainBody;
+    if (familyUse.find("::cp3::runtime::Array") != std::string::npos ||
+        familyUse.find("::cp3::runtime::TypedArray") != std::string::npos ||
+        familyUse.find("::cp3::runtime::SharedArrayBuffer") !=
+            std::string::npos ||
+        familyUse.find("::cp3::runtime::DataView") != std::string::npos) {
+        needsTypedArray_ = true;
+    }
+
     GeneratedModule module;
     module.header = buildHeader(decls);
     module.source = buildSource(decls, defs, mainBody);
@@ -229,6 +272,11 @@ std::string Generator::buildHeader(const std::string& decls) const {
         // A declared `async function` returns `Promise<T>` (spec §14), so the
         // alias must be complete for callers of this header.
         out += "#include \"cp3/async/promise.hpp\"\n";
+    }
+    if (needsTypedArray_) {
+        // The JS-compat typed-array family (D69): a signature or module-scope
+        // binding can name `Array<T>`/the typed views.
+        out += "#include \"cp3/typed_array.hpp\"\n";
     }
     out += "\n";
     out += "namespace " + namesp_ + " {\n\n";
@@ -260,6 +308,9 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsEventLoop_) {
         out += "#include \"cp3/async/promise.hpp\"\n";  // Promise/await/timers
     }
+    if (needsTypedArray_) {
+        out += "#include \"cp3/typed_array.hpp\"\n";  // the family (D69)
+    }
     if (consoleStderr_) {
         out += "#include \"cp3/std/console.hpp\"\n";  // console.warn/.error
     }
@@ -273,6 +324,9 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
     out += "\n";
     out += kHelperBlock;
+    if (needsTypedArray_) {
+        out += kTypedArrayHelperBlock;
+    }
     out += "\nnamespace " + namesp_ + " {\n\n";
     out += decls;
     out += "\n";

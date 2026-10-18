@@ -131,12 +131,9 @@ std::string Generator::emitCall(const CallExpr& c) {
             notImplemented(c, "generic call");
             return "0.0";
         }
+        // A name that is not a function declared in this unit.
         if (functions_.find(name) == functions_.end()) {
-            // Not a function declared in this unit and not an intrinsic we
-            // lower (console.* is handled above): treat it as out of scope
-            // rather than emitting a call to an undeclared C++ name.
-            notImplemented(c, "call to function '" + name + "' not declared in this unit");
-            return "0.0";
+            return emitUnresolvedCall(c, name);
         }
         if (asyncFunctions_.count(name) != 0) {
             // Calling an async function starts async work whose continuations

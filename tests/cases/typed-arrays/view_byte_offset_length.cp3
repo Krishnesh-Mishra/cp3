@@ -1,0 +1,6 @@
+import console from "std/console";
+let buf = new ArrayBuffer(16);
+let view = new Int32Array(buf, 8, 1);
+console.log(view.length);
+console.log(view.byteOffset);
+console.log(view.byteLength);

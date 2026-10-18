@@ -1,0 +1,2 @@
+import console from "std/console";
+console.log(new Uint32Array([-1, 4294967296]).join(","));

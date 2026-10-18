@@ -1,0 +1,5 @@
+import console from "std/console";
+let other = new Int8Array([1, 2]);
+let view = new Int8Array(other);
+other[0] = 9;
+console.log(view.join(","));

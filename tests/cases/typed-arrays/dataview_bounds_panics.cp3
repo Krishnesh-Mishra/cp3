@@ -1,0 +1,4 @@
+import console from "std/console";
+let buf = new ArrayBuffer(4);
+let dv = new DataView(buf);
+console.log(dv.getInt32(4));

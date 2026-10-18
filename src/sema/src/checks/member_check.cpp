@@ -113,6 +113,11 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
                 }
                 return ambient();
             }
+            // The JS-compat family (tarrays_check.cpp): typed views, the
+            // buffer classes and DataView have their own member tables.
+            if (isTypedArrayClass(ot)) return typedArrayMember(ot, prop);
+            if (isBufferClass(ot)) return bufferMember(ot, prop);
+            if (isDataViewClass(ot)) return dataViewMember(prop);
             return ambient();
         case TypeKind::String:
             return stringMember(prop);
@@ -220,6 +225,12 @@ Type Analyzer::indexOfProbe(const Type& ot, IndexExpr& ix) {
             return indexOfObject(ot, ix);
         case TypeKind::Literal:
             return indexOfProbe(ot.literalBaseType(), ix);
+        case TypeKind::Class:
+            // Typed-array elements are `number` when the literal index is
+            // provably in range, `number | undefined` otherwise
+            // (tarrays_check.cpp).
+            if (isTypedArrayClass(ot)) return typedIndexRead(ix);
+            return ambient();
         default:
             return ambient();
     }

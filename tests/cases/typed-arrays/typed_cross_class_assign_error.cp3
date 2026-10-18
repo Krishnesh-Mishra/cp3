@@ -1,0 +1,2 @@
+import console from "std/console";
+let a: Float64Array = new Float32Array(1);

@@ -25,6 +25,11 @@ set(cp3_runtime_sources
     src/core/runtime.cpp
     src/std/crypto.cpp
     src/std/network.cpp
+    src/std/network_fetch.cpp
+    src/std/network_server.cpp
+    src/std/network_ws.cpp
+    src/std/network_ws_client.cpp
+    src/std/network_ws_frames.cpp
 )
 
 add_library(cp3_runtime STATIC ${cp3_runtime_sources})

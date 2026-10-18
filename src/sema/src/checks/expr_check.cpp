@@ -61,7 +61,7 @@ Type Analyzer::inferExpr(Expr& e) {
         case NodeKind::IndexExpr:
             return inferIndex(static_cast<IndexExpr&>(e));
         case NodeKind::CallExpr:
-            return inferCall(static_cast<CallExpr&>(e));
+            return inferCallOrFamily(static_cast<CallExpr&>(e));
         case NodeKind::NewExpr:
             return inferNew(static_cast<NewExpr&>(e));
         case NodeKind::UnaryExpr:
@@ -174,6 +174,27 @@ Type Analyzer::inferObject(ObjectLiteral& ol) {
 }
 
 Type Analyzer::inferNew(NewExpr& n) {
+    // The JS-compat family constructors (`new Int8Array(...)`, `new Array(2)`,
+    // `new DataView(buf)`): nominal types from the family grammar
+    // (tarrays_check.cpp). A name the program shadowed is not ambient, so user
+    // declarations keep the generic path below.
+    if (n.callee && n.callee->kind == NodeKind::Identifier) {
+        auto& id = static_cast<Identifier&>(*n.callee);
+        Binding b;
+        if (lookup(id.name, b) && isAmbientType(b.type) &&
+            isFamilyCtorName(id.name)) {
+            setType(id, b.type);
+            return withType(n, inferFamilyConstruct(id.name, n.arguments,
+                                                    n.span));
+        }
+        if (lookup(id.name, b) && isAmbientType(b.type)) {
+            // `new WebSocket(url)` / `new WebSocketServer({ port })`: an
+            // ambient name the network table knows (std_network.cpp).
+            setType(id, b.type);
+            Type net = inferNetworkConstruct(id.name, n.arguments, n.span);
+            if (!net.isUnknown()) return withType(n, net);
+        }
+    }
     if (n.callee) inferExpr(*n.callee);
     for (auto& a : n.arguments) {
         if (a && a->kind == NodeKind::SpreadElement) {

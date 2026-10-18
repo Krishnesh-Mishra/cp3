@@ -108,10 +108,8 @@ std::string Generator::exprPlain(const Expr& e) {
         case NodeKind::NumberLiteral:
             return numberLiteralText(static_cast<const NumberLiteral&>(e).value);
         case NodeKind::StringLiteral:
-            // Emit as a typed std::string. A bare literal would otherwise
-            // bind to `cp3_ts(bool)`/`cp3_truthy(bool)` (a const char* ->
-            // bool pointer conversion beats const char* -> std::string),
-            // silently formatting every literal as "true".
+            // Emit as a typed std::string: a bare literal would bind to
+            // `cp3_ts(bool)`/`cp3_truthy(bool)` and print every literal as "true".
             return "std::string(" +
                    cppStringLiteral(static_cast<const StringLiteral&>(e).value) + ")";
         case NodeKind::BoolLiteral:
@@ -137,7 +135,22 @@ std::string Generator::exprPlain(const Expr& e) {
         case NodeKind::AssignmentExpr:
             return emitAssignment(static_cast<const AssignmentExpr&>(e));
         case NodeKind::CallExpr:
-            return emitCall(static_cast<const CallExpr&>(e));
+            return emitCallOrFamily(static_cast<const CallExpr&>(e));
+        case NodeKind::NewExpr: {
+            // `new WebSocket(url)` / `new WebSocketServer({ port })`
+            // (std/network), then the JS-compat family constructors
+            // (`new Int8Array(...)`, `new Array(2)`, `new DataView(buf)`);
+            // anything else reports.
+            if (std::string net = emitNetworkNew(static_cast<const NewExpr&>(e));
+                !net.empty()) {
+                return net;
+            }
+            return emitFamilyNew(static_cast<const NewExpr&>(e));
+        }
+        case NodeKind::ArrayLiteral:
+            return arrayLiteralText(static_cast<const ArrayLiteral&>(e), Type::unknown());
+        case NodeKind::IndexExpr:
+            return emitIndexExpr(static_cast<const IndexExpr&>(e));
         case NodeKind::AwaitExpr:
             return emitAwait(static_cast<const AwaitExpr&>(e));
         case NodeKind::MemberExpr: {
@@ -194,6 +207,7 @@ std::string Generator::emitTemplate(const TemplateLiteral& tl) {
 // selects the formatter, letting `cp3_ts` overload-resolution pick the type.
 std::string Generator::tsCall(const Expr& e) {
     const CppInfo ci = info(e);
+    noteFamilyUse(e);
     // A `T | null` optional prints "null" when empty, whereas a
     // `T | undefined` / `T?` optional prints "undefined".
     if (ci.shape == Shape::Optional && ci.emptyKind == NullishKind::Null) {
@@ -203,6 +217,7 @@ std::string Generator::tsCall(const Expr& e) {
 }
 
 std::string Generator::cond(const Expr& e) {
+    noteFamilyUse(e);
     if (e.kind == NodeKind::LogicalExpr) {
         const auto& l = static_cast<const LogicalExpr&>(e);
         if (l.op == LogicalOp::And) return "(" + cond(*l.left) + " && " + cond(*l.right) + ")";
@@ -440,6 +455,11 @@ std::string Generator::emitConditional(const ConditionalExpr& c) {
 
 std::string Generator::emitAssignment(const AssignmentExpr& a) {
     if (a.target->kind != NodeKind::Identifier) {
+        // Array/typed-view element writes (`a[1] = 9`, `u8[0] = 5`) lower to
+        // the family's checked writes first (emit/tarrays_methods.cpp).
+        if (a.target->kind == NodeKind::IndexExpr) {
+            if (std::string w = emitFamilyIndexWrite(a); !w.empty()) return w;
+        }
         notImplemented(a, "assignment to a non-identifier target");
         return "0.0";
     }
