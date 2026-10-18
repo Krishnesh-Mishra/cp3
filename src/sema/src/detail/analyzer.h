@@ -182,6 +182,8 @@ private:
     Type inferMember(MemberExpr& m);
     Type memberOf(const Type& ot, const std::string& prop, const SourceSpan& span,
                   bool optional);
+    // Promise members (spec §14): `.then`/`.catch`/`.catchError`/`.finally`.
+    Type promiseMemberOf(const Type& ot, const std::string& prop);
     Type memberOfProbe(const Type& ot, const std::string& prop,
                        const SourceSpan& span);
     Type arrayMember(const Type& arr, const std::string& prop);

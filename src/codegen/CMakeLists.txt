@@ -19,6 +19,7 @@ set(cp3_codegen_sources
     src/support/int_mode.cpp
     src/support/int_reads.cpp
     src/emit/expr.cpp
+    src/emit/equality.cpp
     src/emit/call.cpp
     src/emit/async.cpp
     src/emit/stmt.cpp

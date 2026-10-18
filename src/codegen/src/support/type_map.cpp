@@ -99,6 +99,33 @@ static CppInfo classifyPromise(const Type& t) {
     return info;
 }
 
+// The Class-kind tail of `classify`: the family spellings (Buffer, typed
+// views, Map/Set, Date), then the builtin EventEmitter (D74), then `Promise<T>`
+// (the only other class with a spelling). Anything else stays out of M1.
+static CppInfo classifyClassValue(const Type& t) {
+    CppInfo info;
+    info.type = t;
+    // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp).
+    if (classifyByteBuffer(t, info)) return info;
+    // The JS-compat family (typed views, buffers, DataView).
+    if (classifyFamily(t, info)) return info;
+    // The std/collections family (`Map<K, V>` / `Set<T>`).
+    if (classifyCollections(t, info)) return info;
+    // The `std/date` value type (src/std/date/codegen.cpp).
+    if (classifyDate(t, info)) return info;
+    // The builtin EventEmitter (D74): a reference type, so its C++
+    // spelling is `Ref<EventEmitter>` (cp3/async/emitter.hpp).
+    if (t.name == "EventEmitter") {
+        info.shape = Shape::EventEmitter;
+        info.representable = true;
+        info.cpp = "::cp3::runtime::Ref<::cp3::runtime::EventEmitter>";
+        return info;
+    }
+    // `Promise<T>` is the only other class type with a spelling (M1).
+    if (isPromiseType(t)) return classifyPromise(t);
+    return info;
+}
+
 // `T | null` / `T | undefined` / the `T?` shorthand / `T | null | undefined`
 // over a primitive `T` -> `std::optional<T>`, or the two-flavor `Maybe<T>`
 // when both nullish kinds are present (an implementation detail of
@@ -183,29 +210,8 @@ CppInfo classify(const Type& raw) {
         case TypeKind::Union:
             classifyNullishUnion(t, info);
             return info;
-        case TypeKind::Class: {
-            // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp).
-            if (classifyByteBuffer(t, info)) return info;
-            // The JS-compat family (typed views, buffers, DataView).
-            if (classifyFamily(t, info)) return info;
-            // The std/collections family (`Map<K, V>` / `Set<T>`).
-            if (classifyCollections(t, info)) return info;
-            // The `std/date` value type (src/std/date/codegen.cpp).
-            if (classifyDate(t, info)) return info;
-            // The builtin EventEmitter (D74): a reference type, so its C++
-            // spelling is `Ref<EventEmitter>` (cp3/async/emitter.hpp).
-            if (t.name == "EventEmitter") {
-                info.shape = Shape::EventEmitter;
-                info.representable = true;
-                info.cpp = "::cp3::runtime::Ref<::cp3::runtime::EventEmitter>";
-                return info;
-            }
-            // `Promise<T>` is the only other class type with a spelling (M1).
-            if (!isPromiseType(t)) {
-                return info;
-            }
-            return classifyPromise(t);
-        }
+        case TypeKind::Class:
+            return classifyClassValue(t);
         case TypeKind::Function:
             // A function-typed value (D74): boxed as `Listener` so every copy
             // shares one identity; only void-returning functions have one.

@@ -82,6 +82,24 @@ Type Analyzer::memberOf(const Type& ot, const std::string& prop,
     return memberOfProbe(ot, prop, span);
 }
 
+// Promise members (spec §14): `.then` yields a new promise of the handler's
+// result (unknowable here, so `Promise<unknown>`), while `.catch`/`.catchError`
+// and `.finally` preserve the value type. Codegen re-derives the exact C++
+// handler types from the receiver.
+Type Analyzer::promiseMemberOf(const Type& ot, const std::string& prop) {
+    const Type value = promiseValue(ot);
+    if (prop == "then") {
+        return Type::function({ambient()}, promiseOf(Type::unknown()));
+    }
+    if (prop == "catch" || prop == "catchError") {
+        return Type::function({ambient()}, promiseOf(value));
+    }
+    if (prop == "finally") {
+        return Type::function({ambient()}, promiseOf(value));
+    }
+    return ambient();
+}
+
 // Same as memberOf but for a single (non-union) type; emits CP3305 for a
 // genuinely missing property on a fixed-shape object.
 Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
@@ -105,23 +123,7 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
         case TypeKind::Array:
             return arrayMember(ot, prop);
         case TypeKind::Class:
-            // Promise members (spec §14): `.then` yields a new promise of the
-            // handler's result (unknowable here, so `Promise<unknown>`), while
-            // `.catch`/`.catchError`/`.finally` preserve the value type. Codegen
-            // re-derives the exact C++ handler types from the receiver.
-            if (isPromiseType(ot)) {
-                const Type value = promiseValue(ot);
-                if (prop == "then") {
-                    return Type::function({ambient()}, promiseOf(Type::unknown()));
-                }
-                if (prop == "catch" || prop == "catchError") {
-                    return Type::function({ambient()}, promiseOf(value));
-                }
-                if (prop == "finally") {
-                    return Type::function({ambient()}, promiseOf(value));
-                }
-                return ambient();
-            }
+            if (isPromiseType(ot)) return promiseMemberOf(ot, prop);
             // `EventEmitter` (D74, spec §14): the documented on/once/off/emit
             // surface, all returning void. A listener is
             // `(...args: unknown[]) => void`; `emit`'s rest parameter is
