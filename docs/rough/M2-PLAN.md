@@ -512,6 +512,37 @@ ambiguous (the predicted baseline exactly); layout lint 225 files, 0 errors
 (64 soft); checker 65 defined / 65 documented / 224 sources / 0 findings.
 Report: `build/scratch/diagnostics/WAVE-DIAGNOSTICS-REPORT.md`.
 
+## std package restructure landing record (2026-10-18)
+
+Committed `489e276` - stage 1 of D72. 39 whole-file moves plus the minimal
+wiring, replayed onto the main tree by
+`build/scratch/restructure/replay-stage1.py` (dress-rehearsed against a byte
+copy of the post-diagnostics tree; every precondition asserted; idempotent;
+exit 0). Every std module now keeps all its phase slices in
+`src/std/<family>/`: `sema.cpp`, `codegen.cpp`, `runtime*.cpp`, `native.hpp`
+and `include/cp3/std/<name>.hpp`; typed-arrays keeps two units per phase
+(`sema.cpp` + `sema_methods.cpp`, `codegen.cpp` + `codegen_methods.cpp`) and
+its four headers under `include/cp3/`. The compiler core stays phase-first;
+`src/codegen/src/emit/std/common.cpp` remains the codegen dispatch core (the
+per-family table extraction is stage 2, spec in
+`build/scratch/restructure/STAGE2-DEFERRALS.md`).
+
+Generated code still spells `#include "cp3/std/<name>.hpp"`: the quoted
+include resolves against the family's `include/` root, added only when the
+program imports that `std/<name>` specifier (the D68 row selection);
+`std/string` and `std/typed-arrays` roots are always available. `tests/cases/**`
+did not move. ARCHITECTURE/STYLE path references were updated in the same
+sweep, the mapping table below and D72's ABI bullet corrected to the landed
+paths, and the two empty `src/runtime/{src,include/cp3}/std/` shells removed.
+
+Lead verification (cold, ccache, parallel runner, canonical Debug build):
+build 0 errors; layout lint 233 files, 0 errors (64 soft); filters crypto
+25/25/0/0/0, typed-arrays 94/94/0/0/0, arrays-strings 185/120/0/56/9,
+control-flow 75/41/0/28/6, types 110/85/0/20/5, async 31/21/0/5/5, stdlib
+296/170/0/110/16 (the four port-binding network run cases included) - every
+total identical to the stage-1 report's table. Report:
+`build/scratch/restructure/WAVE-RESTRUCTURE-STAGE1-REPORT.md`.
+
 ## Perf wave (landed as `5c88ead`; plan below kept as written) - performance
 
 Lead probe, 2026-10-17 (`build/scratch/perf-probe/`, g++ 16.1.0 `-O2`): the
@@ -549,7 +580,7 @@ the generated string ops, the cpp entry, or both carry that gap).
 
 Acceptance: corpus 0 failed + suite rerun meets the D64 targets.
 
-## std package restructure wave (queued - D72, user directive 2026-10-18)
+## std package restructure wave (stage 1 landed as `489e276`; plan below kept as written) - D72
 
 Executed immediately after the network and typed-arrays waves land and are
 committed (never move files under a running agent), before the audit and the
