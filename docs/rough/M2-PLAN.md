@@ -387,6 +387,26 @@ program links neither. The three parallel feature waves (crypto, network,
 typed arrays) fill the stubs; each reports in
 `build/scratch/<wave>/WAVE-<WAVE>-REPORT.md`.
 
+## crypto wave landing record (2026-10-18)
+
+Committed `ff5dbbc` (40 files). `std/crypto` is real on the vendored libsodium
+backend: all six documented members (docs 04 section crypto) implemented and
+lowered, `randomUUID` (RFC 4122 v4, 36 chars), `randomBytes`,
+`sha256`/`sha512` (lowercase hex), `AES256`/`AES256Decrypt` (AES-256-GCM,
+base64 envelope of nonce (12) || ciphertext || tag (16), BLAKE2b-256 key
+stretch, decrypt throws a catchable `Thrown` on tamper or wrong key, never
+silently-wrong plaintext; AES deliberately not gated on
+`crypto_aead_aes256gcm_is_available()`). `randomBytes` returns the raw-byte
+`std::string` stand-in: the docs type it `Buffer` and beta one has no nominal
+Buffer type yet (the pinned `.length` case is exactly the byte count; feeding
+the value back into sha256/sha512 works). Sema types the surface and codegen
+lowers onto `::cp3::runtime::crypto` (`needsCrypto_`), unknown members stay
+CP3002. 18 new focused cases (15 run, 3 check) plus the 7 pinned run-mode
+cases flipped. Lead verification: canonical rebuild exit 0, lint 207 files
+0 errors 52 warnings, spec surface re-checked against docs 04, cold focused
+`--filter crypto` 25/25 passed 0 failed, no dashes, no shared-file edits.
+Report: `build/scratch/crypto/WAVE-CRYPTO-REPORT.md`.
+
 ## Perf wave (landed as `5c88ead`; plan below kept as written) - performance
 
 Lead probe, 2026-10-17 (`build/scratch/perf-probe/`, g++ 16.1.0 `-O2`): the
