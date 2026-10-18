@@ -455,6 +455,49 @@ the generated string ops, the cpp entry, or both carry that gap).
 
 Acceptance: corpus 0 failed + suite rerun meets the D64 targets.
 
+## std package restructure wave (queued - D72, user directive 2026-10-18)
+
+Executed immediately after the network and typed-arrays waves land and are
+committed (never move files under a running agent), before the audit and the
+perf work. Target: `src/std/<family>/` holds every phase slice of that module;
+the compiler core (`lexer`, `parser`, `modules`, `common`, `sema`, `codegen`,
+`runtime`, `cli`) stays phase-first.
+
+Per-module mapping (crypto shown; identical shape for every module):
+
+| today | after |
+|---|---|
+| `src/sema/src/checks/std_crypto.cpp` | `src/std/crypto/sema.cpp` |
+| `src/codegen/src/emit/std/crypto.cpp` | `src/std/crypto/codegen.cpp` |
+| `src/runtime/src/std/crypto.cpp` | `src/std/crypto/runtime.cpp` |
+| `src/runtime/include/cp3/std/crypto.hpp` | `src/std/crypto/crypto.hpp` |
+| `src/cli/src/detail/native_std_crypto.hpp` | `src/std/crypto/native.hpp` |
+
+- network: same, with the runtime split preserved (`runtime.cpp`,
+  `runtime_loop.hpp`, `runtime_fetch.cpp`, `runtime_server.cpp`,
+  `runtime_ws*.cpp`).
+- typed-arrays: `typed_array.hpp`, `array_buffer.hpp`, `data_view.hpp`,
+  `array_extras.hpp`, `sema.cpp` (`tarrays_check` + `tarrays_methods`),
+  `codegen.cpp` (`emit/tarrays` + `tarrays_methods`).
+- console, json, math, os, path, process, string: same shape, one folder each.
+
+Steps and checks:
+
+1. `git mv` every file; contents change only where includes or paths change.
+   Full words in folder names (`typed-arrays`), phase names in file names.
+2. CMake: sema/codegen/runtime targets pick up `src/std/*/` sources.
+3. CLI: `compilerIncludeRoots`/`runtimeSourcePaths` (toolchain/util.cpp) and
+   the native row table learn the per-family include roots; generated code
+   still says `#include "cp3/std/<name>.hpp"`. A program only gets the roots
+   of the families it imports.
+4. Same-sweep updates: `tools/lint_layout.py`, `ARCHITECTURE.md`, `STYLE.md`,
+   M2-PLAN and DECISIONS path references, native rows' repo-relative paths.
+5. Corpus untouched: `tests/cases/**` stays as pinned.
+6. Acceptance: canonical rebuild, lint 0 errors, cold full corpus
+   1236 found / 0 failed / 471 skipped / 108 ambiguous baseline shape, both
+   native smoke programs (crypto AES+sha, network health server) still build
+   and run; then the landing record for this sweep.
+
 ## Native type systems wave (queued - spec §3)
 
 `docs/language-spec/03-type-system.md`: TS type names stay the default;

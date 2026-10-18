@@ -635,3 +635,40 @@ and hands its result to the caller's loop with `postFromThread` (the only
 sanctioned cross-thread channel: queue a task on the target loop, then wake
 it; the loop drains the queue between macrotasks, and after this decision the
 wake also nudges libuv out of a blocking turn).
+
+## D72 - Std package layout: feature folders under src/std (user directive, 2026-10-18)
+
+The layout is phase-first (lexer, parser, sema, codegen, runtime, cli) and that
+made every std module a scatter: "change crypto" means remembering five paths
+across four phases (sema check, codegen lowering, runtime TU, ABI header,
+native rows). The user's ruling: the compiler core stays phase-first; the std
+package becomes feature-first. One folder per std module family under
+`src/std/<family>/` holds every slice of that module:
+
+- `sema.cpp` - the type surface checks (was `sema/src/checks/std_<name>.cpp`)
+- `codegen.cpp` - the lowering (was `codegen/src/emit/std/<name>.cpp`)
+- `runtime*.cpp` plus private headers - the implementation
+- `native.hpp` - the toolchain rows (was `cli/src/detail/native_std_<name>.hpp`)
+- `<name>.hpp` - the generated-code ABI header (was
+  `runtime/include/cp3/std/<name>.hpp`)
+
+Rules:
+
+1. **ABI spelling unchanged.** Generated code still includes
+   `cp3/std/<name>.hpp`; the CLI assembles per-family include roots (added by
+   the modules the program actually imports). This generalizes the D68 row
+   table to every std module: include root plus optional native libs plus
+   optional runtime TUs.
+2. **Names.** Full words (`typed-arrays`, never `tarrays`); phase-named files
+   (`sema.cpp`, `codegen.cpp`, `runtime*.cpp`, `native.hpp`).
+3. **Scope.** All std modules (console, json, math, os, path, process, string,
+   crypto, network) plus the typed-arrays family in one sweep. `tests/cases/**`
+   does not move; the corpus categories stay exactly as pinned.
+4. **Mechanics.** `git mv` plus include-path fixes; CMake source lists;
+   `src/cli/src/toolchain/util.cpp` include roots and runtime discovery;
+   `tools/lint_layout.py`, `ARCHITECTURE.md`, `STYLE.md` and every doc path
+   reference in the same sweep. No behavior change, no new libraries.
+5. **Timing.** Executed after the running feature waves land and are committed
+   (never move files under a running agent), before the nothing-missing audit
+   and the perf work. Acceptance: canonical rebuild, lint 0 errors, cold full
+   corpus 0 failed, crypto and network native smoke programs still link.
