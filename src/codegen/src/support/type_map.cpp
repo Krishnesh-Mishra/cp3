@@ -182,6 +182,8 @@ CppInfo classify(const Type& raw) {
             if (classifyFamily(t, info)) return info;
             // The std/collections family (`Map<K, V>` / `Set<T>`).
             if (classifyCollections(t, info)) return info;
+            // The `std/date` value type (src/std/date/codegen.cpp).
+            if (classifyDate(t, info)) return info;
             // `Promise<T>` is the only class type with a spelling (M1).
             if (!isPromiseType(t)) {
                 return info;

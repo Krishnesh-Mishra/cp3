@@ -129,6 +129,12 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             if (isDataViewClass(ot)) return dataViewMember(prop);
             // `std/collections` Map/Set (src/std/collections/sema.cpp).
             if (isCollectionsClass(ot)) return collectionsMember(ot, prop, span);
+            // `std/date` values: a closed surface (miss -> CP3305 below).
+            if (isDateClass(ot)) {
+                if (auto t = dateInstanceMember(ot, prop)) return *t;
+                reportMemberMiss("Date", prop, span, dateInstanceMemberNames());
+                return Type::unknown();
+            }
             return ambient();
         case TypeKind::String:
             return stringMember(prop);

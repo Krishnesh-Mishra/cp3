@@ -328,6 +328,7 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsJson_) out += "#include \"cp3/std/json.hpp\"\n";
     if (needsProcess_) out += "#include \"cp3/std/process.hpp\"\n";
     if (needsCrypto_) out += "#include \"cp3/std/crypto.hpp\"\n";
+    if (needsDate_) out += "#include \"cp3/std/date.hpp\"\n";
     if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
     if (needsCollections_) {
         out += "#include \"cp3/std/collections.hpp\"\n";  // Map/Set (D44)

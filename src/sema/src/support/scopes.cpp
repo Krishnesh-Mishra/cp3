@@ -146,6 +146,10 @@ void Analyzer::declareBuiltins() {
     for (const std::string& name : familyTypeNames()) {
         typeNames_.emplace(name, Type::named(TypeKind::Class, name));
     }
+    // The `std/date` class name resolves as a type annotation too (`let d:
+    // Date`), matching the family names above; the VALUE still requires
+    // `import Date from "std/date";`, which is where the import hint points.
+    typeNames_.emplace("Date", Type::named(TypeKind::Class, "Date"));
 }
 
 // =============================================================================

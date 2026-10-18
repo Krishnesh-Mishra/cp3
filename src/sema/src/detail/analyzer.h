@@ -202,6 +202,11 @@ private:
     // Definitions live in the per-module src/std/<module>/sema.cpp units.
     std::optional<Type> cryptoMember(const std::string& prop);
     std::optional<Type> networkMember(const std::string& prop);
+    // std/date (src/std/date/sema.cpp): the namespace statics (`Date.now`,
+    // `Date.fromISOString`) and, for a Date value, its instance members.
+    std::optional<Type> dateMember(const std::string& prop);
+    std::optional<Type> dateInstanceMember(const Type& recv,
+                                           const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
 
     // --- std/network (src/std/network/sema.cpp) ------------------------------
@@ -387,6 +392,13 @@ std::vector<std::string> osMemberNames();
 std::vector<std::string> consoleMemberNames();
 std::vector<std::string> jsonMemberNames();
 std::vector<std::string> cryptoMemberNames();
+std::vector<std::string> dateMemberNames();
+std::vector<std::string> dateInstanceMemberNames();
+
+// The nominal Date value type (std/date; src/std/date/sema.cpp). member_check
+// routes a Date receiver's members to the family table and reports CP3305 for
+// a miss, so the class never falls back to the permissive ambient shape.
+bool isDateClass(const Type& t);
 
 // The exact default-import statement for a missing std module binding (e.g.
 // `import Math from "std/math";`), or "" when `name` names no std module.

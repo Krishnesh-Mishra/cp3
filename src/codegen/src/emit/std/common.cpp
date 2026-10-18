@@ -65,6 +65,9 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     // `ws.send(...)`, `wss.on(...)`): the documented members lower to the plain
     // C++ member call on the runtime object (src/std/network/codegen.cpp).
     if (isNetworkObject(m.object.get())) return emitNetworkMemberCall(c, m);
+    // `std/date` (src/std/date/codegen.cpp): the `Date.*` statics and the Date
+    // value's instance methods (`d.addDays(1)`, `d.getFullYear()`).
+    if (std::string date = emitDateCall(c, m); !date.empty()) return date;
     if (m.object && m.object->kind == NodeKind::ArrayLiteral) {
         std::string literal = emitStringMethodCall(c, m);
         if (!literal.empty()) return literal;
