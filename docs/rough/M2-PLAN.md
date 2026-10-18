@@ -64,14 +64,17 @@ dash sweep** (D66.4 leftovers): part 1 landed (`dbc1c96`): everything the perf
 wave does not own, minus the two `tests/runner/run_tests.py` fixes that ride
 with the B1b landing; part 2 (src/sema, src/codegen, src/runtime,
 `src/cli/src/util.cpp`, the `tests/cases/README.md` prose) is queued behind the
-perf wave. The **source-tree structure sweep** (D66.5: `src/codegen`, then
-`src/lexer`/`src/parser`; behavior-neutral, corpus byte-identical) is queued
-immediately after the perf wave and now runs before the post-perf std waves
-(user architecture note, 2026-10-18; D68), so the new module families land in
-the final layout as runtime units behind per-module tables. Post-perf runtime
-waves: the roadmap was revised by the user directive of 2026-10-18 (latest):
-(1) the **structure sweep** lands first (running now); (2) then **three
-parallel implementation waves**, each with its own dedicated agent, because
+perf wave. The **source-tree structure sweep** (D66.5/D68; behavior-neutral, corpus
+byte-identical) landed 2026-10-18 (`173e762`, wave S2; record below) ahead of
+the post-perf std waves, so the new module families land in the final layout
+as runtime units behind per-module tables. The spec-named native backends
+(libsodium for crypto; libuv + uWebSockets for network; oneTBB for
+`parallel.*`) are vendored as pinned static builds packed with cp3c (D70,
+landed `b7c8883`; record below), so the std waves link `third_party/`
+directly. Post-perf runtime waves: the roadmap was revised by the user
+directive of 2026-10-18 (latest): (1) the **structure sweep** landed
+(2026-10-18); (2) the **three parallel implementation waves** run next, each
+with its own dedicated agent, because
 server alone is a big topic: **server** (`std/network`: fetch, createServer,
 WebSocket; lights the health-server row), **crypto** (`std/crypto`), and the
 **JS-compat typed arrays** (D69 + `docs/rough/JSC-TYPED-ARRAYS.md`;
@@ -321,6 +324,42 @@ three D64 deliverables.
   lane.
 - Scorecard: the post-P1 labeled suite refresh follows D67.4; the flagged rows
   it prints are the standing todo queue (string-churn first).
+
+## VEND landing record (2026-10-18)
+
+Committed `b7c8883` (306 files: `third_party/**`, `.gitignore`, D70). All
+four spec-named backends vendored as pinned, static MinGW-W64 x64 builds:
+libsodium 1.0.22 (crypto), libuv v1.53.0 + uWebSockets v20.80.0 including its
+in-tree uSockets (network), oneTBB v2023.1.0 (`parallel.*`). Smoke matrix
+15/15 across dynamic, static-libgcc/stdc++ and fully static links; static exes
+re-run with a scrubbed PATH. `third_party/MANIFEST.md` carries pins, exact
+build commands, artifact SHA-256s and the verified consumer flag lists;
+`third_party/build.ps1` reproduces every artifact from the pinned source.
+Lead re-verification: all six archive SHA-256s recomputed (match); the uWS and
+sodium smokes re-linked and re-run from a clean directory against
+`third_party/` only (exit 0). Caveats: do not gate AES-256-GCM on
+`is_available()` (returns 0 on this build while the round-trip works); oneTBB
+static is upstream-unsupported but builds and passes; TLS/compression off by
+design (SS20). Report: `build/scratch/vend/WAVE-VEND-REPORT.md`.
+
+## S2 structure sweep landing record (2026-10-18)
+
+Committed `173e762` (169 files). 119 files moved into concern
+subdirectories: codegen `emit/` + `emit/std/` (emit_builtin split into 7
+per-family units + `detail/builtin_tables.h`), `support/`, `detail/`; runtime
+`include/cp3/{core,async,parallel,std}/` with mirroring `src/`
+subdirectories; sema `checks/support/detail`; cli
+`commands/pkg/archive/toolchain/detail`; modules `support/detail`;
+parser/lexer `detail/`. The one behavior-affecting change:
+`runtimeSourcePaths()` walks recursively (same 5 TUs, same order). Dash
+roundup part 2: 135 comment dashes in `src/` plus 6 in
+`tests/cases/README.md`; the deliberate generated-banner string stays.
+STYLE.md section 8 refreshed to the delivered inventory. Lead acceptance:
+canonical rebuild exit 0; cold corpus 1236/657/0/471/108 exit 0; layout lint
+195 files 0 errors 53 warnings; independent dash grep and path spot checks.
+Two stale boundary prose refs intentionally left (`cp3/async/eventloop.hpp`,
+`cp3/lexer.hpp` comments) and queued for the next touch of those files.
+Report: `build/scratch/sweep2/WAVE-SWEEP-REPORT.md`.
 
 ## Perf wave (landed as `5c88ead`; plan below kept as written) - performance
 
