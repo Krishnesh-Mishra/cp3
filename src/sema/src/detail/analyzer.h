@@ -209,6 +209,12 @@ private:
     std::optional<Type> dateMember(const std::string& prop);
     std::optional<Type> dateInstanceMember(const Type& recv,
                                            const std::string& prop);
+    std::optional<Type> fsMember(const std::string& prop);
+    // std/fs receiver field reads (src/std/fs/sema.cpp): the documented
+    // `FileStats` fields (`stat.modifiedAt` types as the nominal Date class);
+    // nullopt keeps the permissive ambient fallthrough for every other member.
+    std::optional<Type> fsReceiverMember(const Type& recv,
+                                         const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
 
     // --- std/network (src/std/network/sema.cpp) ------------------------------
@@ -389,9 +395,9 @@ private:
 
 // --- std-namespace surface helpers (std_check.cpp) ---------------------------
 //
-// The closed families (Math / path / os / crypto / console / JSON) report
+// The closed families (Math / path / os / crypto / console / JSON / fs) report
 // CP3305 for an unknown member (member_check.cpp); the open ones (network,
-// process, fs, ...) keep the permissive ambient fallthrough.
+// process, ...) keep the permissive ambient fallthrough.
 bool isClosedStdNamespace(const std::string& ns);
 
 // The implemented member names of `ns`, used as CP3305 candidates.
@@ -406,6 +412,7 @@ std::vector<std::string> osMemberNames();
 std::vector<std::string> consoleMemberNames();
 std::vector<std::string> jsonMemberNames();
 std::vector<std::string> cryptoMemberNames();
+std::vector<std::string> fsMemberNames();
 std::vector<std::string> dateMemberNames();
 std::vector<std::string> dateInstanceMemberNames();
 

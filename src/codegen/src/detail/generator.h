@@ -253,6 +253,14 @@ private:
     // CP3002 meanwhile.
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
+    // `std/fs` (src/std/fs/codegen.cpp): the namespace table plus the
+    // FileStats / ReadStream / WriteStream receivers, recognised by the
+    // `$fs:` marker names.
+    std::string emitFsCall(const CallExpr& c, const MemberExpr& m);
+    bool isFsReceiver(const Expr* e) const;
+    std::string emitFsMemberCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitFsMemberRead(const MemberExpr& m);
+    std::string emitFsStreamOn(const CallExpr& c, const MemberExpr& m);
     // std/date (src/std/date/codegen.cpp): the `Date.*` statics and the Date
     // value's instance methods; pure family, backed by cp3/std/date.hpp.
     std::string emitDateCall(const CallExpr& c, const MemberExpr& m);
@@ -401,6 +409,7 @@ private:
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
+    bool needsFs_ = false;         // std/fs -> cp3/std/fs.hpp include
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
     bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include

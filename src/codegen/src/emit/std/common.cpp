@@ -55,6 +55,7 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     if (isNamespaceObject(m.object.get(), "network")) {
         return emitNetworkCall(c, m);
     }
+    if (isNamespaceObject(m.object.get(), "fs")) return emitFsCall(c, m);
     // `process.*` plus the one nested member this wave lowers:
     // `process.env.get(name)`.
     if (isNamespaceObject(m.object.get(), "process") ||
@@ -65,6 +66,9 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     // `ws.send(...)`, `wss.on(...)`): the documented members lower to the plain
     // C++ member call on the runtime object (src/std/network/codegen.cpp).
     if (isNetworkObject(m.object.get())) return emitNetworkMemberCall(c, m);
+    // `std/fs` receivers (`statSync(...).isDirectory`, `rs.on(...)`,
+    // `ws.write(...)`, `chunk.toString()`); src/std/fs/codegen.cpp.
+    if (isFsReceiver(m.object.get())) return emitFsMemberCall(c, m);
     // `std/date` (src/std/date/codegen.cpp): the `Date.*` statics and the Date
     // value's instance methods (`d.addDays(1)`, `d.getFullYear()`).
     if (std::string date = emitDateCall(c, m); !date.empty()) return date;
@@ -100,6 +104,8 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     if (std::string math = emitMathMember(m); !math.empty()) return math;
     // `std/network` field reads (`res.status`, `res.ok`, `req.method`, ...).
     if (std::string net = emitNetworkMemberRead(m); !net.empty()) return net;
+    // `std/fs` FileStats reads (`stat.size`, `stat.isDirectory`, ...).
+    if (std::string fsStat = emitFsMemberRead(m); !fsStat.empty()) return fsStat;
     if (std::string sep = emitPathMember(m); !sep.empty()) return sep;
     if (m.property == "length" && m.object) {
         if (info(*m.object).shape == Shape::String) {

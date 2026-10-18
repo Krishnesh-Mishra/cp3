@@ -39,6 +39,7 @@ set(cp3_codegen_sources
     ../std/date/codegen.cpp
     ../std/buffer/codegen.cpp
     ../std/console/codegen.cpp
+    ../std/fs/codegen.cpp
 )
 
 add_library(cp3_codegen STATIC ${cp3_codegen_sources})

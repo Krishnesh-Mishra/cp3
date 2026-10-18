@@ -30,6 +30,7 @@ set(cp3_sema_sources
     src/checks/std_check.cpp
     ../std/crypto/sema.cpp
     ../std/network/sema.cpp
+    ../std/fs/sema.cpp
     ../std/typed-arrays/sema.cpp
     ../std/typed-arrays/sema_methods.cpp
     ../std/math/sema.cpp
