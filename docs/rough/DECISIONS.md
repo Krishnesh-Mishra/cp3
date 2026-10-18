@@ -736,3 +736,18 @@ both see the same line or key. Docs: surface block and prose in
 `docs/standard-library/04`, member list in the day-2 guide. Implementation:
 the round-1 console wave owns the stdin pump; the listener bookkeeping is
 console-internal, so there is no round dependency on the events wave.
+
+## D76 - console.hide()/console.show() hide and restore the console window (user directive, 2026-10-18)
+
+`console.hide()` hides the console/terminal window the program runs in and the
+program keeps going: the event loop is untouched and printing continues into
+the hidden window's buffer. `console.show()` restores it. Windows
+implementation: `GetConsoleWindow()` plus `ShowWindow(SW_HIDE/SW_SHOW)`,
+guarded and never throwing. Off Windows, and on Windows when the process has
+no console window (piped streams, a service), both are documented no-ops -
+Linux/macOS terminal windows belong to the terminal emulator, not to the
+process, so there is nothing portable to hide. `.clear` stays the
+contents-clearing member; `.hide`/`.show` act on the window itself. Docs: 04
+signature + example + prose, day-2 member list. Implementation: the round-1
+console wave (console runtime TU, Windows-guarded; add `-luser32` to the
+console native row only if `ShowWindow` needs it).

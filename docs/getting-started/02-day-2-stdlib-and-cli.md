@@ -21,7 +21,7 @@ let x = Math.sqrt(25);        // 5
 
 | Import | Use it for | Key calls |
 | --- | --- | --- |
-| `import console from "std/console"` | All I/O: printing and input | `log`, `info`, `warn`, `error`, `input(prompt)`, `readKey()`, `assert`, `clear`, `on`/`off` (keep listening: `keypress`, `line`, `close`) |
+| `import console from "std/console"` | All I/O: printing and input | `log`, `info`, `warn`, `error`, `input(prompt)`, `readKey()`, `assert`, `clear`, `hide`/`show`, `on`/`off` (keep listening: `keypress`, `line`, `close`) |
 | `import JSON from "std/json"` | Serialize / parse | `JSON.stringify(v)`, `JSON.parse<T>(s)` |
 | `import Math from "std/math"` | Math | `sqrt`, `pow`, `random`, `floor`, `ceil`, `round`, `clamp`, constants |
 | `import fs from "std/fs"` | Files & dirs | `readFileSync`, `writeFileSync`, `existsSync`, `mkdirSync`, `readdirSync`, `statSync` + async twins |

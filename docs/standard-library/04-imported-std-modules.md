@@ -14,6 +14,8 @@ const console: {
   error(...args: Printable[]): void;  // → stderr
   input(prompt?: string): Promise<string>;   // async read of one line from stdin
   clear(): void;                              // clears the terminal screen
+  hide(): void;                               // hides the console window the program runs in (Windows); the program keeps running; no-op when there is no window
+  show(): void;                               // restores a window hidden by hide(); no-op when there is nothing to restore
   assert(condition: boolean, ...args: Printable[]): void;  // logs to stderr only if condition is false; does not throw or exit
   readKey(): Promise<string>;                 // async read of a single keypress, including arrow keys, for interactive CLI menus
   on(event: "keypress" | "line" | "close", listener: (value: string) => void): void;   // keep listening: every key / completed line / once at EOF
@@ -35,6 +37,8 @@ let key = await console.readKey();   // e.g. "ArrowUp", "ArrowDown", "Enter", or
 console.on("line", (line) => console.log("you typed:", line));   // keeps listening
 console.on("keypress", (key) => { /* every key, until off */ });
 console.off("line", handler);
+console.hide();                      // window is gone; the program keeps running
+console.show();                      // brings it back
 ```
 
 **Routing, decided:** `.log` / `.info` → stdout. `.warn` / `.error` → stderr. Matches Node exactly - no ambiguity left here.
@@ -48,6 +52,7 @@ console.off("line", handler);
 - `.assert` never throws and never exits the program - it's a diagnostic aid (log-if-false), not a control-flow mechanism; reach for `throw` if a failed condition should actually stop execution.
 - `.readKey` is async for the same reason `.input` is - it puts the terminal into raw mode via libuv's TTY handling and resolves with the next keypress (a named key like `"ArrowUp"`/`"Enter"`, or the literal character typed), without blocking the event loop while waiting.
 - `.on`/`.off` keep listening instead of asking once: `"keypress"` delivers what `.readKey` returns for every key (raw mode; named keys or the literal character), `"line"` delivers each completed line without its terminator, and `"close"` fires once with `""` when stdin reaches EOF. Listeners persist until `.off` removes them, using the same on/off listener model as the language's built-in `EventEmitter` ([README.md §14](../language-spec/14-async.md)). Nothing blocks the event loop: the input pump starts when the first listener is registered and stops when the last one is removed. Lines and keys fan out - a pending `.input()`/`.readKey()` and the matching listeners both see the same line or key, so a listener is an observation tap, not a competing consumer.
+- `.hide`/`.show` hide and restore the console window itself, not its contents (that is `.clear`): a program can drop to the background without stopping - the event loop keeps running and printing continues into the hidden window's buffer. On Windows they call `ShowWindow` on the process's own console window; everywhere else, and on Windows when the process has no console window (piped output, a service), both are documented no-ops, since a Linux/macOS terminal window belongs to the terminal emulator, not to the program.
 
 ## JSON
 
