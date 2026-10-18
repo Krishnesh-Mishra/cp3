@@ -15,6 +15,12 @@
 //                        -> `::cp3::runtime::console::assertCondition(cond, ...args)`
 //     (`assert` is a C macro in <cassert>, so the function is named
 //      `assertCondition`; it never throws and never exits - spec §04.)
+//   `console.input(prompt?)` -> `::cp3::runtime::console::input(prompt)`
+//   `console.readKey()`  -> `::cp3::runtime::console::readKey()`
+//   `console.on(ev, fn)` -> `::cp3::runtime::console::on(ev, fn)`
+//   `console.off(ev, fn)`-> `::cp3::runtime::console::off(ev, fn)`
+//   `console.hide()`     -> `::cp3::runtime::console::hide()`
+//   `console.show()`     -> `::cp3::runtime::console::show()`
 //
 //   Arguments are rendered by `::cp3::runtime::formatValue` and joined with a
 //   single space, then a newline is written. `.log`/`.info` -> stdout,
@@ -43,13 +49,16 @@
 // =============================================================================
 #pragma once
 
+#include <functional>
 #include <initializer_list>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "cp3/core/runtime.hpp"
+#include "cp3/async/promise.hpp"  // input()/readKey() -> Promise<std::string>
 
 namespace cp3::runtime {
 
@@ -155,10 +164,88 @@ void assertCondition(bool condition, const Ts&... args) {
 // `console.clear()` - ANSI clear-screen + home.
 void clear();
 
-// NOTE (gap): `console.input(prompt)` and `console.readKey()` return
-// `Promise<string>` and must not block the event loop (STDLIB docs §04). They
-// need an async stdin/tty source and are not implemented in this wave; see the
-// runtime report.
+// ---------------------------------------------------------------------------
+// The async input surface (D71): input / readKey / on / off
+// ---------------------------------------------------------------------------
+//
+// Never a second loop (D71): a detached helper thread reads stdin and posts
+// every event through the loop's cross-thread post (`postFromThread`), so
+// waiting for a line or key never blocks pending async work. The pump is
+// demand-driven: it reads (and the terminal enters raw mode) while at least one
+// `input()`, `readKey()` or listener is outstanding, and stops - restoring the
+// terminal - when the last one is gone. Lines and keys fan out (D75): a pending
+// request and the matching listeners all observe the same event.
+
+// `console.input(prompt?)`: one line from stdin, terminator removed; EOF
+// resolves with `""` (never rejects).
+Promise<std::string> input(const std::string& prompt = std::string());
+
+// `console.readKey()`: one keypress; named keys ("ArrowUp"/"ArrowDown"/
+// "ArrowLeft"/"ArrowRight", "Enter", "Escape", "Tab", "Backspace") or the
+// literal character typed. EOF resolves with `""`.
+Promise<std::string> readKey();
+
+// `console.on` / `console.off` (D75): console-internal listener bookkeeping,
+// no dependency on the round-2 events wave. Events: `"keypress"` (the readKey
+// vocabulary), `"line"` (each completed line, terminator removed) and `"close"`
+// (once, with `""`, at stdin EOF). A listener is an observation tap: it never
+// consumes an event a pending `input()`/`readKey()` also sees.
+//
+// The listener's *function type* is its identity: `off(event, fn)` removes the
+// listeners registered from the same function type (a named function value, or
+// the same lambda variable). Two distinct inline arrow functions at different
+// source positions are distinct C++ closure types and do not match; that is the
+// C++ boundary of the JS function-reference identity model.
+namespace detail {
+
+// One process-lifetime address per listener function type F, so `on`/`off` can
+// compare the type instead of the (uncomparable) closure object.
+template <class F>
+struct ListenerTypeTag {
+    static const char value;
+};
+template <class F>
+const char ListenerTypeTag<F>::value = 0;
+
+void addListener(const std::string& event,
+                 std::function<void(std::string)> listener, const void* typeTag);
+void removeListener(const std::string& event, const void* typeTag);
+
+// A listener may declare the documented `(value: string)` parameter or none
+// (`close`'s `""` / `keypress` are easy to ignore): call whichever it takes.
+template <class F, class V>
+void invokeListener(F& listener, V&& value) {
+    if constexpr (std::is_invocable_v<F&, V>) {
+        listener(std::forward<V>(value));
+    } else {
+        listener();
+    }
+}
+
+}  // namespace detail
+
+template <class F>
+void on(const std::string& event, F listener) {
+    std::function<void(std::string)> fn =
+        [handler = std::move(listener)](std::string value) mutable {
+            detail::invokeListener(handler, value);
+        };
+    detail::addListener(event, std::move(fn), &detail::ListenerTypeTag<F>::value);
+}
+
+template <class F>
+void off(const std::string& event, F listener) {
+    static_cast<void>(listener);
+    detail::removeListener(event, &detail::ListenerTypeTag<F>::value);
+}
+
+// `console.hide()` / `console.show()` (D76): hide / restore the process's own
+// console window. Windows: `GetConsoleWindow()` + `ShowWindow`; never throws,
+// the event loop keeps running and printing continues into the hidden buffer.
+// Everywhere else - and on Windows without a console window (piped output, a
+// service) - both are documented no-ops.
+void hide();
+void show();
 
 }  // namespace console
 

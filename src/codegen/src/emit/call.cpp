@@ -1,14 +1,14 @@
 // =============================================================================
-// src/codegen/src/emit/call.cpp - codegen call lowering + console.* (STYLE.md §8).
+// src/codegen/src/emit/call.cpp - codegen call lowering (STYLE.md §8).
 //
-// The `CallExpr` dispatcher and the `console.*` surface:
+// The `CallExpr` dispatcher:
 //
 //   f(...)                     -> `f(...)` (functions declared in this unit)
 //   setTimeout/sleep/...        -> emit_async.cpp's timer/promise lowering
 //   Promise.all/... / p.then()  -> emit_async.cpp's promise lowering
-//   console.log/info(...)      -> `cp3::runtime::println(...)`   (stdout)
-//   console.warn/error(...)    -> `::cp3::runtime::console::warn/error(...)`
-//                                 (stderr, STDLIB docs §07)
+//   console.<member>(...)      -> the std/console family's lowering unit
+//                                 (src/std/console/codegen.cpp, D72); this
+//                                 file only recognises the `console.` receiver.
 //
 // A callee that is neither a user function nor a lowered intrinsic reports
 // CP3002 rather than emitting a call to an undeclared C++ name.
@@ -96,16 +96,9 @@ std::vector<std::string> Generator::emitCallArgs(const CallExpr& c,
 }
 
 std::string Generator::emitCall(const CallExpr& c) {
-    if (isConsoleCall(c, "log") || isConsoleCall(c, "info")) {
-        return emitConsoleLog(c);
-    }
-    if (isConsoleCall(c, "warn") || isConsoleCall(c, "error")) {
-        const auto& m = static_cast<const MemberExpr&>(*c.callee);
-        return emitConsoleMethod(c, m.property.c_str());
-    }
     if (isConsoleMember(c)) {
-        notImplemented(c, "console method (only log/info/warn/error are supported)");
-        return "0.0";
+        const auto& m = static_cast<const MemberExpr&>(*c.callee);
+        return emitConsoleCall(c, m);
     }
     if (c.callee->kind == NodeKind::Identifier) {
         const std::string name = static_cast<const Identifier&>(*c.callee).name;
@@ -178,48 +171,6 @@ bool Generator::isConsoleMember(const CallExpr& c) const {
     const auto& m = static_cast<const MemberExpr&>(*c.callee);
     return m.object && m.object->kind == NodeKind::Identifier &&
            static_cast<const Identifier&>(*m.object).name == "console";
-}
-
-bool Generator::isConsoleCall(const CallExpr& c, const char* method) const {
-    if (c.callee->kind != NodeKind::MemberExpr) return false;
-    const auto& m = static_cast<const MemberExpr&>(*c.callee);
-    return isConsoleMember(c) && m.property == method;
-}
-
-std::string Generator::emitConsoleLog(const CallExpr& c) {
-    if (!consoleImported_) {
-        notImplemented(c, "console used without `import console from \"std/console\"`");
-        return "0.0";
-    }
-    if (c.arguments.empty()) {
-        return "cp3::runtime::println(std::string())";
-    }
-    std::string joined = tsCall(*c.arguments.front());
-    for (std::size_t i = 1; i < c.arguments.size(); ++i) {
-        joined += " + std::string(\" \") + " + tsCall(*c.arguments[i]);
-    }
-    return "cp3::runtime::println(" + joined + ")";
-}
-
-std::string Generator::emitConsoleMethod(const CallExpr& c, const char* method) {
-    if (!consoleImported_) {
-        notImplemented(c, "console used without `import console from \"std/console\"`");
-        return "0.0";
-    }
-    // `.warn` / `.error` write to stderr (STDLIB docs §07); the runtime renders
-    // the arguments itself (cp3::runtime::console::renderAll).
-    consoleStderr_ = true;
-    std::vector<std::string> args;
-    for (const auto& arg : c.arguments) {
-        if (!arg) continue;
-        if (arg->kind == NodeKind::SpreadElement) {
-            notImplemented(*arg, "spread argument");
-            continue;
-        }
-        args.push_back(expr(*arg));
-    }
-    return "::cp3::runtime::console::" + std::string(method) + "(" +
-           joinStrings(args, ", ") + ")";
 }
 
 }  // namespace cp3

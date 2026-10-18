@@ -1,8 +1,0 @@
-{
-  "mode": "run",
-  "exitCode": 3,
-  "error": {
-    "code": "CP3002",
-    "contains": "not implemented"
-  }
-}

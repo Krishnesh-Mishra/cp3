@@ -310,8 +310,8 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsTypedArray_) {
         out += "#include \"cp3/typed_array.hpp\"\n";  // the family (D69)
     }
-    if (consoleStderr_) {
-        out += "#include \"cp3/std/console.hpp\"\n";  // console.warn/.error
+    if (consoleStderr_ || needsConsoleAbi_) {
+        out += "#include \"cp3/std/console.hpp\"\n";  // the console family
     }
     if (needsMath_) out += "#include \"cp3/std/math.hpp\"\n";
     if (needsString_) out += "#include \"cp3/std/string.hpp\"\n";
