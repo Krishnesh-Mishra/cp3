@@ -58,10 +58,15 @@ void Generator::emitTopLevel(const Stmt& s, std::string& decls, std::string& def
             emitExport(static_cast<const ExportDeclaration&>(s), decls, defs, mainBody);
             return;
         case NodeKind::ClassDeclaration:
-        case NodeKind::InterfaceDeclaration:
         case NodeKind::EnumDeclaration:
         case NodeKind::TypeAliasDeclaration:
             notImplemented(s, "top-level declaration");
+            return;
+        case NodeKind::InterfaceDeclaration:
+            // An interface is a structure-only record shape: registered and
+            // reified only for `JSON.parse<T>` uses (src/std/json/codegen.cpp);
+            // otherwise it stays erased.
+            emitJsonInterface(static_cast<const InterfaceDeclaration&>(s));
             return;
         default:
             stmt(s, mainBody, 1);

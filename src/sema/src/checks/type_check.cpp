@@ -99,6 +99,10 @@ bool isPromiseType(const Type& t) {
     return t.kind == TypeKind::Class && t.name == "Promise";
 }
 
+bool isEventEmitterType(const Type& t) {
+    return t.kind == TypeKind::Class && t.name == "EventEmitter";
+}
+
 Type promiseOf(const Type& value) {
     Type p(TypeKind::Class, "Promise");
     p.parts.push_back(value);
@@ -314,6 +318,14 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
     // carrying its value type. A bare `Promise` is `Promise<unknown>`.
     if (nt.name == "Promise") {
         return promiseOf(hasArg ? firstArg : Type::unknown());
+    }
+    // The nominal `Buffer` of std/buffer (docs/standard-library/04 §buffer):
+    // the annotation resolves only while the `import { Buffer } from
+    // "std/buffer"` binding is in scope, so the name never leaks into a
+    // program that does not import the module.
+    if (isByteBufferTypeName(nt.name)) {
+        Binding b;
+        if (lookup(nt.name, b) && b.isAmbient) return byteBufferType();
     }
     const auto it = typeNames_.find(nt.name);
     if (it != typeNames_.end()) return it->second;

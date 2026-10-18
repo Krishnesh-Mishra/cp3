@@ -17,7 +17,7 @@
 //   support/int_mode.cpp   the guarded int64 fast path + `%` lowering
 //   support/int_reads.cpp  the read-only-inside-return analysis for int mode
 //   emit/expr.cpp          expression lowering (operators, literals, tsCall/cond)
-//   emit/call.cpp          call lowering + console.*
+//   emit/call.cpp          call lowering (dispatch only, D72)
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
 //   emit/decl.cpp          forward decls, function signatures, declarations
@@ -25,7 +25,7 @@
 //   emit/std/common.cpp               ambient std surface: shared helpers +
 //                                     dispatch
 //   src/std/<family>/codegen.cpp      Math / path / os / process / JSON /
-//                                     string lowering
+//                                     string / console lowering
 //
 // This header is implementation detail: it lives under
 // `src/codegen/src/detail/` and is never included by another module
@@ -128,16 +128,40 @@ private:
     std::string emitConditional(const ConditionalExpr& c);
     std::string emitAssignment(const AssignmentExpr& a);
 
-    // --- calls + console.* (emit_call.cpp) -----------------------------------
+    // --- calls (emit/call.cpp) -----------------------------------------------
     std::string emitCall(const CallExpr& c);
     // Lowers a user-function call's argument list, applying the callee's
     // optional/default parameters to arguments that are explicit `undefined`.
     std::vector<std::string> emitCallArgs(const CallExpr& c,
                                           const FunctionDeclaration* decl);
     bool isConsoleMember(const CallExpr& c) const;
-    bool isConsoleCall(const CallExpr& c, const char* method) const;
-    std::string emitConsoleLog(const CallExpr& c);
-    std::string emitConsoleMethod(const CallExpr& c, const char* method);
+
+    // --- std/console lowering (src/std/console/codegen.cpp) ------------------
+    // Every `console.<member>(...)` call lands here (emit_call.cpp keeps only
+    // the `console.` receiver check). Each member lowers onto its contract in
+    // cp3/std/console.hpp; an object-literal argument gets the explicit D49
+    // object form.
+    std::string emitConsoleCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitConsoleLogCall(const CallExpr& c);
+    std::string emitConsoleStreamCall(const CallExpr& c,
+                                      const std::string& method);
+    std::string emitConsoleAssert(const CallExpr& c);
+    std::string emitConsoleInput(const CallExpr& c);
+    std::string emitConsoleListener(const CallExpr& c,
+                                    const std::string& method);
+    std::string consoleListenerArg(const Expr& arg);
+    std::string consoleArgText(const Expr& arg);
+    std::string consoleObjectText(const ObjectLiteral& literal);
+    std::string consoleNestedValue(const Expr& value);
+
+    // --- the builtin EventEmitter (D74, cp3/async/emitter.hpp) ----------------
+    // `new EventEmitter()`; the boxed-listener value form (`let h = () => {}`,
+    // an inline arrow argument, a function-typed local passed on); and the
+    // on/once/off/emit method calls. Each returns "" when the form is not one
+    // of them, so the caller keeps its other paths.
+    std::string emitEventEmitterNew(const NewExpr& n);
+    std::string emitListenerValue(const Expr& e);
+    std::string emitEventEmitterCall(const CallExpr& c, const MemberExpr& m);
 
     // --- the JS-compat typed-array family (src/std/typed-arrays/codegen.cpp) ---
     // Constructors with and without `new` (`Array(2)`, `Int8Array([1])`,
@@ -173,6 +197,8 @@ private:
                                   const Type& recv);
     std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m,
                                   const Type& recv);
+    std::string arraySortCallText(const CallExpr& c, const MemberExpr& m,
+                                  const Type& recv);
     std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m,
                                     const char* tag);
     std::string dataViewCallText(const CallExpr& c, const MemberExpr& m);
@@ -180,6 +206,16 @@ private:
                                  const Type& elemOverride);
     std::string declaratorInitText(const VariableDeclarator& d,
                                    const Type& declared);
+
+    // --- std/collections (src/std/collections/codegen.cpp) --------------------
+    // `new Map<K, V>()` / `new Set<T>()`, the member calls (`set`/`get`/`has`/
+    // `delete`/`clear`/`keys`/`values`/`entries`/`forEach`) and the `size` /
+    // `entries().length` property reads. Each returns "" when the form is not
+    // one of them.
+    std::string emitCollectionsNew(const NewExpr& n);
+    std::string emitCollectionsMemberCall(const CallExpr& c,
+                                          const MemberExpr& m);
+    std::string emitCollectionsMember(const MemberExpr& m);
 
     // --- std namespaces + primitive methods (src/std/*/codegen.cpp) ----------
     // Lower `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*` calls, the
@@ -197,6 +233,17 @@ private:
     std::string emitPathMember(const MemberExpr& m);
     std::string emitOsCall(const CallExpr& c, const MemberExpr& m);
     std::string emitJsonCall(const CallExpr& c, const MemberExpr& m);
+    // The JSON record surface (STDLIB docs §04 / docs/language-spec §23): the
+    // unit's interface declarations are registered up front (collectJsonShapes)
+    // and a record shape is reified only when some `JSON.parse<T>` names it.
+    // A registered declaration emits nothing by itself.
+    void collectJsonShapes(const Program& program);
+    void emitJsonInterface(const InterfaceDeclaration& i);
+    std::string emitJsonStringify(const CallExpr& c);
+    std::string emitJsonParse(const CallExpr& c);
+    std::string jsonRecordParse(const std::string& shape, const std::string& text);
+    std::string jsonValueText(const Expr& e);
+    std::string emitJsonMember(const MemberExpr& m);
     std::string emitProcessCall(const CallExpr& c, const MemberExpr& m);
     std::string emitProcessMember(const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
@@ -214,6 +261,16 @@ private:
     std::string emitFsMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitFsMemberRead(const MemberExpr& m);
     std::string emitFsStreamOn(const CallExpr& c, const MemberExpr& m);
+    // std/date (src/std/date/codegen.cpp): the `Date.*` statics and the Date
+    // value's instance methods; pure family, backed by cp3/std/date.hpp.
+    std::string emitDateCall(const CallExpr& c, const MemberExpr& m);
+    // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): the
+    // `Buffer.from`/`Buffer.alloc` statics, the `buf.toString`/`buf.slice`
+    // methods and the `buf.length` read. Each returns "" when the form is not
+    // one of them.
+    std::string emitByteBufferStaticCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitByteBufferMethodCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitByteBufferMember(const MemberExpr& m);
     // `std/network` receivers are recognised by the sema marker names
     // ("$network:*"), so the hooks live on the receiver, not on the member:
     // named imports (identifier calls), `new` forms, member calls/reads.
@@ -329,6 +386,7 @@ private:
 
     bool consoleImported_ = false;
     bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
+    bool needsConsoleAbi_ = false; // console async/misc members -> family header
     bool needsEventLoop_ = false;  // async/timers: emit runEventLoop() in main
     bool needsArith_ = false;      // `%`/int64 lowering -> cp3/core/arith.hpp include
     bool suppressDiagnostics_ = false;  // an int64 attempt must not report
@@ -336,12 +394,26 @@ private:
     bool needsString_ = false;     // string methods -> cp3/std/string.hpp include
     bool needsPath_ = false;       // path.* -> cp3/std/path.hpp include
     bool needsOs_ = false;         // os.* -> cp3/std/os.hpp include
-    bool needsJson_ = false;       // JSON.stringify -> cp3/std/json.hpp include
+    bool needsJson_ = false;       // JSON.stringify/parse -> cp3/std/json.hpp include
+    // The registered JSON record shapes (usage-based reification): per
+    // interface name the C++ struct text, the generated builder body and the
+    // declared field names, plus the sema shape label -> interface name. The
+    // structs materialize into the decls section on first use only.
+    std::unordered_map<std::string, std::string> jsonShapeStructs_;
+    std::unordered_map<std::string, std::string> jsonShapeBuilders_;
+    std::unordered_map<std::string, std::vector<std::string>> jsonShapeFields_;
+    std::unordered_map<std::string, std::string> jsonShapeByLabel_;
+    std::unordered_set<std::string> jsonShapeUsed_;
+    std::string jsonShapeDecls_;
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
+    bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
     bool needsFs_ = false;         // std/fs -> cp3/std/fs.hpp include
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
+    bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
+    bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
+    bool needsEventEmitter_ = false;  // EventEmitter/Listener -> cp3/async/emitter.hpp
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)

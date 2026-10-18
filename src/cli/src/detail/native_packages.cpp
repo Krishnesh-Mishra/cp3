@@ -12,8 +12,11 @@
 
 #include <algorithm>
 
+#include "../../../std/buffer/native.hpp"
+#include "../../../std/collections/native.hpp"
 #include "../../../std/console/native.hpp"
 #include "../../../std/crypto/native.hpp"
+#include "../../../std/date/native.hpp"
 #include "../../../std/fs/native.hpp"
 #include "../../../std/json/native.hpp"
 #include "../../../std/math/native.hpp"
@@ -28,6 +31,7 @@ namespace cp3::cli::detail {
 
 const std::vector<const NativePackage*>& nativePackages() {
     static const std::vector<const NativePackage*> rows = {
+        &kCollectionsNativePackage,
         &kConsoleNativePackage,
         &kFsNativePackage,
         &kJsonNativePackage,
@@ -39,6 +43,8 @@ const std::vector<const NativePackage*>& nativePackages() {
         &kCryptoNativePackage,
         &kNetworkNativePackage,
         &kTypedArraysNativePackage,
+        &kDateNativePackage,
+        &kBufferNativePackage,
     };
     return rows;
 }

@@ -202,6 +202,11 @@ private:
     // Definitions live in the per-module src/std/<module>/sema.cpp units.
     std::optional<Type> cryptoMember(const std::string& prop);
     std::optional<Type> networkMember(const std::string& prop);
+    // std/date (src/std/date/sema.cpp): the namespace statics (`Date.now`,
+    // `Date.fromISOString`) and, for a Date value, its instance members.
+    std::optional<Type> dateMember(const std::string& prop);
+    std::optional<Type> dateInstanceMember(const Type& recv,
+                                           const std::string& prop);
     std::optional<Type> fsMember(const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
 
@@ -273,6 +278,24 @@ private:
     bool checkArrayCtorDeclarator(const VariableDeclarator& d, bool hasAnn,
                                   const Type& annType, const Type& initType);
     bool isReadOnlyFamilyProp(const Type& ot, const std::string& prop) const;
+
+    // --- std/collections (src/std/collections/sema.cpp) ----------------------
+    // `new Map<K, V>()` / `new Set<T>()`: nominal class types carrying their
+    // type arguments (parts { K, V } / { T }); unknown for other names.
+    Type inferCollectionsConstruct(const std::string& name, TypeList& typeArgs);
+    // The docs/04 Map/Set member surface; a member outside it reports CP3305
+    // with the implemented member names as candidates.
+    Type collectionsMember(const Type& recv, const std::string& prop,
+                           const SourceSpan& span);
+
+    // --- the std/buffer `Buffer` family (src/std/buffer/sema.cpp) ------------
+    // The documented member table (`length`/`toString`/`slice`), the
+    // `Buffer.from`/`Buffer.alloc` statics, the instance-member calls and the
+    // D47 literal-encoding check.
+    Type byteBufferMember(const Type& recv, const std::string& prop);
+    bool tryInferBufferStaticCall(CallExpr& call, MemberExpr& m, Type& out);
+    bool tryInferBufferCall(CallExpr& call, MemberExpr& m, Type& out);
+    bool checkByteBufferEncoding(const Expr* arg);
 
     // --- parallel.* capture safety (parallel_check.cpp) ----------------------
     // Walks the closures passed to a `parallel.*` entry point and reports a
@@ -380,6 +403,13 @@ std::vector<std::string> consoleMemberNames();
 std::vector<std::string> jsonMemberNames();
 std::vector<std::string> cryptoMemberNames();
 std::vector<std::string> fsMemberNames();
+std::vector<std::string> dateMemberNames();
+std::vector<std::string> dateInstanceMemberNames();
+
+// The nominal Date value type (std/date; src/std/date/sema.cpp). member_check
+// routes a Date receiver's members to the family table and reports CP3305 for
+// a miss, so the class never falls back to the permissive ambient shape.
+bool isDateClass(const Type& t);
 
 // The exact default-import statement for a missing std module binding (e.g.
 // `import Math from "std/math";`), or "" when `name` names no std module.

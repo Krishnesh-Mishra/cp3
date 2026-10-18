@@ -122,11 +122,46 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
                 }
                 return ambient();
             }
+            // `EventEmitter` (D74, spec §14): the documented on/once/off/emit
+            // surface, all returning void. A listener is
+            // `(...args: unknown[]) => void`; `emit`'s rest parameter is
+            // `unknown`, so it accepts any trailing arguments.
+            if (isEventEmitterType(ot)) {
+                Type listener(TypeKind::Function);
+                listener.parts.push_back(Type::unknown());
+                listener.parts.push_back(Type::voidType());
+                listener.name = kVariadicLabel;
+                if (prop == "on" || prop == "once" || prop == "off") {
+                    return Type::function({Type::string(), listener},
+                                          Type::voidType());
+                }
+                if (prop == "emit") {
+                    // `emit(event, ...args)`: at least `event`, any tail (only
+                    // the first value reaches a listener; see emitter.hpp).
+                    Type f = Type::function({Type::string(), Type::unknown()},
+                                            Type::voidType());
+                    f.name = kVariadicOptionalTailLabel;
+                    return f;
+                }
+                reportMemberMiss("EventEmitter", prop, span,
+                                 {"on", "once", "off", "emit"});
+                return Type::unknown();
+            }
             // The JS-compat family (src/std/typed-arrays/sema.cpp): typed
             // views, the buffer classes and DataView have their own tables.
             if (isTypedArrayClass(ot)) return typedArrayMember(ot, prop);
             if (isBufferClass(ot)) return bufferMember(ot, prop);
             if (isDataViewClass(ot)) return dataViewMember(prop);
+            // `std/collections` Map/Set (src/std/collections/sema.cpp).
+            if (isCollectionsClass(ot)) return collectionsMember(ot, prop, span);
+            // `std/date` values: a closed surface (miss -> CP3305 below).
+            if (isDateClass(ot)) {
+                if (auto t = dateInstanceMember(ot, prop)) return *t;
+                reportMemberMiss("Date", prop, span, dateInstanceMemberNames());
+                return Type::unknown();
+            }
+            // The nominal std/buffer `Buffer` (src/std/buffer/sema.cpp).
+            if (isByteBufferClass(ot)) return byteBufferMember(ot, prop);
             return ambient();
         case TypeKind::String:
             return stringMember(prop);
@@ -150,6 +185,13 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
     }
     if (prop == "pop" || prop == "shift") return Type::function({}, elem);
     if (prop == "join") return Type::function({Type::string()}, Type::string());
+    if (prop == "sort") {
+        // `arr.sort()` / `arr.sort((a, b) => number)`: stable, in place,
+        // returns the receiver. The callback is optional; the default ordering
+        // is type-aware (docs/language-spec/09-arrays-strings.md).
+        Type cmp = Type::function({elem, elem}, Type::number());
+        return withOptionalTail(Type::function({cmp}, Type::array(elem)));
+    }
     if (prop == "includes") {
         // `includes(searchElement, fromIndex?)` - the literal-set form the
         // emitter can lower today (emit_builtin.cpp).

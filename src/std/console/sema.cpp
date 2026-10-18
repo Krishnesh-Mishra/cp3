@@ -9,7 +9,9 @@
 //
 // Console is a CLOSED but surface-aware family (std_check.cpp
 // isClosedStdNamespace): the implemented set below is what a typo is ranked
-// against, so a member that would just report CP3002 is never recommended.
+// against with "did you mean". Since the round-1 wave all twelve documented
+// members are implemented, so every one of them is a suggestion candidate and
+// an unknown member is exactly the documented-shape CP3305.
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -21,22 +23,22 @@ namespace cp3 {
 
 namespace {
 
-// Console's implemented set: a typo must never recommend a member that would
-// just report CP3002, so the documented-but-pending members are not candidates.
-const char* const kConsoleImplemented[] = {"log", "info", "warn", "error"};
+// The twelve documented members (docs/standard-library/04-imported-std-modules.md
+// §console): log, info, warn, error, input, readKey, clear, assert, on, off,
+// hide, show. All are real, so all are candidate suggestions for a typo.
+const char* const kConsoleImplemented[] = {
+    "log",   "info",  "warn", "error", "input", "readKey",
+    "clear", "assert", "on",   "off",   "hide",  "show",
+};
 
 }  // namespace
 
 std::optional<Type> Analyzer::consoleMember(const std::string& prop) {
-    // Surface-aware console (the user-facing typo example): the four
-    // members codegen lowers today type as ambient (permissive signatures);
-    // the documented but still pending ones keep the ambient fallthrough so
-    // their CP3002 skip survives until the console wave lands.
-    static const char* const kPending[] = {"assert", "clear", "input", "readKey"};
+    // The user-facing typo example: the documented members type as ambient
+    // (permissive signatures, like the other std families' surface members),
+    // and anything else keeps the CP3305 closed-shape report with the
+    // implemented set as candidates.
     for (const char* name : kConsoleImplemented) {
-        if (prop == name) return ambient();
-    }
-    for (const char* name : kPending) {
         if (prop == name) return ambient();
     }
     return std::nullopt;

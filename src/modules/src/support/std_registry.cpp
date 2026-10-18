@@ -6,7 +6,9 @@
 // Source of truth: docs/standard-library/04-imported-std-modules.md. Only
 // specifiers listed here resolve; named/default imports are validated against
 // the surface. `std/collections` deliberately exports Map/Set but NOT Mutex
-// (concurrency primitives are language-level, not importable).
+// (concurrency primitives are language-level, not importable). A specifier
+// that left the table (D74: `std/events`) is reported with its builtin
+// replacement by `removedModuleMessage` instead of the generic CP3601 text.
 // =============================================================================
 #include "detail/std_registry.h"
 
@@ -36,10 +38,23 @@ const StdModuleDef kStdModules[] = {
     {"std/os", true, {}},
     {"std/crypto", true, {}},
     {"std/network", true, {"fetch", "WebSocket", "WebSocketServer", "createServer"}},
-    {"std/events", false, {"EventEmitter"}},
     {"std/env", false, {"env"}},
     {"std/collections", false, {"Map", "Set"}},
     {"std/buffer", false, {"Buffer"}},
+};
+
+// Specifiers that were once std modules and are now language builtins (D74).
+// The loader reports the replacement, so an old import fails with a pointer to
+// the builtin instead of the generic "cannot find module".
+struct RemovedModuleDef {
+    const char* specifier;
+    const char* message;
+};
+
+const RemovedModuleDef kRemovedModules[] = {
+    {"std/events",
+     "std/events is not a module: EventEmitter is a language builtin, no "
+     "import is needed (see language-spec 14)"},
 };
 
 const std::map<std::string, ExportSurface>& stdTable() {
@@ -62,6 +77,13 @@ const ExportSurface* stdModuleSurface(std::string_view specifier) {
     const auto& table = stdTable();
     const auto it = table.find(std::string(specifier));
     return it == table.end() ? nullptr : &it->second;
+}
+
+const char* removedModuleMessage(std::string_view specifier) {
+    for (const RemovedModuleDef& def : kRemovedModules) {
+        if (std::string_view(def.specifier) == specifier) return def.message;
+    }
+    return nullptr;
 }
 
 }  // namespace cp3::modules

@@ -14,13 +14,13 @@
 // family unit without touching core.
 //
 // Two shapes of namespace:
-//   * CLOSED families (Math / path / os / crypto / console / JSON / fs): every
-//     member is listed in the family's table, and an unknown member is CP3305
-//     with "did you mean" candidates from the implemented names (member_check.cpp
-//     consults isClosedStdNamespace). Console is surface-aware: members
-//     documented but still pending codegen (assert/clear/input/readKey) stay
-//     ambient so their CP3002 skip survives, and the candidates stay limited
-//     to the implemented set.
+//   * CLOSED families (Math / path / os / crypto / console / JSON / Date /
+//     fs): every member is listed in the family's table, and an unknown member
+//     is CP3305 with "did you mean" candidates from the implemented names
+//     (member_check.cpp consults isClosedStdNamespace). Console is
+//     surface-aware: members documented but still pending codegen
+//     (assert/clear/input/readKey) stay ambient so their CP3002 skip survives,
+//     and the candidates stay limited to the implemented set.
 //   * OPEN families (process in src/std/process/sema.cpp, network in
 //     src/std/network/sema.cpp, env / ... which have no table at all):
 //     unknown members keep the old permissive ambient behavior, so the pinned
@@ -49,6 +49,7 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
     if (ns == "fs") return fsMember(prop);
     if (ns == "console") return consoleMember(prop);
     if (ns == "JSON") return jsonMember(prop);
+    if (ns == "Date") return dateMember(prop);
     return std::nullopt;
 }
 
@@ -58,7 +59,7 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
 
 bool isClosedStdNamespace(const std::string& ns) {
     return ns == "Math" || ns == "path" || ns == "os" || ns == "crypto" ||
-           ns == "console" || ns == "JSON" || ns == "fs";
+           ns == "console" || ns == "JSON" || ns == "Date" || ns == "fs";
 }
 
 // The CP3305 candidate lists come from the family units, which own the tables.
@@ -69,6 +70,7 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns) {
     if (ns == "JSON") return jsonMemberNames();
     if (ns == "crypto") return cryptoMemberNames();
     if (ns == "console") return consoleMemberNames();
+    if (ns == "Date") return dateMemberNames();
     if (ns == "fs") return fsMemberNames();
     return {};
 }
@@ -79,8 +81,8 @@ std::string stdImportHint(const std::string& name) {
         const char* specifier;
     };
     // The default-exported std modules (std_registry.cpp) whose import line a
-    // bare name follows from. Named-only modules (std/events, std/env, ...)
-    // are handled by import validation instead.
+    // bare name follows from. Named-only modules (std/env, std/collections,
+    // ...) are handled by import validation instead.
     static const ModuleHint kHints[] = {
         {"Math", "std/math"},       {"JSON", "std/json"},
         {"console", "std/console"}, {"path", "std/path"},

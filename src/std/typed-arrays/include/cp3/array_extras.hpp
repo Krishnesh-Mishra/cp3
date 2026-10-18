@@ -3,12 +3,14 @@
 // the JS-compat family (D69).
 //
 // `Array(n)` (`makeArrayDefault`: a dense default-initialized array), `.fill`,
-// `.join`, `Array.of` / `Array.from` (array and typed sources), the indexed
-// accessors (`arrayAt` / `arrayWriteAt`) and the element text `join` uses.
-// Pulled by cp3/typed_array.hpp; a standalone include works through the guard.
+// `.join`, `.sort`, `Array.of` / `Array.from` (array and typed sources), the
+// indexed accessors (`arrayAt` / `arrayWriteAt`) and the element text `join`
+// uses. Pulled by cp3/typed_array.hpp; a standalone include works through the
+// guard.
 // =============================================================================
 #pragma once
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <vector>
@@ -57,6 +59,27 @@ std::string arrayJoin(const Array<E>& a, const std::string& sep) {
         out += arrayElementText((*a)[i]);
     }
     return out;
+}
+
+// `a.sort()` (docs/language-spec/09-arrays-strings.md): in place, stable,
+// returns the receiver. The default ordering is type-aware - numeric for
+// number arrays, lexicographic for string arrays - so `[10, 9, 2].sort()`
+// yields `[2, 9, 10]` where JS's lexicographic default would not.
+template <class E>
+Array<E> arraySort(const Array<E>& a) {
+    std::stable_sort(a->begin(), a->end(),
+                     [](const E& x, const E& y) { return x < y; });
+    return a;
+}
+
+// `a.sort((a, b) => number)`: the JS comparator contract (negative sorts the
+// left value first); stable, so a comparator that returns 0 keeps the input
+// order.
+template <class E, class F>
+Array<E> arraySortWith(const Array<E>& a, F cmp) {
+    std::stable_sort(a->begin(), a->end(),
+                     [&cmp](const E& x, const E& y) { return cmp(x, y) < 0.0; });
+    return a;
 }
 
 // A bounds-checked read/write (the corpus only indexes in range; anything else

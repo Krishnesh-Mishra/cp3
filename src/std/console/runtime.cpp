@@ -1,5 +1,6 @@
 // =============================================================================
-// src/std/console/runtime.cpp - D49 rendering and the console output surface.
+// src/std/console/runtime.cpp - D49 rendering, the console output surface, and
+// the D76 window show/hide.
 // =============================================================================
 #include "cp3/std/console.hpp"
 
@@ -7,6 +8,16 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#if defined(_WIN32)
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#endif
 
 namespace cp3::runtime {
 namespace {
@@ -108,6 +119,27 @@ void clear() {
     // ANSI clear-screen + cursor home (spec: console.clear()).
     std::cout << "\x1b[2J\x1b[H";
     std::cout.flush();
+}
+
+// D76: hide/show the process's own console window. Windows only, and a
+// documented no-op when the process has no console window (GetConsoleWindow
+// returns NULL: piped output, a service). Never throws; the window's contents
+// and the event loop are untouched, so printing continues into the hidden
+// buffer.
+void hide() {
+#if defined(_WIN32)
+    if (HWND window = GetConsoleWindow()) {
+        ShowWindow(window, SW_HIDE);
+    }
+#endif
+}
+
+void show() {
+#if defined(_WIN32)
+    if (HWND window = GetConsoleWindow()) {
+        ShowWindow(window, SW_SHOW);
+    }
+#endif
 }
 
 }  // namespace console

@@ -82,6 +82,37 @@ std::string Generator::arrayJoinCallText(const CallExpr& c, const MemberExpr& m,
            ")";
 }
 
+// `arr.sort()` / `arr.sort((a, b) => number)` (docs/language-spec/09):
+// in place, stable, returns the receiver. The default ordering is type-aware
+// (numeric for number arrays, lexicographic for string arrays); the callback
+// form lowers the arrow with the element type as its parameter context.
+std::string Generator::arraySortCallText(const CallExpr& c, const MemberExpr& m,
+                                         const Type& recv) {
+    if (m.property != "sort" || recv.kind != TypeKind::Array) {
+        return std::string();
+    }
+    CppInfo ec;
+    if (!arrayElementInfo(arrayElemOf(recv), ec)) {
+        notImplemented(c, "the array sort element type");
+        return "0.0";
+    }
+    needsTypedArray_ = true;
+    const std::string recvText =
+        familyReceiverText(*m.object, arrayElemOf(recv), c);
+    if (c.arguments.empty()) {
+        return "::cp3::runtime::arraySort<" + ec.cpp + ">(" + recvText + ")";
+    }
+    const Expr* arg = c.arguments.front().get();
+    if (arg == nullptr || arg->kind != NodeKind::ArrowFunction) {
+        notImplemented(c, "a non-arrow sort comparator");
+        return "0.0";
+    }
+    const std::string cmp =
+        emitArrow(static_cast<const ArrowFunction&>(*arg), {ec.cpp, ec.cpp});
+    return "::cp3::runtime::arraySortWith<" + ec.cpp + ">(" + recvText + ", " +
+           cmp + ")";
+}
+
 // The typed-view method table; `set` dispatches on the source kind.
 std::string Generator::typedMethodCallText(const CallExpr& c,
                                            const MemberExpr& m,
@@ -163,7 +194,10 @@ std::string Generator::emitFamilyMemberCall(const CallExpr& c,
     }
     const Type recv = effectiveType(*m.object);
     if (m.property == "fill") return arrayFillCallText(c, m, recv);
-    if (recv.kind == TypeKind::Array) return arrayJoinCallText(c, m, recv);
+    if (recv.kind == TypeKind::Array) {
+        if (m.property == "join") return arrayJoinCallText(c, m, recv);
+        if (m.property == "sort") return arraySortCallText(c, m, recv);
+    }
     if (recv.kind == TypeKind::Class) {
         if (const char* tag = familyTag(recv.name)) {
             return typedMethodCallText(c, m, tag);

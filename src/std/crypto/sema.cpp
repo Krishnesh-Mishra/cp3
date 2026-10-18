@@ -8,9 +8,14 @@
 // The typed table mirrors docs/standard-library/04 section crypto, which is
 // the pinned signature surface the run-mode cases exercise:
 //   randomUUID(): string
-//   randomBytes(n: number): Buffer      (beta one: the raw-byte string
-//                                        stand-in, see cp3/std/crypto.hpp)
-//   sha256(s: string | Buffer): string  (hex; Buffer == string for now)
+//   randomBytes(n: number): string      (beta one keeps the raw-byte string
+//                                        stand-in: retyping it to the nominal
+//                                        Buffer breaks the pinned
+//                                        crypto_signatures_check.cp3:4, so the
+//                                        flip waits on that pin; see the R1
+//                                        buffer wave report)
+//   sha256(s: string | Buffer): string  (hex; a Buffer argument lowers to its
+//                                        bytes in codegen, cp3/std/buffer.hpp)
 //   sha512(s: string | Buffer): string  (hex)
 //   AES256(key: string, data: string): string
 //   AES256Decrypt(key: string, encrypted: string): string
@@ -38,15 +43,18 @@ struct CryptoRow {
 
 Type zeroToString() { return Type::function({}, Type::string()); }
 Type numberToString() { return Type::function({Type::number()}, Type::string()); }
-Type stringToString() { return Type::function({Type::string()}, Type::string()); }
+Type stringOrBufferToString() {
+    return Type::function({Type::unionOf({Type::string(), byteBufferType()})},
+                          Type::string());
+}
 Type twoStringToString() {
     return Type::function({Type::string(), Type::string()}, Type::string());
 }
 
 const CryptoRow kRows[] = {
-    {"randomUUID", zeroToString},      {"randomBytes", numberToString},
-    {"sha256", stringToString},        {"sha512", stringToString},
-    {"AES256", twoStringToString},     {"AES256Decrypt", twoStringToString},
+    {"randomUUID", zeroToString},       {"randomBytes", numberToString},
+    {"sha256", stringOrBufferToString}, {"sha512", stringOrBufferToString},
+    {"AES256", twoStringToString},      {"AES256Decrypt", twoStringToString},
 };
 
 }  // namespace

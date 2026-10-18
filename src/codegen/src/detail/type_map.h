@@ -30,6 +30,10 @@ enum class Shape {
     TypedArray,  // Int8Array .. BigUint64Array
     ArrayBuffer, // ArrayBuffer / SharedArrayBuffer
     DataView,
+    Collections, // Map<K, V> / Set<T> (std/collections)
+    Buffer,      // the nominal std/buffer `Buffer` byte sequence
+    EventEmitter, // the builtin event type (D74): Ref<EventEmitter>
+    Listener,     // a function-typed value (D74): the boxed callable
     Unknown, Unsupported
 };
 
@@ -60,6 +64,10 @@ bool isPromiseType(const Type& t);
 Type promiseOf(const Type& value);
 Type promiseValue(const Type& t);
 
+// The builtin `EventEmitter` (D74): a nominal class type with name
+// "EventEmitter"; codegen lowers it to cp3/async/emitter.hpp.
+bool isEventEmitterType(const Type& t);
+
 // Does an empty optional of `kind` compare strictly equal to `nullishShape`?
 bool optionalEmptyMatches(NullishKind kind, Shape nullishShape);
 
@@ -72,6 +80,21 @@ CppInfo classify(const Type& raw);
 // DataView. Fills `info` and returns true when `t` is one of them; every other
 // type is left for `classify`'s own arms.
 bool classifyFamily(const Type& t, CppInfo& info);
+
+// The std/collections family (src/std/collections/codegen.cpp): `Map<K, V>`
+// and `Set<T>` over primitive keys/values lower to the runtime's
+// insertion-ordered collection handles. Fills `info` and returns true when
+// `t` is one of them; every other type is left for `classify`'s own arms.
+bool classifyCollections(const Type& t, CppInfo& info);
+
+// The Date value type (std/date; src/std/date/codegen.cpp): a nominal class
+// named "Date" lowering to `::cp3::runtime::date::Date`. Returns false for
+// every other type.
+bool classifyDate(const Type& t, CppInfo& info);
+
+// The nominal `Buffer` of std/buffer (src/std/buffer/codegen.cpp): a
+// `TypeKind::Class` named "Buffer" -> `::cp3::runtime::buffer::Buffer`.
+bool classifyByteBuffer(const Type& t, CppInfo& info);
 
 // Structural fallback: a type annotation -> a cp3 Type (when sema is absent).
 std::optional<Type> typeFromTypeNode(const TypeNode& tn);

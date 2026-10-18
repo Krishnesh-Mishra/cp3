@@ -68,11 +68,11 @@ Type Analyzer::inferCall(CallExpr& call) {
                 return promise;
             }
             if (Type family; tryInferFamilyMethodCall(call, member, family)) return family;
+            if (Type buffer; tryInferBufferCall(call, member, buffer)) return buffer;
         }
     }
 
-    for (auto& ta : call.typeArgs)
-        if (ta) resolveType(*ta);
+    for (auto& ta : call.typeArgs) if (ta) resolveType(*ta);
 
     if (ct.isError()) {
         inferArgs(call);
@@ -218,8 +218,14 @@ void Analyzer::sigFromFunctionType(const Type& ct, FuncSig& localSig) {
             localSig.optional.push_back(false);
         }
     }
-    if (ct.name == kVariadicLabel) localSig.rest = true;
+    if (ct.name == kVariadicLabel ||
+        ct.name == kVariadicOptionalTailLabel) {
+        localSig.rest = true;
+    }
     if (ct.name == kOptionalTailLabel && !localSig.optional.empty()) {
+        localSig.optional.back() = true;
+    }
+    if (ct.name == kVariadicOptionalTailLabel && !localSig.optional.empty()) {
         localSig.optional.back() = true;
     }
     if (ct.name == kOptionalTail2Label && localSig.optional.size() >= 2) {
