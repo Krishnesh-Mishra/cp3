@@ -533,3 +533,48 @@ amendments and the ~90-case corpus list land corpus-first in the typed-array
 wave, queued after the std runtime waves; the wave owner first closes whatever
 array indexing path it needs (ranked wave 3). The marker promotions listed in
 the proposal ride that wave.
+
+## D70 - Third-party backends: vendored static builds packed with cp3c (user directive, 2026-10-18)
+
+The spec names the backing library for each native-backed family (README SS20,
+SS13, SS14): libsodium for `std/crypto`, libuv plus uWebSockets/uSockets for
+`std/network` (fetch on the client side, server and WebSocket on uWebSockets),
+TBB under `parallel.*` (tbb::parallel_for / parallel_reduce / parallel_invoke,
+SS13). Rulings and staging:
+
+1. **Downloaded once, packed with cp3c, never user-installed** (user directive).
+   Each library is built as a pinned static archive with the same MinGW-w64 GCC
+   toolchain cp3c drives and committed under `third_party/<lib>/` with headers,
+   upstream LICENSE (and NOTICE where present), and a pinned VERSION file,
+   shipped alongside cp3c exactly like a bundled binary.
+2. **Reproducible manifest.** `third_party/MANIFEST.md` records upstream URL,
+   pinned tag or commit, verbatim build commands, artifact SHA-256 hashes, and
+   the verified link flag list; `third_party/build.ps1` recreates every
+   artifact from the pinned source.
+3. **Beta-one scope.** uSockets/uWebSockets build without TLS (HTTPS/TLS stays
+   out of scope, SS20) and without compression. First target: Windows x64
+   MinGW-W64 (ucrt, posix threads). libuv is the one event-loop library
+   (SS14/SS20); on Windows uSockets rides libuv as well.
+4. **Placement and linking.** Generated programs link the vendored archives
+   statically; cp3c locates `third_party/` relative to its own executable (the
+   D56 materialization pattern) rather than any system or environment path.
+5. **std surface staging unchanged (D68).** Module behavior stays in the
+   runtime behind the three mechanical tables for now; the README SS20 end
+   state is the same natives bound through `import native` (SS19) from
+   cp3-source std wrappers once classes/object literals land. The vendored
+   archives are the identical binding target either way.
+6. **`worker` unaffected.** SS13 specifies one real OS thread per worker; the
+   existing std::thread runtime already matches that. Only `parallel.*` moves
+   to TBB, and the existing std::thread implementation stays until that
+   alignment wave lands.
+7. **Event loop.** SS14/SS20 pin libuv as the async event loop; D62 landed a
+   hand-rolled loop with libuv-matching semantics. The network wave decides
+   in-wave between re-basing the loop on libuv (the spec path) and keeping the
+   hand-rolled loop with libuv isolated inside fetch internals; either way the
+   D62 corpus semantics are preserved.
+
+Evidence: `build/scratch/vend/WAVE-VEND-REPORT.md` and
+`third_party/MANIFEST.md` (artifact SHA-256s, exact build commands, verified
+consumer link flags). Pins as delivered: libsodium 1.0.22 (tag 1.0.22-RELEASE),
+libuv v1.53.0, uWebSockets v20.80.0 including its in-tree uSockets, oneTBB
+v2023.1.0.

@@ -48,3 +48,8 @@ __pycache__/
 
 # ---- test scratch ----
 /tests/**/.tmp/
+
+# ---- vendored static libraries (D70: pinned builds shipped with cp3c) ----
+# Must stay after the *.a / *.lib rules above (last match wins).
+!third_party/**/*.a
+!third_party/**/*.lib
