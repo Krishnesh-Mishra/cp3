@@ -67,16 +67,19 @@ bool isTty(std::FILE* f) noexcept;
 std::uint64_t totalPhysicalMemoryMb() noexcept;
 
 // -----------------------------------------------------------------------------
-// Repository-relative include roots
+// Cp3 root discovery and the include roots that hang off it
 // -----------------------------------------------------------------------------
 //
 // The generated C++ includes the frozen runtime header (cp3/core/runtime.hpp) and
-// may include common headers. `__FILE__` inside util.cpp identifies the
-// repository, letting us locate src/runtime/include and src/common/include
-// without any build-time define. Since D72 the always-available std families
-// (string, typed-arrays) contribute their ABI trees here; every other family's
-// tree is added by its native row when imported. Only directories that actually
-// exist are returned.
+// may include common headers, so a program build needs the shipped header trees
+// and the runtime translation units. The installer ships those trees next to
+// bin/cp3c.exe (packaging/windows), so the root is discovered relocatably: from
+// CP3_ROOT (set by the cp3.cmd shim), from the running executable's ancestors,
+// and finally from this module's compile-time path (`__FILE__`) for an
+// in-checkout compiler. Since D72 the always-available std families (string,
+// typed-arrays) contribute their ABI trees here; every other family's tree is
+// added by its native row when imported. Only directories that actually exist
+// are returned.
 std::vector<fs::path> compilerIncludeRoots();
 
 // Absolute paths of the runtime translation units that generated code links
@@ -86,12 +89,21 @@ std::vector<fs::path> compilerIncludeRoots();
 // minimum set is returned (see src/toolchain/util.cpp).
 std::vector<fs::path> runtimeSourcePaths();
 
-// Repository root: the ancestor directory that owns both `src/cli` and
-// `src/runtime` (normally also `third_party/`), discovered from this module's
-// compile-time path. Empty when the layout cannot be recognised. The std
-// modules' native backends (detail/native_packages.hpp, DECISIONS D68/D70)
-// resolve their vendored paths against this root.
+// Cp3 root: the ancestor directory that owns the shared trees (`src/runtime`
+// plus `src/std`; a source checkout also has `src/cli`), normally also
+// `third_party/`. Empty when the layout cannot be recognised. The std modules'
+// native backends (detail/native_packages.hpp, DECISIONS D68/D70) resolve their
+// vendored paths against this root.
 fs::path repositoryRoot();
+
+// Maps a repository-relative include root ("src/<x>/include", for example
+// "src/runtime/include" or "src/std/console/include") onto the installed
+// layout, where the same header tree lives at "<root>/include/<x>"
+// (packaging/windows/package.ps1 stages every header tree there). Returns
+// "<root>/<rel>" unchanged when that directory exists, so a source checkout is
+// unaffected; falls back to "<root>/<rel>" when the mapped directory does not
+// exist either, so callers report the path a checkout would have to provide.
+fs::path resolveIncludeRoot(const fs::path& root, const std::string& rel);
 
 // -----------------------------------------------------------------------------
 // Misc

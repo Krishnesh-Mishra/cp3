@@ -188,7 +188,7 @@ std::optional<NativeBuildFlags> applyNativePackages(
             return repo.empty() ? fs::path(rel) : repo / rel;
         };
         for (const std::string& rel : pkg->includeDirs) {
-            const fs::path dir = resolve(rel);
+            const fs::path dir = resolveIncludeRoot(repo, rel);
             if (!fs::is_directory(dir, ec)) {
                 reportBroken(pkg->specifier, "include directory", dir);
                 return std::nullopt;
