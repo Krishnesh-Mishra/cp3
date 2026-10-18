@@ -71,6 +71,11 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     } else if (m.object && info(*m.object).shape == Shape::String) {
         return emitStringMethodCall(c, m);
     }
+    // The std/collections Map/Set member calls (`m.set(...)`, `s.add(...)`,
+    // `forEach(...)`): src/std/collections/codegen.cpp.
+    if (std::string coll = emitCollectionsMemberCall(c, m); !coll.empty()) {
+        return coll;
+    }
     // The JS-compat typed-array family (src/std/typed-arrays/codegen.cpp):
     // `Array.of/from`, the array/typed-view method tables, the buffer `.slice`
     // and DataView.
@@ -94,6 +99,9 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
         }
     }
     if (std::string proc = emitProcessMember(m); !proc.empty()) return proc;
+    // `std/collections` `m.size` / `s.size` reads and the `entries().length`
+    // case (src/std/collections/codegen.cpp).
+    if (std::string coll = emitCollectionsMember(m); !coll.empty()) return coll;
     // The JS-compat typed-array family (src/std/typed-arrays/codegen.cpp):
     // `.length` of a cp3 array, typed-view/buffer/DataView members,
     // `X.BYTES_PER_ELEMENT`.

@@ -170,6 +170,13 @@ bool isTypedArrayClass(const Type& t);
 bool isBufferClass(const Type& t);
 bool isDataViewClass(const Type& t);
 
+// --- the std/collections family (src/std/collections/sema.cpp) --------------
+//
+// `Map<K, V>` and `Set<T>` are nominal `TypeKind::Class` types carrying their
+// type arguments (parts == { K, V } / { T }); the member table and the CP3305
+// candidates live in the family unit.
+bool isCollectionsClass(const Type& t);
+
 // True for every constructor name the family registers (`Array` included);
 // scopes.cpp declares them as ambient builtins and type names.
 bool isFamilyCtorName(const std::string& name);

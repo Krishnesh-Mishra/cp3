@@ -173,6 +173,8 @@ private:
                                   const Type& recv);
     std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m,
                                   const Type& recv);
+    std::string arraySortCallText(const CallExpr& c, const MemberExpr& m,
+                                  const Type& recv);
     std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m,
                                     const char* tag);
     std::string dataViewCallText(const CallExpr& c, const MemberExpr& m);
@@ -180,6 +182,16 @@ private:
                                  const Type& elemOverride);
     std::string declaratorInitText(const VariableDeclarator& d,
                                    const Type& declared);
+
+    // --- std/collections (src/std/collections/codegen.cpp) --------------------
+    // `new Map<K, V>()` / `new Set<T>()`, the member calls (`set`/`get`/`has`/
+    // `delete`/`clear`/`keys`/`values`/`entries`/`forEach`) and the `size` /
+    // `entries().length` property reads. Each returns "" when the form is not
+    // one of them.
+    std::string emitCollectionsNew(const NewExpr& n);
+    std::string emitCollectionsMemberCall(const CallExpr& c,
+                                          const MemberExpr& m);
+    std::string emitCollectionsMember(const MemberExpr& m);
 
     // --- std namespaces + primitive methods (src/std/*/codegen.cpp) ----------
     // Lower `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*` calls, the
@@ -333,6 +345,7 @@ private:
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
+    bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)

@@ -192,6 +192,13 @@ Type Analyzer::inferNew(NewExpr& n) {
             Type net = inferNetworkConstruct(id.name, n.arguments, n.span);
             if (!net.isUnknown()) return withType(n, net);
         }
+        if (lookup(id.name, b) && isAmbientType(b.type)) {
+            // `new Map<string, number>()` / `new Set<number>()`: the
+            // std/collections family (src/std/collections/sema.cpp).
+            setType(id, b.type);
+            Type coll = inferCollectionsConstruct(id.name, n.typeArgs);
+            if (!coll.isUnknown()) return withType(n, coll);
+        }
     }
     if (n.callee) inferExpr(*n.callee);
     for (auto& a : n.arguments) {

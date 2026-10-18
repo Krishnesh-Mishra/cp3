@@ -273,6 +273,15 @@ private:
                                   const Type& annType, const Type& initType);
     bool isReadOnlyFamilyProp(const Type& ot, const std::string& prop) const;
 
+    // --- std/collections (src/std/collections/sema.cpp) ----------------------
+    // `new Map<K, V>()` / `new Set<T>()`: nominal class types carrying their
+    // type arguments (parts { K, V } / { T }); unknown for other names.
+    Type inferCollectionsConstruct(const std::string& name, TypeList& typeArgs);
+    // The docs/04 Map/Set member surface; a member outside it reports CP3305
+    // with the implemented member names as candidates.
+    Type collectionsMember(const Type& recv, const std::string& prop,
+                           const SourceSpan& span);
+
     // --- parallel.* capture safety (parallel_check.cpp) ----------------------
     // Walks the closures passed to a `parallel.*` entry point and reports a
     // captured-state write (CP3902) or an unsafe computed-index write (CP3901);

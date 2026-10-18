@@ -137,14 +137,14 @@ std::string Generator::exprPlain(const Expr& e) {
         case NodeKind::CallExpr:
             return emitCallOrFamily(static_cast<const CallExpr&>(e));
         case NodeKind::NewExpr: {
-            // `new WebSocket(url)` / `new WebSocketServer({ port })`
-            // (std/network), then the JS-compat family constructors
-            // (`new Int8Array(...)`, `new Array(2)`, `new DataView(buf)`);
-            // anything else reports.
+            // std/network + std/collections constructors first, then the
+            // JS-compat family and its error report.
             if (std::string net = emitNetworkNew(static_cast<const NewExpr&>(e));
                 !net.empty()) {
                 return net;
             }
+            if (std::string coll = emitCollectionsNew(static_cast<const NewExpr&>(e));
+                !coll.empty()) return coll;
             return emitFamilyNew(static_cast<const NewExpr&>(e));
         }
         case NodeKind::ArrayLiteral:

@@ -127,6 +127,8 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             if (isTypedArrayClass(ot)) return typedArrayMember(ot, prop);
             if (isBufferClass(ot)) return bufferMember(ot, prop);
             if (isDataViewClass(ot)) return dataViewMember(prop);
+            // `std/collections` Map/Set (src/std/collections/sema.cpp).
+            if (isCollectionsClass(ot)) return collectionsMember(ot, prop, span);
             return ambient();
         case TypeKind::String:
             return stringMember(prop);
@@ -150,6 +152,13 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
     }
     if (prop == "pop" || prop == "shift") return Type::function({}, elem);
     if (prop == "join") return Type::function({Type::string()}, Type::string());
+    if (prop == "sort") {
+        // `arr.sort()` / `arr.sort((a, b) => number)`: stable, in place,
+        // returns the receiver. The callback is optional; the default ordering
+        // is type-aware (docs/language-spec/09-arrays-strings.md).
+        Type cmp = Type::function({elem, elem}, Type::number());
+        return withOptionalTail(Type::function({cmp}, Type::array(elem)));
+    }
     if (prop == "includes") {
         // `includes(searchElement, fromIndex?)` - the literal-set form the
         // emitter can lower today (emit_builtin.cpp).

@@ -30,6 +30,7 @@ enum class Shape {
     TypedArray,  // Int8Array .. BigUint64Array
     ArrayBuffer, // ArrayBuffer / SharedArrayBuffer
     DataView,
+    Collections, // Map<K, V> / Set<T> (std/collections)
     Unknown, Unsupported
 };
 
@@ -72,6 +73,12 @@ CppInfo classify(const Type& raw);
 // DataView. Fills `info` and returns true when `t` is one of them; every other
 // type is left for `classify`'s own arms.
 bool classifyFamily(const Type& t, CppInfo& info);
+
+// The std/collections family (src/std/collections/codegen.cpp): `Map<K, V>`
+// and `Set<T>` over primitive keys/values lower to the runtime's
+// insertion-ordered collection handles. Fills `info` and returns true when
+// `t` is one of them; every other type is left for `classify`'s own arms.
+bool classifyCollections(const Type& t, CppInfo& info);
 
 // Structural fallback: a type annotation -> a cp3 Type (when sema is absent).
 std::optional<Type> typeFromTypeNode(const TypeNode& tn);

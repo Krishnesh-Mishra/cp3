@@ -246,6 +246,9 @@ GeneratedModule Generator::run(const Program& program) {
         familyUse.find("::cp3::runtime::DataView") != std::string::npos) {
         needsTypedArray_ = true;
     }
+    if (familyUse.find("::cp3::runtime::collections::") != std::string::npos) {
+        needsCollections_ = true;
+    }
 
     GeneratedModule module;
     module.header = buildHeader(decls);
@@ -276,6 +279,11 @@ std::string Generator::buildHeader(const std::string& decls) const {
         // The JS-compat typed-array family (D69): a signature or module-scope
         // binding can name `Array<T>`/the typed views.
         out += "#include \"cp3/typed_array.hpp\"\n";
+    }
+    if (needsCollections_) {
+        // std/collections (D44): a signature or module-scope binding can name
+        // `Map<K, V>`/`Set<T>`.
+        out += "#include \"cp3/std/collections.hpp\"\n";
     }
     out += "\n";
     out += "namespace " + namesp_ + " {\n\n";
@@ -321,6 +329,9 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsProcess_) out += "#include \"cp3/std/process.hpp\"\n";
     if (needsCrypto_) out += "#include \"cp3/std/crypto.hpp\"\n";
     if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
+    if (needsCollections_) {
+        out += "#include \"cp3/std/collections.hpp\"\n";  // Map/Set (D44)
+    }
     out += "\n";
     out += kHelperBlock;
     if (needsTypedArray_) {
