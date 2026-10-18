@@ -1,5 +1,5 @@
 // =============================================================================
-// src/codegen/src/code_generator.cpp — codegen entry + module assembly
+// src/codegen/src/code_generator.cpp - codegen entry + module assembly
 // (STYLE.md §8).
 //
 // Owns the frozen `CodeGenerator::generate` boundary (cp3/codegen.hpp), the
@@ -12,13 +12,13 @@
 // compilable stub; the generator never throws and never aborts. The dedup is
 // what drives the CLI's exit-3 "skipped" behavior.
 // =============================================================================
-#include "generator.h"
+#include "detail/generator.h"
 
 #include <string>
 
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic_codes.hpp"
-#include "mangle.h"
+#include "detail/mangle.h"
 
 namespace cp3 {
 
@@ -67,7 +67,7 @@ inline std::string cp3_ts(const cp3::runtime::Maybe<T>& v) {
     if (v.isUndefined()) return std::string("undefined");
     return cp3::runtime::toString(v.value());
 }
-// A boxed erroneous value (cp3/error.hpp): `catch (e)` binds one, and cp3
+// A boxed erroneous value (cp3/core/error.hpp): `catch (e)` binds one, and cp3
 // renders it as the thrown value itself.
 inline std::string cp3_ts(const ::cp3::runtime::Thrown& v) { return v.toString(); }
 
@@ -102,8 +102,8 @@ inline bool cp3_truthy(const cp3::runtime::Maybe<T>& v) {
 }
 
 // ----- cp3 `finally` (spec §07, DECISIONS D37) -------------------------------
-// Runs the finally block on every exit of the enclosing scope — normal
-// completion, `break`/`continue`/`return`, or a propagating throw — exactly
+// Runs the finally block on every exit of the enclosing scope - normal
+// completion, `break`/`continue`/`return`, or a propagating throw - exactly
 // once. The normal path calls `runNow()`, which deactivates the guard before
 // invoking the block, so a throw from `finally` propagates instead of being
 // silently repeated. The destructor is `noexcept(false)` for the same reason
@@ -159,7 +159,7 @@ std::string indentText(const std::string& text, const std::string& pad) {
 }  // namespace
 
 // -----------------------------------------------------------------------------
-// Generator — construction, diagnostics and top-level orchestration
+// Generator - construction, diagnostics and top-level orchestration
 // -----------------------------------------------------------------------------
 
 Generator::Generator(DiagnosticSink& sink, const SemaResult& sema,
@@ -212,7 +212,7 @@ GeneratedModule Generator::run(const Program& program) {
 }
 
 // -----------------------------------------------------------------------------
-// Generator — assembly (generated .hpp / .cpp)
+// Generator - assembly (generated .hpp / .cpp)
 // -----------------------------------------------------------------------------
 
 std::string Generator::buildHeader(const std::string& decls) const {
@@ -224,11 +224,11 @@ std::string Generator::buildHeader(const std::string& decls) const {
     out += "#define " + guard + "\n\n";
     out += "#include <optional>\n";
     out += "#include <string>\n\n";
-    out += "#include \"cp3/runtime.hpp\"\n";
+    out += "#include \"cp3/core/runtime.hpp\"\n";
     if (needsEventLoop_) {
         // A declared `async function` returns `Promise<T>` (spec §14), so the
         // alias must be complete for callers of this header.
-        out += "#include \"cp3/promise.hpp\"\n";
+        out += "#include \"cp3/async/promise.hpp\"\n";
     }
     out += "\n";
     out += "namespace " + namesp_ + " {\n\n";
@@ -252,23 +252,23 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
         out += "#include <vector>\n";  // Promise.all/race/allSettled inputs
     }
     out += "\n";
-    out += "#include \"cp3/runtime.hpp\"\n";
-    out += "#include \"cp3/error.hpp\"\n";
+    out += "#include \"cp3/core/runtime.hpp\"\n";
+    out += "#include \"cp3/core/error.hpp\"\n";
     if (needsArith_) {
-        out += "#include \"cp3/arith.hpp\"\n";  // `%` lowering / int64 fast path
+        out += "#include \"cp3/core/arith.hpp\"\n";  // `%` lowering / int64 fast path
     }
     if (needsEventLoop_) {
-        out += "#include \"cp3/promise.hpp\"\n";  // Promise/await/timers
+        out += "#include \"cp3/async/promise.hpp\"\n";  // Promise/await/timers
     }
     if (consoleStderr_) {
-        out += "#include \"cp3/console.hpp\"\n";  // console.warn/.error
+        out += "#include \"cp3/std/console.hpp\"\n";  // console.warn/.error
     }
-    if (needsMath_) out += "#include \"cp3/math.hpp\"\n";
-    if (needsString_) out += "#include \"cp3/string.hpp\"\n";
-    if (needsPath_) out += "#include \"cp3/path.hpp\"\n";
-    if (needsOs_) out += "#include \"cp3/os.hpp\"\n";
-    if (needsJson_) out += "#include \"cp3/json.hpp\"\n";
-    if (needsProcess_) out += "#include \"cp3/process.hpp\"\n";
+    if (needsMath_) out += "#include \"cp3/std/math.hpp\"\n";
+    if (needsString_) out += "#include \"cp3/std/string.hpp\"\n";
+    if (needsPath_) out += "#include \"cp3/std/path.hpp\"\n";
+    if (needsOs_) out += "#include \"cp3/std/os.hpp\"\n";
+    if (needsJson_) out += "#include \"cp3/std/json.hpp\"\n";
+    if (needsProcess_) out += "#include \"cp3/std/process.hpp\"\n";
     out += "\n";
     out += kHelperBlock;
     out += "\nnamespace " + namesp_ + " {\n\n";

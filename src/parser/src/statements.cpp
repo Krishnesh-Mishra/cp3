@@ -5,7 +5,7 @@
 // (parser.cpp): if/while/do-while/for/for-of/for-in/switch, break/continue/
 // return/throw, try/catch/finally, labeled and expression statements.
 // =============================================================================
-#include "tokens.h"
+#include "detail/tokens.h"
 
 #include <memory>
 #include <utility>

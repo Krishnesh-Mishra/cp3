@@ -1,5 +1,5 @@
 // =============================================================================
-// src/runtime/tests/arith_test.cpp - unit driver for cp3/arith.hpp (D64).
+// src/runtime/tests/arith_test.cpp - unit driver for cp3/core/arith.hpp (D64).
 //
 // Covers the two contracts of the header:
 //   * `mod`/`modConst<K>` are bit-exact with `std::fmod` for a curated edge
@@ -17,7 +17,7 @@
 #include <random>
 #include <vector>
 
-#include "cp3/arith.hpp"
+#include "cp3/core/arith.hpp"
 #include "harness.hpp"
 
 namespace {

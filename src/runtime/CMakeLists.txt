@@ -1,5 +1,5 @@
 # =============================================================================
-# cp3_runtime — runtime support for generated code (Undefined, print/println,
+# cp3_runtime - runtime support for generated code (Undefined, print/println,
 # cp3::Error, Promise, worker, parallel.*, console, event loop).
 #
 # The generated-code ABI declared in `include/cp3/**` is frozen (DECISIONS D14);
@@ -9,18 +9,20 @@
 # becomes the support library a transpiled cp3 program links against.
 #
 # ADDING A SOURCE FILE: append one line to `cp3_runtime_sources` below. Policy:
-# headers declare, `.cpp` defines (STYLE.md §3).
+# headers declare, `.cpp` defines (STYLE.md §3). Since the structure sweep the
+# headers live under `include/cp3/{core,async,parallel,std}/` and the sources
+# under `src/{core,async,parallel,std}/`.
 # =============================================================================
 
 find_package(Threads REQUIRED)
 
 set(cp3_runtime_sources
-    src/console.cpp
-    src/error.cpp
-    src/eventloop.cpp
-    src/parallel.cpp
-    src/promise.cpp
-    src/runtime.cpp
+    src/std/console.cpp
+    src/core/error.cpp
+    src/async/eventloop.cpp
+    src/parallel/parallel.cpp
+    src/async/promise.cpp
+    src/core/runtime.cpp
 )
 
 add_library(cp3_runtime STATIC ${cp3_runtime_sources})

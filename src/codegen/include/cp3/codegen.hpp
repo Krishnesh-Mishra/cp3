@@ -1,9 +1,9 @@
 // =============================================================================
-// cp3/codegen.hpp — checked AST -> generated C++20 (+ source map).
+// cp3/codegen.hpp - checked AST -> generated C++20 (+ source map).
 //
 // OWNERSHIP: codegen module. The current implementation is a STUB: generate()
 // returns empty strings. Replace the body; the public shape is the frozen
-// boundary (extended and frozen by the contracts pass — DECISIONS D14).
+// boundary (extended and frozen by the contracts pass - DECISIONS D14).
 //
 // One .cp3 file -> exactly one .hpp/.cpp pair (docs/cli-tooling/01-...).
 //

@@ -1,7 +1,7 @@
 // =============================================================================
 // src/lexer/src/scanner.cpp - lexer cursor, byte classes, trivia, dispatch.
 //
-// Implements the core of the internal `Scanner` declared in scanner.h:
+// Implements the core of the internal `Scanner` declared in detail/scanner.h:
 //   * byte classification and UTF-8 encoding;
 //   * cursor/position helpers and diagnostic/commit primitives;
 //   * whitespace + comment trivia (with block-comment recovery, CP3104);
@@ -11,7 +11,7 @@
 // regexp.cpp and the operator tables in keywords.cpp (STYLE.md §8). Numeric
 // problems are reported as CP3101-CP3107; the scanner never throws.
 // =============================================================================
-#include "scanner.h"
+#include "detail/scanner.h"
 
 #include <cstdint>
 #include <string>
@@ -19,7 +19,7 @@
 #include <utility>
 
 #include "cp3/diagnostic_codes.hpp"
-#include "keywords.h"
+#include "detail/keywords.h"
 
 namespace cp3 {
 

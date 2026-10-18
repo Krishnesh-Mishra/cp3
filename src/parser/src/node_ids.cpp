@@ -8,7 +8,7 @@
 // NodeKind is grouped by category in CP3_AST_NODE_LIST (ast.hpp); the category
 // ranges keep each function small and are guarded by static_asserts below.
 // =============================================================================
-#include "tokens.h"
+#include "detail/tokens.h"
 
 #include <cstddef>
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// src/sema/src/semantic_analyzer.cpp — sema entry point + orchestration.
+// src/sema/src/semantic_analyzer.cpp - sema entry point + orchestration.
 //
 // Owns the frozen `SemanticAnalyzer::analyze` boundary (cp3/sema.hpp), the
 // `Analyzer` diagnostic helpers (D2 anchoring: column 1 of the offending node's
@@ -7,7 +7,7 @@
 // live in scopes.cpp / declarations.cpp, type logic in type_check.cpp, and so
 // on (STYLE.md §8).
 // =============================================================================
-#include "analyzer.h"
+#include "detail/analyzer.h"
 
 #include <cstdint>
 #include <string>
@@ -19,7 +19,7 @@
 namespace cp3 {
 
 // =============================================================================
-// Analyzer — diagnostics
+// Analyzer - diagnostics
 // =============================================================================
 SourceSpan Analyzer::anchorSpan(const SourceSpan& s) const {
     if (!s.file) return s;
@@ -45,7 +45,7 @@ void Analyzer::notImplemented(const SourceSpan& span, const std::string& what) {
 }
 
 // =============================================================================
-// Analyzer — top-level orchestration
+// Analyzer - top-level orchestration
 // =============================================================================
 void Analyzer::run(Program& program) {
     pushScope();

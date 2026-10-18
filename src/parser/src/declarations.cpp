@@ -6,7 +6,7 @@
 // and the parameter / type-parameter lists shared by functions, methods,
 // arrow functions and function types.
 // =============================================================================
-#include "tokens.h"
+#include "detail/tokens.h"
 
 #include <memory>
 #include <string>

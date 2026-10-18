@@ -1,6 +1,6 @@
 // =============================================================================
-// src/runtime/tests/promise_all_test.cpp — `Promise.all` / `.race` /
-// `.allSettled` (cp3/promise_combinators.hpp).
+// src/runtime/tests/promise_all_test.cpp - `Promise.all` / `.race` /
+// `.allSettled` (cp3/async/promise_combinators.hpp).
 //
 // Verifies input-order results, first-rejection wins, and that combining always
 // observes every input (so a combinator never itself leaks an unhandled
@@ -10,9 +10,9 @@
 #include <string>
 #include <vector>
 
-#include "cp3/error.hpp"
-#include "cp3/eventloop.hpp"
-#include "cp3/promise.hpp"
+#include "cp3/core/error.hpp"
+#include "cp3/async/eventloop.hpp"
+#include "cp3/async/promise.hpp"
 #include "harness.hpp"
 
 using cp3::runtime::all;

@@ -1,5 +1,5 @@
 // =============================================================================
-// src/runtime/tests/harness.hpp — a minimal, dependency-free assertion harness
+// src/runtime/tests/harness.hpp - a minimal, dependency-free assertion harness
 // for the runtime unit drivers (STYLE.md §7: no third-party framework).
 //
 // Usage: call CP3_CHECK / CP3_CHECK_EQ, then `return cp3test::summary("name");`

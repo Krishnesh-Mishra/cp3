@@ -14,17 +14,19 @@
 
 set(cp3_modules_sources
     src/module_loader.cpp
-    src/unit_loader.cpp
-    src/prelude_scan.cpp
-    src/import_resolver.cpp
-    src/export_surface.cpp
-    src/std_registry.cpp
-    src/specifier.cpp
-    src/file_paths.cpp
+    src/support/unit_loader.cpp
+    src/support/prelude_scan.cpp
+    src/support/import_resolver.cpp
+    src/support/export_surface.cpp
+    src/support/std_registry.cpp
+    src/support/specifier.cpp
+    src/support/file_paths.cpp
 )
 
 add_library(cp3_modules STATIC ${cp3_modules_sources})
 target_include_directories(cp3_modules PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+# Private headers resolve as `detail/...` from every unit subdirectory.
+target_include_directories(cp3_modules PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(cp3_modules PUBLIC cp3_common cp3_lexer cp3_parser)
 cp3_set_warnings(cp3_modules)
 

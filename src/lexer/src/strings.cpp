@@ -2,12 +2,12 @@
 // src/lexer/src/strings.cpp - string literals and escape sequences.
 //
 // Implements `Scanner::scanString` / `scanEscape` and the escape helpers
-// (declared in scanner.h). Both quote styles are supported; the cooked value is
+// (declared in detail/scanner.h). Both quote styles are supported; the cooked value is
 // stored in `Token::stringValue`. Malformed escapes report CP3106 and a raw
 // newline before the closing quote reports CP3102 (with `unterminated` set),
 // but the literal is still emitted for recovery (STYLE.md §6).
 // =============================================================================
-#include "scanner.h"
+#include "detail/scanner.h"
 
 #include <cstdint>
 #include <string>

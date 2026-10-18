@@ -5,7 +5,7 @@
 //
 //   g++ -std=c++20 -I src/common/include -I src/lexer/include <sources>
 //       -o <tmp>
-//   (sources: this driver, src/lexer/lexer.cpp, src/common/src/*.cpp)
+//   (sources: this driver, src/lexer/src/lexer.cpp, src/common/src/*.cpp)
 //
 // Prints every token (kind, span, payload) and every diagnostic for a set of
 // representative snippets, or for a file given as argv[1].

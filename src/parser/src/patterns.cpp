@@ -5,7 +5,7 @@
 // parameters, and in `catch (…)`: identifiers, array patterns, object patterns
 // (including shorthand, computed keys and defaults) and rest elements.
 // =============================================================================
-#include "tokens.h"
+#include "detail/tokens.h"
 
 #include <memory>
 #include <string>

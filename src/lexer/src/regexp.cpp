@@ -2,7 +2,7 @@
 // src/lexer/src/regexp.cpp - regular-expression literals and flags.
 //
 // Implements `Scanner::regexAllowed`, `Scanner::scanRegex` and
-// `Scanner::scanRegexFlags` (declared in scanner.h). Per DECISIONS.md D52 there
+// `Scanner::scanRegexFlags` (declared in detail/scanner.h). Per DECISIONS.md D52 there
 // are no dedicated regex fields on `Token`: the pattern is stored in
 // `stringValue` and the flag letters in `rawText`.
 //
@@ -10,7 +10,7 @@
 // unknown or duplicated flags. Every problem is reported through the sink and
 // the token is still emitted (STYLE.md §6).
 // =============================================================================
-#include "scanner.h"
+#include "detail/scanner.h"
 
 #include <cstdint>
 #include <string>

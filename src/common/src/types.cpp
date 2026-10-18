@@ -47,7 +47,7 @@ bool acceptsNullish(const Type& t) noexcept {
 }
 
 // Format a finite double for a diagnostic without depending on the runtime's
-// ECMAScript formatter (that lives in cp3/runtime.hpp). Diagnostics are
+// ECMAScript formatter (that lives in cp3/core/runtime.hpp). Diagnostics are
 // best-effort; %g keeps it short and stable.
 std::string formatDouble(double value) {
     char buf[64];

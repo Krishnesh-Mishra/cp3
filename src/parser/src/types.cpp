@@ -5,7 +5,7 @@
 // types (parenthesized / function types, tuples, object type literals, literal
 // types, prefixed escape-hatch types `r_'u32'`, and named/generic types).
 // =============================================================================
-#include "tokens.h"
+#include "detail/tokens.h"
 
 #include <memory>
 #include <string>

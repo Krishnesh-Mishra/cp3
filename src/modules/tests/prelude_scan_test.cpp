@@ -1,5 +1,5 @@
 // =============================================================================
-// modules/tests/prelude_scan_test.cpp - §18 discovery + D4 classification.
+// src/modules/tests/prelude_scan_test.cpp - §18 discovery + D4 classification.
 //
 // OWNERSHIP: modules module (src/modules/tests/**). Opt-in driver:
 //   cmake -B build/scratch/modules -S . -DCP3_MODULES_TESTS=ON
@@ -15,11 +15,11 @@
 #include <system_error>
 #include <vector>
 
-#include "export_surface.h"
-#include "file_paths.h"
-#include "prelude_scan.h"
-#include "specifier.h"
-#include "std_registry.h"
+#include "detail/export_surface.h"
+#include "detail/file_paths.h"
+#include "detail/prelude_scan.h"
+#include "detail/specifier.h"
+#include "detail/std_registry.h"
 
 namespace fs = std::filesystem;
 using namespace cp3;

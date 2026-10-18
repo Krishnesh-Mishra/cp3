@@ -19,7 +19,7 @@
 //
 // undefined / null → C++ (M1):
 //   * cp3 `undefined`  -> `cp3::runtime::Undefined`, a singleton empty struct;
-//     the value is `cp3::runtime::undefined` (see cp3/runtime.hpp).
+//     the value is `cp3::runtime::undefined` (see cp3/core/runtime.hpp).
 //   * cp3 `null`       -> `std::nullptr_t`, the value is `nullptr`.
 //   These two are deliberately DISTINCT (spec §3 keeps `undefined` and `null`
 //   separate, TS-style) and both are "nullish" for unification purposes.

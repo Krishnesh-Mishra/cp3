@@ -1,13 +1,13 @@
 // =============================================================================
 // src/lexer/src/keywords.cpp - keyword and operator tables.
 //
-// Implements `keywordFor` (keywords.h) and `Scanner::scanPunctuation` plus its
-// per-operator helpers (declared in scanner.h). Multi-byte operators use
+// Implements `keywordFor` (detail/keywords.h) and `Scanner::scanPunctuation` plus its
+// per-operator helpers (declared in detail/scanner.h). Multi-byte operators use
 // maximal munch: `>>>=` is tested before `>>>` (DECISIONS.md D53), and `?.` is
 // only a QuestionDot when not followed by a digit. Unknown bytes report CP3101
 // and recover as an `Invalid` token (`\` as `Backslash`) (STYLE.md §6).
 // =============================================================================
-#include "keywords.h"
+#include "detail/keywords.h"
 
 #include <cstdint>
 #include <string>
@@ -16,7 +16,7 @@
 #include <utility>
 
 #include "cp3/diagnostic_codes.hpp"
-#include "scanner.h"
+#include "detail/scanner.h"
 
 namespace cp3 {
 namespace {

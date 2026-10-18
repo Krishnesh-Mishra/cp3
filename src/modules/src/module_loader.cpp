@@ -1,13 +1,13 @@
 // =============================================================================
-// modules/module_loader.cpp - ProgramLoader orchestration + public boundary.
+// src/modules/src/module_loader.cpp - ProgramLoader orchestration + public boundary.
 //
 // OWNERSHIP: modules module (src/modules/**). Defines cp3::ModuleLoader
-// (cp3/modules.hpp) and the ProgramLoader state machine (loader.h):
+// (cp3/modules.hpp) and the ProgramLoader state machine (detail/loader.h):
 // unit registry, dedupe by canonical path, and diagnostic dedupe for the
 // same source location (a prelude injected into N units repeats its imports,
 // but must report each problem once).
 // =============================================================================
-#include "loader.h"
+#include "detail/loader.h"
 
 #include <cstdint>
 #include <string>
@@ -17,8 +17,8 @@
 #include "cp3/diagnostic_codes.hpp"
 #include "cp3/modules.hpp"
 
-#include "file_paths.h"
-#include "prelude_scan.h"
+#include "detail/file_paths.h"
+#include "detail/prelude_scan.h"
 
 namespace cp3 {
 

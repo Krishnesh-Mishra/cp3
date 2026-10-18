@@ -7,7 +7,7 @@
 // multiplicative > power > unary > postfix). Primary/postfix forms live in
 // primary.cpp.
 // =============================================================================
-#include "tokens.h"
+#include "detail/tokens.h"
 
 #include <memory>
 #include <utility>

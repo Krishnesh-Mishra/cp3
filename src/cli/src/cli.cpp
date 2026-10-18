@@ -1,10 +1,10 @@
 // =============================================================================
-// cli/cli.cpp - the `cp3c` command surface: entry, dispatch, top-level usage.
+// src/cli/src/cli.cpp - the `cp3c` command surface: entry, dispatch, top-level usage.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::runCli (cp3/cli.hpp).
 //
 // Responsibilities: argument parsing, the global commands, and dispatch to the
-// per-concern command implementations (src/commands_*.cpp). The frontend stages
+// per-concern command implementations (src/commands/*.cpp). The frontend stages
 // are wired in through the frozen boundaries; rendering is owned by the CLI
 // (DECISIONS D2).
 //
@@ -25,9 +25,9 @@
 
 #include "cp3/version.hpp"
 
-#include "private/commands.hpp"
-#include "private/scripts.hpp"
-#include "private/util.hpp"
+#include "detail/commands.hpp"
+#include "detail/scripts.hpp"
+#include "detail/util.hpp"
 
 namespace cp3 {
 namespace {

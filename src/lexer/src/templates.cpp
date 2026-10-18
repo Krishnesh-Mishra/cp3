@@ -1,7 +1,7 @@
 // =============================================================================
 // src/lexer/src/templates.cpp - template literal scanning.
 //
-// Implements `Scanner::scanTemplateChunk` (declared in scanner.h). Per
+// Implements `Scanner::scanTemplateChunk` (declared in detail/scanner.h). Per
 // DECISIONS.md D7 the scanner consumes a template literal *fully* using an
 // internal mode stack, emitting `TemplateHead`, the interpolation tokens, then
 // `TemplateMiddle`... / `TemplateTail`, or a single `TemplateString` when there
@@ -11,7 +11,7 @@
 // `Token::rawText` the uncooked inner source. An EOF before the closing backtick
 // or `${` reports CP3103 and sets `unterminated` (STYLE.md §6).
 // =============================================================================
-#include "scanner.h"
+#include "detail/scanner.h"
 
 #include <cstdint>
 #include <string>

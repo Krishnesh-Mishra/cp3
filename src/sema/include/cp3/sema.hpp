@@ -1,9 +1,9 @@
 // =============================================================================
-// cp3/sema.hpp — AST -> diagnostics / resolved semantics.
+// cp3/sema.hpp - AST -> diagnostics / resolved semantics.
 //
 // OWNERSHIP: sema module. The current implementation is a STUB: analyze() does
 // nothing and reports no diagnostics. Replace the body; the public shape is the
-// frozen boundary (extended and frozen by the contracts pass — DECISIONS D14).
+// frozen boundary (extended and frozen by the contracts pass - DECISIONS D14).
 //
 // Sema intentionally stores its results in side tables keyed by Node::nodeId;
 // it does NOT mutate the AST (see ast.hpp design rules). Those tables live in
@@ -26,7 +26,7 @@ public:
 
     // Analyzes `program` and publishes every inferred type / symbol / signature
     // into `out` (keyed by Node::nodeId). `out` is cleared first. Returns
-    // `out.ok` — true when no error/fatal diagnostic was reported.
+    // `out.ok` - true when no error/fatal diagnostic was reported.
     bool analyze(Program& program, SemaResult& out);
 
     // Convenience: analyze and discard the side tables when the caller only

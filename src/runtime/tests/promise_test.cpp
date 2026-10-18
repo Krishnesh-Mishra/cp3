@@ -1,6 +1,6 @@
 // =============================================================================
-// src/runtime/tests/promise_test.cpp — Promise chaining, the coroutine `await`
-// bridge, and event-loop ordering (cp3/promise.hpp + cp3/eventloop.hpp).
+// src/runtime/tests/promise_test.cpp - Promise chaining, the coroutine `await`
+// bridge, and event-loop ordering (cp3/async/promise.hpp + cp3/async/eventloop.hpp).
 //
 // Covers DECISIONS D40 (resolve/reject), D41 (awaitValue passthrough),
 // D42 (chaining/flattening) and the microtask-vs-timer ordering contract.
@@ -8,9 +8,9 @@
 #include <stdexcept>
 #include <string>
 
-#include "cp3/error.hpp"
-#include "cp3/eventloop.hpp"
-#include "cp3/promise.hpp"
+#include "cp3/core/error.hpp"
+#include "cp3/async/eventloop.hpp"
+#include "cp3/async/promise.hpp"
 #include "harness.hpp"
 
 using cp3::runtime::awaitValue;

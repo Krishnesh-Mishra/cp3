@@ -1,13 +1,13 @@
 // =============================================================================
 // src/lexer/src/numbers.cpp - numeric literal scanning.
 //
-// Implements `Scanner::scanNumber` and its helpers (declared in scanner.h):
+// Implements `Scanner::scanNumber` and its helpers (declared in detail/scanner.h):
 // decimal/float literals with `_` separators and an exponent, plus the
 // `0x`/`0b`/`0o` radix-prefixed forms. Malformed literals (bad separator, empty
 // radix digits, a trailing identifier) report CP3105 and still yield a
 // NumericLiteral token for recovery (STYLE.md §6).
 // =============================================================================
-#include "scanner.h"
+#include "detail/scanner.h"
 
 #include <cstdint>
 #include <cstdlib>

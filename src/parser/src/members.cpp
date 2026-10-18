@@ -6,7 +6,7 @@
 // and interface / object-type signature members (property and method
 // signatures, including the banned index signature).
 // =============================================================================
-#include "tokens.h"
+#include "detail/tokens.h"
 
 #include <memory>
 #include <utility>

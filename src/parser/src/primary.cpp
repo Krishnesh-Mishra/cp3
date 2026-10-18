@@ -6,7 +6,7 @@
 // optional chaining and explicit call type arguments), and arrow functions.
 // The operator-precedence chain lives in expressions.cpp.
 // =============================================================================
-#include "tokens.h"
+#include "detail/tokens.h"
 
 #include <cstddef>
 #include <memory>

@@ -1,5 +1,5 @@
 // =============================================================================
-// src/runtime/tests/worker_test.cpp — `worker(...)`: structured-clone in/out, an
+// src/runtime/tests/worker_test.cpp - `worker(...)`: structured-clone in/out, an
 // isolated OS thread, an async body, and rejection propagation.
 //
 // The `Point` type below demonstrates the codegen contract: a `Cloner<T>`
@@ -10,11 +10,11 @@
 #include <thread>
 #include <type_traits>
 
-#include "cp3/error.hpp"
-#include "cp3/eventloop.hpp"
-#include "cp3/promise.hpp"
-#include "cp3/value.hpp"
-#include "cp3/worker.hpp"
+#include "cp3/core/error.hpp"
+#include "cp3/async/eventloop.hpp"
+#include "cp3/async/promise.hpp"
+#include "cp3/core/value.hpp"
+#include "cp3/parallel/worker.hpp"
 #include "harness.hpp"
 
 using cp3::runtime::Promise;

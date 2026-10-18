@@ -1,7 +1,7 @@
 # cp3 test cases
 
 This directory holds the conformance cases for `cp3c`. The format below is
-**frozen** — the harness (`tests/runner/run_tests.py`) and every existing case
+**frozen** - the harness (`tests/runner/run_tests.py`) and every existing case
 already depend on it. Do not change it; add new cases instead.
 
 ## Layout
@@ -54,9 +54,9 @@ All fields except `mode` are optional. Unknown fields are ignored.
 
 ### Modes
 
-* **`run`** — the harness runs `cp3c run <file.cp3>`, then compares the process
+* **`run`** - the harness runs `cp3c run <file.cp3>`, then compares the process
   `stdout` to `"stdout"` and the exit code to `"exitCode"`.
-* **`check`** — the harness runs `cp3c check <file.cp3>` (frontend only). The
+* **`check`** - the harness runs `cp3c check <file.cp3>` (frontend only). The
   same stdout/exitCode comparison applies.
 
 If `error` is present in either mode, the harness instead requires a **compile
@@ -68,8 +68,8 @@ matching `error` must appear on stdout/stderr.
 Because some cases assert "any diagnostic of this family", the `code` field
 supports wildcards:
 
-* `x` / `X` / `?` — one character; a **run of two or more** means "any run"
-* `*` — any run
+* `x` / `X` / `?` - one character; a **run of two or more** means "any run"
+* `*` - any run
 
 So the frozen placeholder `"CP3xxxx"` matches any real code such as `CP3408`,
 while `"CP3408"` matches exactly. Prefer the exact code once the real diagnostic
@@ -117,7 +117,7 @@ compiler is still a scaffold), **1** if any case failed.
 While `cp3c` is still a scaffold, the compile commands exit with code `3` and
 print the marker `not implemented`. The harness reports such cases as
 `skipped (compiler is a scaffold build)` and exits `0` when nothing is runnable
-yet — it never crashes on a stub, and it never reports a stub as a failure.
+yet - it never crashes on a stub, and it never reports a stub as a failure.
 
 ## Adding a case
 

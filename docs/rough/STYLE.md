@@ -103,25 +103,54 @@ src/<module>/
 
 ## 8. Required target decomposition
 
-Each module below is split into the listed units. This is the target layout; the
-refactor passes bring existing code to it.
+Delivered by the D66.5/D68 structure sweep; keep new code in this shape.
+Private headers live in `detail/`; a multi-unit concern gets its own
+subdirectory (`emit/`, `checks/`, `support/`, `commands/`, `pkg/`, `archive/`,
+`toolchain/`). One unit per file, the file name is the unit name.
 
 * **common** - already small: `source.cpp`, `diagnostic.cpp`, `token.cpp`,
   `ast.cpp`, `module.cpp`, `types.cpp`, `version.cpp` (keep).
-* **lexer** - `lexer.cpp` (entry/driver), `scanner.cpp/.h` (cursor, trivia,
+* **lexer** - `lexer.cpp` (entry/driver), `scanner.cpp` (cursor, trivia,
   positions, recovery), `numbers.cpp`, `strings.cpp`, `templates.cpp`,
-  `regexp.cpp`, `keywords.cpp/.h` (keyword table).
+  `regexp.cpp`, `keywords.cpp` (keyword table); private headers
+  `detail/scanner.h`, `detail/keywords.h`.
 * **parser** - `parser.cpp` (entry/orchestration), `statements.cpp`,
-  `expressions.cpp`, `declarations.cpp`, `types.cpp`, `patterns.cpp`,
-  `tokens.cpp/.h` (cursor + error recovery helpers), `precedence.h`.
-* **sema** - `semantic_analyzer.cpp` (entry), `scopes.cpp/.h`, `type_check.cpp`,
-  `expr_check.cpp`, `stmt_check.cpp`, `symbols.cpp`, `banned.cpp`.
-* **codegen** - `code_generator.cpp` (entry), `emit_expr.cpp`, `emit_stmt.cpp`,
-  `emit_decl.cpp`, `cpp_writer.cpp/.h` (indent buffer), `mangle.cpp/.h`.
-* **runtime** - already multi-file; keep the policy (headers declare, `.cpp`
-  defines).
-* **cli** - already multi-file; move any substantial logic out of
-  `include/private/*.hpp` into `.cpp` (headers declare, never define).
+  `declarations.cpp`, `members.cpp`, `patterns.cpp`, `types.cpp`,
+  `expressions.cpp`, `primary.cpp`, `literals.cpp`, `node_ids.cpp`,
+  `tokens.cpp` (cursor + error recovery helpers); private header
+  `detail/tokens.h`.
+* **sema** - `semantic_analyzer.cpp` (entry); `checks/` - `type_check.cpp`,
+  `assignability.cpp`, `expr_check.cpp`, `member_check.cpp`, `call_check.cpp`,
+  `ops_check.cpp`, `stmt_check.cpp`, `banned.cpp`, `parallel_check.cpp`,
+  `parallel_expr_check.cpp`, `std_check.cpp`; `support/` - `scopes.cpp`,
+  `symbols.cpp`, `declarations.cpp`; private headers `detail/analyzer.h`,
+  `detail/scopes.h`, `detail/parallel_check.h`.
+* **codegen** - `code_generator.cpp` (entry); `emit/` - `expr.cpp`, `stmt.cpp`,
+  `decl.cpp`, `call.cpp`, `async.cpp`; `emit/std/` - `common.cpp` (shared
+  dispatch) plus one unit per std family (`math.cpp`, `os.cpp`, `path.cpp`,
+  `process.cpp`, `json.cpp`, `string.cpp`); `support/` - `cpp_writer.cpp`,
+  `mangle.cpp`, `type_map.cpp`, `int_reads.cpp`, `int_mode.cpp`; private
+  headers `detail/generator.h`, `detail/cpp_writer.h`, `detail/mangle.h`,
+  `detail/type_map.h`, `detail/int_reads.h`, `detail/builtin_tables.h`.
+* **runtime** - public headers in `include/cp3/{core,async,parallel,std}/`
+  (`core/`: runtime, value, error, maybe, arith; `async/`: promise,
+  promise_impl, promise_combinators, eventloop; `parallel/`: parallel, worker;
+  `std/`: console, json, math, os, path, process, string); implementation
+  `.cpp` files under `src/{core,async,parallel,std}/` mirroring those
+  families; tests stay in `tests/`.
+* **cli** - `cli.cpp` (entry); `commands/` - `build.cpp`, `check.cpp`,
+  `clean.cpp`, `common.cpp`, `dev.cpp`, `exec.cpp`, `fmt.cpp`, `init.cpp`,
+  `install.cpp`, `pack.cpp`, `run.cpp`; `pkg/` - `cache.cpp`, `checksum.cpp`,
+  `cp3pak.cpp`, `json.cpp`, `lockfile.cpp`, `package_json.cpp`, `scripts.cpp`,
+  `semver.cpp`, `signatures.cpp`; `archive/` - `deflate.cpp`, `gzip.cpp`,
+  `inflate.cpp`, `tar.cpp`; `toolchain/` - `diagnostics.cpp`, `pipeline.cpp`,
+  `toolchain.cpp`, `util.cpp`; private headers `detail/*.hpp` (headers
+  declare, never define).
+* **modules** - `module_loader.cpp` (entry/orchestration); `support/` -
+  `unit_loader.cpp`, `import_resolver.cpp`, `specifier.cpp`, `file_paths.cpp`,
+  `export_surface.cpp`, `prelude_scan.cpp`, `std_registry.cpp`; private
+  headers `detail/loader.h`, `detail/specifier.h`, `detail/file_paths.h`,
+  `detail/export_surface.h`, `detail/prelude_scan.h`, `detail/std_registry.h`.
 
 ## 9. Enforcement
 

@@ -7,7 +7,7 @@
 // declarations. Statements live in statements.cpp, declarations in
 // declarations.cpp, and so on (STYLE.md §8).
 // =============================================================================
-#include "tokens.h"
+#include "detail/tokens.h"
 
 #include <cstddef>
 #include <memory>

@@ -1,6 +1,6 @@
 // =============================================================================
-// src/runtime/tests/parallel_test.cpp — `parallel.for` / `parallel.reduce` /
-// `parallel.run` (cp3/parallel.hpp).
+// src/runtime/tests/parallel_test.cpp - `parallel.for` / `parallel.reduce` /
+// `parallel.run` (cp3/parallel/parallel.hpp).
 //
 // Verifies deterministic results, the synchronous (blocking) contract, and that
 // nested `parallel.*` runs inline instead of deadlocking on the busy pool.
@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "cp3/parallel.hpp"
+#include "cp3/parallel/parallel.hpp"
 #include "harness.hpp"
 
 using cp3::runtime::parallelFor;

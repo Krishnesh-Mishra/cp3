@@ -1,6 +1,6 @@
 // =============================================================================
-// src/runtime/tests/format_test.cpp — D9 number formatting and D49 console
-// rendering (cp3/runtime.hpp toString + cp3/console.hpp format*).
+// src/runtime/tests/format_test.cpp - D9 number formatting and D49 console
+// rendering (cp3/core/runtime.hpp toString + cp3/std/console.hpp format*).
 //
 // Build/run by direct compile (see the runtime report):
 //   g++ -std=c++20 -I include -I tests format_test.cpp ../../build.../libcp3_runtime.a
@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "cp3/console.hpp"
-#include "cp3/runtime.hpp"
+#include "cp3/std/console.hpp"
+#include "cp3/core/runtime.hpp"
 #include "harness.hpp"
 
 using cp3::runtime::formatObject;
