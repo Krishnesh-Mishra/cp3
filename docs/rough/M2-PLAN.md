@@ -66,7 +66,10 @@ with the B1b landing; part 2 (src/sema, src/codegen, src/runtime,
 `src/cli/src/util.cpp`, the `tests/cases/README.md` prose) is queued behind the
 perf wave. The **source-tree structure sweep** (D66.5: `src/codegen`, then
 `src/lexer`/`src/parser`; behavior-neutral, corpus byte-identical) is queued
-immediately after the perf wave. Post-perf runtime waves, explicitly
+immediately after the perf wave and now runs before the post-perf std waves
+(user architecture note, 2026-10-18; D68), so the new module families land in
+the final layout as runtime units behind per-module tables. Post-perf runtime
+waves, explicitly
 prioritized by the user directive of 2026-10-18 ("implement server parallel
 and other remaining std lib things"): std/network (**server**), parallel/worker
 (lights up the compute-multi and health-server cp3 rows), crypto, Date/Buffer,

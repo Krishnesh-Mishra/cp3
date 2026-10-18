@@ -487,3 +487,23 @@ Amends D66.2 and extends D64:
    labeled suite run, and a verbatim dated paste into `benchmarks/README.md`
    plus the root README tables (never hand-edit). The table diff is the
    wave's report card, kept per wave.
+
+## D68 - Standard-module architecture: native packages behind mechanical tables (user architecture note, 2026-10-18)
+
+Clarifies the answer to "are the std modules codegen things?":
+
+1. A std module's behavior lives in the runtime library as ordinary C++ units
+   (headers declare, `.cpp` defines), one folder per module family; codegen
+   holds no module semantics beyond a one-line lowering row per member.
+2. The compiler carries exactly three mechanical tables per module: the
+   registry (specifier + exported names, `src/modules`), the typed signature
+   view (`src/sema`), and the lowering rows plus include flags
+   (`src/codegen`). Each table grows as its own per-module file; nothing is
+   appended to a shared dump.
+3. Where a module needs compiler knowledge (for example `fetch` returning
+   `Promise` under the event loop), it rides the existing core machinery
+   (promise/event-loop lowering), not bespoke codegen.
+4. Revisit trigger: once classes and object literals land (waves 2/9),
+   pure-logic modules may move to cp3-source implementations shipped with the
+   compiler; perf-critical families (crypto, network, JSON, strings) stay
+   native under the no-runtime-overhead rule and the D67 gate.
