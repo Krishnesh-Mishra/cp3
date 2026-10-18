@@ -386,8 +386,8 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsEventEmitter_) {
         out += "#include \"cp3/async/emitter.hpp\"\n";  // the builtin (D74)
     }
-    if (consoleStderr_) {
-        out += "#include \"cp3/std/console.hpp\"\n";  // console.warn/.error
+    if (consoleStderr_ || needsConsoleAbi_) {
+        out += "#include \"cp3/std/console.hpp\"\n";  // the console family
     }
     if (needsMath_) out += "#include \"cp3/std/math.hpp\"\n";
     if (needsString_) out += "#include \"cp3/std/string.hpp\"\n";

@@ -17,7 +17,7 @@
 //   support/int_mode.cpp   the guarded int64 fast path + `%` lowering
 //   support/int_reads.cpp  the read-only-inside-return analysis for int mode
 //   emit/expr.cpp          expression lowering (operators, literals, tsCall/cond)
-//   emit/call.cpp          call lowering + console.*
+//   emit/call.cpp          call lowering (dispatch only, D72)
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
 //   emit/decl.cpp          forward decls, function signatures, declarations
@@ -25,7 +25,7 @@
 //   emit/std/common.cpp               ambient std surface: shared helpers +
 //                                     dispatch
 //   src/std/<family>/codegen.cpp      Math / path / os / process / JSON /
-//                                     string lowering
+//                                     string / console lowering
 //
 // This header is implementation detail: it lives under
 // `src/codegen/src/detail/` and is never included by another module
@@ -128,16 +128,31 @@ private:
     std::string emitConditional(const ConditionalExpr& c);
     std::string emitAssignment(const AssignmentExpr& a);
 
-    // --- calls + console.* (emit_call.cpp) -----------------------------------
+    // --- calls (emit/call.cpp) -----------------------------------------------
     std::string emitCall(const CallExpr& c);
     // Lowers a user-function call's argument list, applying the callee's
     // optional/default parameters to arguments that are explicit `undefined`.
     std::vector<std::string> emitCallArgs(const CallExpr& c,
                                           const FunctionDeclaration* decl);
     bool isConsoleMember(const CallExpr& c) const;
-    bool isConsoleCall(const CallExpr& c, const char* method) const;
-    std::string emitConsoleLog(const CallExpr& c);
-    std::string emitConsoleMethod(const CallExpr& c, const char* method);
+
+    // --- std/console lowering (src/std/console/codegen.cpp) ------------------
+    // Every `console.<member>(...)` call lands here (emit_call.cpp keeps only
+    // the `console.` receiver check). Each member lowers onto its contract in
+    // cp3/std/console.hpp; an object-literal argument gets the explicit D49
+    // object form.
+    std::string emitConsoleCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitConsoleLogCall(const CallExpr& c);
+    std::string emitConsoleStreamCall(const CallExpr& c,
+                                      const std::string& method);
+    std::string emitConsoleAssert(const CallExpr& c);
+    std::string emitConsoleInput(const CallExpr& c);
+    std::string emitConsoleListener(const CallExpr& c,
+                                    const std::string& method);
+    std::string consoleListenerArg(const Expr& arg);
+    std::string consoleArgText(const Expr& arg);
+    std::string consoleObjectText(const ObjectLiteral& literal);
+    std::string consoleNestedValue(const Expr& value);
 
     // --- the builtin EventEmitter (D74, cp3/async/emitter.hpp) ----------------
     // `new EventEmitter()`; the boxed-listener value form (`let h = () => {}`,
@@ -363,6 +378,7 @@ private:
 
     bool consoleImported_ = false;
     bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
+    bool needsConsoleAbi_ = false; // console async/misc members -> family header
     bool needsEventLoop_ = false;  // async/timers: emit runEventLoop() in main
     bool needsArith_ = false;      // `%`/int64 lowering -> cp3/core/arith.hpp include
     bool suppressDiagnostics_ = false;  // an int64 attempt must not report
