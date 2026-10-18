@@ -1,0 +1,8 @@
+import console from "std/console";
+import crypto from "std/crypto";
+try {
+    crypto.randomBytes(-1);
+    console.log("no");
+} catch (e) {
+    console.log("bad");
+}

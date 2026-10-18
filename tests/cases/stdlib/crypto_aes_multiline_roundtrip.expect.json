@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "line1\nline2\ttabbed 0123456789\n",
+  "exitCode": 0
+}

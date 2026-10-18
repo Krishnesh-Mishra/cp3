@@ -5,14 +5,34 @@
 // generated-code contract, so keep it additive like every cp3/std header, D14).
 //
 // -----------------------------------------------------------------------------
-// CODEGEN CONTRACT (docs/standard-library/04 §crypto - the wave pins the exact
-// signatures while landing them; codegen lowers `crypto.*` onto this namespace)
+// CODEGEN CONTRACT (docs/standard-library/04 section crypto; the pinned cases
+// under tests/cases/stdlib/crypto_* pin the behavior)
 // -----------------------------------------------------------------------------
 //   crypto.randomUUID()            -> ::cp3::runtime::crypto::randomUuid()
 //   crypto.randomBytes(n)          -> ::cp3::runtime::crypto::randomBytes(n)
-//   crypto.sha256(s) / sha512(s)   -> hex digest strings
-//   crypto AES-256 round-trips     -> base64 "nonce.tag.ciphertext" envelope,
-//                                     decrypt THROWS on tamper/wrong key
+//   crypto.sha256(s) / sha512(s)   -> ::cp3::runtime::crypto::sha256/sha512
+//   crypto.AES256(k, d)            -> ::cp3::runtime::crypto::aes256Encrypt
+//   crypto.AES256Decrypt(k, e)     -> ::cp3::runtime::crypto::aes256Decrypt;
+//                                     throws a catchable value on tamper or
+//                                     wrong key (docs 04 section crypto)
+//
+// -----------------------------------------------------------------------------
+// SEMANTICS / LIMITATIONS
+// -----------------------------------------------------------------------------
+//   * `randomBytes` returns the raw bytes as a `std::string`. The docs type it
+//     `Buffer`, but beta one has no nominal Buffer type yet; the raw-byte
+//     string is the stand-in (it already behaves like one for `.length` and
+//     for feeding the value straight back into `sha256`/`sha512`).
+//   * `randomUUID` is the RFC 4122 version 4 form: 36 lowercase chars.
+//   * `sha256`/`sha512` are lowercase hex over the byte input.
+//   * AES-256-GCM envelope: one base64 string of nonce (12 bytes) ||
+//     ciphertext || tag (16 bytes), so the value is opaque to callers. The
+//     `key` string is stretched to 32 bytes with BLAKE2b-256 before use (the
+//     docs leave key derivation open; this is the decision recorded in the
+//     wave report).
+//   * `aes256Decrypt` throws a catchable cp3 value (`cp3::runtime::Thrown`)
+//     on malformed input, wrong key or tag mismatch - never silently-wrong
+//     plaintext (docs 04).
 //
 // Backend: libsodium (third_party/libsodium, D70). The implementation TU is
 // src/runtime/src/std/crypto.cpp and is compiled + linked only when a program
@@ -20,8 +40,32 @@
 // =============================================================================
 #pragma once
 
+#include <string>
+
 namespace cp3::runtime::crypto {
 
-// STUB: the crypto wave lands the surface here.
+/// `crypto.randomUUID()`: a random RFC 4122 version 4 UUID in the canonical
+/// lowercase 8-4-4-4-12 form (36 characters).
+std::string randomUuid();
+
+/// `crypto.randomBytes(length)`: `length` cryptographically random bytes as a
+/// raw-byte string (the beta-one Buffer stand-in). Throws a catchable value
+/// when `length` is negative, fractional or above 2^31 - 1.
+std::string randomBytes(double length);
+
+/// `crypto.sha256(data)`: the lowercase hex SHA-256 digest (64 characters).
+std::string sha256(const std::string& data);
+
+/// `crypto.sha512(data)`: the lowercase hex SHA-512 digest (128 characters).
+std::string sha512(const std::string& data);
+
+/// `crypto.AES256(key, data)`: AES-256-GCM encryption. Returns the base64
+/// envelope (`nonce || ciphertext || tag`) that `aes256Decrypt` accepts.
+std::string aes256Encrypt(const std::string& key, const std::string& data);
+
+/// `crypto.AES256Decrypt(key, encrypted)`: the inverse of `aes256Encrypt`.
+/// Throws a catchable value when the payload is malformed or the auth tag
+/// does not verify (wrong key or tampered ciphertext).
+std::string aes256Decrypt(const std::string& key, const std::string& encrypted);
 
 }  // namespace cp3::runtime::crypto

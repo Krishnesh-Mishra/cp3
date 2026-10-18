@@ -1,0 +1,2 @@
+import crypto from "std/crypto";
+crypto.sha256(1);

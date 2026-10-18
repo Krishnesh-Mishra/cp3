@@ -1,0 +1,9 @@
+import console from "std/console";
+import crypto from "std/crypto";
+let u = crypto.randomUUID();
+console.log(`${u.length}`);
+console.log(`${u.indexOf("-")}`);
+console.log(`${u.lastIndexOf("-")}`);
+console.log(u.charAt(14));
+console.log(`${["8", "9", "a", "b"].includes(u.charAt(19))}`);
+console.log(`${u.replaceAll("-", "").length}`);

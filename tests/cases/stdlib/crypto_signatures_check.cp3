@@ -1,0 +1,9 @@
+import console from "std/console";
+import crypto from "std/crypto";
+let u: string = crypto.randomUUID();
+let b: string = crypto.randomBytes(16);
+let h1: string = crypto.sha256(b);
+let h2: string = crypto.sha512("x");
+let e: string = crypto.AES256("k", "d");
+let p: string = crypto.AES256Decrypt("k", e);
+console.log(u.length + b.length + h1.length + h2.length + p.length);

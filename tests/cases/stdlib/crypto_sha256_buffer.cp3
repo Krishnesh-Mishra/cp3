@@ -1,0 +1,4 @@
+import console from "std/console";
+import crypto from "std/crypto";
+console.log(crypto.sha256(crypto.randomBytes(0)));
+console.log(`${crypto.sha256(crypto.randomBytes(32)).length}`);

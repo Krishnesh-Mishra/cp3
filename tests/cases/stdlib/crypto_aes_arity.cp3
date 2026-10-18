@@ -1,0 +1,2 @@
+import crypto from "std/crypto";
+crypto.AES256("k");

@@ -1,0 +1,4 @@
+import console from "std/console";
+import crypto from "std/crypto";
+let text = "line1\nline2\ttabbed 0123456789";
+console.log(crypto.AES256Decrypt("somekey", crypto.AES256("somekey", text)));

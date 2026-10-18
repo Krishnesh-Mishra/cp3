@@ -1,0 +1,14 @@
+import console from "std/console";
+import crypto from "std/crypto";
+try {
+    crypto.AES256Decrypt("somekey", "");
+    console.log("no");
+} catch (e) {
+    console.log("short");
+}
+try {
+    crypto.AES256Decrypt("somekey", "not base64!!");
+    console.log("no");
+} catch (e) {
+    console.log("bad");
+}

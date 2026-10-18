@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "short\nbad\n",
+  "exitCode": 0
+}

@@ -1,0 +1,4 @@
+import console from "std/console";
+import crypto from "std/crypto";
+let encrypted = crypto.AES256("somekey", "");
+console.log(`${crypto.AES256Decrypt("somekey", encrypted).length}`);

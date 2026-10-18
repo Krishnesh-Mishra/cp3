@@ -1,0 +1,5 @@
+import console from "std/console";
+import crypto from "std/crypto";
+let a = crypto.randomBytes(8);
+let b = crypto.randomBytes(8);
+console.log(`${a !== b}`);

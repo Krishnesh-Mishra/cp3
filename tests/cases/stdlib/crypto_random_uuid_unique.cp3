@@ -1,0 +1,5 @@
+import console from "std/console";
+import crypto from "std/crypto";
+let a = crypto.randomUUID();
+let b = crypto.randomUUID();
+console.log(`${a !== b}`);
