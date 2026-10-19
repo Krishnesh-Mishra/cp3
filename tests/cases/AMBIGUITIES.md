@@ -8,31 +8,29 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 44** across 13 categories.
+**Total markers: 40** across 12 categories.
 
 | Category | Markers |
 | --- | ---: |
-| `arrays-strings` | 2 |
+| `arrays-strings` | 1 |
 | `async` | 1 |
 | `classes` | 4 |
 | `concurrency` | 6 |
 | `control-flow` | 6 |
-| `enums` | 1 |
 | `errors` | 1 |
 | `functions-closures` | 4 |
 | `generics` | 2 |
 | `memory-weak` | 6 |
 | `modules` | 3 |
-| `stdlib` | 4 |
+| `stdlib` | 2 |
 | `types` | 4 |
-| **Total** | **44** |
+| **Total** | **40** |
 
 ## `arrays-strings`
 
 | case file | question |
 | --- | --- |
 | `arrays-strings/_ambiguous/forin_map_order.expect.json` | `for...in` over a `Map`: iteration order is unspecified (unordered_map) |
-| `arrays-strings/_ambiguous/str_index_type.expect.json` | typed and printed form of `str[i]` (raw byte): native byte type vs number vs 1-char string |
 
 ## `async`
 
@@ -70,12 +68,6 @@ python tests/runner/run_tests.py --write-registry
 | `control-flow/_ambiguous/forin_array_indices.expect.json` | `for...in` target set/index type: section 6 shows `for (let key in object)` over keys/indices while section 8 bans `for...in` on plain objects/class instances; whether array indices are numbers or strings is unspecified |
 | `control-flow/_ambiguous/reduce_no_initial.expect.json` | `reduce` with no initial accumulator value is not specified |
 | `control-flow/_ambiguous/spread_number_array_into_fixed_params.expect.json` | spreading a `number[]` into fixed-arity parameters: whether a tuple type is required is unspecified |
-
-## `enums`
-
-| case file | question |
-| --- | --- |
-| `enums/_ambiguous/numeric_value_via_index.expect.json` | observing a number-backed enum's underlying numeric value via array indexing (enum-to-number conversion) |
 
 ## `errors`
 
@@ -122,8 +114,6 @@ python tests/runner/run_tests.py --write-registry
 
 | case file | question |
 | --- | --- |
-| `stdlib/_ambiguous/array_slice_exists.expect.json` | array.slice is not in the explicit array-method list in §09 (only string slice/substring are listed). |
-| `stdlib/_ambiguous/binarysearch_return_value.expect.json` | the return value of `binarySearch(target)` (index vs boolean vs -1) is not specified. |
 | `stdlib/_ambiguous/json_parse_untyped_typeof_narrow.expect.json` | whether `typeof` narrowing works directly on the `unknown` result of untyped JSON.parse is not shown. |
 | `stdlib/_ambiguous/regex_test_method.expect.json` | regex literals are a core feature, but which RegExp methods (.test/.match/.exec) exist is not specified. |
 

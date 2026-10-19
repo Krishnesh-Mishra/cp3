@@ -962,3 +962,31 @@ Seven markers promoted out of `_ambiguous` (registry 51 to 44). Keepers:
 `forin_map_order` (D44: `Map` iteration order is a collections bug) and
 `str_index_type` (string index reads: check typed it `number`, run was
 CP3002; the byte-read lowering is in the follow-up fix below).
+
+## Index-access fix: string byte reads + enum index operands (2026-10-19, lead)
+
+The arrays-strings wave left two index-access gaps that leaked CP3002 or a raw
+C++ error; both are fixed here and pinned.
+
+- `str[i]` (docs 09: "returns a raw byte") lowers to
+  `::cp3::runtime::strings::byteAt`: the UTF-8 byte at a byte position as a
+  number. Out-of-range, fractional and negative positions follow the array
+  index rule: a hard RangeError ("String index out of range"), exit 1, not
+  catchable by a cp3 catch. `str_index_type` promotes expecting `195`
+  (`"héllo"[1]` is the first byte of `é`, 0xC3; the wave report's U+01F8 note
+  describes the rule, the committed marker source holds the 2-byte `é`);
+  `str_index_out_of_range` pins the panic. Literal receivers normalize
+  through `literalBaseType()`
+  (the same step `type_map.cpp` does), which is what lets a string literal
+  reach the family read at all.
+- A number-backed enum member used as an array index is its underlying number
+  (`a[Color.Green]` reads index 1), matching the member-vs-number comparison
+  rule from batch 4; a string-backed enum index reports instead of emitting a
+  non-convertible operand. `numeric_value_via_index` promotes expecting `20`.
+- `array.slice` and `binarySearch` markers close under the wave's landed
+  surface: `array_slice_exists` promotes (D48; `[1, 2, 3, 4].slice(1, 3)` is
+  `2,3`) and `binarysearch_return_value` promotes as the index, `-1` when the
+  target is missing (docs 09's `binarySearch(target)`).
+
+Four markers promoted plus one new pin (registry 44 to 40); only
+`forin_map_order` remains in arrays-strings (D44 collections bug).

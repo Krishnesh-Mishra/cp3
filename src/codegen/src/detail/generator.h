@@ -233,8 +233,8 @@ private:
     std::string emitFamilyMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitFamilyMember(const MemberExpr& m);
     std::string emitFamilyIndexRead(const IndexExpr& ix);
-    // The `IndexExpr` dispatch: the family read when the receiver is one,
-    // otherwise the ordinary not-implemented report.
+    std::string indexOperandText(const Expr& index);  // enum member -> number
+    // The `IndexExpr` dispatch: the family read, else a not-implemented report.
     std::string emitIndexExpr(const IndexExpr& ix);
     std::string emitFamilyIndexWrite(const AssignmentExpr& a);
     // The receiver text of a family method: an `Array(n)` constructor or an

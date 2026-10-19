@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: typed and printed form of `str[i]` (raw byte): native byte type vs number vs 1-char string"
-  }
-}

@@ -19,6 +19,8 @@
 //     charAt("😀", 0) returning the whole 4-byte emoji (D63 corpus evidence).
 //   * `charAt(i)` past the end returns "" (JS behavior; the out-of-range
 //     question is parked - this is the defensive JS-faithful reading).
+//   * `str[i]` is the raw UTF-8 byte as a number (docs 09); out-of-range or
+//     fractional positions panic with a RangeError, the same rule as arrays.
 //   * `repeat` clamps a negative count to 0 (JS throws RangeError; no case
 //     pins the throw yet).
 //   * `trim`/`trimStart`/`trimEnd` strip the ASCII whitespace set; the full
@@ -34,6 +36,8 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <string>
 #include <vector>
@@ -88,6 +92,26 @@ inline std::string charAt(const std::string& s, double index) {
         ++codepoint;
     }
     return std::string();
+}
+
+/// Docs 09: `str[i]` is the raw UTF-8 byte at byte position `i` as a number
+/// (a deliberate departure from JS's UTF-16 code unit: a multi-byte character
+/// yields one of its bytes, not the character). An out-of-range or
+/// non-integer position is the same hard RangeError as array indexing
+/// (exit 1, not catchable by a cp3 catch).
+[[noreturn]] inline void indexFail() {
+    std::fprintf(stderr, "cp3: RangeError: String index out of range\n");
+    std::fflush(stderr);
+    std::exit(1);
+}
+
+inline double byteAt(const std::string& s, double index) {
+    if (std::isnan(index) || std::isinf(index) || std::trunc(index) != index ||
+        index < 0.0 || index >= static_cast<double>(s.size())) {
+        indexFail();
+    }
+    return static_cast<double>(
+        static_cast<unsigned char>(s[static_cast<std::size_t>(index)]));
 }
 
 // --- predicates ---------------------------------------------------------------
