@@ -76,6 +76,8 @@ private:
     std::string plainBody(const FunctionDeclaration& fd, const std::string& ret);
     void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
                        std::string& mainBody);
+    void emitModuleVarNoInit(const detail::CppInfo& ci, const std::string& name,
+                             const std::string& cv, std::string& decls);
     std::optional<Type> parameterType(const Parameter& p,
                                       const FunctionDeclaration& fd,
                                       std::size_t index) const;
@@ -109,13 +111,7 @@ private:
     // A whole array in a formatter or truthiness test pulls the arr family
     // block (D69), even when this unit never spells the C++ type itself (a
     // cross-module call's result, say).
-    void noteFamilyUse(const Expr& e) {
-        const detail::CppInfo ci = info(e);
-        if (ci.shape == detail::Shape::Array ||
-            ci.shape == detail::Shape::TypedArray) {
-            needsTypedArray_ = true;
-        }
-    }
+    void noteFamilyUse(const Expr& e);
     std::string emitBinary(const BinaryExpr& b);
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
                              const detail::CppInfo& R, const std::string& lhs,
@@ -130,6 +126,9 @@ private:
 
     // --- calls (emit/call.cpp) -----------------------------------------------
     std::string emitCall(const CallExpr& c);
+    // The documented global numeric parsers (`parseInt`/`parseFloat`):
+    // argument coercion plus the runtime helper (STDLIB section 3).
+    std::string emitParseBuiltin(const CallExpr& c, const std::string& name);
     // Lowers a user-function call's argument list, applying the callee's
     // optional/default parameters to arguments that are explicit `undefined`.
     std::vector<std::string> emitCallArgs(const CallExpr& c,
