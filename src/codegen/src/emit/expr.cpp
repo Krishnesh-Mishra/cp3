@@ -2,13 +2,11 @@
 // src/codegen/src/emit/expr.cpp - codegen expression lowering (STYLE.md §8).
 //
 // The expression emitter: literals, identifiers, templates, the `tsCall`/
-// `cond` value-vs-condition adapters, and the operator forms. Logical operators
-// use JS truthiness (`cp3_truthy` lambdas); `??` uses a real nullish (not
-// truthiness) test. Out-of-scope nodes report CP3002 and emit a compilable stub
-// (never throw, never abort).
-//
-// Calls (including `console.*`) live in emit_call.cpp; the async / promise /
-// timer surface lives in emit_async.cpp.
+// `cond` value-vs-condition adapters, and the operator forms. Logical
+// operators use JS truthiness (`cp3_truthy` lambdas); `??` uses a real
+// nullish (not truthiness) test. Out-of-scope nodes report CP3002 and emit a
+// compilable stub (never throw, never abort). Calls (including `console.*`)
+// live in emit_call.cpp; the async / promise / timer surface in emit_async.cpp.
 // =============================================================================
 #include "detail/generator.h"
 

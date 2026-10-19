@@ -4,10 +4,11 @@
 //
 // Lowers the `import ... from "std/..."` / builtin surface whose receivers sema
 // models as ambient (STDLIB docs §04): `Math.*`, `path.*`, `os.*`,
-// `JSON.stringify`, `process.*`, the `String(x)` global, and the `string`
-// method surface + `.length`. Per-family lowering (calls and member reads)
-// lives in the `src/std/<family>/codegen.cpp` units; the `needs*` flags they
-// record drive the include assembly in code_generator.cpp's buildSource.
+// `JSON.stringify`, `process.*`, the `{ env }` named import, the `String(x)`
+// global, and the `string` method surface + `.length`. Per-family lowering
+// (calls and member reads) lives in the `src/std/<family>/codegen.cpp` units;
+// the `needs*` flags they record drive the include assembly in
+// code_generator.cpp's buildSource.
 //
 // A member call/property that is not part of a family's table reports CP3002
 // (the caller falls through to notImplemented), so unsupported std surface
@@ -56,12 +57,17 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
         return emitNetworkCall(c, m);
     }
     if (isNamespaceObject(m.object.get(), "fs")) return emitFsCall(c, m);
-    // `process.*` plus the one nested member this wave lowers:
-    // `process.env.get(name)`.
-    if (isNamespaceObject(m.object.get(), "process") ||
-        isNsMember(m.object.get(), "process", "env")) {
+    // `process.*` (exit/exec/spawn; argv/env reads lower in emitProcessMember)
+    // and the `{ env }` named import from std/env (src/std/env/codegen.cpp).
+    if (isNamespaceObject(m.object.get(), "process")) {
         return emitProcessCall(c, m);
     }
+    if (isNamespaceObject(m.object.get(), "env")) {
+        return emitEnvCall(c, m);
+    }
+    // Process value receivers: the SpawnHandle member calls (`p.on/write/
+    // kill`, src/std/process/codegen.cpp).
+    if (isProcessObject(m.object.get())) return emitProcessObjectCall(c, m);
     // `std/network` receivers (`res.status(404).text(...)`, `app.get(...)`,
     // `ws.send(...)`, `wss.on(...)`): the documented members lower to the plain
     // C++ member call on the runtime object (src/std/network/codegen.cpp).

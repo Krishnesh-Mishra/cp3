@@ -31,6 +31,7 @@ set(cp3_codegen_sources
     ../std/os/codegen.cpp
     ../std/path/codegen.cpp
     ../std/process/codegen.cpp
+    ../std/env/codegen.cpp
     ../std/json/codegen.cpp
     ../std/string/codegen.cpp
     ../std/crypto/codegen.cpp
