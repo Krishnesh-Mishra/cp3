@@ -403,6 +403,7 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
         out += "#include \"cp3/std/collections.hpp\"\n";  // Map/Set (D44)
     }
     if (needsBuffer_) out += "#include \"cp3/std/buffer.hpp\"\n";
+    if (needsFs_) out += "#include \"cp3/std/fs.hpp\"\n";
     out += "\n";
     out += kHelperBlock;
     if (needsTypedArray_) {

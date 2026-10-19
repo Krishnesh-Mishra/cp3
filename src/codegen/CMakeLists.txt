@@ -19,6 +19,7 @@ set(cp3_codegen_sources
     src/support/int_mode.cpp
     src/support/int_reads.cpp
     src/emit/expr.cpp
+    src/emit/equality.cpp
     src/emit/call.cpp
     src/emit/async.cpp
     src/emit/stmt.cpp
@@ -39,6 +40,7 @@ set(cp3_codegen_sources
     ../std/date/codegen.cpp
     ../std/buffer/codegen.cpp
     ../std/console/codegen.cpp
+    ../std/fs/codegen.cpp
 )
 
 add_library(cp3_codegen STATIC ${cp3_codegen_sources})

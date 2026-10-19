@@ -182,6 +182,8 @@ private:
     Type inferMember(MemberExpr& m);
     Type memberOf(const Type& ot, const std::string& prop, const SourceSpan& span,
                   bool optional);
+    // Promise members (spec §14): `.then`/`.catch`/`.catchError`/`.finally`.
+    Type promiseMemberOf(const Type& ot, const std::string& prop);
     Type memberOfProbe(const Type& ot, const std::string& prop,
                        const SourceSpan& span);
     Type arrayMember(const Type& arr, const std::string& prop);
@@ -211,6 +213,12 @@ private:
     std::optional<Type> dateMember(const std::string& prop);
     std::optional<Type> dateInstanceMember(const Type& recv,
                                            const std::string& prop);
+    std::optional<Type> fsMember(const std::string& prop);
+    // std/fs receiver field reads (src/std/fs/sema.cpp): the documented
+    // `FileStats` fields (`stat.modifiedAt` types as the nominal Date class);
+    // nullopt keeps the permissive ambient fallthrough for every other member.
+    std::optional<Type> fsReceiverMember(const Type& recv,
+                                         const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
 
     // --- std/network (src/std/network/sema.cpp) ------------------------------
@@ -358,6 +366,9 @@ private:
     void analyzeTry(TryStatement& stmt);
     void analyzeFunctionBody(FunctionDeclaration& fn);
     bool allPathsReturn(Node* body);
+    // True when a switch has a `default` and every non-empty clause
+    // terminates, so it cannot fall through to the end of the function.
+    bool switchCannotFallThrough(const SwitchStatement& sw);
 
     // --- publishing (symbols.cpp) --------------------------------------------
     void setType(const Node& n, const Type& t);
@@ -394,9 +405,9 @@ private:
 
 // --- std-namespace surface helpers (std_check.cpp) ---------------------------
 //
-// The closed families (Math / path / os / crypto / console / JSON / process /
-// env) report CP3305 for an unknown member (member_check.cpp); the open ones
-// (network, fs, ...) keep the permissive ambient fallthrough.
+// The closed families (Math / path / os / crypto / console / JSON / Date /
+// fs / process / env) report CP3305 for an unknown member (member_check.cpp);
+// the open ones (network, ...) keep the permissive ambient fallthrough.
 bool isClosedStdNamespace(const std::string& ns);
 
 // The implemented member names of `ns`, used as CP3305 candidates.
@@ -413,6 +424,7 @@ std::vector<std::string> envMemberNames();
 std::vector<std::string> consoleMemberNames();
 std::vector<std::string> jsonMemberNames();
 std::vector<std::string> cryptoMemberNames();
+std::vector<std::string> fsMemberNames();
 std::vector<std::string> dateMemberNames();
 std::vector<std::string> dateInstanceMemberNames();
 

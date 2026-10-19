@@ -560,7 +560,7 @@ let port = env.get<number>("PORT", default: 3000);
 
 ## Map / Set
 
-Included. 1:1 mapping to standard C++ containers - `Map<K, V>` wraps `std::unordered_map<K, V>` directly, `Set<T>` wraps `std::unordered_set<T>` directly, same pattern as array→vector. Method names match JS's Map/Set API closely enough that there's no meaningful design gap here.
+Included. `Map<K, V>` and `Set<T>` keep JavaScript's insertion-order contract (DECISIONS D44): iteration visits entries in the order they were inserted, and a repeated `Set` insertion keeps its first position. That rules out `std::unordered_map` / `std::unordered_set` as the backing store; the implementation uses a small insertion-ordered structure with `==` dedup instead. Method names match JS's Map/Set API closely enough that there's no meaningful design gap here.
 
 ```cp3
 class Map<K, V> {

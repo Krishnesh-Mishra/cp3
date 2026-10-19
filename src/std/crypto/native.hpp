@@ -18,10 +18,15 @@ namespace cp3::cli::detail {
 // Verified against third_party/MANIFEST.md "Verified consumer flags":
 //   compile: -I third_party/libsodium/include
 //   link:    -L third_party/libsodium/lib -lsodium
-// The row also adds the family ABI tree (src/std/crypto/include, D72) first.
+// The row also adds the family ABI tree (src/std/crypto/include, D72) first,
+// plus the std/buffer tree: the crypto surface types `randomBytes` as the
+// nominal Buffer and accepts Buffers in sha256/sha512, so generated code can
+// name cp3/std/buffer.hpp without the program importing std/buffer (the same
+// pattern std/fs uses for its Buffer chunk).
 inline const NativePackage kCryptoNativePackage{
     "std/crypto",
-    {"src/std/crypto/include", "third_party/libsodium/include"},
+    {"src/std/crypto/include", "src/std/buffer/include",
+     "third_party/libsodium/include"},
     {},
     {"src/std/crypto/runtime.cpp"},
     {"third_party/libsodium/lib"},

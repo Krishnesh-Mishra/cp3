@@ -26,9 +26,10 @@ using namespace detail;
 namespace {
 
 // The documented `crypto` member -> its runtime spelling (cp3/std/crypto.hpp).
-// `randomBytes` keeps the beta-one raw-byte `std::string` stand-in the pinned
-// cases pin (`.length` == byte count); a `Buffer` argument to sha256/sha512
-// lowers to its bytes (the runtime digest surface takes `std::string`).
+// `randomBytes` returns the nominal Buffer: the runtime hands back the raw
+// bytes as `std::string` and the call is wrapped with
+// `::cp3::runtime::buffer::from`; a `Buffer` argument to sha256/sha512 lowers
+// to its bytes (the runtime digest surface takes `std::string`).
 struct CryptoFn {
     const char* js;
     const char* fn;
@@ -52,6 +53,14 @@ std::string Generator::emitCryptoCall(const CallExpr& c, const MemberExpr& m) {
     const char* fn = cryptoRuntimeFn(m.property);
     if (!fn) return std::string();
     needsCrypto_ = true;
+    // `randomBytes(n: number): Buffer`: the runtime produces the raw bytes as
+    // `std::string`; wrap them into the nominal Buffer (cp3/std/buffer.hpp).
+    if (m.property == "randomBytes" && c.arguments.size() == 1 &&
+        c.arguments.front()->kind != NodeKind::SpreadElement) {
+        needsBuffer_ = true;
+        return "::cp3::runtime::buffer::from(::cp3::runtime::crypto::randomBytes(" +
+               joinStrings(emitPlainArgs(c), ", ") + "))";
+    }
     // `sha256(s: string | Buffer)` / `sha512(...)`: a Buffer argument lowers to
     // its raw bytes, the `const std::string&` the runtime digest surface takes
     // (cp3/std/buffer.hpp). A string argument lowers unchanged.

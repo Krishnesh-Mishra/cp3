@@ -8,12 +8,9 @@
 // The typed table mirrors docs/standard-library/04 section crypto, which is
 // the pinned signature surface the run-mode cases exercise:
 //   randomUUID(): string
-//   randomBytes(n: number): string      (beta one keeps the raw-byte string
-//                                        stand-in: retyping it to the nominal
-//                                        Buffer breaks the pinned
-//                                        crypto_signatures_check.cp3:4, so the
-//                                        flip waits on that pin; see the R1
-//                                        buffer wave report)
+//   randomBytes(n: number): Buffer      (the nominal std/buffer `Buffer`;
+//                                        codegen wraps the runtime's raw bytes
+//                                        with ::cp3::runtime::buffer::from)
 //   sha256(s: string | Buffer): string  (hex; a Buffer argument lowers to its
 //                                        bytes in codegen, cp3/std/buffer.hpp)
 //   sha512(s: string | Buffer): string  (hex)
@@ -42,7 +39,9 @@ struct CryptoRow {
 };
 
 Type zeroToString() { return Type::function({}, Type::string()); }
-Type numberToString() { return Type::function({Type::number()}, Type::string()); }
+Type numberToBuffer() {
+    return Type::function({Type::number()}, byteBufferType());
+}
 Type stringOrBufferToString() {
     return Type::function({Type::unionOf({Type::string(), byteBufferType()})},
                           Type::string());
@@ -52,7 +51,7 @@ Type twoStringToString() {
 }
 
 const CryptoRow kRows[] = {
-    {"randomUUID", zeroToString},       {"randomBytes", numberToString},
+    {"randomUUID", zeroToString},       {"randomBytes", numberToBuffer},
     {"sha256", stringOrBufferToString}, {"sha512", stringOrBufferToString},
     {"AES256", twoStringToString},      {"AES256Decrypt", twoStringToString},
 };

@@ -5,8 +5,9 @@
 // Owns the statement passes: block/scope walk (`checkStmts`), the statement
 // dispatch (`visitStmt` + `visitExecStmt` / `visitDeclStmt`), condition
 // checking, loop/switch/return/try analysis, `typeof` narrowing, and
-// `allPathsReturn` / `analyzeFunctionBody` return analysis. Declarations are
-// built in declarations.cpp (STYLE.md §8).
+// `analyzeFunctionBody` return analysis. The `allPathsReturn` /
+// `switchCannotFallThrough` flow helpers live in flow_check.cpp; declarations
+// are built in declarations.cpp (STYLE.md §8).
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -448,38 +449,6 @@ void Analyzer::analyzeFunctionBody(FunctionDeclaration& fn) {
                        "the end of its body");
         }
     }
-}
-
-bool Analyzer::allPathsReturn(Node* body) {
-    if (!body) return false;
-    if (body->kind == NodeKind::ReturnStatement) return true;
-    // A throw never falls off the end of the function.
-    if (body->kind == NodeKind::ThrowStatement) return true;
-    if (body->kind != NodeKind::BlockStatement) return false;
-    auto& bs = static_cast<BlockStatement&>(*body);
-    for (auto it = bs.body.rbegin(); it != bs.body.rend(); ++it) {
-        Stmt* s = it->get();
-        if (!s) continue;
-        if (s->kind == NodeKind::EmptyStatement) continue;
-        if (s->kind == NodeKind::ReturnStatement) return true;
-        if (s->kind == NodeKind::ThrowStatement) return true;
-        if (s->kind == NodeKind::IfStatement) {
-            auto& is = static_cast<IfStatement&>(*s);
-            if (is.elseBranch && allPathsReturn(is.thenBranch.get()) &&
-                allPathsReturn(is.elseBranch.get())) {
-                return true;
-            }
-        }
-        if (s->kind == NodeKind::TryStatement) {
-            auto& ts = static_cast<TryStatement&>(*s);
-            // A `return`/`throw` in the try block (or in the catch handler)
-            // terminates the function; a `finally` cannot un-terminate it.
-            if (allPathsReturn(ts.tryBlock.get())) return true;
-            if (ts.handler && allPathsReturn(ts.handler->body.get())) return true;
-        }
-        return false;
-    }
-    return false;
 }
 
 }  // namespace cp3

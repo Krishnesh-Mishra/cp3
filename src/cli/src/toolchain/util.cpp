@@ -219,28 +219,101 @@ std::uint64_t totalPhysicalMemoryMb() noexcept {
 }
 
 // -----------------------------------------------------------------------------
-// Repository-relative include roots
+// Cp3 root discovery and include-root resolution
 // -----------------------------------------------------------------------------
 
-// Repo root discovered from this translation unit's compile-time path
-// (.../src/cli/src/toolchain/util.cpp): walk up until the directory that owns
-// both src/cli and src/runtime. This mirrors the historical `__FILE__`-relative
-// computation without depending on this file's exact depth under src/. Public
-// to the cli module because the native-backend rows (detail/native_packages.hpp)
-// resolve third_party/** against it.
-fs::path repositoryRoot() {
-    std::error_code ec;
-    fs::path probe = fs::path(__FILE__).parent_path();
-    while (!probe.empty()) {
-        if (fs::is_directory(probe / "src" / "cli", ec) &&
-            fs::is_directory(probe / "src" / "runtime", ec)) {
-            return probe;
+namespace {
+
+// Directory of the running executable (empty when it cannot be determined).
+// The installer's layout is <root>/bin/cp3c.exe next to the shipped trees, so
+// the executable is the one anchor that survives being copied to a user machine.
+fs::path executableDirectory() {
+#if defined(_WIN32)
+    std::wstring buffer(MAX_PATH, L'\0');
+    for (;;) {
+        const DWORD len = GetModuleFileNameW(nullptr, buffer.data(),
+                                             static_cast<DWORD>(buffer.size()));
+        if (len == 0) return {};
+        if (len < buffer.size()) {
+            buffer.resize(len);
+            break;
         }
+        buffer.resize(buffer.size() * 2);  // executable path longer than MAX_PATH
+    }
+    return fs::path(buffer).parent_path();
+#else
+    std::vector<char> buffer(4096, '\0');
+    const ssize_t len =
+        readlink("/proc/self/exe", buffer.data(), buffer.size() - 1);
+    if (len <= 0) return {};
+    return fs::path(std::string(buffer.data(), static_cast<std::size_t>(len)))
+        .parent_path();
+#endif
+}
+
+// True when `dir` owns the trees every cp3 distribution ships: the runtime
+// translation units plus the std families. A source checkout additionally has
+// src/cli, which installed trees deliberately lack; requiring it would reject
+// them. The nested and flat runtime layouts both count (runtimeSourcePaths
+// accepts either).
+bool ownsCp3Trees(const fs::path& dir) {
+    std::error_code ec;
+    const bool runtime = fs::is_directory(dir / "src" / "runtime" / "src", ec) ||
+                         fs::is_directory(dir / "src" / "runtime", ec);
+    return runtime && fs::is_directory(dir / "src" / "std", ec);
+}
+
+// Candidate roots in priority order:
+//   1. CP3_ROOT, set by the cp3.cmd shim - a shim on PATH can point at a
+//      distribution whose bin/ is not the shim's own directory;
+//   2. the running executable's ancestors - an installed tree resolves as
+//      <root>/bin/cp3c.exe at depth 1;
+//   3. this file's compile-time path - an in-checkout compiler.
+fs::path findCp3Root() {
+    if (const char* env = std::getenv("CP3_ROOT")) {
+        const fs::path fromEnv = stripSurroundingQuotes(env);
+        if (!fromEnv.empty() && ownsCp3Trees(fromEnv)) return fromEnv;
+    }
+    fs::path probe = executableDirectory();
+    for (int depth = 0; depth < 4 && !probe.empty(); ++depth) {
+        if (ownsCp3Trees(probe)) return probe;
+        const fs::path parent = probe.parent_path();
+        if (parent == probe) break;
+        probe = parent;
+    }
+    probe = fs::path(__FILE__).parent_path();
+    while (!probe.empty()) {
+        if (ownsCp3Trees(probe)) return probe;
         const fs::path parent = probe.parent_path();
         if (parent == probe) break;
         probe = parent;
     }
     return {};
+}
+
+}  // namespace
+
+// Public to the cli module because the native-backend rows
+// (detail/native_packages.hpp) resolve third_party/** against it.
+fs::path repositoryRoot() { return findCp3Root(); }
+
+fs::path resolveIncludeRoot(const fs::path& root, const std::string& rel) {
+    std::error_code ec;
+    const fs::path direct = root / rel;
+    if (fs::is_directory(direct, ec)) return direct;
+    // "src/<x>/include" -> "<root>/include/<x>": the installer stages every
+    // shipped header tree into one include directory (PKG-CONTRACTS section 4)
+    // while runtime sources stay under src/**.
+    const std::string prefix = "src/";
+    const std::string suffix = "/include";
+    if (rel.rfind(prefix, 0) == 0 && rel.size() > prefix.size() + suffix.size() &&
+        rel.compare(rel.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        const fs::path mapped =
+            root / "include" /
+            rel.substr(prefix.size(), rel.size() - prefix.size() - suffix.size());
+        if (fs::is_directory(mapped, ec)) return mapped;
+    }
+    return direct;
 }
 
 std::vector<fs::path> compilerIncludeRoots() {
@@ -252,7 +325,7 @@ std::vector<fs::path> compilerIncludeRoots() {
     for (const char* rel : {"src/runtime/include", "src/common/include",
                             "src/std/string/include",
                             "src/std/typed-arrays/include"}) {
-        const fs::path candidate = repo / rel;
+        const fs::path candidate = resolveIncludeRoot(repo, rel);
         std::error_code ec;
         if (fs::is_directory(candidate, ec)) roots.push_back(candidate);
     }
