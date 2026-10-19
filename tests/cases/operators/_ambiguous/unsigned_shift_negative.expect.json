@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: unsigned right shift `>>>` semantics for negative operands and int32 vs int64 width"
-  }
-}
