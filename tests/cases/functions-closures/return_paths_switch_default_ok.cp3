@@ -1,0 +1,10 @@
+import console from "std/console";
+function pick(kind: string): number {
+    switch (kind) {
+        case "a":
+            return 1;
+        default:
+            return 0;
+    }
+}
+console.log(pick("a"));
