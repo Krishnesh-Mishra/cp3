@@ -59,12 +59,10 @@ Type Analyzer::inferCall(CallExpr& call) {
         if (call.callee->kind == NodeKind::MemberExpr) {
             checkParallelCall(call);
             auto& member = static_cast<MemberExpr&>(*call.callee);
-            if (Type json; tryInferJsonCall(call, member, json)) return json;
-            if (Type promise; tryInferPromiseStaticCall(call, member, promise)) return promise;
-            // std/network generics: `res.json<T>()` / `req.json<T>()` (src/std/network/sema.cpp).
-            if (Type network; tryInferNetworkMemberCall(call, member, network)) return network;
-            if (Type family; tryInferFamilyMethodCall(call, member, family)) return family;
-            if (Type buffer; tryInferBufferCall(call, member, buffer)) return buffer;
+            Type inferred;
+            if (tryInferMemberCall(call, member, inferred)) {
+                return inferred;
+            }
         }
     }
 
@@ -95,6 +93,21 @@ Type Analyzer::inferCall(CallExpr& call) {
            "value of type '" + pretty(ct) + "' is not callable");
     inferArgs(call);
     return withType(call, Type::error());
+}
+
+// The member-call site inference chain (one hook per family, each owning its
+// own typing): JSON.parse (unknown), the Promise statics, `env.get<T>`
+// (src/std/env/sema.cpp), the std/network generic member calls
+// (src/std/network/sema.cpp) and the JS-compat family / Buffer methods.
+// Returns true when one of them typed the call and `out` is set.
+bool Analyzer::tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
+    if (tryInferJsonCall(call, m, out)) return true;
+    if (tryInferPromiseStaticCall(call, m, out)) return true;
+    if (tryInferEnvCall(call, m, out)) return true;
+    // std/network generics: `res.json<T>()` / `req.json<T>()` (src/std/network/sema.cpp).
+    if (tryInferNetworkMemberCall(call, m, out)) return true;
+    if (tryInferFamilyMethodCall(call, m, out)) return true;
+    return tryInferBufferCall(call, m, out);
 }
 
 // Core timer builtins (spec §14, STDLIB docs §03): honest result types so

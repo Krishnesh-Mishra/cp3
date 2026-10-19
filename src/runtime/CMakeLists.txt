@@ -27,6 +27,8 @@ set(cp3_runtime_sources
     src/async/promise.cpp
     src/core/runtime.cpp
     ../std/crypto/runtime.cpp
+    ../std/process/child.cpp
+    ../std/process/runtime.cpp
     ../std/network/runtime.cpp
     ../std/network/runtime_fetch.cpp
     ../std/network/runtime_fetch_io.cpp
@@ -56,6 +58,8 @@ target_include_directories(cp3_runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/crypto/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/json/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/network/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../std/process/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../std/collections/include"
 )
 target_compile_definitions(cp3_runtime PRIVATE UWS_NO_ZLIB)
 target_link_libraries(cp3_runtime PUBLIC cp3_common Threads::Threads)

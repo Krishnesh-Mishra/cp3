@@ -14,17 +14,16 @@
 // family unit without touching core.
 //
 // Two shapes of namespace:
-//   * CLOSED families (Math / path / os / crypto / console / JSON / Date):
-//     every member is listed in the family's table, and an unknown member is
-//     CP3305 with "did you mean" candidates from the implemented names
-//     (member_check.cpp consults isClosedStdNamespace). Console is
-//     surface-aware: members documented but still pending codegen
-//     (assert/clear/input/readKey) stay ambient so their CP3002 skip survives,
-//     and the candidates stay limited to the implemented set.
-//   * OPEN families (process in src/std/process/sema.cpp, network in
-//     src/std/network/sema.cpp, fs / env / ... which have no table at all):
-//     unknown members keep the old permissive ambient behavior, so the pinned
-//     signature cases pass unchanged.
+//   * CLOSED families (Math / path / os / crypto / console / JSON / Date /
+//     fs / process / env): every documented member is listed in the family's
+//     table, and an unknown member is CP3305 with "did you mean" candidates
+//     from the implemented names (member_check.cpp consults
+//     isClosedStdNamespace). Console is closed too: since the round-1 wave all
+//     twelve documented members (assert/clear/input/readKey included) are
+//     implemented, so the suggestion candidates cover the full documented set.
+//   * OPEN families (network in src/std/network/sema.cpp, and any family with
+//     no table at all): unknown members keep the old permissive ambient
+//     behavior, so the pinned signature cases pass unchanged.
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -44,8 +43,10 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
     if (ns == "path") return pathMember(prop);
     if (ns == "os") return osMember(prop);
     if (ns == "process") return processMember(prop);
+    if (ns == "env") return envMember(prop);
     if (ns == "crypto") return cryptoMember(prop);
     if (ns == "network") return networkMember(prop);
+    if (ns == "fs") return fsMember(prop);
     if (ns == "console") return consoleMember(prop);
     if (ns == "JSON") return jsonMember(prop);
     if (ns == "Date") return dateMember(prop);
@@ -58,7 +59,8 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
 
 bool isClosedStdNamespace(const std::string& ns) {
     return ns == "Math" || ns == "path" || ns == "os" || ns == "crypto" ||
-           ns == "console" || ns == "JSON" || ns == "Date";
+           ns == "console" || ns == "JSON" || ns == "Date" || ns == "fs" ||
+           ns == "process" || ns == "env";
 }
 
 // The CP3305 candidate lists come from the family units, which own the tables.
@@ -66,10 +68,13 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns) {
     if (ns == "Math") return mathMemberNames();
     if (ns == "path") return pathMemberNames();
     if (ns == "os") return osMemberNames();
+    if (ns == "process") return processMemberNames();
+    if (ns == "env") return envMemberNames();
     if (ns == "JSON") return jsonMemberNames();
     if (ns == "crypto") return cryptoMemberNames();
     if (ns == "console") return consoleMemberNames();
     if (ns == "Date") return dateMemberNames();
+    if (ns == "fs") return fsMemberNames();
     return {};
 }
 

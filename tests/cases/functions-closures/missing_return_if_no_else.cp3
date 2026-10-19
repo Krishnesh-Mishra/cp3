@@ -1,0 +1,7 @@
+import console from "std/console";
+function f(x: number): number {
+    if (x > 0) {
+        return 1;
+    }
+}
+console.log(f(0));

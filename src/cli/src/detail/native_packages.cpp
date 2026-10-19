@@ -17,6 +17,8 @@
 #include "../../../std/console/native.hpp"
 #include "../../../std/crypto/native.hpp"
 #include "../../../std/date/native.hpp"
+#include "../../../std/env/native.hpp"
+#include "../../../std/fs/native.hpp"
 #include "../../../std/json/native.hpp"
 #include "../../../std/math/native.hpp"
 #include "../../../std/network/native.hpp"
@@ -32,6 +34,7 @@ const std::vector<const NativePackage*>& nativePackages() {
     static const std::vector<const NativePackage*> rows = {
         &kCollectionsNativePackage,
         &kConsoleNativePackage,
+        &kFsNativePackage,
         &kJsonNativePackage,
         &kMathNativePackage,
         &kOsNativePackage,
@@ -43,6 +46,7 @@ const std::vector<const NativePackage*>& nativePackages() {
         &kTypedArraysNativePackage,
         &kDateNativePackage,
         &kBufferNativePackage,
+        &kEnvNativePackage,
     };
     return rows;
 }

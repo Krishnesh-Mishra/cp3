@@ -182,6 +182,8 @@ private:
     Type inferMember(MemberExpr& m);
     Type memberOf(const Type& ot, const std::string& prop, const SourceSpan& span,
                   bool optional);
+    // Promise members (spec §14): `.then`/`.catch`/`.catchError`/`.finally`.
+    Type promiseMemberOf(const Type& ot, const std::string& prop);
     Type memberOfProbe(const Type& ot, const std::string& prop,
                        const SourceSpan& span);
     Type arrayMember(const Type& arr, const std::string& prop);
@@ -195,6 +197,10 @@ private:
     std::optional<Type> pathMember(const std::string& prop);
     std::optional<Type> osMember(const std::string& prop);
     std::optional<Type> processMember(const std::string& prop);
+    // The documented `process` object shapes ("$process:ExecResult" /
+    // "$process:SpawnHandle"); codegen recognises them by name.
+    Type processObjectType(const std::string& name);
+    std::optional<Type> envMember(const std::string& prop);
     std::optional<Type> consoleMember(const std::string& prop);
     std::optional<Type> jsonMember(const std::string& prop);
     // Native-backed std modules: a member outside the documented surface
@@ -207,6 +213,12 @@ private:
     std::optional<Type> dateMember(const std::string& prop);
     std::optional<Type> dateInstanceMember(const Type& recv,
                                            const std::string& prop);
+    std::optional<Type> fsMember(const std::string& prop);
+    // std/fs receiver field reads (src/std/fs/sema.cpp): the documented
+    // `FileStats` fields (`stat.modifiedAt` types as the nominal Date class);
+    // nullopt keeps the permissive ambient fallthrough for every other member.
+    std::optional<Type> fsReceiverMember(const Type& recv,
+                                         const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
 
     // --- std/network (src/std/network/sema.cpp) ------------------------------
@@ -235,6 +247,12 @@ private:
     void reportUndefinedCall(CallExpr& call, Identifier& id);
     bool tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out);
     bool tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out);
+    // `env.get<T>(key, options?)` (src/std/env/sema.cpp): T from the explicit
+    // type argument, else the `{ default: v }` value type, else `string`.
+    bool tryInferEnvCall(CallExpr& call, MemberExpr& m, Type& out);
+    // The member-call site inference chain for a MemberExpr callee: the JSON,
+    // Promise-static, env, JS-compat-family and Buffer hooks in order.
+    bool tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out);
     void inferArgs(CallExpr& call);
     void sigFromFunctionType(const Type& ct, FuncSig& localSig);
     void inferArg(Expr* a);
@@ -356,6 +374,9 @@ private:
     void analyzeTry(TryStatement& stmt);
     void analyzeFunctionBody(FunctionDeclaration& fn);
     bool allPathsReturn(Node* body);
+    // True when a switch has a `default` and every non-empty clause
+    // terminates, so it cannot fall through to the end of the function.
+    bool switchCannotFallThrough(const SwitchStatement& sw);
 
     // --- publishing (symbols.cpp) --------------------------------------------
     void setType(const Node& n, const Type& t);
@@ -392,9 +413,9 @@ private:
 
 // --- std-namespace surface helpers (std_check.cpp) ---------------------------
 //
-// The closed families (Math / path / os / crypto / console / JSON) report
-// CP3305 for an unknown member (member_check.cpp); the open ones (network,
-// process, fs, ...) keep the permissive ambient fallthrough.
+// The closed families (Math / path / os / crypto / console / JSON / Date /
+// fs / process / env) report CP3305 for an unknown member (member_check.cpp);
+// the open ones (network, ...) keep the permissive ambient fallthrough.
 bool isClosedStdNamespace(const std::string& ns);
 
 // The implemented member names of `ns`, used as CP3305 candidates.
@@ -406,9 +427,12 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns);
 std::vector<std::string> mathMemberNames();
 std::vector<std::string> pathMemberNames();
 std::vector<std::string> osMemberNames();
+std::vector<std::string> processMemberNames();
+std::vector<std::string> envMemberNames();
 std::vector<std::string> consoleMemberNames();
 std::vector<std::string> jsonMemberNames();
 std::vector<std::string> cryptoMemberNames();
+std::vector<std::string> fsMemberNames();
 std::vector<std::string> dateMemberNames();
 std::vector<std::string> dateInstanceMemberNames();
 

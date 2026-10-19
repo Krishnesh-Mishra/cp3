@@ -22,6 +22,7 @@ set(cp3_sema_sources
     src/checks/call_check.cpp
     src/checks/ops_check.cpp
     src/checks/stmt_check.cpp
+    src/checks/flow_check.cpp
     src/support/symbols.cpp
     src/checks/banned.cpp
     src/checks/parallel_check.cpp
@@ -29,12 +30,14 @@ set(cp3_sema_sources
     src/checks/std_check.cpp
     ../std/crypto/sema.cpp
     ../std/network/sema.cpp
+    ../std/fs/sema.cpp
     ../std/typed-arrays/sema.cpp
     ../std/typed-arrays/sema_methods.cpp
     ../std/math/sema.cpp
     ../std/path/sema.cpp
     ../std/os/sema.cpp
     ../std/process/sema.cpp
+    ../std/env/sema.cpp
     ../std/console/sema.cpp
     ../std/json/sema.cpp
     ../std/collections/sema.cpp
