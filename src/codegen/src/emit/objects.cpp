@@ -128,4 +128,20 @@ std::string Generator::emitObject(const Expr& e) {
     return "(" + receiver + ")." + member;
 }
 
+// The object-literal expression form: a `$o{...}` value shape lowers to the
+// generated value struct (emitObject above); a literal with an enum-typed
+// field lowers to a std::tuple (emit/enum.cpp); anything else stays CP3002.
+std::string Generator::emitObjectLiteral(const Expr& e) {
+    if (std::string object = emitObject(e); !object.empty()) {
+        return object;
+    }
+    if (std::string literal =
+            emitEnumObjectLiteral(static_cast<const ObjectLiteral&>(e));
+        !literal.empty()) {
+        return literal;
+    }
+    notImplemented(e, "this object literal");
+    return "0.0";
+}
+
 }  // namespace cp3

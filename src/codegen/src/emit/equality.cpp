@@ -137,6 +137,15 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
         return unionEqualityText(b, L, R, lhs, rhs);
     }
 
+    // A number-backed enum member compared with a plain number compares its
+    // underlying value (JS parity: `Color.Red === 0` is true).
+    if ((L.shape == Shape::Enum && R.cpp == "double") ||
+        (R.shape == Shape::Enum && L.cpp == "double")) {
+        const std::string& member = (L.shape == Shape::Enum) ? lhs : rhs;
+        const std::string& other = (L.shape == Shape::Enum) ? rhs : lhs;
+        return "((static_cast<double>(" + member + ")) " + op + " " + other + ")";
+    }
+
     // Same representation: compare directly. D15 keeps loose `==` same-type.
     if (L.representable && R.representable && L.cpp == R.cpp) {
         return "(" + lhs + " " + op + " " + rhs + ")";

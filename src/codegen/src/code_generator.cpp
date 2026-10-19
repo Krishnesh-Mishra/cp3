@@ -262,12 +262,10 @@ GeneratedModule Generator::run(const Program& program) {
     }
 
     // Usage-based reification (STDLIB docs §04): register the unit's interface
-    // record shapes before the emit walk, so a `JSON.parse<T>` use can name T
-    // even when the declaration comes later in the unit.
+    // record shapes before the emit walk, so a later `JSON.parse<T>` can name T.
     collectJsonShapes(program);
 
-    // The unit's enums (spec 04): resolved before the emit walk so a use can
-    // precede its declaration (src/emit/enum.cpp).
+    // The unit's enums (spec 04): resolved before the emit walk (emit/enum.cpp).
     collectEnums(program);
 
     std::string decls;   // function forward declarations
@@ -280,19 +278,14 @@ GeneratedModule Generator::run(const Program& program) {
         }
     }
 
-    // The enum declarations come first (a binding, signature or record shape
-    // can name one). The value structs of the object shapes the unit names
-    // (support/value_shapes.cpp) go ahead of the record structs of the shapes
-    // actually used as `JSON.parse<T>`, which in turn precede the builders and
-    // the bindings that read them: every unit spells a shape identically, so a
-    // struct a signature or a body references is complete wherever it is named.
+    // Enums first (signatures and record shapes can name one), then the object
+    // value and JSON record structs, complete before any builder reads them.
     decls = enumDecls_ +
             objectDeclsFor(jsonShapeDecls_ + decls + defs + mainBody) +
             jsonShapeDecls_ + decls;
 
     // The family include (D69) is needed wherever a generated declaration or
-    // definition names its C++ spellings, including signatures whose array
-    // type was resolved from a body rather than an annotation.
+    // definition names its C++ spellings, array types from bodies included.
     const std::string familyUse = decls + defs + mainBody;
     if (familyUse.find("::cp3::runtime::Array") != std::string::npos ||
         familyUse.find("::cp3::runtime::TypedArray") != std::string::npos ||

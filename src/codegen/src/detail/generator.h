@@ -151,11 +151,9 @@ private:
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
                              const detail::CppInfo& R, const std::string& lhs,
                              const std::string& rhs);
-    // The Shape::Union half of `==`/`===` (emit/equality.cpp); it reports its
-    // own `notImplemented` cases and answers with a constant instead.
+    // The Shape::Union half of `==`/`===` (emit/equality.cpp).
     std::string unionEqualityText(const BinaryExpr& b, const detail::CppInfo& L,
-                                  const detail::CppInfo& R,
-                                  const std::string& lhs,
+                                  const detail::CppInfo& R, const std::string& lhs,
                                   const std::string& rhs);
     std::string emitLogical(const LogicalExpr& l);
     std::string emitNullish(const LogicalExpr& l);
@@ -237,26 +235,22 @@ private:
     std::string declaratorInitText(const VariableDeclarator& d, const Type& declared);
 
     // --- object value shapes (emit/objects.cpp) -------------------------------
-    // `o.a` / `o?.a` over a value-shape receiver, or an object literal value.
-    std::string emitObject(const Expr& e);
+    std::string emitObject(const Expr& e);         // `o.a` / `o?.a` reads
+    std::string emitObjectLiteral(const Expr& e);  // `{...}` literal values
 
     // --- std/collections (src/std/collections/codegen.cpp) --------------------
-    // `new Map<K, V>()` / `new Set<T>()`, the member calls (`set`/`get`/`has`/
-    // `delete`/`clear`/`keys`/`values`/`entries`/`forEach`) and the `size` /
-    // `entries().length` property reads. Each returns "" when the form is not
-    // one of them.
+    // `new Map<K, V>()` / `new Set<T>()`, the member calls and the `size` /
+    // `entries().length` reads; each returns "" when the form is not one of them.
     std::string emitCollectionsNew(const NewExpr& n);
     std::string emitCollectionsMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitCollectionsMember(const MemberExpr& m);
 
     // --- std namespaces + primitive methods (src/std/*/codegen.cpp) ----------
     // Lower `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*` calls, the
-    // `string` method surface, and builtin property reads (`Math.PI`,
-    // `path.sep`, `process.argv`, `s.length`). Each returns "" when the form
-    // is not implemented, so the caller can report CP3002. The per-family
-    // member reads live with their lowering units too; the namespace dispatch
-    // (emitBuiltinCall / emitBuiltinMember) and the shared helpers
-    // (detail/builtin_tables.h) stay in emit/std/common.cpp.
+    // `string` method surface and builtin property reads (`Math.PI`, `path.sep`,
+    // `process.argv`, `s.length`). Each returns "" for a form it does not
+    // implement, so the caller reports CP3002; the dispatch and the shared
+    // tables (detail/builtin_tables.h) stay in emit/std/common.cpp.
     std::string emitBuiltinCall(const CallExpr& c, const MemberExpr& m);
     std::string emitBuiltinMember(const MemberExpr& m);
     std::string emitMathCall(const CallExpr& c, const MemberExpr& m);
@@ -289,10 +283,9 @@ private:
     // get/has/load calls, backed by cp3/std/env.hpp (composed on process).
     std::string emitEnvCall(const CallExpr& c, const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
-    // Native-backed std modules (src/std/crypto/codegen.cpp,
-    // src/std/network/codegen.cpp): one per-module lowering unit. Each returns
-    // "" when the form is not implemented, so the caller keeps reporting
-    // CP3002 meanwhile.
+    // Native-backed std modules (src/std/{crypto,network}/codegen.cpp): one
+    // lowering unit per module, each returning "" for a form it does not
+    // implement, so the caller keeps reporting CP3002 meanwhile.
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
     // `std/fs` (src/std/fs/codegen.cpp): the namespace table plus the
@@ -308,8 +301,7 @@ private:
     std::string emitDateCall(const CallExpr& c, const MemberExpr& m);
     // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): the
     // `Buffer.from`/`Buffer.alloc` statics, the `buf.toString`/`buf.slice`
-    // methods and the `buf.length` read. Each returns "" when the form is not
-    // one of them.
+    // methods and the `buf.length` read; "" when the form is not one of them.
     std::string emitByteBufferStaticCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMethodCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMember(const MemberExpr& m);
@@ -361,11 +353,10 @@ private:
     void emitTry(const TryStatement& ts, std::string& out, int indent);
 
     // --- enums (emit/enum.cpp) ------------------------------------------------
-    // Top-level `enum` declarations (spec 04): `collectEnums` resolves each
-    // declaration and prepends the `enum class <name> : long long` text;
-    // `emitEnumMember`/`emitEnumObjectLiteral` lower a member access and an
-    // enum-carrying object literal; `emitEnumSwitch` handles a switch statement
-    // (the same-enum lowering via `lowerEnumSwitch`, else the CP3002 stub).
+    // `collectEnums` resolves top-level `enum` declarations (spec 04) and
+    // prepends the `enum class <name> : long long` text; `emitEnumMember` and
+    // `emitEnumObjectLiteral` lower member reads and enum-carrying literals;
+    // `emitEnumSwitch` handles switches (the same-enum lowering, else the stub).
     void collectEnums(const Program& program);
     std::string emitEnumMember(const MemberExpr& m);
     std::string emitEnumObjectLiteral(const ObjectLiteral& ol);
@@ -373,9 +364,8 @@ private:
     void emitEnumSwitch(const Stmt& s, std::string& out, int indent);
 
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
-    // The fast path is emitted per function: a body with every `number`
-    // lowered to a guarded std::int64_t, plus a double wrapper that guards the
-    // arguments once and re-runs the ordinary body when a guard bails.
+    // Per function: a body with every `number` lowered to a guarded
+    // std::int64_t, plus a double wrapper that re-runs it when a guard bails.
     bool intEligible(const FunctionDeclaration& fd, const std::string& ret) const;
     std::string intBody(const FunctionDeclaration& fd, bool& kept);
     std::string intSignature(const FunctionDeclaration& fd) const;

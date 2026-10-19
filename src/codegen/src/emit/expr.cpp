@@ -162,27 +162,8 @@ std::string Generator::exprPlain(const Expr& e) {
             notImplemented(e, "this property access");
             return "0.0";
         }
-        case NodeKind::ObjectLiteral:
-            // A `$o{...}` value shape: the generated value struct
-            // (emit/objects.cpp).
-            if (std::string object = emitObject(e); !object.empty()) {
-                return object;
-            }
-            notImplemented(e, "this object literal");
-            return "0.0";
+        case NodeKind::ObjectLiteral: return emitObjectLiteral(e);
         case NodeKind::ArrowFunction: return emitListenerValue(e);  // D74
-        case NodeKind::ObjectLiteral: {
-            // An object literal with an enum-typed field lowers to a
-            // std::tuple (src/emit/enum.cpp); any other object literal stays
-            // CP3002.
-            if (std::string literal =
-                    emitEnumObjectLiteral(static_cast<const ObjectLiteral&>(e));
-                !literal.empty()) {
-                return literal;
-            }
-            notImplemented(e, "this expression");
-            return "0.0";
-        }
         default:
             notImplemented(e, "this expression");
             return "0.0";
