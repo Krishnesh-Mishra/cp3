@@ -3,14 +3,15 @@
 // the JS-compat family (D69).
 //
 // `Array(n)` (`makeArrayDefault`: a dense default-initialized array), `.fill`,
-// `.join`, `.sort`, `Array.of` / `Array.from` (array and typed sources), the
-// indexed accessors (`arrayAt` / `arrayWriteAt`) and the element text `join`
-// uses. Pulled by cp3/typed_array.hpp; a standalone include works through the
-// guard.
+// `.join`, `.sort`, `.includes`, `Array.of` / `Array.from` (array and typed
+// sources), the indexed accessors (`arrayAt` / `arrayWriteAt`) and the element
+// text `join` uses. Pulled by cp3/typed_array.hpp; a standalone include works
+// through the guard.
 // =============================================================================
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <string>
 #include <vector>
@@ -80,6 +81,26 @@ Array<E> arraySortWith(const Array<E>& a, F cmp) {
     std::stable_sort(a->begin(), a->end(),
                      [&cmp](const E& x, const E& y) { return cmp(x, y) < 0.0; });
     return a;
+}
+
+// `a.includes(value)` (docs/language-spec/09-arrays-strings.md): the
+// SameValueZero search; only the one-argument form is lowered. NaN finds
+// itself and +0/-0 compare equal (the double overload); the template covers
+// every element type with `==` (bool, string, an enum).
+inline bool sameValueZero(double a, double b) {
+    return a == b || (std::isnan(a) && std::isnan(b));
+}
+template <class E>
+bool sameValueZero(const E& a, const E& b) {
+    return a == b;
+}
+
+template <class E>
+bool arrayIncludes(const Array<E>& a, const E& value) {
+    for (std::size_t i = 0; i < a->size(); ++i) {
+        if (sameValueZero((*a)[i], value)) return true;
+    }
+    return false;
 }
 
 // A bounds-checked read/write (the corpus only indexes in range; anything else

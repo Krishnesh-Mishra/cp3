@@ -101,6 +101,9 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
 }
 
 std::string Generator::emitBuiltinMember(const MemberExpr& m) {
+    // Enum member access (`Color.Green`) and the enum-carrying object
+    // literal's field read (src/emit/enum.cpp).
+    if (std::string member = emitEnumMember(m); !member.empty()) return member;
     if (std::string math = emitMathMember(m); !math.empty()) return math;
     // `std/network` field reads (`res.status`, `res.ok`, `req.method`, ...).
     if (std::string net = emitNetworkMemberRead(m); !net.empty()) return net;

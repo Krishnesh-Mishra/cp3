@@ -170,6 +170,8 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             return ambient();
         case TypeKind::String:
             return stringMember(prop);
+        case TypeKind::Enum:
+            return enumMember(ot, prop, span);
         case TypeKind::Number:
         case TypeKind::Boolean:
             return ambient();

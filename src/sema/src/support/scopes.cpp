@@ -171,8 +171,7 @@ void Analyzer::hoistType(Stmt& s) {
         }
         case NodeKind::EnumDeclaration: {
             auto& e = static_cast<EnumDeclaration&>(s);
-            typeNames_[e.name] = ambient();
-            declaredTypes_.insert(s.nodeId);
+            registerEnum(e);
             return;
         }
         case NodeKind::ClassDeclaration: {

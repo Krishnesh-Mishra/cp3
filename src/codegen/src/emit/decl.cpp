@@ -58,9 +58,12 @@ void Generator::emitTopLevel(const Stmt& s, std::string& decls, std::string& def
             emitExport(static_cast<const ExportDeclaration&>(s), decls, defs, mainBody);
             return;
         case NodeKind::ClassDeclaration:
-        case NodeKind::EnumDeclaration:
         case NodeKind::TypeAliasDeclaration:
             notImplemented(s, "top-level declaration");
+            return;
+        case NodeKind::EnumDeclaration:
+            // Resolved and emitted as a whole by collectEnums before the emit
+            // walk (src/emit/enum.cpp); the statement itself emits nothing.
             return;
         case NodeKind::InterfaceDeclaration:
             // An interface is a structure-only record shape: registered and
@@ -108,7 +111,7 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         // array / class type, ...) keeps the unit "not implemented" instead of
         // being quietly mis-typed (same contract as local declarations).
         if (d->type) {
-            if (auto dt = typeFromTypeNode(*d->type)) {
+            if (auto dt = typeOfNode(*d->type)) {
                 if (!classify(*dt).representable && !dt->isUnknown() &&
                     !dt->isError()) {
                     notImplemented(*d, "this declared type");
@@ -264,7 +267,7 @@ std::optional<Type> Generator::parameterType(const Parameter& p,
                                              const FunctionDeclaration& fd,
                                              std::size_t index) const {
     if (p.type) {
-        if (auto t = typeFromTypeNode(*p.type)) {
+        if (auto t = typeOfNode(*p.type)) {
             if (p.optional) return Type::nullable(*t);
             return t;
         }
@@ -326,7 +329,7 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
         return "void";
     }
     if (fd.returnType) {
-        if (auto t = typeFromTypeNode(*fd.returnType)) {
+        if (auto t = typeOfNode(*fd.returnType)) {
             CppInfo ci = classify(*t);
             if (ci.representable) return ci.cpp;
             // A declared return type M1 cannot represent (e.g. a function
@@ -361,7 +364,7 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
 // is the `Promise<T>` the call yields, resolved after the body was checked.
 Type Generator::asyncValueType(const FunctionDeclaration& fd) const {
     if (fd.returnType) {
-        if (auto t = typeFromTypeNode(*fd.returnType)) {
+        if (auto t = typeOfNode(*fd.returnType)) {
             if (detail::isPromiseType(*t)) return detail::promiseValue(*t);
             return *t;
         }

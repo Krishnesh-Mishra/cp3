@@ -21,6 +21,8 @@
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
 //   emit/decl.cpp          forward decls, function signatures, declarations
+//   emit/enum.cpp          enum declarations, member access, same-enum switch
+//                          (spec 04)
 //   src/std/typed-arrays/codegen.cpp  the JS-compat typed-array family (D69)
 //   emit/std/common.cpp               ambient std surface: shared helpers +
 //                                     dispatch
@@ -46,6 +48,7 @@
 #include "cp3/ast.hpp"
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic.hpp"
+#include "detail/enums.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -92,6 +95,10 @@ private:
     std::optional<Type> lookup(const std::string& name) const;
     std::optional<Type> bindingType(const VariableDeclarator& d) const;
     std::optional<Type> resolvedBindingType(const VariableDeclarator& d) const;
+    // A type annotation -> a cp3 Type (detail::typeFromTypeNode), with every
+    // Class part named like a collected enum rewritten to TypeKind::Enum.
+    std::optional<Type> typeOfNode(const TypeNode& tn) const;
+    void rewriteEnumTypes(Type& t) const;
     Type effectiveType(const Expr& e) const;
     Type inferBinary(const BinaryExpr& b) const;
     Type inferLogical(const LogicalExpr& l) const;
@@ -199,6 +206,8 @@ private:
                                   const Type& recv);
     std::string arraySortCallText(const CallExpr& c, const MemberExpr& m,
                                   const Type& recv);
+    std::string arrayIncludesCallText(const CallExpr& c, const MemberExpr& m,
+                                      const Type& recv);
     std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m,
                                     const char* tag);
     std::string dataViewCallText(const CallExpr& c, const MemberExpr& m);
@@ -312,6 +321,18 @@ private:
     void emitThrow(const ThrowStatement& t, std::string& out, int indent);
     void emitTry(const TryStatement& ts, std::string& out, int indent);
 
+    // --- enums (emit/enum.cpp) ------------------------------------------------
+    // Top-level `enum` declarations (spec 04): `collectEnums` resolves each
+    // declaration and prepends the `enum class <name> : long long` text;
+    // `emitEnumMember`/`emitEnumObjectLiteral` lower a member access and an
+    // enum-carrying object literal; `emitEnumSwitch` handles a switch statement
+    // (the same-enum lowering via `lowerEnumSwitch`, else the CP3002 stub).
+    void collectEnums(const Program& program);
+    std::string emitEnumMember(const MemberExpr& m);
+    std::string emitEnumObjectLiteral(const ObjectLiteral& ol);
+    bool lowerEnumSwitch(const SwitchStatement& sw, std::string& out, int indent);
+    void emitEnumSwitch(const Stmt& s, std::string& out, int indent);
+
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
     // The fast path is emitted per function: a body with every `number`
     // lowered to a guarded std::int64_t, plus a double wrapper that guards the
@@ -405,6 +426,13 @@ private:
     std::unordered_map<std::string, std::string> jsonShapeByLabel_;
     std::unordered_set<std::string> jsonShapeUsed_;
     std::string jsonShapeDecls_;
+    // The unit's enums (collectEnums): the resolved model per declaration name,
+    // the accumulated `enum class` decls text, and the sema object label ->
+    // field names of every enum-carrying object literal that lowered to a
+    // `std::tuple` (the field read is `std::get<i>`).
+    std::unordered_map<std::string, detail::EnumCppInfo> enums_;
+    std::string enumDecls_;
+    std::unordered_map<std::string, std::vector<std::string>> enumObjectFields_;
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
@@ -413,6 +441,7 @@ private:
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
     bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
+    bool needsTuple_ = false;        // enum-carrying object literal -> <tuple>
     bool needsEventEmitter_ = false;  // EventEmitter/Listener -> cp3/async/emitter.hpp
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
