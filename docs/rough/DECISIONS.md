@@ -824,6 +824,18 @@ follow the standing JS-parity design goal (see D78).
   `compare_member_to_number`, `numeric_value_via_index`,
   `async_arrow_function` (B16).
 
+## CLI/tooling marker retirement (2026-10-19, lead)
+
+The 23 `cli/_ambiguous` markers are retired: they record CLI, packaging and
+tooling behavior that is not observable from a .cp3 program (the deferred list
+already classed them "not testable cases"). The behavior they describe is
+covered where it is testable: the `cli` corpus family (run/check/exit-code
+cases), the packaging acceptance scripts (install/TESTMODE/path handling,
+doctor, init), the intel formatting checks (`cp3 fmt` byte parity), and the C1
+lane's pack/install round trip. Post-beta-one CLI features (GitHub repo
+installs, registry-style specs, `build.cacheBinary`/`excludeSource`) stay
+explicitly deferred with named exit-3 errors per the M2 plan, not scaffold.
+
 ## Audit promotions, third batch (2026-10-19, lead)
 
 - D49 promotion: `stdlib/_ambiguous/console_log_array_format` is now the
