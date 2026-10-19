@@ -128,31 +128,9 @@ static CppInfo classifyClassValue(const Type& t) {
 
 // `T | null` / `T | undefined` / the `T?` shorthand / `T | null | undefined`
 // over a primitive `T` -> `std::optional<T>`, or the two-flavor `Maybe<T>`
-// when both nullish kinds are present (an implementation detail of
-// `classify`). Any other union has no M1 spelling.
-static void classifyNullishUnion(const Type& t, CppInfo& info) {
-    std::vector<Type> nonNullish;
-    for (const Type& part : t.parts) {
-        if (!part.isNullish()) {
-            nonNullish.push_back(part);
-        }
-    }
-    if (nonNullish.size() != 1) return;
-    const CppInfo inner = classify(nonNullish.front());
-    if (!inner.representable || !isPrimitiveShape(inner.shape)) return;
-    info.representable = true;
-    info.emptyKind = nullishKindOf(t);
-    if (info.emptyKind == NullishKind::Mixed) {
-        // `T | null | undefined` must keep the two nullish flavors apart
-        // (JS `null !== undefined`), which no `std::optional` can: use the
-        // flavored Maybe<T>.
-        info.shape = Shape::Maybe;
-        info.cpp = "cp3::runtime::Maybe<" + inner.cpp + ">";
-    } else {
-        info.shape = Shape::Optional;
-        info.cpp = "std::optional<" + inner.cpp + ">";
-    }
-}
+// when both nullish kinds are present. Also the single-member option over an
+// object value shape (`{...} | null` -> `std::optional<Struct>`). The
+// primitive-only union spellings live in support/value_shapes.cpp.
 
 Type promiseOf(const Type& value) {
     Type p(TypeKind::Class, "Promise");
@@ -208,8 +186,13 @@ CppInfo classify(const Type& raw) {
             return info;
         }
         case TypeKind::Union:
-            classifyNullishUnion(t, info);
+            classifyValueUnion(t, info);
+            if (!info.representable) classifyNullishUnion(t, info);
             return info;
+        case TypeKind::Object:
+            // A structural `$o{...}` shape: an all-primitive object becomes a
+            // generated value struct (support/value_shapes.cpp).
+            return classifyObjectValue(t);
         case TypeKind::Class:
             return classifyClassValue(t);
         case TypeKind::Function:

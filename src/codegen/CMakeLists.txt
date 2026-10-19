@@ -16,10 +16,14 @@ set(cp3_codegen_sources
     src/support/mangle.cpp
     src/support/cpp_writer.cpp
     src/support/type_map.cpp
+    src/support/value_shapes.cpp
+    src/support/helper_blocks.cpp
     src/support/int_mode.cpp
     src/support/int_reads.cpp
     src/emit/expr.cpp
     src/emit/equality.cpp
+    src/emit/objects.cpp
+    src/emit/assignment.cpp
     src/emit/call.cpp
     src/emit/async.cpp
     src/emit/stmt.cpp

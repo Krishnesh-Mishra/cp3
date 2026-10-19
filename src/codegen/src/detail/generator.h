@@ -14,9 +14,13 @@
 //   support/mangle.cpp     identifier/namespace mangling (free helpers)
 //   support/cpp_writer.cpp indentation buffer + low-level literal/string helpers
 //   support/type_map.cpp   cp3 type -> C++ type mapping + type resolution
+//   support/value_shapes.cpp  primitive unions + object value shapes
+//   support/helper_blocks.cpp the generated-code helper blocks (new families)
 //   support/int_mode.cpp   the guarded int64 fast path + `%` lowering
 //   support/int_reads.cpp  the read-only-inside-return analysis for int mode
 //   emit/expr.cpp          expression lowering (operators, literals, tsCall/cond)
+//   emit/objects.cpp       object value shapes: member reads + literal values
+//   emit/assignment.cpp    assignment lowering (compounds, bitwise, logical)
 //   emit/call.cpp          call lowering (dispatch only, D72)
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
@@ -49,6 +53,25 @@
 #include "detail/type_map.h"
 
 namespace cp3 {
+
+// The int64 fast-path state (D64): non-null exactly while a function's fast
+// body is being attempted. `failed` means the attempt cannot be proven exact
+// and must be discarded, in which case the ordinary double body is the only
+// lowering.
+struct IntMode {
+    bool failed = false;
+    // Names read somewhere outside a `return` argument (int_reads.cpp);
+    // `nullopt` when that walk could not see the whole body. A name absent
+    // here is read only by `return`, so its bound check can be deferred from
+    // the operation to that single observation point.
+    std::optional<std::unordered_set<std::string>> readOutsideReturns;
+    // Locals whose bound check is currently deferred: their value may sit
+    // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
+    std::unordered_set<std::string> deferred;
+    // Set while emitting a statement's own expression: the one position where
+    // an assignment's value is discarded, so a raw store is allowed.
+    bool stmtExpr = false;
+};
 
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
@@ -120,6 +143,12 @@ private:
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
                              const detail::CppInfo& R, const std::string& lhs,
                              const std::string& rhs);
+    // The Shape::Union half of `==`/`===` (emit/equality.cpp); it reports its
+    // own `notImplemented` cases and answers with a constant instead.
+    std::string unionEqualityText(const BinaryExpr& b, const detail::CppInfo& L,
+                                  const detail::CppInfo& R,
+                                  const std::string& lhs,
+                                  const std::string& rhs);
     std::string emitLogical(const LogicalExpr& l);
     std::string emitNullish(const LogicalExpr& l);
     std::string emitUnary(const UnaryExpr& u);
@@ -206,6 +235,10 @@ private:
                                  const Type& elemOverride);
     std::string declaratorInitText(const VariableDeclarator& d,
                                    const Type& declared);
+
+    // --- object value shapes (emit/objects.cpp) -------------------------------
+    // `o.a` / `o?.a` over a value-shape receiver, or an object literal value.
+    std::string emitObject(const Expr& e);
 
     // --- std/collections (src/std/collections/codegen.cpp) --------------------
     // `new Map<K, V>()` / `new Set<T>()`, the member calls (`set`/`get`/`has`/
@@ -380,24 +413,6 @@ private:
     void emitMain(std::string& out, const std::string& mainBody) const;
 
     // --- state ----------------------------------------------------------------
-    // The int64 fast-path state (D64): non-null exactly while a function's fast
-    // body is being attempted. `failed` means the attempt cannot be proven
-    // exact and must be discarded, in which case the ordinary double body is
-    // the only lowering.
-    struct IntMode {
-        bool failed = false;
-        // Names read somewhere outside a `return` argument (int_reads.cpp);
-        // `nullopt` when that walk could not see the whole body. A name absent
-        // here is read only by `return`, so its bound check can be deferred
-        // from the operation to that single observation point.
-        std::optional<std::unordered_set<std::string>> readOutsideReturns;
-        // Locals whose bound check is currently deferred: their value may sit
-        // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
-        std::unordered_set<std::string> deferred;
-        // Set while emitting a statement's own expression: the one position
-        // where an assignment's value is discarded, so a raw store is allowed.
-        bool stmtExpr = false;
-    };
     std::unique_ptr<IntMode> intMode_;
 
     DiagnosticSink& sink_;
@@ -436,6 +451,9 @@ private:
     bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
     bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
     bool needsEventEmitter_ = false;  // EventEmitter/Listener -> cp3/async/emitter.hpp
+    bool needsBitwise_ = false;    // bitwise/shift ops -> cp3/core/bitwise.hpp
+    bool needsUnion_ = false;      // primitive unions -> cp3/core/union.hpp
+    bool needsObject_ = false;     // object value shapes -> the object helper block
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)
