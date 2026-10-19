@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// `s.split(r)` (D48's string-side regex lowering): the substrings between
+// matches, with participating capture groups inserted; an empty match advances
+// one byte; a no-match subject yields the subject itself.
+const sep = /(\d)/;
+console.log("a1b2c".split(sep).join("|"));
+console.log("a,,b".split(/,/).join("|"));
+console.log("abc".split(/x/).join("|"));
+console.log("ab".split(/(?:)/).join("|"));

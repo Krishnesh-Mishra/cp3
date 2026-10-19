@@ -4,7 +4,8 @@
 // OWNERSHIP: runtime module. This header is part of the generated-code ABI.
 //
 // DECISIONS D48: `/pattern/flags` is core language; the documented surface is
-// `.test(s)`, `.match(s)`, `.exec(s)` plus the `.source` / `.flags` reads.
+// `.test(s)`, `.match(s)`, `.exec(s)` plus the `.source` / `.flags` reads, and
+// the string-side `s.split(r)` lowering (`Regex::split`).
 // The engine is PCRE2 (docs/cli-tooling/03 - chosen for JS feature parity:
 // lookarounds, backreferences; not std::regex, not RE2), vendored as a pinned
 // static archive (third_party/pcre2, MANIFEST "Verified consumer flags"). The
@@ -71,6 +72,14 @@ public:
     bool test(const std::string& subject) const;
     Array<std::string> match(const std::string& subject) const;
     Array<std::string> exec(const std::string& subject) const;
+
+    // `s.split(r)`, the string-side lowering of a regex separator (the
+    // day-2 docs example and the stdlib/string_split_regex corpus case): the
+    // substrings between matches, with every participating capture group
+    // inserted (a group that did not participate is "", the M1 spelling of
+    // undefined). A subject with no match yields [subject]; an empty match
+    // advances one byte; the g/y state is neither read nor written.
+    Array<std::string> split(const std::string& subject) const;
 
     // `.source` / `.flags`: the literal text as written and its canonical
     // flag order. Both are `""` on a default-constructed value.

@@ -282,9 +282,14 @@ Type Analyzer::stringMember(const std::string& prop) {
         return Type::function({Type::string(), Type::string()}, Type::string());
     }
     if (prop == "split") {
-        // `s.split(sep)`: the separator is required here and the result is a
-        // regular `string[]` (docs/language-spec/09-arrays-strings.md).
-        return Type::function({Type::string()}, Type::array(Type::string()));
+        // `s.split(sep)`: the separator is required and may be a string or a
+        // regex (the day-2 docs example and the stdlib/string_split_regex
+        // corpus case); the result is a regular `string[]`
+        // (docs/language-spec/09-arrays-strings.md).
+        return Type::function(
+            {Type::unionOf(
+                {Type::string(), Type::named(TypeKind::Class, "RegExp")})},
+            Type::array(Type::string()));
     }
     return ambient();
 }

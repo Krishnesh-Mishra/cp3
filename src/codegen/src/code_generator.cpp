@@ -278,41 +278,9 @@ GeneratedModule Generator::run(const Program& program) {
             objectDeclsFor(jsonShapeDecls_ + decls + defs + mainBody) +
             jsonShapeDecls_ + decls;
 
-    // The family include (D69) is needed wherever a generated spelling appears.
-    const std::string familyUse = decls + defs + mainBody;
-    if (familyUse.find("::cp3::runtime::Array") != std::string::npos ||
-        familyUse.find("::cp3::runtime::TypedArray") != std::string::npos ||
-        familyUse.find("::cp3::runtime::SharedArrayBuffer") !=
-            std::string::npos ||
-        familyUse.find("::cp3::runtime::DataView") != std::string::npos ||
-        familyUse.find("std::variant<") != std::string::npos) {  // union slot (docs 09)
-        needsTypedArray_ = true;
-    }
-    if (familyUse.find("::cp3::runtime::collections::") != std::string::npos) {
-        needsCollections_ = true;
-    }
-    // The nominal std/buffer `Buffer` follows the same rule.
-    if (familyUse.find("::cp3::runtime::buffer::Buffer") != std::string::npos) {
-        needsBuffer_ = true;
-    }
-    // The builtin EventEmitter (D74): a module-scope binding or a signature can
-    // name `Ref<EventEmitter>`/`Listener` without the emitter having been
-    // lowered in this unit's own statements.
-    if (familyUse.find("::cp3::runtime::EventEmitter") != std::string::npos ||
-        familyUse.find("::cp3::runtime::Listener") != std::string::npos) {
-        needsEventEmitter_ = true;
-    }
-    // The operator wave's spellings: bitwise/shift helpers and the unions.
-    if (familyUse.find("::cp3::runtime::bitwise::") != std::string::npos) needsBitwise_ = true;
-    if (familyUse.find("std::variant<") != std::string::npos) needsUnion_ = true;
-    if (familyUse.find("::cp3::runtime::unions::") != std::string::npos) needsUnion_ = true;
-    if (familyUse.find("cp3_obj_") != std::string::npos) needsObject_ = true;
-    // The core regex value (D48): the same rule - a parameter or exported
-    // binding can name the C++ spelling without a literal having been lowered
-    // in this unit's own statements.
-    if (familyUse.find("::cp3::runtime::regex::Regex") != std::string::npos) {
-        needsRegex_ = true;
-    }
+    // The family include (D69) follows the emitted spellings
+    // (support/usage_includes.cpp).
+    applyUsageIncludes(decls + defs + mainBody);
 
     GeneratedModule module;
     module.header = buildHeader(decls);

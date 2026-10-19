@@ -22,6 +22,7 @@ set(cp3_codegen_sources
     src/support/helper_blocks.cpp
     src/support/int_mode.cpp
     src/support/int_reads.cpp
+    src/support/usage_includes.cpp
     src/emit/expr.cpp
     src/emit/equality.cpp
     src/emit/objects.cpp

@@ -64,29 +64,21 @@ struct Engine {
 
 namespace {
 
-// One match attempt's outcome: the groups ([$0, $1, ...]) and the byte offset
-// just past the whole match.
+// One match attempt's outcome: the groups ([$0, $1, ...]) and the byte offsets
+// of the whole match.
 struct MatchResult {
     bool matched = false;
     std::vector<std::string> values;
+    std::size_t begin = 0;
     std::size_t end = 0;
 };
 
-// One match attempt. Honors the g/y state exactly like
-// `RegExp.prototype.exec`: a stateful regex starts at `lastIndex`, advances it
-// to the end of the match on success, and resets it to 0 on failure. A plain
-// regex always starts at 0 and leaves the state untouched.
-//
-// The engine is mutable state shared through a `shared_ptr`: a `const Regex`
-// still advances it, exactly like `const Ref<T>` elsewhere in the runtime ABI.
-MatchResult attempt(Engine& engine, const std::string& subject) {
+// One match attempt at an explicit byte offset, with no g/y state involved
+// (`Regex::split` scans through this).
+MatchResult attemptFrom(Engine& engine, const std::string& subject,
+                        std::size_t start) {
     MatchResult result;
-    const bool stateful = engine.global || engine.sticky;
-    const std::size_t start = stateful ? engine.lastIndex : 0;
-    if (start > subject.size()) {
-        if (stateful) engine.lastIndex = 0;
-        return result;
-    }
+    if (start > subject.size()) return result;
     pcre2_match_data* data =
         pcre2_match_data_create_from_pattern(engine.code, nullptr);
     const int rc = pcre2_match(
@@ -96,7 +88,6 @@ MatchResult attempt(Engine& engine, const std::string& subject) {
     if (rc < 0) {
         // PCRE2_ERROR_NOMATCH (or a bad subject offset): JS "no match".
         pcre2_match_data_free(data);
-        if (stateful) engine.lastIndex = 0;
         return result;
     }
     // match_data_create_from_pattern sizes the ovector for every capture group,
@@ -114,9 +105,24 @@ MatchResult attempt(Engine& engine, const std::string& subject) {
             result.values.push_back(subject.substr(begin, finish - begin));
         }
     }
+    result.begin = static_cast<std::size_t>(ovector[0]);
     result.end = static_cast<std::size_t>(ovector[1]);
     pcre2_match_data_free(data);
-    if (stateful) engine.lastIndex = result.end;
+    return result;
+}
+
+// One match attempt through the public g/y state. Honors it exactly like
+// `RegExp.prototype.exec`: a stateful regex starts at `lastIndex`, advances it
+// to the end of the match on success, and resets it to 0 on failure. A plain
+// regex always starts at 0 and leaves the state untouched.
+//
+// The engine is mutable state shared through a `shared_ptr`: a `const Regex`
+// still advances it, exactly like `const Ref<T>` elsewhere in the runtime ABI.
+MatchResult attempt(Engine& engine, const std::string& subject) {
+    const bool stateful = engine.global || engine.sticky;
+    const std::size_t start = stateful ? engine.lastIndex : 0;
+    const MatchResult result = attemptFrom(engine, subject, start);
+    if (stateful) engine.lastIndex = result.matched ? result.end : 0;
     return result;
 }
 
@@ -208,6 +214,60 @@ Array<std::string> Regex::match(const std::string& subject) const {
         engine_->lastIndex = start + 1;
     }
     engine_->lastIndex = 0;
+    return makeArray<std::string>(std::move(out));
+}
+
+// `s.split(r)`: the spec's separator algorithm, run as a fresh left-to-right
+// scan (g/y state untouched). `piece` is the start of the substring not yet
+// emitted; an empty match at that exact byte advances one byte with nothing
+// emitted (the spec's AdvanceStringIndex), which is what makes "ab".split(/(?:)/)
+// ["a", "b"] and not ["", "a", "b"].
+Array<std::string> Regex::split(const std::string& subject) const {
+    std::vector<std::string> out;
+    if (engine_ == nullptr) {
+        out.push_back(subject);
+        return makeArray<std::string>(std::move(out));
+    }
+    // The spec's empty-subject early return: "" splits to [] when the pattern
+    // matches at 0, and to [""] when it does not.
+    if (subject.empty()) {
+        if (!attemptFrom(*engine_, subject, 0).matched) {
+            out.push_back(std::string());
+        }
+        return makeArray<std::string>(std::move(out));
+    }
+    std::size_t piece = 0;
+    std::size_t pos = 0;
+    while (pos < subject.size()) {
+        const MatchResult found = attemptFrom(*engine_, subject, pos);
+        if (!found.matched) {
+            // An unanchored search exhausts every later position, so a
+            // non-sticky pattern is done; a sticky one (PCRE2_ANCHORED) still
+            // has to try the next byte, exactly like the spec's per-position
+            // sticky clone.
+            if (engine_->sticky) {
+                ++pos;
+                continue;
+            }
+            break;
+        }
+        if (found.end == piece) {
+            // The spec's AdvanceStringIndex: a match that would emit an empty
+            // piece at the pending offset advances instead (this is what keeps
+            // "ab".split(/(?:)/) ["a", "b"]).
+            ++pos;
+            continue;
+        }
+        out.push_back(subject.substr(piece, found.begin - piece));
+        // JS inserts every capture group into the result; a group that did not
+        // participate is "" here (the M1 spelling of undefined).
+        for (std::size_t group = 1; group < found.values.size(); ++group) {
+            out.push_back(found.values[group]);
+        }
+        piece = found.end;
+        pos = found.end;
+    }
+    out.push_back(subject.substr(piece));
     return makeArray<std::string>(std::move(out));
 }
 

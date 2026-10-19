@@ -202,8 +202,10 @@ work), `find`/`indexOf` not-found results, `reduce` without an initial accumulat
   `String(x)` is a core builtin (no import).
 - **D47.** `Buffer` accepts only `utf8` (default), `base64`, `hex`; any other
   encoding is a **compile-time** error.
-- **D48.** Regex literals support `.test` / `.match` / `.exec` (core, no import);
-  `array.slice` exists (array/string parity).
+- **D48.** Regex literals support `.test` / `.match` / `.exec` (core, no import)
+  plus `String.prototype.split(RegExp)` through the same engine (the day-2 docs
+  example and the `stdlib/string_split_regex` corpus case); `array.slice` exists
+  (array/string parity).
 - **D49.** `console.log` renders arrays as `[1, 2, 3]` and plain objects as
   `{ a: 1 }` - `, ` between elements, `: ` after keys, property/insertion order.
 
@@ -366,6 +368,27 @@ real pass/fail. Anything in the AST beyond that must produce a clean
   also wipes `.cp3/packages/`). Supersedes `cache.cpp`'s current
   exe-in-`build/` behavior; fix queued behind the async wave because
   `src/cli` is single-writer until then.
+  **Addendum (2026-10-19, regex landing).** Change detection is now
+  coherence-complete in both directions. (a) Per-entry header stamps: each
+  manifest entry records the include-tree fingerprint it was built under
+  (`headerFingerprintOf`: every file under the include roots, hashed in sorted
+  order) besides profile + content hash, so an include-tree change retires
+  every object on its next build - no translation unit is tracked back to the
+  headers it includes, so the fingerprint over-approximates deliberately.
+  (b) Executable **link stamps**: `.cp3/build/<exe>.link-stamp` records the
+  identity of the object set (paths + content hashes), the profile, the header
+  fingerprint and the native link flags; the link step reruns whenever the
+  stamp differs, so a runtime object rebuilt in an earlier program's pass
+  relinks every executable that contains it instead of leaving a stale binary.
+  Manifest format is `cp3c-manifest-v2` (pre-v2 manifests recompile once).
+  Motivated by the stale-artifact hazards recorded in
+  WAVE-M2-OPERATORS-REPORT section 4 and WAVE-STD-R3-NETWORK-REPORT ("Cold
+  artifact crash root cause"), both of which needed manual `.cp3` deletes; the
+  regex landing hit the relink direction during `Regex::split` verification
+  (a green runtime object next to an executable still linked against the
+  previous one). Worked example: a comment-only edit to
+  `cp3/core/regex.hpp` recompiles all 22 objects and relinks all 13
+  executables of that family, with no manual deletes.
 - **D62.** Wave-4 JS-parity rulings (spec §14/§20 pin libuv/Node as the model
   but are silent on specifics; evidence: `build/scratch/async/WAVE4-REPORT.md`
   §9 - these bind future async/timer work):

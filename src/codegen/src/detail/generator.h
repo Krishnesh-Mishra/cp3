@@ -445,6 +445,13 @@ private:
     // An operand of a raw `+`/`-`: a deferred read stays unchecked.
     std::string intRawOperand(const Expr& e);
 
+    // --- usage-based include flags (support/usage_includes.cpp) --------------
+    // The emitted text decides which family includes and helper blocks the
+    // generated unit carries (D69): the typed-array family, collections,
+    // buffer, the builtin EventEmitter (D74), the operator spellings and the
+    // D48 core regex value.
+    void applyUsageIncludes(const std::string& familyUse);
+
     // --- assembly (code_generator.cpp) ---------------------------------------
     std::string buildHeader(const std::string& decls) const;
     std::string buildSource(const std::string& decls, const std::string& defs,

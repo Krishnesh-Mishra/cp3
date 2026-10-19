@@ -75,11 +75,19 @@ std::string Generator::emitStringMethodCall(const CallExpr& c, const MemberExpr&
     }
     const char* fn = stringRuntimeFn(m.property);
     if (!fn && m.property == "split") {
-        // `s.split(sep)` -> a regular `string[]` (the array extras';
-        // `makeArray` wraps the pieces; src/std/arrays/codegen_methods.cpp
-        // lowers the methods the result feeds into).
+        // `s.split(sep)`: a string separator splits through the string runtime
+        // (the array extras' `makeArray` wraps the pieces;
+        // src/std/arrays/codegen_methods.cpp lowers the methods it feeds into);
+        // a RegExp separator lowers onto the D48 engine's JS scan
+        // (cp3/core/regex.hpp, Regex::split).
         if (c.arguments.size() != 1 || !c.arguments.front()) {
             return std::string();
+        }
+        const Type sep = effectiveType(*c.arguments.front());
+        if (sep.kind == TypeKind::Class && sep.name == "RegExp") {
+            needsRegex_ = true;
+            return "(" + expr(*c.arguments.front()) + ").split(" +
+                   expr(*m.object) + ")";
         }
         needsString_ = true;
         needsTypedArray_ = true;
