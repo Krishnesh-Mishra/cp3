@@ -8,7 +8,7 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 88** across 15 categories.
+**Total markers: 81** across 15 categories.
 
 | Category | Markers |
 | --- | ---: |
@@ -25,9 +25,9 @@ python tests/runner/run_tests.py --write-registry
 | `memory-weak` | 6 |
 | `modules` | 3 |
 | `operators` | 6 |
-| `stdlib` | 11 |
+| `stdlib` | 4 |
 | `types` | 4 |
-| **Total** | **88** |
+| **Total** | **81** |
 
 ## `arrays-strings`
 
@@ -173,15 +173,8 @@ python tests/runner/run_tests.py --write-registry
 | --- | --- |
 | `stdlib/_ambiguous/array_slice_exists.expect.json` | array.slice is not in the explicit array-method list in §09 (only string slice/substring are listed). |
 | `stdlib/_ambiguous/binarysearch_return_value.expect.json` | the return value of `binarySearch(target)` (index vs boolean vs -1) is not specified. |
-| `stdlib/_ambiguous/console_log_array_format.expect.json` | the exact printed representation of an array or object passed to console.log is not pinned. |
-| `stdlib/_ambiguous/env_get_named_arg_syntax.expect.json` | does `env.get` take an options object `{ default: T }` (per the signature) or named-argument syntax `default: T` (per the example)? |
-| `stdlib/_ambiguous/fetch_non_2xx_no_throw.expect.json` | fetch not throwing on 4xx/5xx is pinned, but observing it needs a live server plus a network round trip the single-file harness cannot pin deterministically. |
-| `stdlib/_ambiguous/fs_readdir_order.expect.json` | the ordering of readdirSync results is not specified. |
 | `stdlib/_ambiguous/json_parse_untyped_typeof_narrow.expect.json` | whether `typeof` narrowing works directly on the `unknown` result of untyped JSON.parse is not shown. |
-| `stdlib/_ambiguous/json_stringify_indent_format.expect.json` | the exact whitespace/indentation produced by `JSON.stringify(value, indent)` is not pinned. |
-| `stdlib/_ambiguous/math_round_negative_half.expect.json` | Math is "Node/JS-style" but JS rounds -2.5 to -2 while C++ round() gives -3; the negative-half case is not pinned. |
 | `stdlib/_ambiguous/regex_test_method.expect.json` | regex literals are a core feature, but which RegExp methods (.test/.match/.exec) exist is not specified. |
-| `stdlib/_ambiguous/string_conversion_global.expect.json` | the cheat sheet shows `String(x)`, but it is not listed among the core-language builtins in §03/§20. |
 
 ## `types`
 

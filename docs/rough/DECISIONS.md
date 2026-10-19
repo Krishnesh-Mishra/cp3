@@ -823,3 +823,31 @@ follow the standing JS-parity design goal (see D78).
   AUDIT-FOLLOWUPS.md): `finally_return_overrides`,
   `compare_member_to_number`, `numeric_value_via_index`,
   `async_arrow_function` (B16).
+
+## Audit promotions, third batch (2026-10-19, lead)
+
+- D49 promotion: `stdlib/_ambiguous/console_log_array_format` is now the
+  graded run case `tests/cases/stdlib/console_log_array_format.cp3`
+  (`console.log([1, 2, 3])` prints `[1, 2, 3]`).
+- JS parity (D78-style): `json_stringify_indent_format` prints the two-space
+  indented form (`{` newline two spaces `"a": 1` newline `}`); promotes as a
+  graded run case.
+- JS parity: `Math.round(-2.5)` is `-2` (JavaScript rounds half toward
+  +Infinity; C++ `std::round` rounds away from zero - the JS answer wins);
+  promotes to `tests/cases/stdlib/math_round_negative_half.cp3`.
+- JS parity: the global `String(x)` conversion is present (`String(5)` prints
+  `5`); promotes to `tests/cases/stdlib/string_conversion_global.cp3`.
+- `env.get` argument spelling (on the deferred list): the options object
+  `{ default: T }` is the surface (already pinned by `env_get_default.cp3`);
+  the named-argument spelling is a syntax error (CP3201), pinned by the new
+  graded check case `tests/cases/stdlib/env_get_named_arg_syntax.cp3`.
+- Retired markers: `fetch_non_2xx_no_throw` (pinned by the live-server corpus
+  case `network_fetch_404.cp3`; a real example.com round trip cannot be a cold
+  corpus case) and `fs_readdir_order` (the deferred list; ordering is
+  OS-dependent by design and corpus tests must sort).
+- Still open: `array_slice_exists` and `binarysearch_return_value` (both
+  decided or documented surfaces but still CP3002 gaps - arrays/strings
+  effort), `json_parse_untyped_typeof_narrow` (waits for the runtime `unknown`
+  carrier; candidate after the types wave), and
+  `stdlib/_ambiguous/regex_test_method` (carried by the new regex wave, M2
+  wave 19, as a lead-authorized promotion).

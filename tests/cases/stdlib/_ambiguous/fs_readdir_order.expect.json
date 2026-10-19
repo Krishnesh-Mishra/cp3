@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the ordering of readdirSync results is not specified."
-  }
-}
