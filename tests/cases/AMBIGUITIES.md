@@ -8,14 +8,13 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 81** across 15 categories.
+**Total markers: 58** across 14 categories.
 
 | Category | Markers |
 | --- | ---: |
 | `arrays-strings` | 9 |
 | `async` | 1 |
 | `classes` | 4 |
-| `cli` | 23 |
 | `concurrency` | 6 |
 | `control-flow` | 6 |
 | `enums` | 2 |
@@ -27,7 +26,7 @@ python tests/runner/run_tests.py --write-registry
 | `operators` | 6 |
 | `stdlib` | 4 |
 | `types` | 4 |
-| **Total** | **81** |
+| **Total** | **58** |
 
 ## `arrays-strings`
 
@@ -57,34 +56,6 @@ python tests/runner/run_tests.py --write-registry
 | `classes/_ambiguous/multiple_inheritance.expect.json` | How is 'multiple class inheritance is not supported' surfaced - as a parser error on `extends A, B`, or a semantic error? (A, B, C order here is illustrative.) |
 | `classes/_ambiguous/static_via_instance.expect.json` | Is reading a static member through an instance (`c.x`) allowed, or must it be `C.x`? Spec maps statics to C++ but does not state the access rule. |
 | `classes/_ambiguous/super_call.expect.json` | Is a `super` keyword provided to call a parent method? The spec documents single `extends` but never mentions `super`. |
-
-## `cli`
-
-| case file | question |
-| --- | --- |
-| `cli/_ambiguous/build_debug_flag.expect.json` | the --debug build profile is a toolchain flag with no .cp3-observable semantics. |
-| `cli/_ambiguous/build_release_flag.expect.json` | the --release build profile (whole-program LTO) has no observable effect inside a .cp3 program. |
-| `cli/_ambiguous/clean_all_wipes_packages.expect.json` | cp3 clean --all deleting .cp3/packages/ cannot be expressed as a .cp3 case. |
-| `cli/_ambiguous/clean_wipes_build.expect.json` | cp3 clean deleting .cp3/build/ cannot be expressed as a .cp3 case. |
-| `cli/_ambiguous/dev_watch_mode.expect.json` | cp3 dev's watch/rebuild behavior is not expressible as a .cp3 case. |
-| `cli/_ambiguous/dot_cp3_layout.expect.json` | the generated .cp3/ directory layout is a project-tooling artifact, not observable from a .cp3 program. |
-| `cli/_ambiguous/exec_package_bin.expect.json` | cp3 exec resolving and running a package's bin tool is not expressible as a .cp3 case. |
-| `cli/_ambiguous/fmt_formatter.expect.json` | cp3 fmt's output and the package.json "format" overrides are not expressible as a .cp3 case. |
-| `cli/_ambiguous/init_generates_layout.expect.json` | the generated project layout from cp3 init is not observable through `cp3c run/check <file>`. |
-| `cli/_ambiguous/init_prompts.expect.json` | cp3 init's four interactive prompts and generated files cannot be expressed as a single .cp3 case. |
-| `cli/_ambiguous/install_auto_flag.expect.json` | the --auto compatibility-selection behavior is not expressible as a .cp3 case. |
-| `cli/_ambiguous/install_dependencies.expect.json` | cp3 install's network/registry behavior is not expressible as a .cp3 case. |
-| `cli/_ambiguous/install_github_url.expect.json` | installing from a GitHub release URL (single/multiple/none .cp3pak assets) is not expressible as a .cp3 case. |
-| `cli/_ambiguous/lifecycle_postbuild_hook.expect.json` | npm-style pre*/post* lifecycle hooks run around CLI commands, not inside a .cp3 program. |
-| `cli/_ambiguous/lifecycle_prebuild_hook.expect.json` | npm-style pre*/post* lifecycle hooks run around CLI commands, not inside a .cp3 program. |
-| `cli/_ambiguous/max_memory_flag.expect.json` | the --max-memory codegen cap is a CLI flag with no .cp3-observable semantics. |
-| `cli/_ambiguous/recompile_cp3pak.expect.json` | recompiling an existing .cp3pak is a tooling operation, not a .cp3 case. |
-| `cli/_ambiguous/run_vs_check.expect.json` | the distinction between `cp3 run` and `cp3 check` is a CLI-invocation property, not a property of a .cp3 program. |
-| `cli/_ambiguous/spinner_rule.expect.json` | the spinner rule is a CLI UX property with no .cp3-observable semantics. |
-| `cli/_ambiguous/static_link_single_binary.expect.json` | the static-link output shape is a build-artifact property, not a .cp3 case. |
-| `cli/_ambiguous/toolchain_fallback.expect.json` | toolchain selection/fallback and multi-toolchain error grouping are CLI behaviors, not .cp3 cases. |
-| `cli/_ambiguous/type_package_build.expect.json` | producing a .cp3pak from a package project is an artifact/tooling behavior, not a .cp3 case. |
-| `cli/_ambiguous/version_flag.expect.json` | the version command's output is a CLI property, not a .cp3 case. |
 
 ## `concurrency`
 

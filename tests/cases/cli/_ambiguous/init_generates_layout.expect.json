@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the generated project layout from cp3 init is not observable through `cp3c run/check <file>`."
-  }
-}

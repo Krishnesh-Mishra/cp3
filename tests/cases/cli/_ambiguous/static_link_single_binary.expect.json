@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the static-link output shape is a build-artifact property, not a .cp3 case."
-  }
-}

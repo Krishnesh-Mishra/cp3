@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the distinction between `cp3 run` and `cp3 check` is a CLI-invocation property, not a property of a .cp3 program."
-  }
-}

@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: recompiling an existing .cp3pak is a tooling operation, not a .cp3 case."
-  }
-}

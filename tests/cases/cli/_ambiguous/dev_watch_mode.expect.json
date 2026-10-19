@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: cp3 dev's watch/rebuild behavior is not expressible as a .cp3 case."
-  }
-}
