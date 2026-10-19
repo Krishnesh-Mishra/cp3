@@ -898,3 +898,67 @@ operators is the first family with zero ambiguous markers. Still open with
 owners in AUDIT-FOLLOWUPS.md: `numeric_value_via_index` (still a raw C++
 compile error), `finally_return_overrides`, `async_arrow_function`, plus the
 arrays/network gaps listed in the third batch.
+
+## D79 - `std/network` server scale mode: `createServer({ threads })` (user directive, 2026-10-19)
+
+The single-loop server stays the default, byte-for-byte: `createServer()` with
+no options behaves exactly as shipped and as net-suite pins it. Scaling a
+server across cores is an explicit, opt-in option on the construction call:
+
+```cp3
+const app = createServer({ threads: os.cpus() });
+```
+
+Surface: `createServer(options?: { threads?: number }): HttpServer`; the
+existing no-arg call is unchanged.
+
+- `threads: n` starts `n` event loops, one per OS thread, each running its own
+  uWS app instance. `threads` must be an integer >= 1; `1` and the absent
+  option are today's single-loop server exactly.
+- A connection is pinned for its whole lifetime to the loop that accepted it
+  (WebSocket upgrades included), so handlers and per-connection state stay
+  single-threaded and no user-facing synchronization appears.
+- Module-level state is per-loop, the same isolation `worker` already has: `n`
+  threads means `n` copies of every module-level binding. Cross-loop state
+  goes through `worker` message passing, never through shared memory.
+- Platforms: POSIX binds one `SO_REUSEPORT` socket per loop and lets the
+  kernel distribute accepts. Windows has no `SO_REUSEPORT`, so the
+  shared-listener path creates one listening socket and hands accepted
+  connections to the loops (`WSADuplicateSocket`); the measured bench rows run
+  on Windows, so this path is mandatory, not a stub.
+- Non-goals: not CPU data parallelism (`parallel.*` owns that), no atomics,
+  locks or shared closures exposed (§13; binding-level atomics remain rejected,
+  as re-affirmed today on user review), and `WebSocketServer` broadcast stays
+  per-loop with cross-loop fan-out as a documented `worker`-channel pattern.
+
+Considered and rejected: `n` threads sharing one app with locks around handler
+dispatch (reverses the no-locks guarantee and serializes exactly the work the
+option exists to parallelize), and a thread pool inside the existing loop (uWS
+is single-threaded by design; the loop is the unit of scaling).
+
+Acceptance for the queued wave (full text in M2-PLAN): net-suite cases stay
+byte-identical with `threads` absent; per-loop accept and module-state
+isolation probes with `threads = os.cpus()`; `ws-echo` and `json-api` bench
+rows at `threads=1`, `threads=N` and the Go comparator under the D60/D65
+conventions.
+
+## Audit promotions, fifth batch: arrays-strings (2026-10-19, lead)
+
+Ruled from canonical probes on the landed arrays-strings surface; docs are
+silent or already ruling, so the standing JS-parity goal (D78) applies.
+
+- `array_mixed_infer`: a mixed-type array literal without an annotation is
+  CP3401 at 2:1, `type mismatch: array literal mixes incompatible element
+  types (annotate the array with a union type)` (docs 09 lines 16-31).
+- `array_print_format`: `console.log([1, 2, 3])` prints `[1, 2, 3]` (D49).
+- `binarysearch_unsorted`: `a.binarySearch(t)` on an unsorted array panics
+  with a RangeError, exit 1 (docs 09 line 49: debug sorted-check).
+- `find_not_found` / `indexof_not_found`: not-found reads are JS-shaped
+  (`undefined` / `-1`).
+- `slice_negative` / `substring_swap`: `"hello".slice(-2)` is `lo`;
+  `"hello".substring(3, 1)` swaps to `el` (JS argument normalization).
+
+Seven markers promoted out of `_ambiguous` (registry 51 to 44). Keepers:
+`forin_map_order` (D44: `Map` iteration order is a collections bug) and
+`str_index_type` (string index reads: check typed it `number`, run was
+CP3002; the byte-read lowering is in the follow-up fix below).

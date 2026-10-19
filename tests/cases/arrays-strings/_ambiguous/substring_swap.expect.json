@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: `substring(a, b)` when a > b (JS swaps the arguments; std::substr does not)"
-  }
-}

@@ -695,6 +695,35 @@ that auto-fills like any pending entry.
 Scheduling: queued behind the perf wave and wave 2 (classes); mid-size wave
 (parser + sema + codegen + cli). Move up on request.
 
+## Network scale mode wave (queued - D79)
+
+`std/network` gains the opt-in multi-loop server: `createServer({ threads })`
+starts `n` event loops, one per OS thread, each with its own uWS app and
+per-loop module state; connections stay pinned to their accepting loop; POSIX
+distributes accepts via `SO_REUSEPORT`, Windows uses one shared listening
+socket with `WSADuplicateSocket` handoff. Full semantics and the rejected
+alternatives: **D79** in DECISIONS.md.
+
+Scope: `src/std/network/runtime_server.cpp` + `runtime_loop.hpp` + the
+codegen/service surface for the options object. The single-loop path is
+untouched by construction; the net-suite corpus pins it.
+
+Scheduling: queued behind the active wave queue (functions-closures,
+concurrency, regex and the classes/modules/types/control-flow/generics
+landings), because the cross-loop state story references the `worker`
+semantics the concurrency wave owns; start after the concurrency wave lands.
+Small wave (one runtime family + codegen surface + docs).
+
+Acceptance:
+1. Net-suite and the full corpus stay 0 failed; `threads` absent is
+   byte-identical to today's single-loop server.
+2. Probes: per-loop accept distribution with `threads = os.cpus()` under load
+   (POSIX `SO_REUSEPORT` kernel path, Windows shared-listener path), per-loop
+   module-state isolation, and a WebSocket echo through the scaled loops.
+3. Bench rows: `ws-echo` and `json-api` at `threads=1` vs `threads=N` vs the
+   Go comparator, recorded under the D60/D65 conventions.
+4. Canonical rebuild + lint 0 errors; landing record per the standard flow.
+
 ## Corpus weight at M2 open (runnable = 843)
 
 stdlib 190 (16 passed, 173 skipped) · types 86 (66) · arrays-strings 82 (13) ·

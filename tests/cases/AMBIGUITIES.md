@@ -8,11 +8,11 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 51** across 13 categories.
+**Total markers: 44** across 13 categories.
 
 | Category | Markers |
 | --- | ---: |
-| `arrays-strings` | 9 |
+| `arrays-strings` | 2 |
 | `async` | 1 |
 | `classes` | 4 |
 | `concurrency` | 6 |
@@ -25,21 +25,14 @@ python tests/runner/run_tests.py --write-registry
 | `modules` | 3 |
 | `stdlib` | 4 |
 | `types` | 4 |
-| **Total** | **51** |
+| **Total** | **44** |
 
 ## `arrays-strings`
 
 | case file | question |
 | --- | --- |
-| `arrays-strings/_ambiguous/array_mixed_infer.expect.json` | inferring an element type for an unannotated mixed array literal `[1, "two"]` |
-| `arrays-strings/_ambiguous/array_print_format.expect.json` | `console.log` rendering of a whole array/object value (fmt representation) |
-| `arrays-strings/_ambiguous/binarysearch_unsorted.expect.json` | `binarySearch` on an unsorted array: debug panic vs silently wrong result |
-| `arrays-strings/_ambiguous/find_not_found.expect.json` | `find` return value when nothing matches (undefined vs other) |
 | `arrays-strings/_ambiguous/forin_map_order.expect.json` | `for...in` over a `Map`: iteration order is unspecified (unordered_map) |
-| `arrays-strings/_ambiguous/indexof_not_found.expect.json` | `indexOf` return value when the element is not found (-1 vs other) |
-| `arrays-strings/_ambiguous/slice_negative.expect.json` | negative index arguments to `slice` (JS wraps from the end; std::substr does not) |
 | `arrays-strings/_ambiguous/str_index_type.expect.json` | typed and printed form of `str[i]` (raw byte): native byte type vs number vs 1-char string |
-| `arrays-strings/_ambiguous/substring_swap.expect.json` | `substring(a, b)` when a > b (JS swaps the arguments; std::substr does not) |
 
 ## `async`
 

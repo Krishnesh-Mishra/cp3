@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: `indexOf` return value when the element is not found (-1 vs other)"
-  }
-}

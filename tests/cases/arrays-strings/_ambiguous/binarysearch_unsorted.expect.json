@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: `binarySearch` on an unsorted array: debug panic vs silently wrong result"
-  }
-}
