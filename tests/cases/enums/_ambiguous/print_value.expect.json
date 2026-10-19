@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: whether/how an enum value is Printable and what console.log renders for it"
-  }
-}

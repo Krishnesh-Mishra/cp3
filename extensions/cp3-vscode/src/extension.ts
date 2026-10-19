@@ -18,6 +18,15 @@
 // is already gone. This module keeps one `StartAttempt` record per start,
 // funnels every channel through it, dedupes the user notifications, and routes
 // the library's raw error notifications into the output channel.
+//
+// The extension also contributes a debugger (`type: "cp3"`). It starts
+//
+//     <cp3.compilerPath> dap --stdio
+//
+// which builds the launch program with the Debug profile (codegen emits
+// `#line` mapping so gdb sees .cp3 lines), runs it under gdb from PATH, and
+// speaks DAP. gdb is deliberately not bundled: a missing gdb fails the launch
+// with a clear message.
 
 import * as vscode from "vscode";
 import {
@@ -40,6 +49,10 @@ const OUTPUT_CHANNEL_NAME = "cp3 Language Server";
 const COMPILER_PATH_SETTING = "cp3.compilerPath";
 const DEFAULT_COMPILER_PATH = "cp3c";
 const RESTART_COMMAND = "cp3.restartServer";
+const TASK_TYPE = "cp3";
+const TASK_SOURCE = "cp3";
+const PROBLEM_MATCHER = "$cp3c";
+const DEBUG_TYPE = "cp3";
 
 let outputChannel: vscode.LogOutputChannel | undefined;
 let client: LanguageClient | undefined;
@@ -150,6 +163,76 @@ function errorHandler(attempt: StartAttempt): ErrorHandler {
 
 function workspaceCwd(): string | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+interface Cp3TaskSpec {
+    readonly name: string;
+    readonly task: "build" | "run" | "check";
+    readonly group?: vscode.TaskGroup;
+}
+
+// The three compiler tasks contributed to `Tasks: Run Task`. Each runs
+// `<cp3.compilerPath> <task> ${file}` in the first workspace folder and pipes
+// the compiler's machine lines through the `$cp3c` problem matcher, so build,
+// run and check report into the Problems panel exactly like `cp3c check`.
+const CP3_TASKS: readonly Cp3TaskSpec[] = [
+    { name: "cp3: build", task: "build", group: vscode.TaskGroup.Build },
+    { name: "cp3: run", task: "run" },
+    { name: "cp3: check", task: "check", group: vscode.TaskGroup.Test },
+];
+
+function taskCompilerCommand(): string {
+    const setting = vscode.workspace
+        .getConfiguration()
+        .get<string>(COMPILER_PATH_SETTING, DEFAULT_COMPILER_PATH);
+    // An unresolved bare name is still handed to the process unchanged: the
+    // task terminal then shows the usual "not recognized" error instead of the
+    // task silently disappearing from the list.
+    return resolveCompilerPath(setting) ?? setting;
+}
+
+// Builds the contributed tasks and re-resolves tasks saved in tasks.json, so
+// both pick up the current `cp3.compilerPath` and workspace folder.
+class Cp3TaskProvider implements vscode.TaskProvider {
+    provideTasks(): vscode.Task[] {
+        return CP3_TASKS.map((spec) => this.buildTask(spec));
+    }
+
+    resolveTask(task: vscode.Task): vscode.Task | undefined {
+        const wanted = task.definition.task;
+        const spec = CP3_TASKS.find((entry) => entry.task === wanted);
+        return spec === undefined ? undefined : this.buildTask(spec);
+    }
+
+    private buildTask(spec: Cp3TaskSpec): vscode.Task {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        const definition: vscode.TaskDefinition = {
+            type: TASK_TYPE,
+            task: spec.task,
+        };
+        const execution = new vscode.ProcessExecution(
+            taskCompilerCommand(),
+            [spec.task, "${file}"],
+            { cwd: folder?.uri.fsPath }
+        );
+        const task = new vscode.Task(
+            definition,
+            folder ?? vscode.TaskScope.Workspace,
+            spec.name,
+            TASK_SOURCE,
+            execution,
+            [PROBLEM_MATCHER]
+        );
+        if (spec.group !== undefined) {
+            task.group = spec.group;
+        }
+        task.presentationOptions = {
+            reveal: vscode.TaskRevealKind.Always,
+            panel: vscode.TaskPanelKind.Dedicated,
+            clear: true,
+        };
+        return task;
+    }
 }
 
 async function stopClient(): Promise<void> {
@@ -268,10 +351,73 @@ export async function startClient(forced = false): Promise<void> {
     }
 }
 
+/**
+ * Fills the launch attributes the adapter needs. `program` defaults to the
+ * active .cp3 file (so "cp3: Debug current file" works) and `cwd` to the
+ * workspace folder. Returning undefined cancels a launch that has no program.
+ */
+class Cp3DebugConfigurationProvider implements vscode.DebugConfigurationProvider {
+    resolveDebugConfiguration(
+        folder: vscode.WorkspaceFolder | undefined,
+        config: vscode.DebugConfiguration
+    ): vscode.DebugConfiguration | undefined {
+        // An empty configuration means "show the launch.json picker"; VS Code
+        // calls this provider with nothing set in that case.
+        if (!config.type && !config.request && !config.name) {
+            return undefined;
+        }
+        if (!config.program) {
+            const editor = vscode.window.activeTextEditor;
+            if (editor?.document.languageId !== LANGUAGE_ID) {
+                void vscode.window.showErrorMessage(
+                    "cp3: set \"program\" to a .cp3 file in launch.json, or open one in the editor."
+                );
+                return undefined;
+            }
+            config.program = editor.document.uri.fsPath;
+        }
+        config.cwd ??= folder?.uri.fsPath ?? workspaceCwd();
+        return config;
+    }
+}
+
+/** Starts `<cp3.compilerPath> dap --stdio` for `type: "cp3"` sessions. */
+class Cp3DebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+    createDebugAdapterDescriptor(
+        session: vscode.DebugSession
+    ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
+        const setting = vscode.workspace
+            .getConfiguration()
+            .get<string>(COMPILER_PATH_SETTING, DEFAULT_COMPILER_PATH);
+        const command = resolveCompilerPath(setting);
+        if (command === undefined) {
+            throw new Error(missingCompilerMessage(setting));
+        }
+        return new vscode.DebugAdapterExecutable(command, ["dap", "--stdio"], {
+            cwd: session.workspaceFolder?.uri.fsPath ?? workspaceCwd(),
+        });
+    }
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     context.subscriptions.push(output());
     context.subscriptions.push(
         vscode.commands.registerCommand(RESTART_COMMAND, () => startClient(true))
+    );
+    context.subscriptions.push(
+        vscode.tasks.registerTaskProvider(TASK_TYPE, new Cp3TaskProvider())
+    );
+    context.subscriptions.push(
+        vscode.debug.registerDebugConfigurationProvider(
+            DEBUG_TYPE,
+            new Cp3DebugConfigurationProvider()
+        )
+    );
+    context.subscriptions.push(
+        vscode.debug.registerDebugAdapterDescriptorFactory(
+            DEBUG_TYPE,
+            new Cp3DebugAdapterFactory()
+        )
     );
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((event) => {

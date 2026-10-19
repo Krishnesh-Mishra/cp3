@@ -1,0 +1,26 @@
+import console from "std/console";
+import { Map } from "std/collections";
+import { fetch, createServer } from "std/network";
+
+// The full request surface from the docs: req.params for the `:id` route
+// segment, req.query for the query string, req.headers for a request header.
+// All three are Map<string, string>; the client sends its probe header as the
+// documented Map.
+const app = createServer();
+
+app.get("/users/:id", (req, res) => {
+  let id = req.params.get("id");
+  let q = req.query.get("q");
+  let h = req.headers.get("x-probe");
+  res.text(`${id}|${q}|${h}`);
+});
+app.listen(48113, () => {
+  console.log("listening");
+});
+
+let headers = new Map<string, string>();
+headers.set("x-probe", "on");
+let hit = await fetch("http://127.0.0.1:48113/users/7?q=yes", { headers });
+console.log(`${hit.status}`);
+console.log(await hit.text());
+app.close();

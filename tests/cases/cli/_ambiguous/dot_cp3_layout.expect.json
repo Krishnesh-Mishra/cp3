@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the generated .cp3/ directory layout is a project-tooling artifact, not observable from a .cp3 program."
-  }
-}

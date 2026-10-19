@@ -14,13 +14,19 @@
 //   support/mangle.cpp     identifier/namespace mangling (free helpers)
 //   support/cpp_writer.cpp indentation buffer + low-level literal/string helpers
 //   support/type_map.cpp   cp3 type -> C++ type mapping + type resolution
+//   support/value_shapes.cpp  primitive unions + object value shapes
+//   support/helper_blocks.cpp the generated-code helper blocks (new families)
 //   support/int_mode.cpp   the guarded int64 fast path + `%` lowering
 //   support/int_reads.cpp  the read-only-inside-return analysis for int mode
 //   emit/expr.cpp          expression lowering (operators, literals, tsCall/cond)
+//   emit/objects.cpp       object value shapes: member reads + literal values
+//   emit/assignment.cpp    assignment lowering (compounds, bitwise, logical)
 //   emit/call.cpp          call lowering (dispatch only, D72)
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
 //   emit/decl.cpp          forward decls, function signatures, declarations
+//   emit/enum.cpp          enum declarations, member access, same-enum switch
+//                          (spec 04)
 //   src/std/typed-arrays/codegen.cpp  the JS-compat typed-array family (D69)
 //   emit/std/common.cpp               ambient std surface: shared helpers +
 //                                     dispatch
@@ -46,6 +52,7 @@
 #include "cp3/ast.hpp"
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic.hpp"
+#include "detail/enums.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -68,13 +75,32 @@ struct ArrayEmitter {
 };
 }  // namespace detail
 
+// The int64 fast-path state (D64): non-null exactly while a function's fast
+// body is being attempted (`Generator::intMode_`). `failed` means the attempt
+// cannot be proven exact and must be discarded, in which case the ordinary
+// double body is the only lowering.
+struct IntMode {
+    bool failed = false;
+    // Names read somewhere outside a `return` argument (int_reads.cpp);
+    // `nullopt` when that walk could not see the whole body. A name absent here
+    // is read only by `return`, so its bound check can be deferred from the
+    // operation to that single observation point.
+    std::optional<std::unordered_set<std::string>> readOutsideReturns;
+    // Locals whose bound check is currently deferred: their value may sit
+    // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
+    std::unordered_set<std::string> deferred;
+    // Set while emitting a statement's own expression: the one position where
+    // an assignment's value is discarded, so a raw store is allowed.
+    bool stmtExpr = false;
+};
+
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
 // unit, and the CP3002 dedup set.
 class Generator {
 public:
     Generator(DiagnosticSink& sink, const SemaResult& sema,
-              const std::string& moduleName);
+              const std::string& moduleName, bool lineDirectives = false);
 
     // Top-level orchestration: collect names, emit every statement, assemble.
     GeneratedModule run(const Program& program);
@@ -84,17 +110,24 @@ private:
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
 
+    // --- source mapping (support/line_map.cpp) --------------------------------
+    // `emitLineDirective` appends `#line <line> "<source>"` for `node`'s span
+    // so DWARF (and gdb) see the .cp3 file; a no-op unless mapping is on.
+    void emitLineDirective(const Node& node, std::string& out);
+    // `emitMappedRaw` pins each physical line of a raw structural chunk (the
+    // int64 wrapper prologue) to `node`; verbatim when mapping is off.
+    void emitMappedRaw(const Node& node, const std::string& raw, std::string& out);
+
     // --- declarations (emit_decl.cpp) ----------------------------------------
     void collectFunctionNames(const Stmt& s);
-    void emitTopLevel(const Stmt& s, std::string& decls, std::string& defs,
-                      std::string& mainBody);
+    void emitTopLevel(const Stmt& s, std::string& decls, std::string& defs, std::string& mainBody);
     void emitExport(const ExportDeclaration& ed, std::string& decls,
                     std::string& defs, std::string& mainBody);
-    void addFunction(const FunctionDeclaration& fd, std::string& decls,
-                     std::string& defs);
+    void addFunction(const FunctionDeclaration& fd, std::string& decls, std::string& defs);
     std::string plainBody(const FunctionDeclaration& fd, const std::string& ret);
-    void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
-                       std::string& mainBody);
+    void emitModuleVar(const VariableDeclaration& vd, std::string& decls, std::string& mainBody);
+    void emitModuleVarNoInit(const detail::CppInfo& ci, const std::string& name,
+                             const std::string& cv, std::string& decls);
     std::optional<Type> parameterType(const Parameter& p,
                                       const FunctionDeclaration& fd,
                                       std::size_t index) const;
@@ -111,6 +144,10 @@ private:
     std::optional<Type> lookup(const std::string& name) const;
     std::optional<Type> bindingType(const VariableDeclarator& d) const;
     std::optional<Type> resolvedBindingType(const VariableDeclarator& d) const;
+    // A type annotation -> a cp3 Type (detail::typeFromTypeNode), with every
+    // Class part named like a collected enum rewritten to TypeKind::Enum.
+    std::optional<Type> typeOfNode(const TypeNode& tn) const;
+    void rewriteEnumTypes(Type& t) const;
     Type effectiveType(const Expr& e) const;
     Type inferBinary(const BinaryExpr& b) const;
     Type inferLogical(const LogicalExpr& l) const;
@@ -128,17 +165,15 @@ private:
     // A whole array in a formatter or truthiness test pulls the arr family
     // block (D69), even when this unit never spells the C++ type itself (a
     // cross-module call's result, say).
-    void noteFamilyUse(const Expr& e) {
-        const detail::CppInfo ci = info(e);
-        if (ci.shape == detail::Shape::Array ||
-            ci.shape == detail::Shape::TypedArray) {
-            needsTypedArray_ = true;
-        }
-    }
+    void noteFamilyUse(const Expr& e);
     std::string emitBinary(const BinaryExpr& b);
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
                              const detail::CppInfo& R, const std::string& lhs,
                              const std::string& rhs);
+    // The Shape::Union half of `==`/`===` (emit/equality.cpp).
+    std::string unionEqualityText(const BinaryExpr& b, const detail::CppInfo& L,
+                                  const detail::CppInfo& R, const std::string& lhs,
+                                  const std::string& rhs);
     std::string emitLogical(const LogicalExpr& l);
     std::string emitNullish(const LogicalExpr& l);
     std::string emitUnary(const UnaryExpr& u);
@@ -149,6 +184,9 @@ private:
 
     // --- calls (emit/call.cpp) -----------------------------------------------
     std::string emitCall(const CallExpr& c);
+    // The documented global numeric parsers (`parseInt`/`parseFloat`):
+    // argument coercion plus the runtime helper (STDLIB section 3).
+    std::string emitParseBuiltin(const CallExpr& c, const std::string& name);
     // Lowers a user-function call's argument list, applying the callee's
     // optional/default parameters to arguments that are explicit `undefined`.
     std::vector<std::string> emitCallArgs(const CallExpr& c,
@@ -162,12 +200,10 @@ private:
     // object form.
     std::string emitConsoleCall(const CallExpr& c, const MemberExpr& m);
     std::string emitConsoleLogCall(const CallExpr& c);
-    std::string emitConsoleStreamCall(const CallExpr& c,
-                                      const std::string& method);
+    std::string emitConsoleStreamCall(const CallExpr& c, const std::string& method);
     std::string emitConsoleAssert(const CallExpr& c);
     std::string emitConsoleInput(const CallExpr& c);
-    std::string emitConsoleListener(const CallExpr& c,
-                                    const std::string& method);
+    std::string emitConsoleListener(const CallExpr& c, const std::string& method);
     std::string consoleListenerArg(const Expr& arg);
     std::string consoleArgText(const Expr& arg);
     std::string consoleObjectText(const ObjectLiteral& literal);
@@ -204,46 +240,36 @@ private:
     std::string emitFamilyIndexWrite(const AssignmentExpr& a);
     // The receiver text of a family method: an `Array(n)` constructor or an
     // array literal takes the element type the call fixed (`elem`).
-    std::string familyReceiverText(const Expr& obj, const Type& elem,
-                                   const Node& site);
-    std::string arrayCtorText(const ExprList& args, const Type& elem,
-                              const Node& site);
-    std::string typedCtorText(const std::string& cls, const ExprList& args,
-                              const Node& site);
-    std::string arrayStaticCallText(const CallExpr& c,
-                                    const std::string& prop);
-    std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m,
-                                  const Type& recv);
-    std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m,
-                                  const Type& recv);
-    std::string arraySortCallText(const CallExpr& c, const MemberExpr& m,
-                                  const Type& recv);
-    std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m,
-                                    const char* tag);
+    std::string familyReceiverText(const Expr& obj, const Type& elem, const Node& site);
+    std::string arrayCtorText(const ExprList& args, const Type& elem, const Node& site);
+    std::string typedCtorText(const std::string& cls, const ExprList& args, const Node& site);
+    std::string arrayStaticCallText(const CallExpr& c, const std::string& prop);
+    std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string arraySortCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string arrayIncludesCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m, const char* tag);
     std::string dataViewCallText(const CallExpr& c, const MemberExpr& m);
-    std::string arrayLiteralText(const ArrayLiteral& lit,
-                                 const Type& elemOverride);
-    std::string declaratorInitText(const VariableDeclarator& d,
-                                   const Type& declared);
+    std::string arrayLiteralText(const ArrayLiteral& lit, const Type& elemOverride);
+    std::string declaratorInitText(const VariableDeclarator& d, const Type& declared);
+
+    // --- object value shapes (emit/objects.cpp) -------------------------------
+    std::string emitObject(const Expr& e);         // `o.a` / `o?.a` reads
+    std::string emitObjectLiteral(const Expr& e);  // `{...}` literal values
 
     // --- std/collections (src/std/collections/codegen.cpp) --------------------
-    // `new Map<K, V>()` / `new Set<T>()`, the member calls (`set`/`get`/`has`/
-    // `delete`/`clear`/`keys`/`values`/`entries`/`forEach`) and the `size` /
-    // `entries().length` property reads. Each returns "" when the form is not
-    // one of them.
+    // `new Map<K, V>()` / `new Set<T>()`, the member calls and the `size` /
+    // `entries().length` reads; each returns "" when the form is not one of them.
     std::string emitCollectionsNew(const NewExpr& n);
-    std::string emitCollectionsMemberCall(const CallExpr& c,
-                                          const MemberExpr& m);
+    std::string emitCollectionsMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitCollectionsMember(const MemberExpr& m);
 
     // --- std namespaces + primitive methods (src/std/*/codegen.cpp) ----------
     // Lower `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*` calls, the
-    // `string` method surface, and builtin property reads (`Math.PI`,
-    // `path.sep`, `process.argv`, `s.length`). Each returns "" when the form
-    // is not implemented, so the caller can report CP3002. The per-family
-    // member reads live with their lowering units too; the namespace dispatch
-    // (emitBuiltinCall / emitBuiltinMember) and the shared helpers
-    // (detail/builtin_tables.h) stay in emit/std/common.cpp.
+    // `string` method surface and builtin property reads (`Math.PI`, `path.sep`,
+    // `process.argv`, `s.length`). Each returns "" for a form it does not
+    // implement, so the caller reports CP3002; the dispatch and the shared
+    // tables (detail/builtin_tables.h) stay in emit/std/common.cpp.
     std::string emitBuiltinCall(const CallExpr& c, const MemberExpr& m);
     std::string emitBuiltinMember(const MemberExpr& m);
     std::string emitMathCall(const CallExpr& c, const MemberExpr& m);
@@ -276,10 +302,9 @@ private:
     // get/has/load calls, backed by cp3/std/env.hpp (composed on process).
     std::string emitEnvCall(const CallExpr& c, const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
-    // Native-backed std modules (src/std/crypto/codegen.cpp,
-    // src/std/network/codegen.cpp): one per-module lowering unit. Each returns
-    // "" when the form is not implemented, so the caller keeps reporting
-    // CP3002 meanwhile.
+    // Native-backed std modules (src/std/{crypto,network}/codegen.cpp): one
+    // lowering unit per module, each returning "" for a form it does not
+    // implement, so the caller keeps reporting CP3002 meanwhile.
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
     // `std/fs` (src/std/fs/codegen.cpp): the namespace table plus the
@@ -295,8 +320,7 @@ private:
     std::string emitDateCall(const CallExpr& c, const MemberExpr& m);
     // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): the
     // `Buffer.from`/`Buffer.alloc` statics, the `buf.toString`/`buf.slice`
-    // methods and the `buf.length` read. Each returns "" when the form is not
-    // one of them.
+    // methods and the `buf.length` read; "" when the form is not one of them.
     std::string emitByteBufferStaticCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMethodCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMember(const MemberExpr& m);
@@ -321,14 +345,12 @@ private:
     std::string fetchInitText(const Expr& init);
     std::string networkArg(const Type& receiver, const std::string& property,
                            const CallExpr& c, const Expr& arg, std::size_t index);
-    std::string networkArgs(const Type& receiver, const std::string& property,
-                            const CallExpr& c);
+    std::string networkArgs(const Type& receiver, const std::string& property, const CallExpr& c);
     std::vector<std::string> emitPlainArgs(const CallExpr& c);
 
     // --- async / promises / errors (emit_async.cpp) --------------------------
     std::string emitAwait(const AwaitExpr& a);
-    std::string emitArrow(const ArrowFunction& a,
-                          const std::vector<std::string>& contextParams);
+    std::string emitArrow(const ArrowFunction& a, const std::vector<std::string>& contextParams);
     std::vector<std::string> arrowParamText(
         const ArrowFunction& a, const std::vector<std::string>& contextParams);
     std::string arrowReturnType(const ArrowFunction& a);
@@ -349,10 +371,20 @@ private:
     void emitThrow(const ThrowStatement& t, std::string& out, int indent);
     void emitTry(const TryStatement& ts, std::string& out, int indent);
 
+    // --- enums (emit/enum.cpp) ------------------------------------------------
+    // `collectEnums` resolves top-level `enum` declarations (spec 04) and
+    // prepends the `enum class <name> : long long` text; `emitEnumMember` and
+    // `emitEnumObjectLiteral` lower member reads and enum-carrying literals;
+    // `emitEnumSwitch` handles switches (the same-enum lowering, else the stub).
+    void collectEnums(const Program& program);
+    std::string emitEnumMember(const MemberExpr& m);
+    std::string emitEnumObjectLiteral(const ObjectLiteral& ol);
+    bool lowerEnumSwitch(const SwitchStatement& sw, std::string& out, int indent);
+    void emitEnumSwitch(const Stmt& s, std::string& out, int indent);
+
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
-    // The fast path is emitted per function: a body with every `number`
-    // lowered to a guarded std::int64_t, plus a double wrapper that guards the
-    // arguments once and re-runs the ordinary body when a guard bails.
+    // Per function: a body with every `number` lowered to a guarded
+    // std::int64_t, plus a double wrapper that re-runs it when a guard bails.
     bool intEligible(const FunctionDeclaration& fd, const std::string& ret) const;
     std::string intBody(const FunctionDeclaration& fd, bool& kept);
     std::string intSignature(const FunctionDeclaration& fd) const;
@@ -371,8 +403,7 @@ private:
     std::string intConditional(const ConditionalExpr& c);
     std::string intLogical(const LogicalExpr& l);
     // `a % b`: `modConst<K>` for an integral literal divisor, else `mod`.
-    std::string modCall(const std::string& lhs, const Expr& rhs,
-                        const std::string& rhsText);
+    std::string modCall(const std::string& lhs, const Expr& rhs, const std::string& rhsText);
     // The C++ type source of a local binding (declared, else inferred from the
     // initializer) and whether int mode lowers it to std::int64_t.
     detail::CppInfo bindingCpp(const VariableDeclarator& d) const;
@@ -399,24 +430,7 @@ private:
     void emitMain(std::string& out, const std::string& mainBody) const;
 
     // --- state ----------------------------------------------------------------
-    // The int64 fast-path state (D64): non-null exactly while a function's fast
-    // body is being attempted. `failed` means the attempt cannot be proven
-    // exact and must be discarded, in which case the ordinary double body is
-    // the only lowering.
-    struct IntMode {
-        bool failed = false;
-        // Names read somewhere outside a `return` argument (int_reads.cpp);
-        // `nullopt` when that walk could not see the whole body. A name absent
-        // here is read only by `return`, so its bound check can be deferred
-        // from the operation to that single observation point.
-        std::optional<std::unordered_set<std::string>> readOutsideReturns;
-        // Locals whose bound check is currently deferred: their value may sit
-        // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
-        std::unordered_set<std::string> deferred;
-        // Set while emitting a statement's own expression: the one position
-        // where an assignment's value is discarded, so a raw store is allowed.
-        bool stmtExpr = false;
-    };
+    // The int64 fast-path state (D64); see `struct IntMode` above.
     std::unique_ptr<IntMode> intMode_;
 
     DiagnosticSink& sink_;
@@ -425,6 +439,7 @@ private:
     std::string namesp_;
 
     bool consoleImported_ = false;
+    bool lineMapping_ = false;     // --debug: emit `#line` into generated code
     bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
     bool needsConsoleAbi_ = false; // console async/misc members -> family header
     bool needsEventLoop_ = false;  // async/timers: emit runEventLoop() in main
@@ -445,6 +460,13 @@ private:
     std::unordered_map<std::string, std::string> jsonShapeByLabel_;
     std::unordered_set<std::string> jsonShapeUsed_;
     std::string jsonShapeDecls_;
+    // The unit's enums (collectEnums): the resolved model per declaration name,
+    // the accumulated `enum class` decls text, and the sema object label ->
+    // field names of every enum-carrying object literal that lowered to a
+    // `std::tuple` (the field read is `std::get<i>`).
+    std::unordered_map<std::string, detail::EnumCppInfo> enums_;
+    std::string enumDecls_;
+    std::unordered_map<std::string, std::vector<std::string>> enumObjectFields_;
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
     bool needsEnv_ = false;        // { env } -> cp3/std/env.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
@@ -454,7 +476,11 @@ private:
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
     bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
+    bool needsTuple_ = false;        // enum-carrying object literal -> <tuple>
     bool needsEventEmitter_ = false;  // EventEmitter/Listener -> cp3/async/emitter.hpp
+    bool needsBitwise_ = false;    // bitwise/shift ops -> cp3/core/bitwise.hpp
+    bool needsUnion_ = false;      // primitive unions -> cp3/core/union.hpp
+    bool needsObject_ = false;     // object value shapes -> the object helper block
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)

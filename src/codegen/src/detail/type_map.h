@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "cp3/types.hpp"
 
@@ -33,8 +34,11 @@ enum class Shape {
     DataView,
     Collections, // Map<K, V> / Set<T> (std/collections)
     Buffer,      // the nominal std/buffer `Buffer` byte sequence
+    Enum,        // a named enum (spec 04): `enum class <name> : long long`
     EventEmitter, // the builtin event type (D74): Ref<EventEmitter>
     Listener,     // a function-typed value (D74): the boxed callable
+    Union,       // A | B over primitives: std::variant (cp3/core/union.hpp)
+    Object,      // an all-primitive `$o{...}` shape: a generated value struct
     Unknown, Unsupported
 };
 
@@ -47,6 +51,14 @@ enum class Shape {
 enum class NullishKind { None, Null, Undefined, Mixed };
 
 bool isPrimitiveShape(Shape s);
+
+// One field of an all-primitive `$o{...}` object value shape (Shape::Object):
+// its cp3 name (also its generated-struct member spelling, modulo mapIdent)
+// and the C++ spelling of its primitive type.
+struct ObjectField {
+    std::string name;
+    std::string cpp;
+};
 
 struct CppInfo {
     Shape shape = Shape::Unsupported;
@@ -75,10 +87,36 @@ bool optionalEmptyMatches(NullishKind kind, Shape nullishShape);
 // The C++ lowering of `raw`, including the optional/nullish flavor.
 CppInfo classify(const Type& raw);
 
-// A non-nullish value union (`number | string` - the sanctioned mixed-array
-// element form, docs 09) -> `std::variant` over the primitive alternatives;
-// leaves `info` empty for anything else (src/std/arrays/codegen_methods.cpp).
+// The enum arm of `classify` (spec 04; src/emit/enum.cpp): a named enum ->
+// `enum class <name> : long long`. Runs only for a `TypeKind::Enum` type.
+CppInfo classifyEnum(const Type& t);
+
+// `A | B` over primitives -> the canonical `std::variant<double, std::string
+// [, bool]>`; and `T | null` / `T | undefined` / `T?` over a primitive or an
+// object value shape -> `std::optional<T>` (the two-flavor primitive case
+// keeps `Maybe<T>`). The two Union arms of `classify` (value_shapes.cpp).
 void classifyValueUnion(const Type& t, CppInfo& info);
+void classifyNullishUnion(const Type& t, CppInfo& info);
+
+// The C++ spelling of an all-primitive `$o{...}` object shape: fills the
+// generated struct name and its fields and registers the struct text for
+// assembly. False when any field is optional/non-primitive or the shape is
+// not a plain object label (tuples, ambient objects, interfaces, or a label
+// another family claimed through `objectShapeExclude`).
+bool objectShapeOf(const Type& t, std::string& structName,
+                   std::vector<ObjectField>& fields);
+CppInfo classifyObjectValue(const Type& t);
+// A `$o{...}` label another family owns (a std/json interface record): its
+// spelling is that family's, so the value-shape path must not claim it.
+// Registered before the emit walk (std/json's collectJsonShapes).
+void objectShapeExclude(const std::string& label);
+// Does `t` denote an object value shape, directly or as the single non-nullish
+// member of a nullish option (`{...} | null` -> `std::optional<Struct>`)?
+// Fills `object` with the object `Type` and reports whether it was peeled.
+bool objectReceiver(const Type& t, Type& object, bool& optional);
+// The registered struct texts whose names occur in `text` (the decls prefix a
+// unit adds for the shapes it references).
+std::string objectDeclsFor(const std::string& text);
 
 // The JS-compat typed-array family (D69; src/std/typed-arrays/codegen.cpp):
 // regular arrays with a value-like element type (`number`, `string`,

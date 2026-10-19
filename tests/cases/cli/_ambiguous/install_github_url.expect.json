@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: installing from a GitHub release URL (single/multiple/none .cp3pak assets) is not expressible as a .cp3 case."
-  }
-}

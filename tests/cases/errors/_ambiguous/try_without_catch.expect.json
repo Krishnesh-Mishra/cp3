@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: is `try { } finally { }` (no catch clause) allowed? The spec only ever shows try/catch/finally."
-  }
-}

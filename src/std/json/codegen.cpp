@@ -203,6 +203,10 @@ void Generator::collectJsonShapes(const Program& program) {
         if (!iface || iface->name.empty()) continue;
         auto fields = recordFields(*iface);
         if (!fields) continue;  // not a plain record: the declaration reports
+        // The interface keeps its own record struct (jsonRecordParse): the
+        // object value-shape path (support/value_shapes.cpp) must not claim the
+        // same `$o{...}` label.
+        objectShapeExclude(shapeLabel(*fields));
         jsonShapeByLabel_[shapeLabel(*fields)] = iface->name;
         jsonShapeStructs_[iface->name] = structText(iface->name, *fields);
         jsonShapeBuilders_[iface->name] = builderText(iface->name, *fields);

@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "listening\n401\nUnauthorized\n200\nsecret\n",
+  "exitCode": 0
+}

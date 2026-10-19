@@ -1,0 +1,36 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// The typed JSON round-trip over a real socket: the server serialises object
+// literals with res.json(payload) and res.json(payload, status?), and the
+// client parses them back with `await res.json<User>()` through the reified
+// interface tables. (The docs' `res.json<User>(payload)` typed-payload form is
+// tracked as PENDING SURFACE in the suite, not weakened here.)
+interface User {
+  id: number;
+  name: string;
+}
+
+const app = createServer();
+
+app.get("/user", (req, res) => {
+  res.json({ id: 7, name: "alice" });
+});
+app.get("/created", (req, res) => {
+  res.json({ id: 9, name: "bob" }, 201);
+});
+app.listen(48114, () => {
+  console.log("listening");
+});
+
+let res = await fetch("http://127.0.0.1:48114/user");
+let user = await res.json<User>();
+console.log(`${res.status}`);
+console.log(`${user.id}`);
+console.log(`${user.name}`);
+
+let created = await fetch("http://127.0.0.1:48114/created");
+let other = await created.json<User>();
+console.log(`${created.status}`);
+console.log(`${other.name}`);
+app.close();

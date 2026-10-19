@@ -1,0 +1,41 @@
+// =============================================================================
+// tests/network/fixtures/ws_server_own.cp3 - phase D fixture.
+//
+// The cp3 `WebSocketServer` is driven by the python RFC6455 client
+// (ws_rfc6455.py): connection event, echo of every text frame, delivery of the
+// client's binary frame through the message slot (raw bytes, logged as hex),
+// a binary echo back (the documented `ws.send(Buffer)` arm), and the close
+// event with the client's code/reason. The expected stdout is exact. The suite
+// polls the port for readiness (buffering makes a "ready" line an unreliable
+// signal) and 48206 is reserved for this fixture alone.
+// =============================================================================
+import console from "std/console";
+import { Buffer } from "std/buffer";
+import { WebSocketServer } from "std/network";
+
+const wss = new WebSocketServer({ port: 48206 });
+console.log("D0|ready");
+let messages = 0;
+wss.on("connection", (ws) => {
+  console.log("D1|connection");
+  ws.on("message", (msg) => {
+    messages = messages + 1;
+    if (messages === 1) {
+      console.log(`D2a|${msg}`);
+      ws.send("echo:" + msg);
+    } else if (messages === 2) {
+      console.log(`D2b|${msg}`);
+      ws.send("echo:" + msg);
+    } else {
+      console.log(`D2c|${Buffer.from(msg).toString("hex")}`);
+      ws.send(Buffer.from(msg));
+    }
+  });
+  ws.on("close", (code, reason) => {
+    console.log(`D3|${code}|${reason}`);
+  });
+});
+
+await sleep(4000);
+wss.close();
+console.log("D4|done");

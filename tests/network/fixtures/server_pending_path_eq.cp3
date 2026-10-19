@@ -1,0 +1,39 @@
+// =============================================================================
+// tests/network/fixtures/server_pending_path_eq.cp3 - phase B runtime gap.
+//
+// Finding F3 (silent miscompile): comparing a req.* field against a string
+// literal WITHOUT a type annotation compiles cleanly, but the comparison is
+// lowered to a comma expression whose value is the constant `false`, e.g.
+//
+//   if (cp3_truthy(((req).path, std::string("/teapot"), false))) { ... }
+//
+// (inspect the generated .cpp of this very fixture). There is no compiler
+// diagnostic, so the middleware below never answers, the request falls through
+// and the 404 fallback is served. run_network_suite.py records that observation
+// as PENDING SURFACE (runtime gap, evidence = generated C++ + observed bytes)
+// and the moment the comparison lowers correctly the fixture prints
+// `PB6|418|teapot` and the check flips to PASS.
+//
+// Adding `let path: string = req.path;` makes the comparison correct today
+// (that is what server_own.cp3 does for B13); this fixture deliberately keeps
+// the unannotated form so the gap stays visible.
+// =============================================================================
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+const app = createServer();
+
+app.use((req, res, next) => {
+  if (req.path === "/teapot") {   // unannotated: silently false today (F3)
+    res.status(418).text("teapot");
+    return;
+  }
+});
+
+const PORT = 48220;
+app.listen(PORT, () => {});
+
+let r = await fetch(`http://127.0.0.1:${PORT}/teapot`);
+console.log(`PB6|${r.status}|${await r.text()}`);
+
+app.close();

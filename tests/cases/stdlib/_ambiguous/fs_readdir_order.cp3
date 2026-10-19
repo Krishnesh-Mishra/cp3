@@ -1,3 +1,0 @@
-import console from "std/console";
-import fs from "std/fs";
-console.log(fs.readdirSync(".").join(","));

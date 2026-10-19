@@ -13,12 +13,14 @@
 //   initialize / initialized, shutdown / exit,
 //   textDocument/{didOpen,didChange,didSave,didClose},
 //   textDocument/publishDiagnostics.
-// Explicitly out of scope: hover, completion, goto, formatting, rename.
+// The intel round adds the query requests behind IntelHooks: completion, hover,
+// definition, documentSymbol, workspaceSymbol, signatureHelp, formatting.
 // =============================================================================
 #pragma once
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -50,6 +52,79 @@ struct RawDiagnostic {
 using CheckFn = std::function<std::vector<RawDiagnostic>(const std::string& path,
                                                          const std::string& text)>;
 
+// One completion candidate, transport-neutral.
+struct CompletionCandidate {
+    std::string label;         // insert text and filter text
+    int kind = 1;              // LSP CompletionItemKind (3 function, 5 field, ...)
+    std::string detail;        // type or signature line; may be empty
+    std::string insertText;    // when non-empty and different from `label`
+    int insertTextFormat = 1;  // 1 plain text, 2 snippet
+};
+
+// A hover answer: plain text lines (types, signatures). The server wraps them
+// into a markdown code block.
+struct HoverAnswer {
+    std::string contents;
+};
+
+// A jump target in compiler coordinates (1-based line, 1-based BYTE column).
+// Positions are relative to `path`, which may differ from the queried file
+// (definition reaches local imports).
+struct SourceTarget {
+    std::string path;
+    std::uint32_t line = 1;
+    std::uint32_t column = 1;
+    std::uint32_t endLine = 1;
+    std::uint32_t endColumn = 1;
+};
+
+// One document-symbol (outline) entry in compiler coordinates.
+struct SymbolEntry {
+    std::string name;
+    int kind = 13;  // LSP SymbolKind (12 function, 5 class, 13 variable, ...)
+    std::uint32_t line = 1;
+    std::uint32_t column = 1;
+    std::uint32_t endLine = 1;
+    std::uint32_t endColumn = 1;
+};
+
+// The active call's signature at the cursor.
+struct SignatureAnswer {
+    std::string label;                      // full signature line
+    std::vector<std::string> parameters;    // one entry per parameter
+    int activeParameter = 0;                // 0-based index
+};
+
+// Transport-neutral intelligence queries. The CLI owns the frontend and the
+// semantic engine; the server owns positions, documents and JSON shapes.
+//
+// Positions in and out use the compiler convention (1-based line, 1-based
+// BYTE column); the server converts UTF-16 <-> bytes at the boundary. Every
+// hook must be total: it returns empty answers for unknown/broken documents
+// and never writes to stdout or exits. `readFile` reads a file from disk so
+// the server can convert positions in a definition target it has not opened.
+struct IntelHooks {
+    std::function<std::vector<CompletionCandidate>(
+        const std::string& path, const std::string& text, std::uint32_t line,
+        std::uint32_t column)> completion;
+    std::function<std::optional<HoverAnswer>(
+        const std::string& path, const std::string& text, std::uint32_t line,
+        std::uint32_t column)> hover;
+    std::function<std::vector<SourceTarget>(
+        const std::string& path, const std::string& text, std::uint32_t line,
+        std::uint32_t column)> definition;
+    std::function<std::vector<SymbolEntry>(const std::string& path,
+                                           const std::string& text)>
+        documentSymbols;
+    std::function<std::optional<SignatureAnswer>(
+        const std::string& path, const std::string& text, std::uint32_t line,
+        std::uint32_t column)> signatureHelp;
+    std::function<std::optional<std::string>(const std::string& path,
+                                             const std::string& text)>
+        format;
+    std::function<std::optional<std::string>(const std::string& path)> readFile;
+};
+
 // Runs the LSP server over stdin/stdout until the client sends `exit`.
 //
 // Returns the process exit code: 0 after shutdown + exit, 1 for `exit`
@@ -58,5 +133,10 @@ using CheckFn = std::function<std::vector<RawDiagnostic>(const std::string& path
 // stream that closed mid-frame - the stream can no longer be trusted, so the
 // server stops instead of buffering blindly).
 int runStdioServer(const CheckFn& check);
+
+// The intel round: the same server plus the query providers. A hook that is
+// null answers empty (the client's capability advertisement omits the
+// provider, so this is a safety net, not a mode).
+int runStdioServer(const CheckFn& check, const IntelHooks& intel);
 
 }  // namespace cp3::lsp

@@ -22,6 +22,8 @@ namespace cp3 {
 using namespace detail;
 
 void Generator::stmt(const Stmt& s, std::string& out, int indent) {
+    // One source-mapping directive per statement (--debug only).
+    emitLineDirective(s, out);
     switch (s.kind) {
         case NodeKind::BlockStatement: {
             pushScope();
@@ -42,7 +44,7 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
                 line(out, indent, ";");
                 return;
             }
-            // Only a statement's own expression may defer a bound check: its
+            // A statement's own expression may defer its bound check: the
             // value is discarded, so it is never observed (see intAssignText).
             const bool wasStmt = intOn() && intMode_->stmtExpr;
             if (intOn()) intMode_->stmtExpr = true;
@@ -73,27 +75,27 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
             line(out, indent, "} while (" + condition + ");");
             return;
         }
-        case NodeKind::ForStatement: {
+        case NodeKind::ForStatement:
             emitFor(static_cast<const ForStatement&>(s), out, indent);
             return;
-        }
         case NodeKind::ForOfStatement:
             return ArrayEmitter::forOf(*this, static_cast<const ForOfStatement&>(s), out, indent);
-        case NodeKind::ReturnStatement: {
+        case NodeKind::ReturnStatement:
             emitReturn(static_cast<const ReturnStatement&>(s), out, indent);
             return;
-        }
         case NodeKind::BreakStatement:
-            line(out, indent, "break;");
-            return;
         case NodeKind::ContinueStatement:
-            line(out, indent, "continue;");
+            line(out, indent,
+                 s.kind == NodeKind::BreakStatement ? "break;" : "continue;");
             return;
         case NodeKind::ThrowStatement:
             emitThrow(static_cast<const ThrowStatement&>(s), out, indent);
             return;
         case NodeKind::TryStatement:
             emitTry(static_cast<const TryStatement&>(s), out, indent);
+            return;
+        case NodeKind::SwitchStatement:
+            emitEnumSwitch(s, out, indent);  // same-enum switch; else CP3002
             return;
         default:
             notImplemented(s, "this statement");
@@ -143,7 +145,7 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
     // array / class type, ...) is out of scope: report it so the unit is
     // treated as not-implemented instead of being quietly mis-typed.
     if (d.type) {
-        if (auto dt = typeFromTypeNode(*d.type)) {
+        if (auto dt = typeOfNode(*d.type)) {
             if (!classify(*dt).representable && !dt->isUnknown() && !dt->isError()) {
                 notImplemented(d, "this declared type");
             }

@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: cp3 init's four interactive prompts and generated files cannot be expressed as a single .cp3 case."
-  }
-}

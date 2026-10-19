@@ -6,13 +6,15 @@ import console from "std/console";
 // print both sums on one line. Same workload and same output as the C++, Rust,
 // Go, JavaScript and Python entries (expected line in the task README).
 //
-// NOT RUNNABLE TODAY: classes and interfaces have not landed (wave 2), so the
-// compiler stops at the interface declaration and the runner records that
-// diagnostic instead of a timing. The entry is written to the frozen spec and
-// its row fills in when the wave lands.
+// NOT RUNNABLE TODAY: classes and interfaces (wave 2) and the array surface
+// (wave 3) have not landed, so the compiler stops at the interface declaration
+// and the runner records that diagnostic instead of a timing. The entry is
+// written to the frozen spec - docs/language-spec/15 declares methods with the
+// `function` keyword and the constructor as `constructor(...)`, which is the
+// form used here.
 
 interface Shape {
-  area(): number;
+  function area(): number;
 }
 
 class Circle implements Shape {
@@ -22,7 +24,7 @@ class Circle implements Shape {
     this.radius = radius;
   }
 
-  area(): number {
+  function area(): number {
     return 3 * this.radius * this.radius;
   }
 }
@@ -34,7 +36,7 @@ class Square implements Shape {
     this.side = side;
   }
 
-  area(): number {
+  function area(): number {
     return this.side * this.side;
   }
 }
@@ -48,7 +50,7 @@ class Rect implements Shape {
     this.height = height;
   }
 
-  area(): number {
+  function area(): number {
     return this.width * this.height;
   }
 }

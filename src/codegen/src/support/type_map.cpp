@@ -16,6 +16,7 @@
 //   null      -> std::nullptr_t                 (value nullptr)
 //   T | null / T | undefined (T primitive) -> std::optional<T>
 //   T | null | undefined (T primitive)     -> cp3::runtime::Maybe<T>
+//   Enum (spec 04)                         -> enum class <name> : long long
 //   EventEmitter (D74)                     -> cp3::runtime::Ref<cp3::runtime::EventEmitter>
 //   (...args: unknown[]) => void (D74)     -> cp3::runtime::Listener
 // =============================================================================
@@ -128,31 +129,9 @@ static CppInfo classifyClassValue(const Type& t) {
 
 // `T | null` / `T | undefined` / the `T?` shorthand / `T | null | undefined`
 // over a primitive `T` -> `std::optional<T>`, or the two-flavor `Maybe<T>`
-// when both nullish kinds are present (an implementation detail of
-// `classify`). Any other union has no M1 spelling.
-static void classifyNullishUnion(const Type& t, CppInfo& info) {
-    std::vector<Type> nonNullish;
-    for (const Type& part : t.parts) {
-        if (!part.isNullish()) {
-            nonNullish.push_back(part);
-        }
-    }
-    if (nonNullish.size() != 1) return;
-    const CppInfo inner = classify(nonNullish.front());
-    if (!inner.representable || !isPrimitiveShape(inner.shape)) return;
-    info.representable = true;
-    info.emptyKind = nullishKindOf(t);
-    if (info.emptyKind == NullishKind::Mixed) {
-        // `T | null | undefined` must keep the two nullish flavors apart
-        // (JS `null !== undefined`), which no `std::optional` can: use the
-        // flavored Maybe<T>.
-        info.shape = Shape::Maybe;
-        info.cpp = "cp3::runtime::Maybe<" + inner.cpp + ">";
-    } else {
-        info.shape = Shape::Optional;
-        info.cpp = "std::optional<" + inner.cpp + ">";
-    }
-}
+// when both nullish kinds are present. Also the single-member option over an
+// object value shape (`{...} | null` -> `std::optional<Struct>`). The
+// primitive-only union spellings live in support/value_shapes.cpp.
 
 Type promiseOf(const Type& value) {
     Type p(TypeKind::Class, "Promise");
@@ -208,11 +187,16 @@ CppInfo classify(const Type& raw) {
             return info;
         }
         case TypeKind::Union:
-            classifyNullishUnion(t, info);
-            if (!info.representable) classifyValueUnion(t, info);
+            classifyValueUnion(t, info);
+            if (!info.representable) classifyNullishUnion(t, info);
             return info;
+        case TypeKind::Object:
+            // A structural `$o{...}` shape: an all-primitive object becomes a
+            // generated value struct (support/value_shapes.cpp).
+            return classifyObjectValue(t);
         case TypeKind::Class:
             return classifyClassValue(t);
+        case TypeKind::Enum: return classifyEnum(t);  // spec 04: enum class
         case TypeKind::Function:
             // A function-typed value (D74): boxed as `Listener` so every copy
             // shares one identity; only void-returning functions have one.
@@ -228,7 +212,7 @@ CppInfo classify(const Type& raw) {
             classifyFamily(t, info);
             return info;
         default:
-            return info;  // Object/Enum/TypeParam: out of M1
+            return info;  // Object/TypeParam: out of M1
     }
 }
 
@@ -385,7 +369,7 @@ std::optional<Type> Generator::lookup(const std::string& name) const {
 
 std::optional<Type> Generator::bindingType(const VariableDeclarator& d) const {
     if (d.type) {
-        if (auto t = typeFromTypeNode(*d.type)) {
+        if (auto t = typeOfNode(*d.type)) {
             return t;
         }
     }

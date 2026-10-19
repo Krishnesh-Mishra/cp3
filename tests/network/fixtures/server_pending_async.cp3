@@ -1,0 +1,26 @@
+// =============================================================================
+// tests/network/fixtures/server_pending_async.cp3 - PENDING SURFACE.
+//
+// docs 04 §network: async route handlers are in beta one, and req.text()
+// buffers the body for them. The async arrow lowering is still a codegen seam:
+// `CP3002: not implemented yet: async arrow function` (the network runtime
+// buffers the body before dispatch, but no handler form can await it yet). The
+// moment async handlers land, the fixture prints `PB2|200|got:payload` and B16
+// flips to PASS. Port 48217 is reserved for it.
+// =============================================================================
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+const app = createServer();
+app.post("/echo", async (req, res) => {
+  const body = await req.text();
+  res.text("got:" + body);
+});
+app.listen(48217, () => {});
+
+const res = await fetch("http://127.0.0.1:48217/echo", {
+  method: "POST",
+  body: "payload",
+});
+console.log(`PB2|${res.status}|${await res.text()}`);
+app.close();

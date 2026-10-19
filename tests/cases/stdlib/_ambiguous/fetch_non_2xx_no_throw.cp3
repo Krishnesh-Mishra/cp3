@@ -1,4 +1,0 @@
-import console from "std/console";
-import { fetch } from "std/network";
-let res = await fetch("https://example.com/missing");
-console.log(res.ok ? "ok" : `${res.status}`);

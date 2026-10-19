@@ -10,6 +10,8 @@
 // =============================================================================
 #include "detail/lsp_protocol.hpp"
 
+#include <initializer_list>
+
 #include "cp3/version.hpp"
 
 #include "detail/lsp_text.hpp"
@@ -27,6 +29,27 @@ Json positionJson(const LspPosition& pos) {
 bool endsBefore(const LspPosition& end, const LspPosition& start) {
     if (end.line != start.line) return end.line < start.line;
     return end.character <= start.character;
+}
+
+Json triggerCharactersJson(std::initializer_list<const char*> characters) {
+    Json list = jsonArray();
+    for (const char* character : characters) {
+        list.push(jsonString(character));
+    }
+    return list;
+}
+
+Json completionProviderJson() {
+    Json provider = jsonObject();
+    provider.set("triggerCharacters", triggerCharactersJson({".", "\""}));
+    provider.set("resolveProvider", jsonBool(false));
+    return provider;
+}
+
+Json signatureHelpProviderJson() {
+    Json provider = jsonObject();
+    provider.set("triggerCharacters", triggerCharactersJson({"(", ","}));
+    return provider;
 }
 
 Json diagnosticJson(const std::string& text, const RawDiagnostic& raw) {
@@ -53,6 +76,16 @@ Json diagnosticJson(const std::string& text, const RawDiagnostic& raw) {
 Json initializeResult() {
     Json capabilities = jsonObject();
     capabilities.set("textDocumentSync", jsonInt(1));  // full sync
+    // Intel round (M2-LSP-INTEL): the query providers, advertised together
+    // with the diagnostics surface. Trigger characters mirror the brief:
+    // '.' and '"' for completion, '(' and ',' for signature help.
+    capabilities.set("completionProvider", completionProviderJson());
+    capabilities.set("hoverProvider", jsonBool(true));
+    capabilities.set("definitionProvider", jsonBool(true));
+    capabilities.set("documentSymbolProvider", jsonBool(true));
+    capabilities.set("workspaceSymbolProvider", jsonBool(true));
+    capabilities.set("signatureHelpProvider", signatureHelpProviderJson());
+    capabilities.set("documentFormattingProvider", jsonBool(true));
     Json serverInfo = jsonObject();
     serverInfo.set("name", jsonString("cp3-lsp"));
     serverInfo.set("version", jsonString(kVersion));

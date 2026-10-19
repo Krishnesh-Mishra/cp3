@@ -41,6 +41,9 @@ Type Analyzer::inferCall(CallExpr& call) {
             if (tryInferStringBuiltin(call, id, builtin)) {
                 return withType(call, builtin);
             }
+            if (tryParseBuiltinCall(call, id, builtin)) {
+                return withType(call, builtin);
+            }
             if (tryInferNetworkCall(call, id, builtin)) {
                 return withType(call, builtin);
             }
@@ -134,6 +137,17 @@ bool Analyzer::tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& o
         return true;
     }
     return false;
+}
+
+// The documented global numeric parsers (STDLIB docs section 3): `parseInt`
+// and `parseFloat` both return cp3 `number`, so `let n = parseInt(s)` and
+// ternaries over the result type correctly. Codegen lowers the calls to the
+// runtime helpers in cp3/core/runtime.hpp.
+bool Analyzer::tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& out) {
+    if (id.name != "parseInt" && id.name != "parseFloat") return false;
+    inferArgs(call);
+    out = Type::number();
+    return true;
 }
 
 void Analyzer::reportUndefinedCall(CallExpr& call, Identifier& id) {
