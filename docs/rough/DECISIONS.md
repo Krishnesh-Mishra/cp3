@@ -751,3 +751,17 @@ contents-clearing member; `.hide`/`.show` act on the window itself. Docs: 04
 signature + example + prose, day-2 member list. Implementation: the round-1
 console wave (console runtime TU, Windows-guarded; add `-luser32` to the
 console native row only if `ShowWindow` needs it).
+
+## D77 - RequestInit.headers is Map<string, string> (lead ruling, 2026-10-19)
+
+The signatures say `headers?: Map<string, string>` and that is the answer: a
+request init's `headers` (like `FetchResponse.headers` and
+`HttpRequest.headers`) is the collections `Map<string, string>`. The round-2
+imported-std-modules fetch example that showed a plain object literal was the
+doc side of the disagreement and is rewritten to build a `Map` (fetch
+example in `docs/standard-library/04-imported-std-modules.md`). A plain object
+literal in that position is off the documented surface; it currently stops at
+a CP3002 codegen placeholder ("fetch headers as an object literal"), a
+typed-shape error candidate for the audit phase. Pinned by
+`tests/cases/stdlib/network_headers_map_field.cp3` (promoted out of
+`_ambiguous` with this ruling).
