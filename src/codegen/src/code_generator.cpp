@@ -395,6 +395,7 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsOs_) out += "#include \"cp3/std/os.hpp\"\n";
     if (needsJson_) out += "#include \"cp3/std/json.hpp\"\n";
     if (needsProcess_) out += "#include \"cp3/std/process.hpp\"\n";
+    if (needsEnv_) out += "#include \"cp3/std/env.hpp\"\n";
     if (needsCrypto_) out += "#include \"cp3/std/crypto.hpp\"\n";
     if (needsDate_) out += "#include \"cp3/std/date.hpp\"\n";
     if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
@@ -419,7 +420,20 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     out += defs;
     out += "\n}  // namespace " + namesp_ + "\n\n";
     out += "using namespace " + namesp_ + ";\n\n";
-    out += "int main() {\n";
+    emitMain(out, mainBody);
+    return out;
+}
+
+void Generator::emitMain(std::string& out, const std::string& mainBody) const {
+    if (needsProcess_) {
+        // std/process argv: hand the C argument vector to the runtime before
+        // any cp3 statement runs (process.argv, pinned by
+        // process_argv_is_array).
+        out += "int main(int cp3_argc, char** cp3_argv) {\n";
+        out += "    ::cp3::runtime::process::initArgv(cp3_argc, cp3_argv);\n";
+    } else {
+        out += "int main() {\n";
+    }
     if (topLevelAwait_) {
         // Top-level `await` (spec §14): the entry unit's statements run inside
         // an eagerly-started coroutine, driven to completion by the loop below.
@@ -436,7 +450,6 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     }
     out += "    return 0;\n";
     out += "}\n";
-    return out;
 }
 
 // -----------------------------------------------------------------------------

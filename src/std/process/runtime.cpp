@@ -4,7 +4,7 @@
 // OWNERSHIP: the std/process family (src/std/process/**). Compiled as a
 // runtime TU by the process native row whenever a program imports
 // "std/process" (src/std/process/native.hpp). The inline surface (exit, the
-// env overlay) stays in cp3/std/process.hpp; this unit owns what needs
+// environment map) stays in cp3/std/process.hpp; this unit owns what needs
 // threading and OS handles.
 //
 // Threading model (D71: one event loop per thread, never a second loop):
@@ -32,17 +32,12 @@
 
 namespace cp3::runtime::process {
 
-namespace {
-
-std::vector<std::string>& argvStore() {
-    static std::vector<std::string> store;
-    return store;
-}
-
-/// The listener table plus the platform child of one live spawn. Registration
-/// and write/kill may come from the caller thread while the loop thread
-/// delivers events, so both are mutex-guarded; `closed` marks "the child is
-/// gone" so late writes/kills are no-ops instead of use-after-close.
+// The listener table plus the platform child of one live spawn. Defined at
+// namespace scope (not in the anonymous namespace below) because SpawnHandle's
+// pimpl members live in this namespace and the header only forward-declares
+// it. Registration and write/kill may come from the caller thread while the
+// loop thread delivers events, so both are mutex-guarded; `closed` marks "the
+// child is gone" so late writes/kills are no-ops instead of use-after-close.
 struct SpawnState {
     std::mutex mutex;
     std::vector<std::function<void(std::string)>> data;
@@ -51,6 +46,13 @@ struct SpawnState {
     detail::ChildProcess child;
     bool closed = false;
 };
+
+namespace {
+
+std::vector<std::string>& argvStore() {
+    static std::vector<std::string> store;
+    return store;
+}
 
 void deliverChunk(SpawnState& state, bool fromStderr, const std::string& chunk) {
     std::vector<std::function<void(std::string)>> handlers;
@@ -105,8 +107,8 @@ void waitAndPost(const std::shared_ptr<SpawnState>& state, EventLoop& loop,
     });
 }
 
-SpawnHandle startSpawn(const std::string& cmd,
-                       const std::vector<std::string>& args) {
+std::shared_ptr<SpawnState> startSpawn(const std::string& cmd,
+                                       const std::vector<std::string>& args) {
     auto state = std::make_shared<SpawnState>();
     std::string error;
     if (!detail::launchChild(cmd, args, state->child, error)) {
@@ -131,7 +133,7 @@ SpawnHandle startSpawn(const std::string& cmd,
         loop.releaseExternal();
         throw Thrown::make(std::string("process.spawn: ") + ex.what());
     }
-    return SpawnHandle(std::move(state));
+    return state;
 }
 
 /// Read one pipe into `out`; runs on a reader thread of `exec`.
@@ -143,7 +145,7 @@ void collectChunks(detail::ChildProcess& child, std::string& out) {
     }
 }
 
-void runExec(const Promise<ExecResult>& result, EventLoop& loop,
+void runExec(Promise<ExecResult> result, EventLoop& loop,
              const std::shared_ptr<detail::ChildProcess>& child) {
     ExecResult out;
     std::string err;
@@ -214,7 +216,7 @@ void SpawnHandle::kill() {
 }
 
 SpawnHandle spawn(const std::string& cmd, const std::vector<std::string>& args) {
-    return startSpawn(cmd, args);
+    return SpawnHandle(startSpawn(cmd, args));
 }
 
 Promise<ExecResult> exec(const std::string& cmd,

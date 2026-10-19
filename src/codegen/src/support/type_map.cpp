@@ -138,6 +138,14 @@ Type promiseValue(const Type& t) {
     return t.parts.front();
 }
 
+// The nominal class families each own a classifier (src/std/<family>/codegen.cpp):
+// Buffer (std/buffer), the JS-compat typed views/DataView, Map/Set
+// (std/collections) and the std/date value. One chain, tried in order.
+static bool classifyClassFamilies(const Type& t, CppInfo& info) {
+    return classifyByteBuffer(t, info) || classifyFamily(t, info) ||
+           classifyCollections(t, info) || classifyDate(t, info);
+}
+
 CppInfo classify(const Type& raw) {
     CppInfo info;
     Type t = raw;
@@ -184,26 +192,17 @@ CppInfo classify(const Type& raw) {
             classifyNullishUnion(t, info);
             return info;
         case TypeKind::Class: {
-            // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp).
-            if (classifyByteBuffer(t, info)) return info;
-            // The JS-compat family (typed views, buffers, DataView).
-            if (classifyFamily(t, info)) return info;
-            // The std/collections family (`Map<K, V>` / `Set<T>`).
-            if (classifyCollections(t, info)) return info;
-            // The `std/date` value type (src/std/date/codegen.cpp).
-            if (classifyDate(t, info)) return info;
-            // The builtin EventEmitter (D74): a reference type, so its C++
-            // spelling is `Ref<EventEmitter>` (cp3/async/emitter.hpp).
+            // The nominal std families (Buffer, typed views, Map/Set,
+            // std/date), then the EventEmitter builtin (D74) and Promise<T>:
+            // the class types with an M1 spelling.
+            if (classifyClassFamilies(t, info)) return info;
             if (t.name == "EventEmitter") {
                 info.shape = Shape::EventEmitter;
                 info.representable = true;
                 info.cpp = "::cp3::runtime::Ref<::cp3::runtime::EventEmitter>";
                 return info;
             }
-            // `Promise<T>` is the only other class type with a spelling (M1).
-            if (!isPromiseType(t)) {
-                return info;
-            }
+            if (!isPromiseType(t)) return info;
             return classifyPromise(t);
         }
         case TypeKind::Function:

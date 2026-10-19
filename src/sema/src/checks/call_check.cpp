@@ -59,20 +59,10 @@ Type Analyzer::inferCall(CallExpr& call) {
         if (call.callee->kind == NodeKind::MemberExpr) {
             checkParallelCall(call);
             auto& member = static_cast<MemberExpr&>(*call.callee);
-            Type json;
-            if (tryInferJsonCall(call, member, json)) {
-                return json;
+            Type inferred;
+            if (tryInferMemberCall(call, member, inferred)) {
+                return inferred;
             }
-            Type promise;
-            if (tryInferPromiseStaticCall(call, member, promise)) {
-                return promise;
-            }
-            Type env;
-            if (tryInferEnvCall(call, member, env)) {
-                return env;
-            }
-            if (Type family; tryInferFamilyMethodCall(call, member, family)) return family;
-            if (Type buffer; tryInferBufferCall(call, member, buffer)) return buffer;
         }
     }
 
@@ -103,6 +93,18 @@ Type Analyzer::inferCall(CallExpr& call) {
            "value of type '" + pretty(ct) + "' is not callable");
     inferArgs(call);
     return withType(call, Type::error());
+}
+
+// The member-call site inference chain (one hook per family, each owning its
+// own typing): JSON.parse (unknown), the Promise statics, `env.get<T>`
+// (src/std/env/sema.cpp) and the JS-compat family / Buffer methods. Returns
+// true when one of them typed the call and `out` is set.
+bool Analyzer::tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
+    if (tryInferJsonCall(call, m, out)) return true;
+    if (tryInferPromiseStaticCall(call, m, out)) return true;
+    if (tryInferEnvCall(call, m, out)) return true;
+    if (tryInferFamilyMethodCall(call, m, out)) return true;
+    return tryInferBufferCall(call, m, out);
 }
 
 // Core timer builtins (spec §14, STDLIB docs §03): honest result types so

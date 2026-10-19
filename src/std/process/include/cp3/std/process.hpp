@@ -11,7 +11,10 @@
 //   process.exit(code)        -> `::cp3::runtime::process::exit(code)`
 //   process.argv              -> `::cp3::runtime::process::argv()`
 //   process.argv.length       -> `argv()->size()` (emitted directly by codegen)
-//   process.env.get(name)     -> `::cp3::runtime::process::envGet(name)`
+//   process.env               -> `::cp3::runtime::process::envMap()`
+//                                (the program-wide `Map<string, string>`;
+//                                `.get`/`.set`/... lower through the
+//                                std/collections member tables)
 //   process.exec(cmd, args)   -> `::cp3::runtime::process::exec(cmd, args)`
 //                                (Promise<ExecResult>; members map
 //                                stdout->out, stderr->err, exitCode->exitCode)
@@ -29,10 +32,12 @@
 //     the program name, so argv().size() >= 1, as in Node). A program that
 //     never imported std/process has no argv store; argv() then reports a
 //     single "cp3" entry.
-//   * envGet/envHas read an in-process overlay first (env.load writes it) and
-//     the OS environment second. An OS variable that is present but EMPTY is
-//     `undefined` (process_env_get_unset pins unset === undefined); an
-//     overlay entry may be an empty string (a parsed `KEY=` line is present).
+//   * envMap is the program-wide `process.env` `Map<string, string>`: created
+//     on first use and seeded from the OS environment (an OS variable that is
+//     present but EMPTY is absent, so `get(missing) === undefined` holds for
+//     it as well). `env.load` writes into it through envSet. The OS
+//     environment itself is never modified, so children of exec/spawn inherit
+//     the OS environment only.
 //   * exec: buffered. Resolves once, after the child exits, with stdout /
 //     stderr / exitCode. It does NOT reject on a non-zero exit code; a
 //     rejection is reserved for a command that cannot be started at all
@@ -46,22 +51,22 @@
 //     threads that post onto the calling thread's loop (D71: one loop per
 //     thread; no second loop).
 //
-// The environment overlay lives here (process owns `process.env`); the
-// std/env family (src/std/env/include/cp3/std/env.hpp) composes it: `env.get`
-// is `envGet` plus conversion/default/throw, `env.has` is `envHas`, and
+// The environment map lives here (process owns `process.env`); the std/env
+// family (src/std/env/include/cp3/std/env.hpp) composes it: `env.get` is
+// `envGet` plus conversion/default/throw, `env.has` is `envHas`, and
 // `env.load` parses a .env file into `envSet`.
 // =============================================================================
 #pragma once
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
 #include <type_traits>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -69,6 +74,13 @@
 #include "cp3/async/promise.hpp"
 #include "cp3/core/error.hpp"
 #include "cp3/core/value.hpp"
+#include "cp3/std/collections.hpp"
+
+#if !defined(_WIN32)
+// The POSIX environment block (the seeding source of process.env); declared at
+// global scope so the C symbol name is not namespace-mangled.
+extern char** environ;
+#endif
 
 namespace cp3::runtime::process {
 
@@ -95,32 +107,50 @@ void initArgv(int argc, char** argv);
 Array<std::string> argv();
 
 // -----------------------------------------------------------------------------
-// process.env (the overlay `std/env` composes)
+// process.env: the program-wide `Map<string, string>` (docs §04)
 // -----------------------------------------------------------------------------
-inline std::unordered_map<std::string, std::string>& envOverlay() {
-    static std::unordered_map<std::string, std::string> overlay;
-    return overlay;
+// One `KEY=VALUE` entry of the platform's environment block; a missing `=`,
+// an empty key or an empty value is skipped (a present-but-EMPTY OS variable
+// counts as unset, the process_env_get_unset semantics).
+inline void seedEnvEntry(const collections::Map<std::string, std::string>& map,
+                         const char* entry) {
+    if (entry == nullptr) return;
+    const char* equals = std::strchr(entry, '=');
+    if (equals == nullptr || equals == entry || equals[1] == '\0') return;
+    map->set(std::string(entry, equals), std::string(equals + 1));
+}
+
+// Created on first use and seeded from the OS environment; `env.load` and
+// `process.env.set` write here. The OS environment itself is never modified:
+// children of exec/spawn inherit the OS environment only.
+inline collections::Map<std::string, std::string> envMap() {
+    static collections::Map<std::string, std::string> store = [] {
+        collections::Map<std::string, std::string> map =
+            collections::makeMap<std::string, std::string>();
+#if defined(_WIN32)
+        for (char** entry = _environ; entry != nullptr && *entry != nullptr;
+             ++entry) {
+            seedEnvEntry(map, *entry);
+        }
+#else
+        for (char** entry = environ; entry != nullptr && *entry != nullptr;
+             ++entry) {
+            seedEnvEntry(map, *entry);
+        }
+#endif
+        return map;
+    }();
+    return store;
 }
 
 inline std::optional<std::string> envGet(const std::string& name) {
-    const auto& overlay = envOverlay();
-    const auto it = overlay.find(name);
-    if (it != overlay.end()) return it->second;
-    if (const char* value = std::getenv(name.c_str())) {
-        if (*value != '\0') return std::string(value);
-    }
-    return std::nullopt;
+    return envMap()->get(name);
 }
 
-inline bool envHas(const std::string& name) {
-    const auto& overlay = envOverlay();
-    if (overlay.find(name) != overlay.end()) return true;
-    if (const char* value = std::getenv(name.c_str())) return *value != '\0';
-    return false;
-}
+inline bool envHas(const std::string& name) { return envMap()->has(name); }
 
 inline void envSet(const std::string& name, const std::string& value) {
-    envOverlay()[name] = value;
+    envMap()->set(name, value);
 }
 
 // -----------------------------------------------------------------------------
@@ -149,9 +179,11 @@ public:
 
     /// `p.on("data" | "stderr", (chunk: string) => void)` /
     /// `p.on("exit", (code: number) => void)`. A listener may also take no
-    /// parameters at all (the nullary wrapper below). With a listener of the
-    /// wrong shape the emitted C++ fails to compile; sema types the documented
-    /// one-parameter callbacks.
+    /// parameters at all (the nullary wrappers below). The event dispatch is
+    /// a runtime string, so BOTH adapters instantiate for every listener; the
+    /// one that does not fit the listener's shape compiles to an inert
+    /// wrapper that is never attached, so a listener of the wrong shape for
+    /// its event simply never fires (sema types the documented callbacks).
     template <class F>
     void on(const std::string& event, F&& listener) {
         if (event == "exit") {
@@ -181,10 +213,14 @@ private:
     static std::function<void(std::string)> adaptChunk(F&& listener) {
         if constexpr (std::is_invocable_v<F&, std::string&>) {
             return std::function<void(std::string)>(std::forward<F>(listener));
-        } else {
+        } else if constexpr (std::is_invocable_v<F&>) {
             return [fn = std::forward<F>(listener)](std::string) mutable {
                 fn();
             };
+        } else {
+            // The dead branch of `on`'s runtime dispatch (an exit-shaped
+            // listener): never attached, only required to compile.
+            return [](std::string) {};
         }
     }
 
@@ -192,8 +228,12 @@ private:
     static std::function<void(double)> adaptExit(F&& listener) {
         if constexpr (std::is_invocable_v<F&, double>) {
             return std::function<void(double)>(std::forward<F>(listener));
-        } else {
+        } else if constexpr (std::is_invocable_v<F&>) {
             return [fn = std::forward<F>(listener)](double) mutable { fn(); };
+        } else {
+            // The dead branch of `on`'s runtime dispatch (a chunk-shaped
+            // listener): never attached, only required to compile.
+            return [](double) {};
         }
     }
 

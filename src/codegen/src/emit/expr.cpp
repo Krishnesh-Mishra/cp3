@@ -2,13 +2,11 @@
 // src/codegen/src/emit/expr.cpp - codegen expression lowering (STYLE.md §8).
 //
 // The expression emitter: literals, identifiers, templates, the `tsCall`/
-// `cond` value-vs-condition adapters, and the operator forms. Logical operators
-// use JS truthiness (`cp3_truthy` lambdas); `??` uses a real nullish (not
-// truthiness) test. Out-of-scope nodes report CP3002 and emit a compilable stub
-// (never throw, never abort).
-//
-// Calls (including `console.*`) live in emit_call.cpp; the async / promise /
-// timer surface lives in emit_async.cpp.
+// `cond` value-vs-condition adapters, and the operator forms. Logical
+// operators use JS truthiness (`cp3_truthy` lambdas); `??` uses a real
+// nullish (not truthiness) test. Out-of-scope nodes report CP3002 and emit a
+// compilable stub (never throw, never abort). Calls (including `console.*`)
+// live in emit_call.cpp; the async / promise / timer surface in emit_async.cpp.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -58,8 +56,7 @@ bool isComparisonOp(BinaryOp op) {
     }
 }
 
-// `maybe <op> nullish` for a Shape::Maybe operand: strict `===` requires the
-// flavor to match, loose `==` treats both nullish flavors as equal (JS).
+// `maybe <op> nullish`: strict `===` needs the flavor, loose `==` takes both.
 std::string maybeNullishCompare(const std::string& mb, Shape nullish,
                                 bool isEqual, bool isStrict) {
     std::string cond;
@@ -298,8 +295,7 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
         return isEqual ? "true" : "false";
     }
 
-    // optional <-> nullish: an optional only ever holds a value or nothing.
-    // Strict `===` only matches when the empty slot's flavor agrees.
+    // optional <-> nullish: strict `===` needs the empty slot's flavor to agree.
     if (L.shape == Shape::Optional && rNullish) {
         if (isStrict && !optionalEmptyMatches(L.emptyKind, R.shape)) {
             return isEqual ? "false" : "true";
@@ -313,8 +309,8 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
         return isEqual ? "(! " + rhs + ".has_value())" : "(" + rhs + ".has_value())";
     }
 
-    // Maybe (three-way nullable) <-> nullish: the flavor is stored, so strict
-    // `===` can match exactly and loose `==` matches either flavor.
+    // Maybe (three-way nullable) <-> nullish: strict `===` matches the stored
+    // flavor, loose `==` matches either flavor.
     if (L.shape == Shape::Maybe && rNullish) {
         return maybeNullishCompare(lhs, R.shape, isEqual, isStrict);
     }
@@ -329,8 +325,8 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
         return "((" + opt + ".has_value()) && (*" + opt + " " + op + " " + val + "))";
     }
 
-    // Maybe vs Maybe, or Maybe vs T: compare the unwrapped value (a nullish
-    // side never equals a non-nullish value, so the guard is required).
+    // Maybe vs Maybe/T: compare the unwrapped value, guarded so a nullish side
+    // never equals a non-nullish value.
     if (L.shape == Shape::Maybe || R.shape == Shape::Maybe) {
         const std::string mb = (L.shape == Shape::Maybe) ? lhs : rhs;
         const std::string val = (L.shape == Shape::Maybe) ? rhs : lhs;
@@ -342,8 +338,8 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
         return "(" + lhs + " " + op + " " + rhs + ")";
     }
 
-    // Differing primitive kinds: D15 says loose `==` is false; `===` is false
-    // too. Preserve operand evaluation with the comma operator.
+    // Differing primitive kinds: false either way (D15), with the comma
+    // operator preserving operand evaluation.
     return "(" + lhs + ", " + rhs + ", " + (isEqual ? "false" : "true") + ")";
 }
 

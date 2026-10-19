@@ -9,16 +9,17 @@
 // The typed surface is the documented set (STDLIB docs §04, process section):
 // `argv`, `env`, `exit`, `exec`, `spawn`. `exec`/`spawn` resolve to the
 // `$process:ExecResult` / `$process:SpawnHandle` marker shapes below, which
-// codegen (src/std/process/codegen.cpp) recognises by name; the shapes are
-// OPEN, because only the documented fields are typed and the rest of the
-// not-yet-typed surface stays permissive (the landed network convention).
+// codegen (src/std/process/codegen.cpp) recognises by name. The shapes are
+// CLOSED: the docs pin them as interfaces with exactly these fields, so
+// `result.stdout` types as the string it is (an ambient field would silently
+// compare unequal and could not take `.length`; see member_check.cpp) and an
+// undocumented member is CP3305 with the documented names as candidates.
 //
-// DEPENDENCY SEAM - `process.env`: the docs pin `Map<string, string>` from
-// the (in-flight, not yet landed) collections family. Until it lands this
-// file types a minimal fixed placeholder, `env.get(name): string | undefined`
-// (the pinned `process_env_get_unset` behavior). TODO(collections): replace
-// the `env` arm of `processMember` with the landed Map<string, string>; the
-// exact swap point is marked there.
+// `process.env` is `Map<string, string>` (docs §04). The collections family
+// (src/std/collections/sema.cpp) owns that type's member table, so
+// `env.get(missing)` types `string | undefined` - the pinned
+// process_env_get_unset equality - and every member lookup flows through the
+// shared Map inference (member_check.cpp's Class branch).
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -62,8 +63,17 @@ Type Analyzer::processObjectType(const std::string& name) {
     } else {
         return Type::unknown();
     }
-    Type object = makeObjectType(std::move(fields), true, false, {});
-    object.name = name;
+    Type object = makeObjectType(std::move(fields), false, false, {});
+    // makeObjectType keys the shape by its structural label, while codegen
+    // (src/std/process/codegen.cpp) recognises these markers by NAME and
+    // memberOfProbe's shapeOf looks up by name, so the marker name needs the
+    // same shape registered under it (the fields are identical).
+    const auto label = shapes_.find(object.name);
+    if (label != shapes_.end()) {
+        Shape shape = label->second;
+        object.name = name;
+        shapes_[name] = std::move(shape);
+    }
     return object;
 }
 
@@ -84,25 +94,13 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
                               processObjectType(kSpawnHandle));
     }
     if (prop == "env") {
-        // ---------------------------------------------------------------
-        // TODO(collections): THE SWAP POINT for `process.env`. Replace this
-        // placeholder object with the landed collections `Map<string, string>`
-        // (docs §04 pins `env: Map<string, string>`). `get(missing)` must keep
-        // typing as `string | undefined` and keep lowering to
-        // `::cp3::runtime::process::envGet`; once the real Map lands, sema's
-        // member lookup comes from the collections family instead of this arm
-        // and the placeholder below is deleted. Re-verify after the swap:
-        // `process_env_get_unset` (the `=== undefined` pin).
-        // ---------------------------------------------------------------
-        std::vector<Type> value;
-        value.push_back(Type::string());
-        value.push_back(Type::undefined());
-        Field get;
-        get.name = "get";
-        get.type = Type::function({Type::string()}, Type::unionOf(std::move(value)));
-        std::vector<Field> fields;
-        fields.push_back(std::move(get));
-        return makeObjectType(std::move(fields), false, false, {});
+        // docs §04 pins `Map<string, string>`; the collections family (D44)
+        // owns the type and its members, so this is just the nominal `Map`
+        // instance (the swap point recorded before the merge, now closed).
+        Type env(TypeKind::Class, "Map");
+        env.parts.push_back(Type::string());
+        env.parts.push_back(Type::string());
+        return env;
     }
     return std::nullopt;
 }

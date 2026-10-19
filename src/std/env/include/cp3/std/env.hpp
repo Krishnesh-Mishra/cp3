@@ -4,9 +4,9 @@
 //
 // OWNERSHIP: the std/env family (src/std/env/**). Header-only: the .env parser
 // and the typed get/has/load surface are `inline`; the values themselves live
-// in the process family's overlay (`envSet`/`envGet`/`envHas`,
-// cp3/std/process.hpp), which this header composes (STDLIB docs §04: env is
-// "built on top of process").
+// in the process family's program-wide environment map (`envSet`/`envGet`/
+// `envHas`, cp3/std/process.hpp), which this header composes (STDLIB docs §04:
+// env is "built on top of process").
 //
 // -----------------------------------------------------------------------------
 // CODEGEN CONTRACT (src/std/env/codegen.cpp)
@@ -26,8 +26,9 @@
 //     throws (silently returning the fallback would hide a config error).
 //   * T is one of string / number / boolean (the representable primitives);
 //     boolean reads "false", "0" and "" as false, anything else as true.
-//   * has(key): true when the overlay has the key (env.load always sets one)
-//     or the OS environment value is non-empty.
+//   * has(key): true when the environment map has the key. The map is seeded
+//     from the OS environment at first use, so an unset or EMPTY OS variable
+//     is false, while a value env.load wrote (an empty one included) is true.
 //   * load(path): throws when the file cannot be opened. The format is the
 //     usual .env subset: `KEY=VALUE` lines, blank lines and `#` comments
 //     skipped, an optional `export ` prefix, surrounding single/double quotes
@@ -126,7 +127,8 @@ inline T get(const std::string& key, T fallback) {
     return detail::convert<T>(key, *raw);
 }
 
-/// `env.has(key)`: overlay key present, or a non-empty OS environment value.
+/// `env.has(key)`: the key is present in the environment map (seeded from the
+/// OS environment; an unset or EMPTY OS variable is false).
 inline bool has(const std::string& key) { return process::envHas(key); }
 
 /// `env.load(path)`: parse a .env-style file into `process.env`; throws when

@@ -246,6 +246,16 @@ private:
     std::string emitJsonMember(const MemberExpr& m);
     std::string emitProcessCall(const CallExpr& c, const MemberExpr& m);
     std::string emitProcessMember(const MemberExpr& m);
+    // `std/process` value receivers are recognised by the sema marker names
+    // ("$process:*"), so the SpawnHandle hooks live on the receiver: the
+    // `p.on/write/kill` member calls plus the string[] argument-vector
+    // lowering exec/spawn share.
+    bool isProcessObject(const Expr* e) const;
+    std::string emitProcessObjectCall(const CallExpr& c, const MemberExpr& m);
+    std::string processArgs(const Expr& e);
+    // std/env (src/std/env/codegen.cpp): the `{ env }` named import's
+    // get/has/load calls, backed by cp3/std/env.hpp (composed on process).
+    std::string emitEnvCall(const CallExpr& c, const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
     // Native-backed std modules (src/std/crypto/codegen.cpp,
     // src/std/network/codegen.cpp): one per-module lowering unit. Each returns
@@ -349,6 +359,9 @@ private:
     std::string buildHeader(const std::string& decls) const;
     std::string buildSource(const std::string& decls, const std::string& defs,
                             const std::string& mainBody) const;
+    // The `int main` unit of the generated source: the std/process argument
+    // vector init, the top-level-await coroutine and the event-loop drain.
+    void emitMain(std::string& out, const std::string& mainBody) const;
 
     // --- state ----------------------------------------------------------------
     // The int64 fast-path state (D64): non-null exactly while a function's fast
@@ -398,6 +411,7 @@ private:
     std::unordered_set<std::string> jsonShapeUsed_;
     std::string jsonShapeDecls_;
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
+    bool needsEnv_ = false;        // { env } -> cp3/std/env.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include

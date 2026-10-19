@@ -234,6 +234,9 @@ private:
     // `env.get<T>(key, options?)` (src/std/env/sema.cpp): T from the explicit
     // type argument, else the `{ default: v }` value type, else `string`.
     bool tryInferEnvCall(CallExpr& call, MemberExpr& m, Type& out);
+    // The member-call site inference chain for a MemberExpr callee: the JSON,
+    // Promise-static, env, JS-compat-family and Buffer hooks in order.
+    bool tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out);
     void inferArgs(CallExpr& call);
     void sigFromFunctionType(const Type& ct, FuncSig& localSig);
     void inferArg(Expr* a);
