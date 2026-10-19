@@ -107,15 +107,16 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
     switch (ot.kind) {
         case TypeKind::Object: {
             if (isAmbientType(ot)) return ambient();
+            // Documented std/network fields carry their declared type; the
+            // marker stays open, so unknown members fall through to ambient.
+            if (auto t = networkObjectMember(ot, prop)) return *t;
             // std/fs receiver fields (`stat.size`, `stat.modifiedAt`, ...):
             // src/std/fs/sema.cpp; a miss keeps the ambient fallthrough.
             if (auto fs = fsReceiverMember(ot, prop)) return *fs;
             Shape* sh = shapeOf(ot);
             if (!sh) return ambient();
             if (sh->open) return ambient();
-            if (sh->tuple) {
-                return ambient();
-            }
+            if (sh->tuple) return ambient();
             if (const Field* f = findField(sh, prop)) return f->type;
             std::vector<std::string> candidates;
             candidates.reserve(sh->fields.size());
@@ -170,6 +171,8 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             return ambient();
         case TypeKind::String:
             return stringMember(prop);
+        case TypeKind::Enum:
+            return enumMember(ot, prop, span);
         case TypeKind::Number:
         case TypeKind::Boolean:
             return ambient();

@@ -21,6 +21,8 @@
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
 //   emit/decl.cpp          forward decls, function signatures, declarations
+//   emit/enum.cpp          enum declarations, member access, same-enum switch
+//                          (spec 04)
 //   src/std/typed-arrays/codegen.cpp  the JS-compat typed-array family (D69)
 //   emit/std/common.cpp               ambient std surface: shared helpers +
 //                                     dispatch
@@ -46,9 +48,29 @@
 #include "cp3/ast.hpp"
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic.hpp"
+#include "detail/enums.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
+
+// The int64 fast-path state (D64): non-null exactly while a function's fast
+// body is being attempted (`Generator::intMode_`). `failed` means the attempt
+// cannot be proven exact and must be discarded, in which case the ordinary
+// double body is the only lowering.
+struct IntMode {
+    bool failed = false;
+    // Names read somewhere outside a `return` argument (int_reads.cpp);
+    // `nullopt` when that walk could not see the whole body. A name absent here
+    // is read only by `return`, so its bound check can be deferred from the
+    // operation to that single observation point.
+    std::optional<std::unordered_set<std::string>> readOutsideReturns;
+    // Locals whose bound check is currently deferred: their value may sit
+    // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
+    std::unordered_set<std::string> deferred;
+    // Set while emitting a statement's own expression: the one position where
+    // an assignment's value is discarded, so a raw store is allowed.
+    bool stmtExpr = false;
+};
 
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
@@ -56,7 +78,7 @@ namespace cp3 {
 class Generator {
 public:
     Generator(DiagnosticSink& sink, const SemaResult& sema,
-              const std::string& moduleName);
+              const std::string& moduleName, bool lineDirectives = false);
 
     // Top-level orchestration: collect names, emit every statement, assemble.
     GeneratedModule run(const Program& program);
@@ -64,6 +86,15 @@ public:
 private:
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
+
+    // --- source mapping (support/line_map.cpp) --------------------------------
+    // `emitLineDirective` appends `#line <line> "<source>"` for `node`'s span
+    // so DWARF (and gdb) see the .cp3 file; a no-op unless mapping is on.
+    void emitLineDirective(const Node& node, std::string& out);
+    // `emitMappedRaw` pins each physical line of a raw structural chunk (the
+    // int64 wrapper prologue) to `node`; verbatim when mapping is off.
+    void emitMappedRaw(const Node& node, const std::string& raw,
+                       std::string& out);
 
     // --- declarations (emit_decl.cpp) ----------------------------------------
     void collectFunctionNames(const Stmt& s);
@@ -76,6 +107,8 @@ private:
     std::string plainBody(const FunctionDeclaration& fd, const std::string& ret);
     void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
                        std::string& mainBody);
+    void emitModuleVarNoInit(const detail::CppInfo& ci, const std::string& name,
+                             const std::string& cv, std::string& decls);
     std::optional<Type> parameterType(const Parameter& p,
                                       const FunctionDeclaration& fd,
                                       std::size_t index) const;
@@ -92,6 +125,10 @@ private:
     std::optional<Type> lookup(const std::string& name) const;
     std::optional<Type> bindingType(const VariableDeclarator& d) const;
     std::optional<Type> resolvedBindingType(const VariableDeclarator& d) const;
+    // A type annotation -> a cp3 Type (detail::typeFromTypeNode), with every
+    // Class part named like a collected enum rewritten to TypeKind::Enum.
+    std::optional<Type> typeOfNode(const TypeNode& tn) const;
+    void rewriteEnumTypes(Type& t) const;
     Type effectiveType(const Expr& e) const;
     Type inferBinary(const BinaryExpr& b) const;
     Type inferLogical(const LogicalExpr& l) const;
@@ -109,13 +146,7 @@ private:
     // A whole array in a formatter or truthiness test pulls the arr family
     // block (D69), even when this unit never spells the C++ type itself (a
     // cross-module call's result, say).
-    void noteFamilyUse(const Expr& e) {
-        const detail::CppInfo ci = info(e);
-        if (ci.shape == detail::Shape::Array ||
-            ci.shape == detail::Shape::TypedArray) {
-            needsTypedArray_ = true;
-        }
-    }
+    void noteFamilyUse(const Expr& e);
     std::string emitBinary(const BinaryExpr& b);
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
                              const detail::CppInfo& R, const std::string& lhs,
@@ -130,6 +161,9 @@ private:
 
     // --- calls (emit/call.cpp) -----------------------------------------------
     std::string emitCall(const CallExpr& c);
+    // The documented global numeric parsers (`parseInt`/`parseFloat`):
+    // argument coercion plus the runtime helper (STDLIB section 3).
+    std::string emitParseBuiltin(const CallExpr& c, const std::string& name);
     // Lowers a user-function call's argument list, applying the callee's
     // optional/default parameters to arguments that are explicit `undefined`.
     std::vector<std::string> emitCallArgs(const CallExpr& c,
@@ -143,12 +177,10 @@ private:
     // object form.
     std::string emitConsoleCall(const CallExpr& c, const MemberExpr& m);
     std::string emitConsoleLogCall(const CallExpr& c);
-    std::string emitConsoleStreamCall(const CallExpr& c,
-                                      const std::string& method);
+    std::string emitConsoleStreamCall(const CallExpr& c, const std::string& method);
     std::string emitConsoleAssert(const CallExpr& c);
     std::string emitConsoleInput(const CallExpr& c);
-    std::string emitConsoleListener(const CallExpr& c,
-                                    const std::string& method);
+    std::string emitConsoleListener(const CallExpr& c, const std::string& method);
     std::string consoleListenerArg(const Expr& arg);
     std::string consoleArgText(const Expr& arg);
     std::string consoleObjectText(const ObjectLiteral& literal);
@@ -185,27 +217,20 @@ private:
     std::string emitFamilyIndexWrite(const AssignmentExpr& a);
     // The receiver text of a family method: an `Array(n)` constructor or an
     // array literal takes the element type the call fixed (`elem`).
-    std::string familyReceiverText(const Expr& obj, const Type& elem,
-                                   const Node& site);
-    std::string arrayCtorText(const ExprList& args, const Type& elem,
-                              const Node& site);
-    std::string typedCtorText(const std::string& cls, const ExprList& args,
-                              const Node& site);
-    std::string arrayStaticCallText(const CallExpr& c,
-                                    const std::string& prop);
-    std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m,
-                                  const Type& recv);
-    std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m,
-                                  const Type& recv);
-    std::string arraySortCallText(const CallExpr& c, const MemberExpr& m,
-                                  const Type& recv);
+    std::string familyReceiverText(const Expr& obj, const Type& elem, const Node& site);
+    std::string arrayCtorText(const ExprList& args, const Type& elem, const Node& site);
+    std::string typedCtorText(const std::string& cls, const ExprList& args, const Node& site);
+    std::string arrayStaticCallText(const CallExpr& c, const std::string& prop);
+    std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string arraySortCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string arrayIncludesCallText(const CallExpr& c, const MemberExpr& m,
+                                      const Type& recv);
     std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m,
                                     const char* tag);
     std::string dataViewCallText(const CallExpr& c, const MemberExpr& m);
-    std::string arrayLiteralText(const ArrayLiteral& lit,
-                                 const Type& elemOverride);
-    std::string declaratorInitText(const VariableDeclarator& d,
-                                   const Type& declared);
+    std::string arrayLiteralText(const ArrayLiteral& lit, const Type& elemOverride);
+    std::string declaratorInitText(const VariableDeclarator& d, const Type& declared);
 
     // --- std/collections (src/std/collections/codegen.cpp) --------------------
     // `new Map<K, V>()` / `new Set<T>()`, the member calls (`set`/`get`/`has`/
@@ -282,15 +307,23 @@ private:
     std::string emitByteBufferMethodCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMember(const MemberExpr& m);
     // `std/network` receivers are recognised by the sema marker names
-    // ("$network:*"), so the hooks live on the receiver, not on the member:
-    // named imports (identifier calls), `new` forms, member calls/reads.
+    // ("$network:*"): named imports, `new` forms, member calls/reads.
     bool isNetworkObject(const Expr* e) const;
+    // Std/network Map-shaped field reads (`res.headers`, `req.params`, ...):
+    // their `Map<string, string>` type, re-derived from the hints below.
+    std::optional<Type> networkMapFieldType(const Expr& e) const;
+    std::string emitNetworkMapFieldCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitNetworkMapFieldMember(const MemberExpr& m);
     std::string emitNetworkIdentifier(const CallExpr& c, const std::string& name);
     std::string emitUnresolvedCall(const CallExpr& c, const std::string& name);
     std::string emitNetworkNew(const NewExpr& n);
     std::string emitNetworkMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkMemberRead(const MemberExpr& m);
     std::string emitNetworkFetch(const CallExpr& c, const ExprList& args);
+    // `res.json<T>()` / `req.json<T>()` (reified interface T; "" else) and
+    // `res.json(payload, status?)`: the json value tree serializes the latter.
+    std::string networkJsonRecord(const MemberExpr& m, const CallExpr& c);
+    std::string networkResponseJson(const CallExpr& c, const MemberExpr& m);
     std::string fetchInitText(const Expr& init);
     std::string networkArg(const Type& receiver, const std::string& property,
                            const CallExpr& c, const Expr& arg, std::size_t index);
@@ -321,6 +354,18 @@ private:
     void emitReturn(const ReturnStatement& r, std::string& out, int indent);
     void emitThrow(const ThrowStatement& t, std::string& out, int indent);
     void emitTry(const TryStatement& ts, std::string& out, int indent);
+
+    // --- enums (emit/enum.cpp) ------------------------------------------------
+    // Top-level `enum` declarations (spec 04): `collectEnums` resolves each
+    // declaration and prepends the `enum class <name> : long long` text;
+    // `emitEnumMember`/`emitEnumObjectLiteral` lower a member access and an
+    // enum-carrying object literal; `emitEnumSwitch` handles a switch statement
+    // (the same-enum lowering via `lowerEnumSwitch`, else the CP3002 stub).
+    void collectEnums(const Program& program);
+    std::string emitEnumMember(const MemberExpr& m);
+    std::string emitEnumObjectLiteral(const ObjectLiteral& ol);
+    bool lowerEnumSwitch(const SwitchStatement& sw, std::string& out, int indent);
+    void emitEnumSwitch(const Stmt& s, std::string& out, int indent);
 
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
     // The fast path is emitted per function: a body with every `number`
@@ -372,24 +417,7 @@ private:
     void emitMain(std::string& out, const std::string& mainBody) const;
 
     // --- state ----------------------------------------------------------------
-    // The int64 fast-path state (D64): non-null exactly while a function's fast
-    // body is being attempted. `failed` means the attempt cannot be proven
-    // exact and must be discarded, in which case the ordinary double body is
-    // the only lowering.
-    struct IntMode {
-        bool failed = false;
-        // Names read somewhere outside a `return` argument (int_reads.cpp);
-        // `nullopt` when that walk could not see the whole body. A name absent
-        // here is read only by `return`, so its bound check can be deferred
-        // from the operation to that single observation point.
-        std::optional<std::unordered_set<std::string>> readOutsideReturns;
-        // Locals whose bound check is currently deferred: their value may sit
-        // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
-        std::unordered_set<std::string> deferred;
-        // Set while emitting a statement's own expression: the one position
-        // where an assignment's value is discarded, so a raw store is allowed.
-        bool stmtExpr = false;
-    };
+    // The int64 fast-path state (D64); see `struct IntMode` above.
     std::unique_ptr<IntMode> intMode_;
 
     DiagnosticSink& sink_;
@@ -398,6 +426,7 @@ private:
     std::string namesp_;
 
     bool consoleImported_ = false;
+    bool lineMapping_ = false;     // --debug: emit `#line` into generated code
     bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
     bool needsConsoleAbi_ = false; // console async/misc members -> family header
     bool needsEventLoop_ = false;  // async/timers: emit runEventLoop() in main
@@ -418,6 +447,13 @@ private:
     std::unordered_map<std::string, std::string> jsonShapeByLabel_;
     std::unordered_set<std::string> jsonShapeUsed_;
     std::string jsonShapeDecls_;
+    // The unit's enums (collectEnums): the resolved model per declaration name,
+    // the accumulated `enum class` decls text, and the sema object label ->
+    // field names of every enum-carrying object literal that lowered to a
+    // `std::tuple` (the field read is `std::get<i>`).
+    std::unordered_map<std::string, detail::EnumCppInfo> enums_;
+    std::string enumDecls_;
+    std::unordered_map<std::string, std::vector<std::string>> enumObjectFields_;
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
     bool needsEnv_ = false;        // { env } -> cp3/std/env.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
@@ -427,6 +463,7 @@ private:
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
     bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
+    bool needsTuple_ = false;        // enum-carrying object literal -> <tuple>
     bool needsEventEmitter_ = false;  // EventEmitter/Listener -> cp3/async/emitter.hpp
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
@@ -435,6 +472,9 @@ private:
     std::string currentReturn_ = "int";
 
     std::vector<std::unordered_map<std::string, Type>> env_;
+    // Codegen type hints for the Map-shaped std/network fields; the open
+    // marker hides their type in sema, so networkMapFieldType checks these.
+    std::unordered_map<std::uint32_t, Type> exprTypeHints_;
     std::unordered_set<std::string> functions_;
     std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
     std::unordered_set<std::string> asyncFunctions_;   // `async function` names

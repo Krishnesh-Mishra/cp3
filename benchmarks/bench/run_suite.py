@@ -68,10 +68,9 @@ SERVER_PORTS = {
     "go": 18082,
     "js": 18083,
     "python": 18084,
-    # The cp3 server entry has no argv surface in the beta-one std spec, so its
-    # port is the constant in its own source. Never bound unless std/network
-    # lands and the entry builds.
-    "cp3": 8080,
+    # std/process (argv) and std/network have landed, so the cp3 entry takes
+    # its port from argv[1] like every other language.
+    "cp3": 18085,
 }
 LANGUAGES = ["cpp", "rust", "go", "js", "python", "cp3"]
 

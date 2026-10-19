@@ -128,17 +128,23 @@ list shorter, and that is the intended use of the gate.
   iterations (`128576`) and 40,000 iterations (`675862`) across all six
   languages, including cp3.
 
-## 5. Tier-1 cp3 status (pending rows)
+## 5. Tier-1 cp3 status (snapshot 2026-10-19)
 
-- `health-server`: `main.cp3:24:13: error: CP3002: codegen: CallExpr ('call to function 'createServer' not declared in this unit') is not implemented in M1`
-- `compute-single-int`: `main.cp3:25:10: error: CP3002: codegen: Identifier ('returned value outside M1') is not implemented in M1`
-- `compute-multi`: `main.cp3:34:15: error: CP3002: codegen: CallExpr ('parallel.*') is not implemented in M1`
-- `word-frequency`: `main.cp3:27:1: error: CP3302: cannot find type name 'Map'`
-- `object-churn`: `main.cp3:17:1: error: CP3002: not implemented yet: class declarations`
-- `array-growth`: `main.cp3:15:7: error: CP3002: codegen: VariableDeclarator ('declared type outside M1') is not implemented in M1`
-- `closure-capture`: `main.cp3:20:7: error: CP3002: codegen: VariableDeclarator ('declared type outside M1') is not implemented in M1`
-- `interface-dispatch`: `main.cp3:18:1: error: CP3207: syntax error: expected ';'`
-- `generics-mono`: `main.cp3:14:1: error: CP3207: syntax error: expected ';'`
+Scan method: each entry is copied to a scratch directory and built once with
+`build\bin\cp3c.exe`; the quoted text is the compiler's own first diagnostic.
+
+- `health-server`: **runs**. It builds against the landed `std/network` and
+  serves the wire contract on the port it is given as `argv[1]`
+  (`/healthz` -> 200 `ok`, `/` -> 200 `health-server ok`, `/nope` -> 404
+  `not found`). The timed row joins the next suite run on a quiet machine.
+- `compute-single-int`: `main.cp3:25:10: error: CP3002: not implemented yet: this returned value` (the native-type tier, D65)
+- `compute-multi`: `main.cp3:34:15: error: CP3002: not implemented yet: parallel.*`
+- `word-frequency`: `main.cp3:28:3: error: CP3002: not implemented yet: this method call` (the array surface; the Map surface itself landed and the entry uses the inference form because a `Map<...>` type annotation is a separate known gap)
+- `object-churn`: `main.cp3:17:1: error: CP3002: not implemented yet: classes`
+- `array-growth`: `main.cp3:19:3: error: CP3002: not implemented yet: this method call`
+- `closure-capture`: `main.cp3:23:3: error: CP3002: not implemented yet: this method call`
+- `interface-dispatch`: `main.cp3:20:1: error: CP3002: not implemented yet: classes` (the entry now uses the spec class syntax)
+- `generics-mono`: `main.cp3:23:1: error: CP3002: not implemented yet: generic functions` (plus `classes` for `Box<T>`)
 
 A pending row is not a failure: it is the compiler's own diagnostic, captured
 verbatim, and the row fills in automatically when the feature lands, with no

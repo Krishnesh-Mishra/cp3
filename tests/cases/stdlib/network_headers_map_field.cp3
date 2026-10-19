@@ -1,0 +1,7 @@
+import { Map } from "std/collections";
+import { fetch } from "std/network";
+
+let headers = new Map<string, string>();
+headers.set("X-Test", "1");
+let res = await fetch("https://api.example.com/data", { headers });
+let again = await fetch("https://api.example.com/again", { headers: res.headers });

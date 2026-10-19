@@ -50,6 +50,7 @@ void printUsage(std::FILE* out) {
         "  install [src]      Install a .cp3pak / package dir (bare: package.json deps)\n"
         "  exec <pkg> [args]  Run a package's bundled tool\n"
         "  lsp [--stdio]      Language server on stdio (for editor integrations)\n"
+        "  dap [--stdio]      Debug adapter on stdio (for editor debugging)\n"
         "  version            Print the compiler version\n"
         "  help               Print this help\n"
         "\n"
@@ -269,7 +270,7 @@ bool resolveCommand(const std::string& first, std::string& command,
     if (first == "run" || first == "build" || first == "check" ||
         first == "dev" || first == "fmt" || first == "clean" ||
         first == "init" || first == "exec" || first == "install" ||
-        first == "lsp") {
+        first == "lsp" || first == "dap") {
         command = first;
         return true;
     }
@@ -325,6 +326,20 @@ int runLsp(const std::vector<std::string>& args) {
     }
     cp3::cli::CliOptions opt;
     return cp3::cli::cmdLsp(opt);
+}
+
+// `dap` owns the same tiny argument surface for the same reason: an
+// editor-spawned debug adapter must never run project scripts or parse
+// build options - the launch request carries everything it needs.
+int runDap(const std::vector<std::string>& args) {
+    for (std::size_t i = 1; i < args.size(); ++i) {
+        if (args[i] == "--stdio") continue;
+        std::fprintf(stderr, "cp3c: unknown option '%s'\n", args[i].c_str());
+        std::fputs("usage: cp3c dap [--stdio]\n", stderr);
+        return kExitUsageError;
+    }
+    cp3::cli::CliOptions opt;
+    return cp3::cli::cmdDap(opt);
 }
 
 int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt);
@@ -444,9 +459,13 @@ int runCli(int argc, char** argv) {
         return kExitUsageError;
     }
 
-    // `lsp` validates its own flags and never runs package.json hooks.
+    // `lsp` and `dap` validate their own flags and never run package.json
+    // hooks.
     if (command == "lsp") {
         return runLsp(args);
+    }
+    if (command == "dap") {
+        return runDap(args);
     }
 
     std::vector<std::string> rest(args.begin() + 1, args.end());

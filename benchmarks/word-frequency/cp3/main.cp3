@@ -6,10 +6,15 @@ import { Map } from "std/collections";
 // deterministic checksum. Same workload and same output as the C++, Rust, Go,
 // JavaScript and Python entries (expected value in the task README).
 //
-// NOT RUNNABLE TODAY: the Map type from std/collections has not landed, so the
-// compiler stops at the std/collections import (CP3xxx) and the runner records
-// that diagnostic instead of a timing. The entry is written to the frozen spec
-// and its row fills in when the collections wave lands.
+// std/collections has landed, so the Map surface this entry needs is real.
+// The remaining blocker is the array surface (array literals, indexing and
+// push), which the arrays wave owns; the row fills in when that lands.
+//
+// The Map is named by inference from the constructor rather than by a type
+// annotation: `let x: Map<string, number>` is still a known type-name gap (the
+// import brings the constructor into value scope, not the type name). That gap
+// is tracked in the audit follow-ups; the bench uses the inference form the
+// corpus itself uses.
 //
 // The final fold walks the vocabulary in a fixed order, so no map iteration
 // order can leak into the output; only the count arithmetic matters.
@@ -24,7 +29,7 @@ while (w < VOCAB) {
   w = w + 1;
 }
 
-const counts: Map<string, number> = new Map<string, number>();
+const counts = new Map<string, number>();
 
 let state = 1;
 let pick = 0;
