@@ -18,6 +18,7 @@
 
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic_codes.hpp"
+#include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 
 namespace cp3 {
@@ -203,35 +204,23 @@ inline bool cp3_truthy(const cp3::runtime::EventValue& v) {
 
 )CP3HELPERS";
 
-// Prefix every line of `text` with `pad`. Used to re-indent the top-level
-// statements when they are wrapped in the top-level-`await` coroutine.
-std::string indentText(const std::string& text, const std::string& pad) {
-    std::string out;
-    out.reserve(text.size());
-    bool atLineStart = true;
-    for (char c : text) {
-        if (atLineStart && c != '\n') {
-            out += pad;
-            atLineStart = false;
-        }
-        out += c;
-        if (c == '\n') {
-            atLineStart = true;
-        }
-    }
-    return out;
-}
-
 }  // namespace
 
 // -----------------------------------------------------------------------------
 // Generator - construction, diagnostics and top-level orchestration
 // -----------------------------------------------------------------------------
 
-Generator::Generator(DiagnosticSink& sink, const SemaResult& sema,
-                     const std::string& moduleName, bool lineDirectives)
+GeneratorState::GeneratorState(DiagnosticSink& sink, const SemaResult& sema,
+                               const std::string& moduleName, bool lineMapping,
+                               const CodegenOptions& options)
     : sink_(sink), sema_(sema), moduleName_(moduleName),
-      namesp_(suggestNamespace(moduleName)), lineMapping_(lineDirectives) {}
+      namesp_(suggestNamespace(moduleName)), options_(options),
+      lineMapping_(lineMapping) {}
+
+Generator::Generator(DiagnosticSink& sink, const SemaResult& sema,
+                     const std::string& moduleName, bool lineDirectives,
+                     const CodegenOptions& options)
+    : GeneratorState(sink, sema, moduleName, lineDirectives, options) {}
 
 void Generator::notImplemented(const Node& node, const std::string& what) {
     // Inside an int64 fast-path attempt nothing is reported and nothing is
@@ -249,6 +238,11 @@ void Generator::notImplemented(const Node& node, const std::string& what) {
 }
 
 GeneratedModule Generator::run(const Program& program) {
+    // The worker unit lowers only its default-export arrow (spec 13); the
+    // entry unit's ordinary walk follows.
+    if (options_.workerModule) {
+        return runWorkerModule(program);
+    }
     for (const auto& stmtPtr : program.body) {
         if (!stmtPtr) continue;
         collectFunctionNames(*stmtPtr);
@@ -268,6 +262,11 @@ GeneratedModule Generator::run(const Program& program) {
     // The unit's enums (spec 04): resolved before the emit walk so a use can
     // precede its declaration (src/emit/enum.cpp).
     collectEnums(program);
+
+    // The worker-object pre-scan (spec 13): only when this unit imports a
+    // worker, mark the object literals that lower to `std::tuple` and the
+    // kernel shapes the `worker(...)` calls accept (src/emit/worker.cpp).
+    collectWorkerObjects(program);
 
     std::string decls;   // function forward declarations
     std::string defs;    // function definitions
@@ -413,6 +412,16 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     }
     if (needsBuffer_) out += "#include \"cp3/std/buffer.hpp\"\n";
     if (needsFs_) out += "#include \"cp3/std/fs.hpp\"\n";
+    if (needsParallel_) {
+        out += "#include \"cp3/parallel/parallel.hpp\"\n";  // parallel.* (spec 13)
+    }
+    if (needsWorker_) {
+        out += "#include \"cp3/parallel/worker.hpp\"\n";  // worker(...) (spec 13)
+        if (options_.worker && !workerModule_) {
+            // The worker module's default export (`cp3_default`).
+            out += "#include \"" + options_.worker->headerPath + "\"\n";
+        }
+    }
     out += "\n";
     out += kHelperBlock;
     if (needsTypedArray_) {
@@ -429,8 +438,10 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     out += "\n";
     out += defs;
     out += "\n}  // namespace " + namesp_ + "\n\n";
-    out += "using namespace " + namesp_ + ";\n\n";
-    emitMain(out, mainBody);
+    if (!workerModule_) {
+        out += "using namespace " + namesp_ + ";\n\n";
+        emitMain(out, mainBody);
+    }
     return out;
 }
 
@@ -469,7 +480,14 @@ void Generator::emitMain(std::string& out, const std::string& mainBody) const {
 GeneratedModule CodeGenerator::generate(const Program& program,
                                         const SemaResult& sema,
                                         const std::string& moduleName) {
-    Generator generator(sink_, sema, moduleName, lineDirectives_);
+    return generate(program, sema, moduleName, CodegenOptions{});
+}
+
+GeneratedModule CodeGenerator::generate(const Program& program,
+                                        const SemaResult& sema,
+                                        const std::string& moduleName,
+                                        const CodegenOptions& options) {
+    Generator generator(sink_, sema, moduleName, lineDirectives_, options);
     return generator.run(program);
 }
 

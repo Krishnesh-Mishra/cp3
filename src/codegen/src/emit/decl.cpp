@@ -153,17 +153,7 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         }
         const std::string name =
             mapIdent(static_cast<const Identifier&>(*d->id).name);
-        // A declared type M1 cannot represent (`number | string`, an object /
-        // array / class type, ...) keeps the unit "not implemented" instead of
-        // being quietly mis-typed (same contract as local declarations).
-        if (d->type) {
-            if (auto dt = typeOfNode(*d->type)) {
-                if (!classify(*dt).representable && !dt->isUnknown() &&
-                    !dt->isError()) {
-                    notImplemented(*d, "this declared type");
-                }
-            }
-        }
+        reportModuleVarType(*d);
         const std::optional<Type> declared = resolvedBindingType(*d);
         CppInfo ci = declared ? classify(*declared) : CppInfo{};
         if (d->init && !ci.representable) {
@@ -233,6 +223,18 @@ void Generator::emitModuleVarNoInit(const detail::CppInfo& ci,
     } else {
         line(decls, 1, cv + "auto " + name + " = cp3::runtime::undefined;");
     }
+}
+
+// A declared type M1 cannot represent (`number | string`, an object / array /
+// class type, ...) keeps the unit "not implemented" instead of being quietly
+// mis-typed (same contract as local declarations).
+void Generator::reportModuleVarType(const VariableDeclarator& d) {
+    if (!d.type) return;
+    auto dt = typeOfNode(*d.type);
+    if (!dt || classify(*dt).representable || dt->isUnknown() || dt->isError()) {
+        return;
+    }
+    notImplemented(d, "this declared type");
 }
 
 void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,

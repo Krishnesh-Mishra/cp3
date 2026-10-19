@@ -27,6 +27,7 @@
 #include <utility>
 #include <vector>
 
+#include "detail/parallel.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -173,6 +174,13 @@ CppInfo classify(const Type& raw) {
         t = t.literalBaseType();
     }
     info.type = t;
+    // The parallel.run result marker must be caught before the Array arm:
+    // classifyFamily keys on the element type alone and would spell it
+    // `Array<double>`. Keeping it non-representable leaves the binding `auto`.
+    if (isParallelRunType(t)) {
+        info.shape = Shape::Unknown;
+        return info;
+    }
     switch (t.kind) {
         case TypeKind::Number:
             info.shape = Shape::Number; info.representable = true; info.cpp = "double";
@@ -351,34 +359,6 @@ bool isStaticallyNullish(const Type& t) {
 }  // namespace detail
 
 // -----------------------------------------------------------------------------
-// Generator: declaration-type environment
-// -----------------------------------------------------------------------------
-
-void Generator::pushScope() { env_.emplace_back(); }
-
-void Generator::popScope() {
-    if (!env_.empty()) {
-        env_.pop_back();
-    }
-}
-
-void Generator::declare(const std::string& name, const std::optional<Type>& type) {
-    if (!type) return;
-    if (env_.empty()) env_.emplace_back();
-    env_.back()[name] = *type;
-}
-
-std::optional<Type> Generator::lookup(const std::string& name) const {
-    for (auto it = env_.rbegin(); it != env_.rend(); ++it) {
-        auto found = it->find(name);
-        if (found != it->end()) {
-            return found->second;
-        }
-    }
-    return std::nullopt;
-}
-
-// -----------------------------------------------------------------------------
 // Generator: type resolution
 // -----------------------------------------------------------------------------
 
@@ -386,6 +366,14 @@ std::optional<Type> Generator::bindingType(const VariableDeclarator& d) const {
     if (d.type) {
         if (auto t = typeOfNode(*d.type)) {
             return t;
+        }
+    }
+    // A `parallel.reduce` result takes the accumulator type even though sema
+    // leaves the ambient call unknown (the binding must not be `auto`: its
+    // closure was lowered against the init's C++ type).
+    if (d.init && d.init->kind == NodeKind::CallExpr) {
+        if (auto t = parallelCallType(static_cast<const CallExpr&>(*d.init))) {
+            return *t;
         }
     }
     if (const Type* t = sema_.typeOf(d.nodeId)) {
@@ -416,6 +404,9 @@ std::optional<Type> Generator::resolvedBindingType(const VariableDeclarator& d) 
 
 Type Generator::effectiveType(const Expr& e) const {
     if (const auto t = networkMapFieldType(e)) return *t;
+    if (e.kind == NodeKind::CallExpr) {
+        if (auto t = parallelCallType(static_cast<const CallExpr&>(e))) return *t;
+    }
     if (e.kind == NodeKind::Identifier) {
         const auto& id = static_cast<const Identifier&>(e);
         if (auto t = lookup(id.name)) return *t;

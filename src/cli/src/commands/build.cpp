@@ -127,6 +127,25 @@ bool compileProgram(BuildState& st, const fs::path& cppPath, const fs::path& obj
     return true;
 }
 
+// Compiles the extra generated TUs of the build (spec 13: the worker modules
+// the entry imports). Each is written beside the entry's generated files; their
+// headers are what the entry's source includes. Runs before compileProgram so
+// the worker objects are part of the same manifest save. Returns false after
+// reporting a failed compile.
+bool compileExtras(BuildState& st, const BuildRequest& request) {
+    if (request.extraModules == nullptr) return true;
+    for (const BuildRequest::ExtraModule& extra : *request.extraModules) {
+        if (extra.module == nullptr) continue;
+        const fs::path cpp = st.layout.buildDir / (extra.moduleName + ".cpp");
+        const fs::path hpp = st.layout.buildDir / (extra.moduleName + ".hpp");
+        const fs::path obj = st.layout.buildDir / (extra.moduleName + ".o");
+        writeTextFile(cpp, extra.module->source, nullptr);
+        writeTextFile(hpp, extra.module->header, nullptr);
+        if (!compileTU(st, extra.sourceKey, cpp, obj)) return false;
+    }
+    return true;
+}
+
 // Links when anything was (re)compiled or the executable is missing; otherwise
 // the cached executable is reused as-is.
 bool linkProgram(BuildState& st, const fs::path& exePath) {
@@ -273,6 +292,9 @@ int buildWithToolchain(const BuildRequest& request) {
     BuildState state{opt, tc,        layout,   profile,
                      *nativeFlags, force, manifest, objects};
 
+    if (!compileExtras(state, request)) {
+        return kExitCompileError;
+    }
     if (!compileProgram(state, cppPath, objPath, entry.string())) {
         return kExitCompileError;
     }

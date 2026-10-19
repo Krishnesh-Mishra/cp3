@@ -160,22 +160,27 @@ std::string Generator::exprPlain(const Expr& e) {
             return "0.0";
         }
         case NodeKind::ArrowFunction: return emitListenerValue(e);  // D74
-        case NodeKind::ObjectLiteral: {
-            // An object literal with an enum-typed field lowers to a
-            // std::tuple (src/emit/enum.cpp); any other object literal stays
-            // CP3002.
-            if (std::string literal =
-                    emitEnumObjectLiteral(static_cast<const ObjectLiteral&>(e));
-                !literal.empty()) {
-                return literal;
-            }
-            notImplemented(e, "this expression");
-            return "0.0";
-        }
+        case NodeKind::ObjectLiteral:
+            return emitObjectLiteral(static_cast<const ObjectLiteral&>(e));
         default:
             notImplemented(e, "this expression");
             return "0.0";
     }
+}
+
+// An object literal with an enum-typed field lowers to a std::tuple
+// (src/emit/enum.cpp); a worker-marked literal (the `worker(...)` kernel form,
+// spec 13) does too (src/emit/worker.cpp); any other object literal stays
+// CP3002.
+std::string Generator::emitObjectLiteral(const ObjectLiteral& ol) {
+    if (std::string literal = emitEnumObjectLiteral(ol); !literal.empty()) {
+        return literal;
+    }
+    if (std::string worker = emitWorkerObjectLiteral(ol); !worker.empty()) {
+        return worker;
+    }
+    notImplemented(ol, "this expression");
+    return "0.0";
 }
 
 std::string Generator::emitIdentifier(const Identifier& id) {
@@ -420,6 +425,11 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
         // (src/std/typed-arrays/codegen_methods.cpp).
         if (a.target->kind == NodeKind::IndexExpr) {
             if (std::string w = emitFamilyIndexWrite(a); !w.empty()) return w;
+        }
+        // A worker object's field write (`obj.data = 1`): a `std::get<i>`
+        // assignment, gated on the worker labels (src/emit/worker.cpp).
+        if (a.target->kind == NodeKind::MemberExpr) {
+            if (std::string w = emitWorkerMemberWrite(a); !w.empty()) return w;
         }
         notImplemented(a, "assignment to a non-identifier target");
         return "0.0";

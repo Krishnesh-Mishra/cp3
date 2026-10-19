@@ -81,5 +81,22 @@ std::string joinStrings(const std::vector<std::string>& parts,
     return out;
 }
 
+std::string indentText(const std::string& text, const std::string& pad) {
+    std::string out;
+    out.reserve(text.size());
+    bool atLineStart = true;
+    for (char c : text) {
+        if (atLineStart && c != '\n') {
+            out += pad;
+            atLineStart = false;
+        }
+        out += c;
+        if (c == '\n') {
+            atLineStart = true;
+        }
+    }
+    return out;
+}
+
 }  // namespace detail
 }  // namespace cp3

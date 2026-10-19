@@ -15,6 +15,7 @@
 #include <string>
 
 #include "detail/family.h"
+#include "detail/parallel.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -308,6 +309,12 @@ std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
     if (!ix.object || !ix.index) return std::string();
     const Type ot = effectiveType(*ix.object);
     const std::string idxText = expr(*ix.index);
+    if (isParallelRunType(ot)) {
+        // The `parallel.run` result: a fixed-extent `std::array` (the runtime
+        // sized it from the callable count), so the index is a raw subscript.
+        return "(" + expr(*ix.object) + ")[static_cast<std::size_t>(" + idxText +
+               ")]";
+    }
     if (ot.kind == TypeKind::Class) {
         const char* tag = familyTag(ot.name);
         if (tag == nullptr) return std::string();
@@ -355,6 +362,11 @@ std::string Generator::emitFamilyIndexWrite(const AssignmentExpr& a) {
     const Type ot = effectiveType(*ix.object);
     const std::string idxText = expr(*ix.index);
     const std::string value = expr(*a.value);
+    if (isParallelRunType(ot)) {
+        // A `parallel.run` result element write: `std::array` subscript.
+        return "((" + expr(*ix.object) + ")[static_cast<std::size_t>(" + idxText +
+               ")] = " + value + ")";
+    }
     if (ot.kind == TypeKind::Class) {
         const char* tag = familyTag(ot.name);
         if (tag == nullptr) return std::string();

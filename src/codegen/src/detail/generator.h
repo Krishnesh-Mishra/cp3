@@ -49,36 +49,20 @@
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic.hpp"
 #include "detail/enums.h"
+#include "detail/generator_state.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
 
-// The int64 fast-path state (D64): non-null exactly while a function's fast
-// body is being attempted (`Generator::intMode_`). `failed` means the attempt
-// cannot be proven exact and must be discarded, in which case the ordinary
-// double body is the only lowering.
-struct IntMode {
-    bool failed = false;
-    // Names read somewhere outside a `return` argument (int_reads.cpp);
-    // `nullopt` when that walk could not see the whole body. A name absent here
-    // is read only by `return`, so its bound check can be deferred from the
-    // operation to that single observation point.
-    std::optional<std::unordered_set<std::string>> readOutsideReturns;
-    // Locals whose bound check is currently deferred: their value may sit
-    // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
-    std::unordered_set<std::string> deferred;
-    // Set while emitting a statement's own expression: the one position where
-    // an assignment's value is discarded, so a raw store is allowed.
-    bool stmtExpr = false;
-};
-
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
-// unit, and the CP3002 dedup set.
-class Generator {
+// unit, and the CP3002 dedup set (the state block inherited from
+// `GeneratorState`, detail/generator_state.h).
+class Generator : private GeneratorState {
 public:
     Generator(DiagnosticSink& sink, const SemaResult& sema,
-              const std::string& moduleName, bool lineDirectives = false);
+              const std::string& moduleName, bool lineDirectives = false,
+              const CodegenOptions& options = CodegenOptions{});
 
     // Top-level orchestration: collect names, emit every statement, assemble.
     GeneratedModule run(const Program& program);
@@ -107,6 +91,10 @@ private:
     std::string plainBody(const FunctionDeclaration& fd, const std::string& ret);
     void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
                        std::string& mainBody);
+    // Reports a module-variable type M1 cannot represent (`number | string`,
+    // an object / array / class type, ...): the unit stays "not implemented"
+    // instead of being quietly mis-typed (same contract as local declarations).
+    void reportModuleVarType(const VariableDeclarator& d);
     void emitModuleVarNoInit(const detail::CppInfo& ci, const std::string& name,
                              const std::string& cv, std::string& decls);
     std::optional<Type> parameterType(const Parameter& p,
@@ -140,6 +128,10 @@ private:
     std::string expr(const Expr& e);
     std::string exprCmp(const Expr& e);
     std::string emitIdentifier(const Identifier& id);
+    // The ObjectLiteral arm of `exprPlain`: an enum-carrying literal
+    // (src/emit/enum.cpp) or a worker-marked one (src/emit/worker.cpp) lowers
+    // to a `std::tuple`; anything else reports.
+    std::string emitObjectLiteral(const ObjectLiteral& ol);
     std::string emitTemplate(const TemplateLiteral& tl);
     std::string tsCall(const Expr& e);
     std::string cond(const Expr& e);
@@ -169,6 +161,40 @@ private:
     std::vector<std::string> emitCallArgs(const CallExpr& c,
                                           const FunctionDeclaration* decl);
     bool isConsoleMember(const CallExpr& c) const;
+
+    // --- parallel.* / worker(...) (emit/parallel.cpp, emit/worker.cpp) --------
+    // `parallel` and `worker` are ambient builtins (spec §13); each entry point
+    // lowers onto cp3/parallel/** and reports CP3002 for anything outside the
+    // documented shapes. `parallelCallType` types the calls sema leaves
+    // ambient (the reduce accumulator's type, the `parallel.run` result
+    // marker); `effectiveType`/`bindingType` consult it first.
+    std::optional<Type> parallelCallType(const CallExpr& c) const;
+    bool parallelRange(const Expr& range, std::string& begin, std::string& end);
+    bool parallelClosureShape(const ArrowFunction& a, std::size_t count) const;
+    std::string emitParallelCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitParallelFor(const CallExpr& c);
+    std::string emitParallelReduce(const CallExpr& c);
+    std::string emitParallelRun(const CallExpr& c);
+    std::string emitParallelClosure(
+        const ArrowFunction& a, const std::vector<Type>& paramTypes,
+        const std::vector<std::string>& contextParams);
+    // `worker(...)`: the entry-unit call and its argument forms (a primitive, a
+    // worker-marked object binding, a marked object literal -> a tuple), the
+    // worker-object pre-scan, and the worker unit's own lowering
+    // (`runWorkerModule` emits only its default export as `cp3_default`).
+    std::string emitWorkerCall(const CallExpr& c);
+    std::string workerArgText(const Expr& arg);
+    std::string emitWorkerObjectLiteral(const ObjectLiteral& ol);
+    std::string emitWorkerMemberWrite(const AssignmentExpr& a);
+    void collectWorkerObjects(const Program& program);
+    void registerWorkerObject(const Type& objType, std::vector<std::string> names);
+    std::string workerParamText(const Parameter& p, const ArrowFunction& arrow,
+                                std::size_t index);
+    std::string workerObjectParamText(const ObjectType& ot, const std::string& name,
+                                      const std::optional<Type>& pt);
+    std::string workerReturnType(const ArrowFunction& arrow);
+    std::string workerBody(const ArrowFunction& arrow, const std::string& ret);
+    GeneratedModule runWorkerModule(const Program& program);
 
     // --- std/console lowering (src/std/console/codegen.cpp) ------------------
     // Every `console.<member>(...)` call lands here (emit_call.cpp keeps only
@@ -416,70 +442,8 @@ private:
     // vector init, the top-level-await coroutine and the event-loop drain.
     void emitMain(std::string& out, const std::string& mainBody) const;
 
-    // --- state ----------------------------------------------------------------
-    // The int64 fast-path state (D64); see `struct IntMode` above.
-    std::unique_ptr<IntMode> intMode_;
-
-    DiagnosticSink& sink_;
-    const SemaResult& sema_;
-    std::string moduleName_;
-    std::string namesp_;
-
-    bool consoleImported_ = false;
-    bool lineMapping_ = false;     // --debug: emit `#line` into generated code
-    bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
-    bool needsConsoleAbi_ = false; // console async/misc members -> family header
-    bool needsEventLoop_ = false;  // async/timers: emit runEventLoop() in main
-    bool needsArith_ = false;      // `%`/int64 lowering -> cp3/core/arith.hpp include
-    bool suppressDiagnostics_ = false;  // an int64 attempt must not report
-    bool needsMath_ = false;       // Math.* -> cp3/std/math.hpp include
-    bool needsString_ = false;     // string methods -> cp3/std/string.hpp include
-    bool needsPath_ = false;       // path.* -> cp3/std/path.hpp include
-    bool needsOs_ = false;         // os.* -> cp3/std/os.hpp include
-    bool needsJson_ = false;       // JSON.stringify/parse -> cp3/std/json.hpp include
-    // The registered JSON record shapes (usage-based reification): per
-    // interface name the C++ struct text, the generated builder body and the
-    // declared field names, plus the sema shape label -> interface name. The
-    // structs materialize into the decls section on first use only.
-    std::unordered_map<std::string, std::string> jsonShapeStructs_;
-    std::unordered_map<std::string, std::string> jsonShapeBuilders_;
-    std::unordered_map<std::string, std::vector<std::string>> jsonShapeFields_;
-    std::unordered_map<std::string, std::string> jsonShapeByLabel_;
-    std::unordered_set<std::string> jsonShapeUsed_;
-    std::string jsonShapeDecls_;
-    // The unit's enums (collectEnums): the resolved model per declaration name,
-    // the accumulated `enum class` decls text, and the sema object label ->
-    // field names of every enum-carrying object literal that lowered to a
-    // `std::tuple` (the field read is `std::get<i>`).
-    std::unordered_map<std::string, detail::EnumCppInfo> enums_;
-    std::string enumDecls_;
-    std::unordered_map<std::string, std::vector<std::string>> enumObjectFields_;
-    bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
-    bool needsEnv_ = false;        // { env } -> cp3/std/env.hpp include
-    bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
-    bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
-    bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
-    bool needsFs_ = false;         // std/fs -> cp3/std/fs.hpp include
-    bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
-    bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
-    bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
-    bool needsTuple_ = false;        // enum-carrying object literal -> <tuple>
-    bool needsEventEmitter_ = false;  // EventEmitter/Listener -> cp3/async/emitter.hpp
-    bool topLevelAwait_ = false;   // an `await` appeared at top level
-    bool inAsyncBody_ = false;     // current function body lowers to a coroutine
-    int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)
-    int uniqueCounter_ = 0;        // fresh names for generated scaffolding
-    std::string currentReturn_ = "int";
-
-    std::vector<std::unordered_map<std::string, Type>> env_;
-    // Codegen type hints for the Map-shaped std/network fields; the open
-    // marker hides their type in sema, so networkMapFieldType checks these.
-    std::unordered_map<std::uint32_t, Type> exprTypeHints_;
-    std::unordered_set<std::string> functions_;
-    std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
-    std::unordered_set<std::string> asyncFunctions_;   // `async function` names
-    std::vector<std::string> thrownBindings_;          // active `catch (e)` names
-    std::unordered_set<std::uint32_t> reported_;
+    // The per-unit state block lives in `GeneratorState`
+    // (detail/generator_state.h), inherited privately above.
 };
 
 }  // namespace cp3

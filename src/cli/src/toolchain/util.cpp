@@ -377,10 +377,11 @@ std::vector<fs::path> runtimeSourcePaths() {
     // program imports "std/console" (native_packages.cpp), so it is not
     // discovered here.
     //
-    // Deliberately NOT compiled: parallel.cpp / worker.cpp pull in threads and
-    // stay behind `parallel.*`'s CP3002 (spec §13, unchanged this wave).
+    // parallel.cpp is the `parallel.*` / `worker(...)` engine (spec 13);
+    // worker.hpp is header-only, so it contributes no TU.
     static const char* const kRequired[] = {"runtime.cpp", "error.cpp",
-                                            "eventloop.cpp", "promise.cpp"};
+                                            "eventloop.cpp", "promise.cpp",
+                                            "parallel.cpp"};
     std::vector<fs::path> sources;
     for (const char* name : kRequired) {
         for (const fs::path& file : present) {
