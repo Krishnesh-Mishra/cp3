@@ -18,6 +18,25 @@ both binaries agree - arrays-strings 47/0/109/10) and **+141** core-semantics
 marker retired (D63). Running total (pre-wave-1): **1236 found - 516 passed /
 6 failed / 606 skipped / 108 ambiguous**; all 6 reds are wave-1 targets (§5-6).
 
+**Status 2026-10-19 (refresh; supersedes the pre-wave-1 running total).**
+Landed since: enums wave (cold 32/25/0/0/7; `enum class` long long,
+string-backed, switches, enum-carrying object literals), cp3-debug wave
+(`#line` Debug-only source mapping, `cp3c dap --stdio` over gdb MI2, VS Code
+debugger contribution; default generated output byte-identical to canonical),
+lsp-intel wave (hover/completion/definition/document symbols/signature help
+providers + tasks; landing verification in flight), lead batches (parse
+builtins with D46 hex + D78 NaN, module const-init ordering after `initArgv`,
+bench surface refresh, lint trims). Cold master standings today: diagnostics
+9/9/0/0/0, syntax 72/70/0/0/2, types 110/87/0/18/5, operators 132/93/0/33/6,
+control-flow 75/41/0/28/6, variables 58/45/0/13/0, modules 44/34/0/7/3,
+concurrency 28/8/0/14/6, enums 32/25/0/0/7, parseint 9/9, parsefloat 6/6, lint
+0 errors. In flight (9 agents): classes, arrays-strings, functions-closures,
+operators, control-flow, concurrency, modules, types, net-suite; generics is
+complete at 0 failed with 17 class-blocked skips and is re-driven after the
+classes wave lands. Queued after the fleet: memory-weak wave, the Map/Set
+annotated-constructor gap, bench re-scan + health-server timed row + D67
+measured run, installer/vsix rebuild (debugger + providers), full-corpus gate.
+
 ## Critical path (revised - see D59/D60)
 
 Examples are showcase-only now (D59): no auto-run, no statuses - the corpus in

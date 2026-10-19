@@ -93,20 +93,16 @@ private:
     void emitLineDirective(const Node& node, std::string& out);
     // `emitMappedRaw` pins each physical line of a raw structural chunk (the
     // int64 wrapper prologue) to `node`; verbatim when mapping is off.
-    void emitMappedRaw(const Node& node, const std::string& raw,
-                       std::string& out);
+    void emitMappedRaw(const Node& node, const std::string& raw, std::string& out);
 
     // --- declarations (emit_decl.cpp) ----------------------------------------
     void collectFunctionNames(const Stmt& s);
-    void emitTopLevel(const Stmt& s, std::string& decls, std::string& defs,
-                      std::string& mainBody);
+    void emitTopLevel(const Stmt& s, std::string& decls, std::string& defs, std::string& mainBody);
     void emitExport(const ExportDeclaration& ed, std::string& decls,
                     std::string& defs, std::string& mainBody);
-    void addFunction(const FunctionDeclaration& fd, std::string& decls,
-                     std::string& defs);
+    void addFunction(const FunctionDeclaration& fd, std::string& decls, std::string& defs);
     std::string plainBody(const FunctionDeclaration& fd, const std::string& ret);
-    void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
-                       std::string& mainBody);
+    void emitModuleVar(const VariableDeclaration& vd, std::string& decls, std::string& mainBody);
     void emitModuleVarNoInit(const detail::CppInfo& ci, const std::string& name,
                              const std::string& cv, std::string& decls);
     std::optional<Type> parameterType(const Parameter& p,
@@ -224,10 +220,8 @@ private:
     std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
     std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
     std::string arraySortCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
-    std::string arrayIncludesCallText(const CallExpr& c, const MemberExpr& m,
-                                      const Type& recv);
-    std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m,
-                                    const char* tag);
+    std::string arrayIncludesCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m, const char* tag);
     std::string dataViewCallText(const CallExpr& c, const MemberExpr& m);
     std::string arrayLiteralText(const ArrayLiteral& lit, const Type& elemOverride);
     std::string declaratorInitText(const VariableDeclarator& d, const Type& declared);
@@ -238,8 +232,7 @@ private:
     // `entries().length` property reads. Each returns "" when the form is not
     // one of them.
     std::string emitCollectionsNew(const NewExpr& n);
-    std::string emitCollectionsMemberCall(const CallExpr& c,
-                                          const MemberExpr& m);
+    std::string emitCollectionsMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitCollectionsMember(const MemberExpr& m);
 
     // --- std namespaces + primitive methods (src/std/*/codegen.cpp) ----------
@@ -327,14 +320,12 @@ private:
     std::string fetchInitText(const Expr& init);
     std::string networkArg(const Type& receiver, const std::string& property,
                            const CallExpr& c, const Expr& arg, std::size_t index);
-    std::string networkArgs(const Type& receiver, const std::string& property,
-                            const CallExpr& c);
+    std::string networkArgs(const Type& receiver, const std::string& property, const CallExpr& c);
     std::vector<std::string> emitPlainArgs(const CallExpr& c);
 
     // --- async / promises / errors (emit_async.cpp) --------------------------
     std::string emitAwait(const AwaitExpr& a);
-    std::string emitArrow(const ArrowFunction& a,
-                          const std::vector<std::string>& contextParams);
+    std::string emitArrow(const ArrowFunction& a, const std::vector<std::string>& contextParams);
     std::vector<std::string> arrowParamText(
         const ArrowFunction& a, const std::vector<std::string>& contextParams);
     std::string arrowReturnType(const ArrowFunction& a);
@@ -389,8 +380,7 @@ private:
     std::string intConditional(const ConditionalExpr& c);
     std::string intLogical(const LogicalExpr& l);
     // `a % b`: `modConst<K>` for an integral literal divisor, else `mod`.
-    std::string modCall(const std::string& lhs, const Expr& rhs,
-                        const std::string& rhsText);
+    std::string modCall(const std::string& lhs, const Expr& rhs, const std::string& rhsText);
     // The C++ type source of a local binding (declared, else inferred from the
     // initializer) and whether int mode lowers it to std::int64_t.
     detail::CppInfo bindingCpp(const VariableDeclarator& d) const;
