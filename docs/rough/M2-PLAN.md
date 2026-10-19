@@ -724,6 +724,46 @@ Acceptance:
    Go comparator, recorded under the D60/D65 conventions.
 4. Canonical rebuild + lint 0 errors; landing record per the standard flow.
 
+## Worker handles wave (queued - D80)
+
+`worker` moves from the call-shaped form (`import worker from "./x.cp3";
+await worker(v)`) to an explicit handle with message events: `new Worker("./x.cp3")`
+on the main side (`on("message"/"error")`, `postMessage`, `terminate`), and the
+module's default export receiving the worker-side `thread` handle once at thread
+start (`thread.on("message")`, `thread.postMessage`). Messages are
+structured-clone deep copies; no shared memory, no locks; module-level state is
+per worker; a thrown handler error is delivered as an `"error"` event while a
+hard crash stays process-fatal; `await w.request(v)` is the optional one-shot
+sugar. Full surface and the removed name-magic: **D80** in DECISIONS.md,
+spec §13.
+
+Scope: `src/runtime/include/cp3/parallel/worker.hpp` (persistent thread +
+per-handle inbox/outbox queues), `src/codegen/src/emit/worker.cpp` +
+`worker_scan.cpp` (handle form: `NewExpr` on the builtin `Worker`, the member
+surface, the default-export signature), `src/cli/src/toolchain/worker_module.cpp`
+(`new Worker("path")` resolution replacing the binding-name rule), spec §13 +
+the std-module docs, and the concurrency corpus cases (call-form cases migrate;
+`worker_call_shape` and `worker_crash_takes_process_down` promote under the new
+surface).
+
+Scheduling: right after the active landing queue (concurrency, regex, classes,
+control-flow, modules, types, generics, functions-closures); it rewrites the
+worker surface the concurrency landing introduces, so it merges a master that
+already contains it. Small-to-mid wave (one runtime family + codegen surface +
+docs + case migration).
+
+Acceptance:
+1. Concurrency family 0 skipped / 0 failed; both worker markers promote; the
+   full corpus stays 0 failed.
+2. Probes: one long-lived worker answering N messages while the main loop keeps
+   serving timers between them (non-blocking evidence), per-worker module-state
+   isolation, terminate frees the thread (no leak), FIFO ordering per sender,
+   and an `"error"` event for a thrown handler.
+3. The name magic is gone: a default import of a `.cp3` file not referenced by
+   `new Worker` is an ordinary module call; `new Worker` with a non-literal path
+   is a compile error.
+4. Canonical rebuild + lint 0 errors; landing record per the standard flow.
+
 ## Corpus weight at M2 open (runnable = 843)
 
 stdlib 190 (16 passed, 173 skipped) · types 86 (66) · arrays-strings 82 (13) ·

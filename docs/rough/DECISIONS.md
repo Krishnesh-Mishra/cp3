@@ -990,3 +990,60 @@ C++ error; both are fixed here and pinned.
 
 Four markers promoted plus one new pin (registry 44 to 40); only
 `forin_map_order` remains in arrays-strings (D44 collections bug).
+
+## D80 - Workers are explicit handles: `new Worker(module)` + message events (user directive, 2026-10-19)
+
+User review of the landed call form (`import worker from "./x.cp3";
+await worker(v)`): the surface cannot tell a worker from a plain function (the
+compiler inferred "worker" from the import *binding name*, so renaming the
+binding changed semantics), and a call-shaped one-shot is the wrong fit for a
+long-lived background thread. Ruled: workers are explicit handles with message
+events, matching the JS Web Worker model the spec already cites. This is the
+worker half of the same conversation that settled D79.
+
+Surface (spec §13):
+
+```cp3
+// main side
+const w = new Worker("./sum.cp3");
+w.on("message", (msg) => { ... });
+w.on("error", (err) => { ... });
+w.postMessage(value);
+w.terminate();
+
+// sum.cp3
+export default (thread) => {
+  thread.on("message", (msg) => { thread.postMessage(result); });
+};
+```
+
+- `new Worker(path)`: `path` is a **static string literal** naming a `.cp3`
+  file, resolved at compile time under the import rules; the file is compiled
+  as a worker unit whose default export runs once at thread start with the
+  worker-side `thread` handle. A computed path is a compile error. The
+  binding-name inference is removed: `new Worker` is the only way to start a
+  worker, and an ordinary default import of a `.cp3` file stays an ordinary
+  cross-module call.
+- `w.postMessage(v)` / `thread.postMessage(v)`: fire-and-forget structured
+  clone (genuine deep copy both ways, per the no-shared-memory rule); messages
+  queue until the other side attaches a listener; delivery is FIFO per sender.
+  Nothing blocks the main loop - it keeps turning between messages.
+- `w.on("message", l)` / `w.on("error", l)` on both sides; multiple listeners
+  allowed. A thrown error inside a message handler arrives as an `"error"`
+  event (catchable); a hard crash still takes the process down, per the
+  concurrency batch ruling.
+- `await w.request(v)`: optional one-shot ask/answer sugar over the same
+  channel (correlation-tagged); resolves with the next `"message"`. The old
+  `await worker(v)` form is removed.
+- `w.terminate()`: stops the worker's loop and frees the thread; pending
+  messages drop; idempotent.
+- Module-level state stays per worker (isolation); no locks, no atomics, no
+  shared memory. The D79 server scale mode uses this channel for cross-loop
+  fan-out.
+
+Status: the landed concurrency wave keeps the call form for now; the handle
+wave (queued in M2-PLAN right after the active landing queue) implements this
+surface and migrates the worker corpus cases. The markers
+`worker_call_shape` and `worker_crash_takes_process_down` stay ambiguous until
+that wave, then promote against this ruling (canonical handle shape; thrown
+handler error becomes a catchable `"error"` event).
