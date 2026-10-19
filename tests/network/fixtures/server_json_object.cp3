@@ -1,0 +1,36 @@
+// =============================================================================
+// tests/network/fixtures/server_json_object.cp3 - phase B object codec
+// round-trip through the landed path.
+//
+// docs 04 §network: `res.json(payload, status?)` serialises an object literal
+// through the json dynamic value tree (this is the path that lowers today),
+// and `res.json<User>()` on the client parses it back through the reified
+// json record shape. The second route carries the optional status argument.
+// The strict `res.json<User>(payload)` form is tracked separately by
+// server_pending_json_object.cp3 (CP3002). Port 48221 is reserved.
+// =============================================================================
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+interface User {
+  id: number;
+  name: string;
+}
+
+const app = createServer();
+app.get("/user", (req, res) => {
+  res.json({ id: 7, name: "alice" });
+});
+app.get("/created", (req, res) => {
+  res.json({ id: 9, name: "bob" }, 201);
+});
+app.listen(48221, () => {});
+
+const userRes = await fetch("http://127.0.0.1:48221/user");
+const user = await userRes.json<User>();
+console.log(`PB5a|${userRes.status}|${user.id}|${user.name}|${userRes.headers.get("content-type")}`);
+
+const createdRes = await fetch("http://127.0.0.1:48221/created");
+const created = await createdRes.json<User>();
+console.log(`PB5b|${createdRes.status}|${created.id}|${created.name}`);
+app.close();

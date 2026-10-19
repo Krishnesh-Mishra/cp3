@@ -1,0 +1,31 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// res.json() for the three scalar codecs: number, string, boolean. The wire
+// bytes are the JSON text; fetch reads them back with text().
+const app = createServer();
+app.get("/json-num", (req, res) => {
+  res.json(7);
+});
+app.get("/json-str", (req, res) => {
+  res.json("hi");
+});
+app.get("/json-bool", (req, res) => {
+  res.json(true);
+});
+app.listen(48109, () => {
+  console.log("listening");
+});
+
+let num = await fetch("http://127.0.0.1:48109/json-num");
+console.log(`${num.status}`);
+console.log(await num.text());
+
+let str = await fetch("http://127.0.0.1:48109/json-str");
+console.log(`${str.status}`);
+console.log(await str.text());
+
+let bool = await fetch("http://127.0.0.1:48109/json-bool");
+console.log(`${bool.status}`);
+console.log(await bool.text());
+app.close();

@@ -1,0 +1,27 @@
+// =============================================================================
+// tests/network/fixtures/server_req_fields.cp3 - phase B request fields.
+//
+// docs 04 §network: HttpRequest.params / query / headers are all
+// Map<string, string>. The `:id` route param, two query values and a request
+// header sent as a Map must all arrive intact. Port 48218 is reserved for
+// this fixture.
+// =============================================================================
+import console from "std/console";
+import { Map } from "std/collections";
+import { fetch, createServer } from "std/network";
+
+const app = createServer();
+app.get("/users/:id", (req, res) => {
+  let id = req.params.get("id");
+  let q = req.query.get("q");
+  let lang = req.query.get("lang");
+  let probe = req.headers.get("x-probe");
+  res.text(`${id}|${q}|${lang}|${probe}`);
+});
+app.listen(48218, () => {});
+
+let headers = new Map<string, string>();
+headers.set("x-probe", "on");
+const res = await fetch("http://127.0.0.1:48218/users/7?q=1&lang=en", { headers });
+console.log(`PB3|${res.status}|${await res.text()}`);
+app.close();

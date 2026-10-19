@@ -1,0 +1,32 @@
+// =============================================================================
+// tests/network/fixtures/server_next_chain.cp3 - phase B middleware chain.
+//
+// docs 04 §network: `app.use` middleware runs in registration order; calling
+// `next()` continues the chain, the final route answers. Two middlewares both
+// call next() and the route reports the preserved order, so a chain that
+// silently skips a middleware (or never reaches the route) fails the check.
+// Port 48216 is reserved for this fixture.
+// =============================================================================
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+const app = createServer();
+let order = "x";
+
+app.use((req, res, next) => {
+  order = order + "1";
+  next();
+});
+app.use((req, res, next) => {
+  order = order + "2";
+  next();
+});
+app.get("/ok", (req, res) => {
+  res.text(order);
+});
+
+app.listen(48216, () => {});
+
+const res = await fetch("http://127.0.0.1:48216/ok");
+console.log(`PB1|${res.status}|${await res.text()}`);
+app.close();

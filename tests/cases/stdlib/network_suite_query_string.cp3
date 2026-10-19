@@ -1,0 +1,22 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// The query string is stripped from req.path; the route matches on the path
+// alone. (Reading the query values through req.query is covered by
+// network_suite_params_query_headers.)
+const app = createServer();
+app.get("/echo", (req, res) => {
+  res.text(req.path);
+});
+app.listen(48106, () => {
+  console.log("listening");
+});
+
+let one = await fetch("http://127.0.0.1:48106/echo?a=1&b=2");
+console.log(`${one.status}`);
+console.log(await one.text());
+
+let none = await fetch("http://127.0.0.1:48106/echo");
+console.log(`${none.status}`);
+console.log(await none.text());
+app.close();
