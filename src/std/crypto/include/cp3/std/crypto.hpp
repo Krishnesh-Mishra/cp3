@@ -19,13 +19,10 @@
 // -----------------------------------------------------------------------------
 // SEMANTICS / LIMITATIONS
 // -----------------------------------------------------------------------------
-//   * `randomBytes` returns the raw bytes as a `std::string`. The docs type it
-//     `Buffer`; the nominal Buffer now exists (std/buffer), but retyping
-//     `randomBytes` is blocked by the pinned crypto_signatures_check.cp3:4
-//     (`let b: string = crypto.randomBytes(16)`), so it keeps the raw-byte
-//     string stand-in (which already behaves like one for `.length` and for
-//     feeding the value straight back into `sha256`/`sha512`; the R1 buffer
-//     wave report records the conflict and the one-line pin fix).
+//   * `randomBytes` returns the nominal `Buffer` (docs 04). The runtime still
+//     produces the raw bytes as a `std::string` and this C++ surface keeps
+//     that spelling; codegen wraps the result with
+//     `::cp3::runtime::buffer::from`.
 //   * `randomUUID` is the RFC 4122 version 4 form: 36 lowercase chars.
 //   * `sha256`/`sha512` take `string | Buffer` in the cp3 surface; a Buffer
 //     argument lowers to its bytes (`::cp3::runtime::buffer::bytes`) and this
@@ -55,8 +52,9 @@ namespace cp3::runtime::crypto {
 std::string randomUuid();
 
 /// `crypto.randomBytes(length)`: `length` cryptographically random bytes as a
-/// raw-byte string (the beta-one Buffer stand-in). Throws a catchable value
-/// when `length` is negative, fractional or above 2^31 - 1.
+/// raw-byte string; codegen wraps the result into the nominal `Buffer`
+/// (`::cp3::runtime::buffer::from`). Throws a catchable value when `length`
+/// is negative, fractional or above 2^31 - 1.
 std::string randomBytes(double length);
 
 /// `crypto.sha256(data)`: the lowercase hex SHA-256 digest (64 characters).
