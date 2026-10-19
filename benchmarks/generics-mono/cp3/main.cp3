@@ -6,19 +6,16 @@ import console from "std/console";
 // same output as the C++, Rust, Go, JavaScript and Python entries (expected
 // line in the task README).
 //
-// NOT RUNNABLE TODAY: generic classes and functions have not landed (wave 10),
-// so the compiler stops at the Box<T> declaration and the runner records that
-// diagnostic instead of a timing. The entry is written to the frozen spec and
-// its row fills in when the wave lands.
+// NOT RUNNABLE TODAY: generic classes (classes wave) and generic functions
+// (wave 10) have not landed, so the compiler stops at the Box<T> declaration
+// and the runner records that diagnostic instead of a timing. The entry is
+// written to the frozen spec - docs/language-spec/15 declares methods with the
+// `function` keyword and the constructor as `constructor(...)`.
 
 class Box<T> {
   value: T;
 
-  constructor(value: T) {
-    this.value = value;
-  }
-
-  get(): T {
+  function get(): T {
     return this.value;
   }
 }
@@ -34,7 +31,7 @@ class NumberBox {
     this.value = value;
   }
 
-  get(): number {
+  function get(): number {
     return this.value;
   }
 }
@@ -45,8 +42,9 @@ const MOD = 1000000007;
 let totalGeneric = 0;
 let i = 0;
 while (i < ITERATIONS) {
-  const box = new Box<number>(i);
-  totalGeneric = (totalGeneric + sumBox(box)) % MOD;
+  const box = new Box<number>();
+  box.value = i;
+  totalGeneric = (totalGeneric + sumBox<number>(box)) % MOD;
   i = i + 1;
 }
 

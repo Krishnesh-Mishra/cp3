@@ -22,6 +22,15 @@ namespace cp3 {
 
 using namespace detail;
 
+// A whole array in a formatter or truthiness test pulls the arr family block
+// (D69), even when this unit never spells the C++ type itself.
+void Generator::noteFamilyUse(const Expr& e) {
+    const CppInfo ci = info(e);
+    if (ci.shape == Shape::Array || ci.shape == Shape::TypedArray) {
+        needsTypedArray_ = true;
+    }
+}
+
 namespace {
 
 const char* binaryOpSpelling(BinaryOp op) {

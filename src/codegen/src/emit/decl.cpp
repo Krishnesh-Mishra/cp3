@@ -181,12 +181,7 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
             continue;
         }
         if (!d->init) {
-            if (ci.representable && ci.shape != Shape::Void) {
-                line(decls, 1, cv + ci.cpp + " " + name + "{};");
-            } else {
-                line(decls, 1,
-                     cv + "auto " + name + " = cp3::runtime::undefined;");
-            }
+            emitModuleVarNoInit(ci, name, cv, decls);
             continue;
         }
         // `let a: number[] = Array(3)` / `let a: number[] = []`: the
@@ -221,6 +216,16 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         }
         line(decls, 1, ci.cpp + " " + name + "{};");
         line(mainBody, 1, name + " = " + initText + ";");
+    }
+}
+
+void Generator::emitModuleVarNoInit(const detail::CppInfo& ci,
+                                    const std::string& name,
+                                    const std::string& cv, std::string& decls) {
+    if (ci.representable && ci.shape != Shape::Void) {
+        line(decls, 1, cv + ci.cpp + " " + name + "{};");
+    } else {
+        line(decls, 1, cv + "auto " + name + " = cp3::runtime::undefined;");
     }
 }
 

@@ -14,9 +14,10 @@ Contract, identical in every language:
 | anything else | `404` text/plain `not found` |
 
 Every entry listens on `127.0.0.1` only (no firewall prompt, no exposure) and
-takes the port as `argv[1]` (default 8080). The cp3 entry uses a `const` port
-- the beta-one std spec has no process-argv surface - so if it ever runs,
-that is 8080.
+takes the port as `argv[1]` (default 8080); the suite assigns 18080-18085 per
+language. The cp3 entry reads `process.argv` like every other entry and was
+smoke-verified on its own port (`/healthz` -> 200 `ok`, `/` -> 200
+`health-server ok`, `/nope` -> 404 `not found`).
 
 ## Run one by hand
 
