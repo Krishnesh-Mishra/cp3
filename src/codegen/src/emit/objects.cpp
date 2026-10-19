@@ -128,12 +128,18 @@ std::string Generator::emitObject(const Expr& e) {
     return "(" + receiver + ")." + member;
 }
 
-// The object-literal expression form: a `$o{...}` value shape lowers to the
-// generated value struct (emitObject above); a literal with an enum-typed field
-// lowers to a std::tuple (emit/enum.cpp); a worker-marked literal (the
-// `worker(...)` kernel form, spec 13) does too (src/emit/worker.cpp); anything
-// else stays CP3002.
+// The object-literal expression form: a worker-marked literal (the `worker(...)`
+// kernel form, spec 13) lowers to a std::tuple first (its node id is the
+// pre-scan's explicit gate, so it outranks the shape forms); a `$o{...}` value
+// shape lowers to the generated value struct (emitObject above); a literal with
+// an enum-typed field lowers to a std::tuple (emit/enum.cpp); anything else
+// stays CP3002.
 std::string Generator::emitObjectLiteral(const Expr& e) {
+    if (std::string worker =
+            emitWorkerObjectLiteral(static_cast<const ObjectLiteral&>(e));
+        !worker.empty()) {
+        return worker;
+    }
     if (std::string object = emitObject(e); !object.empty()) {
         return object;
     }
@@ -141,11 +147,6 @@ std::string Generator::emitObjectLiteral(const Expr& e) {
             emitEnumObjectLiteral(static_cast<const ObjectLiteral&>(e));
         !literal.empty()) {
         return literal;
-    }
-    if (std::string worker =
-            emitWorkerObjectLiteral(static_cast<const ObjectLiteral&>(e));
-        !worker.empty()) {
-        return worker;
     }
     notImplemented(e, "this object literal");
     return "0.0";

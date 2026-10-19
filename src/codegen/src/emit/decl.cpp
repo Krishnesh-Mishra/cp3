@@ -179,6 +179,12 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         // (src/std/typed-arrays/codegen.cpp).
         std::string initText = declaratorInitText(*d, ci.type);
         if (initText.empty()) initText = expr(*d->init);
+        // A worker-marked object literal lowers to a `std::tuple`; the binding
+        // type follows the emitted text, not the ordinary value shape.
+        if (d->init->kind == NodeKind::ObjectLiteral &&
+            workerLiterals_.count(d->init->nodeId) != 0) {
+            ci.cpp = "decltype(" + initText + ")";
+        }
         if (ci.shape == Shape::Optional && isNullishLiteral(*d->init)) {
             initText = "std::nullopt";
         }
