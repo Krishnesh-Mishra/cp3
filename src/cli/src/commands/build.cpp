@@ -10,8 +10,13 @@
 //   * --release wipes the build directory and ignores the manifest;
 //   * otherwise each translation unit (the generated module plus every runtime
 //     source) is recompiled only when its content hash or profile changed;
-//   * the link step reruns when anything was compiled or the executable is
-//     missing; otherwise the cached executable is reused.
+//   * every manifest entry records the include-tree fingerprint it was built
+//     under (detail/cache.hpp); a changed fingerprint retires the entry,
+//     because TUs are not tracked back to the headers they include;
+//   * the link step reruns when anything compiled, the executable is missing,
+//     or its link stamp - object-set paths + content hashes, profile, header
+//     fingerprint, native link flags - changed, so a runtime TU rebuilt for an
+//     earlier program still invalidates every executable that contains it.
 //
 // DECISIONS D68: std modules with a vendored native backend (third_party/**)
 // add include roots, compile flags, runtime TUs and link libraries, selected by
@@ -48,6 +53,7 @@ struct BuildState {
     const BuildLayout& layout;
     const std::string& profile;
     const NativeBuildFlags& nativeFlags;
+    const std::string& headerFingerprint;  // of the current include roots
     bool force;
     std::vector<CacheEntry>& manifest;
     std::vector<fs::path>& objects;
@@ -73,9 +79,14 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
     std::error_code ec;
     const std::string hash = std::to_string(fnv1a64(content));
     CacheEntry* existing = findEntry(st.manifest, obj.string());
+    // The entry also carries the include-tree fingerprint it was built under:
+    // the manifest does not track which headers a TU includes, so an include
+    // change retires every entry on its next build (detail/cache.hpp).
     const bool upToDate = !st.force && existing != nullptr &&
                           existing->hash == hash &&
-                          existing->profile == st.profile && fs::exists(obj, ec);
+                          existing->profile == st.profile &&
+                          existing->header == st.headerFingerprint &&
+                          fs::exists(obj, ec);
     if (upToDate) {
         existing->source = sourceKey;
         st.objects.push_back(obj);
@@ -96,12 +107,14 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
     st.anyCompiled = true;
 
     if (existing == nullptr) {
-        st.manifest.push_back(
-            CacheEntry{st.profile, sourceKey, hash, cpp.string(), obj.string()});
+        st.manifest.push_back(CacheEntry{st.profile, sourceKey, hash,
+                                         st.headerFingerprint, cpp.string(),
+                                         obj.string()});
     } else {
         existing->profile = st.profile;
         existing->source = sourceKey;
         existing->hash = hash;
+        existing->header = st.headerFingerprint;
         existing->cpp = cpp.string();
     }
     st.objects.push_back(obj);
@@ -146,12 +159,46 @@ bool compileExtras(BuildState& st, const BuildRequest& request) {
     return true;
 }
 
-// Links when anything was (re)compiled or the executable is missing; otherwise
-// the cached executable is reused as-is.
+// The link step's input identity: every object's path and content hash plus
+// the profile, the header fingerprint and the native link flags.
+std::string linkStampOf(const BuildState& st) {
+    std::string material = st.profile;
+    material += '\n';
+    material += st.headerFingerprint;
+    for (const fs::path& obj : st.objects) {
+        material += '\n';
+        material += obj.string();
+        material += '\t';
+        for (const CacheEntry& e : st.manifest) {
+            if (e.obj == obj.string()) {
+                material += e.hash;
+                break;
+            }
+        }
+    }
+    for (const std::string& flag : st.nativeFlags.link) {
+        material += '\n';
+        material += flag;
+    }
+    return std::to_string(fnv1a64(material));
+}
+
+// Links when anything was (re)compiled, the executable is missing, or its link
+// stamp no longer matches the object set being linked. The stamp is what keeps
+// an executable from surviving a runtime TU rebuild performed in an earlier
+// program's pass: that program's exe is relinked because it compiled the TU,
+// but every other program sharing the build directory reuses its cached exe
+// unless the stamp says the object set moved.
 bool linkProgram(BuildState& st, const fs::path& exePath) {
     std::error_code ec;
-    const bool needLink = st.anyCompiled || st.force || !fs::exists(exePath, ec);
-    if (!needLink) {
+    const fs::path stampPath =
+        st.layout.buildDir / (exePath.filename().string() + ".link-stamp");
+    const std::string stamp = linkStampOf(st);
+    std::string previous;
+    const bool stampMatches = fs::exists(exePath, ec) &&
+                              readTextFile(stampPath, previous) &&
+                              previous == stamp;
+    if (!st.force && !st.anyCompiled && stampMatches) {
         if (st.opt.verbose) {
             std::fprintf(stderr, "cp3c: up to date, reusing %s\n",
                          exePath.string().c_str());
@@ -169,6 +216,7 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
         std::fprintf(stderr, "cp3c: linking failed (exit %d)\n", rc);
         return false;
     }
+    writeTextFile(stampPath, stamp, nullptr);
     return true;
 }
 
@@ -249,6 +297,36 @@ std::optional<NativeBuildFlags> applyNativePackages(
     return flags;
 }
 
+// The toolchain probe plus the native-package flags the generated module
+// needs: the imported std backends (D68) and the core regex backend (D48),
+// selected from the module text. Reports and returns nullopt when the
+// toolchain is missing or a vendored backend is unusable.
+std::optional<NativeBuildFlags> resolveNativeFlags(
+    const CliOptions& opt, const BuildRequest& request,
+    const GeneratedModule& mod, BuildLayout& layout, const Toolchain*& tcOut) {
+    const Toolchain& tc = detectToolchain();
+    if (!tc.found()) {
+        std::fprintf(stderr,
+                     "cp3c: no C++ toolchain found on this system "
+                     "(looked for cl, clang++, g++ on PATH)\n");
+        std::fprintf(stderr,
+                     "      install MSVC, Clang, or GCC/g++ and re-run.\n");
+        return std::nullopt;
+    }
+    tcOut = &tc;
+    if (opt.verbose) {
+        std::fprintf(stderr, "cp3c: toolchain: %s\n",
+                     describeToolchain(tc).c_str());
+    }
+    // D48: the core regex backend is needed exactly when the generated C++
+    // names it (the literal lowering and the usage-based include scan in
+    // codegen both leave the include in mod.source).
+    const bool usesRegex =
+        mod.source.find("cp3/core/regex.hpp") != std::string::npos;
+    return applyNativePackages(opt, tc, *request.importedStdModules, layout,
+                               usesRegex);
+}
+
 }  // namespace
 
 int buildWithToolchain(const BuildRequest& request) {
@@ -272,37 +350,21 @@ int buildWithToolchain(const BuildRequest& request) {
     writeTextFile(cppPath, mod.source, nullptr);
     writeTextFile(hppPath, mod.header, nullptr);
 
-    const Toolchain& tc = detectToolchain();
-    if (!tc.found()) {
-        std::fprintf(stderr,
-                     "cp3c: no C++ toolchain found on this system "
-                     "(looked for cl, clang++, g++ on PATH)\n");
-        std::fprintf(stderr,
-                     "      install MSVC, Clang, or GCC/g++ and re-run.\n");
-        return kExitCompileError;
-    }
-    if (opt.verbose) {
-        std::fprintf(stderr, "cp3c: toolchain: %s\n",
-                     describeToolchain(tc).c_str());
-    }
-
-    // D48: the core regex backend is needed exactly when the generated C++
-    // names it (the literal lowering and the usage-based include scan in
-    // codegen both leave the include in mod.source).
-    const bool usesRegex =
-        mod.source.find("cp3/core/regex.hpp") != std::string::npos;
+    const Toolchain* tcPtr = nullptr;
     const std::optional<NativeBuildFlags> nativeFlags =
-        applyNativePackages(opt, tc, *request.importedStdModules, layout,
-                            usesRegex);
+        resolveNativeFlags(opt, request, mod, layout, tcPtr);
     if (!nativeFlags.has_value()) return kExitCompileError;
+    const Toolchain& tc = *tcPtr;
 
+    const std::string headerFingerprint =
+        headerFingerprintOf(layout.includeDirs);
     std::vector<CacheEntry> manifest = loadManifest(layout.manifestPath);
     const std::string profile = profileNameOf(opt.compile.profile);
     const bool force = (opt.compile.profile == BuildProfile::Release);
 
     std::vector<fs::path> objects;
     BuildState state{opt, tc,        layout,   profile,
-                     *nativeFlags, force, manifest, objects};
+                     *nativeFlags, headerFingerprint, force, manifest, objects};
 
     if (!compileExtras(state, request)) {
         return kExitCompileError;

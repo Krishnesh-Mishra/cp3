@@ -7,6 +7,7 @@
 // =============================================================================
 #include "detail/cache.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <system_error>
@@ -76,7 +77,9 @@ std::vector<CacheEntry> loadManifest(const fs::path& manifestPath) {
     std::ifstream in(manifestPath);
     if (!in) return entries;
     std::string line;
-    std::getline(in, line);  // header
+    if (!std::getline(in, line) || line != "cp3c-manifest-v2") {
+        return entries;  // v1 (or corrupt): retire every object once.
+    }
     while (std::getline(in, line)) {
         if (line.empty() || line[0] == '#') continue;
         CacheEntry e;
@@ -84,6 +87,7 @@ std::vector<CacheEntry> loadManifest(const fs::path& manifestPath) {
         if (!std::getline(ss, e.profile, '\t')) continue;
         if (!std::getline(ss, e.source, '\t')) continue;
         if (!std::getline(ss, e.hash, '\t')) continue;
+        if (!std::getline(ss, e.header, '\t')) continue;
         if (!std::getline(ss, e.cpp, '\t')) continue;
         if (!std::getline(ss, e.obj, '\t')) continue;
         entries.push_back(std::move(e));
@@ -94,12 +98,36 @@ std::vector<CacheEntry> loadManifest(const fs::path& manifestPath) {
 void saveManifest(const fs::path& manifestPath,
                   const std::vector<CacheEntry>& entries) {
     std::ostringstream out;
-    out << "cp3c-manifest-v1\n";
+    out << "cp3c-manifest-v2\n";
     for (const CacheEntry& e : entries) {
-        out << e.profile << '\t' << e.source << '\t' << e.hash << '\t' << e.cpp
-            << '\t' << e.obj << '\n';
+        out << e.profile << '\t' << e.source << '\t' << e.hash << '\t'
+            << e.header << '\t' << e.cpp << '\t' << e.obj << '\n';
     }
     writeTextFile(manifestPath, out.str(), nullptr);
+}
+
+std::string headerFingerprintOf(const std::vector<fs::path>& includeDirs) {
+    std::vector<fs::path> files;
+    std::error_code ec;
+    for (const fs::path& root : includeDirs) {
+        if (!fs::is_directory(root, ec)) continue;
+        for (const fs::directory_entry& entry :
+             fs::recursive_directory_iterator(root, ec)) {
+            if (entry.is_regular_file(ec)) files.push_back(entry.path());
+        }
+    }
+    if (files.empty()) return std::string();
+    std::sort(files.begin(), files.end());
+    std::string material;
+    for (const fs::path& file : files) {
+        std::string content;
+        if (!readTextFile(file, content)) continue;
+        material += file.generic_string();
+        material += '\n';
+        material += content;
+        material += '\n';
+    }
+    return std::to_string(fnv1a64(material));
 }
 
 }  // namespace cp3::cli

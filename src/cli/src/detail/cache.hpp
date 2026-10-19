@@ -19,6 +19,14 @@
 // changed (compared by content hash); unchanged object files are reused and
 // only the link step reruns. `--release` ignores the cache (clean whole-program
 // build with LTO).
+//
+// Headers are hashed as a set (headerFingerprintOf: every file under the
+// include roots); each manifest entry records the fingerprint it was built
+// under, so a changed include tree retires every object on its next build,
+// because no translation unit is tracked back to the headers it includes. The
+// fingerprint also feeds the executable's link stamp (commands/build.cpp), so
+// a rebuilt header or runtime object cannot leave an executable linked
+// against the previous ones.
 // =============================================================================
 #pragma once
 
@@ -46,6 +54,7 @@ struct CacheEntry {
     std::string profile;  // "incremental" | "release" | "debug"
     std::string source;   // logical source key (the .cp3 path or the real .cpp)
     std::string hash;     // hash of the generated/real .cpp content
+    std::string header;   // include-tree fingerprint when the object was built
     std::string cpp;      // generated .cpp path
     std::string obj;      // object path
 };
@@ -62,6 +71,12 @@ std::string moduleNameFor(const fs::path& entryFile, const fs::path& projectRoot
 
 const char* profileNameOf(BuildProfile profile) noexcept;
 
+// Content fingerprint of every regular file under the include roots, sorted
+// and hashed in a deterministic order. Empty includeDirs fingerprint to "".
+std::string headerFingerprintOf(const std::vector<fs::path>& includeDirs);
+
+// Reads the manifest. A file written before the fingerprint format (or a
+// corrupt one) yields no entries, which retires every object once.
 std::vector<CacheEntry> loadManifest(const fs::path& manifestPath);
 
 void saveManifest(const fs::path& manifestPath,
