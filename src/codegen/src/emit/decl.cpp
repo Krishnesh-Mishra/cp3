@@ -24,6 +24,51 @@ namespace cp3 {
 
 using namespace detail;
 
+namespace {
+
+// A module-scope `const` may initialize in place only when its initializer is
+// a compile-time value. Anything that reads runtime state (a call,
+// interpolation, `process.argv`/`env`) must run inside `main` at the
+// statement's source position: a namespace-scope static initializer runs
+// before `main`, which is before initArgv and every other runtime store
+// exists. This classifies the literal subset (operators over literals
+// included) that is safe to hoist.
+bool isStaticInitExpr(const Expr& e) {
+    switch (e.kind) {
+        case NodeKind::NumberLiteral:
+        case NodeKind::StringLiteral:
+        case NodeKind::BoolLiteral:
+        case NodeKind::NullLiteral:
+        case NodeKind::UndefinedLiteral:
+            return true;
+        case NodeKind::UnaryExpr: {
+            const auto& u = static_cast<const UnaryExpr&>(e);
+            return u.operand && isStaticInitExpr(*u.operand);
+        }
+        case NodeKind::BinaryExpr: {
+            const auto& b = static_cast<const BinaryExpr&>(e);
+            return b.left && b.right && isStaticInitExpr(*b.left) &&
+                   isStaticInitExpr(*b.right);
+        }
+        case NodeKind::LogicalExpr: {
+            const auto& l = static_cast<const LogicalExpr&>(e);
+            return l.left && l.right && isStaticInitExpr(*l.left) &&
+                   isStaticInitExpr(*l.right);
+        }
+        case NodeKind::ConditionalExpr: {
+            const auto& c = static_cast<const ConditionalExpr&>(e);
+            return c.condition && c.whenTrue && c.whenFalse &&
+                   isStaticInitExpr(*c.condition) &&
+                   isStaticInitExpr(*c.whenTrue) &&
+                   isStaticInitExpr(*c.whenFalse);
+        }
+        default:
+            return false;
+    }
+}
+
+}  // namespace
+
 // Records every function declared in this unit (including `export function`)
 // so a call can be checked against them.
 void Generator::collectFunctionNames(const Stmt& s) {
@@ -161,7 +206,17 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
             continue;
         }
         if (isConst) {
-            line(decls, 1, cv + ci.cpp + " " + name + " = " + initText + ";");
+            if (isStaticInitExpr(*d->init)) {
+                line(decls, 1, cv + ci.cpp + " " + name + " = " + initText + ";");
+            } else {
+                // The initializer reads runtime state: evaluate it inside
+                // `main` at its source position, after initArgv and the rest
+                // of the runtime bootstrap. The binding keeps namespace scope
+                // so functions can read it; language-level const-ness is
+                // enforced by sema.
+                line(decls, 1, ci.cpp + " " + name + "{};");
+                line(mainBody, 1, name + " = " + initText + ";");
+            }
             continue;
         }
         line(decls, 1, ci.cpp + " " + name + "{};");

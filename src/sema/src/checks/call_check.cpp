@@ -41,6 +41,9 @@ Type Analyzer::inferCall(CallExpr& call) {
             if (tryInferStringBuiltin(call, id, builtin)) {
                 return withType(call, builtin);
             }
+            if (tryParseBuiltinCall(call, id, builtin)) {
+                return withType(call, builtin);
+            }
             if (tryInferNetworkCall(call, id, builtin)) {
                 return withType(call, builtin);
             }
@@ -59,16 +62,10 @@ Type Analyzer::inferCall(CallExpr& call) {
         if (call.callee->kind == NodeKind::MemberExpr) {
             checkParallelCall(call);
             auto& member = static_cast<MemberExpr&>(*call.callee);
-            Type json;
-            if (tryInferJsonCall(call, member, json)) {
-                return json;
+            Type inferred;
+            if (tryInferMemberCall(call, member, inferred)) {
+                return inferred;
             }
-            Type promise;
-            if (tryInferPromiseStaticCall(call, member, promise)) {
-                return promise;
-            }
-            if (Type family; tryInferFamilyMethodCall(call, member, family)) return family;
-            if (Type buffer; tryInferBufferCall(call, member, buffer)) return buffer;
         }
     }
 
@@ -101,6 +98,21 @@ Type Analyzer::inferCall(CallExpr& call) {
     return withType(call, Type::error());
 }
 
+// The member-call site inference chain (one hook per family, each owning its
+// own typing): JSON.parse (unknown), the Promise statics, `env.get<T>`
+// (src/std/env/sema.cpp), the std/network generic member calls
+// (src/std/network/sema.cpp) and the JS-compat family / Buffer methods.
+// Returns true when one of them typed the call and `out` is set.
+bool Analyzer::tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
+    if (tryInferJsonCall(call, m, out)) return true;
+    if (tryInferPromiseStaticCall(call, m, out)) return true;
+    if (tryInferEnvCall(call, m, out)) return true;
+    // std/network generics: `res.json<T>()` / `req.json<T>()` (src/std/network/sema.cpp).
+    if (tryInferNetworkMemberCall(call, m, out)) return true;
+    if (tryInferFamilyMethodCall(call, m, out)) return true;
+    return tryInferBufferCall(call, m, out);
+}
+
 // Core timer builtins (spec §14, STDLIB docs §03): honest result types so
 // `let id = setInterval(...)`, `clearTimeout(id)` and `await sleep(...)` type
 // correctly (the ambient table is permissive by default). Returns true when
@@ -122,6 +134,17 @@ bool Analyzer::tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& o
         return true;
     }
     return false;
+}
+
+// The documented global numeric parsers (STDLIB docs section 3): `parseInt`
+// and `parseFloat` both return cp3 `number`, so `let n = parseInt(s)` and
+// ternaries over the result type correctly. Codegen lowers the calls to the
+// runtime helpers in cp3/core/runtime.hpp.
+bool Analyzer::tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& out) {
+    if (id.name != "parseInt" && id.name != "parseFloat") return false;
+    inferArgs(call);
+    out = Type::number();
+    return true;
 }
 
 void Analyzer::reportUndefinedCall(CallExpr& call, Identifier& id) {

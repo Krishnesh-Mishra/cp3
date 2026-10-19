@@ -4,10 +4,11 @@
 //
 // Lowers the `import ... from "std/..."` / builtin surface whose receivers sema
 // models as ambient (STDLIB docs §04): `Math.*`, `path.*`, `os.*`,
-// `JSON.stringify`, `process.*`, the `String(x)` global, and the `string`
-// method surface + `.length`. Per-family lowering (calls and member reads)
-// lives in the `src/std/<family>/codegen.cpp` units; the `needs*` flags they
-// record drive the include assembly in code_generator.cpp's buildSource.
+// `JSON.stringify`, `process.*`, the `{ env }` named import, the `String(x)`
+// global, and the `string` method surface + `.length`. Per-family lowering
+// (calls and member reads) lives in the `src/std/<family>/codegen.cpp` units;
+// the `needs*` flags they record drive the include assembly in
+// code_generator.cpp's buildSource.
 //
 // A member call/property that is not part of a family's table reports CP3002
 // (the caller falls through to notImplemented), so unsupported std surface
@@ -56,12 +57,17 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
         return emitNetworkCall(c, m);
     }
     if (isNamespaceObject(m.object.get(), "fs")) return emitFsCall(c, m);
-    // `process.*` plus the one nested member this wave lowers:
-    // `process.env.get(name)`.
-    if (isNamespaceObject(m.object.get(), "process") ||
-        isNsMember(m.object.get(), "process", "env")) {
+    // `process.*` (exit/exec/spawn; argv/env reads lower in emitProcessMember)
+    // and the `{ env }` named import from std/env (src/std/env/codegen.cpp).
+    if (isNamespaceObject(m.object.get(), "process")) {
         return emitProcessCall(c, m);
     }
+    if (isNamespaceObject(m.object.get(), "env")) {
+        return emitEnvCall(c, m);
+    }
+    // Process value receivers: the SpawnHandle member calls (`p.on/write/
+    // kill`, src/std/process/codegen.cpp).
+    if (isProcessObject(m.object.get())) return emitProcessObjectCall(c, m);
     // `std/network` receivers (`res.status(404).text(...)`, `app.get(...)`,
     // `ws.send(...)`, `wss.on(...)`): the documented members lower to the plain
     // C++ member call on the runtime object (src/std/network/codegen.cpp).
@@ -77,6 +83,13 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
         if (!literal.empty()) return literal;
     } else if (m.object && info(*m.object).shape == Shape::String) {
         return emitStringMethodCall(c, m);
+    }
+    // A std/network Map-shaped documented field read (`req.headers.get(...)`,
+    // `res.headers.get(...)`): the open marker hides the Map type from sema,
+    // so this hook hands the collections lowering the receiver type
+    // (src/std/network/codegen.cpp).
+    if (std::string field = emitNetworkMapFieldCall(c, m); !field.empty()) {
+        return field;
     }
     // The std/collections Map/Set member calls (`m.set(...)`, `s.add(...)`,
     // `forEach(...)`): src/std/collections/codegen.cpp.
@@ -119,6 +132,11 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
         }
     }
     if (std::string proc = emitProcessMember(m); !proc.empty()) return proc;
+    // A std/network Map-shaped field read's `.size` (`req.params.size`): same
+    // hint as the call form above (src/std/network/codegen.cpp).
+    if (std::string field = emitNetworkMapFieldMember(m); !field.empty()) {
+        return field;
+    }
     // `std/collections` `m.size` / `s.size` reads and the `entries().length`
     // case (src/std/collections/codegen.cpp).
     if (std::string coll = emitCollectionsMember(m); !coll.empty()) return coll;

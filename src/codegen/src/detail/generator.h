@@ -255,6 +255,16 @@ private:
     std::string emitJsonMember(const MemberExpr& m);
     std::string emitProcessCall(const CallExpr& c, const MemberExpr& m);
     std::string emitProcessMember(const MemberExpr& m);
+    // `std/process` value receivers are recognised by the sema marker names
+    // ("$process:*"), so the SpawnHandle hooks live on the receiver: the
+    // `p.on/write/kill` member calls plus the string[] argument-vector
+    // lowering exec/spawn share.
+    bool isProcessObject(const Expr* e) const;
+    std::string emitProcessObjectCall(const CallExpr& c, const MemberExpr& m);
+    std::string processArgs(const Expr& e);
+    // std/env (src/std/env/codegen.cpp): the `{ env }` named import's
+    // get/has/load calls, backed by cp3/std/env.hpp (composed on process).
+    std::string emitEnvCall(const CallExpr& c, const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
     // Native-backed std modules (src/std/crypto/codegen.cpp,
     // src/std/network/codegen.cpp): one per-module lowering unit. Each returns
@@ -281,15 +291,23 @@ private:
     std::string emitByteBufferMethodCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMember(const MemberExpr& m);
     // `std/network` receivers are recognised by the sema marker names
-    // ("$network:*"), so the hooks live on the receiver, not on the member:
-    // named imports (identifier calls), `new` forms, member calls/reads.
+    // ("$network:*"): named imports, `new` forms, member calls/reads.
     bool isNetworkObject(const Expr* e) const;
+    // Std/network Map-shaped field reads (`res.headers`, `req.params`, ...):
+    // their `Map<string, string>` type, re-derived from the hints below.
+    std::optional<Type> networkMapFieldType(const Expr& e) const;
+    std::string emitNetworkMapFieldCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitNetworkMapFieldMember(const MemberExpr& m);
     std::string emitNetworkIdentifier(const CallExpr& c, const std::string& name);
     std::string emitUnresolvedCall(const CallExpr& c, const std::string& name);
     std::string emitNetworkNew(const NewExpr& n);
     std::string emitNetworkMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkMemberRead(const MemberExpr& m);
     std::string emitNetworkFetch(const CallExpr& c, const ExprList& args);
+    // `res.json<T>()` / `req.json<T>()` (reified interface T; "" else) and
+    // `res.json(payload, status?)`: the json value tree serializes the latter.
+    std::string networkJsonRecord(const MemberExpr& m, const CallExpr& c);
+    std::string networkResponseJson(const CallExpr& c, const MemberExpr& m);
     std::string fetchInitText(const Expr& init);
     std::string networkArg(const Type& receiver, const std::string& property,
                            const CallExpr& c, const Expr& arg, std::size_t index);
@@ -378,6 +396,9 @@ private:
     std::string buildHeader(const std::string& decls) const;
     std::string buildSource(const std::string& decls, const std::string& defs,
                             const std::string& mainBody) const;
+    // The `int main` unit of the generated source: the std/process argument
+    // vector init, the top-level-await coroutine and the event-loop drain.
+    void emitMain(std::string& out, const std::string& mainBody) const;
 
     // --- state ----------------------------------------------------------------
     // The int64 fast-path state (D64): non-null exactly while a function's fast
@@ -434,6 +455,7 @@ private:
     std::string enumDecls_;
     std::unordered_map<std::string, std::vector<std::string>> enumObjectFields_;
     bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
+    bool needsEnv_ = false;        // { env } -> cp3/std/env.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
@@ -450,6 +472,9 @@ private:
     std::string currentReturn_ = "int";
 
     std::vector<std::unordered_map<std::string, Type>> env_;
+    // Codegen type hints for the Map-shaped std/network fields; the open
+    // marker hides their type in sema, so networkMapFieldType checks these.
+    std::unordered_map<std::uint32_t, Type> exprTypeHints_;
     std::unordered_set<std::string> functions_;
     std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
     std::unordered_set<std::string> asyncFunctions_;   // `async function` names

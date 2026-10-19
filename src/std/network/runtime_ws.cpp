@@ -13,8 +13,8 @@
 //
 // Missing on purpose (wave report): the `req` argument of the connection
 // listener is empty (uWS hands the request to the upgrade callback, not to
-// `open`, and its Map-shaped fields need the Map type anyway), and
-// `upgrade`-time customization (headers, protocols) is not exposed.
+// `open`), and `upgrade`-time customization (headers, protocols) is not
+// exposed.
 // =============================================================================
 #include "cp3/std/network.hpp"
 
@@ -57,12 +57,28 @@ void WsImpl::emitOpen() {
     if (it != slots.end() && it->second.none) it->second.none();
 }
 
-void WsImpl::emitMessage(const std::string& data) {
+void WsImpl::emitMessage(const std::string& data, bool isBinary) {
     if (closed) return;
     const auto it = slots.find("message");
     if (it == slots.end()) return;
+    // The documented payload is `string | Buffer`: the frame kind picks the
+    // matching slot when the handler registered one, otherwise the payload
+    // converts so a single handler still sees every frame (the pre-buffer
+    // behavior for text handlers).
+    if (isBinary) {
+        if (it->second.binary) {
+            it->second.binary(buffer::from(data));
+        } else if (it->second.text) {
+            it->second.text(data);
+        } else if (it->second.none) {
+            it->second.none();
+        }
+        return;
+    }
     if (it->second.text) {
         it->second.text(data);
+    } else if (it->second.binary) {
+        it->second.binary(buffer::from(data));
     } else if (it->second.none) {
         it->second.none();
     }
@@ -127,6 +143,11 @@ void WebSocket::on(const std::string& event, std::function<void(std::string)> ha
 }
 
 void WebSocket::on(const std::string& event,
+                   std::function<void(const buffer::Buffer&)> handler) const {
+    if (impl_) impl_->slots[event].binary = std::move(handler);
+}
+
+void WebSocket::on(const std::string& event,
                    std::function<void(double, std::string)> handler) const {
     if (impl_) impl_->slots[event].pair = std::move(handler);
 }
@@ -144,6 +165,17 @@ void WebSocket::send(const std::string& data) const {
         return;
     }
     detail::wsClientSend(impl_, data);
+}
+
+void WebSocket::send(const buffer::Buffer& data) const {
+    if (!impl_ || impl_->closed) return;
+    if (impl_->kind == detail::WsImpl::Kind::Server) {
+        if (impl_->native != nullptr) {
+            static_cast<NativeWs*>(impl_->native)->send(data.bytes(), uWS::OpCode::BINARY);
+        }
+        return;
+    }
+    detail::wsClientSendBinary(impl_, data.bytes());
 }
 
 void WebSocket::close(double code, const std::string& reason) const {
@@ -207,7 +239,9 @@ void onServerMessage(const std::shared_ptr<WssImpl>& impl, NativeWs* native,
     const auto it = impl->connections.find(native);
     if (it == impl->connections.end() || it->second == nullptr) return;
     const std::shared_ptr<detail::WsImpl> connection = WebSocket::sharedImpl(*it->second);
-    if (connection != nullptr) connection->emitMessage(std::string(message));
+    if (connection != nullptr) {
+        connection->emitMessage(std::string(message), opCode == uWS::OpCode::BINARY);
+    }
 }
 
 void onServerClose(const std::shared_ptr<WssImpl>& impl, NativeWs* native, int code,

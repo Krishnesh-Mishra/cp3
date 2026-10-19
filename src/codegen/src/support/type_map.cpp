@@ -417,6 +417,7 @@ std::optional<Type> Generator::resolvedBindingType(const VariableDeclarator& d) 
 }
 
 Type Generator::effectiveType(const Expr& e) const {
+    if (const auto t = networkMapFieldType(e)) return *t;
     if (e.kind == NodeKind::Identifier) {
         const auto& id = static_cast<const Identifier&>(e);
         if (auto t = lookup(id.name)) return *t;

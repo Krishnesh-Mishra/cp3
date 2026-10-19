@@ -204,6 +204,10 @@ private:
     std::optional<Type> pathMember(const std::string& prop);
     std::optional<Type> osMember(const std::string& prop);
     std::optional<Type> processMember(const std::string& prop);
+    // The documented `process` object shapes ("$process:ExecResult" /
+    // "$process:SpawnHandle"); codegen recognises them by name.
+    Type processObjectType(const std::string& name);
+    std::optional<Type> envMember(const std::string& prop);
     std::optional<Type> consoleMember(const std::string& prop);
     std::optional<Type> jsonMember(const std::string& prop);
     // Native-backed std modules: a member outside the documented surface
@@ -227,8 +231,16 @@ private:
     // --- std/network (src/std/network/sema.cpp) ------------------------------
     // One documented object shape per member table entry ("$network:<name>").
     Type networkObjectType(const std::string& name);
+    // A documented field read on a marker receiver keeps its declared type
+    // (member_check.cpp hook). The marker shape itself stays open: an
+    // undocumented member still falls through to ambient.
+    std::optional<Type> networkObjectMember(const Type& recv,
+                                            const std::string& prop);
     // Named-import call sites: `fetch(...)` / `createServer()`.
     bool tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& out);
+    // The generic instance member (`res.json<T>()` / `req.json<T>()`): the
+    // explicit T substitutes into Promise<T>, matching `JSON.parse<T>`.
+    bool tryInferNetworkMemberCall(CallExpr& call, MemberExpr& m, Type& out);
     // `new WebSocket(url)` / `new WebSocketServer({ port })`; unknown -> unknown.
     Type inferNetworkConstruct(const std::string& name, ExprList& args,
                                const SourceSpan& span);
@@ -239,9 +251,19 @@ private:
     Type tupleIndexAt(const Shape& sh, IndexExpr& ix);
     Type inferCall(CallExpr& call);
     bool tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
+    // `parseInt(str)` / `parseFloat(str)` (STDLIB docs section 3): the
+    // documented global numeric parsers, typed `number`. `String(x)` is typed
+    // by tryInferStringBuiltin (std_check.cpp).
+    bool tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
     void reportUndefinedCall(CallExpr& call, Identifier& id);
     bool tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out);
     bool tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out);
+    // `env.get<T>(key, options?)` (src/std/env/sema.cpp): T from the explicit
+    // type argument, else the `{ default: v }` value type, else `string`.
+    bool tryInferEnvCall(CallExpr& call, MemberExpr& m, Type& out);
+    // The member-call site inference chain for a MemberExpr callee: the JSON,
+    // Promise-static, env, JS-compat-family and Buffer hooks in order.
+    bool tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out);
     void inferArgs(CallExpr& call);
     void sigFromFunctionType(const Type& ct, FuncSig& localSig);
     void inferArg(Expr* a);
@@ -404,9 +426,9 @@ private:
 
 // --- std-namespace surface helpers (std_check.cpp) ---------------------------
 //
-// The closed families (Math / path / os / crypto / console / JSON / fs) report
-// CP3305 for an unknown member (member_check.cpp); the open ones (network,
-// process, ...) keep the permissive ambient fallthrough.
+// The closed families (Math / path / os / crypto / console / JSON / Date /
+// fs / process / env) report CP3305 for an unknown member (member_check.cpp);
+// the open ones (network, ...) keep the permissive ambient fallthrough.
 bool isClosedStdNamespace(const std::string& ns);
 
 // The implemented member names of `ns`, used as CP3305 candidates.
@@ -418,6 +440,8 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns);
 std::vector<std::string> mathMemberNames();
 std::vector<std::string> pathMemberNames();
 std::vector<std::string> osMemberNames();
+std::vector<std::string> processMemberNames();
+std::vector<std::string> envMemberNames();
 std::vector<std::string> consoleMemberNames();
 std::vector<std::string> jsonMemberNames();
 std::vector<std::string> cryptoMemberNames();

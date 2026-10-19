@@ -38,6 +38,7 @@ set(cp3_sema_sources
     ../std/path/sema.cpp
     ../std/os/sema.cpp
     ../std/process/sema.cpp
+    ../std/env/sema.cpp
     ../std/console/sema.cpp
     ../std/json/sema.cpp
     ../std/collections/sema.cpp
