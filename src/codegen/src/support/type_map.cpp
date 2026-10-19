@@ -209,6 +209,7 @@ CppInfo classify(const Type& raw) {
         }
         case TypeKind::Union:
             classifyNullishUnion(t, info);
+            if (!info.representable) classifyValueUnion(t, info);
             return info;
         case TypeKind::Class:
             return classifyClassValue(t);

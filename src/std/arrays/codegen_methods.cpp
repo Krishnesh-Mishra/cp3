@@ -1,0 +1,244 @@
+// =============================================================================
+// src/std/arrays/codegen_methods.cpp - the regular-array method surface
+// (docs/language-spec/09-arrays-strings.md): mutation, callback iteration,
+// searching, slicing, the in-place mutators and `for...of`.
+//
+// detail::ArrayEmitter (generator.h) holds the static entry points; Generator
+// friends it for the private emitters it drives. The lowering calls the
+// runtime extras in cp3/array_extras.hpp with the element type from sema;
+// callback methods lower the arrow with the element type as its parameter
+// context. Out-of-scope forms report CP3002.
+// =============================================================================
+#include "detail/generator.h"
+
+#include <cstddef>
+#include <string>
+#include <vector>
+
+#include "detail/cpp_writer.h"
+#include "detail/family.h"
+#include "detail/mangle.h"
+#include "detail/type_map.h"
+
+namespace cp3 {
+
+using namespace detail;
+
+namespace {
+
+// The arrow argument at `index`, or null: the caller reports the unsupported
+// non-arrow form (a named function callback is not lowered).
+const ArrowFunction* arrowArg(const CallExpr& c, std::size_t index) {
+    if (index >= c.arguments.size() || !c.arguments[index]) return nullptr;
+    const Expr* arg = c.arguments[index].get();
+    if (arg->kind != NodeKind::ArrowFunction) return nullptr;
+    return static_cast<const ArrowFunction*>(arg);
+}
+
+bool isOneOf(const std::string& prop, const char* const* names,
+             std::size_t count) {
+    for (std::size_t i = 0; i < count; ++i) {
+        if (prop == names[i]) return true;
+    }
+    return false;
+}
+
+template <std::size_t N>
+bool isOneOf(const std::string& prop, const char* const (&names)[N]) {
+    return isOneOf(prop, names, N);
+}
+
+}  // namespace
+
+// A non-nullish value union (`number | string` - the sanctioned mixed-array
+// element form, docs 09) -> `std::variant` over the primitive alternatives.
+// Anything else (objects, classes, ...) stays out of M2. Moved here from
+// type_map.cpp: the mixed-array element form is this surface's own shape.
+void detail::classifyValueUnion(const Type& t, CppInfo& info) {
+    if (t.parts.size() < 2) return;
+    std::vector<std::string> cpps;
+    for (const Type& part : t.parts) {
+        if (part.isNullish()) return;
+        const CppInfo ci = classify(part);
+        if (!ci.representable || !isPrimitiveShape(ci.shape)) return;
+        cpps.push_back(ci.cpp);
+    }
+    info.shape = Shape::Union;
+    info.representable = true;
+    info.cpp = "std::variant<";
+    for (std::size_t i = 0; i < cpps.size(); ++i) {
+        if (i != 0) info.cpp += ", ";
+        info.cpp += cpps[i];
+    }
+    info.cpp += ">";
+}
+
+// The callback set (`map` / `filter` / `reduce` / `find` / `findIndex` /
+// `some` / `every`): each arrow lowers with its parameter context.
+std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
+                                               const MemberExpr& m,
+                                               const CppInfo& ec,
+                                               const std::string& recvText) {
+    const std::string& prop = m.property;
+    const ArrowFunction* cb = arrowArg(c, 0);
+    if (cb == nullptr) {
+        g.notImplemented(c, "a non-arrow array callback");
+        return "0.0";
+    }
+    if (prop == "map") {
+        CppInfo rc;
+        if (!arrayElementInfo(arrayElemOf(g.effectiveType(c)), rc)) {
+            g.notImplemented(c, "the array map result type");
+            return "0.0";
+        }
+        return "::cp3::runtime::arrayMap<" + rc.cpp + ">(" + recvText + ", " +
+               g.emitArrow(*cb, {ec.cpp}) + ")";
+    }
+    if (prop == "reduce") {
+        // The accumulator parameter has the fold's result type: the initial
+        // value's when given, the element's otherwise (a no-initial fold seeds
+        // from the first element, JS-style).
+        CppInfo rc;
+        if (!arrayElementInfo(g.effectiveType(c), rc)) {
+            g.notImplemented(c, "the array reduce result type");
+            return "0.0";
+        }
+        const std::string fold = g.emitArrow(*cb, {rc.cpp, ec.cpp});
+        if (c.arguments.size() > 1 && c.arguments[1]) {
+            return "::cp3::runtime::arrayReduce<" + rc.cpp + ">(" + recvText +
+                   ", " + fold + ", " + g.expr(*c.arguments[1]) + ")";
+        }
+        // A no-initial fold keeps the element type; a callback that changes it
+        // has no lowering yet.
+        if (rc.cpp != ec.cpp) {
+            g.notImplemented(c, "this no-initial reduce (changing type)");
+            return "0.0";
+        }
+        return "::cp3::runtime::arrayReduceNoInit<" + rc.cpp + ">(" + recvText +
+               ", " + fold + ")";
+    }
+    const char* fn = nullptr;
+    if (prop == "filter") fn = "arrayFilter";
+    else if (prop == "find") fn = "arrayFind";
+    else if (prop == "findIndex") fn = "arrayFindIndex";
+    else if (prop == "some") fn = "arraySome";
+    else if (prop == "every") fn = "arrayEvery";
+    if (fn == nullptr) return std::string();
+    return "::cp3::runtime::" + std::string(fn) + "<" + ec.cpp + ">(" +
+           recvText + ", " + g.emitArrow(*cb, {ec.cpp}) + ")";
+}
+
+// The dispatch: returns "" when the member is not a regular-array method this
+// unit lowers (the caller keeps its own CP3002 path).
+std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
+                                             const MemberExpr& m) {
+    if (!m.object) return std::string();
+    static const char* const kCallbacks[] = {"map",     "filter", "reduce",
+                                             "find",    "findIndex",
+                                             "some",    "every"};
+    static const char* const kSimple[] = {
+        "push", "pop", "unshift", "shift", "unique", "shuffle",
+        "indexOf", "includes", "binarySearch", "slice", "flat"};
+    const std::string& prop = m.property;
+    const bool callback = isOneOf(prop, kCallbacks);
+    if (!callback && !isOneOf(prop, kSimple)) {
+        return std::string();
+    }
+    const Type recv = g.effectiveType(*m.object);
+    if (recv.kind != TypeKind::Array) return std::string();
+    const Type elem = arrayElemOf(recv);
+    CppInfo ec;
+    if (!arrayElementInfo(elem, ec)) {
+        g.notImplemented(c, "the array method element type");
+        return "0.0";
+    }
+    g.needsTypedArray_ = true;
+    const std::string recvText = g.familyReceiverText(*m.object, elem, c);
+    if (callback) return callbackText(g, c, m, ec, recvText);
+
+    auto arg = [&c, &g](std::size_t i) -> std::string {
+        return i < c.arguments.size() && c.arguments[i]
+                   ? g.expr(*c.arguments[i])
+                   : std::string();
+    };
+    if (prop == "push" || prop == "unshift") {
+        const char* fn = prop == "push" ? "arrayPush" : "arrayUnshift";
+        return "::cp3::runtime::" + std::string(fn) + "<" + ec.cpp + ">(" +
+               recvText + ", " + arg(0) + ")";
+    }
+    if (prop == "pop" || prop == "shift") {
+        const char* fn = prop == "pop" ? "arrayPop" : "arrayShift";
+        return "::cp3::runtime::" + std::string(fn) + "<" + ec.cpp + ">(" +
+               recvText + ")";
+    }
+    if (prop == "unique" || prop == "shuffle") {
+        const char* fn = prop == "unique" ? "arrayUnique" : "arrayShuffle";
+        return "::cp3::runtime::" + std::string(fn) + "<" + ec.cpp + ">(" +
+               recvText + ")";
+    }
+    if (prop == "indexOf" || prop == "includes" || prop == "binarySearch") {
+        const char* fn = prop == "indexOf"   ? "arrayIndexOf"
+                         : prop == "includes" ? "arrayIncludes"
+                                              : "arrayBinarySearch";
+        std::string out = "::cp3::runtime::" + std::string(fn) + "<" + ec.cpp +
+                          ">(" + recvText + ", " + arg(0);
+        if (c.arguments.size() > 1) out += ", " + arg(1);
+        return out + ")";
+    }
+    if (prop == "slice") {
+        std::string out =
+            "::cp3::runtime::arraySlice<" + ec.cpp + ">(" + recvText;
+        for (const auto& a : c.arguments) {
+            out += ", ";
+            out += a ? g.expr(*a) : "0.0";
+        }
+        return out + ")";
+    }
+    // `flat()`: one level; the receiver's element must itself be an array.
+    CppInfo ic;
+    if (elem.kind != TypeKind::Array ||
+        !arrayElementInfo(arrayElemOf(elem), ic)) {
+        g.notImplemented(c, "the array flat element type");
+        return "0.0";
+    }
+    return "::cp3::runtime::arrayFlat<" + ic.cpp + ">(" + recvText + ")";
+}
+
+// `for (const x of a)`: over a regular array; the binding takes the element
+// type (the alternative `for await` form is out of scope and reports).
+void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
+                                 std::string& out, int indent) {
+    if (g.intOn()) g.intFail();
+    const auto* vd = f.left && f.left->kind == NodeKind::VariableDeclaration
+                         ? static_cast<const VariableDeclaration*>(f.left.get())
+                         : nullptr;
+    const VariableDeclarator* d =
+        vd == nullptr || vd->declarations.empty() ? nullptr
+                                                  : vd->declarations.front().get();
+    if (d == nullptr || !d->id || d->id->kind != NodeKind::Identifier) {
+        g.notImplemented(f, "this for-of binding");
+        line(out, indent, "/* CP3002: unsupported for-of binding */");
+        return;
+    }
+    const Type elem = f.right ? arrayElemOf(g.effectiveType(*f.right))
+                              : Type::unknown();
+    CppInfo ec;
+    if (!f.right || !arrayElementInfo(elem, ec)) {
+        g.notImplemented(f, "this for-of source");
+        line(out, indent, "/* CP3002: unsupported for-of source */");
+        return;
+    }
+    g.needsTypedArray_ = true;
+    const std::string recv = g.familyReceiverText(*f.right, elem, f);
+    const std::string name =
+        mapIdent(static_cast<const Identifier&>(*d->id).name);
+    g.pushScope();
+    line(out, indent,
+         "for (const " + ec.cpp + "& " + name + " : *(" + recv + ")) {");
+    g.declareBinding(*d);
+    if (f.body) g.emitBranch(*f.body, out, indent + 1);
+    line(out, indent, "}");
+    g.popScope();
+}
+
+}  // namespace cp3

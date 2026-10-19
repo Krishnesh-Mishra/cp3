@@ -50,6 +50,24 @@
 
 namespace cp3 {
 
+class Generator;
+
+// The regular-array method surface (src/std/arrays/codegen_methods.cpp):
+// push/pop, the callback set, searching, slicing and the in-place mutators,
+// plus `for...of`. A friend of Generator for the private state it drives; the
+// definitions live in that unit.
+namespace detail {
+struct ArrayEmitter {
+    static std::string methodCall(Generator& g, const CallExpr& c,
+                                  const MemberExpr& m);
+    static std::string callbackText(Generator& g, const CallExpr& c,
+                                    const MemberExpr& m, const CppInfo& ec,
+                                    const std::string& recvText);
+    static void forOf(Generator& g, const ForOfStatement& f, std::string& out,
+                      int indent);
+};
+}  // namespace detail
+
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
 // unit, and the CP3002 dedup set.
@@ -62,6 +80,7 @@ public:
     GeneratedModule run(const Program& program);
 
 private:
+    friend struct detail::ArrayEmitter;  // src/std/arrays/codegen_methods.cpp
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
 

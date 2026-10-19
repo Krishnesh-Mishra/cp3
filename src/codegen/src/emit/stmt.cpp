@@ -77,6 +77,8 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
             emitFor(static_cast<const ForStatement&>(s), out, indent);
             return;
         }
+        case NodeKind::ForOfStatement:
+            return ArrayEmitter::forOf(*this, static_cast<const ForOfStatement&>(s), out, indent);
         case NodeKind::ReturnStatement: {
             emitReturn(static_cast<const ReturnStatement&>(s), out, indent);
             return;

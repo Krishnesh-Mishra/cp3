@@ -93,6 +93,20 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
         return "((" + mb + ".hasValue()) && (" + mb + ".value() " + op + " " + val + "))";
     }
 
+    // A value union (`number | string` -> std::variant) against a value: `===`
+    // only matches when the union currently holds the same alternative, while
+    // loose `==` coerces through JS abstract equality (spec 05: `1 == "1"`
+    // holds for a union-held value). Both-union comparisons fall through to the
+    // direct compare below.
+    if ((L.shape == Shape::Union) != (R.shape == Shape::Union)) {
+        const std::string uni = (L.shape == Shape::Union) ? lhs : rhs;
+        const std::string val = (L.shape == Shape::Union) ? rhs : lhs;
+        const std::string helper = isStrict ? "::cp3::runtime::unionStrictEquals("
+                                            : "::cp3::runtime::unionLooseEquals(";
+        const std::string eq = helper + uni + ", " + val + ")";
+        return isEqual ? "(" + eq + ")" : "(! " + eq + ")";
+    }
+
     // Same representation: compare directly. D15 keeps loose `==` same-type.
     if (L.representable && R.representable && L.cpp == R.cpp) {
         return "(" + lhs + " " + op + " " + rhs + ")";

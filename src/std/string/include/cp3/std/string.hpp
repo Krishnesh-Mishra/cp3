@@ -36,6 +36,7 @@
 #include <cstddef>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace cp3::runtime::strings {
 
@@ -257,6 +258,29 @@ inline std::string slice(const std::string& s, double start,
     if (!(stop > begin)) return std::string();
     return s.substr(static_cast<std::size_t>(begin),
                     static_cast<std::size_t>(stop - begin));
+}
+
+// JS `split`: every occurrence of the separator ends a piece; a separator
+// that never matches yields the whole receiver. An empty separator splits into
+// single bytes (the byte view of a string, D63), not codepoints.
+inline std::vector<std::string> split(const std::string& s,
+                                      const std::string& sep) {
+    std::vector<std::string> out;
+    if (sep.empty()) {
+        out.reserve(s.size());
+        for (char c : s) out.emplace_back(1, c);
+        return out;
+    }
+    std::size_t at = 0;
+    while (true) {
+        const std::size_t pos = s.find(sep, at);
+        if (pos == std::string::npos) {
+            out.push_back(s.substr(at));
+            return out;
+        }
+        out.push_back(s.substr(at, pos - at));
+        at = pos + sep.size();
+    }
 }
 
 // JS `substring`: negative indices clamp to 0 and start/end swap when needed.

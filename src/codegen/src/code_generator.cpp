@@ -163,6 +163,16 @@ template <class Tag>
 inline bool cp3_truthy(const cp3::runtime::TypedArray<Tag>&) { return true; }
 template <class E>
 inline bool cp3_truthy(const cp3::runtime::Array<E>&) { return true; }
+// A value-union slot (`number | string` -> std::variant, docs 09): printing
+// renders the held alternative, and its JS truthiness is the held value's.
+template <class... Ts>
+inline std::string cp3_ts(const std::variant<Ts...>& v) {
+    return std::visit([](const auto& x) { return cp3_ts(x); }, v);
+}
+template <class... Ts>
+inline bool cp3_truthy(const std::variant<Ts...>& v) {
+    return std::visit([](const auto& x) { return cp3_truthy(x); }, v);
+}
 
 }  // namespace
 
@@ -293,6 +303,13 @@ GeneratedModule Generator::run(const Program& program) {
     }
     if (familyUse.find("::cp3::runtime::collections::") != std::string::npos) {
         needsCollections_ = true;
+    }
+    // A value union (`number | string` -> std::variant, docs 09): the variant
+    // spelling and its helpers (unionStrictEquals) come from the family header
+    // (cp3/array_extras.hpp, pulled by cp3/typed_array.hpp), which is also
+    // where <variant> reaches the unit.
+    if (familyUse.find("std::variant<") != std::string::npos) {
+        needsTypedArray_ = true;
     }
     // The nominal std/buffer `Buffer` follows the same rule.
     if (familyUse.find("::cp3::runtime::buffer::Buffer") != std::string::npos) {

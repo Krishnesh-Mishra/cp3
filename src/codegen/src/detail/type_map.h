@@ -27,6 +27,7 @@ namespace detail {
 enum class Shape {
     Number, String, Bool, Undefined, Null, Void, Optional, Maybe, Promise,
     Array,       // number[] / string[] / boolean[] / nested arrays
+    Union,       // a non-nullish value union (`number | string` -> std::variant)
     TypedArray,  // Int8Array .. BigUint64Array
     ArrayBuffer, // ArrayBuffer / SharedArrayBuffer
     DataView,
@@ -73,6 +74,11 @@ bool optionalEmptyMatches(NullishKind kind, Shape nullishShape);
 
 // The C++ lowering of `raw`, including the optional/nullish flavor.
 CppInfo classify(const Type& raw);
+
+// A non-nullish value union (`number | string` - the sanctioned mixed-array
+// element form, docs 09) -> `std::variant` over the primitive alternatives;
+// leaves `info` empty for anything else (src/std/arrays/codegen_methods.cpp).
+void classifyValueUnion(const Type& t, CppInfo& info);
 
 // The JS-compat typed-array family (D69; src/std/typed-arrays/codegen.cpp):
 // regular arrays with a value-like element type (`number`, `string`,
