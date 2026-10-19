@@ -415,12 +415,6 @@ std::optional<Type> Generator::resolvedBindingType(const VariableDeclarator& d) 
 }
 
 Type Generator::effectiveType(const Expr& e) const {
-    // A codegen type hint wins over sema here (exprTypeHints_; see generator.h).
-    if (const auto it = exprTypeHints_.find(e.nodeId); it != exprTypeHints_.end()) {
-        return it->second;
-    }
-    // The Map-shaped std/network fields (`req.params/query/headers`,
-    // `res.headers`): a family constant (src/std/network/codegen_methods.cpp).
     if (const auto t = networkMapFieldType(e)) return *t;
     if (e.kind == NodeKind::Identifier) {
         const auto& id = static_cast<const Identifier&>(e);

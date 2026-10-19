@@ -125,6 +125,11 @@ std::string networkMemberName(const Type& receiver, const std::string& property)
 /// it classifies as the optional shape even when the receiver is a handler
 /// parameter that sema only sees as ambient.
 std::optional<Type> Generator::networkMapFieldType(const Expr& e) const {
+    // A recorded hint wins; it is how the Map type reaches `effectiveType`
+    // for handler parameters that sema only sees as ambient.
+    if (const auto it = exprTypeHints_.find(e.nodeId); it != exprTypeHints_.end()) {
+        return it->second;
+    }
     if (e.kind == NodeKind::CallExpr) {
         const auto& c = static_cast<const CallExpr&>(e);
         if (!c.callee || c.callee->kind != NodeKind::MemberExpr) return std::nullopt;
