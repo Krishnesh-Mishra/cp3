@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: encodings other than utf8/base64/hex are out of scope for beta one, but is passing \"ascii\" a compile error or a runtime error?"
-  }
-}

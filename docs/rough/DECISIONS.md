@@ -782,3 +782,20 @@ one. Zero would turn every malformed input into a silent legitimate value.
 `tests/cases/stdlib/parseint_hex_prefix_upper.cp3`. The ruled behavior is
 pinned by `tests/cases/stdlib/parseint_invalid.cp3` and
 `tests/cases/stdlib/parsefloat_invalid.cp3`.
+
+## Audit promotions (2026-10-19, lead)
+
+- D44 promotion: `stdlib/_ambiguous/map_iteration_order` is now the graded run
+  case `tests/cases/stdlib/map_iteration_order.cp3` (out-of-order insertion,
+  `keys()` prints `b,a`).
+- `stdlib/_ambiguous/date_getter_timezone` is promoted to the graded run case
+  `tests/cases/stdlib/date_getter_utc.cp3`: Date getters read the UTC
+  calendar (`2020-01-01T20:00:00Z` prints `1,20`), matching the pinned UTC
+  semantics in the stdlib date section; the timestamp is chosen so a
+  local-time regression fails on any machine.
+- D47 promotion: `stdlib/_ambiguous/buffer_ascii_encoding` is now the graded
+  check case `tests/cases/stdlib/buffer_ascii_encoding.cp3` (CP3401 at 3:1,
+  `encoding "ascii" is not supported`).
+- `arrays-strings/_ambiguous/forin_map_order` stays a marker: `for (let k in
+  m)` over a Map hits `CP3002: not implemented yet: this statement`; the pin
+  waits for the `for...in` lowering gap (tracked in AUDIT-FOLLOWUPS.md).

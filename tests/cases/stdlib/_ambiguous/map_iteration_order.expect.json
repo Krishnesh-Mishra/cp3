@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: Map/Set wrap unordered_map/unordered_set, so iteration order is unspecified."
-  }
-}
