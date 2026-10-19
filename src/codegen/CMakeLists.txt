@@ -15,6 +15,7 @@ set(cp3_codegen_sources
     src/code_generator.cpp
     src/support/mangle.cpp
     src/support/cpp_writer.cpp
+    src/support/line_map.cpp
     src/support/type_map.cpp
     src/support/int_mode.cpp
     src/support/int_reads.cpp

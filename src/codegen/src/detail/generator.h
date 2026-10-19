@@ -56,7 +56,7 @@ namespace cp3 {
 class Generator {
 public:
     Generator(DiagnosticSink& sink, const SemaResult& sema,
-              const std::string& moduleName);
+              const std::string& moduleName, bool lineDirectives = false);
 
     // Top-level orchestration: collect names, emit every statement, assemble.
     GeneratedModule run(const Program& program);
@@ -64,6 +64,15 @@ public:
 private:
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
+
+    // --- source mapping (support/line_map.cpp) --------------------------------
+    // `emitLineDirective` appends `#line <line> "<source>"` for `node`'s span
+    // so DWARF (and gdb) see the .cp3 file; a no-op unless mapping is on.
+    void emitLineDirective(const Node& node, std::string& out);
+    // `emitMappedRaw` pins each physical line of a raw structural chunk (the
+    // int64 wrapper prologue) to `node`; verbatim when mapping is off.
+    void emitMappedRaw(const Node& node, const std::string& raw,
+                       std::string& out);
 
     // --- declarations (emit_decl.cpp) ----------------------------------------
     void collectFunctionNames(const Stmt& s);
@@ -398,6 +407,7 @@ private:
     std::string namesp_;
 
     bool consoleImported_ = false;
+    bool lineMapping_ = false;     // --debug: emit `#line` into generated code
     bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
     bool needsConsoleAbi_ = false; // console async/misc members -> family header
     bool needsEventLoop_ = false;  // async/timers: emit runEventLoop() in main

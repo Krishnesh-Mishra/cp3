@@ -81,6 +81,7 @@ void Generator::emitExport(const ExportDeclaration& ed, std::string& decls,
         return;
     }
     if (ed.defaultExpr) {
+        emitLineDirective(ed, mainBody);
         line(mainBody, 1, expr(*ed.defaultExpr) + ";");
         return;
     }
@@ -125,6 +126,7 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
             // No namespace-scope spelling (e.g. an arrow binding, or a
             // top-level `await` initializer that needs the coroutine context):
             // keep the binding a `main`-local, the pre-globals lowering.
+            emitLineDirective(*d, mainBody);
             line(mainBody, 1, declaratorText(*d, vd.kind) + ";");
             if (d->id && d->id->kind == NodeKind::Identifier) {
                 declare(static_cast<const Identifier&>(*d->id).name,
@@ -152,16 +154,19 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         if (isConst && initText.find("co_await") != std::string::npos) {
             // A const initializer that awaits only compiles inside the entry
             // coroutine: keep the binding a `main`-local (no static init).
+            emitLineDirective(*d, mainBody);
             line(mainBody, 1, declaratorText(*d, vd.kind) + ";");
             declare(static_cast<const Identifier&>(*d->id).name,
                     resolvedBindingType(*d));
             continue;
         }
         if (isConst) {
+            emitLineDirective(*d, decls);
             line(decls, 1, cv + ci.cpp + " " + name + " = " + initText + ";");
             continue;
         }
         line(decls, 1, ci.cpp + " " + name + "{};");
+        emitLineDirective(*d, mainBody);
         line(mainBody, 1, name + " = " + initText + ";");
     }
 }
@@ -207,10 +212,17 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
     const std::string body = plainBody(fd, ret);
     if (fastKept) {
         line(decls, 1, intSignature(fd) + ";");
+        emitLineDirective(fd, defs);
         defs += intSignature(fd) + " {\n" + fastBody + "}\n\n";
     }
     const std::string prologue = fastKept ? intWrapperPrologue(fd) : std::string();
-    defs += signatureDef + " {\n" + prologue + body + "}\n\n";
+    emitLineDirective(fd, defs);
+    defs += signatureDef + " {\n";
+    // The prologue is structural: pin its lines to the function line so the
+    // wrapper's argument stores cannot pose as statements of their own (the
+    // source line counter would otherwise drift one line per statement).
+    emitMappedRaw(fd, prologue, defs);
+    defs += body + "}\n\n";
 }
 
 // The ordinary lowering of a function body: cp3 `number` stays a double. This

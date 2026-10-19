@@ -30,7 +30,12 @@ struct GeneratedModule {
 
 class CodeGenerator {
 public:
-    explicit CodeGenerator(DiagnosticSink& sink) noexcept : sink_(sink) {}
+    // `lineDirectives` emits `#line <n> "<source>"` ahead of generated
+    // declarations and statements, so DWARF maps executable code back to the
+    // .cp3 source (Debug profile / F5 debugging). Off by default: the
+    // incremental and release workflows stay byte-identical.
+    explicit CodeGenerator(DiagnosticSink& sink, bool lineDirectives = false) noexcept
+        : sink_(sink), lineDirectives_(lineDirectives) {}
 
     // Emits C++20 for `program`, consulting `sema` for inferred types and
     // resolved bindings. `moduleName` is the logical/relative module name used
@@ -47,6 +52,7 @@ public:
 
 private:
     DiagnosticSink& sink_;
+    bool lineDirectives_ = false;  // emit `#line` source mapping (Debug)
 };
 
 }  // namespace cp3

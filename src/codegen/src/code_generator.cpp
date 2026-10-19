@@ -229,9 +229,9 @@ std::string indentText(const std::string& text, const std::string& pad) {
 // -----------------------------------------------------------------------------
 
 Generator::Generator(DiagnosticSink& sink, const SemaResult& sema,
-                     const std::string& moduleName)
+                     const std::string& moduleName, bool lineDirectives)
     : sink_(sink), sema_(sema), moduleName_(moduleName),
-      namesp_(suggestNamespace(moduleName)) {}
+      namesp_(suggestNamespace(moduleName)), lineMapping_(lineDirectives) {}
 
 void Generator::notImplemented(const Node& node, const std::string& what) {
     // Inside an int64 fast-path attempt nothing is reported and nothing is
@@ -460,7 +460,7 @@ void Generator::emitMain(std::string& out, const std::string& mainBody) const {
 GeneratedModule CodeGenerator::generate(const Program& program,
                                         const SemaResult& sema,
                                         const std::string& moduleName) {
-    Generator generator(sink_, sema, moduleName);
+    Generator generator(sink_, sema, moduleName, lineDirectives_);
     return generator.run(program);
 }
 

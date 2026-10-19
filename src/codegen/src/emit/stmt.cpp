@@ -22,6 +22,8 @@ namespace cp3 {
 using namespace detail;
 
 void Generator::stmt(const Stmt& s, std::string& out, int indent) {
+    // One source-mapping directive per statement (--debug only).
+    emitLineDirective(s, out);
     switch (s.kind) {
         case NodeKind::BlockStatement: {
             pushScope();
@@ -42,7 +44,7 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
                 line(out, indent, ";");
                 return;
             }
-            // Only a statement's own expression may defer a bound check: its
+            // A statement's own expression may defer its bound check: the
             // value is discarded, so it is never observed (see intAssignText).
             const bool wasStmt = intOn() && intMode_->stmtExpr;
             if (intOn()) intMode_->stmtExpr = true;

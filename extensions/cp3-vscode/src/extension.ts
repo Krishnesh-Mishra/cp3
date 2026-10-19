@@ -18,6 +18,15 @@
 // is already gone. This module keeps one `StartAttempt` record per start,
 // funnels every channel through it, dedupes the user notifications, and routes
 // the library's raw error notifications into the output channel.
+//
+// The extension also contributes a debugger (`type: "cp3"`). It starts
+//
+//     <cp3.compilerPath> dap --stdio
+//
+// which builds the launch program with the Debug profile (codegen emits
+// `#line` mapping so gdb sees .cp3 lines), runs it under gdb from PATH, and
+// speaks DAP. gdb is deliberately not bundled: a missing gdb fails the launch
+// with a clear message.
 
 import * as vscode from "vscode";
 import {
@@ -40,6 +49,7 @@ const OUTPUT_CHANNEL_NAME = "cp3 Language Server";
 const COMPILER_PATH_SETTING = "cp3.compilerPath";
 const DEFAULT_COMPILER_PATH = "cp3c";
 const RESTART_COMMAND = "cp3.restartServer";
+const DEBUG_TYPE = "cp3";
 
 let outputChannel: vscode.LogOutputChannel | undefined;
 let client: LanguageClient | undefined;
@@ -268,10 +278,70 @@ export async function startClient(forced = false): Promise<void> {
     }
 }
 
+/**
+ * Fills the launch attributes the adapter needs. `program` defaults to the
+ * active .cp3 file (so "cp3: Debug current file" works) and `cwd` to the
+ * workspace folder. Returning undefined cancels a launch that has no program.
+ */
+class Cp3DebugConfigurationProvider implements vscode.DebugConfigurationProvider {
+    resolveDebugConfiguration(
+        folder: vscode.WorkspaceFolder | undefined,
+        config: vscode.DebugConfiguration
+    ): vscode.DebugConfiguration | undefined {
+        // An empty configuration means "show the launch.json picker"; VS Code
+        // calls this provider with nothing set in that case.
+        if (!config.type && !config.request && !config.name) {
+            return undefined;
+        }
+        if (!config.program) {
+            const editor = vscode.window.activeTextEditor;
+            if (editor?.document.languageId !== LANGUAGE_ID) {
+                void vscode.window.showErrorMessage(
+                    "cp3: set \"program\" to a .cp3 file in launch.json, or open one in the editor."
+                );
+                return undefined;
+            }
+            config.program = editor.document.uri.fsPath;
+        }
+        config.cwd ??= folder?.uri.fsPath ?? workspaceCwd();
+        return config;
+    }
+}
+
+/** Starts `<cp3.compilerPath> dap --stdio` for `type: "cp3"` sessions. */
+class Cp3DebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+    createDebugAdapterDescriptor(
+        session: vscode.DebugSession
+    ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
+        const setting = vscode.workspace
+            .getConfiguration()
+            .get<string>(COMPILER_PATH_SETTING, DEFAULT_COMPILER_PATH);
+        const command = resolveCompilerPath(setting);
+        if (command === undefined) {
+            throw new Error(missingCompilerMessage(setting));
+        }
+        return new vscode.DebugAdapterExecutable(command, ["dap", "--stdio"], {
+            cwd: session.workspaceFolder?.uri.fsPath ?? workspaceCwd(),
+        });
+    }
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     context.subscriptions.push(output());
     context.subscriptions.push(
         vscode.commands.registerCommand(RESTART_COMMAND, () => startClient(true))
+    );
+    context.subscriptions.push(
+        vscode.debug.registerDebugConfigurationProvider(
+            DEBUG_TYPE,
+            new Cp3DebugConfigurationProvider()
+        )
+    );
+    context.subscriptions.push(
+        vscode.debug.registerDebugAdapterDescriptorFactory(
+            DEBUG_TYPE,
+            new Cp3DebugAdapterFactory()
+        )
     );
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((event) => {
