@@ -8,7 +8,7 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 36** across 12 categories.
+**Total markers: 35** across 12 categories.
 
 | Category | Markers |
 | --- | ---: |
@@ -22,9 +22,9 @@ python tests/runner/run_tests.py --write-registry
 | `generics` | 2 |
 | `memory-weak` | 6 |
 | `modules` | 3 |
-| `stdlib` | 2 |
+| `stdlib` | 1 |
 | `types` | 4 |
-| **Total** | **36** |
+| **Total** | **35** |
 
 ## `arrays-strings`
 
@@ -111,7 +111,6 @@ python tests/runner/run_tests.py --write-registry
 | case file | question |
 | --- | --- |
 | `stdlib/_ambiguous/json_parse_untyped_typeof_narrow.expect.json` | whether `typeof` narrowing works directly on the `unknown` result of untyped JSON.parse is not shown. |
-| `stdlib/_ambiguous/regex_test_method.expect.json` | regex literals are a core feature, but which RegExp methods (.test/.match/.exec) exist is not specified. |
 
 ## `types`
 
