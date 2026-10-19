@@ -116,9 +116,7 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             Shape* sh = shapeOf(ot);
             if (!sh) return ambient();
             if (sh->open) return ambient();
-            if (sh->tuple) {
-                return ambient();
-            }
+            if (sh->tuple) return ambient();
             if (const Field* f = findField(sh, prop)) return f->type;
             std::vector<std::string> candidates;
             candidates.reserve(sh->fields.size());

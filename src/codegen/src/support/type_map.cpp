@@ -208,9 +208,7 @@ CppInfo classify(const Type& raw) {
             }
             return info;
         }
-        case TypeKind::Union:
-            classifyNullishUnion(t, info);
-            return info;
+        case TypeKind::Union: classifyNullishUnion(t, info); return info;
         case TypeKind::Class:
             return classifyClassValue(t);
         case TypeKind::Enum: return classifyEnum(t);  // spec 04: enum class

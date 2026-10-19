@@ -53,6 +53,25 @@
 
 namespace cp3 {
 
+// The int64 fast-path state (D64): non-null exactly while a function's fast
+// body is being attempted (`Generator::intMode_`). `failed` means the attempt
+// cannot be proven exact and must be discarded, in which case the ordinary
+// double body is the only lowering.
+struct IntMode {
+    bool failed = false;
+    // Names read somewhere outside a `return` argument (int_reads.cpp);
+    // `nullopt` when that walk could not see the whole body. A name absent here
+    // is read only by `return`, so its bound check can be deferred from the
+    // operation to that single observation point.
+    std::optional<std::unordered_set<std::string>> readOutsideReturns;
+    // Locals whose bound check is currently deferred: their value may sit
+    // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
+    std::unordered_set<std::string> deferred;
+    // Set while emitting a statement's own expression: the one position where
+    // an assignment's value is discarded, so a raw store is allowed.
+    bool stmtExpr = false;
+};
+
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
 // unit, and the CP3002 dedup set.
@@ -149,12 +168,10 @@ private:
     // object form.
     std::string emitConsoleCall(const CallExpr& c, const MemberExpr& m);
     std::string emitConsoleLogCall(const CallExpr& c);
-    std::string emitConsoleStreamCall(const CallExpr& c,
-                                      const std::string& method);
+    std::string emitConsoleStreamCall(const CallExpr& c, const std::string& method);
     std::string emitConsoleAssert(const CallExpr& c);
     std::string emitConsoleInput(const CallExpr& c);
-    std::string emitConsoleListener(const CallExpr& c,
-                                    const std::string& method);
+    std::string emitConsoleListener(const CallExpr& c, const std::string& method);
     std::string consoleListenerArg(const Expr& arg);
     std::string consoleArgText(const Expr& arg);
     std::string consoleObjectText(const ObjectLiteral& literal);
@@ -191,29 +208,20 @@ private:
     std::string emitFamilyIndexWrite(const AssignmentExpr& a);
     // The receiver text of a family method: an `Array(n)` constructor or an
     // array literal takes the element type the call fixed (`elem`).
-    std::string familyReceiverText(const Expr& obj, const Type& elem,
-                                   const Node& site);
-    std::string arrayCtorText(const ExprList& args, const Type& elem,
-                              const Node& site);
-    std::string typedCtorText(const std::string& cls, const ExprList& args,
-                              const Node& site);
-    std::string arrayStaticCallText(const CallExpr& c,
-                                    const std::string& prop);
-    std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m,
-                                  const Type& recv);
-    std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m,
-                                  const Type& recv);
-    std::string arraySortCallText(const CallExpr& c, const MemberExpr& m,
-                                  const Type& recv);
+    std::string familyReceiverText(const Expr& obj, const Type& elem, const Node& site);
+    std::string arrayCtorText(const ExprList& args, const Type& elem, const Node& site);
+    std::string typedCtorText(const std::string& cls, const ExprList& args, const Node& site);
+    std::string arrayStaticCallText(const CallExpr& c, const std::string& prop);
+    std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string arraySortCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
     std::string arrayIncludesCallText(const CallExpr& c, const MemberExpr& m,
                                       const Type& recv);
     std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m,
                                     const char* tag);
     std::string dataViewCallText(const CallExpr& c, const MemberExpr& m);
-    std::string arrayLiteralText(const ArrayLiteral& lit,
-                                 const Type& elemOverride);
-    std::string declaratorInitText(const VariableDeclarator& d,
-                                   const Type& declared);
+    std::string arrayLiteralText(const ArrayLiteral& lit, const Type& elemOverride);
+    std::string declaratorInitText(const VariableDeclarator& d, const Type& declared);
 
     // --- std/collections (src/std/collections/codegen.cpp) --------------------
     // `new Map<K, V>()` / `new Set<T>()`, the member calls (`set`/`get`/`has`/
@@ -400,24 +408,7 @@ private:
     void emitMain(std::string& out, const std::string& mainBody) const;
 
     // --- state ----------------------------------------------------------------
-    // The int64 fast-path state (D64): non-null exactly while a function's fast
-    // body is being attempted. `failed` means the attempt cannot be proven
-    // exact and must be discarded, in which case the ordinary double body is
-    // the only lowering.
-    struct IntMode {
-        bool failed = false;
-        // Names read somewhere outside a `return` argument (int_reads.cpp);
-        // `nullopt` when that walk could not see the whole body. A name absent
-        // here is read only by `return`, so its bound check can be deferred
-        // from the operation to that single observation point.
-        std::optional<std::unordered_set<std::string>> readOutsideReturns;
-        // Locals whose bound check is currently deferred: their value may sit
-        // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
-        std::unordered_set<std::string> deferred;
-        // Set while emitting a statement's own expression: the one position
-        // where an assignment's value is discarded, so a raw store is allowed.
-        bool stmtExpr = false;
-    };
+    // The int64 fast-path state (D64); see `struct IntMode` above.
     std::unique_ptr<IntMode> intMode_;
 
     DiagnosticSink& sink_;
