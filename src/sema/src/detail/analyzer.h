@@ -244,6 +244,10 @@ private:
     Type tupleIndexAt(const Shape& sh, IndexExpr& ix);
     Type inferCall(CallExpr& call);
     bool tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
+    // `parseInt(str)` / `parseFloat(str)` (STDLIB docs section 3): the
+    // documented global numeric parsers, typed `number`. `String(x)` is typed
+    // by tryInferStringBuiltin (std_check.cpp).
+    bool tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
     void reportUndefinedCall(CallExpr& call, Identifier& id);
     bool tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out);
     bool tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out);

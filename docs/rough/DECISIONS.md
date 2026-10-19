@@ -765,3 +765,20 @@ a CP3002 codegen placeholder ("fetch headers as an object literal"), a
 typed-shape error candidate for the audit phase. Pinned by
 `tests/cases/stdlib/network_headers_map_field.cp3` (promoted out of
 `_ambiguous` with this ruling).
+
+## D78 - parseInt/parseFloat invalid input yields NaN (lead ruling, 2026-10-19)
+
+The two global parsers return `NaN` when their input contains no parsable
+digits of the selected form (`parseInt("abc")`, `parseInt("0x")`,
+`parseFloat("abc")`), matching JS rather than the bare `strtol`/`strtod`
+zero. STDLIB docs section 3 says they are "backed directly by
+`std::strtol`/`std::strtod`" - that sentence pins the implementation family,
+not the observable result of a failed parse, and the design goal (day-2
+onboarding for JS/TS developers) makes the JS answer the only non-surprising
+one. Zero would turn every malformed input into a silent legitimate value.
+
+`parseInt` honours a `0x`/`0X` prefix as base 16 (D46, now implemented), so
+`_ambiguous/parseint_hex` is promoted to the graded
+`tests/cases/stdlib/parseint_hex_prefix_upper.cp3`. The ruled behavior is
+pinned by `tests/cases/stdlib/parseint_invalid.cp3` and
+`tests/cases/stdlib/parsefloat_invalid.cp3`.
