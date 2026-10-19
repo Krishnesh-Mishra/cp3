@@ -22,6 +22,15 @@ namespace cp3 {
 
 using namespace detail;
 
+// A whole array in a formatter or truthiness test pulls the arr family block
+// (D69), even when this unit never spells the C++ type itself.
+void Generator::noteFamilyUse(const Expr& e) {
+    const CppInfo ci = info(e);
+    if (ci.shape == Shape::Array || ci.shape == Shape::TypedArray) {
+        needsTypedArray_ = true;
+    }
+}
+
 namespace {
 
 const char* binaryOpSpelling(BinaryOp op) {
@@ -151,6 +160,18 @@ std::string Generator::exprPlain(const Expr& e) {
             return "0.0";
         }
         case NodeKind::ArrowFunction: return emitListenerValue(e);  // D74
+        case NodeKind::ObjectLiteral: {
+            // An object literal with an enum-typed field lowers to a
+            // std::tuple (src/emit/enum.cpp); any other object literal stays
+            // CP3002.
+            if (std::string literal =
+                    emitEnumObjectLiteral(static_cast<const ObjectLiteral&>(e));
+                !literal.empty()) {
+                return literal;
+            }
+            notImplemented(e, "this expression");
+            return "0.0";
+        }
         default:
             notImplemented(e, "this expression");
             return "0.0";
@@ -197,6 +218,24 @@ std::string Generator::emitTemplate(const TemplateLiteral& tl) {
 std::string Generator::tsCall(const Expr& e) {
     const CppInfo ci = info(e);
     noteFamilyUse(e);
+    // An enum value formats by its backing kind (spec 04): the underlying
+    // number for a number-backed enum, the member's string for a string-backed
+    // one (the per-enum toString helper). An enum whose declaration did not
+    // surface in this unit keeps the unit a skip instead of emitting a call
+    // with no formatter overload.
+    if (ci.shape == Shape::Enum) {
+        const auto found = enums_.find(ci.type.name);
+        if (found == enums_.end()) {
+            notImplemented(e, "this enum value");
+            return "0.0";
+        }
+        const std::string value = expr(e);
+        if (found->second.stringBacked) {
+            return "cp3_ts(cp3_enum_" + found->second.cpp + "_toString(" + value +
+                   "))";
+        }
+        return "cp3_ts(static_cast<double>(" + value + "))";
+    }
     // A `T | null` optional prints "null" when empty, whereas a
     // `T | undefined` / `T?` optional prints "undefined".
     if (ci.shape == Shape::Optional && ci.emptyKind == NullishKind::Null) {

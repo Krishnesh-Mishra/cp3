@@ -227,11 +227,15 @@ function fetch(url: string, init?: RequestInit): Promise<FetchResponse>;
 ```
 
 ```cp3
+import { Map } from "std/collections";
 import { fetch } from "std/network";
+
+let headers = new Map<string, string>();
+headers.set("Content-Type", "application/json");
 
 let res = await fetch("https://api.example.com/data", {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
+  headers,
   body: JSON.stringify({ user: "alice" })
 });
 

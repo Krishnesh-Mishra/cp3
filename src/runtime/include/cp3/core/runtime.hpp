@@ -66,6 +66,18 @@ std::string toString(bool value);
 std::string toString(std::nullptr_t);   // -> "null"
 std::string toString(Undefined);        // -> "undefined"
 
+// --- global numeric parsing builtins (STDLIB docs section 3) ----------------
+//
+// `parseInt` / `parseFloat` are core-language globals in cp3, not string
+// methods. parseInt skips leading whitespace, accepts an optional sign, a
+// `0x`/`0X` prefix selects base 16 (DECISIONS D46), otherwise base 10, and
+// parsing stops at the first character that is not a digit of that base; no
+// digits at all yields NaN. parseFloat accepts the longest decimal prefix
+// (fraction and exponent included); no digits yields NaN. Both return a cp3
+// `number` (a 64-bit double).
+double parseInt(const std::string& text);
+double parseFloat(const std::string& text);
+
 // --- stdout -----------------------------------------------------------------
 //
 // print: writes exactly the string, no trailing newline.

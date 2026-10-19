@@ -5,11 +5,14 @@
 // =============================================================================
 #include "cp3/core/runtime.hpp"
 
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <system_error>
 
@@ -154,6 +157,70 @@ std::string toString(const std::string& value) { return value; }
 std::string toString(bool value) { return value ? "true" : "false"; }
 std::string toString(std::nullptr_t) { return "null"; }
 std::string toString(Undefined) { return "undefined"; }
+
+double parseInt(const std::string& text) {
+    const char* p = text.c_str();
+    while (std::isspace(static_cast<unsigned char>(*p)) != 0) ++p;
+    bool negative = false;
+    if (*p == '+' || *p == '-') {
+        negative = *p == '-';
+        ++p;
+    }
+    int base = 10;
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        base = 16;
+        p += 2;
+    }
+    double value = 0.0;
+    bool any = false;
+    for (; *p != '\0'; ++p) {
+        int digit = -1;
+        if (*p >= '0' && *p <= '9') {
+            digit = *p - '0';
+        } else if (base == 16 && *p >= 'a' && *p <= 'f') {
+            digit = *p - 'a' + 10;
+        } else if (base == 16 && *p >= 'A' && *p <= 'F') {
+            digit = *p - 'A' + 10;
+        }
+        if (digit < 0 || digit >= base) break;
+        value = value * static_cast<double>(base) + static_cast<double>(digit);
+        any = true;
+    }
+    if (!any) return std::numeric_limits<double>::quiet_NaN();
+    return negative ? -value : value;
+}
+
+double parseFloat(const std::string& text) {
+    const char* p = text.c_str();
+    while (std::isspace(static_cast<unsigned char>(*p)) != 0) ++p;
+    const char* start = p;
+    if (*p == '+' || *p == '-') ++p;
+    bool anyDigit = false;
+    while (*p >= '0' && *p <= '9') {
+        ++p;
+        anyDigit = true;
+    }
+    if (*p == '.') {
+        ++p;
+        while (*p >= '0' && *p <= '9') {
+            ++p;
+            anyDigit = true;
+        }
+    }
+    if (!anyDigit) return std::numeric_limits<double>::quiet_NaN();
+    const char* end = p;
+    if (*p == 'e' || *p == 'E') {
+        const char* q = p + 1;
+        if (*q == '+' || *q == '-') ++q;
+        bool exponentDigit = false;
+        while (*q >= '0' && *q <= '9') {
+            ++q;
+            exponentDigit = true;
+        }
+        if (exponentDigit) end = q;
+    }
+    return std::strtod(std::string(start, end).c_str(), nullptr);
+}
 
 void print(const std::string& text) { std::cout << text; }
 

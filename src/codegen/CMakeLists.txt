@@ -25,6 +25,7 @@ set(cp3_codegen_sources
     src/emit/async.cpp
     src/emit/stmt.cpp
     src/emit/decl.cpp
+    src/emit/enum.cpp
     ../std/typed-arrays/codegen.cpp
     ../std/typed-arrays/codegen_methods.cpp
     src/emit/std/common.cpp
@@ -37,6 +38,7 @@ set(cp3_codegen_sources
     ../std/string/codegen.cpp
     ../std/crypto/codegen.cpp
     ../std/network/codegen.cpp
+    ../std/network/codegen_methods.cpp
     ../std/collections/codegen.cpp
     ../std/date/codegen.cpp
     ../std/buffer/codegen.cpp

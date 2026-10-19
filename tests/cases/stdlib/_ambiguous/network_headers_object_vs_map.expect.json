@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: RequestInit.headers is typed `Map<string,string>` in the signature but shown as a plain object in the example."
-  }
-}

@@ -2,11 +2,12 @@
 // src/std/typed-arrays/codegen_methods.cpp - the JS-compat typed-array family
 // (D69): the member, property and index surface.
 //
-// `fill` / `join` on regular arrays and typed views, the typed method table
-// (`subarray` / `slice` / `copyWithin` / `reverse` / `indexOf` / `includes` /
-// `set`), the `DataView` `get*` / `set*` calls, the property reads (`length`,
-// `byteLength`, `byteOffset`, `buffer`, `X.BYTES_PER_ELEMENT`) and the indexed
-// reads / writes. The constructors and statics live in the sibling codegen.cpp.
+// `fill` / `join` / `includes` on regular arrays and typed views, the typed
+// method table (`subarray` / `slice` / `copyWithin` / `reverse` / `indexOf` /
+// `includes` / `set`), the `DataView` `get*` / `set*` calls, the property reads
+// (`length`, `byteLength`, `byteOffset`, `buffer`, `X.BYTES_PER_ELEMENT`) and
+// the indexed reads / writes. The constructors and statics live in the sibling
+// codegen.cpp.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -113,6 +114,29 @@ std::string Generator::arraySortCallText(const CallExpr& c, const MemberExpr& m,
            cmp + ")";
 }
 
+// `arr.includes(value)` (docs/language-spec/09-arrays-strings.md): the
+// SameValueZero search over the elements (the runtime helper; only the
+// one-argument form is lowered, the two-argument form stays CP3002).
+std::string Generator::arrayIncludesCallText(const CallExpr& c,
+                                             const MemberExpr& m,
+                                             const Type& recv) {
+    if (m.property != "includes" || recv.kind != TypeKind::Array) {
+        return std::string();
+    }
+    if (c.arguments.size() != 1 || !c.arguments.front()) {
+        return std::string();
+    }
+    CppInfo ec;
+    if (!arrayElementInfo(arrayElemOf(recv), ec)) {
+        notImplemented(c, "the array includes element type");
+        return "0.0";
+    }
+    needsTypedArray_ = true;
+    return "::cp3::runtime::arrayIncludes<" + ec.cpp + ">(" +
+           familyReceiverText(*m.object, arrayElemOf(recv), c) + ", " +
+           expr(*c.arguments.front()) + ")";
+}
+
 // The typed-view method table; `set` dispatches on the source kind.
 std::string Generator::typedMethodCallText(const CallExpr& c,
                                            const MemberExpr& m,
@@ -197,6 +221,7 @@ std::string Generator::emitFamilyMemberCall(const CallExpr& c,
     if (recv.kind == TypeKind::Array) {
         if (m.property == "join") return arrayJoinCallText(c, m, recv);
         if (m.property == "sort") return arraySortCallText(c, m, recv);
+        if (m.property == "includes") return arrayIncludesCallText(c, m, recv);
     }
     if (recv.kind == TypeKind::Class) {
         if (const char* tag = familyTag(recv.name)) {

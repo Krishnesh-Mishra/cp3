@@ -24,6 +24,51 @@ namespace cp3 {
 
 using namespace detail;
 
+namespace {
+
+// A module-scope `const` may initialize in place only when its initializer is
+// a compile-time value. Anything that reads runtime state (a call,
+// interpolation, `process.argv`/`env`) must run inside `main` at the
+// statement's source position: a namespace-scope static initializer runs
+// before `main`, which is before initArgv and every other runtime store
+// exists. This classifies the literal subset (operators over literals
+// included) that is safe to hoist.
+bool isStaticInitExpr(const Expr& e) {
+    switch (e.kind) {
+        case NodeKind::NumberLiteral:
+        case NodeKind::StringLiteral:
+        case NodeKind::BoolLiteral:
+        case NodeKind::NullLiteral:
+        case NodeKind::UndefinedLiteral:
+            return true;
+        case NodeKind::UnaryExpr: {
+            const auto& u = static_cast<const UnaryExpr&>(e);
+            return u.operand && isStaticInitExpr(*u.operand);
+        }
+        case NodeKind::BinaryExpr: {
+            const auto& b = static_cast<const BinaryExpr&>(e);
+            return b.left && b.right && isStaticInitExpr(*b.left) &&
+                   isStaticInitExpr(*b.right);
+        }
+        case NodeKind::LogicalExpr: {
+            const auto& l = static_cast<const LogicalExpr&>(e);
+            return l.left && l.right && isStaticInitExpr(*l.left) &&
+                   isStaticInitExpr(*l.right);
+        }
+        case NodeKind::ConditionalExpr: {
+            const auto& c = static_cast<const ConditionalExpr&>(e);
+            return c.condition && c.whenTrue && c.whenFalse &&
+                   isStaticInitExpr(*c.condition) &&
+                   isStaticInitExpr(*c.whenTrue) &&
+                   isStaticInitExpr(*c.whenFalse);
+        }
+        default:
+            return false;
+    }
+}
+
+}  // namespace
+
 // Records every function declared in this unit (including `export function`)
 // so a call can be checked against them.
 void Generator::collectFunctionNames(const Stmt& s) {
@@ -58,9 +103,12 @@ void Generator::emitTopLevel(const Stmt& s, std::string& decls, std::string& def
             emitExport(static_cast<const ExportDeclaration&>(s), decls, defs, mainBody);
             return;
         case NodeKind::ClassDeclaration:
-        case NodeKind::EnumDeclaration:
         case NodeKind::TypeAliasDeclaration:
             notImplemented(s, "top-level declaration");
+            return;
+        case NodeKind::EnumDeclaration:
+            // Resolved and emitted as a whole by collectEnums before the emit
+            // walk (src/emit/enum.cpp); the statement itself emits nothing.
             return;
         case NodeKind::InterfaceDeclaration:
             // An interface is a structure-only record shape: registered and
@@ -109,7 +157,7 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         // array / class type, ...) keeps the unit "not implemented" instead of
         // being quietly mis-typed (same contract as local declarations).
         if (d->type) {
-            if (auto dt = typeFromTypeNode(*d->type)) {
+            if (auto dt = typeOfNode(*d->type)) {
                 if (!classify(*dt).representable && !dt->isUnknown() &&
                     !dt->isError()) {
                     notImplemented(*d, "this declared type");
@@ -135,12 +183,7 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
             continue;
         }
         if (!d->init) {
-            if (ci.representable && ci.shape != Shape::Void) {
-                line(decls, 1, cv + ci.cpp + " " + name + "{};");
-            } else {
-                line(decls, 1,
-                     cv + "auto " + name + " = cp3::runtime::undefined;");
-            }
+            emitModuleVarNoInit(ci, name, cv, decls);
             continue;
         }
         // `let a: number[] = Array(3)` / `let a: number[] = []`: the
@@ -161,13 +204,34 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
             continue;
         }
         if (isConst) {
-            emitLineDirective(*d, decls);
-            line(decls, 1, cv + ci.cpp + " " + name + " = " + initText + ";");
+            if (isStaticInitExpr(*d->init)) {
+                emitLineDirective(*d, decls);
+                line(decls, 1, cv + ci.cpp + " " + name + " = " + initText + ";");
+            } else {
+                // The initializer reads runtime state: evaluate it inside
+                // `main` at its source position, after initArgv and the rest
+                // of the runtime bootstrap. The binding keeps namespace scope
+                // so functions can read it; language-level const-ness is
+                // enforced by sema.
+                line(decls, 1, ci.cpp + " " + name + "{};");
+                emitLineDirective(*d, mainBody);
+                line(mainBody, 1, name + " = " + initText + ";");
+            }
             continue;
         }
         line(decls, 1, ci.cpp + " " + name + "{};");
         emitLineDirective(*d, mainBody);
         line(mainBody, 1, name + " = " + initText + ";");
+    }
+}
+
+void Generator::emitModuleVarNoInit(const detail::CppInfo& ci,
+                                    const std::string& name,
+                                    const std::string& cv, std::string& decls) {
+    if (ci.representable && ci.shape != Shape::Void) {
+        line(decls, 1, cv + ci.cpp + " " + name + "{};");
+    } else {
+        line(decls, 1, cv + "auto " + name + " = cp3::runtime::undefined;");
     }
 }
 
@@ -276,7 +340,7 @@ std::optional<Type> Generator::parameterType(const Parameter& p,
                                              const FunctionDeclaration& fd,
                                              std::size_t index) const {
     if (p.type) {
-        if (auto t = typeFromTypeNode(*p.type)) {
+        if (auto t = typeOfNode(*p.type)) {
             if (p.optional) return Type::nullable(*t);
             return t;
         }
@@ -338,7 +402,7 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
         return "void";
     }
     if (fd.returnType) {
-        if (auto t = typeFromTypeNode(*fd.returnType)) {
+        if (auto t = typeOfNode(*fd.returnType)) {
             CppInfo ci = classify(*t);
             if (ci.representable) return ci.cpp;
             // A declared return type M1 cannot represent (e.g. a function
@@ -373,7 +437,7 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
 // is the `Promise<T>` the call yields, resolved after the body was checked.
 Type Generator::asyncValueType(const FunctionDeclaration& fd) const {
     if (fd.returnType) {
-        if (auto t = typeFromTypeNode(*fd.returnType)) {
+        if (auto t = typeOfNode(*fd.returnType)) {
             if (detail::isPromiseType(*t)) return detail::promiseValue(*t);
             return *t;
         }

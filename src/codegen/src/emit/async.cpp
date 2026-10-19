@@ -242,7 +242,7 @@ std::vector<std::string> Generator::arrowParamText(
         }
         std::string type;
         if (p->type) {
-            if (auto t = typeFromTypeNode(*p->type)) {
+            if (auto t = typeOfNode(*p->type)) {
                 const CppInfo ci = classify(*t);
                 if (ci.representable) type = ci.cpp;
             }
@@ -264,7 +264,7 @@ std::vector<std::string> Generator::arrowParamText(
 // arrow stays deduced, which also covers a block body with bare `return;`).
 std::string Generator::arrowReturnType(const ArrowFunction& a) {
     if (a.returnType) {
-        if (auto t = typeFromTypeNode(*a.returnType)) {
+        if (auto t = typeOfNode(*a.returnType)) {
             const CppInfo ci = classify(*t);
             if (ci.representable && ci.shape != Shape::Void) return ci.cpp;
         }

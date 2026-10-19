@@ -29,8 +29,9 @@
 //     runtime loop, so the program cannot exit while that work is pending -
 //     the §14 "pending work" rule, unchanged.
 //   * Handlers run synchronously on the runtime thread; an `async` handler
-//     arrow is not representable yet (CP3002), so `req.text()` / `req.json<T>()`
-//     exist for surface completeness but cannot be awaited by a handler today.
+//     arrow is not representable yet (CP3002; SEAM(async) in
+//     src/std/network/codegen.cpp), so `req.text()` / `req.json<T>()` exist
+//     for surface completeness but cannot be awaited by a handler today.
 // =============================================================================
 #pragma once
 
@@ -45,8 +46,15 @@
 #include "cp3/async/promise.hpp"
 #include "cp3/core/error.hpp"
 #include "cp3/core/runtime.hpp"
+#include "cp3/std/buffer.hpp"
+#include "cp3/std/collections.hpp"
+#include "cp3/std/json.hpp"
 
 namespace cp3::runtime::network {
+
+/// `Map<string, string>` (std/collections): the documented type of the
+/// header/params/query fields (docs 04 §network).
+using StringMap = collections::Map<std::string, std::string>;
 
 /// Implementation state. Namespace scope (not nested in the public classes) so
 /// the private TUs can name it without friendship; generated code never does.
@@ -76,15 +84,21 @@ bool jsonBool(const std::string& text);
 // =============================================================================
 // fetch
 // =============================================================================
-/// The `fetch(url, init)` options an object literal can spell today. `headers`
-/// would need the Map type (MISSING); `method`, `body` and `timeout` are
-/// carried. `timeoutMs` of 0 means "no timeout" (JS omits it; a call that never
-/// answers keeps the loop alive, exactly like a never-settled timer).
+/// The `fetch(url, init)` options an object literal can spell today. `method`,
+/// `body` and `timeout` are carried. `timeoutMs` of 0 means "no timeout" (JS
+/// omits it; a call that never answers keeps the loop alive, exactly like a
+/// never-settled timer).
+///
+/// `headers` is the documented `Map<string, string>` (docs 04 §network); a null
+/// handle (the option was omitted) writes no extra lines. buildRequest
+/// (runtime_fetch.cpp) writes one `Name: value` line per entry, skipping the
+/// framing-owned names (host/content-length/connection).
 struct FetchInit {
     std::string method = "GET";
     std::string body;
     bool hasBody = false;
     double timeoutMs = 0.0;
+    StringMap headers;
 };
 
 /// The `FetchResponse` a resolved `fetch` fulfils with. The body is fully
@@ -92,27 +106,36 @@ struct FetchInit {
 class FetchResponse {
 public:
     FetchResponse() = default;
-    FetchResponse(double statusCode, std::string statusText_, std::string body)
+    FetchResponse(double statusCode, std::string statusText_, std::string body,
+                  StringMap headers_)
         : ok(statusCode >= 200.0 && statusCode < 300.0),
           status(statusCode),
           statusText(std::move(statusText_)),
+          headers(std::move(headers_)),
           body_(std::move(body)) {}
 
-    /// `res.ok` / `res.status` / `res.statusText`. `res.headers` needs the Map
-    /// type (MISSING; see the wave report).
+    /// `res.ok` / `res.status` / `res.statusText`.
     bool ok = false;
     double status = 0.0;
     std::string statusText;
+    /// `res.headers`: the response header block, names lower cased like the
+    /// JS Headers object (parseHead in runtime_fetch.cpp fills it).
+    StringMap headers;
 
     /// `await res.text()`.
     Promise<std::string> text() const { return Promise<std::string>::resolve(body_); }
 
-    /// `await res.arrayBuffer()`; Buffer is a string in M1, so this is the same
-    /// bytes as `text()`.
-    Promise<std::string> arrayBuffer() const { return Promise<std::string>::resolve(body_); }
+    /// `await res.arrayBuffer()`: the buffered bytes as a std/buffer `Buffer`.
+    Promise<buffer::Buffer> arrayBuffer() const {
+        return Promise<buffer::Buffer>::resolve(buffer::from(body_));
+    }
 
-    /// `await res.json<T>()` for T = number | string | boolean; any other T is
-    /// not representable (JSON.parse is a later wave).
+    /// `await res.json<T>()`.
+    ///
+    /// T = number | string | boolean parses through the scalar readers
+    /// (runtime.cpp). A reified interface T (the `JSON.parse<T>` shapes) takes
+    /// the builder overload below: the generated builder validates the body
+    /// against T's shape and the promise fulfils with the struct.
     template <class T>
     Promise<T> json() const {
         if constexpr (std::is_same_v<T, std::string>) {
@@ -125,6 +148,14 @@ public:
             static_assert(sizeof(T) == 0,
                           "std/network: json<T>() supports number, string and boolean");
         }
+    }
+
+    /// The reified form (`res.json<User>()`): the generated builder parses this
+    /// response's buffered body (the same `parseRecord` `JSON.parse<T>` uses)
+    /// and the explicit T names the struct.
+    template <class T, class F>
+    Promise<T> json(F build) const {
+        return Promise<T>::resolve(::cp3::runtime::json::parseRecord(body_, build));
     }
 
 private:
@@ -144,15 +175,30 @@ class Next;
 class HttpRequest {
 public:
     /// `req.method` (upper case, as received) and `req.path` (query string
-    /// stripped). `req.params` / `req.query` / `req.headers` need the Map type
-    /// (MISSING); the runtime parses them internally already.
+    /// stripped; the server splits `?` off before dispatch).
+    ///
+    /// The three Map-shaped request fields (docs 04 §network); the server fills
+    /// them in onRequest (runtime_server.cpp) from `req->getQuery()`, the
+    /// header block and the matched `:name` route params.
+    ///   params: Map<string, string>   route params, e.g. :id
+    ///   query:  Map<string, string>   query string, e.g. ?key=value
+    ///   headers: Map<string, string>
+    ///
+    /// SEAM(readstream/fs): `body: ReadStream` is the raw request as a stream
+    /// (the same interface as fs.readFileStream). Until the fs family lands,
+    /// the body is buffered before the chain runs and `text()`/`json<T>()` read
+    /// that buffer; exposing `body` is the buffered bytes behind a ReadStream.
     std::string method;
     std::string path;
+    StringMap params;
+    StringMap query;
+    StringMap headers;
 
     /// `await req.text()`; the body is buffered before the handler chain runs.
     Promise<std::string> text() const { return Promise<std::string>::resolve(body_); }
 
-    /// `await req.json<T>()` for T = number | string | boolean.
+    /// `await req.json<T>()` for T = number | string | boolean; a reified
+    /// interface T takes the builder overload below.
     template <class T>
     Promise<T> json() const {
         if constexpr (std::is_same_v<T, std::string>) {
@@ -167,8 +213,20 @@ public:
         }
     }
 
+    /// The reified form (`req.json<User>()`); see FetchResponse::json(F).
+    template <class T, class F>
+    Promise<T> json(F build) const {
+        return Promise<T>::resolve(::cp3::runtime::json::parseRecord(body_, build));
+    }
+
     /// Internal: the server stores the buffered body before dispatch.
     void setBody(std::string body) { body_ = std::move(body); }
+    /// Internal: the server stores the query/header maps before dispatch.
+    void setQuery(StringMap map) { query = std::move(map); }
+    void setHeaders(StringMap map) { headers = std::move(map); }
+    /// Internal: the matched route's `:name` parameters (one Map per match, so
+    /// a chain that runs through several routes never sees stale params).
+    void setParams(StringMap map) { params = std::move(map); }
 
 private:
     std::string body_;
@@ -187,15 +245,19 @@ public:
 
     /// `res.text(data, status?)`.
     void text(const std::string& data, double status = 0.0);
-    /// `res.json(data, status?)`; the payload is a scalar here (an object
-    /// literal is not representable yet).
+    /// `res.json(data, status?)`: a scalar payload uses the dedicated
+    /// overloads; an array/object literal lowers to the json dynamic value
+    /// tree (`jsonValueText`, src/std/network/codegen.cpp) and answers here.
     void json(double data, double status = 0.0);
     void json(const std::string& data, double status = 0.0);
     void json(bool data, double status = 0.0);
+    void json(const ::cp3::runtime::json::Value& data, double status = 0.0);
     /// `res.send(status?)`: whatever has been buffered, empty if nothing.
     void send(double status = 0.0);
-    /// `res.write(chunk)`: chunked streaming.
+    /// `res.write(chunk)`: chunked streaming; `string | Buffer` (docs 04
+    /// §network), the Buffer arm writes the raw bytes.
     void write(const std::string& chunk);
+    void write(const buffer::Buffer& chunk);
     /// `res.end()`: terminates a chunked response.
     void end();
 
@@ -235,7 +297,16 @@ public:
     void get(const std::string& path, RouteHandler handler) const;
     void post(const std::string& path, RouteHandler handler) const;
     void put(const std::string& path, RouteHandler handler) const;
+    /// `app.delete(...)`; codegen maps the cp3 `delete` onto this `del` member
+    /// (`delete` is a C++ keyword). The docs' beta-one list is the four verbs
+    /// get/post/put/delete; patch/head/options/any exist because the sema table
+    /// already names them and a route that lowers must have a real member.
     void del(const std::string& path, RouteHandler handler) const;
+    void patch(const std::string& path, RouteHandler handler) const;
+    void head(const std::string& path, RouteHandler handler) const;
+    void options(const std::string& path, RouteHandler handler) const;
+    /// `app.any(path, handler)`: every method (the wildcard method row).
+    void any(const std::string& path, RouteHandler handler) const;
     void use(Middleware middleware) const;
     /// `app.listen(port, callback?)`; the callback runs once the port is bound.
     void listen(double port, std::function<void()> callback = {}) const;
@@ -268,17 +339,23 @@ public:
 
     /// `ws.on(event, handler)`; shapes follow the documented events:
     ///   "open"    -> () => void
-    ///   "message" -> (data: string) => void
+    ///   "message" -> (data: string | Buffer) => void
     ///   "close"   -> (code: number, reason: string) => void
     ///   "error"   -> (err: unknown) => void
     /// (One handler per event; a later registration replaces the earlier one.)
+    /// A text frame reaches the string handler, a binary frame
+    /// (uWS::OpCode::BINARY / client opcode 0x2) the Buffer handler; both share
+    /// the "message" slot.
     void on(const std::string& event, std::function<void()> handler) const;
     void on(const std::string& event, std::function<void(std::string)> handler) const;
+    void on(const std::string& event, std::function<void(const buffer::Buffer&)> handler) const;
     void on(const std::string& event, std::function<void(double, std::string)> handler) const;
     void on(const std::string& event, std::function<void(Thrown)> handler) const;
 
-    /// `ws.send(data)` (string data in beta one).
+    /// `ws.send(data)` (docs 04 §network's `string | Buffer`): the string path
+    /// sends a text frame, the Buffer path a binary frame.
     void send(const std::string& data) const;
+    void send(const buffer::Buffer& data) const;
     /// `ws.close(code?, reason?)`.
     void close(double code = 1000.0, const std::string& reason = "") const;
 
