@@ -213,11 +213,8 @@ void tryFinishHandshake(const std::shared_ptr<WsClient>& client) {
 // =============================================================================
 void handleTextFrame(const std::shared_ptr<WsClient>& client, std::uint8_t opcode,
                      const std::string& payload) {
-    if (opcode == 0x2u) {
-        client->impl->emitMessage(payload);  // binary arrives as a string (Buffer == string)
-        return;
-    }
-    client->impl->emitMessage(payload);
+    // 0x2 = BINARY reaches the Buffer listener slot; everything else is text.
+    client->impl->emitMessage(payload, opcode == 0x2u);
 }
 
 void handleFrame(const std::shared_ptr<WsClient>& client, bool fin, std::uint8_t opcode,
@@ -447,6 +444,12 @@ void wsClientStart(const std::shared_ptr<WsImpl>& impl, const std::string& host,
 void wsClientSend(const std::shared_ptr<WsImpl>& impl, const std::string& data) {
     if (impl == nullptr || impl->client == nullptr || impl->client->finished) return;
     impl->client->outbox += wsMakeFrame(0x1u, data);
+    flushWrites(impl->client);
+}
+
+void wsClientSendBinary(const std::shared_ptr<WsImpl>& impl, const std::string& data) {
+    if (impl == nullptr || impl->client == nullptr || impl->client->finished) return;
+    impl->client->outbox += wsMakeFrame(0x2u, data);
     flushWrites(impl->client);
 }
 

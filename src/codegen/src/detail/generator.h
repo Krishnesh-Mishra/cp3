@@ -282,15 +282,23 @@ private:
     std::string emitByteBufferMethodCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMember(const MemberExpr& m);
     // `std/network` receivers are recognised by the sema marker names
-    // ("$network:*"), so the hooks live on the receiver, not on the member:
-    // named imports (identifier calls), `new` forms, member calls/reads.
+    // ("$network:*"): named imports, `new` forms, member calls/reads.
     bool isNetworkObject(const Expr* e) const;
+    // Std/network Map-shaped field reads (`res.headers`, `req.params`, ...):
+    // their `Map<string, string>` type, re-derived from the hints below.
+    std::optional<Type> networkMapFieldType(const Expr& e) const;
+    std::string emitNetworkMapFieldCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitNetworkMapFieldMember(const MemberExpr& m);
     std::string emitNetworkIdentifier(const CallExpr& c, const std::string& name);
     std::string emitUnresolvedCall(const CallExpr& c, const std::string& name);
     std::string emitNetworkNew(const NewExpr& n);
     std::string emitNetworkMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkMemberRead(const MemberExpr& m);
     std::string emitNetworkFetch(const CallExpr& c, const ExprList& args);
+    // `res.json<T>()` / `req.json<T>()` (reified interface T; "" else) and
+    // `res.json(payload, status?)`: the json value tree serializes the latter.
+    std::string networkJsonRecord(const MemberExpr& m, const CallExpr& c);
+    std::string networkResponseJson(const CallExpr& c, const MemberExpr& m);
     std::string fetchInitText(const Expr& init);
     std::string networkArg(const Type& receiver, const std::string& property,
                            const CallExpr& c, const Expr& arg, std::size_t index);
@@ -435,6 +443,9 @@ private:
     std::string currentReturn_ = "int";
 
     std::vector<std::unordered_map<std::string, Type>> env_;
+    // Codegen type hints for the Map-shaped std/network fields; the open
+    // marker hides their type in sema, so networkMapFieldType checks these.
+    std::unordered_map<std::uint32_t, Type> exprTypeHints_;
     std::unordered_set<std::string> functions_;
     std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
     std::unordered_set<std::string> asyncFunctions_;   // `async function` names

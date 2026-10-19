@@ -25,13 +25,15 @@
 
 namespace cp3::runtime::network::detail {
 
-/// The four listener shapes a documented WebSocket event can have:
-///   "open" -> `()`, "message" -> `(string)`, "close" -> `(number, string)`,
-///   "error" -> `(unknown)`; a handler may also declare fewer parameters and
+/// The four listener shapes a documented WebSocket event can have (the
+/// message payload is `string | Buffer`, docs 04 §network):
+///   "open" -> `()`, "message" -> `(string | Buffer)`, "close" ->
+///   `(number, string)`, "error" -> `(unknown)`; a handler may also declare fewer parameters and
 /// ignore the payload, which lands in `none`.
 struct WsSlots {
     std::function<void()> none;
     std::function<void(const std::string&)> text;
+    std::function<void(const buffer::Buffer&)> binary;
     std::function<void(double, const std::string&)> pair;
     std::function<void(const Thrown&)> thr;
 };
@@ -50,7 +52,8 @@ struct WsImpl {
     std::map<std::string, WsSlots> slots;
 
     void emitOpen();
-    void emitMessage(const std::string& data);
+    /// A message frame: `isBinary` picks the Buffer slot over the string one.
+    void emitMessage(const std::string& data, bool isBinary = false);
     void emitClose(double code, const std::string& reason);
     void emitError(const std::string& message);
 };
@@ -77,6 +80,8 @@ std::string parseWsUrl(const std::string& url, std::string& host, int& port, std
 void wsClientStart(const std::shared_ptr<WsImpl>& impl, const std::string& host, int port,
                    const std::string& target);
 void wsClientSend(const std::shared_ptr<WsImpl>& impl, const std::string& data);
+/// Sends a binary frame (opcode 0x2) carrying `data` bytes.
+void wsClientSendBinary(const std::shared_ptr<WsImpl>& impl, const std::string& data);
 void wsClientClose(const std::shared_ptr<WsImpl>& impl, double code, const std::string& reason);
 
 }  // namespace cp3::runtime::network::detail

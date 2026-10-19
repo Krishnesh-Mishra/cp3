@@ -26,11 +26,15 @@ namespace cp3::cli::detail {
 inline const NativePackage kNetworkNativePackage{
     "std/network",
     // The family ABI tree (D72) first; src/std/json/include serves
-    // runtime_server.cpp's cp3/std/json.hpp include.
+    // runtime_server.cpp's cp3/std/json.hpp include, and the buffer /
+    // collections roots serve cp3/std/network.hpp's includes (res.headers and
+    // req.params/query/headers are Map<string, string>, arrayBuffer is Buffer).
     {"src/std/network/include", "src/std/json/include",
+     "src/std/buffer/include", "src/std/collections/include",
      "third_party/uWebSockets/include", "third_party/libuv/include"},
     {"-DUWS_NO_ZLIB"},
     {"src/std/network/runtime.cpp", "src/std/network/runtime_fetch.cpp",
+     "src/std/network/runtime_fetch_io.cpp",
      "src/std/network/runtime_server.cpp", "src/std/network/runtime_ws.cpp",
      "src/std/network/runtime_ws_client.cpp", "src/std/network/runtime_ws_frames.cpp"},
     {"third_party/uWebSockets/lib", "third_party/libuv/lib"},
