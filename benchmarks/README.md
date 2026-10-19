@@ -76,13 +76,13 @@ process id.
 | `compute-multi` | the same total split across all cores | `131434424` | pending `parallel.*` |
 | `hello-world` | spawn -> exit wall time, best and median of 15+ runs | `Hello, world!` | runs |
 | `string-churn` | 8 case/slice rounds per iteration over a 4 KiB source | `852167` (50k) / `254546` (300k) | runs |
-| `word-frequency` | 3M LCG picks into a 64-word hash map, folded counts | `37425343` | pending `std/collections` |
+| `word-frequency` | 3M LCG picks into a 64-word hash map, folded counts | `37425343` | pending arrays (literals, indexing, push) |
 | `object-churn` | 5M small objects, half die in scope, half escape | `90641269` | pending classes |
 | `array-growth` | 20M pushes while summing, then pop half | `200000010000000` | pending arrays |
 | `closure-capture` | map/filter/reduce over 10M + 1000 escaping closures | `16666688333331 998521500000` | pending closures |
-| `interface-dispatch` | 2M shapes through `area()`, plus a direct-call control loop | `37999986 66000000` | pending classes/interfaces |
-| `generics-mono` | generic `Box<T>` loop vs a hand-written concrete copy | `998986007 998986007` | pending generics |
-| `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404` | wire contract (below) | pending `std/network` |
+| `interface-dispatch` | 2M shapes through `area()`, plus a direct-call control loop | `37999986 66000000` | pending classes/interfaces + arrays |
+| `generics-mono` | generic `Box<T>` loop vs a hand-written concrete copy | `998986007 998986007` | pending generic classes + generic functions |
+| `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404` | wire contract (below) | runs (contract verified; timing joins the next suite run) |
 
 Every value above is re-derived independently by `bench/oracle.py`, which
 re-implements every workload again in plain Python; the runner cross-checks
@@ -92,9 +92,9 @@ column plus `!!` warning lines for any disagreement).
 The health-server contract: every language listens on `127.0.0.1` only and
 answers `GET /healthz` with `200` text/plain `ok`, `GET /` with `200`
 text/plain `health-server ok`, and anything else with `404` text/plain
-`not found`. The port comes from `argv[1]` (the suite assigns 18080-18084 per
-language); the cp3 entry uses a `const` port because the beta-one std spec has
-no process-argv surface.
+`not found`. The port comes from `argv[1]` (the suite assigns 18080-18085 per
+language, default 8080); the cp3 entry reads `process.argv` like every other
+entry and was smoke-verified on its own port.
 
 Each task folder has its own README with the exact workload definition, the
 expected output, the per-language build/run commands, and a link back to the
@@ -449,19 +449,31 @@ is simply that fast; that is the result, not a measurement problem.
 
 ## Pending cp3 entries, precisely
 
-- `health-server`: `main.cp3:24:13: error: CP3002: codegen: CallExpr ('call to function 'createServer' not declared in this unit') is not implemented in M1`
-- `compute-single-int`: `main.cp3:25:10: error: CP3002: codegen: Identifier ('returned value outside M1') is not implemented in M1`
-- `compute-multi`: `main.cp3:34:15: error: CP3002: codegen: CallExpr ('parallel.*') is not implemented in M1`
-- `word-frequency`: `main.cp3:27:1: error: CP3302: cannot find type name 'Map'`
-- `object-churn`: `main.cp3:17:1: error: CP3002: not implemented yet: class declarations`
-- `array-growth`: `main.cp3:15:7: error: CP3002: codegen: VariableDeclarator ('declared type outside M1') is not implemented in M1`
-- `closure-capture`: `main.cp3:20:7: error: CP3002: codegen: VariableDeclarator ('declared type outside M1') is not implemented in M1`
-- `interface-dispatch`: `main.cp3:18:1: error: CP3207: syntax error: expected ';'`
-- `generics-mono`: `main.cp3:14:1: error: CP3207: syntax error: expected ';'`
+Snapshot 2026-10-19 (`build\bin\cp3c.exe`; one `cp3c build main.cp3` per entry
+from a scratch copy; the quoted text is the compiler's own first diagnostic):
 
-`compute-single/cp3` and `hello-world/cp3` and `string-churn/cp3` DO run
-today; they are written in the subset the current compiler implements and
-their rows in the labeled run are real timings.
+- `compute-single-int`: `main.cp3:25:10: error: CP3002: not implemented yet: this returned value` (the native-type tier, D65)
+- `compute-multi`: `main.cp3:34:15: error: CP3002: not implemented yet: parallel.*`
+- `word-frequency`: `main.cp3:28:3: error: CP3002: not implemented yet: this method call` (the array surface: literals, indexing, push)
+- `object-churn`: `main.cp3:17:1: error: CP3002: not implemented yet: classes`
+- `array-growth`: `main.cp3:19:3: error: CP3002: not implemented yet: this method call`
+- `closure-capture`: `main.cp3:23:3: error: CP3002: not implemented yet: this method call`
+- `interface-dispatch`: `main.cp3:20:1: error: CP3002: not implemented yet: classes` (syntax re-checked against the spec: `function` members)
+- `generics-mono`: `main.cp3:23:1: error: CP3002: not implemented yet: generic functions` (also `classes` for `Box<T>`)
+
+`health-server` left this list on 2026-10-19: it builds against the landed
+`std/network` and serves the wire contract on its argv port (smoke-verified:
+`/healthz` -> 200 `ok`, `/` -> 200 `health-server ok`, `/nope` -> 404
+`not found`). Its timed row joins the next suite run on a quiet machine.
+`compute-single/cp3`, `hello-world/cp3` and `string-churn/cp3` keep their real
+timings.
+
+Every pending line maps to a live wave: arrays (word-frequency, array-growth),
+classes/interfaces (object-churn, interface-dispatch), closures
+(closure-capture), generics (generics-mono), `parallel.*` (compute-multi) and
+the native-type tier (compute-single-int). A pending row is not a failure: it
+is the compiler's own diagnostic, captured verbatim, and the row fills in
+when the feature lands without any change to the entry or the runner.
 
 ## Refresh policy
 

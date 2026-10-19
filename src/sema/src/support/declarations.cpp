@@ -362,12 +362,10 @@ void Analyzer::visitClassDecl(ClassDeclaration& c) {
 }
 
 void Analyzer::visitEnumDecl(EnumDeclaration& e) {
-    notImplemented(e.span, "enums");
-    // Declare the enum name as an open/ambient type so that later member
-    // accesses and annotations do not produce *spurious* follow-on type errors
-    // (CP3002 is the only diagnostic).
-    typeNames_[e.name] = ambient();
-    declareAmbient(e.name, e.span, e.nodeId);
+    // The resolution pass already ran from `hoistType` (checkStmts hoists the
+    // block's type declarations before visiting it); registerEnum is
+    // idempotent, so this is the export-wrapped / nested fallback.
+    registerEnum(e);
 }
 
 void Analyzer::visitTypeAlias(TypeAliasDeclaration& t) {

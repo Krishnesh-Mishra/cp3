@@ -1,0 +1,35 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// res.status() and the chained res.header() call: the status and the custom
+// header land on the wire and the chain still returns the response. The client
+// reads the response header back through the FetchResponse.headers Map.
+const app = createServer();
+app.get("/created", (req, res) => {
+  res.status(201).text("created");
+});
+app.get("/chained", (req, res) => {
+  res.status(202).header("x-chain", "yes").text("chained");
+});
+app.get("/teapot", (req, res) => {
+  res.status(418).text("teapot");
+});
+app.listen(48107, () => {
+  console.log("listening");
+});
+
+let created = await fetch("http://127.0.0.1:48107/created");
+console.log(`${created.status}`);
+console.log(`${created.ok}`);
+console.log(await created.text());
+
+let chained = await fetch("http://127.0.0.1:48107/chained");
+console.log(`${chained.status}`);
+console.log(`${chained.headers.get("x-chain")}`);
+console.log(await chained.text());
+
+let teapot = await fetch("http://127.0.0.1:48107/teapot");
+console.log(`${teapot.status}`);
+console.log(`${teapot.ok}`);
+console.log(await teapot.text());
+app.close();

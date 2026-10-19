@@ -39,8 +39,11 @@ std::unique_ptr<ModuleGraph> loadModuleGraph(SourceManager& sm, const SourceFile
 bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink);
 
 // Emits C++20 for one checked program through the three-argument generator,
-// consulting `sema` for inferred types and resolved bindings.
+// consulting `sema` for inferred types and resolved bindings. `lineDirectives`
+// turns on `#line` source mapping, which the Debug profile needs so gdb (and
+// the DAP adapter) see .cp3 files and lines.
 GeneratedModule generateModule(const Program& program, const SemaResult& sema,
-                               const std::string& moduleName, DiagnosticSink& sink);
+                               const std::string& moduleName, DiagnosticSink& sink,
+                               bool lineDirectives = false);
 
 }  // namespace cp3::cli

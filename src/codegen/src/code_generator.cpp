@@ -230,9 +230,9 @@ std::string indentText(const std::string& text, const std::string& pad) {
 // -----------------------------------------------------------------------------
 
 Generator::Generator(DiagnosticSink& sink, const SemaResult& sema,
-                     const std::string& moduleName)
+                     const std::string& moduleName, bool lineDirectives)
     : sink_(sink), sema_(sema), moduleName_(moduleName),
-      namesp_(suggestNamespace(moduleName)) {}
+      namesp_(suggestNamespace(moduleName)), lineMapping_(lineDirectives) {}
 
 void Generator::notImplemented(const Node& node, const std::string& what) {
     // Inside an int64 fast-path attempt nothing is reported and nothing is
@@ -266,6 +266,10 @@ GeneratedModule Generator::run(const Program& program) {
     // even when the declaration comes later in the unit.
     collectJsonShapes(program);
 
+    // The unit's enums (spec 04): resolved before the emit walk so a use can
+    // precede its declaration (src/emit/enum.cpp).
+    collectEnums(program);
+
     std::string decls;   // function forward declarations
     std::string defs;    // function definitions
     std::string mainBody;
@@ -276,13 +280,14 @@ GeneratedModule Generator::run(const Program& program) {
         }
     }
 
-    // The record structs of the shapes actually used as `JSON.parse<T>`
-    // materialize ahead of everything else (they must precede the builders and
-    // the bindings that read them). The value structs of the object shapes the
-    // unit names (support/value_shapes.cpp) go ahead of those: every unit
-    // spells a shape identically, so a struct a signature or a body references
-    // is complete wherever it is named.
-    decls = objectDeclsFor(jsonShapeDecls_ + decls + defs + mainBody) +
+    // The enum declarations come first (a binding, signature or record shape
+    // can name one). The value structs of the object shapes the unit names
+    // (support/value_shapes.cpp) go ahead of the record structs of the shapes
+    // actually used as `JSON.parse<T>`, which in turn precede the builders and
+    // the bindings that read them: every unit spells a shape identically, so a
+    // struct a signature or a body references is complete wherever it is named.
+    decls = enumDecls_ +
+            objectDeclsFor(jsonShapeDecls_ + decls + defs + mainBody) +
             jsonShapeDecls_ + decls;
 
     // The family include (D69) is needed wherever a generated declaration or
@@ -342,6 +347,11 @@ std::string Generator::buildHeader(const std::string& decls) const {
     }
     out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
+    if (needsTuple_) {
+        // An enum-carrying object literal can surface in a forward declaration
+        // (a parameter default).
+        out += "#include <tuple>\n";
+    }
     if (needsEventLoop_) {
         // A declared `async function` returns `Promise<T>` (spec §14), so the
         // alias must be complete for callers of this header.
@@ -384,10 +394,9 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     out += "#include <limits>\n";
     out += "#include <optional>\n";
     out += "#include <string>\n";
+    if (needsTuple_) out += "#include <tuple>\n";  // enum-carrying object literals
     if (needsUnion_) out += "#include <variant>\n";  // primitive unions
-    if (needsEventLoop_) {
-        out += "#include <vector>\n";  // Promise.all/race/allSettled inputs
-    }
+    if (needsEventLoop_) out += "#include <vector>\n";  // Promise input lists
     out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
     out += "#include \"cp3/core/error.hpp\"\n";
@@ -485,7 +494,7 @@ void Generator::emitMain(std::string& out, const std::string& mainBody) const {
 GeneratedModule CodeGenerator::generate(const Program& program,
                                         const SemaResult& sema,
                                         const std::string& moduleName) {
-    Generator generator(sink_, sema, moduleName);
+    Generator generator(sink_, sema, moduleName, lineDirectives_);
     return generator.run(program);
 }
 

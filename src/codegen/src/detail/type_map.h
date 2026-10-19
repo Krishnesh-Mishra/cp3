@@ -33,6 +33,7 @@ enum class Shape {
     DataView,
     Collections, // Map<K, V> / Set<T> (std/collections)
     Buffer,      // the nominal std/buffer `Buffer` byte sequence
+    Enum,        // a named enum (spec 04): `enum class <name> : long long`
     EventEmitter, // the builtin event type (D74): Ref<EventEmitter>
     Listener,     // a function-typed value (D74): the boxed callable
     Union,       // A | B over primitives: std::variant (cp3/core/union.hpp)
@@ -84,6 +85,10 @@ bool optionalEmptyMatches(NullishKind kind, Shape nullishShape);
 
 // The C++ lowering of `raw`, including the optional/nullish flavor.
 CppInfo classify(const Type& raw);
+
+// The enum arm of `classify` (spec 04; src/emit/enum.cpp): a named enum ->
+// `enum class <name> : long long`. Runs only for a `TypeKind::Enum` type.
+CppInfo classifyEnum(const Type& t);
 
 // `A | B` over primitives -> the canonical `std::variant<double, std::string
 // [, bool]>`; and `T | null` / `T | undefined` / `T?` over a primitive or an

@@ -1,0 +1,23 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// res.write() chunks stream out progressively and res.end() closes the body.
+const app = createServer();
+app.get("/stream", (req, res) => {
+  res.write("chunk1");
+  res.write("chunk2");
+  res.write("chunk3");
+  res.end();
+});
+app.listen(48108, () => {
+  console.log("listening");
+});
+
+let stream = await fetch("http://127.0.0.1:48108/stream");
+console.log(`${stream.status}`);
+console.log(await stream.text());
+
+// The server still answers normally right after a streamed response.
+let after = await fetch("http://127.0.0.1:48108/stream");
+console.log(await after.text());
+app.close();

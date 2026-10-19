@@ -71,7 +71,10 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
 int codegenEntry(const CompilationUnit& entry, const SemaResult& sema,
                  const BuildContext& ctx, GeneratedModule& mod) {
     CollectingDiagnosticSink cgSink;
-    mod = generateModule(*entry.ast, sema, *ctx.moduleName, cgSink);
+    // --debug carries `#line` mapping so DWARF and gdb point at the .cp3 file.
+    const bool lineDirectives =
+        ctx.opt->compile.profile == BuildProfile::Debug;
+    mod = generateModule(*entry.ast, sema, *ctx.moduleName, cgSink, lineDirectives);
     renderDiagnostics(cgSink.diagnostics(), *ctx.render, stderr);
     if (cgSink.hasErrors()) {
         return onlyNotImplemented(cgSink.diagnostics())

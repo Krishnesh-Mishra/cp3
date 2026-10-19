@@ -1,0 +1,115 @@
+// =============================================================================
+// tests/network/fixtures/server_own.cp3 - phase B fixture (runnable surface).
+//
+// A cp3 server exercised by the cp3 `fetch` client over a real socket, so the
+// server is verified without python in the request path. Every line is
+// machine-checkable (`id|field|field`); run_network_suite.py asserts them.
+//
+// Covered: fixed text, res.status(), chained res.header(), chunked
+// res.write()+res.end(), json scalars (res.json), req.method/req.path,
+// post/put route matching, `:id` route params matching, the 404 fallback,
+// res.send(status), middleware that answers without calling next(), and
+// survival after the whole run.
+// =============================================================================
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+const app = createServer();
+
+// Middleware without next(): answering stops the chain; answering nothing
+// lets the chain continue to the routes (current lowered semantics).
+// The `: string` annotation is required because of finding F3: an unannotated
+// req.path compared with `===` lowers to a comma expression that is silently
+// false (tracked as its own PENDING SURFACE check, B20).
+app.use((req, res, next) => {
+  let path: string = req.path;
+  if (path === "/teapot") {
+    res.status(418).text("teapot");
+    return;
+  }
+});
+
+app.get("/text", (req, res) => {
+  res.text("hello");
+});
+app.get("/status", (req, res) => {
+  res.status(201).text("created");
+});
+app.get("/chain", (req, res) => {
+  res.status(202).header("x-chain", "yes").text("chained");
+});
+app.get("/stream", (req, res) => {
+  res.write("chunk1");
+  res.write("chunk2");
+  res.end();
+});
+app.get("/json-num", (req, res) => {
+  res.json(7);
+});
+app.get("/json-str", (req, res) => {
+  res.json("hi");
+});
+app.get("/json-bool", (req, res) => {
+  res.json(true);
+});
+app.get("/method", (req, res) => {
+  res.text(req.method + " " + req.path);
+});
+app.post("/post", (req, res) => {
+  res.text("posted");
+});
+app.put("/put/:id", (req, res) => {
+  res.text("putparam");
+});
+app.get("/send", (req, res) => {
+  res.send(203);
+});
+
+const PORT = 48204;
+app.listen(PORT, () => {});
+
+const B = `http://127.0.0.1:${PORT}`;
+
+let b1 = await fetch(`${B}/text`);
+console.log(`B1|${b1.status}|${b1.ok}|${await b1.text()}`);
+
+let b2 = await fetch(`${B}/status`);
+console.log(`B2|${b2.status}|${await b2.text()}`);
+
+let b3 = await fetch(`${B}/chain`);
+console.log(`B3|${b3.status}|${await b3.text()}`);
+
+let b4 = await fetch(`${B}/stream`);
+console.log(`B4|${b4.status}|${await b4.text()}`);
+
+let b5 = await fetch(`${B}/json-num`);
+console.log(`B5|${b5.status}|${await b5.text()}`);
+
+let b6 = await fetch(`${B}/json-str`);
+console.log(`B6|${b6.status}|${await b6.text()}`);
+
+let b7 = await fetch(`${B}/json-bool`);
+console.log(`B7|${b7.status}|${await b7.text()}`);
+
+let b8 = await fetch(`${B}/method?x=1`);
+console.log(`B8|${b8.status}|${await b8.text()}`);
+
+let b9 = await fetch(`${B}/post`, { method: "POST", body: "ignored-for-now" });
+console.log(`B9|${b9.status}|${await b9.text()}`);
+
+let b10 = await fetch(`${B}/put/9`, { method: "PUT" });
+console.log(`B10|${b10.status}|${await b10.text()}`);
+
+let b11 = await fetch(`${B}/missing`);
+console.log(`B11|${b11.status}|${await b11.text()}`);
+
+let b12 = await fetch(`${B}/send`);
+console.log(`B12|${b12.status}|${await b12.text()}`);
+
+let b13 = await fetch(`${B}/teapot`);
+console.log(`B13|${b13.status}|${await b13.text()}`);
+
+let b14 = await fetch(`${B}/text`);
+console.log(`B14|${b14.status}|${await b14.text()}`);
+
+app.close();

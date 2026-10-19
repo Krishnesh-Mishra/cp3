@@ -1,5 +1,6 @@
 import { createServer } from "std/network";
 import console from "std/console";
+import process from "std/process";
 
 // health-server (cp3 entry) -- written to the frozen std/network API
 // (STDLIB-README "network"): createServer(), .get(), res.text(), .use() as a
@@ -11,10 +12,9 @@ import console from "std/console";
 //   GET /         -> 200 text/plain "health-server ok"
 //   anything else -> 404 text/plain "not found"
 //
-// Unlike the other entries this one takes no port argument: the bench runner
-// expects the cp3 server on 8080, so the port stays the constant below.
+// Takes the port as argv[1] like every other entry (default 8080).
 
-const PORT = 8080;
+const PORT = process.argv.length > 1 ? parseInt(process.argv[1]) : 8080;
 const app = createServer();
 
 app.get("/healthz", (req, res) => {

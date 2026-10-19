@@ -1,0 +1,108 @@
+// =============================================================================
+// tests/network/fixtures/fetch_referee.cp3 - phase A fixture.
+//
+// The python referee (http_referee.py, port 48201) is the authority: this
+// program drives the documented `fetch` surface against it and prints one
+// machine-checkable line per check (`id|field|field`). run_network_suite.py
+// asserts every line AND the referee's own request log.
+//
+// docs/standard-library/04-imported-std-modules.md, section `network`:
+// fetch(url, init?), init.headers as Map<string, string>, res.ok/status/
+// statusText/headers, text()/json<T>()/arrayBuffer(), "only a network-level
+// failure (DNS, timeout, connection refused) rejects the promise", and the
+// D70 clear rejection for https:// with TLS off.
+// =============================================================================
+import console from "std/console";
+import { Buffer } from "std/buffer";
+import { Map } from "std/collections";
+import { fetch } from "std/network";
+
+interface User {
+  id: number;
+  name: string;
+}
+
+const BASE = "http://127.0.0.1:48201";
+
+let r1 = await fetch(`${BASE}/fixed/200`);
+console.log(`A1|${r1.status}|${r1.ok}|${await r1.text()}|${r1.statusText}`);
+
+let r2 = await fetch(`${BASE}/fixed/404`);
+console.log(`A2|${r2.status}|${r2.ok}|${await r2.text()}|${r2.statusText}`);
+
+let r3 = await fetch(`${BASE}/echo`, { method: "POST", body: "alpha" });
+console.log(`A3|${r3.status}|${await r3.text()}`);
+
+let r4 = await fetch(`${BASE}/echo?x=1`, { method: "PUT", body: "beta" });
+console.log(`A4|${r4.status}|${await r4.text()}`);
+
+let r5 = await fetch(`${BASE}/echo`, { method: "DELETE" });
+console.log(`A5|${r5.status}|${await r5.text()}`);
+
+let r6 = await fetch(`${BASE}/echo?x=1&y=2`);
+console.log(`A6|${r6.status}|${await r6.text()}`);
+
+// A network-level failure must reject: the documented timeout option.
+try {
+  await fetch(`${BASE}/slow`, { timeout: 300 });
+  console.log("A7|resolved");
+} catch (e) {
+  console.log(`A7|rejected|${e}`);
+}
+
+// Connection refused (nothing listens on 48202) must reject.
+try {
+  await fetch("http://127.0.0.1:48202/nope");
+  console.log("A8|resolved");
+} catch (e) {
+  console.log(`A8|rejected|${e}`);
+}
+
+// https:// must reject clearly with TLS off (D70) and never touch the network.
+try {
+  await fetch("https://example.com/");
+  console.log("A9|resolved");
+} catch (e) {
+  console.log(`A9|rejected|${e}`);
+}
+
+// Redirect handling is not documented as either following or not; record it.
+let r10 = await fetch(`${BASE}/redirect`);
+console.log(`A10|${r10.status}|${await r10.text()}`);
+
+// Binary payload via the documented arrayBuffer(): a std/buffer Buffer whose
+// bytes are the 0..63 octets the referee sent.
+let r11 = await fetch(`${BASE}/binary`);
+let bin: Buffer = await r11.arrayBuffer();
+console.log(`A11|${r11.status}|${bin.length}|${bin.toString("hex")}`);
+
+// RequestInit.headers (Map<string, string>) on the wire, and FetchResponse
+// .headers reading the referee's own response header back.
+let headers = new Map<string, string>();
+headers.set("x-probe", "yes");
+let r13 = await fetch(`${BASE}/headers`, { headers });
+console.log(`A13|${r13.status}|${await r13.text()}|${r13.headers.get("x-referee")}`);
+
+// json<number>() over a real socket.
+let r14 = await fetch(`${BASE}/json/number`);
+console.log(`A14|${r14.status}|${await r14.json<number>()}`);
+
+// json<User>() with a reified interface (the JSON.parse<T> shape tables).
+let r15 = await fetch(`${BASE}/json/user`);
+let user = await r15.json<User>();
+console.log(`A15|${r15.status}|${user.id}|${user.name}`);
+
+// The remaining scalar codecs.
+let r16a = await fetch(`${BASE}/json/string`);
+console.log(`A16a|${r16a.status}|${await r16a.json<string>()}`);
+let r16b = await fetch(`${BASE}/json/bool`);
+console.log(`A16b|${r16b.status}|${await r16b.json<boolean>()}`);
+
+// Shape validation: a mismatched T rejects catchably, like JSON.parse<T>.
+try {
+  let r17 = await fetch(`${BASE}/json/user`);
+  await r17.json<number>();
+  console.log("A17|resolved");
+} catch (e) {
+  console.log(`A17|rejected|${e}`);
+}

@@ -765,3 +765,89 @@ a CP3002 codegen placeholder ("fetch headers as an object literal"), a
 typed-shape error candidate for the audit phase. Pinned by
 `tests/cases/stdlib/network_headers_map_field.cp3` (promoted out of
 `_ambiguous` with this ruling).
+
+## D78 - parseInt/parseFloat invalid input yields NaN (lead ruling, 2026-10-19)
+
+The two global parsers return `NaN` when their input contains no parsable
+digits of the selected form (`parseInt("abc")`, `parseInt("0x")`,
+`parseFloat("abc")`), matching JS rather than the bare `strtol`/`strtod`
+zero. STDLIB docs section 3 says they are "backed directly by
+`std::strtol`/`std::strtod`" - that sentence pins the implementation family,
+not the observable result of a failed parse, and the design goal (day-2
+onboarding for JS/TS developers) makes the JS answer the only non-surprising
+one. Zero would turn every malformed input into a silent legitimate value.
+
+`parseInt` honours a `0x`/`0X` prefix as base 16 (D46, now implemented), so
+`_ambiguous/parseint_hex` is promoted to the graded
+`tests/cases/stdlib/parseint_hex_prefix_upper.cp3`. The ruled behavior is
+pinned by `tests/cases/stdlib/parseint_invalid.cp3` and
+`tests/cases/stdlib/parsefloat_invalid.cp3`.
+
+## Audit promotions (2026-10-19, lead)
+
+- D44 promotion: `stdlib/_ambiguous/map_iteration_order` is now the graded run
+  case `tests/cases/stdlib/map_iteration_order.cp3` (out-of-order insertion,
+  `keys()` prints `b,a`).
+- `stdlib/_ambiguous/date_getter_timezone` is promoted to the graded run case
+  `tests/cases/stdlib/date_getter_utc.cp3`: Date getters read the UTC
+  calendar (`2020-01-01T20:00:00Z` prints `1,20`), matching the pinned UTC
+  semantics in the stdlib date section; the timestamp is chosen so a
+  local-time regression fails on any machine.
+- D47 promotion: `stdlib/_ambiguous/buffer_ascii_encoding` is now the graded
+  check case `tests/cases/stdlib/buffer_ascii_encoding.cp3` (CP3401 at 3:1,
+  `encoding "ascii" is not supported`).
+- `arrays-strings/_ambiguous/forin_map_order` stays a marker: `for (let k in
+  m)` over a Map hits `CP3002: not implemented yet: this statement`; the pin
+  waits for the `for...in` lowering gap (tracked in AUDIT-FOLLOWUPS.md).
+
+## Audit promotions, second batch (2026-10-19, lead)
+
+Rulings pinned by canonical-build probes; docs are silent on each, so they
+follow the standing JS-parity design goal (see D78).
+
+- errors: there is no built-in `Error` type (`throw` takes any value);
+  the catch binding is block-scoped (CP3301 after the block); `catch { }`
+  without a binding is allowed; `try { } finally { }` without catch is
+  allowed; an out-of-bounds index is a hard runtime RangeError that
+  terminates (exit 1, not catchable by a cp3 catch); an uncaught top-level
+  throw terminates with exit 1.
+- enums: raw numbers are not assignable to enum types (CP3401);
+  auto-increment after an explicit initializer is previous + 1 (prints 6);
+  a member without an initializer after a string-backed member is CP3401;
+  mixed backing is CP3706; `console.log` of a number-backed member prints
+  the underlying number.
+- async: `await` on a non-Promise unwraps the value (JS); `Promise.resolve`
+  is present; `.then` returns a chainable Promise; an unhandled rejection
+  terminates with exit 1.
+- Still open (deferred until the touching waves land, tracked in
+  AUDIT-FOLLOWUPS.md): `finally_return_overrides`,
+  `compare_member_to_number`, `numeric_value_via_index`,
+  `async_arrow_function` (B16).
+
+## Audit promotions, third batch (2026-10-19, lead)
+
+- D49 promotion: `stdlib/_ambiguous/console_log_array_format` is now the
+  graded run case `tests/cases/stdlib/console_log_array_format.cp3`
+  (`console.log([1, 2, 3])` prints `[1, 2, 3]`).
+- JS parity (D78-style): `json_stringify_indent_format` prints the two-space
+  indented form (`{` newline two spaces `"a": 1` newline `}`); promotes as a
+  graded run case.
+- JS parity: `Math.round(-2.5)` is `-2` (JavaScript rounds half toward
+  +Infinity; C++ `std::round` rounds away from zero - the JS answer wins);
+  promotes to `tests/cases/stdlib/math_round_negative_half.cp3`.
+- JS parity: the global `String(x)` conversion is present (`String(5)` prints
+  `5`); promotes to `tests/cases/stdlib/string_conversion_global.cp3`.
+- `env.get` argument spelling (on the deferred list): the options object
+  `{ default: T }` is the surface (already pinned by `env_get_default.cp3`);
+  the named-argument spelling is a syntax error (CP3201), pinned by the new
+  graded check case `tests/cases/stdlib/env_get_named_arg_syntax.cp3`.
+- Retired markers: `fetch_non_2xx_no_throw` (pinned by the live-server corpus
+  case `network_fetch_404.cp3`; a real example.com round trip cannot be a cold
+  corpus case) and `fs_readdir_order` (the deferred list; ordering is
+  OS-dependent by design and corpus tests must sort).
+- Still open: `array_slice_exists` and `binarysearch_return_value` (both
+  decided or documented surfaces but still CP3002 gaps - arrays/strings
+  effort), `json_parse_untyped_typeof_narrow` (waits for the runtime `unknown`
+  carrier; candidate after the types wave), and
+  `stdlib/_ambiguous/regex_test_method` (carried by the new regex wave, M2
+  wave 19, as a lead-authorized promotion).

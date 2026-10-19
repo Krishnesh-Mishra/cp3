@@ -1,0 +1,28 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// POST and PUT registrations match their methods only; a GET on the same
+// path falls through to the 404 fallback.
+const app = createServer();
+app.post("/items", (req, res) => {
+  res.status(201).text("created-post");
+});
+app.put("/items/:id", (req, res) => {
+  res.text("updated-put");
+});
+app.listen(48110, () => {
+  console.log("listening");
+});
+
+let posted = await fetch("http://127.0.0.1:48110/items", { method: "POST", body: "x" });
+console.log(`${posted.status}`);
+console.log(await posted.text());
+
+let put = await fetch("http://127.0.0.1:48110/items/7", { method: "PUT", body: "y" });
+console.log(`${put.status}`);
+console.log(await put.text());
+
+let wrongMethod = await fetch("http://127.0.0.1:48110/items");
+console.log(`${wrongMethod.status}`);
+console.log(await wrongMethod.text());
+app.close();
