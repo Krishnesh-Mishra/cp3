@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: observing a number-backed enum's underlying numeric value via array indexing (enum-to-number conversion)"
-  }
-}

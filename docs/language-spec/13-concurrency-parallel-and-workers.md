@@ -112,3 +112,25 @@ Whatever crosses into a worker file is **copied in as a genuine deep copy**, not
 | A few different, independent functions at once                               | `parallel.run`    |
 | One long-running, independent background task, isolated from everything else | `worker`          |
 
+## Servers across threads: `createServer({ threads })` (decided, queued - D79)
+
+The `std/network` server is single-loop by default, and that stays the exact
+default behavior. A server can opt into one event loop per OS thread:
+
+```cp3
+const app = createServer({ threads: os.cpus() });
+```
+
+`threads` must be an integer >= 1; `1` and the absent option mean today's
+single-loop server. With `n` threads, each loop runs its own server instance
+with its own module-level state - the same isolation `worker` already has, so
+`n` threads means `n` copies of every module-level binding and cross-loop state
+goes through `worker` message passing, never shared memory. A connection is
+pinned for its whole lifetime to the loop that accepted it (WebSocket upgrades
+included), which keeps handlers and per-connection state single-threaded. No
+locks, atomics, or shared closures are exposed, exactly as everywhere else in
+this section; `parallel.*` remains the CPU data-parallelism mechanism, and
+`threads` exists only to scale I/O across cores. Platform binding: POSIX uses
+`SO_REUSEPORT` per loop, Windows uses one shared listening socket with accept
+handoff. Full decision record: D79 in `docs/rough/DECISIONS.md`.
+

@@ -1,0 +1,38 @@
+import console from "std/console";
+import { Map } from "std/collections";
+import { fetch, createServer } from "std/network";
+
+// Middleware auth, docs-faithful (docs/standard-library/04-imported-std-
+// modules.md, `network` -> HTTP server): req.headers.get("authorization")
+// gates the route; answering stops the chain, next() continues it. Middleware
+// may be sync (the documented Middleware type is `void | Promise<void>`);
+// async handlers are separately tracked as pending in the suite.
+const app = createServer();
+
+app.use((req, res, next) => {
+  let token = req.headers.get("authorization");
+  if (!token) {
+    res.status(401).text("Unauthorized");
+    return;
+  }
+  next();
+});
+
+app.get("/secure", (req, res) => {
+  res.text("secret");
+});
+app.listen(48111, () => {
+  console.log("listening");
+});
+
+let denied = await fetch("http://127.0.0.1:48111/secure");
+console.log(`${denied.status}`);
+console.log(await denied.text());
+
+// RequestInit.headers is Map<string, string> (docs 04 §network).
+let headers = new Map<string, string>();
+headers.set("authorization", "Bearer t");
+let allowed = await fetch("http://127.0.0.1:48111/secure", { headers });
+console.log(`${allowed.status}`);
+console.log(await allowed.text());
+app.close();

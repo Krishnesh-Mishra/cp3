@@ -104,6 +104,50 @@ std::uint32_t utf16UnitsIn(std::string_view bytes) {
     return units;
 }
 
+// One decoded sequence: its byte width and its UTF-16 unit count. Malformed
+// bytes decode as width 1 / one unit, matching utf16UnitsIn.
+void decodeUnit(std::string_view bytes, std::size_t i, std::size_t& width,
+                std::uint32_t& units) {
+    const unsigned char lead = static_cast<unsigned char>(bytes[i]);
+    width = 1;
+    units = 1;
+    if (lead < 0xC2 || lead > 0xF4) return;  // ASCII or invalid
+    const std::uint32_t want = lead >= 0xF0 ? 4 : (lead >= 0xE0 ? 3 : 2);
+    if (i + want > bytes.size()) return;
+    std::uint32_t cp = lead & (want == 4 ? 0x07u : (want == 3 ? 0x0Fu : 0x1Fu));
+    for (std::uint32_t k = 1; k < want; ++k) {
+        const unsigned char next = static_cast<unsigned char>(bytes[i + k]);
+        if ((next & 0xC0u) != 0x80u) return;
+        cp = (cp << 6) | (next & 0x3Fu);
+    }
+    width = want;
+    units = cp > 0xFFFF ? 2 : 1;
+}
+
+bool isUriSafe(unsigned char c) {
+    if (c >= 'a' && c <= 'z') return true;
+    if (c >= 'A' && c <= 'Z') return true;
+    if (c >= '0' && c <= '9') return true;
+    return c == '-' || c == '.' || c == '_' || c == '~' || c == '/' || c == ':';
+}
+
+std::string percentEncode(std::string_view text) {
+    static const char* kHex = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(text.size());
+    for (const char raw : text) {
+        const unsigned char c = static_cast<unsigned char>(raw);
+        if (isUriSafe(c)) {
+            out.push_back(static_cast<char>(c));
+        } else {
+            out.push_back('%');
+            out.push_back(kHex[c >> 4]);
+            out.push_back(kHex[c & 0x0Fu]);
+        }
+    }
+    return out;
+}
+
 }  // namespace
 
 bool uriToPath(const std::string& uri, std::string& path) {
@@ -164,6 +208,43 @@ LspPosition advanceOne(const std::string& text, LspPosition start) {
     LspPosition out = start;
     if (out.character < utf16UnitsIn(line)) ++out.character;
     return out;
+}
+
+std::string pathToUri(const std::string& path) {
+    std::string normalized = path;
+    for (char& c : normalized) {
+        if (c == '\\') c = '/';
+    }
+    return "file:///" + percentEncode(normalized);
+}
+
+LspPosition endPosition(const std::string& text) {
+    const std::uint32_t last = lineCount(text);
+    LspPosition pos;
+    pos.line = last - 1;
+    pos.character = utf16UnitsIn(lineOf(text, last));
+    return pos;
+}
+
+std::uint32_t toByteColumn(const std::string& text, std::uint32_t line,
+                           std::uint32_t character) {
+    std::uint32_t wanted = line + 1;
+    const std::uint32_t last = lineCount(text);
+    if (wanted > last) wanted = last;
+    std::size_t begin = 0;
+    std::size_t end = 0;
+    if (!lineBounds(text, wanted, begin, end)) return 1;
+    const std::string_view bytes = std::string_view(text).substr(begin, end - begin);
+    std::size_t i = 0;
+    std::uint32_t units = 0;
+    while (i < bytes.size() && units < character) {
+        std::size_t width = 1;
+        std::uint32_t step = 1;
+        decodeUnit(bytes, i, width, step);
+        units += step;
+        i += width;
+    }
+    return static_cast<std::uint32_t>(i) + 1;
 }
 
 }  // namespace cp3::lsp

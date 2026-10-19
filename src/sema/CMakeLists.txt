@@ -34,6 +34,7 @@ set(cp3_sema_sources
     ../std/fs/sema.cpp
     ../std/typed-arrays/sema.cpp
     ../std/typed-arrays/sema_methods.cpp
+    ../std/arrays/sema_methods.cpp
     ../std/math/sema.cpp
     ../std/path/sema.cpp
     ../std/os/sema.cpp

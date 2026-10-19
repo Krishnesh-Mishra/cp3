@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the exact printed representation of an array or object passed to console.log is not pinned."
-  }
-}

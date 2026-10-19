@@ -166,10 +166,8 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
             // keep the binding a `main`-local, the pre-globals lowering.
             emitLineDirective(*d, mainBody);
             line(mainBody, 1, declaratorText(*d, vd.kind) + ";");
-            if (d->id && d->id->kind == NodeKind::Identifier) {
-                declare(static_cast<const Identifier&>(*d->id).name,
-                        resolvedBindingType(*d));
-            }
+            declare(static_cast<const Identifier&>(*d->id).name,
+                    resolvedBindingType(*d));
             continue;
         }
         if (!d->init) {

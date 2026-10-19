@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: bitwise operators on `number` (64-bit double): JS int32 wraparound vs C++ int64 (1 << 40)"
-  }
-}

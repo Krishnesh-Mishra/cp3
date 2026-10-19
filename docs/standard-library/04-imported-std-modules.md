@@ -373,6 +373,8 @@ app.listen(3000, () => {
 
 **Included in beta one:** `fetch` (exact JS shape), `WebSocket`/`WebSocketServer`, `.get`/`.post`/`.put`/`.delete`, route params (`:id`), query string parsing, JSON/text/streaming request and response bodies, basic middleware (`app.use`), status codes and headers, `.listen(port)`, async handlers, and the per-request 500-on-throw behavior above.
 
+**Decided, queued for right after beta one (not part of the surface yet - D79):** `createServer({ threads: n })` starts `n` event loops, one per OS thread, each running its own server instance with its own module-level state (the same isolation `worker` already has). Each connection stays pinned to the loop that accepted it, and cross-loop state goes through `worker` message passing. Until the scale-mode wave lands, `createServer()` with no options remains the single-loop server exactly as documented above.
+
 **Explicitly out of scope for beta one** (not started, not partially done - don't build against these): nested/sub-routers, regex path matching, HTTPS/TLS (would mean wrapping OpenSSL/mbedTLS - a real, separate scope of work and security liability), server-side template engines, `multipart/form-data` file-upload parsing, response compression (gzip). Every one of these is a realistic third-party `.cp3pak` addition post-beta-one (an eventual `@cp3/tls`, `@cp3/multer`, `@cp3/compression`, etc.), not forgotten - matching how Node ships a barebones `http` module and lets the community build Express, or how Go ships barebones `net/http` and lets the community build Gin.
 
 ## Date

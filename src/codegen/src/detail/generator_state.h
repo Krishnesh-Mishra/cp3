@@ -110,6 +110,9 @@ protected:
     bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
     bool needsTuple_ = false;        // enum-carrying object literal -> <tuple>
     bool needsEventEmitter_ = false;  // EventEmitter/Listener -> cp3/async/emitter.hpp
+    bool needsBitwise_ = false;       // bitwise/shift ops -> cp3/core/bitwise.hpp
+    bool needsUnion_ = false;         // primitive unions -> cp3/core/union.hpp
+    bool needsObject_ = false;        // object value shapes -> the object helper block
     bool needsParallel_ = false;      // parallel.* -> cp3/parallel/parallel.hpp
     bool needsWorker_ = false;        // worker(...) -> cp3/parallel/worker.hpp
     bool workerModule_ = false;       // this unit IS the worker module

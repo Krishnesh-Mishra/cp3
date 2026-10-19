@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: are the static `Promise.resolve`/`Promise.reject` present? The spec lists only all/race/allSettled."
-  }
-}

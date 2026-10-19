@@ -14,9 +14,13 @@
 //   support/mangle.cpp     identifier/namespace mangling (free helpers)
 //   support/cpp_writer.cpp indentation buffer + low-level literal/string helpers
 //   support/type_map.cpp   cp3 type -> C++ type mapping + type resolution
+//   support/value_shapes.cpp  primitive unions + object value shapes
+//   support/helper_blocks.cpp the generated-code helper blocks (new families)
 //   support/int_mode.cpp   the guarded int64 fast path + `%` lowering
 //   support/int_reads.cpp  the read-only-inside-return analysis for int mode
 //   emit/expr.cpp          expression lowering (operators, literals, tsCall/cond)
+//   emit/objects.cpp       object value shapes: member reads + literal values
+//   emit/assignment.cpp    assignment lowering (compounds, bitwise, logical)
 //   emit/call.cpp          call lowering (dispatch only, D72)
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
@@ -54,6 +58,22 @@
 
 namespace cp3 {
 
+class Generator;
+
+// The regular-array method surface (src/std/arrays/codegen_methods.cpp): push/
+// pop, the callback set, searching, slicing, the in-place mutators and a
+// `for...of`; a friend of Generator, defined in that unit.
+namespace detail {
+struct ArrayEmitter {
+    static std::string methodCall(Generator& g, const CallExpr& c,
+                                  const MemberExpr& m);
+    static std::string callbackText(Generator& g, const CallExpr& c,
+                                    const MemberExpr& m, const CppInfo& ec,
+                                    const std::string& recvText);
+    static void forOf(Generator& g, const ForOfStatement& f, std::string& out,
+                      int indent);
+};
+}  // namespace detail
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
 // unit, and the CP3002 dedup set (the state block inherited from
@@ -68,6 +88,7 @@ public:
     GeneratedModule run(const Program& program);
 
 private:
+    friend struct detail::ArrayEmitter;  // src/std/arrays/codegen_methods.cpp
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
 
@@ -77,17 +98,14 @@ private:
     void emitLineDirective(const Node& node, std::string& out);
     // `emitMappedRaw` pins each physical line of a raw structural chunk (the
     // int64 wrapper prologue) to `node`; verbatim when mapping is off.
-    void emitMappedRaw(const Node& node, const std::string& raw,
-                       std::string& out);
+    void emitMappedRaw(const Node& node, const std::string& raw, std::string& out);
 
     // --- declarations (emit_decl.cpp) ----------------------------------------
     void collectFunctionNames(const Stmt& s);
-    void emitTopLevel(const Stmt& s, std::string& decls, std::string& defs,
-                      std::string& mainBody);
+    void emitTopLevel(const Stmt& s, std::string& decls, std::string& defs, std::string& mainBody);
     void emitExport(const ExportDeclaration& ed, std::string& decls,
                     std::string& defs, std::string& mainBody);
-    void addFunction(const FunctionDeclaration& fd, std::string& decls,
-                     std::string& defs);
+    void addFunction(const FunctionDeclaration& fd, std::string& decls, std::string& defs);
     std::string plainBody(const FunctionDeclaration& fd, const std::string& ret);
     void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
                        std::string& mainBody);
@@ -128,10 +146,6 @@ private:
     std::string expr(const Expr& e);
     std::string exprCmp(const Expr& e);
     std::string emitIdentifier(const Identifier& id);
-    // The ObjectLiteral arm of `exprPlain`: an enum-carrying literal
-    // (src/emit/enum.cpp) or a worker-marked one (src/emit/worker.cpp) lowers
-    // to a `std::tuple`; anything else reports.
-    std::string emitObjectLiteral(const ObjectLiteral& ol);
     std::string emitTemplate(const TemplateLiteral& tl);
     std::string tsCall(const Expr& e);
     std::string cond(const Expr& e);
@@ -143,6 +157,10 @@ private:
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
                              const detail::CppInfo& R, const std::string& lhs,
                              const std::string& rhs);
+    // The Shape::Union half of `==`/`===` (emit/equality.cpp).
+    std::string unionEqualityText(const BinaryExpr& b, const detail::CppInfo& L,
+                                  const detail::CppInfo& R, const std::string& lhs,
+                                  const std::string& rhs);
     std::string emitLogical(const LogicalExpr& l);
     std::string emitNullish(const LogicalExpr& l);
     std::string emitUnary(const UnaryExpr& u);
@@ -237,8 +255,8 @@ private:
     std::string emitFamilyMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitFamilyMember(const MemberExpr& m);
     std::string emitFamilyIndexRead(const IndexExpr& ix);
-    // The `IndexExpr` dispatch: the family read when the receiver is one,
-    // otherwise the ordinary not-implemented report.
+    std::string indexOperandText(const Expr& index);  // enum member -> number
+    // The `IndexExpr` dispatch: the family read, else a not-implemented report.
     std::string emitIndexExpr(const IndexExpr& ix);
     std::string emitFamilyIndexWrite(const AssignmentExpr& a);
     // The receiver text of a family method: an `Array(n)` constructor or an
@@ -250,32 +268,29 @@ private:
     std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
     std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
     std::string arraySortCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
-    std::string arrayIncludesCallText(const CallExpr& c, const MemberExpr& m,
-                                      const Type& recv);
-    std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m,
-                                    const char* tag);
+    std::string arrayIncludesCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
+    std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m, const char* tag);
     std::string dataViewCallText(const CallExpr& c, const MemberExpr& m);
     std::string arrayLiteralText(const ArrayLiteral& lit, const Type& elemOverride);
     std::string declaratorInitText(const VariableDeclarator& d, const Type& declared);
 
+    // --- object value shapes (emit/objects.cpp) -------------------------------
+    std::string emitObject(const Expr& e);         // `o.a` / `o?.a` reads
+    std::string emitObjectLiteral(const Expr& e);  // `{...}` literal values
+
     // --- std/collections (src/std/collections/codegen.cpp) --------------------
-    // `new Map<K, V>()` / `new Set<T>()`, the member calls (`set`/`get`/`has`/
-    // `delete`/`clear`/`keys`/`values`/`entries`/`forEach`) and the `size` /
-    // `entries().length` property reads. Each returns "" when the form is not
-    // one of them.
+    // `new Map<K, V>()` / `new Set<T>()`, the member calls and the `size` /
+    // `entries().length` reads; each returns "" when the form is not one of them.
     std::string emitCollectionsNew(const NewExpr& n);
-    std::string emitCollectionsMemberCall(const CallExpr& c,
-                                          const MemberExpr& m);
+    std::string emitCollectionsMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitCollectionsMember(const MemberExpr& m);
 
     // --- std namespaces + primitive methods (src/std/*/codegen.cpp) ----------
     // Lower `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*` calls, the
-    // `string` method surface, and builtin property reads (`Math.PI`,
-    // `path.sep`, `process.argv`, `s.length`). Each returns "" when the form
-    // is not implemented, so the caller can report CP3002. The per-family
-    // member reads live with their lowering units too; the namespace dispatch
-    // (emitBuiltinCall / emitBuiltinMember) and the shared helpers
-    // (detail/builtin_tables.h) stay in emit/std/common.cpp.
+    // `string` method surface and builtin property reads (`Math.PI`, `path.sep`,
+    // `process.argv`, `s.length`). Each returns "" for a form it does not
+    // implement, so the caller reports CP3002; the dispatch and the shared
+    // tables (detail/builtin_tables.h) stay in emit/std/common.cpp.
     std::string emitBuiltinCall(const CallExpr& c, const MemberExpr& m);
     std::string emitBuiltinMember(const MemberExpr& m);
     std::string emitMathCall(const CallExpr& c, const MemberExpr& m);
@@ -308,10 +323,9 @@ private:
     // get/has/load calls, backed by cp3/std/env.hpp (composed on process).
     std::string emitEnvCall(const CallExpr& c, const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
-    // Native-backed std modules (src/std/crypto/codegen.cpp,
-    // src/std/network/codegen.cpp): one per-module lowering unit. Each returns
-    // "" when the form is not implemented, so the caller keeps reporting
-    // CP3002 meanwhile.
+    // Native-backed std modules (src/std/{crypto,network}/codegen.cpp): one
+    // lowering unit per module, each returning "" for a form it does not
+    // implement, so the caller keeps reporting CP3002 meanwhile.
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
     // `std/fs` (src/std/fs/codegen.cpp): the namespace table plus the
@@ -327,8 +341,7 @@ private:
     std::string emitDateCall(const CallExpr& c, const MemberExpr& m);
     // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): the
     // `Buffer.from`/`Buffer.alloc` statics, the `buf.toString`/`buf.slice`
-    // methods and the `buf.length` read. Each returns "" when the form is not
-    // one of them.
+    // methods and the `buf.length` read; "" when the form is not one of them.
     std::string emitByteBufferStaticCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMethodCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMember(const MemberExpr& m);
@@ -353,14 +366,12 @@ private:
     std::string fetchInitText(const Expr& init);
     std::string networkArg(const Type& receiver, const std::string& property,
                            const CallExpr& c, const Expr& arg, std::size_t index);
-    std::string networkArgs(const Type& receiver, const std::string& property,
-                            const CallExpr& c);
+    std::string networkArgs(const Type& receiver, const std::string& property, const CallExpr& c);
     std::vector<std::string> emitPlainArgs(const CallExpr& c);
 
     // --- async / promises / errors (emit_async.cpp) --------------------------
     std::string emitAwait(const AwaitExpr& a);
-    std::string emitArrow(const ArrowFunction& a,
-                          const std::vector<std::string>& contextParams);
+    std::string emitArrow(const ArrowFunction& a, const std::vector<std::string>& contextParams);
     std::vector<std::string> arrowParamText(
         const ArrowFunction& a, const std::vector<std::string>& contextParams);
     std::string arrowReturnType(const ArrowFunction& a);
@@ -382,11 +393,10 @@ private:
     void emitTry(const TryStatement& ts, std::string& out, int indent);
 
     // --- enums (emit/enum.cpp) ------------------------------------------------
-    // Top-level `enum` declarations (spec 04): `collectEnums` resolves each
-    // declaration and prepends the `enum class <name> : long long` text;
-    // `emitEnumMember`/`emitEnumObjectLiteral` lower a member access and an
-    // enum-carrying object literal; `emitEnumSwitch` handles a switch statement
-    // (the same-enum lowering via `lowerEnumSwitch`, else the CP3002 stub).
+    // `collectEnums` resolves top-level `enum` declarations (spec 04) and
+    // prepends the `enum class <name> : long long` text; `emitEnumMember` and
+    // `emitEnumObjectLiteral` lower member reads and enum-carrying literals;
+    // `emitEnumSwitch` handles switches (the same-enum lowering, else the stub).
     void collectEnums(const Program& program);
     std::string emitEnumMember(const MemberExpr& m);
     std::string emitEnumObjectLiteral(const ObjectLiteral& ol);
@@ -394,9 +404,8 @@ private:
     void emitEnumSwitch(const Stmt& s, std::string& out, int indent);
 
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
-    // The fast path is emitted per function: a body with every `number`
-    // lowered to a guarded std::int64_t, plus a double wrapper that guards the
-    // arguments once and re-runs the ordinary body when a guard bails.
+    // Per function: a body with every `number` lowered to a guarded
+    // std::int64_t, plus a double wrapper that re-runs it when a guard bails.
     bool intEligible(const FunctionDeclaration& fd, const std::string& ret) const;
     std::string intBody(const FunctionDeclaration& fd, bool& kept);
     std::string intSignature(const FunctionDeclaration& fd) const;
@@ -415,8 +424,7 @@ private:
     std::string intConditional(const ConditionalExpr& c);
     std::string intLogical(const LogicalExpr& l);
     // `a % b`: `modConst<K>` for an integral literal divisor, else `mod`.
-    std::string modCall(const std::string& lhs, const Expr& rhs,
-                        const std::string& rhsText);
+    std::string modCall(const std::string& lhs, const Expr& rhs, const std::string& rhsText);
     // The C++ type source of a local binding (declared, else inferred from the
     // initializer) and whether int mode lowers it to std::int64_t.
     detail::CppInfo bindingCpp(const VariableDeclarator& d) const;

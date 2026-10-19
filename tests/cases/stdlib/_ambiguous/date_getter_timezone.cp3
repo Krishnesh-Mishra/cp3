@@ -1,4 +1,0 @@
-import console from "std/console";
-import Date from "std/date";
-let d = Date.fromISOString("2020-01-02T00:00:00Z");
-console.log(`${d.getDate()}`);

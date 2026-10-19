@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: is there a built-in `Error` type to `throw new Error(...)`? The spec states there is no separate exception hierarchy."
-  }
-}

@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: cp3 clean deleting .cp3/build/ cannot be expressed as a .cp3 case."
-  }
-}

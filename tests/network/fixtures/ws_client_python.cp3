@@ -1,0 +1,46 @@
+// =============================================================================
+// tests/network/fixtures/ws_client_python.cp3 - phase C fixture.
+//
+// The cp3 `WebSocket` client connects to the python RFC6455 echo server
+// (ws_rfc6455.py, port 48205): it must fire "open", deliver the echo of every
+// text frame, deliver the server's binary frame through the documented
+// `string | Buffer` message slot (raw bytes), auto-pong the server's ping
+// (recorded python-side), send a binary frame of its own (recorded
+// python-side), and report the close handshake. The expected stdout is exact;
+// the python server also asserts what it received.
+// =============================================================================
+import console from "std/console";
+import { Buffer } from "std/buffer";
+import { WebSocket } from "std/network";
+
+const ws = new WebSocket("ws://127.0.0.1:48205/chat");
+let messages = 0;
+let closed = false;
+
+ws.on("open", () => {
+  console.log("C1|open");
+  ws.send("hello");
+  ws.send(Buffer.from("cli-bin", "utf8"));
+});
+ws.on("message", (msg) => {
+  messages = messages + 1;
+  if (messages === 1) {
+    console.log(`C2a|${msg}`);
+    ws.send("again");
+  } else if (messages === 2) {
+    console.log(`C2b|${msg}`);
+  } else {
+    console.log(`C2c|${Buffer.from(msg).toString("hex")}`);
+    ws.close(1000, "done");
+  }
+});
+ws.on("close", (code, reason) => {
+  closed = true;
+  console.log(`C3|${code}|${reason}`);
+});
+ws.on("error", (err) => {
+  console.log(`C4|error|${err}`);
+});
+
+await sleep(3000);
+console.log(`C5|${messages}|${closed}`);

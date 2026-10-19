@@ -191,7 +191,10 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
         f.name = kVariadicLabel;
         return f;
     }
-    if (prop == "pop" || prop == "shift") return Type::function({}, elem);
+    if (prop == "pop" || prop == "shift") {
+        // JS: the removed element, or `undefined` when the array is empty.
+        return Type::function({}, Type::unionOf({elem, Type::undefined()}));
+    }
     if (prop == "join") return Type::function({Type::string()}, Type::string());
     if (prop == "sort") {
         // `arr.sort()` / `arr.sort((a, b) => number)`: stable, in place,
@@ -205,6 +208,43 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
         // emitter can lower today (emit_builtin.cpp).
         return withOptionalTail(
             Type::function({elem, Type::number()}, Type::boolean()));
+    }
+    // The wave-3 method surface (docs/language-spec/09-arrays-strings.md).
+    // `map` / `reduce` are typed by `tryInferArrayCall` because their result
+    // follows the callback (src/std/arrays/sema_methods.cpp); the rest have a
+    // result the signature alone fixes.
+    if (prop == "filter") {
+        Type pred = Type::function({elem}, Type::boolean());
+        return Type::function({pred}, Type::array(elem));
+    }
+    if (prop == "find") {
+        Type pred = Type::function({elem}, Type::boolean());
+        return Type::function({pred},
+                              Type::unionOf({elem, Type::undefined()}));
+    }
+    if (prop == "findIndex" || prop == "some" || prop == "every") {
+        Type pred = Type::function({elem}, Type::boolean());
+        Type ret = prop == "findIndex" ? Type::number() : Type::boolean();
+        return Type::function({pred}, ret);
+    }
+    if (prop == "indexOf") {
+        return withOptionalTail(
+            Type::function({elem, Type::number()}, Type::number()));
+    }
+    if (prop == "binarySearch") {
+        return Type::function({elem}, Type::number());
+    }
+    if (prop == "slice") {
+        return withOptionalTail2(
+            Type::function({Type::number(), Type::number()}, Type::array(elem)));
+    }
+    if (prop == "flat") {
+        const Type inner =
+            elem.kind == TypeKind::Array ? elemOf(elem) : Type::unknown();
+        return Type::function({}, Type::array(inner));
+    }
+    if (prop == "unique" || prop == "shuffle") {
+        return Type::function({}, arr);
     }
     return ambient();
 }
@@ -239,6 +279,11 @@ Type Analyzer::stringMember(const std::string& prop) {
     }
     if (prop == "replace" || prop == "replaceAll") {
         return Type::function({Type::string(), Type::string()}, Type::string());
+    }
+    if (prop == "split") {
+        // `s.split(sep)`: the separator is required here and the result is a
+        // regular `string[]` (docs/language-spec/09-arrays-strings.md).
+        return Type::function({Type::string()}, Type::array(Type::string()));
     }
     return ambient();
 }

@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: an enum member with no initializer following a string-backed member"
-  }
-}

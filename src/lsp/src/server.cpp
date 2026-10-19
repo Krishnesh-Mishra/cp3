@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <map>
 #include <string>
@@ -24,6 +25,7 @@
 #include "cp3/diagnostic_codes.hpp"
 
 #include "detail/framing.hpp"
+#include "detail/lsp_intel.hpp"
 #include "detail/lsp_json.hpp"
 #include "detail/lsp_protocol.hpp"
 #include "detail/lsp_text.hpp"
@@ -49,9 +51,36 @@ struct Document {
     bool dirty = false;
 };
 
+// A borrowed view of a document for the intel providers.
+DocumentView viewOf(const Document& document) {
+    DocumentView view;
+    view.uri = &document.uri;
+    view.path = &document.path;
+    view.text = &document.text;
+    return view;
+}
+
+// The document and position of a position-based request; `document` is null
+// when the request names no open document (the caller answers empty).
+struct RequestTarget {
+    Document* document = nullptr;
+    std::uint32_t line = 0;       // 0-based
+    std::uint32_t character = 0;  // 0-based UTF-16 code units
+};
+
 const std::string* stringField(const Json& object, std::string_view key) {
     const Json* value = object.find(key);
     return value != nullptr ? value->asString() : nullptr;
+}
+
+std::uint32_t numberField(const Json& object, std::string_view key,
+                          std::uint32_t fallback) {
+    const Json* value = object.find(key);
+    if (value == nullptr || !value->isNumber()) return fallback;
+    const long long parsed = std::strtoll(value->number.c_str(), nullptr, 10);
+    if (parsed < 0) return 0;
+    if (parsed > 0xFFFFFFFFLL) return 0xFFFFFFFFu;
+    return static_cast<std::uint32_t>(parsed);
 }
 
 // Last-resort diagnostic when the checker itself fails; the CLI glue already
@@ -66,7 +95,8 @@ RawDiagnostic internalError(const std::string& what) {
 
 class Server {
 public:
-    explicit Server(const CheckFn& check) : check_(check) {}
+    Server(const CheckFn& check, const IntelHooks* intel)
+        : check_(check), intel_(intel) {}
 
     // Reads and handles frames until `exit` or end of input.
     int run();
@@ -74,7 +104,14 @@ public:
 private:
     void handleBody(const std::string& body);
     void handleMessage(const Json& message);
-    void handleRequest(const std::string& method, const Json& id);
+    void handleRequest(const std::string& method, const Json& id,
+                       const Json* params);
+    bool handleIntelRequest(const std::string& method, const Json& id,
+                            const Json* params);
+    bool handleIntelPositionRequest(const std::string& method, const Json& id,
+                                    const Json* params);
+    bool handleIntelDocumentRequest(const std::string& method, const Json& id,
+                                    const Json* params);
     void handleNotification(const Json& message, const std::string& method);
 
     void openDocument(const Json& params);
@@ -83,6 +120,7 @@ private:
     void closeDocument(const Json& params);
     Document* documentFor(const Json& params);
     Document* findDocument(const std::string& uri);
+    RequestTarget requestTarget(const Json* params);
 
     void drainBurst();
     void runPendingChecks();
@@ -98,6 +136,7 @@ private:
     void emit(const Json& message);
 
     const CheckFn& check_;
+    const IntelHooks* intel_ = nullptr;
     std::map<std::string, Document> documents_;
     bool shutdownRequested_ = false;
     bool stop_ = false;
@@ -147,13 +186,14 @@ void Server::handleMessage(const Json& message) {
         return;
     }
     if (id != nullptr) {
-        handleRequest(*name, *id);
+        handleRequest(*name, *id, message.find("params"));
     } else {
         handleNotification(message, *name);
     }
 }
 
-void Server::handleRequest(const std::string& method, const Json& id) {
+void Server::handleRequest(const std::string& method, const Json& id,
+                           const Json* params) {
     if (method == "initialize") {
         respond(id, initializeResult());
         return;
@@ -163,7 +203,83 @@ void Server::handleRequest(const std::string& method, const Json& id) {
         respond(id, jsonNull());
         return;
     }
+    if (intel_ != nullptr && handleIntelRequest(method, id, params)) return;
     respondError(id, kMethodNotFoundCode, "method not found: " + method);
+}
+
+bool Server::handleIntelRequest(const std::string& method, const Json& id,
+                                const Json* params) {
+    return handleIntelPositionRequest(method, id, params) ||
+           handleIntelDocumentRequest(method, id, params);
+}
+
+// completion/hover/definition/signatureHelp: textDocument + position.
+bool Server::handleIntelPositionRequest(const std::string& method,
+                                        const Json& id, const Json* params) {
+    const bool listAnswer = method == "textDocument/completion" ||
+                            method == "textDocument/definition";
+    if (method != "textDocument/completion" && method != "textDocument/hover" &&
+        method != "textDocument/definition" &&
+        method != "textDocument/signatureHelp") {
+        return false;
+    }
+    const RequestTarget target = requestTarget(params);
+    if (target.document == nullptr) {
+        respond(id, listAnswer ? jsonArray() : jsonNull());
+        return true;
+    }
+    const DocumentView view = viewOf(*target.document);
+    if (method == "textDocument/completion") {
+        respond(id, completionResult(view, target.line, target.character, *intel_));
+    } else if (method == "textDocument/hover") {
+        respond(id, hoverResult(view, target.line, target.character, *intel_));
+    } else if (method == "textDocument/definition") {
+        respond(id, definitionResult(view, target.line, target.character, *intel_));
+    } else {
+        respond(id, signatureHelpResult(view, target.line, target.character, *intel_));
+    }
+    return true;
+}
+
+// documentSymbol/formatting/workspaceSymbol: no position required.
+bool Server::handleIntelDocumentRequest(const std::string& method,
+                                        const Json& id, const Json* params) {
+    if (method == "textDocument/documentSymbol") {
+        const RequestTarget target = requestTarget(params);
+        if (target.document == nullptr) respond(id, jsonArray());
+        else respond(id, documentSymbolResult(viewOf(*target.document), *intel_));
+        return true;
+    }
+    if (method == "textDocument/formatting") {
+        const RequestTarget target = requestTarget(params);
+        if (target.document == nullptr) respond(id, jsonArray());
+        else respond(id, formattingResult(viewOf(*target.document), *intel_));
+        return true;
+    }
+    if (method == "workspace/symbol") {
+        const std::string* query = nullptr;
+        if (params != nullptr && params->isObject()) {
+            const Json* value = params->find("query");
+            if (value != nullptr) query = value->asString();
+        }
+        std::vector<DocumentView> views;
+        for (const auto& entry : documents_) views.push_back(viewOf(entry.second));
+        respond(id, workspaceSymbolResult(query != nullptr ? *query : std::string(),
+                                          views, *intel_));
+        return true;
+    }
+    return false;
+}
+
+RequestTarget Server::requestTarget(const Json* params) {
+    RequestTarget target;
+    if (params == nullptr || !params->isObject()) return target;
+    target.document = documentFor(*params);
+    const Json* position = params->find("position");
+    if (position == nullptr || !position->isObject()) return target;
+    target.line = numberField(*position, "line", 0);
+    target.character = numberField(*position, "character", 0);
+    return target;
 }
 
 void Server::handleNotification(const Json& message, const std::string& method) {
@@ -325,7 +441,12 @@ void Server::emit(const Json& message) {
 }  // namespace
 
 int runStdioServer(const CheckFn& check) {
-    Server server(check);
+    Server server(check, nullptr);
+    return server.run();
+}
+
+int runStdioServer(const CheckFn& check, const IntelHooks& intel) {
+    Server server(check, &intel);
     return server.run();
 }
 

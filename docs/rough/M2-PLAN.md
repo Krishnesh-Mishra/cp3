@@ -18,6 +18,27 @@ both binaries agree - arrays-strings 47/0/109/10) and **+141** core-semantics
 marker retired (D63). Running total (pre-wave-1): **1236 found - 516 passed /
 6 failed / 606 skipped / 108 ambiguous**; all 6 reds are wave-1 targets (§5-6).
 
+**Status 2026-10-19 (refresh; supersedes the pre-wave-1 running total).**
+Landed since: enums wave (cold 32/25/0/0/7; `enum class` long long,
+string-backed, switches, enum-carrying object literals), cp3-debug wave
+(`#line` Debug-only source mapping, `cp3c dap --stdio` over gdb MI2, VS Code
+debugger contribution; default generated output byte-identical to canonical),
+lsp-intel wave (hover/completion/definition/document symbols/signature help
+providers + tasks; landed 949942a), lead batches (parse
+builtins with D46 hex + D78 NaN, module const-init ordering after `initArgv`,
+bench surface refresh, lint trims). Cold master standings today: diagnostics
+9/9/0/0/0, syntax 72/70/0/0/2, types 110/87/0/18/5, operators 132/93/0/33/6,
+control-flow 75/41/0/28/6, variables 58/45/0/13/0, modules 44/34/0/7/3,
+concurrency 28/8/0/14/6, enums 32/25/0/0/7, parseint 9/9, parsefloat 6/6, lint
+0 errors. In flight (8 agents): classes, arrays-strings, functions-closures,
+operators, control-flow, concurrency, modules, types; generics is
+complete at 0 failed with 17 class-blocked skips and is re-driven after the
+classes wave lands. Landed since the waves began: net-suite (referee suite
+63/0/3 pending surfaces, 10 corpus pairs on ports 48105-48114, cbba62e) and
+the vsix + installer rebuild (bundled providers + debugger). Queued after the fleet: memory-weak wave, the Map/Set
+annotated-constructor gap, bench re-scan + health-server timed row + D67
+measured run, installer/vsix rebuild (debugger + providers), full-corpus gate.
+
 ## Critical path (revised - see D59/D60)
 
 Examples are showcase-only now (D59): no auto-run, no statuses - the corpus in
@@ -673,6 +694,35 @@ that auto-fills like any pending entry.
 
 Scheduling: queued behind the perf wave and wave 2 (classes); mid-size wave
 (parser + sema + codegen + cli). Move up on request.
+
+## Network scale mode wave (queued - D79)
+
+`std/network` gains the opt-in multi-loop server: `createServer({ threads })`
+starts `n` event loops, one per OS thread, each with its own uWS app and
+per-loop module state; connections stay pinned to their accepting loop; POSIX
+distributes accepts via `SO_REUSEPORT`, Windows uses one shared listening
+socket with `WSADuplicateSocket` handoff. Full semantics and the rejected
+alternatives: **D79** in DECISIONS.md.
+
+Scope: `src/std/network/runtime_server.cpp` + `runtime_loop.hpp` + the
+codegen/service surface for the options object. The single-loop path is
+untouched by construction; the net-suite corpus pins it.
+
+Scheduling: queued behind the active wave queue (functions-closures,
+concurrency, regex and the classes/modules/types/control-flow/generics
+landings), because the cross-loop state story references the `worker`
+semantics the concurrency wave owns; start after the concurrency wave lands.
+Small wave (one runtime family + codegen surface + docs).
+
+Acceptance:
+1. Net-suite and the full corpus stay 0 failed; `threads` absent is
+   byte-identical to today's single-loop server.
+2. Probes: per-loop accept distribution with `threads = os.cpus()` under load
+   (POSIX `SO_REUSEPORT` kernel path, Windows shared-listener path), per-loop
+   module-state isolation, and a WebSocket echo through the scaled loops.
+3. Bench rows: `ws-echo` and `json-api` at `threads=1` vs `threads=N` vs the
+   Go comparator, recorded under the D60/D65 conventions.
+4. Canonical rebuild + lint 0 errors; landing record per the standard flow.
 
 ## Corpus weight at M2 open (runnable = 843)
 

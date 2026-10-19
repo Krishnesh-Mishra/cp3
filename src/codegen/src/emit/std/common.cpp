@@ -96,6 +96,12 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     if (std::string coll = emitCollectionsMemberCall(c, m); !coll.empty()) {
         return coll;
     }
+    // The regular-array method surface (src/std/arrays/codegen_methods.cpp):
+    // push/pop, map/filter/reduce/find/..., indexOf/includes/binarySearch,
+    // slice/flat/unique/shuffle.
+    if (std::string arr = ArrayEmitter::methodCall(*this, c, m); !arr.empty()) {
+        return arr;
+    }
     // The JS-compat typed-array family (src/std/typed-arrays/codegen.cpp):
     // `Array.of/from`, the array/typed-view method tables, the buffer `.slice`
     // and DataView.

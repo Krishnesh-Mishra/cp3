@@ -1,0 +1,49 @@
+// =============================================================================
+// tests/network/fixtures/server_probe_target.cp3 - phase S target server.
+//
+// A cp3 server that python security probes attack over raw sockets. The
+// invariants the suite asserts are only: the server never crashes or hangs,
+// every response that does arrive is valid HTTP, a CRLF injection never lands
+// in a response header, and a 500 from one handler stays isolated to one
+// request. Documented-but-unspecified statuses are recorded, not asserted.
+// =============================================================================
+import console from "std/console";
+import { createServer } from "std/network";
+
+const app = createServer();
+
+// /private is answered by middleware that inspects req.path but never calls
+// next() (next() lowering is a pending surface; middlewares that answer stop
+// the chain under the current lowering, so the /private route itself must
+// never run). The `: string` annotation is required because of finding F3
+// (unannotated req.path === literal is silently false).
+app.use((req, res, next) => {
+  let path: string = req.path;
+  if (path === "/private") {
+    res.status(401).text("unauthorized");
+    return;
+  }
+});
+
+app.get("/ok", (req, res) => {
+  res.text("ok");
+});
+app.post("/echo", (req, res) => {
+  res.text("echo-ok");
+});
+app.get("/boom", (req, res) => {
+  throw "probe-boom";
+});
+app.get("/hdr", (req, res) => {
+  res.header("x-probe", "clean").text("hdr");
+});
+app.get("/private", (req, res) => {
+  res.text("secret");
+});
+
+app.listen(48207, () => {});
+
+// Stay up while the python probes run; the suite terminates this process.
+await sleep(20000);
+app.close();
+console.log("S0|done");

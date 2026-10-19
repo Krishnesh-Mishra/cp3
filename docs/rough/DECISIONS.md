@@ -782,3 +782,211 @@ one. Zero would turn every malformed input into a silent legitimate value.
 `tests/cases/stdlib/parseint_hex_prefix_upper.cp3`. The ruled behavior is
 pinned by `tests/cases/stdlib/parseint_invalid.cp3` and
 `tests/cases/stdlib/parsefloat_invalid.cp3`.
+
+## Audit promotions (2026-10-19, lead)
+
+- D44 promotion: `stdlib/_ambiguous/map_iteration_order` is now the graded run
+  case `tests/cases/stdlib/map_iteration_order.cp3` (out-of-order insertion,
+  `keys()` prints `b,a`).
+- `stdlib/_ambiguous/date_getter_timezone` is promoted to the graded run case
+  `tests/cases/stdlib/date_getter_utc.cp3`: Date getters read the UTC
+  calendar (`2020-01-01T20:00:00Z` prints `1,20`), matching the pinned UTC
+  semantics in the stdlib date section; the timestamp is chosen so a
+  local-time regression fails on any machine.
+- D47 promotion: `stdlib/_ambiguous/buffer_ascii_encoding` is now the graded
+  check case `tests/cases/stdlib/buffer_ascii_encoding.cp3` (CP3401 at 3:1,
+  `encoding "ascii" is not supported`).
+- `arrays-strings/_ambiguous/forin_map_order` stays a marker: `for (let k in
+  m)` over a Map hits `CP3002: not implemented yet: this statement`; the pin
+  waits for the `for...in` lowering gap (tracked in AUDIT-FOLLOWUPS.md).
+
+## Audit promotions, second batch (2026-10-19, lead)
+
+Rulings pinned by canonical-build probes; docs are silent on each, so they
+follow the standing JS-parity design goal (see D78).
+
+- errors: there is no built-in `Error` type (`throw` takes any value);
+  the catch binding is block-scoped (CP3301 after the block); `catch { }`
+  without a binding is allowed; `try { } finally { }` without catch is
+  allowed; an out-of-bounds index is a hard runtime RangeError that
+  terminates (exit 1, not catchable by a cp3 catch); an uncaught top-level
+  throw terminates with exit 1.
+- enums: raw numbers are not assignable to enum types (CP3401);
+  auto-increment after an explicit initializer is previous + 1 (prints 6);
+  a member without an initializer after a string-backed member is CP3401;
+  mixed backing is CP3706; `console.log` of a number-backed member prints
+  the underlying number.
+- async: `await` on a non-Promise unwraps the value (JS); `Promise.resolve`
+  is present; `.then` returns a chainable Promise; an unhandled rejection
+  terminates with exit 1.
+- Still open (deferred until the touching waves land, tracked in
+  AUDIT-FOLLOWUPS.md): `finally_return_overrides`,
+  `compare_member_to_number`, `numeric_value_via_index`,
+  `async_arrow_function` (B16).
+
+## CLI/tooling marker retirement (2026-10-19, lead)
+
+The 23 `cli/_ambiguous` markers are retired: they record CLI, packaging and
+tooling behavior that is not observable from a .cp3 program (the deferred list
+already classed them "not testable cases"). The behavior they describe is
+covered where it is testable: the `cli` corpus family (run/check/exit-code
+cases), the packaging acceptance scripts (install/TESTMODE/path handling,
+doctor, init), the intel formatting checks (`cp3 fmt` byte parity), and the C1
+lane's pack/install round trip. Post-beta-one CLI features (GitHub repo
+installs, registry-style specs, `build.cacheBinary`/`excludeSource`) stay
+explicitly deferred with named exit-3 errors per the M2 plan, not scaffold.
+
+## Audit promotions, third batch (2026-10-19, lead)
+
+- D49 promotion: `stdlib/_ambiguous/console_log_array_format` is now the
+  graded run case `tests/cases/stdlib/console_log_array_format.cp3`
+  (`console.log([1, 2, 3])` prints `[1, 2, 3]`).
+- JS parity (D78-style): `json_stringify_indent_format` prints the two-space
+  indented form (`{` newline two spaces `"a": 1` newline `}`); promotes as a
+  graded run case.
+- JS parity: `Math.round(-2.5)` is `-2` (JavaScript rounds half toward
+  +Infinity; C++ `std::round` rounds away from zero - the JS answer wins);
+  promotes to `tests/cases/stdlib/math_round_negative_half.cp3`.
+- JS parity: the global `String(x)` conversion is present (`String(5)` prints
+  `5`); promotes to `tests/cases/stdlib/string_conversion_global.cp3`.
+- `env.get` argument spelling (on the deferred list): the options object
+  `{ default: T }` is the surface (already pinned by `env_get_default.cp3`);
+  the named-argument spelling is a syntax error (CP3201), pinned by the new
+  graded check case `tests/cases/stdlib/env_get_named_arg_syntax.cp3`.
+- Retired markers: `fetch_non_2xx_no_throw` (pinned by the live-server corpus
+  case `network_fetch_404.cp3`; a real example.com round trip cannot be a cold
+  corpus case) and `fs_readdir_order` (the deferred list; ordering is
+  OS-dependent by design and corpus tests must sort).
+- Still open: `array_slice_exists` and `binarysearch_return_value` (both
+  decided or documented surfaces but still CP3002 gaps - arrays/strings
+  effort), `json_parse_untyped_typeof_narrow` (waits for the runtime `unknown`
+  carrier; candidate after the types wave), and
+  `stdlib/_ambiguous/regex_test_method` (carried by the new regex wave, M2
+  wave 19, as a lead-authorized promotion).
+
+## Audit promotions, fourth batch: operators + the enum comparison (2026-10-19, lead)
+
+Ruled from canonical-build probes on the landed operators surface; the docs
+are silent on each, so they follow the standing JS-parity goal (D78). The
+operators wave also landed the runtime basis for each ruling
+(`cp3/core/bitwise.hpp` implements ECMAScript ToInt32/ToUint32 with the shift
+count masked by 31).
+
+- `bitwise_wide`: bitwise/shift are the ECMAScript int32 operations;
+  `1 << 40` prints `256`.
+- `eq_fixed_mismatch`: `==`/`===` between two fixed mismatched types is legal
+  and false for both forms (`1 == true` and `1 === true` print `false`; D15).
+- `nan_print`: printing a NaN number prints `NaN` (D9).
+- `null_undefined_eq`: `null == undefined` is true, `null === undefined` is
+  false (D15).
+- `unary_plus_string`: unary `+` on a string is a compile error, not a
+  conversion (CP3406 at 2:1, `invalid operand type 'string' for unary '+'`;
+  D17).
+- `unsigned_shift_negative`: `-1 >>> 28` prints `15` (ToUint32 semantics).
+- enums `compare_member_to_number`: a number-backed enum member compared with
+  a plain number compares the underlying value (`Color.Red === 0` is true;
+  codegen casts through `static_cast<double>` in `emitEquality`).
+- Union clarification (with the arrays-strings landing): loose `==` over a
+  one-sided value union coerces through JS abstract equality (spec 05:
+  `1 == "1"` is true for a union-held value), while a fixed non-union type
+  mismatch stays false under D15. Both are pinned in the corpus
+  (`union_eq_coerce`, the mixed-array cases), and the landing resolves the
+  flagged D15/spec-05 clash in spec 05's favor for the union case only.
+
+Six operators markers and the enums marker promoted (registry 58 to 51);
+operators is the first family with zero ambiguous markers. Still open with
+owners in AUDIT-FOLLOWUPS.md: `numeric_value_via_index` (still a raw C++
+compile error), `finally_return_overrides`, `async_arrow_function`, plus the
+arrays/network gaps listed in the third batch.
+
+## D79 - `std/network` server scale mode: `createServer({ threads })` (user directive, 2026-10-19)
+
+The single-loop server stays the default, byte-for-byte: `createServer()` with
+no options behaves exactly as shipped and as net-suite pins it. Scaling a
+server across cores is an explicit, opt-in option on the construction call:
+
+```cp3
+const app = createServer({ threads: os.cpus() });
+```
+
+Surface: `createServer(options?: { threads?: number }): HttpServer`; the
+existing no-arg call is unchanged.
+
+- `threads: n` starts `n` event loops, one per OS thread, each running its own
+  uWS app instance. `threads` must be an integer >= 1; `1` and the absent
+  option are today's single-loop server exactly.
+- A connection is pinned for its whole lifetime to the loop that accepted it
+  (WebSocket upgrades included), so handlers and per-connection state stay
+  single-threaded and no user-facing synchronization appears.
+- Module-level state is per-loop, the same isolation `worker` already has: `n`
+  threads means `n` copies of every module-level binding. Cross-loop state
+  goes through `worker` message passing, never through shared memory.
+- Platforms: POSIX binds one `SO_REUSEPORT` socket per loop and lets the
+  kernel distribute accepts. Windows has no `SO_REUSEPORT`, so the
+  shared-listener path creates one listening socket and hands accepted
+  connections to the loops (`WSADuplicateSocket`); the measured bench rows run
+  on Windows, so this path is mandatory, not a stub.
+- Non-goals: not CPU data parallelism (`parallel.*` owns that), no atomics,
+  locks or shared closures exposed (§13; binding-level atomics remain rejected,
+  as re-affirmed today on user review), and `WebSocketServer` broadcast stays
+  per-loop with cross-loop fan-out as a documented `worker`-channel pattern.
+
+Considered and rejected: `n` threads sharing one app with locks around handler
+dispatch (reverses the no-locks guarantee and serializes exactly the work the
+option exists to parallelize), and a thread pool inside the existing loop (uWS
+is single-threaded by design; the loop is the unit of scaling).
+
+Acceptance for the queued wave (full text in M2-PLAN): net-suite cases stay
+byte-identical with `threads` absent; per-loop accept and module-state
+isolation probes with `threads = os.cpus()`; `ws-echo` and `json-api` bench
+rows at `threads=1`, `threads=N` and the Go comparator under the D60/D65
+conventions.
+
+## Audit promotions, fifth batch: arrays-strings (2026-10-19, lead)
+
+Ruled from canonical probes on the landed arrays-strings surface; docs are
+silent or already ruling, so the standing JS-parity goal (D78) applies.
+
+- `array_mixed_infer`: a mixed-type array literal without an annotation is
+  CP3401 at 2:1, `type mismatch: array literal mixes incompatible element
+  types (annotate the array with a union type)` (docs 09 lines 16-31).
+- `array_print_format`: `console.log([1, 2, 3])` prints `[1, 2, 3]` (D49).
+- `binarysearch_unsorted`: `a.binarySearch(t)` on an unsorted array panics
+  with a RangeError, exit 1 (docs 09 line 49: debug sorted-check).
+- `find_not_found` / `indexof_not_found`: not-found reads are JS-shaped
+  (`undefined` / `-1`).
+- `slice_negative` / `substring_swap`: `"hello".slice(-2)` is `lo`;
+  `"hello".substring(3, 1)` swaps to `el` (JS argument normalization).
+
+Seven markers promoted out of `_ambiguous` (registry 51 to 44). Keepers:
+`forin_map_order` (D44: `Map` iteration order is a collections bug) and
+`str_index_type` (string index reads: check typed it `number`, run was
+CP3002; the byte-read lowering is in the follow-up fix below).
+
+## Index-access fix: string byte reads + enum index operands (2026-10-19, lead)
+
+The arrays-strings wave left two index-access gaps that leaked CP3002 or a raw
+C++ error; both are fixed here and pinned.
+
+- `str[i]` (docs 09: "returns a raw byte") lowers to
+  `::cp3::runtime::strings::byteAt`: the UTF-8 byte at a byte position as a
+  number. Out-of-range, fractional and negative positions follow the array
+  index rule: a hard RangeError ("String index out of range"), exit 1, not
+  catchable by a cp3 catch. `str_index_type` promotes expecting `195`
+  (`"héllo"[1]` is the first byte of `é`, 0xC3; the wave report's U+01F8 note
+  describes the rule, the committed marker source holds the 2-byte `é`);
+  `str_index_out_of_range` pins the panic. Literal receivers normalize
+  through `literalBaseType()`
+  (the same step `type_map.cpp` does), which is what lets a string literal
+  reach the family read at all.
+- A number-backed enum member used as an array index is its underlying number
+  (`a[Color.Green]` reads index 1), matching the member-vs-number comparison
+  rule from batch 4; a string-backed enum index reports instead of emitting a
+  non-convertible operand. `numeric_value_via_index` promotes expecting `20`.
+- `array.slice` and `binarySearch` markers close under the wave's landed
+  surface: `array_slice_exists` promotes (D48; `[1, 2, 3, 4].slice(1, 3)` is
+  `2,3`) and `binarysearch_return_value` promotes as the index, `-1` when the
+  target is missing (docs 09's `binarySearch(target)`).
+
+Four markers promoted plus one new pin (registry 44 to 40); only
+`forin_map_order` remains in arrays-strings (D44 collections bug).

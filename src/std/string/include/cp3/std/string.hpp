@@ -19,6 +19,8 @@
 //     charAt("😀", 0) returning the whole 4-byte emoji (D63 corpus evidence).
 //   * `charAt(i)` past the end returns "" (JS behavior; the out-of-range
 //     question is parked - this is the defensive JS-faithful reading).
+//   * `str[i]` is the raw UTF-8 byte as a number (docs 09); out-of-range or
+//     fractional positions panic with a RangeError, the same rule as arrays.
 //   * `repeat` clamps a negative count to 0 (JS throws RangeError; no case
 //     pins the throw yet).
 //   * `trim`/`trimStart`/`trimEnd` strip the ASCII whitespace set; the full
@@ -34,8 +36,11 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace cp3::runtime::strings {
 
@@ -87,6 +92,26 @@ inline std::string charAt(const std::string& s, double index) {
         ++codepoint;
     }
     return std::string();
+}
+
+/// Docs 09: `str[i]` is the raw UTF-8 byte at byte position `i` as a number
+/// (a deliberate departure from JS's UTF-16 code unit: a multi-byte character
+/// yields one of its bytes, not the character). An out-of-range or
+/// non-integer position is the same hard RangeError as array indexing
+/// (exit 1, not catchable by a cp3 catch).
+[[noreturn]] inline void indexFail() {
+    std::fprintf(stderr, "cp3: RangeError: String index out of range\n");
+    std::fflush(stderr);
+    std::exit(1);
+}
+
+inline double byteAt(const std::string& s, double index) {
+    if (std::isnan(index) || std::isinf(index) || std::trunc(index) != index ||
+        index < 0.0 || index >= static_cast<double>(s.size())) {
+        indexFail();
+    }
+    return static_cast<double>(
+        static_cast<unsigned char>(s[static_cast<std::size_t>(index)]));
 }
 
 // --- predicates ---------------------------------------------------------------
@@ -257,6 +282,29 @@ inline std::string slice(const std::string& s, double start,
     if (!(stop > begin)) return std::string();
     return s.substr(static_cast<std::size_t>(begin),
                     static_cast<std::size_t>(stop - begin));
+}
+
+// JS `split`: every occurrence of the separator ends a piece; a separator
+// that never matches yields the whole receiver. An empty separator splits into
+// single bytes (the byte view of a string, D63), not codepoints.
+inline std::vector<std::string> split(const std::string& s,
+                                      const std::string& sep) {
+    std::vector<std::string> out;
+    if (sep.empty()) {
+        out.reserve(s.size());
+        for (char c : s) out.emplace_back(1, c);
+        return out;
+    }
+    std::size_t at = 0;
+    while (true) {
+        const std::size_t pos = s.find(sep, at);
+        if (pos == std::string::npos) {
+            out.push_back(s.substr(at));
+            return out;
+        }
+        out.push_back(s.substr(at, pos - at));
+        at = pos + sep.size();
+    }
 }
 
 // JS `substring`: negative indices clamp to 0 and start/end swap when needed.

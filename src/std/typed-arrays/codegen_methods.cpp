@@ -303,12 +303,32 @@ std::string Generator::emitFamilyMember(const MemberExpr& m) {
     return std::string();
 }
 
+// The index operand of a family read/write. A number-backed enum member is
+// its underlying number (spec 04); a string-backed enum, or an enum whose
+// declaration is missing from this unit, reports instead of emitting an
+// operand C++ cannot convert.
+std::string Generator::indexOperandText(const Expr& index) {
+    const CppInfo ci = info(index);
+    if (ci.shape != Shape::Enum) return expr(index);
+    const auto found = enums_.find(ci.type.name);
+    if (found == enums_.end()) {
+        notImplemented(index, "this enum value");
+        return "0.0";
+    }
+    if (found->second.stringBacked) {
+        notImplemented(index, "this index expression");
+        return "0.0";
+    }
+    return "static_cast<double>(" + expr(index) + ")";
+}
+
 // `a[i]`: sema published `number` when the literal index was proved in range
 // (checked read), `number | undefined` otherwise (`std::optional`).
 std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
     if (!ix.object || !ix.index) return std::string();
-    const Type ot = effectiveType(*ix.object);
-    const std::string idxText = expr(*ix.index);
+    Type ot = effectiveType(*ix.object);
+    if (ot.isLiteral()) ot = ot.literalBaseType();
+    const std::string idxText = indexOperandText(*ix.index);
     if (isParallelRunType(ot)) {
         // The `parallel.run` result: a fixed-extent `std::array` (the runtime
         // sized it from the callable count), so the index is a raw subscript.
@@ -338,6 +358,12 @@ std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
         return "::cp3::runtime::arrayAt<" + ec.cpp + ">(" + expr(*ix.object) +
                ", " + idxText + ")";
     }
+    if (ot.kind == TypeKind::String) {
+        // Docs 09: the raw UTF-8 byte at a byte position, as a number.
+        needsString_ = true;
+        return "::cp3::runtime::strings::byteAt(" + expr(*ix.object) + ", " +
+               idxText + ")";
+    }
     return std::string();
 }
 
@@ -359,8 +385,9 @@ std::string Generator::emitFamilyIndexWrite(const AssignmentExpr& a) {
     }
     const auto& ix = static_cast<const IndexExpr&>(*a.target);
     if (!ix.object || !ix.index) return std::string();
-    const Type ot = effectiveType(*ix.object);
-    const std::string idxText = expr(*ix.index);
+    Type ot = effectiveType(*ix.object);
+    if (ot.isLiteral()) ot = ot.literalBaseType();
+    const std::string idxText = indexOperandText(*ix.index);
     const std::string value = expr(*a.value);
     if (isParallelRunType(ot)) {
         // A `parallel.run` result element write: `std::array` subscript.

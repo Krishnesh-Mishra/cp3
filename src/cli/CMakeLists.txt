@@ -21,11 +21,20 @@ set(cp3_cli_sources
     src/commands/common.cpp
     src/commands/check.cpp
     src/commands/lsp.cpp
+    src/commands/lsp_intel.cpp
+    src/commands/lsp_intel_query.cpp
+    src/commands/lsp_intel_define.cpp
+    src/commands/lsp_intel_complete.cpp
+    src/commands/lsp_intel_members.cpp
+    src/commands/lsp_intel_names.cpp
+    src/commands/lsp_intel_walk.cpp
+    src/commands/lsp_intel_walk_children.cpp
     src/commands/dap.cpp
     src/commands/run.cpp
     src/commands/build.cpp
     src/commands/dev.cpp
     src/commands/fmt.cpp
+    src/format/format.cpp
     src/commands/clean.cpp
     src/commands/init.cpp
     src/commands/exec.cpp
@@ -67,6 +76,7 @@ target_sources(cp3_cli PRIVATE
     "${cp3_lsp_dir}/src/text.cpp"
     "${cp3_lsp_dir}/src/protocol.cpp"
     "${cp3_lsp_dir}/src/server.cpp"
+    "${cp3_lsp_dir}/src/intel.cpp"
 )
 # src/lsp/src resolves the module's `detail/...` private headers. It is
 # appended AFTER src/cli/src so CLI units keep resolving their own `detail/...`
