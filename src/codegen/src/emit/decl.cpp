@@ -153,9 +153,8 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         }
         const std::string name =
             mapIdent(static_cast<const Identifier&>(*d->id).name);
-        // A declared type M1 cannot represent (`number | string`, an object /
-        // array / class type, ...) keeps the unit "not implemented" instead of
-        // being quietly mis-typed (same contract as local declarations).
+        // A declared type M1 cannot represent (`number | string`, an object or
+        // array type, ...) keeps the unit "not implemented" (as with locals).
         if (d->type) {
             if (auto dt = typeOfNode(*d->type)) {
                 if (!classify(*dt).representable && !dt->isUnknown() &&
@@ -176,10 +175,8 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
             // keep the binding a `main`-local, the pre-globals lowering.
             emitLineDirective(*d, mainBody);
             line(mainBody, 1, declaratorText(*d, vd.kind) + ";");
-            if (d->id && d->id->kind == NodeKind::Identifier) {
-                declare(static_cast<const Identifier&>(*d->id).name,
-                        resolvedBindingType(*d));
-            }
+            declare(static_cast<const Identifier&>(*d->id).name,
+                    resolvedBindingType(*d));
             continue;
         }
         if (!d->init) {
