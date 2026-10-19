@@ -85,11 +85,20 @@ namespace detail {
 // Everything buildWithToolchain needs from the frontend half of cmdBuildOrRun:
 // pointers into the caller's locals (valid for the duration of the call).
 struct BuildRequest {
+    // An extra generated TU (spec 13: the worker modules the entry imports).
+    // Written beside the entry's generated files and compiled before it.
+    struct ExtraModule {
+        std::string moduleName;         // output stem, e.g. "worker_impl"
+        const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
+        std::string sourceKey;          // incremental cache key (the .cp3 path)
+    };
+
     const CliOptions* opt = nullptr;
     const fs::path* entry = nullptr;         // as resolved by the CLI
     const std::string* moduleName = nullptr;  // e.g. "src/index"
     const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
     const std::vector<std::string>* importedStdModules = nullptr;  // D68 selection
+    const std::vector<ExtraModule>* extraModules = nullptr;  // worker modules
     bool execute = false;                     // `cp3c run` was requested
 };
 

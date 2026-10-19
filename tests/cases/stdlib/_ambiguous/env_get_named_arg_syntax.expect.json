@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: does `env.get` take an options object `{ default: T }` (per the signature) or named-argument syntax `default: T` (per the example)?"
-  }
-}

@@ -27,5 +27,9 @@ std::string numberLiteralText(double value);
 std::string joinStrings(const std::vector<std::string>& parts,
                         const std::string& sep);
 
+// Prefix every line of `text` with `pad` (used to re-indent the top-level
+// statements when they are wrapped in the top-level-`await` coroutine).
+std::string indentText(const std::string& text, const std::string& pad);
+
 }  // namespace detail
 }  // namespace cp3

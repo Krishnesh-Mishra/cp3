@@ -823,3 +823,290 @@ follow the standing JS-parity design goal (see D78).
   AUDIT-FOLLOWUPS.md): `finally_return_overrides`,
   `compare_member_to_number`, `numeric_value_via_index`,
   `async_arrow_function` (B16).
+
+## CLI/tooling marker retirement (2026-10-19, lead)
+
+The 23 `cli/_ambiguous` markers are retired: they record CLI, packaging and
+tooling behavior that is not observable from a .cp3 program (the deferred list
+already classed them "not testable cases"). The behavior they describe is
+covered where it is testable: the `cli` corpus family (run/check/exit-code
+cases), the packaging acceptance scripts (install/TESTMODE/path handling,
+doctor, init), the intel formatting checks (`cp3 fmt` byte parity), and the C1
+lane's pack/install round trip. Post-beta-one CLI features (GitHub repo
+installs, registry-style specs, `build.cacheBinary`/`excludeSource`) stay
+explicitly deferred with named exit-3 errors per the M2 plan, not scaffold.
+
+## Audit promotions, third batch (2026-10-19, lead)
+
+- D49 promotion: `stdlib/_ambiguous/console_log_array_format` is now the
+  graded run case `tests/cases/stdlib/console_log_array_format.cp3`
+  (`console.log([1, 2, 3])` prints `[1, 2, 3]`).
+- JS parity (D78-style): `json_stringify_indent_format` prints the two-space
+  indented form (`{` newline two spaces `"a": 1` newline `}`); promotes as a
+  graded run case.
+- JS parity: `Math.round(-2.5)` is `-2` (JavaScript rounds half toward
+  +Infinity; C++ `std::round` rounds away from zero - the JS answer wins);
+  promotes to `tests/cases/stdlib/math_round_negative_half.cp3`.
+- JS parity: the global `String(x)` conversion is present (`String(5)` prints
+  `5`); promotes to `tests/cases/stdlib/string_conversion_global.cp3`.
+- `env.get` argument spelling (on the deferred list): the options object
+  `{ default: T }` is the surface (already pinned by `env_get_default.cp3`);
+  the named-argument spelling is a syntax error (CP3201), pinned by the new
+  graded check case `tests/cases/stdlib/env_get_named_arg_syntax.cp3`.
+- Retired markers: `fetch_non_2xx_no_throw` (pinned by the live-server corpus
+  case `network_fetch_404.cp3`; a real example.com round trip cannot be a cold
+  corpus case) and `fs_readdir_order` (the deferred list; ordering is
+  OS-dependent by design and corpus tests must sort).
+- Still open: `array_slice_exists` and `binarysearch_return_value` (both
+  decided or documented surfaces but still CP3002 gaps - arrays/strings
+  effort), `json_parse_untyped_typeof_narrow` (waits for the runtime `unknown`
+  carrier; candidate after the types wave), and
+  `stdlib/_ambiguous/regex_test_method` (carried by the new regex wave, M2
+  wave 19, as a lead-authorized promotion).
+
+## Audit promotions, fourth batch: operators + the enum comparison (2026-10-19, lead)
+
+Ruled from canonical-build probes on the landed operators surface; the docs
+are silent on each, so they follow the standing JS-parity goal (D78). The
+operators wave also landed the runtime basis for each ruling
+(`cp3/core/bitwise.hpp` implements ECMAScript ToInt32/ToUint32 with the shift
+count masked by 31).
+
+- `bitwise_wide`: bitwise/shift are the ECMAScript int32 operations;
+  `1 << 40` prints `256`.
+- `eq_fixed_mismatch`: `==`/`===` between two fixed mismatched types is legal
+  and false for both forms (`1 == true` and `1 === true` print `false`; D15).
+- `nan_print`: printing a NaN number prints `NaN` (D9).
+- `null_undefined_eq`: `null == undefined` is true, `null === undefined` is
+  false (D15).
+- `unary_plus_string`: unary `+` on a string is a compile error, not a
+  conversion (CP3406 at 2:1, `invalid operand type 'string' for unary '+'`;
+  D17).
+- `unsigned_shift_negative`: `-1 >>> 28` prints `15` (ToUint32 semantics).
+- enums `compare_member_to_number`: a number-backed enum member compared with
+  a plain number compares the underlying value (`Color.Red === 0` is true;
+  codegen casts through `static_cast<double>` in `emitEquality`).
+- Union clarification (with the arrays-strings landing): loose `==` over a
+  one-sided value union coerces through JS abstract equality (spec 05:
+  `1 == "1"` is true for a union-held value), while a fixed non-union type
+  mismatch stays false under D15. Both are pinned in the corpus
+  (`union_eq_coerce`, the mixed-array cases), and the landing resolves the
+  flagged D15/spec-05 clash in spec 05's favor for the union case only.
+
+Six operators markers and the enums marker promoted (registry 58 to 51);
+operators is the first family with zero ambiguous markers. Still open with
+owners in AUDIT-FOLLOWUPS.md: `numeric_value_via_index` (still a raw C++
+compile error), `finally_return_overrides`, `async_arrow_function`, plus the
+arrays/network gaps listed in the third batch.
+
+## D79 - `std/network` server scale mode: `createServer({ threads })` (user directive, 2026-10-19)
+
+The single-loop server stays the default, byte-for-byte: `createServer()` with
+no options behaves exactly as shipped and as net-suite pins it. Scaling a
+server across cores is an explicit, opt-in option on the construction call:
+
+```cp3
+const app = createServer({ threads: os.cpus() });
+```
+
+Surface: `createServer(options?: { threads?: number }): HttpServer`; the
+existing no-arg call is unchanged.
+
+- `threads: n` starts `n` event loops, one per OS thread, each running its own
+  uWS app instance. `threads` must be an integer >= 1; `1` and the absent
+  option are today's single-loop server exactly.
+- A connection is pinned for its whole lifetime to the loop that accepted it
+  (WebSocket upgrades included), so handlers and per-connection state stay
+  single-threaded and no user-facing synchronization appears.
+- Module-level state is per-loop, the same isolation `worker` already has: `n`
+  threads means `n` copies of every module-level binding. Cross-loop state
+  goes through `worker` message passing, never through shared memory.
+- Platforms: POSIX binds one `SO_REUSEPORT` socket per loop and lets the
+  kernel distribute accepts. Windows has no `SO_REUSEPORT`, so the
+  shared-listener path creates one listening socket and hands accepted
+  connections to the loops (`WSADuplicateSocket`); the measured bench rows run
+  on Windows, so this path is mandatory, not a stub.
+- Non-goals: not CPU data parallelism (`parallel.*` owns that), no atomics,
+  locks or shared closures exposed (§13; binding-level atomics remain rejected,
+  as re-affirmed today on user review), and `WebSocketServer` broadcast stays
+  per-loop with cross-loop fan-out as a documented `worker`-channel pattern.
+
+Considered and rejected: `n` threads sharing one app with locks around handler
+dispatch (reverses the no-locks guarantee and serializes exactly the work the
+option exists to parallelize), and a thread pool inside the existing loop (uWS
+is single-threaded by design; the loop is the unit of scaling).
+
+Acceptance for the queued wave (full text in M2-PLAN): net-suite cases stay
+byte-identical with `threads` absent; per-loop accept and module-state
+isolation probes with `threads = os.cpus()`; `ws-echo` and `json-api` bench
+rows at `threads=1`, `threads=N` and the Go comparator under the D60/D65
+conventions.
+
+## Audit promotions, fifth batch: arrays-strings (2026-10-19, lead)
+
+Ruled from canonical probes on the landed arrays-strings surface; docs are
+silent or already ruling, so the standing JS-parity goal (D78) applies.
+
+- `array_mixed_infer`: a mixed-type array literal without an annotation is
+  CP3401 at 2:1, `type mismatch: array literal mixes incompatible element
+  types (annotate the array with a union type)` (docs 09 lines 16-31).
+- `array_print_format`: `console.log([1, 2, 3])` prints `[1, 2, 3]` (D49).
+- `binarysearch_unsorted`: `a.binarySearch(t)` on an unsorted array panics
+  with a RangeError, exit 1 (docs 09 line 49: debug sorted-check).
+- `find_not_found` / `indexof_not_found`: not-found reads are JS-shaped
+  (`undefined` / `-1`).
+- `slice_negative` / `substring_swap`: `"hello".slice(-2)` is `lo`;
+  `"hello".substring(3, 1)` swaps to `el` (JS argument normalization).
+
+Seven markers promoted out of `_ambiguous` (registry 51 to 44). Keepers:
+`forin_map_order` (D44: `Map` iteration order is a collections bug) and
+`str_index_type` (string index reads: check typed it `number`, run was
+CP3002; the byte-read lowering is in the follow-up fix below).
+
+## Index-access fix: string byte reads + enum index operands (2026-10-19, lead)
+
+The arrays-strings wave left two index-access gaps that leaked CP3002 or a raw
+C++ error; both are fixed here and pinned.
+
+- `str[i]` (docs 09: "returns a raw byte") lowers to
+  `::cp3::runtime::strings::byteAt`: the UTF-8 byte at a byte position as a
+  number. Out-of-range, fractional and negative positions follow the array
+  index rule: a hard RangeError ("String index out of range"), exit 1, not
+  catchable by a cp3 catch. `str_index_type` promotes expecting `195`
+  (`"héllo"[1]` is the first byte of `é`, 0xC3; the wave report's U+01F8 note
+  describes the rule, the committed marker source holds the 2-byte `é`);
+  `str_index_out_of_range` pins the panic. Literal receivers normalize
+  through `literalBaseType()`
+  (the same step `type_map.cpp` does), which is what lets a string literal
+  reach the family read at all.
+- A number-backed enum member used as an array index is its underlying number
+  (`a[Color.Green]` reads index 1), matching the member-vs-number comparison
+  rule from batch 4; a string-backed enum index reports instead of emitting a
+  non-convertible operand. `numeric_value_via_index` promotes expecting `20`.
+- `array.slice` and `binarySearch` markers close under the wave's landed
+  surface: `array_slice_exists` promotes (D48; `[1, 2, 3, 4].slice(1, 3)` is
+  `2,3`) and `binarysearch_return_value` promotes as the index, `-1` when the
+  target is missing (docs 09's `binarySearch(target)`).
+
+Four markers promoted plus one new pin (registry 44 to 40); only
+`forin_map_order` remains in arrays-strings (D44 collections bug).
+
+## D80 - Workers are explicit handles: `new Worker(module)` + message events (user directive, 2026-10-19)
+
+User review of the landed call form (`import worker from "./x.cp3";
+await worker(v)`): the surface cannot tell a worker from a plain function (the
+compiler inferred "worker" from the import *binding name*, so renaming the
+binding changed semantics), and a call-shaped one-shot is the wrong fit for a
+long-lived background thread. Ruled: workers are explicit handles with message
+events, matching the JS Web Worker model the spec already cites. This is the
+worker half of the same conversation that settled D79.
+
+Surface (spec §13):
+
+```cp3
+// main side
+const w = new Worker("./sum.cp3");
+w.on("message", (msg) => { ... });
+w.on("error", (err) => { ... });
+w.postMessage(value);
+w.terminate();
+
+// sum.cp3
+export default (thread) => {
+  thread.on("message", (msg) => { thread.postMessage(result); });
+};
+```
+
+- `new Worker(path)`: `path` is a **static string literal** naming a `.cp3`
+  file, resolved at compile time under the import rules; the file is compiled
+  as a worker unit whose default export runs once at thread start with the
+  worker-side `thread` handle. A computed path is a compile error. The
+  binding-name inference is removed: `new Worker` is the only way to start a
+  worker, and an ordinary default import of a `.cp3` file stays an ordinary
+  cross-module call.
+- `w.postMessage(v)` / `thread.postMessage(v)`: fire-and-forget structured
+  clone (genuine deep copy both ways, per the no-shared-memory rule); messages
+  queue until the other side attaches a listener; delivery is FIFO per sender.
+  Nothing blocks the main loop - it keeps turning between messages.
+- `w.on("message", l)` / `w.on("error", l)` on both sides; multiple listeners
+  allowed. A thrown error inside a message handler arrives as an `"error"`
+  event (catchable); a hard crash still takes the process down, per the
+  concurrency batch ruling.
+- `await w.request(v)`: optional one-shot ask/answer sugar over the same
+  channel (correlation-tagged); resolves with the next `"message"`. The old
+  `await worker(v)` form is removed.
+- `w.terminate()`: stops the worker's loop and frees the thread; pending
+  messages drop; idempotent.
+- Module-level state stays per worker (isolation); no locks, no atomics, no
+  shared memory. The D79 server scale mode uses this channel for cross-loop
+  fan-out.
+
+Status: the landed concurrency wave keeps the call form for now; the handle
+wave (queued in M2-PLAN right after the active landing queue) implements this
+surface and migrates the worker corpus cases. The markers
+`worker_call_shape` and `worker_crash_takes_process_down` stay ambiguous until
+that wave, then promote against this ruling (canonical handle shape; thrown
+handler error becomes a catchable `"error"` event).
+
+### D80 addendum - typed channels and the inline form (lead freeze, 2026-10-19)
+
+Final surface freeze before the handle wave launches (user-approved; supersedes
+the annotation-free reading of D80 above where the two differ).
+
+- The worker entry annotates its handle: `thread: Thread<In, Out>`; `In` is
+  main-to-worker, `Out` is worker-to-main. That annotation is the single source
+  of truth: the main side infers `Worker<In, Out>` for `new Worker(...)`, so
+  main-side code needs no annotations of its own. A missing annotation on the
+  worker entry (file default export or inline arrow) is a compile error.
+- `void` in one direction makes that direction's send surface a compile error:
+  a `Thread<In, void>` worker cannot `thread.postMessage`, and `w.postMessage`
+  / `w.request` on a `Worker<void, Out>` cannot send. `Thread<unknown, unknown>`
+  waits for the runtime unknown carrier (opt-in, later).
+- Payloads are ordinary cp3 value types and copy on send exactly like an
+  assignment copy (numbers, strings, booleans, arrays, records, enums, unions
+  of those). Functions, closures, promises, live handles and unresolved
+  (unknown) payload types are compile errors.
+- Inline form: `new Worker((thread: Thread<In, Out>) => { ... })` compiles
+  through the same worker-unit pipeline as a file (synthesized unit, its own
+  module state, no access to enclosing locals - pass data with messages). The
+  file form stays the recommendation for anything with structure; moving from
+  inline to file is moving the body and swapping the arrow for a path.
+- `await w.request(v)` resolves with the next `Out` message; on the worker
+  side messages arrive as `"message"` events.
+
+## Audit promotions, sixth batch: concurrency (2026-10-19, lead)
+
+Ruled from the wave report (section 5, "decisions where the docs were silent")
+and canonical probes on the landed concurrency surface.
+
+- Structural rulings (report 5.1-5.5, 5.7-5.10): `parallel` stays a bare
+  ambient builtin (D34, no import); ranges are end-exclusive with
+  `static_cast<std::int64_t>(expr)` bounds; the chunked `parallel.reduce`
+  combine gate covers exactly `acc + i` from literal `0`, `acc * i` from
+  literal `1` and `i > acc ? i : acc` from literal `0`; every other reduce
+  keeps the exact sequential 4-argument form; `parallel.run` yields a
+  homogeneous array carried by the `$parallelRun` marker; closures lower as
+  `[&]` capture lambdas behind the sema capture-safety walk; worker objects
+  mark through exactly one un-reassigned single-declared binding; a worker
+  argument that cannot be proven copyable stays CP3002 (a skip, never a wrong
+  deep copy).
+- `parallel_capture_diagnostic_text`: pinned to the existing wording; a
+  captured reassignment is CP3902 at 2:1.
+- `parallel_import_required`: bare `parallel.reduce(1..3, 0, (s, i) => s + i)`
+  runs and prints `3`.
+- `parallel_range_end_exclusive`: `0..n` is `[0, n)`; `parallel.reduce(0..5, 0,
+  (s, i) => s + i)` is `10`. The old marker source tripped the capture rule
+  (`n = n + 1` inside `parallel.for`), so the case carries the reduce form.
+- `parallel_run_mixed_result_types`: mixed closure result types are a type
+  error, not a first-closure pick. Codegen resolves every closure's result and
+  reports CP3904 (`kParallelRunMixedResultTypes`, catalog row) at the
+  `parallel.run` call (`2:9` in the case), exit 1 in run mode, no C++
+  invocation. A closure whose result cannot be resolved still skips the check
+  (that path stays CP3002 until codegen can type it).
+- Held: `worker_call_shape` and `worker_crash_takes_process_down` stay
+  ambiguous; D80 owns that surface. The handle wave promotes against its
+  ruling (canonical `new Worker(path)` shape; a thrown handler error becomes a
+  catchable `"error"` event; a hard crash stays process-fatal for beta one).
+
+Four markers promoted (registry 40 to 36); concurrency keeps the two D80
+markers. Probes: `build/scratch/rounds/evidence/concurrency/batch7-probe.txt`.

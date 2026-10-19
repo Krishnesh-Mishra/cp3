@@ -313,6 +313,9 @@ private:
                                  const SourceSpan& span);
     bool tryInferArrayStaticCall(CallExpr& call, MemberExpr& m, Type& out);
     bool tryInferFillCall(CallExpr& call, MemberExpr& m, Type& out);
+    // The regular-array callback folds whose result type depends on the
+    // callback (`map` / `reduce`; src/std/arrays/sema_methods.cpp).
+    bool tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out);
     Type typedArrayMember(const Type& recv, const std::string& prop);
     Type bufferMember(const Type& recv, const std::string& prop);
     Type dataViewMember(const std::string& prop);

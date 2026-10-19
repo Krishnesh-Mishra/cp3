@@ -30,11 +30,10 @@ bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink) {
     return analyzer.analyze(program, out);
 }
 
-GeneratedModule generateModule(const Program& program, const SemaResult& sema,
-                               const std::string& moduleName, DiagnosticSink& sink,
-                               bool lineDirectives) {
-    CodeGenerator codegen(sink, lineDirectives);
-    return codegen.generate(program, sema, moduleName);
+GeneratedModule generateModule(const GenerateModuleInput& input) {
+    CodeGenerator codegen(input.sink, input.lineDirectives);
+    return codegen.generate(input.program, input.sema, input.moduleName,
+                            input.options);
 }
 
 }  // namespace cp3::cli

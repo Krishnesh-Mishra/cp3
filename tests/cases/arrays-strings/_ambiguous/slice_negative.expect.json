@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: negative index arguments to `slice` (JS wraps from the end; std::substr does not)"
-  }
-}

@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: inferring an element type for an unannotated mixed array literal `[1, \"two\"]`"
-  }
-}

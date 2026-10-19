@@ -9,7 +9,9 @@
 // =============================================================================
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "cp3/analysis.hpp"
 #include "cp3/codegen.hpp"
@@ -23,6 +25,7 @@
 #include "detail/package_json.hpp"
 #include "detail/pipeline.hpp"
 #include "detail/util.hpp"
+#include "detail/worker_module.hpp"
 
 namespace cp3::cli {
 
@@ -69,12 +72,14 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
 // The codegen half. Returns kExitSuccess when `mod` holds real generated code
 // (an empty module keeps the not-implemented marker for the harness).
 int codegenEntry(const CompilationUnit& entry, const SemaResult& sema,
-                 const BuildContext& ctx, GeneratedModule& mod) {
+                 const BuildContext& ctx, const CodegenOptions& options,
+                 GeneratedModule& mod) {
     CollectingDiagnosticSink cgSink;
     // --debug carries `#line` mapping so DWARF and gdb point at the .cp3 file.
     const bool lineDirectives =
         ctx.opt->compile.profile == BuildProfile::Debug;
-    mod = generateModule(*entry.ast, sema, *ctx.moduleName, cgSink, lineDirectives);
+    mod = generateModule(
+        {*entry.ast, sema, *ctx.moduleName, cgSink, lineDirectives, options});
     renderDiagnostics(cgSink.diagnostics(), *ctx.render, stderr);
     if (cgSink.hasErrors()) {
         return onlyNotImplemented(cgSink.diagnostics())
@@ -85,6 +90,37 @@ int codegenEntry(const CompilationUnit& entry, const SemaResult& sema,
         return notImplemented(ctx.execute ? "run" : "build");
     }
     return kExitSuccess;
+}
+
+// The worker half of codegen (spec 13): resolves the canonical worker import,
+// lowers the worker unit by itself, and returns both the entry's codegen
+// options and the extra TU the toolchain must compile. A worker unit that does
+// not lower leaves `options.worker` unset, so the entry's `worker(...)` stays a
+// CP3002 skip (the worker unit's own diagnostics are never rendered: the entry
+// is the unit the user compiled).
+struct WorkerLinkage {
+    CodegenOptions options;
+    GeneratedModule module;  // empty when there is no compilable worker
+    std::string moduleName;
+    std::string sourceKey;
+};
+
+WorkerLinkage prepareWorker(const CompilationUnit& entry, const ModuleGraph& graph,
+                            const std::string& moduleName, bool lineDirectives) {
+    WorkerLinkage out;
+    const std::optional<WorkerUnit> worker =
+        findWorkerUnit(*entry.ast, graph, moduleName);
+    if (!worker || !programCallsWorker(*entry.ast)) return out;
+    CollectingDiagnosticSink workerSink;
+    out.module = generateWorkerModule(*worker, lineDirectives, workerSink);
+    if (out.module.source.empty()) {
+        out.module = GeneratedModule{};
+        return out;
+    }
+    out.options.worker = WorkerImport{worker->moduleName, worker->headerPath};
+    out.moduleName = worker->moduleName;
+    out.sourceKey = worker->sourceKey;
+    return out;
 }
 
 int runOnPackageError(const std::string& entry) {
@@ -124,8 +160,12 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     if (frontend.exitCode != kExitSuccess) return frontend.exitCode;
     CompilationUnit* entry = frontend.graph->entry();
 
+    const bool lineDirectives = opt.compile.profile == BuildProfile::Debug;
+    const WorkerLinkage worker =
+        prepareWorker(*entry, *frontend.graph, moduleName, lineDirectives);
+
     GeneratedModule mod;
-    const int cgExit = codegenEntry(*entry, frontend.sema, ctx, mod);
+    const int cgExit = codegenEntry(*entry, frontend.sema, ctx, worker.options, mod);
     if (cgExit != kExitSuccess) return cgExit;
 
     if (opt.verbose && opt.compile.maxMemoryMb != 0) {
@@ -159,6 +199,12 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     request.moduleName = &moduleName;
     request.module = &mod;
     request.importedStdModules = &importedStdModules;
+    std::vector<detail::BuildRequest::ExtraModule> extras;
+    if (!worker.module.source.empty()) {
+        extras.push_back(detail::BuildRequest::ExtraModule{
+            worker.moduleName, &worker.module, worker.sourceKey});
+    }
+    request.extraModules = &extras;
     request.execute = execute;
     return detail::buildWithToolchain(request);
 }

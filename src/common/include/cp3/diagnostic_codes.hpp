@@ -106,5 +106,6 @@ inline constexpr const char* kDecoratorsUnsupported = "CP3808";
 inline constexpr const char* kParallelSharedMutation = "CP3901";
 inline constexpr const char* kParallelCaptureReassign = "CP3902";
 inline constexpr const char* kUnknownWorkerFile = "CP3903";
+inline constexpr const char* kParallelRunMixedResultTypes = "CP3904";
 
 }  // namespace cp3::diagcode

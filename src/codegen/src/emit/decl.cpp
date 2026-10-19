@@ -153,16 +153,7 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         }
         const std::string name =
             mapIdent(static_cast<const Identifier&>(*d->id).name);
-        // A declared type M1 cannot represent (`number | string`, an object or
-        // array type, ...) keeps the unit "not implemented" (as with locals).
-        if (d->type) {
-            if (auto dt = typeOfNode(*d->type)) {
-                if (!classify(*dt).representable && !dt->isUnknown() &&
-                    !dt->isError()) {
-                    notImplemented(*d, "this declared type");
-                }
-            }
-        }
+        reportModuleVarType(*d);
         const std::optional<Type> declared = resolvedBindingType(*d);
         CppInfo ci = declared ? classify(*declared) : CppInfo{};
         if (d->init && !ci.representable) {
@@ -188,6 +179,12 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         // (src/std/typed-arrays/codegen.cpp).
         std::string initText = declaratorInitText(*d, ci.type);
         if (initText.empty()) initText = expr(*d->init);
+        // A worker-marked object literal lowers to a `std::tuple`; the binding
+        // type follows the emitted text, not the ordinary value shape.
+        if (d->init->kind == NodeKind::ObjectLiteral &&
+            workerLiterals_.count(d->init->nodeId) != 0) {
+            ci.cpp = "decltype(" + initText + ")";
+        }
         if (ci.shape == Shape::Optional && isNullishLiteral(*d->init)) {
             initText = "std::nullopt";
         }
@@ -230,6 +227,18 @@ void Generator::emitModuleVarNoInit(const detail::CppInfo& ci,
     } else {
         line(decls, 1, cv + "auto " + name + " = cp3::runtime::undefined;");
     }
+}
+
+// A declared type M1 cannot represent (`number | string`, an object / array /
+// class type, ...) keeps the unit "not implemented" instead of being quietly
+// mis-typed (same contract as local declarations).
+void Generator::reportModuleVarType(const VariableDeclarator& d) {
+    if (!d.type) return;
+    auto dt = typeOfNode(*d.type);
+    if (!dt || classify(*dt).representable || dt->isUnknown() || dt->isError()) {
+        return;
+    }
+    notImplemented(d, "this declared type");
 }
 
 void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,

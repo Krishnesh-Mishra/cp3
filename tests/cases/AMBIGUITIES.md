@@ -8,40 +8,29 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 87** across 15 categories.
+**Total markers: 36** across 12 categories.
 
 | Category | Markers |
 | --- | ---: |
-| `arrays-strings` | 9 |
+| `arrays-strings` | 1 |
 | `async` | 1 |
 | `classes` | 4 |
-| `cli` | 23 |
-| `concurrency` | 6 |
+| `concurrency` | 2 |
 | `control-flow` | 6 |
-| `enums` | 2 |
 | `errors` | 1 |
 | `functions-closures` | 4 |
 | `generics` | 2 |
 | `memory-weak` | 6 |
 | `modules` | 3 |
-| `operators` | 6 |
-| `stdlib` | 10 |
+| `stdlib` | 2 |
 | `types` | 4 |
-| **Total** | **87** |
+| **Total** | **36** |
 
 ## `arrays-strings`
 
 | case file | question |
 | --- | --- |
-| `arrays-strings/_ambiguous/array_mixed_infer.expect.json` | inferring an element type for an unannotated mixed array literal `[1, "two"]` |
-| `arrays-strings/_ambiguous/array_print_format.expect.json` | `console.log` rendering of a whole array/object value (fmt representation) |
-| `arrays-strings/_ambiguous/binarysearch_unsorted.expect.json` | `binarySearch` on an unsorted array: debug panic vs silently wrong result |
-| `arrays-strings/_ambiguous/find_not_found.expect.json` | `find` return value when nothing matches (undefined vs other) |
 | `arrays-strings/_ambiguous/forin_map_order.expect.json` | `for...in` over a `Map`: iteration order is unspecified (unordered_map) |
-| `arrays-strings/_ambiguous/indexof_not_found.expect.json` | `indexOf` return value when the element is not found (-1 vs other) |
-| `arrays-strings/_ambiguous/slice_negative.expect.json` | negative index arguments to `slice` (JS wraps from the end; std::substr does not) |
-| `arrays-strings/_ambiguous/str_index_type.expect.json` | typed and printed form of `str[i]` (raw byte): native byte type vs number vs 1-char string |
-| `arrays-strings/_ambiguous/substring_swap.expect.json` | `substring(a, b)` when a > b (JS swaps the arguments; std::substr does not) |
 
 ## `async`
 
@@ -58,42 +47,10 @@ python tests/runner/run_tests.py --write-registry
 | `classes/_ambiguous/static_via_instance.expect.json` | Is reading a static member through an instance (`c.x`) allowed, or must it be `C.x`? Spec maps statics to C++ but does not state the access rule. |
 | `classes/_ambiguous/super_call.expect.json` | Is a `super` keyword provided to call a parent method? The spec documents single `extends` but never mentions `super`. |
 
-## `cli`
-
-| case file | question |
-| --- | --- |
-| `cli/_ambiguous/build_debug_flag.expect.json` | the --debug build profile is a toolchain flag with no .cp3-observable semantics. |
-| `cli/_ambiguous/build_release_flag.expect.json` | the --release build profile (whole-program LTO) has no observable effect inside a .cp3 program. |
-| `cli/_ambiguous/clean_all_wipes_packages.expect.json` | cp3 clean --all deleting .cp3/packages/ cannot be expressed as a .cp3 case. |
-| `cli/_ambiguous/clean_wipes_build.expect.json` | cp3 clean deleting .cp3/build/ cannot be expressed as a .cp3 case. |
-| `cli/_ambiguous/dev_watch_mode.expect.json` | cp3 dev's watch/rebuild behavior is not expressible as a .cp3 case. |
-| `cli/_ambiguous/dot_cp3_layout.expect.json` | the generated .cp3/ directory layout is a project-tooling artifact, not observable from a .cp3 program. |
-| `cli/_ambiguous/exec_package_bin.expect.json` | cp3 exec resolving and running a package's bin tool is not expressible as a .cp3 case. |
-| `cli/_ambiguous/fmt_formatter.expect.json` | cp3 fmt's output and the package.json "format" overrides are not expressible as a .cp3 case. |
-| `cli/_ambiguous/init_generates_layout.expect.json` | the generated project layout from cp3 init is not observable through `cp3c run/check <file>`. |
-| `cli/_ambiguous/init_prompts.expect.json` | cp3 init's four interactive prompts and generated files cannot be expressed as a single .cp3 case. |
-| `cli/_ambiguous/install_auto_flag.expect.json` | the --auto compatibility-selection behavior is not expressible as a .cp3 case. |
-| `cli/_ambiguous/install_dependencies.expect.json` | cp3 install's network/registry behavior is not expressible as a .cp3 case. |
-| `cli/_ambiguous/install_github_url.expect.json` | installing from a GitHub release URL (single/multiple/none .cp3pak assets) is not expressible as a .cp3 case. |
-| `cli/_ambiguous/lifecycle_postbuild_hook.expect.json` | npm-style pre*/post* lifecycle hooks run around CLI commands, not inside a .cp3 program. |
-| `cli/_ambiguous/lifecycle_prebuild_hook.expect.json` | npm-style pre*/post* lifecycle hooks run around CLI commands, not inside a .cp3 program. |
-| `cli/_ambiguous/max_memory_flag.expect.json` | the --max-memory codegen cap is a CLI flag with no .cp3-observable semantics. |
-| `cli/_ambiguous/recompile_cp3pak.expect.json` | recompiling an existing .cp3pak is a tooling operation, not a .cp3 case. |
-| `cli/_ambiguous/run_vs_check.expect.json` | the distinction between `cp3 run` and `cp3 check` is a CLI-invocation property, not a property of a .cp3 program. |
-| `cli/_ambiguous/spinner_rule.expect.json` | the spinner rule is a CLI UX property with no .cp3-observable semantics. |
-| `cli/_ambiguous/static_link_single_binary.expect.json` | the static-link output shape is a build-artifact property, not a .cp3 case. |
-| `cli/_ambiguous/toolchain_fallback.expect.json` | toolchain selection/fallback and multi-toolchain error grouping are CLI behaviors, not .cp3 cases. |
-| `cli/_ambiguous/type_package_build.expect.json` | producing a .cp3pak from a package project is an artifact/tooling behavior, not a .cp3 case. |
-| `cli/_ambiguous/version_flag.expect.json` | the version command's output is a CLI property, not a .cp3 case. |
-
 ## `concurrency`
 
 | case file | question |
 | --- | --- |
-| `concurrency/_ambiguous/parallel_capture_diagnostic_text.expect.json` | the spec pins that a captured-let reassignment inside parallel.* is a compile error, but not the diagnostic wording/code. |
-| `concurrency/_ambiguous/parallel_import_required.expect.json` | is `parallel` a global builtin (used bare in §13) or a std import? It is not listed in the std module table. |
-| `concurrency/_ambiguous/parallel_range_end_exclusive.expect.json` | is the `a..b` range end exclusive? Inferred from the loop example but never stated. |
-| `concurrency/_ambiguous/parallel_run_mixed_result_types.expect.json` | what is the result type of `parallel.run` when closures return different types (heterogeneous tuple vs array)? |
 | `concurrency/_ambiguous/worker_call_shape.expect.json` | is `worker(...)` the called default export of an imported `.cp3` file (as the §13 example implies), and is `import worker from "x.cp3"` the canonical shape? |
 | `concurrency/_ambiguous/worker_crash_takes_process_down.expect.json` | the spec says a worker-thread crash can take the whole program down, but the observable exit code/output is not pinned. |
 
@@ -107,13 +64,6 @@ python tests/runner/run_tests.py --write-registry
 | `control-flow/_ambiguous/forin_array_indices.expect.json` | `for...in` target set/index type: section 6 shows `for (let key in object)` over keys/indices while section 8 bans `for...in` on plain objects/class instances; whether array indices are numbers or strings is unspecified |
 | `control-flow/_ambiguous/reduce_no_initial.expect.json` | `reduce` with no initial accumulator value is not specified |
 | `control-flow/_ambiguous/spread_number_array_into_fixed_params.expect.json` | spreading a `number[]` into fixed-arity parameters: whether a tuple type is required is unspecified |
-
-## `enums`
-
-| case file | question |
-| --- | --- |
-| `enums/_ambiguous/compare_member_to_number.expect.json` | comparing an enum member to a raw number (Color.Red === 0) |
-| `enums/_ambiguous/numeric_value_via_index.expect.json` | observing a number-backed enum's underlying numeric value via array indexing (enum-to-number conversion) |
 
 ## `errors`
 
@@ -156,31 +106,12 @@ python tests/runner/run_tests.py --write-registry
 | `modules/_ambiguous/prelude_strong_weak_order.expect.json` | When `_prelude.cp3` (strong) and `_prelude.weak.cp3` sit in the same folder, the spec fixes injection order (same, then strong, then weak) but does not pin the observable effect when both inject conflicting/different imports. |
 | `modules/_ambiguous/relative_specifier_form.expect.json` | Local module specifier form: bare `base.cp3` (as the spec's own `import worker from "worker.cp3"` example) vs. ES-relative `./base.cp3`. The spec says 'plain ES module semantics' but its example is bare. |
 
-## `operators`
-
-| case file | question |
-| --- | --- |
-| `operators/_ambiguous/bitwise_wide.expect.json` | bitwise operators on `number` (64-bit double): JS int32 wraparound vs C++ int64 (1 << 40) |
-| `operators/_ambiguous/eq_fixed_mismatch.expect.json` | `==`/`===` between two fixed mismatched types (number vs boolean): section 3 says any two different-type values may be compared, section 5 says a mismatched-type comparison between two fixed types would not compile |
-| `operators/_ambiguous/nan_print.expect.json` | stdout rendering of NaN (JS 'NaN' vs fmt 'nan') |
-| `operators/_ambiguous/null_undefined_eq.expect.json` | `null == undefined` / `null === undefined`: spec keeps the two concepts separate (TS-style) but does not define cross-comparison |
-| `operators/_ambiguous/unary_plus_string.expect.json` | unary `+` numeric coercion of a string operand |
-| `operators/_ambiguous/unsigned_shift_negative.expect.json` | unsigned right shift `>>>` semantics for negative operands and int32 vs int64 width |
-
 ## `stdlib`
 
 | case file | question |
 | --- | --- |
-| `stdlib/_ambiguous/array_slice_exists.expect.json` | array.slice is not in the explicit array-method list in §09 (only string slice/substring are listed). |
-| `stdlib/_ambiguous/binarysearch_return_value.expect.json` | the return value of `binarySearch(target)` (index vs boolean vs -1) is not specified. |
-| `stdlib/_ambiguous/console_log_array_format.expect.json` | the exact printed representation of an array or object passed to console.log is not pinned. |
-| `stdlib/_ambiguous/env_get_named_arg_syntax.expect.json` | does `env.get` take an options object `{ default: T }` (per the signature) or named-argument syntax `default: T` (per the example)? |
-| `stdlib/_ambiguous/fetch_non_2xx_no_throw.expect.json` | fetch not throwing on 4xx/5xx is pinned, but observing it needs a live server plus a network round trip the single-file harness cannot pin deterministically. |
-| `stdlib/_ambiguous/fs_readdir_order.expect.json` | the ordering of readdirSync results is not specified. |
 | `stdlib/_ambiguous/json_parse_untyped_typeof_narrow.expect.json` | whether `typeof` narrowing works directly on the `unknown` result of untyped JSON.parse is not shown. |
-| `stdlib/_ambiguous/json_stringify_indent_format.expect.json` | the exact whitespace/indentation produced by `JSON.stringify(value, indent)` is not pinned. |
-| `stdlib/_ambiguous/math_round_negative_half.expect.json` | Math is "Node/JS-style" but JS rounds -2.5 to -2 while C++ round() gives -3; the negative-half case is not pinned. |
-| `stdlib/_ambiguous/string_conversion_global.expect.json` | the cheat sheet shows `String(x)`, but it is not listed among the core-language builtins in §03/§20. |
+| `stdlib/_ambiguous/regex_test_method.expect.json` | regex literals are a core feature, but which RegExp methods (.test/.match/.exec) exist is not specified. |
 
 ## `types`
 

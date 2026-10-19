@@ -14,9 +14,13 @@
 //   support/mangle.cpp     identifier/namespace mangling (free helpers)
 //   support/cpp_writer.cpp indentation buffer + low-level literal/string helpers
 //   support/type_map.cpp   cp3 type -> C++ type mapping + type resolution
+//   support/value_shapes.cpp  primitive unions + object value shapes
+//   support/helper_blocks.cpp the generated-code helper blocks (new families)
 //   support/int_mode.cpp   the guarded int64 fast path + `%` lowering
 //   support/int_reads.cpp  the read-only-inside-return analysis for int mode
 //   emit/expr.cpp          expression lowering (operators, literals, tsCall/cond)
+//   emit/objects.cpp       object value shapes: member reads + literal values
+//   emit/assignment.cpp    assignment lowering (compounds, bitwise, logical)
 //   emit/call.cpp          call lowering (dispatch only, D72)
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
@@ -49,41 +53,42 @@
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic.hpp"
 #include "detail/enums.h"
+#include "detail/generator_state.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
 
-// The int64 fast-path state (D64): non-null exactly while a function's fast
-// body is being attempted (`Generator::intMode_`). `failed` means the attempt
-// cannot be proven exact and must be discarded, in which case the ordinary
-// double body is the only lowering.
-struct IntMode {
-    bool failed = false;
-    // Names read somewhere outside a `return` argument (int_reads.cpp);
-    // `nullopt` when that walk could not see the whole body. A name absent here
-    // is read only by `return`, so its bound check can be deferred from the
-    // operation to that single observation point.
-    std::optional<std::unordered_set<std::string>> readOutsideReturns;
-    // Locals whose bound check is currently deferred: their value may sit
-    // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
-    std::unordered_set<std::string> deferred;
-    // Set while emitting a statement's own expression: the one position where
-    // an assignment's value is discarded, so a raw store is allowed.
-    bool stmtExpr = false;
-};
+class Generator;
 
+// The regular-array method surface (src/std/arrays/codegen_methods.cpp): push/
+// pop, the callback set, searching, slicing, the in-place mutators and a
+// `for...of`; a friend of Generator, defined in that unit.
+namespace detail {
+struct ArrayEmitter {
+    static std::string methodCall(Generator& g, const CallExpr& c,
+                                  const MemberExpr& m);
+    static std::string callbackText(Generator& g, const CallExpr& c,
+                                    const MemberExpr& m, const CppInfo& ec,
+                                    const std::string& recvText);
+    static void forOf(Generator& g, const ForOfStatement& f, std::string& out,
+                      int indent);
+};
+}  // namespace detail
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
-// unit, and the CP3002 dedup set.
-class Generator {
+// unit, and the CP3002 dedup set (the state block inherited from
+// `GeneratorState`, detail/generator_state.h).
+class Generator : private GeneratorState {
 public:
     Generator(DiagnosticSink& sink, const SemaResult& sema,
-              const std::string& moduleName, bool lineDirectives = false);
+              const std::string& moduleName, bool lineDirectives = false,
+              const CodegenOptions& options = CodegenOptions{});
 
     // Top-level orchestration: collect names, emit every statement, assemble.
     GeneratedModule run(const Program& program);
 
 private:
+    friend struct detail::ArrayEmitter;  // src/std/arrays/codegen_methods.cpp
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
 
@@ -102,7 +107,12 @@ private:
                     std::string& defs, std::string& mainBody);
     void addFunction(const FunctionDeclaration& fd, std::string& decls, std::string& defs);
     std::string plainBody(const FunctionDeclaration& fd, const std::string& ret);
-    void emitModuleVar(const VariableDeclaration& vd, std::string& decls, std::string& mainBody);
+    void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
+                       std::string& mainBody);
+    // Reports a module-variable type M1 cannot represent (`number | string`,
+    // an object / array / class type, ...): the unit stays "not implemented"
+    // instead of being quietly mis-typed (same contract as local declarations).
+    void reportModuleVarType(const VariableDeclarator& d);
     void emitModuleVarNoInit(const detail::CppInfo& ci, const std::string& name,
                              const std::string& cv, std::string& decls);
     std::optional<Type> parameterType(const Parameter& p,
@@ -147,6 +157,10 @@ private:
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
                              const detail::CppInfo& R, const std::string& lhs,
                              const std::string& rhs);
+    // The Shape::Union half of `==`/`===` (emit/equality.cpp).
+    std::string unionEqualityText(const BinaryExpr& b, const detail::CppInfo& L,
+                                  const detail::CppInfo& R, const std::string& lhs,
+                                  const std::string& rhs);
     std::string emitLogical(const LogicalExpr& l);
     std::string emitNullish(const LogicalExpr& l);
     std::string emitUnary(const UnaryExpr& u);
@@ -165,6 +179,40 @@ private:
     std::vector<std::string> emitCallArgs(const CallExpr& c,
                                           const FunctionDeclaration* decl);
     bool isConsoleMember(const CallExpr& c) const;
+
+    // --- parallel.* / worker(...) (emit/parallel.cpp, emit/worker.cpp) --------
+    // `parallel` and `worker` are ambient builtins (spec §13); each entry point
+    // lowers onto cp3/parallel/** and reports CP3002 for anything outside the
+    // documented shapes. `parallelCallType` types the calls sema leaves
+    // ambient (the reduce accumulator's type, the `parallel.run` result
+    // marker); `effectiveType`/`bindingType` consult it first.
+    std::optional<Type> parallelCallType(const CallExpr& c) const;
+    bool parallelRange(const Expr& range, std::string& begin, std::string& end);
+    bool parallelClosureShape(const ArrowFunction& a, std::size_t count) const;
+    std::string emitParallelCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitParallelFor(const CallExpr& c);
+    std::string emitParallelReduce(const CallExpr& c);
+    std::string emitParallelRun(const CallExpr& c);
+    std::string emitParallelClosure(
+        const ArrowFunction& a, const std::vector<Type>& paramTypes,
+        const std::vector<std::string>& contextParams);
+    // `worker(...)`: the entry-unit call and its argument forms (a primitive, a
+    // worker-marked object binding, a marked object literal -> a tuple), the
+    // worker-object pre-scan, and the worker unit's own lowering
+    // (`runWorkerModule` emits only its default export as `cp3_default`).
+    std::string emitWorkerCall(const CallExpr& c);
+    std::string workerArgText(const Expr& arg);
+    std::string emitWorkerObjectLiteral(const ObjectLiteral& ol);
+    std::string emitWorkerMemberWrite(const AssignmentExpr& a);
+    void collectWorkerObjects(const Program& program);
+    void registerWorkerObject(const Type& objType, std::vector<std::string> names);
+    std::string workerParamText(const Parameter& p, const ArrowFunction& arrow,
+                                std::size_t index);
+    std::string workerObjectParamText(const ObjectType& ot, const std::string& name,
+                                      const std::optional<Type>& pt);
+    std::string workerReturnType(const ArrowFunction& arrow);
+    std::string workerBody(const ArrowFunction& arrow, const std::string& ret);
+    GeneratedModule runWorkerModule(const Program& program);
 
     // --- std/console lowering (src/std/console/codegen.cpp) ------------------
     // Every `console.<member>(...)` call lands here (emit_call.cpp keeps only
@@ -207,8 +255,8 @@ private:
     std::string emitFamilyMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitFamilyMember(const MemberExpr& m);
     std::string emitFamilyIndexRead(const IndexExpr& ix);
-    // The `IndexExpr` dispatch: the family read when the receiver is one,
-    // otherwise the ordinary not-implemented report.
+    std::string indexOperandText(const Expr& index);  // enum member -> number
+    // The `IndexExpr` dispatch: the family read, else a not-implemented report.
     std::string emitIndexExpr(const IndexExpr& ix);
     std::string emitFamilyIndexWrite(const AssignmentExpr& a);
     // The receiver text of a family method: an `Array(n)` constructor or an
@@ -226,23 +274,23 @@ private:
     std::string arrayLiteralText(const ArrayLiteral& lit, const Type& elemOverride);
     std::string declaratorInitText(const VariableDeclarator& d, const Type& declared);
 
+    // --- object value shapes (emit/objects.cpp) -------------------------------
+    std::string emitObject(const Expr& e);         // `o.a` / `o?.a` reads
+    std::string emitObjectLiteral(const Expr& e);  // `{...}` literal values
+
     // --- std/collections (src/std/collections/codegen.cpp) --------------------
-    // `new Map<K, V>()` / `new Set<T>()`, the member calls (`set`/`get`/`has`/
-    // `delete`/`clear`/`keys`/`values`/`entries`/`forEach`) and the `size` /
-    // `entries().length` property reads. Each returns "" when the form is not
-    // one of them.
+    // `new Map<K, V>()` / `new Set<T>()`, the member calls and the `size` /
+    // `entries().length` reads; each returns "" when the form is not one of them.
     std::string emitCollectionsNew(const NewExpr& n);
     std::string emitCollectionsMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitCollectionsMember(const MemberExpr& m);
 
     // --- std namespaces + primitive methods (src/std/*/codegen.cpp) ----------
     // Lower `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*` calls, the
-    // `string` method surface, and builtin property reads (`Math.PI`,
-    // `path.sep`, `process.argv`, `s.length`). Each returns "" when the form
-    // is not implemented, so the caller can report CP3002. The per-family
-    // member reads live with their lowering units too; the namespace dispatch
-    // (emitBuiltinCall / emitBuiltinMember) and the shared helpers
-    // (detail/builtin_tables.h) stay in emit/std/common.cpp.
+    // `string` method surface and builtin property reads (`Math.PI`, `path.sep`,
+    // `process.argv`, `s.length`). Each returns "" for a form it does not
+    // implement, so the caller reports CP3002; the dispatch and the shared
+    // tables (detail/builtin_tables.h) stay in emit/std/common.cpp.
     std::string emitBuiltinCall(const CallExpr& c, const MemberExpr& m);
     std::string emitBuiltinMember(const MemberExpr& m);
     std::string emitMathCall(const CallExpr& c, const MemberExpr& m);
@@ -275,10 +323,9 @@ private:
     // get/has/load calls, backed by cp3/std/env.hpp (composed on process).
     std::string emitEnvCall(const CallExpr& c, const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
-    // Native-backed std modules (src/std/crypto/codegen.cpp,
-    // src/std/network/codegen.cpp): one per-module lowering unit. Each returns
-    // "" when the form is not implemented, so the caller keeps reporting
-    // CP3002 meanwhile.
+    // Native-backed std modules (src/std/{crypto,network}/codegen.cpp): one
+    // lowering unit per module, each returning "" for a form it does not
+    // implement, so the caller keeps reporting CP3002 meanwhile.
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
     // `std/fs` (src/std/fs/codegen.cpp): the namespace table plus the
@@ -297,8 +344,7 @@ private:
     std::string emitRegexMember(const MemberExpr& m);  // source/flags reads
     // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): the
     // `Buffer.from`/`Buffer.alloc` statics, the `buf.toString`/`buf.slice`
-    // methods and the `buf.length` read. Each returns "" when the form is not
-    // one of them.
+    // methods and the `buf.length` read; "" when the form is not one of them.
     std::string emitByteBufferStaticCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMethodCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMember(const MemberExpr& m);
@@ -350,11 +396,10 @@ private:
     void emitTry(const TryStatement& ts, std::string& out, int indent);
 
     // --- enums (emit/enum.cpp) ------------------------------------------------
-    // Top-level `enum` declarations (spec 04): `collectEnums` resolves each
-    // declaration and prepends the `enum class <name> : long long` text;
-    // `emitEnumMember`/`emitEnumObjectLiteral` lower a member access and an
-    // enum-carrying object literal; `emitEnumSwitch` handles a switch statement
-    // (the same-enum lowering via `lowerEnumSwitch`, else the CP3002 stub).
+    // `collectEnums` resolves top-level `enum` declarations (spec 04) and
+    // prepends the `enum class <name> : long long` text; `emitEnumMember` and
+    // `emitEnumObjectLiteral` lower member reads and enum-carrying literals;
+    // `emitEnumSwitch` handles switches (the same-enum lowering, else the stub).
     void collectEnums(const Program& program);
     std::string emitEnumMember(const MemberExpr& m);
     std::string emitEnumObjectLiteral(const ObjectLiteral& ol);
@@ -362,9 +407,8 @@ private:
     void emitEnumSwitch(const Stmt& s, std::string& out, int indent);
 
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
-    // The fast path is emitted per function: a body with every `number`
-    // lowered to a guarded std::int64_t, plus a double wrapper that guards the
-    // arguments once and re-runs the ordinary body when a guard bails.
+    // Per function: a body with every `number` lowered to a guarded
+    // std::int64_t, plus a double wrapper that re-runs it when a guard bails.
     bool intEligible(const FunctionDeclaration& fd, const std::string& ret) const;
     std::string intBody(const FunctionDeclaration& fd, bool& kept);
     std::string intSignature(const FunctionDeclaration& fd) const;
@@ -409,71 +453,8 @@ private:
     // vector init, the top-level-await coroutine and the event-loop drain.
     void emitMain(std::string& out, const std::string& mainBody) const;
 
-    // --- state ----------------------------------------------------------------
-    // The int64 fast-path state (D64); see `struct IntMode` above.
-    std::unique_ptr<IntMode> intMode_;
-
-    DiagnosticSink& sink_;
-    const SemaResult& sema_;
-    std::string moduleName_;
-    std::string namesp_;
-
-    bool consoleImported_ = false;
-    bool lineMapping_ = false;     // --debug: emit `#line` into generated code
-    bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
-    bool needsConsoleAbi_ = false; // console async/misc members -> family header
-    bool needsEventLoop_ = false;  // async/timers: emit runEventLoop() in main
-    bool needsArith_ = false;      // `%`/int64 lowering -> cp3/core/arith.hpp include
-    bool suppressDiagnostics_ = false;  // an int64 attempt must not report
-    bool needsMath_ = false;       // Math.* -> cp3/std/math.hpp include
-    bool needsString_ = false;     // string methods -> cp3/std/string.hpp include
-    bool needsPath_ = false;       // path.* -> cp3/std/path.hpp include
-    bool needsOs_ = false;         // os.* -> cp3/std/os.hpp include
-    bool needsJson_ = false;       // JSON.stringify/parse -> cp3/std/json.hpp include
-    // The registered JSON record shapes (usage-based reification): per
-    // interface name the C++ struct text, the generated builder body and the
-    // declared field names, plus the sema shape label -> interface name. The
-    // structs materialize into the decls section on first use only.
-    std::unordered_map<std::string, std::string> jsonShapeStructs_;
-    std::unordered_map<std::string, std::string> jsonShapeBuilders_;
-    std::unordered_map<std::string, std::vector<std::string>> jsonShapeFields_;
-    std::unordered_map<std::string, std::string> jsonShapeByLabel_;
-    std::unordered_set<std::string> jsonShapeUsed_;
-    std::string jsonShapeDecls_;
-    // The unit's enums (collectEnums): the resolved model per declaration name,
-    // the accumulated `enum class` decls text, and the sema object label ->
-    // field names of every enum-carrying object literal that lowered to a
-    // `std::tuple` (the field read is `std::get<i>`).
-    std::unordered_map<std::string, detail::EnumCppInfo> enums_;
-    std::string enumDecls_;
-    std::unordered_map<std::string, std::vector<std::string>> enumObjectFields_;
-    bool needsProcess_ = false;    // process.* -> cp3/std/process.hpp include
-    bool needsEnv_ = false;        // { env } -> cp3/std/env.hpp include
-    bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
-    bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
-    bool needsRegex_ = false;      // regex literals -> cp3/core/regex.hpp include
-    bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
-    bool needsFs_ = false;         // std/fs -> cp3/std/fs.hpp include
-    bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
-    bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
-    bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
-    bool needsTuple_ = false;        // enum-carrying object literal -> <tuple>
-    bool needsEventEmitter_ = false;  // EventEmitter/Listener -> cp3/async/emitter.hpp
-    bool topLevelAwait_ = false;   // an `await` appeared at top level
-    bool inAsyncBody_ = false;     // current function body lowers to a coroutine
-    int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)
-    int uniqueCounter_ = 0;        // fresh names for generated scaffolding
-    std::string currentReturn_ = "int";
-
-    std::vector<std::unordered_map<std::string, Type>> env_;
-    // Codegen type hints for the Map-shaped std/network fields; the open
-    // marker hides their type in sema, so networkMapFieldType checks these.
-    std::unordered_map<std::uint32_t, Type> exprTypeHints_;
-    std::unordered_set<std::string> functions_;
-    std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
-    std::unordered_set<std::string> asyncFunctions_;   // `async function` names
-    std::vector<std::string> thrownBindings_;          // active `catch (e)` names
-    std::unordered_set<std::uint32_t> reported_;
+    // The per-unit state block lives in `GeneratorState`
+    // (detail/generator_state.h), inherited privately above.
 };
 
 }  // namespace cp3

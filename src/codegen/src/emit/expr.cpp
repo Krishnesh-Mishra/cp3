@@ -152,26 +152,18 @@ std::string Generator::exprPlain(const Expr& e) {
             return emitAwait(static_cast<const AwaitExpr&>(e));
         case NodeKind::MemberExpr: {
             // Builtin property reads (`Math.PI`, `path.sep`, `process.argv`,
-            // `s.length`); anything else stays CP3002 (emit_builtin.cpp).
+            // `s.length`) and a std/json record field first; then a member read
+            // of an object value shape (`o.a`, `o?.a`); anything else stays
+            // CP3002 (emit_builtin.cpp, emit/objects.cpp).
             const auto& m = static_cast<const MemberExpr&>(e);
             std::string value = emitBuiltinMember(m);
+            if (value.empty()) value = emitObject(m);
             if (!value.empty()) return value;
             notImplemented(e, "this property access");
             return "0.0";
         }
+        case NodeKind::ObjectLiteral: return emitObjectLiteral(e);
         case NodeKind::ArrowFunction: return emitListenerValue(e);  // D74
-        case NodeKind::ObjectLiteral: {
-            // An object literal with an enum-typed field lowers to a
-            // std::tuple (src/emit/enum.cpp); any other object literal stays
-            // CP3002.
-            if (std::string literal =
-                    emitEnumObjectLiteral(static_cast<const ObjectLiteral&>(e));
-                !literal.empty()) {
-                return literal;
-            }
-            notImplemented(e, "this expression");
-            return "0.0";
-        }
         default:
             notImplemented(e, "this expression");
             return "0.0";
@@ -282,6 +274,20 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
             return modCall(lhs, *b.right, rhs);
         case BinaryOp::Power:
             return "std::pow(" + lhs + ", " + rhs + ")";
+        case BinaryOp::BitAnd:
+            // ECMAScript ToInt32 on both operands (cp3/core/bitwise.hpp); the
+            // result is a double like every other cp3 `number`.
+            return "::cp3::runtime::bitwise::band(" + lhs + ", " + rhs + ")";
+        case BinaryOp::BitOr:
+            return "::cp3::runtime::bitwise::bor(" + lhs + ", " + rhs + ")";
+        case BinaryOp::BitXor:
+            return "::cp3::runtime::bitwise::bxor(" + lhs + ", " + rhs + ")";
+        case BinaryOp::ShiftLeft:
+            return "::cp3::runtime::bitwise::shl(" + lhs + ", " + rhs + ")";
+        case BinaryOp::ShiftRight:
+            return "::cp3::runtime::bitwise::shr(" + lhs + ", " + rhs + ")";
+        case BinaryOp::UnsignedShiftRight:
+            return "::cp3::runtime::bitwise::ushr(" + lhs + ", " + rhs + ")";
         case BinaryOp::LessThan:
         case BinaryOp::GreaterThan:
         case BinaryOp::LessThanEqual:
@@ -311,6 +317,23 @@ std::string Generator::emitLogical(const LogicalExpr& l) {
     const CppInfo R = info(*l.right);
     if (!L.representable || !R.representable || L.shape == Shape::Unsupported ||
         R.shape == Shape::Unsupported || L.cpp != R.cpp) {
+        // A primitive-union result (`0 || "x"`): each branch is wrapped into
+        // the canonical variant so the lambda has a single return type.
+        const CppInfo whole = info(l);
+        if (whole.representable && whole.shape == Shape::Union &&
+            isPrimitiveShape(L.shape) && isPrimitiveShape(R.shape)) {
+            const std::string lhs = expr(*l.left);
+            const std::string rhs = expr(*l.right);
+            const std::string cast = "static_cast<" + whole.cpp + ">";
+            if (l.op == LogicalOp::And) {
+                return "([&]{ auto cp3_l = (" + cast + "(" + lhs +
+                       ")); return cp3_truthy(cp3_l) ? (" + cast + "(" + rhs +
+                       ")) : cp3_l; }())";
+            }
+            return "([&]{ auto cp3_l = (" + cast + "(" + lhs +
+                   ")); return cp3_truthy(cp3_l) ? cp3_l : (" + cast + "(" +
+                   rhs + ")); }())";
+        }
         notImplemented(l, "logical operator with mixed operand types");
         return "0.0";
     }
@@ -358,6 +381,8 @@ std::string Generator::emitUnary(const UnaryExpr& u) {
             return "(-(" + expr(*u.operand) + "))";
         case UnaryOp::Plus:
             return "(+(" + expr(*u.operand) + "))";
+        case UnaryOp::BitNot:
+            return "::cp3::runtime::bitwise::bnot(" + expr(*u.operand) + ")";
         case UnaryOp::Void:
             return "((void)(" + expr(*u.operand) + "), cp3::runtime::undefined)";
         case UnaryOp::Typeof:
@@ -381,6 +406,40 @@ std::string Generator::emitTypeof(const UnaryExpr& u) {
         case Shape::Bool: return "std::string(\"boolean\")";
         case Shape::Undefined: return "std::string(\"undefined\")";
         case Shape::Null: return "std::string(\"object\")";
+        case Shape::Object: return "std::string(\"object\")";
+        case Shape::Union:
+            // A primitive union reports the held alternative.
+            return "::cp3::runtime::unions::typeOf(" + expr(*u.operand) + ")";
+        case Shape::Optional:
+        case Shape::Maybe: {
+            // A nullish option over a primitive: the empty slot is `null`
+            // ("object") or `undefined`, and `Maybe` stores which.
+            Type inner;
+            bool found = false;
+            for (const Type& part : ci.type.parts) {
+                if (!part.isNullish()) {
+                    inner = part;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found || !isPrimitiveShape(classify(inner).shape)) {
+                notImplemented(u, "typeof of a non-primitive value");
+                return "std::string(\"undefined\")";
+            }
+            if (ci.shape == Shape::Maybe) {
+                return "([&]{ const auto& cp3_v = (" + expr(*u.operand) +
+                       "); if (cp3_v.isNull()) return std::string(\"object\"); "
+                       "if (cp3_v.isUndefined()) return "
+                       "std::string(\"undefined\"); return "
+                       "::cp3::runtime::typeOf(cp3_v.value()); }())";
+            }
+            const char* empty =
+                (ci.emptyKind == NullishKind::Null) ? "object" : "undefined";
+            return "([&]{ const auto& cp3_v = (" + expr(*u.operand) +
+                   "); return cp3_v.has_value() ? ::cp3::runtime::typeOf(*cp3_v) "
+                   ": std::string(\"" + empty + "\"); }())";
+        }
         default:
             notImplemented(u, "typeof of a non-primitive value");
             return "std::string(\"undefined\")";
@@ -416,50 +475,6 @@ std::string Generator::emitConditional(const ConditionalExpr& c) {
     }
     notImplemented(c, "ternary with non-uniform branch types");
     return "0.0";
-}
-
-std::string Generator::emitAssignment(const AssignmentExpr& a) {
-    if (a.target->kind != NodeKind::Identifier) {
-        // Array/typed-view element writes (`a[1] = 9`, `u8[0] = 5`) lower to
-        // the family's checked writes first
-        // (src/std/typed-arrays/codegen_methods.cpp).
-        if (a.target->kind == NodeKind::IndexExpr) {
-            if (std::string w = emitFamilyIndexWrite(a); !w.empty()) return w;
-        }
-        notImplemented(a, "assignment to a non-identifier target");
-        return "0.0";
-    }
-    const std::string target = mapIdent(static_cast<const Identifier&>(*a.target).name);
-    const CppInfo T = info(*a.target);
-    const std::string value = expr(*a.value);
-
-    switch (a.op) {
-        case AssignOp::Assign:
-            if (T.shape == Shape::Optional && isNullishLiteral(*a.value)) {
-                return "(" + target + " = std::nullopt)";
-            }
-            return "(" + target + " = " + value + ")";
-        case AssignOp::Add:
-        case AssignOp::Subtract:
-        case AssignOp::Multiply:
-        case AssignOp::Divide: {
-            const char* op = nullptr;
-            switch (a.op) {
-                case AssignOp::Add: op = "+="; break;
-                case AssignOp::Subtract: op = "-="; break;
-                case AssignOp::Multiply: op = "*="; break;
-                default: op = "/="; break;
-            }
-            return "(" + target + " " + op + " " + value + ")";
-        }
-        case AssignOp::Modulo:
-            return "(" + target + " = " + modCall(target, *a.value, value) + ")";
-        case AssignOp::Power:
-            return "(" + target + " = std::pow(" + target + ", " + value + "))";
-        default:
-            notImplemented(a, "compound assignment operator");
-            return "0.0";
-    }
 }
 
 }  // namespace cp3

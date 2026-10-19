@@ -107,8 +107,9 @@ dap::BuildOutcome buildDebugProgram(const std::string& program,
         CollectingDiagnosticSink cgSink;
         // --debug codegen carries `#line` mapping so DWARF and gdb point at the
         // .cp3 file (the whole point of the debug adapter).
-        const GeneratedModule mod = generateModule(*entry->ast, sema, moduleName,
-                                                   cgSink, /*lineDirectives=*/true);
+        const GeneratedModule mod =
+            generateModule({*entry->ast, sema, moduleName, cgSink,
+                            /*lineDirectives=*/true});
         log += renderToText(cgSink.diagnostics(), render);
         if (cgSink.hasErrors() || (mod.source.empty() && mod.header.empty())) {
             outcome.log = log.empty() ? "cp3c: code generation produced no module\n" : log;

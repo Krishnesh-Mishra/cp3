@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the cheat sheet shows `String(x)`, but it is not listed among the core-language builtins in §03/§20."
-  }
-}

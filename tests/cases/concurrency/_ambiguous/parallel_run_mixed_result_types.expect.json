@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: what is the result type of `parallel.run` when closures return different types (heterogeneous tuple vs array)?"
-  }
-}

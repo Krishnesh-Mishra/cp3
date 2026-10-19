@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the --debug build profile is a toolchain flag with no .cp3-observable semantics."
-  }
-}

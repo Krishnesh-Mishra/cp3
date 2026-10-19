@@ -80,35 +80,71 @@ Reading a captured `let`/`var`/`const` from many closures at once is fine, since
 
 The supported tools are the ones above: read-only sharing, `parallel.reduce` for combining, and the disjoint loop-index write for filling arrays.
 
-## `worker` - isolated, message-passing tasks, one real OS thread each
+## `worker` - isolated threads with message events (decided - handle wave queued, D80)
 
-Rather than sharing memory between threads (which would leave two threads free to mutate the same object with no safe way to coordinate, since cp3 exposes no locks or atomics to users), `worker` avoids shared memory entirely. Each `worker` call spins up its own real OS thread, running its own independent event loop ([§14](14-async.md)) - not a separate OS process. A thread is far cheaper to spawn than a process, and the safety `worker` provides comes from the compiler's discipline around what's reachable inside it, not from OS-level process isolation. The tradeoff this accepts: a crash inside a worker thread can take the whole program down with it, the same as any other unhandled crash - full process-level fault isolation isn't part of what `worker` provides in beta one.
+Rather than sharing memory between threads (which would leave two threads free to mutate the same object with no safe way to coordinate, since cp3 exposes no locks or atomics to users), workers avoid shared memory entirely. Each worker runs on its own real OS thread with its own independent event loop ([§14](14-async.md)) - not a separate OS process. A thread is far cheaper to spawn than a process, and the safety a worker provides comes from the compiler's discipline around what's reachable inside it, not from OS-level process isolation. The tradeoff this accepts: a hard crash inside a worker thread can take the whole program down with it, the same as any other unhandled crash - full process-level fault isolation isn't part of what workers provide in beta one. A thrown handler error is not a crash: it is delivered to the other side as an `"error"` event (below).
+
+Workers are explicit handles, the JS Web Worker model: `new Worker(path)` starts the thread, messages go both ways with `postMessage` and arrive as events. The worker file's default export is the worker body; it runs once at thread start and receives the worker-side handle.
 
 ```cp3
-// worker.cp3
-export default (data) => {
-  // process data, return a result
-  return processedResult;
+// sum.cp3
+export default (thread) => {
+  thread.on("message", (msg) => {
+    thread.postMessage({ total: msg.n * 2 });
+  });
 };
 ```
 
 ```cp3
 // main.cp3
-import worker from "worker.cp3";
-
-const output = await worker(dataNeededForProcessing);
+const w = new Worker("./sum.cp3");
+w.on("message", (msg) => {
+  console.log(`${msg.total}`);
+});
+w.postMessage({ n: 21 });
+// the main event loop keeps running between messages
+w.terminate();
 ```
 
-`worker(...)` returns a `Promise` ([§14](14-async.md)), resolving with whatever the worker file's default export returns, or rejecting if the worker file throws - a plain `try`/`catch` around the `await` catches it, exactly like any other async call (`fs.readFile`, `process.exec`). No separate event/handle mechanism - it's the same Promise shape as everything else in std.
+- `new Worker(path)` takes a **static string literal** naming a `.cp3` file, resolved at compile time like an import - a computed path is a compile error. Starting a worker is explicit: `new Worker` is the only way, and an ordinary default import of a `.cp3` file stays an ordinary cross-module call (there is no name-based inference).
+- `w.postMessage(v)` / `thread.postMessage(v)` sends a structured-clone **deep copy**; messages queue until the other side attaches a listener and arrive in order per sender. Nothing blocks the main loop: it keeps turning between messages.
+- `w.on("message", listener)` and `w.on("error", listener)` exist on both sides (`w` on the main thread, `thread` inside the worker); multiple listeners may be attached. A thrown error inside a message handler arrives on the other side as an `"error"` event, never as a silent death.
+- `await w.request(v)` is the optional one-shot ask/answer sugar over the same channel (correlation-tagged); it resolves with the next `"message"`, so code that just wants one answer does not manage events by hand.
+- `w.terminate()` stops the worker's loop and frees its thread; pending messages are dropped; it is idempotent.
 
-Whatever crosses into a worker file is **copied in as a genuine deep copy**, not a shared reference - nothing else is implicitly reachable from inside it. This has to be a real copy rather than a shared handle across the thread boundary: atomic refcounts ([§10](10-memory-management.md)) keep the *counter* safe, but two threads mutating the same object's fields would still be a data race, and cp3 deliberately gives users no locks to prevent one. This mirrors how JS Web Workers already behave (message-passing, not shared memory), so it matches the existing JS mental model.
+Whatever crosses a worker boundary is **copied in as a genuine deep copy**, not a shared reference - nothing else is implicitly reachable from inside it. This has to be a real copy rather than a shared handle across the thread boundary: atomic refcounts ([§10](10-memory-management.md)) keep the *counter* safe, but two threads mutating the same object's fields would still be a data race, and cp3 deliberately gives users no locks to prevent one. This mirrors how JS Web Workers already behave (message-passing, not shared memory), so it matches the existing JS mental model.
+
+Status: the current build still accepts the earlier call-shaped form (`import worker from "./worker.cp3"; await worker(data)`, `worker(...)` returning a `Promise`); the handle surface above is the decided replacement (**D80**), and the handle wave (M2-PLAN) lands it and migrates the worker corpus cases.
 
 ## When to use which
 
-| Need                                                                         | Use               |
-| ---------------------------------------------------------------------------- | ----------------- |
-| Same operation across a big array/range                                      | `parallel.for`    |
-| Same computation, combine results (sum, max, etc.)                           | `parallel.reduce` |
-| A few different, independent functions at once                               | `parallel.run`    |
-| One long-running, independent background task, isolated from everything else | `worker`          |
+| Need                                                                         | Use                                      |
+| ---------------------------------------------------------------------------- | ---------------------------------------- |
+| Same operation across a big array/range                                      | `parallel.for`                           |
+| Same computation, combine results (sum, max, etc.)                           | `parallel.reduce`                        |
+| A few different, independent functions at once                               | `parallel.run`                           |
+| One long-running, independent thread you talk to over time                   | `new Worker(...)` + `on`/`postMessage`   |
+| One isolated task, one answer back                                           | `new Worker(...)` + `await w.request(v)` |
+
+## Servers across threads: `createServer({ threads })` (decided, queued - D79)
+
+The `std/network` server is single-loop by default, and that stays the exact
+default behavior. A server can opt into one event loop per OS thread:
+
+```cp3
+const app = createServer({ threads: os.cpus() });
+```
+
+`threads` must be an integer >= 1; `1` and the absent option mean today's
+single-loop server. With `n` threads, each loop runs its own server instance
+with its own module-level state - the same isolation `worker` already has, so
+`n` threads means `n` copies of every module-level binding and cross-loop state
+goes through `worker` message passing, never shared memory. A connection is
+pinned for its whole lifetime to the loop that accepted it (WebSocket upgrades
+included), which keeps handlers and per-connection state single-threaded. No
+locks, atomics, or shared closures are exposed, exactly as everywhere else in
+this section; `parallel.*` remains the CPU data-parallelism mechanism, and
+`threads` exists only to scale I/O across cores. Platform binding: POSIX uses
+`SO_REUSEPORT` per loop, Windows uses one shared listening socket with accept
+handoff. Full decision record: D79 in `docs/rough/DECISIONS.md`.
 

@@ -14,6 +14,7 @@
 // =============================================================================
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include "cp3/analysis.hpp"
@@ -26,6 +27,23 @@ namespace cp3 {
 struct GeneratedModule {
     std::string header;  // contents of the generated .hpp
     std::string source;  // contents of the generated .cpp
+};
+
+// `worker(...)` (spec 13): the entry unit lowers the call onto a worker
+// module's default export. The CLI resolves `import worker from "<local>.cp3"`
+// and hands codegen the module's name and generated-header include path;
+// codegen itself never walks the dependency graph.
+struct WorkerImport {
+    std::string moduleName;  // the worker module's logical name
+    std::string headerPath;  // its generated .hpp, as written in the include
+};
+
+// Per-unit codegen options outside the AST/sema side tables. All-default for
+// every ordinary unit; the CLI sets `worker` for an entry unit that imports a
+// worker and `workerModule` while generating the worker unit itself.
+struct CodegenOptions {
+    std::optional<WorkerImport> worker;
+    bool workerModule = false;
 };
 
 class CodeGenerator {
@@ -45,6 +63,13 @@ public:
     GeneratedModule generate(const Program& program,
                              const SemaResult& sema,
                              const std::string& moduleName);
+
+    // `options` extends the boundary with the concurrency lowering's per-unit
+    // inputs (spec 13); the 3-argument overload delegates with the defaults.
+    GeneratedModule generate(const Program& program,
+                             const SemaResult& sema,
+                             const std::string& moduleName,
+                             const CodegenOptions& options);
 
     // Convenience: generate against an empty SemaResult (types stay unknown).
     // Intended for probes/tests, not for the real pipeline.

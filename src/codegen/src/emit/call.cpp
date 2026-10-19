@@ -122,9 +122,10 @@ std::string Generator::emitCall(const CallExpr& c) {
             functions_.find(name) == functions_.end()) {
             return emitParseBuiltin(c, name);
         }
-        if (name == "worker") {
-            notImplemented(c, "worker(...)");
-            return "0.0";
+        if (name == "worker" && functions_.find(name) == functions_.end()) {
+            // The ambient `worker(...)` lowering (spec 13); a user-declared
+            // `worker` function wins (checked here, before the disambiguation).
+            return emitWorkerCall(c);
         }
         if (!c.typeArgs.empty()) {
             notImplemented(c, "calls with type arguments");
@@ -148,8 +149,8 @@ std::string Generator::emitCall(const CallExpr& c) {
         const auto& m = static_cast<const MemberExpr&>(*c.callee);
         if (m.object && m.object->kind == NodeKind::Identifier &&
             static_cast<const Identifier&>(*m.object).name == "parallel") {
-            notImplemented(c, "parallel.*");
-            return "0.0";
+            // `parallel.for` / `parallel.reduce` / `parallel.run` (spec 13).
+            return emitParallelCall(c, m);
         }
         // `Promise.all/race/allSettled(...)`.
         if (m.object && m.object->kind == NodeKind::Identifier &&

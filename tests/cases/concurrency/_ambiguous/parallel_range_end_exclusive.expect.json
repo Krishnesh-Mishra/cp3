@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: is the `a..b` range end exclusive? Inferred from the loop example but never stated."
-  }
-}

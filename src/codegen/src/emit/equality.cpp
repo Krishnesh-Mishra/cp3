@@ -4,9 +4,10 @@
 // The equality rules over nullish operands: `null == undefined` is true while
 // `===` is false; an `std::optional` or the flavored `Maybe<T>` only equals a
 // value it holds, and `===` additionally requires the empty slot's flavor to
-// agree. Same-representation operands compare directly; differing primitive
-// kinds are false either way (D15). `emitBinary` (emit/expr.cpp) dispatches
-// here.
+// agree. A primitive union operand compares through cp3/core/union.hpp
+// (`===` requires the held alternative to match, `==` coerces with ToNumber).
+// Same-representation operands compare directly; differing primitive kinds are
+// false either way (D15). `emitBinary` (emit/expr.cpp) dispatches here.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -34,6 +35,44 @@ std::string maybeNullishCompare(const std::string& mb, Shape nullish,
 }
 
 }  // namespace
+
+// A primitive union (`std::variant`, Shape::Union): the union side is always
+// passed first, so the runtime helper can `visit` it; two unions of the same
+// C++ spelling compare directly. Impossible pairs report through
+// `notImplemented` and answer with a constant (D15).
+std::string Generator::unionEqualityText(const BinaryExpr& b, const CppInfo& L,
+                                         const CppInfo& R, const std::string& lhs,
+                                         const std::string& rhs) {
+    const bool isEqual = (b.op == BinaryOp::Equal || b.op == BinaryOp::StrictEqual);
+    const bool isStrict = (b.op == BinaryOp::StrictEqual || b.op == BinaryOp::StrictNotEqual);
+    const char* op = isEqual ? "==" : "!=";
+
+    const bool lUnion = (L.shape == Shape::Union);
+    const bool rUnion = (R.shape == Shape::Union);
+    if (lUnion && rUnion) {
+        if (L.cpp == R.cpp) {
+            return "(" + lhs + " " + op + " " + rhs + ")";
+        }
+        notImplemented(b, "== between different union types");
+        return isEqual ? "false" : "true";
+    }
+    const std::string uni = lUnion ? lhs : rhs;
+    const std::string val = lUnion ? rhs : lhs;
+    const CppInfo& other = lUnion ? R : L;
+    // A union never holds a nullish alternative (`null`/`undefined` are not
+    // primitive members), so a nullish other side never matches.
+    if (other.shape == Shape::Null || other.shape == Shape::Undefined) {
+        return isEqual ? "false" : "true";
+    }
+    if (isPrimitiveShape(other.shape)) {
+        const std::string call = std::string("::cp3::runtime::unions::") +
+                                 (isStrict ? "strictEq" : "looseEq") + "(" + uni +
+                                 ", " + val + ")";
+        return isEqual ? "(" + call + ")" : "(! " + call + ")";
+    }
+    notImplemented(b, "== involving a union and a non-primitive value");
+    return isEqual ? "false" : "true";
+}
 
 std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
                                     const CppInfo& R, const std::string& lhs,
@@ -85,12 +124,27 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
         return "((" + opt + ".has_value()) && (*" + opt + " " + op + " " + val + "))";
     }
 
-    // Maybe vs Maybe, or Maybe vs T: compare the unwrapped value (a nullish
-    // side never equals a non-nullish value, so the guard is required).
+    // Maybe vs Maybe, or a Maybe vs T: compare the unwrapped value (guarded).
     if (L.shape == Shape::Maybe || R.shape == Shape::Maybe) {
         const std::string mb = (L.shape == Shape::Maybe) ? lhs : rhs;
         const std::string val = (L.shape == Shape::Maybe) ? rhs : lhs;
         return "((" + mb + ".hasValue()) && (" + mb + ".value() " + op + " " + val + "))";
+    }
+
+    // A primitive union (`std::variant`, Shape::Union) on either side: the
+    // one-sided `==` coerces through the runtime helpers, `===` matches only
+    // the held alternative (see `unionEqualityText`).
+    if (L.shape == Shape::Union || R.shape == Shape::Union) {
+        return unionEqualityText(b, L, R, lhs, rhs);
+    }
+
+    // A number-backed enum member compared with a plain number compares its
+    // underlying value (JS parity: `Color.Red === 0` is true).
+    if ((L.shape == Shape::Enum && R.cpp == "double") ||
+        (R.shape == Shape::Enum && L.cpp == "double")) {
+        const std::string& member = (L.shape == Shape::Enum) ? lhs : rhs;
+        const std::string& other = (L.shape == Shape::Enum) ? rhs : lhs;
+        return "((static_cast<double>(" + member + ")) " + op + " " + other + ")";
     }
 
     // Same representation: compare directly. D15 keeps loose `==` same-type.

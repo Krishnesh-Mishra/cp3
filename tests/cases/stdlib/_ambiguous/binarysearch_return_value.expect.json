@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the return value of `binarySearch(target)` (index vs boolean vs -1) is not specified."
-  }
-}

@@ -27,6 +27,7 @@
 #include <utility>
 #include <vector>
 
+#include "detail/parallel.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -130,31 +131,9 @@ static CppInfo classifyClassValue(const Type& t) {
 
 // `T | null` / `T | undefined` / the `T?` shorthand / `T | null | undefined`
 // over a primitive `T` -> `std::optional<T>`, or the two-flavor `Maybe<T>`
-// when both nullish kinds are present (an implementation detail of
-// `classify`). Any other union has no M1 spelling.
-static void classifyNullishUnion(const Type& t, CppInfo& info) {
-    std::vector<Type> nonNullish;
-    for (const Type& part : t.parts) {
-        if (!part.isNullish()) {
-            nonNullish.push_back(part);
-        }
-    }
-    if (nonNullish.size() != 1) return;
-    const CppInfo inner = classify(nonNullish.front());
-    if (!inner.representable || !isPrimitiveShape(inner.shape)) return;
-    info.representable = true;
-    info.emptyKind = nullishKindOf(t);
-    if (info.emptyKind == NullishKind::Mixed) {
-        // `T | null | undefined` must keep the two nullish flavors apart
-        // (JS `null !== undefined`), which no `std::optional` can: use the
-        // flavored Maybe<T>.
-        info.shape = Shape::Maybe;
-        info.cpp = "cp3::runtime::Maybe<" + inner.cpp + ">";
-    } else {
-        info.shape = Shape::Optional;
-        info.cpp = "std::optional<" + inner.cpp + ">";
-    }
-}
+// when both nullish kinds are present. Also the single-member option over an
+// object value shape (`{...} | null` -> `std::optional<Struct>`). The
+// primitive-only union spellings live in support/value_shapes.cpp.
 
 Type promiseOf(const Type& value) {
     Type p(TypeKind::Class, "Promise");
@@ -174,6 +153,13 @@ CppInfo classify(const Type& raw) {
         t = t.literalBaseType();
     }
     info.type = t;
+    // The parallel.run result marker must be caught before the Array arm:
+    // classifyFamily keys on the element type alone and would spell it
+    // `Array<double>`. Keeping it non-representable leaves the binding `auto`.
+    if (isParallelRunType(t)) {
+        info.shape = Shape::Unknown;
+        return info;
+    }
     switch (t.kind) {
         case TypeKind::Number:
             info.shape = Shape::Number; info.representable = true; info.cpp = "double";
@@ -209,7 +195,14 @@ CppInfo classify(const Type& raw) {
             }
             return info;
         }
-        case TypeKind::Union: classifyNullishUnion(t, info); return info;
+        case TypeKind::Union:
+            classifyValueUnion(t, info);
+            if (!info.representable) classifyNullishUnion(t, info);
+            return info;
+        case TypeKind::Object:
+            // A structural `$o{...}` shape: an all-primitive object becomes a
+            // generated value struct (support/value_shapes.cpp).
+            return classifyObjectValue(t);
         case TypeKind::Class:
             return classifyClassValue(t);
         case TypeKind::Enum: return classifyEnum(t);  // spec 04: enum class
@@ -352,34 +345,6 @@ bool isStaticallyNullish(const Type& t) {
 }  // namespace detail
 
 // -----------------------------------------------------------------------------
-// Generator: declaration-type environment
-// -----------------------------------------------------------------------------
-
-void Generator::pushScope() { env_.emplace_back(); }
-
-void Generator::popScope() {
-    if (!env_.empty()) {
-        env_.pop_back();
-    }
-}
-
-void Generator::declare(const std::string& name, const std::optional<Type>& type) {
-    if (!type) return;
-    if (env_.empty()) env_.emplace_back();
-    env_.back()[name] = *type;
-}
-
-std::optional<Type> Generator::lookup(const std::string& name) const {
-    for (auto it = env_.rbegin(); it != env_.rend(); ++it) {
-        auto found = it->find(name);
-        if (found != it->end()) {
-            return found->second;
-        }
-    }
-    return std::nullopt;
-}
-
-// -----------------------------------------------------------------------------
 // Generator: type resolution
 // -----------------------------------------------------------------------------
 
@@ -387,6 +352,14 @@ std::optional<Type> Generator::bindingType(const VariableDeclarator& d) const {
     if (d.type) {
         if (auto t = typeOfNode(*d.type)) {
             return t;
+        }
+    }
+    // A `parallel.reduce` result takes the accumulator type even though sema
+    // leaves the ambient call unknown (the binding must not be `auto`: its
+    // closure was lowered against the init's C++ type).
+    if (d.init && d.init->kind == NodeKind::CallExpr) {
+        if (auto t = parallelCallType(static_cast<const CallExpr&>(*d.init))) {
+            return *t;
         }
     }
     if (const Type* t = sema_.typeOf(d.nodeId)) {
@@ -417,6 +390,9 @@ std::optional<Type> Generator::resolvedBindingType(const VariableDeclarator& d) 
 
 Type Generator::effectiveType(const Expr& e) const {
     if (const auto t = networkMapFieldType(e)) return *t;
+    if (e.kind == NodeKind::CallExpr) {
+        if (auto t = parallelCallType(static_cast<const CallExpr&>(e))) return *t;
+    }
     if (e.kind == NodeKind::Identifier) {
         const auto& id = static_cast<const Identifier&>(e);
         if (auto t = lookup(id.name)) return *t;

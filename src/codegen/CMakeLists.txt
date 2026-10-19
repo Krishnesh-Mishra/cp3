@@ -17,18 +17,27 @@ set(cp3_codegen_sources
     src/support/cpp_writer.cpp
     src/support/line_map.cpp
     src/support/type_map.cpp
+    src/support/scope_env.cpp
+    src/support/value_shapes.cpp
+    src/support/helper_blocks.cpp
     src/support/int_mode.cpp
     src/support/int_reads.cpp
     src/emit/expr.cpp
     src/emit/equality.cpp
+    src/emit/objects.cpp
+    src/emit/assignment.cpp
     src/emit/call.cpp
     src/emit/async.cpp
     src/emit/stmt.cpp
     src/emit/decl.cpp
     src/emit/enum.cpp
     src/emit/regex.cpp
+    src/emit/parallel.cpp
+    src/emit/worker.cpp
+    src/emit/worker_scan.cpp
     ../std/typed-arrays/codegen.cpp
     ../std/typed-arrays/codegen_methods.cpp
+    ../std/arrays/codegen_methods.cpp
     src/emit/std/common.cpp
     ../std/math/codegen.cpp
     ../std/os/codegen.cpp

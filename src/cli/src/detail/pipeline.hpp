@@ -38,12 +38,23 @@ std::unique_ptr<ModuleGraph> loadModuleGraph(SourceManager& sm, const SourceFile
 // diagnostic was reported.
 bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink);
 
-// Emits C++20 for one checked program through the three-argument generator,
-// consulting `sema` for inferred types and resolved bindings. `lineDirectives`
-// turns on `#line` source mapping, which the Debug profile needs so gdb (and
-// the DAP adapter) see .cp3 files and lines.
-GeneratedModule generateModule(const Program& program, const SemaResult& sema,
-                               const std::string& moduleName, DiagnosticSink& sink,
-                               bool lineDirectives = false);
+// The inputs of one `generateModule` call. `lineDirectives` turns on `#line`
+// source mapping, which the Debug profile needs so gdb (and the DAP adapter)
+// see .cp3 files and lines. `options` carries the concurrency lowering's
+// per-unit inputs (spec 13): the worker import of an entry unit, or
+// worker-module mode for the worker unit itself. (The struct keeps the call
+// within the parameter budget.)
+struct GenerateModuleInput {
+    const Program& program;
+    const SemaResult& sema;
+    const std::string& moduleName;
+    DiagnosticSink& sink;
+    bool lineDirectives = false;
+    CodegenOptions options;
+};
+
+// Emits C++20 for one checked program through the generator, consulting
+// `input.sema` for inferred types and resolved bindings.
+GeneratedModule generateModule(const GenerateModuleInput& input);
 
 }  // namespace cp3::cli

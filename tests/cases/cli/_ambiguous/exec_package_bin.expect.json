@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: cp3 exec resolving and running a package's bin tool is not expressible as a .cp3 case."
-  }
-}

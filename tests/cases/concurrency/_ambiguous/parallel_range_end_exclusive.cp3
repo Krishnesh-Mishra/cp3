@@ -1,2 +1,0 @@
-let n = 0;
-parallel.for(0..5, (i) => { n = n + 1; });

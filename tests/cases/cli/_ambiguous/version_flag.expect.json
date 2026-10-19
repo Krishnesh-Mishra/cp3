@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the version command's output is a CLI property, not a .cp3 case."
-  }
-}

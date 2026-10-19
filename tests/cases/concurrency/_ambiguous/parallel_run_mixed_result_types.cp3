@@ -1,3 +1,0 @@
-import console from "std/console";
-let r = parallel.run(() => 1, () => "two");
-console.log(`${r.length}`);

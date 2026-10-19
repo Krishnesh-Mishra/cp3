@@ -4,13 +4,10 @@
 //
 // Owns the frozen `CodeGenerator::generate` boundary (cp3/codegen.hpp), the
 // `Generator` constructor/diagnostic helpers, the module namespace, and the
-// synthesized assembly: the generated .hpp, the .cpp's per-TU helper block and
-// `main()`. The per-concern emit units (type_map/emit_expr/emit_stmt/emit_decl)
-// are driven by `Generator::run` here.
-//
-// Out-of-scope AST nodes report CP3002 (deduped per nodeId) and emit a
-// compilable stub; the generator never throws and never aborts. The dedup is
-// what drives the CLI's exit-3 "skipped" behavior.
+// synthesized assembly (the generated .hpp, the .cpp's per-TU helper block and
+// `main()`), driven by `Generator::run`. Out-of-scope AST nodes report CP3002
+// (deduped per nodeId) and emit a compilable stub; the generator never throws,
+// and the dedup drives the CLI's exit-3 "skipped" behavior.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -18,6 +15,8 @@
 
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic_codes.hpp"
+#include "detail/cpp_writer.h"
+#include "detail/helper_blocks.h"
 #include "detail/mangle.h"
 
 namespace cp3 {
@@ -203,35 +202,21 @@ inline bool cp3_truthy(const cp3::runtime::EventValue& v) {
 
 )CP3HELPERS";
 
-// Prefix every line of `text` with `pad`. Used to re-indent the top-level
-// statements when they are wrapped in the top-level-`await` coroutine.
-std::string indentText(const std::string& text, const std::string& pad) {
-    std::string out;
-    out.reserve(text.size());
-    bool atLineStart = true;
-    for (char c : text) {
-        if (atLineStart && c != '\n') {
-            out += pad;
-            atLineStart = false;
-        }
-        out += c;
-        if (c == '\n') {
-            atLineStart = true;
-        }
-    }
-    return out;
-}
-
 }  // namespace
 
-// -----------------------------------------------------------------------------
-// Generator - construction, diagnostics and top-level orchestration
-// -----------------------------------------------------------------------------
+// --- Generator - construction, diagnostics and top-level orchestration -------
+
+GeneratorState::GeneratorState(DiagnosticSink& sink, const SemaResult& sema,
+                               const std::string& moduleName, bool lineMapping,
+                               const CodegenOptions& options)
+    : sink_(sink), sema_(sema), moduleName_(moduleName),
+      namesp_(suggestNamespace(moduleName)), options_(options),
+      lineMapping_(lineMapping) {}
 
 Generator::Generator(DiagnosticSink& sink, const SemaResult& sema,
-                     const std::string& moduleName, bool lineDirectives)
-    : sink_(sink), sema_(sema), moduleName_(moduleName),
-      namesp_(suggestNamespace(moduleName)), lineMapping_(lineDirectives) {}
+                     const std::string& moduleName, bool lineDirectives,
+                     const CodegenOptions& options)
+    : GeneratorState(sink, sema, moduleName, lineDirectives, options) {}
 
 void Generator::notImplemented(const Node& node, const std::string& what) {
     // Inside an int64 fast-path attempt nothing is reported and nothing is
@@ -249,6 +234,11 @@ void Generator::notImplemented(const Node& node, const std::string& what) {
 }
 
 GeneratedModule Generator::run(const Program& program) {
+    // The worker unit lowers only its default-export arrow (spec 13); the
+    // entry unit's ordinary walk follows.
+    if (options_.workerModule) {
+        return runWorkerModule(program);
+    }
     for (const auto& stmtPtr : program.body) {
         if (!stmtPtr) continue;
         collectFunctionNames(*stmtPtr);
@@ -261,13 +251,16 @@ GeneratedModule Generator::run(const Program& program) {
     }
 
     // Usage-based reification (STDLIB docs §04): register the unit's interface
-    // record shapes before the emit walk, so a `JSON.parse<T>` use can name T
-    // even when the declaration comes later in the unit.
+    // record shapes before the emit walk, so a later `JSON.parse<T>` can name T.
     collectJsonShapes(program);
 
-    // The unit's enums (spec 04): resolved before the emit walk so a use can
-    // precede its declaration (src/emit/enum.cpp).
+    // The unit's enums (spec 04): resolved before the emit walk (emit/enum.cpp).
     collectEnums(program);
+
+    // The worker-object pre-scan (spec 13): only when this unit imports a
+    // worker, mark the object literals that lower to `std::tuple` and the
+    // kernel shapes the `worker(...)` calls accept (src/emit/worker.cpp).
+    collectWorkerObjects(program);
 
     std::string decls;   // function forward declarations
     std::string defs;    // function definitions
@@ -279,21 +272,20 @@ GeneratedModule Generator::run(const Program& program) {
         }
     }
 
-    // The enum declarations come first (a binding, signature or record shape
-    // can name one); the record structs of the shapes actually used as
-    // `JSON.parse<T>` materialize after them (they must precede the builders
-    // and the bindings that read them).
-    decls = enumDecls_ + jsonShapeDecls_ + decls;
+    // Enums first (signatures and record shapes can name one), then the object
+    // value and JSON record structs, complete before any builder reads them.
+    decls = enumDecls_ +
+            objectDeclsFor(jsonShapeDecls_ + decls + defs + mainBody) +
+            jsonShapeDecls_ + decls;
 
-    // The family include (D69) is needed wherever a generated declaration or
-    // definition names its C++ spellings, including signatures whose array
-    // type was resolved from a body rather than an annotation.
+    // The family include (D69) is needed wherever a generated spelling appears.
     const std::string familyUse = decls + defs + mainBody;
     if (familyUse.find("::cp3::runtime::Array") != std::string::npos ||
         familyUse.find("::cp3::runtime::TypedArray") != std::string::npos ||
         familyUse.find("::cp3::runtime::SharedArrayBuffer") !=
             std::string::npos ||
-        familyUse.find("::cp3::runtime::DataView") != std::string::npos) {
+        familyUse.find("::cp3::runtime::DataView") != std::string::npos ||
+        familyUse.find("std::variant<") != std::string::npos) {  // union slot (docs 09)
         needsTypedArray_ = true;
     }
     if (familyUse.find("::cp3::runtime::collections::") != std::string::npos) {
@@ -310,6 +302,11 @@ GeneratedModule Generator::run(const Program& program) {
         familyUse.find("::cp3::runtime::Listener") != std::string::npos) {
         needsEventEmitter_ = true;
     }
+    // The operator wave's spellings: bitwise/shift helpers and the unions.
+    if (familyUse.find("::cp3::runtime::bitwise::") != std::string::npos) needsBitwise_ = true;
+    if (familyUse.find("std::variant<") != std::string::npos) needsUnion_ = true;
+    if (familyUse.find("::cp3::runtime::unions::") != std::string::npos) needsUnion_ = true;
+    if (familyUse.find("cp3_obj_") != std::string::npos) needsObject_ = true;
     // The core regex value (D48): the same rule - a parameter or exported
     // binding can name the C++ spelling without a literal having been lowered
     // in this unit's own statements.
@@ -323,9 +320,7 @@ GeneratedModule Generator::run(const Program& program) {
     return module;
 }
 
-// -----------------------------------------------------------------------------
-// Generator - assembly (generated .hpp / .cpp)
-// -----------------------------------------------------------------------------
+// --- Generator - assembly (generated .hpp / .cpp) -----------------------------
 
 std::string Generator::buildHeader(const std::string& decls) const {
     const std::string guard =
@@ -335,7 +330,12 @@ std::string Generator::buildHeader(const std::string& decls) const {
     out += "#ifndef " + guard + "\n";
     out += "#define " + guard + "\n\n";
     out += "#include <optional>\n";
-    out += "#include <string>\n\n";
+    out += "#include <string>\n";
+    if (needsUnion_) {
+        // A signature can name a primitive union (`std::variant<...>`).
+        out += "#include <variant>\n";
+    }
+    out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
     if (needsTuple_) {
         // An enum-carrying object literal can surface in a forward declaration
@@ -390,10 +390,13 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     out += "#include <optional>\n";
     out += "#include <string>\n";
     if (needsTuple_) out += "#include <tuple>\n";  // enum-carrying object literals
+    if (needsUnion_) out += "#include <variant>\n";  // primitive unions
     if (needsEventLoop_) out += "#include <vector>\n";  // Promise input lists
     out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
     out += "#include \"cp3/core/error.hpp\"\n";
+    if (needsBitwise_) out += "#include \"cp3/core/bitwise.hpp\"\n";  // & | ^ ~ << >> >>>
+    if (needsUnion_) out += "#include \"cp3/core/union.hpp\"\n";  // primitive unions
     if (needsArith_) {
         out += "#include \"cp3/core/arith.hpp\"\n";  // `%` lowering / int64 fast path
     }
@@ -425,24 +428,32 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     }
     if (needsBuffer_) out += "#include \"cp3/std/buffer.hpp\"\n";
     if (needsFs_) out += "#include \"cp3/std/fs.hpp\"\n";
+    if (needsParallel_) {
+        out += "#include \"cp3/parallel/parallel.hpp\"\n";  // parallel.* (spec 13)
+    }
+    if (needsWorker_) {
+        out += "#include \"cp3/parallel/worker.hpp\"\n";  // worker(...) (spec 13)
+        if (options_.worker && !workerModule_) {
+            // The worker module's default export (`cp3_default`).
+            out += "#include \"" + options_.worker->headerPath + "\"\n";
+        }
+    }
     out += "\n";
     out += kHelperBlock;
-    if (needsTypedArray_) {
-        out += kTypedArrayHelperBlock;
-    }
-    if (needsBuffer_) {
-        out += kBufferHelperBlock;
-    }
-    if (needsEventEmitter_) {
-        out += kEventEmitterHelperBlock;
-    }
+    if (needsTypedArray_) out += kTypedArrayHelperBlock;
+    if (needsBuffer_) out += kBufferHelperBlock;
+    if (needsEventEmitter_) out += kEventEmitterHelperBlock;
+    if (needsUnion_) out += unionHelperBlock();
+    if (needsObject_) out += objectHelperBlock();
     out += "\nnamespace " + namesp_ + " {\n\n";
     out += decls;
     out += "\n";
     out += defs;
     out += "\n}  // namespace " + namesp_ + "\n\n";
-    out += "using namespace " + namesp_ + ";\n\n";
-    emitMain(out, mainBody);
+    if (!workerModule_) {
+        out += "using namespace " + namesp_ + ";\n\n";
+        emitMain(out, mainBody);
+    }
     return out;
 }
 
@@ -474,14 +485,19 @@ void Generator::emitMain(std::string& out, const std::string& mainBody) const {
     out += "}\n";
 }
 
-// -----------------------------------------------------------------------------
-// CodeGenerator (frozen boundary)
-// -----------------------------------------------------------------------------
+// --- CodeGenerator (frozen boundary) ------------------------------------------
 
 GeneratedModule CodeGenerator::generate(const Program& program,
                                         const SemaResult& sema,
                                         const std::string& moduleName) {
-    Generator generator(sink_, sema, moduleName, lineDirectives_);
+    return generate(program, sema, moduleName, CodegenOptions{});
+}
+
+GeneratedModule CodeGenerator::generate(const Program& program,
+                                        const SemaResult& sema,
+                                        const std::string& moduleName,
+                                        const CodegenOptions& options) {
+    Generator generator(sink_, sema, moduleName, lineDirectives_, options);
     return generator.run(program);
 }
 

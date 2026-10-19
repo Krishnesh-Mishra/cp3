@@ -695,6 +695,88 @@ that auto-fills like any pending entry.
 Scheduling: queued behind the perf wave and wave 2 (classes); mid-size wave
 (parser + sema + codegen + cli). Move up on request.
 
+## Network scale mode wave (queued - D79)
+
+`std/network` gains the opt-in multi-loop server: `createServer({ threads })`
+starts `n` event loops, one per OS thread, each with its own uWS app and
+per-loop module state; connections stay pinned to their accepting loop; POSIX
+distributes accepts via `SO_REUSEPORT`, Windows uses one shared listening
+socket with `WSADuplicateSocket` handoff. Full semantics and the rejected
+alternatives: **D79** in DECISIONS.md.
+
+Scope: `src/std/network/runtime_server.cpp` + `runtime_loop.hpp` + the
+codegen/service surface for the options object. The single-loop path is
+untouched by construction; the net-suite corpus pins it.
+
+Scheduling: queued behind the active wave queue (functions-closures,
+concurrency, regex and the classes/modules/types/control-flow/generics
+landings), because the cross-loop state story references the `worker`
+semantics the concurrency wave owns; start after the concurrency wave lands.
+Small wave (one runtime family + codegen surface + docs).
+
+Acceptance:
+1. Net-suite and the full corpus stay 0 failed; `threads` absent is
+   byte-identical to today's single-loop server.
+2. Probes: per-loop accept distribution with `threads = os.cpus()` under load
+   (POSIX `SO_REUSEPORT` kernel path, Windows shared-listener path), per-loop
+   module-state isolation, and a WebSocket echo through the scaled loops.
+3. Bench rows: `ws-echo` and `json-api` at `threads=1` vs `threads=N` vs the
+   Go comparator, recorded under the D60/D65 conventions.
+4. Canonical rebuild + lint 0 errors; landing record per the standard flow.
+
+## Worker handles wave (queued - D80)
+
+`worker` moves from the call-shaped form (`import worker from "./x.cp3";
+await worker(v)`) to an explicit handle with message events: `new Worker("./x.cp3")`
+on the main side (`on("message"/"error")`, `postMessage`, `terminate`), and the
+module's default export receiving the worker-side `thread` handle once at thread
+start (`thread.on("message")`, `thread.postMessage`). Messages are
+structured-clone deep copies; no shared memory, no locks; module-level state is
+per worker; a thrown handler error is delivered as an `"error"` event while a
+hard crash stays process-fatal; `await w.request(v)` is the optional one-shot
+sugar. Full surface and the removed name-magic: **D80** in DECISIONS.md,
+spec §13.
+
+Surface (spec §13):
+
+- Handle types: the worker entry annotates `thread: Thread<In, Out>` (`In`
+  main-to-worker, `Out` worker-to-main); the annotation is the single source of
+  truth and the main side infers `Worker<In, Out>`. `void` in a direction makes
+  that direction's send surface a compile error; payloads are ordinary copyable
+  cp3 value types, and functions/closures/promises/live handles/unknown
+  payloads are compile errors.
+- Inline form: `new Worker((thread: Thread<In, Out>) => { ... })` compiles
+  through the same worker-unit pipeline as a file (synthesized unit, its own
+  module state, no access to enclosing locals); the file form stays the
+  recommendation for structure.
+
+Scope: `src/runtime/include/cp3/parallel/worker.hpp` (persistent thread +
+per-handle inbox/outbox queues), `src/codegen/src/emit/worker.cpp` +
+`worker_scan.cpp` (handle form: `NewExpr` on the builtin `Worker`, the member
+surface, the default-export signature), `src/cli/src/toolchain/worker_module.cpp`
+(`new Worker("path")` resolution replacing the binding-name rule), spec §13 +
+the std-module docs, and the concurrency corpus cases (call-form cases migrate;
+`worker_call_shape` and `worker_crash_takes_process_down` promote under the new
+surface).
+
+Scheduling: right after the active landing queue (concurrency, regex, classes,
+control-flow, modules, types, generics, functions-closures); it rewrites the
+worker surface the concurrency landing introduces, so it merges a master that
+already contains it. Small-to-mid wave (one runtime family + codegen surface +
+docs + case migration).
+
+Acceptance:
+1. Concurrency family 0 skipped / 0 failed; both worker markers promote; the
+   full corpus stays 0 failed.
+2. Probes: one long-lived worker answering N messages while the main loop keeps
+   serving timers between them (non-blocking evidence), per-worker module-state
+   isolation, terminate frees the thread (no leak), FIFO ordering per sender,
+   and an `"error"` event for a thrown handler.
+3. The name magic is gone: a default import of a `.cp3` file not referenced by
+   `new Worker` is an ordinary module call; `new Worker` with a non-literal path
+   is a compile error.
+4. Canonical rebuild + lint 0 errors; landing record per the standard flow.
+
 ## Corpus weight at M2 open (runnable = 843)
 
 stdlib 190 (16 passed, 173 skipped) · types 86 (66) · arrays-strings 82 (13) ·
