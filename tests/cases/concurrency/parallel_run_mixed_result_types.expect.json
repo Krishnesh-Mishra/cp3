@@ -1,6 +1,11 @@
 {
-  "mode": "check",
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
   "error": {
-    "contains": "AMBIGUOUS: what is the result type of `parallel.run` when closures return different types (heterogeneous tuple vs array)?"
+    "code": "CP3904",
+    "line": 2,
+    "col": 9,
+    "contains": "must all return the same type"
   }
 }

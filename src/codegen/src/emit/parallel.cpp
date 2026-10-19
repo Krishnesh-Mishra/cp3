@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/parallel.h"
 #include "detail/type_map.h"
@@ -41,6 +42,12 @@ namespace {
 bool isNamed(const Expr* e, const std::string& name) {
     if (e == nullptr || e->kind != NodeKind::Identifier) return false;
     return static_cast<const Identifier&>(*e).name == name;
+}
+
+// A printable label for a diagnostic message: the nominal label when the type
+// carries one (class, enum, type parameter), the kind name otherwise.
+std::string parallelTypeLabel(const Type& t) {
+    return t.name.empty() ? typeKindName(t.kind) : t.name;
 }
 
 // The two plain parameter names of a reduce body; false for anything else
@@ -264,6 +271,37 @@ std::string Generator::emitParallelRun(const CallExpr& c) {
             return "0.0";
         }
         closures.push_back(emitParallelClosure(body, {}, {}));
+    }
+    // parallel.run yields a homogeneous array: every closure must resolve to
+    // the same result type. Mixed returns have no defined element type, so the
+    // call reports CP3904 instead of silently taking the first closure's type.
+    std::optional<Type> element;
+    std::size_t firstClosure = 0;
+    for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+        const auto& body = static_cast<const ArrowFunction&>(*c.arguments[i]);
+        auto it = sema_.functions.find(body.nodeId);
+        if (it == sema_.functions.end()) continue;
+        Type t = it->second.returnType;
+        if (t.isLiteral()) t = t.literalBaseType();
+        if (t.isUnknown() || t.isError() || t.isVoid()) continue;
+        if (!element) {
+            element = t;
+            firstClosure = i + 1;
+            continue;
+        }
+        if (t == *element) continue;
+        if (intMode_) intMode_->failed = true;
+        if (!suppressDiagnostics_) {
+            sink_.error(diagcode::kParallelRunMixedResultTypes, c.span,
+                        "parallel.run() closures must all return the same type "
+                        "(closure " + std::to_string(firstClosure) +
+                        " returns '" + parallelTypeLabel(*element) +
+                        "', closure " + std::to_string(i + 1) + " returns '" +
+                        parallelTypeLabel(t) +
+                        "'); the result is a homogeneous array, so make every "
+                        "closure return one type");
+        }
+        break;
     }
     return "::cp3::runtime::parallelRun(" + joinStrings(closures, ", ") + ")";
 }

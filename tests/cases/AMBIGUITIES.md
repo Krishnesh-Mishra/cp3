@@ -8,14 +8,14 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 40** across 12 categories.
+**Total markers: 36** across 12 categories.
 
 | Category | Markers |
 | --- | ---: |
 | `arrays-strings` | 1 |
 | `async` | 1 |
 | `classes` | 4 |
-| `concurrency` | 6 |
+| `concurrency` | 2 |
 | `control-flow` | 6 |
 | `errors` | 1 |
 | `functions-closures` | 4 |
@@ -24,7 +24,7 @@ python tests/runner/run_tests.py --write-registry
 | `modules` | 3 |
 | `stdlib` | 2 |
 | `types` | 4 |
-| **Total** | **40** |
+| **Total** | **36** |
 
 ## `arrays-strings`
 
@@ -51,10 +51,6 @@ python tests/runner/run_tests.py --write-registry
 
 | case file | question |
 | --- | --- |
-| `concurrency/_ambiguous/parallel_capture_diagnostic_text.expect.json` | the spec pins that a captured-let reassignment inside parallel.* is a compile error, but not the diagnostic wording/code. |
-| `concurrency/_ambiguous/parallel_import_required.expect.json` | is `parallel` a global builtin (used bare in §13) or a std import? It is not listed in the std module table. |
-| `concurrency/_ambiguous/parallel_range_end_exclusive.expect.json` | is the `a..b` range end exclusive? Inferred from the loop example but never stated. |
-| `concurrency/_ambiguous/parallel_run_mixed_result_types.expect.json` | what is the result type of `parallel.run` when closures return different types (heterogeneous tuple vs array)? |
 | `concurrency/_ambiguous/worker_call_shape.expect.json` | is `worker(...)` the called default export of an imported `.cp3` file (as the §13 example implies), and is `import worker from "x.cp3"` the canonical shape? |
 | `concurrency/_ambiguous/worker_crash_takes_process_down.expect.json` | the spec says a worker-thread crash can take the whole program down, but the observable exit code/output is not pinned. |
 

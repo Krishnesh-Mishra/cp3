@@ -737,6 +737,19 @@ hard crash stays process-fatal; `await w.request(v)` is the optional one-shot
 sugar. Full surface and the removed name-magic: **D80** in DECISIONS.md,
 spec §13.
 
+Surface (spec §13):
+
+- Handle types: the worker entry annotates `thread: Thread<In, Out>` (`In`
+  main-to-worker, `Out` worker-to-main); the annotation is the single source of
+  truth and the main side infers `Worker<In, Out>`. `void` in a direction makes
+  that direction's send surface a compile error; payloads are ordinary copyable
+  cp3 value types, and functions/closures/promises/live handles/unknown
+  payloads are compile errors.
+- Inline form: `new Worker((thread: Thread<In, Out>) => { ... })` compiles
+  through the same worker-unit pipeline as a file (synthesized unit, its own
+  module state, no access to enclosing locals); the file form stays the
+  recommendation for structure.
+
 Scope: `src/runtime/include/cp3/parallel/worker.hpp` (persistent thread +
 per-handle inbox/outbox queues), `src/codegen/src/emit/worker.cpp` +
 `worker_scan.cpp` (handle form: `NewExpr` on the builtin `Worker`, the member

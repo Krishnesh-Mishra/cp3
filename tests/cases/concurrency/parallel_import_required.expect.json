@@ -1,6 +1,5 @@
 {
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: is `parallel` a global builtin (used bare in §13) or a std import? It is not listed in the std module table."
-  }
+  "mode": "run",
+  "stdout": "3\n",
+  "exitCode": 0
 }

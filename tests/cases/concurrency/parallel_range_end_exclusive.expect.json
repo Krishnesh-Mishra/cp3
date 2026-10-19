@@ -1,6 +1,5 @@
 {
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: is the `a..b` range end exclusive? Inferred from the loop example but never stated."
-  }
+  "mode": "run",
+  "stdout": "10\n",
+  "exitCode": 0
 }

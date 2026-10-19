@@ -1047,3 +1047,66 @@ surface and migrates the worker corpus cases. The markers
 `worker_call_shape` and `worker_crash_takes_process_down` stay ambiguous until
 that wave, then promote against this ruling (canonical handle shape; thrown
 handler error becomes a catchable `"error"` event).
+
+### D80 addendum - typed channels and the inline form (lead freeze, 2026-10-19)
+
+Final surface freeze before the handle wave launches (user-approved; supersedes
+the annotation-free reading of D80 above where the two differ).
+
+- The worker entry annotates its handle: `thread: Thread<In, Out>`; `In` is
+  main-to-worker, `Out` is worker-to-main. That annotation is the single source
+  of truth: the main side infers `Worker<In, Out>` for `new Worker(...)`, so
+  main-side code needs no annotations of its own. A missing annotation on the
+  worker entry (file default export or inline arrow) is a compile error.
+- `void` in one direction makes that direction's send surface a compile error:
+  a `Thread<In, void>` worker cannot `thread.postMessage`, and `w.postMessage`
+  / `w.request` on a `Worker<void, Out>` cannot send. `Thread<unknown, unknown>`
+  waits for the runtime unknown carrier (opt-in, later).
+- Payloads are ordinary cp3 value types and copy on send exactly like an
+  assignment copy (numbers, strings, booleans, arrays, records, enums, unions
+  of those). Functions, closures, promises, live handles and unresolved
+  (unknown) payload types are compile errors.
+- Inline form: `new Worker((thread: Thread<In, Out>) => { ... })` compiles
+  through the same worker-unit pipeline as a file (synthesized unit, its own
+  module state, no access to enclosing locals - pass data with messages). The
+  file form stays the recommendation for anything with structure; moving from
+  inline to file is moving the body and swapping the arrow for a path.
+- `await w.request(v)` resolves with the next `Out` message; on the worker
+  side messages arrive as `"message"` events.
+
+## Audit promotions, sixth batch: concurrency (2026-10-19, lead)
+
+Ruled from the wave report (section 5, "decisions where the docs were silent")
+and canonical probes on the landed concurrency surface.
+
+- Structural rulings (report 5.1-5.5, 5.7-5.10): `parallel` stays a bare
+  ambient builtin (D34, no import); ranges are end-exclusive with
+  `static_cast<std::int64_t>(expr)` bounds; the chunked `parallel.reduce`
+  combine gate covers exactly `acc + i` from literal `0`, `acc * i` from
+  literal `1` and `i > acc ? i : acc` from literal `0`; every other reduce
+  keeps the exact sequential 4-argument form; `parallel.run` yields a
+  homogeneous array carried by the `$parallelRun` marker; closures lower as
+  `[&]` capture lambdas behind the sema capture-safety walk; worker objects
+  mark through exactly one un-reassigned single-declared binding; a worker
+  argument that cannot be proven copyable stays CP3002 (a skip, never a wrong
+  deep copy).
+- `parallel_capture_diagnostic_text`: pinned to the existing wording; a
+  captured reassignment is CP3902 at 2:1.
+- `parallel_import_required`: bare `parallel.reduce(1..3, 0, (s, i) => s + i)`
+  runs and prints `3`.
+- `parallel_range_end_exclusive`: `0..n` is `[0, n)`; `parallel.reduce(0..5, 0,
+  (s, i) => s + i)` is `10`. The old marker source tripped the capture rule
+  (`n = n + 1` inside `parallel.for`), so the case carries the reduce form.
+- `parallel_run_mixed_result_types`: mixed closure result types are a type
+  error, not a first-closure pick. Codegen resolves every closure's result and
+  reports CP3904 (`kParallelRunMixedResultTypes`, catalog row) at the
+  `parallel.run` call (`2:9` in the case), exit 1 in run mode, no C++
+  invocation. A closure whose result cannot be resolved still skips the check
+  (that path stays CP3002 until codegen can type it).
+- Held: `worker_call_shape` and `worker_crash_takes_process_down` stay
+  ambiguous; D80 owns that surface. The handle wave promotes against its
+  ruling (canonical `new Worker(path)` shape; a thrown handler error becomes a
+  catchable `"error"` event; a hard crash stays process-fatal for beta one).
+
+Four markers promoted (registry 40 to 36); concurrency keeps the two D80
+markers. Probes: `build/scratch/rounds/evidence/concurrency/batch7-probe.txt`.
