@@ -863,3 +863,38 @@ explicitly deferred with named exit-3 errors per the M2 plan, not scaffold.
   carrier; candidate after the types wave), and
   `stdlib/_ambiguous/regex_test_method` (carried by the new regex wave, M2
   wave 19, as a lead-authorized promotion).
+
+## Audit promotions, fourth batch: operators + the enum comparison (2026-10-19, lead)
+
+Ruled from canonical-build probes on the landed operators surface; the docs
+are silent on each, so they follow the standing JS-parity goal (D78). The
+operators wave also landed the runtime basis for each ruling
+(`cp3/core/bitwise.hpp` implements ECMAScript ToInt32/ToUint32 with the shift
+count masked by 31).
+
+- `bitwise_wide`: bitwise/shift are the ECMAScript int32 operations;
+  `1 << 40` prints `256`.
+- `eq_fixed_mismatch`: `==`/`===` between two fixed mismatched types is legal
+  and false for both forms (`1 == true` and `1 === true` print `false`; D15).
+- `nan_print`: printing a NaN number prints `NaN` (D9).
+- `null_undefined_eq`: `null == undefined` is true, `null === undefined` is
+  false (D15).
+- `unary_plus_string`: unary `+` on a string is a compile error, not a
+  conversion (CP3406 at 2:1, `invalid operand type 'string' for unary '+'`;
+  D17).
+- `unsigned_shift_negative`: `-1 >>> 28` prints `15` (ToUint32 semantics).
+- enums `compare_member_to_number`: a number-backed enum member compared with
+  a plain number compares the underlying value (`Color.Red === 0` is true;
+  codegen casts through `static_cast<double>` in `emitEquality`).
+- Union clarification (with the arrays-strings landing): loose `==` over a
+  one-sided value union coerces through JS abstract equality (spec 05:
+  `1 == "1"` is true for a union-held value), while a fixed non-union type
+  mismatch stays false under D15. Both are pinned in the corpus
+  (`union_eq_coerce`, the mixed-array cases), and the landing resolves the
+  flagged D15/spec-05 clash in spec 05's favor for the union case only.
+
+Six operators markers and the enums marker promoted (registry 58 to 51);
+operators is the first family with zero ambiguous markers. Still open with
+owners in AUDIT-FOLLOWUPS.md: `numeric_value_via_index` (still a raw C++
+compile error), `finally_return_overrides`, `async_arrow_function`, plus the
+arrays/network gaps listed in the third batch.

@@ -8,7 +8,7 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 58** across 14 categories.
+**Total markers: 51** across 13 categories.
 
 | Category | Markers |
 | --- | ---: |
@@ -17,16 +17,15 @@ python tests/runner/run_tests.py --write-registry
 | `classes` | 4 |
 | `concurrency` | 6 |
 | `control-flow` | 6 |
-| `enums` | 2 |
+| `enums` | 1 |
 | `errors` | 1 |
 | `functions-closures` | 4 |
 | `generics` | 2 |
 | `memory-weak` | 6 |
 | `modules` | 3 |
-| `operators` | 6 |
 | `stdlib` | 4 |
 | `types` | 4 |
-| **Total** | **58** |
+| **Total** | **51** |
 
 ## `arrays-strings`
 
@@ -83,7 +82,6 @@ python tests/runner/run_tests.py --write-registry
 
 | case file | question |
 | --- | --- |
-| `enums/_ambiguous/compare_member_to_number.expect.json` | comparing an enum member to a raw number (Color.Red === 0) |
 | `enums/_ambiguous/numeric_value_via_index.expect.json` | observing a number-backed enum's underlying numeric value via array indexing (enum-to-number conversion) |
 
 ## `errors`
@@ -126,17 +124,6 @@ python tests/runner/run_tests.py --write-registry
 | `modules/_ambiguous/default_export_function_decl.expect.json` | Is `export default function name(...)` a valid default-export form, or must the default be an expression/object (`export default { add }`) as the spec's examples show? |
 | `modules/_ambiguous/prelude_strong_weak_order.expect.json` | When `_prelude.cp3` (strong) and `_prelude.weak.cp3` sit in the same folder, the spec fixes injection order (same, then strong, then weak) but does not pin the observable effect when both inject conflicting/different imports. |
 | `modules/_ambiguous/relative_specifier_form.expect.json` | Local module specifier form: bare `base.cp3` (as the spec's own `import worker from "worker.cp3"` example) vs. ES-relative `./base.cp3`. The spec says 'plain ES module semantics' but its example is bare. |
-
-## `operators`
-
-| case file | question |
-| --- | --- |
-| `operators/_ambiguous/bitwise_wide.expect.json` | bitwise operators on `number` (64-bit double): JS int32 wraparound vs C++ int64 (1 << 40) |
-| `operators/_ambiguous/eq_fixed_mismatch.expect.json` | `==`/`===` between two fixed mismatched types (number vs boolean): section 3 says any two different-type values may be compared, section 5 says a mismatched-type comparison between two fixed types would not compile |
-| `operators/_ambiguous/nan_print.expect.json` | stdout rendering of NaN (JS 'NaN' vs fmt 'nan') |
-| `operators/_ambiguous/null_undefined_eq.expect.json` | `null == undefined` / `null === undefined`: spec keeps the two concepts separate (TS-style) but does not define cross-comparison |
-| `operators/_ambiguous/unary_plus_string.expect.json` | unary `+` numeric coercion of a string operand |
-| `operators/_ambiguous/unsigned_shift_negative.expect.json` | unsigned right shift `>>>` semantics for negative operands and int32 vs int64 width |
 
 ## `stdlib`
 

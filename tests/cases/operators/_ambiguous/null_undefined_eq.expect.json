@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: `null == undefined` / `null === undefined`: spec keeps the two concepts separate (TS-style) but does not define cross-comparison"
-  }
-}

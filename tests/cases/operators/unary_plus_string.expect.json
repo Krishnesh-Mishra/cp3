@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3406",
+    "line": 2,
+    "col": 1,
+    "contains": "invalid operand type 'string' for unary '+'"
+  }
+}
