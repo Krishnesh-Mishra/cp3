@@ -78,6 +78,9 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     // `std/date` (src/std/date/codegen.cpp): the `Date.*` statics and the Date
     // value's instance methods (`d.addDays(1)`, `d.getFullYear()`).
     if (std::string date = emitDateCall(c, m); !date.empty()) return date;
+    // Core regex literals (D48; src/emit/regex.cpp): `r.test(s)`, `r.match(s)`,
+    // `r.exec(s)` on a RegExp value.
+    if (std::string regex = emitRegexCall(c, m); !regex.empty()) return regex;
     if (m.object && m.object->kind == NodeKind::ArrayLiteral) {
         std::string literal = emitStringMethodCall(c, m);
         if (!literal.empty()) return literal;
@@ -117,6 +120,8 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     // Enum member access (`Color.Green`) and the enum-carrying object
     // literal's field read (src/emit/enum.cpp).
     if (std::string member = emitEnumMember(m); !member.empty()) return member;
+    // Core regex literals (D48; src/emit/regex.cpp): `.source` / `.flags`.
+    if (std::string regex = emitRegexMember(m); !regex.empty()) return regex;
     if (std::string math = emitMathMember(m); !math.empty()) return math;
     // `std/network` field reads (`res.status`, `res.ok`, `req.method`, ...).
     if (std::string net = emitNetworkMemberRead(m); !net.empty()) return net;

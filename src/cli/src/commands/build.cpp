@@ -160,10 +160,16 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
 // path, or on an MSVC toolchain (the vendored archives are GCC/Clang builds).
 std::optional<NativeBuildFlags> applyNativePackages(
     const CliOptions& opt, const Toolchain& tc,
-    const std::vector<std::string>& importedStdModules, BuildLayout& layout) {
+    const std::vector<std::string>& importedStdModules, BuildLayout& layout,
+    bool usesRegex) {
     NativeBuildFlags flags;
-    const std::vector<const NativePackage*> natives =
+    std::vector<const NativePackage*> natives =
         selectNativePackages(importedStdModules);
+    // Core-language backends (D48) join the same list; selected from the
+    // generated module's content, not the import graph.
+    const std::vector<const NativePackage*> core =
+        selectCoreNativePackages(usesRegex);
+    natives.insert(natives.end(), core.begin(), core.end());
     if (natives.empty()) return flags;
 
     if (tc.msvc) {
@@ -261,8 +267,14 @@ int buildWithToolchain(const BuildRequest& request) {
                      describeToolchain(tc).c_str());
     }
 
+    // D48: the core regex backend is needed exactly when the generated C++
+    // names it (the literal lowering and the usage-based include scan in
+    // codegen both leave the include in mod.source).
+    const bool usesRegex =
+        mod.source.find("cp3/core/regex.hpp") != std::string::npos;
     const std::optional<NativeBuildFlags> nativeFlags =
-        applyNativePackages(opt, tc, *request.importedStdModules, layout);
+        applyNativePackages(opt, tc, *request.importedStdModules, layout,
+                            usesRegex);
     if (!nativeFlags.has_value()) return kExitCompileError;
 
     std::vector<CacheEntry> manifest = loadManifest(layout.manifestPath);

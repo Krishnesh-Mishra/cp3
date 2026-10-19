@@ -1,0 +1,3 @@
+import console from "std/console";
+let m = /([0-9])/g.match("122333");
+console.log(m.join(","));

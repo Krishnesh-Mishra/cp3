@@ -1,0 +1,1 @@
+https://github.com/PCRE2Project/pcre2.git pcre2-10.49 6f9d7c1373262c541324a16a358785b33ef116cf 2026-10-19

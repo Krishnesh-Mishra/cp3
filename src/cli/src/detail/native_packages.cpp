@@ -12,6 +12,8 @@
 
 #include <algorithm>
 
+#include "detail/native_regex.hpp"
+
 #include "../../../std/buffer/native.hpp"
 #include "../../../std/collections/native.hpp"
 #include "../../../std/console/native.hpp"
@@ -60,6 +62,12 @@ std::vector<const NativePackage*> selectNativePackages(
                       row->specifier) != importedStdSpecifiers.end();
         if (imported) selected.push_back(row);
     }
+    return selected;
+}
+
+std::vector<const NativePackage*> selectCoreNativePackages(bool usesRegex) {
+    std::vector<const NativePackage*> selected;
+    if (usesRegex) selected.push_back(&kRegexCoreNativePackage);
     return selected;
 }
 

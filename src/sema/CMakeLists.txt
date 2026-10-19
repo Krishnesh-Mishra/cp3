@@ -23,6 +23,7 @@ set(cp3_sema_sources
     src/checks/ops_check.cpp
     src/checks/stmt_check.cpp
     src/checks/flow_check.cpp
+    src/checks/regex_check.cpp
     src/support/symbols.cpp
     src/checks/banned.cpp
     src/checks/parallel_check.cpp

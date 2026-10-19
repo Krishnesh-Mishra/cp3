@@ -310,6 +310,12 @@ GeneratedModule Generator::run(const Program& program) {
         familyUse.find("::cp3::runtime::Listener") != std::string::npos) {
         needsEventEmitter_ = true;
     }
+    // The core regex value (D48): the same rule - a parameter or exported
+    // binding can name the C++ spelling without a literal having been lowered
+    // in this unit's own statements.
+    if (familyUse.find("::cp3::runtime::regex::Regex") != std::string::npos) {
+        needsRegex_ = true;
+    }
 
     GeneratedModule module;
     module.header = buildHeader(decls);
@@ -360,6 +366,11 @@ std::string Generator::buildHeader(const std::string& decls) const {
         // can name `Ref<EventEmitter>`/`Listener`.
         out += "#include \"cp3/async/emitter.hpp\"\n";
     }
+    if (needsRegex_) {
+        // Core regex literals (D48): a signature or module-scope binding can
+        // name `::cp3::runtime::regex::Regex`.
+        out += "#include \"cp3/core/regex.hpp\"\n";
+    }
     out += "\n";
     out += "namespace " + namesp_ + " {\n\n";
     out += decls;
@@ -386,6 +397,7 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsArith_) {
         out += "#include \"cp3/core/arith.hpp\"\n";  // `%` lowering / int64 fast path
     }
+    if (needsRegex_) out += "#include \"cp3/core/regex.hpp\"\n";  // regex literals
     if (needsEventLoop_) {
         out += "#include \"cp3/async/promise.hpp\"\n";  // Promise/await/timers
     }

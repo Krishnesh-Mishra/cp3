@@ -22,6 +22,7 @@ set(cp3_runtime_sources
     ../std/console/runtime_pump.cpp
     ../std/console/runtime_pump_read.cpp
     src/core/error.cpp
+    src/core/regex.cpp
     src/async/eventloop.cpp
     src/parallel/parallel.cpp
     src/async/promise.cpp
@@ -47,6 +48,13 @@ target_include_directories(cp3_runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/libsodium/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/libuv/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/uWebSockets/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/pcre2/include"
+)
+# PCRE2 is consumed as a static 8-bit library: pcre2.h needs both defines
+# before it is included (src/core/regex.cpp is the only TU that includes it).
+target_compile_definitions(cp3_runtime PRIVATE
+    PCRE2_STATIC=1
+    PCRE2_CODE_UNIT_WIDTH=8
 )
 # Since D72 the std family ABI headers (cp3/std/*.hpp) and the typed-array
 # headers live in each family's include/ tree under src/std/; the moved TUs

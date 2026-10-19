@@ -26,6 +26,7 @@ set(cp3_codegen_sources
     src/emit/stmt.cpp
     src/emit/decl.cpp
     src/emit/enum.cpp
+    src/emit/regex.cpp
     ../std/typed-arrays/codegen.cpp
     ../std/typed-arrays/codegen_methods.cpp
     src/emit/std/common.cpp

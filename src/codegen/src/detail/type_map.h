@@ -97,6 +97,11 @@ bool classifyCollections(const Type& t, CppInfo& info);
 // every other type.
 bool classifyDate(const Type& t, CppInfo& info);
 
+// The core regex value type (D48; src/emit/regex.cpp): a nominal class named
+// "RegExp" lowering to `::cp3::runtime::regex::Regex`. Returns false for every
+// other type.
+bool classifyRegex(const Type& t, CppInfo& info);
+
 // The nominal `Buffer` of std/buffer (src/std/buffer/codegen.cpp): a
 // `TypeKind::Class` named "Buffer" -> `::cp3::runtime::buffer::Buffer`.
 bool classifyByteBuffer(const Type& t, CppInfo& info);

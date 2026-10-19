@@ -292,6 +292,9 @@ private:
     // std/date (src/std/date/codegen.cpp): the `Date.*` statics and the Date
     // value's instance methods; pure family, backed by cp3/std/date.hpp.
     std::string emitDateCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitRegexLiteral(const RegExpLiteral& lit);  // D48, cp3/core/regex.hpp
+    std::string emitRegexCall(const CallExpr& c, const MemberExpr& m);  // test/match/exec
+    std::string emitRegexMember(const MemberExpr& m);  // source/flags reads
     // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): the
     // `Buffer.from`/`Buffer.alloc` statics, the `buf.toString`/`buf.slice`
     // methods and the `buf.length` read. Each returns "" when the form is not
@@ -448,6 +451,7 @@ private:
     bool needsEnv_ = false;        // { env } -> cp3/std/env.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
+    bool needsRegex_ = false;      // regex literals -> cp3/core/regex.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
     bool needsFs_ = false;         // std/fs -> cp3/std/fs.hpp include
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include

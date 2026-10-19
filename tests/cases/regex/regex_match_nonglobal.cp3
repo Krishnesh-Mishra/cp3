@@ -1,0 +1,4 @@
+import console from "std/console";
+let m = /(5)(y)/.match("5y5y");
+console.log(m.join("|"));
+console.log(/(5)(y)/.match("zzz").length);

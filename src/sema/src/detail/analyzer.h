@@ -220,6 +220,14 @@ private:
     std::optional<Type> dateMember(const std::string& prop);
     std::optional<Type> dateInstanceMember(const Type& recv,
                                            const std::string& prop);
+    // Core regex literals (src/sema/src/checks/regex_check.cpp): a RegExp
+    // value's documented members (`.test`/`.match`/`.exec` + `.source`/`.flags`).
+    std::optional<Type> regexInstanceMember(const Type& recv,
+                                            const std::string& prop);
+    // The closed-surface probe memberOfProbe calls for a RegExp receiver: a
+    // miss is CP3305 with the implemented names as candidates (like Date).
+    Type memberOfRegex(const Type& recv, const std::string& prop,
+                       const SourceSpan& span);
     std::optional<Type> fsMember(const std::string& prop);
     // std/fs receiver field reads (src/std/fs/sema.cpp): the documented
     // `FileStats` fields (`stat.modifiedAt` types as the nominal Date class);
@@ -453,6 +461,15 @@ std::vector<std::string> dateInstanceMemberNames();
 // routes a Date receiver's members to the family table and reports CP3305 for
 // a miss, so the class never falls back to the permissive ambient shape.
 bool isDateClass(const Type& t);
+
+// The nominal RegExp value type (core regex literals, D48;
+// src/sema/src/checks/regex_check.cpp). expr_check types a RegExpLiteral as
+// `regexLiteralType()`; member_check routes a RegExp receiver's members to the
+// family table and reports CP3305 for a miss, so the class never falls back to
+// the permissive ambient shape.
+Type regexLiteralType();
+bool isRegexClass(const Type& t);
+std::vector<std::string> regexInstanceMemberNames();
 
 // The exact default-import statement for a missing std module binding (e.g.
 // `import Math from "std/math";`), or "" when `name` names no std module.

@@ -47,7 +47,9 @@ Type Analyzer::inferExpr(Expr& e) {
         case NodeKind::TemplateLiteral:
             return inferTemplate(static_cast<TemplateLiteral&>(e));
         case NodeKind::RegExpLiteral:
-            return withType(e, ambient());
+            // Core regex literal (D48): the nominal RegExp class; the member
+            // surface lives in checks/regex_check.cpp.
+            return withType(e, regexLiteralType());
         case NodeKind::Identifier:
             return inferIdentifier(static_cast<Identifier&>(e));
         case NodeKind::ThisExpr:

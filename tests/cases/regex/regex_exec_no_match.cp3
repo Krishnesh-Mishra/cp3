@@ -1,0 +1,4 @@
+import console from "std/console";
+let m = /zzz/.exec("abc");
+console.log(m.length);
+console.log(m.join("|"));

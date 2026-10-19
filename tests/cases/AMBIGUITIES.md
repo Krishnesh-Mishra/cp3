@@ -8,7 +8,7 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 88** across 15 categories.
+**Total markers: 87** across 15 categories.
 
 | Category | Markers |
 | --- | ---: |
@@ -25,9 +25,9 @@ python tests/runner/run_tests.py --write-registry
 | `memory-weak` | 6 |
 | `modules` | 3 |
 | `operators` | 6 |
-| `stdlib` | 11 |
+| `stdlib` | 10 |
 | `types` | 4 |
-| **Total** | **88** |
+| **Total** | **87** |
 
 ## `arrays-strings`
 
@@ -180,7 +180,6 @@ python tests/runner/run_tests.py --write-registry
 | `stdlib/_ambiguous/json_parse_untyped_typeof_narrow.expect.json` | whether `typeof` narrowing works directly on the `unknown` result of untyped JSON.parse is not shown. |
 | `stdlib/_ambiguous/json_stringify_indent_format.expect.json` | the exact whitespace/indentation produced by `JSON.stringify(value, indent)` is not pinned. |
 | `stdlib/_ambiguous/math_round_negative_half.expect.json` | Math is "Node/JS-style" but JS rounds -2.5 to -2 while C++ round() gives -3; the negative-half case is not pinned. |
-| `stdlib/_ambiguous/regex_test_method.expect.json` | regex literals are a core feature, but which RegExp methods (.test/.match/.exec) exist is not specified. |
 | `stdlib/_ambiguous/string_conversion_global.expect.json` | the cheat sheet shows `String(x)`, but it is not listed among the core-language builtins in §03/§20. |
 
 ## `types`

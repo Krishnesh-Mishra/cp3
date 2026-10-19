@@ -112,6 +112,7 @@ std::string Generator::exprPlain(const Expr& e) {
             return "nullptr";
         case NodeKind::UndefinedLiteral:
             return "cp3::runtime::undefined";
+        case NodeKind::RegExpLiteral: return emitRegexLiteral(static_cast<const RegExpLiteral&>(e));
         case NodeKind::Identifier:
             return emitIdentifier(static_cast<const Identifier&>(e));
         case NodeKind::TemplateLiteral:
@@ -131,9 +132,8 @@ std::string Generator::exprPlain(const Expr& e) {
         case NodeKind::CallExpr:
             return emitCallOrFamily(static_cast<const CallExpr&>(e));
         case NodeKind::NewExpr: {
-            // std/network + std/collections constructors first, then the
-            // builtin `new EventEmitter()` (D74), then the JS-compat family
-            // constructors; anything else reports.
+            // Order: std/network + std/collections constructors, then the
+            // builtin `new EventEmitter()` (D74), then the JS-compat family.
             if (std::string net = emitNetworkNew(static_cast<const NewExpr&>(e));
                 !net.empty()) {
                 return net;
@@ -370,6 +370,11 @@ std::string Generator::emitUnary(const UnaryExpr& u) {
 
 std::string Generator::emitTypeof(const UnaryExpr& u) {
     const CppInfo ci = info(*u.operand);
+    // A regex value is a reference (object) type: `typeof r === "object"`
+    // (D16; the shape itself is Unknown, so the switch cannot decide it).
+    if (ci.type.kind == TypeKind::Class && ci.type.name == "RegExp") {
+        return "std::string(\"object\")";
+    }
     switch (ci.shape) {
         case Shape::Number: return "std::string(\"number\")";
         case Shape::String: return "std::string(\"string\")";

@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: regex literals are a core feature, but which RegExp methods (.test/.match/.exec) exist is not specified."
-  }
-}

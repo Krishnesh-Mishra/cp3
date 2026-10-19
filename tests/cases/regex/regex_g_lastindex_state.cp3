@@ -1,0 +1,6 @@
+import console from "std/console";
+let r = /o/g;
+console.log(r.test("foo") ? "t" : "f");
+console.log(r.test("foo") ? "t" : "f");
+console.log(r.test("foo") ? "t" : "f");
+console.log(r.test("foo") ? "t" : "f");

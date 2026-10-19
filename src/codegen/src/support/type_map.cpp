@@ -114,6 +114,7 @@ static CppInfo classifyClassValue(const Type& t) {
     if (classifyCollections(t, info)) return info;
     // The `std/date` value type (src/std/date/codegen.cpp).
     if (classifyDate(t, info)) return info;
+    if (classifyRegex(t, info)) return info;  // core regex (src/emit/regex.cpp)
     // The builtin EventEmitter (D74): a reference type, so its C++
     // spelling is `Ref<EventEmitter>` (cp3/async/emitter.hpp).
     if (t.name == "EventEmitter") {
