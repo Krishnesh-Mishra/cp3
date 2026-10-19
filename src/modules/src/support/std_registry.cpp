@@ -16,6 +16,9 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <vector>
+
+#include "cp3/std_modules.hpp"
 
 namespace cp3::modules {
 
@@ -87,3 +90,17 @@ const char* removedModuleMessage(std::string_view specifier) {
 }
 
 }  // namespace cp3::modules
+
+namespace cp3 {
+
+// Public surface (cp3/std_modules.hpp): the specifier list the LSP completion
+// offers inside `import ... from "|"`. Table order is the docs order.
+std::vector<std::string> stdModuleSpecifiers() {
+    std::vector<std::string> specifiers;
+    for (const modules::StdModuleDef& def : modules::kStdModules) {
+        specifiers.emplace_back(def.specifier);
+    }
+    return specifiers;
+}
+
+}  // namespace cp3

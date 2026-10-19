@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: parseInt is backed by std::strtol; whether a 0x prefix is honored (base detection) is not pinned."
-  }
-}

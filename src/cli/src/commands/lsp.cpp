@@ -25,6 +25,7 @@
 #include "cp3/lsp.hpp"
 
 #include "detail/commands.hpp"
+#include "detail/lsp_intel.hpp"
 #include "detail/pipeline.hpp"
 
 namespace cp3::cli {
@@ -112,9 +113,13 @@ std::vector<lsp::RawDiagnostic> checkText(const std::string& path,
 
 }  // namespace
 
+// The LSP command also installs the intel hooks (src/commands/lsp_intel*.cpp):
+// the semantic engine behind completion/hover/definition/symbols/signature/
+// formatting (M2-LSP-INTEL). `src/format/format.cpp` is shared with `cp3c fmt`
+// so the formatter's bytes and the LSP formatting result cannot drift.
 int cmdLsp(const CliOptions& opt) {
     (void)opt;  // `lsp` has its own argument surface (validated in cli.cpp)
-    return lsp::runStdioServer(&checkText);
+    return lsp::runStdioServer(&checkText, makeIntelHooks());
 }
 
 }  // namespace cp3::cli

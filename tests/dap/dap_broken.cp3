@@ -1,0 +1,4 @@
+// tests/dap/dap_broken.cp3 - a program the frontend must reject.
+// Used by tests/dap/dap_check.py: `launch` on it reports a clean error
+// instead of hanging (the adapter never reaches gdb).
+let broken: string = 42;

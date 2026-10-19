@@ -31,8 +31,9 @@ bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink) {
 }
 
 GeneratedModule generateModule(const Program& program, const SemaResult& sema,
-                               const std::string& moduleName, DiagnosticSink& sink) {
-    CodeGenerator codegen(sink);
+                               const std::string& moduleName, DiagnosticSink& sink,
+                               bool lineDirectives) {
+    CodeGenerator codegen(sink, lineDirectives);
     return codegen.generate(program, sema, moduleName);
 }
 

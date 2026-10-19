@@ -20,10 +20,20 @@ set(cp3_cli_sources
     src/commands/common.cpp
     src/commands/check.cpp
     src/commands/lsp.cpp
+    src/commands/lsp_intel.cpp
+    src/commands/lsp_intel_query.cpp
+    src/commands/lsp_intel_define.cpp
+    src/commands/lsp_intel_complete.cpp
+    src/commands/lsp_intel_members.cpp
+    src/commands/lsp_intel_names.cpp
+    src/commands/lsp_intel_walk.cpp
+    src/commands/lsp_intel_walk_children.cpp
+    src/commands/dap.cpp
     src/commands/run.cpp
     src/commands/build.cpp
     src/commands/dev.cpp
     src/commands/fmt.cpp
+    src/format/format.cpp
     src/commands/clean.cpp
     src/commands/init.cpp
     src/commands/exec.cpp
@@ -65,6 +75,7 @@ target_sources(cp3_cli PRIVATE
     "${cp3_lsp_dir}/src/text.cpp"
     "${cp3_lsp_dir}/src/protocol.cpp"
     "${cp3_lsp_dir}/src/server.cpp"
+    "${cp3_lsp_dir}/src/intel.cpp"
 )
 # src/lsp/src resolves the module's `detail/...` private headers. It is
 # appended AFTER src/cli/src so CLI units keep resolving their own `detail/...`
@@ -72,6 +83,28 @@ target_sources(cp3_cli PRIVATE
 # like a CLI one, which the lsp_*/no-overlap names deliberately prevent.
 target_include_directories(cp3_cli PRIVATE "${cp3_lsp_dir}/include"
                                            "${cp3_lsp_dir}/src")
+
+# -----------------------------------------------------------------------------
+# cp3c dap - the debug adapter module (src/dap/**, cp3/dap.hpp).
+#
+# Same shape as the LSP module above, for the same reason (ONE product binary:
+# `cp3c dap`, never a second executable) and with the same collision rule: the
+# module's private headers are named dap_*/mi/process/session, none of which
+# exists under src/cli/src or src/lsp/src.
+# -----------------------------------------------------------------------------
+set(cp3_dap_dir "${CMAKE_CURRENT_SOURCE_DIR}/../dap")
+target_sources(cp3_cli PRIVATE
+    "${cp3_dap_dir}/src/json.cpp"
+    "${cp3_dap_dir}/src/framing.cpp"
+    "${cp3_dap_dir}/src/mi.cpp"
+    "${cp3_dap_dir}/src/process.cpp"
+    "${cp3_dap_dir}/src/session.cpp"
+    "${cp3_dap_dir}/src/session_queries.cpp"
+    "${cp3_dap_dir}/src/server.cpp"
+    "${cp3_dap_dir}/src/server_requests.cpp"
+)
+target_include_directories(cp3_cli PRIVATE "${cp3_dap_dir}/include"
+                                           "${cp3_dap_dir}/src")
 
 target_link_libraries(cp3_cli PUBLIC
     cp3_common cp3_lexer cp3_parser cp3_modules cp3_sema cp3_codegen)

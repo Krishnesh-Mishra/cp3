@@ -15,6 +15,7 @@ set(cp3_codegen_sources
     src/code_generator.cpp
     src/support/mangle.cpp
     src/support/cpp_writer.cpp
+    src/support/line_map.cpp
     src/support/type_map.cpp
     src/support/int_mode.cpp
     src/support/int_reads.cpp
@@ -24,6 +25,7 @@ set(cp3_codegen_sources
     src/emit/async.cpp
     src/emit/stmt.cpp
     src/emit/decl.cpp
+    src/emit/enum.cpp
     ../std/typed-arrays/codegen.cpp
     ../std/typed-arrays/codegen_methods.cpp
     src/emit/std/common.cpp

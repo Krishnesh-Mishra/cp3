@@ -29,6 +29,11 @@ struct LspPosition {
 // fails: the MVP cannot check buffers that do not map to a file.
 bool uriToPath(const std::string& uri, std::string& path);
 
+// Encodes a filesystem path as a `file:` URI (backslashes become '/', reserved
+// bytes are percent-encoded, a drive letter keeps its colon). Used to answer
+// definition/workspaceSymbol locations.
+std::string pathToUri(const std::string& path);
+
 // The text of a 1-based line without its EOL, or an empty view when the
 // document has no such line.
 std::string_view lineOf(const std::string& text, std::uint32_t line);
@@ -42,5 +47,16 @@ LspPosition toLspPosition(const std::string& text, std::uint32_t line,
 // `start` advanced by one character within its line (used when a diagnostic
 // carries only a start position); stays put at the end of the line.
 LspPosition advanceOne(const std::string& text, LspPosition start);
+
+// The position one past the last character of the document (the end of the
+// final line), used by whole-document edits.
+LspPosition endPosition(const std::string& text);
+
+// The reverse direction: the 1-based BYTE column in `text` for an LSP position
+// (0-based line, 0-based UTF-16 character), clamped into the document. A
+// character that falls inside a multi-unit code point resolves to that code
+// point's first byte, never into the middle of one.
+std::uint32_t toByteColumn(const std::string& text, std::uint32_t line,
+                           std::uint32_t character);
 
 }  // namespace cp3::lsp

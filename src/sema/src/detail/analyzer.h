@@ -22,6 +22,7 @@
 //   checks/stmt_check.cpp   statements, control flow, return analysis
 //   checks/banned.cpp       banned-pattern diagnostics (delete/arguments/for-in/any)
 //   checks/std_check.cpp    std-namespace dispatch + `String(x)`
+//   checks/enum_check.cpp   the enum declaration model (spec 04)
 //   src/std/<family>/sema.cpp per-family std member tables (math / path / os /
 //                           process / console / JSON)
 //   src/std/typed-arrays/sema.cpp the JS-compat typed-array family (D69)
@@ -45,6 +46,7 @@
 #include "cp3/analysis.hpp"
 #include "cp3/ast.hpp"
 #include "cp3/diagnostic.hpp"
+#include "detail/enums.h"
 #include "detail/scopes.h"
 
 namespace cp3 {
@@ -127,6 +129,9 @@ private:
     void declareForBinding(Node* left, const Type& elemType);
     void analyzeImport(ImportDeclaration& d);
     void registerInterface(InterfaceDeclaration& i);
+    // The enum declaration model (checks/enum_check.cpp): resolves members,
+    // registers the type name + value binding, reports CP3401/CP3706.
+    void registerEnum(EnumDeclaration& e);
 
     // --- type resolution + shapes (type_check.cpp) ---------------------------
     Shape* shapeOf(const Type& t);
@@ -187,6 +192,8 @@ private:
     Type memberOfProbe(const Type& ot, const std::string& prop,
                        const SourceSpan& span);
     Type arrayMember(const Type& arr, const std::string& prop);
+    // Enum member access (`Color.Green`, spec 04; checks/enum_check.cpp).
+    Type enumMember(const Type& ot, const std::string& prop, const SourceSpan& span);
     Type stringMember(const std::string& prop);
     // Typed views of the ambient std namespaces + the `String(x)` global
     // (the per-family tables live in src/std/<family>/sema.cpp; STDLIB docs
@@ -244,6 +251,10 @@ private:
     Type tupleIndexAt(const Shape& sh, IndexExpr& ix);
     Type inferCall(CallExpr& call);
     bool tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
+    // `parseInt(str)` / `parseFloat(str)` (STDLIB docs section 3): the
+    // documented global numeric parsers, typed `number`. `String(x)` is typed
+    // by tryInferStringBuiltin (std_check.cpp).
+    bool tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
     void reportUndefinedCall(CallExpr& call, Identifier& id);
     bool tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out);
     bool tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out);
@@ -391,6 +402,8 @@ private:
     std::vector<std::unordered_map<std::string, Binding>> scopes_;
     std::unordered_map<std::string, Shape> shapes_;
     std::unordered_map<std::string, Type> typeNames_;
+    // The resolved enum declarations, keyed by type name (checks/enum_check.cpp).
+    std::unordered_map<std::string, EnumInfo> enums_;
     std::unordered_map<std::uint32_t, FuncSig> sigs_;
     std::unordered_set<std::uint32_t> declaredFns_;
     std::unordered_set<std::uint32_t> declaredTypes_;

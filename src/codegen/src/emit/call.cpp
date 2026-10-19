@@ -118,6 +118,10 @@ std::string Generator::emitCall(const CallExpr& c) {
             notImplemented(c, "String(...)");
             return "0.0";
         }
+        if ((name == "parseInt" || name == "parseFloat") &&
+            functions_.find(name) == functions_.end()) {
+            return emitParseBuiltin(c, name);
+        }
         if (name == "worker") {
             notImplemented(c, "worker(...)");
             return "0.0";
@@ -168,6 +172,19 @@ std::string Generator::emitCall(const CallExpr& c) {
         return "0.0";
     }
     notImplemented(c, "this call");
+    return "0.0";
+}
+
+std::string Generator::emitParseBuiltin(const CallExpr& c,
+                                        const std::string& name) {
+    // The documented global numeric parsers (STDLIB docs section 3).
+    // `toString` gives JS's argument coercion for non-string inputs.
+    if (c.arguments.size() == 1 && c.arguments.front() &&
+        c.arguments.front()->kind != NodeKind::SpreadElement) {
+        return "::cp3::runtime::" + name + "(::cp3::runtime::toString(" +
+               expr(*c.arguments.front()) + "))";
+    }
+    notImplemented(c, name + "(...)");
     return "0.0";
 }
 

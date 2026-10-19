@@ -28,6 +28,7 @@ set(cp3_sema_sources
     src/checks/parallel_check.cpp
     src/checks/parallel_expr_check.cpp
     src/checks/std_check.cpp
+    src/checks/enum_check.cpp
     ../std/crypto/sema.cpp
     ../std/network/sema.cpp
     ../std/fs/sema.cpp

@@ -17,7 +17,9 @@
     "cpp"
   ],
   "activationEvents": [
-    "onLanguage:cp3"
+    "onLanguage:cp3",
+    "onTaskType:cp3",
+    "onDebugResolve:cp3"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -47,16 +49,89 @@
         "title": "cp3: Restart Language Server"
       }
     ],
+    "taskDefinitions": [
+      {
+        "type": "cp3",
+        "required": [
+          "task"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "enum": [
+              "build",
+              "run",
+              "check"
+            ],
+            "description": "The cp3c action to run on the active cp3 file in the workspace folder."
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "cp3c",
+        "owner": "cp3c",
+        "source": "cp3c",
+        "fileLocation": "absolute",
+        "pattern": {
+          "regexp": "^(.+):(\\d+):(\\d+): (error|warning): (CP\\d+): (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "code": 5,
+          "message": 6
+        }
+      }
+    ],
     "configuration": {
       "title": "cp3",
       "properties": {
         "cp3.compilerPath": {
           "type": "string",
           "default": "cp3c",
-          "markdownDescription": "Path to the cp3 compiler executable used as the language server. A bare name (the default, `cp3c`) is resolved on PATH, also trying `cp3c.exe` on Windows; an absolute path is used as-is. The extension runs `<path> lsp --stdio`."
+          "markdownDescription": "Path to the cp3 compiler executable used as the language server and the debug adapter. A bare name (the default, `cp3c`) is resolved on PATH, also trying `cp3c.exe` on Windows; an absolute path is used as-is. The extension runs `<path> lsp --stdio` and `<path> dap --stdio`."
         }
       }
-    }
+    },
+    "debuggers": [
+      {
+        "type": "cp3",
+        "label": "C+++ (cp3)",
+        "languages": [
+          "cp3"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the .cp3 program to build and debug.",
+                "default": "${file}"
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the build and the program.",
+                "default": "${workspaceFolder}"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "cp3",
+            "request": "launch",
+            "name": "cp3: Debug current file",
+            "program": "${file}",
+            "cwd": "${workspaceFolder}"
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "node esbuild.mjs --production",
