@@ -17,7 +17,8 @@
     "cpp"
   ],
   "activationEvents": [
-    "onLanguage:cp3"
+    "onLanguage:cp3",
+    "onTaskType:cp3"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -45,6 +46,42 @@
       {
         "command": "cp3.restartServer",
         "title": "cp3: Restart Language Server"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "cp3",
+        "required": [
+          "task"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "enum": [
+              "build",
+              "run",
+              "check"
+            ],
+            "description": "The cp3c action to run on the active cp3 file in the workspace folder."
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "cp3c",
+        "owner": "cp3c",
+        "source": "cp3c",
+        "fileLocation": "absolute",
+        "pattern": {
+          "regexp": "^(.+):(\\d+):(\\d+): (error|warning): (CP\\d+): (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "code": 5,
+          "message": 6
+        }
       }
     ],
     "configuration": {

@@ -40,6 +40,9 @@ const OUTPUT_CHANNEL_NAME = "cp3 Language Server";
 const COMPILER_PATH_SETTING = "cp3.compilerPath";
 const DEFAULT_COMPILER_PATH = "cp3c";
 const RESTART_COMMAND = "cp3.restartServer";
+const TASK_TYPE = "cp3";
+const TASK_SOURCE = "cp3";
+const PROBLEM_MATCHER = "$cp3c";
 
 let outputChannel: vscode.LogOutputChannel | undefined;
 let client: LanguageClient | undefined;
@@ -150,6 +153,76 @@ function errorHandler(attempt: StartAttempt): ErrorHandler {
 
 function workspaceCwd(): string | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+interface Cp3TaskSpec {
+    readonly name: string;
+    readonly task: "build" | "run" | "check";
+    readonly group?: vscode.TaskGroup;
+}
+
+// The three compiler tasks contributed to `Tasks: Run Task`. Each runs
+// `<cp3.compilerPath> <task> ${file}` in the first workspace folder and pipes
+// the compiler's machine lines through the `$cp3c` problem matcher, so build,
+// run and check report into the Problems panel exactly like `cp3c check`.
+const CP3_TASKS: readonly Cp3TaskSpec[] = [
+    { name: "cp3: build", task: "build", group: vscode.TaskGroup.Build },
+    { name: "cp3: run", task: "run" },
+    { name: "cp3: check", task: "check", group: vscode.TaskGroup.Test },
+];
+
+function taskCompilerCommand(): string {
+    const setting = vscode.workspace
+        .getConfiguration()
+        .get<string>(COMPILER_PATH_SETTING, DEFAULT_COMPILER_PATH);
+    // An unresolved bare name is still handed to the process unchanged: the
+    // task terminal then shows the usual "not recognized" error instead of the
+    // task silently disappearing from the list.
+    return resolveCompilerPath(setting) ?? setting;
+}
+
+// Builds the contributed tasks and re-resolves tasks saved in tasks.json, so
+// both pick up the current `cp3.compilerPath` and workspace folder.
+class Cp3TaskProvider implements vscode.TaskProvider {
+    provideTasks(): vscode.Task[] {
+        return CP3_TASKS.map((spec) => this.buildTask(spec));
+    }
+
+    resolveTask(task: vscode.Task): vscode.Task | undefined {
+        const wanted = task.definition.task;
+        const spec = CP3_TASKS.find((entry) => entry.task === wanted);
+        return spec === undefined ? undefined : this.buildTask(spec);
+    }
+
+    private buildTask(spec: Cp3TaskSpec): vscode.Task {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        const definition: vscode.TaskDefinition = {
+            type: TASK_TYPE,
+            task: spec.task,
+        };
+        const execution = new vscode.ProcessExecution(
+            taskCompilerCommand(),
+            [spec.task, "${file}"],
+            { cwd: folder?.uri.fsPath }
+        );
+        const task = new vscode.Task(
+            definition,
+            folder ?? vscode.TaskScope.Workspace,
+            spec.name,
+            TASK_SOURCE,
+            execution,
+            [PROBLEM_MATCHER]
+        );
+        if (spec.group !== undefined) {
+            task.group = spec.group;
+        }
+        task.presentationOptions = {
+            reveal: vscode.TaskRevealKind.Always,
+            panel: vscode.TaskPanelKind.Dedicated,
+            clear: true,
+        };
+        return task;
+    }
 }
 
 async function stopClient(): Promise<void> {
@@ -272,6 +345,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(output());
     context.subscriptions.push(
         vscode.commands.registerCommand(RESTART_COMMAND, () => startClient(true))
+    );
+    context.subscriptions.push(
+        vscode.tasks.registerTaskProvider(TASK_TYPE, new Cp3TaskProvider())
     );
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((event) => {
