@@ -11,10 +11,12 @@
 // The marker objects are OPEN on purpose (round-2 network report, decision
 // 10): they carry a `$network:` name and no shape table, so a member outside
 // the documented set stays ambient instead of reporting, exactly like the rest
-// of the not-yet-typed std surface. The Field rows below are declarative then:
-// they are the documented member set (docs 04 §network), kept complete so that
-// closing these shapes later is a table-only change, but they do not gate
-// member usage today.
+// of the not-yet-typed std surface. The Field rows below are the documented
+// member set (docs 04 §network); since the finish phase they also TYPE the
+// documented reads: `networkObjectMember` (member_check.cpp hook) returns the
+// row type for one of them while an undocumented member still falls through
+// to ambient. The Map-shaped rows name the landed `Map<string, string>`
+// (std/collections) and `arrayBuffer` promises the landed `Buffer`.
 // Marker names are shared with codegen (src/std/network/codegen.cpp), which
 // uses them to decide which receivers it lowers.
 // =============================================================================
@@ -35,6 +37,18 @@ const char* const kHttpServer = "$network:HttpServer";
 const char* const kWebSocket = "$network:WebSocket";
 const char* const kWebSocketServer = "$network:WebSocketServer";
 
+/// `Map<string, string>` (std/collections): the documented shape of the
+/// request/fetch headers, route params and query string.
+Type stringMap() {
+    Type map(TypeKind::Class, "Map");
+    map.parts.push_back(Type::string());
+    map.parts.push_back(Type::string());
+    return map;
+}
+
+/// The nominal std/buffer `Buffer` (src/std/buffer/sema.cpp).
+Type bufferType() { return byteBufferType(); }
+
 /// `(p0, p1, ...) => void` with permissive parameters: the documented handler
 /// shapes share one callback grammar, and the parameters are typed contextually
 /// by codegen (the runtime lambda's declared parameter types).
@@ -49,25 +63,27 @@ Type callbackOf(std::size_t arity) {
 Type eventListener() { return callbackOf(2); }
 
 // -----------------------------------------------------------------------------
-// The documented field rows per receiver (docs 04 §network). Declarative: the
-// marker shapes stay open, so these rows never gate a member (file header);
-// SEAM comments mark the in-flight-family swap points.
+// The documented field rows per receiver (docs 04 §network). The marker shapes
+// stay open, so the rows never gate a member (file header); the
+// `networkObjectMember` hook hands a documented read its row type. SEAM
+// comments mark the still-blocked swap points (the fs ReadStream body, the
+// headers ambiguity).
 // -----------------------------------------------------------------------------
 std::vector<Field> fetchResponseFields() {
     return {
         Field{"ok", Type::boolean(), false},
         Field{"status", Type::number(), false},
         Field{"statusText", Type::string(), false},
-        // SEAM(collections): `headers: Map<string, string>`; the runtime
-        // already buffers the header block (runtime_fetch.cpp parseHead).
-        Field{"headers", ambient(), false},
+        // Map<string, string>; the runtime fills it in parseHead
+        // (runtime_fetch.cpp) from the response header block.
+        Field{"headers", stringMap(), false},
         Field{"text", Type::function({}, promiseOf(Type::string())), false},
-        // SEAM(json): non-scalar T needs the json reification (see codegen's
-        // networkTypeArgsText); the ambient return stands in until then.
+        // SEAM(json): non-scalar T is routed through the json reification at
+        // codegen (networkTypeArgsText / the record arm); the
+        // `tryInferNetworkMemberCall` hook substitutes the explicit T here.
         Field{"json", Type::function({}, promiseOf(ambient())), false},
-        // SEAM(buffer): the documented return is `Promise<Buffer>`; the
-        // runtime hands the buffered bytes back as a string until Buffer lands.
-        Field{"arrayBuffer", Type::function({}, promiseOf(Type::string())), false},
+        // The landed std/buffer `Buffer`.
+        Field{"arrayBuffer", Type::function({}, promiseOf(bufferType())), false},
     };
 }
 
@@ -75,12 +91,12 @@ std::vector<Field> httpRequestFields() {
     return {
         Field{"method", Type::string(), false},
         Field{"path", Type::string(), false},
-        // SEAM(collections): the three Map<string, string> fields; the server
-        // already receives the query string, the route params and the header
-        // block natively (runtime_server.cpp onRequest).
-        Field{"params", ambient(), false},
-        Field{"query", ambient(), false},
-        Field{"headers", ambient(), false},
+        // The three Map<string, string> fields; the server fills them in
+        // onRequest (runtime_server.cpp) from the native query string, the
+        // header block and the matched `:name` route params.
+        Field{"params", stringMap(), false},
+        Field{"query", stringMap(), false},
+        Field{"headers", stringMap(), false},
         // SEAM(readstream/fs): `body: ReadStream`; the runtime buffers the
         // body before the chain runs, so nothing stream-shaped exists yet.
         Field{"body", ambient(), false},
@@ -129,8 +145,13 @@ std::vector<Field> webSocketFields() {
     return {
         Field{"on", Type::function({Type::string(), eventListener()}, Type::voidType()),
               false},
-        // SEAM(buffer): the documented parameter is `string | Buffer`.
-        Field{"send", callbackOf(1), false},
+        // `send(data: string | Buffer)` (docs 04 §network): the landed
+        // std/buffer type joins the string arm, exactly like the crypto
+        // hash inputs (src/std/crypto/sema.cpp).
+        Field{"send",
+              Type::function({Type::unionOf({Type::string(), bufferType()})},
+                             Type::voidType()),
+              false},
         Field{"close", withOptionalTail2(callbackOf(2)), false},
     };
 }
@@ -143,30 +164,40 @@ std::vector<Field> webSocketServerFields() {
     };
 }
 
+/// The documented field rows of one marker table, or {} when `name` is not a
+/// network marker. Shared by `networkObjectType` (the marker itself) and
+/// `networkObjectMember` (one documented read).
+std::vector<Field> networkFieldsFor(const std::string& name) {
+    if (name == kFetchResponse) return fetchResponseFields();
+    if (name == kHttpRequest) return httpRequestFields();
+    if (name == kHttpResponse) return httpResponseFields();
+    if (name == kHttpServer) return httpServerFields();
+    if (name == kWebSocket) return webSocketFields();
+    if (name == kWebSocketServer) return webSocketServerFields();
+    return {};
+}
+
 }  // namespace
 
 Type Analyzer::networkObjectType(const std::string& name) {
-    std::vector<Field> fields;
-    if (name == kFetchResponse) {
-        fields = fetchResponseFields();
-    } else if (name == kHttpRequest) {
-        fields = httpRequestFields();
-    } else if (name == kHttpResponse) {
-        fields = httpResponseFields();
-    } else if (name == kHttpServer) {
-        fields = httpServerFields();
-    } else if (name == kWebSocket) {
-        fields = webSocketFields();
-    } else if (name == kWebSocketServer) {
-        fields = webSocketServerFields();
-    } else {
-        return Type::unknown();
-    }
+    std::vector<Field> fields = networkFieldsFor(name);
+    if (fields.empty()) return Type::unknown();
     // The open flag drops the shape: what sema keeps is the marker name (see
-    // the file header). The rows above are the audit surface for a later round.
+    // the file header). `networkObjectMember` below is what makes a documented
+    // read carry its declared type anyway.
     Type object = makeObjectType(std::move(fields), true, false, {});
     object.name = name;
     return object;
+}
+
+std::optional<Type> Analyzer::networkObjectMember(const Type& recv,
+                                                  const std::string& prop) {
+    if (recv.kind != TypeKind::Object) return std::nullopt;
+    const std::vector<Field> fields = networkFieldsFor(recv.name);
+    for (const Field& field : fields) {
+        if (field.name == prop) return field.type;
+    }
+    return std::nullopt;
 }
 
 std::optional<Type> Analyzer::networkMember(const std::string& prop) {
@@ -210,6 +241,31 @@ Type Analyzer::inferNetworkConstruct(const std::string& name, ExprList& args,
     }
     return name == "WebSocket" ? networkObjectType(kWebSocket)
                                : networkObjectType(kWebSocketServer);
+}
+
+bool Analyzer::tryInferNetworkMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
+    if (m.property != "json" || m.object == nullptr) return false;
+    const Type recv = typeOfExpr(*m.object);
+    if (recv.kind != TypeKind::Object) return false;
+    if (recv.name != kFetchResponse && recv.name != kHttpRequest) return false;
+    if (call.typeArgs.empty() || !call.typeArgs.front()) return false;
+    // `res.json<T>()` / `req.json<T>()` takes no arguments (docs 04 §network);
+    // the explicit T substitutes into the promise exactly like
+    // `JSON.parse<T>` (call_check.cpp's tryInferJsonCall), so `await
+    // res.json<User>()` is the interface shape and `u.id` lowers through the
+    // json record tables.
+    Type value = Type::unknown();
+    for (auto& ta : call.typeArgs) {
+        if (!ta) continue;
+        value = resolveType(*ta);
+    }
+    FuncSig sig;
+    sig.annotatedReturn = true;
+    sig.name = "json";
+    sig.ret = promiseOf(value);
+    checkArgs(sig, call);
+    out = withType(call, sig.ret);
+    return true;
 }
 
 }  // namespace cp3

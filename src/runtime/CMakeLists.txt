@@ -29,6 +29,7 @@ set(cp3_runtime_sources
     ../std/crypto/runtime.cpp
     ../std/network/runtime.cpp
     ../std/network/runtime_fetch.cpp
+    ../std/network/runtime_fetch_io.cpp
     ../std/network/runtime_server.cpp
     ../std/network/runtime_ws.cpp
     ../std/network/runtime_ws_client.cpp
@@ -49,6 +50,8 @@ target_include_directories(cp3_runtime PRIVATE
 # headers live in each family's include/ tree under src/std/; the moved TUs
 # include them directly, so the compiler needs those roots here.
 target_include_directories(cp3_runtime PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../std/buffer/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../std/collections/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/console/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/crypto/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/json/include"

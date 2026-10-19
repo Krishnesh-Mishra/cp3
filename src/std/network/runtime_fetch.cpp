@@ -5,12 +5,15 @@
 // runtime.cpp (the std/network native package row, D68): compiled + linked only
 // for a program that imports "std/network".
 // One request, one TCP connection, `Connection: close`: beta-one fetch is a
-// plain HTTP/1.1 client - no connection reuse, no redirects, no TLS, no request
-// headers option (all MISSING in the wave report); the body is fully buffered
-// (Content-Length, chunked and close-delimited), so `res.text()` /
-// `res.json<T>()` never suspend. A FetchOp stays alive through shared_ptr
-// holders in `handle->data` (tcp, timer, DNS request, in-flight write) and
-// counts as pending work until it settles.
+// plain HTTP/1.1 client - no connection reuse, no redirects, no TLS. The
+// request headers option is the documented `Map<string, string>`, the response
+// header block comes back as the documented `res.headers` Map, and the body is
+// fully buffered (Content-Length, chunked and close-delimited), so
+// `res.text()` / `res.json<T>()` never suspend. A FetchOp stays alive through
+// shared_ptr holders in `handle->data` (tcp, timer, DNS request, in-flight
+// write) and counts as pending work until it settles; the libuv transport
+// (handle attachment, callbacks, beginFetch) lives in the sibling
+// runtime_fetch_io.cpp.
 // =============================================================================
 #include "cp3/std/network.hpp"
 
@@ -22,20 +25,15 @@
 
 #include <uv.h>
 
+#include "runtime_fetch.hpp"
 #include "runtime_loop.hpp"
 
-namespace cp3::runtime::network {
+namespace cp3::runtime::network::detail {
 namespace {
 
 // =============================================================================
 // URL parsing
 // =============================================================================
-struct UrlParts {
-    std::string host;
-    int port = 80;
-    std::string target = "/";  // path + query, exactly as sent on the request line
-};
-
 bool parsePort(const std::string& text, int& port) {
     if (text.empty() || text.size() > 5) return false;
     int value = 0;
@@ -48,68 +46,18 @@ bool parsePort(const std::string& text, int& port) {
     return true;
 }
 
-/// Parses `http://host[:port][/path]`; empty result string = success, else the
-/// rejection message (https:// gets its own, TLS-off message).
-std::string parseHttpUrl(const std::string& url, UrlParts& out) {
-    if (url.rfind("https://", 0) == 0) {
-        return "std/network: https:// is not supported in this build (TLS is off)";
-    }
-    const std::string prefix = "http://";
-    if (url.rfind(prefix, 0) != 0) {
-        return "std/network: fetch() needs an http:// URL, got: " + url;
-    }
-    const std::string rest = url.substr(prefix.size());
-    const std::size_t slash = rest.find('/');
-    const std::string authority = slash == std::string::npos ? rest : rest.substr(0, slash);
-    if (slash != std::string::npos) {
-        out.target = rest.substr(slash);
-    }
-    const std::size_t colon = authority.rfind(':');
-    if (colon == std::string::npos) {
-        out.host = authority;
-    } else {
-        out.host = authority.substr(0, colon);
-        if (!parsePort(authority.substr(colon + 1), out.port)) {
-            return "std/network: bad port in URL: " + url;
-        }
-    }
-    if (out.host.empty()) {
-        return "std/network: missing host in URL: " + url;
-    }
-    return {};
-}
-
 // =============================================================================
-// One in-flight request
+// Settling and handle lifetime
 // =============================================================================
-enum class BodyState { Head, SizeLine, Chunk, AfterChunk, Trailers, Length, Close };
-
-struct FetchOp {
-    Promise<FetchResponse> promise;  // pending until settle below
-    UrlParts url;
-    FetchInit init;
-    std::string authority;  // host:port, for Host: and diagnostics
-
-    uv_tcp_t tcp{};
-    uv_connect_t connect{};
-    uv_getaddrinfo_t dns{};
-    uv_timer_t timeout{};
-    bool tcpReady = false;
-    bool timerReady = false;
-    bool done = false;
-
-    std::string raw;         // every byte received so far
-    std::size_t cursor = 0;  // parse cursor into `raw`
-    double statusCode = 0.0;
-    std::string statusText;
-    long long contentLength = -1;
-    BodyState bodyState = BodyState::Head;
-    long long chunkLeft = 0;
-    std::string decoded;  // the decoded body
-};
-
-void attachOp(uv_handle_t* handle, const std::shared_ptr<FetchOp>& op) {
-    handle->data = new std::shared_ptr<FetchOp>(op);
+/// The documented Map-shaped fields (`res.headers`, and the `headers` option)
+/// are `Map<string, string>` (docs 04 §network); this turns one such pair list
+/// into the Map.
+StringMap headerMap(const std::vector<std::pair<std::string, std::string>>& pairs) {
+    StringMap map = collections::makeMap<std::string, std::string>();
+    for (const auto& [name, value] : pairs) {
+        map->set(name, value);
+    }
+    return map;
 }
 
 /// Closes a handle and drops the reference it held; the op dies with its last
@@ -123,14 +71,6 @@ void closeOpHandle(uv_handle_t* handle) {
         delete holder;
     });
 }
-
-std::shared_ptr<FetchOp> opOf(const uv_handle_t* handle) {
-    auto* holder = static_cast<std::shared_ptr<FetchOp>*>(handle->data);
-    return holder == nullptr ? nullptr : *holder;
-}
-
-void failOp(const std::shared_ptr<FetchOp>& op, const std::string& message);
-void succeedOp(const std::shared_ptr<FetchOp>& op);
 
 void releaseOp(const std::shared_ptr<FetchOp>& op) {
     releaseNetwork();
@@ -146,34 +86,14 @@ void releaseOp(const std::shared_ptr<FetchOp>& op) {
 void succeedOp(const std::shared_ptr<FetchOp>& op) {
     if (op->done) return;
     op->done = true;
-    op->promise.fulfill(FetchResponse(op->statusCode, op->statusText, std::move(op->decoded)));
-    releaseOp(op);
-}
-
-void failOp(const std::shared_ptr<FetchOp>& op, const std::string& message) {
-    if (op->done) return;
-    op->done = true;
-    op->promise.rejectWith(Thrown::make(message));
+    op->promise.fulfill(FetchResponse(op->statusCode, op->statusText, std::move(op->decoded),
+                                     headerMap(op->responseHeaders)));
     releaseOp(op);
 }
 
 // =============================================================================
 // Request head and response parsing
 // =============================================================================
-std::string buildRequest(const FetchOp& op) {
-    std::string request = op.init.method.empty() ? "GET" : op.init.method;
-    request += " " + op.url.target + " HTTP/1.1\r\nHost: " + op.authority +
-               "\r\nAccept: */*\r\nConnection: close\r\n";
-    if (op.init.hasBody) {
-        request += "Content-Length: " + std::to_string(op.init.body.size()) + "\r\n";
-    }
-    request += "\r\n";
-    if (op.init.hasBody) {
-        request += op.init.body;
-    }
-    return request;
-}
-
 std::string lowerAscii(const std::string& text) {
     std::string out = text;
     for (char& c : out) {
@@ -218,6 +138,7 @@ bool parseHead(FetchOp& op, std::size_t headEnd) {
     if (!parseStatusCode(text.substr(9, 3), op.statusCode)) return false;
     op.statusText = firstEnd > 13 ? text.substr(13, firstEnd - 13) : std::string();
     op.contentLength = -1;
+    op.responseHeaders.clear();
     bool chunked = false;
     for (std::size_t pos = firstEnd + 2; pos < headEnd;) {
         const std::size_t end = text.find("\r\n", pos);
@@ -228,6 +149,9 @@ bool parseHead(FetchOp& op, std::size_t headEnd) {
         if (colon == std::string::npos) continue;
         const std::string key = lowerAscii(line.substr(0, colon));
         const std::string value = trimAscii(line.substr(colon + 1));
+        // Every header reaches the documented `res.headers` Map; the framing
+        // names are also read out below.
+        op.responseHeaders.emplace_back(key, value);
         if (key == "content-length") {
             if (!parseContentLength(value, op.contentLength)) return false;
         } else if (key == "transfer-encoding" &&
@@ -319,6 +243,71 @@ void parseBody(const std::shared_ptr<FetchOp>& op) {
     }
 }
 
+}  // namespace
+
+std::string parseHttpUrl(const std::string& url, UrlParts& out) {
+    if (url.rfind("https://", 0) == 0) {
+        return "std/network: https:// is not supported in this build (TLS is off)";
+    }
+    const std::string prefix = "http://";
+    if (url.rfind(prefix, 0) != 0) {
+        return "std/network: fetch() needs an http:// URL, got: " + url;
+    }
+    const std::string rest = url.substr(prefix.size());
+    const std::size_t slash = rest.find('/');
+    const std::string authority = slash == std::string::npos ? rest : rest.substr(0, slash);
+    if (slash != std::string::npos) {
+        out.target = rest.substr(slash);
+    }
+    const std::size_t colon = authority.rfind(':');
+    if (colon == std::string::npos) {
+        out.host = authority;
+    } else {
+        out.host = authority.substr(0, colon);
+        if (!parsePort(authority.substr(colon + 1), out.port)) {
+            return "std/network: bad port in URL: " + url;
+        }
+    }
+    if (out.host.empty()) {
+        return "std/network: missing host in URL: " + url;
+    }
+    return {};
+}
+
+void failOp(const std::shared_ptr<FetchOp>& op, const std::string& message) {
+    if (op->done) return;
+    op->done = true;
+    op->promise.rejectWith(Thrown::make(message));
+    releaseOp(op);
+}
+
+std::string buildRequest(const FetchOp& op) {
+    std::string request = op.init.method.empty() ? "GET" : op.init.method;
+    request += " " + op.url.target + " HTTP/1.1\r\nHost: " + op.authority +
+               "\r\nAccept: */*\r\nConnection: close\r\n";
+    // The documented `RequestInit.headers` Map (docs 04 §network): one
+    // `Name: value` line per entry. The framing-owned names stay ours: a user
+    // override of host/content-length/connection would malform the request.
+    if (op.init.headers) {
+        for (const auto& [name, value] : *op.init.headers->entries()) {
+            const std::string lowered = lowerAscii(name);
+            if (lowered == "host" || lowered == "content-length" ||
+                lowered == "connection") {
+                continue;
+            }
+            request += name + ": " + value + "\r\n";
+        }
+    }
+    if (op.init.hasBody) {
+        request += "Content-Length: " + std::to_string(op.init.body.size()) + "\r\n";
+    }
+    request += "\r\n";
+    if (op.init.hasBody) {
+        request += op.init.body;
+    }
+    return request;
+}
+
 void consume(const std::shared_ptr<FetchOp>& op) {
     if (op->done) return;
     if (op->bodyState == BodyState::Head) {
@@ -349,151 +338,21 @@ void finishOnEof(const std::shared_ptr<FetchOp>& op) {
     failOp(op, "std/network: response body truncated");
 }
 
-// =============================================================================
-// libuv callbacks
-// =============================================================================
-void onAlloc(uv_handle_t*, std::size_t suggested, uv_buf_t* buf) {
-    const std::size_t size = suggested == 0 ? 65536 : suggested;
-    buf->base = new char[size];
-    buf->len = size;
-}
-
-void onRead(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
-    const std::shared_ptr<FetchOp> op = opOf(reinterpret_cast<uv_handle_t*>(stream));
-    if (op != nullptr && nread > 0) {
-        op->raw.append(buf->base, static_cast<std::size_t>(nread));
-    }
-    if (buf->base != nullptr) delete[] buf->base;
-    if (op == nullptr || op->done || nread == 0) return;
-    if (nread < 0) {
-        if (nread == UV_EOF) {
-            finishOnEof(op);
-        } else {
-            failOp(op, "std/network: connection error while reading the response");
-        }
-        return;
-    }
-    consume(op);
-}
-
-struct WriteRequest {
-    uv_write_t req{};
-    std::string data;
-    std::shared_ptr<FetchOp> op;
-};
-
-void onWriteDone(uv_write_t* req, int status) {
-    auto* write = reinterpret_cast<WriteRequest*>(req);
-    const std::shared_ptr<FetchOp> op = std::move(write->op);
-    delete write;
-    if (status < 0) {
-        failOp(op, "std/network: could not send the request");
-    }
-}
-
-void onTimeout(uv_timer_t* timer) {
-    const std::shared_ptr<FetchOp> op = opOf(reinterpret_cast<uv_handle_t*>(timer));
-    if (op != nullptr) {
-        failOp(op, "std/network: request timed out after " +
-                       std::to_string(static_cast<long long>(op->init.timeoutMs)) + " ms");
-    }
-}
-
-void onConnected(uv_connect_t* req, int status);
-
-int connectTo(const std::shared_ptr<FetchOp>& op, const struct sockaddr* addr) {
-    return uv_tcp_connect(&op->connect, &op->tcp, addr, onConnected);
-}
-
-void onConnected(uv_connect_t* req, int status) {
-    const std::shared_ptr<FetchOp> op = opOf(reinterpret_cast<uv_handle_t*>(req->handle));
-    if (op == nullptr || op->done) return;
-    if (status < 0) {
-        failOp(op, "std/network: could not connect to " + op->authority);
-        return;
-    }
-    auto* write = new WriteRequest;
-    write->op = op;
-    write->data = buildRequest(*op);
-    uv_buf_t buf = uv_buf_init(write->data.data(), static_cast<unsigned int>(write->data.size()));
-    if (uv_write(&write->req, req->handle, &buf, 1, onWriteDone) != 0) {
-        delete write;
-        failOp(op, "std/network: could not send the request");
-        return;
-    }
-    uv_read_start(req->handle, onAlloc, onRead);
-}
-
-void onResolved(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
-    std::unique_ptr<std::shared_ptr<FetchOp>> holder(
-        static_cast<std::shared_ptr<FetchOp>*>(req->data));
-    const std::shared_ptr<FetchOp> op = *holder;
-    if (status != 0 || res == nullptr) {
-        if (res != nullptr) uv_freeaddrinfo(res);
-        failOp(op, "std/network: DNS lookup failed for " + op->url.host);
-        return;
-    }
-    const int rc = connectTo(op, res->ai_addr);
-    uv_freeaddrinfo(res);
-    if (rc != 0) {
-        failOp(op, "std/network: could not start the connection");
-    }
-}
+}  // namespace cp3::runtime::network::detail
 
 // =============================================================================
 // Entry point
 // =============================================================================
-std::shared_ptr<FetchOp> beginFetch(const UrlParts& url, const FetchInit& init) {
-    auto op = std::make_shared<FetchOp>();
-    op->url = url;
-    op->init = init;
-    op->authority = url.host + ":" + std::to_string(url.port);
-    retainNetwork();
-    uv_loop_t* loop = static_cast<uv_loop_t*>(loopHandle());
-    if (loop == nullptr) {
-        failOp(op, "std/network: could not create the libuv loop");
-        return op;
-    }
-    uv_tcp_init(loop, &op->tcp);
-    attachOp(reinterpret_cast<uv_handle_t*>(&op->tcp), op);
-    op->tcpReady = true;
-    if (init.timeoutMs > 0) {
-        uv_timer_init(loop, &op->timeout);
-        attachOp(reinterpret_cast<uv_handle_t*>(&op->timeout), op);
-        op->timerReady = true;
-        uv_timer_start(&op->timeout, onTimeout, static_cast<std::uint64_t>(init.timeoutMs), 0);
-    }
-    struct sockaddr_in addr{};
-    if (uv_ip4_addr(url.host.c_str(), url.port, &addr) == 0) {
-        const int rc = connectTo(op, reinterpret_cast<const struct sockaddr*>(&addr));
-        if (rc != 0) failOp(op, "std/network: could not start the connection");
-        return op;
-    }
-    struct addrinfo hints{};
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    op->dns.data = new std::shared_ptr<FetchOp>(op);
-    const std::string port = std::to_string(url.port);
-    const int rc =
-        uv_getaddrinfo(loop, &op->dns, onResolved, url.host.c_str(), port.c_str(), &hints);
-    if (rc != 0) {
-        delete static_cast<std::shared_ptr<FetchOp>*>(op->dns.data);
-        op->dns.data = nullptr;
-        failOp(op, "std/network: DNS lookup could not start");
-    }
-    return op;
-}
-
-}  // namespace
+namespace cp3::runtime::network {
 
 Promise<FetchResponse> fetch(const std::string& url, const FetchInit& init) {
-    UrlParts parts;
-    const std::string error = parseHttpUrl(url, parts);
+    detail::UrlParts parts;
+    const std::string error = detail::parseHttpUrl(url, parts);
     if (!error.empty()) {
         return Promise<FetchResponse>::reject(Thrown::make(error));
     }
     ensureLoop();
-    const std::shared_ptr<FetchOp> op = beginFetch(parts, init);
+    const std::shared_ptr<detail::FetchOp> op = detail::beginFetch(parts, init);
     return op->promise;
 }
 

@@ -212,8 +212,16 @@ private:
     // --- std/network (src/std/network/sema.cpp) ------------------------------
     // One documented object shape per member table entry ("$network:<name>").
     Type networkObjectType(const std::string& name);
+    // A documented field read on a marker receiver keeps its declared type
+    // (member_check.cpp hook). The marker shape itself stays open: an
+    // undocumented member still falls through to ambient.
+    std::optional<Type> networkObjectMember(const Type& recv,
+                                            const std::string& prop);
     // Named-import call sites: `fetch(...)` / `createServer()`.
     bool tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& out);
+    // The generic instance member (`res.json<T>()` / `req.json<T>()`): the
+    // explicit T substitutes into Promise<T>, matching `JSON.parse<T>`.
+    bool tryInferNetworkMemberCall(CallExpr& call, MemberExpr& m, Type& out);
     // `new WebSocket(url)` / `new WebSocketServer({ port })`; unknown -> unknown.
     Type inferNetworkConstruct(const std::string& name, ExprList& args,
                                const SourceSpan& span);

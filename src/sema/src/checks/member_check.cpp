@@ -89,6 +89,11 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
     switch (ot.kind) {
         case TypeKind::Object: {
             if (isAmbientType(ot)) return ambient();
+            // The documented std/network marker objects: the marker stays open
+            // (an undocumented member falls through to ambient below), but a
+            // documented field read carries its declared type; the Map-shaped
+            // fields reach codegen as real Map types (src/std/network/sema.cpp).
+            if (auto t = networkObjectMember(ot, prop)) return *t;
             Shape* sh = shapeOf(ot);
             if (!sh) return ambient();
             if (sh->open) return ambient();

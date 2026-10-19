@@ -74,6 +74,13 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     } else if (m.object && info(*m.object).shape == Shape::String) {
         return emitStringMethodCall(c, m);
     }
+    // A std/network Map-shaped documented field read (`req.headers.get(...)`,
+    // `res.headers.get(...)`): the open marker hides the Map type from sema,
+    // so this hook hands the collections lowering the receiver type
+    // (src/std/network/codegen.cpp).
+    if (std::string field = emitNetworkMapFieldCall(c, m); !field.empty()) {
+        return field;
+    }
     // The std/collections Map/Set member calls (`m.set(...)`, `s.add(...)`,
     // `forEach(...)`): src/std/collections/codegen.cpp.
     if (std::string coll = emitCollectionsMemberCall(c, m); !coll.empty()) {
@@ -110,6 +117,11 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
         }
     }
     if (std::string proc = emitProcessMember(m); !proc.empty()) return proc;
+    // A std/network Map-shaped field read's `.size` (`req.params.size`): same
+    // hint as the call form above (src/std/network/codegen.cpp).
+    if (std::string field = emitNetworkMapFieldMember(m); !field.empty()) {
+        return field;
+    }
     // `std/collections` `m.size` / `s.size` reads and the `entries().length`
     // case (src/std/collections/codegen.cpp).
     if (std::string coll = emitCollectionsMember(m); !coll.empty()) return coll;

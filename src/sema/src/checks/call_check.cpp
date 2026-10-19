@@ -59,14 +59,10 @@ Type Analyzer::inferCall(CallExpr& call) {
         if (call.callee->kind == NodeKind::MemberExpr) {
             checkParallelCall(call);
             auto& member = static_cast<MemberExpr&>(*call.callee);
-            Type json;
-            if (tryInferJsonCall(call, member, json)) {
-                return json;
-            }
-            Type promise;
-            if (tryInferPromiseStaticCall(call, member, promise)) {
-                return promise;
-            }
+            if (Type json; tryInferJsonCall(call, member, json)) return json;
+            if (Type promise; tryInferPromiseStaticCall(call, member, promise)) return promise;
+            // std/network generics: `res.json<T>()` / `req.json<T>()` (src/std/network/sema.cpp).
+            if (Type network; tryInferNetworkMemberCall(call, member, network)) return network;
             if (Type family; tryInferFamilyMethodCall(call, member, family)) return family;
             if (Type buffer; tryInferBufferCall(call, member, buffer)) return buffer;
         }

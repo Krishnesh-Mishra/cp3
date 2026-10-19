@@ -267,12 +267,26 @@ private:
     // ("$network:*"), so the hooks live on the receiver, not on the member:
     // named imports (identifier calls), `new` forms, member calls/reads.
     bool isNetworkObject(const Expr* e) const;
+    // A documented Map-shaped field read (`res.headers`, `req.params`,
+    // `req.query`, `req.headers`) and its `Map<string, string>` type. A
+    // handler parameter is ambient in sema, so the open marker hides the type;
+    // `emitNetworkMapFieldCall`/`Member` re-use the collections lowering with
+    // a codegen type hint (see exprTypeHints_ below).
+    std::optional<Type> networkMapFieldType(const Expr& e) const;
+    std::string emitNetworkMapFieldCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitNetworkMapFieldMember(const MemberExpr& m);
     std::string emitNetworkIdentifier(const CallExpr& c, const std::string& name);
     std::string emitUnresolvedCall(const CallExpr& c, const std::string& name);
     std::string emitNetworkNew(const NewExpr& n);
     std::string emitNetworkMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkMemberRead(const MemberExpr& m);
     std::string emitNetworkFetch(const CallExpr& c, const ExprList& args);
+    // `res.json<T>()` / `req.json<T>()` for a reified interface T (the json
+    // record tables); "" when T is not one, so the scalar path still runs.
+    std::string networkJsonRecord(const MemberExpr& m, const CallExpr& c);
+    // `res.json(payload, status?)` for an array/object literal payload: the
+    // json dynamic value tree serializes it (cp3/std/json.hpp).
+    std::string networkResponseJson(const CallExpr& c, const MemberExpr& m);
     std::string fetchInitText(const Expr& init);
     std::string networkArg(const Type& receiver, const std::string& property,
                            const CallExpr& c, const Expr& arg, std::size_t index);
@@ -412,6 +426,11 @@ private:
     std::string currentReturn_ = "int";
 
     std::vector<std::unordered_map<std::string, Type>> env_;
+    // Codegen type hints: an expression whose real type the open std/network
+    // marker hides from sema (the Map-shaped documented fields) records it
+    // here, and `effectiveType` consults this before the sema map
+    // (src/std/network/codegen.cpp).
+    std::unordered_map<std::uint32_t, Type> exprTypeHints_;
     std::unordered_set<std::string> functions_;
     std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
     std::unordered_set<std::string> asyncFunctions_;   // `async function` names

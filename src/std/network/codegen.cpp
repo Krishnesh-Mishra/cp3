@@ -12,17 +12,25 @@
 //   new WebSocketServer(o)   -> ::cp3::runtime::network::WebSocketServer(port[, path])
 //   every other documented member (app.get/post/use/listen, ws.on/send/close,
 //   wss.on/close, res.status/text/json/send/write/end, res.status/ok/statusText,
-//   req.method/path) becomes the plain C++ member call/read.
+//   req.method/path/params/query/headers, res.headers/arrayBuffer)
+//   becomes the plain C++ member call/read.
 //   `app.delete(...)` maps to the runtime `del` member (`delete` is a C++
-//   keyword), `res.json<T>()` carries its explicit T through, and a middleware
-//   body calling `next()` lowers to the runtime continuation call.
+//   keyword), `res.json<T>()` carries its explicit T through (a registered
+//   interface T through the json record tables), `res.json({ ... })` through
+//   the json dynamic value tree, the Map-shaped fields (`res.headers`,
+//   `req.params/query/headers`) delegate their member calls to the collections
+//   lowering (exprTypeHints_), and a middleware body calling `next()` lowers to
+//   the runtime continuation call.
 //
-// PENDING (blocked on the in-flight std families; each has a SEAM marker
-// below): RequestInit.headers, FetchResponse.headers, req.params/query/headers
-// (collections Map), req.body (fs ReadStream), arrayBuffer() -> Buffer
-// (buffer), json<T> for a class/interface T (json reification + interface
-// codegen). Documented reads with no runtime member keep a named CP3002 skip
-// (emitNetworkMemberRead) instead of a raw C++ member read.
+// The member call/read surface (argument typing, the Map-shaped field reads,
+// the json dispatch and the known read list) lives in the sibling
+// codegen_methods.cpp; this unit owns receiver recognition plus the
+// construction/entry lowering.
+//
+// SEAMS (blocked on an in-flight or unlanded family; each is marked where it
+// fires): req.body -> the fs ReadStream (fs), async handlers (the async codegen
+// still reports CP3002 for `async () =>`), and the fetch-headers object-literal
+// form (the `_ambiguous/network_headers_object_vs_map` proposal: the Map wins).
 //
 // Receivers are recognised by the `$network:` marker names sema publishes
 // (src/std/network/sema.cpp). Handler arrows are emitted with declared parameter types
@@ -54,10 +62,6 @@ constexpr const char* kWebSocket = "$network:WebSocket";
 constexpr const char* kWebSocketServer = "$network:WebSocketServer";
 
 constexpr const char* kRuntimeNs = "::cp3::runtime::network::";
-constexpr const char* kReqType = "::cp3::runtime::network::HttpRequest&";
-constexpr const char* kResType = "::cp3::runtime::network::HttpResponse&";
-constexpr const char* kNextType = "::cp3::runtime::network::Next";
-constexpr const char* kThrownType = "::cp3::runtime::Thrown";
 
 /// The marker type a middleware's `next` parameter carries in the temporary
 /// handler scope below: the `$network:` prefix matches the sema markers, so a
@@ -75,70 +79,6 @@ std::string objectKey(const ObjectProperty& p) {
         return static_cast<const StringLiteral&>(*p.key).value;
     }
     return std::string();
-}
-
-/// The documented listener parameter types for one event name.
-std::vector<std::string> eventParams(const std::string& event) {
-    if (event == "message") return {std::string("std::string")};
-    if (event == "close") return {"double", "std::string"};
-    if (event == "error") return {std::string(kThrownType)};
-    if (event == "connection") {
-        return {std::string("::cp3::runtime::network::WebSocket&"),
-                std::string("::cp3::runtime::network::HttpRequest")};
-    }
-    return {};  // "open" and anything unlisted: no parameters
-}
-
-/// The sema marker type behind one documented C++ parameter. Sema keeps the
-/// documented callback parameters permissive, so the emitter types the lambda's
-/// own parameter names itself: a member call inside the body (`res.text(...)`,
-/// `ws.send(...)`) must still find the network tables.
-Type contextType(const std::string& cpp) {
-    if (cpp == kReqType || cpp == "::cp3::runtime::network::HttpRequest") {
-        return Type::named(TypeKind::Object, kHttpRequest);
-    }
-    if (cpp == kResType || cpp == "::cp3::runtime::network::HttpResponse") {
-        return Type::named(TypeKind::Object, kHttpResponse);
-    }
-    if (cpp == "::cp3::runtime::network::WebSocket&" ||
-        cpp == "::cp3::runtime::network::WebSocket") {
-        return Type::named(TypeKind::Object, kWebSocket);
-    }
-    if (cpp == kNextType) return Type::named(TypeKind::Object, kNextMarker);
-    if (cpp == "std::string") return Type::string();
-    if (cpp == "double") return Type::number();
-    return Type::unknown();
-}
-
-/// The C++ spelling of the explicit type arguments on a network member call
-/// (`res.json<T>()`, docs 04 §network). `json<T>` is the only generic member,
-/// and today only a primitive T has a C++ spelling. A class/interface T needs
-/// two things that do not exist yet: interface codegen (a top-level interface
-/// is CP3002) and the usage-based reification the json wave emits for
-/// `JSON.parse<T>`.
-/// SEAM(json): when the json wave lands, route the named/compound arm through
-/// its reification type spelling (the same one `JSON.parse<T>` emits) and
-/// return true for it; the call site already carries `<T>` unchanged.
-bool networkTypeArgsText(const TypeList& typeArgs, std::string& out) {
-    if (typeArgs.empty()) return true;
-    std::vector<std::string> spellings;
-    for (const auto& arg : typeArgs) {
-        if (!arg) return false;
-        const std::optional<Type> t = typeFromTypeNode(*arg);
-        if (!t) return false;
-        const CppInfo ci = classify(*t);
-        if (!ci.representable || !isPrimitiveShape(ci.shape)) return false;
-        spellings.push_back(ci.cpp);
-    }
-    out = "<" + joinStrings(spellings, ", ") + ">";
-    return true;
-}
-
-/// `app.delete(...)` -> the runtime member `del`: `delete` is a C++ keyword,
-/// so the HttpServer handle cannot spell it (docs 04 §network lists `.delete`).
-std::string networkMemberName(const Type& receiver, const std::string& property) {
-    if (receiver.name == kHttpServer && property == "delete") return "del";
-    return property;
 }
 
 }  // namespace
@@ -163,73 +103,12 @@ bool Generator::isNetworkObject(const Expr* e) const {
 }
 
 // =============================================================================
-// Argument lowering
-// =============================================================================
-
-/// Lowers one argument; an arrow function becomes a lambda with the parameter
-/// types the runtime callback expects for this call.
-std::string Generator::networkArg(const Type& receiver, const std::string& property,
-                                  const CallExpr& c, const Expr& arg, std::size_t index) {
-    if (arg.kind != NodeKind::ArrowFunction) return expr(arg);
-    std::vector<std::string> context;
-    if (receiver.name == kHttpServer) {
-        if (property == "listen") {
-            context = {};
-        } else if (property == "use") {
-            context = {kReqType, kResType, kNextType};
-        } else {
-            context = {kReqType, kResType};
-        }
-    } else if (receiver.name == kWebSocket || receiver.name == kWebSocketServer) {
-        // The event name is the first literal argument.
-        std::string event = "open";
-        if (index > 0 && !c.arguments.empty() && c.arguments.front() &&
-            c.arguments.front()->kind == NodeKind::StringLiteral) {
-            event = static_cast<const StringLiteral&>(*c.arguments.front()).value;
-        }
-        context = eventParams(event);
-    }
-    const auto& arrow = static_cast<const ArrowFunction&>(arg);
-    // Type the lambda's parameter names for the body emission only: sema keeps
-    // callback parameters permissive, so without this a member call inside the
-    // handler (`res.text(...)`, `ws.send(...)`) would not reach the network
-    // tables and would report CP3002. The temporary scope keeps the names out of
-    // the enclosing scope.
-    pushScope();
-    for (std::size_t i = 0; i < arrow.params.size() && i < context.size(); ++i) {
-        const Parameter* p = arrow.params[i].get();
-        if (!p || !p->name || p->name->kind != NodeKind::Identifier) continue;
-        const Type type = contextType(context[i]);
-        if (type.isUnknown()) continue;
-        declare(static_cast<const Identifier&>(*p->name).name, type);
-    }
-    std::string text = emitArrow(arrow, context);
-    popScope();
-    return text;
-}
-
-std::string Generator::networkArgs(const Type& receiver, const std::string& property,
-                                   const CallExpr& c) {
-    std::string args;
-    for (std::size_t i = 0; i < c.arguments.size(); ++i) {
-        const Expr* arg = c.arguments[i].get();
-        if (!arg) continue;
-        if (arg->kind == NodeKind::SpreadElement) {
-            notImplemented(*arg, "spread argument");
-            continue;
-        }
-        if (!args.empty()) args += ", ";
-        args += networkArg(receiver, property, c, *arg, i);
-    }
-    return args;
-}
-
-// =============================================================================
 // fetch / createServer
 // =============================================================================
 
-/// `{ method, body, timeout }` -> `FetchInit{method, body, hasBody, timeoutMs}`
-/// (the positional generated-code contract in cp3/std/network.hpp).
+/// `{ method, body, timeout, headers }` ->
+/// `FetchInit{method, body, hasBody, timeoutMs, headers}` (the positional
+/// generated-code contract in cp3/std/network.hpp).
 std::string Generator::fetchInitText(const Expr& init) {
     if (init.kind != NodeKind::ObjectLiteral) {
         notImplemented(init, "fetch options (an object literal)");
@@ -239,6 +118,7 @@ std::string Generator::fetchInitText(const Expr& init) {
     std::string method = "std::string(\"GET\")";
     std::string body = "std::string()";
     std::string timeout = "0.0";
+    std::string headers;
     bool hasBody = false;
     for (const auto& p : literal.properties) {
         if (!p || !p->value) continue;
@@ -251,16 +131,27 @@ std::string Generator::fetchInitText(const Expr& init) {
         } else if (key == "timeout") {
             timeout = expr(*p->value);
         } else if (key == "headers") {
-            // SEAM(collections): RequestInit.headers is `Map<string, string>`
-            // (docs 04 §network). Once std/collections lands the Map reads as
-            // its pair list here and the pairs go into a FetchInit.headers
-            // field, which buildRequest (runtime_fetch.cpp) turns into
-            // `Name: value` lines. Until then this stays the CP3002 skip.
-            notImplemented(*p, "fetch headers (needs the Map type)");
+            // RequestInit.headers is `Map<string, string>` (docs 04 §network):
+            // the Map expression reaches FetchInit.headers and buildRequest
+            // (runtime_fetch.cpp) writes one `Name: value` line per entry. An
+            // object-literal form stays a CP3002 skip: that is precisely the
+            // `_ambiguous/network_headers_object_vs_map` question, and the wave
+            // report's proposal answers it with the Map (the docs example
+            // aside), so the skipped shape is the one the ambiguity names.
+            if (p->value->kind == NodeKind::ObjectLiteral) {
+                notImplemented(*p->value,
+                               "fetch headers as an object literal (the documented "
+                               "shape is a Map<string, string>; headers ambiguity)");
+                continue;
+            }
+            headers = expr(*p->value);
+            needsCollections_ = true;
         }
     }
-    return std::string(kRuntimeNs) + "FetchInit{" + method + ", " + body + ", " +
-           (hasBody ? "true" : "false") + ", " + timeout + "}";
+    std::string text = std::string(kRuntimeNs) + "FetchInit{" + method + ", " + body +
+                       ", " + (hasBody ? "true" : "false") + ", " + timeout;
+    if (!headers.empty()) text += ", " + headers;
+    return text + "}";
 }
 
 std::string Generator::emitNetworkFetch(const CallExpr& c, const ExprList& args) {
@@ -356,58 +247,6 @@ std::string Generator::emitNetworkNew(const NewExpr& n) {
     std::string text = std::string(kRuntimeNs) + "WebSocketServer(" + port;
     if (!path.empty()) text += ", " + path;
     return text + ")";
-}
-
-// =============================================================================
-// Member calls / reads on network receivers
-// =============================================================================
-
-std::string Generator::emitNetworkMemberCall(const CallExpr& c, const MemberExpr& m) {
-    needsNetwork_ = true;
-    needsEventLoop_ = true;
-    const Type receiver = effectiveType(*m.object);
-    const std::string args = networkArgs(receiver, m.property, c);
-    // Explicit generics (`res.json<T>()`); a T with no C++ spelling yet keeps
-    // the CP3002 skip (see networkTypeArgsText for the json seam).
-    std::string typeArgs;
-    if (!networkTypeArgsText(c.typeArgs, typeArgs)) {
-        notImplemented(c, "std/network member call with a type argument that has "
-                          "no C++ spelling yet (json<T> supports a primitive T)");
-        return "0.0";
-    }
-    return "(" + expr(*m.object) + ")." + networkMemberName(receiver, m.property) +
-           typeArgs + "(" + args + ")";
-}
-
-std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
-    if (m.object == nullptr) return std::string();
-    const std::string& name = effectiveType(*m.object).name;
-    bool known = false;
-    if (name == kFetchResponse) {
-        known = m.property == "ok" || m.property == "status" || m.property == "statusText";
-    } else if (name == kHttpRequest) {
-        known = m.property == "method" || m.property == "path";
-    }
-    if (known) {
-        needsNetwork_ = true;
-        return "(" + expr(*m.object) + ")." + m.property;
-    }
-    // Documented reads whose runtime members do not exist yet: keep the CP3002
-    // skip (naming the seam) instead of emitting a raw C++ read that would die
-    // inside g++ with "no member named ...".
-    if (name == kFetchResponse && m.property == "headers") {
-        notImplemented(m, "res.headers (needs the Map type; SEAM(collections))");
-        return "0.0";
-    }
-    if (name == kHttpRequest &&
-        (m.property == "params" || m.property == "query" || m.property == "headers" ||
-         m.property == "body")) {
-        notImplemented(m, "req." + m.property +
-                              " (needs the Map/stream families; SEAM(collections) / "
-                              "SEAM(readstream/fs))");
-        return "0.0";
-    }
-    return std::string();
 }
 
 // =============================================================================

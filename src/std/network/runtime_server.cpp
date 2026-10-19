@@ -71,15 +71,23 @@ std::string reasonPhrase(double code) {
     }
 }
 
-/// `*` and `/*` match any path; `:name` segments swallow one path segment.
-bool pathMatches(const std::string& pattern, const std::string& path) {
+/// `*` and `/*` match any path; `:name` segments swallow one path segment and
+/// record the captured value under `name` (used by the `req.params` Map).
+bool pathMatches(const std::string& pattern, const std::string& path,
+                 std::vector<std::pair<std::string, std::string>>* params) {
     if (pattern == "*" || pattern == "/*") return true;
     std::size_t pi = 0;
     std::size_t si = 0;
     while (pi < pattern.size() && si < path.size()) {
         if (pattern[pi] == ':') {
+            const std::size_t nameStart = ++pi;
             while (pi < pattern.size() && pattern[pi] != '/') ++pi;
+            const std::size_t valueStart = si;
             while (si < path.size() && path[si] != '/') ++si;
+            if (params != nullptr) {
+                params->emplace_back(pattern.substr(nameStart, pi - nameStart),
+                                     path.substr(valueStart, si - valueStart));
+            }
             continue;
         }
         if (pattern[pi] != path[si]) return false;
@@ -87,6 +95,71 @@ bool pathMatches(const std::string& pattern, const std::string& path) {
         ++si;
     }
     return pi == pattern.size() && si == path.size();
+}
+
+/// Percent-decoding for one query component (`%xx`, and `+` as space), the
+/// URLSearchParams reading the documented `query: Map<string, string>` wants.
+/// An invalid escape stays literal.
+std::string percentDecode(const std::string& text) {
+    const auto hex = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    std::string out;
+    out.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '+') {
+            out.push_back(' ');
+            continue;
+        }
+        if (c == '%' && i + 2 < text.size()) {
+            const int hi = hex(text[i + 1]);
+            const int lo = hex(text[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                out.push_back(static_cast<char>((hi << 4) | lo));
+                i += 2;
+                continue;
+            }
+        }
+        out.push_back(c);
+    }
+    return out;
+}
+
+/// `key=value&k2=two` -> the documented `query` Map (a later duplicate key
+/// wins, exactly like `Map.set`).
+StringMap parseQuery(const std::string& text) {
+    StringMap map = collections::makeMap<std::string, std::string>();
+    std::size_t start = 0;
+    while (start < text.size()) {
+        const std::size_t amp = text.find('&', start);
+        const std::size_t end = amp == std::string::npos ? text.size() : amp;
+        const std::string part = text.substr(start, end - start);
+        if (!part.empty()) {
+            const std::size_t eq = part.find('=');
+            const std::string name =
+                percentDecode(eq == std::string::npos ? part : part.substr(0, eq));
+            const std::string value =
+                eq == std::string::npos ? std::string() : percentDecode(part.substr(eq + 1));
+            map->set(name, value);
+        }
+        if (amp == std::string::npos) break;
+        start = amp + 1;
+    }
+    return map;
+}
+
+/// The request header block as the documented `headers` Map; names lower cased
+/// like the JS Headers object.
+StringMap requestHeaders(NativeRequest* req) {
+    StringMap map = collections::makeMap<std::string, std::string>();
+    for (const auto& [key, value] : *req) {
+        map->set(lowerAscii(std::string(key)), std::string(value));
+    }
+    return map;
 }
 
 }  // namespace
@@ -215,6 +288,13 @@ void HttpResponse::json(bool data, double code) {
     sendBuffered(*impl_, "application/json; charset=utf-8", false);
 }
 
+void HttpResponse::json(const ::cp3::runtime::json::Value& data, double code) {
+    if (!impl_ || impl_->finished) return;
+    if (code > 0) impl_->status = code;
+    impl_->body = cp3::runtime::json::stringify(data);
+    sendBuffered(*impl_, "application/json; charset=utf-8", false);
+}
+
 void HttpResponse::send(double code) {
     if (!impl_ || impl_->finished) return;
     if (code > 0) impl_->status = code;
@@ -226,6 +306,10 @@ void HttpResponse::write(const std::string& chunk) {
     NativeResponse* res = startHead(*impl_);
     if (res == nullptr) return;
     res->write(chunk);  // no content-length written: uWS switches to chunked
+}
+
+void HttpResponse::write(const buffer::Buffer& chunk) {
+    write(chunk.bytes());
 }
 
 void HttpResponse::end() {
@@ -252,7 +336,13 @@ void runChain(RequestContext& ctx) {
     while (!ctx.response.sent() && ctx.index < ctx.server->routes.size()) {
         const ServerImpl::Route& route = ctx.server->routes[ctx.index++];
         if (route.method != "*" && route.method != ctx.request.method) continue;
-        if (!pathMatches(route.pattern, ctx.request.path)) continue;
+        std::vector<std::pair<std::string, std::string>> captures;
+        if (!pathMatches(route.pattern, ctx.request.path, &captures)) continue;
+        // The matched route's `:name` parameters as one fresh Map per match, so
+        // a chain that runs through several routes never sees stale captures.
+        StringMap params = collections::makeMap<std::string, std::string>();
+        for (auto& [name, value] : captures) params->set(name, value);
+        ctx.request.setParams(std::move(params));
         Next next([&ctx] { runChain(ctx); });
         route.handler(ctx.request, ctx.response, next);
     }
@@ -305,14 +395,11 @@ void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
     pending->server = server;
     pending->context.server = server.get();
     pending->context.request.method = std::string(req->getCaseSensitiveMethod());
-    // `req.path` excludes the query string (docs 04 §network): patterns match
-    // against the path half only. SEAM(collections): the query half is parsed
-    // into the documented `query: Map<string, string>` right here once the
-    // collections family lands (the native side already hands us the raw text).
-    const std::string target(req->getUrl());
-    const std::size_t queryAt = target.find('?');
-    pending->context.request.path =
-        queryAt == std::string::npos ? target : target.substr(0, queryAt);
+    // `req.path` excludes the query string (docs 04 §network): uWS hands the
+    // path and the raw query text separately (`getUrl` / `getQuery`).
+    pending->context.request.path = std::string(req->getUrl());
+    pending->context.request.setQuery(parseQuery(std::string(req->getQuery())));
+    pending->context.request.setHeaders(requestHeaders(req));
     pending->context.response.bindNative(res);
     res->onAborted([pending] { pending->aborted = true; });
     res->onData([pending](std::string_view chunk, bool isLast) {
