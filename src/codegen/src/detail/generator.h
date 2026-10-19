@@ -59,10 +59,9 @@ namespace cp3 {
 
 class Generator;
 
-// The regular-array method surface (src/std/arrays/codegen_methods.cpp):
-// push/pop, the callback set, searching, slicing and the in-place mutators,
-// plus `for...of`. A friend of Generator for the private state it drives; the
-// definitions live in that unit.
+// The regular-array method surface (src/std/arrays/codegen_methods.cpp): push/
+// pop, the callback set, searching, slicing, the in-place mutators and a
+// `for...of`; a friend of Generator, defined in that unit.
 namespace detail {
 struct ArrayEmitter {
     static std::string methodCall(Generator& g, const CallExpr& c,

@@ -50,29 +50,6 @@ bool isOneOf(const std::string& prop, const char* const (&names)[N]) {
 
 }  // namespace
 
-// A non-nullish value union (`number | string` - the sanctioned mixed-array
-// element form, docs 09) -> `std::variant` over the primitive alternatives.
-// Anything else (objects, classes, ...) stays out of M2. Moved here from
-// type_map.cpp: the mixed-array element form is this surface's own shape.
-void detail::classifyValueUnion(const Type& t, CppInfo& info) {
-    if (t.parts.size() < 2) return;
-    std::vector<std::string> cpps;
-    for (const Type& part : t.parts) {
-        if (part.isNullish()) return;
-        const CppInfo ci = classify(part);
-        if (!ci.representable || !isPrimitiveShape(ci.shape)) return;
-        cpps.push_back(ci.cpp);
-    }
-    info.shape = Shape::Union;
-    info.representable = true;
-    info.cpp = "std::variant<";
-    for (std::size_t i = 0; i < cpps.size(); ++i) {
-        if (i != 0) info.cpp += ", ";
-        info.cpp += cpps[i];
-    }
-    info.cpp += ">";
-}
-
 // The callback set (`map` / `filter` / `reduce` / `find` / `findIndex` /
 // `some` / `every`): each arrow lowers with its parameter context.
 std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,

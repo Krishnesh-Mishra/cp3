@@ -4,13 +4,10 @@
 //
 // Owns the frozen `CodeGenerator::generate` boundary (cp3/codegen.hpp), the
 // `Generator` constructor/diagnostic helpers, the module namespace, and the
-// synthesized assembly: the generated .hpp, the .cpp's per-TU helper block and
-// `main()`. The per-concern emit units (type_map/emit_expr/emit_stmt/emit_decl)
-// are driven by `Generator::run` here.
-//
-// Out-of-scope AST nodes report CP3002 (deduped per nodeId) and emit a
-// compilable stub; the generator never throws and never aborts. The dedup is
-// what drives the CLI's exit-3 "skipped" behavior.
+// synthesized assembly (the generated .hpp, the .cpp's per-TU helper block and
+// `main()`), driven by `Generator::run`. Out-of-scope AST nodes report CP3002
+// (deduped per nodeId) and emit a compilable stub; the generator never throws,
+// and the dedup drives the CLI's exit-3 "skipped" behavior.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -164,16 +161,6 @@ template <class Tag>
 inline bool cp3_truthy(const cp3::runtime::TypedArray<Tag>&) { return true; }
 template <class E>
 inline bool cp3_truthy(const cp3::runtime::Array<E>&) { return true; }
-// A value-union slot (`number | string` -> std::variant, docs 09): printing
-// renders the held alternative, and its JS truthiness is the held value's.
-template <class... Ts>
-inline std::string cp3_ts(const std::variant<Ts...>& v) {
-    return std::visit([](const auto& x) { return cp3_ts(x); }, v);
-}
-template <class... Ts>
-inline bool cp3_truthy(const std::variant<Ts...>& v) {
-    return std::visit([](const auto& x) { return cp3_truthy(x); }, v);
-}
 
 }  // namespace
 
@@ -235,9 +222,7 @@ std::string indentText(const std::string& text, const std::string& pad) {
 
 }  // namespace
 
-// -----------------------------------------------------------------------------
-// Generator - construction, diagnostics and top-level orchestration
-// -----------------------------------------------------------------------------
+// --- Generator - construction, diagnostics and top-level orchestration -------
 
 Generator::Generator(DiagnosticSink& sink, const SemaResult& sema,
                      const std::string& moduleName, bool lineDirectives)
@@ -294,25 +279,18 @@ GeneratedModule Generator::run(const Program& program) {
             objectDeclsFor(jsonShapeDecls_ + decls + defs + mainBody) +
             jsonShapeDecls_ + decls;
 
-    // The family include (D69) is needed wherever a generated declaration or
-    // definition names its C++ spellings, array types from bodies included.
+    // The family include (D69) is needed wherever a generated spelling appears.
     const std::string familyUse = decls + defs + mainBody;
     if (familyUse.find("::cp3::runtime::Array") != std::string::npos ||
         familyUse.find("::cp3::runtime::TypedArray") != std::string::npos ||
         familyUse.find("::cp3::runtime::SharedArrayBuffer") !=
             std::string::npos ||
-        familyUse.find("::cp3::runtime::DataView") != std::string::npos) {
+        familyUse.find("::cp3::runtime::DataView") != std::string::npos ||
+        familyUse.find("std::variant<") != std::string::npos) {  // union slot (docs 09)
         needsTypedArray_ = true;
     }
     if (familyUse.find("::cp3::runtime::collections::") != std::string::npos) {
         needsCollections_ = true;
-    }
-    // A value union (`number | string` -> std::variant, docs 09): the variant
-    // spelling and its helpers (unionStrictEquals) come from the family header
-    // (cp3/array_extras.hpp, pulled by cp3/typed_array.hpp), which is also
-    // where <variant> reaches the unit.
-    if (familyUse.find("std::variant<") != std::string::npos) {
-        needsTypedArray_ = true;
     }
     // The nominal std/buffer `Buffer` follows the same rule.
     if (familyUse.find("::cp3::runtime::buffer::Buffer") != std::string::npos) {
@@ -325,8 +303,7 @@ GeneratedModule Generator::run(const Program& program) {
         familyUse.find("::cp3::runtime::Listener") != std::string::npos) {
         needsEventEmitter_ = true;
     }
-    // The operator wave's spellings: bitwise/shift helpers, primitive
-    // `std::variant` unions and generated `cp3_obj_` value structs.
+    // The operator wave's spellings: bitwise/shift helpers and the unions.
     if (familyUse.find("::cp3::runtime::bitwise::") != std::string::npos) needsBitwise_ = true;
     if (familyUse.find("std::variant<") != std::string::npos) needsUnion_ = true;
     if (familyUse.find("::cp3::runtime::unions::") != std::string::npos) needsUnion_ = true;
@@ -338,9 +315,7 @@ GeneratedModule Generator::run(const Program& program) {
     return module;
 }
 
-// -----------------------------------------------------------------------------
-// Generator - assembly (generated .hpp / .cpp)
-// -----------------------------------------------------------------------------
+// --- Generator - assembly (generated .hpp / .cpp) -----------------------------
 
 std::string Generator::buildHeader(const std::string& decls) const {
     const std::string guard =
@@ -497,9 +472,7 @@ void Generator::emitMain(std::string& out, const std::string& mainBody) const {
     out += "}\n";
 }
 
-// -----------------------------------------------------------------------------
-// CodeGenerator (frozen boundary)
-// -----------------------------------------------------------------------------
+// --- CodeGenerator (frozen boundary) ------------------------------------------
 
 GeneratedModule CodeGenerator::generate(const Program& program,
                                         const SemaResult& sema,

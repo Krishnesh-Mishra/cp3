@@ -124,29 +124,16 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
         return "((" + opt + ".has_value()) && (*" + opt + " " + op + " " + val + "))";
     }
 
-    // Maybe vs Maybe, or Maybe vs T: compare the unwrapped value (a nullish
-    // side never equals a non-nullish value, so the guard is required).
+    // Maybe vs Maybe, or a Maybe vs T: compare the unwrapped value (guarded).
     if (L.shape == Shape::Maybe || R.shape == Shape::Maybe) {
         const std::string mb = (L.shape == Shape::Maybe) ? lhs : rhs;
         const std::string val = (L.shape == Shape::Maybe) ? rhs : lhs;
         return "((" + mb + ".hasValue()) && (" + mb + ".value() " + op + " " + val + "))";
     }
 
-    // A value union (`number | string` -> std::variant) against a value: `===`
-    // only matches when the union currently holds the same alternative, while
-    // loose `==` coerces through JS abstract equality (spec 05: `1 == "1"`
-    // holds for a union-held value). Both-union comparisons fall through to the
-    // direct compare below.
-    if ((L.shape == Shape::Union) != (R.shape == Shape::Union)) {
-        const std::string uni = (L.shape == Shape::Union) ? lhs : rhs;
-        const std::string val = (L.shape == Shape::Union) ? rhs : lhs;
-        const std::string helper = isStrict ? "::cp3::runtime::unionStrictEquals("
-                                            : "::cp3::runtime::unionLooseEquals(";
-        const std::string eq = helper + uni + ", " + val + ")";
-        return isEqual ? "(" + eq + ")" : "(! " + eq + ")";
-    }
-
-    // A primitive union (`std::variant`, Shape::Union): see `unionEqualityText`.
+    // A primitive union (`std::variant`, Shape::Union) on either side: the
+    // one-sided `==` coerces through the runtime helpers, `===` matches only
+    // the held alternative (see `unionEqualityText`).
     if (L.shape == Shape::Union || R.shape == Shape::Union) {
         return unionEqualityText(b, L, R, lhs, rhs);
     }

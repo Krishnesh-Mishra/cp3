@@ -94,24 +94,15 @@ Array<E> arraySortWith(const Array<E>& a, F cmp) {
     return a;
 }
 
-// `a.includes(value)` (docs/language-spec/09-arrays-strings.md): the
-// SameValueZero search; only the one-argument form is lowered. NaN finds
-// itself and +0/-0 compare equal (the double overload); the template covers
-// every element type with `==` (bool, string, an enum).
+// SameValueZero (JS `includes` / `indexOf` on the double instantiation):
+// NaN finds itself and +0/-0 compare equal; the template covers every other
+// element type with `==` (bool, string, an enum).
 inline bool sameValueZero(double a, double b) {
     return a == b || (std::isnan(a) && std::isnan(b));
 }
 template <class E>
 bool sameValueZero(const E& a, const E& b) {
     return a == b;
-}
-
-template <class E>
-bool arrayIncludes(const Array<E>& a, const E& value) {
-    for (std::size_t i = 0; i < a->size(); ++i) {
-        if (sameValueZero((*a)[i], value)) return true;
-    }
-    return false;
 }
 
 // A bounds-checked read/write (the corpus only indexes in range; anything else
@@ -265,12 +256,13 @@ double arrayIndexOf(const Array<E>& a, const E& value, double from = 0.0) {
     return -1.0;
 }
 
-// `a.includes(x, from?)`.
+// `a.includes(x, from?)`: SameValueZero (the double instantiation finds NaN
+// and treats +0/-0 as equal, matching JS).
 template <class E>
 bool arrayIncludes(const Array<E>& a, const E& value, double from = 0.0) {
     const std::size_t start = startIndex(from, a->size());
     for (std::size_t i = start; i < a->size(); ++i) {
-        if ((*a)[i] == value) return true;
+        if (sameValueZero((*a)[i], value)) return true;
     }
     return false;
 }

@@ -44,8 +44,7 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
                 line(out, indent, ";");
                 return;
             }
-            // A statement's own expression may defer its bound check: the
-            // value is discarded, so it is never observed (see intAssignText).
+            // A statement's expression may defer its bound check (intAssignText).
             const bool wasStmt = intOn() && intMode_->stmtExpr;
             if (intOn()) intMode_->stmtExpr = true;
             const std::string text = expr(*es.expression);
@@ -85,8 +84,7 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
             return;
         case NodeKind::BreakStatement:
         case NodeKind::ContinueStatement:
-            line(out, indent,
-                 s.kind == NodeKind::BreakStatement ? "break;" : "continue;");
+            line(out, indent, s.kind == NodeKind::BreakStatement ? "break;" : "continue;");
             return;
         case NodeKind::ThrowStatement:
             emitThrow(static_cast<const ThrowStatement&>(s), out, indent);

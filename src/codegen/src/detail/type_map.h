@@ -28,7 +28,7 @@ namespace detail {
 enum class Shape {
     Number, String, Bool, Undefined, Null, Void, Optional, Maybe, Promise,
     Array,       // number[] / string[] / boolean[] / nested arrays
-    Union,       // a non-nullish value union (`number | string` -> std::variant)
+    Union,       // a non-nullish value union: std::variant (cp3/core/union.hpp)
     TypedArray,  // Int8Array .. BigUint64Array
     ArrayBuffer, // ArrayBuffer / SharedArrayBuffer
     DataView,
@@ -37,7 +37,6 @@ enum class Shape {
     Enum,        // a named enum (spec 04): `enum class <name> : long long`
     EventEmitter, // the builtin event type (D74): Ref<EventEmitter>
     Listener,     // a function-typed value (D74): the boxed callable
-    Union,       // A | B over primitives: std::variant (cp3/core/union.hpp)
     Object,      // an all-primitive `$o{...}` shape: a generated value struct
     Unknown, Unsupported
 };
