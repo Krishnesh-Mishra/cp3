@@ -8,18 +8,18 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 103** across 15 categories.
+**Total markers: 88** across 15 categories.
 
 | Category | Markers |
 | --- | ---: |
 | `arrays-strings` | 9 |
-| `async` | 5 |
+| `async` | 1 |
 | `classes` | 4 |
 | `cli` | 23 |
 | `concurrency` | 6 |
 | `control-flow` | 6 |
-| `enums` | 7 |
-| `errors` | 7 |
+| `enums` | 2 |
+| `errors` | 1 |
 | `functions-closures` | 4 |
 | `generics` | 2 |
 | `memory-weak` | 6 |
@@ -27,7 +27,7 @@ python tests/runner/run_tests.py --write-registry
 | `operators` | 6 |
 | `stdlib` | 11 |
 | `types` | 4 |
-| **Total** | **103** |
+| **Total** | **88** |
 
 ## `arrays-strings`
 
@@ -48,10 +48,6 @@ python tests/runner/run_tests.py --write-registry
 | case file | question |
 | --- | --- |
 | `async/_ambiguous/async_arrow_function.expect.json` | is `async () => {}` (async arrow function) supported? The spec only shows `async function`. |
-| `async/_ambiguous/await_non_promise.expect.json` | what does `await` on a non-Promise value do (JS unwraps it)? Not specified. |
-| `async/_ambiguous/promise_resolve_reject.expect.json` | are the static `Promise.resolve`/`Promise.reject` present? The spec lists only all/race/allSettled. |
-| `async/_ambiguous/then_chaining_return.expect.json` | whether `.then` returns a new Promise that chains (JS semantics) is not stated. |
-| `async/_ambiguous/unhandled_rejection_exit_code.expect.json` | the process terminating on an unhandled rejection is pinned, but the exact exit code and printed diagnostics are not. |
 
 ## `classes`
 
@@ -116,25 +112,14 @@ python tests/runner/run_tests.py --write-registry
 
 | case file | question |
 | --- | --- |
-| `enums/_ambiguous/assign_raw_number.expect.json` | assigning a raw number to a numeric-enum-typed variable (`let c: Color = 1`) |
-| `enums/_ambiguous/autonumber_value.expect.json` | the underlying numeric value of an auto-incremented member after an explicit initializer is not observable through any spec-pinned operation |
 | `enums/_ambiguous/compare_member_to_number.expect.json` | comparing an enum member to a raw number (Color.Red === 0) |
-| `enums/_ambiguous/implicit_after_string.expect.json` | an enum member with no initializer following a string-backed member |
-| `enums/_ambiguous/mixed_backing.expect.json` | an enum mixing string and number members |
 | `enums/_ambiguous/numeric_value_via_index.expect.json` | observing a number-backed enum's underlying numeric value via array indexing (enum-to-number conversion) |
-| `enums/_ambiguous/print_value.expect.json` | whether/how an enum value is Printable and what console.log renders for it |
 
 ## `errors`
 
 | case file | question |
 | --- | --- |
-| `errors/_ambiguous/builtin_error_type.expect.json` | is there a built-in `Error` type to `throw new Error(...)`? The spec states there is no separate exception hierarchy. |
-| `errors/_ambiguous/catch_binding_scope.expect.json` | is the catch binding visible after the catch block? Not specified. |
-| `errors/_ambiguous/catch_without_binding.expect.json` | is `catch { }` (optional catch binding) allowed? The spec always shows `catch (e)`. |
 | `errors/_ambiguous/finally_return_overrides.expect.json` | does a `return` inside `finally` override the try/catch return (JS semantics)? Not stated. |
-| `errors/_ambiguous/oob_index_catchable.expect.json` | is an out-of-bounds array access a catchable thrown error or a hard runtime panic (CLI §2 calls it a runtime crash)? |
-| `errors/_ambiguous/try_without_catch.expect.json` | is `try { } finally { }` (no catch clause) allowed? The spec only ever shows try/catch/finally. |
-| `errors/_ambiguous/uncaught_throw_behavior.expect.json` | what is the observable exit code / output of an uncaught top-level `throw`? Only unhandled *rejections* are pinned to terminate the process. |
 
 ## `functions-closures`
 

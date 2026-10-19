@@ -799,3 +799,27 @@ pinned by `tests/cases/stdlib/parseint_invalid.cp3` and
 - `arrays-strings/_ambiguous/forin_map_order` stays a marker: `for (let k in
   m)` over a Map hits `CP3002: not implemented yet: this statement`; the pin
   waits for the `for...in` lowering gap (tracked in AUDIT-FOLLOWUPS.md).
+
+## Audit promotions, second batch (2026-10-19, lead)
+
+Rulings pinned by canonical-build probes; docs are silent on each, so they
+follow the standing JS-parity design goal (see D78).
+
+- errors: there is no built-in `Error` type (`throw` takes any value);
+  the catch binding is block-scoped (CP3301 after the block); `catch { }`
+  without a binding is allowed; `try { } finally { }` without catch is
+  allowed; an out-of-bounds index is a hard runtime RangeError that
+  terminates (exit 1, not catchable by a cp3 catch); an uncaught top-level
+  throw terminates with exit 1.
+- enums: raw numbers are not assignable to enum types (CP3401);
+  auto-increment after an explicit initializer is previous + 1 (prints 6);
+  a member without an initializer after a string-backed member is CP3401;
+  mixed backing is CP3706; `console.log` of a number-backed member prints
+  the underlying number.
+- async: `await` on a non-Promise unwraps the value (JS); `Promise.resolve`
+  is present; `.then` returns a chainable Promise; an unhandled rejection
+  terminates with exit 1.
+- Still open (deferred until the touching waves land, tracked in
+  AUDIT-FOLLOWUPS.md): `finally_return_overrides`,
+  `compare_member_to_number`, `numeric_value_via_index`,
+  `async_arrow_function` (B16).
