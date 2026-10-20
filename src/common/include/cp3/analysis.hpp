@@ -67,6 +67,12 @@ struct SemaResult {
     // bool returned by SemanticAnalyzer::analyze).
     bool ok = false;
 
+    // D79: the unit calls `createServer({ threads })` with a thread count that
+    // is not the literal 1, so codegen must make module-level bindings
+    // thread-local and replay their runtime initializers on every loop thread.
+    // False for every unit without the option, which keeps today's lowering.
+    bool networkScaleMode = false;
+
     // The inferred type of `nodeId`, or nullptr when there is none.
     const Type* typeOf(std::uint32_t nodeId) const {
         const auto it = nodeTypes.find(nodeId);
@@ -80,6 +86,7 @@ struct SemaResult {
         symbols.clear();
         functions.clear();
         ok = false;
+        networkScaleMode = false;
     }
 };
 
