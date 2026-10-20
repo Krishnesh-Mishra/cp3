@@ -9,6 +9,7 @@
 // `saved`), read tolerantly so a hand-edited file never crashes a build.
 // CP3_CONFIG_DIR overrides the config directory for tests and CI.
 // =============================================================================
+#include "detail/toolchain.hpp"
 #include "detail/toolchain_select.hpp"
 
 #include <cstdio>
@@ -73,6 +74,20 @@ bool looksLikePath(const std::string& value) {
 }
 
 }  // namespace
+
+void warnSavedToolchainChoice(const ToolchainChoice& choice,
+                              const std::string& label) {
+    ChoiceResolutionResult result;
+    resolveToolchainChoice(choice, label, false, result);
+    const std::string warning = !result.warning.empty()
+                                    ? result.warning
+                                    : (!result.error.empty()
+                                           ? label + ": " + result.error
+                                           : std::string());
+    if (warning.empty()) return;
+    if (toolchainWarning().find(warning) != std::string::npos) return;
+    std::fprintf(stderr, "cp3c: warning: %s\n", warning.c_str());
+}
 
 fs::path toolchainConfigPath() {
     return configDirectory() / "toolchain.conf";

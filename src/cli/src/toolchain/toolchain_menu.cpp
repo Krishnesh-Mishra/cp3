@@ -83,6 +83,7 @@ private:
 #if defined(_WIN32)
 int readKey() {
     const int first = _getch();
+    if (first == EOF) return kKeyCancel;
     if (first == 0 || first == 224) {
         const int second = _getch();
         if (second == 72) return kKeyUp;

@@ -8,6 +8,14 @@ cp3 init
 
 Prompts: project **type** (`application` or `package`) → **name** → **description** → **type-system pattern** (TypeScript / C++ / Rust - see [README.md §3](../language-spec/03-type-system.md)). Generates `src/`, `package.json`, and a hello-world entry file (`index.cp3` by default).
 
+Interactive prompts appear only on a terminal and only without `--yes`. For scripts and CI, pass the answers explicitly:
+
+```bash
+cp3 init --yes --type package --type-system rust
+```
+
+`--type-system` accepts `typescript` (the default), `cpp`, or `rust`; the chosen value is written to `package.json` as `"typeSystem"`. Without a terminal or `--type-system`, the default is `typescript`.
+
 **`package.json`**
 
 ```json
@@ -149,10 +157,13 @@ export default { add, sub, mul, div }
 ```
 
 ```bash
-cp3 build      # → basickit.cp3pak
-cp3 publish    # push to the registry, or:
-cp3 link ./basickit.cp3pak   # local/private use
+cp3 build      # → .cp3/out/basickit.cp3pak
+cp3 publish    # build + report/copy the artifact; beta one has no registry push
+cp3 publish --out ./dist   # copy basickit.cp3pak into ./dist
+cp3 link ../basickit       # local/private use from a source checkout
 ```
+
+`cp3 publish` builds the package exactly as `cp3 build` does and reports the absolute `.cp3pak` path, name, version, size, and SHA-256; `--out` copies it, and `--dry-run` only reports. To share the package, attach that `.cp3pak` to a public GitHub release. Consumers can then install it with `cp3 install https://github.com/<owner>/<repo>` (see [§4](04-package-manager.md)).
 
 Consuming project:
 

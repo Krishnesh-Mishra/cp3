@@ -212,7 +212,8 @@ ChoiceResolution resolveFamily(const ToolchainChoice& choice,
             }
             selected = &installs.front();
             result.warning = sourceLabel + " pins " + candidate->name + " " +
-                             choice.version + ", not installed; using " +
+                             choice.version +
+                             ", not installed; falling back to " +
                              candidate->name + " " + selected->version + " (" +
                              selected->program + "). Run cp3c toolchain to install " +
                              choice.version + ".";
@@ -371,13 +372,17 @@ bool parseToolchainSpec(const std::string& raw, ToolchainChoice& out,
         return true;
     }
     const std::size_t at = value.rfind('@');
-    if (at != std::string::npos && at > 0 &&
-        looksLikeVersion(value.substr(at + 1))) {
+    if (at != std::string::npos && at > 0) {
         const std::string id = trimCopy(value.substr(0, at));
         if (const ToolchainCandidate* candidate =
                 findToolchainCandidate(lowerCopy(id))) {
+            const std::string rawVersion = trimCopy(value.substr(at + 1));
+            if (!looksLikeVersion(rawVersion)) {
+                err = "invalid version in '" + value + "'";
+                return false;
+            }
             const std::string version =
-                normalizeCompilerVersion(value.substr(at + 1));
+                normalizeCompilerVersion(rawVersion);
             if (version.empty()) {
                 err = "invalid version in '" + value + "'";
                 return false;
@@ -391,9 +396,17 @@ bool parseToolchainSpec(const std::string& raw, ToolchainChoice& out,
     }
     std::string program;
     if (!findProgram(value, program)) {
-        err = "'" + value +
-              "' is neither a known toolchain id (gcc, clang, msvc, "
-              "apple-clang), id@version, nor an existing executable";
+        const bool pathShaped =
+            value.find('/') != std::string::npos ||
+            value.find('\\') != std::string::npos ||
+            (value.size() > 1 && value[1] == ':');
+        if (pathShaped) {
+            err = "compiler path '" + value + "' does not exist";
+        } else {
+            err = "unknown toolchain '" + value +
+                  "' (expected gcc, clang, msvc, apple-clang, id@version, or "
+                  "an existing compiler path)";
+        }
         return false;
     }
     out.id = program;
@@ -413,30 +426,13 @@ ChoiceResolution resolveToolchainChoice(const ToolchainChoice& choice,
     return result.status;
 }
 
-bool resolveToolchainValue(const std::string& raw, Toolchain& out,
-                           std::string& err) {
-    ToolchainChoice choice;
-    if (!parseToolchainSpec(raw, choice, err)) return false;
-    ChoiceResolutionResult result;
-    resolveToolchainChoice(choice, "toolchain", true, result);
-    if (result.status == ChoiceResolution::Ok) {
-        out = std::move(result.toolchain);
-        return true;
-    }
-    err = result.error.empty()
-              ? (result.warning.empty() ? "toolchain is not available"
-                                        : result.warning)
-              : result.error;
-    return false;
-}
-
 const Toolchain& detectToolchain() {
     SelectionState& current = state();
     if (!current.resolved) {
         resolveNow();
         current.resolved = true;
         if (!current.warning.empty()) {
-            std::fprintf(stderr, "cp3c: toolchain: %s\n",
+            std::fprintf(stderr, "cp3c: warning: toolchain: %s\n",
                          current.warning.c_str());
         }
     }
@@ -467,9 +463,9 @@ std::string toolchainSourceDescription() {
     const SelectionState& current = state();
     switch (current.source) {
         case ToolchainSource::Flag:
-            return "--toolchain " + current.origin;
+            return "command line (--toolchain " + current.origin + ")";
         case ToolchainSource::Environment:
-            return "CP3_TOOLCHAIN=" + current.origin;
+            return "environment (CP3_TOOLCHAIN=" + current.origin + ")";
         case ToolchainSource::Project:
             return "project package.json (" + current.origin + ")";
         case ToolchainSource::Global:

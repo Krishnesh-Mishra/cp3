@@ -7,8 +7,9 @@ rem command is `cp3` (PKG-CONTRACTS section 1). Commands owned here and never
 rem forwarded:
 rem   cp3 init [target] [--force]      scaffold a project (package.json,
 rem                                    src/main.cp3, README.md)
-rem   cp3 install vs-code-plugin       install the bundled .vsix via `code`
 rem   cp3 doctor                       print environment status
+rem Everything `cp3c` owns is forwarded, including the editor extension
+rem command: `cp3 editor-plugin` (alias `cp3 editor-plugins`).
 rem Everything else - including `cp3 lsp`, `cp3 run`, `cp3 build`, `cp3 init`
 rem arguments we do not own - is forwarded verbatim to cp3c.exe with the exit
 rem code passed through.
@@ -27,7 +28,6 @@ set "PF86=%ProgramFiles(x86)%"
 if "%~1"=="" goto forward
 if /I "%~1"=="doctor" goto doctor
 if /I "%~1"=="init" goto init
-if /I "%~1"=="install" if /I "%~2"=="vs-code-plugin" goto plugin
 
 :forward
 rem `cp3 lsp ...` lands here too: cp3c owns the LSP subcommand.
@@ -112,39 +112,6 @@ echo cp3: could not write the scaffold under "%TARGET%".
 exit /b 1
 
 rem ----------------------------------------------------------------------------
-rem cp3 install vs-code-plugin
-rem
-rem Installs the bundled <install>\share\vscode\cp3-vscode-*.vsix through the
-rem `code` CLI (PATH first, then the standard VS Code install locations).
-rem Exit codes: 0 installed, 1 VS Code or the bundled .vsix missing, or a
-rem non-zero `code --install-extension`.
-rem ----------------------------------------------------------------------------
-:plugin
-call :find_code
-if not defined CODE goto plugin_nocode
-call :find_vsix
-if not defined VSIX goto plugin_novsix
-echo cp3: installing the VS Code extension from "%VSIX%" ...
-call "%CODE%" --install-extension "%VSIX%" --force
-if errorlevel 1 goto plugin_failed
-echo cp3: VS Code extension installed.
-exit /b 0
-:plugin_nocode
-echo cp3: the VS Code CLI ('code') was not found on PATH or in the standard
-echo      install locations.
-echo      Install VS Code, then run this command again:
-echo          cp3 install vs-code-plugin
-exit /b 1
-:plugin_novsix
-echo cp3: no bundled VS Code extension found in "%CP3_ROOT%\share\vscode".
-echo      This cp3 package was built without one (see packaging/windows). The
-echo      extension is optional; the compiler works without it.
-exit /b 1
-:plugin_failed
-echo cp3: 'code --install-extension' failed with exit code %errorlevel%.
-exit /b 1
-
-rem ----------------------------------------------------------------------------
 rem cp3 doctor
 rem
 rem Short status list: cp3c presence/version, C++ toolchain availability in the
@@ -188,6 +155,7 @@ echo   bundled vsix : %VSIX_STATUS%
 echo   shipped trees: include=%TREE_INCLUDE% src=%TREE_SRC% third_party=%TREE_TP%
 echo   note         : a C++ toolchain (g++/clang++/cl) on PATH is required to
 echo                  build cp3 programs; VS Code is optional.
+echo                  Install/open the bundled extension with: cp3 editor-plugin
 if "%CP3C_FOUND%"=="yes" exit /b 0
 exit /b 1
 

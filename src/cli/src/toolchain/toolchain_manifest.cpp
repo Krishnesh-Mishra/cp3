@@ -13,6 +13,7 @@
 #include "detail/toolchain_select.hpp"
 
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "detail/json.hpp"
@@ -274,6 +275,13 @@ bool readChoice(const JsonValue& manifest, ToolchainChoice& out,
 
 }  // namespace
 
+bool toolchainProjectRoot(fs::path& packageRoot) {
+    std::error_code ec;
+    const fs::path cwd = fs::current_path(ec);
+    if (ec) return false;
+    return findPackageRoot(cwd, packageRoot);
+}
+
 bool readProjectToolchain(const fs::path& packageRoot, ToolchainChoice& out,
                           std::string& err) {
     JsonValue manifest;
@@ -292,8 +300,8 @@ bool writeProjectToolchain(const fs::path& packageRoot,
     JsonValue manifest;
     std::string parseError;
     if (!JsonValue::parse(text, manifest, parseError)) {
-        err = path.string() + ": refusing to edit an unparsable manifest (" +
-              parseError + ")";
+        err = path.string() + ": refusing to edit a manifest with a parse "
+              "error (" + parseError + ")";
         return false;
     }
     if (!manifest.isObject()) {
@@ -371,8 +379,8 @@ bool clearProjectToolchain(const fs::path& packageRoot, bool& removed,
     JsonValue manifest;
     std::string parseError;
     if (!JsonValue::parse(text, manifest, parseError)) {
-        err = path.string() + ": refusing to edit an unparsable manifest (" +
-              parseError + ")";
+        err = path.string() + ": refusing to edit a manifest with a parse "
+              "error (" + parseError + ")";
         return false;
     }
     std::vector<FieldSpan> fields;

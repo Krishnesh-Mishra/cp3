@@ -1,0 +1,389 @@
+{
+  "group": "hooks",
+  "cases": [
+    {
+      "group": "hooks",
+      "name": "build-pre-then-post",
+      "description": "build pre then post",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "slow": true,
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "running script 'prebuild'",
+            "running script 'postbuild'"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "prebuild\npostbuild\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "check-pre-then-post",
+      "description": "check pre then post",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "precheck",
+            "postcheck"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "precheck\npostcheck\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "run-pre-then-post",
+      "description": "run pre then post",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"hooks\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"scripts\": {\n    \"prerun\": \"echo prerun>>hook-order.txt\",\n    \"postrun\": \"echo postrun>>hook-order.txt\"\n  }\n}\n"
+        }
+      },
+      "slow": true,
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "running script 'prerun'",
+            "running script 'postrun'"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "prerun\npostrun\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "clean-pre-then-post",
+      "description": "clean pre then post",
+      "argv": [
+        "clean"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "preclean",
+            "postclean"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "preclean\npostclean\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "fmt-pre-then-post",
+      "description": "fmt pre then post",
+      "argv": [
+        "fmt",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"hooks\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"scripts\": {\n    \"prefmt\": \"echo prefmt>>hook-order.txt\",\n    \"postfmt\": \"echo postfmt>>hook-order.txt\"\n  }\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "prefmt",
+            "postfmt"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "prefmt\npostfmt\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "failing-prebuild-aborts",
+      "description": "failing prebuild aborts",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks-fail-pre"
+        ]
+      },
+      "expect": {
+        "exit": 5,
+        "stderr": {
+          "contains": [
+            "running script 'prebuild'",
+            "script 'prebuild' failed (exit 5)"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "prebuild \n"
+          }
+        },
+        "files_absent": [
+          ".cp3/out/index.exe"
+        ]
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "failing-postbuild-keeps-build",
+      "description": "failing postbuild keeps build",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks-fail-post"
+        ]
+      },
+      "slow": true,
+      "expect": {
+        "exit": 5,
+        "stderr": {
+          "contains": [
+            "prebuild",
+            "postbuild",
+            "script 'postbuild' failed (exit 5)"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "prebuild\npostbuild \n"
+          },
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "missing-command-in-prehook",
+      "description": "missing command in prehook",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks-missing-command"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "running script 'prebuild'",
+            "script 'prebuild' failed (exit 1)"
+          ]
+        },
+        "files_absent": [
+          ".cp3/out/index.exe"
+        ]
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "guard-suppresses-build-hooks",
+      "description": "guard suppresses build hooks",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "env": {
+        "CP3_SCRIPT_GUARD": "1"
+      },
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "slow": true,
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "not_contains": "running script"
+        },
+        "files": {
+          "hook-order.txt": {
+            "absent": true
+          },
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "guard-suppresses-check-hooks",
+      "description": "guard suppresses check hooks",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "env": {
+        "CP3_SCRIPT_GUARD": "1"
+      },
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "not_contains": "running script"
+        },
+        "files": {
+          "hook-order.txt": {
+            "absent": true
+          }
+        }
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "failing-precheck-aborts",
+      "description": "failing precheck aborts",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"hooks\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"scripts\": {\n    \"precheck\": \"echo precheck>>hook-order.txt && exit 5\",\n    \"postcheck\": \"echo postcheck>>hook-order.txt\"\n  }\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 5,
+        "stderr": {
+          "contains": [
+            "precheck",
+            "script 'precheck' failed (exit 5)"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "precheck \n"
+          }
+        }
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "init-does-not-run-hooks",
+      "description": "init does not run hooks",
+      "argv": [
+        "init",
+        "app",
+        "--yes"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "not_contains": "running script"
+        },
+        "files": {
+          "hook-order.txt": {
+            "absent": true
+          },
+          "app/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "hooks",
+      "name": "help-does-not-run-hooks",
+      "description": "help does not run hooks",
+      "argv": [
+        "help"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "Usage:"
+        },
+        "stderr": {
+          "not_contains": "running script"
+        },
+        "files": {
+          "hook-order.txt": {
+            "absent": true
+          }
+        }
+      }
+    }
+  ]
+}

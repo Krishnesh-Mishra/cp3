@@ -140,9 +140,11 @@ ChoiceResolution resolveToolchainChoice(const ToolchainChoice& choice,
                                         bool strict,
                                         ChoiceResolutionResult& result);
 
-// Resolves a saved choice strictly, for `toolchain use`.
-bool resolveToolchainValue(const std::string& raw, Toolchain& out,
-                           std::string& err);
+// Diagnostic helper for `toolchain list`: report a stale saved choice even when
+// a higher-priority flag or environment value wins. The active resolution's own
+// warning is not repeated.
+void warnSavedToolchainChoice(const ToolchainChoice& choice,
+                              const std::string& label);
 
 // -----------------------------------------------------------------------------
 // Global user config: <config dir>/cp3/toolchain.conf, plain key=value lines.
@@ -168,6 +170,8 @@ bool clearGlobalToolchainConfig(bool& removed, std::string& err);
 // Project scope: the top-level `"toolchain"` string or object in package.json.
 // The writer preserves every other byte (order, indentation, CRLF).
 // -----------------------------------------------------------------------------
+// Finds the nearest package.json at or above the current directory.
+bool toolchainProjectRoot(std::filesystem::path& packageRoot);
 bool readProjectToolchain(const std::filesystem::path& packageRoot,
                           ToolchainChoice& out, std::string& err);
 bool writeProjectToolchain(const std::filesystem::path& packageRoot,

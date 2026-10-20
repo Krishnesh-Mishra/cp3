@@ -113,7 +113,7 @@ installed family:
 $ cp3 toolchain
 current: GCC 16.1.0 (C:\...\g++.exe) from auto-detect (D12)
 versions: policy latest, recorded 16.1.0, effective 16.1.0
-Select a C++ toolchain:
+Select a C++ compiler family:
    1. gcc         GCC           ready      C:\...\g++.exe (16.1.0)
    2. clang       Clang         not usable clang++: test compile failed
    3. msvc        MSVC cl       missing    not installed
@@ -128,7 +128,7 @@ choice:
 - The newest installed version is selected by default as `Latest installed (<version>) - recommended`. That records the version but keeps the `latest` policy, so a future system update is picked up automatically.
 - MSVC toolsets are discovered through `vswhere` and `VC\Tools\MSVC\<toolset>`. `More versions (Visual Studio Installer)` opens Visual Studio Installer; it never starts an in-cp3c download. MSVC toolsets coexist, so an exact MSVC pin is reliable.
 - Windows GCC and Clang installers usually replace the installed version in place. The wizard warns before installing an older version than the one already present.
-- Arrow keys move, Enter selects, `q` or Esc cancels. Piped stdin uses numbered prompts for every menu, so `echo 1 | cp3 toolchain` still works without a terminal.
+- Arrow keys move, Enter selects, `q` or Esc cancels. Piped stdin uses numbered prompts for every menu, including the project/global scope question, so `echo 1 | cp3 toolchain` still works without a terminal.
 
 After a usable family and version are selected, the scope question appears when
 a project is present:
@@ -154,7 +154,7 @@ The package manifest form is:
 - The legacy string `"toolchain": "gcc"` and the version-less object `{ "id": "gcc" }` both mean `latest`.
 - An object with a version but no policy keeps the older exact behavior: `{ "id": "gcc", "version": "16.1.0" }`.
 - A missing family warns and falls through to automatic detection. It never silently switches to a different saved family. Under `--strict-toolchain` a missing exact pin or saved family is an error.
-- `cp3 toolchain use gcc@16.1.0` saves an exact pin. `cp3 toolchain use gcc` saves `latest`. The same `id@version` form is accepted by `--toolchain` and `CP3_TOOLCHAIN`; a plain `id` forces latest for that run.
+- `cp3 toolchain use gcc@16.1.0` saves an exact pin. `cp3 toolchain use gcc` saves `latest`. If the exact version is not installed, `use` warns and saves the newest installed version of the same family as `latest`; `--strict-toolchain` makes it an error instead. A missing family is always an error because there is nothing installed to save. The same `id@version` form is accepted by `--toolchain` and `CP3_TOOLCHAIN`; a plain `id` forces latest for that run.
 
 The global config is plain text, one key per line:
 
@@ -193,16 +193,23 @@ Scripts and tests use the non-interactive forms:
 
 ```
 cp3 toolchain list                            # families, versions, paths, scopes, effective choice
+cp3 toolchain list --json                     # candidates, installed, scopes and current source
 cp3 toolchain detect                          # automatic detection plus the current choice
 cp3 toolchain use gcc@16.1.0 --project        # write an exact pin to package.json
 cp3 toolchain use gcc --global                # write latest to the user config
 cp3 toolchain clear --project                 # remove only the project field
 cp3 toolchain clear                           # remove both saved scopes
+cp3 toolchain --yes                           # accept the current or first usable defaults
 ```
 
 `cp3 toolchain use` accepts a standard id, `id@version` or a full path. With both
 scopes possible, scripts must pass `--project` or `--global`; the interactive
-command asks instead. Piped stdin falls back to numbered prompts.
+command asks instead. Piped stdin falls back to numbered prompts. `--yes` answers
+the whole wizard with the current usable compiler, otherwise the first usable
+family, the newest installed version and the project scope when a package.json
+is present, otherwise global. `list --json` is the stable machine-readable
+surface; `current.source` is one of `command-line`, `environment`, `project`,
+`global` or `auto-detect`.
 
 When a build finds no compiler, its error points at `cp3 toolchain` rather than
 only listing the compilers it tried.

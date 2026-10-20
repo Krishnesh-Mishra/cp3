@@ -1,0 +1,10 @@
+{
+  "name": "cache-binary",
+  "version": "1.0.0",
+  "description": "package with cacheBinary set",
+  "type": "package",
+  "main": "src/index.cp3",
+  "build": {
+    "cacheBinary": true
+  }
+}

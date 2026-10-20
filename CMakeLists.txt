@@ -1,5 +1,5 @@
 # =============================================================================
-# cp3c — the C+++ (.cp3) reference compiler
+# cp3c - the C+++ (.cp3) reference compiler
 #
 # cp3 transpiles .cp3 source to C++20 (one .cpp/.hpp pair per .cp3 file) and
 # drives the system C++ toolchain. This CMake project builds *the compiler
@@ -11,8 +11,8 @@
 # the `cp3c` binary from this repository's own src/ tree.
 #
 # THIS FILE DELIBERATELY KNOWS NOTHING ABOUT MODULE SOURCES. Every module owns
-# its target, source list, include dirs and links in its own build file —
-# `src/<module>/CMakeLists.txt` — and `src/CMakeLists.txt` wires the modules
+# its target, source list, include dirs and links in its own build file -
+# `src/<module>/CMakeLists.txt` - and `src/CMakeLists.txt` wires the modules
 # together and defines the `cp3c` executable. Adding a `.cpp` to a module means
 # editing ONLY that module's CMakeLists.txt (STYLE.md §3): this keeps parallel
 # module authors from colliding in a shared root file.
@@ -65,7 +65,7 @@ if(Python3_Interpreter_FOUND)
     set(CP3_PYTHON "${Python3_EXECUTABLE}")
 else()
     set(CP3_PYTHON "python")
-    message(STATUS "Python3 not found — Python tooling targets will try '${CP3_PYTHON}' from PATH.")
+    message(STATUS "Python3 not found - Python tooling targets will try '${CP3_PYTHON}' from PATH.")
 endif()
 
 # -----------------------------------------------------------------------------
@@ -87,12 +87,12 @@ if(Python3_Interpreter_FOUND)
     )
     add_dependencies(cp3c-tests cp3c)
 else()
-    message(STATUS "Python3 not found — 'cp3c-tests' target disabled (run tests/runner/run_tests.py manually).")
+    message(STATUS "Python3 not found - 'cp3c-tests' target disabled (run tests/runner/run_tests.py manually).")
 endif()
 
 # -----------------------------------------------------------------------------
 # Layout linter (STYLE.md §2 budgets, §4 naming).  ADVISORY BY DESIGN: it is
-# never in ALL, never depends on cp3c, and must never block any other target —
+# never in ALL, never depends on cp3c, and must never block any other target -
 # a warning in one module must not stop another module's build (STYLE.md §9).
 #
 #   cmake --build <build> --target lint

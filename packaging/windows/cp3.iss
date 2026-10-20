@@ -17,8 +17,7 @@
 ;     the registry type follows the content (REG_EXPAND_SZ when the value
 ;     uses %variables%, REG_SZ otherwise); the system PATH is never touched;
 ;   * installs the bundled VS Code extension with `code --install-extension`
-;     when the `code` CLI exists, otherwise points at
-;     `cp3 install vs-code-plugin`;
+;     when the `code` CLI exists, otherwise points at `cp3 editor-plugin`;
 ;   * quiet modes: Inno's /SILENT and /VERYSILENT (plus /SUPPRESSMSGBOXES);
 ;   * no-side-effect test mode: /TESTMODE=1 (same as /NOPATH=1 /NOVSCODE=1)
 ;     copies files only and never touches PATH or VS Code.
@@ -267,7 +266,7 @@ begin
     Log('VS Code extension: the `code` CLI was not found');
     if not WizardSilent then
       MsgBox('VS Code was not found, so the bundled cp3 extension was not installed.' + #13#10 +
-        'Install VS Code, then run: cp3 install vs-code-plugin', mbInformation, MB_OK);
+        'Install VS Code, then run: cp3 editor-plugin', mbInformation, MB_OK);
     Exit;
   end;
   Params := '/C ""' + CodeCli + '" --install-extension "' + Vsix + '" --force"';
@@ -277,7 +276,7 @@ begin
     if (ResultCode <> 0) and (not WizardSilent) then
       MsgBox('Installing the cp3 extension into VS Code failed (exit code ' +
         IntToStr(ResultCode) + ').' + #13#10 +
-        'Run `cp3 install vs-code-plugin` to retry.', mbError, MB_OK);
+        'Run `cp3 editor-plugin` to retry.', mbError, MB_OK);
   end
   else
     Log('VS Code extension: could not launch ' + CodeCli);

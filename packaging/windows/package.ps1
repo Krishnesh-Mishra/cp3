@@ -263,7 +263,7 @@ cp3 $Version - C+++ compiler, runtime and tooling
 Layout
   bin\cp3c.exe     the compiler (also serves the editor LSP via `"cp3c lsp`")
   bin\cp3.cmd      the cp3 command: run, build, check, init, doctor,
-                   install vs-code-plugin, lsp, ...
+                   editor-plugin, lsp, ...
   bin\*.dll        MinGW runtime DLLs the compiler needs to start
   include\         header trees the compiler passes to the C++ toolchain
   src\             runtime units compiled into every cp3 program
@@ -282,7 +282,7 @@ Getting started
   cd my-app
   cp3 run                     build and run it
 
-  cp3 install vs-code-plugin  install the bundled editor extension
+  cp3 editor-plugin           install the bundled editor extension
 
 Uninstall
   Settings > Apps > cp3, or run unins000.exe in the install directory. The

@@ -1,0 +1,144 @@
+{
+  "group": "exec",
+  "cases": [
+    {
+      "group": "exec",
+      "name": "current-build-reports-not-implemented",
+      "description": "current build reports not implemented",
+      "argv": [
+        "exec",
+        "hello-tool"
+      ],
+      "setup": {
+        "fixtures": [
+          "exec-package"
+        ]
+      },
+      "expect": {
+        "exit": 3,
+        "stderr": {
+          "contains": [
+            "'exec' needs package 'bin' resolution",
+            "not implemented"
+          ]
+        }
+      }
+    },
+    {
+      "group": "exec",
+      "name": "current-build-ignores-args",
+      "description": "current build ignores args",
+      "argv": [
+        "exec",
+        "hello-tool",
+        "alpha",
+        "beta"
+      ],
+      "setup": {
+        "fixtures": [
+          "exec-package"
+        ]
+      },
+      "expect": {
+        "exit": 3,
+        "stderr": {
+          "contains": "'exec' needs package 'bin' resolution"
+        }
+      }
+    },
+    {
+      "group": "exec",
+      "name": "current-build-unknown-package",
+      "description": "current build unknown package",
+      "argv": [
+        "exec",
+        "missing-tool"
+      ],
+      "expect": {
+        "exit": 3,
+        "stderr": {
+          "contains": "'exec' needs package 'bin' resolution"
+        }
+      }
+    },
+    {
+      "group": "exec",
+      "name": "runs-declared-tool",
+      "description": "runs declared tool",
+      "argv": [
+        "exec",
+        "hello-tool"
+      ],
+      "setup": {
+        "fixtures": [
+          "exec-package"
+        ]
+      },
+      "slow": true,
+      "xfail": {
+        "id": "exec-not-implemented",
+        "reason": "cp3c exec is a named not-implemented path in this build"
+      },
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello-tool ok"
+        }
+      }
+    },
+    {
+      "group": "exec",
+      "name": "propagates-tool-exit-code",
+      "description": "propagates tool exit code",
+      "argv": [
+        "exec",
+        "exit-tool"
+      ],
+      "setup": {
+        "files": {
+          "package.json": "{\n  \"name\": \"exit-tool-pkg\",\n  \"version\": \"1.0.0\",\n  \"type\": \"package\",\n  \"main\": \"src/index.cp3\",\n  \"bin\": {\n    \"exit-tool\": \"src/tool.cp3\"\n  }\n}\n",
+          "src/index.cp3": "export default 1;\n",
+          "src/tool.cp3": "import process from \"std/process\";\nprocess.exit(7);\n"
+        }
+      },
+      "slow": true,
+      "xfail": {
+        "id": "exec-not-implemented",
+        "reason": "cp3c exec is a named not-implemented path in this build"
+      },
+      "requires": "compiler",
+      "expect": {
+        "exit": 7
+      }
+    },
+    {
+      "group": "exec",
+      "name": "forwards-program-arguments",
+      "description": "forwards program arguments",
+      "argv": [
+        "exec",
+        "hello-tool",
+        "--",
+        "alpha"
+      ],
+      "setup": {
+        "fixtures": [
+          "exec-package"
+        ]
+      },
+      "slow": true,
+      "xfail": {
+        "id": "exec-not-implemented",
+        "reason": "cp3c exec is a named not-implemented path in this build"
+      },
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "alpha"
+        }
+      }
+    }
+  ]
+}

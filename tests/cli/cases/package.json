@@ -1,0 +1,522 @@
+{
+  "group": "package",
+  "cases": [
+    {
+      "group": "package",
+      "name": "link-directory",
+      "description": "link a local package directory",
+      "argv": [
+        "link",
+        "deps/local-dep"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-dep"
+          }
+        ]
+      },
+      "requires": [
+        "command:link"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "linked local-kit 1.2.3"
+        },
+        "files": {
+          ".cp3/lock.json": {
+            "contains": [
+              "\"source\": \"link\"",
+              "\"kind\": \"directory\"",
+              "\"local-kit\""
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "link-directory-json",
+      "description": "link a directory with json output",
+      "argv": [
+        "link",
+        "deps/local-dep",
+        "--json"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-dep"
+          }
+        ]
+      },
+      "requires": [
+        "command:link",
+        "flag:--json"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "command": "link"
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "link-list-empty",
+      "description": "link list with no links",
+      "argv": [
+        "link",
+        "--list"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          }
+        ]
+      },
+      "requires": [
+        "command:link",
+        "flag:--list"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "no linked packages"
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "link-list-empty-json",
+      "description": "link list with no links in json",
+      "argv": [
+        "link",
+        "--list",
+        "--json"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          }
+        ]
+      },
+      "requires": [
+        "command:link",
+        "flag:--list",
+        "flag:--json"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "command": "link",
+          "links": []
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "link-missing-path",
+      "description": "link missing path",
+      "argv": [
+        "link",
+        "./missing"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          }
+        ]
+      },
+      "requires": [
+        "command:link"
+      ],
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "does not exist (expected a .cp3pak file or a package directory)"
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "link-conflict-with-install",
+      "description": "link refuses to replace an installed package",
+      "argv": [
+        "link",
+        "deps/local-dep"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-dep"
+          }
+        ],
+        "files": {
+          ".cp3/lock.json": "{\n  \"lockfileVersion\": 1,\n  \"packages\": {\n    \"local-kit\": {\n      \"version\": \"1.2.3\",\n      \"source\": \"install\",\n      \"resolved\": \"file:deps/old\"\n    }\n  }\n}\n"
+        }
+      },
+      "requires": [
+        "command:link"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "already installed; pass --force to replace it with a link"
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "link-artifact",
+      "description": "link an artifact package",
+      "argv": [
+        "link",
+        "deps/local-kit.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep.cp3pak",
+            "to": "deps/local-kit.cp3pak"
+          }
+        ]
+      },
+      "requires": [
+        "command:link"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "artifact cache"
+        },
+        "files": {
+          ".cp3/lock.json": {
+            "contains": [
+              "\"kind\": \"artifact\"",
+              "\"integrity\": \"sha256:"
+            ]
+          },
+          ".cp3/link/local-kit/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "link-artifact-json",
+      "description": "link an artifact with json output",
+      "argv": [
+        "link",
+        "deps/local-kit.cp3pak",
+        "--json"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep.cp3pak",
+            "to": "deps/local-kit.cp3pak"
+          }
+        ]
+      },
+      "requires": [
+        "command:link",
+        "flag:--json"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "command": "link"
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "unlink-directory",
+      "description": "unlink a directory entry",
+      "argv": [
+        "unlink",
+        "local-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          }
+        ],
+        "files": {
+          ".cp3/lock.json": "{\n  \"lockfileVersion\": 1,\n  \"packages\": {\n    \"local-kit\": {\n      \"version\": \"1.2.3\",\n      \"source\": \"link\",\n      \"kind\": \"directory\",\n      \"resolved\": \"deps/local-dep\",\n      \"target\": \"deps/local-dep\"\n    }\n  }\n}\n"
+        }
+      },
+      "requires": [
+        "command:unlink"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "unlinked local-kit (directory)"
+        },
+        "files": {
+          ".cp3/lock.json": {
+            "not_contains": "local-kit"
+          }
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "unlink-artifact-removes-cache",
+      "description": "unlink an artifact and remove its cache",
+      "argv": [
+        "unlink",
+        "local-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          }
+        ],
+        "files": {
+          ".cp3/lock.json": "{\n  \"lockfileVersion\": 1,\n  \"packages\": {\n    \"local-kit\": {\n      \"version\": \"1.2.3\",\n      \"source\": \"link\",\n      \"kind\": \"artifact\",\n      \"resolved\": \"deps/local-kit.cp3pak\",\n      \"target\": \".cp3/link/local-kit\",\n      \"integrity\": \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n    }\n  }\n}\n",
+          ".cp3/link/local-kit/package.json": "{\"name\":\"local-kit\",\"version\":\"1.2.3\"}\n"
+        }
+      },
+      "requires": [
+        "command:unlink"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "unlinked local-kit (artifact)"
+        },
+        "files": {
+          ".cp3/lock.json": {
+            "not_contains": "local-kit"
+          },
+          ".cp3/link/local-kit/package.json": {
+            "exists": false
+          }
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "unlink-absent",
+      "description": "unlink a name that is not linked",
+      "argv": [
+        "unlink",
+        "nope"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          }
+        ]
+      },
+      "requires": [
+        "command:unlink"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "'nope' is not linked"
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "publish-dry-run",
+      "description": "publish dry run does not build",
+      "argv": [
+        "publish",
+        "--dry-run"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "package"
+          }
+        ]
+      },
+      "requires": [
+        "command:publish",
+        "flag:--dry-run"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "dry run"
+        },
+        "stdout": {
+          "contains": [
+            "would build",
+            "demo-package",
+            "2.1.0"
+          ]
+        },
+        "files": {
+          ".cp3/out/demo-package.cp3pak": {
+            "exists": false
+          }
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "publish-dry-run-json",
+      "description": "publish dry run in json",
+      "argv": [
+        "publish",
+        "--dry-run",
+        "--json"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "package"
+          }
+        ]
+      },
+      "requires": [
+        "command:publish",
+        "flag:--dry-run",
+        "flag:--json"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "command": "publish",
+          "name": "demo-package",
+          "version": "2.1.0",
+          "dryRun": true
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "publish-application-rejected",
+      "description": "publish rejects an application",
+      "argv": [
+        "publish"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          }
+        ]
+      },
+      "requires": [
+        "command:publish"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "\"type\" must be \"package\""
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "publish-missing-manifest",
+      "description": "publish without a manifest",
+      "argv": [
+        "publish"
+      ],
+      "requires": [
+        "command:publish"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "package.json"
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "publish-out-file",
+      "description": "publish to an explicit artifact file",
+      "argv": [
+        "publish",
+        "--out",
+        "dist/bundle.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "package"
+          }
+        ]
+      },
+      "slow": true,
+      "requires": [
+        "command:publish",
+        "flag:--out"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "dist/bundle.cp3pak": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "package",
+      "name": "publish-json",
+      "description": "publish emits machine readable output",
+      "argv": [
+        "publish",
+        "--json"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "package"
+          }
+        ]
+      },
+      "slow": true,
+      "requires": [
+        "command:publish",
+        "flag:--json"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "command": "publish",
+          "name": "demo-package",
+          "version": "2.1.0",
+          "dryRun": false
+        }
+      }
+    }
+  ]
+}

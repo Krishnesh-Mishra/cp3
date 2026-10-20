@@ -1,23 +1,15 @@
 // =============================================================================
 // src/cli/src/toolchain/toolchain_wizard.cpp - the interactive toolchain flow.
-//
-// OWNERSHIP: cli module (src/cli/**). Implements runToolchainWizard, called by
-// src/commands/toolchain.cpp.
-//
-// Family -> version -> scope. The version list shows the newest installed
-// version as `latest` by default, every installed version for exact pins, and
-// the newest five package-manager versions plus `Show more (+N)` paging. It
-// works with no installed version. Installing always delegates to the system
-// package manager; no compiler is downloaded into a cp3 directory.
+// OWNERSHIP: cli module. Family -> version -> scope; the version list shows the
+// newest five package-manager versions plus `Show more (+N)`. Installing always
+// delegates to the system package manager, never an in-cp3 download.
 // =============================================================================
 #include <algorithm>
 #include <cstdio>
 #include <string>
-#include <system_error>
 #include <vector>
 
 #include "detail/commands.hpp"
-#include "detail/package_json.hpp"
 #include "detail/toolchain_select.hpp"
 #include "detail/util.hpp"
 
@@ -61,13 +53,6 @@ std::string tableRow(const CandidateStatus& status) {
     return "  " + padRight(status.candidate.id, 12) +
            padRight(status.candidate.name, 14) +
            padRight(statusText(status), 11) + statusDetail(status);
-}
-
-bool projectRootHere(fs::path& root) {
-    std::error_code ec;
-    const fs::path cwd = fs::current_path(ec);
-    if (ec) return false;
-    return findPackageRoot(cwd, root);
 }
 
 bool parseScope(const CliOptions& opt, Scope& scope, std::string& err) {
@@ -354,15 +339,16 @@ VersionOutcome chooseVersion(const ToolchainCandidate& candidate,
 int finishWizard(const VersionPick& pick, Scope forced, bool inProject,
                  const fs::path& root) {
     Scope scope = forced;
+    if (scope == Scope::Project && !inProject) {
+        std::fputs("cp3c: no package.json found here; --project needs a cp3 "
+                   "project\n", stderr);
+        return kExitUsageError;
+    }
     if (scope == Scope::None) {
         if (!inProject) {
             std::fputs("No package.json found here, so only the global choice "
                        "is available.\n", stdout);
             scope = Scope::Global;
-        } else if (!isTty(stdin)) {
-            std::fputs("cp3c: this directory is a cp3 project; re-run with "
-                       "--project or --global\n", stderr);
-            return kExitUsageError;
         } else {
             bool cancelled = false;
             const int choice = runMenu(
@@ -393,8 +379,11 @@ int finishWizard(const VersionPick& pick, Scope forced, bool inProject,
     if (scope == Scope::Project) {
         std::printf("scope: this project (%s)\n",
                     (root / "package.json").string().c_str());
+    } else if (!inProject) {
+        std::printf("scope: global (all projects; no package.json found here) "
+                    "(%s)\n", toolchainConfigPath().string().c_str());
     } else {
-        std::printf("scope: all projects (%s)\n",
+        std::printf("scope: global (all projects) (%s)\n",
                     toolchainConfigPath().string().c_str());
     }
     resetToolchainResolution();
@@ -402,6 +391,54 @@ int finishWizard(const VersionPick& pick, Scope forced, bool inProject,
 }
 
 }  // namespace
+
+int runWizardDefaults(const std::vector<CandidateStatus>& statuses,
+                      const Toolchain& current, Scope forced, bool inProject,
+                      const fs::path& root) {
+    const CandidateStatus* chosen = nullptr;
+    for (const CandidateStatus& status : statuses) {
+        if (status.usable && !current.program.empty() &&
+            status.program == current.program) {
+            chosen = &status;
+            break;
+        }
+    }
+    if (chosen == nullptr && !current.id.empty()) {
+        for (const CandidateStatus& status : statuses) {
+            if (status.usable && status.candidate.id == current.id) {
+                chosen = &status;
+                break;
+            }
+        }
+    }
+    if (chosen == nullptr) {
+        for (const CandidateStatus& status : statuses) {
+            if (status.usable) {
+                chosen = &status;
+                break;
+            }
+        }
+    }
+    if (chosen == nullptr || chosen->version.empty()) {
+        std::fputs("cp3c: no usable C++ compiler found; run 'cp3c "
+                   "toolchain' to install one\n", stderr);
+        return kExitCompileError;
+    }
+    ToolchainInstall install;
+    install.candidate = chosen->candidate;
+    install.program = chosen->program;
+    install.linkProgram = chosen->linkProgram;
+    install.version = chosen->version;
+    install.banner = chosen->banner;
+    install.problem = chosen->problem;
+    install.usable = chosen->usable;
+    VersionPick pick{chosen->candidate, install, "latest"};
+    Scope scope = forced;
+    if (scope == Scope::None) {
+        scope = inProject ? Scope::Project : Scope::Global;
+    }
+    return finishWizard(pick, scope, inProject, root);
+}
 
 int runToolchainWizard(const CliOptions& opt) {
     Scope forced = Scope::None;
@@ -411,7 +448,7 @@ int runToolchainWizard(const CliOptions& opt) {
         return kExitUsageError;
     }
     fs::path root;
-    const bool inProject = projectRootHere(root);
+    const bool inProject = toolchainProjectRoot(root);
     std::vector<CandidateStatus> statuses;
     for (const ToolchainCandidate& candidate : toolchainCandidates()) {
         statuses.push_back(probeToolchainCandidate(candidate, true));
@@ -424,6 +461,9 @@ int runToolchainWizard(const CliOptions& opt) {
         std::printf("versions: %s\n", toolchainVersionDescription().c_str());
     } else {
         std::puts("none (no C++ compiler found)");
+    }
+    if (opt.yes) {
+        return runWizardDefaults(statuses, current, forced, inProject, root);
     }
     int initial = 0;
     for (std::size_t i = 0; i < statuses.size(); ++i) {
@@ -443,8 +483,8 @@ int runToolchainWizard(const CliOptions& opt) {
             keys.push_back(status.candidate.id);
         }
         bool cancelled = false;
-        const int selected =
-            runMenu("Select a C++ toolchain:", rows, keys, initial, cancelled);
+        const int selected = runMenu("Select a C++ compiler family:", rows,
+                                     keys, initial, cancelled);
         if (cancelled) return kExitSuccess;
         if (selected < 0) return kExitUsageError;
         const CandidateStatus& status = statuses[static_cast<std::size_t>(selected)];

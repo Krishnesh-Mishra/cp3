@@ -41,7 +41,19 @@ struct CliOptions {
     bool yes = false;                     // init non-interactive
     bool once = false;                    // dev --once (run one pass then exit)
     bool autoSelect = false;              // install --auto (GitHub selector)
+    bool interactive = false;             // editor-plugin --interactive
+    bool force = false;                   // publish/link/install/editor overwrite
+    bool dryRun = false;                  // publish/editor dry run
+    bool json = false;                    // machine-readable command output
+    bool listLinks = false;               // link --list
     std::string initType;                 // init --type application|package
+    std::string initTypeSystem;           // init --type-system typescript|cpp|rust
+    std::string outDir;                   // publish --out <dir|file>
+    std::string name;                     // link --name <name>
+    std::string editor;                   // editor-plugin --editor <id|path>
+    std::string vsix;                     // editor-plugin --vsix <path>
+    std::string extensionsDir;            // editor-plugin --extensions-dir <dir>
+    std::string out;                      // editor-plugin --out <file-or-dir>
     std::string toolchain;                // --toolchain <id[@version]|path>
     bool strictToolchain = false;         // --strict-toolchain
     bool projectScope = false;            // toolchain --project
@@ -87,8 +99,15 @@ int cmdToolchain(const CliOptions& opt);
 
 // Interactive family, version and scope flow, shared by `cp3c toolchain`.
 int runToolchainWizard(const CliOptions& opt);
+
+// Machine-readable `cp3c toolchain list --json`.
+int toolchainListJson();
 int cmdExec(const CliOptions& opt);
 int cmdInstall(const CliOptions& opt);
+int cmdPublish(const CliOptions& opt);
+int cmdLink(const CliOptions& opt);
+int cmdUnlink(const CliOptions& opt);
+int cmdEditorPlugin(const CliOptions& opt);
 int cmdLsp(const CliOptions& opt);
 int cmdDap(const CliOptions& opt);
 
