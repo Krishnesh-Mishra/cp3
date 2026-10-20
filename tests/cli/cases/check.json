@@ -1,0 +1,374 @@
+{
+  "group": "check",
+  "cases": [
+    {
+      "group": "check",
+      "name": "hello-project",
+      "description": "hello project",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "check",
+      "name": "package-project",
+      "description": "package project",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "package"
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "check",
+      "name": "bad-syntax-exit-1",
+      "description": "bad syntax exit 1",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "bad-syntax"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3201",
+            "syntax error",
+            "src/index.cp3:1:1"
+          ]
+        }
+      }
+    },
+    {
+      "group": "check",
+      "name": "bad-type-exit-1",
+      "description": "bad type exit 1",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "bad-type"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3401",
+            "type mismatch",
+            "'string'",
+            "'number'"
+          ]
+        }
+      }
+    },
+    {
+      "group": "check",
+      "name": "missing-file",
+      "description": "missing file",
+      "argv": [
+        "check",
+        "missing.cp3"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "cannot open 'missing.cp3'"
+        }
+      }
+    },
+    {
+      "group": "check",
+      "name": "bare-command-needs-file",
+      "description": "bare command needs file",
+      "argv": [
+        "check"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "check needs a .cp3 file",
+            "Usage:"
+          ]
+        }
+      }
+    },
+    {
+      "group": "check",
+      "name": "rejects-extra-argument",
+      "description": "rejects extra argument",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "two"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unexpected extra argument 'two'"
+        }
+      }
+    },
+    {
+      "group": "check",
+      "name": "rejects-unknown-option",
+      "description": "rejects unknown option",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--bogus"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unknown option '--bogus'"
+        }
+      }
+    },
+    {
+      "group": "check",
+      "name": "release-profile-accepted",
+      "description": "release profile accepted",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--release"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "check",
+      "name": "debug-profile-accepted",
+      "description": "debug profile accepted",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--debug"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "check",
+      "name": "max-memory-accepted",
+      "description": "max memory accepted",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--max-memory",
+        "128"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "check",
+      "name": "separator-before-file",
+      "description": "separator before file",
+      "argv": [
+        "check",
+        "--",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "check",
+      "name": "path-with-spaces",
+      "description": "path with spaces",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "cwd": "space project",
+      "setup": {
+        "fixtures": [
+          {
+            "name": "hello",
+            "to": "space project"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "check",
+      "name": "unicode-path",
+      "description": "unicode path",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "cwd": "café",
+      "setup": {
+        "fixtures": [
+          {
+            "name": "hello",
+            "to": "café"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "check",
+      "name": "success-is-quiet",
+      "description": "success is quiet",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "empty": true
+        },
+        "stderr": {
+          "empty": true
+        }
+      }
+    },
+    {
+      "group": "check",
+      "name": "crlf-source",
+      "description": "crlf source",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "files": {
+          "package.json": "{\"name\":\"crlf\",\"main\":\"src/index.cp3\"}\r\n",
+          "src/index.cp3": "import console from \"std/console\";\r\n\r\nconsole.log(\"crlf ok\");\r\n"
+        }
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "check",
+      "name": "hooks-pre-and-post",
+      "description": "hooks pre and post",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "running script 'precheck'",
+            "running script 'postcheck'"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "precheck\npostcheck\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "check",
+      "name": "hooks-suppressed-by-guard",
+      "description": "hooks suppressed by guard",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "env": {
+        "CP3_SCRIPT_GUARD": "1"
+      },
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "not_contains": "running script"
+        },
+        "files": {
+          "hook-order.txt": {
+            "absent": true
+          }
+        }
+      }
+    }
+  ]
+}

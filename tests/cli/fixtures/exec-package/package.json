@@ -1,0 +1,10 @@
+{
+  "name": "hello-tool",
+  "version": "0.3.0",
+  "description": "a tool package used by exec cases",
+  "type": "package",
+  "main": "src/index.cp3",
+  "bin": {
+    "hello-tool": "src/tool.cp3"
+  }
+}

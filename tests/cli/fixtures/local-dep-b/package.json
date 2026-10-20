@@ -1,0 +1,14 @@
+{
+  "name": "local-kit-b",
+  "version": "2.0.0",
+  "description": "second local dependency fixture",
+  "type": "package",
+  "main": "src/index.cp3",
+  "typeSystem": "typescript",
+  "engines": {
+    "cp3": ">=0.1.0-0"
+  },
+  "build": {
+    "files": ["README.md"]
+  }
+}

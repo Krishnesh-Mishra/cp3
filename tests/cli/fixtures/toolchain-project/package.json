@@ -1,0 +1,8 @@
+{
+  "name": "toolchain-project",
+  "version": "1.0.0",
+  "description": "project with an explicit toolchain pin",
+  "type": "application",
+  "main": "src/index.cp3",
+  "toolchain": "gcc"
+}

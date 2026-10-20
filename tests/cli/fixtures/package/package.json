@@ -1,0 +1,11 @@
+{
+  "name": "demo-package",
+  "version": "2.1.0",
+  "description": "package fixture",
+  "type": "package",
+  "main": "src/index.cp3",
+  "typeSystem": "typescript",
+  "build": {
+    "files": ["README.md"]
+  }
+}

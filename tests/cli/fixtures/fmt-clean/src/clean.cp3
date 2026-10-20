@@ -1,0 +1,4 @@
+function add(a: number, b: number): number {
+  let total = a + b;
+  return total;
+}

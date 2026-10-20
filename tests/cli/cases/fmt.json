@@ -1,0 +1,283 @@
+{
+  "group": "fmt",
+  "cases": [
+    {
+      "group": "fmt",
+      "name": "formats-messy-file",
+      "description": "formats messy file",
+      "argv": [
+        "fmt",
+        "src/messy.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "fmt-messy"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "formatted src/messy.cp3"
+        },
+        "files": {
+          "src/messy.cp3": {
+            "equals_file": "fmt-clean.cp3"
+          }
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "idempotent-on-clean-file",
+      "description": "idempotent on clean file",
+      "argv": [
+        "fmt",
+        "src/clean.cp3",
+        "--verbose"
+      ],
+      "setup": {
+        "fixtures": [
+          "fmt-clean"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "already formatted"
+        },
+        "files": {
+          "src/clean.cp3": {
+            "equals_file": "fmt-clean.cp3"
+          }
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "clean-file-silent-without-verbose",
+      "description": "clean file silent without verbose",
+      "argv": [
+        "fmt",
+        "src/clean.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "fmt-clean"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "empty": true
+        },
+        "stderr": {
+          "empty": true
+        },
+        "files": {
+          "src/clean.cp3": {
+            "equals_file": "fmt-clean.cp3"
+          }
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "missing-file",
+      "description": "missing file",
+      "argv": [
+        "fmt",
+        "missing.cp3"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "cannot read 'missing.cp3'"
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "no-file",
+      "description": "no file",
+      "argv": [
+        "fmt"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "fmt needs a .cp3 file"
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "refuses-lexical-errors",
+      "description": "refuses lexical errors",
+      "argv": [
+        "fmt",
+        "src/lex.cp3"
+      ],
+      "setup": {
+        "files": {
+          "src/lex.cp3": "let s = \"unterminated\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "refusing to rewrite",
+            "error:"
+          ]
+        },
+        "files": {
+          "src/lex.cp3": {
+            "equals": "let s = \"unterminated\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "normalizes-crlf",
+      "description": "normalizes crlf",
+      "argv": [
+        "fmt",
+        "src/crlf.cp3"
+      ],
+      "setup": {
+        "files": {
+          "src/crlf.cp3": "function f(): number {\r\n      return 1;   \r\n}\r\n\r\n\r\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          "src/crlf.cp3": {
+            "no_crlf": true,
+            "equals": "function f(): number {\n  return 1;\n}\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "strips-trailing-whitespace-and-blank-lines",
+      "description": "strips trailing whitespace and blank lines",
+      "argv": [
+        "fmt",
+        "src/spacey.cp3"
+      ],
+      "setup": {
+        "files": {
+          "src/spacey.cp3": "let a = 1;   \n\n\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          "src/spacey.cp3": {
+            "equals": "let a = 1;\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "extra-positional",
+      "description": "extra positional",
+      "argv": [
+        "fmt",
+        "src/clean.cp3",
+        "extra"
+      ],
+      "setup": {
+        "fixtures": [
+          "fmt-clean"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unexpected extra argument 'extra'"
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "unknown-option",
+      "description": "unknown option",
+      "argv": [
+        "fmt",
+        "src/clean.cp3",
+        "--check"
+      ],
+      "setup": {
+        "fixtures": [
+          "fmt-clean"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unknown option '--check'"
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "path-with-spaces",
+      "description": "path with spaces",
+      "argv": [
+        "fmt",
+        "src/clean.cp3"
+      ],
+      "cwd": "fmt space",
+      "setup": {
+        "fixtures": [
+          {
+            "name": "fmt-clean",
+            "to": "fmt space"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          "src/clean.cp3": {
+            "equals_file": "fmt-clean.cp3"
+          }
+        }
+      }
+    },
+    {
+      "group": "fmt",
+      "name": "hooks-pre-and-post",
+      "description": "hooks pre and post",
+      "argv": [
+        "fmt",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "files": {
+          "package.json": "{\n  \"name\": \"fmt-hooks\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"scripts\": {\n    \"prefmt\": \"echo prefmt>>hook-order.txt\",\n    \"postfmt\": \"echo postfmt>>hook-order.txt\"\n  }\n}\n",
+          "src/index.cp3": "function f(): number {\n      return 1;\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "running script 'prefmt'",
+            "running script 'postfmt'"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "prefmt\npostfmt\n"
+          }
+        }
+      }
+    }
+  ]
+}

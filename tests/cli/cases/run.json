@@ -1,0 +1,390 @@
+{
+  "group": "run",
+  "cases": [
+    {
+      "group": "run",
+      "name": "hello-explicit",
+      "description": "hello explicit",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "hello-default-entry",
+      "description": "hello default entry",
+      "argv": [
+        "run"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "xfail": {
+        "id": "run-bare-does-not-use-default-entry",
+        "reason": "build resolves package.json main when no file is given, but run exits 2 with 'run needs a .cp3 file'"
+      },
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "default-entry-manifest-main",
+      "description": "default entry manifest main",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "bare-cp3-path",
+      "description": "bare cp3 path",
+      "argv": [
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "program-args-after-separator",
+      "description": "program args after separator",
+      "argv": [
+        "run",
+        "src/index.cp3",
+        "--",
+        "alpha",
+        "beta"
+      ],
+      "setup": {
+        "fixtures": [
+          "args"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "alpha",
+            "beta"
+          ],
+          "not_contains": "beta --"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "program-args-without-separator",
+      "description": "program args without separator",
+      "argv": [
+        "run",
+        "src/index.cp3",
+        "alpha"
+      ],
+      "setup": {
+        "fixtures": [
+          "args"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "alpha"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "program-arg-starting-with-dash",
+      "description": "program arg starting with dash",
+      "argv": [
+        "run",
+        "src/index.cp3",
+        "--",
+        "--help"
+      ],
+      "setup": {
+        "fixtures": [
+          "args"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "--help"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "propagates-program-exit-code",
+      "description": "propagates program exit code",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "exit-code"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 7
+      }
+    },
+    {
+      "group": "run",
+      "name": "missing-file",
+      "description": "missing file",
+      "argv": [
+        "run",
+        "missing.cp3"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "cannot open 'missing.cp3'"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "no-entry",
+      "description": "no entry",
+      "argv": [
+        "run"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "run needs a .cp3 file",
+            "Usage:"
+          ]
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "bad-syntax",
+      "description": "bad syntax",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "bad-syntax"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3201",
+            "syntax error"
+          ]
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "bad-type",
+      "description": "bad type",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "bad-type"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3401",
+            "type mismatch"
+          ]
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "release-profile",
+      "description": "release profile",
+      "argv": [
+        "run",
+        "src/index.cp3",
+        "--release"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "debug-profile",
+      "description": "debug profile",
+      "argv": [
+        "run",
+        "src/index.cp3",
+        "--debug"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "verbose-shows-toolchain",
+      "description": "verbose shows toolchain",
+      "argv": [
+        "run",
+        "src/index.cp3",
+        "--verbose"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        },
+        "stderr": {
+          "contains": "toolchain:"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "arg-with-space-is-one-argument",
+      "description": "arg with space is one argument",
+      "argv": [
+        "run",
+        "src/index.cp3",
+        "--",
+        "two words"
+      ],
+      "setup": {
+        "fixtures": [
+          "args"
+        ]
+      },
+      "slow": true,
+      "xfail": {
+        "id": "run-splits-args-with-spaces",
+        "reason": "run rebuilds the child command line with a shell-style split, so one argv item with a space becomes two program arguments"
+      },
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "regex": "(?m)^two words$"
+        }
+      }
+    },
+    {
+      "group": "run",
+      "name": "working-directory-is-project-root",
+      "description": "working directory is project root",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    }
+  ]
+}

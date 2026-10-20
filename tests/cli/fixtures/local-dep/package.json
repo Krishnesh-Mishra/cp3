@@ -1,0 +1,14 @@
+{
+  "name": "local-kit",
+  "version": "1.2.3",
+  "description": "local dependency fixture",
+  "type": "package",
+  "main": "src/index.cp3",
+  "typeSystem": "typescript",
+  "engines": {
+    "cp3": ">=0.1.0-0"
+  },
+  "build": {
+    "files": ["README.md"]
+  }
+}

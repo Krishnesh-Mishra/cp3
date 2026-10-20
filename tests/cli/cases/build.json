@@ -1,0 +1,720 @@
+{
+  "group": "build",
+  "cases": [
+    {
+      "group": "build",
+      "name": "hello-explicit-entry",
+      "description": "hello explicit entry",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "hello-default-entry-from-manifest",
+      "description": "hello default entry from manifest",
+      "argv": [
+        "build"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "fallback-src-main",
+      "description": "fallback src main",
+      "argv": [
+        "build"
+      ],
+      "setup": {
+        "files": {
+          "src/main.cp3": "import console from \"std/console\";\n\nconsole.log(\"main fallback\");\n"
+        }
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "src/.cp3/out/main.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "fallback-src-index",
+      "description": "fallback src index",
+      "argv": [
+        "build"
+      ],
+      "setup": {
+        "files": {
+          "src/index.cp3": "import console from \"std/console\";\n\nconsole.log(\"index fallback\");\n"
+        }
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "src/.cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "fallback-root-index",
+      "description": "fallback root index",
+      "argv": [
+        "build"
+      ],
+      "setup": {
+        "files": {
+          "index.cp3": "import console from \"std/console\";\n\nconsole.log(\"root fallback\");\n"
+        }
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "main-entry-produces-main-exe",
+      "description": "main entry produces main exe",
+      "argv": [
+        "build",
+        "src/main.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello-main"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/main.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "release-profile",
+      "description": "release profile",
+      "argv": [
+        "build",
+        "src/index.cp3",
+        "--release"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "debug-profile",
+      "description": "debug profile",
+      "argv": [
+        "build",
+        "src/index.cp3",
+        "--debug"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "verbose-shows-toolchain",
+      "description": "verbose shows toolchain",
+      "argv": [
+        "build",
+        "src/index.cp3",
+        "--verbose"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "toolchain:"
+        },
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "max-memory-megabytes",
+      "description": "max memory megabytes",
+      "argv": [
+        "build",
+        "src/index.cp3",
+        "--max-memory",
+        "256"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "max-memory-percent",
+      "description": "max memory percent",
+      "argv": [
+        "build",
+        "src/index.cp3",
+        "--max-memory",
+        "50%"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "bad-syntax-exit-1",
+      "description": "bad syntax exit 1",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "bad-syntax"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3201",
+            "syntax error"
+          ]
+        },
+        "files_absent": [
+          ".cp3/out/index.exe"
+        ]
+      }
+    },
+    {
+      "group": "build",
+      "name": "bad-type-exit-1",
+      "description": "bad type exit 1",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "bad-type"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3401",
+            "type mismatch"
+          ]
+        },
+        "files_absent": [
+          ".cp3/out/index.exe"
+        ]
+      }
+    },
+    {
+      "group": "build",
+      "name": "missing-file",
+      "description": "missing file",
+      "argv": [
+        "build",
+        "missing.cp3"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "cannot open 'missing.cp3'"
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "no-entry",
+      "description": "no entry",
+      "argv": [
+        "build"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "build needs a .cp3 file",
+            "Usage:"
+          ]
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "extra-positional",
+      "description": "extra positional",
+      "argv": [
+        "build",
+        "src/index.cp3",
+        "extra"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unexpected extra argument 'extra'"
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "unknown-option",
+      "description": "unknown option",
+      "argv": [
+        "build",
+        "src/index.cp3",
+        "--bogus"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unknown option '--bogus'"
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "package-writes-cp3pak",
+      "description": "package writes cp3pak",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "package"
+        ]
+      },
+      "slow": true,
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "packed",
+            "demo-package 2.1.0"
+          ]
+        },
+        "files": {
+          ".cp3/out/demo-package.cp3pak": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "package-name-from-manifest",
+      "description": "package name from manifest",
+      "argv": [
+        "build"
+      ],
+      "setup": {
+        "fixtures": [
+          "package"
+        ]
+      },
+      "slow": true,
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/demo-package.cp3pak": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "package-without-default-export",
+      "description": "package without default export",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "package-no-default"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "need an `export default",
+            "no .cp3pak was produced"
+          ]
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "package-object-default-not-implemented",
+      "description": "package object default not implemented",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "bad-package"
+        ]
+      },
+      "expect": {
+        "exit": 3,
+        "stderr": {
+          "contains": [
+            "CP3002",
+            "object literal",
+            "not implemented"
+          ]
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "package-exclude-source-not-implemented",
+      "description": "package exclude source not implemented",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "package-exclude-source"
+        ]
+      },
+      "expect": {
+        "exit": 3,
+        "stderr": {
+          "contains": [
+            "excludeSource needs cacheBinary",
+            "not implemented"
+          ]
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "package-cache-binary-packs",
+      "description": "package cache binary packs",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "package-cache-binary"
+        ]
+      },
+      "slow": true,
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "packed"
+        },
+        "files": {
+          ".cp3/out/cache-binary.cp3pak": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "init-package-scaffold-builds",
+      "description": "init package scaffold builds",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "files": {
+          "package.json": "{\n  \"name\": \"pkg\",\n  \"version\": \"1.0.0\",\n  \"description\": \"a C+++ project\",\n  \"type\": \"package\",\n  \"main\": \"src/index.cp3\",\n  \"typeSystem\": \"typescript\",\n  \"scripts\": {\n    \"dev\": \"cp3c dev src/index.cp3\",\n    \"build\": \"cp3c build src/index.cp3\",\n    \"start\": \"cp3c run src/index.cp3\",\n    \"check\": \"cp3c check src/index.cp3\"\n  },\n  \"build\": {\n    \"files\": [\"README.md\"]\n  }\n}\n",
+          "src/index.cp3": "// pkg - package entry; every key below is a named export.\nfunction add(a: number, b: number): number {\n  return a + b;\n}\n\nexport default { add };\n"
+        }
+      },
+      "slow": true,
+      "xfail": {
+        "id": "init-package-object-export",
+        "reason": "cp3c init --type package emits export default { add }, which codegen rejects with CP3002"
+      },
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "not_contains": "CP3002"
+        },
+        "files": {
+          ".cp3/out/pkg.cp3pak": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "path-with-spaces",
+      "description": "path with spaces",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "cwd": "build with space",
+      "setup": {
+        "fixtures": [
+          {
+            "name": "hello",
+            "to": "build with space"
+          }
+        ]
+      },
+      "slow": true,
+      "xfail": {
+        "id": "paths-with-spaces-break-build",
+        "reason": "the compiler splits unquoted intermediate paths, so a project directory containing a space fails in g++"
+      },
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "unicode-path",
+      "description": "unicode path",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "cwd": "café",
+      "setup": {
+        "fixtures": [
+          {
+            "name": "hello",
+            "to": "café"
+          }
+        ]
+      },
+      "slow": true,
+      "xfail": {
+        "id": "non-ascii-paths-break-build",
+        "reason": "the compiler passes non-ASCII intermediate paths through a narrow-string command line, so g++ cannot find the generated source"
+      },
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "release-debug-conflict",
+      "description": "release debug conflict",
+      "argv": [
+        "build",
+        "src/index.cp3",
+        "--release",
+        "--debug"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "mutually exclusive"
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "separator-before-file",
+      "description": "separator before file",
+      "argv": [
+        "build",
+        "--",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "hooks-order",
+      "description": "hooks order",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "slow": true,
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "running script 'prebuild'",
+            "running script 'postbuild'"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "prebuild\npostbuild\n"
+          }
+        }
+      }
+    }
+  ]
+}

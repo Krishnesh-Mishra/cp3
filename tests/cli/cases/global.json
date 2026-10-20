@@ -1,0 +1,626 @@
+{
+  "group": "global",
+  "cases": [
+    {
+      "group": "global",
+      "name": "no-args-prints-usage",
+      "description": "no args prints usage",
+      "argv": [],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "cp3c - the C+++",
+            "Commands:",
+            "Exit codes:"
+          ]
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "help-command",
+      "description": "help command",
+      "argv": [
+        "help"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "Usage:",
+            "run <file.cp3>"
+          ]
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "help-short",
+      "description": "help short",
+      "argv": [
+        "-h"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "Usage:",
+            "Commands:"
+          ]
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "help-long",
+      "description": "help long",
+      "argv": [
+        "--help"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "Usage:",
+            "Exit codes:"
+          ]
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "version-command",
+      "description": "version command",
+      "argv": [
+        "version"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "regex": "^cp3c \\d+\\.\\d+\\.\\d+"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "version-short",
+      "description": "version short",
+      "argv": [
+        "-v"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "regex": "^cp3c \\d+\\.\\d+\\.\\d+"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "version-long",
+      "description": "version long",
+      "argv": [
+        "--version"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "regex": "^cp3c \\d+\\.\\d+\\.\\d+"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "unknown-command",
+      "description": "unknown command",
+      "argv": [
+        "definitely-not-a-command"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "unknown command 'definitely-not-a-command'",
+            "Usage:"
+          ]
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "unknown-option",
+      "description": "unknown option",
+      "argv": [
+        "--definitely-not-an-option"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "unknown option '--definitely-not-an-option'",
+            "Usage:"
+          ]
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "option-before-command-is-not-parsed",
+      "description": "option before command is not parsed",
+      "argv": [
+        "--release",
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unknown option '--release'"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "release-and-debug-conflict",
+      "description": "release and debug conflict",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--release",
+        "--debug"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "--release and --debug are mutually exclusive"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "max-memory-megabytes",
+      "description": "max memory megabytes",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--max-memory",
+        "256"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "global",
+      "name": "max-memory-percent",
+      "description": "max memory percent",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--max-memory",
+        "50%"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "global",
+      "name": "max-memory-equals-form",
+      "description": "max memory equals form",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--max-memory=256"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "global",
+      "name": "max-memory-zero",
+      "description": "max memory zero",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--max-memory",
+        "0"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "invalid --max-memory value '0'"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "max-memory-negative",
+      "description": "max memory negative",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--max-memory",
+        "-1"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "invalid --max-memory value '-1'"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "max-memory-junk",
+      "description": "max memory junk",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--max-memory",
+        "junk"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "invalid --max-memory value 'junk'"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "max-memory-missing-value",
+      "description": "max memory missing value",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--max-memory"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "--max-memory requires a value"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "type-missing-value",
+      "description": "type missing value",
+      "argv": [
+        "init",
+        "--type"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "--type requires a value"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "type-invalid-value",
+      "description": "type invalid value",
+      "argv": [
+        "init",
+        "app",
+        "--type",
+        "library"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "invalid --type 'library'"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "bare-cp3-path-means-run",
+      "description": "bare cp3 path means run",
+      "argv": [
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "separator-runs-file",
+      "description": "separator runs file",
+      "argv": [
+        "run",
+        "--",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "check-rejects-extra-positional",
+      "description": "check rejects extra positional",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "extra"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unexpected extra argument 'extra'"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "clean-rejects-positional",
+      "description": "clean rejects positional",
+      "argv": [
+        "clean",
+        "build"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "'clean' takes no file argument"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "install-rejects-two-sources",
+      "description": "install rejects two sources",
+      "argv": [
+        "install",
+        "a",
+        "b"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "'install' takes at most one path or URL"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "run-missing-file",
+      "description": "run missing file",
+      "argv": [
+        "run",
+        "missing.cp3"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "cannot open 'missing.cp3'"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "run-path-with-spaces",
+      "description": "run path with spaces",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "cwd": "project with space",
+      "setup": {
+        "fixtures": [
+          {
+            "name": "hello",
+            "to": "project with space"
+          }
+        ]
+      },
+      "slow": true,
+      "xfail": {
+        "id": "paths-with-spaces-break-build",
+        "reason": "the compiler splits unquoted intermediate paths, so a project directory containing a space fails in g++"
+      },
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "run-unicode-path",
+      "description": "run unicode path",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "cwd": "café",
+      "setup": {
+        "fixtures": [
+          {
+            "name": "hello",
+            "to": "café"
+          }
+        ]
+      },
+      "slow": true,
+      "xfail": {
+        "id": "non-ascii-paths-break-build",
+        "reason": "the compiler passes non-ASCII intermediate paths through a narrow-string command line, so g++ cannot find the generated source"
+      },
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "lsp-rejects-unknown-option",
+      "description": "lsp rejects unknown option",
+      "argv": [
+        "lsp",
+        "--tcp"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "unknown option '--tcp'",
+            "usage: cp3c lsp [--stdio]"
+          ]
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "dap-rejects-unknown-option",
+      "description": "dap rejects unknown option",
+      "argv": [
+        "dap",
+        "--tcp"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "unknown option '--tcp'",
+            "usage: cp3c dap [--stdio]"
+          ]
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "not-implemented-exit-code",
+      "description": "not implemented exit code",
+      "argv": [
+        "exec",
+        "hello-tool"
+      ],
+      "setup": {
+        "fixtures": [
+          "exec-package"
+        ]
+      },
+      "expect": {
+        "exit": 3,
+        "stderr": {
+          "contains": "'exec' needs package 'bin' resolution"
+        }
+      }
+    },
+    {
+      "group": "global",
+      "name": "check-separator-before-file",
+      "description": "check separator before file",
+      "argv": [
+        "check",
+        "--",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "global",
+      "name": "help-ignores-extra-args",
+      "description": "help ignores extra args",
+      "argv": [
+        "help",
+        "anything"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "Usage:"
+        }
+      }
+    }
+  ]
+}

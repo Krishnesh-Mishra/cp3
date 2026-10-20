@@ -1,0 +1,7 @@
+{
+  "name": "no-default",
+  "version": "1.0.0",
+  "description": "package with no default export",
+  "type": "package",
+  "main": "src/index.cp3"
+}

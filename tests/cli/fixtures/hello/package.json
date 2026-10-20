@@ -1,0 +1,8 @@
+{
+  "name": "hello",
+  "version": "1.0.0",
+  "description": "hello fixture",
+  "type": "application",
+  "main": "src/index.cp3",
+  "typeSystem": "typescript"
+}
