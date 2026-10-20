@@ -177,6 +177,8 @@ work), `find`/`indexOf` not-found results, `reduce` without an initial accumulat
 - **D36.** `worker(x)` invokes a module's default export compiled as a worker;
   `import worker from "./x.cp3"` is the canonical form. A worker crash may take the
   process down with a nonzero exit code (exact value deferred).
+  Superseded by D80 (2026-10-19): workers are explicit `new Worker(...)` handles
+  with message events; the import-bound worker call form is retired.
 
 **Errors**
 - **D37.** `catch { }` (no binding) is allowed, and `try { } finally { }` (no catch)

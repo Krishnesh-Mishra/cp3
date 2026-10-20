@@ -651,24 +651,30 @@ The supported tools are the ones above: read-only sharing, `parallel.reduce` for
 
 ### `worker` - isolated, message-passing tasks, one real OS thread each
 
-Rather than sharing memory between threads (which would leave two threads free to mutate the same object with no safe way to coordinate, since cp3 exposes no locks or atomics to users), `worker` avoids shared memory entirely. Each `worker` call spins up its own real OS thread, running its own independent event loop (§14) - not a separate OS process. A thread is far cheaper to spawn than a process, and the safety `worker` provides comes from the compiler's discipline around what's reachable inside it, not from OS-level process isolation. The tradeoff this accepts: a crash inside a worker thread can take the whole program down with it, the same as any other unhandled crash - full process-level fault isolation isn't part of what `worker` provides in beta one.
+Rather than sharing memory between threads (which would leave two threads free to mutate the same object with no safe way to coordinate, since cp3 exposes no locks or atomics to users), `worker` avoids shared memory entirely. Each `new Worker(...)` spins up its own real OS thread, running its own independent event loop (§14) - not a separate OS process. A thread is far cheaper to spawn than a process, and the safety `worker` provides comes from the compiler's discipline around what's reachable inside it, not from OS-level process isolation. The tradeoff this accepts: a crash inside a worker thread can take the whole program down with it, the same as any other unhandled crash - full process-level fault isolation isn't part of what `worker` provides in beta one.
 
 ```cp3
-// worker.cp3
-export default (data) => {
-  // process data, return a result
-  return processedResult;
+// sum.cp3 - the worker file
+export default (thread: Thread<number, number>) => {
+  thread.on("message", (value) => {
+    thread.postMessage(value * 2);
+  });
 };
 ```
 
 ```cp3
 // main.cp3
-import worker from "worker.cp3";
+const w = new Worker("./sum.cp3");
 
-const output = await worker(dataNeededForProcessing);
+w.on("message", (result) => { console.log(result); });
+w.postMessage(21);
+
+// optional one-shot sugar over the same channel:
+const doubled = await w.request(21);
+w.terminate();
 ```
 
-`worker(...)` returns a `Promise` (§14), resolving with whatever the worker file's default export returns, or rejecting if the worker file throws - a plain `try`/`catch` around the `await` catches it, exactly like any other async call (`fs.readFile`, `process.exec`). No separate event/handle mechanism - it's the same Promise shape as everything else in std.
+A worker is an explicit handle, not a callable function: `new Worker("./file.cp3")` starts the thread, `postMessage` sends a deep copy, `on("message")` receives one, and `terminate()` stops it. Messages queue until the other side attaches a listener and deliver FIFO per sender, so the main event loop never blocks. `await w.request(v)` is optional one-shot sugar over the same channel; a thrown handler error arrives as a catchable `"error"` event. The `Thread<In, Out>` annotation on the worker entry is required (it is the single source of truth for both sides' message types), and `void` in one direction makes that direction's sends a compile error. (Historical note: an earlier draft described a `Promise`-returning `worker(...)` call; D80 replaced it with this handle surface.)
 
 Whatever crosses into a worker file is **copied in as a genuine deep copy**, not a shared reference - nothing else is implicitly reachable from inside it. This has to be a real copy rather than a shared handle across the thread boundary: atomic refcounts (§10) keep the *counter* safe, but two threads mutating the same object's fields would still be a data race, and cp3 deliberately gives users no locks to prevent one. This mirrors how JS Web Workers already behave (message-passing, not shared memory), so it matches the existing JS mental model.
 
@@ -1129,7 +1135,7 @@ The concept is considered technically sound; what remains is specification and r
 - **Object literals against a declared type get TypeScript-style excess property checking, closing a real gap.** A fresh object literal assigned directly to a typed target (`let x: T = {...}`) is checked for fields `T` doesn't declare, not just missing ones - specifically to catch typos (`valeu` instead of `value`) that plain structural width-subtyping would otherwise silently accept as "one harmless extra field." A value already sitting in a variable and passed along afterward still gets ordinary structural checking (extra fields allowed) - same distinction TypeScript itself draws. Also closes a related question: a `class` with any `private`/`protected` field cannot be satisfied by a bare object literal at all, since there's no constructor call through which to legitimately set an inaccessible field (§15).
 
 - **Module resolution**: follows plain ES module semantics directly - named imports/exports are live bindings, `export * from` re-exports are supported, and circular imports between two `.cp3` files resolve the same way JS/ESM already does (a value referenced before its module finishes initializing is `undefined` at that point, not an error) - no cp3-specific deviation.
-- **Cross-thread error propagation from `worker`**: `worker(...)` returns a `Promise` (§14), same as `fs.readFile`/`process.exec` - a thrown error inside a worker file simply rejects that promise, catchable with a plain `try`/`catch` around the `await`. No separate event/handle mechanism; see §13 for the corrected call shape. Superseded a previous draft of this decision that used an event-based "error" handle, which didn't match `worker`'s actual (synchronous-looking, `await`-based) calling convention.
+- **Cross-thread error propagation from `worker`**: `worker(...)` returns a `Promise` (§14), same as `fs.readFile`/`process.exec` - a thrown error inside a worker file simply rejects that promise, catchable with a plain `try`/`catch` around the `await`. No separate event/handle mechanism; see §13 for the corrected call shape. Superseded a previous draft of this decision that used an event-based "error" handle, which didn't match `worker`'s actual (synchronous-looking, `await`-based) calling convention. *(Superseded again by D80, 2026-10-19: workers are explicit `new Worker(...)` handles; a thrown handler error arrives as a catchable `"error"` event and `await w.request(v)` is the one-shot sugar.)*
 - **Native interop scope for beta one**: `import native` supports free functions and simple, non-templated, non-overloaded classes/structs where every parameter and return type is a primitive, `string`, or array/`Buffer`. Templates, function overloading on the C++ side, and operator overloading are **not supported in beta one** - this is a known, explicit limitation, not an oversight; expanding native interop coverage is post-beta-one work. (Std modules that reach native C++ internally - `fs`, `crypto`, etc. - are hand-written against this same bridge and are unaffected by this limitation, since none of them need templates/overloads to implement their documented signatures.)
 - **Qt / Unreal binding surface**: explicitly **out of scope for beta one** entirely. `import "ue5"`/Qt-style bindings remain a real example of what native interop is *for* longer-term, but no specific class-by-class binding surface ships as part of beta one.
 - **Generics runtime reification** (for `JSON.parse<T>`): usage-based, not universal - the compiler emits a shape descriptor (field names + type tags) only for the specific classes/interfaces that actually appear as `T` in a `JSON.parse<T>` call somewhere in the compiled program. A type that's never used with `.parse<T>` stays fully compile-time-erased, same cost as a plain C++ template - there is no blanket "all generics become reified" cost.
@@ -1141,7 +1147,7 @@ The concept is considered technically sound; what remains is specification and r
 - **`Promise<T>` full surface confirmed**: `.then`/`.catch`/`.finally` plus static `Promise.all`/`.race`/`.allSettled`, all built as ordinary cp3-level combinators on top of the same coroutine+libuv foundation - `await` is the primary/everyday form, but it was never meant to be the *only* one (§14).
 - **Unhandled Promise rejections terminate the process** (after printing through the CLI-README.md §2 diagnostics subsystem) - a stricter default than Node's historical silent-warning behavior, chosen deliberately (§14).
 - **`worker` confirmed as one real OS thread per call, not a separate OS process** - cheaper to spawn, safety comes from the compiler's copy-in discipline rather than OS-level isolation; the accepted tradeoff is that a worker-thread crash can take the whole process down with it (§13).
-- **`worker`'s call shape corrected to be Promise-returning** (`await worker(...)`, rejects on a thrown error) - an earlier draft of this doc had it returning an event-emitting handle, which didn't match its own documented (synchronous-looking) calling convention; fixed to match every other async std API (§13).
+- **~~`worker`'s call shape corrected to be Promise-returning~~ (`await worker(...)`, rejects on a thrown error) - superseded by D80.** An earlier draft of this doc had it returning an event-emitting handle, which didn't match its own documented (synchronous-looking) calling convention; the Promise-returning form was the beta-one fix, then D80 (2026-10-19) replaced it with explicit `new Worker(...)` handles and message events (§13).
 - **~~Managed references clarified as *not* literally `std::shared_ptr` (custom non-atomic refcount)~~ - superseded.** Managed references are now literally `std::shared_ptr` with standard atomic refcounting; see the memory-model simplification entry below.
 - **Coroutine frames use the ordinary C++20 coroutine frame allocation, with reference-type locals as plain refcounted handles inside it** - not a second, separate allocation path. One memory story for the whole language (§10).
 - **`std/server` reinstated for beta one, superseding an earlier "removed entirely" decision.** *(Superseded further, not just here - see the `std/network` consolidation entry above, which folds this into a single module alongside `fetch`/WebSocket and switches the backend from llhttp to uWebSockets. Kept here for the historical trail.)* The original removal reasoning (avoid wrapping Drogon - too large, too template-heavy for beta-one's native-interop scope) was correct against Drogon specifically, but dropping the module entirely went too far, since it left the language's own core pitch (native-speed Express-equivalent) with nothing to demonstrate. Fixed architecture: libuv (already mandatory once `async` exists) + llhttp (Node's own HTTP parser, small and proven) + pure-cp3 routing/request/response logic - no heavy framework dependency reintroduced. `std/webview` stays dropped; nothing about this reconsideration applies to it (§20).
