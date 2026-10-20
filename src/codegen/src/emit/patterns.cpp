@@ -202,6 +202,18 @@ void Generator::emitPatternParams(const FunctionDeclaration& fd, std::string& ou
 std::optional<Type> Generator::parameterType(const Parameter& p,
                                              const FunctionDeclaration& fd,
                                              std::size_t index) const {
+    // A generic function's annotation names its own type parameters (`x: T`),
+    // which the raw annotation cannot map (sema resolved them): prefer the
+    // resolved signature (spec 16).
+    if (!fd.typeParams.empty()) {
+        auto it = sema_.functions.find(fd.nodeId);
+        if (it != sema_.functions.end() &&
+            index < it->second.paramTypes.size()) {
+            const Type t = it->second.paramTypes[index];
+            if (p.optional) return Type::nullable(t);
+            return t;
+        }
+    }
     if (p.type) {
         if (auto t = typeOfNode(*p.type)) {
             if (p.optional) return Type::nullable(*t);

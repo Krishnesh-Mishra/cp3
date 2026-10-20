@@ -65,7 +65,8 @@ inline bool isArrayElementShape(Shape s) {
     return s == Shape::Number || s == Shape::String || s == Shape::Bool ||
            s == Shape::Array || s == Shape::Enum || s == Shape::Union ||
            s == Shape::Native || s == Shape::Function ||
-           s == Shape::ClassRef || s == Shape::Object;
+           s == Shape::ClassRef || s == Shape::Object ||
+           s == Shape::TypeParam;
 }
 
 // The array-element spelling of `elem` (classify + shape gate).

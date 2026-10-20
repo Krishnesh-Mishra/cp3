@@ -379,7 +379,16 @@ void Analyzer::analyzeReturn(ReturnStatement& stmt) {
                        "a void function cannot return a value");
             }
         } else if (hasArg) {
-            checkAssign(argType, ctx.ret, stmt.span, false);
+            // A tuple return type takes its element types from the literal
+            // positionally; the inferred array type cannot express that, so
+            // the tuple path checks the literal element by element.
+            if (isTupleType(ctx.ret) &&
+                stmt.argument->kind == NodeKind::ArrayLiteral) {
+                checkArrayLiteral(static_cast<ArrayLiteral&>(*stmt.argument),
+                                  ctx.ret);
+            } else {
+                checkAssign(argType, ctx.ret, stmt.span, false);
+            }
         } else if (!ctx.ret.isVoid() && !ctx.ret.isUndefined() &&
                    !ctx.ret.isUnknown()) {
             checkAssign(Type::undefined(), ctx.ret, stmt.span, false);
@@ -409,6 +418,9 @@ void Analyzer::analyzeTry(TryStatement& stmt) {
 // =============================================================================
 void Analyzer::analyzeFunctionBody(FunctionDeclaration& fn) {
     const FuncSig sig = sigs_.count(fn.nodeId) ? sigs_[fn.nodeId] : FuncSig{};
+    // A generic function's body resolves its own type parameters (with their
+    // constraints), even though every function in the block was hoisted first.
+    if (!fn.typeParams.empty()) registerTypeParams(fn.typeParams);
     pushScope();
     for (std::size_t i = 0; i < fn.params.size() && i < sig.params.size(); ++i) {
         Parameter* p = fn.params[i].get();

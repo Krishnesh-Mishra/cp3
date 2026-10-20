@@ -128,7 +128,7 @@ protected:
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
     bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include
-    bool needsTuple_ = false;        // enum-carrying object literal -> <tuple>
+    bool needsTuple_ = false;        // tuple value (enum object / generic tuple) -> <tuple>
     bool needsEventEmitter_ = false;  // EventEmitter/Listener -> cp3/async/emitter.hpp
     bool needsBitwise_ = false;       // bitwise/shift ops -> cp3/core/bitwise.hpp
     bool needsUnion_ = false;         // primitive unions -> cp3/core/union.hpp
@@ -160,6 +160,10 @@ protected:
     // every frame, and the arrow each `let f = (...) => ...` binding names.
     detail::CaptureInfo captures_;
     std::uint32_t currentFrameId_ = 0;  // Program / function / arrow being emitted
+    bool currentReturnTuple_ = false;  // current function returns a std::tuple
+    // Structs reifying object-literal arguments to generic functions
+    // (support/generic.cpp), prepended to the decls section.
+    std::string genericDecls_;
 
     std::vector<std::unordered_map<std::string, detail::Binding>> env_;
     // The spec 15 object surface: forward declarations (classFwdDecls_), structs

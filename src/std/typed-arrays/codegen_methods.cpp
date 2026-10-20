@@ -342,6 +342,10 @@ std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
         return "(" + expr(*ix.object) + ")[static_cast<std::size_t>(" + idxText +
                ")]";
     }
+    // A tuple's constant index read (`p[1]` -> `std::get<1>(p)`); "" otherwise.
+    if (std::string tuple = emitGenericIndexRead(ix); !tuple.empty()) {
+        return tuple;
+    }
     if (ot.kind == TypeKind::Class) {
         const char* tag = familyTag(ot.name);
         if (tag == nullptr) return std::string();

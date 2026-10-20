@@ -24,7 +24,7 @@
 //   emit/call.cpp          call lowering (dispatch only, D72)
 //   emit/async.cpp         await / arrow functions / timers / Promise.*
 //   emit/stmt.cpp          statement lowering
-//   emit/decl.cpp          forward decls, function signatures, declarations
+//   emit/decl.cpp          forward decls, function definitions, declarations
 //   emit/enum.cpp          enum declarations, member access, same-enum switch
 //                          (spec 04)
 //   src/std/typed-arrays/codegen.cpp  the JS-compat typed-array family (D69)
@@ -211,7 +211,7 @@ private:
     Type asyncValueType(const FunctionDeclaration& fd) const;
     const Expr* firstReturnedExpr(const Stmt& s) const;
 
-    // --- declaration-type environment + type resolution (type_map.cpp) -------
+    // --- declaration-type environment + type resolution (type_resolve.cpp) ---
     void pushScope();
     void popScope();
     // `cell`: shared `Cell<T>`; `global`: module-scope (reference via moduleRef).
@@ -283,9 +283,20 @@ private:
     friend struct detail::CallBuilder;
     bool isConsoleMember(const CallExpr& c) const;
 
-    // --- parallel.* (emit/parallel.cpp) --------------------------------------
-    // Ambient builtin (spec 13): documented shapes lower onto cp3/parallel/**,
-    // everything else reports CP3002. `parallelCallType` types ambient results.
+    // --- generic functions + tuples (support/generic.cpp) ---------------------
+    // Real C++ function templates: the `template <typename T, ...>` prefix
+    // from the declared type parameters, the callee spelling with any explicit
+    // call-site type arguments (`identity<number>(...)`), the tuple lowering
+    // (`std::make_tuple`, `std::get<N>`) and the object-literal argument
+    // reification (`getX({ x: 5 })` -> a struct named after the literal).
+    std::string templatePrefix(const FunctionDeclaration& fd) const;
+    std::string calleeText(const std::string& name, const CallExpr& c);
+    std::string typeArgText(const TypeNode& tn);
+    std::string reifyObjectArg(const ObjectLiteral& lit);
+    std::string emitTupleLiteral(const ArrayLiteral& lit);
+    std::string emitGenericIndexRead(const IndexExpr& ix);
+
+    // --- parallel.* / worker(...) (emit/parallel.cpp, emit/worker.cpp) --------
     std::optional<Type> parallelCallType(const CallExpr& c) const;
     bool parallelRange(const Expr& range, std::string& begin, std::string& end);
     bool parallelClosureShape(const ArrowFunction& a, std::size_t count) const;

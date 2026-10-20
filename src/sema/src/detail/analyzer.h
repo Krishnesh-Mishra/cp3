@@ -18,6 +18,7 @@
 //   checks/expr_check.cpp   primary expression inference
 //   checks/member_check.cpp member/index/call inference
 //   checks/call_check.cpp   call inference + overload resolution
+//   checks/generic_check.cpp generic function substitution/inference
 //   checks/ops_check.cpp    operator expression inference
 //   checks/stmt_check.cpp   statements, control flow, return analysis
 //   checks/banned.cpp       banned-pattern diagnostics (delete/arguments/for-in/any)
@@ -318,6 +319,20 @@ private:
     void checkArgs(const FuncSig& sig, CallExpr& call);
     std::string arityText(std::size_t required, std::size_t maxArgs,
                           bool rest) const;
+    // --- generic functions (generic_check.cpp) -------------------------------
+    // Resolves a call to a generic function (spec §16): explicit type arguments
+    // are checked against the constraints, the rest are inferred, then the
+    // substituted signature runs the ordinary arity/assignability check.
+    Type inferGenericCall(CallExpr& call, const FuncSig& sig);
+    // Replaces every type-parameter leaf of `t` by its binding in `subst`.
+    Type substituteType(const Type& t,
+                        const std::unordered_map<std::string, Type>& subst);
+    // Binds the type parameters of `param` from the argument type `arg`
+    // (structural: arrays, tuples, class type arguments). Never fails; a
+    // mismatch surfaces later through the substituted parameter check.
+    void unifyParam(const Type& param, const Type& arg,
+                    std::unordered_map<std::string, Type>& subst);
+
     // --- overload resolution (member_check.cpp) ------------------------------
     // Overload resolution for a callee naming an overload set.
     Type inferOverloadCall(CallExpr& call, const Binding& binding,
@@ -439,6 +454,10 @@ private:
     std::vector<std::unordered_map<std::string, Binding>> scopes_;
     std::unordered_map<std::string, Shape> shapes_;
     std::unordered_map<std::string, Type> typeNames_;
+    // The declared spelling of a named type-parameter constraint, keyed by the
+    // constraint type's canonical key (registerTypeParams, scopes.cpp): lets a
+    // constraint-violation diagnostic print `Shape` instead of `object`.
+    std::unordered_map<std::string, std::string> typeParamConstraintNames_;
     // The resolved enum declarations, keyed by type name (checks/enum_check.cpp).
     std::unordered_map<std::string, EnumInfo> enums_;
     std::unordered_map<std::uint32_t, FuncSig> sigs_;

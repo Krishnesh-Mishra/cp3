@@ -7,6 +7,7 @@
 // (`typeFromTypeNode`) and the shared helpers.
 // =============================================================================
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cp3/native_types.hpp"
@@ -18,6 +19,24 @@
 
 namespace cp3 {
 namespace detail {
+
+bool isTupleType(const Type& t) {
+    return t.kind == TypeKind::Object && t.name.rfind("$t", 0) == 0;
+}
+
+// The C++ spelling of a tuple's element list (`std::tuple<A, B>`), when every
+// element carries one; used for generic tuple signatures (emit/decl.cpp).
+bool tupleCpp(const Type& t, std::string& out) {
+    std::string cpp = "std::tuple<";
+    for (std::size_t i = 0; i < t.parts.size(); ++i) {
+        const CppInfo ec = classify(t.parts[i]);
+        if (!ec.representable) return false;
+        if (i != 0) cpp += ", ";
+        cpp += ec.cpp;
+    }
+    out = std::move(cpp) + ">";
+    return true;
+}
 
 // `Promise<T>` -> `::cp3::runtime::Promise<T>` (cp3/async/promise.hpp). Only
 // M1-representable value types (primitives and `void`) have a spelling;
@@ -162,10 +181,10 @@ CppInfo classify(const Type& raw) {
             return classifyClassValue(t);
         case TypeKind::Enum: return classifyEnum(t);  // spec 04: enum class
         case TypeKind::TypeParam:
-            // A generic field/method type: the C++ spelling is the template
+            // A generic field/function type: the C++ spelling is the template
             // parameter itself (`T`), usable anywhere a value type is.
             info.type = t;
-            info.shape = Shape::Unknown;
+            info.shape = Shape::TypeParam;
             info.representable = true;
             info.cpp = mapIdent(t.name);
             return info;

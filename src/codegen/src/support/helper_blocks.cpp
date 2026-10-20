@@ -15,6 +15,18 @@ namespace detail {
 // The generated per-TU helper block (anonymous namespace in the .cpp).
 const char* const kHelperBlock = R"CP3HELPERS(namespace {
 
+// A generic function's type-parameter receiver (spec 16) is either a generated
+// value struct or a `Ref<T>` class handle. Dereference the handle so one member
+// spelling (`cp3_member_base(x).field`) works for both.
+template <typename T>
+decltype(auto) cp3_member_base(T&& value) {
+    if constexpr (requires { *value; }) {
+        return *value;
+    } else {
+        return (value);
+    }
+}
+
 // ----- cp3 value formatting (routes into the D9 runtime formatter) -----------
 inline std::string cp3_ts(double v) { return cp3::runtime::toString(v); }
 inline std::string cp3_ts(const std::string& v) { return cp3::runtime::toString(v); }
