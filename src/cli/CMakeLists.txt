@@ -24,6 +24,7 @@ set(cp3_cli_sources
     src/toolchain/diagnostics.cpp
     src/toolchain/pipeline.cpp
     src/commands/common.cpp
+    src/commands/arguments.cpp
     src/commands/check.cpp
     src/commands/lsp.cpp
     src/commands/lsp_intel.cpp
@@ -47,9 +48,15 @@ set(cp3_cli_sources
     src/commands/exec.cpp
     src/commands/pack.cpp
     src/commands/install.cpp
+    src/commands/publish.cpp
+    src/commands/link.cpp
     src/pkg/package_json.cpp
     src/pkg/signatures.cpp
     src/pkg/lockfile.cpp
+    src/pkg/install.cpp
+    src/pkg/link.cpp
+    src/pkg/github.cpp
+    src/pkg/github_install.cpp
     src/pkg/scripts.cpp
     src/pkg/json.cpp
     src/pkg/checksum.cpp

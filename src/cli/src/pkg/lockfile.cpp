@@ -11,6 +11,13 @@
 //         "version": "1.0.0",
 //         "resolved": "file:../basickit.cp3pak",
 //         "integrity": "sha256:..."
+//       },
+//       "localkit": {
+//         "version": "1.0.0",
+//         "source": "link",
+//         "kind": "directory",
+//         "resolved": "C:/work/localkit",
+//         "target": "C:/work/localkit"
 //       }
 //     }
 //   }
@@ -28,24 +35,76 @@ namespace {
 
 constexpr int kLockfileVersion = 1;
 
+// Appends `"key": "value",` when the value is non-empty. Keeping every
+// optional field out of the file when empty preserves the pre-link shape.
+void writeStringField(std::string& out, const char* key, const std::string& value,
+                      bool last) {
+    if (value.empty()) return;
+    out += "      \"" + std::string(key) + "\": " + jsonQuote(value);
+    out += last ? "\n" : ",\n";
+}
+
+bool endsWithComma(const std::string& out) {
+    return !out.empty() && out.back() == '\n' && out.size() >= 2 &&
+           out[out.size() - 2] == ',';
+}
+
+// Rewrites the final comma of a field list into a newline. The writer emits
+// fields optimistically; this trims the separator left by the last present
+// optional field.
+void finishFields(std::string& out) {
+    if (endsWithComma(out)) {
+        out[out.size() - 2] = '\n';
+        out.pop_back();
+    }
+}
+
 void writeEntry(std::string& out, const LockEntry& entry, bool last) {
     out += "    " + jsonQuote(entry.name) + ": {\n";
     out += "      \"version\": " + jsonQuote(entry.version) + ",\n";
-    if (!entry.repo.empty()) {
-        out += "      \"repo\": " + jsonQuote(entry.repo) + ",\n";
-    }
-    if (!entry.tag.empty()) {
-        out += "      \"tag\": " + jsonQuote(entry.tag) + ",\n";
-    }
-    if (!entry.asset.empty()) {
-        out += "      \"asset\": " + jsonQuote(entry.asset) + ",\n";
-    }
-    out += "      \"resolved\": " + jsonQuote(entry.resolved) + ",\n";
-    out += "      \"integrity\": " + jsonQuote(entry.integrity) + "\n";
+    writeStringField(out, "source", entry.source, false);
+    writeStringField(out, "kind", entry.kind, false);
+    writeStringField(out, "repo", entry.repo, false);
+    writeStringField(out, "tag", entry.tag, false);
+    writeStringField(out, "asset", entry.asset, false);
+    writeStringField(out, "resolved", entry.resolved, false);
+    writeStringField(out, "target", entry.target, false);
+    writeStringField(out, "integrity", entry.integrity, true);
+    finishFields(out);
     out += last ? "    }\n" : "    },\n";
 }
 
 }  // namespace
+
+bool isLinkEntry(const LockEntry& entry) {
+    return entry.source == kSourceLink;
+}
+
+LockEntry* findLockEntry(std::vector<LockEntry>& entries,
+                         const std::string& name) {
+    for (LockEntry& entry : entries) {
+        if (entry.name == name) return &entry;
+    }
+    return nullptr;
+}
+
+const LockEntry* findLockEntry(const std::vector<LockEntry>& entries,
+                               const std::string& name) {
+    for (const LockEntry& entry : entries) {
+        if (entry.name == name) return &entry;
+    }
+    return nullptr;
+}
+
+void upsertLockEntry(std::vector<LockEntry>& entries, const LockEntry& entry) {
+    for (LockEntry& existing : entries) {
+        if (existing.name == entry.name) {
+            existing = entry;
+            return;
+        }
+    }
+    entries.push_back(entry);
+}
 
 bool readLockfile(const fs::path& projectRoot, std::vector<LockEntry>& out,
                   std::string& err) {
@@ -90,6 +149,15 @@ bool readLockfile(const fs::path& projectRoot, std::vector<LockEntry>& out,
         }
         if (const std::string* value = field.second.stringField("asset")) {
             entry.asset = *value;
+        }
+        if (const std::string* value = field.second.stringField("source")) {
+            entry.source = *value;
+        }
+        if (const std::string* value = field.second.stringField("kind")) {
+            entry.kind = *value;
+        }
+        if (const std::string* value = field.second.stringField("target")) {
+            entry.target = *value;
         }
         out.push_back(std::move(entry));
     }

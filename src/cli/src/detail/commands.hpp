@@ -41,7 +41,14 @@ struct CliOptions {
     bool yes = false;                     // init non-interactive
     bool once = false;                    // dev --once (run one pass then exit)
     bool autoSelect = false;              // install --auto (GitHub selector)
+    bool force = false;                   // publish/link/install overwrite
+    bool dryRun = false;                  // publish --dry-run
+    bool json = false;                    // machine-readable command output
+    bool listLinks = false;               // link --list
     std::string initType;                 // init --type application|package
+    std::string initTypeSystem;           // init --type-system typescript|cpp|rust
+    std::string outDir;                   // publish --out <dir|file>
+    std::string name;                     // link --name <name>
     std::string toolchain;                // --toolchain <id|path> (one command)
     bool projectScope = false;            // toolchain --project
     bool globalScope = false;             // toolchain --global
@@ -85,6 +92,9 @@ int cmdInit(const CliOptions& opt);
 int cmdToolchain(const CliOptions& opt);
 int cmdExec(const CliOptions& opt);
 int cmdInstall(const CliOptions& opt);
+int cmdPublish(const CliOptions& opt);
+int cmdLink(const CliOptions& opt);
+int cmdUnlink(const CliOptions& opt);
 int cmdLsp(const CliOptions& opt);
 int cmdDap(const CliOptions& opt);
 
