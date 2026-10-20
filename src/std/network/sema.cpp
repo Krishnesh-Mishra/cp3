@@ -22,13 +22,34 @@
 // =============================================================================
 #include "detail/analyzer.h"
 
+#include <cmath>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
+
 namespace cp3 {
 
 namespace {
+
+/// A numeric `threads` literal, including a negated one (`-1` parses as a
+/// unary expression, not a NumberLiteral).
+bool literalThreadCount(const Expr& e, double& out) {
+    if (e.kind == NodeKind::NumberLiteral) {
+        out = static_cast<const NumberLiteral&>(e).value;
+        return true;
+    }
+    if (e.kind == NodeKind::UnaryExpr) {
+        const auto& unary = static_cast<const UnaryExpr&>(e);
+        if (unary.op == UnaryOp::Negate && unary.operand &&
+            unary.operand->kind == NodeKind::NumberLiteral) {
+            out = -static_cast<const NumberLiteral&>(*unary.operand).value;
+            return true;
+        }
+    }
+    return false;
+}
 
 const char* const kFetchResponse = "$network:FetchResponse";
 const char* const kHttpRequest = "$network:HttpRequest";
@@ -208,7 +229,11 @@ std::optional<Type> Analyzer::networkMember(const std::string& prop) {
         return withOptionalTail(Type::function(
             {Type::string(), ambient()}, promiseOf(networkObjectType(kFetchResponse))));
     }
-    if (prop == "createServer") return Type::function({}, networkObjectType(kHttpServer));
+    if (prop == "createServer") {
+        // `createServer(options?)` (D79): one optional objects argument.
+        return withOptionalTail(
+            Type::function({ambient()}, networkObjectType(kHttpServer)));
+    }
     if (prop == "WebSocket") {
         return Type::function({Type::string()}, networkObjectType(kWebSocket));
     }
@@ -225,11 +250,79 @@ bool Analyzer::tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& o
         return true;
     }
     if (id.name == "createServer") {
-        inferArgs(call);
+        if (checkCreateServerOptions(call)) out_.networkScaleMode = true;
         out = networkObjectType(kHttpServer);
         return true;
     }
     return false;
+}
+
+/// D79: `createServer(options?)`. The only accepted shape is one object
+/// literal with an optional `threads` property. Literal thread counts are
+/// checked here (0, negative, fractional and non-number literals become
+/// CP3401); a computed value is validated by the runtime constructor, and the
+/// literal 1 keeps the single-loop path.
+bool Analyzer::checkCreateServerOptions(CallExpr& call) {
+    inferArgs(call);
+    if (call.arguments.empty()) return false;
+    if (call.arguments.size() > 1 || !call.arguments.front()) {
+        report(diagcode::kTypeMismatch, anchorSpan(call.span),
+               "createServer() takes at most one argument (an options object: "
+               "{ threads?: number })");
+        return false;
+    }
+    const Expr& options = *call.arguments.front();
+    if (options.kind != NodeKind::ObjectLiteral) {
+        report(diagcode::kTypeMismatch, anchorSpan(options.span),
+               "createServer() options must be an object literal: "
+               "{ threads?: number }");
+        return false;
+    }
+    bool scale = false;
+    const auto& literal = static_cast<const ObjectLiteral&>(options);
+    for (const auto& propPtr : literal.properties) {
+        const ObjectProperty* prop = propPtr.get();
+        if (prop == nullptr) continue;
+        if (prop->computed || prop->key == nullptr) {
+            report(diagcode::kTypeMismatch, anchorSpan(prop->span),
+                   "createServer() options only support the 'threads' property");
+            continue;
+        }
+        const std::string key = keyName(prop->key.get());
+        if (key != "threads") {
+            report(diagcode::kTypeMismatch, anchorSpan(prop->span),
+                   "unknown createServer() option '" + key +
+                       "' (only 'threads' is supported)");
+            continue;
+        }
+        if (prop->value == nullptr) continue;
+        double literalCount = 0.0;
+        if (literalThreadCount(*prop->value, literalCount)) {
+            if (!std::isfinite(literalCount) || literalCount < 1.0 ||
+                literalCount != std::floor(literalCount)) {
+                report(diagcode::kTypeMismatch, anchorSpan(prop->value->span),
+                       "createServer() 'threads' must be an integer >= 1");
+            } else if (literalCount != 1.0) {
+                scale = true;
+            }
+            continue;
+        }
+        // A computed value may still be known to be non-numeric; otherwise it
+        // is accepted and checked by the runtime constructor.
+        const Type valueType = typeOfExpr(*prop->value);
+        const bool numericLiteral =
+            valueType.kind == TypeKind::Literal &&
+            valueType.literalBaseType().kind == TypeKind::Number;
+        if (valueType.kind == TypeKind::Number || numericLiteral ||
+            valueType.kind == TypeKind::Unknown ||
+            valueType.kind == TypeKind::Error) {
+            scale = true;
+        } else {
+            report(diagcode::kTypeMismatch, anchorSpan(prop->value->span),
+                   "createServer() 'threads' must be a number");
+        }
+    }
+    return scale;
 }
 
 Type Analyzer::inferNetworkConstruct(const std::string& name, ExprList& args,
@@ -244,6 +337,18 @@ Type Analyzer::inferNetworkConstruct(const std::string& name, ExprList& args,
 }
 
 bool Analyzer::tryInferNetworkMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
+    // `network.createServer(...)` (D79): the namespace spelling of the same
+    // construction path, with the same options validation.
+    if (m.property == "createServer" && m.object &&
+        m.object->kind == NodeKind::Identifier) {
+        const auto& id = static_cast<const Identifier&>(*m.object);
+        Binding binding;
+        if (id.name == "network" && lookup(id.name, binding) && binding.isAmbient) {
+            if (checkCreateServerOptions(call)) out_.networkScaleMode = true;
+            out = networkObjectType(kHttpServer);
+            return true;
+        }
+    }
     if (m.property != "json" || m.object == nullptr) return false;
     const Type recv = typeOfExpr(*m.object);
     if (recv.kind != TypeKind::Object) return false;

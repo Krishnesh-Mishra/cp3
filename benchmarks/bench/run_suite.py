@@ -7,10 +7,12 @@
 # measurements. Nothing here is estimated; every number comes from a process
 # this script started and stopped itself.
 #
-#   * health-server: build (if needed), boot->ready ms, /healthz latency
-#     p50/p95 over N requests on persistent keep-alive sessions, req/s at fixed
-#     concurrency for a few seconds. Processes are started, and killed, one at
-#     a time; only processes this script started are ever stopped.
+#   * health-server and health-server-multi: build (if needed), boot->ready
+#     ms, /healthz latency p50/p95 over N requests on persistent keep-alive
+#     sessions, req/s at fixed concurrency for a few seconds. The multicore
+#     row is driven by several client OS processes. Server processes are
+#     started and stopped one at a time, together with the process tree each
+#     one created (cluster workers, multiprocessing workers).
 #   * compute-style tasks (compute-single, compute-single-int, compute-multi,
 #     hello-world, string-churn, word-frequency, object-churn, array-growth,
 #     closure-capture, interface-dispatch, generics-mono): build (if needed),
@@ -43,11 +45,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import http.client
+import json
 import math
 import os
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -63,18 +67,28 @@ BUILD = HERE / ".build"
 CP3C: Path | None = None  # set in main() from --cp3c
 EXE = ".exe" if os.name == "nt" else ""
 SERVER_PORTS = {
-    "cpp": 18080,
-    "rust": 18081,
-    "go": 18082,
-    "js": 18083,
-    "python": 18084,
-    # std/process (argv) and std/network have landed, so the cp3 entry takes
-    # its port from argv[1] like every other language.
-    "cp3": 18085,
+    "health-server": {
+        "cpp": 18080,
+        "rust": 18081,
+        "go": 18082,
+        "js": 18083,
+        "python": 18084,
+        # std/process (argv) and std/network have landed, so the cp3 entry
+        # takes its port from argv[1] like every other language.
+        "cp3": 18085,
+    },
+    "health-server-multi": {
+        "cpp": 18090,
+        "rust": 18091,
+        "go": 18092,
+        "js": 18093,
+        "python": 18094,
+        "cp3": 18095,
+    },
 }
 LANGUAGES = ["cpp", "rust", "go", "js", "python", "cp3"]
 
-SERVER_TASKS = ["health-server"]
+SERVER_TASKS = ["health-server", "health-server-multi"]
 COMPUTE_TASKS = [
     "compute-single",
     "compute-single-int",
@@ -429,43 +443,53 @@ def wait_until_ready(port: int, process: subprocess.Popen, deadline_s: float = 2
 # --------------------------------------------------------------------------
 # server trials
 # --------------------------------------------------------------------------
-def server_build_spec(language: str) -> tuple[list[str], Path, Path] | None:
+def server_build_spec(language: str, task: str) -> tuple[list[str], Path, Path] | None:
     """(build argv, output binary, source file), or None when there is no build step."""
-    base = BENCHMARKS / "health-server"
+    base = BENCHMARKS / task
+    stem = task
     if language == "cpp":
-        output = BUILD / f"health-server-cpp{EXE}"
+        output = BUILD / f"{stem}-cpp{EXE}"
         argv = ["g++", "-std=c++20", "-O2", "-o", str(output), str(base / "cpp" / "main.cpp")]
         if os.name == "nt":
             argv.append("-lws2_32")
         return argv, output, base / "cpp" / "main.cpp"
     if language == "rust":
-        output = BUILD / f"health-server-rust{EXE}"
+        output = BUILD / f"{stem}-rust{EXE}"
         return (["rustc", "-O", "-o", str(output), str(base / "rust" / "main.rs")],
                 output, base / "rust" / "main.rs")
     if language == "go":
-        output = BUILD / f"health-server-go{EXE}"
+        output = BUILD / f"{stem}-go{EXE}"
         return (["go", "build", "-o", str(output), str(base / "go" / "main.go")],
                 output, base / "go" / "main.go")
     return None
 
 
-def server_run_argv(language: str, port: int) -> tuple[list[str], str]:
-    base = BENCHMARKS / "health-server"
+def server_run_argv(language: str, task: str, port: int) -> tuple[list[str], str]:
+    base = BENCHMARKS / task
+    stem = task
     if language == "cpp":
-        return [str(BUILD / f"health-server-cpp{EXE}"), str(port)], "hand-rolled sockets (Winsock2)"
+        return [str(BUILD / f"{stem}-cpp{EXE}"), str(port)], (
+            "hand-rolled sockets, accept workers")
     if language == "rust":
-        return [str(BUILD / f"health-server-rust{EXE}"), str(port)], "std::net, no crates"
+        return [str(BUILD / f"{stem}-rust{EXE}"), str(port)], (
+            "std::net, accept workers")
     if language == "go":
-        return [str(BUILD / f"health-server-go{EXE}"), str(port)], "net/http"
+        return [str(BUILD / f"{stem}-go{EXE}"), str(port)], "net/http (all cores)"
     if language == "js":
         express_modules = base / "js" / "express" / "node_modules"
-        if express_modules.is_dir():
-            return ["node", str(base / "js" / "express" / "server.mjs"), str(port)], "express (installed)"
-        return ["node", str(base / "js" / "main.mjs"), str(port)], "node:http (zero-dep)"
+        if task == "health-server" and express_modules.is_dir():
+            return ["node", str(base / "js" / "express" / "server.mjs"), str(port)], (
+                "express (installed)")
+        return ["node", str(base / "js" / "main.mjs"), str(port)], (
+            "node:cluster" if task.endswith("-multi") else "node:http (zero-dep)")
     if language == "python":
-        return [sys.executable, str(base / "python" / "main.py"), str(port)], "http.server (threaded)"
+        return [sys.executable, str(base / "python" / "main.py"), str(port)], (
+            "multiprocessing (shared socket)" if task.endswith("-multi")
+            else "http.server (threaded)")
     if language == "cp3":
-        return [str(BUILD / f"health-server-cp3{EXE}"), str(port)], "std/network (spec)"
+        return [str(BUILD / f"{stem}-cp3{EXE}"), str(port)], (
+            "std/network, os.cpus() loops" if task.endswith("-multi")
+            else "std/network (spec)")
     raise ValueError(language)
 
 
@@ -485,14 +509,79 @@ def try_cp3_build(entry: Path) -> tuple[bool, str]:
     return False, "build succeeded but no executable was found under .cp3/"
 
 
-def run_server_trial(language: str, latency_count: int, warmup: int,
-                     seconds: float, concurrency: int, cp3c: Path) -> dict:
-    base = BENCHMARKS / "health-server"
+def kill_process_tree(process: subprocess.Popen) -> None:
+    """Stop a server process and any children it started (cluster/multiprocessing)."""
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                       capture_output=True)
+    else:
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except OSError:
+            process.kill()
+    try:
+        process.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        process.kill()
+
+
+def run_multi_client_load(port: int, seconds: float, concurrency: int,
+                          clients: int, path: str = "/healthz",
+                          client: str = "raw") -> tuple[int, int, list[str]]:
+    """Drive the server from several separate client OS processes.
+
+    Each process owns `concurrency` keep-alive connections and runs for the
+    same fixed window, starting at a shared epoch time. `client` is "raw" (the
+    multicore row) or "http" (the single-core row's established http.client
+    probe). Returns (ok, err, failure_notes); the caller divides ok by
+    `seconds`.
+    """
+    script = HERE / "server_load.py"
+    start_at = time.time() + 0.8
+    procs: list[subprocess.Popen] = []
+    for _ in range(max(1, clients)):
+        procs.append(subprocess.Popen(
+            [sys.executable, str(script), "--port", str(port),
+             "--seconds", f"{seconds:g}", "--concurrency", str(concurrency),
+             "--start-at", f"{start_at:.6f}", "--path", path,
+             "--client", client],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+    ok = err = 0
+    failures: list[str] = []
+    deadline = start_at + seconds + 60.0
+    for process in procs:
+        try:
+            out, error_text = process.communicate(
+                timeout=max(1.0, deadline - time.time()))
+        except subprocess.TimeoutExpired:
+            kill_process_tree(process)
+            out, error_text = "", "[runner] load process timed out and was killed"
+        payload = None
+        for line in reversed((out or "").strip().splitlines()):
+            try:
+                payload = json.loads(line)
+                break
+            except json.JSONDecodeError:
+                continue
+        if payload is None:
+            failures.append(first_diagnostic(error_text or out or "load process failed"))
+            continue
+        ok += int(payload.get("ok", 0))
+        err += int(payload.get("err", 0))
+    return ok, err, failures
+
+
+def run_server_trial(language: str, task: str, latency_count: int, warmup: int,
+                     seconds: float, concurrency: int, cp3c: Path,
+                     clients: int = 4, single_clients: int = 2) -> dict:
+    base = BENCHMARKS / task
     row: dict = {"language": language, "variant": "", "build_ms": None,
                  "boot_ms": None, "p50": None, "p95": None, "rps": None,
                  "requests": 0, "errors": 0, "peak_rss_mb": None,
                  "binary_kb": None, "note": ""}
-    port = SERVER_PORTS[language]
+    port = SERVER_PORTS[task][language]
 
     # --- build step -------------------------------------------------------
     if language == "cp3":
@@ -503,13 +592,14 @@ def run_server_trial(language: str, latency_count: int, warmup: int,
         if not ok:
             row["note"] = f"not runnable yet: {detail}"
             return row
-        argv, variant = [detail, str(port)], "std/network (spec)"
+        argv, variant = [detail, str(port)], f"std/network, os.cpus() loops" \
+            if task.endswith("-multi") else "std/network (spec)"
         row["variant"] = variant
         row["binary_kb"] = stripped_size_kb(Path(detail))
     else:
-        argv, variant = server_run_argv(language, port)
+        argv, variant = server_run_argv(language, task, port)
         row["variant"] = variant
-        build = server_build_spec(language)
+        build = server_build_spec(language, task)
         if build is not None:
             build_argv, output, source = build
             if up_to_date(output, source):
@@ -524,9 +614,11 @@ def run_server_trial(language: str, latency_count: int, warmup: int,
             row["binary_kb"] = stripped_size_kb(output)
 
     # --- run it -----------------------------------------------------------
-    log_path = BUILD / f"health-server-{language}.log"
+    log_path = BUILD / f"{task}-{language}.log"
     with open(log_path, "wb") as log:
-        process = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, cwd=base)
+        process = subprocess.Popen(
+            argv, stdout=log, stderr=subprocess.STDOUT, cwd=base,
+            start_new_session=(os.name != "nt"))
         sampler = RssSampler(process.pid)
         sampler.start()
         try:
@@ -557,46 +649,30 @@ def run_server_trial(language: str, latency_count: int, warmup: int,
             row["p50"] = percentile(latencies, 50)
             row["p95"] = percentile(latencies, 95)
 
-            deadline = time.perf_counter() + seconds
-            counter = {"ok": 0, "err": 0}
-            lock = threading.Lock()
-
-            def worker():
-                local_ok = local_err = 0
-                session = Session(port)
-                while time.perf_counter() < deadline:
-                    try:
-                        status, _, _ = session.get("/healthz")
-                        if status == 200:
-                            local_ok += 1
-                        else:
-                            local_err += 1
-                    except (OSError, http.client.HTTPException):
-                        local_err += 1
-                session.close()
-                with lock:
-                    counter["ok"] += local_ok
-                    counter["err"] += local_err
-
-            threads = [threading.Thread(target=worker) for _ in range(concurrency)]
-            load_start = time.perf_counter()
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
-            elapsed = time.perf_counter() - load_start
-            row["requests"] = counter["ok"]
-            row["errors"] = errors + counter["err"]
-            row["rps"] = counter["ok"] / elapsed if elapsed > 0 else float("nan")
-            details = f"warmup {warmup}, {len(latencies)} latency reqs, {concurrency} conns x {seconds:g}s"
+            if task.endswith("-multi"):
+                load_clients = clients
+                load_client = "raw"
+            else:
+                load_clients = single_clients
+                load_client = "http"
+            load_ok, load_err, failures = run_multi_client_load(
+                port, seconds, concurrency, load_clients, client=load_client)
+            row["requests"] = load_ok
+            row["errors"] = errors + load_err
+            row["rps"] = load_ok / seconds if seconds > 0 else float("nan")
+            details = (f"warmup {warmup}, {len(latencies)} latency reqs, "
+                       f"{load_clients} client procs x {concurrency} conns x "
+                       f"{seconds:g}s ({load_client})")
+            if failures:
+                details += f", load failures: {'; '.join(failures[:2])}"
             row["note"] = f"{row['note']}, {details}" if row["note"] else details
         finally:
             sampler.stop()
             sampler.join(timeout=5)
             if sampler.peak is not None:
                 row["peak_rss_mb"] = sampler.peak / 1048576.0
-            process.kill()  # only ever the process this script started
-            process.wait(timeout=15)
+            # Only ever the process tree this script started.
+            kill_process_tree(process)
     return row
 
 
@@ -781,9 +857,9 @@ def binary_cell(row: dict) -> str:
     return f"{row['binary_kb']:.0f}" if row["binary_kb"] is not None else "-"
 
 
-def print_server_table(rows: list[dict]) -> None:
+def print_server_table(task: str, rows: list[dict]) -> None:
     print()
-    print("== health-server ==")
+    print(f"== {task} ==")
     print(f"{'lang':<7} {'variant':<30} {'build_ms':>9} {'boot_ms':>8} "
           f"{'p50_ms':>8} {'p95_ms':>8} {'req/s':>9} {'cp3/cpp':>8} {'cp3/rust':>9} "
           f"{'peak_rss_mb':>11} {'binary_kb':>9}  note")
@@ -797,12 +873,12 @@ def print_server_table(rows: list[dict]) -> None:
     # throughput -> time ratio: cp3/cpp = cpp_rps / cp3_rps
     cpp_ratio = cpp_rps / cp3_rps if (cpp_rps and cp3_rps) else None
     rust_ratio = rust_rps / cp3_rps if (rust_rps and cp3_rps) else None
-    SUMMARY_ROWS.append({"task": "health-server", "cpp": cpp_ratio, "rust": rust_ratio})
+    SUMMARY_ROWS.append({"task": task, "cpp": cpp_ratio, "rust": rust_ratio})
     go_rps = next((r["rps"] for r in rows if r["language"] == "go" and r["rps"]), None)
     js_rps = next((r["rps"] for r in rows if r["language"] == "js" and r["rps"]), None)
     python_rps = next((r["rps"] for r in rows
                        if r["language"] == "python" and r["rps"]), None)
-    gate_row("health-server", cp3_rps,
+    gate_row(task, cp3_rps,
              {"cpp": cpp_rps, "rust": rust_rps, "go": go_rps, "js": js_rps,
               "python": python_rps}, unit="rps")
     for row in rows:
@@ -1003,6 +1079,10 @@ def main() -> int:
     parser.add_argument("--only", default="", help="comma list of: " + ",".join(ALL_TASKS))
     parser.add_argument("--seconds", type=float, default=3.0, help="throughput phase seconds per server")
     parser.add_argument("--concurrency", type=int, default=8, help="throughput phase connections")
+    parser.add_argument("--clients", type=int, default=4,
+                        help="client OS processes for the multicore server row (default 4)")
+    parser.add_argument("--single-clients", type=int, default=2,
+                        help="client OS processes for the single-core server row (default 2)")
     parser.add_argument("--latency", type=int, default=300, help="latency phase request count")
     parser.add_argument("--warmup", type=int, default=100, help="warmup requests before measuring")
     parser.add_argument("--reps", type=int, default=2, help="compute runs; best is reported")
@@ -1082,16 +1162,20 @@ def main() -> int:
                 return True
             return have({"cpp": "g++", "rust": "rustc", "go": "go"}[language])
 
-        if "health-server" in wanted:
+        for task in SERVER_TASKS:
+            if task not in wanted:
+                continue
             rows = []
             for language in LANGUAGES:
                 if not present(language):
                     print(f"[skip] {language}: toolchain not found on PATH")
                     continue
-                print(f"[run ] health-server: {language} ...", flush=True)
-                rows.append(run_server_trial(language, args.latency, args.warmup,
-                                             args.seconds, args.concurrency, cp3c))
-            print_server_table(rows)
+                print(f"[run ] {task}: {language} ...", flush=True)
+                rows.append(run_server_trial(language, task, args.latency, args.warmup,
+                                             args.seconds, args.concurrency, cp3c,
+                                             clients=args.clients,
+                                             single_clients=args.single_clients))
+            print_server_table(task, rows)
 
         for task in COMPUTE_TASKS:
             if task not in wanted:

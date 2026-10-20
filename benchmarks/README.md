@@ -47,6 +47,8 @@ in PowerShell, `.\run.ps1 --only word-frequency` does the same.
 | `--strict` | exit code 1 when the performance gate prints any WARN or BIG WARN |
 | `--results DIR` | tee the raw output to `DIR/run.txt` plus `DIR/meta.txt` (provenance, incl. the cp3c SHA-256) |
 | `--seconds S`, `--concurrency C`, `--latency N`, `--warmup N` | server load phases (defaults 3 s, 8 connections, 300 latency requests, 100 warmup) |
+| `--clients N` | client OS processes for `health-server-multi` (default 4, minimum useful 2); each owns `--concurrency` keep-alive connections |
+| `--single-clients N` | client OS processes for `health-server` (default 2, the quiet-probe shape); each owns `--concurrency` `http.client` sessions |
 
 The test harness runs the suite for you automatically (D67): after the
 conformance corpus pass it invokes `benchmarks/run_benchmark.py`, streams its
@@ -63,9 +65,9 @@ python tests/runner/run_tests.py --no-bench         # corpus only
 `--no-bench` skips the bench pass; `--json` skips it with a note so machine
 output stays parseable. The harness exit code stays `max(corpus, bench)`.
 
-The runner needs Python 3 only. It never stops a process it did not start:
-servers are launched with `subprocess.Popen`, measured, and killed by exact
-process id.
+The runner needs Python 3 only. Servers are launched with `subprocess.Popen`,
+measured, and stopped by exact process id together with the process tree they
+created (cluster or multiprocessing workers); no unrelated process is touched.
 
 ## The tasks
 
@@ -82,7 +84,8 @@ process id.
 | `closure-capture` | map/filter/reduce over 10M + 1000 escaping closures | `16666688333331 998521500000` | pending closures |
 | `interface-dispatch` | 2M shapes through `area()`, plus a direct-call control loop | `37999986 66000000` | pending classes/interfaces + arrays |
 | `generics-mono` | generic `Box<T>` loop vs a hand-written concrete copy | `998986007 998986007` | pending generic classes + generic functions |
-| `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404` | wire contract (below) | runs (contract verified; timing joins the next suite run) |
+| `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404`, single core | wire contract (below) | runs (contract verified) |
+| `health-server-multi` | the same contract with one worker per logical CPU in every language | wire contract (below) | runs (`createServer({ threads: os.cpus() })`) |
 
 Every value above is re-derived independently by `bench/oracle.py`, which
 re-implements every workload again in plain Python; the runner cross-checks
@@ -93,8 +96,16 @@ The health-server contract: every language listens on `127.0.0.1` only and
 answers `GET /healthz` with `200` text/plain `ok`, `GET /` with `200`
 text/plain `health-server ok`, and anything else with `404` text/plain
 `not found`. The port comes from `argv[1]` (the suite assigns 18080-18085 per
-language, default 8080); the cp3 entry reads `process.argv` like every other
-entry and was smoke-verified on its own port.
+language to the single-core row and 18090-18095 to the multicore row, default
+8080); the cp3 entry reads `process.argv` like every other entry.
+
+`health-server-multi` is the multicore sibling: cp3 uses
+`createServer({ threads: os.cpus() })` (one event loop and one uWS app per
+logical CPU), cpp and rust run one accept/handler worker per core on a shared
+listener, go uses `net/http` with `GOMAXPROCS`, js uses `node:cluster`, and
+python passes one listening socket to `multiprocessing` workers. The runner
+drives this row from `--clients` separate client OS processes (default 4),
+each with `--concurrency` raw keep-alive connections.
 
 Each task folder has its own README with the exact workload definition, the
 expected output, the per-language build/run commands, and a link back to the
@@ -119,9 +130,13 @@ Compute tables:
 Server table adds `variant` (e.g. Express vs zero-dep `node:http`), `boot_ms`
 (process start to first `200` on `/healthz`), `p50_ms`/`p95_ms` (per-request
 round trips on one persistent keep-alive connection) and `req/s` (successful
-requests over the load window at fixed concurrency). For servers the
-`cp3/cpp` and `cp3/rust` columns are time-per-request ratios (lower is better
-for cp3), computed from the throughputs.
+requests over the load window at fixed concurrency). The single-core row uses
+`--single-clients` client processes (default 2), each with `--concurrency`
+`http.client` sessions, matching the diagnosis quiet probe; the multicore row
+uses `--clients` client processes, each with `--concurrency` raw-socket
+keep-alive sessions. For servers the `cp3/cpp` and `cp3/rust` columns are
+time-per-request ratios (lower is better for cp3), computed from the
+throughputs.
 
 The summary table at the end collects one ratio pair per task and prints a
 geomean footer over every runnable pair.

@@ -145,14 +145,16 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
                               std::string& mainBody) {
     const bool isConst = vd.kind == VarKind::Const;
     const std::string cv = isConst ? "const " : "";
+    // D79: per-loop module state. Every namespace-scope binding gets its own
+    // copy per thread; runtime initializers are replayed by the hook below.
+    const std::string tl = scaleMode_ ? "thread_local " : "";
     for (const auto& declPtr : vd.declarations) {
         const VariableDeclarator* d = declPtr.get();
         if (!d || !d->id || d->id->kind != NodeKind::Identifier) {
             if (d && d->id) notImplemented(*d->id, "destructuring binding");
             continue;
         }
-        const std::string name =
-            mapIdent(static_cast<const Identifier&>(*d->id).name);
+        const std::string name = mapIdent(static_cast<const Identifier&>(*d->id).name);
         reportModuleVarType(*d);
         const std::optional<Type> declared = resolvedBindingType(*d);
         CppInfo ci = declared ? classify(*declared) : CppInfo{};
@@ -200,32 +202,35 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         if (isConst) {
             if (isStaticInitExpr(*d->init)) {
                 emitLineDirective(*d, decls);
-                line(decls, 1, cv + ci.cpp + " " + name + " = " + initText + ";");
+                line(decls, 1, tl + cv + ci.cpp + " " + name + " = " + initText + ";");
             } else {
                 // The initializer reads runtime state: evaluate it inside
                 // `main` at its source position, after initArgv and the rest
                 // of the runtime bootstrap. The binding keeps namespace scope
                 // so functions can read it; language-level const-ness is
                 // enforced by sema.
-                line(decls, 1, ci.cpp + " " + name + "{};");
+                line(decls, 1, tl + ci.cpp + " " + name + "{};");
                 emitLineDirective(*d, mainBody);
                 line(mainBody, 1, name + " = " + initText + ";");
+                if (scaleMode_) moduleInitLines_.push_back(name + " = " + initText + ";");
             }
             continue;
         }
-        line(decls, 1, ci.cpp + " " + name + "{};");
+        line(decls, 1, tl + ci.cpp + " " + name + "{};");
         emitLineDirective(*d, mainBody);
         line(mainBody, 1, name + " = " + initText + ";");
+        if (scaleMode_) moduleInitLines_.push_back(name + " = " + initText + ";");
     }
 }
 
 void Generator::emitModuleVarNoInit(const detail::CppInfo& ci,
                                     const std::string& name,
                                     const std::string& cv, std::string& decls) {
+    const std::string tl = scaleMode_ ? "thread_local " : "";
     if (ci.representable && ci.shape != Shape::Void) {
-        line(decls, 1, cv + ci.cpp + " " + name + "{};");
+        line(decls, 1, tl + cv + ci.cpp + " " + name + "{};");
     } else {
-        line(decls, 1, cv + "auto " + name + " = cp3::runtime::undefined;");
+        line(decls, 1, tl + cv + "auto " + name + " = cp3::runtime::undefined;");
     }
 }
 
