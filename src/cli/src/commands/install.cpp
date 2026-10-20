@@ -46,11 +46,21 @@ std::string stripFilePrefix(const std::string& spec) {
 }
 
 bool looksLikePath(const std::string& spec) {
+    // An explicit file: spec is always local, including file:deps/kit.
+    if (spec.rfind("file:", 0) == 0) return spec.size() > 5;
     const std::string path = stripFilePrefix(spec);
     if (path.empty()) return false;
+    if (path == "." || path == "..") return true;
     if (path.rfind("./", 0) == 0 || path.rfind("../", 0) == 0 ||
         path.rfind(".\\", 0) == 0 || path.rfind("..\\", 0) == 0 ||
         path.rfind("/", 0) == 0 || path.rfind("\\\\", 0) == 0) {
+        return true;
+    }
+    // A relative path with a separator is path-shaped, not a bare package
+    // name. Bare names still stay registry-only, even if a same-named
+    // directory happens to exist.
+    if (path.find('/') != std::string::npos ||
+        path.find('\\') != std::string::npos) {
         return true;
     }
     if (path.size() >= 2 && path[1] == ':') return true;  // C:\ or C:/
@@ -249,6 +259,7 @@ int installDependencies(const CliOptions& opt, const fs::path& projectRoot,
         }
         LockEntry entry;
         if (installDependency(dep.first, dep.second.string, context, entry)) {
+            if (!opt.json) reportInstalled(entry, false);
             installed.push_back(entry);
         } else {
             ++failures;

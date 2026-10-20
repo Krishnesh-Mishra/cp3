@@ -515,16 +515,16 @@
     },
     {
       "group": "init",
-      "name": "cp3c-has-no-force-flag",
-      "description": "cp3c has no force flag",
+      "name": "unknown-option",
+      "description": "unknown option is rejected",
       "argv": [
         "init",
-        "--force"
+        "--not-a-real-flag"
       ],
       "expect": {
         "exit": 2,
         "stderr": {
-          "contains": "unknown option '--force'"
+          "contains": "unknown option '--not-a-real-flag'"
         }
       }
     },
