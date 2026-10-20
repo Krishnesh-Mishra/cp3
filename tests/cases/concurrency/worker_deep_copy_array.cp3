@@ -1,0 +1,8 @@
+import console from "std/console";
+
+const w = new Worker("./worker_array_mutate_impl.cp3");
+let data = [1, 2, 3];
+const marker = await w.request(data);
+console.log(`${marker}`);
+console.log(`${data[0]},${data.length}`);
+w.terminate();

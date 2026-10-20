@@ -143,6 +143,7 @@ private:
                         std::vector<Type> tupleElems);
     const Field* findField(const Shape* shape, const std::string& name) const;
     Type resolveType(TypeNode& node);
+    Type resolveTypeInner(TypeNode& node);
     Type resolveNamedType(NamedType& nt);
     Type resolveUnionType(UnionType& ut);
     Type resolveArrayType(ArrayType& at);

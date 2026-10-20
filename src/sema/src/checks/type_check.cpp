@@ -261,7 +261,16 @@ const Field* Analyzer::findField(const Shape* shape,
 // =============================================================================
 // Type resolution
 // =============================================================================
+// Every resolved type annotation is published into the `SemaResult` side table
+// (D1), so codegen can look a `TypeNode`'s resolved type up by node id
+// (`sema.typeOf`) instead of re-deriving it structurally - the resolved model
+// carries object shapes and generic arguments (`Thread<In, Out>`) a structural
+// re-parse cannot reconstruct.
 Type Analyzer::resolveType(TypeNode& node) {
+    return withType(node, resolveTypeInner(node));
+}
+
+Type Analyzer::resolveTypeInner(TypeNode& node) {
     switch (node.kind) {
         case NodeKind::NamedType:
             return resolveNamedType(static_cast<NamedType&>(node));
@@ -290,16 +299,23 @@ Type Analyzer::resolveType(TypeNode& node) {
 
 Type Analyzer::resolveNamedType(NamedType& nt) {
     // Type arguments are resolved eagerly (both for their own diagnostics and
-    // for the generic types M1 does model, `Promise<T>`).
-    Type firstArg = Type::unknown();
-    bool hasArg = false;
+    // for the generic types M1 does model, `Promise<T>` and `Thread<In, Out>`).
+    std::vector<Type> args;
     for (auto& ta : nt.typeArgs) {
         if (!ta) continue;
-        Type resolved = resolveType(*ta);
-        if (!hasArg) {
-            firstArg = resolved;
-            hasArg = true;
-        }
+        args.push_back(resolveType(*ta));
+    }
+    const bool hasArg = !args.empty();
+    const Type firstArg = hasArg ? args.front() : Type::unknown();
+    // The concurrency channel types (D80, spec 13): ambient generic classes.
+    // `Thread<In, Out>` types the worker entry's parameter; `Worker<In, Out>`
+    // is the main side's handle type. Both are nominal Class types whose parts
+    // are the resolved direction types, in order - the single source of truth
+    // codegen reads back through the type-node side table.
+    if (nt.name == "Thread" || nt.name == "Worker") {
+        Type channel(TypeKind::Class, nt.name);
+        channel.parts = args;
+        return channel;
     }
     if (nt.name == "any") {
         checkBannedAny(nt.span);

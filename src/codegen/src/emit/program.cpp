@@ -153,6 +153,10 @@ std::string programHeader(const ProgramAssembly& assembly,
     if (n.eventEmitter) out += "#include \"cp3/async/emitter.hpp\"\n";
     if (n.regex) out += "#include \"cp3/core/regex.hpp\"\n";
     out += "\n";
+    if (entry != nullptr && !entry->globals.empty()) {
+        out += entry->globals;
+        out += "\n";
+    }
     out += "namespace " + namesp + " {\n\n";
     if (entry != nullptr) out += entry->decls;
     out += "\n}  // namespace " + namesp + "\n\n";
@@ -199,7 +203,9 @@ std::string programSource(const ProgramAssembly& assembly,
     if (n.parallel) out += "#include \"cp3/parallel/parallel.hpp\"\n";
     if (n.worker) {
         out += "#include \"cp3/parallel/worker.hpp\"\n";
-        if (!n.workerHeader.empty()) out += "#include \"" + n.workerHeader + "\"\n";
+        for (const std::string& header : n.workerHeaders) {
+            out += "#include \"" + header + "\"\n";
+        }
     }
     out += "\n";
     out += kHelperBlock;
@@ -209,6 +215,14 @@ std::string programSource(const ProgramAssembly& assembly,
     if (n.unionValue) out += unionHelperBlock();
     if (n.objectValue) out += objectHelperBlock();
     out += "\n";
+    // The generated `$o{...}` value structs are global (guarded), so every
+    // unit spells the same nominal type and a worker TU can share it.
+    for (const ProgramUnitText& unit : assembly.units) {
+        if (!unit.globals.empty()) {
+            out += unit.globals;
+            out += "\n";
+        }
+    }
     // Phase 1: every unit's declaration section (forward declarations and
     // module-scope bindings), so phase 2 can reference any unit.
     for (const ProgramUnitText& unit : assembly.units) {
@@ -276,7 +290,8 @@ void Generator::emitProgramUnit(const ProgramLink& link,
                       ? surfaceIt->second.namesp
                       : suggestNamespace(unit.moduleName);
     text.isEntry = unit.isEntry;
-    inner.runUnit(*unit.ast, text.decls, text.defs, text.mainBody);
+    inner.runUnit(*unit.ast, text.decls, text.defs, text.mainBody,
+                  text.globals);
     text.topLevelAwait = inner.topLevelAwait_;
     ProgramNeeds& n = assembly.needs;
     n.consoleStderr |= inner.consoleStderr_;
@@ -305,8 +320,15 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     n.regex |= inner.needsRegex_;
     n.parallel |= inner.needsParallel_;
     n.worker |= inner.needsWorker_;
-    if (unit.isEntry && options.worker) {
-        n.workerHeader = options.worker->headerPath;
+    if (unit.isEntry) {
+        for (const WorkerSite& site : options.workers) {
+            if (site.inlineSite || site.headerPath.empty()) continue;
+            bool seen = false;
+            for (const std::string& existing : n.workerHeaders) {
+                if (existing == site.headerPath) seen = true;
+            }
+            if (!seen) n.workerHeaders.push_back(site.headerPath);
+        }
     }
     assembly.units.push_back(std::move(text));
 }

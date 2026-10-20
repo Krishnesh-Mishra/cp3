@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3908",
+    "line": 2,
+    "col": 25,
+    "contains": "does not match the channel's In type"
+  }
+}

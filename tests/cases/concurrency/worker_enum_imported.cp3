@@ -1,0 +1,6 @@
+import console from "std/console";
+import { Color } from "./worker_shared_enum.cp3";
+
+const w = new Worker("./worker_enum_import_impl.cp3");
+console.log(`${await w.request(Color.Green)}`);
+w.terminate();

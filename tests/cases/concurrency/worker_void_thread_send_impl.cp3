@@ -1,0 +1,5 @@
+export default (thread: Thread<number, void>) => {
+  thread.on("message", (data) => {
+    thread.postMessage(7);
+  });
+};

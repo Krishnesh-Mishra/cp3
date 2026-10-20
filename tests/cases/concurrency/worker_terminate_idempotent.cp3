@@ -1,0 +1,8 @@
+import console from "std/console";
+
+const w = new Worker("./worker_early_impl.cp3");
+w.on("message", (msg) => {
+  console.log(`${msg}`);
+  w.terminate();
+  w.terminate();
+});

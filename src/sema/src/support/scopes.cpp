@@ -122,6 +122,11 @@ void Analyzer::declareBuiltins() {
         "Object", "String",   "Number",   "Boolean",
         "Array",  "parseInt", "parseFloat", "isNaN", "isFinite",
         "print",  "worker",  "parallel", "Promise", "Symbol",   "BigInt",
+        // The worker channel types (D80, spec 13): ambient generic types in
+        // every unit. `Worker` also has a value binding, so `new Worker(...)`
+        // resolves (the surface is checked in codegen/the CLI, which own the
+        // module resolution the constructor needs).
+        "Worker", "Thread",
         // The core-language event type (D74, spec §14): a global builtin
         // exactly like `Promise` and the timers, no import required.
         "EventEmitter",

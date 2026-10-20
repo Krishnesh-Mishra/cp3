@@ -1,0 +1,6 @@
+const w = new Worker((thread) => {
+  thread.on("message", (data) => {
+    thread.postMessage(data);
+  });
+});
+w.terminate();

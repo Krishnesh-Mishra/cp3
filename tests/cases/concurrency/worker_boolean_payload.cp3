@@ -1,0 +1,6 @@
+import console from "std/console";
+
+const w = new Worker("./worker_boolean_impl.cp3");
+console.log(`${await w.request(1)}`);
+console.log(`${await w.request(-1)}`);
+w.terminate();

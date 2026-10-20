@@ -1,0 +1,3 @@
+const w = new Worker("./worker_void_out_impl.cp3");
+w.postMessage(5);
+setTimeout(() => w.terminate(), 100);

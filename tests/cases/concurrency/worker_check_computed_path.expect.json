@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3910",
+    "line": 2,
+    "col": 11,
+    "contains": "must be a static string literal"
+  }
+}

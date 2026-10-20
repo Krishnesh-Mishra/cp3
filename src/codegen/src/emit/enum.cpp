@@ -170,14 +170,21 @@ const EnumDeclaration* topLevelEnum(const Stmt& s) {
 // Declaration collection
 // =============================================================================
 void Generator::collectEnums(const Program& program) {
-    for (const auto& stmtPtr : program.body) {
-        if (!stmtPtr) continue;
-        const EnumDeclaration* e = topLevelEnum(*stmtPtr);
-        if (e == nullptr || e->name.empty() || enums_.count(e->name) != 0) continue;
+    const auto collect = [this](const EnumDeclaration* e) {
+        if (e == nullptr || e->name.empty() || enums_.count(e->name) != 0) return;
         EnumCppInfo info = buildEnumInfo(*e);
         enumDecls_ += enumDeclText(info) + "\n";
         enums_.emplace(e->name, std::move(info));
+    };
+    for (const auto& stmtPtr : program.body) {
+        if (!stmtPtr) continue;
+        collect(topLevelEnum(*stmtPtr));
     }
+    // Imported local enums are compile-time declarations: each unit re-emits
+    // them in its own namespace so a payload annotation can name the enum and
+    // the main side can spell a member value. Same-named enums on both sides of
+    // a worker channel are structurally compatible (workerPayloadAccepts).
+    for (const EnumDeclaration* e : options_.importedEnums) collect(e);
 }
 
 // =============================================================================
@@ -364,11 +371,16 @@ CppInfo classifyEnum(const Type& t) {
 }  // namespace detail
 
 // A type annotation -> a cp3 Type, with every Class part named like a known
-// enum rewritten to the enum kind. `collectEnums` runs before the emit walk, so
-// `enums_` is complete at every call site; a name that is not an enum keeps the
-// Class kind (and its "this declared type" CP3002, unchanged).
+// enum rewritten to the enum kind. Sema's resolved type wins when it published
+// one (D1): it carries generic arguments (`Thread<In, Out>`), the object shape
+// of a structural record, and enum kinds the structural re-parse cannot see.
+// `collectEnums` runs before the emit walk, so `enums_` is complete here.
 std::optional<Type> Generator::typeOfNode(const TypeNode& tn) const {
-    auto mapped = typeFromTypeNode(tn);
+    std::optional<Type> mapped;
+    if (const Type* published = sema_.typeOf(tn.nodeId)) {
+        if (!published->isUnknown() && !published->isError()) mapped = *published;
+    }
+    if (!mapped) mapped = typeFromTypeNode(tn);
     if (!mapped) return std::nullopt;
     rewriteEnumTypes(*mapped);
     return mapped;

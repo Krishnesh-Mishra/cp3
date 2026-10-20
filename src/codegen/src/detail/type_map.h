@@ -51,12 +51,14 @@ enum class NullishKind { None, Null, Undefined, Mixed };
 
 bool isPrimitiveShape(Shape s);
 
-// One field of an all-primitive `$o{...}` object value shape (Shape::Object):
-// its cp3 name (also its generated-struct member spelling, modulo mapIdent)
-// and the C++ spelling of its primitive type.
+// One field of an `$o{...}` object value shape (Shape::Object): its cp3 name
+// (also its generated-struct member spelling, modulo mapIdent), the C++
+// spelling of its type, and the cp3 type itself (so nested member reads keep
+// their shape).
 struct ObjectField {
     std::string name;
     std::string cpp;
+    Type type;
 };
 
 struct CppInfo {
@@ -104,6 +106,9 @@ void classifyNullishUnion(const Type& t, CppInfo& info);
 // another family claimed through `objectShapeExclude`).
 bool objectShapeOf(const Type& t, std::string& structName,
                    std::vector<ObjectField>& fields);
+// The C++ spelling of the shape field named `property` (false when absent).
+bool fieldCppText(const std::vector<ObjectField>& fields,
+                  const std::string& property, std::string& out);
 CppInfo classifyObjectValue(const Type& t);
 // A `$o{...}` label another family owns (a std/json interface record): its
 // spelling is that family's, so the value-shape path must not claim it.
@@ -113,9 +118,10 @@ void objectShapeExclude(const std::string& label);
 // member of a nullish option (`{...} | null` -> `std::optional<Struct>`)?
 // Fills `object` with the object `Type` and reports whether it was peeled.
 bool objectReceiver(const Type& t, Type& object, bool& optional);
-// The registered struct texts whose names occur in `text` (the decls prefix a
-// unit adds for the shapes it references).
-std::string objectDeclsFor(const std::string& text);
+// The registered struct texts whose names occur in `text`, each inside its
+// `CP3_OBJ_<HEX>_DEFINED` guard for emission at global scope: the worker TU and
+// the entry TU spell the same `$o{...}` shape as one nominal type.
+std::string objectGlobalDeclsFor(const std::string& text, bool cloneValues);
 
 // The JS-compat typed-array family (D69; src/std/typed-arrays/codegen.cpp):
 // regular arrays with a value-like element type (`number`, `string`,

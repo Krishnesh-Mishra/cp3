@@ -1,0 +1,12 @@
+import console from "std/console";
+
+const w = new Worker((thread: Thread<number, number>) => {
+  let seen = 0;
+  thread.on("message", (data) => {
+    seen = seen + 1;
+    thread.postMessage(seen);
+  });
+});
+console.log(`${await w.request(0)}`);
+console.log(`${await w.request(0)}`);
+w.terminate();

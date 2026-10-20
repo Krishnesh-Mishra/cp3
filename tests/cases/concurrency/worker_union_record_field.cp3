@@ -1,0 +1,7 @@
+import console from "std/console";
+
+const w = new Worker("./worker_union_record_impl.cp3");
+let msg: { v: number | string } = { v: 1 };
+const r = await w.request(msg);
+console.log(`${typeof r.v}`);
+w.terminate();

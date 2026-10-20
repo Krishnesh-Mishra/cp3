@@ -1,0 +1,3 @@
+const w = new Worker("./worker_send_only_impl.cp3");
+let r = await w.request(1);
+w.terminate();

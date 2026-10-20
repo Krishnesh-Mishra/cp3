@@ -66,43 +66,138 @@ bool isIdentifier(const std::string& name) {
     return true;
 }
 
-// The C++ spelling of one `typeKey` (sema's structural field key), or "" when
-// the field is not a primitive this wave represents. A primitive key is the
-// kind name, '|', the (empty) type name, and another '|': `number||`,
-// `string||`, `boolean||`.
-std::string fieldCppFor(const std::string& key) {
-    if (key == "number||") return "double";
-    if (key == "string||") return "std::string";
-    if (key == "boolean||") return "bool";
-    return std::string();
+// Parses one sema structural type key (`number||`, `array||<number||>`,
+// `object|$o{...}|`, `union||<...>`) back into a cp3 Type. The object arm keeps
+// the label; `classify` later walks it, which is how nested record and array
+// fields keep their exact C++ spelling.
+bool parseTypeKey(const std::string& s, std::size_t& pos, Type& out);
+
+// Reads a balanced `$o{...}` or `$t[...]` label starting at `pos`.
+bool readShapeLabel(const std::string& s, std::size_t& pos, std::string& out) {
+    if (s.compare(pos, 3, "$o{") != 0 && s.compare(pos, 3, "$t[") != 0) {
+        return false;
+    }
+    const char open = s[pos + 2];
+    const char close = open == '{' ? '}' : ']';
+    const std::size_t start = pos;
+    int depth = 0;
+    for (; pos < s.size(); ++pos) {
+        if (s[pos] == open) {
+            ++depth;
+        } else if (s[pos] == close) {
+            --depth;
+            if (depth == 0) {
+                ++pos;
+                out = s.substr(start, pos - start);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool parseTypeKey(const std::string& s, std::size_t& pos, Type& out) {
+    const std::size_t kindEnd = s.find('|', pos);
+    if (kindEnd == std::string::npos) return false;
+    const std::string kind = s.substr(pos, kindEnd - pos);
+    pos = kindEnd + 1;
+    std::string name;
+    if (kind == "object") {
+        if (!readShapeLabel(s, pos, name)) return false;
+        if (pos >= s.size() || s[pos] != '|') return false;
+        ++pos;
+    } else {
+        const std::size_t nameEnd = s.find('|', pos);
+        if (nameEnd == std::string::npos) return false;
+        name = s.substr(pos, nameEnd - pos);
+        pos = nameEnd + 1;
+    }
+    std::vector<Type> parts;
+    while (pos < s.size() && s[pos] == '<') {
+        ++pos;
+        Type part;
+        if (!parseTypeKey(s, pos, part)) return false;
+        if (pos >= s.size() || s[pos] != '>') return false;
+        ++pos;
+        parts.push_back(std::move(part));
+    }
+    if (kind == "number") {
+        out = Type::number();
+    } else if (kind == "string") {
+        out = Type::string();
+    } else if (kind == "boolean") {
+        out = Type::boolean();
+    } else if (kind == "undefined") {
+        out = Type::undefined();
+    } else if (kind == "null") {
+        out = Type::nullType();
+    } else if (kind == "void") {
+        out = Type::voidType();
+    } else if (kind == "unknown") {
+        out = Type::unknown();
+    } else if (kind == "error") {
+        out = Type::error();
+    } else if (kind == "array") {
+        if (parts.size() != 1) return false;
+        out = Type::array(std::move(parts.front()));
+    } else if (kind == "union") {
+        out = Type::unionOf(std::move(parts));
+    } else if (kind == "nullable") {
+        if (parts.size() != 1) return false;
+        out = Type::nullable(std::move(parts.front()));
+    } else if (kind == "object") {
+        out = Type::named(TypeKind::Object, std::move(name));
+    } else if (kind == "enum") {
+        out = Type::named(TypeKind::Enum, std::move(name));
+    } else if (kind == "class") {
+        out = Type::named(TypeKind::Class, std::move(name));
+        out.parts = std::move(parts);
+    } else {
+        return false;  // literals/functions are not annotation field types
+    }
+    return true;
 }
 
 // Parses a `$o{name:key,...}` shape label into its representable fields.
-// False when any field is optional, non-primitive, or not a plain identifier,
-// or when two fields would collide as C++ member names.
+// False when any field is not a value type this wave can spell, or when two
+// fields would collide as C++ member names. Nested record and array labels are
+// parsed by their own `typeKey`, so composites recurse.
 bool parseObjectLabel(const std::string& label, std::vector<ObjectField>& out) {
     const std::string prefix = "$o{";
     if (label.rfind(prefix, 0) != 0 || label.size() < prefix.size() + 1 ||
         label.back() != '}') {
         return false;
     }
-    const std::string body =
-        label.substr(prefix.size(), label.size() - prefix.size() - 1);
+    const std::size_t end = label.size() - 1;
     std::vector<ObjectField> fields;
-    std::size_t pos = 0;
-    while (pos < body.size()) {
-        const std::size_t comma = body.find(',', pos);
-        if (comma == std::string::npos) return false;
-        const std::string entry = body.substr(pos, comma - pos);
-        pos = comma + 1;
-        const std::size_t colon = entry.find(':');
-        if (colon == std::string::npos) return false;
-        const std::string name = entry.substr(0, colon);
+    std::size_t pos = prefix.size();
+    while (pos < end) {
+        const std::size_t colon = label.find(':', pos);
+        if (colon == std::string::npos || colon >= end) return false;
+        const std::string name = label.substr(pos, colon - pos);
         // A trailing '?' marks an optional field: no member spelling here.
         if (!isIdentifier(name)) return false;
-        const std::string cpp = fieldCppFor(entry.substr(colon + 1));
-        if (cpp.empty()) return false;
-        fields.push_back(ObjectField{name, cpp});
+        pos = colon + 1;
+        Type fieldType;
+        if (!parseTypeKey(label, pos, fieldType)) return false;
+        if (pos >= end || label[pos] != ',') return false;
+        ++pos;
+        const CppInfo ci = classify(fieldType);
+        if (!ci.representable) return false;
+        switch (ci.shape) {
+            case Shape::Number:
+            case Shape::String:
+            case Shape::Bool:
+            case Shape::Array:
+            case Shape::Object:
+            case Shape::Union:
+            case Shape::Optional:
+            case Shape::Maybe:
+                break;
+            default:
+                return false;
+        }
+        fields.push_back(ObjectField{name, ci.cpp, std::move(fieldType)});
     }
     for (std::size_t i = 0; i < fields.size(); ++i) {
         for (std::size_t j = i + 1; j < fields.size(); ++j) {
@@ -119,6 +214,7 @@ bool parseObjectLabel(const std::string& label, std::vector<ObjectField>& out) {
 struct RegisteredShape {
     std::string name;
     std::string text;
+    std::vector<ObjectField> fields;
 };
 
 // The process-lifetime registry (codegen is single-threaded; re-registering a
@@ -134,6 +230,32 @@ std::vector<RegisteredShape>& registry() {
 std::unordered_set<std::string>& excludedLabels() {
     static std::unordered_set<std::string> labels;
     return labels;
+}
+
+// The rendering expression for one struct member in `cp3ToText`. Composite
+// fields cannot go through the primitive `toString` family: a nested record
+// renders itself, an array renders its elements, and a value-union renders the
+// alternative it currently holds.
+std::string fieldTextExpr(const ObjectField& f) {
+    const std::string member = mapIdent(f.name);
+    const CppInfo ci = classify(f.type);
+    switch (ci.shape) {
+        case Shape::Object:
+            return member + ".cp3ToText()";
+        case Shape::Array:
+            return "::cp3::runtime::arrayJoin(" + member +
+                   ", std::string(\",\"))";
+        case Shape::Union:
+            return "std::visit([](const auto& cp3_v) { return "
+                   "::cp3::runtime::toString(cp3_v); }, " +
+                   member + ")";
+        case Shape::Optional:
+            return member + ".has_value() ? "
+                   "::cp3::runtime::toString(*" + member +
+                   ") : std::string(\"null\")";
+        default:
+            return "::cp3::runtime::toString(" + member + ")";
+    }
 }
 
 // The generated value struct: primitive members in label order, a D49-style
@@ -154,8 +276,7 @@ std::string structTextFor(const std::string& name,
         out += "        std::string cp3_text = std::string(\"{ \");\n";
         for (std::size_t i = 0; i < fields.size(); ++i) {
             if (i != 0) out += "        cp3_text += std::string(\", \");\n";
-            out += "        cp3_text += ::cp3::runtime::toString(" +
-                   mapIdent(fields[i].name) + ");\n";
+            out += "        cp3_text += " + fieldTextExpr(fields[i]) + ";\n";
         }
         out += "        cp3_text += std::string(\" }\");\n";
         out += "        return cp3_text;\n";
@@ -184,21 +305,64 @@ bool objectShapeOf(const Type& t, std::string& structName,
     for (const RegisteredShape& shape : registry()) {
         if (shape.name == name) return true;
     }
-    registry().push_back(RegisteredShape{name, structTextFor(name, parsed)});
+    registry().push_back(
+        RegisteredShape{name, structTextFor(name, parsed), parsed});
     return true;
 }
 
-std::string objectDeclsFor(const std::string& text) {
-    std::vector<const RegisteredShape*> hits;
-    for (const RegisteredShape& shape : registry()) {
-        if (text.find(shape.name) != std::string::npos) hits.push_back(&shape);
+std::string cloneSpecializationFor(const RegisteredShape& shape) {
+    std::string out = "namespace cp3::runtime {\n";
+    out += "template <>\nstruct Cloner<" + shape.name + "> {\n";
+    out += "    static " + shape.name + " clone(const " + shape.name + "& v) {\n";
+    out += "        return " + shape.name + "{";
+    for (std::size_t i = 0; i < shape.fields.size(); ++i) {
+        if (i != 0) out += ", ";
+        out += "::cp3::runtime::clone(v." + mapIdent(shape.fields[i].name) + ")";
     }
-    std::sort(hits.begin(), hits.end(),
-              [](const RegisteredShape* a, const RegisteredShape* b) {
-                  return a->name < b->name;
-              });
+    out += "};\n";
+    out += "    }\n";
+    out += "};\n";
+    out += "}  // namespace cp3::runtime\n\n";
+    return out;
+}
+
+std::string objectGlobalDeclsFor(const std::string& text, bool cloneValues) {
+    // A struct body may name another generated shape (a nested record). Emit
+    // dependencies first: a depth-first post-order over the registered texts,
+    // not a flat name sort, so `inner`'s struct precedes the struct that holds
+    // it.
+    std::vector<const RegisteredShape*> ordered;
+    std::unordered_set<const RegisteredShape*> done;
+    std::unordered_set<const RegisteredShape*> visiting;
+    const auto visit = [&](const auto& self,
+                           const RegisteredShape* shape) -> void {
+        if (done.count(shape) != 0 || visiting.count(shape) != 0) return;
+        visiting.insert(shape);
+        for (const RegisteredShape& other : registry()) {
+            if (&other != shape &&
+                shape->text.find(other.name) != std::string::npos) {
+                self(self, &other);
+            }
+        }
+        visiting.erase(shape);
+        done.insert(shape);
+        ordered.push_back(shape);
+    };
+    for (const RegisteredShape& shape : registry()) {
+        if (text.find(shape.name) != std::string::npos) visit(visit, &shape);
+    }
     std::string out;
-    for (const RegisteredShape* shape : hits) out += shape->text;
+    for (const RegisteredShape* shape : ordered) {
+        // A shared global definition: the worker TU's header and the entry TU
+        // both name the same shape, so the guard keeps one definition per
+        // translation unit while the nominal type stays identical across them.
+        const std::string guard = upperSnake(shape->name) + "_DEFINED";
+        out += "#ifndef " + guard + "\n";
+        out += "#define " + guard + "\n";
+        out += shape->text;
+        if (cloneValues) out += cloneSpecializationFor(*shape);
+        out += "#endif  // " + guard + "\n\n";
+    }
     return out;
 }
 
@@ -270,6 +434,20 @@ void classifyNullishUnion(const Type& t, CppInfo& info) {
     }
     info.emptyKind = kind;
     info.representable = true;
+}
+
+// The C++ spelling of the shape field named `property` (false when absent).
+// The worker payload check reads it too: a member read over a record shape is
+// typed by the shape the channel fixes, not by sema's ambient inference.
+bool fieldCppText(const std::vector<ObjectField>& fields,
+                  const std::string& property, std::string& out) {
+    for (const ObjectField& f : fields) {
+        if (f.name == property) {
+            out = f.cpp;
+            return true;
+        }
+    }
+    return false;
 }
 
 // Does `t` denote an object value shape, directly or as the single non-nullish

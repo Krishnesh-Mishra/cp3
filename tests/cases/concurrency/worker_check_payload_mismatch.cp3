@@ -1,0 +1,3 @@
+const w = new Worker("./worker_echo_impl.cp3");
+w.postMessage("hi");
+w.terminate();

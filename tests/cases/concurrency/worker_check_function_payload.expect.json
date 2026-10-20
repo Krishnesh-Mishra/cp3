@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3907",
+    "line": 1,
+    "col": 11,
+    "contains": "payloads must be copyable value types"
+  }
+}

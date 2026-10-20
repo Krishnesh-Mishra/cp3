@@ -1,0 +1,14 @@
+import console from "std/console";
+
+let r = parallel.run(
+  () => 1,
+  () => 2,
+  () => 3,
+  () => 4,
+  () => 5,
+  () => 6,
+  () => 7,
+  () => 8
+);
+let sum = r[0] + r[1] + r[2] + r[3] + r[4] + r[5] + r[6] + r[7];
+console.log(`${sum}`);

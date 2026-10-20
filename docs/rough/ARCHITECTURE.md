@@ -311,7 +311,7 @@ shapes:
 | Source construct | AST shape |
 | --- | --- |
 | `parallel.for(...)` / `parallel.reduce(...)` / `parallel.run(...)` | `CallExpr{ callee = MemberExpr{ Identifier("parallel"), "for" }, ... }` |
-| `worker(data)` | `CallExpr{ callee = Identifier("worker") }` |
+| `new Worker("path")` (file or inline arrow) | `NewExpr{ callee = Identifier("Worker") }` |
 | `0..n` (range) | `RangeExpr` |
 | `{ weak: value }` (object-literal weak link) | `WeakExpr` |
 | `Object.keys(o)` / `.values(o)` / `.entries(o)` | `CallExpr{ callee = MemberExpr{ Identifier("Object"), ... } }`, expanded at compile time |

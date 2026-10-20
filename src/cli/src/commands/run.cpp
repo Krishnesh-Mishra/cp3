@@ -53,7 +53,6 @@ struct FrontendResult {
     std::unique_ptr<ModuleGraph> graph;
     SemaResult sema;
     std::unordered_map<std::uint32_t, SemaResult> unitSemas;
-    std::optional<WorkerUnit> worker;
     bool program = false;
     int exitCode = kExitSuccess;
 };
@@ -75,11 +74,10 @@ bool hasLocalModules(const ModuleGraph& graph) {
 // analyzed standalone). Diagnostics share the caller's sink so one broken
 // module fails the build before codegen.
 void analyzeLocalUnits(ModuleGraph& graph, CompilationUnit* entry,
-                       const CompilationUnit* worker,
                        std::unordered_map<std::uint32_t, SemaResult>& out,
                        DiagnosticSink& sink) {
     for (CompilationUnit* unit : graph.units()) {
-        if (unit == nullptr || unit == entry || unit == worker ||
+        if (unit == nullptr || unit == entry ||
             unit->isPrelude || !unit->ast) {
             continue;
         }
@@ -96,12 +94,9 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
     if (entry != nullptr && entry->ast) {
         analyzeProgram(*entry->ast, result.sema, feSink);
         result.program = hasLocalModules(*result.graph);
-        result.worker =
-            findWorkerUnit(*entry->ast, *result.graph, *ctx.moduleName);
         if (result.program) {
-            analyzeLocalUnits(*result.graph, entry,
-                              result.worker ? result.worker->unit : nullptr,
-                              result.unitSemas, feSink);
+            analyzeLocalUnits(*result.graph, entry, result.unitSemas,
+                              feSink);
         }
     }
     renderDiagnostics(feSink.diagnostics(), *ctx.render, stderr);
@@ -149,12 +144,12 @@ int codegenEntry(const CompilationUnit& entry, const SemaResult& sema,
 
 // Assembles the whole-program unit list: every loaded unit with a parsed AST,
 // the entry carrying `frontend.sema` and every other unit its own table from
-// the frontend pass. Prelude units and the worker unit (its own TU) are skipped.
+// the frontend pass. Prelude units (their items arrive through importers) and
+// units without a checked table are skipped.
 std::vector<CheckedModuleUnit> checkedUnits(const FrontendResult& frontend) {
     std::vector<CheckedModuleUnit> units;
     for (CompilationUnit* unit : frontend.graph->units()) {
         if (unit == nullptr || !unit->ast || unit->isPrelude) continue;
-        if (frontend.worker && unit == frontend.worker->unit) continue;
         const SemaResult* sema = nullptr;
         if (unit->isEntry) {
             sema = &frontend.sema;
@@ -180,38 +175,49 @@ int codegenProgram(const FrontendResult& frontend, const BuildContext& ctx,
     return codegenOutcome(cgSink, mod, ctx);
 }
 
-// The worker half of codegen (spec 13): resolves the canonical worker import,
-// lowers the worker unit by itself, and returns both the entry's codegen
-// options and the extra TU the toolchain must compile. A worker unit that does
-// not lower leaves `options.worker` unset, so the entry's `worker(...)` stays a
-// CP3002 skip (the worker unit's own diagnostics are never rendered: the entry
-// is the unit the user compiled).
-struct WorkerLinkage {
-    CodegenOptions options;
-    GeneratedModule module;  // empty when there is no compilable worker
-    std::string moduleName;
-    std::string sourceKey;
+// The units and context of one worker-file resolution (`prepareWorkers`): the
+// entry AST to scan, the folder its literals resolve against, and the sink the
+// generated modules feed into.
+struct WorkerInputs {
+    const CompilationUnit& entry;
+    fs::path folder;
+    const std::string& moduleName;
+    SourceManager& sm;
+    const BuildContext& ctx;
 };
 
-WorkerLinkage prepareWorker(const CompilationUnit& entry,
-                            const std::optional<WorkerUnit>& worker,
-                            bool lineDirectives) {
-    WorkerLinkage out;
-    if (!worker || !programCallsWorker(*entry.ast)) return out;
-    CollectingDiagnosticSink workerSink;
-    out.module = generateWorkerModule(*worker, lineDirectives, workerSink);
-    if (out.module.source.empty()) {
-        out.module = GeneratedModule{};
-        return out;
+// The worker-file half of codegen (D80, spec 13): resolves every
+// `new Worker("<path>")` site that starts a real file unit, lowers each worker
+// unit in its own graph, and returns the entry's codegen options plus the extra
+// TUs the toolchain must compile. Worker-unit diagnostics are rendered here -
+// they are the user's compile errors too: a CP3002-only failure is a skip.
+int prepareWorkers(const WorkerInputs& in, CodegenOptions& options,
+                   std::vector<detail::BuildRequest::ExtraModule>& extras,
+                   std::vector<GeneratedModule>& modules) {
+    const std::vector<WorkerPathSite> sites = collectWorkerPathSites(*in.entry.ast);
+    if (sites.empty()) return kExitSuccess;
+    const bool lineDirectives =
+        in.ctx.opt->compile.profile == BuildProfile::Debug;
+    ResolvedWorkers workers = resolveWorkerUnits(sites, in.folder,
+                                                 in.moduleName, in.sm,
+                                                 lineDirectives);
+    renderDiagnostics(workers.diagnostics, *in.ctx.render, stderr);
+    if (workers.failed) {
+        return onlyNotImplemented(workers.diagnostics)
+                   ? notImplemented(in.ctx.execute ? "run" : "build")
+                   : kExitCompileError;
     }
-    out.options.worker = WorkerImport{worker->moduleName, worker->headerPath};
-    out.moduleName = worker->moduleName;
-    out.sourceKey = worker->sourceKey;
-    return out;
+    options.workers = std::move(workers.sites);
+    modules = std::move(workers.modules);
+    for (std::size_t i = 0; i < modules.size(); ++i) {
+        extras.push_back(detail::BuildRequest::ExtraModule{
+            workers.moduleNames[i], &modules[i], workers.sourceKeys[i]});
+    }
+    return kExitSuccess;
 }
 
 int runOnPackageError(const std::string& entry) {
-    // CLI-README §5.1: a package build produces a .cp3pak - there is nothing
+    // CLI-README 5.1: a package build produces a .cp3pak - there is nothing
     // to run, so `run` is a usage error for a package project.
     std::fprintf(stderr,
                  "cp3c: '%s' is a 'type: package' project; packages have "
@@ -247,15 +253,21 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     if (frontend.exitCode != kExitSuccess) return frontend.exitCode;
     CompilationUnit* entry = frontend.graph->entry();
 
-    const bool lineDirectives = opt.compile.profile == BuildProfile::Debug;
-    const WorkerLinkage worker =
-        prepareWorker(*entry, frontend.worker, lineDirectives);
+    CodegenOptions options;
+    options.importedEnums = importedEnumsFor(*frontend.graph, *entry);
+    std::vector<GeneratedModule> workerModules;
+    std::vector<detail::BuildRequest::ExtraModule> extras;
+    const int workerExit = prepareWorkers(
+        WorkerInputs{*entry, fs::path(file->path).parent_path(), moduleName, sm,
+                     ctx},
+        options, extras, workerModules);
+    if (workerExit != kExitSuccess) return workerExit;
 
     GeneratedModule mod;
     const int cgExit = frontend.program
-                           ? codegenProgram(frontend, ctx, worker.options, mod)
-                           : codegenEntry(*entry, frontend.sema, ctx,
-                                          worker.options, mod);
+                           ? codegenProgram(frontend, ctx, options, mod)
+                           : codegenEntry(*entry, frontend.sema, ctx, options,
+                                          mod);
     if (cgExit != kExitSuccess) return cgExit;
 
     if (opt.verbose && opt.compile.maxMemoryMb != 0) {
@@ -289,11 +301,6 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     request.moduleName = &moduleName;
     request.module = &mod;
     request.importedStdModules = &importedStdModules;
-    std::vector<detail::BuildRequest::ExtraModule> extras;
-    if (!worker.module.source.empty()) {
-        extras.push_back(detail::BuildRequest::ExtraModule{
-            worker.moduleName, &worker.module, worker.sourceKey});
-    }
     request.extraModules = &extras;
     request.execute = execute;
     return detail::buildWithToolchain(request);

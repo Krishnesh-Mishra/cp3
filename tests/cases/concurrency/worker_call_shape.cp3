@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// D80: new Worker(literal path) is the only worker start, and it returns the
+// main-side handle used by postMessage / on / terminate.
+const w = new Worker("./worker_shape_impl.cp3");
+w.on("message", (msg) => {
+  console.log(`${msg}`);
+  w.terminate();
+});
+w.postMessage(41);

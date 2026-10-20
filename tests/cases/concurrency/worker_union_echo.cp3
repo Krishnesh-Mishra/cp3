@@ -1,0 +1,8 @@
+import console from "std/console";
+
+const w = new Worker("./worker_union_echo_impl.cp3");
+const a = await w.request(3);
+const b = await w.request("hi");
+console.log(`${typeof a}`);
+console.log(`${typeof b}`);
+w.terminate();

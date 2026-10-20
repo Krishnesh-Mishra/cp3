@@ -44,13 +44,14 @@ struct ProgramNeeds {
     bool objectValue = false;    // object value shapes -> the object helpers
     bool regex = false;          // regex literals -> cp3/core/regex.hpp
     bool parallel = false;       // parallel.* -> cp3/parallel/parallel.hpp
-    bool worker = false;         // worker(...) -> cp3/parallel/worker.hpp
-    std::string workerHeader;    // the worker module's generated .hpp, if any
+    bool worker = false;         // new Worker(...) -> cp3/parallel/worker.hpp
+    std::vector<std::string> workerHeaders;  // generated worker unit headers
 };
 
 // One unit's contribution to the assembled translation unit.
 struct ProgramUnitText {
     std::string namesp;    // e.g. "cp3_mod_counter"
+    std::string globals;   // guarded global `$o{...}` value structs
     std::string decls;     // forward declarations + module-scope globals
     std::string defs;      // function definitions
     std::string mainBody;  // top-level statements (the module initializer)

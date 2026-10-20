@@ -1,0 +1,8 @@
+let counter = 0;
+
+export default (thread: Thread<number, number>) => {
+  thread.on("message", (data) => {
+    counter = counter + 1;
+    thread.postMessage(counter);
+  });
+};

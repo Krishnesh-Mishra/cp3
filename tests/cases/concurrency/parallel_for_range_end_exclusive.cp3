@@ -1,0 +1,7 @@
+import console from "std/console";
+
+let slots = [0, 0, 0, 0];
+parallel.for(0..3, (i) => {
+  slots[i] = 1;
+});
+console.log(slots.join(","));

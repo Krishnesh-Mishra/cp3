@@ -14,9 +14,11 @@
 set(cp3_codegen_sources
     src/code_generator.cpp
     src/support/mangle.cpp
+    src/support/module_writer.cpp
     src/support/cpp_writer.cpp
     src/support/line_map.cpp
     src/support/type_map.cpp
+    src/support/binding_types.cpp
     src/support/scope_env.cpp
     src/support/value_shapes.cpp
     src/support/helper_blocks.cpp
@@ -37,7 +39,9 @@ set(cp3_codegen_sources
     src/emit/regex.cpp
     src/emit/parallel.cpp
     src/emit/worker.cpp
+    src/emit/worker_handles.cpp
     src/emit/worker_scan.cpp
+    src/emit/worker_scan_stmt.cpp
     ../std/typed-arrays/codegen.cpp
     ../std/typed-arrays/codegen_methods.cpp
     ../std/arrays/codegen_methods.cpp

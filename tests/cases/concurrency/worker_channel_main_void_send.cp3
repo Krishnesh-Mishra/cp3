@@ -1,0 +1,3 @@
+const w = new Worker("./worker_send_only_impl.cp3");
+w.postMessage(1);
+w.terminate();

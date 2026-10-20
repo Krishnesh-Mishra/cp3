@@ -105,7 +105,13 @@ inline constexpr const char* kDecoratorsUnsupported = "CP3808";
 // --- concurrency (sema) - language-spec 13 -----------------------------------
 inline constexpr const char* kParallelSharedMutation = "CP3901";
 inline constexpr const char* kParallelCaptureReassign = "CP3902";
-inline constexpr const char* kUnknownWorkerFile = "CP3903";
 inline constexpr const char* kParallelRunMixedResultTypes = "CP3904";
+inline constexpr const char* kWorkerMissingAnnotation = "CP3905";
+inline constexpr const char* kWorkerVoidSend = "CP3906";
+inline constexpr const char* kWorkerPayloadNotCopyable = "CP3907";
+inline constexpr const char* kWorkerPayloadMismatch = "CP3908";
+inline constexpr const char* kWorkerEnclosingCapture = "CP3909";
+inline constexpr const char* kWorkerComputedPath = "CP3910";
+inline constexpr const char* kWorkerHandleMember = "CP3911";
 
 }  // namespace cp3::diagcode
