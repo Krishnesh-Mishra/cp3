@@ -147,8 +147,11 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
     const std::string cv = isConst ? "const " : "";
     for (const auto& declPtr : vd.declarations) {
         const VariableDeclarator* d = declPtr.get();
-        if (!d || !d->id || d->id->kind != NodeKind::Identifier) {
-            if (d && d->id) notImplemented(*d->id, "destructuring binding");
+        if (!d) continue;
+        // A module-scope pattern binds in `main` at its source position.
+        if (emitDestructureDecl(*d, vd.kind, mainBody, 1)) continue;
+        if (!d->id || d->id->kind != NodeKind::Identifier) {
+            if (d->id) notImplemented(*d->id, "destructuring binding");
             continue;
         }
         const std::string name =
@@ -319,10 +322,13 @@ std::string Generator::plainBody(const FunctionDeclaration& fd, const std::strin
     pushScope();
     for (std::size_t i = 0; i < fd.params.size(); ++i) {
         const Parameter& p = *fd.params[i];
-        if (p.name && p.name->kind == NodeKind::Identifier) {
-            declare(static_cast<const Identifier&>(*p.name).name, parameterType(p, fd, i));
+        if (const Identifier* id = parameterIdentifier(p)) {
+            declare(id->name, parameterType(p, fd, i));
         }
     }
+    // A destructured parameter unpacks in the prologue; the C++ parameter is
+    // the generated handle `parameterText` spelled (emit/patterns.cpp).
+    emitPatternParams(fd, body, 1);
     if (fd.body) {
         stmt(*fd.body, body, 1);
         if (fd.isAsync) {
@@ -340,62 +346,6 @@ std::string Generator::plainBody(const FunctionDeclaration& fd, const std::strin
     inAsyncBody_ = savedInAsync;
     currentReturn_ = savedReturn;
     return body;
-}
-
-std::optional<Type> Generator::parameterType(const Parameter& p,
-                                             const FunctionDeclaration& fd,
-                                             std::size_t index) const {
-    if (p.type) {
-        if (auto t = typeOfNode(*p.type)) {
-            if (p.optional) return Type::nullable(*t);
-            return t;
-        }
-    }
-    auto it = sema_.functions.find(fd.nodeId);
-    if (it != sema_.functions.end() && index < it->second.paramTypes.size()) {
-        return it->second.paramTypes[index];
-    }
-    return std::nullopt;
-}
-
-std::string Generator::parameterText(const Parameter& p, const FunctionDeclaration& fd,
-                                     std::size_t index, bool includeDefault) {
-    if (p.isRest) {
-        notImplemented(p, "rest parameter");
-        return "/* rest */";
-    }
-    std::string name;
-    if (p.name && p.name->kind == NodeKind::Identifier) {
-        name = mapIdent(static_cast<const Identifier&>(*p.name).name);
-    } else {
-        if (p.name) notImplemented(*p.name, "destructuring parameter");
-        name = "cp3_param";
-    }
-
-    std::string type;
-    const std::optional<Type> pt = parameterType(p, fd, index);
-    if (pt) {
-        CppInfo ci = classify(*pt);
-        if (ci.representable) {
-            type = ci.cpp;
-        }
-    }
-    if (type.empty()) {
-        notImplemented(p, "untyped parameter");
-        type = "double";
-    }
-
-    std::string out = type + (p.isRef ? "& " : " ") + name;
-    if (includeDefault) {
-        if (p.defaultValue) {
-            out += " = " + expr(*p.defaultValue);
-        } else if (p.optional && type.rfind("std::optional<", 0) == 0) {
-            // `name?: T` lowers to `std::optional<T> name = std::nullopt` so
-            // the argument may be omitted at the call site.
-            out += " = std::nullopt";
-        }
-    }
-    return out;
 }
 
 std::string Generator::functionReturnType(const FunctionDeclaration& fd) {

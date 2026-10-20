@@ -49,6 +49,23 @@ struct IntMode {
     bool stmtExpr = false;
 };
 
+// One active breakable statement (loop or switch). `break` and `continue`
+// lower to these labels; a JS label names one frame until its statement ends.
+struct FlowFrame {
+    bool isLoop = false;
+    std::string breakLabel;
+    std::string continueLabel;
+};
+
+// One active JS label attached to a statement. A labeled `continue` requires a
+// loop frame (the label on a switch may only be broken out of).
+struct LabelFrame {
+    std::string name;
+    bool isLoop = false;
+    std::string breakLabel;
+    std::string continueLabel;
+};
+
 // The state block of `Generator`; see the class comment in generator.h. The
 // constructor captures the generator's fixed wiring (the sink, the sema side
 // tables, the unit name and options); the remaining members initialize
@@ -136,6 +153,8 @@ protected:
     std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
     std::unordered_set<std::string> asyncFunctions_;   // `async function` names
     std::vector<std::string> thrownBindings_;          // active `catch (e)` names
+    std::vector<FlowFrame> flowStack_;   // innermost breakable statement last
+    std::vector<LabelFrame> labelStack_;  // active JS labels (loops + blocks)
     std::unordered_set<std::uint32_t> reported_;
 };
 

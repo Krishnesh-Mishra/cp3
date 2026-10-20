@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "detail/cpp_writer.h"
@@ -54,6 +55,80 @@ const Parameter* paramAt(const FunctionDeclaration& decl, std::size_t i) {
 
 }  // namespace
 
+// A call to a function with a rest parameter: the fixed arguments stay as
+// they are and the rest slot becomes one `Array<E>`. A lone spread array passes
+// through unchanged (the common `f(...args)` form); mixed fixed/spread
+// arguments concatenate inside a lambda.
+std::vector<std::string> Generator::emitRestCallArgs(
+    const CallExpr& c, const FunctionDeclaration& decl, std::size_t restIndex) {
+    const std::optional<Type> arrayType =
+        parameterType(*decl.params[restIndex], decl, restIndex);
+    if (!arrayType || arrayType->kind != TypeKind::Array ||
+        arrayType->parts.empty()) {
+        notImplemented(c, "this rest parameter's type");
+        return {"0.0"};
+    }
+    const CppInfo elem = classify(arrayType->parts.front());
+    if (!elem.representable) {
+        notImplemented(c, "this rest element type");
+        return {"0.0"};
+    }
+    needsTypedArray_ = true;
+    const std::size_t count = c.arguments.size();
+    std::vector<std::string> args;
+    args.reserve(restIndex + 1);
+    for (std::size_t i = 0; i < restIndex; ++i) {
+        const Expr* arg = i < count ? c.arguments[i].get() : nullptr;
+        args.push_back(arg ? expr(*arg) : "0.0");
+    }
+    const Expr* lone =
+        (count == restIndex + 1) ? c.arguments[restIndex].get() : nullptr;
+    if (lone && lone->kind == NodeKind::SpreadElement) {
+        const auto& sp = static_cast<const SpreadElement&>(*lone);
+        if (sp.argument && info(*sp.argument).shape == Shape::Array) {
+            args.push_back(expr(*sp.argument));
+            return args;
+        }
+    }
+    bool hasSpread = false;
+    for (std::size_t i = restIndex; i < count; ++i) {
+        const Expr* arg = c.arguments[i].get();
+        if (arg && arg->kind == NodeKind::SpreadElement) hasSpread = true;
+    }
+    if (!hasSpread) {
+        std::string list;
+        for (std::size_t i = restIndex; i < count; ++i) {
+            const Expr* arg = c.arguments[i].get();
+            if (!arg) continue;
+            if (!list.empty()) list += ", ";
+            list += expr(*arg);
+        }
+        args.push_back("::cp3::runtime::makeArray<" + elem.cpp +
+                       ">(std::vector<" + elem.cpp + ">{" + list + "})");
+        return args;
+    }
+    const std::string v = freshLabel("rest_");
+    std::string body = "std::vector<" + elem.cpp + "> " + v + ";";
+    for (std::size_t i = restIndex; i < count; ++i) {
+        const Expr* arg = c.arguments[i].get();
+        if (!arg) continue;
+        if (arg->kind != NodeKind::SpreadElement) {
+            body += " " + v + ".push_back(" + expr(*arg) + ");";
+            continue;
+        }
+        const auto& sp = static_cast<const SpreadElement&>(*arg);
+        if (!sp.argument || info(*sp.argument).shape != Shape::Array) {
+            notImplemented(*arg, "this spread argument");
+            continue;
+        }
+        body += " { const auto& cp3_src = " + expr(*sp.argument) + "; " + v +
+                ".insert(" + v + ".end(), cp3_src->begin(), cp3_src->end()); }";
+    }
+    args.push_back("[&]{ " + body + " return ::cp3::runtime::makeArray<" +
+                   elem.cpp + ">(std::move(" + v + ")); }()");
+    return args;
+}
+
 // Lowers a user-function call's argument list against the callee's declared
 // parameters. An explicit `undefined` for an optional/default parameter is the
 // JS "argument absent" value: it lowers to the parameter's default expression
@@ -61,6 +136,12 @@ const Parameter* paramAt(const FunctionDeclaration& decl, std::size_t i) {
 // trailing, so the C++ default applies.
 std::vector<std::string> Generator::emitCallArgs(const CallExpr& c,
                                                  const FunctionDeclaration* decl) {
+    if (decl != nullptr) {
+        for (std::size_t i = 0; i < decl->params.size(); ++i) {
+            const Parameter* p = decl->params[i].get();
+            if (p && p->isRest) return emitRestCallArgs(c, *decl, i);
+        }
+    }
     const std::size_t count = c.arguments.size();
     std::vector<std::string> raw(count);
     std::vector<bool> drop(count, false);

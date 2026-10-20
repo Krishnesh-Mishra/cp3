@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "detail/family.h"
@@ -289,6 +290,32 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
         return "0.0";
     }
     needsTypedArray_ = true;
+    bool hasSpread = false;
+    for (const auto& el : lit.elements) {
+        if (el && el->kind == NodeKind::SpreadElement) hasSpread = true;
+    }
+    if (hasSpread) {
+        // `[...a, 4, 5]`: a std::vector braced list cannot splice an existing
+        // vector, so concatenate into a local vector inside a lambda.
+        const std::string v = freshLabel("elems_");
+        std::string body = "std::vector<" + ec.cpp + "> " + v + ";";
+        for (const auto& el : lit.elements) {
+            if (!el) continue;
+            if (el->kind != NodeKind::SpreadElement) {
+                body += " " + v + ".push_back(" + expr(*el) + ");";
+                continue;
+            }
+            const auto& sp = static_cast<const SpreadElement&>(*el);
+            if (!sp.argument || info(*sp.argument).shape != Shape::Array) {
+                notImplemented(*el, "this spread element");
+                continue;
+            }
+            body += " { const auto& cp3_src = " + expr(*sp.argument) + "; " + v +
+                    ".insert(" + v + ".end(), cp3_src->begin(), cp3_src->end()); }";
+        }
+        return "[&]{ " + body + " return ::cp3::runtime::makeArray<" + ec.cpp +
+               ">(std::move(" + v + ")); }()";
+    }
     std::string out = "::cp3::runtime::makeArray<" + ec.cpp + ">(std::vector<" +
                       ec.cpp + ">{";
     for (std::size_t i = 0; i < lit.elements.size(); ++i) {
