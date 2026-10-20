@@ -1,0 +1,10 @@
+{
+  "name": "exclude-source",
+  "version": "1.0.0",
+  "description": "package that asks for cached binaries",
+  "type": "package",
+  "main": "src/index.cp3",
+  "build": {
+    "excludeSource": true
+  }
+}

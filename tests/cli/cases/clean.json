@@ -1,0 +1,233 @@
+{
+  "group": "clean",
+  "cases": [
+    {
+      "group": "clean",
+      "name": "empty-project-is-quiet",
+      "description": "empty project is quiet",
+      "argv": [
+        "clean"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "empty": true
+        },
+        "stderr": {
+          "empty": true
+        }
+      }
+    },
+    {
+      "group": "clean",
+      "name": "verbose-lists-nothing-to-remove",
+      "description": "verbose lists nothing to remove",
+      "argv": [
+        "clean",
+        "--verbose"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "nothing to remove",
+            ".cp3/build",
+            ".cp3/out"
+          ]
+        }
+      }
+    },
+    {
+      "group": "clean",
+      "name": "removes-build-and-out",
+      "description": "removes build and out",
+      "argv": [
+        "clean"
+      ],
+      "setup": {
+        "files": {
+          ".cp3/build/stale.o": "o\n",
+          ".cp3/out/app.exe": "exe\n",
+          ".cp3/packages/local-kit/package.json": "{}\n",
+          ".cp3/lock.json": "{}\n",
+          "src/index.cp3": "let x = 1;\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "removed",
+            ".cp3/build",
+            ".cp3/out"
+          ]
+        },
+        "files": {
+          ".cp3/packages/local-kit/package.json": {
+            "exists": true
+          },
+          ".cp3/lock.json": {
+            "exists": true
+          },
+          "src/index.cp3": {
+            "equals": "let x = 1;\n"
+          }
+        },
+        "files_absent": [
+          ".cp3/build",
+          ".cp3/out"
+        ]
+      }
+    },
+    {
+      "group": "clean",
+      "name": "all-removes-packages",
+      "description": "all removes packages",
+      "argv": [
+        "clean",
+        "--all"
+      ],
+      "setup": {
+        "files": {
+          ".cp3/packages/local-kit/package.json": "{}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": ".cp3/packages"
+        },
+        "files_absent": [
+          ".cp3/packages"
+        ]
+      }
+    },
+    {
+      "group": "clean",
+      "name": "all-removes-lockfile",
+      "description": "all removes lockfile",
+      "argv": [
+        "clean",
+        "--all"
+      ],
+      "setup": {
+        "files": {
+          ".cp3/packages/local-kit/package.json": "{}\n",
+          ".cp3/lock.json": "{}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files_absent": [
+          ".cp3/packages",
+          ".cp3/lock.json"
+        ]
+      }
+    },
+    {
+      "group": "clean",
+      "name": "all-without-packages-is-quiet",
+      "description": "all without packages is quiet",
+      "argv": [
+        "clean",
+        "--all"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "empty": true
+        }
+      }
+    },
+    {
+      "group": "clean",
+      "name": "rejects-positional",
+      "description": "rejects positional",
+      "argv": [
+        "clean",
+        "extra"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "'clean' takes no file argument"
+        }
+      }
+    },
+    {
+      "group": "clean",
+      "name": "rejects-unknown-option",
+      "description": "rejects unknown option",
+      "argv": [
+        "clean",
+        "--bogus"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unknown option '--bogus'"
+        }
+      }
+    },
+    {
+      "group": "clean",
+      "name": "verbose-short-flag",
+      "description": "verbose short flag",
+      "argv": [
+        "clean",
+        "-v"
+      ],
+      "setup": {
+        "files": {
+          ".cp3/build/stale.o": "o\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "removed",
+            ".cp3/build",
+            "nothing to remove"
+          ]
+        }
+      }
+    },
+    {
+      "group": "clean",
+      "name": "only-affects-current-directory",
+      "description": "only affects current directory",
+      "argv": [
+        "clean"
+      ],
+      "cwd": "src",
+      "setup": {
+        "files": {
+          ".cp3/build/root.o": "root\n",
+          "src/.cp3/build/nested.o": "nested\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          "../.cp3/build/root.o": {
+            "exists": true
+          }
+        },
+        "files_absent": [
+          ".cp3/build"
+        ]
+      }
+    }
+  ]
+}

@@ -379,13 +379,15 @@ std::optional<NativeBuildFlags> resolveNativeFlags(
                      "cp3c: no C++ toolchain found on this system "
                      "(looked for cl, clang++, g++ on PATH)\n");
         std::fprintf(stderr,
-                     "      install MSVC, Clang, or GCC/g++ and re-run.\n");
+                     "      run 'cp3c toolchain' to choose or install one.\n");
         return std::nullopt;
     }
     tcOut = &tc;
     if (opt.verbose) {
         std::fprintf(stderr, "cp3c: toolchain: %s\n",
                      describeToolchain(tc).c_str());
+        std::fprintf(stderr, "cp3c: toolchain source: %s\n",
+                     toolchainSourceDescription().c_str());
     }
     return applyNativePackages(opt, tc, *request.importedStdModules, layout,
                                generatedProgramText(request, mod));

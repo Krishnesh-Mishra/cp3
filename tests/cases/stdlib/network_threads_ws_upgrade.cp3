@@ -1,0 +1,33 @@
+import console from "std/console";
+import { createServer, fetch, WebSocket, WebSocketServer } from "std/network";
+
+const app = createServer({ threads: 2 });
+app.get("/health", (req, res) => {
+  res.text("ok");
+});
+app.listen(48121, () => {
+});
+
+const wss = new WebSocketServer({ port: 48122 });
+wss.on("connection", (ws) => {
+  ws.on("message", (message) => {
+    ws.send("echo:" + message);
+  });
+});
+
+let echoed = "";
+const ws = new WebSocket("ws://127.0.0.1:48122/");
+ws.on("open", () => {
+  ws.send("hello");
+});
+ws.on("message", (message) => {
+  echoed = message;
+  ws.close();
+  wss.close();
+});
+
+await sleep(300);
+let res = await fetch("http://127.0.0.1:48121/health");
+console.log(await res.text());
+console.log(echoed);
+app.close();

@@ -77,6 +77,8 @@ Rather than benchmarking at build time, toolchain preference is a **fixed order 
 
 If the first-choice toolchain fails to compile due to an error, `cp3 build` **silently retries with the next toolchain in the list** - the user doesn't have to manually re-invoke the build with a different compiler.
 
+This fixed order is the automatic fallback. An explicit project or user choice, described in the next section, is resolved first.
+
 ## Build progress: numbered steps, not a percentage bar
 
 Progress is shown as real pipeline stages (`Step 1 of 7`, `Step 2 of 7`, etc.) - e.g. parsing, type-checking, cp3→C++ codegen, invoking the toolchain. If a toolchain step fails and the build falls through to the next one in the fallback order, the total step count **grows to reflect the retry** (e.g. `Step 6 of 8`, then `Step 7 of 9` if it falls through again) - so the user visibly sees "this pipeline attempt failed, now trying the next one," rather than the build silently restarting with no feedback.
@@ -99,6 +101,72 @@ Would you like to install Clang/LLVM now? [Y/n]
 ```
 
 Accepting downloads and installs Clang/LLVM for the current platform and proceeds with the build - the person never has to leave `cp3` or go hunt down a C++ toolchain themselves just to get started.
+
+## Choosing a toolchain explicitly
+
+Automatic detection is the default, but a project or a user can pin a compiler. `cp3 toolchain` opens a single-select menu:
+
+```
+$ cp3 toolchain
+current: GCC 16.1.0 (g++) from auto-detect (D12)
+Select a C++ toolchain:
+  >  1. gcc         GCC           ready      C:\...\g++.exe (g++ 16.1.0)
+     2. clang       Clang         missing    clang++ not found on PATH
+     3. msvc        MSVC          missing    cl.exe not found on PATH
+  (up/down arrows, Enter to select, q to cancel)
+```
+
+- Rows are GCC, Clang and MSVC on Windows; Apple Clang, Clang and GCC on macOS; GCC and Clang on Linux.
+- `ready` means the driver was found and a tiny C++20 program compiled, linked and ran. A driver that exists but cannot link is reported as `not usable` with the reason instead of being silently accepted.
+- The menu starts on the current effective compiler.
+- Selecting a missing compiler asks `Install <name>? Yes / No`. Yes prints the exact platform installer command and runs it only after that explicit confirmation. No, or an install that leaves the compiler unusable, returns to the menu. Installers are never run in automated tests.
+- Arrow keys move, Enter selects, `q` or Esc cancels.
+- MSVC additionally requires `link.exe`, because cp3 invokes the linker directly. A `cl.exe` without a matching `link.exe` is reported as not usable, with the Developer Command Prompt or Build Tools reason.
+
+After a usable compiler is selected, the scope question appears when a project is present:
+
+```
+Where should this toolchain apply?
+  > 1. This project (package.json)
+    2. All projects (global)
+```
+
+- Project scope writes `"toolchain": "<id>"` into the nearest `package.json` (documented in [§5.1](05-package-format-authoring-cp3pak.md)). Writing is byte-preserving: field order, indentation and CRLF line endings stay exactly as they were, and an unparsable manifest is refused rather than rewritten.
+- Global scope writes the user config at `%APPDATA%\cp3\toolchain.conf` on Windows, or `$XDG_CONFIG_HOME/cp3/toolchain.conf` (`~/.config/cp3/toolchain.conf` by default) on POSIX. `CP3_CONFIG_DIR` overrides the config directory, which is what tests use.
+- Outside a project only the global scope is offered, and the prompt says why.
+
+The global config is plain text, one key per line:
+
+```
+id=gcc
+program=C:\Users\you\...\g++.exe
+saved=2026-10-20
+```
+
+Resolution order for every command that needs a compiler:
+
+1. `--toolchain <id|path>` on the command line.
+2. `CP3_TOOLCHAIN` environment variable.
+3. `"toolchain"` in the project's `package.json`.
+4. The global config.
+5. Automatic detection (the fixed per-platform order above).
+
+`--verbose` names the source that won. A project choice applies from any subdirectory of that project and does not leak into another project or a bare file outside one. A saved compiler that has since disappeared is reported once and the next source is used, so a stale choice does not break builds.
+
+Scripts and tests use the non-interactive forms:
+
+```
+cp3 toolchain list                            # ids, status, paths, scopes, effective choice
+cp3 toolchain detect                          # automatic detection plus the current choice
+cp3 toolchain use gcc --project               # write package.json
+cp3 toolchain use clang --global              # write the user config
+cp3 toolchain clear --project                 # remove only the project field
+cp3 toolchain clear                           # remove both saved scopes
+```
+
+`cp3 toolchain use` accepts a standard id or a full path. With both scopes possible, scripts must pass `--project` or `--global`; the interactive command asks instead. Piped stdin falls back to the numbered prompt, so `echo 1 | cp3 toolchain` works without a terminal.
+
+When a build finds no compiler, its error points at `cp3 toolchain` rather than only listing the compilers it tried.
 
 ## The CLI command surface: `run`, `check`, `dev`, `fmt`
 

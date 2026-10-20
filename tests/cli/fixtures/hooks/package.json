@@ -1,0 +1,17 @@
+{
+  "name": "hooks",
+  "version": "1.0.0",
+  "description": "lifecycle hook fixture",
+  "type": "application",
+  "main": "src/index.cp3",
+  "scripts": {
+    "prebuild": "echo prebuild>>hook-order.txt",
+    "postbuild": "echo postbuild>>hook-order.txt",
+    "precheck": "echo precheck>>hook-order.txt",
+    "postcheck": "echo postcheck>>hook-order.txt",
+    "preclean": "echo preclean>>hook-order.txt",
+    "postclean": "echo postclean>>hook-order.txt",
+    "preinstall": "echo preinstall>>hook-order.txt",
+    "postinstall": "echo postinstall>>hook-order.txt"
+  }
+}

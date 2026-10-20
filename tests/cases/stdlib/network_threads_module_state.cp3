@@ -1,0 +1,19 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+let hits = 0;
+
+const app = createServer({ threads: 2 });
+app.get("/hit", (req, res) => {
+  hits = hits + 1;
+  res.json(hits);
+});
+app.listen(48120, () => {
+  console.log("listening");
+});
+
+let first = await fetch("http://127.0.0.1:48120/hit");
+console.log(await first.text());
+let second = await fetch("http://127.0.0.1:48120/hit");
+console.log(await second.text());
+app.close();

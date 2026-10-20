@@ -32,12 +32,13 @@
 #include "cp3/std/json.hpp"
 
 #include "runtime_loop.hpp"
+#include "runtime_server_internal.hpp"
 
 namespace cp3::runtime::network {
 namespace {
 
-using NativeRequest = uWS::HttpRequest;
-using NativeResponse = uWS::HttpResponse<false>;
+using NativeRequest = detail::NativeRequest;
+using NativeResponse = detail::NativeResponse;
 
 std::string lowerAscii(const std::string& text) {
     std::string out = text;
@@ -168,29 +169,8 @@ namespace detail {
 
 /// State behind one `createServer()`. The uWS App is deliberately leaked (its
 /// lifetime is the process, like every uWS context in this runtime); the routes
-/// are kept alive by the wildcard handler capturing this impl.
-struct ServerImpl {
-    struct Route {
-        std::string method;   // "*" = app.use (any method)
-        std::string pattern;  // "*" = any path; else literal, `:name` segments
-        std::function<void(HttpRequest&, HttpResponse&, Next&)> handler;
-    };
-
-    uWS::App* app = nullptr;
-    bool listening = false;
-    bool closed = false;
-    std::vector<Route> routes;
-};
-
-/// The buffered response bound to one request.
-struct ResponseImpl {
-    void* native = nullptr;  // uWS::HttpResponse<false>*
-    double status = 200.0;
-    bool headStarted = false;
-    bool finished = false;
-    std::vector<std::pair<std::string, std::string>> headers;
-    std::string body;
-};
+/// are kept alive by the wildcard handler capturing this impl. The definition
+/// lives in runtime_server_internal.hpp so the scaled TU shares it.
 
 }  // namespace detail
 
@@ -409,6 +389,17 @@ void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
 
 }  // namespace
 
+namespace detail {
+
+void installWildcardRoute(const std::shared_ptr<ServerImpl>& impl, uWS::App* app) {
+    if (!impl || app == nullptr) return;
+    app->any("/*", [impl](NativeResponse* res, NativeRequest* req) {
+        onRequest(impl, res, req);
+    });
+}
+
+}  // namespace detail
+
 // =============================================================================
 // HttpServer
 // =============================================================================
@@ -461,13 +452,16 @@ void HttpServer::use(Middleware middleware) const {
 }
 
 void HttpServer::listen(double port, std::function<void()> callback) const {
-    if (!impl_ || impl_->app == nullptr || impl_->listening) return;
+    if (!impl_ || impl_->listening) return;
+    if (impl_->scaled) {
+        detail::scaledListen(impl_, port, callback);
+        return;
+    }
+    if (impl_->app == nullptr) return;
     impl_->listening = true;
     retainNetwork();
     std::shared_ptr<detail::ServerImpl> impl = impl_;
-    impl->app->any("/*", [impl](NativeResponse* res, NativeRequest* req) {
-        onRequest(impl, res, req);
-    });
+    detail::installWildcardRoute(impl, impl->app);
     const int bound = static_cast<int>(port);
     try {
         impl->app->listen(bound, [callback](us_listen_socket_t* socket) {
@@ -485,7 +479,12 @@ void HttpServer::listen(double port, std::function<void()> callback) const {
 }
 
 void HttpServer::close() const {
-    if (!impl_ || impl_->app == nullptr || impl_->closed) return;
+    if (!impl_ || impl_->closed) return;
+    if (impl_->scaled) {
+        detail::scaledClose(impl_);
+        return;
+    }
+    if (impl_->app == nullptr) return;
     impl_->closed = true;
     impl_->app->close();  // closes the listen sockets and every connection
     if (impl_->listening) {

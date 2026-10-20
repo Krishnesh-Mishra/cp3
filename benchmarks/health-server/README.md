@@ -46,8 +46,9 @@ cd express && npm install && node server.mjs 18083
 # python - stdlib http.server, threaded
 python main.py 18084
 
-# cp3 - the frozen-spec entry (does not compile yet, see below)
-build/bin/cp3c.exe run benchmarks/health-server/cp3/main.cp3   # from the repo root
+# cp3 - the frozen-spec entry (build first, then run the binary)
+build/bin/cp3c.exe build benchmarks/health-server/cp3/main.cp3   # from the repo root
+benchmarks/health-server/cp3/.cp3/out/main.exe 18085
 ```
 
 Then `curl http://127.0.0.1:18080/healthz` (or any HTTP client) and stop the
@@ -93,14 +94,8 @@ in `../README.md`. On a trivial handler the load client and loopback dominate:
 all five rows land within ~1.5x of each other, and the compute tables are
 where the runtimes actually separate.
 
-The cp3 entry **cannot run yet**: `std/network` has not landed, and the
-current compiler stops with
-
-```
-main.cp3:24:13: error: CP3002: codegen: CallExpr ('call to function 'createServer' not declared in this unit') is not implemented in M1
-```
-
-The source follows the frozen `std/network` API in STDLIB-README ("network"):
+The cp3 entry now builds and runs against the landed `std/network` API:
 `createServer()`, `.get(path, handler)`, `res.text(...)`, `.use(...)` as the
-404 fallback, `.listen(port, cb)`. The runner attempts it every time and will
-run it automatically once the feature lands.
+404 fallback, `.listen(port, cb)`. It serves the contract on its argv port and
+is measured by the suite. The single-core row is unchanged by D79; the
+multicore sibling lives in `../health-server-multi/`.

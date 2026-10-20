@@ -1,0 +1,11 @@
+{
+  "name": "bad-package",
+  "version": "1.0.0",
+  "description": "package entry uses an object default, which this build rejects",
+  "type": "package",
+  "main": "src/index.cp3",
+  "typeSystem": "typescript",
+  "build": {
+    "files": ["README.md"]
+  }
+}

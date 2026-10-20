@@ -175,7 +175,22 @@ std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::strin
     if (name == "createServer") {
         needsNetwork_ = true;
         needsEventLoop_ = true;
-        return std::string(kRuntimeNs) + "HttpServer()";
+        // D79: `createServer({ threads: n })` lowers to the runtime's scaled
+        // constructor. No argument (and an object without `threads`) keeps the
+        // exact no-arg lowering.
+        std::string threads;
+        if (!c.arguments.empty() && c.arguments.front()) {
+            const Expr* options = c.arguments.front().get();
+            if (options->kind == NodeKind::ObjectLiteral) {
+                const auto& literal = static_cast<const ObjectLiteral&>(*options);
+                for (const auto& prop : literal.properties) {
+                    if (!prop || !prop->value) continue;
+                    if (objectKey(*prop) == "threads") threads = expr(*prop->value);
+                }
+            }
+        }
+        if (threads.empty()) return std::string(kRuntimeNs) + "HttpServer()";
+        return std::string(kRuntimeNs) + "HttpServer(" + threads + ")";
     }
     return std::string();
 }

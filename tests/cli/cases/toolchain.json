@@ -1,0 +1,665 @@
+{
+  "group": "toolchain",
+  "cases": [
+    {
+      "group": "toolchain",
+      "name": "list-with-no-pin",
+      "description": "list with no pin",
+      "argv": [
+        "toolchain",
+        "list"
+      ],
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "gcc",
+            "effective"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "list-with-project-pin",
+      "description": "list with project pin",
+      "argv": [
+        "toolchain",
+        "list"
+      ],
+      "setup": {
+        "fixtures": [
+          "toolchain-project"
+        ]
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "gcc",
+            "project"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "list-with-global-pin",
+      "description": "list with global pin",
+      "argv": [
+        "toolchain",
+        "list"
+      ],
+      "setup": {
+        "config_fixtures": [
+          "toolchain-config"
+        ]
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "gcc",
+            "global"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "project-beats-global",
+      "description": "project beats global",
+      "argv": [
+        "toolchain",
+        "list"
+      ],
+      "setup": {
+        "fixtures": [
+          "toolchain-project"
+        ],
+        "config_fixtures": [
+          "toolchain-config"
+        ]
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "project",
+            "gcc"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "use-gcc-project-scope",
+      "description": "use gcc project scope",
+      "argv": [
+        "toolchain",
+        "use",
+        "gcc",
+        "--project"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "package.json": {
+            "contains": "\"toolchain\": \"gcc\""
+          }
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "use-gcc-global-scope",
+      "description": "use gcc global scope",
+      "argv": [
+        "toolchain",
+        "use",
+        "gcc",
+        "--global"
+      ],
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "{config}/toolchain.conf": {
+            "contains": "id=gcc"
+          }
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "use-invalid-family",
+      "description": "use invalid family",
+      "argv": [
+        "toolchain",
+        "use",
+        "not-a-compiler"
+      ],
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unknown"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "use-invalid-version",
+      "description": "use invalid version",
+      "argv": [
+        "toolchain",
+        "use",
+        "gcc@not-a-version"
+      ],
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 2
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "choose-exact-installed-version",
+      "description": "choose exact installed version",
+      "argv": [
+        "toolchain",
+        "use",
+        "gcc@16.1.0"
+      ],
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "selected"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "missing-version-warns-and-falls-back",
+      "description": "missing version warns and falls back",
+      "argv": [
+        "toolchain",
+        "use",
+        "gcc@1.2.3"
+      ],
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "warning",
+            "fall"
+          ]
+        },
+        "files": {
+          "{config}/toolchain.conf": {
+            "contains": "id=gcc"
+          }
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "missing-version-strict-fails",
+      "description": "missing version strict fails",
+      "argv": [
+        "toolchain",
+        "use",
+        "gcc@1.2.3",
+        "--strict-toolchain"
+      ],
+      "requires": [
+        "command:toolchain",
+        "flag:--strict-toolchain"
+      ],
+      "expect": {
+        "exit": 1
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "global-toolchain-flag-overrides-config",
+      "description": "global toolchain flag overrides config",
+      "argv": [
+        "run",
+        "src/index.cp3",
+        "--toolchain",
+        "gcc"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ],
+        "config_fixtures": [
+          "toolchain-config"
+        ]
+      },
+      "slow": true,
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "environment-overrides-config",
+      "description": "environment overrides config",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "env": {
+        "CP3_TOOLCHAIN": "gcc"
+      },
+      "setup": {
+        "fixtures": [
+          "hello"
+        ],
+        "config_fixtures": [
+          "toolchain-config"
+        ]
+      },
+      "slow": true,
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "verbose-names-source",
+      "description": "verbose names source",
+      "argv": [
+        "run",
+        "src/index.cp3",
+        "--verbose"
+      ],
+      "setup": {
+        "fixtures": [
+          "toolchain-project"
+        ]
+      },
+      "slow": true,
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "toolchain",
+            "project"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "cache-invalidated-when-version-changes",
+      "description": "cache invalidated when version changes",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "non-tty-numbered-selection",
+      "description": "non tty numbered selection",
+      "argv": [
+        "toolchain"
+      ],
+      "stdin": "1\n",
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "compiler",
+            "selected"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "yes-accepts-default",
+      "description": "yes accepts default",
+      "argv": [
+        "toolchain",
+        "--yes"
+      ],
+      "requires": [
+        "command:toolchain",
+        "flag:--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "selected"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "no-compiler-family",
+      "description": "no compiler family",
+      "argv": [
+        "toolchain",
+        "list"
+      ],
+      "env": {
+        "PATH_MODE": "minimal"
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "gcc",
+            "missing"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "invalid-family-in-config",
+      "description": "invalid family in config",
+      "argv": [
+        "toolchain",
+        "list"
+      ],
+      "setup": {
+        "config_fixtures": [
+          "toolchain-config"
+        ]
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "json-list-shape",
+      "description": "json list shape",
+      "argv": [
+        "toolchain",
+        "list",
+        "--json"
+      ],
+      "requires": [
+        "command:toolchain",
+        "flag:--json"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "ok": true,
+          "action": "toolchain-list"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "clear-project-pin",
+      "description": "clear project pin",
+      "argv": [
+        "toolchain",
+        "clear",
+        "--project"
+      ],
+      "setup": {
+        "fixtures": [
+          "toolchain-project"
+        ]
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "package.json": {
+            "not_contains": "\"toolchain\""
+          }
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "clear-global-pin",
+      "description": "clear global pin",
+      "argv": [
+        "toolchain",
+        "clear",
+        "--global"
+      ],
+      "setup": {
+        "config_fixtures": [
+          "toolchain-config"
+        ]
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "{config}/toolchain.conf": {
+            "absent": true
+          }
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "detect",
+      "description": "detect",
+      "argv": [
+        "toolchain",
+        "detect"
+      ],
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "gcc"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "use-full-path",
+      "description": "use full path",
+      "argv": [
+        "toolchain",
+        "use",
+        "g++"
+      ],
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "selected"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "no-project-offers-global-only",
+      "description": "no project offers global only",
+      "argv": [
+        "toolchain",
+        "use",
+        "gcc"
+      ],
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "global",
+            "no package.json"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "refuses-unparsable-manifest",
+      "description": "refuses unparsable manifest",
+      "argv": [
+        "toolchain",
+        "use",
+        "gcc",
+        "--project"
+      ],
+      "setup": {
+        "files": {
+          "package.json": "{ bad json\n"
+        }
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "parse"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "environment-beats-project",
+      "description": "environment beats project",
+      "argv": [
+        "toolchain",
+        "list"
+      ],
+      "env": {
+        "CP3_TOOLCHAIN": "gcc"
+      },
+      "setup": {
+        "fixtures": [
+          "toolchain-project"
+        ]
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "environment",
+            "gcc"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "flag-beats-environment",
+      "description": "flag beats environment",
+      "argv": [
+        "toolchain",
+        "list",
+        "--toolchain",
+        "gcc"
+      ],
+      "env": {
+        "CP3_TOOLCHAIN": "clang"
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "command line",
+            "gcc"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "missing-saved-compiler-warns",
+      "description": "missing saved compiler warns",
+      "argv": [
+        "toolchain",
+        "list"
+      ],
+      "env": {
+        "CP3_TOOLCHAIN": "gcc"
+      },
+      "setup": {
+        "config_fixtures": [
+          "toolchain-config"
+        ]
+      },
+      "requires": "command:toolchain",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "warning"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "list-json-versions",
+      "description": "list json versions",
+      "argv": [
+        "toolchain",
+        "list",
+        "--json"
+      ],
+      "setup": {
+        "fixtures": [
+          "toolchain-project"
+        ]
+      },
+      "requires": [
+        "command:toolchain",
+        "flag:--json"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "ok": true
+        }
+      }
+    }
+  ]
+}

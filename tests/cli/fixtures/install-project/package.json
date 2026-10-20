@@ -1,0 +1,7 @@
+{
+  "name": "consumer",
+  "version": "1.0.0",
+  "description": "install consumer fixture",
+  "type": "application",
+  "main": "src/index.cp3"
+}
