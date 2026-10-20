@@ -59,7 +59,7 @@ winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept
 | Path | Contents |
 | --- | --- |
 | `bin\cp3c.exe` | the compiler (also the LSP server through `cp3c lsp`) |
-| `bin\cp3.cmd` | the `cp3` command: `init`, `doctor`, `install vs-code-plugin`, plus everything `cp3c` offers |
+| `bin\cp3.cmd` | the `cp3` command: `init`, `doctor`, plus everything `cp3c` offers (including `editor-plugin`) |
 | `bin\*.dll` | MinGW runtime DLLs the compiler links against |
 | `include\` | header trees handed to the C++ toolchain: `runtime\`, `common\`, `std\<family>\` |
 | `src\` | runtime translation units compiled into every cp3 program (`src\runtime\src\`, `src\std\<family>\`) |
@@ -109,7 +109,7 @@ one `include\` tree serves every case while runtime sources stay under
 - When the `code` CLI exists (PATH first, then the standard VS Code install
   locations) and a `.vsix` was staged, runs
   `code --install-extension <vsix> --force`. Without VS Code it leaves a log
-  line and points at `cp3 install vs-code-plugin`.
+  line and points at `cp3 editor-plugin`.
 - Installs silently with Inno's `/SILENT` or `/VERYSILENT`
   (`/SUPPRESSMSGBOXES` recommended); `/LOG=<file>` writes the full log.
 
@@ -136,8 +136,8 @@ it is equivalent to `/NOPATH=1 /NOVSCODE=1`.
 3. `cp3 doctor` - reports the compiler, the C++ toolchain it will use, ccache,
    VS Code and the shipped trees.
 4. `cp3 init my-app` then `cd my-app` and `cp3 run src/main.cp3`.
-5. `cp3 install vs-code-plugin` installs the bundled extension if the
-   installer did not already do it.
+5. `cp3 editor-plugin` installs the bundled extension if the installer did
+   not already do it (the wizard also reports status and exports the VSIX).
 
 Prerequisites on the user machine: a C++ toolchain on PATH (MinGW-w64 `g++` is
 the tested one; MSVC `cl` and `clang++` are detected too) and Windows 10+ with
@@ -151,7 +151,7 @@ not bundled in this round.
 | `cp3 <anything>` | forwarded verbatim to `bin\cp3c.exe`, exit code passed through (`cp3 lsp`, `cp3 build`, `cp3 check`, ... all land here) |
 | `cp3 init [target] [--force]` | scaffolds `package.json` (`"main": "src/main.cp3"`), `src/main.cp3`, `README.md`; refuses a non-empty target unless `--force`; exit 2 on refusal |
 | `cp3 doctor` | status list; exit 1 when `cp3c.exe` is missing |
-| `cp3 install vs-code-plugin` | installs the bundled `.vsix` through `code`; exit 1 when VS Code or the `.vsix` is missing |
+| `cp3 editor-plugin` | interactive extension wizard; non-TTY runs `status`. Actions: `status`, `install`, `uninstall`, `export`, `path` (`--editor`, `--vsix`, `--extensions-dir`, `--out`, `--force`, `--yes`, `--dry-run`, `--json`, `--interactive`) |
 
 ## Verifying a build
 

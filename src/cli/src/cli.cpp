@@ -26,6 +26,7 @@
 #include "cp3/version.hpp"
 
 #include "detail/commands.hpp"
+#include "detail/editor_plugin.hpp"
 #include "detail/scripts.hpp"
 #include "detail/util.hpp"
 
@@ -48,6 +49,7 @@ void printUsage(std::FILE* out) {
         "  clean              Remove .cp3/build and .cp3/out (--all clears .cp3/packages)\n"
         "  init [dir]         Scaffold a new project (package.json + src/index.cp3)\n"
         "  install [src]      Install a .cp3pak / package dir (bare: package.json deps)\n"
+        "  editor-plugin      Editor extension wizard/actions (alias editor-plugins)\n"
         "  exec <pkg> [args]  Run a package's bundled tool\n"
         "  lsp [--stdio]      Language server on stdio (for editor integrations)\n"
         "  dap [--stdio]      Debug adapter on stdio (for editor debugging)\n"
@@ -66,6 +68,7 @@ void printUsage(std::FILE* out) {
         "      --type <t>        (init) pre-select project type (application|package)\n"
         "      --auto            (install) auto-pick a GitHub release asset\n"
         "      --once            (dev) run one watch pass and exit\n"
+        "      --json, --interactive, --dry-run, --force  (editor-plugin) output/prompts\n"
         "\n"
         "Exit codes:\n"
         "  0 success   1 compile error   2 usage error   3 not implemented\n",
@@ -174,6 +177,7 @@ bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease
     if (t == "--yes" || t == "-y") { opt.yes = true; return true; }
     if (t == "--once") { opt.once = true; return true; }
     if (t == "--auto") { opt.autoSelect = true; return true; }
+    if (cp3::cli::matchEditorFlag(t, opt)) return true;
     return false;
 }
 
@@ -183,6 +187,7 @@ bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease
 bool parseValueOption(const std::vector<std::string>& tokens, std::size_t& i,
                       cp3::cli::CliOptions& opt, std::string& err) {
     const std::string& t = tokens[i];
+    if (cp3::cli::matchEditorValueOption(tokens, i, opt, err)) return true;
     if (t == "--max-memory" || cp3::cli::startsWith(t, "--max-memory=")) {
         std::string value;
         if (t == "--max-memory") {
@@ -270,6 +275,7 @@ bool resolveCommand(const std::string& first, std::string& command,
     if (first == "run" || first == "build" || first == "check" ||
         first == "dev" || first == "fmt" || first == "clean" ||
         first == "init" || first == "exec" || first == "install" ||
+        first == "editor-plugin" || first == "editor-plugins" ||
         first == "lsp" || first == "dap") {
         command = first;
         return true;
@@ -415,6 +421,9 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     }
     if (command == "install") {
         return cp3::cli::cmdInstall(opt);
+    }
+    if (command == "editor-plugin" || command == "editor-plugins") {
+        return cp3::cli::cmdEditorPlugin(opt);
     }
     if (command == "exec") {
         return cp3::cli::cmdExec(opt);

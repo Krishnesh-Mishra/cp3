@@ -40,6 +40,14 @@ set(cp3_cli_sources
     src/commands/exec.cpp
     src/commands/pack.cpp
     src/commands/install.cpp
+    src/commands/editor_plugin.cpp
+    src/commands/editor_actions.cpp
+    src/commands/editor_install.cpp
+    src/commands/editor_detect.cpp
+    src/commands/editor_vsix.cpp
+    src/commands/editor_process.cpp
+    src/commands/editor_prompt.cpp
+    src/commands/editor_wizard.cpp
     src/pkg/package_json.cpp
     src/pkg/signatures.cpp
     src/pkg/lockfile.cpp

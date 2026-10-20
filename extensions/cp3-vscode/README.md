@@ -43,8 +43,12 @@ The extension ships with the cp3 toolchain. Pick whichever fits:
    `.vsix` automatically when it finds the `code` CLI.
 2. **From an existing cp3 install.**
    ```
-   cp3 install vs-code-plugin
+   cp3 editor-plugin
    ```
+   The wizard detects VS Code, VS Code Insiders, Cursor, Antigravity and
+   VSCodium. The scriptable form is `cp3 editor-plugin install --editor code`;
+   `cp3 editor-plugin export --out <dir>` writes the bundled `.vsix` for an
+   editor on another machine.
 3. **From this folder, by hand.**
    ```
    code --install-extension extensions/cp3-vscode/dist/cp3-vscode-0.1.0.vsix --force

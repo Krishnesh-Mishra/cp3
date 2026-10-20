@@ -41,7 +41,15 @@ struct CliOptions {
     bool yes = false;                     // init non-interactive
     bool once = false;                    // dev --once (run one pass then exit)
     bool autoSelect = false;              // install --auto (GitHub selector)
+    bool interactive = false;             // editor-plugin --interactive
+    bool json = false;                    // editor-plugin --json
+    bool dryRun = false;                  // editor-plugin --dry-run
+    bool force = false;                   // editor-plugin --force
     std::string initType;                 // init --type application|package
+    std::string editor;                   // editor-plugin --editor <id|path>
+    std::string vsix;                     // editor-plugin --vsix <path>
+    std::string extensionsDir;            // editor-plugin --extensions-dir <dir>
+    std::string out;                      // editor-plugin --out <file-or-dir>
 };
 
 // -----------------------------------------------------------------------------
@@ -77,6 +85,7 @@ int cmdClean(const CliOptions& opt);
 int cmdInit(const CliOptions& opt);
 int cmdExec(const CliOptions& opt);
 int cmdInstall(const CliOptions& opt);
+int cmdEditorPlugin(const CliOptions& opt);
 int cmdLsp(const CliOptions& opt);
 int cmdDap(const CliOptions& opt);
 
