@@ -290,17 +290,14 @@ Type Analyzer::resolveType(TypeNode& node) {
 
 Type Analyzer::resolveNamedType(NamedType& nt) {
     // Type arguments are resolved eagerly (both for their own diagnostics and
-    // for the generic types M1 does model, `Promise<T>`).
-    Type firstArg = Type::unknown();
-    bool hasArg = false;
+    // for the generic types M1 does model: `Promise<T>` and user classes).
+    std::vector<Type> typeArgs;
     for (auto& ta : nt.typeArgs) {
         if (!ta) continue;
-        Type resolved = resolveType(*ta);
-        if (!hasArg) {
-            firstArg = resolved;
-            hasArg = true;
-        }
+        typeArgs.push_back(resolveType(*ta));
     }
+    const Type firstArg = typeArgs.empty() ? Type::unknown() : typeArgs.front();
+    const bool hasArg = !typeArgs.empty();
     if (nt.name == "any") {
         checkBannedAny(nt.span);
         return ambient();
@@ -328,7 +325,15 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
         if (lookup(nt.name, b) && b.isAmbient) return byteBufferType();
     }
     const auto it = typeNames_.find(nt.name);
-    if (it != typeNames_.end()) return it->second;
+    if (it != typeNames_.end()) {
+        Type base = it->second;
+        // A user class instantiation (`Box<number>`): the type arguments are
+        // carried in `parts` for member substitution and codegen spelling.
+        if (base.kind == TypeKind::Class && !typeArgs.empty()) {
+            base.parts = std::move(typeArgs);
+        }
+        return base;
+    }
     report(diagcode::kUndefinedType, nt.span,
            "cannot find type name '" + nt.name + "'");
     return Type::unknown();

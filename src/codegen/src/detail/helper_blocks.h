@@ -10,8 +10,13 @@
 // =============================================================================
 #pragma once
 
+#include <string>
+
 namespace cp3 {
 namespace detail {
+
+// The per-TU value-model helpers every generated unit carries.
+std::string commonHelperBlock();
 
 // The primitive-union helpers (`cp3_ts`/`cp3_truthy` over a `std::variant`).
 const char* unionHelperBlock();

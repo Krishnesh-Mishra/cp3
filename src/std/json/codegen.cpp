@@ -31,6 +31,7 @@
 #include <utility>
 #include <vector>
 
+#include "detail/class_model.h"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
@@ -220,6 +221,12 @@ void Generator::emitJsonInterface(const InterfaceDeclaration& i) {
     // A registered shape is erased until a `JSON.parse<T>` names it (usage-based
     // reification): the declaration itself emits nothing.
     if (!i.name.empty() && jsonShapeStructs_.count(i.name) != 0) return;
+    // An interface claimed by the spec 15 model pass is emitted as its wrapper
+    // struct (emit/class_shape.cpp), so the declaration itself emits nothing.
+    if (!i.name.empty() &&
+        ModelRegistry::get().interfaceByName(i.name) != nullptr) {
+        return;
+    }
     notImplemented(i, "top-level declaration");
 }
 

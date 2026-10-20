@@ -104,6 +104,12 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
         // assignment, gated on the worker labels (src/emit/worker.cpp).
         if (a.target->kind == NodeKind::MemberExpr) {
             if (std::string w = emitWorkerMemberWrite(a); !w.empty()) return w;
+            // A class/interface/structural-object field write (spec 15).
+            if (std::string w = emitModelAssign(
+                    a, static_cast<const MemberExpr&>(*a.target));
+                !w.empty()) {
+                return w;
+            }
         }
         notImplemented(a, "assignment to a non-identifier target");
         return "0.0";

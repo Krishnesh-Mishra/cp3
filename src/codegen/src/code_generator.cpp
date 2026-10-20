@@ -25,117 +25,6 @@ using namespace detail;
 
 namespace {
 
-// The generated per-TU helper block (anonymous namespace in the .cpp).
-const char* const kHelperBlock = R"CP3HELPERS(namespace {
-
-// ----- cp3 value formatting (routes into the D9 runtime formatter) -----------
-inline std::string cp3_ts(double v) { return cp3::runtime::toString(v); }
-inline std::string cp3_ts(const std::string& v) { return cp3::runtime::toString(v); }
-inline std::string cp3_ts(bool v) { return cp3::runtime::toString(v); }
-inline std::string cp3_ts(cp3::runtime::Undefined v) { return cp3::runtime::toString(v); }
-inline std::string cp3_ts(std::nullptr_t v) { return cp3::runtime::toString(v); }
-// Defensive: keeps a raw C string from binding to cp3_ts(bool) through the
-// pointer->bool conversion (which would format every literal as "true").
-inline std::string cp3_ts(const char* v) {
-    return cp3::runtime::toString(std::string(v ? v : ""));
-}
-inline std::string cp3_ts(const std::optional<double>& v) {
-    return v.has_value() ? cp3::runtime::toString(*v) : std::string("undefined");
-}
-inline std::string cp3_ts(const std::optional<std::string>& v) {
-    return v.has_value() ? cp3::runtime::toString(*v) : std::string("undefined");
-}
-inline std::string cp3_ts(const std::optional<bool>& v) {
-    return v.has_value() ? cp3::runtime::toString(*v) : std::string("undefined");
-}
-// A `T | null` optional: its empty case is `null`, not `undefined`.
-inline std::string cp3_ts_null(const std::optional<double>& v) {
-    return v.has_value() ? cp3::runtime::toString(*v) : std::string("null");
-}
-inline std::string cp3_ts_null(const std::optional<std::string>& v) {
-    return v.has_value() ? cp3::runtime::toString(*v) : std::string("null");
-}
-inline std::string cp3_ts_null(const std::optional<bool>& v) {
-    return v.has_value() ? cp3::runtime::toString(*v) : std::string("null");
-}
-// A three-way nullable (`T | null | undefined`): Maybe stores the flavor, so
-// the empty case prints the flavor itself.
-template <class T>
-inline std::string cp3_ts(const cp3::runtime::Maybe<T>& v) {
-    if (v.isNull()) return std::string("null");
-    if (v.isUndefined()) return std::string("undefined");
-    return cp3::runtime::toString(v.value());
-}
-// A boxed erroneous value (cp3/core/error.hpp): `catch (e)` binds one, and cp3
-// renders it as the thrown value itself.
-inline std::string cp3_ts(const ::cp3::runtime::Thrown& v) { return v.toString(); }
-
-// ----- JS truthiness ---------------------------------------------------------
-inline bool cp3_truthy(double v) { return v != 0.0 && !std::isnan(v); }
-// The int64 fast path (D64) keeps a `number` as std::int64_t inside a fast
-// body; its truthiness and its formatting are those of the exactly equal
-// double, so these two overloads are what keeps `cp3_truthy(0LL)` and
-// `cp3_ts(5LL)` unambiguous (and correct) in an int64 body.
-inline bool cp3_truthy(std::int64_t v) { return v != 0; }
-inline std::string cp3_ts(std::int64_t v) {
-    return cp3::runtime::toString(static_cast<double>(v));
-}
-inline bool cp3_truthy(const std::string& v) { return !v.empty(); }
-inline bool cp3_truthy(bool v) { return v; }
-inline bool cp3_truthy(cp3::runtime::Undefined) { return false; }
-inline bool cp3_truthy(std::nullptr_t) { return false; }
-// Defensive: JS truthiness of a C string is "non-empty", not "non-null".
-inline bool cp3_truthy(const char* v) { return v != nullptr && *v != '\0'; }
-inline bool cp3_truthy(const std::optional<double>& v) {
-    return v.has_value() && cp3_truthy(*v);
-}
-inline bool cp3_truthy(const std::optional<std::string>& v) {
-    return v.has_value() && cp3_truthy(*v);
-}
-inline bool cp3_truthy(const std::optional<bool>& v) {
-    return v.has_value() && cp3_truthy(*v);
-}
-template <class T>
-inline bool cp3_truthy(const cp3::runtime::Maybe<T>& v) {
-    return v.hasValue() && cp3_truthy(v.value());
-}
-
-// ----- cp3 `finally` (spec §07, DECISIONS D37) -------------------------------
-// Runs the finally block on every exit of the enclosing scope - normal
-// completion, `break`/`continue`/`return`, or a propagating throw - exactly
-// once. The normal path calls `runNow()`, which deactivates the guard before
-// invoking the block, so a throw from `finally` propagates instead of being
-// silently repeated. The destructor is `noexcept(false)` for the same reason
-// on a `return`/`break` path (JS replaces that completion with the throw); a
-// throw while another exception is already in flight terminates the process.
-template <class F>
-class cp3_finally_guard {
-public:
-    explicit cp3_finally_guard(F fn) : fn_(fn) {}
-    cp3_finally_guard(const cp3_finally_guard&) = delete;
-    cp3_finally_guard& operator=(const cp3_finally_guard&) = delete;
-    ~cp3_finally_guard() noexcept(false) {
-        if (active_) {
-            active_ = false;
-            fn_();
-        }
-    }
-    void runNow() {
-        if (active_) {
-            active_ = false;
-            fn_();
-        }
-    }
-
-private:
-    F fn_;
-    bool active_ = true;
-};
-
-}  // namespace
-
-)CP3HELPERS";
-
 // The family's per-TU helpers (formatter + truthiness), added only when the
 // unit uses the family: the templates name cp3::runtime types that exist only
 // with the cp3/typed_array.hpp include.
@@ -202,6 +91,22 @@ inline bool cp3_truthy(const cp3::runtime::EventValue& v) {
 
 )CP3HELPERS";
 
+// The spec 15 object surface helpers: a class/interface/object handle (and an
+// optional over one) is an object, so JS truthiness is always true. Added only
+// when the unit uses `Ref<T>` (cp3/core/value.hpp); without these, `if (obj)`
+// finds no overload (Ref's bool conversion is explicit).
+const char* const kRefHelperBlock = R"CP3HELPERS(namespace {
+
+// ----- spec 15 handles (Ref<T> / interfaces) ----------------------------------
+template <class T>
+inline bool cp3_truthy(const ::cp3::runtime::Ref<T>&) { return true; }
+template <class T>
+inline bool cp3_truthy(const std::optional<T>& v) { return v.has_value(); }
+
+}  // namespace
+
+)CP3HELPERS";
+
 }  // namespace
 
 // --- Generator - construction, diagnostics and top-level orchestration -------
@@ -262,6 +167,13 @@ GeneratedModule Generator::run(const Program& program) {
     // kernel shapes the `worker(...)` calls accept (src/emit/worker.cpp).
     collectWorkerObjects(program);
 
+    // The spec 15 object surface: rebuild the class/interface/object models
+    // for this unit before anything is emitted, so a class used above its
+    // declaration (and a function taking one) already has a C++ spelling.
+    detail::ModelRegistry::get().reset();
+    detail::ModelRegistry::get().setNamespace(namesp_);
+    collectModels(program);
+
     std::string decls;   // function forward declarations
     std::string defs;    // function definitions
     std::string mainBody;
@@ -272,11 +184,22 @@ GeneratedModule Generator::run(const Program& program) {
         }
     }
 
+    // Class structs materialize after the walk (every class and signature is
+    // registered by then), before the structural object/interface structs (a
+    // method signature can still register a new object shape while it emits).
+    emitAllClasses();
+    objectDecls_ = objectStructsText();
+    if (!objectDecls_.empty()) needsRef_ = true;
+
     // Enums first (signatures and record shapes can name one), then the object
-    // value and JSON record structs, complete before any builder reads them.
+    // value and JSON record structs, class forward declarations and structs,
+    // complete before any builder reads them.
     decls = enumDecls_ +
-            objectDeclsFor(jsonShapeDecls_ + decls + defs + mainBody) +
-            jsonShapeDecls_ + decls;
+            objectDeclsFor(jsonShapeDecls_ + decls + defs + mainBody +
+                           classDecls_ + classDefs_ + objectDecls_) +
+            classFwdDecls_ + jsonShapeDecls_ + objectDecls_ + classDecls_ +
+            decls;
+    defs = classDefs_ + defs;
 
     // The family include (D69) follows the emitted spellings
     // (support/usage_includes.cpp).
@@ -305,6 +228,10 @@ std::string Generator::buildHeader(const std::string& decls) const {
     }
     out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
+    if (needsRef_) {
+        // Classes / structural objects / interfaces (spec 15) name `Ref<T>`.
+        out += "#include \"cp3/core/value.hpp\"\n";
+    }
     if (needsTuple_) {
         // An enum-carrying object literal can surface in a forward declaration
         // (a parameter default).
@@ -363,6 +290,9 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
     out += "#include \"cp3/core/error.hpp\"\n";
+    if (needsRef_) {
+        out += "#include \"cp3/core/value.hpp\"\n";  // Ref/WeakRef (spec 15)
+    }
     if (needsBitwise_) out += "#include \"cp3/core/bitwise.hpp\"\n";  // & | ^ ~ << >> >>>
     if (needsUnion_) out += "#include \"cp3/core/union.hpp\"\n";  // primitive unions
     if (needsArith_) {
@@ -407,10 +337,11 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
         }
     }
     out += "\n";
-    out += kHelperBlock;
+    out += commonHelperBlock();
     if (needsTypedArray_) out += kTypedArrayHelperBlock;
     if (needsBuffer_) out += kBufferHelperBlock;
     if (needsEventEmitter_) out += kEventEmitterHelperBlock;
+    if (needsRef_) out += kRefHelperBlock;
     if (needsUnion_) out += unionHelperBlock();
     if (needsObject_) out += objectHelperBlock();
     out += "\nnamespace " + namesp_ + " {\n\n";

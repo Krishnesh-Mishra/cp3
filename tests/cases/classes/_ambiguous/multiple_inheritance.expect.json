@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: How is 'multiple class inheritance is not supported' surfaced - as a parser error on `extends A, B`, or a semantic error? (A, B, C order here is illustrative.)"
-  }
-}

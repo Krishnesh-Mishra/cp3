@@ -53,7 +53,7 @@ Type Analyzer::inferExpr(Expr& e) {
         case NodeKind::Identifier:
             return inferIdentifier(static_cast<Identifier&>(e));
         case NodeKind::ThisExpr:
-            return withType(e, ambient());
+            return withType(e, thisType());
         case NodeKind::ArrayLiteral:
             return inferArray(static_cast<ArrayLiteral&>(e));
         case NodeKind::ObjectLiteral:
@@ -107,6 +107,18 @@ Type Analyzer::inferIdentifier(Identifier& id) {
     if (id.name == "arguments") {
         reportBannedArguments(id.span);
         return withType(id, ambient());
+    }
+    // D22: `super` names the base instance inside a derived class body.
+    if (id.name == "super") {
+        if (!classStack_.empty()) {
+            const ClassInfo* ci = findClass(classStack_.back());
+            if (ci != nullptr && !ci->baseName.empty()) {
+                return withType(id,
+                                Type::named(TypeKind::Class, ci->baseName));
+            }
+        }
+        reportUndefinedName(id.span, id.name);
+        return withType(id, Type::error());
     }
     Binding b;
     if (!lookup(id.name, b)) {
@@ -214,6 +226,13 @@ Type Analyzer::inferNew(NewExpr& n) {
             setType(id, b.type);
             Type coll = inferCollectionsConstruct(id.name, n.typeArgs);
             if (!coll.isUnknown()) return withType(n, coll);
+        }
+        // User classes (spec 15): `new C(args)` checks the constructor and
+        // yields the nominal instance type; abstract classes are CP3413
+        // (class_conform_check.cpp).
+        if (lookup(id.name, b) && b.type.kind == TypeKind::Class &&
+            findClass(id.name)) {
+            return withType(n, inferUserConstruct(id, b, n));
         }
     }
     if (n.callee) inferExpr(*n.callee);

@@ -33,6 +33,9 @@ void Analyzer::checkStmts(StmtList& body) {
             hoistFunction(static_cast<FunctionDeclaration&>(*s));
         }
     }
+    // Class member tables resolve before bodies run so `this`, member access
+    // and `new` see the full surface (class_check.cpp).
+    resolveClasses(body);
     // `var` names are visible (as `undefined`) before their declaration.
     hoistVars(body);
     for (auto& s : body) {

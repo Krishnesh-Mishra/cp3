@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: Exact getter/setter declaration syntax: TS-style `get value()` (no `function` keyword, as used here) vs. cp3's `function name()` method form. The spec says only 'getters/setters (get/set)'."
-  }
-}

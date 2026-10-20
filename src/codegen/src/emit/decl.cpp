@@ -103,6 +103,10 @@ void Generator::emitTopLevel(const Stmt& s, std::string& decls, std::string& def
             emitExport(static_cast<const ExportDeclaration&>(s), decls, defs, mainBody);
             return;
         case NodeKind::ClassDeclaration:
+            // A class declaration (spec 15) is registered up front and emits
+            // its struct in `emitAllClasses` (after the walk).
+            emitTopLevelClass(static_cast<const ClassDeclaration&>(s));
+            return;
         case NodeKind::TypeAliasDeclaration:
             notImplemented(s, "top-level declaration");
             return;
@@ -153,6 +157,8 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         }
         const std::string name =
             mapIdent(static_cast<const Identifier&>(*d->id).name);
+        // A module-scope value, not a type name (class static receivers).
+        moduleValues_.insert(static_cast<const Identifier&>(*d->id).name);
         reportModuleVarType(*d);
         const std::optional<Type> declared = resolvedBindingType(*d);
         CppInfo ci = declared ? classify(*declared) : CppInfo{};
@@ -177,7 +183,8 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         // `let a: number[] = Array(3)` / `let a: number[] = []`: the
         // annotation fixes an otherwise unknowable element type
         // (src/std/typed-arrays/codegen.cpp).
-        std::string initText = declaratorInitText(*d, ci.type);
+        std::string initText = modelInitText(*d, ci.type);
+        if (initText.empty()) initText = declaratorInitText(*d, ci.type);
         if (initText.empty()) initText = expr(*d->init);
         // A worker-marked object literal lowers to a `std::tuple`; the binding
         // type follows the emitted text, not the ordinary value shape.

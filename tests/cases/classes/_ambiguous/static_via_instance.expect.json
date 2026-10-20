@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: Is reading a static member through an instance (`c.x`) allowed, or must it be `C.x`? Spec maps statics to C++ but does not state the access rule."
-  }
-}

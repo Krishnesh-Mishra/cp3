@@ -31,6 +31,24 @@ bool Analyzer::wouldAccept(const Type& from, const Type& to, bool freshLiteral) 
         return true;
     }
     if (isAssignable(from, to)) return true;
+    // User classes (spec 15): structural conformance to an
+    // interface/object shape, literal-to-class, and derived-to-base.
+    if (from.kind == TypeKind::Class && to.kind == TypeKind::Object) {
+        if (const ClassInfo* ci = findClass(from.name)) {
+            return classConformsToShape(*ci, to);
+        }
+    }
+    if (from.kind == TypeKind::Object && to.kind == TypeKind::Class) {
+        if (const ClassInfo* ci = findClass(to.name)) {
+            return literalConformsToClass(from, *ci, freshLiteral);
+        }
+    }
+    if (from.kind == TypeKind::Class && to.kind == TypeKind::Class &&
+        !to.name.empty()) {
+        if (const ClassInfo* ci = findClass(from.name)) {
+            return classIsOrDerivesFrom(*ci, to.name);
+        }
+    }
     if (from.kind == TypeKind::Array && to.kind == TypeKind::Array) {
         return wouldAccept(elemOf(from), elemOf(to), false);
     }
@@ -114,6 +132,7 @@ void Analyzer::checkAssign(const Type& from, const Type& to,
         from.kind == TypeKind::Object) {
         if (emitObjectDiff(from, to, span, freshLiteral)) return;
     }
+    if (emitClassAssignDiff(from, to, span, freshLiteral)) return;
     if (isTupleType(to) && from.kind == TypeKind::Array) {
         report(diagcode::kTypeMismatch, span,
                "type mismatch: array literal does not match tuple type '" +

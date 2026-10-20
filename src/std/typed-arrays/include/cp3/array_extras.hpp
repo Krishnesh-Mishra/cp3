@@ -18,6 +18,7 @@
 #include <optional>
 #include <random>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -106,9 +107,12 @@ bool sameValueZero(const E& a, const E& b) {
 }
 
 // A bounds-checked read/write (the corpus only indexes in range; anything else
-// panics instead of reading out of bounds).
+// panics instead of reading out of bounds). The read returns a reference:
+// generated uses copy only where cp3 semantics copy (a binding, argument or
+// return), so a member read or method call through the element does not copy a
+// reference-counted handle.
 template <class E>
-E arrayAt(const Array<E>& a, double index) {
+const E& arrayAt(const Array<E>& a, double index) {
     if (!indexInRange(index, a->size())) typedArrayPanic("Array index out of range");
     return (*a)[static_cast<std::size_t>(index)];
 }
@@ -142,6 +146,15 @@ Array<double> arrayFromTyped(const TypedArray<Tag>& src) {
 template <class E>
 double arrayPush(const Array<E>& a, const E& value) {
     a->push_back(value);
+    return static_cast<double>(a->size());
+}
+
+// A freshly constructed element (`a.push(new C())` / `a.push({...})`) is moved
+// into the vector: the temporary would be destroyed right after the call, so
+// the handle copy (and its atomic increment) is unobservable.
+template <class E>
+double arrayPush(const Array<E>& a, E&& value) {
+    a->push_back(std::move(value));
     return static_cast<double>(a->size());
 }
 

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "detail/cpp_writer.h"
+#include "detail/expr_ops.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
 
@@ -30,42 +31,6 @@ void Generator::noteFamilyUse(const Expr& e) {
         needsTypedArray_ = true;
     }
 }
-
-namespace {
-
-const char* binaryOpSpelling(BinaryOp op) {
-    switch (op) {
-        case BinaryOp::Add: return "+";
-        case BinaryOp::Subtract: return "-";
-        case BinaryOp::Multiply: return "*";
-        case BinaryOp::Divide: return "/";
-        case BinaryOp::LessThan: return "<";
-        case BinaryOp::GreaterThan: return ">";
-        case BinaryOp::LessThanEqual: return "<=";
-        case BinaryOp::GreaterThanEqual: return ">=";
-        default: return nullptr;
-    }
-}
-
-// A comparison sees two numbers as equal when their difference is zero,
-// so the sign of a zero operand is unobservable to it (IEEE -0 == +0).
-bool isComparisonOp(BinaryOp op) {
-    switch (op) {
-        case BinaryOp::LessThan:
-        case BinaryOp::GreaterThan:
-        case BinaryOp::LessThanEqual:
-        case BinaryOp::GreaterThanEqual:
-        case BinaryOp::Equal:
-        case BinaryOp::NotEqual:
-        case BinaryOp::StrictEqual:
-        case BinaryOp::StrictNotEqual:
-            return true;
-        default:
-            return false;
-    }
-}
-
-}  // namespace
 
 // The expression entry point: inside an int64 fast-path attempt a node whose
 // type is `number` is lowered by the fast path (int_mode.cpp); everything else
@@ -115,6 +80,7 @@ std::string Generator::exprPlain(const Expr& e) {
         case NodeKind::RegExpLiteral: return emitRegexLiteral(static_cast<const RegExpLiteral&>(e));
         case NodeKind::Identifier:
             return emitIdentifier(static_cast<const Identifier&>(e));
+        case NodeKind::ThisExpr: return "this";
         case NodeKind::TemplateLiteral:
             return emitTemplate(static_cast<const TemplateLiteral&>(e));
         case NodeKind::BinaryExpr:
@@ -131,38 +97,18 @@ std::string Generator::exprPlain(const Expr& e) {
             return emitAssignment(static_cast<const AssignmentExpr&>(e));
         case NodeKind::CallExpr:
             return emitCallOrFamily(static_cast<const CallExpr&>(e));
-        case NodeKind::NewExpr: {
-            // Order: std/network + std/collections constructors, then the
-            // builtin `new EventEmitter()` (D74), then the JS-compat family.
-            if (std::string net = emitNetworkNew(static_cast<const NewExpr&>(e));
-                !net.empty()) {
-                return net;
-            }
-            if (std::string coll = emitCollectionsNew(static_cast<const NewExpr&>(e));
-                !coll.empty()) return coll;
-            if (std::string em = emitEventEmitterNew(static_cast<const NewExpr&>(e));
-                !em.empty()) return em;
-            return emitFamilyNew(static_cast<const NewExpr&>(e));
-        }
+        case NodeKind::NewExpr:
+            return emitNewExpr(static_cast<const NewExpr&>(e));
         case NodeKind::ArrayLiteral:
             return arrayLiteralText(static_cast<const ArrayLiteral&>(e), Type::unknown());
         case NodeKind::IndexExpr:
             return emitIndexExpr(static_cast<const IndexExpr&>(e));
         case NodeKind::AwaitExpr:
             return emitAwait(static_cast<const AwaitExpr&>(e));
-        case NodeKind::MemberExpr: {
-            // Builtin property reads (`Math.PI`, `path.sep`, `process.argv`,
-            // `s.length`) and a std/json record field first; then a member read
-            // of an object value shape (`o.a`, `o?.a`); anything else stays
-            // CP3002 (emit_builtin.cpp, emit/objects.cpp).
-            const auto& m = static_cast<const MemberExpr&>(e);
-            std::string value = emitBuiltinMember(m);
-            if (value.empty()) value = emitObject(m);
-            if (!value.empty()) return value;
-            notImplemented(e, "this property access");
-            return "0.0";
-        }
-        case NodeKind::ObjectLiteral: return emitObjectLiteral(e);
+        case NodeKind::MemberExpr:
+            return emitMemberAny(static_cast<const MemberExpr&>(e));
+        case NodeKind::ObjectLiteral:
+            return emitObjectAny(static_cast<const ObjectLiteral&>(e));
         case NodeKind::ArrowFunction: return emitListenerValue(e);  // D74
         default:
             notImplemented(e, "this expression");
@@ -170,9 +116,43 @@ std::string Generator::exprPlain(const Expr& e) {
     }
 }
 
+// `new`: user classes (spec 15), std/network + std/collections constructors,
+// the builtin `new EventEmitter()` (D74), then the JS-compat family.
+std::string Generator::emitNewExpr(const NewExpr& n) {
+    if (std::string model = emitModelNew(n); !model.empty()) return model;
+    if (std::string net = emitNetworkNew(n); !net.empty()) return net;
+    if (std::string coll = emitCollectionsNew(n); !coll.empty()) return coll;
+    if (std::string em = emitEventEmitterNew(n); !em.empty()) return em;
+    return emitFamilyNew(n);
+}
+
+// A member read: a user class / interface / object model wins over a builtin
+// name; then builtin properties (`Math.PI`, `path.sep`, `s.length`) and the
+// std/json record fields; then a structural-object field. Anything else stays
+// CP3002 (emit_builtin.cpp, emit/objects.cpp).
+std::string Generator::emitMemberAny(const MemberExpr& m) {
+    std::string value = emitModelMember(m);
+    if (value.empty()) value = emitBuiltinMember(m);
+    if (value.empty()) value = emitObject(m);
+    if (!value.empty()) return value;
+    notImplemented(m, "this property access");
+    return "0.0";
+}
+
+// A literal lowers through its class/interface/structural-object model, or
+// through the all-primitive value-struct path (emit/objects.cpp).
+std::string Generator::emitObjectAny(const ObjectLiteral& lit) {
+    if (std::string model = emitModelObjectLiteral(lit); !model.empty()) {
+        return model;
+    }
+    return emitObjectLiteral(lit);
+}
+
 std::string Generator::emitIdentifier(const Identifier& id) {
     if (id.name == "undefined") return "cp3::runtime::undefined";
     if (id.name == "null") return "nullptr";
+    // D22: the `super` value is the current instance viewed as its base.
+    if (id.name == "super") return "*this";
     if (id.name == "NaN") return "std::numeric_limits<double>::quiet_NaN()";
     if (id.name == "Infinity") return "std::numeric_limits<double>::infinity()";
     if (id.name == "true") return "true";
@@ -180,9 +160,15 @@ std::string Generator::emitIdentifier(const Identifier& id) {
     // A `var` read that precedes its declaration (the binding is hoisted and
     // sema typed the read `undefined`): the C++ declaration does not exist yet,
     // so emit the value the binding holds at that point in JS.
-    if (!lookup(id.name)) {
+    if (!hasValueBinding(id.name)) {
         if (const Type* t = sema_.typeOf(id.nodeId); t && t->isUndefined()) {
             return "cp3::runtime::undefined";
+        }
+        // A class name is a type, not a value: using one as a value (other
+        // than as the receiver of a static member) has no C++ spelling.
+        if (ModelRegistry::get().classByName(id.name) != nullptr) {
+            notImplemented(id, "a class used as a value");
+            return "0.0";
         }
     }
     return mapIdent(id.name);
@@ -209,6 +195,15 @@ std::string Generator::emitTemplate(const TemplateLiteral& tl) {
 // selects the formatter, letting `cp3_ts` overload-resolution pick the type.
 std::string Generator::tsCall(const Expr& e) {
     const CppInfo ci = info(e);
+    // A class instance or interface wrapper formats only when it exposes a
+    // `toString` (the generated overload); a structural object never does, and
+    // an array of those has no formatter either. Staying on the CP3002 path
+    // here keeps the generated C++ compilable instead of failing overload
+    // resolution.
+    if (!valueFormattable(ci.type)) {
+        notImplemented(e, "formatting this value");
+        return "std::string(\"undefined\")";
+    }
     noteFamilyUse(e);
     // An enum value formats by its backing kind (spec 04): the underlying
     // number for a number-backed enum, the member's string for a string-backed

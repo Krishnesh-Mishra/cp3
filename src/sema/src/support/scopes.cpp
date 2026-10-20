@@ -175,8 +175,11 @@ void Analyzer::hoistType(Stmt& s) {
             return;
         }
         case NodeKind::ClassDeclaration: {
+            // Classes are nominal types (spec 15); a generic class is a type
+            // constructor whose instantiations carry their type arguments in
+            // the Type parts.
             auto& c = static_cast<ClassDeclaration&>(s);
-            typeNames_[c.name] = ambient();
+            typeNames_[c.name] = Type::named(TypeKind::Class, c.name);
             declaredTypes_.insert(s.nodeId);
             return;
         }

@@ -37,6 +37,7 @@ enum class Shape {
     Enum,        // a named enum (spec 04): `enum class <name> : long long`
     EventEmitter, // the builtin event type (D74): Ref<EventEmitter>
     Listener,     // a function-typed value (D74): the boxed callable
+    ClassRef,     // a user class instance (spec 15): Ref<Class>
     Object,      // an all-primitive `$o{...}` shape: a generated value struct
     Unknown, Unsupported
 };
@@ -84,6 +85,8 @@ bool isEventEmitterType(const Type& t);
 bool optionalEmptyMatches(NullishKind kind, Shape nullishShape);
 
 // The C++ lowering of `raw`, including the optional/nullish flavor.
+CppInfo classifyPromise(const Type& t);
+
 CppInfo classify(const Type& raw);
 
 // The enum arm of `classify` (spec 04; src/emit/enum.cpp): a named enum ->
@@ -105,6 +108,11 @@ void classifyNullishUnion(const Type& t, CppInfo& info);
 bool objectShapeOf(const Type& t, std::string& structName,
                    std::vector<ObjectField>& fields);
 CppInfo classifyObjectValue(const Type& t);
+// The class and structural-model arms of `classify` (class_types.cpp): a user
+// class / generic instantiation is a `Ref<T>` handle; an interface/object model
+// uses its generated wrapper/struct.
+CppInfo classifyClassValue(const Type& t);
+CppInfo classifyObjectModel(const Type& t);
 // A `$o{...}` label another family owns (a std/json interface record): its
 // spelling is that family's, so the value-shape path must not claim it.
 // Registered before the emit walk (std/json's collectJsonShapes).
@@ -146,6 +154,11 @@ bool classifyByteBuffer(const Type& t, CppInfo& info);
 
 // Structural fallback: a type annotation -> a cp3 Type (when sema is absent).
 std::optional<Type> typeFromTypeNode(const TypeNode& tn);
+
+// The annotation's cp3 type, or `unknown` when it has no mapping; the model
+// pass (support/class_walk.cpp) uses this where an annotation must always
+// yield a Type value.
+Type modelTypeFromTypeNode(const TypeNode& tn);
 
 bool isNullishLiteral(const Expr& e);
 

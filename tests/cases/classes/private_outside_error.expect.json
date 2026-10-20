@@ -4,7 +4,7 @@
   "exitCode": 1,
   "error": {
     "code": "CP3xxxx",
-    "line": 3,
+    "line": 4,
     "col": 1,
     "contains": "private"
   }

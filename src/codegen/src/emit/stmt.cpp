@@ -58,22 +58,12 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
         case NodeKind::IfStatement:
             emitIf(static_cast<const IfStatement&>(s), out, indent);
             return;
-        case NodeKind::WhileStatement: {
-            const auto& ws = static_cast<const WhileStatement&>(s);
-            const std::string condition = ws.condition ? cond(*ws.condition) : "false";
-            line(out, indent, "while (" + condition + ") {");
-            if (ws.body) emitBranch(*ws.body, out, indent + 1);
-            line(out, indent, "}");
+        case NodeKind::WhileStatement:
+            emitWhile(static_cast<const WhileStatement&>(s), out, indent);
             return;
-        }
-        case NodeKind::DoWhileStatement: {
-            const auto& dw = static_cast<const DoWhileStatement&>(s);
-            line(out, indent, "do {");
-            if (dw.body) emitBranch(*dw.body, out, indent + 1);
-            const std::string condition = dw.condition ? cond(*dw.condition) : "false";
-            line(out, indent, "} while (" + condition + ");");
+        case NodeKind::DoWhileStatement:
+            emitDoWhile(static_cast<const DoWhileStatement&>(s), out, indent);
             return;
-        }
         case NodeKind::ForStatement:
             emitFor(static_cast<const ForStatement&>(s), out, indent);
             return;
@@ -95,6 +85,11 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
         case NodeKind::SwitchStatement:
             emitEnumSwitch(s, out, indent);  // same-enum switch; else CP3002
             return;
+        case NodeKind::ClassDeclaration:
+            // A function-local class (spec 15) emits its struct inline: a
+            // local type cannot have out-of-line definitions at namespace scope.
+            emitLocalClass(static_cast<const ClassDeclaration&>(s), out, indent);
+            return;
         default:
             notImplemented(s, "this statement");
             line(out, indent, "/* CP3002: unsupported statement */");
@@ -110,6 +105,22 @@ void Generator::emitBranch(const Stmt& s, std::string& out, int indent) {
     } else {
         stmt(s, out, indent);
     }
+}
+
+void Generator::emitWhile(const WhileStatement& ws, std::string& out,
+                          int indent) {
+    const std::string condition = ws.condition ? cond(*ws.condition) : "false";
+    line(out, indent, "while (" + condition + ") {");
+    if (ws.body) emitBranch(*ws.body, out, indent + 1);
+    line(out, indent, "}");
+}
+
+void Generator::emitDoWhile(const DoWhileStatement& dw, std::string& out,
+                            int indent) {
+    line(out, indent, "do {");
+    if (dw.body) emitBranch(*dw.body, out, indent + 1);
+    const std::string condition = dw.condition ? cond(*dw.condition) : "false";
+    line(out, indent, "} while (" + condition + ");");
 }
 
 void Generator::emitIf(const IfStatement& is, std::string& out, int indent) {
@@ -161,6 +172,11 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
         std::string initText;
         if (ci.shape == Shape::Optional && isNullishLiteral(*d.init)) {
             initText = "std::nullopt";
+        } else if (std::string special = modelInitText(d, ci.type);
+                   !special.empty()) {
+            // A class/interface/object-typed binding (spec 15): the model
+            // initializer (emit/class_expr.cpp).
+            initText = special;
         } else if (std::string special = declaratorInitText(d, ci.type);
                    !special.empty()) {
             // `let a: number[] = Array(3)` / `let a: number[] = []` (the

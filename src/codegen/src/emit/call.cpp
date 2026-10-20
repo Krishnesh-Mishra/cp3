@@ -97,53 +97,70 @@ std::vector<std::string> Generator::emitCallArgs(const CallExpr& c,
     return args;
 }
 
+// A call whose callee is a bare name: console/timer/parse/worker builtins
+// first, then a detached method lambda, then a declared function.
+std::string Generator::emitIdentifierCall(const CallExpr& c,
+                                          const std::string& name) {
+    if (functions_.find(name) == functions_.end() && isTimerBuiltinName(name)) {
+        return emitTimerBuiltin(c, name);
+    }
+    // `String(value)` (bug 9 surface): the scalar conversion global. A
+    // user-declared `String` function wins (checked above).
+    if (name == "String" && functions_.find(name) == functions_.end()) {
+        if (c.arguments.size() == 1 && c.arguments.front() &&
+            c.arguments.front()->kind != NodeKind::SpreadElement) {
+            return "::cp3::runtime::toString(" + expr(*c.arguments.front()) +
+                   ")";
+        }
+        notImplemented(c, "String(...)");
+        return "0.0";
+    }
+    if ((name == "parseInt" || name == "parseFloat") &&
+        functions_.find(name) == functions_.end()) {
+        return emitParseBuiltin(c, name);
+    }
+    if (name == "worker" && functions_.find(name) == functions_.end()) {
+        // The ambient `worker(...)` lowering (spec 13); a user-declared
+        // `worker` function wins (checked here, before the disambiguation).
+        return emitWorkerCall(c);
+    }
+    if (!c.typeArgs.empty()) {
+        notImplemented(c, "calls with type arguments");
+        return "0.0";
+    }
+    // A name that is not a function declared in this unit.
+    if (functions_.find(name) == functions_.end()) {
+        // A local bound to a class method (`let f = c.getX`) is a detached
+        // lambda, so it is directly callable; a void-returning function
+        // value is a boxed `Listener` and stays on the CP3002 path (only
+        // the builtin emitter knows its `invoke`).
+        const Type local = effectiveType(*c.callee);
+        if (local.kind == TypeKind::Function && !local.parts.empty() &&
+            !local.parts.back().isVoid()) {
+            return mapIdent(name) + "(" +
+                   joinStrings(emitPlainArgs(c), ", ") + ")";
+        }
+        return emitUnresolvedCall(c, name);
+    }
+    if (asyncFunctions_.count(name) != 0) {
+        // Calling an async function starts async work whose continuations
+        // only run when the loop does.
+        needsEventLoop_ = true;
+    }
+    const auto declIt = functionDecls_.find(name);
+    const FunctionDeclaration* decl =
+        declIt != functionDecls_.end() ? declIt->second : nullptr;
+    return mapIdent(name) + "(" + joinStrings(emitCallArgs(c, decl), ", ") + ")";
+}
+
 std::string Generator::emitCall(const CallExpr& c) {
     if (isConsoleMember(c)) {
         const auto& m = static_cast<const MemberExpr&>(*c.callee);
         return emitConsoleCall(c, m);
     }
     if (c.callee->kind == NodeKind::Identifier) {
-        const std::string name = static_cast<const Identifier&>(*c.callee).name;
-        if (functions_.find(name) == functions_.end() && isTimerBuiltinName(name)) {
-            return emitTimerBuiltin(c, name);
-        }
-        // `String(value)` (bug 9 surface): the scalar conversion global. A
-        // user-declared `String` function wins (checked above).
-        if (name == "String" && functions_.find(name) == functions_.end()) {
-            if (c.arguments.size() == 1 && c.arguments.front() &&
-                c.arguments.front()->kind != NodeKind::SpreadElement) {
-                return "::cp3::runtime::toString(" + expr(*c.arguments.front()) +
-                       ")";
-            }
-            notImplemented(c, "String(...)");
-            return "0.0";
-        }
-        if ((name == "parseInt" || name == "parseFloat") &&
-            functions_.find(name) == functions_.end()) {
-            return emitParseBuiltin(c, name);
-        }
-        if (name == "worker" && functions_.find(name) == functions_.end()) {
-            // The ambient `worker(...)` lowering (spec 13); a user-declared
-            // `worker` function wins (checked here, before the disambiguation).
-            return emitWorkerCall(c);
-        }
-        if (!c.typeArgs.empty()) {
-            notImplemented(c, "calls with type arguments");
-            return "0.0";
-        }
-        // A name that is not a function declared in this unit.
-        if (functions_.find(name) == functions_.end()) {
-            return emitUnresolvedCall(c, name);
-        }
-        if (asyncFunctions_.count(name) != 0) {
-            // Calling an async function starts async work whose continuations
-            // only run when the loop does.
-            needsEventLoop_ = true;
-        }
-        const auto declIt = functionDecls_.find(name);
-        const FunctionDeclaration* decl =
-            declIt != functionDecls_.end() ? declIt->second : nullptr;
-        return mapIdent(name) + "(" + joinStrings(emitCallArgs(c, decl), ", ") + ")";
+        return emitIdentifierCall(
+            c, static_cast<const Identifier&>(*c.callee).name);
     }
     if (c.callee->kind == NodeKind::MemberExpr) {
         const auto& m = static_cast<const MemberExpr&>(*c.callee);
@@ -163,6 +180,11 @@ std::string Generator::emitCall(const CallExpr& c) {
         }
         if (m.object && detail::isEventEmitterType(effectiveType(*m.object))) {
             return emitEventEmitterCall(c, m);
+        }
+        // A class method / interface method call (spec 15) before the builtin
+        // namespace surface: a class member name owns its spelling.
+        if (std::string model = emitModelCall(c, m); !model.empty()) {
+            return model;
         }
         // `Math.*`, `path.*`, `os.*`, `JSON.stringify`, `process.*`, and the
         // primitive `string` method surface (emit_builtin.cpp).

@@ -45,4 +45,8 @@ std::optional<Type> Generator::lookup(const std::string& name) const {
     return std::nullopt;
 }
 
+bool Generator::hasValueBinding(const std::string& name) const {
+    return lookup(name).has_value() || moduleValues_.count(name) != 0;
+}
+
 }  // namespace cp3

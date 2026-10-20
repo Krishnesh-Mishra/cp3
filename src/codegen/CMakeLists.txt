@@ -17,8 +17,12 @@ set(cp3_codegen_sources
     src/support/cpp_writer.cpp
     src/support/line_map.cpp
     src/support/type_map.cpp
+    src/support/class_types.cpp
     src/support/scope_env.cpp
     src/support/value_shapes.cpp
+    src/support/class_model.cpp
+    src/support/class_collect.cpp
+    src/support/class_walk.cpp
     src/support/helper_blocks.cpp
     src/support/int_mode.cpp
     src/support/int_reads.cpp
@@ -31,6 +35,9 @@ set(cp3_codegen_sources
     src/emit/async.cpp
     src/emit/stmt.cpp
     src/emit/decl.cpp
+    src/emit/class_decl.cpp
+    src/emit/class_shape.cpp
+    src/emit/class_expr.cpp
     src/emit/enum.cpp
     src/emit/regex.cpp
     src/emit/parallel.cpp

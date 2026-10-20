@@ -356,9 +356,10 @@ void Analyzer::visitDeclStmt(Stmt& s) {
 }
 
 void Analyzer::visitClassDecl(ClassDeclaration& c) {
-    notImplemented(c.span, "classes");
-    typeNames_[c.name] = ambient();
-    declareAmbient(c.name, c.span, c.nodeId);
+    // resolveClasses (checkStmts) already built the member table; an exported
+    // class visited without that pre-pass is resolved here instead.
+    if (classResolved_.insert(c.nodeId).second) resolveClass(c);
+    checkClassBodies(c);
 }
 
 void Analyzer::visitEnumDecl(EnumDeclaration& e) {
