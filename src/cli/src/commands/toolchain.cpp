@@ -6,10 +6,11 @@
 // Non-interactive forms for scripts:
 //   cp3c toolchain list
 //   cp3c toolchain detect
-//   cp3c toolchain use <id|path> [--project|--global]
+//   cp3c toolchain use <id[@version]|path> [--project|--global]
 //   cp3c toolchain clear [--project|--global]
-// Bare `cp3c toolchain` opens the single-select menu. A piped stdin gets the
-// numbered fallback; when both scopes are possible a flag is required.
+// Bare `cp3c toolchain` opens the family -> version -> scope wizard. A piped
+// stdin gets the numbered fallback; when both scopes are possible a flag is
+// required.
 // =============================================================================
 #include <cstdio>
 #include <string>
@@ -27,13 +28,6 @@ namespace cp3::cli {
 namespace {
 
 enum class Scope { None, Project, Global };
-
-std::string lowerCopy(std::string s) {
-    for (char& c : s) {
-        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
-    }
-    return s;
-}
 
 std::string padRight(std::string text, std::size_t width) {
     if (text.size() < width) text.append(width - text.size(), ' ');
@@ -66,6 +60,22 @@ void printCandidateTable(bool validate) {
     }
 }
 
+void printInstalledVersions() {
+    std::puts("installed versions");
+    for (const ToolchainCandidate& candidate : toolchainCandidates()) {
+        const std::vector<ToolchainInstall> installs =
+            discoverToolchainVersions(candidate, false);
+        if (installs.empty()) {
+            std::printf("  %s: none\n", candidate.id.c_str());
+            continue;
+        }
+        for (const ToolchainInstall& install : installs) {
+            std::printf("  %s %s  %s\n", candidate.id.c_str(),
+                        install.version.c_str(), install.program.c_str());
+        }
+    }
+}
+
 bool projectRootHere(fs::path& root) {
     std::error_code ec;
     const fs::path cwd = fs::current_path(ec);
@@ -90,170 +100,35 @@ bool parseScope(const CliOptions& opt, Scope& scope, std::string& err) {
     return true;
 }
 
-struct AssignRequest {
-    std::string id;
-    std::string name;
-    std::string program;
-    Scope scope = Scope::None;
-    fs::path projectRoot;
-    bool customPath = false;
-};
-
-bool saveChoice(const AssignRequest& request, std::string& err) {
-    if (request.scope == Scope::Project) {
-        if (request.projectRoot.empty()) {
-            err = "no package.json found; --project needs a cp3 project";
-            return false;
-        }
-        std::string value = request.id;
-        if (request.customPath) {
-            value = request.program;
-            std::fprintf(stderr,
-                         "cp3c: warning: storing the machine-specific path "
-                         "'%s' in package.json\n",
-                         request.program.c_str());
-        }
-        return writeProjectToolchain(request.projectRoot, value, err);
-    }
-    return writeGlobalToolchainConfig(request.id, request.program, err);
-}
-
-void printSaved(const AssignRequest& request) {
-    std::printf("selected: %s (%s)\n", request.name.c_str(),
-                request.program.c_str());
-    if (request.scope == Scope::Project) {
+void printSaved(const Toolchain& resolved, const ToolchainCandidate& candidate,
+                const ToolchainChoice& choice, Scope scope,
+                const fs::path& root) {
+    std::printf("selected: %s %s (%s)\n", candidate.name.c_str(),
+                resolved.version.c_str(), resolved.program.c_str());
+    std::printf("policy: %s, recorded %s, effective %s\n",
+                choice.policy.c_str(), choice.version.c_str(),
+                resolved.version.c_str());
+    if (scope == Scope::Project) {
         std::printf("scope: this project (%s)\n",
-                    (request.projectRoot / "package.json").string().c_str());
+                    (root / "package.json").string().c_str());
     } else {
         std::printf("scope: all projects (%s)\n",
                     toolchainConfigPath().string().c_str());
     }
 }
 
-int finishInteractive(const CandidateStatus& status, Scope forced,
-                      bool inProject, const fs::path& root) {
-    Scope scope = forced;
-    if (scope == Scope::None) {
-        if (!inProject) {
-            std::fputs("No package.json found here, so only the global choice "
-                       "is available.\n", stdout);
-            scope = Scope::Global;
-        } else if (!isTty(stdin)) {
-            std::fputs("cp3c: this directory is a cp3 project; re-run with "
-                       "--project or --global\n", stderr);
-            return kExitUsageError;
-        } else {
-            bool cancelled = false;
-            const int choice = runMenu(
-                "Where should this toolchain apply?",
-                {"This project (package.json)", "All projects (global)"},
-                {"project", "global"}, 0, cancelled);
-            if (cancelled) return kExitSuccess;
-            if (choice < 0) return kExitUsageError;
-            scope = choice == 0 ? Scope::Project : Scope::Global;
-        }
-    }
-    AssignRequest request;
-    request.id = status.candidate.id;
-    request.name = status.candidate.name;
-    request.program = status.program;
-    request.scope = scope;
-    request.projectRoot = root;
-    std::string error;
-    if (!saveChoice(request, error)) {
-        std::fprintf(stderr, "cp3c: %s\n", error.c_str());
-        return kExitCompileError;
-    }
-    printSaved(request);
-    return kExitSuccess;
-}
-
-// Asks before doing anything, prints the exact command, then runs it. Returns
-// true only when an installer actually ran.
-bool installMissing(const CandidateStatus& status) {
-    const std::string question = "Install " + status.candidate.name + "?";
-    if (!runYesNo(question)) return false;
-    const InstallPlan plan = planToolchainInstall(status.candidate);
-    if (!plan.runnable) {
-        std::printf("%s\n", plan.label.c_str());
-        if (!plan.url.empty()) std::printf("download: %s\n", plan.url.c_str());
-        return false;
-    }
-    std::printf("command: %s\n", plan.command.c_str());
-    std::fflush(stdout);
-    if (!plan.warning.empty()) std::printf("%s\n", plan.warning.c_str());
-    if (plan.needsSecondConfirm &&
-        !runYesNo("Download and install Build Tools now?")) {
-        return false;
-    }
-    return runInstallPlan(plan);
-}
-
-void reportStillMissing(const CandidateStatus& status) {
-    const InstallPlan plan = planToolchainInstall(status.candidate);
-    std::fprintf(stderr, "cp3c: %s is still not usable: %s\n",
-                 status.candidate.name.c_str(), status.problem.c_str());
-    if (!plan.command.empty()) {
-        std::fprintf(stderr, "cp3c: remaining command: %s\n",
-                     plan.command.c_str());
-    }
-    std::fputs("cp3c: installer PATH changes often need a new terminal; open "
-               "one and run 'cp3c toolchain' again.\n", stderr);
-}
-
-int toolchainInteractive(const CliOptions& opt) {
-    Scope forced = Scope::None;
-    std::string error;
-    if (!parseScope(opt, forced, error)) {
-        std::fprintf(stderr, "cp3c: %s\n", error.c_str());
-        return kExitUsageError;
-    }
-    fs::path root;
-    const bool inProject = projectRootHere(root);
-    std::vector<CandidateStatus> statuses;
-    for (const ToolchainCandidate& candidate : toolchainCandidates()) {
-        statuses.push_back(probeToolchainCandidate(candidate, true));
-    }
-    const Toolchain& current = detectToolchain();
-    std::printf("current: %s\n", effectiveLine().c_str());
-    int initial = 0;
-    for (std::size_t i = 0; i < statuses.size(); ++i) {
-        if (!current.program.empty() &&
-            statuses[i].program == current.program) {
-            initial = static_cast<int>(i);
-        }
-    }
-    for (;;) {
-        std::vector<std::string> rows;
-        std::vector<std::string> keys;
-        for (const CandidateStatus& status : statuses) {
-            rows.push_back(tableRow(status));
-            keys.push_back(status.candidate.id);
-        }
-        bool cancelled = false;
-        const int selected =
-            runMenu("Select a C++ toolchain:", rows, keys, initial, cancelled);
-        if (cancelled) return kExitSuccess;
-        if (selected < 0) return kExitUsageError;
-        CandidateStatus& status = statuses[static_cast<std::size_t>(selected)];
-        if (!status.usable) {
-            std::printf("\n%s is not usable: %s\n",
-                        status.candidate.name.c_str(),
-                        status.problem.c_str());
-            if (!installMissing(status)) continue;
-            status = probeToolchainCandidate(status.candidate, true);
-            if (!status.usable) {
-                reportStillMissing(status);
-                continue;
-            }
-        }
-        return finishInteractive(status, forced, inProject, root);
-    }
+std::string describeChoice(const ToolchainChoice& choice) {
+    if (!choice.present) return "not set";
+    std::string out = "id=" + choice.id;
+    if (!choice.version.empty()) out += ", recorded=" + choice.version;
+    if (!choice.policy.empty()) out += ", policy=" + choice.policy;
+    if (!choice.program.empty()) out += ", program=" + choice.program;
+    return out;
 }
 
 int toolchainUse(const CliOptions& opt, const std::vector<std::string>& args) {
     if (args.size() != 1) {
-        std::fputs("usage: cp3c toolchain use <id|path> "
+        std::fputs("usage: cp3c toolchain use <id[@version]|path> "
                    "[--project|--global]\n", stderr);
         return kExitUsageError;
     }
@@ -285,36 +160,36 @@ int toolchainUse(const CliOptions& opt, const std::vector<std::string>& args) {
         std::fprintf(stderr, "cp3c: %s\n", error.c_str());
         return kExitCompileError;
     }
-    const bool customPath = findToolchainCandidate(lowerCopy(value)) == nullptr;
-    ToolchainCandidate candidate;
-    if (!customPath) {
-        candidate = *findToolchainCandidate(lowerCopy(value));
-    } else {
-        candidate.id = resolved.msvc ? "msvc"
-                                     : (resolved.clang ? "clang" : "gcc");
-        candidate.name = resolved.name;
-        candidate.exe = resolved.program;
-        candidate.msvc = resolved.msvc;
-        candidate.clang = resolved.clang;
+    ToolchainChoice choice;
+    if (!parseToolchainSpec(value, choice, error)) {
+        std::fprintf(stderr, "cp3c: %s\n", error.c_str());
+        return kExitCompileError;
     }
-    const CandidateStatus status = probeToolchainCandidate(candidate, true);
+    const ToolchainCandidate* candidate = findToolchainCandidate(resolved.id);
+    ToolchainCandidate fallback{"", resolved.name, resolved.program, resolved.msvc,
+                                resolved.clang};
+    const ToolchainCandidate& family = candidate != nullptr ? *candidate : fallback;
+    std::string link;
+    if (family.msvc) findExecutable("link", link);
+    const CandidateStatus status =
+        probeToolchainProgram(family, resolved.program, link, true);
     if (!status.usable) {
         std::fprintf(stderr, "cp3c: %s is not usable: %s\n", value.c_str(),
                      status.problem.c_str());
         return kExitCompileError;
     }
-    AssignRequest request;
-    request.id = status.candidate.id;
-    request.name = status.candidate.name;
-    request.program = status.program;
-    request.scope = scope;
-    request.projectRoot = root;
-    request.customPath = customPath;
-    if (!saveChoice(request, error)) {
+    choice.version = resolved.version;
+    if (choice.custom) {
+        choice.id = resolved.program;
+        choice.program = resolved.program;
+        choice.policy = "latest";
+    }
+    choice.present = true;
+    if (!saveToolchainChoice(choice, scope == Scope::Project, root, error)) {
         std::fprintf(stderr, "cp3c: %s\n", error.c_str());
         return kExitCompileError;
     }
-    printSaved(request);
+    printSaved(resolved, family, choice, scope, root);
     resetToolchainResolution();
     return kExitSuccess;
 }
@@ -370,35 +245,40 @@ int toolchainClear(const CliOptions& opt) {
 int toolchainList() {
     std::printf("C++ toolchains\n");
     printCandidateTable(true);
+    printInstalledVersions();
     const GlobalToolchainConfig config = readGlobalToolchainConfig();
     if (config.present) {
-        std::printf("global config: %s (id=%s, program=%s)\n",
+        std::printf("global config: %s (%s)\n",
                     toolchainConfigPath().string().c_str(),
-                    config.id.c_str(), config.program.c_str());
+                    describeChoice(config.choice()).c_str());
     } else {
         std::printf("global config: %s (not set)\n",
                     toolchainConfigPath().string().c_str());
     }
     fs::path root;
     if (projectRootHere(root)) {
-        std::string value;
+        ToolchainChoice choice;
         std::string error;
-        if (!readProjectToolchain(root, value, error)) {
+        if (!readProjectToolchain(root, choice, error)) {
             std::printf("project: %s (invalid: %s)\n",
                         (root / "package.json").string().c_str(),
                         error.c_str());
-        } else if (value.empty()) {
+        } else if (!choice.present) {
             std::printf("project: %s (no toolchain field)\n",
                         (root / "package.json").string().c_str());
         } else {
-            std::printf("project: %s (toolchain: %s)\n",
+            std::printf("project: %s (%s)\n",
                         (root / "package.json").string().c_str(),
-                        value.c_str());
+                        describeChoice(choice).c_str());
         }
     } else {
         std::puts("project: none (no package.json found here)");
     }
     std::printf("current: %s\n", effectiveLine().c_str());
+    const Toolchain& toolchain = detectToolchain();
+    if (toolchain.found()) {
+        std::printf("versions: %s\n", toolchainVersionDescription().c_str());
+    }
     return kExitSuccess;
 }
 
@@ -409,17 +289,23 @@ int toolchainDetect() {
                                   : "(none found)");
     std::printf("C++ toolchains\n");
     printCandidateTable(true);
+    printInstalledVersions();
     std::printf("current: %s\n", effectiveLine().c_str());
+    const Toolchain& toolchain = detectToolchain();
+    if (toolchain.found()) {
+        std::printf("versions: %s\n", toolchainVersionDescription().c_str());
+    }
     return kExitSuccess;
 }
 
 void printToolchainUsage(std::FILE* out) {
     std::fputs(
-        "usage: cp3c toolchain [list|detect|use <id|path>|clear]\n"
-        "  cp3c toolchain                 choose a compiler interactively\n"
-        "  cp3c toolchain list            status, paths and the effective choice\n"
+        "usage: cp3c toolchain [list|detect|use <id[@version]|path>|clear]\n"
+        "  cp3c toolchain                 choose family, version and scope\n"
+        "  cp3c toolchain list            versions, paths and the effective choice\n"
         "  cp3c toolchain detect          show what auto-detection finds\n"
-        "  cp3c toolchain use <id|path>   save a choice (--project|--global)\n"
+        "  cp3c toolchain use <id[@version]|path>\n"
+        "                                 save a choice (--project|--global)\n"
         "  cp3c toolchain clear           remove saved choices "
         "(--project|--global)\n",
         out);
@@ -439,7 +325,7 @@ int cmdToolchain(const CliOptions& opt) {
             std::fputs("cp3c: 'toolchain' takes no arguments\n", stderr);
             return kExitUsageError;
         }
-        return toolchainInteractive(opt);
+        return runToolchainWizard(opt);
     }
     if (sub == "list") {
         if (!args.empty()) {

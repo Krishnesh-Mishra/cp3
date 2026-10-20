@@ -1,30 +1,31 @@
 // =============================================================================
-// src/cli/src/detail/toolchain_select.hpp - compiler candidates, probing,
-// persistence and the interactive selector DECLARATIONS.
+// src/cli/src/detail/toolchain_select.hpp - compiler families, versions,
+// persistence, resolution and the interactive selector DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //
-// Definitions live in src/toolchain/toolchain_probe.cpp (candidate probing and
-// validation), toolchain_config.cpp (global config + project package.json),
-// toolchain_menu.cpp (single-select input and install plans) and
-// src/commands/toolchain.cpp (the `cp3c toolchain` command surface).
+// Definitions live in src/toolchain/toolchain_probe.cpp (family probing),
+// toolchain_versions.cpp (version discovery and comparison), toolchain_config.cpp
+// (global config), toolchain_manifest.cpp (package.json), toolchain_select.cpp
+// (resolution), toolchain_wizard.cpp (menus), toolchain_install.cpp (system
+// installer planning) and src/commands/toolchain.cpp (the command surface).
 //
-// A candidate is a named compiler family. Finding its driver is not enough:
-// probeToolchainCandidate(validate=true) compiles, links and runs a tiny C++20
-// program, so `cp3c toolchain list` reports installs that cannot actually
-// produce a binary truthfully.
+// A candidate is a compiler family. A concrete install is one discovered
+// driver plus its parsed version. Finding a driver is not enough: validation
+// compiles, links and runs a tiny C++20 program before a choice is saved.
 // =============================================================================
 #pragma once
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "detail/toolchain.hpp"
 
 namespace cp3::cli {
 
-// One selectable compiler family (id is stable and goes into the saved files).
+// One selectable compiler family (id is stable and goes into saved files).
 struct ToolchainCandidate {
     std::string id;    // gcc | clang | msvc | apple-clang
     std::string name;  // friendly name shown in menus
@@ -33,13 +34,35 @@ struct ToolchainCandidate {
     bool clang = false;
 };
 
-// Result of probing one candidate. `problem` explains why an unusable
-// candidate cannot be used; it is empty for a usable one.
+// One discovered system installation. `version` is the normalized compiler
+// version (or the MSVC toolset directory name); `banner` is the first line of
+// the vendor version output.
+struct ToolchainInstall {
+    ToolchainCandidate candidate;
+    std::string program;
+    std::string linkProgram;  // MSVC: matching link.exe
+    std::string version;
+    std::string banner;
+    std::string problem;
+    bool usable = false;
+};
+
+// One version the platform package manager can install. `version` is the
+// compiler version shown to the user; `packageVersion` is the exact package
+// identifier passed to the system installer.
+struct AvailableToolchainVersion {
+    std::string version;
+    std::string packageVersion;
+};
+
+// Result of probing one family. `program`/`version` describe the newest
+// installed version; `problem` explains why an unusable family cannot be used.
 struct CandidateStatus {
     ToolchainCandidate candidate;
-    std::string program;      // full driver path, empty when missing
-    std::string linkProgram;  // MSVC: link.exe path (required by linkArgs)
-    std::string version;      // first line of the version banner
+    std::string program;
+    std::string linkProgram;
+    std::string version;
+    std::string banner;
     std::string problem;
     bool found = false;
     bool usable = false;
@@ -50,14 +73,75 @@ struct CandidateStatus {
 std::vector<ToolchainCandidate> toolchainCandidates();
 const ToolchainCandidate* findToolchainCandidate(const std::string& id);
 
-// Locates a candidate. With `validate` it also runs the tiny compile link run
-// probe described in the file header.
+// Parses and compares compiler versions. Missing patch components become zero.
+std::string normalizeCompilerVersion(std::string_view text);
+int compareCompilerVersions(const std::string& left, const std::string& right);
+
+// Every installed version of a family, newest first. `validate` runs the tiny
+// compile link run probe for each version; without it, entries describe what
+// was found and parsed. Never copies or installs a compiler.
+std::vector<ToolchainInstall> discoverToolchainVersions(
+    const ToolchainCandidate& candidate, bool validate);
+
+// Versions the platform package manager offers, newest first. Empty when no
+// package manager is available or the vendor has no version list.
+std::vector<AvailableToolchainVersion> availableToolchainVersions(
+    const ToolchainCandidate& candidate);
+
+// Locates the newest installed version of a family and reports its status.
 CandidateStatus probeToolchainCandidate(const ToolchainCandidate& candidate,
                                         bool validate);
 
-// Resolves an id, a bare command name or a full driver path into a Toolchain.
-// Fails with a precise reason when nothing executable matches.
-bool resolveToolchainValue(const std::string& value, Toolchain& out,
+// Probes one exact program (used after a version is chosen).
+CandidateStatus probeToolchainProgram(const ToolchainCandidate& candidate,
+                                      const std::string& program,
+                                      const std::string& linkProgram,
+                                      bool validate);
+
+// A saved family/version request. `policy` is latest or exact; an empty policy
+// with a version keeps the old exact behavior, and an empty version means
+// latest. `custom` means `id` (or `program`) is an explicit executable path.
+struct ToolchainChoice {
+    std::string id;
+    std::string version;
+    std::string policy;
+    std::string program;
+    bool custom = false;
+    bool present = false;
+};
+
+// Parses `id`, `id@version` or an executable path. Does not probe versions.
+bool parseToolchainSpec(const std::string& raw, ToolchainChoice& out,
+                        std::string& err);
+
+// Resolves a choice against installed system compilers.
+enum class ChoiceResolution {
+    Ok,
+    Invalid,        // unknown family or malformed choice
+    FamilyMissing,  // the requested family has no usable installed version
+    StrictFailure,  // exact pin or family missing under --strict-toolchain
+};
+
+// Resolution outputs grouped so callers pass one result object. `warning` is
+// set for fallback paths; `error` is set for invalid choices.
+struct ChoiceResolutionResult {
+    ChoiceResolution status = ChoiceResolution::Invalid;
+    Toolchain toolchain;
+    std::string warning;
+    std::string error;
+};
+
+// `sourceLabel` names the winning source in warnings ("project package.json",
+// "global config", "--toolchain", "CP3_TOOLCHAIN"). Exact pins that are missing
+// fall back to the newest installed version of the same family unless strict.
+// A missing family never silently switches to another family.
+ChoiceResolution resolveToolchainChoice(const ToolchainChoice& choice,
+                                        const std::string& sourceLabel,
+                                        bool strict,
+                                        ChoiceResolutionResult& result);
+
+// Resolves a saved choice strictly, for `toolchain use`.
+bool resolveToolchainValue(const std::string& raw, Toolchain& out,
                            std::string& err);
 
 // -----------------------------------------------------------------------------
@@ -66,43 +150,58 @@ bool resolveToolchainValue(const std::string& value, Toolchain& out,
 // -----------------------------------------------------------------------------
 struct GlobalToolchainConfig {
     std::string id;
+    std::string version;
+    std::string policy;
     std::string program;
     std::string saved;
     bool present = false;
+
+    ToolchainChoice choice() const;
 };
 
 std::filesystem::path toolchainConfigPath();
 GlobalToolchainConfig readGlobalToolchainConfig();
-bool writeGlobalToolchainConfig(const std::string& id,
-                                const std::string& program, std::string& err);
+bool writeGlobalToolchainConfig(const ToolchainChoice& choice, std::string& err);
 bool clearGlobalToolchainConfig(bool& removed, std::string& err);
 
 // -----------------------------------------------------------------------------
-// Project scope: the top-level `"toolchain"` string in package.json. The
-// writer preserves every other byte (order, indentation, CRLF).
+// Project scope: the top-level `"toolchain"` string or object in package.json.
+// The writer preserves every other byte (order, indentation, CRLF).
 // -----------------------------------------------------------------------------
 bool readProjectToolchain(const std::filesystem::path& packageRoot,
-                          std::string& out, std::string& err);
+                          ToolchainChoice& out, std::string& err);
 bool writeProjectToolchain(const std::filesystem::path& packageRoot,
-                           const std::string& value, std::string& err);
+                           const ToolchainChoice& choice, std::string& err);
 bool clearProjectToolchain(const std::filesystem::path& packageRoot,
                            bool& removed, std::string& err);
 
+// Saves a validated choice in the requested scope. Project scope warns when a
+// machine-specific custom path is written.
+bool saveToolchainChoice(const ToolchainChoice& choice, bool projectScope,
+                         const std::filesystem::path& projectRoot,
+                         std::string& err);
+
 // -----------------------------------------------------------------------------
 // Install planning and execution. planToolchainInstall never runs anything; it
-// only selects the exact command (or download URL) for this platform.
+// only selects the exact command (or download URL) for this platform. A
+// non-empty packageVersion pins the system package manager to that version.
 // -----------------------------------------------------------------------------
 struct InstallPlan {
-    std::string label;   // exact command, or the manual instructions
-    std::string command; // human-readable command line (empty when manual)
+    std::string label;
+    std::string command;
     std::vector<std::string> argv;
     std::string url;
     std::string warning;
-    bool needsSecondConfirm = false;  // MSVC Build Tools is a large download
+    bool needsSecondConfirm = false;
     bool runnable = false;
 };
 
-InstallPlan planToolchainInstall(const ToolchainCandidate& candidate);
+InstallPlan planToolchainInstall(const ToolchainCandidate& candidate,
+                                 const std::string& packageVersion = {});
+// Opens the vendor's own version manager. MSVC uses the Visual Studio
+// Installer; other platforms return manual instructions. Never downloads a
+// compiler into cp3.
+InstallPlan planToolchainMoreVersions(const ToolchainCandidate& candidate);
 bool runInstallPlan(const InstallPlan& plan);
 
 // -----------------------------------------------------------------------------

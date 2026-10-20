@@ -36,6 +36,10 @@ namespace cp3::cli {
 struct Toolchain {
     std::string program;  // full path to the driver, empty when none found
     std::string name;     // friendly name: "MSVC cl", "Clang", "GCC"
+    std::string id;       // gcc | clang | msvc | apple-clang, empty for auto
+    std::string version;  // exact parsed effective compiler version
+    std::string recordedVersion;  // version recorded in the choice, if any
+    std::string policy;   // latest | exact | custom | auto
     bool msvc = false;
     bool clang = false;
 
@@ -59,19 +63,28 @@ const Toolchain& detectToolchain();
 // Probes the D12 order without consulting any saved choice.
 Toolchain probeAutoToolchain();
 
-// CLI wiring: the global --toolchain value (empty clears it) and the directory
-// whose nearest package.json supplies the project scope. Both reset the cache.
+// CLI wiring: the global --toolchain value (empty clears it), the directory
+// whose nearest package.json supplies the project scope, and --strict-toolchain.
+// All reset the cache.
 void setToolchainOverride(std::string value);
 void setToolchainProjectDirectory(fs::path dir);
+void setToolchainStrict(bool strict);
 void resetToolchainResolution();
 
 // Source of the cached choice, for --verbose and `cp3c toolchain list`.
 ToolchainSource toolchainSource() noexcept;
 std::string toolchainSourceDescription();
 std::string toolchainWarning();
+bool toolchainStrictFailed() noexcept;
+
+// Recorded versus effective version, for --verbose and list.
+std::string toolchainVersionDescription();
 
 // Human-readable summary for --verbose and failure messages.
 std::string describeToolchain(const Toolchain& tc);
+
+// Stable build-cache identity: family, exact parsed version and program path.
+std::string toolchainCacheKey(const Toolchain& tc);
 
 // One compilation step: the TU, its object, the program's include roots and any
 // native-backend compile flags (DECISIONS D68, detail/native_packages.hpp).

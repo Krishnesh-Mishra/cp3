@@ -216,9 +216,27 @@ int runMenu(const std::string& title, const std::vector<std::string>& rows,
 }
 
 bool runYesNo(const std::string& question) {
+    if (!isTty(stdin)) {
+        std::printf("%s\n  1. Yes\n  2. No\nchoice: ", question.c_str());
+        std::fflush(stdout);
+        std::string line;
+        if (!std::getline(std::cin, line)) {
+            std::printf("\n");
+            return false;
+        }
+        std::printf("\n");
+        const std::string answer = lowerCopy(trimCopy(line));
+        if (answer == "1" || answer == "yes" || answer == "y") return true;
+        if (!answer.empty() && answer != "2" && answer != "no" &&
+            answer != "n") {
+            std::fprintf(stderr, "cp3c: invalid choice '%s'\n",
+                         answer.c_str());
+        }
+        return false;
+    }
     bool cancelled = false;
-    const int choice = runMenu(question, {"Yes", "No"}, {"yes", "no", "y", "n"},
-                               0, cancelled);
+    const int choice = runMenu(question, {"Yes", "No"}, {"yes", "no"}, 0,
+                               cancelled);
     return choice == 0;
 }
 

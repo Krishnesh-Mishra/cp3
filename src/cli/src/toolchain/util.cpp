@@ -9,6 +9,7 @@
 // =============================================================================
 #include "detail/util.hpp"
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -24,11 +25,8 @@
 #    define NOMINMAX
 #  endif
 #  include <io.h>
-#  include <process.h>
 #  include <windows.h>
 #else
-#  include <cerrno>
-#  include <sys/wait.h>
 #  include <unistd.h>
 #endif
 
@@ -142,49 +140,6 @@ bool findExecutable(const std::string& name, std::string& found) {
         start = end + 1;
     }
     return false;
-}
-
-int runProcess(const std::vector<std::string>& args) {
-    if (args.empty()) return -1;
-
-#if defined(_WIN32)
-    std::vector<const char*> argv;
-    argv.reserve(args.size() + 1);
-    for (const std::string& a : args) argv.push_back(a.c_str());
-    argv.push_back(nullptr);
-    const intptr_t rc = _spawnvp(_P_WAIT, argv[0], argv.data());
-    return rc < 0 ? -1 : static_cast<int>(rc);
-#else
-    std::vector<char*> argv;
-    argv.reserve(args.size() + 1);
-    for (const std::string& a : args) argv.push_back(const_cast<char*>(a.c_str()));
-    argv.push_back(nullptr);
-
-    const pid_t pid = fork();
-    if (pid < 0) return -1;
-    if (pid == 0) {
-        execvp(argv[0], argv.data());
-        _exit(127);
-    }
-    int status = 0;
-    while (waitpid(pid, &status, 0) < 0) {
-        if (errno != EINTR) return -1;
-    }
-    if (WIFEXITED(status)) return WEXITSTATUS(status);
-    return -1;
-#endif
-}
-
-std::string describeCommand(const std::vector<std::string>& args) {
-    std::string out;
-    for (std::size_t i = 0; i < args.size(); ++i) {
-        if (i != 0) out.push_back(' ');
-        const bool needsQuote = args[i].find(' ') != std::string::npos;
-        if (needsQuote) out.push_back('"');
-        out += args[i];
-        if (needsQuote) out.push_back('"');
-    }
-    return out;
 }
 
 // -----------------------------------------------------------------------------

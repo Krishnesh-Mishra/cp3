@@ -42,7 +42,8 @@ struct CliOptions {
     bool once = false;                    // dev --once (run one pass then exit)
     bool autoSelect = false;              // install --auto (GitHub selector)
     std::string initType;                 // init --type application|package
-    std::string toolchain;                // --toolchain <id|path> (one command)
+    std::string toolchain;                // --toolchain <id[@version]|path>
+    bool strictToolchain = false;         // --strict-toolchain
     bool projectScope = false;            // toolchain --project
     bool globalScope = false;             // toolchain --global
 };
@@ -83,6 +84,9 @@ int cmdFmt(const CliOptions& opt);
 int cmdClean(const CliOptions& opt);
 int cmdInit(const CliOptions& opt);
 int cmdToolchain(const CliOptions& opt);
+
+// Interactive family, version and scope flow, shared by `cp3c toolchain`.
+int runToolchainWizard(const CliOptions& opt);
 int cmdExec(const CliOptions& opt);
 int cmdInstall(const CliOptions& opt);
 int cmdLsp(const CliOptions& opt);

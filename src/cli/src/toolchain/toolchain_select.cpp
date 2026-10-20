@@ -1,15 +1,10 @@
 // =============================================================================
 // src/cli/src/toolchain/toolchain_select.cpp - effective toolchain resolution.
-//
-// OWNERSHIP: cli module (src/cli/**). Implements the resolution half of
-// detail/toolchain_select.hpp and cp3::cli::detectToolchain.
-//
-// Precedence (first source that resolves to an existing driver wins):
-//   --toolchain <id|path> > CP3_TOOLCHAIN > project package.json "toolchain"
-//   > global toolchain.conf > D12 auto-detect.
-// A source that cannot resolve is reported and skipped, never fatal: a build
-// whose saved compiler was uninstalled warns once and falls back rather than
-// refusing to run. The result is cached until one of the setters resets it.
+// OWNERSHIP: cli module. Implements detail/toolchain_select.hpp and
+// detectToolchain: --toolchain > CP3_TOOLCHAIN > project > global > D12.
+// `latest` records the saved version and uses the newest installed family
+// version; `exact` uses the recorded version and falls back with a warning or
+// fails under --strict-toolchain. A missing family uses auto-detect.
 // =============================================================================
 #include <cstdio>
 #include <cstdlib>
@@ -29,12 +24,14 @@ namespace {
 
 struct SelectionState {
     bool resolved = false;
+    bool strict = false;
+    bool strictFailed = false;
     Toolchain toolchain;
     ToolchainSource source = ToolchainSource::None;
-    std::string origin;        // flag/env value, or the file that supplied it
+    std::string origin;
     std::string warning;
-    std::string overrideValue; // --toolchain
-    fs::path projectDir;       // search start for package.json
+    std::string overrideValue;
+    fs::path projectDir;
     bool projectDirSet = false;
 };
 
@@ -43,16 +40,18 @@ SelectionState& state() {
     return current;
 }
 
-struct Attempt {
-    bool ok = false;
-    Toolchain toolchain;
-    std::string error;
-};
+std::string trimCopy(const std::string& s) {
+    const std::size_t first = s.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return {};
+    const std::size_t last = s.find_last_not_of(" \t\r\n");
+    return s.substr(first, last - first + 1);
+}
 
-Attempt attemptValue(const std::string& value) {
-    Attempt attempt;
-    attempt.ok = resolveToolchainValue(value, attempt.toolchain, attempt.error);
-    return attempt;
+std::string lowerCopy(std::string s) {
+    for (char& c : s) {
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    }
+    return s;
 }
 
 std::string joinProblems(const std::vector<std::string>& problems) {
@@ -70,130 +69,366 @@ fs::path projectSearchStart() {
     return fs::current_path(ec);
 }
 
-Attempt attemptProject(std::string& origin,
-                       std::vector<std::string>& problems) {
-    fs::path root;
-    if (!findPackageRoot(projectSearchStart(), root)) return {};
-    std::string value;
-    std::string error;
-    if (!readProjectToolchain(root, value, error)) {
-        problems.push_back(error);
-        return {};
-    }
-    if (value.empty()) return {};
-    origin = (root / "package.json").string();
-    Attempt attempt = attemptValue(value);
-    if (!attempt.ok) {
-        problems.push_back("project package.json toolchain '" + value +
-                           "': " + attempt.error);
-    }
-    return attempt;
+bool looksLikeVersion(const std::string& text) {
+    return !text.empty() && text[0] >= '0' && text[0] <= '9';
 }
 
-Attempt attemptGlobal(std::string& origin,
-                      std::vector<std::string>& problems) {
-    const GlobalToolchainConfig config = readGlobalToolchainConfig();
-    if (!config.present) return {};
-    origin = toolchainConfigPath().string();
+const ToolchainCandidate* candidateForProgram(const std::string& program) {
+    const std::string base = lowerCopy(fs::path(program).filename().string());
+    if (base.find("clang") != std::string::npos) return findToolchainCandidate("clang");
+    if (base == "cl" || base.rfind("cl.", 0) == 0 ||
+        base.find("cl.exe") != std::string::npos) {
+        return findToolchainCandidate("msvc");
+    }
+    if (base.find("g++") != std::string::npos ||
+        base.find("gcc") != std::string::npos ||
+        base.find("mingw") != std::string::npos) {
+        return findToolchainCandidate("gcc");
+    }
+    return nullptr;
+}
+
+bool findProgram(const std::string& raw, std::string& program) {
     std::error_code ec;
-    if (!config.program.empty() &&
-        fs::is_regular_file(config.program, ec)) {
-        Attempt attempt = attemptValue(config.program);
-        if (attempt.ok) return attempt;
-        problems.push_back("saved compiler '" + config.program +
-                           "' is not usable: " + attempt.error);
-    } else if (!config.program.empty()) {
-        problems.push_back("saved compiler '" + config.program +
-                           "' no longer exists");
+    if (fs::is_regular_file(raw, ec)) {
+        program = raw;
+        return true;
     }
-    if (!config.id.empty()) {
-        Attempt attempt = attemptValue(config.id);
-        if (attempt.ok) {
-            if (!config.program.empty()) {
-                problems.push_back("re-probed '" + config.id + "' at " +
-                                   attempt.toolchain.program);
-            }
-            return attempt;
-        }
-        problems.push_back("saved toolchain '" + config.id +
-                           "' is not available: " + attempt.error);
+    if (raw.find('/') != std::string::npos ||
+        raw.find('\\') != std::string::npos) {
+        return false;
     }
-    return {};
+    return findExecutable(raw, program);
 }
 
-void adopt(const Toolchain& toolchain, ToolchainSource source,
-           const std::string& origin) {
-    SelectionState& current = state();
-    current.toolchain = toolchain;
-    current.source = source;
-    current.origin = origin;
+Toolchain toolchainFromInstall(const ToolchainCandidate& candidate,
+                               const ToolchainInstall& install,
+                               const ToolchainChoice& choice,
+                               const std::string& policy) {
+    Toolchain tc;
+    tc.program = install.program;
+    tc.name = candidate.name;
+    tc.id = candidate.id;
+    tc.version = install.version;
+    tc.recordedVersion = choice.version;
+    tc.policy = policy;
+    tc.msvc = candidate.msvc;
+    tc.clang = candidate.clang;
+    return tc;
+}
+
+ChoiceResolution resolveCustom(const ToolchainChoice& choice, Toolchain& out,
+                               std::string& err) {
+    std::string program = choice.program.empty() ? choice.id : choice.program;
+    if (!findProgram(program, program)) {
+        err = "'" + program + "' is not an existing executable";
+        return ChoiceResolution::Invalid;
+    }
+    const ToolchainCandidate* candidate = candidateForProgram(program);
+    ToolchainCandidate fallback{"", "C++ compiler", "", false, false};
+    const ToolchainCandidate& family = candidate != nullptr ? *candidate : fallback;
+    std::string link;
+    if (family.msvc) findExecutable("link", link);
+    const CandidateStatus status =
+        probeToolchainProgram(family, program, link, false);
+    out.program = program;
+    out.name = family.name.empty() ? "C++ compiler" : family.name;
+    out.id = family.id;
+    out.version = status.version;
+    out.recordedVersion = choice.version;
+    out.policy = "custom";
+    out.msvc = family.msvc;
+    out.clang = family.clang;
+    return ChoiceResolution::Ok;
+}
+
+std::string policyOf(const ToolchainChoice& choice) {
+    if (!choice.policy.empty()) return choice.policy;
+    return choice.version.empty() ? "latest" : "exact";
+}
+
+ChoiceResolution missingFamily(const ToolchainCandidate& candidate,
+                               const ToolchainChoice& choice,
+                               const std::string& sourceLabel, bool strict,
+                               std::string& warning) {
+    const std::string& label = candidate.name;
+    if (strict) {
+        warning = sourceLabel + " selects " + label +
+                  ", but it is not installed (--strict-toolchain)";
+        return ChoiceResolution::StrictFailure;
+    }
+    warning = sourceLabel + " selects " + label +
+              ", but no installed " + label +
+              " was found; using auto-detect. Install it with cp3c toolchain.";
+    if (!choice.version.empty()) {
+        warning += " Requested version: " + choice.version + ".";
+    }
+    return ChoiceResolution::FamilyMissing;
+}
+
+ChoiceResolution resolveFamily(const ToolchainChoice& choice,
+                               const std::string& sourceLabel, bool strict,
+                               ChoiceResolutionResult& result) {
+    const ToolchainCandidate* candidate = findToolchainCandidate(choice.id);
+    if (candidate == nullptr) {
+        result.error = "unknown toolchain id '" + choice.id +
+                       "' (expected gcc, clang, msvc or apple-clang)";
+        return ChoiceResolution::Invalid;
+    }
+    std::vector<ToolchainInstall> installs =
+        discoverToolchainVersions(*candidate, false);
+    if (candidate->msvc) {
+        std::vector<ToolchainInstall> usable;
+        for (ToolchainInstall& install : installs) {
+            if (!install.linkProgram.empty()) usable.push_back(std::move(install));
+        }
+        installs = std::move(usable);
+    }
+    if (installs.empty()) {
+        return missingFamily(*candidate, choice, sourceLabel, strict,
+                             result.warning);
+    }
+    const std::string policy = policyOf(choice);
+    if (policy != "latest" && policy != "exact") {
+        result.error = "toolchain policy must be \"latest\" or \"exact\"";
+        return ChoiceResolution::Invalid;
+    }
+    const bool exact = policy == "exact" && !choice.version.empty();
+    const ToolchainInstall* selected = &installs.front();
+    if (exact) {
+        selected = nullptr;
+        for (const ToolchainInstall& install : installs) {
+            if (compareCompilerVersions(install.version, choice.version) == 0) {
+                selected = &install;
+                break;
+            }
+        }
+        if (selected == nullptr) {
+            if (strict) {
+                result.warning = sourceLabel + " pins " + candidate->name + " " +
+                                 choice.version +
+                                 ", which is not installed (--strict-toolchain)";
+                return ChoiceResolution::StrictFailure;
+            }
+            selected = &installs.front();
+            result.warning = sourceLabel + " pins " + candidate->name + " " +
+                             choice.version + ", not installed; using " +
+                             candidate->name + " " + selected->version + " (" +
+                             selected->program + "). Run cp3c toolchain to install " +
+                             choice.version + ".";
+        }
+    }
+    result.toolchain = toolchainFromInstall(*candidate, *selected, choice,
+                                            exact ? "exact" : "latest");
+    return ChoiceResolution::Ok;
+}
+
+ChoiceResolution resolveChoice(const ToolchainChoice& choice,
+                               const std::string& sourceLabel, bool strict,
+                               ChoiceResolutionResult& result) {
+    if (!choice.present || (choice.id.empty() && choice.program.empty())) {
+        result.error = "empty toolchain choice";
+        return ChoiceResolution::Invalid;
+    }
+    if (choice.custom) return resolveCustom(choice, result.toolchain, result.error);
+    return resolveFamily(choice, sourceLabel, strict, result);
+}
+
+enum class SourceResult { Resolved, Skip, Auto, Fatal };
+
+struct ResolutionRun {
+    std::vector<std::string> problems;
+    bool strictFailed = false;
+    bool useAuto = false;
+};
+
+SourceResult attemptSource(const ToolchainChoice& choice,
+                           const std::string& sourceLabel,
+                           ToolchainSource source, const std::string& origin,
+                           ResolutionRun& run) {
+    ChoiceResolutionResult result;
+    result.status =
+        resolveChoice(choice, sourceLabel, state().strict, result);
+    if (result.status == ChoiceResolution::Ok) {
+        SelectionState& current = state();
+        current.toolchain = std::move(result.toolchain);
+        current.source = source;
+        current.origin = origin;
+        if (!result.warning.empty()) run.problems.push_back(result.warning);
+        return SourceResult::Resolved;
+    }
+    if (result.status == ChoiceResolution::StrictFailure) {
+        run.problems.push_back(result.warning.empty() ? result.error
+                                                       : result.warning);
+        run.strictFailed = true;
+        return SourceResult::Fatal;
+    }
+    if (result.status == ChoiceResolution::FamilyMissing) {
+        run.problems.push_back(result.warning.empty() ? result.error
+                                                       : result.warning);
+        run.useAuto = true;
+        return SourceResult::Auto;
+    }
+    if (!result.error.empty()) {
+        run.problems.push_back(sourceLabel + ": " + result.error);
+    }
+    return SourceResult::Skip;
+}
+
+bool loadChoice(const std::string& raw, const std::string& sourceLabel,
+                ToolchainChoice& choice, ResolutionRun& run) {
+    std::string error;
+    if (!parseToolchainSpec(raw, choice, error)) {
+        run.problems.push_back(sourceLabel + ": " + error);
+        return false;
+    }
+    return true;
 }
 
 void resolveNow() {
     SelectionState& current = state();
-    std::vector<std::string> problems;
+    ResolutionRun run;
     bool done = false;
 
     if (!current.overrideValue.empty()) {
-        const Attempt attempt = attemptValue(current.overrideValue);
-        if (attempt.ok) {
-            adopt(attempt.toolchain, ToolchainSource::Flag,
-                  current.overrideValue);
-            done = true;
-        } else {
-            problems.push_back("--toolchain " + current.overrideValue + ": " +
-                               attempt.error);
+        ToolchainChoice choice;
+        if (loadChoice(current.overrideValue, "--toolchain", choice, run)) {
+            done = attemptSource(choice, "--toolchain", ToolchainSource::Flag,
+                                 current.overrideValue, run) ==
+                   SourceResult::Resolved;
         }
     }
-
-    if (!done) {
+    if (!done && !run.strictFailed && !run.useAuto) {
         if (const char* fromEnv = std::getenv("CP3_TOOLCHAIN")) {
             if (*fromEnv != '\0') {
-                const Attempt attempt = attemptValue(fromEnv);
-                if (attempt.ok) {
-                    adopt(attempt.toolchain, ToolchainSource::Environment,
-                          fromEnv);
-                    done = true;
-                } else {
-                    problems.push_back(std::string("CP3_TOOLCHAIN=") + fromEnv +
-                                       ": " + attempt.error);
+                ToolchainChoice choice;
+                if (loadChoice(fromEnv, "CP3_TOOLCHAIN", choice, run)) {
+                    done = attemptSource(
+                               choice, "CP3_TOOLCHAIN",
+                               ToolchainSource::Environment, fromEnv, run) ==
+                           SourceResult::Resolved;
                 }
             }
         }
     }
-
-    if (!done) {
-        std::string origin;
-        const Attempt attempt = attemptProject(origin, problems);
-        if (attempt.ok) {
-            adopt(attempt.toolchain, ToolchainSource::Project, origin);
-            done = true;
+    if (!done && !run.strictFailed && !run.useAuto) {
+        fs::path root;
+        if (findPackageRoot(projectSearchStart(), root)) {
+            ToolchainChoice choice;
+            std::string error;
+            if (!readProjectToolchain(root, choice, error)) {
+                run.problems.push_back("project package.json: " + error);
+            } else if (choice.present) {
+                done = attemptSource(choice, "project package.json",
+                                     ToolchainSource::Project,
+                                     (root / "package.json").string(), run) ==
+                       SourceResult::Resolved;
+            }
         }
     }
-
-    if (!done) {
-        std::string origin;
-        const Attempt attempt = attemptGlobal(origin, problems);
-        if (attempt.ok) {
-            adopt(attempt.toolchain, ToolchainSource::Global, origin);
-            done = true;
+    if (!done && !run.strictFailed && !run.useAuto) {
+        const GlobalToolchainConfig config = readGlobalToolchainConfig();
+        if (config.present) {
+            done = attemptSource(
+                       config.choice(), "global config", ToolchainSource::Global,
+                       toolchainConfigPath().string(), run) ==
+                   SourceResult::Resolved;
         }
     }
-
-    if (!done) {
+    if (!done && !run.strictFailed) {
         const Toolchain automatic = probeAutoToolchain();
         if (automatic.found()) {
-            adopt(automatic, ToolchainSource::Auto, "");
-        } else {
-            current.toolchain = Toolchain{};
-            current.source = ToolchainSource::None;
+            current.toolchain = automatic;
+            current.source = ToolchainSource::Auto;
             current.origin.clear();
+            done = true;
         }
     }
-    current.warning = joinProblems(problems);
+    if (!done && !run.strictFailed) {
+        current.toolchain = Toolchain{};
+        current.source = ToolchainSource::None;
+        current.origin.clear();
+    }
+    current.strictFailed = run.strictFailed;
+    current.warning = joinProblems(run.problems);
 }
 
 }  // namespace
+
+bool parseToolchainSpec(const std::string& raw, ToolchainChoice& out,
+                        std::string& err) {
+    out = ToolchainChoice{};
+    const std::string value = trimCopy(raw);
+    if (value.empty()) {
+        err = "no toolchain value";
+        return false;
+    }
+    if (const ToolchainCandidate* candidate =
+            findToolchainCandidate(lowerCopy(value))) {
+        out.id = candidate->id;
+        out.policy = "latest";
+        out.present = true;
+        return true;
+    }
+    const std::size_t at = value.rfind('@');
+    if (at != std::string::npos && at > 0 &&
+        looksLikeVersion(value.substr(at + 1))) {
+        const std::string id = trimCopy(value.substr(0, at));
+        if (const ToolchainCandidate* candidate =
+                findToolchainCandidate(lowerCopy(id))) {
+            const std::string version =
+                normalizeCompilerVersion(value.substr(at + 1));
+            if (version.empty()) {
+                err = "invalid version in '" + value + "'";
+                return false;
+            }
+            out.id = candidate->id;
+            out.version = version;
+            out.policy = "exact";
+            out.present = true;
+            return true;
+        }
+    }
+    std::string program;
+    if (!findProgram(value, program)) {
+        err = "'" + value +
+              "' is neither a known toolchain id (gcc, clang, msvc, "
+              "apple-clang), id@version, nor an existing executable";
+        return false;
+    }
+    out.id = program;
+    out.program = program;
+    out.custom = true;
+    out.policy = "custom";
+    out.present = true;
+    return true;
+}
+
+ChoiceResolution resolveToolchainChoice(const ToolchainChoice& choice,
+                                        const std::string& sourceLabel,
+                                        bool strict,
+                                        ChoiceResolutionResult& result) {
+    result = ChoiceResolutionResult{};
+    result.status = resolveChoice(choice, sourceLabel, strict, result);
+    return result.status;
+}
+
+bool resolveToolchainValue(const std::string& raw, Toolchain& out,
+                           std::string& err) {
+    ToolchainChoice choice;
+    if (!parseToolchainSpec(raw, choice, err)) return false;
+    ChoiceResolutionResult result;
+    resolveToolchainChoice(choice, "toolchain", true, result);
+    if (result.status == ChoiceResolution::Ok) {
+        out = std::move(result.toolchain);
+        return true;
+    }
+    err = result.error.empty()
+              ? (result.warning.empty() ? "toolchain is not available"
+                                        : result.warning)
+              : result.error;
+    return false;
+}
 
 const Toolchain& detectToolchain() {
     SelectionState& current = state();
@@ -216,6 +451,11 @@ void setToolchainOverride(std::string value) {
 void setToolchainProjectDirectory(fs::path dir) {
     state().projectDir = std::move(dir);
     state().projectDirSet = !state().projectDir.empty();
+    state().resolved = false;
+}
+
+void setToolchainStrict(bool strict) {
+    state().strict = strict;
     state().resolved = false;
 }
 
@@ -243,5 +483,18 @@ std::string toolchainSourceDescription() {
 }
 
 std::string toolchainWarning() { return state().warning; }
+
+bool toolchainStrictFailed() noexcept { return state().strictFailed; }
+
+std::string toolchainVersionDescription() {
+    const Toolchain& tc = state().toolchain;
+    if (!tc.found()) return "none";
+    std::string out = "policy " + (tc.policy.empty() ? "auto" : tc.policy);
+    if (!tc.recordedVersion.empty()) {
+        out += ", recorded " + tc.recordedVersion;
+    }
+    if (!tc.version.empty()) out += ", effective " + tc.version;
+    return out;
+}
 
 }  // namespace cp3::cli

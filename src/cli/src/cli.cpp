@@ -62,7 +62,8 @@ void printUsage(std::FILE* out) {
         "      --release         (build/run) whole-program build with LTO\n"
         "      --debug           (build/run) -O0 plus debug info\n"
         "      --verbose         Show toolchain choice and pipeline steps\n"
-        "      --toolchain <id|path>  Use this compiler for one command\n"
+        "      --toolchain <id[@version]|path>  Use this compiler for one command\n"
+        "      --strict-toolchain  Fail when a saved toolchain pin is missing\n"
         "      --project         (toolchain) save the choice in package.json\n"
         "      --global          (toolchain) save the choice for all projects\n"
         "      --max-memory <MB|N%>  Cap codegen-phase memory (default: 70% of system RAM)\n"
@@ -130,6 +131,7 @@ bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease
     if (t == "--auto") { opt.autoSelect = true; return true; }
     if (t == "--project") { opt.projectScope = true; return true; }
     if (t == "--global") { opt.globalScope = true; return true; }
+    if (t == "--strict-toolchain") { opt.strictToolchain = true; return true; }
     return false;
 }
 
@@ -468,6 +470,7 @@ int runCli(int argc, char** argv) {
     // entry file's directory (the working directory when there is no entry),
     // so a project choice never leaks onto a file outside that project.
     cp3::cli::setToolchainOverride(opt.toolchain);
+    cp3::cli::setToolchainStrict(opt.strictToolchain);
     {
         std::error_code ec;
         cp3::cli::fs::path start = cp3::cli::fs::current_path(ec);

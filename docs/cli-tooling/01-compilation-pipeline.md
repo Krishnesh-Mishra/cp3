@@ -67,17 +67,18 @@ cp3 has two build strategies, trading build speed against how much the optimizer
 
 cp3 never generates, invokes, or requires **CMake** (or any other build-system config). It calls the platform's C++ **compiler driver** directly (`cl.exe`, `clang++`, `g++`) with the flags it needs, for the two phases above. This is what keeps the project's founding promise true - you never learn a build system, never write a `CMakeLists.txt`, and never open a header file to build a cp3 project. The only build configuration that exists at all is the small `"build"` block in `package.json` ([§5.1](05-package-format-authoring-cp3pak.md)).
 
-## Toolchain selection: fixed per-platform order, with silent fallback
+## Toolchain selection: automatic order and explicit versioned choices
 
-Rather than benchmarking at build time, toolchain preference is a **fixed order per platform**:
+Without a saved choice, toolchain preference is a **fixed order per platform**:
 
-- **Windows** - MSVC → Clang
-- **macOS** - Apple Clang → (plain) Clang
-- **Linux** - Clang
+- **Windows** - MSVC → Clang → GCC
+- **macOS** - Apple Clang → Clang → GCC
+- **Linux** - Clang → GCC
 
-If the first-choice toolchain fails to compile due to an error, `cp3 build` **silently retries with the next toolchain in the list** - the user doesn't have to manually re-invoke the build with a different compiler.
-
-This fixed order is the automatic fallback. An explicit project or user choice, described in the next section, is resolved first.
+The first usable driver in that order is the automatic choice. It is not a
+benchmark and it does not depend on the compiler version. An explicit project or
+user choice is resolved before automatic detection, and version policies decide
+whether that choice tracks the newest installed compiler or pins an exact one.
 
 ## Build progress: numbered steps, not a percentage bar
 
@@ -102,28 +103,35 @@ Would you like to install Clang/LLVM now? [Y/n]
 
 Accepting downloads and installs Clang/LLVM for the current platform and proceeds with the build - the person never has to leave `cp3` or go hunt down a C++ toolchain themselves just to get started.
 
-## Choosing a toolchain explicitly
+## Choosing a toolchain and version explicitly
 
-Automatic detection is the default, but a project or a user can pin a compiler. `cp3 toolchain` opens a single-select menu:
+`cp3 toolchain` opens a two-level menu: pick a compiler family, then a version
+and policy. The family menu reports the current effective compiler and every
+installed family:
 
 ```
 $ cp3 toolchain
-current: GCC 16.1.0 (g++) from auto-detect (D12)
+current: GCC 16.1.0 (C:\...\g++.exe) from auto-detect (D12)
+versions: policy latest, recorded 16.1.0, effective 16.1.0
 Select a C++ toolchain:
-  >  1. gcc         GCC           ready      C:\...\g++.exe (g++ 16.1.0)
-     2. clang       Clang         missing    clang++ not found on PATH
-     3. msvc        MSVC          missing    cl.exe not found on PATH
-  (up/down arrows, Enter to select, q to cancel)
+   1. gcc         GCC           ready      C:\...\g++.exe (16.1.0)
+   2. clang       Clang         not usable clang++: test compile failed
+   3. msvc        MSVC cl       missing    not installed
+choice:
 ```
 
 - Rows are GCC, Clang and MSVC on Windows; Apple Clang, Clang and GCC on macOS; GCC and Clang on Linux.
 - `ready` means the driver was found and a tiny C++20 program compiled, linked and ran. A driver that exists but cannot link is reported as `not usable` with the reason instead of being silently accepted.
-- The menu starts on the current effective compiler.
-- Selecting a missing compiler asks `Install <name>? Yes / No`. Yes prints the exact platform installer command and runs it only after that explicit confirmation. No, or an install that leaves the compiler unusable, returns to the menu. Installers are never run in automated tests.
-- Arrow keys move, Enter selects, `q` or Esc cancels.
-- MSVC additionally requires `link.exe`, because cp3 invokes the linker directly. A `cl.exe` without a matching `link.exe` is reported as not usable, with the Developer Command Prompt or Build Tools reason.
+- Selecting a missing family still opens its version list, so a compiler can be installed from the same flow. With no installed version the first row is `Install latest (<version>)`; choosing it asks `Install <name> <version>? Yes / No`, prints the platform package-manager command and runs it only after that confirmation.
+- The list shows every installed version with its path and usability. An exact pin can therefore choose an older installed toolset instead of replacing the newest one.
+- Package-manager versions that are not installed follow, five per page. `Show more (+N)` reveals the next page. `Back` returns to the family menu and `Cancel` leaves the wizard.
+- The newest installed version is selected by default as `Latest installed (<version>) - recommended`. That records the version but keeps the `latest` policy, so a future system update is picked up automatically.
+- MSVC toolsets are discovered through `vswhere` and `VC\Tools\MSVC\<toolset>`. `More versions (Visual Studio Installer)` opens Visual Studio Installer; it never starts an in-cp3c download. MSVC toolsets coexist, so an exact MSVC pin is reliable.
+- Windows GCC and Clang installers usually replace the installed version in place. The wizard warns before installing an older version than the one already present.
+- Arrow keys move, Enter selects, `q` or Esc cancels. Piped stdin uses numbered prompts for every menu, so `echo 1 | cp3 toolchain` still works without a terminal.
 
-After a usable compiler is selected, the scope question appears when a project is present:
+After a usable family and version are selected, the scope question appears when
+a project is present:
 
 ```
 Where should this toolchain apply?
@@ -131,42 +139,73 @@ Where should this toolchain apply?
     2. All projects (global)
 ```
 
-- Project scope writes `"toolchain": "<id>"` into the nearest `package.json` (documented in [§5.1](05-package-format-authoring-cp3pak.md)). Writing is byte-preserving: field order, indentation and CRLF line endings stay exactly as they were, and an unparsable manifest is refused rather than rewritten.
+- Project scope writes a `"toolchain"` object into the nearest `package.json` (documented in [§5.1](05-package-format-authoring-cp3pak.md)). Writing is byte-preserving: field order, indentation and CRLF line endings stay exactly as they were, and an unparsable manifest is refused rather than rewritten.
 - Global scope writes the user config at `%APPDATA%\cp3\toolchain.conf` on Windows, or `$XDG_CONFIG_HOME/cp3/toolchain.conf` (`~/.config/cp3/toolchain.conf` by default) on POSIX. `CP3_CONFIG_DIR` overrides the config directory, which is what tests use.
 - Outside a project only the global scope is offered, and the prompt says why.
+
+The package manifest form is:
+
+```json
+"toolchain": { "id": "gcc", "version": "16.1.0", "policy": "latest" }
+```
+
+- `latest` is the default. It uses the newest installed version of the family and treats `version` as a record of what was selected, not as a pin. The recorded version is not rewritten on every build.
+- `exact` is opt-in. Use it for CI, releases, benchmarks and prebuilt native libraries where a compiler update must not change the build. A missing exact version falls back to the newest installed version of the same family with a warning, unless `--strict-toolchain` is present.
+- The legacy string `"toolchain": "gcc"` and the version-less object `{ "id": "gcc" }` both mean `latest`.
+- An object with a version but no policy keeps the older exact behavior: `{ "id": "gcc", "version": "16.1.0" }`.
+- A missing family warns and falls through to automatic detection. It never silently switches to a different saved family. Under `--strict-toolchain` a missing exact pin or saved family is an error.
+- `cp3 toolchain use gcc@16.1.0` saves an exact pin. `cp3 toolchain use gcc` saves `latest`. The same `id@version` form is accepted by `--toolchain` and `CP3_TOOLCHAIN`; a plain `id` forces latest for that run.
 
 The global config is plain text, one key per line:
 
 ```
 id=gcc
+version=16.1.0
+policy=latest
 program=C:\Users\you\...\g++.exe
 saved=2026-10-20
 ```
 
 Resolution order for every command that needs a compiler:
 
-1. `--toolchain <id|path>` on the command line.
+1. `--toolchain <id[@version]|path>` on the command line.
 2. `CP3_TOOLCHAIN` environment variable.
 3. `"toolchain"` in the project's `package.json`.
 4. The global config.
 5. Automatic detection (the fixed per-platform order above).
 
-`--verbose` names the source that won. A project choice applies from any subdirectory of that project and does not leak into another project or a bare file outside one. A saved compiler that has since disappeared is reported once and the next source is used, so a stale choice does not break builds.
+`--verbose` names the source that won and prints the policy, recorded version and
+effective version. `cp3 toolchain list` shows the same values plus every
+installed version, its path and the project or global scope. A project choice
+applies from any subdirectory of that project and does not leak into another
+project or a bare file outside one. A saved compiler or exact version that has
+since disappeared is reported once and the next source or newest same-family
+version is used, so a stale choice does not break normal builds.
+
+The build cache keys the effective compiler identity: family, exact parsed
+version and driver path. A system compiler update therefore invalidates objects
+and the link stamp under `latest`, while an unchanged compiler keeps the cache
+warm. No compiler is copied into a cp3 project or cache; discovery reads system
+locations and installation is delegated to winget, Visual Studio Installer,
+apt/dnf/pacman or Homebrew.
 
 Scripts and tests use the non-interactive forms:
 
 ```
-cp3 toolchain list                            # ids, status, paths, scopes, effective choice
+cp3 toolchain list                            # families, versions, paths, scopes, effective choice
 cp3 toolchain detect                          # automatic detection plus the current choice
-cp3 toolchain use gcc --project               # write package.json
-cp3 toolchain use clang --global              # write the user config
+cp3 toolchain use gcc@16.1.0 --project        # write an exact pin to package.json
+cp3 toolchain use gcc --global                # write latest to the user config
 cp3 toolchain clear --project                 # remove only the project field
 cp3 toolchain clear                           # remove both saved scopes
 ```
 
-`cp3 toolchain use` accepts a standard id or a full path. With both scopes possible, scripts must pass `--project` or `--global`; the interactive command asks instead. Piped stdin falls back to the numbered prompt, so `echo 1 | cp3 toolchain` works without a terminal.
+`cp3 toolchain use` accepts a standard id, `id@version` or a full path. With both
+scopes possible, scripts must pass `--project` or `--global`; the interactive
+command asks instead. Piped stdin falls back to numbered prompts.
 
-When a build finds no compiler, its error points at `cp3 toolchain` rather than only listing the compilers it tried.
+When a build finds no compiler, its error points at `cp3 toolchain` rather than
+only listing the compilers it tried.
 
 ## The CLI command surface: `run`, `check`, `dev`, `fmt`
 

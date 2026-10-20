@@ -54,6 +54,7 @@ struct BuildState {
     const std::string& profile;
     const NativeBuildFlags& nativeFlags;
     const std::string& headerFingerprint;  // of the current include roots
+    const std::string& compilerKey;        // family, exact version, driver path
     bool force;
     std::vector<CacheEntry>& manifest;
     std::vector<fs::path>& objects;
@@ -86,6 +87,7 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
                           existing->hash == hash &&
                           existing->profile == st.profile &&
                           existing->header == st.headerFingerprint &&
+                          existing->compiler == st.compilerKey &&
                           fs::exists(obj, ec);
     if (upToDate) {
         existing->source = sourceKey;
@@ -108,13 +110,14 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
 
     if (existing == nullptr) {
         st.manifest.push_back(CacheEntry{st.profile, sourceKey, hash,
-                                         st.headerFingerprint, cpp.string(),
-                                         obj.string()});
+                                         st.headerFingerprint, st.compilerKey,
+                                         cpp.string(), obj.string()});
     } else {
         existing->profile = st.profile;
         existing->source = sourceKey;
         existing->hash = hash;
         existing->header = st.headerFingerprint;
+        existing->compiler = st.compilerKey;
         existing->cpp = cpp.string();
     }
     st.objects.push_back(obj);
@@ -169,6 +172,8 @@ std::string linkStampOf(const BuildState& st,
     std::string material = st.profile;
     material += '\n';
     material += st.headerFingerprint;
+    material += '\n';
+    material += st.compilerKey;
     for (const fs::path& obj : st.objects) {
         material += '\n';
         material += obj.string();
@@ -375,6 +380,15 @@ std::optional<NativeBuildFlags> resolveNativeFlags(
     const GeneratedModule& mod, BuildLayout& layout, const Toolchain*& tcOut) {
     const Toolchain& tc = detectToolchain();
     if (!tc.found()) {
+        if (toolchainStrictFailed()) {
+            // detectToolchain already printed the strict warning with the
+            // source and the missing pin. Return without repeating it.
+            if (toolchainWarning().empty()) {
+                std::fputs("cp3c: --strict-toolchain: no saved exact pin "
+                           "could be resolved\n", stderr);
+            }
+            return std::nullopt;
+        }
         std::fprintf(stderr,
                      "cp3c: no C++ toolchain found on this system "
                      "(looked for cl, clang++, g++ on PATH)\n");
@@ -388,6 +402,8 @@ std::optional<NativeBuildFlags> resolveNativeFlags(
                      describeToolchain(tc).c_str());
         std::fprintf(stderr, "cp3c: toolchain source: %s\n",
                      toolchainSourceDescription().c_str());
+        std::fprintf(stderr, "cp3c: toolchain versions: %s\n",
+                     toolchainVersionDescription().c_str());
     }
     return applyNativePackages(opt, tc, *request.importedStdModules, layout,
                                generatedProgramText(request, mod));
@@ -430,11 +446,13 @@ int buildWithToolchain(const BuildRequest& request) {
         headerFingerprintOf(layout.includeDirs);
     std::vector<CacheEntry> manifest = loadManifest(layout.manifestPath);
     const std::string profile = profileNameOf(opt.compile.profile);
+    const std::string compilerKey = toolchainCacheKey(tc);
     const bool force = (opt.compile.profile == BuildProfile::Release);
 
     std::vector<fs::path> objects;
-    BuildState state{opt, tc,        layout,   profile,
-                     *nativeFlags, headerFingerprint, force, manifest, objects};
+    BuildState state{opt,          tc,        layout,       profile,
+                     *nativeFlags, headerFingerprint, compilerKey, force,
+                     manifest,     objects};
 
     if (!compileExtras(state, request)) {
         return kExitCompileError;

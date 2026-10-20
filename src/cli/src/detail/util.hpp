@@ -54,6 +54,10 @@ bool findExecutable(const std::string& name, std::string& found);
 // involved, so arguments with spaces need no quoting.
 int runProcess(const std::vector<std::string>& args);
 
+// Runs `args` with stdout and stderr captured into `out`. Returns the exit
+// code, or -1 when the process could not be launched. No shell is involved.
+int runProcessCapture(const std::vector<std::string>& args, std::string& out);
+
 // Renders an argv vector for a --verbose log line.
 std::string describeCommand(const std::vector<std::string>& args);
 

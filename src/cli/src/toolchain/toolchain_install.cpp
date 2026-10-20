@@ -5,14 +5,17 @@
 // detail/toolchain_select.hpp.
 //
 // Planning is separate from running: planToolchainInstall only picks the exact
-// command (or the manual instructions when no package manager exists), and
-// runInstallPlan is reached only after an explicit Yes in the selector. Sudo
-// and winget prompts stay in the terminal; no shell is involved.
+// system package manager command (or the manual instructions when none exists),
+// and runInstallPlan is reached only after an explicit Yes in the selector.
+// Sudo and winget prompts stay in the terminal; no shell is involved. More
+// MSVC versions opens the Visual Studio Installer, never an in-cp3c download.
 // =============================================================================
 #include "detail/toolchain_select.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -62,9 +65,34 @@ InstallPlan wingetPlan(const std::string& id,
     return plan;
 }
 
-InstallPlan planForWindows(const ToolchainCandidate& candidate) {
+std::vector<std::string> wingetVersionArgs(const std::string& version) {
+    if (version.empty()) return {};
+    return {"--version", version};
+}
+
+fs::path visualStudioInstaller() {
+    const char* x86 = std::getenv("ProgramFiles(x86)");
+    const char* native = std::getenv("ProgramFiles");
+    const fs::path relative =
+        fs::path("Microsoft") / "Visual Studio" / "Installer" /
+        "vs_installer.exe";
+    std::error_code ec;
+    if (x86 != nullptr) {
+        const fs::path candidate = fs::path(x86) / relative;
+        if (fs::is_regular_file(candidate, ec)) return candidate;
+    }
+    if (native != nullptr) {
+        const fs::path candidate = fs::path(native) / relative;
+        if (fs::is_regular_file(candidate, ec)) return candidate;
+    }
+    return {};
+}
+
+InstallPlan planForWindows(const ToolchainCandidate& candidate,
+                           const std::string& version) {
     if (candidate.id == "gcc") {
-        InstallPlan plan = wingetPlan("BrechtSanders.WinLibs.POSIX.UCRT", {});
+        InstallPlan plan = wingetPlan("BrechtSanders.WinLibs.POSIX.UCRT",
+                                      wingetVersionArgs(version));
         if (plan.runnable) return plan;
         return manualPlan(
             "winget is not available. Download a WinLibs UCRT build from "
@@ -72,7 +100,7 @@ InstallPlan planForWindows(const ToolchainCandidate& candidate) {
             "https://winlibs.com/");
     }
     if (candidate.id == "clang") {
-        InstallPlan plan = wingetPlan("LLVM.LLVM", {});
+        InstallPlan plan = wingetPlan("LLVM.LLVM", wingetVersionArgs(version));
         if (plan.runnable) return plan;
         return manualPlan(
             "winget is not available. Install LLVM from "
@@ -100,9 +128,32 @@ InstallPlan planForWindows(const ToolchainCandidate& candidate) {
     return manualPlan("no installer is known for this compiler.", "");
 }
 
+InstallPlan planMoreVersionsWindows(const ToolchainCandidate& candidate) {
+    if (candidate.id != "msvc") return {};
+    const fs::path installer = visualStudioInstaller();
+    if (!installer.empty()) {
+        InstallPlan plan;
+        plan.argv = {installer.string()};
+        plan.command = joined(plan.argv);
+        plan.label = "Visual Studio Installer";
+        plan.runnable = true;
+        return plan;
+    }
+    return manualPlan(
+        "Visual Studio Installer not found. Open the Visual Studio Installer "
+        "from the Start menu and add an MSVC v143 toolset.",
+        "https://visualstudio.microsoft.com/downloads/");
+}
+
 #elif defined(__APPLE__)
 
-InstallPlan planForApple(const ToolchainCandidate& candidate) {
+std::string majorVersion(const std::string& version) {
+    const std::size_t dot = version.find('.');
+    return dot == std::string::npos ? version : version.substr(0, dot);
+}
+
+InstallPlan planForApple(const ToolchainCandidate& candidate,
+                         const std::string& version) {
     if (candidate.id == "apple-clang") {
         std::string tool;
         if (onPath("xcode-select", tool)) {
@@ -125,14 +176,26 @@ InstallPlan planForApple(const ToolchainCandidate& candidate) {
             "run the matching 'brew install' command.",
             "https://brew.sh/");
     }
+    std::string formula = candidate.id == "gcc" ? "gcc" : "llvm";
+    if (!version.empty() && candidate.id == "gcc") {
+        formula += "@" + majorVersion(version);
+    }
     InstallPlan plan;
     plan.argv.push_back(brew);
     plan.argv.push_back("install");
-    plan.argv.push_back(candidate.id == "gcc" ? "gcc" : "llvm");
+    plan.argv.push_back(formula);
     plan.command = joined(plan.argv);
     plan.label = plan.command;
     plan.runnable = true;
     return plan;
+}
+
+InstallPlan planMoreVersionsApple(const ToolchainCandidate& candidate) {
+    (void)candidate;
+    return manualPlan(
+        "Use Homebrew to install another formula version, or install a "
+        "versioned LLVM/GCC package with your package manager.",
+        "https://brew.sh/");
 }
 
 #else
@@ -146,7 +209,8 @@ struct PackageChoice {
 
 // Returns the package manager invocation, or an empty vector when none of
 // apt-get, dnf or pacman is on PATH. A found sudo prefixes every command.
-std::vector<std::string> packageManagerArgs(const PackageChoice& packages) {
+std::vector<std::string> packageManagerArgs(const PackageChoice& packages,
+                                            const std::string& version) {
     std::string sudo;
     std::vector<std::string> prefix;
     if (onPath("sudo", sudo)) prefix.push_back(sudo);
@@ -155,14 +219,16 @@ std::vector<std::string> packageManagerArgs(const PackageChoice& packages) {
         prefix.push_back(tool);
         prefix.push_back("install");
         prefix.push_back("-y");
-        prefix.push_back(packages.apt);
+        prefix.push_back(version.empty() ? packages.apt
+                                         : packages.apt + "=" + version);
         return prefix;
     }
     if (onPath("dnf", tool)) {
         prefix.push_back(tool);
         prefix.push_back("install");
         prefix.push_back("-y");
-        prefix.push_back(packages.dnf);
+        prefix.push_back(version.empty() ? packages.dnf
+                                         : packages.dnf + "-" + version);
         return prefix;
     }
     if (onPath("pacman", tool)) {
@@ -175,12 +241,13 @@ std::vector<std::string> packageManagerArgs(const PackageChoice& packages) {
     return {};
 }
 
-InstallPlan planForLinux(const ToolchainCandidate& candidate) {
+InstallPlan planForLinux(const ToolchainCandidate& candidate,
+                         const std::string& version) {
     const bool gcc = candidate.id == "gcc";
-    const PackageChoice packages{gcc ? "build-essential" : "clang",
-                                 gcc ? "gcc-c++" : "clang",
-                                 gcc ? "gcc" : "clang"};
-    std::vector<std::string> argv = packageManagerArgs(packages);
+    const PackageChoice packages{
+        gcc ? (version.empty() ? "build-essential" : "g++") : "clang",
+        gcc ? "gcc-c++" : "clang", gcc ? "gcc" : "clang"};
+    std::vector<std::string> argv = packageManagerArgs(packages, version);
     if (argv.empty()) {
         return manualPlan(
             "no supported package manager (apt-get, dnf, pacman) was found. "
@@ -195,17 +262,36 @@ InstallPlan planForLinux(const ToolchainCandidate& candidate) {
     return plan;
 }
 
+InstallPlan planMoreVersionsLinux(const ToolchainCandidate& candidate) {
+    (void)candidate;
+    return manualPlan(
+        "Use your package manager to add another version repository, or "
+        "switch to the exact package version shown in the version list.",
+        "");
+}
+
 #endif
 
 }  // namespace
 
-InstallPlan planToolchainInstall(const ToolchainCandidate& candidate) {
+InstallPlan planToolchainInstall(const ToolchainCandidate& candidate,
+                                 const std::string& packageVersion) {
 #if defined(_WIN32)
-    return planForWindows(candidate);
+    return planForWindows(candidate, packageVersion);
 #elif defined(__APPLE__)
-    return planForApple(candidate);
+    return planForApple(candidate, packageVersion);
 #else
-    return planForLinux(candidate);
+    return planForLinux(candidate, packageVersion);
+#endif
+}
+
+InstallPlan planToolchainMoreVersions(const ToolchainCandidate& candidate) {
+#if defined(_WIN32)
+    return planMoreVersionsWindows(candidate);
+#elif defined(__APPLE__)
+    return planMoreVersionsApple(candidate);
+#else
+    return planMoreVersionsLinux(candidate);
 #endif
 }
 
