@@ -25,6 +25,18 @@ inline const NativePackage kConsoleNativePackage{
      "src/std/console/runtime_pump_read.cpp"},
     {},
     {},
+    // `console.log`/`.info` of plain values lower straight onto `println` and
+    // need none of these TUs; the D49 object/array renderer, warn/error/
+    // clear/assert/hide/show do need runtime.cpp, and the D71 stdin pump pair
+    // only exists for input/readKey/on/off. The pump pair moves together
+    // (readerMain and the post helpers live either side of pump.hpp).
+    {"::cp3::runtime::console::|::cp3::runtime::formatObject|"
+     "::cp3::runtime::formatValue|::cp3::runtime::formatNested|"
+     "::cp3::runtime::writeLine",
+     "::cp3::runtime::console::input(|::cp3::runtime::console::readKey(|"
+     "::cp3::runtime::console::on(|::cp3::runtime::console::off(",
+     "::cp3::runtime::console::input(|::cp3::runtime::console::readKey(|"
+     "::cp3::runtime::console::on(|::cp3::runtime::console::off("},
 };
 
 }  // namespace cp3::cli::detail

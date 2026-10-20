@@ -3,8 +3,8 @@
 // =============================================================================
 #include "cp3/core/error.hpp"
 
+#include <cstdio>
 #include <cstdlib>
-#include <iostream>
 #include <string>
 
 namespace cp3::runtime {
@@ -35,8 +35,13 @@ std::string Thrown::toString() const {
 }
 
 void fatalUnhandledRejection(const Thrown& reason) {
-    std::cerr << "cp3: error: unhandled promise rejection: " << reason.toString() << '\n';
-    std::cerr.flush();
+    // C stdio, not std::cerr: see the print/println note in core/runtime.cpp.
+    // stderr is unbuffered by default and is flushed explicitly anyway, which
+    // is exactly std::cerr's contract.
+    const std::string line =
+        "cp3: error: unhandled promise rejection: " + reason.toString() + '\n';
+    std::fwrite(line.data(), 1, line.size(), stderr);
+    std::fflush(stderr);
     std::exit(kFailureExitCode);
 }
 

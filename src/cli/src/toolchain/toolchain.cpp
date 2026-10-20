@@ -150,6 +150,16 @@ std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
         args.push_back(step.exe.string());
         for (const fs::path& obj : step.objects) args.push_back(obj.string());
         if (profile == BuildProfile::Release) args.push_back("-flto");
+#if defined(_WIN32)
+        // Startup (startup perf wave): every dynamically linked C++ runtime DLL
+        // is one more image the loader maps and one more DllMain that runs
+        // before main. On Windows there is no dlopen/NSS contract to keep, so a
+        // fully static runtime is safe and measurably cheaper: libstdc++-6.dll,
+        // libgcc_s_seh-1.dll and libwinpthread-1.dll disappear from the import
+        // table. Linux keeps the dynamic runtime (static glibc breaks
+        // getaddrinfo/NSS for std/network).
+        args.push_back("-static");
+#endif
     }
     // Native-backend libraries last: -L dirs then -l archives, after every
     // object, so static-archive resolution order is correct.

@@ -82,12 +82,20 @@ std::uint64_t totalPhysicalMemoryMb() noexcept;
 // are returned.
 std::vector<fs::path> compilerIncludeRoots();
 
-// Absolute paths of the runtime translation units that generated code links
-// against. The runtime moved from a flat `src/runtime/` directory to
-// `src/runtime/src/`; the directory is therefore *listed* rather than a single
-// file name hard-coded, preferring the current layout. Only the documented
-// minimum set is returned (see src/toolchain/util.cpp).
-std::vector<fs::path> runtimeSourcePaths();
+// True when `markers` occurs in `text`. `markers` is a '|'-separated any-of
+// list; an empty list means "always". Used to decide which runtime translation
+// units a generated program links: the program links what it names.
+bool markerListMatches(const std::string& text, std::string_view markers);
+
+// Absolute paths of the runtime translation units that `programText` (the
+// generated C++ of the whole program: every generated source and header, plus
+// the text of the selected native-backend TUs) links against. The runtime moved
+// from a flat `src/runtime/` directory to `src/runtime/src/`; the directory is
+// therefore *listed* rather than a single file name hard-coded, preferring the
+// current layout. Only the units whose markers occur in `programText` are
+// returned, so a program that never uses the loop, promises, or the parallel
+// engine does not link those TUs at all.
+std::vector<fs::path> runtimeSourcePaths(const std::string& programText);
 
 // Cp3 root: the ancestor directory that owns the shared trees (`src/runtime`
 // plus `src/std`; a source checkout also has `src/cli`), normally also

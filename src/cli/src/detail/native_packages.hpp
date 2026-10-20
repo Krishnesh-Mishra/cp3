@@ -36,6 +36,12 @@ struct NativePackage {
     std::vector<std::string> runtimeSources;  // repo-relative .cpp, compiled + linked
     std::vector<std::string> libDirs;         // repo-relative, added as -L
     std::vector<std::string> linkFlags;       // appended at link time
+    // Parallel to runtimeSources: when entry i is non-empty it is a
+    // '|'-separated any-of list of markers that must occur in the generated
+    // program text for runtimeSources[i] to be compiled and linked. An empty
+    // string (or a missing entry) means "always, when the row is selected", so
+    // every row written before this field keeps its old behaviour.
+    std::vector<std::string> runtimeSourceMarkers = {};
 };
 
 // Every std module with a native backend, in a stable order. Rows are defined
