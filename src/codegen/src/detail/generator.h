@@ -73,6 +73,7 @@ struct ArrayEmitter {
     static void forOf(Generator& g, const ForOfStatement& f, std::string& out,
                       int indent);
 };
+struct ProgramAssembly;  // detail/program_assembly.h (emit/program.cpp)
 }  // namespace detail
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
@@ -86,6 +87,15 @@ public:
 
     // Top-level orchestration: collect names, emit every statement, assemble.
     GeneratedModule run(const Program& program);
+
+    // The whole-program entry and its per-unit emission (emit/program.cpp).
+    GeneratedModule runProgram(const ModuleGraph& graph,
+                               const std::vector<CheckedModuleUnit>& units);
+    void runUnit(const Program& program, std::string& decls, std::string& defs,
+                 std::string& mainBody);
+    void emitProgramUnit(const detail::ProgramLink& link,
+                         const CompilationUnit& unit,
+                         detail::ProgramAssembly& assembly);
 
 private:
     friend struct detail::ArrayEmitter;  // src/std/arrays/codegen_methods.cpp
@@ -146,6 +156,7 @@ private:
     std::string expr(const Expr& e);
     std::string exprCmp(const Expr& e);
     std::string emitIdentifier(const Identifier& id);
+    std::string emitMemberRead(const MemberExpr& m);
     std::string emitTemplate(const TemplateLiteral& tl);
     std::string tsCall(const Expr& e);
     std::string cond(const Expr& e);
@@ -171,13 +182,20 @@ private:
 
     // --- calls (emit/call.cpp) -----------------------------------------------
     std::string emitCall(const CallExpr& c);
+    // A call to an imported binding of a whole-program build: the linked
+    // qualified C++ name ("" when the name is not linked, so the caller keeps
+    // its ambient lowering); a link miss reports CP3002 at the use site.
+    std::string emitLinkedCall(const CallExpr& c, const std::string& name);
+    // Linked-call helpers (emit/call.cpp): the member miss at the use site,
+    // and the identifier-callee chain (imports, builtins, user functions).
+    std::string linkedMemberMiss(const MemberExpr& m) const;
+    std::string emitIdentifierCall(const CallExpr& c, const std::string& name);
     // The documented global numeric parsers (`parseInt`/`parseFloat`):
     // argument coercion plus the runtime helper (STDLIB section 3).
     std::string emitParseBuiltin(const CallExpr& c, const std::string& name);
     // Lowers a user-function call's argument list, applying the callee's
     // optional/default parameters to arguments that are explicit `undefined`.
-    std::vector<std::string> emitCallArgs(const CallExpr& c,
-                                          const FunctionDeclaration* decl);
+    std::vector<std::string> emitCallArgs(const CallExpr& c, const FunctionDeclaration* decl);
     bool isConsoleMember(const CallExpr& c) const;
 
     // --- parallel.* / worker(...) (emit/parallel.cpp, emit/worker.cpp) --------
@@ -193,9 +211,8 @@ private:
     std::string emitParallelFor(const CallExpr& c);
     std::string emitParallelReduce(const CallExpr& c);
     std::string emitParallelRun(const CallExpr& c);
-    std::string emitParallelClosure(
-        const ArrowFunction& a, const std::vector<Type>& paramTypes,
-        const std::vector<std::string>& contextParams);
+    std::string emitParallelClosure(const ArrowFunction& a, const std::vector<Type>& paramTypes,
+                                    const std::vector<std::string>& contextParams);
     // `worker(...)`: the entry-unit call and its argument forms (a primitive, a
     // worker-marked object binding, a marked object literal -> a tuple), the
     // worker-object pre-scan, and the worker unit's own lowering
@@ -206,8 +223,7 @@ private:
     std::string emitWorkerMemberWrite(const AssignmentExpr& a);
     void collectWorkerObjects(const Program& program);
     void registerWorkerObject(const Type& objType, std::vector<std::string> names);
-    std::string workerParamText(const Parameter& p, const ArrowFunction& arrow,
-                                std::size_t index);
+    std::string workerParamText(const Parameter& p, const ArrowFunction& arrow, std::size_t index);
     std::string workerObjectParamText(const ObjectType& ot, const std::string& name,
                                       const std::optional<Type>& pt);
     std::string workerReturnType(const ArrowFunction& arrow);

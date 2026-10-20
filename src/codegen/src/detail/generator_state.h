@@ -26,6 +26,7 @@
 #include "cp3/diagnostic.hpp"
 #include "detail/enums.h"
 #include "detail/mangle.h"
+#include "detail/program_link.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -132,6 +133,10 @@ protected:
     // Codegen type hints for the Map-shaped std/network fields; the open
     // marker hides their type in sema, so networkMapFieldType checks these.
     std::unordered_map<std::uint32_t, Type> exprTypeHints_;
+    // Whole-program imports (emit/program.cpp): local spelling -> linked name.
+    std::unordered_map<std::string, detail::LinkedName> linkedNames_;
+    // Whole-program build: module-link export forms carry no C++ of their own.
+    bool programMode_ = false;
     std::unordered_set<std::string> functions_;
     std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
     std::unordered_set<std::string> asyncFunctions_;   // `async function` names

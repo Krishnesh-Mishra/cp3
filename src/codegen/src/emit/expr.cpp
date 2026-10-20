@@ -150,24 +150,32 @@ std::string Generator::exprPlain(const Expr& e) {
             return emitIndexExpr(static_cast<const IndexExpr&>(e));
         case NodeKind::AwaitExpr:
             return emitAwait(static_cast<const AwaitExpr&>(e));
-        case NodeKind::MemberExpr: {
-            // Builtin property reads (`Math.PI`, `path.sep`, `process.argv`,
-            // `s.length`) and a std/json record field first; then a member read
-            // of an object value shape (`o.a`, `o?.a`); anything else stays
-            // CP3002 (emit_builtin.cpp, emit/objects.cpp).
-            const auto& m = static_cast<const MemberExpr&>(e);
-            std::string value = emitBuiltinMember(m);
-            if (value.empty()) value = emitObject(m);
-            if (!value.empty()) return value;
-            notImplemented(e, "this property access");
-            return "0.0";
-        }
+        case NodeKind::MemberExpr:
+            return emitMemberRead(static_cast<const MemberExpr&>(e));
         case NodeKind::ObjectLiteral: return emitObjectLiteral(e);
         case NodeKind::ArrowFunction: return emitListenerValue(e);  // D74
         default:
             notImplemented(e, "this expression");
             return "0.0";
     }
+}
+
+std::string Generator::emitMemberRead(const MemberExpr& m) {
+    // A property read through a namespace import/re-export: the link miss is
+    // the use site's diagnostic.
+    if (std::string miss = linkedMemberMiss(m); !miss.empty()) {
+        notImplemented(*m.object, miss);
+        return "0.0";
+    }
+    // Builtin property reads (`Math.PI`, `path.sep`, `process.argv`,
+    // `s.length`) and a std/json record field first; then a member read of an
+    // object value shape (`o.a`, `o?.a`); anything else stays CP3002
+    // (emit_builtin.cpp, emit/objects.cpp).
+    std::string value = emitBuiltinMember(m);
+    if (value.empty()) value = emitObject(m);
+    if (!value.empty()) return value;
+    notImplemented(m, "this property access");
+    return "0.0";
 }
 
 std::string Generator::emitIdentifier(const Identifier& id) {
@@ -181,6 +189,16 @@ std::string Generator::emitIdentifier(const Identifier& id) {
     // sema typed the read `undefined`): the C++ declaration does not exist yet,
     // so emit the value the binding holds at that point in JS.
     if (!lookup(id.name)) {
+        // An imported binding of a whole-program build: the target unit's
+        // qualified C++ name, or the link miss reported at the use site.
+        const auto linked = linkedNames_.find(id.name);
+        if (linked != linkedNames_.end()) {
+            if (linked->second.cpp.empty()) {
+                notImplemented(id, linked->second.miss);
+                return "0.0";
+            }
+            return linked->second.cpp;
+        }
         if (const Type* t = sema_.typeOf(id.nodeId); t && t->isUndefined()) {
             return "cp3::runtime::undefined";
         }

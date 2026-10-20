@@ -17,9 +17,11 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "cp3/analysis.hpp"
 #include "cp3/codegen.hpp"
+#include "cp3/codegen_program.hpp"
 #include "cp3/diagnostic.hpp"
 #include "cp3/module.hpp"
 #include "cp3/source.hpp"
@@ -56,5 +58,10 @@ struct GenerateModuleInput {
 // Emits C++20 for one checked program through the generator, consulting
 // `input.sema` for inferred types and resolved bindings.
 GeneratedModule generateModule(const GenerateModuleInput& input);
+
+// Emits C++20 for a whole local-module program through `generateProgram`
+// (cp3/codegen_program.hpp): one generated translation unit, one C++ namespace
+// per checked unit, local imports resolved through the link table.
+GeneratedModule generateProgramModule(const GenerateProgramInput& input);
 
 }  // namespace cp3::cli

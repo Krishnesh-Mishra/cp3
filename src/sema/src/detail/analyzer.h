@@ -101,6 +101,10 @@ private:
                         const SourceSpan& span, const BindingSpec& spec = {});
     void declareAmbient(const std::string& name, const SourceSpan& span,
                         std::uint32_t nodeId);
+    // The exported name `local` is bound to, resolving a named std-import alias
+    // (`import { Map as M } from "std/collections"` -> M resolves to "Map").
+    // Any other spelling resolves to itself.
+    std::string importedName(const std::string& local) const;
     void overrideBinding(const std::string& name, const Type& type,
                          const SourceSpan& span);
     void declareBuiltins();
@@ -419,6 +423,10 @@ private:
     std::unordered_set<std::uint32_t> declaredFns_;
     std::unordered_set<std::uint32_t> declaredTypes_;
     std::unordered_map<std::uint32_t, FuncSig> arrowSigs_;
+    // Named std imports bound under another spelling (local -> exported name):
+    // `import { Map as M } from "std/collections"` records M -> Map so the
+    // construct tables keyed on the canonical name still match.
+    std::unordered_map<std::string, std::string> stdImportAliases_;
     std::vector<std::string> labels_;
     // Call nodes already checked for parallel.* capture safety, so a node that
     // is inferred more than once is never reported twice.

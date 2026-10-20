@@ -36,4 +36,8 @@ GeneratedModule generateModule(const GenerateModuleInput& input) {
                             input.options);
 }
 
+GeneratedModule generateProgramModule(const GenerateProgramInput& input) {
+    return generateProgram(input);
+}
+
 }  // namespace cp3::cli

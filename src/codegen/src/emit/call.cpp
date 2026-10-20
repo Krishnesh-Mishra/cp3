@@ -97,6 +97,98 @@ std::vector<std::string> Generator::emitCallArgs(const CallExpr& c,
     return args;
 }
 
+// A call to a local module's imported binding (emit/program.cpp's link table):
+// the target unit's qualified C++ name, with the callee's declared parameters
+// applied to optional/default arguments. A name that is not linked (or is a
+// function of this unit) returns "" so the caller keeps its other lowerings.
+// A link miss reports CP3002 here, at the use site.
+std::string Generator::emitLinkedCall(const CallExpr& c,
+                                      const std::string& name) {
+    if (functions_.count(name) != 0) return std::string();
+    const auto it = linkedNames_.find(name);
+    if (it == linkedNames_.end()) return std::string();
+    const LinkedName& ln = it->second;
+    if (ln.cpp.empty()) {
+        // The canonical worker import's default export is an anonymous arrow:
+        // the ambient `worker(...)` lowering owns the call (spec 13).
+        if (ln.fn == nullptr && name == "worker") return std::string();
+        notImplemented(c, ln.miss);
+        return "0.0";
+    }
+    if (ln.fn == nullptr) {
+        notImplemented(c, "this call");
+        return "0.0";
+    }
+    if (!c.typeArgs.empty()) {
+        notImplemented(c, "calls with type arguments");
+        return "0.0";
+    }
+    if (ln.isAsync) {
+        // Calling an async function starts async work whose continuations only
+        // run when the loop does.
+        needsEventLoop_ = true;
+    }
+    return ln.cpp + "(" + joinStrings(emitCallArgs(c, ln.fn), ", ") + ")";
+}
+
+// The link miss for a member access whose object is an imported binding with
+// no C++ lowering (a namespace import/re-export), reported at the use site.
+std::string Generator::linkedMemberMiss(const MemberExpr& m) const {
+    if (!m.object || m.object->kind != NodeKind::Identifier) return std::string();
+    const auto linked = linkedNames_.find(
+        static_cast<const Identifier&>(*m.object).name);
+    if (linked == linkedNames_.end() || !linked->second.cpp.empty()) {
+        return std::string();
+    }
+    return linked->second.miss;
+}
+
+std::string Generator::emitIdentifierCall(const CallExpr& c,
+                                          const std::string& name) {
+    if (std::string linked = emitLinkedCall(c, name); !linked.empty()) {
+        return linked;
+    }
+    if (functions_.find(name) == functions_.end() && isTimerBuiltinName(name)) {
+        return emitTimerBuiltin(c, name);
+    }
+    // `String(value)` (bug 9 surface): the scalar conversion global. A
+    // user-declared `String` function wins (checked above).
+    if (name == "String" && functions_.find(name) == functions_.end()) {
+        if (c.arguments.size() == 1 && c.arguments.front() &&
+            c.arguments.front()->kind != NodeKind::SpreadElement) {
+            return "::cp3::runtime::toString(" + expr(*c.arguments.front()) + ")";
+        }
+        notImplemented(c, "String(...)");
+        return "0.0";
+    }
+    if ((name == "parseInt" || name == "parseFloat") &&
+        functions_.find(name) == functions_.end()) {
+        return emitParseBuiltin(c, name);
+    }
+    if (name == "worker" && functions_.find(name) == functions_.end()) {
+        // The ambient `worker(...)` lowering (spec 13); a user-declared
+        // `worker` function wins (checked here, before the disambiguation).
+        return emitWorkerCall(c);
+    }
+    if (!c.typeArgs.empty()) {
+        notImplemented(c, "calls with type arguments");
+        return "0.0";
+    }
+    // A name that is not a function declared in this unit.
+    if (functions_.find(name) == functions_.end()) {
+        return emitUnresolvedCall(c, name);
+    }
+    if (asyncFunctions_.count(name) != 0) {
+        // Calling an async function starts async work whose continuations only
+        // run when the loop does.
+        needsEventLoop_ = true;
+    }
+    const auto declIt = functionDecls_.find(name);
+    const FunctionDeclaration* decl =
+        declIt != functionDecls_.end() ? declIt->second : nullptr;
+    return mapIdent(name) + "(" + joinStrings(emitCallArgs(c, decl), ", ") + ")";
+}
+
 std::string Generator::emitCall(const CallExpr& c) {
     if (isConsoleMember(c)) {
         const auto& m = static_cast<const MemberExpr&>(*c.callee);
@@ -104,49 +196,17 @@ std::string Generator::emitCall(const CallExpr& c) {
     }
     if (c.callee->kind == NodeKind::Identifier) {
         const std::string name = static_cast<const Identifier&>(*c.callee).name;
-        if (functions_.find(name) == functions_.end() && isTimerBuiltinName(name)) {
-            return emitTimerBuiltin(c, name);
-        }
-        // `String(value)` (bug 9 surface): the scalar conversion global. A
-        // user-declared `String` function wins (checked above).
-        if (name == "String" && functions_.find(name) == functions_.end()) {
-            if (c.arguments.size() == 1 && c.arguments.front() &&
-                c.arguments.front()->kind != NodeKind::SpreadElement) {
-                return "::cp3::runtime::toString(" + expr(*c.arguments.front()) +
-                       ")";
-            }
-            notImplemented(c, "String(...)");
-            return "0.0";
-        }
-        if ((name == "parseInt" || name == "parseFloat") &&
-            functions_.find(name) == functions_.end()) {
-            return emitParseBuiltin(c, name);
-        }
-        if (name == "worker" && functions_.find(name) == functions_.end()) {
-            // The ambient `worker(...)` lowering (spec 13); a user-declared
-            // `worker` function wins (checked here, before the disambiguation).
-            return emitWorkerCall(c);
-        }
-        if (!c.typeArgs.empty()) {
-            notImplemented(c, "calls with type arguments");
-            return "0.0";
-        }
-        // A name that is not a function declared in this unit.
-        if (functions_.find(name) == functions_.end()) {
-            return emitUnresolvedCall(c, name);
-        }
-        if (asyncFunctions_.count(name) != 0) {
-            // Calling an async function starts async work whose continuations
-            // only run when the loop does.
-            needsEventLoop_ = true;
-        }
-        const auto declIt = functionDecls_.find(name);
-        const FunctionDeclaration* decl =
-            declIt != functionDecls_.end() ? declIt->second : nullptr;
-        return mapIdent(name) + "(" + joinStrings(emitCallArgs(c, decl), ", ") + ")";
+        return emitIdentifierCall(c, name);
     }
     if (c.callee->kind == NodeKind::MemberExpr) {
         const auto& m = static_cast<const MemberExpr&>(*c.callee);
+        // A call through an import form with no C++ lowering (a namespace
+        // import/re-export): report its link miss at the use site instead of a
+        // generic method-call skip.
+        if (std::string miss = linkedMemberMiss(m); !miss.empty()) {
+            notImplemented(*m.object, miss);
+            return "0.0";
+        }
         if (m.object && m.object->kind == NodeKind::Identifier &&
             static_cast<const Identifier&>(*m.object).name == "parallel") {
             // `parallel.for` / `parallel.reduce` / `parallel.run` (spec 13).

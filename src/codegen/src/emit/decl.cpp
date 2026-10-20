@@ -129,10 +129,26 @@ void Generator::emitExport(const ExportDeclaration& ed, std::string& decls,
         return;
     }
     if (ed.defaultExpr) {
+        // A whole-program build: an identifier default export is exactly the
+        // named binding the link table already exposes under its qualified
+        // C++ name. An anonymous value (arrow/object literal) has no C++ name
+        // to bind either; a use reports the link miss, so the declaration
+        // itself stays quiet.
+        if (programMode_) {
+            const NodeKind kind = ed.defaultExpr->kind;
+            if (kind == NodeKind::Identifier || kind == NodeKind::ArrowFunction ||
+                kind == NodeKind::ObjectLiteral) {
+                return;
+            }
+        }
         emitLineDirective(ed, mainBody);
         line(mainBody, 1, expr(*ed.defaultExpr) + ";");
         return;
     }
+    // A module-link export (`export { a }`, `export * from "m"`): the link
+    // table is the single source of truth in a whole-program build, so the
+    // declaration contributes no C++ of its own.
+    if (programMode_) return;
     notImplemented(ed, "re-export");
 }
 

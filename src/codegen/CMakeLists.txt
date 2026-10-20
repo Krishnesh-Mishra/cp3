@@ -23,6 +23,8 @@ set(cp3_codegen_sources
     src/support/int_mode.cpp
     src/support/int_reads.cpp
     src/support/usage_includes.cpp
+    src/support/program_link.cpp
+    src/emit/program.cpp
     src/emit/expr.cpp
     src/emit/equality.cpp
     src/emit/objects.cpp

@@ -181,11 +181,15 @@ Type Analyzer::inferNew(NewExpr& n) {
     if (n.callee && n.callee->kind == NodeKind::Identifier) {
         auto& id = static_cast<Identifier&>(*n.callee);
         Binding b;
+        // A named std import may be bound under another spelling
+        // (`import { Map as M } from "std/collections"`); the construct tables
+        // key on the exported name, so resolve the alias first.
+        const std::string ctor = importedName(id.name);
         // `new EventEmitter()` (D74, spec §14): a language builtin, always in
         // scope. The type is nominal; its members are typed in
         // member_check.cpp and codegen lowers the construction to the runtime.
         if (lookup(id.name, b) && isAmbientType(b.type) &&
-            id.name == "EventEmitter") {
+            ctor == "EventEmitter") {
             setType(id, b.type);
             for (auto& a : n.arguments) {
                 if (a) inferExpr(*a);
@@ -196,23 +200,23 @@ Type Analyzer::inferNew(NewExpr& n) {
             return withType(n, Type::named(TypeKind::Class, "EventEmitter"));
         }
         if (lookup(id.name, b) && isAmbientType(b.type) &&
-            isFamilyCtorName(id.name)) {
+            isFamilyCtorName(ctor)) {
             setType(id, b.type);
-            return withType(n, inferFamilyConstruct(id.name, n.arguments,
+            return withType(n, inferFamilyConstruct(ctor, n.arguments,
                                                     n.span));
         }
         if (lookup(id.name, b) && isAmbientType(b.type)) {
             // `new WebSocket(url)` / `new WebSocketServer({ port })`: an
             // ambient name the network table knows (src/std/network/sema.cpp).
             setType(id, b.type);
-            Type net = inferNetworkConstruct(id.name, n.arguments, n.span);
+            Type net = inferNetworkConstruct(ctor, n.arguments, n.span);
             if (!net.isUnknown()) return withType(n, net);
         }
         if (lookup(id.name, b) && isAmbientType(b.type)) {
             // `new Map<string, number>()` / `new Set<number>()`: the
             // std/collections family (src/std/collections/sema.cpp).
             setType(id, b.type);
-            Type coll = inferCollectionsConstruct(id.name, n.typeArgs);
+            Type coll = inferCollectionsConstruct(ctor, n.typeArgs);
             if (!coll.isUnknown()) return withType(n, coll);
         }
     }

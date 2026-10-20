@@ -7,14 +7,17 @@
 // the entry unit, threads the resulting SemaResult into codegen, then hands the
 // generated module to the toolchain driver. `execute` selects `run` semantics.
 // =============================================================================
+#include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cp3/analysis.hpp"
 #include "cp3/codegen.hpp"
+#include "cp3/codegen_program.hpp"
 #include "cp3/diagnostic.hpp"
 #include "cp3/module.hpp"
 #include "cp3/source.hpp"
@@ -40,12 +43,49 @@ struct BuildContext {
 };
 
 // The load+sema half of the pipeline. exitCode is kExitSuccess when `graph`
-// carries an analyzed entry unit to hand to codegen.
+// carries an analyzed entry unit to hand to codegen. `program` selects the
+// whole-program codegen path (a resolved local import exists); in that mode
+// every emittable unit is checked and its SemaResult kept in `unitSemas` -
+// each unit's parser restarts nodeIds (D6), so the tables are per unit and
+// cannot be merged. `worker` is the resolved canonical worker import of spec
+// 13, if any; the worker unit lowers through its own TU, not this program.
 struct FrontendResult {
     std::unique_ptr<ModuleGraph> graph;
     SemaResult sema;
+    std::unordered_map<std::uint32_t, SemaResult> unitSemas;
+    std::optional<WorkerUnit> worker;
+    bool program = false;
     int exitCode = kExitSuccess;
 };
+
+// Any resolved local import ("./x.cp3") routes the build through the
+// whole-program codegen path; std/package/native imports do not.
+bool hasLocalModules(const ModuleGraph& graph) {
+    for (const ModuleDependency& dep : graph.dependencies()) {
+        if (dep.resolution == ModuleResolution::Local &&
+            dep.imported != UINT32_MAX) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Checks every loaded local unit other than the entry and the worker unit
+// (preludes contribute their items through their importers and are never
+// analyzed standalone). Diagnostics share the caller's sink so one broken
+// module fails the build before codegen.
+void analyzeLocalUnits(ModuleGraph& graph, CompilationUnit* entry,
+                       const CompilationUnit* worker,
+                       std::unordered_map<std::uint32_t, SemaResult>& out,
+                       DiagnosticSink& sink) {
+    for (CompilationUnit* unit : graph.units()) {
+        if (unit == nullptr || unit == entry || unit == worker ||
+            unit->isPrelude || !unit->ast) {
+            continue;
+        }
+        analyzeProgram(*unit->ast, out[unit->id], sink);
+    }
+}
 
 FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
                           const BuildContext& ctx) {
@@ -55,6 +95,14 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
     CompilationUnit* entry = result.graph->entry();
     if (entry != nullptr && entry->ast) {
         analyzeProgram(*entry->ast, result.sema, feSink);
+        result.program = hasLocalModules(*result.graph);
+        result.worker =
+            findWorkerUnit(*entry->ast, *result.graph, *ctx.moduleName);
+        if (result.program) {
+            analyzeLocalUnits(*result.graph, entry,
+                              result.worker ? result.worker->unit : nullptr,
+                              result.unitSemas, feSink);
+        }
     }
     renderDiagnostics(feSink.diagnostics(), *ctx.render, stderr);
     if (feSink.hasErrors()) {
@@ -69,17 +117,11 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
     return result;
 }
 
-// The codegen half. Returns kExitSuccess when `mod` holds real generated code
-// (an empty module keeps the not-implemented marker for the harness).
-int codegenEntry(const CompilationUnit& entry, const SemaResult& sema,
-                 const BuildContext& ctx, const CodegenOptions& options,
-                 GeneratedModule& mod) {
-    CollectingDiagnosticSink cgSink;
-    // --debug carries `#line` mapping so DWARF and gdb point at the .cp3 file.
-    const bool lineDirectives =
-        ctx.opt->compile.profile == BuildProfile::Debug;
-    mod = generateModule(
-        {*entry.ast, sema, *ctx.moduleName, cgSink, lineDirectives, options});
+// Shared tail of both codegen paths: render the codegen diagnostics, turn them
+// into an exit code, and keep the not-implemented marker when nothing was
+// generated.
+int codegenOutcome(CollectingDiagnosticSink& cgSink, const GeneratedModule& mod,
+                   const BuildContext& ctx) {
     renderDiagnostics(cgSink.diagnostics(), *ctx.render, stderr);
     if (cgSink.hasErrors()) {
         return onlyNotImplemented(cgSink.diagnostics())
@@ -90,6 +132,52 @@ int codegenEntry(const CompilationUnit& entry, const SemaResult& sema,
         return notImplemented(ctx.execute ? "run" : "build");
     }
     return kExitSuccess;
+}
+
+// The codegen half for a single-unit graph.
+int codegenEntry(const CompilationUnit& entry, const SemaResult& sema,
+                 const BuildContext& ctx, const CodegenOptions& options,
+                 GeneratedModule& mod) {
+    CollectingDiagnosticSink cgSink;
+    // --debug carries `#line` mapping so DWARF and gdb point at the .cp3 file.
+    const bool lineDirectives =
+        ctx.opt->compile.profile == BuildProfile::Debug;
+    mod = generateModule(
+        {*entry.ast, sema, *ctx.moduleName, cgSink, lineDirectives, options});
+    return codegenOutcome(cgSink, mod, ctx);
+}
+
+// Assembles the whole-program unit list: every loaded unit with a parsed AST,
+// the entry carrying `frontend.sema` and every other unit its own table from
+// the frontend pass. Prelude units and the worker unit (its own TU) are skipped.
+std::vector<CheckedModuleUnit> checkedUnits(const FrontendResult& frontend) {
+    std::vector<CheckedModuleUnit> units;
+    for (CompilationUnit* unit : frontend.graph->units()) {
+        if (unit == nullptr || !unit->ast || unit->isPrelude) continue;
+        if (frontend.worker && unit == frontend.worker->unit) continue;
+        const SemaResult* sema = nullptr;
+        if (unit->isEntry) {
+            sema = &frontend.sema;
+        } else {
+            const auto it = frontend.unitSemas.find(unit->id);
+            if (it == frontend.unitSemas.end()) continue;
+            sema = &it->second;
+        }
+        units.push_back(CheckedModuleUnit{unit, sema});
+    }
+    return units;
+}
+
+// The codegen half for a local-module graph.
+int codegenProgram(const FrontendResult& frontend, const BuildContext& ctx,
+                   const CodegenOptions& options, GeneratedModule& mod) {
+    CollectingDiagnosticSink cgSink;
+    const bool lineDirectives =
+        ctx.opt->compile.profile == BuildProfile::Debug;
+    mod = generateProgramModule({*frontend.graph, checkedUnits(frontend),
+                                 *ctx.moduleName, cgSink, lineDirectives,
+                                 options});
+    return codegenOutcome(cgSink, mod, ctx);
 }
 
 // The worker half of codegen (spec 13): resolves the canonical worker import,
@@ -105,11 +193,10 @@ struct WorkerLinkage {
     std::string sourceKey;
 };
 
-WorkerLinkage prepareWorker(const CompilationUnit& entry, const ModuleGraph& graph,
-                            const std::string& moduleName, bool lineDirectives) {
+WorkerLinkage prepareWorker(const CompilationUnit& entry,
+                            const std::optional<WorkerUnit>& worker,
+                            bool lineDirectives) {
     WorkerLinkage out;
-    const std::optional<WorkerUnit> worker =
-        findWorkerUnit(*entry.ast, graph, moduleName);
     if (!worker || !programCallsWorker(*entry.ast)) return out;
     CollectingDiagnosticSink workerSink;
     out.module = generateWorkerModule(*worker, lineDirectives, workerSink);
@@ -162,10 +249,13 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
 
     const bool lineDirectives = opt.compile.profile == BuildProfile::Debug;
     const WorkerLinkage worker =
-        prepareWorker(*entry, *frontend.graph, moduleName, lineDirectives);
+        prepareWorker(*entry, frontend.worker, lineDirectives);
 
     GeneratedModule mod;
-    const int cgExit = codegenEntry(*entry, frontend.sema, ctx, worker.options, mod);
+    const int cgExit = frontend.program
+                           ? codegenProgram(frontend, ctx, worker.options, mod)
+                           : codegenEntry(*entry, frontend.sema, ctx,
+                                          worker.options, mod);
     if (cgExit != kExitSuccess) return cgExit;
 
     if (opt.verbose && opt.compile.maxMemoryMb != 0) {

@@ -305,11 +305,24 @@ void Analyzer::analyzeImport(ImportDeclaration& d) {
     if (!d.namespaceBinding.empty())
         declareAmbient(d.namespaceBinding, d.span, d.nodeId);
     if (!d.alias.empty()) declareAmbient(d.alias, d.span, d.nodeId);
+    const bool fromStd = d.source.rfind("std/", 0) == 0;
     for (auto& sp : d.specifiers) {
         if (!sp) continue;
         const std::string& local = sp->local.empty() ? sp->imported : sp->local;
         declareAmbient(local, sp->span, sp->nodeId);
+        // A named std import keeps the exported name it was bound to, so a
+        // construct that keys on the canonical export (`new M<...>()` where
+        // `M` is `Map`) still reaches the family lowering.
+        if (fromStd && !sp->imported.empty() && !local.empty() &&
+            local != sp->imported) {
+            stdImportAliases_[local] = sp->imported;
+        }
     }
+}
+
+std::string Analyzer::importedName(const std::string& local) const {
+    const auto it = stdImportAliases_.find(local);
+    return it == stdImportAliases_.end() ? local : it->second;
 }
 
 void Analyzer::registerInterface(InterfaceDeclaration& i) {
