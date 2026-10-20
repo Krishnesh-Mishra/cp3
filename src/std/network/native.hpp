@@ -41,6 +41,13 @@ inline const NativePackage kNetworkNativePackage{
     {"third_party/uWebSockets/lib", "third_party/libuv/lib"},
     {"-luSockets", "-luv", "-lws2_32", "-luserenv", "-liphlpapi", "-lole32",
      "-ldbghelp", "-lsynchronization"},
+    // Parallel to runtimeSources. A program that imports std/network only for
+    // fetch should not link the HTTP server or WebSocket runtime, and a
+    // WebSocket program should not link the server. runtime_server.cpp keeps
+    // the scaled server TU with it because HttpServer::listen/close reference
+    // the scaled entry points and both units are selected by the same marker.
+    {"", "fetch(", "fetch(", "HttpServer(", "HttpServer(", "WebSocket",
+     "WebSocket", "WebSocket"},
 };
 
 }  // namespace cp3::cli::detail
