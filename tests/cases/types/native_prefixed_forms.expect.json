@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "7 10 1.5 ts 2.5 200 -9\nnumber number string\n",
+  "exitCode": 0
+}

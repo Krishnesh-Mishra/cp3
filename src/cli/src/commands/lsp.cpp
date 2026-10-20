@@ -12,6 +12,7 @@
 // stages report through a DiagnosticSink that is never rendered here.
 // =============================================================================
 #include <exception>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
@@ -26,6 +27,7 @@
 
 #include "detail/commands.hpp"
 #include "detail/lsp_intel.hpp"
+#include "detail/package_json.hpp"
 #include "detail/pipeline.hpp"
 
 namespace cp3::cli {
@@ -85,8 +87,13 @@ std::vector<lsp::RawDiagnostic> checkTextOnce(const std::string& path,
     const std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sources, *file, sink);
     SemaResult sema;
     CompilationUnit* entry = graph != nullptr ? graph->entry() : nullptr;
+    CompileOptions compile;
+    std::filesystem::path root;
+    if (findPackageRoot(std::filesystem::path(path).parent_path(), root)) {
+        applyProjectTypeSettings(root, compile);
+    }
     if (entry != nullptr && entry->ast != nullptr) {
-        analyzeProgram(*entry->ast, sema, sink);
+        analyzeProgram(*entry->ast, sema, sink, compile);
     }
     return collectDiagnostics(*file, sink.diagnostics());
 }

@@ -1,0 +1,20 @@
+import console from "std/console";
+
+let a: r_'i64' = 17;
+let b: r_'i64' = 5;
+let q: r_'i64' = a / b;
+let m: r_'i64' = a % b;
+let neg: r_'i64' = -17;
+let nq: r_'i64' = neg / b;
+let nm: r_'i64' = neg % b;
+let bits: r_'u32' = 0xF0F0;
+let andv: r_'u32' = bits & 0xFF00;
+let orv: r_'u32' = bits | 0x000F;
+let xorv: r_'u32' = bits ^ 0x00FF;
+let shl: r_'u32' = orv << 2;
+let shr: r_'u32' = shl >> 1;
+let byLiteral: r_'i64' = a / 5;
+let modLiteral: r_'i64' = a % 5;
+
+console.log(`${q} ${m} ${nq} ${nm} ${andv} ${orv} ${xorv} ${shl} ${shr}`);
+console.log(`${byLiteral} ${modLiteral}`);

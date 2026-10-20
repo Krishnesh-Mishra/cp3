@@ -25,6 +25,7 @@
 
 #include "detail/cache.hpp"
 #include "detail/commands.hpp"
+#include "detail/package_json.hpp"
 #include "detail/pipeline.hpp"
 #include "detail/util.hpp"
 #include "detail/worker_module.hpp"
@@ -55,15 +56,21 @@ int cmdCheck(const CliOptions& opt) {
         return kExitUsageError;
     }
 
+    // Spec 03: the project's package.json selects the plain type-name
+    // vocabulary and the strictNumericCasts policy.
+    CliOptions effective = opt;
+    applyProjectTypeSettings(findProjectRoot(fs::path(opt.file)),
+                             effective.compile);
+
     CollectingDiagnosticSink sink;
     const std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sm, *file, sink);
     SemaResult sema;
     CompilationUnit* entry = graph->entry();
     if (entry != nullptr && entry->ast) {
-        analyzeProgram(*entry->ast, sema, sink);
+        analyzeProgram(*entry->ast, sema, sink, effective.compile);
     }
 
-    const RenderOptions ro = makeRenderOptions(opt, file->path);
+    const RenderOptions ro = makeRenderOptions(effective, file->path);
     renderDiagnostics(sink.diagnostics(), ro, stderr);
     if (sink.hasErrors()) {
         if (onlyNotImplemented(sink.diagnostics())) return notImplemented("check");
@@ -76,6 +83,7 @@ int cmdCheck(const CliOptions& opt) {
         moduleNameFor(entryPath, findProjectRoot(entryPath));
     CodegenOptions options;
     options.importedEnums = importedEnumsFor(*graph, *entry);
+    options.typeSystem = effective.compile.typeSystem;
 
     // File-form worker units: load/sema/lower each one in its own graph, the
     // same way build/run does. Their diagnostics are compile errors.
@@ -85,7 +93,7 @@ int cmdCheck(const CliOptions& opt) {
     if (!sites.empty()) {
         ResolvedWorkers workers =
             resolveWorkerUnits(sites, entryPath.parent_path(), moduleName, sm,
-                               false);
+                               false, effective.compile);
         workerDiagnostics = std::move(workers.diagnostics);
         options.workers = std::move(workers.sites);
         workerNotImplemented = onlyNotImplemented(workerDiagnostics);

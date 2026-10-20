@@ -111,8 +111,29 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
     const std::string target =
         mapIdent(static_cast<const Identifier&>(*a.target).name);
     const CppInfo T = info(*a.target);
-    const std::string value = expr(*a.value);
+    std::string value = expr(*a.value);
+    // A native target takes an in-range integral literal as an integer token.
+    if (T.shape == Shape::Native) {
+        if (const auto k = integralLiteralValue(*a.value)) value = std::to_string(*k);
+    }
 
+    // A native integer keeps the C++ compound operator (full width, integer
+    // `%`); the bitwise helpers below are the ToInt32 `number` path.
+    if (T.shape == Shape::Native) {
+        const char* op = nullptr;
+        switch (a.op) {
+            case AssignOp::Modulo: op = "%"; break;
+            case AssignOp::BitAnd: op = "&"; break;
+            case AssignOp::BitOr: op = "|"; break;
+            case AssignOp::BitXor: op = "^"; break;
+            case AssignOp::ShiftLeft: op = "<<"; break;
+            case AssignOp::ShiftRight: op = ">>"; break;
+            default: break;
+        }
+        if (op != nullptr) {
+            return "(" + target + " " + op + "= " + value + ")";
+        }
+    }
     if (const char* helper = bitwiseHelper(a.op)) {
         // ECMAScript ToInt32 on both operands, a double result.
         return "(" + target + " = ::cp3::runtime::bitwise::" + helper + "(" +

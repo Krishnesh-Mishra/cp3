@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "cp3/diagnostic_codes.hpp"
+#include "cp3/native_types.hpp"
 
 namespace cp3 {
 
@@ -29,6 +30,25 @@ bool Analyzer::wouldAccept(const Type& from, const Type& to, bool freshLiteral) 
     if (to.isUnknown() || isAmbientType(to) || to.isVoid() ||
         to.kind == TypeKind::TypeParam) {
         return true;
+    }
+    // Native numeric conversions under strictNumericCasts (spec 03 / D65):
+    // only the exact same native type is accepted, and a literal still adopts
+    // the declared type when it fits exactly (Rust literal inference). With
+    // the flag off, the frozen isAssignable follows the C++ implicit rule.
+    const bool nativeScalarTo = isNativeType(to) || to.kind == TypeKind::Number;
+    const bool nativeScalarFrom =
+        isNativeType(from) || from.kind == TypeKind::Number ||
+        (from.isLiteral() && from.literalBase == TypeKind::Number);
+    if (options_.strictNumericCasts && nativeScalarFrom && nativeScalarTo &&
+        (isNativeType(from) || isNativeType(to))) {
+        if (from.isLiteral() && from.literalBase == TypeKind::Number &&
+            isNativeType(to)) {
+            return nativeCanRepresentLiteral(to, from.numberValue);
+        }
+        if (isNativeType(from) && isNativeType(to)) {
+            return from.name == to.name;
+        }
+        return false;
     }
     if (isAssignable(from, to)) return true;
     if (from.kind == TypeKind::Array && to.kind == TypeKind::Array) {
@@ -119,6 +139,22 @@ void Analyzer::checkAssign(const Type& from, const Type& to,
                "type mismatch: array literal does not match tuple type '" +
                    pretty(to) + "'");
         return;
+    }
+    // A failed conversion between native/number scalars is worth naming the
+    // flag that refused it.
+    if (options_.strictNumericCasts && (isNativeType(from) || isNativeType(to))) {
+        const bool scalarFrom =
+            isNativeType(from) || from.kind == TypeKind::Number ||
+            (from.isLiteral() && from.literalBase == TypeKind::Number);
+        const bool scalarTo = isNativeType(to) || to.kind == TypeKind::Number;
+        if (scalarFrom && scalarTo) {
+            report(diagcode::kTypeMismatch, span,
+                   "strictNumericCasts refuses an implicit numeric conversion "
+                   "from '" +
+                       pretty(from) + "' to '" + pretty(to) +
+                       "'; convert one side explicitly");
+            return;
+        }
     }
     report(diagcode::kTypeMismatch, span,
            "type mismatch: cannot assign '" + pretty(from) + "' to '" +

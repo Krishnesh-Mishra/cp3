@@ -1,0 +1,12 @@
+import console from "std/console";
+
+let a: r_'i32' = 7;
+let b: c_'unsigned long long' = 10;
+let c: ts_'number' = 1.5;
+let d: ts_'string' = "ts";
+let e: c_'float' = 2.5;
+let f: r_'u8' = 200;
+let g: c_'long long' = -9;
+
+console.log(`${a} ${b} ${c} ${d} ${e} ${f} ${g}`);
+console.log(typeof a, typeof c, typeof d);

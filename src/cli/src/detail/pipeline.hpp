@@ -24,6 +24,7 @@
 #include "cp3/codegen_program.hpp"
 #include "cp3/diagnostic.hpp"
 #include "cp3/module.hpp"
+#include "cp3/options.hpp"
 #include "cp3/source.hpp"
 
 namespace cp3::cli {
@@ -35,10 +36,11 @@ namespace cp3::cli {
 std::unique_ptr<ModuleGraph> loadModuleGraph(SourceManager& sm, const SourceFile& entry,
                                              DiagnosticSink& sink);
 
-// Runs sema with the extended two-argument signature, publishing the
-// nodeId-keyed side tables into `out`. Returns true when no error/fatal
-// diagnostic was reported.
-bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink);
+// Runs sema with the project-aware signature (spec 03: `typeSystem` and
+// `strictNumericCasts`), publishing the nodeId-keyed side tables into `out`.
+// Returns true when no error/fatal diagnostic was reported.
+bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink,
+                    const CompileOptions& compile = CompileOptions{});
 
 // The inputs of one `generateModule` call. `lineDirectives` turns on `#line`
 // source mapping, which the Debug profile needs so gdb (and the DAP adapter)

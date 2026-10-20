@@ -22,6 +22,7 @@
 #include "cp3/analysis.hpp"
 #include "cp3/ast.hpp"
 #include "cp3/diagnostic.hpp"
+#include "cp3/options.hpp"
 
 namespace cp3 {
 
@@ -59,6 +60,10 @@ struct CodegenOptions {
     // re-emits the names it imported as its own `enum class`, and same-named
     // enums are structurally compatible at the channel boundary (D80).
     std::vector<const EnumDeclaration*> importedEnums;
+    // The project's plain type-name vocabulary (spec 03). Inline r_/c_/ts_
+    // prefixes work in every project; this only affects bare `i64`-style
+    // annotations in a rust/cpp project.
+    TypeSystem typeSystem = TypeSystem::TypeScript;
 };
 
 // The typed channel of a worker unit's entry (D80): the `thread: Thread<In, Out>`

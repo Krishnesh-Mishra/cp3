@@ -25,8 +25,9 @@ std::unique_ptr<ModuleGraph> loadModuleGraph(SourceManager& sm, const SourceFile
     return loader.load(sm, entry);
 }
 
-bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink) {
-    SemanticAnalyzer analyzer(sink);
+bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink,
+                    const CompileOptions& compile) {
+    SemanticAnalyzer analyzer(sink, compile);
     return analyzer.analyze(program, out);
 }
 

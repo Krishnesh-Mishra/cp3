@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "cp3/diagnostic_codes.hpp"
+#include "cp3/native_types.hpp"
 
 namespace cp3 {
 
@@ -154,6 +155,8 @@ std::string pretty(const Type& t) {
             return t.name.empty() ? "class" : t.name;
         case TypeKind::Enum: return t.name.empty() ? "enum" : t.name;
         case TypeKind::TypeParam: return t.name.empty() ? "type parameter" : t.name;
+        case TypeKind::Native:
+            return t.name.empty() ? "native" : t.name;
         case TypeKind::Literal:
             switch (t.literalBase) {
                 case TypeKind::Number: return "number";
@@ -345,6 +348,20 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
     }
     const auto it = typeNames_.find(nt.name);
     if (it != typeNames_.end()) return it->second;
+    // A non-TypeScript project also accepts its own plain value-type names:
+    // `let a: i64 = 10;` (rust) or `let a: long long = 10;` (cpp). Unsupported
+    // spellings (i128, long double, ...) get their precise diagnostic; a name
+    // that is simply not native falls through to the ordinary undefined-type
+    // error below.
+    if (options_.typeSystem != TypeSystem::TypeScript) {
+        NativeNameResult native =
+            resolvePlainNativeTypeName(options_.typeSystem, nt.name);
+        if (native.type) return *native.type;
+        if (native.status == NativeNameStatus::Unsupported) {
+            report(diagcode::kUnknownType, nt.span, native.error);
+            return Type::unknown();
+        }
+    }
     report(diagcode::kUndefinedType, nt.span,
            "cannot find type name '" + nt.name + "'");
     return Type::unknown();
@@ -355,7 +372,9 @@ Type Analyzer::resolveUnionType(UnionType& ut) {
     for (auto& t : ut.types) {
         if (t) members.push_back(resolveType(*t));
     }
-    return Type::unionOf(std::move(members));
+    Type result = Type::unionOf(std::move(members));
+    rejectNativeUnion(result, ut.span);
+    return result;
 }
 
 Type Analyzer::resolveArrayType(ArrayType& at) {
@@ -394,17 +413,6 @@ Type Analyzer::resolveObjectType(ObjectType& ot) {
         }
     }
     return makeObjectType(std::move(fields), open, false, {});
-}
-
-Type Analyzer::resolvePrefixedType(PrefixedType& pt) {
-    if (pt.name.find('*') != std::string::npos ||
-        pt.name.find('&') != std::string::npos) {
-        report(diagcode::kUnknownTypeArgument, pt.span,
-               "raw pointer/reference types are not permitted here");
-        return Type::unknown();
-    }
-    // Raw foreign value types are treated permissively in M1.
-    return Type::unknown();
 }
 
 Type Analyzer::resolveLiteralType(LiteralType& lt) {

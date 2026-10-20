@@ -380,7 +380,7 @@ std::optional<Type> Generator::typeOfNode(const TypeNode& tn) const {
     if (const Type* published = sema_.typeOf(tn.nodeId)) {
         if (!published->isUnknown() && !published->isError()) mapped = *published;
     }
-    if (!mapped) mapped = typeFromTypeNode(tn);
+    if (!mapped) mapped = typeFromTypeNode(tn, options_.typeSystem);
     if (!mapped) return std::nullopt;
     rewriteEnumTypes(*mapped);
     return mapped;

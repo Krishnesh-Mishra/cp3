@@ -15,6 +15,7 @@
 #include "cp3/analysis.hpp"
 #include "cp3/ast.hpp"
 #include "cp3/diagnostic.hpp"
+#include "cp3/options.hpp"
 
 namespace cp3 {
 
@@ -23,6 +24,13 @@ namespace cp3 {
 class SemanticAnalyzer {
 public:
     explicit SemanticAnalyzer(DiagnosticSink& sink) noexcept : sink_(sink) {}
+
+    // The project-aware form (spec 03): `options.typeSystem` selects the plain
+    // type-name vocabulary and `options.strictNumericCasts` enables Rust-style
+    // refusal of implicit native-width conversions. Additive: the one-argument
+    // constructor keeps the TypeScript defaults.
+    SemanticAnalyzer(DiagnosticSink& sink, const CompileOptions& options) noexcept
+        : sink_(sink), options_(options) {}
 
     // Analyzes `program` and publishes every inferred type / symbol / signature
     // into `out` (keyed by Node::nodeId). `out` is cleared first. Returns
@@ -35,6 +43,7 @@ public:
 
 private:
     DiagnosticSink& sink_;
+    CompileOptions options_{};
 };
 
 }  // namespace cp3

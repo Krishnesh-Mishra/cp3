@@ -93,6 +93,7 @@ std::string Generator::sourceIncludes() const {
     out += "#include <limits>\n";
     out += "#include <optional>\n";
     out += "#include <string>\n";
+    out += "#include <type_traits>\n";  // native integer formatter/truthiness
     if (needsTuple_) out += "#include <tuple>\n";  // enum-carrying object literals
     if (needsUnion_) out += "#include <variant>\n";  // primitive unions
     if (needsEventLoop_) out += "#include <vector>\n";  // Promise input lists

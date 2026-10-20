@@ -50,6 +50,8 @@ enum class TypeKind {
     Nullable,    // T | null | undefined - parts = { T }  (the optional shorthand)
     TypeParam,   // a generic type parameter     - name is the parameter name
     Literal,     // a literal type "data"/42/true - see literalBase + payload
+    Native,      // a Rust/C++ native value type - name is its canonical id
+                 // (spec 03 / D65; see cp3/native_types.hpp)
 };
 
 // Stable printable name of a kind ("number", "union", ...). Never null.
@@ -91,6 +93,9 @@ struct Type {
     static Type undefined();
     static Type nullType();  // `null` (named without the reserved-ish spelling)
     static Type voidType();  // `void`
+    // A native Rust/C++ value type (spec 03 / D65): its canonical id from
+    // cp3/native_types.hpp, e.g. "i64" or "f32".
+    static Type native(std::string id);
 
     // --- literal constructors ------------------------------------------------
     static Type numberLiteral(double value);
@@ -115,6 +120,7 @@ struct Type {
     bool isNull() const noexcept { return kind == TypeKind::Null; }
     bool isVoid() const noexcept { return kind == TypeKind::Void; }
     bool isLiteral() const noexcept { return kind == TypeKind::Literal; }
+    bool isNative() const noexcept { return kind == TypeKind::Native; }
     bool isUnion() const noexcept { return kind == TypeKind::Union; }
     bool isNullable() const noexcept { return kind == TypeKind::Nullable; }
     // True for Undefined and Null only (the cp3 "nullish" set).
@@ -131,7 +137,8 @@ struct Type {
 };
 
 // True for the cp3 primitive *value* types: Number, String, Boolean,
-// Undefined, Null. (Void/Unknown/Error are not value primitives.)
+// Undefined, Null, and the native numeric types (D65). (Void/Unknown/Error are
+// not value primitives.)
 bool isPrimitive(const Type& t) noexcept;
 
 // Human-readable rendering for diagnostics, e.g. "number",

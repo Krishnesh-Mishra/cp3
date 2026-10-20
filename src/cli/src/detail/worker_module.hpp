@@ -59,11 +59,12 @@ struct ResolvedWorkers {
 // Resolves each site's literal against `entryFolder`, dedupes by canonical
 // source path (two sites may drive the same file), and generates each worker
 // TU. Worker-unit diagnostics are collected here; the caller renders them and
-// stops on `failed`.
+// stops on `failed`. `compile` carries the project type-system settings.
 ResolvedWorkers resolveWorkerUnits(const std::vector<WorkerPathSite>& sites,
                                    const std::filesystem::path& entryFolder,
                                    const std::string& entryModuleName,
-                                   SourceManager& sm, bool lineDirectives);
+                                   SourceManager& sm, bool lineDirectives,
+                                   const CompileOptions& compile);
 
 // Every top-level enum declared in a unit of `graph` other than `unit` (a
 // local import, including one reached through another import). The CLI hands

@@ -75,13 +75,13 @@ bool hasLocalModules(const ModuleGraph& graph) {
 // module fails the build before codegen.
 void analyzeLocalUnits(ModuleGraph& graph, CompilationUnit* entry,
                        std::unordered_map<std::uint32_t, SemaResult>& out,
-                       DiagnosticSink& sink) {
+                       DiagnosticSink& sink, const CompileOptions& compile) {
     for (CompilationUnit* unit : graph.units()) {
         if (unit == nullptr || unit == entry ||
             unit->isPrelude || !unit->ast) {
             continue;
         }
-        analyzeProgram(*unit->ast, out[unit->id], sink);
+        analyzeProgram(*unit->ast, out[unit->id], sink, compile);
     }
 }
 
@@ -92,11 +92,11 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
     result.graph = loadModuleGraph(sm, file, feSink);
     CompilationUnit* entry = result.graph->entry();
     if (entry != nullptr && entry->ast) {
-        analyzeProgram(*entry->ast, result.sema, feSink);
+        analyzeProgram(*entry->ast, result.sema, feSink, ctx.opt->compile);
         result.program = hasLocalModules(*result.graph);
         if (result.program) {
             analyzeLocalUnits(*result.graph, entry, result.unitSemas,
-                              feSink);
+                              feSink, ctx.opt->compile);
         }
     }
     renderDiagnostics(feSink.diagnostics(), *ctx.render, stderr);
@@ -200,7 +200,8 @@ int prepareWorkers(const WorkerInputs& in, CodegenOptions& options,
         in.ctx.opt->compile.profile == BuildProfile::Debug;
     ResolvedWorkers workers = resolveWorkerUnits(sites, in.folder,
                                                  in.moduleName, in.sm,
-                                                 lineDirectives);
+                                                 lineDirectives,
+                                                 in.ctx.opt->compile);
     renderDiagnostics(workers.diagnostics, *in.ctx.render, stderr);
     if (workers.failed) {
         return onlyNotImplemented(workers.diagnostics)
@@ -246,8 +247,12 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     const bool packageProject = isPackageProject(projectRoot);
     if (packageProject && execute) return runOnPackageError(opt.file);
 
-    const RenderOptions ro = makeRenderOptions(opt, file->path);
-    const BuildContext ctx{&opt, &ro, &moduleName, execute};
+    // The project's type-system vocabulary (spec 03) joins the CLI options.
+    CliOptions effective = opt;
+    applyProjectTypeSettings(projectRoot, effective.compile);
+
+    const RenderOptions ro = makeRenderOptions(effective, file->path);
+    const BuildContext ctx{&effective, &ro, &moduleName, execute};
 
     FrontendResult frontend = runFrontend(sm, *file, ctx);
     if (frontend.exitCode != kExitSuccess) return frontend.exitCode;
@@ -255,6 +260,7 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
 
     CodegenOptions options;
     options.importedEnums = importedEnumsFor(*frontend.graph, *entry);
+    options.typeSystem = effective.compile.typeSystem;
     std::vector<GeneratedModule> workerModules;
     std::vector<detail::BuildRequest::ExtraModule> extras;
     const int workerExit = prepareWorkers(
@@ -270,14 +276,15 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
                                           mod);
     if (cgExit != kExitSuccess) return cgExit;
 
-    if (opt.verbose && opt.compile.maxMemoryMb != 0) {
+    if (effective.verbose && effective.compile.maxMemoryMb != 0) {
         std::fprintf(stderr, "cp3c: --max-memory cap: %llu MB (codegen phase)\n",
-                     static_cast<unsigned long long>(opt.compile.maxMemoryMb));
+                     static_cast<unsigned long long>(
+                         effective.compile.maxMemoryMb));
     }
 
     if (packageProject) {
         detail::PackInput input;
-        input.opt = &opt;
+        input.opt = &effective;
         input.entryPath = &entryPath;
         input.moduleName = &moduleName;
         input.module = &mod;
@@ -296,7 +303,7 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
         }
     }
     detail::BuildRequest request;
-    request.opt = &opt;
+    request.opt = &effective;
     request.entry = &entryPath;
     request.moduleName = &moduleName;
     request.module = &mod;

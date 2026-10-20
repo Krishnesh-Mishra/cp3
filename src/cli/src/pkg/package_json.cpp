@@ -74,4 +74,19 @@ std::string packageMain(const JsonValue& manifest) {
     return "src/index.cp3";
 }
 
+void applyProjectTypeSettings(const fs::path& root, CompileOptions& compile) {
+    JsonValue manifest;
+    std::string err;
+    if (!loadPackageJson(root, manifest, err)) return;
+    if (const std::string* text = manifest.stringField("typeSystem")) {
+        TypeSystem parsed = compile.typeSystem;
+        if (parseTypeSystem(*text, parsed)) compile.typeSystem = parsed;
+    }
+    if (const JsonValue* strict = manifest.find("strictNumericCasts")) {
+        if (strict->type == JsonValue::Type::Bool) {
+            compile.strictNumericCasts = strict->boolean;
+        }
+    }
+}
+
 }  // namespace cp3::cli

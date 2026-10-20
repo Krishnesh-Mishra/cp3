@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "cp3/diagnostic_codes.hpp"
+#include "cp3/native_types.hpp"
 
 namespace cp3 {
 
@@ -163,6 +164,12 @@ bool Analyzer::isMixedArray(const Type& t) const {
 }
 
 void Analyzer::checkArrayLiteral(ArrayLiteral& lit, const Type& target) {
+    // A native element type (`r_'u8'[]`) takes the element's own literal type,
+    // not its widened base: the literal must reach `checkAssign` so the
+    // integral range rule can accept `[1, 2, 3]` for an `i64[]`.
+    const bool nativeElement =
+        target.kind == TypeKind::Array && !target.parts.empty() &&
+        isNativeType(target.parts.front());
     std::vector<Type> elems;
     for (auto& e : lit.elements) {
         if (!e) {
@@ -176,7 +183,8 @@ void Analyzer::checkArrayLiteral(ArrayLiteral& lit, const Type& target) {
                                                        : Type::unknown());
             continue;
         }
-        elems.push_back(widen(inferExpr(*e)));
+        const Type inferred = inferExpr(*e);
+        elems.push_back(nativeElement ? inferred : widen(inferred));
     }
     if (isTupleType(target)) {
         Shape* sh = shapeOf(target);
@@ -310,6 +318,12 @@ void Analyzer::analyzeImport(ImportDeclaration& d) {
         if (!sp) continue;
         const std::string& local = sp->local.empty() ? sp->imported : sp->local;
         declareAmbient(local, sp->span, sp->nodeId);
+        // A named import may also be a type (an exported local enum used as a
+        // worker channel payload). Imports are compile-time and sema does not
+        // fetch the other unit; registering the name as an ambient nominal
+        // type lets `Thread<Color, Color>` resolve. Codegen re-emits imported
+        // enum declarations from the module graph (CodegenOptions).
+        typeNames_.emplace(local, Type::named(TypeKind::Class, local));
         // A named std import keeps the exported name it was bound to, so a
         // construct that keys on the canonical export (`new M<...>()` where
         // `M` is `Map`) still reaches the family lowering.

@@ -125,6 +125,7 @@ struct WorkerResolver {
     std::unordered_map<std::string, std::string> nameByKey;
     std::unordered_map<std::string, WorkerChannel> channelByKey;
     std::set<std::string> usedNames;
+    const CompileOptions& compile;
 
     std::string resolveSite(const WorkerPathSite& site);
     bool generateUnit(const fs::path& resolved, const WorkerPathSite& site,
@@ -148,7 +149,7 @@ bool WorkerResolver::generateUnit(const fs::path& resolved,
         return false;
     }
     SemaResult sema;
-    if (!analyzeProgram(*unit->ast, sema, sink)) return false;
+    if (!analyzeProgram(*unit->ast, sema, sink, compile)) return false;
     const std::optional<WorkerChannel> channel =
         resolveWorkerChannel(*unit->ast, sema);
     if (!channel) {
@@ -162,6 +163,7 @@ bool WorkerResolver::generateUnit(const fs::path& resolved,
     const std::string moduleName = uniqueModuleName(site.literal, usedNames);
     CodegenOptions options;
     options.workerModule = true;
+    options.typeSystem = compile.typeSystem;
     options.importedEnums = importedEnumsFor(*graph, *unit);
     GeneratedModule module =
         generateModule({*unit->ast, sema, moduleName, sink, lineDirectives, options});
@@ -207,12 +209,13 @@ std::vector<const EnumDeclaration*> importedEnumsFor(const ModuleGraph& graph,
 ResolvedWorkers resolveWorkerUnits(const std::vector<WorkerPathSite>& sites,
                                    const fs::path& entryFolder,
                                    const std::string& entryModuleName,
-                                   SourceManager& sm, bool lineDirectives) {
+                                   SourceManager& sm, bool lineDirectives,
+                                   const CompileOptions& compile) {
     ResolvedWorkers out;
     CollectingDiagnosticSink sink;
     WorkerResolver resolver{sm,          lineDirectives, sink,
                             entryModuleName, entryFolder,   out,
-                            {},          {},             {}};
+                            {},          {},             {}, compile};
     for (const WorkerPathSite& site : sites) {
         const std::string moduleName = resolver.resolveSite(site);
         if (moduleName.empty()) continue;

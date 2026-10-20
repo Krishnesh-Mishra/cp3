@@ -65,6 +65,12 @@ fs::path resolveEntry(const std::string& program, const std::string& cwd) {
     return ec ? entry : canonical;
 }
 
+CodegenOptions codegenOptionsFor(const CompileOptions& compile) {
+    CodegenOptions out;
+    out.typeSystem = compile.typeSystem;
+    return out;
+}
+
 // One Debug build behind `launch`: the same frontend + toolchain stages
 // `cp3c build --debug` runs, with diagnostics captured instead of printed.
 dap::BuildOutcome buildDebugProgram(const std::string& program,
@@ -84,6 +90,7 @@ dap::BuildOutcome buildDebugProgram(const std::string& program,
         CliOptions opt;
         opt.file = entryPath.string();
         opt.compile.profile = BuildProfile::Debug;
+        applyProjectTypeSettings(projectRoot, opt.compile);
         const RenderOptions render = makeRenderOptions(opt, file->path);
 
         std::string log;
@@ -92,7 +99,7 @@ dap::BuildOutcome buildDebugProgram(const std::string& program,
         CompilationUnit* entry = graph != nullptr ? graph->entry() : nullptr;
         SemaResult sema;
         if (entry != nullptr && entry->ast) {
-            analyzeProgram(*entry->ast, sema, feSink);
+            analyzeProgram(*entry->ast, sema, feSink, opt.compile);
         }
         log += renderToText(feSink.diagnostics(), render);
         if (feSink.hasErrors() || entry == nullptr || !entry->ast) {
@@ -107,9 +114,9 @@ dap::BuildOutcome buildDebugProgram(const std::string& program,
         CollectingDiagnosticSink cgSink;
         // --debug codegen carries `#line` mapping so DWARF and gdb point at the
         // .cp3 file (the whole point of the debug adapter).
-        const GeneratedModule mod =
-            generateModule({*entry->ast, sema, moduleName, cgSink,
-                            /*lineDirectives=*/true, CodegenOptions{}});
+        const GeneratedModule mod = generateModule(
+            {*entry->ast, sema, moduleName, cgSink, /*lineDirectives=*/true,
+             codegenOptionsFor(opt.compile)});
         log += renderToText(cgSink.diagnostics(), render);
         if (cgSink.hasErrors() || (mod.source.empty() && mod.header.empty())) {
             outcome.log = log.empty() ? "cp3c: code generation produced no module\n" : log;

@@ -27,6 +27,8 @@
 #include <utility>
 #include <vector>
 
+#include "cp3/native_types.hpp"
+
 #include "detail/parallel.h"
 #include "detail/type_map.h"
 #include "detail/worker.h"
@@ -42,7 +44,8 @@ using namespace detail;
 namespace detail {
 
 bool isPrimitiveShape(Shape s) {
-    return s == Shape::Number || s == Shape::String || s == Shape::Bool;
+    return s == Shape::Number || s == Shape::String || s == Shape::Bool ||
+           s == Shape::Native;
 }
 
 NullishKind nullishKindOf(const Type& t) {
@@ -83,58 +86,7 @@ bool isEventEmitterType(const Type& t) {
     return t.kind == TypeKind::Class && t.name == "EventEmitter";
 }
 
-// `Promise<T>` -> `::cp3::runtime::Promise<T>` (cp3/async/promise.hpp). Only
-// M1-representable value types (primitives and `void`) have a spelling;
-// anything else stays not-implemented. Implementation detail of `classify`.
-static CppInfo classifyPromise(const Type& t) {
-    CppInfo info;
-    const Type inner = promiseValue(t);
-    if (inner.isVoid()) {
-        info.shape = Shape::Promise; info.representable = true;
-        info.cpp = "::cp3::runtime::Promise<void>";
-        return info;
-    }
-    const CppInfo ic = classify(inner);
-    if (ic.representable && isPrimitiveShape(ic.shape)) {
-        info.shape = Shape::Promise; info.representable = true;
-        info.cpp = "::cp3::runtime::Promise<" + ic.cpp + ">";
-    }
-    return info;
-}
-
-// The Class-kind tail of `classify`: the family spellings (Buffer, typed
-// views, Map/Set, Date), then the builtin EventEmitter (D74), then `Promise<T>`
-// (the only other class with a spelling). Anything else stays out of M1.
-static CppInfo classifyClassValue(const Type& t) {
-    CppInfo info;
-    info.type = t;
-    // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp).
-    if (classifyByteBuffer(t, info)) return info;
-    // The JS-compat family (typed views, buffers, DataView).
-    if (classifyFamily(t, info)) return info;
-    // The std/collections family (`Map<K, V>` / `Set<T>`).
-    if (classifyCollections(t, info)) return info;
-    // The `std/date` value type (src/std/date/codegen.cpp).
-    if (classifyDate(t, info)) return info;
-    if (classifyRegex(t, info)) return info;  // core regex (src/emit/regex.cpp)
-    // The builtin EventEmitter (D74): a reference type, so its C++
-    // spelling is `Ref<EventEmitter>` (cp3/async/emitter.hpp).
-    if (t.name == "EventEmitter") {
-        info.shape = Shape::EventEmitter;
-        info.representable = true;
-        info.cpp = "::cp3::runtime::Ref<::cp3::runtime::EventEmitter>";
-        return info;
-    }
-    // `Promise<T>` is the only other class type with a spelling (M1).
-    if (isPromiseType(t)) return classifyPromise(t);
-    return info;
-}
-
-// `T | null` / `T | undefined` / the `T?` shorthand / `T | null | undefined`
-// over a primitive `T` -> `std::optional<T>`, or the two-flavor `Maybe<T>`
-// when both nullish kinds are present. Also the single-member option over an
-// object value shape (`{...} | null` -> `std::optional<Struct>`). The
-// primitive-only union spellings live in support/value_shapes.cpp.
+// `Promise<T>` -> ... the mapping lives in support/type_classify.cpp.
 
 Type promiseOf(const Type& value) {
     Type p(TypeKind::Class, "Promise");
@@ -147,87 +99,15 @@ Type promiseValue(const Type& t) {
     return t.parts.front();
 }
 
-CppInfo classify(const Type& raw) {
-    CppInfo info;
-    Type t = raw;
-    if (t.isLiteral()) {
-        t = t.literalBaseType();
-    }
-    info.type = t;
-    // The parallel.run result marker must be caught before the Array arm:
-    // classifyFamily keys on the element type alone and would spell it
-    // `Array<double>`. Keeping it non-representable leaves the binding `auto`.
-    if (isParallelRunType(t)) {
-        info.shape = Shape::Unknown;
-        return info;
-    }
-    switch (t.kind) {
-        case TypeKind::Number:
-            info.shape = Shape::Number; info.representable = true; info.cpp = "double";
-            return info;
-        case TypeKind::String:
-            info.shape = Shape::String; info.representable = true; info.cpp = "std::string";
-            return info;
-        case TypeKind::Boolean:
-            info.shape = Shape::Bool; info.representable = true; info.cpp = "bool";
-            return info;
-        case TypeKind::Undefined:
-            info.shape = Shape::Undefined; info.representable = true;
-            info.cpp = "cp3::runtime::Undefined";
-            return info;
-        case TypeKind::Null:
-            info.shape = Shape::Null; info.representable = true; info.cpp = "std::nullptr_t";
-            return info;
-        case TypeKind::Void:
-            info.shape = Shape::Void; info.representable = true; info.cpp = "void";
-            return info;
-        case TypeKind::Unknown:
-        case TypeKind::Error:
-            info.shape = Shape::Unknown; info.representable = false;
-            return info;
-        case TypeKind::Nullable: {
-            if (t.parts.size() == 1) {
-                CppInfo inner = classify(t.parts.front());
-                if (inner.representable && isPrimitiveShape(inner.shape)) {
-                    info.shape = Shape::Optional; info.representable = true;
-                    info.cpp = "std::optional<" + inner.cpp + ">";
-                    info.emptyKind = NullishKind::Mixed;
-                }
-            }
-            return info;
-        }
-        case TypeKind::Union:
-            classifyValueUnion(t, info);
-            if (!info.representable) classifyNullishUnion(t, info);
-            return info;
-        case TypeKind::Object:
-            // A structural `$o{...}` shape: an all-primitive object becomes a
-            // generated value struct (support/value_shapes.cpp).
-            return classifyObjectValue(t);
-        case TypeKind::Class:
-            return classifyClassValue(t);
-        case TypeKind::Enum: return classifyEnum(t);  // spec 04: enum class
-        case TypeKind::Function:
-            // A function-typed value (D74): boxed as `Listener` so every copy
-            // shares one identity; only void-returning functions have one.
-            if (t.parts.empty() || !t.parts.back().isVoid()) return info;
-            info.shape = Shape::Listener;
-            info.representable = true;
-            info.cpp = "::cp3::runtime::Listener";
-            return info;
-        case TypeKind::Array:
-            // Regular arrays have a spelling when their element type does
-            // (src/std/typed-arrays/codegen.cpp); otherwise they stay out of
-            // M1.
-            classifyFamily(t, info);
-            return info;
-        default:
-            return info;  // Object/TypeParam: out of M1
-    }
-}
-
-std::optional<Type> typeFromTypeNode(const TypeNode& tn) {
+std::optional<Type> typeFromTypeNode(const TypeNode& tn, TypeSystem typeSystem) {
     switch (tn.kind) {
+        case NodeKind::PrefixedType: {
+            // `r_'u32'`, `c_'long long'`, `ts_'number'` (spec 03). An
+            // unresolved spelling returns nullopt; sema has already reported
+            // the precise diagnostic that stops the pipeline.
+            const auto& pt = static_cast<const PrefixedType&>(tn);
+            return resolveNativeTypeName(pt.prefix, pt.name).type;
+        }
         case NodeKind::NamedType: {
             const auto& nt = static_cast<const NamedType&>(tn);
             if (nt.name == "number") return Type::number();
@@ -237,12 +117,20 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn) {
             if (nt.name == "undefined") return Type::undefined();
             if (nt.name == "null") return Type::nullType();
             if (nt.name == "unknown") return Type::unknown();
+            // The project's own plain vocabulary (`i64`, `long long`, ...).
+            // TypeScript names above keep working in every project.
+            if (typeSystem != TypeSystem::TypeScript) {
+                const NativeNameResult native =
+                    resolvePlainNativeTypeName(typeSystem, nt.name);
+                if (native.type) return *native.type;
+            }
             if (nt.name == "Promise") {
                 // `Promise<T>` (spec §14); a bare `Promise` is `Promise<unknown>`.
                 Type p(TypeKind::Class, "Promise");
                 Type inner = Type::unknown();
                 if (!nt.typeArgs.empty() && nt.typeArgs.front()) {
-                    auto mapped = typeFromTypeNode(*nt.typeArgs.front());
+                    auto mapped =
+                        typeFromTypeNode(*nt.typeArgs.front(), typeSystem);
                     if (!mapped) return std::nullopt;
                     inner = *mapped;
                 }
@@ -255,7 +143,7 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn) {
             std::vector<Type> members;
             for (const auto& part : static_cast<const UnionType&>(tn).types) {
                 if (!part) return std::nullopt;
-                auto mapped = typeFromTypeNode(*part);
+                auto mapped = typeFromTypeNode(*part, typeSystem);
                 if (!mapped) return std::nullopt;
                 members.push_back(*mapped);
             }
@@ -264,14 +152,14 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn) {
         case NodeKind::ArrayType: {
             const auto& at = static_cast<const ArrayType&>(tn);
             if (!at.element) return std::nullopt;
-            auto element = typeFromTypeNode(*at.element);
+            auto element = typeFromTypeNode(*at.element, typeSystem);
             if (!element) return std::nullopt;
             return Type::array(*element);
         }
         case NodeKind::ParenthesizedType: {
             const auto& pt = static_cast<const ParenthesizedType&>(tn);
             if (!pt.inner) return std::nullopt;
-            return typeFromTypeNode(*pt.inner);
+            return typeFromTypeNode(*pt.inner, typeSystem);
         }
         default:
             return std::nullopt;
