@@ -262,6 +262,12 @@ GeneratedModule Generator::run(const Program& program) {
     // kernel shapes the `worker(...)` calls accept (src/emit/worker.cpp).
     collectWorkerObjects(program);
 
+    // The closure-capture analysis (spec 10): classify every function frame's
+    // locals before the emit walk, so a shared mutable binding lowers to a
+    // `Cell<T>` from its first declaration on.
+    captures_ = analyzeCaptures(program);
+    currentFrameId_ = program.nodeId;
+
     std::string decls;   // function forward declarations
     std::string defs;    // function definitions
     std::string mainBody;
@@ -299,6 +305,7 @@ std::string Generator::buildHeader(const std::string& decls) const {
     out += "#define " + guard + "\n\n";
     out += "#include <optional>\n";
     out += "#include <string>\n";
+    out += "#include <functional>\n";  // std::function closures (spec 10)
     if (needsUnion_) {
         // A signature can name a primitive union (`std::variant<...>`).
         out += "#include <variant>\n";
@@ -357,12 +364,14 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     out += "#include <limits>\n";
     out += "#include <optional>\n";
     out += "#include <string>\n";
+    out += "#include <functional>\n";  // std::function closures (spec 10)
     if (needsTuple_) out += "#include <tuple>\n";  // enum-carrying object literals
     if (needsUnion_) out += "#include <variant>\n";  // primitive unions
     if (needsEventLoop_) out += "#include <vector>\n";  // Promise input lists
     out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
     out += "#include \"cp3/core/error.hpp\"\n";
+    out += "#include \"cp3/core/value.hpp\"\n";  // Cell<T> (spec 10 closures)
     if (needsBitwise_) out += "#include \"cp3/core/bitwise.hpp\"\n";  // & | ^ ~ << >> >>>
     if (needsUnion_) out += "#include \"cp3/core/union.hpp\"\n";  // primitive unions
     if (needsArith_) {

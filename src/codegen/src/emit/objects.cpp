@@ -128,6 +128,55 @@ std::string Generator::emitObject(const Expr& e) {
     return "(" + receiver + ")." + member;
 }
 
+// A field write of a `$o{...}` value shape: `(<object>).field = value`. Only
+// the forms with a plain C++ spelling are lowered; anything else keeps CP3002.
+std::string Generator::emitMemberAssign(const AssignmentExpr& a,
+                                        const MemberExpr& m) {
+    if (!m.object || !a.value) return std::string();
+    Type object;
+    bool optional = false;
+    if (!objectReceiver(effectiveType(*m.object), object, optional)) {
+        return std::string();
+    }
+    // A possibly-null receiver has no plain field write.
+    if (optional) return std::string();
+    std::string structName;
+    std::vector<ObjectField> fields;
+    if (!objectShapeOf(object, structName, fields)) return std::string();
+    std::string field;
+    if (!fieldCppText(fields, m.property, field)) return std::string();
+    const std::string target =
+        "(" + expr(*m.object) + ")." + mapIdent(m.property);
+    const std::string value = expr(*a.value);
+    switch (a.op) {
+        case AssignOp::Assign:
+            if (field.rfind("std::optional<", 0) == 0 &&
+                isNullishLiteral(*a.value)) {
+                return "(" + target + " = std::nullopt)";
+            }
+            return "(" + target + " = " + value + ")";
+        case AssignOp::Add:
+        case AssignOp::Subtract:
+        case AssignOp::Multiply:
+        case AssignOp::Divide: {
+            const char* op = nullptr;
+            switch (a.op) {
+                case AssignOp::Add: op = "+="; break;
+                case AssignOp::Subtract: op = "-="; break;
+                case AssignOp::Multiply: op = "*="; break;
+                default: op = "/="; break;
+            }
+            return "(" + target + " " + op + " " + value + ")";
+        }
+        case AssignOp::Modulo:
+            return "(" + target + " = " + modCall(target, *a.value, value) + ")";
+        case AssignOp::Power:
+            return "(" + target + " = std::pow(" + target + ", " + value + "))";
+        default:
+            return std::string();
+    }
+}
+
 // The object-literal expression form: a worker-marked literal (the `worker(...)`
 // kernel form, spec 13) lowers to a std::tuple first (its node id is the
 // pre-scan's explicit gate, so it outranks the shape forms); a `$o{...}` value

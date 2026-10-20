@@ -18,6 +18,7 @@
 #include "detail/cpp_writer.h"
 #include "detail/family.h"
 #include "detail/mangle.h"
+#include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -186,17 +187,10 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
 void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
                                  std::string& out, int indent) {
     if (g.intOn()) g.intFail();
+    if (f.isAwait) g.notImplemented(f, "for await");
     const auto* vd = f.left && f.left->kind == NodeKind::VariableDeclaration
                          ? static_cast<const VariableDeclaration*>(f.left.get())
                          : nullptr;
-    const VariableDeclarator* d =
-        vd == nullptr || vd->declarations.empty() ? nullptr
-                                                  : vd->declarations.front().get();
-    if (d == nullptr || !d->id || d->id->kind != NodeKind::Identifier) {
-        g.notImplemented(f, "this for-of binding");
-        line(out, indent, "/* CP3002: unsupported for-of binding */");
-        return;
-    }
     const Type elem = f.right ? arrayElemOf(g.effectiveType(*f.right))
                               : Type::unknown();
     CppInfo ec;
@@ -207,12 +201,44 @@ void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
     }
     g.needsTypedArray_ = true;
     const std::string recv = g.familyReceiverText(*f.right, elem, f);
-    const std::string name =
-        mapIdent(static_cast<const Identifier&>(*d->id).name);
-    g.pushScope();
+    const std::string item = "cp3_item" + std::to_string(g.uniqueCounter_++);
+    const std::string range = "cp3_range" + std::to_string(g.uniqueCounter_++);
+    // The range expression can itself be a temporary array handle (an array
+    // literal builds a fresh `makeArray(...)`): keep the handle in the C++20
+    // init-statement so its storage outlives the loop. Iterating the handle
+    // directly would read freed storage under `/std:c++20` (the P2718R0
+    // lifetime extension is C++23 only).
     line(out, indent,
-         "for (const " + ec.cpp + "& " + name + " : *(" + recv + ")) {");
-    g.declareBinding(*d);
+         "for (auto " + range + " = " + recv + "; " + ec.cpp + " " + item + " : *" +
+             range + ") {");
+    g.pushScope();
+    if (vd != nullptr) {
+        const std::string cv = (vd->kind == VarKind::Const) ? "const " : "";
+        for (const auto& declPtr : vd->declarations) {
+            const VariableDeclarator* d = declPtr.get();
+            if (d == nullptr || !d->id) continue;
+            if (d->id->kind == NodeKind::Identifier) {
+                const std::string name =
+                    mapIdent(static_cast<const Identifier&>(*d->id).name);
+                std::optional<Type> bt = g.bindingType(*d);
+                if (!bt) bt = elem;
+                const CppInfo ci = classify(*bt);
+                line(out, indent + 1,
+                     cv + (ci.representable ? ci.cpp : ec.cpp) + " " + name + " = " +
+                         item + ";");
+                g.declare(static_cast<const Identifier&>(*d->id).name, bt);
+            } else {
+                std::optional<Type> bt = g.resolvedBindingType(*d);
+                if (!bt) bt = elem;
+                PatternEmitter(g).emitBindings(*d->id, item, bt, out, indent + 1);
+            }
+        }
+    } else if (f.left && isPatternNode(*f.left)) {
+        PatternEmitter(g).emitBindings(*f.left, item, elem, out, indent + 1);
+    } else {
+        g.notImplemented(f, "this for-of binding");
+        line(out, indent + 1, "/* CP3002: unsupported for-of binding */");
+    }
     if (f.body) g.emitBranch(*f.body, out, indent + 1);
     line(out, indent, "}");
     g.popScope();

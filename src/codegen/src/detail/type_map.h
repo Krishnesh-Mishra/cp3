@@ -37,6 +37,7 @@ enum class Shape {
     Enum,        // a named enum (spec 04): `enum class <name> : long long`
     EventEmitter, // the builtin event type (D74): Ref<EventEmitter>
     Listener,     // a function-typed value (D74): the boxed callable
+    Function,     // a value-returning function value: std::function<R(Params)>
     Object,      // an all-primitive `$o{...}` shape: a generated value struct
     Unknown, Unsupported
 };
@@ -65,6 +66,19 @@ struct CppInfo {
     std::string cpp;             // the C++ type spelling
     Type type;                   // the normalized cp3 type
     NullishKind emptyKind = NullishKind::None;
+};
+
+// One entry of the declaration-type environment: the binding's cp3 type plus
+// whether it lowers to the shared `Cell<T>` representation (a local that is
+// captured by a nested frame and reassigned, detail/captures.h). `global` is
+// set for a module-scope binding (a namespace-scope global), whose references
+// are emitted qualified (`cp3_mod_x::name`) so a name that also exists in the
+// global namespace (`log`, from the C math header) cannot become ambiguous in
+// `main`, where a `using namespace` is in effect.
+struct Binding {
+    Type type;
+    bool cell = false;
+    bool global = false;
 };
 
 // Which of `null` / `undefined` a union's empty case denotes (see NullishKind).
@@ -159,6 +173,10 @@ std::optional<std::int64_t> integralLiteralValue(const Expr& e);
 
 // Drops `null`/`undefined` members (used for the `??` result type).
 Type stripNullish(const Type& t);
+
+// `null`, `undefined`, or a union of only nullish members: a value that is
+// always nullish, so `??` can drop it outright.
+bool isStaticallyNullish(const Type& t);
 
 }  // namespace detail
 }  // namespace cp3

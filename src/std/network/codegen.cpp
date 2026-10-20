@@ -192,8 +192,8 @@ std::string Generator::emitUnresolvedCall(const CallExpr& c, const std::string& 
     // A middleware body calling `next()` (docs 04 §network): the parameter is
     // typed with the `$network:Next` marker in the temporary handler scope
     // (networkArg), so the call lowers to the runtime continuation.
-    const std::optional<Type> binding = lookup(name);
-    if (binding && binding->name == kNextMarker) {
+    const std::optional<detail::Binding> binding = lookup(name);
+    if (binding && binding->type.name == kNextMarker) {
         needsNetwork_ = true;
         if (!c.arguments.empty()) {
             notImplemented(c, "arguments to the std/network next() continuation");

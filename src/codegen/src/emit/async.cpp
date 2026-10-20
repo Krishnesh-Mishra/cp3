@@ -222,11 +222,13 @@ std::string Generator::emitPromiseMemberCall(const CallExpr& c, const MemberExpr
 // -----------------------------------------------------------------------------
 
 // A lambda parameter list: the annotation wins, then sema's parameter type,
-// then the surrounding context (a timer callback or a promise handler). An
-// untyped parameter becomes a C++20 generic-lambda parameter, which keeps the
-// emitted lambda valid without knowing the cp3 type.
+// then the type the surrounding context expects (the expected function type
+// on `expected_`), then the call context (a timer callback or a promise
+// handler). An untyped parameter becomes a C++20 generic-lambda parameter,
+// which keeps the emitted lambda valid without knowing the cp3 type.
 std::vector<std::string> Generator::arrowParamText(
-    const ArrowFunction& a, const std::vector<std::string>& contextParams) {
+    const ArrowFunction& a, const std::vector<std::string>& contextParams,
+    const std::optional<Type>& expectedFn) {
     const auto fnIt = sema_.functions.find(a.nodeId);
     std::vector<std::string> params;
     params.reserve(a.params.size());
@@ -234,51 +236,85 @@ std::vector<std::string> Generator::arrowParamText(
         const Parameter* p = a.params[i].get();
         if (!p) continue;
         if (p->isRest) notImplemented(*p, "rest parameter");
-        std::string name = "cp3_param";
-        if (p->name && p->name->kind == NodeKind::Identifier) {
+        std::string name = "cp3_param" + std::to_string(i);
+        const bool named = p->name && p->name->kind == NodeKind::Identifier;
+        if (named) {
             name = mapIdent(static_cast<const Identifier&>(*p->name).name);
         } else if (p->name) {
             notImplemented(*p->name, "destructuring parameter");
         }
-        std::string type;
+        std::optional<Type> type;
         if (p->type) {
-            if (auto t = typeOfNode(*p->type)) {
-                const CppInfo ci = classify(*t);
-                if (ci.representable) type = ci.cpp;
-            }
+            if (auto t = typeOfNode(*p->type)) type = t;
         }
-        if (type.empty() && fnIt != sema_.functions.end() &&
+        if (!type && fnIt != sema_.functions.end() &&
             i < fnIt->second.paramTypes.size()) {
-            const CppInfo ci = classify(fnIt->second.paramTypes[i]);
-            if (ci.representable && ci.shape != Shape::Void) type = ci.cpp;
+            type = fnIt->second.paramTypes[i];
         }
-        if (type.empty() && i < contextParams.size()) {
-            type = contextParams[i];
+        if (!type && expectedFn && expectedFn->kind == TypeKind::Function &&
+            i + 1 < expectedFn->parts.size()) {
+            type = expectedFn->parts[i];
         }
-        params.push_back(type.empty() ? ("auto " + name) : (type + " " + name));
+        // An untyped parameter whose sema type is still `unknown` (or sema's
+        // open `$ambient` object placeholder) takes the spelling the context
+        // hands it. Leave any binding the context already declared
+        // (parallel.reduce declares its accumulator as the init type) in place
+        // instead of shadowing it with a placeholder.
+        const bool placeholder =
+            type && (type->isUnknown() || type->isError() ||
+                     (type->kind == TypeKind::Object &&
+                      type->name == "$ambient"));
+        if (named && type && !placeholder) {
+            declare(static_cast<const Identifier&>(*p->name).name, type);
+        }
+        std::string cpp;
+        if (type) {
+            const CppInfo ci = classify(*type);
+            if (ci.representable && ci.shape != Shape::Void) cpp = ci.cpp;
+        }
+        if (cpp.empty() && i < contextParams.size()) cpp = contextParams[i];
+        params.push_back(cpp.empty() ? ("auto " + name) : (cpp + " " + name));
     }
     return params;
 }
 
-// The lambda's explicit return type, or "" to let C++ deduce it (a `void`
-// arrow stays deduced, which also covers a block body with bare `return;`).
-std::string Generator::arrowReturnType(const ArrowFunction& a) {
+// The cp3 type of the lambda's return value: the annotation, then sema, then
+// the expected function type's return slot. `nullopt` for a void lambda (its
+// C++ return type is deduced).
+std::optional<Type> Generator::arrowReturnCpType(
+    const ArrowFunction& a, const std::optional<Type>& expectedFn) {
     if (a.returnType) {
-        if (auto t = typeOfNode(*a.returnType)) {
-            const CppInfo ci = classify(*t);
-            if (ci.representable && ci.shape != Shape::Void) return ci.cpp;
+        if (auto annotated = typeOfNode(*a.returnType)) {
+            return annotated->isVoid() ? std::nullopt : annotated;
         }
     }
-    auto it = sema_.functions.find(a.nodeId);
+    const auto it = sema_.functions.find(a.nodeId);
     if (it != sema_.functions.end()) {
-        const CppInfo ci = classify(it->second.returnType);
+        const Type& t = it->second.returnType;
+        if (!t.isUnknown() && !t.isError() && !t.isVoid()) return t;
+    }
+    if (expectedFn && expectedFn->kind == TypeKind::Function &&
+        !expectedFn->parts.empty()) {
+        const Type& t = expectedFn->parts.back();
+        if (!t.isUnknown() && !t.isError() && !t.isVoid()) return t;
+    }
+    return std::nullopt;
+}
+
+// The lambda's explicit return type, or "" to let C++ deduce it (a `void`
+// arrow stays deduced, which also covers a block body with bare `return;`).
+std::string Generator::arrowReturnType(const ArrowFunction& a,
+                                       const std::optional<Type>& expectedFn) {
+    if (auto t = arrowReturnCpType(a, expectedFn)) {
+        const CppInfo ci = classify(*t);
         if (ci.representable && ci.shape != Shape::Void) return ci.cpp;
     }
     return std::string();
 }
 
 std::string Generator::emitArrow(const ArrowFunction& a,
-                                 const std::vector<std::string>& contextParams) {
+                                 const std::vector<std::string>& contextParams,
+                                 bool byValue) {
     if (a.isAsync) {
         // D40 admits `async () => {}`; lowering them is out of this wave.
         notImplemented(a, "async arrow function");
@@ -287,19 +323,33 @@ std::string Generator::emitArrow(const ArrowFunction& a,
     if (!a.typeParams.empty()) {
         notImplemented(a, "generic arrow");
     }
+    if (intOn()) intFail();
+
+    // The context's expected function type (a binding annotation, a call
+    // argument, a field, a return type) fixes the lambda's parameters and
+    // return value where the arrow's own resolved types are not concrete.
+    std::optional<Type> expectedFn;
+    if (expected_ && expected_->kind == TypeKind::Function) expectedFn = *expected_;
 
     ++nestingDepth_;
     pushScope();
-    const std::vector<std::string> params = arrowParamText(a, contextParams);
-    const std::string ret = arrowReturnType(a);
+    const std::vector<std::string> params =
+        arrowParamText(a, contextParams, expectedFn);
+    const std::string ret = arrowReturnType(a, expectedFn);
+    const std::optional<Type> retCp = arrowReturnCpType(a, expectedFn);
 
-    // A `return` inside the lambda body leaves the LAMBDA, not the enclosing
-    // function, and a lambda body is never a coroutine: clear both pieces of
-    // the enclosing function's context while lowering it.
+    // A lambda body returns from the LAMBDA, and a lambda is never a
+    // coroutine: swap in the arrow's own context for the enclosing one.
     const std::string savedReturn = currentReturn_;
+    const std::optional<Type> savedReturnType = currentReturnType_;
+    const std::optional<Type> savedExpected = expected_;
+    const std::uint32_t savedFrame = currentFrameId_;
     const bool savedInAsync = inAsyncBody_;
     currentReturn_ = ret.empty() ? "void" : ret;
+    currentReturnType_ = retCp;
+    currentFrameId_ = a.nodeId;
     inAsyncBody_ = false;
+    expected_ = retCp;
 
     std::string body;
     if (a.body && a.expressionBody) {
@@ -308,12 +358,22 @@ std::string Generator::emitArrow(const ArrowFunction& a,
         stmt(*static_cast<const Stmt*>(a.body.get()), body, 1);
     }
 
+    expected_ = savedExpected;
     inAsyncBody_ = savedInAsync;
+    currentFrameId_ = savedFrame;
+    currentReturnType_ = savedReturnType;
     currentReturn_ = savedReturn;
     popScope();
     --nestingDepth_;
 
-    std::string out = "[&](" + joinStrings(params, ", ") + ")";
+    // `[=] mutable` for a value the enclosing scope may not outlive (a
+    // returned closure, a stored field, a call argument, a listener box):
+    // copies of a Cell handle still share the binding, and the copy semantics
+    // are exactly what spec 10 requires for a non-reassigned local. `mutable`
+    // keeps a `count.set(...)` through a by-value cell handle well-formed.
+    std::string out = byValue ? "[=](" : "[&](";
+    out += joinStrings(params, ", ") + ")";
+    if (byValue) out += " mutable";
     if (!ret.empty()) out += " -> " + ret;
     out += " {\n" + body + "}";
     return out;

@@ -23,158 +23,12 @@
 
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/timers.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
 
 using namespace detail;
-
-namespace {
-
-// The core timer builtins (spec §14 / STDLIB docs §03): bare globals lowered
-// onto cp3/core/runtime.hpp + cp3/async/promise.hpp, no import required.
-bool isTimerBuiltinName(const std::string& name) {
-    return name == "setTimeout" || name == "setInterval" ||
-           name == "clearTimeout" || name == "clearInterval" || name == "sleep";
-}
-
-// A parameter that may absorb an explicit `undefined` argument: it carries a
-// default expression, or is declared optional (`a?: T` lowers to
-// `std::optional<T> = std::nullopt`).
-bool optionalParamAt(const FunctionDeclaration& decl, std::size_t i) {
-    if (i >= decl.params.size()) return false;
-    const Parameter* p = decl.params[i].get();
-    return p && (p->optional || p->defaultValue != nullptr);
-}
-
-const Parameter* paramAt(const FunctionDeclaration& decl, std::size_t i) {
-    if (i >= decl.params.size()) return nullptr;
-    return decl.params[i].get();
-}
-
-}  // namespace
-
-// Lowers a user-function call's argument list against the callee's declared
-// parameters. An explicit `undefined` for an optional/default parameter is the
-// JS "argument absent" value: it lowers to the parameter's default expression
-// (or `std::nullopt`) when a later argument follows, and is dropped when
-// trailing, so the C++ default applies.
-std::vector<std::string> Generator::emitCallArgs(const CallExpr& c,
-                                                 const FunctionDeclaration* decl) {
-    const std::size_t count = c.arguments.size();
-    std::vector<std::string> raw(count);
-    std::vector<bool> drop(count, false);
-    for (std::size_t i = 0; i < count; ++i) {
-        const Expr* arg = c.arguments[i].get();
-        if (!arg) { raw[i] = "0.0"; continue; }
-        if (arg->kind == NodeKind::SpreadElement) {
-            notImplemented(*arg, "spread argument");
-            continue;
-        }
-        if (arg->kind == NodeKind::UndefinedLiteral && decl &&
-            optionalParamAt(*decl, i)) {
-            drop[i] = true;
-            continue;
-        }
-        raw[i] = expr(*arg);
-    }
-    std::size_t passed = count;  // one past the last argument that must be passed
-    while (passed > 0 && drop[passed - 1]) --passed;
-    std::vector<std::string> args;
-    args.reserve(passed);
-    for (std::size_t i = 0; i < passed; ++i) {
-        if (!drop[i]) {
-            args.push_back(std::move(raw[i]));
-            continue;
-        }
-        const Parameter* p = paramAt(*decl, i);
-        if (p && p->defaultValue) {
-            args.push_back(expr(*p->defaultValue));
-        } else {
-            args.push_back("std::nullopt");
-        }
-    }
-    return args;
-}
-
-std::string Generator::emitCall(const CallExpr& c) {
-    if (isConsoleMember(c)) {
-        const auto& m = static_cast<const MemberExpr&>(*c.callee);
-        return emitConsoleCall(c, m);
-    }
-    if (c.callee->kind == NodeKind::Identifier) {
-        const std::string name = static_cast<const Identifier&>(*c.callee).name;
-        if (functions_.find(name) == functions_.end() && isTimerBuiltinName(name)) {
-            return emitTimerBuiltin(c, name);
-        }
-        // `String(value)` (bug 9 surface): the scalar conversion global. A
-        // user-declared `String` function wins (checked above).
-        if (name == "String" && functions_.find(name) == functions_.end()) {
-            if (c.arguments.size() == 1 && c.arguments.front() &&
-                c.arguments.front()->kind != NodeKind::SpreadElement) {
-                return "::cp3::runtime::toString(" + expr(*c.arguments.front()) +
-                       ")";
-            }
-            notImplemented(c, "String(...)");
-            return "0.0";
-        }
-        if ((name == "parseInt" || name == "parseFloat") &&
-            functions_.find(name) == functions_.end()) {
-            return emitParseBuiltin(c, name);
-        }
-        if (name == "worker" && functions_.find(name) == functions_.end()) {
-            // The ambient `worker(...)` lowering (spec 13); a user-declared
-            // `worker` function wins (checked here, before the disambiguation).
-            return emitWorkerCall(c);
-        }
-        if (!c.typeArgs.empty()) {
-            notImplemented(c, "calls with type arguments");
-            return "0.0";
-        }
-        // A name that is not a function declared in this unit.
-        if (functions_.find(name) == functions_.end()) {
-            return emitUnresolvedCall(c, name);
-        }
-        if (asyncFunctions_.count(name) != 0) {
-            // Calling an async function starts async work whose continuations
-            // only run when the loop does.
-            needsEventLoop_ = true;
-        }
-        const auto declIt = functionDecls_.find(name);
-        const FunctionDeclaration* decl =
-            declIt != functionDecls_.end() ? declIt->second : nullptr;
-        return mapIdent(name) + "(" + joinStrings(emitCallArgs(c, decl), ", ") + ")";
-    }
-    if (c.callee->kind == NodeKind::MemberExpr) {
-        const auto& m = static_cast<const MemberExpr&>(*c.callee);
-        if (m.object && m.object->kind == NodeKind::Identifier &&
-            static_cast<const Identifier&>(*m.object).name == "parallel") {
-            // `parallel.for` / `parallel.reduce` / `parallel.run` (spec 13).
-            return emitParallelCall(c, m);
-        }
-        // `Promise.all/race/allSettled(...)`.
-        if (m.object && m.object->kind == NodeKind::Identifier &&
-            static_cast<const Identifier&>(*m.object).name == "Promise") {
-            return emitPromiseStatic(c, m);
-        }
-        // A Promise method (`then`/`catch`/`finally`); `on/once/off/emit` (D74).
-        if (m.object && detail::isPromiseType(effectiveType(*m.object))) {
-            return emitPromiseMemberCall(c, m);
-        }
-        if (m.object && detail::isEventEmitterType(effectiveType(*m.object))) {
-            return emitEventEmitterCall(c, m);
-        }
-        // `Math.*`, `path.*`, `os.*`, `JSON.stringify`, `process.*`, and the
-        // primitive `string` method surface (emit_builtin.cpp).
-        if (std::string builtin = emitBuiltinCall(c, m); !builtin.empty()) {
-            return builtin;
-        }
-        notImplemented(c, "this method call");
-        return "0.0";
-    }
-    notImplemented(c, "this call");
-    return "0.0";
-}
 
 std::string Generator::emitParseBuiltin(const CallExpr& c,
                                         const std::string& name) {
@@ -219,15 +73,22 @@ std::string Generator::emitEventEmitterNew(const NewExpr& n) {
 // never match (JS function identity).
 std::string Generator::emitListenerValue(const Expr& e) {
     if (e.kind == NodeKind::ArrowFunction) {
-        const CppInfo ci = info(e);
-        if (!ci.representable || ci.shape != Shape::Listener) {
-            // A value-returning arrow has no boxed spelling (type_map.cpp).
+        const auto& a = static_cast<const ArrowFunction&>(e);
+        std::optional<Type> fnType;
+        if (expected_ && expected_->kind == TypeKind::Function) {
+            fnType = *expected_;
+        } else {
+            const Type own = effectiveType(a);
+            if (own.kind == TypeKind::Function) fnType = own;
+        }
+        if (!fnType || classify(*fnType).shape != Shape::Listener) {
+            // A value-returning arrow has no boxed spelling.
             notImplemented(e, "this function value");
             return "::cp3::runtime::Listener()";
         }
         needsEventEmitter_ = true;
         return "::cp3::runtime::Listener::box(" +
-               emitArrow(static_cast<const ArrowFunction&>(e), {}) + ")";
+               emitArrow(a, {}, /*byValue=*/true) + ")";
     }
     const CppInfo ci = info(e);
     if (ci.representable && ci.shape == Shape::Listener) {

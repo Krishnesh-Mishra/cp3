@@ -15,6 +15,7 @@
 
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -126,6 +127,26 @@ void Generator::emitIf(const IfStatement& is, std::string& out, int indent) {
 void Generator::emitVarDecl(const VariableDeclaration& vd, std::string& out, int indent) {
     for (const auto& decl : vd.declarations) {
         if (!decl) continue;
+        if (decl->id && decl->id->kind != NodeKind::Identifier) {
+            // A destructuring binding materializes its source, then emits one
+            // plain binding per name (emit/destructure.cpp).
+            const std::optional<Type> srcType = resolvedBindingType(*decl);
+            std::string initText;
+            if (decl->init) {
+                const std::optional<Type> savedExpected = expected_;
+                expected_ = srcType;
+                initText = expr(*decl->init);
+                expected_ = savedExpected;
+            } else {
+                notImplemented(*decl, "destructuring binding without an initializer");
+                initText = "cp3::runtime::undefined";
+            }
+            const std::string tmp = "cp3_d" + std::to_string(uniqueCounter_++);
+            const std::string cv = (vd.kind == VarKind::Const) ? "const " : "";
+            line(out, indent, cv + "auto " + tmp + " = " + initText + ";");
+            PatternEmitter(*this).emitBindings(*decl->id, tmp, srcType, out, indent);
+            continue;
+        }
         std::string text = declaratorText(*decl, vd.kind);
         line(out, indent, text + ";");
         declareBinding(*decl);
@@ -154,8 +175,15 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
     // initializer must therefore be a region value: a `number` in C++ that the
     // fast path cannot account for would make the two bodies disagree.
     const bool asInt = intBinding(ci);
+    // A captured-and-reassigned local of this frame is the shared-cell
+    // representation: reads and writes go through `get`/`set` so the enclosing
+    // frame and every closure share one binding.
+    const bool cell = isCell(static_cast<const Identifier&>(*d.id).name);
+    const std::string valueCpp =
+        (ci.representable && ci.shape != Shape::Void) ? ci.cpp : "double";
     const std::string typeSpelling =
-        asInt ? "std::int64_t" : (ci.representable ? ci.cpp : "auto");
+        cell ? "::cp3::runtime::Cell<" + valueCpp + ">"
+             : (asInt ? "std::int64_t" : (ci.representable ? ci.cpp : "auto"));
     if (d.init) {
         if (asInt && !numberTyped(*d.init)) intFail();
         std::string initText;
@@ -168,11 +196,20 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
             // src/std/typed-arrays/codegen.cpp).
             initText = special;
         } else {
+            const std::optional<Type> savedExpected = expected_;
+            if (!ci.type.isUnknown() && !ci.type.isError()) expected_ = ci.type;
             initText = expr(*d.init);
+            expected_ = savedExpected;
         }
+        // `Cell`'s constructors are explicit; a cell is never `const` (the
+        // closures write through it).
+        if (cell) return typeSpelling + " " + name + "(" + initText + ")";
         return cv + typeSpelling + " " + name + " = " + initText;
     }
 
+    if (cell) {
+        return typeSpelling + " " + name + "{}";
+    }
     if (ci.shape == Shape::Optional || ci.shape == Shape::Maybe) {
         return cv + ci.cpp + " " + name;
     }
