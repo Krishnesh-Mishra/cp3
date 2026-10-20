@@ -74,6 +74,8 @@ void printUsage(std::FILE* out) {
         "      --auto            (install) auto-pick a GitHub release asset\n"
         "      --once            (dev) run one watch pass and exit\n"
         "      --json, --interactive, --dry-run, --force  (editor-plugin) output/prompts\n"
+        "      --editor <id|path>, --vsix <path>  (editor-plugin) target and package\n"
+        "      --extensions-dir <dir>, --out <path>  (editor-plugin) overrides\n"
         "\n"
         "Exit codes:\n"
         "  0 success   1 compile error   2 usage error   3 not implemented\n",

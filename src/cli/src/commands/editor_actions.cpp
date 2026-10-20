@@ -128,6 +128,19 @@ std::vector<EditorInfo> usableOnly(const std::vector<EditorInfo>& selected) {
     return usable;
 }
 
+// Non-interactive editor actions need a deterministic target. VS Code is the
+// canonical target, so prefer it when it is usable; otherwise accept a single
+// unambiguous editor. Anything else still asks for --editor.
+std::vector<EditorInfo> defaultSelection(
+    const std::vector<EditorInfo>& selected) {
+    const std::vector<EditorInfo> usable = usableOnly(selected);
+    if (usable.size() == 1) return usable;
+    for (const EditorInfo& editor : usable) {
+        if (editor.id == "code") return {editor};
+    }
+    return {};
+}
+
 }  // namespace
 
 void emitEditorJson(const EditorSession& session,
@@ -175,7 +188,8 @@ int failEditorAction(const EditorSession& session, EditorActionReport& report,
 void printEditorSummary(const std::vector<EditorInfo>& editors, bool details) {
     std::fputs("cp3 editor support\n\n", stdout);
     if (editors.empty()) {
-        std::fputs("  no supported editors detected\n", stdout);
+        std::fputs("  no editor detected (install VS Code, Cursor, or "
+                   "Antigravity)\n", stdout);
         return;
     }
     for (std::size_t i = 0; i < editors.size(); ++i) {
@@ -231,19 +245,24 @@ EditorPrepareResult prepareEditorSession(EditorSession& session) {
             return result;
         }
         if (!(options.interactive || isTty(stdin))) {
-            result.exitCode = kExitUsageError;
-            result.error = "choose an editor with --editor <id|path>; known ids: "
-                           "code, code-insiders, cursor, antigravity, codium";
-            return result;
+            selected = defaultSelection(selected);
+            if (selected.empty()) {
+                result.exitCode = kExitUsageError;
+                result.error =
+                    "choose an editor with --editor <id|path>; known ids: "
+                    "code, code-insiders, cursor, antigravity, codium";
+                return result;
+            }
+        } else {
+            EditorInfo chosen;
+            if (!promptEditorChoice(selected, chosen)) {
+                result.exitCode = kExitUsageError;
+                result.error = "no editor selected";
+                return result;
+            }
+            selected.clear();
+            selected.push_back(chosen);
         }
-        EditorInfo chosen;
-        if (!promptEditorChoice(selected, chosen)) {
-            result.exitCode = kExitUsageError;
-            result.error = "no editor selected";
-            return result;
-        }
-        selected.clear();
-        selected.push_back(chosen);
     }
 
     if (selected.empty() && !options.editor.empty() &&

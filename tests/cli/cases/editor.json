@@ -116,7 +116,7 @@
         "exit": 0,
         "stdout": {
           "contains": [
-            "update-available",
+            "update available",
             "0.0.9"
           ]
         }
@@ -143,7 +143,7 @@
         "exit": 0,
         "stdout": {
           "contains": [
-            "newer-installed",
+            "newer than bundled",
             "0.2.0"
           ]
         }
@@ -164,7 +164,7 @@
       "expect": {
         "exit": 0,
         "stdout": {
-          "contains": "not-installed"
+          "contains": "not installed"
         }
       }
     },
@@ -223,7 +223,7 @@
         },
         "files": {
           "{root}/editor.log": {
-            "absent": true
+            "not_contains": "--install-extension"
           }
         }
       }
@@ -249,7 +249,7 @@
       "expect": {
         "exit": 0,
         "stdout": {
-          "contains": "installed"
+          "contains": "updated"
         },
         "files": {
           "{root}/editor.log": {
@@ -280,7 +280,7 @@
       "expect": {
         "exit": 0,
         "stdout": {
-          "contains": "installed"
+          "contains": "updated"
         },
         "files": {
           "{root}/editor.log": {
@@ -334,7 +334,10 @@
         "exit": 0,
         "files": {
           "{root}/editor.log": {
-            "contains": "code --install-extension"
+            "contains": [
+              "code",
+              "--install-extension"
+            ]
           }
         }
       }
@@ -404,7 +407,10 @@
         },
         "files": {
           "{root}/editor.log": {
-            "contains": "--uninstall-extension cp3.cp3-vscode"
+            "contains": [
+              "--uninstall-extension",
+              "cp3.cp3-vscode"
+            ]
           }
         }
       }
@@ -719,7 +725,7 @@
         "editor-plugin",
         "--interactive"
       ],
-      "stdin": "99\n1\n6\n",
+      "stdin": "99\n1\n1\ny\n",
       "env": {
         "PATH_PREPEND": "editor/bin"
       },

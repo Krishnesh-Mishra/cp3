@@ -707,6 +707,14 @@ def make_dirs(run_root: Path, index: int, case: Case) -> CaseDirs:
         dirs.programfiles86,
     ):
         directory.mkdir(parents=True, exist_ok=True)
+    # cp3c looks for the bundled VSIX in ../share/vscode relative to its own
+    # executable. Direct-compiler cases need that layout too, not just the
+    # assembled shim variants.
+    vsix_dir = root / "share" / "vscode"
+    vsix_dir.mkdir(parents=True, exist_ok=True)
+    (vsix_dir / "cp3-vscode-0.1.0.vsix").write_text(
+        "fake vsix for the CLI tests\n", encoding="utf-8"
+    )
     return dirs
 
 
@@ -729,6 +737,12 @@ def build_environment(
     env["ProgramW6432"] = str(dirs.programfiles)
     env["FAKE_EDITOR_LOG"] = str(dirs.root / "editor.log")
     env["ComSpec"] = comspec
+    # Direct cp3c editor cases use the real compiler binary, so its relative
+    # repository search would never see the per-case fake VSIX. Point CP3_ROOT
+    # at the case root for those cases only. The cp3-no-vsix shim variant must
+    # stay without a package so its failure path is exercised.
+    if case.group == "editor" and case.tool == "cp3c":
+        env["CP3_ROOT"] = str(dirs.root)
 
     base_path = os.environ.get("PATH", "")
     path_mode = case.env.get("PATH_MODE", "")
@@ -754,6 +768,12 @@ def build_environment(
         path_entries.extend(
             [str(Path(system_root) / "System32"), system_root, str(Path(system_root) / "System32" / "Wbem")]
         )
+        # The Windows cp3c build links the MinGW runtime dynamically. A
+        # reduced PATH must still contain that runtime, or cp3c fails to start
+        # with STATUS_DLL_NOT_FOUND before the command under test runs.
+        compiler = shutil.which("g++") or shutil.which("clang++")
+        if compiler:
+            path_entries.append(str(Path(compiler).resolve().parent))
     env["PATH"] = os.pathsep.join(part for part in path_entries if part)
 
     for key, value in case.env.items():

@@ -442,6 +442,19 @@ EditorInfo customEditor(const std::string& cliPath,
     info.cliFound = true;
     info.detected = true;
     info.installable = probeSupportsExtensions(info.cli);
+    // A user-supplied path to a known editor CLI is still that editor. Match
+    // the executable stem so `--editor C:\...\code.cmd` reports and probes as
+    // Visual Studio Code rather than an anonymous custom tool.
+    const std::string stem = lowerAscii(fs::path(cliPath).stem().string());
+    for (const EditorSpec& spec : editorSpecs()) {
+        if (lowerAscii(spec.cliName) != stem) continue;
+        info.id = spec.id;
+        info.name = spec.name;
+        if (extensionsDir.empty() && !spec.extensionsDir.empty()) {
+            info.extensionsDir = absolutePath(spec.extensionsDir);
+        }
+        break;
+    }
     if (!extensionsDir.empty()) {
         info.extensionsDir = absolutePath(extensionsDir);
     }
