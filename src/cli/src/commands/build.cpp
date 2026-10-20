@@ -160,8 +160,12 @@ bool compileExtras(BuildState& st, const BuildRequest& request) {
 }
 
 // The link step's input identity: every object's path and content hash plus
-// the profile, the header fingerprint and the native link flags.
-std::string linkStampOf(const BuildState& st) {
+// the profile, the header fingerprint, the native link flags, and the exact
+// link command line (argv[0], output path and profile/security flags such as
+// `-static` included). Hashing the command is what makes a toolchain-flag
+// change relink an otherwise up-to-date program.
+std::string linkStampOf(const BuildState& st,
+                        const std::vector<std::string>& linkCommand) {
     std::string material = st.profile;
     material += '\n';
     material += st.headerFingerprint;
@@ -180,6 +184,10 @@ std::string linkStampOf(const BuildState& st) {
         material += '\n';
         material += flag;
     }
+    for (const std::string& arg : linkCommand) {
+        material += '\n';
+        material += arg;
+    }
     return std::to_string(fnv1a64(material));
 }
 
@@ -193,7 +201,10 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
     std::error_code ec;
     const fs::path stampPath =
         st.layout.buildDir / (exePath.filename().string() + ".link-stamp");
-    const std::string stamp = linkStampOf(st);
+    const LinkStep step{st.objects, exePath, st.nativeFlags.link};
+    const std::vector<std::string> args =
+        linkArgs(st.tc, st.opt.compile.profile, step);
+    const std::string stamp = linkStampOf(st, args);
     std::string previous;
     const bool stampMatches = fs::exists(exePath, ec) &&
                               readTextFile(stampPath, previous) &&
@@ -205,9 +216,6 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
         }
         return true;
     }
-    const LinkStep step{st.objects, exePath, st.nativeFlags.link};
-    const std::vector<std::string> args =
-        linkArgs(st.tc, st.opt.compile.profile, step);
     if (st.opt.verbose) {
         std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
     }
@@ -225,17 +233,21 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
 // plus compile/link flags, so a program that never imports std/network pays
 // nothing for uWebSockets. Returns nullopt after reporting on a missing packed
 // path, or on an MSVC toolchain (the vendored archives are GCC/Clang builds).
+//
+// A source whose row gives it a marker (NativePackage::runtimeSourceMarkers) is
+// only linked when the generated program text names one of its markers, so a
+// program that imports a family for one member does not link the whole family.
 std::optional<NativeBuildFlags> applyNativePackages(
     const CliOptions& opt, const Toolchain& tc,
     const std::vector<std::string>& importedStdModules, BuildLayout& layout,
-    bool usesRegex) {
+    const std::string& programText) {
     NativeBuildFlags flags;
     std::vector<const NativePackage*> natives =
         selectNativePackages(importedStdModules);
     // Core-language backends (D48) join the same list; selected from the
     // generated module's content, not the import graph.
-    const std::vector<const NativePackage*> core =
-        selectCoreNativePackages(usesRegex);
+    const std::vector<const NativePackage*> core = selectCoreNativePackages(
+        programText.find("cp3/core/regex.hpp") != std::string::npos);
     natives.insert(natives.end(), core.begin(), core.end());
     if (natives.empty()) return flags;
 
@@ -268,7 +280,17 @@ std::optional<NativeBuildFlags> applyNativePackages(
             }
             layout.includeDirs.push_back(dir);
         }
-        for (const std::string& rel : pkg->runtimeSources) {
+        for (std::size_t i = 0; i < pkg->runtimeSources.size(); ++i) {
+            const std::string& rel = pkg->runtimeSources[i];
+            // A marker-carrying source is linked only when the generated
+            // program actually names the family member it implements.
+            if (i < pkg->runtimeSourceMarkers.size() &&
+                !markerListMatches(programText, pkg->runtimeSourceMarkers[i])) {
+                if (opt.verbose)
+                    std::fprintf(stderr, "cp3c: skipping unused %s TU: %s\n",
+                                 pkg->specifier, rel.c_str());
+                continue;
+            }
             const fs::path src = resolve(rel);
             if (!fs::is_regular_file(src, ec)) {
                 reportBroken(pkg->specifier, "runtime source", src);
@@ -297,6 +319,53 @@ std::optional<NativeBuildFlags> applyNativePackages(
     return flags;
 }
 
+// The text every link-selection decision is made from: the entry's generated
+// source and header plus every generated worker module. What a program links is
+// decided by what its generated C++ names, never by the entry's path.
+std::string generatedProgramText(const BuildRequest& request,
+                                 const GeneratedModule& mod) {
+    std::string text = mod.source;
+    text += '\n';
+    text += mod.header;
+    if (request.extraModules != nullptr) {
+        for (const BuildRequest::ExtraModule& extra : *request.extraModules) {
+            if (extra.module == nullptr) continue;
+            text += '\n';
+            text += extra.module->source;
+            text += '\n';
+            text += extra.module->header;
+        }
+    }
+    return text;
+}
+
+// Fills layout.runtimeSources with the core runtime TUs the program names plus
+// the native-backend TUs already selected by applyNativePackages (which leaves
+// them in the vector). The native TUs' own text is folded into the marker text:
+// a native TU that uses the loop (the console pump, std/network) pulls the loop
+// in with it.
+void selectRuntimeSources(const CliOptions& opt, BuildLayout& layout,
+                          const std::string& programText) {
+    std::string markers = programText;
+    const std::vector<fs::path> nativeSources = layout.runtimeSources;
+    for (const fs::path& src : nativeSources) {
+        std::string text;
+        if (readTextFile(src, text)) {
+            markers += '\n';
+            markers += text;
+        }
+    }
+    layout.runtimeSources = runtimeSourcePaths(markers);
+    layout.runtimeSources.insert(layout.runtimeSources.end(),
+                                 nativeSources.begin(), nativeSources.end());
+    if (opt.verbose) {
+        for (const fs::path& src : layout.runtimeSources) {
+            std::fprintf(stderr, "cp3c: runtime TU: %s\n",
+                         src.filename().string().c_str());
+        }
+    }
+}
+
 // The toolchain probe plus the native-package flags the generated module
 // needs: the imported std backends (D68) and the core regex backend (D48),
 // selected from the module text. Reports and returns nullopt when the
@@ -320,13 +389,8 @@ std::optional<NativeBuildFlags> resolveNativeFlags(
         std::fprintf(stderr, "cp3c: toolchain source: %s\n",
                      toolchainSourceDescription().c_str());
     }
-    // D48: the core regex backend is needed exactly when the generated C++
-    // names it (the literal lowering and the usage-based include scan in
-    // codegen both leave the include in mod.source).
-    const bool usesRegex =
-        mod.source.find("cp3/core/regex.hpp") != std::string::npos;
     return applyNativePackages(opt, tc, *request.importedStdModules, layout,
-                               usesRegex);
+                               generatedProgramText(request, mod));
 }
 
 }  // namespace
@@ -352,11 +416,15 @@ int buildWithToolchain(const BuildRequest& request) {
     writeTextFile(cppPath, mod.source, nullptr);
     writeTextFile(hppPath, mod.header, nullptr);
 
+    const std::string programText = generatedProgramText(request, mod);
+
     const Toolchain* tcPtr = nullptr;
     const std::optional<NativeBuildFlags> nativeFlags =
         resolveNativeFlags(opt, request, mod, layout, tcPtr);
     if (!nativeFlags.has_value()) return kExitCompileError;
     const Toolchain& tc = *tcPtr;
+
+    selectRuntimeSources(opt, layout, programText);
 
     const std::string headerFingerprint =
         headerFingerprintOf(layout.includeDirs);

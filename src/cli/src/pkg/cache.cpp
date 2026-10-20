@@ -45,7 +45,8 @@ BuildLayout makeBuildLayout(const fs::path& entryFile) {
     // .cp3/out/<entry-stem>.
     layout.exePath = layout.outDir / (entryFile.stem().string() + suffix);
     layout.includeDirs = compilerIncludeRoots();
-    layout.runtimeSources = runtimeSourcePaths();
+    // runtimeSources is filled by the build driver from the generated program
+    // text (runtimeSourcePaths in detail/util.hpp): the set is per program.
     return layout;
 }
 

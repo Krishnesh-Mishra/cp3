@@ -11,7 +11,6 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
-#include <iostream>
 #include <limits>
 #include <string>
 #include <system_error>
@@ -222,9 +221,20 @@ double parseFloat(const std::string& text) {
     return std::strtod(std::string(start, end).c_str(), nullptr);
 }
 
-void print(const std::string& text) { std::cout << text; }
+// print/println write through C stdio rather than std::cout on purpose: the
+// iostream objects are initialized by a static initializer in every TU that
+// includes <iostream>, and that machinery (plus the locale facets it builds) is
+// pure startup cost for a program that only prints. std::cout with the default
+// sync_with_stdio(true) is a stdio_sync_filebuf, so these calls land in exactly
+// the same stdout buffer with the same ordering semantics.
+void print(const std::string& text) {
+    std::fwrite(text.data(), 1, text.size(), stdout);
+}
 
-void println(const std::string& text) { std::cout << text << '\n'; }
+void println(const std::string& text) {
+    std::fwrite(text.data(), 1, text.size(), stdout);
+    std::fputc('\n', stdout);
+}
 
 const char* name() noexcept {
     return "cp3-runtime";
