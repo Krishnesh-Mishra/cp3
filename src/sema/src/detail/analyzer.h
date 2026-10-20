@@ -246,6 +246,10 @@ private:
                                             const std::string& prop);
     // Named-import call sites: `fetch(...)` / `createServer()`.
     bool tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& out);
+    // D79 options check for `createServer(options?)`: reports CP3401 for an
+    // invalid shape/value and returns true when the call opts into scale mode
+    // (a `threads` value that is not the literal 1).
+    bool checkCreateServerOptions(CallExpr& call);
     // The generic instance member (`res.json<T>()` / `req.json<T>()`): the
     // explicit T substitutes into Promise<T>, matching `JSON.parse<T>`.
     bool tryInferNetworkMemberCall(CallExpr& call, MemberExpr& m, Type& out);

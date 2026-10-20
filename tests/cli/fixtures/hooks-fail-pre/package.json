@@ -1,0 +1,10 @@
+{
+  "name": "hooks-fail-pre",
+  "version": "1.0.0",
+  "type": "application",
+  "main": "src/index.cp3",
+  "scripts": {
+    "prebuild": "echo prebuild>>hook-order.txt && exit 5",
+    "postbuild": "echo postbuild>>hook-order.txt"
+  }
+}

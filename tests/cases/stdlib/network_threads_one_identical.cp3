@@ -1,0 +1,15 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+const app = createServer({ threads: 1 });
+app.get("/healthz", (req, res) => {
+  res.text("ok");
+});
+app.listen(48118, () => {
+  console.log("listening");
+});
+
+let res = await fetch("http://127.0.0.1:48118/healthz");
+console.log(`${res.status}`);
+console.log(await res.text());
+app.close();

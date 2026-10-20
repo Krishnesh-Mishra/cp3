@@ -1,0 +1,937 @@
+{
+  "group": "install",
+  "cases": [
+    {
+      "group": "install",
+      "name": "local-directory",
+      "description": "local directory",
+      "argv": [
+        "install",
+        "deps/local-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-kit"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed local-kit 1.2.3"
+        },
+        "files": {
+          ".cp3/lock.json": {
+            "contains": [
+              "\"resolved\": \"file:deps/local-kit\"",
+              "\"integrity\": \"dir-sha256:"
+            ]
+          },
+          ".cp3/packages/local-kit/package.json": {
+            "json_paths": {
+              "name": "local-kit",
+              "version": "1.2.3"
+            }
+          },
+          ".cp3/packages/local-kit/README.md": {
+            "contains": "local-kit"
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "local-cp3pak",
+      "description": "local cp3pak",
+      "argv": [
+        "install",
+        "deps/local-kit.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep.cp3pak",
+            "to": "deps/local-kit.cp3pak"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed local-kit 1.2.3"
+        },
+        "files": {
+          ".cp3/lock.json": {
+            "contains": [
+              "\"resolved\": \"file:deps/local-kit.cp3pak\"",
+              "\"integrity\": \"sha256:"
+            ]
+          },
+          ".cp3/packages/local-kit/index.cp3": {
+            "exists": true
+          },
+          ".cp3/packages/local-kit/package.json": {
+            "json_paths": {
+              "version": "1.2.3"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "file-prefix",
+      "description": "file prefix",
+      "argv": [
+        "install",
+        "file:deps/local-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-kit"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed local-kit"
+        },
+        "files": {
+          ".cp3/lock.json": {
+            "contains": "\"resolved\": \"file:deps/local-kit\""
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "absolute-source-path",
+      "description": "absolute source path",
+      "argv": [
+        "install",
+        "{root}/source-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "{root}/source-kit"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed local-kit"
+        },
+        "files": {
+          ".cp3/packages/local-kit/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "from-nested-directory",
+      "description": "from nested directory",
+      "argv": [
+        "install",
+        "../deps/local-kit"
+      ],
+      "cwd": "src",
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-kit"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed local-kit"
+        },
+        "files": {
+          "../.cp3/packages/local-kit/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "source-path-with-spaces",
+      "description": "source path with spaces",
+      "argv": [
+        "install",
+        "deps/local kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local kit"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed local-kit"
+        },
+        "files": {
+          ".cp3/packages/local-kit/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "no-package-json",
+      "description": "no package json",
+      "argv": [
+        "install",
+        "anything"
+      ],
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "no package.json found",
+            "cp3c init"
+          ]
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "missing-source",
+      "description": "missing source",
+      "argv": [
+        "install",
+        "nope"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "does not exist (expected a .cp3pak file or a package directory)"
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "malformed-source-manifest",
+      "description": "malformed source manifest",
+      "argv": [
+        "install",
+        "deps/bad"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ],
+        "files": {
+          "deps/bad/package.json": "{ not json\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "expected object key"
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "invalid-package-name",
+      "description": "invalid package name",
+      "argv": [
+        "install",
+        "deps/bad-name"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ],
+        "files": {
+          "deps/bad-name/package.json": "{\"name\":\"bad/name\",\"version\":\"1.0.0\"}\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "package name 'bad/name' is not usable"
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "missing-name-falls-back-to-directory",
+      "description": "missing name falls back to directory",
+      "argv": [
+        "install",
+        "deps/no-name"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ],
+        "files": {
+          "deps/no-name/package.json": "{\"version\":\"1.0.0\"}\n",
+          "deps/no-name/src/index.cp3": "export default 1;\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed no-name 1.0.0"
+        },
+        "files": {
+          ".cp3/packages/no-name/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "duplicate-install-upserts-lock",
+      "description": "duplicate install upserts lock",
+      "argv": [
+        "install",
+        "deps/local-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-kit"
+          }
+        ],
+        "files": {
+          ".cp3/lock.json": "{\n  \"lockfileVersion\": 1,\n  \"packages\": {\n    \"local-kit\": {\n      \"version\": \"0.0.1\",\n      \"resolved\": \"file:old\",\n      \"integrity\": \"dir-sha256:old\"\n    }\n  }\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed local-kit 1.2.3"
+        },
+        "files": {
+          ".cp3/lock.json": {
+            "contains": [
+              "\"version\": \"1.2.3\"",
+              "\"resolved\": \"file:deps/local-kit\""
+            ],
+            "not_contains": [
+              "0.0.1",
+              "file:old"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "preserves-unrelated-lock-entry",
+      "description": "preserves unrelated lock entry",
+      "argv": [
+        "install",
+        "deps/local-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-kit"
+          }
+        ],
+        "files": {
+          ".cp3/lock.json": "{\n  \"lockfileVersion\": 1,\n  \"packages\": {\n    \"other\": {\n      \"version\": \"9.9.9\",\n      \"resolved\": \"file:other\",\n      \"integrity\": \"dir-sha256:other\"\n    }\n  }\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/lock.json": {
+            "contains": [
+              "\"other\"",
+              "9.9.9",
+              "local-kit"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "bare-one-dependency",
+      "description": "bare one dependency",
+      "argv": [
+        "install"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"consumer\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"dependencies\": {\n    \"local-kit\": \"file:deps/local-kit\"\n  }\n}\n",
+          "deps/local-kit/package.json": "{\"name\":\"local-kit\",\"version\":\"1.2.3\"}\n",
+          "deps/local-kit/src/index.cp3": "export default 1;\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "installed local-kit",
+            "1 package installed"
+          ]
+        },
+        "files": {
+          ".cp3/packages/local-kit/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "bare-two-dependencies",
+      "description": "bare two dependencies",
+      "argv": [
+        "install"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-kit"
+          },
+          {
+            "name": "local-dep-b",
+            "to": "deps/local-kit-b"
+          }
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"consumer\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"dependencies\": {\n    \"local-kit\": \"file:deps/local-kit\",\n    \"local-kit-b\": \"file:deps/local-kit-b\"\n  }\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "installed local-kit",
+            "installed local-kit-b",
+            "2 packages installed"
+          ]
+        },
+        "files": {
+          ".cp3/packages/local-kit/package.json": {
+            "exists": true
+          },
+          ".cp3/packages/local-kit-b/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "bare-one-failure-still-installs-rest",
+      "description": "bare one failure still installs rest",
+      "argv": [
+        "install"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"consumer\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"dependencies\": {\n    \"missing-kit\": \"file:deps/missing\",\n    \"local-kit\": \"file:deps/local-kit\"\n  }\n}\n",
+          "deps/local-kit/package.json": "{\"name\":\"local-kit\",\"version\":\"1.2.3\"}\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "cannot install 'missing-kit'",
+            "installed local-kit",
+            "1 of 2 dependencies could not be installed"
+          ]
+        },
+        "files": {
+          ".cp3/packages/local-kit/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "bare-registry-spec-not-implemented",
+      "description": "bare registry spec not implemented",
+      "argv": [
+        "install"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"consumer\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"dependencies\": {\n    \"local-kit\": \"1.2.3\"\n  }\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "registry lookups are not implemented",
+            "1 of 1 dependencies"
+          ]
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "bare-github-url-not-implemented",
+      "description": "bare github url not implemented",
+      "argv": [
+        "install"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"consumer\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"dependencies\": {\n    \"kit\": \"https://github.com/acme/kit\"\n  }\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "GitHub repo installs are not implemented"
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "direct-github-url-exit-3",
+      "description": "direct github url exit 3",
+      "argv": [
+        "install",
+        "https://github.com/acme/kit"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ]
+      },
+      "expect": {
+        "exit": 3,
+        "stderr": {
+          "contains": [
+            "not implemented",
+            "install a local .cp3pak"
+          ]
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "direct-http-url-usage-error",
+      "description": "direct http url usage error",
+      "argv": [
+        "install",
+        "https://example.com/kit.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "only https://github.com/<user>/<repo> URLs are recognized"
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "invalid-cp3pak",
+      "description": "invalid cp3pak",
+      "argv": [
+        "install",
+        "deps/bad.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ],
+        "files": {
+          "deps/bad.cp3pak": "not a gzip stream\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "is not a valid .cp3pak"
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "cp3pak-without-package-json",
+      "description": "cp3pak without package json",
+      "argv": [
+        "install",
+        "deps/no-pkg.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep-no-package-json.cp3pak",
+            "to": "deps/no-pkg.cp3pak"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "no package.json inside"
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "unsupported-cp3pak-format",
+      "description": "unsupported cp3pak format",
+      "argv": [
+        "install",
+        "deps/future.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep-bad-version.cp3pak",
+            "to": "deps/future.cp3pak"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "unsupported .cp3pak formatVersion 99",
+            "reads up to 1"
+          ]
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "engines-satisfied-no-warning",
+      "description": "engines satisfied no warning",
+      "argv": [
+        "install",
+        "deps/local-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-kit"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "empty": true
+        },
+        "stderr": {
+          "not_contains": "warning"
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "engines-unsatisfied-warns",
+      "description": "engines unsatisfied warns",
+      "argv": [
+        "install",
+        "deps/future-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          }
+        ],
+        "files": {
+          "deps/future-kit/package.json": "{\"name\":\"future-kit\",\"version\":\"1.0.0\",\"engines\":{\"cp3\":\">=99.0.0\"}}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "warning: 'future-kit' declares engines.cp3",
+            "installed future-kit"
+          ]
+        },
+        "files": {
+          ".cp3/packages/future-kit/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "engines-star-warns",
+      "description": "engines star warns",
+      "argv": [
+        "install",
+        "deps/star-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          }
+        ],
+        "files": {
+          "deps/star-kit/package.json": "{\"name\":\"star-kit\",\"version\":\"1.0.0\",\"engines\":{\"cp3\":\"*\"}}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "warning: 'star-kit' declares engines.cp3",
+            "installed star-kit"
+          ]
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "hooks-pre-and-post",
+      "description": "hooks pre and post",
+      "argv": [
+        "install"
+      ],
+      "setup": {
+        "fixtures": [
+          "hooks"
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "running script 'preinstall'",
+            "nothing to install",
+            "running script 'postinstall'"
+          ]
+        },
+        "files": {
+          "hook-order.txt": {
+            "equals": "preinstall\npostinstall\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "failing-preinstall-aborts",
+      "description": "failing preinstall aborts",
+      "argv": [
+        "install"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project"
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"consumer\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"scripts\": {\n    \"preinstall\": \"echo pre>>hook.txt && exit 5\"\n  },\n  \"dependencies\": {\n    \"local-kit\": \"file:deps/local-kit\"\n  }\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 5,
+        "stderr": {
+          "contains": [
+            "script 'preinstall' failed (exit 5)"
+          ]
+        },
+        "files": {
+          "hook.txt": {
+            "equals": "pre \n"
+          }
+        },
+        "files_absent": [
+          ".cp3/packages/local-kit"
+        ]
+      }
+    },
+    {
+      "group": "install",
+      "name": "malformed-lockfile",
+      "description": "malformed lockfile",
+      "argv": [
+        "install",
+        "deps/local-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-kit"
+          }
+        ],
+        "files": {
+          ".cp3/lock.json": "{ this is not json\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "lock.json"
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "directory-copy-skips-cp3-state",
+      "description": "directory copy skips cp3 state",
+      "argv": [
+        "install",
+        "deps/local-kit"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          }
+        ],
+        "files": {
+          "deps/local-kit/package.json": "{\"name\":\"local-kit\",\"version\":\"1.2.3\"}\n",
+          "deps/local-kit/src/index.cp3": "export default 1;\n",
+          "deps/local-kit/.cp3/out/stale.exe": "stale\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed local-kit"
+        },
+        "files_absent": [
+          ".cp3/packages/local-kit/.cp3"
+        ]
+      }
+    },
+    {
+      "group": "install",
+      "name": "auto-flag-with-local-path",
+      "description": "auto flag with local path",
+      "argv": [
+        "install",
+        "deps/local-kit",
+        "--auto"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "local-dep",
+            "to": "deps/local-kit"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed local-kit"
+        },
+        "files": {
+          ".cp3/packages/local-kit/package.json": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "install",
+      "name": "rejects-two-sources",
+      "description": "rejects two sources",
+      "argv": [
+        "install",
+        "a",
+        "b"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "'install' takes at most one path or URL"
+        }
+      }
+    }
+  ]
+}

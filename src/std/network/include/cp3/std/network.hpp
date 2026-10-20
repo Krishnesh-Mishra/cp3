@@ -293,6 +293,12 @@ public:
     using Middleware = std::function<void(HttpRequest&, HttpResponse&, Next)>;
 
     HttpServer();
+    /// D79: `createServer({ threads: n })`. An integer n >= 1 starts n event
+    /// loops, one per OS thread, each with its own uWS app instance and its own
+    /// module-state copies (thread_local). `n == 1` is exactly the no-arg
+    /// single-loop server; an invalid runtime value (0, negative, fractional,
+    /// NaN) throws a `Thrown`. The no-argument construction path is unchanged.
+    explicit HttpServer(double threads);
 
     void get(const std::string& path, RouteHandler handler) const;
     void post(const std::string& path, RouteHandler handler) const;
@@ -316,6 +322,16 @@ public:
 private:
     std::shared_ptr<detail::ServerImpl> impl_;
 };
+
+// =============================================================================
+// Per-loop module state (D79)
+// =============================================================================
+/// Generated `main` registers `cp3_init_module_state` here when the unit calls
+/// `createServer({ threads })`. Each child loop invokes it after its event loop
+/// exists and before its uWS App is constructed, replaying every module-scope
+/// runtime initializer onto that thread's `thread_local` copy. Programs without
+/// the option never call this, so their lowering is unchanged.
+void setModuleInitHook(void (*hook)());
 
 // =============================================================================
 // WebSocket

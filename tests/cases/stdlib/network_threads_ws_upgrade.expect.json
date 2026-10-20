@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "ok\necho:hello\n",
+  "exitCode": 0
+}

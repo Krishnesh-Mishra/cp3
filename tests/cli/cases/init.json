@@ -1,0 +1,769 @@
+{
+  "group": "init",
+  "cases": [
+    {
+      "group": "init",
+      "name": "default-current-directory",
+      "description": "default current directory",
+      "argv": [
+        "init",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "name": "work",
+              "main": "src/index.cp3",
+              "type": "application",
+              "typeSystem": "typescript"
+            }
+          },
+          "src/index.cp3": {
+            "contains": "console.log(\"Hello from work!\")"
+          },
+          "README.md": {
+            "absent": true
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "non-tty-uses-defaults-without-yes",
+      "description": "non tty uses defaults without yes",
+      "argv": [
+        "init"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "name": "work",
+              "type": "application",
+              "main": "src/index.cp3"
+            }
+          },
+          "src/index.cp3": {
+            "contains": "Hello from work"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "yes-short-flag",
+      "description": "yes short flag",
+      "argv": [
+        "init",
+        "-y"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "name": "work"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "named-target",
+      "description": "named target",
+      "argv": [
+        "init",
+        "app",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "app/package.json": {
+            "equals_file": "init-application-package.json"
+          },
+          "app/src/index.cp3": {
+            "equals_file": "init-application-entry.cp3"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "nested-target",
+      "description": "nested target",
+      "argv": [
+        "init",
+        "nested/deep/app",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "nested/deep/app/package.json": {
+            "json_paths": {
+              "name": "app"
+            }
+          },
+          "nested/deep/app/src/index.cp3": {
+            "contains": "Hello from app"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "target-path-with-spaces",
+      "description": "target path with spaces",
+      "argv": [
+        "init",
+        "my application",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "my application/package.json": {
+            "json_paths": {
+              "name": "my application"
+            }
+          },
+          "my application/src/index.cp3": {
+            "contains": "Hello from my application"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "target-unicode-path",
+      "description": "target unicode path",
+      "argv": [
+        "init",
+        "café",
+        "--yes"
+      ],
+      "xfail": {
+        "id": "init-unicode-target-crash",
+        "reason": "cp3c init aborts in std::filesystem when the target path contains non-ASCII characters on Windows"
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          "café/package.json": {
+            "json_paths": {
+              "name": "café"
+            }
+          },
+          "café/src/index.cp3": {
+            "contains": "Hello from café"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "explicit-application-type",
+      "description": "explicit application type",
+      "argv": [
+        "init",
+        "app",
+        "--yes",
+        "--type",
+        "application"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "app/package.json": {
+            "equals_file": "init-application-package.json"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "explicit-package-type",
+      "description": "explicit package type",
+      "argv": [
+        "init",
+        "pkg",
+        "--yes",
+        "--type",
+        "package"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "pkg/package.json": {
+            "equals_file": "init-package-package.json"
+          },
+          "pkg/src/index.cp3": {
+            "equals_file": "init-package-entry.cp3"
+          },
+          "pkg/README.md": {
+            "contains": [
+              "# pkg",
+              "a C+++ project"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "package-type-before-target",
+      "description": "package type before target",
+      "argv": [
+        "init",
+        "--type",
+        "package",
+        "pkg",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "pkg/package.json": {
+            "json_paths": {
+              "type": "package",
+              "name": "pkg"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "default-name-from-directory",
+      "description": "default name from directory",
+      "argv": [
+        "init",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "name": "work"
+            }
+          },
+          "src/index.cp3": {
+            "contains": "Hello from work"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "package-default-name-from-directory",
+      "description": "package default name from directory",
+      "argv": [
+        "init",
+        "--yes",
+        "--type",
+        "package"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "name": "work",
+              "type": "package"
+            }
+          },
+          "src/index.cp3": {
+            "contains": "// work - package entry"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "scripts-block",
+      "description": "scripts block",
+      "argv": [
+        "init",
+        "app",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "app/package.json": {
+            "json_paths": {
+              "scripts.dev": "cp3c dev src/index.cp3",
+              "scripts.build": "cp3c build src/index.cp3",
+              "scripts.start": "cp3c run src/index.cp3",
+              "scripts.check": "cp3c check src/index.cp3",
+              "build.bundleNativeDlls": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "package-build-files-field",
+      "description": "package build files field",
+      "argv": [
+        "init",
+        "pkg",
+        "--yes",
+        "--type",
+        "package"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "pkg/package.json": {
+            "json_paths": {
+              "build.files": [
+                "README.md"
+              ],
+              "main": "src/index.cp3"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "package-entry-exports-object",
+      "description": "package entry exports object",
+      "argv": [
+        "init",
+        "pkg",
+        "--yes",
+        "--type",
+        "package"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "pkg/src/index.cp3": {
+            "contains": [
+              "export default { add }",
+              "function add"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "app-entry-no-default-export",
+      "description": "app entry no default export",
+      "argv": [
+        "init",
+        "app",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "app/src/index.cp3": {
+            "not_contains": "export default"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "existing-package-json-left-unchanged",
+      "description": "existing package json left unchanged",
+      "argv": [
+        "init",
+        "--yes"
+      ],
+      "setup": {
+        "files": {
+          "package.json": "{\"name\":\"kept\",\"custom\":true}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "package.json already exists; leaving it unchanged"
+        },
+        "files": {
+          "package.json": {
+            "contains": [
+              "\"name\":\"kept\"",
+              "\"custom\":true"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "existing-entry-left-unchanged",
+      "description": "existing entry left unchanged",
+      "argv": [
+        "init",
+        "--yes"
+      ],
+      "setup": {
+        "files": {
+          "src/index.cp3": "// keep this source\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "index.cp3 already exists; leaving it unchanged"
+        },
+        "files": {
+          "src/index.cp3": {
+            "equals": "// keep this source\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "existing-readme-left-unchanged",
+      "description": "existing readme left unchanged",
+      "argv": [
+        "init",
+        "--yes",
+        "--type",
+        "package"
+      ],
+      "setup": {
+        "files": {
+          "README.md": "# keep this readme\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "README.md already exists; leaving it unchanged"
+        },
+        "files": {
+          "README.md": {
+            "equals": "# keep this readme\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "unrelated-files-preserved",
+      "description": "unrelated files preserved",
+      "argv": [
+        "init",
+        "--yes"
+      ],
+      "setup": {
+        "files": {
+          "notes.txt": "keep me\n",
+          "assets/logo.txt": "logo\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          "notes.txt": {
+            "equals": "keep me\n"
+          },
+          "assets/logo.txt": {
+            "equals": "logo\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "invalid-type",
+      "description": "invalid type",
+      "argv": [
+        "init",
+        "app",
+        "--type",
+        "shared"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "invalid --type 'shared'"
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "missing-type-value",
+      "description": "missing type value",
+      "argv": [
+        "init",
+        "app",
+        "--type"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "--type requires a value"
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "cp3c-has-no-force-flag",
+      "description": "cp3c has no force flag",
+      "argv": [
+        "init",
+        "--force"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unknown option '--force'"
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "stdin-is-ignored-without-tty",
+      "description": "stdin is ignored without tty",
+      "argv": [
+        "init"
+      ],
+      "stdin": "package\ncustom-name\ncustom description\n",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "name": "work",
+              "type": "application",
+              "description": "a C+++ project"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "name-with-spaces",
+      "description": "name with spaces",
+      "argv": [
+        "init",
+        "my app",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "my app/package.json": {
+            "json_paths": {
+              "name": "my app"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "name-with-apostrophe",
+      "description": "name with apostrophe",
+      "argv": [
+        "init",
+        "dev's app",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "dev's app/package.json": {
+            "json_paths": {
+              "name": "dev's app"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "absolute-target",
+      "description": "absolute target",
+      "argv": [
+        "init",
+        "{root}/absolute-app",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "{root}/absolute-app/package.json": {
+            "json_paths": {
+              "name": "absolute-app"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "existing-unrelated-directory-is-allowed",
+      "description": "existing unrelated directory is allowed",
+      "argv": [
+        "init",
+        "--yes"
+      ],
+      "setup": {
+        "files": {
+          "keep/me.txt": "x\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          "keep/me.txt": {
+            "equals": "x\n"
+          },
+          "package.json": {
+            "json_paths": {
+              "name": "work"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "package-yes-short",
+      "description": "package yes short",
+      "argv": [
+        "init",
+        "pkg",
+        "-y",
+        "--type",
+        "package"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "pkg/package.json": {
+            "json_paths": {
+              "type": "package"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "type-and-target-order-flexible",
+      "description": "type and target order flexible",
+      "argv": [
+        "init",
+        "app",
+        "--type",
+        "application",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "app/package.json": {
+            "json_paths": {
+              "type": "application"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "reports-name-and-directory",
+      "description": "reports name and directory",
+      "argv": [
+        "init",
+        "app",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "initialized cp3 project 'app'",
+            "app"
+          ]
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "package-reports-package-kind",
+      "description": "package reports package kind",
+      "argv": [
+        "init",
+        "pkg",
+        "--yes",
+        "--type",
+        "package"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "initialized cp3 package 'pkg'"
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "trailing-slash-target",
+      "description": "trailing slash target",
+      "argv": [
+        "init",
+        "app/",
+        "--yes"
+      ],
+      "xfail": {
+        "id": "init-trailing-slash-name",
+        "reason": "a trailing slash makes target.filename() empty, so the scaffold name falls back to cp3-app"
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          "app/package.json": {
+            "json_paths": {
+              "name": "app"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "package-readme-description",
+      "description": "package readme description",
+      "argv": [
+        "init",
+        "pkg",
+        "--yes",
+        "--type",
+        "package"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "pkg/README.md": {
+            "contains": [
+              "# pkg",
+              "a C+++ project",
+              "Built with the C+++ (`cp3`) toolchain."
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

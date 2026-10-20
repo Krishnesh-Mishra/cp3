@@ -1,0 +1,2 @@
+import { createServer } from "std/network";
+const app = createServer({ threads: "two" });
