@@ -18,6 +18,8 @@ set(cp3_common_sources
     src/ast.cpp
     src/module.cpp
     src/types.cpp
+    src/native_types.cpp
+    src/options.cpp
     src/suggest.cpp
     src/version.cpp
 )

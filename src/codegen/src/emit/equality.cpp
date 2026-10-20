@@ -34,6 +34,19 @@ std::string maybeNullishCompare(const std::string& mb, Shape nullish,
     return isEqual ? "(" + cond + ")" : "(! " + cond + ")";
 }
 
+// A native integer compares numerically with another native or a number.
+bool nativeComparable(const CppInfo& l, const CppInfo& r) {
+    return l.shape == Shape::Native &&
+           (r.shape == Shape::Native || r.shape == Shape::Number);
+}
+
+// A number-backed enum member compared with a plain number compares its
+// underlying value (JS parity: `Color.Red === 0` is true).
+bool enumNumberCompare(const CppInfo& l, const CppInfo& r) {
+    return (l.shape == Shape::Enum && r.cpp == "double") ||
+           (r.shape == Shape::Enum && l.cpp == "double");
+}
+
 }  // namespace
 
 // A primitive union (`std::variant`, Shape::Union): the union side is always
@@ -131,20 +144,18 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
         return "((" + mb + ".hasValue()) && (" + mb + ".value() " + op + " " + val + "))";
     }
 
-    // A primitive union (`std::variant`, Shape::Union) on either side: the
-    // one-sided `==` coerces through the runtime helpers, `===` matches only
-    // the held alternative (see `unionEqualityText`).
+    // A primitive union on either side: see `unionEqualityText`.
     if (L.shape == Shape::Union || R.shape == Shape::Union) {
         return unionEqualityText(b, L, R, lhs, rhs);
     }
 
-    // A number-backed enum member compared with a plain number compares its
-    // underlying value (JS parity: `Color.Red === 0` is true).
-    if ((L.shape == Shape::Enum && R.cpp == "double") ||
-        (R.shape == Shape::Enum && L.cpp == "double")) {
+    if (enumNumberCompare(L, R)) {
         const std::string& member = (L.shape == Shape::Enum) ? lhs : rhs;
         const std::string& other = (L.shape == Shape::Enum) ? rhs : lhs;
         return "((static_cast<double>(" + member + ")) " + op + " " + other + ")";
+    }
+    if (nativeComparable(L, R) || nativeComparable(R, L)) {
+        return "(" + lhs + " " + op + " " + rhs + ")";
     }
 
     // Same representation: compare directly. D15 keeps loose `==` same-type.

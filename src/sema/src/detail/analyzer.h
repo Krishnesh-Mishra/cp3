@@ -46,6 +46,7 @@
 #include "cp3/analysis.hpp"
 #include "cp3/ast.hpp"
 #include "cp3/diagnostic.hpp"
+#include "cp3/options.hpp"
 #include "detail/enums.h"
 #include "detail/scopes.h"
 
@@ -56,7 +57,9 @@ namespace cp3 {
 // references to the sink + result it publishes into.
 class Analyzer {
 public:
-    Analyzer(DiagnosticSink& sink, SemaResult& out) : sink_(sink), out_(out) {
+    Analyzer(DiagnosticSink& sink, SemaResult& out,
+             const CompileOptions& options = CompileOptions{})
+        : sink_(sink), out_(out), options_(options) {
         shapes_[kAmbientLabel] = Shape{};
         shapes_[kAmbientLabel].open = true;
     }
@@ -146,6 +149,8 @@ private:
     Type resolveFunctionType(FunctionType& ft);
     Type resolveObjectType(ObjectType& ot);
     Type resolvePrefixedType(PrefixedType& pt);
+    // Refuse a non-nullish union that mixes a native with another member.
+    void rejectNativeUnion(const Type& result, const SourceSpan& span);
     Type resolveLiteralType(LiteralType& lt);
     void addPropertySignature(std::vector<Field>& fields, bool& open,
                               PropertySignature& ps);
@@ -358,6 +363,11 @@ private:
     Type inferBinary(BinaryExpr& be);
     Type evalBinary(BinaryOp op, const Type& l, const Type& r,
                     const SourceSpan& span);
+    // Native arithmetic/bitwise result; nullopt lets comparison/equality
+    // decide (they always yield boolean).
+    std::optional<Type> evalNativeBinary(BinaryOp op, const Type& ln,
+                                         const Type& rn,
+                                         const SourceSpan& span);
     std::string binaryText(BinaryOp op) const;
     Type inferLogical(LogicalExpr& le);
     Type inferConditional(ConditionalExpr& ce);
@@ -410,6 +420,7 @@ private:
     // --- state ----------------------------------------------------------------
     DiagnosticSink& sink_;
     SemaResult& out_;
+    CompileOptions options_;
     std::vector<std::unordered_map<std::string, Binding>> scopes_;
     std::unordered_map<std::string, Shape> shapes_;
     std::unordered_map<std::string, Type> typeNames_;

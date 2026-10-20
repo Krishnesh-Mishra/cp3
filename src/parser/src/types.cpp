@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "cp3/diagnostic_codes.hpp"
+#include "cp3/native_types.hpp"
 
 namespace cp3 {
 
@@ -150,6 +151,25 @@ TypePtr ParserImpl::parsePrimaryType() {
         Token nameTok = advance();
         auto named = std::make_unique<NamedType>(nameTok.span);
         named->name = textOf(nameTok);
+        // A qualified C++ name in type position (`std::string`,
+        // `std::size_t`): the lexer emits `::` as two colons. Fold the
+        // qualified spelling so the project's native table can resolve it.
+        while (check(TokenKind::Colon) && peek(1).kind == TokenKind::Colon &&
+               isIdentLike(peek(2))) {
+            (void)advance();  // ':'
+            (void)advance();  // ':'
+            named->name += "::";
+            named->name += textOf(advance());
+        }
+        // A project typeSystem of "cpp" spells plain names the C++ way:
+        // `let a: long long = 5;`. Keep the supported multi-word spellings
+        // (`long long int`, `unsigned short`, `signed char`, ...) in one
+        // NamedType; any other identifier sequence is left to the grammar.
+        while (isIdentLike(peek()) &&
+               isCppTypeContinuation(named->name, textOf(peek()))) {
+            named->name += " ";
+            named->name += textOf(advance());
+        }
         if (check(TokenKind::Less)) named->typeArgs = parseTypeArgs();
         named->span = spanFrom(start);
         return named;

@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3407",
+    "line": 1,
+    "col": 1,
+    "contains": "raw pointer, reference, and array types"
+  }
+}

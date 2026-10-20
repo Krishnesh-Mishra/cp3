@@ -11,6 +11,7 @@
 #include "detail/generator.h"
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -252,10 +253,25 @@ std::string Generator::cond(const Expr& e) {
 std::string Generator::emitBinary(const BinaryExpr& b) {
     // A comparison may lower a `%` operand without the `-0.0` bail (exprCmp).
     const bool cmp = isComparisonOp(b.op);
-    const std::string lhs = cmp ? exprCmp(*b.left) : expr(*b.left);
-    const std::string rhs = cmp ? exprCmp(*b.right) : expr(*b.right);
     const CppInfo L = info(*b.left);
     const CppInfo R = info(*b.right);
+    std::string lhs = cmp ? exprCmp(*b.left) : expr(*b.left);
+    std::string rhs = cmp ? exprCmp(*b.right) : expr(*b.right);
+    // In a native expression an in-range integral literal is an integer
+    // token, not a double: `n / 2` must stay integer division, `n % 2` must
+    // compile, and `n < 1e15` must compare at full width. A fractional
+    // literal keeps its double spelling (the expression is then `number`).
+    if (L.shape == Shape::Native || R.shape == Shape::Native) {
+        if (const auto k = integralLiteralValue(*b.left); k && !L.type.isNative()) {
+            lhs = std::to_string(*k);
+        }
+        if (const auto k = integralLiteralValue(*b.right);
+            k && !R.type.isNative()) {
+            rhs = std::to_string(*k);
+        }
+    }
+
+    if (auto native = nativeBinaryText(b, L, R, lhs, rhs)) return *native;
 
     switch (b.op) {
         case BinaryOp::Add:
@@ -275,8 +291,6 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
         case BinaryOp::Power:
             return "std::pow(" + lhs + ", " + rhs + ")";
         case BinaryOp::BitAnd:
-            // ECMAScript ToInt32 on both operands (cp3/core/bitwise.hpp); the
-            // result is a double like every other cp3 `number`.
             return "::cp3::runtime::bitwise::band(" + lhs + ", " + rhs + ")";
         case BinaryOp::BitOr:
             return "::cp3::runtime::bitwise::bor(" + lhs + ", " + rhs + ")";
@@ -307,6 +321,38 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
             notImplemented(b, "this binary operator");
             return "0.0";
     }
+}
+
+// Native (`r_'...'` / `c_'...'`) integral operators keep the raw C++ operator:
+// `%` stays an integer remainder (never std::fmod), and the bitwise/shift
+// forms run at the declared width instead of the ToInt32 number path.
+std::optional<std::string> Generator::nativeBinaryText(
+    const BinaryExpr& b, const CppInfo& L, const CppInfo& R,
+    const std::string& lhs, const std::string& rhs) {
+    if (L.shape != Shape::Native && R.shape != Shape::Native) {
+        return std::nullopt;
+    }
+    if (b.op == BinaryOp::Modulo) {
+        const bool nativePair = L.shape == Shape::Native &&
+                                R.shape == Shape::Native;
+        const bool literalPair =
+            (L.shape == Shape::Native &&
+             integralLiteralValue(*b.right).has_value()) ||
+            (R.shape == Shape::Native &&
+             integralLiteralValue(*b.left).has_value());
+        if (nativePair || literalPair) return "(" + lhs + " % " + rhs + ")";
+        return std::nullopt;  // mixed native/number `%`: sema reports CP3406
+    }
+    const char* op = nullptr;
+    switch (b.op) {
+        case BinaryOp::BitAnd: op = "&"; break;
+        case BinaryOp::BitOr: op = "|"; break;
+        case BinaryOp::BitXor: op = "^"; break;
+        case BinaryOp::ShiftLeft: op = "<<"; break;
+        case BinaryOp::ShiftRight: op = ">>"; break;
+        default: return std::nullopt;
+    }
+    return "(" + lhs + " " + op + " " + rhs + ")";
 }
 
 std::string Generator::emitLogical(const LogicalExpr& l) {
@@ -382,6 +428,10 @@ std::string Generator::emitUnary(const UnaryExpr& u) {
         case UnaryOp::Plus:
             return "(+(" + expr(*u.operand) + "))";
         case UnaryOp::BitNot:
+            // Native integers keep `~` (no ToInt32 truncation).
+            if (info(*u.operand).shape == Shape::Native) {
+                return "(~(" + expr(*u.operand) + "))";
+            }
             return "::cp3::runtime::bitwise::bnot(" + expr(*u.operand) + ")";
         case UnaryOp::Void:
             return "((void)(" + expr(*u.operand) + "), cp3::runtime::undefined)";
@@ -390,59 +440,6 @@ std::string Generator::emitUnary(const UnaryExpr& u) {
         default:
             notImplemented(u, "this unary operator");
             return "0.0";
-    }
-}
-
-std::string Generator::emitTypeof(const UnaryExpr& u) {
-    const CppInfo ci = info(*u.operand);
-    // A regex value is a reference (object) type: `typeof r === "object"`
-    // (D16; the shape itself is Unknown, so the switch cannot decide it).
-    if (ci.type.kind == TypeKind::Class && ci.type.name == "RegExp") {
-        return "std::string(\"object\")";
-    }
-    switch (ci.shape) {
-        case Shape::Number: return "std::string(\"number\")";
-        case Shape::String: return "std::string(\"string\")";
-        case Shape::Bool: return "std::string(\"boolean\")";
-        case Shape::Undefined: return "std::string(\"undefined\")";
-        case Shape::Null: return "std::string(\"object\")";
-        case Shape::Object: return "std::string(\"object\")";
-        case Shape::Union:
-            // A primitive union reports the held alternative.
-            return "::cp3::runtime::unions::typeOf(" + expr(*u.operand) + ")";
-        case Shape::Optional:
-        case Shape::Maybe: {
-            // A nullish option over a primitive: the empty slot is `null`
-            // ("object") or `undefined`, and `Maybe` stores which.
-            Type inner;
-            bool found = false;
-            for (const Type& part : ci.type.parts) {
-                if (!part.isNullish()) {
-                    inner = part;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found || !isPrimitiveShape(classify(inner).shape)) {
-                notImplemented(u, "typeof of a non-primitive value");
-                return "std::string(\"undefined\")";
-            }
-            if (ci.shape == Shape::Maybe) {
-                return "([&]{ const auto& cp3_v = (" + expr(*u.operand) +
-                       "); if (cp3_v.isNull()) return std::string(\"object\"); "
-                       "if (cp3_v.isUndefined()) return "
-                       "std::string(\"undefined\"); return "
-                       "::cp3::runtime::typeOf(cp3_v.value()); }())";
-            }
-            const char* empty =
-                (ci.emptyKind == NullishKind::Null) ? "object" : "undefined";
-            return "([&]{ const auto& cp3_v = (" + expr(*u.operand) +
-                   "); return cp3_v.has_value() ? ::cp3::runtime::typeOf(*cp3_v) "
-                   ": std::string(\"" + empty + "\"); }())";
-        }
-        default:
-            notImplemented(u, "typeof of a non-primitive value");
-            return "std::string(\"undefined\")";
     }
 }
 
@@ -472,6 +469,19 @@ std::string Generator::emitConditional(const ConditionalExpr& c) {
     }
     if (B.shape == Shape::Optional && isNullishLiteral(*c.whenTrue)) {
         return "(" + cond(*c.condition) + " ? std::nullopt : " + b + ")";
+    }
+    // `cond ? nativeValue : undefined|null` (D65): the result is the native
+    // type's `std::optional`; wrap the value branch and fold the other.
+    const CppInfo whole = info(c);
+    if (whole.shape == Shape::Optional) {
+        if (A.shape == Shape::Native && isNullishLiteral(*c.whenFalse)) {
+            return "(" + cond(*c.condition) + " ? std::optional<" + A.cpp +
+                   ">(" + a + ") : std::nullopt)";
+        }
+        if (B.shape == Shape::Native && isNullishLiteral(*c.whenTrue)) {
+            return "(" + cond(*c.condition) + " ? std::nullopt : std::optional<" +
+                   B.cpp + ">(" + b + "))";
+        }
     }
     notImplemented(c, "ternary with non-uniform branch types");
     return "0.0";

@@ -15,6 +15,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,6 +32,7 @@
 #include "cp3/source.hpp"
 
 #include "detail/format.hpp"
+#include "detail/package_json.hpp"
 #include "detail/pipeline.hpp"
 #include "detail/util.hpp"
 
@@ -54,7 +56,14 @@ std::unique_ptr<AnalyzedDocument> analyzeDocument(const std::string& path,
     if (document->graph != nullptr) {
         document->entry = document->graph->entry();
         if (document->entry != nullptr && document->entry->ast != nullptr) {
-            analyzeProgram(*document->entry->ast, document->sema, sink);
+            CompileOptions compile;
+            std::filesystem::path root;
+            if (findPackageRoot(std::filesystem::path(path).parent_path(),
+                                root)) {
+                applyProjectTypeSettings(root, compile);
+            }
+            analyzeProgram(*document->entry->ast, document->sema, sink,
+                           compile);
         }
     }
     document->diagnostics = sink.diagnostics();

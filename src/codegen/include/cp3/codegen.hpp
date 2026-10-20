@@ -20,6 +20,7 @@
 #include "cp3/analysis.hpp"
 #include "cp3/ast.hpp"
 #include "cp3/diagnostic.hpp"
+#include "cp3/options.hpp"
 
 namespace cp3 {
 
@@ -44,6 +45,10 @@ struct WorkerImport {
 struct CodegenOptions {
     std::optional<WorkerImport> worker;
     bool workerModule = false;
+    // The project's plain type-name vocabulary (spec 03). Inline r_/c_/ts_
+    // prefixes work in every project; this only affects bare `i64`-style
+    // annotations in a rust/cpp project.
+    TypeSystem typeSystem = TypeSystem::TypeScript;
 };
 
 class CodeGenerator {

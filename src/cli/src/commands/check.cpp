@@ -16,7 +16,9 @@
 #include "cp3/module.hpp"
 #include "cp3/source.hpp"
 
+#include "detail/cache.hpp"
 #include "detail/commands.hpp"
+#include "detail/package_json.hpp"
 #include "detail/pipeline.hpp"
 #include "detail/util.hpp"
 
@@ -31,16 +33,22 @@ int cmdCheck(const CliOptions& opt) {
         return kExitUsageError;
     }
 
+    // Spec 03: the project's package.json selects the plain type-name
+    // vocabulary and the strictNumericCasts policy.
+    CliOptions effective = opt;
+    applyProjectTypeSettings(findProjectRoot(fs::path(opt.file)),
+                             effective.compile);
+
     CollectingDiagnosticSink sink;
     const std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sm, *file, sink);
     SemaResult sema;
     CompilationUnit* entry = graph->entry();
     if (entry != nullptr && entry->ast) {
-        analyzeProgram(*entry->ast, sema, sink);
+        analyzeProgram(*entry->ast, sema, sink, effective.compile);
     }
 
-    renderDiagnostics(sink.diagnostics(), makeRenderOptions(opt, file->path),
-                      stderr);
+    renderDiagnostics(sink.diagnostics(),
+                      makeRenderOptions(effective, file->path), stderr);
     if (sink.hasErrors()) {
         if (onlyNotImplemented(sink.diagnostics())) return notImplemented("check");
         return kExitCompileError;

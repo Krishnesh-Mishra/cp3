@@ -154,6 +154,12 @@ private:
     // cross-module call's result, say).
     void noteFamilyUse(const Expr& e);
     std::string emitBinary(const BinaryExpr& b);
+    // Native `%`, bitwise and shift lowering (nullopt keeps the number path).
+    std::optional<std::string> nativeBinaryText(const BinaryExpr& b,
+                                                const detail::CppInfo& L,
+                                                const detail::CppInfo& R,
+                                                const std::string& lhs,
+                                                const std::string& rhs);
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
                              const detail::CppInfo& R, const std::string& lhs,
                              const std::string& rhs);

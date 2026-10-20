@@ -1,0 +1,14 @@
+import console from "std/console";
+
+let a: r_'u8' = 200;
+let b: r_'u8' = 100;
+let promoted: r_'i32' = a + b;
+let i32v: r_'i32' = -5;
+let u32v: r_'u32' = 7;
+let mixed: r_'u32' = i32v + u32v;
+let wide: r_'i64' = i32v + 10;
+let u64v: r_'u64' = wide;
+let f: r_'f32' = 1.5;
+let asNumber: number = wide + 2.5;
+
+console.log(`${promoted} ${mixed} ${wide} ${u64v} ${f} ${asNumber}`);

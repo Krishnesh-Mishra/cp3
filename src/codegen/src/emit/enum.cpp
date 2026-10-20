@@ -368,7 +368,7 @@ CppInfo classifyEnum(const Type& t) {
 // `enums_` is complete at every call site; a name that is not an enum keeps the
 // Class kind (and its "this declared type" CP3002, unchanged).
 std::optional<Type> Generator::typeOfNode(const TypeNode& tn) const {
-    auto mapped = typeFromTypeNode(tn);
+    auto mapped = typeFromTypeNode(tn, options_.typeSystem);
     if (!mapped) return std::nullopt;
     rewriteEnumTypes(*mapped);
     return mapped;

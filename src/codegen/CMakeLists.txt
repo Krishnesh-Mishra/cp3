@@ -17,6 +17,7 @@ set(cp3_codegen_sources
     src/support/cpp_writer.cpp
     src/support/line_map.cpp
     src/support/type_map.cpp
+    src/support/type_classify.cpp
     src/support/scope_env.cpp
     src/support/value_shapes.cpp
     src/support/helper_blocks.cpp
@@ -24,6 +25,7 @@ set(cp3_codegen_sources
     src/support/int_reads.cpp
     src/support/usage_includes.cpp
     src/emit/expr.cpp
+    src/emit/typeof.cpp
     src/emit/equality.cpp
     src/emit/objects.cpp
     src/emit/assignment.cpp

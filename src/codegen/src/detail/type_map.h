@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/options.hpp"
 #include "cp3/types.hpp"
 
 namespace cp3 {
@@ -38,6 +39,7 @@ enum class Shape {
     EventEmitter, // the builtin event type (D74): Ref<EventEmitter>
     Listener,     // a function-typed value (D74): the boxed callable
     Object,      // an all-primitive `$o{...}` shape: a generated value struct
+    Native,      // a Rust/C++ native numeric value (D65): its exact C++ type
     Unknown, Unsupported
 };
 
@@ -145,7 +147,10 @@ bool classifyRegex(const Type& t, CppInfo& info);
 bool classifyByteBuffer(const Type& t, CppInfo& info);
 
 // Structural fallback: a type annotation -> a cp3 Type (when sema is absent).
-std::optional<Type> typeFromTypeNode(const TypeNode& tn);
+// `typeSystem` enables the project's plain Rust/C++ value-type names.
+std::optional<Type> typeFromTypeNode(const TypeNode& tn,
+                                     TypeSystem typeSystem =
+                                         TypeSystem::TypeScript);
 
 bool isNullishLiteral(const Expr& e);
 

@@ -1,0 +1,3 @@
+let n: number = 5;
+let a: r_'i64' = 10;
+a = a + n;

@@ -53,8 +53,10 @@ bool programCallsWorker(const Program& program);
 // Lowers the worker unit (`export default (…) => …` -> `cp3_default`), running
 // sema on the worker unit with its own `SemaResult`. An unsupported worker
 // reports into `sink` and returns an all-empty module; the caller then leaves
-// the entry's codegen without worker options (CP3002 skip).
+// the entry's codegen without worker options (CP3002 skip). `compile` carries
+// the project type-system settings.
 GeneratedModule generateWorkerModule(const WorkerUnit& worker, bool lineDirectives,
-                                     DiagnosticSink& sink);
+                                     DiagnosticSink& sink,
+                                     const CompileOptions& compile);
 
 }  // namespace cp3::cli

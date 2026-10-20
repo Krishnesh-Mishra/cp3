@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "31 15 10 6 31 4 -2 1.5 true\nnumber number boolean\n",
+  "exitCode": 0
+}

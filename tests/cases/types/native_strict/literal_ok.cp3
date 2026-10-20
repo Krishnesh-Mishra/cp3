@@ -1,0 +1,8 @@
+import console from "std/console";
+
+let a: r_'i64' = 5;
+a = a + 1;
+let b: r_'i64' = a;
+let c: number = 2.5;
+
+console.log(`${a} ${b} ${c}`);

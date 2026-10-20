@@ -13,8 +13,23 @@
 #include <utility>
 
 #include "cp3/diagnostic_codes.hpp"
+#include "cp3/native_types.hpp"
 
 namespace cp3 {
+
+namespace {
+
+bool isNumberLiteralValue(const Type& t) {
+    return t.isLiteral() && t.literalBase == TypeKind::Number;
+}
+
+// True for an operand a native arithmetic operator can consume: a native value
+// or an ordinary cp3 number (a number literal included).
+bool isNumericOperand(const Type& t) {
+    return isNativeType(t) || isNumberish(t);
+}
+
+}  // namespace
 
 // =============================================================================
 // Unary + update
@@ -47,6 +62,25 @@ Type Analyzer::inferUnary(UnaryExpr& u) {
 
 Type Analyzer::arithmeticUnaryResult(UnaryExpr& u, const Type& ot) {
     if (isPermissive(ot)) return Type::number();
+    // Negating a numeric literal keeps a literal type, so `let a: r_'i8' =
+    // -1;` sees an integral value in range instead of a widened `number`.
+    // (Codegen's integralLiteralValue already folds the same shape.)
+    if (u.op == UnaryOp::Negate && ot.isLiteral() &&
+        ot.literalBase == TypeKind::Number) {
+        return Type::numberLiteral(-ot.numberValue);
+    }
+    if (isNativeType(ot)) {
+        // C++ allows `-`, `+` and `~` on every integer, and `-`/`+` on floats.
+        // The declared type keeps its native width; the C++ compiler applies
+        // any integral promotion in the generated expression.
+        if (u.op == UnaryOp::BitNot && !isNativeInteger(ot)) {
+            report(diagcode::kInvalidOperandTypes, u.span,
+                   "invalid operand type '" + pretty(ot) +
+                       "' for unary '~' (an integer type is required)");
+            return Type::error();
+        }
+        return ot;
+    }
     if (isNumberish(ot)) return Type::number();
     if (u.op == UnaryOp::Negate && ot.isUnion()) return Type::number();
     report(diagcode::kInvalidOperandTypes, u.span,
@@ -84,7 +118,11 @@ Type Analyzer::inferUpdate(UpdateExpr& up) {
             inferExpr(*up.operand);
         }
     }
-    return withType(up, Type::number());
+    // `++`/`--` keep a native operand's declared width (C++ narrows back to
+    // the lvalue type); ordinary numbers stay `number`.
+    const Type operandType = up.operand ? typeOfExpr(*up.operand)
+                                        : Type::unknown();
+    return withType(up, isNativeType(operandType) ? operandType : Type::number());
 }
 
 // =============================================================================
@@ -100,10 +138,27 @@ Type Analyzer::inferBinary(BinaryExpr& be) {
 Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
                           const SourceSpan& span) {
     const bool permissive = isPermissive(l) || isPermissive(r);
+    // Native numeric operands (spec 03 / D65): C++ usual arithmetic
+    // conversions. An integral literal that fits adopts the native type, so
+    // `n % 2` and `n + 1` stay native; any other number widens the expression
+    // to `number` unless strictNumericCasts refuses the mix.
+    Type ln = l;
+    Type rn = r;
+    if (isNativeType(ln) && isNumberLiteralValue(r) &&
+        nativeCanRepresentLiteral(ln, r.numberValue)) {
+        rn = ln;
+    } else if (isNativeType(rn) && isNumberLiteralValue(l) &&
+               nativeCanRepresentLiteral(rn, l.numberValue)) {
+        ln = rn;
+    }
+    if (!permissive && (isNativeType(ln) || isNativeType(rn))) {
+        if (auto native = evalNativeBinary(op, ln, rn, span)) return *native;
+    }
+    const bool numericPair = isNumericOperand(ln) && isNumericOperand(rn);
     switch (op) {
         case BinaryOp::Add:
             if (permissive) return ambient();
-            if (isNumberish(l) && isNumberish(r)) return Type::number();
+            if (isNumberish(ln) && isNumberish(rn)) return Type::number();
             if (isStringish(l) && isStringish(r)) return Type::string();
             report(diagcode::kMixedTypeArithmetic, span,
                    "type mismatch: mixed-type arithmetic with '+' on '" +
@@ -122,7 +177,7 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
         case BinaryOp::ShiftRight:
         case BinaryOp::UnsignedShiftRight:
             if (permissive) return ambient();
-            if (isNumberish(l) && isNumberish(r)) return Type::number();
+            if (isNumberish(ln) && isNumberish(rn)) return Type::number();
             report(diagcode::kMixedTypeArithmetic, span,
                    "type mismatch: mixed-type arithmetic with '" +
                        binaryText(op) + "' on '" + pretty(l) + "' and '" +
@@ -133,8 +188,7 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
         case BinaryOp::LessThanEqual:
         case BinaryOp::GreaterThanEqual:
             if (permissive) return Type::boolean();
-            if ((isNumberish(l) && isNumberish(r)) ||
-                (isStringish(l) && isStringish(r))) {
+            if (numericPair || (isStringish(l) && isStringish(r))) {
                 return Type::boolean();
             }
             report(diagcode::kInvalidOperandTypes, span,

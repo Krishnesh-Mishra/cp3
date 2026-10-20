@@ -1,0 +1,15 @@
+import console from "std/console";
+
+let x: r_'i64' = 5;
+let post: r_'i64' = x++;
+let pre: r_'i64' = ++x;
+x--;
+let y: r_'i32' = -7;
+let absish: r_'i32' = -y;
+let bits: r_'u32' = 0xF0F0;
+let inv: r_'u32' = ~bits;
+let cmp: boolean = x > 5 && x < 10;
+let eq: boolean = x !== 5;
+
+console.log(`${post} ${pre} ${x} ${absish} ${inv} ${cmp} ${eq}`);
+console.log(`${x == 6} ${x === 6} ${typeof inv}`);

@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "cp3/diagnostic_codes.hpp"
+#include "cp3/native_types.hpp"
 
 namespace cp3 {
 
@@ -163,6 +164,12 @@ bool Analyzer::isMixedArray(const Type& t) const {
 }
 
 void Analyzer::checkArrayLiteral(ArrayLiteral& lit, const Type& target) {
+    // A native element type (`r_'u8'[]`) takes the element's own literal type,
+    // not its widened base: the literal must reach `checkAssign` so the
+    // integral range rule can accept `[1, 2, 3]` for an `i64[]`.
+    const bool nativeElement =
+        target.kind == TypeKind::Array && !target.parts.empty() &&
+        isNativeType(target.parts.front());
     std::vector<Type> elems;
     for (auto& e : lit.elements) {
         if (!e) {
@@ -176,7 +183,8 @@ void Analyzer::checkArrayLiteral(ArrayLiteral& lit, const Type& target) {
                                                        : Type::unknown());
             continue;
         }
-        elems.push_back(widen(inferExpr(*e)));
+        const Type inferred = inferExpr(*e);
+        elems.push_back(nativeElement ? inferred : widen(inferred));
     }
     if (isTupleType(target)) {
         Shape* sh = shapeOf(target);

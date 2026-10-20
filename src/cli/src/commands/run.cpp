@@ -54,7 +54,7 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
     result.graph = loadModuleGraph(sm, file, feSink);
     CompilationUnit* entry = result.graph->entry();
     if (entry != nullptr && entry->ast) {
-        analyzeProgram(*entry->ast, result.sema, feSink);
+        analyzeProgram(*entry->ast, result.sema, feSink, ctx.opt->compile);
     }
     renderDiagnostics(feSink.diagnostics(), *ctx.render, stderr);
     if (feSink.hasErrors()) {
@@ -106,13 +106,15 @@ struct WorkerLinkage {
 };
 
 WorkerLinkage prepareWorker(const CompilationUnit& entry, const ModuleGraph& graph,
-                            const std::string& moduleName, bool lineDirectives) {
+                            const std::string& moduleName, bool lineDirectives,
+                            const CompileOptions& compile) {
     WorkerLinkage out;
     const std::optional<WorkerUnit> worker =
         findWorkerUnit(*entry.ast, graph, moduleName);
     if (!worker || !programCallsWorker(*entry.ast)) return out;
     CollectingDiagnosticSink workerSink;
-    out.module = generateWorkerModule(*worker, lineDirectives, workerSink);
+    out.module =
+        generateWorkerModule(*worker, lineDirectives, workerSink, compile);
     if (out.module.source.empty()) {
         out.module = GeneratedModule{};
         return out;
@@ -153,29 +155,39 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     const bool packageProject = isPackageProject(projectRoot);
     if (packageProject && execute) return runOnPackageError(opt.file);
 
-    const RenderOptions ro = makeRenderOptions(opt, file->path);
-    const BuildContext ctx{&opt, &ro, &moduleName, execute};
+    // The project's type-system vocabulary (spec 03) joins the CLI options.
+    CliOptions effective = opt;
+    applyProjectTypeSettings(projectRoot, effective.compile);
+
+    const RenderOptions ro = makeRenderOptions(effective, file->path);
+    const BuildContext ctx{&effective, &ro, &moduleName, execute};
 
     FrontendResult frontend = runFrontend(sm, *file, ctx);
     if (frontend.exitCode != kExitSuccess) return frontend.exitCode;
     CompilationUnit* entry = frontend.graph->entry();
 
-    const bool lineDirectives = opt.compile.profile == BuildProfile::Debug;
-    const WorkerLinkage worker =
-        prepareWorker(*entry, *frontend.graph, moduleName, lineDirectives);
+    const bool lineDirectives =
+        effective.compile.profile == BuildProfile::Debug;
+    const WorkerLinkage worker = prepareWorker(*entry, *frontend.graph,
+                                               moduleName, lineDirectives,
+                                               effective.compile);
 
+    CodegenOptions codegenOptions = worker.options;
+    codegenOptions.typeSystem = effective.compile.typeSystem;
     GeneratedModule mod;
-    const int cgExit = codegenEntry(*entry, frontend.sema, ctx, worker.options, mod);
+    const int cgExit =
+        codegenEntry(*entry, frontend.sema, ctx, codegenOptions, mod);
     if (cgExit != kExitSuccess) return cgExit;
 
-    if (opt.verbose && opt.compile.maxMemoryMb != 0) {
+    if (effective.verbose && effective.compile.maxMemoryMb != 0) {
         std::fprintf(stderr, "cp3c: --max-memory cap: %llu MB (codegen phase)\n",
-                     static_cast<unsigned long long>(opt.compile.maxMemoryMb));
+                     static_cast<unsigned long long>(
+                         effective.compile.maxMemoryMb));
     }
 
     if (packageProject) {
         detail::PackInput input;
-        input.opt = &opt;
+        input.opt = &effective;
         input.entryPath = &entryPath;
         input.moduleName = &moduleName;
         input.module = &mod;
@@ -194,7 +206,7 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
         }
     }
     detail::BuildRequest request;
-    request.opt = &opt;
+    request.opt = &effective;
     request.entry = &entryPath;
     request.moduleName = &moduleName;
     request.module = &mod;

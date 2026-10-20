@@ -1,0 +1,5 @@
+{
+  "name": "native-project-strict",
+  "typeSystem": "typescript",
+  "strictNumericCasts": true
+}

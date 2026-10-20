@@ -34,6 +34,10 @@ inline std::string cp3_ts(const std::string& v) { return cp3::runtime::toString(
 inline std::string cp3_ts(bool v) { return cp3::runtime::toString(v); }
 inline std::string cp3_ts(cp3::runtime::Undefined v) { return cp3::runtime::toString(v); }
 inline std::string cp3_ts(std::nullptr_t v) { return cp3::runtime::toString(v); }
+// Native integers (D65) and the int64 fast path (D64) format exact digits.
+template <class T, std::enable_if_t<std::is_integral_v<T> &&
+                                    !std::is_same_v<T, bool>, int> = 0>
+inline std::string cp3_ts(T v) { return std::to_string(v); }
 // Defensive: keeps a raw C string from binding to cp3_ts(bool) through the
 // pointer->bool conversion (which would format every literal as "true").
 inline std::string cp3_ts(const char* v) {
@@ -48,6 +52,12 @@ inline std::string cp3_ts(const std::optional<std::string>& v) {
 inline std::string cp3_ts(const std::optional<bool>& v) {
     return v.has_value() ? cp3::runtime::toString(*v) : std::string("undefined");
 }
+// A native integer option (`r_'i64' | undefined`, D65) and the int64 fast
+// path: format the exact value through the ordinary overload.
+template <class T>
+inline std::string cp3_ts(const std::optional<T>& v) {
+    return v.has_value() ? cp3_ts(*v) : std::string("undefined");
+}
 // A `T | null` optional: its empty case is `null`, not `undefined`.
 inline std::string cp3_ts_null(const std::optional<double>& v) {
     return v.has_value() ? cp3::runtime::toString(*v) : std::string("null");
@@ -58,13 +68,17 @@ inline std::string cp3_ts_null(const std::optional<std::string>& v) {
 inline std::string cp3_ts_null(const std::optional<bool>& v) {
     return v.has_value() ? cp3::runtime::toString(*v) : std::string("null");
 }
+template <class T>
+inline std::string cp3_ts_null(const std::optional<T>& v) {
+    return v.has_value() ? cp3_ts(*v) : std::string("null");
+}
 // A three-way nullable (`T | null | undefined`): Maybe stores the flavor, so
 // the empty case prints the flavor itself.
 template <class T>
 inline std::string cp3_ts(const cp3::runtime::Maybe<T>& v) {
     if (v.isNull()) return std::string("null");
     if (v.isUndefined()) return std::string("undefined");
-    return cp3::runtime::toString(v.value());
+    return cp3_ts(v.value());
 }
 // A boxed erroneous value (cp3/core/error.hpp): `catch (e)` binds one, and cp3
 // renders it as the thrown value itself.
@@ -73,12 +87,14 @@ inline std::string cp3_ts(const ::cp3::runtime::Thrown& v) { return v.toString()
 // ----- JS truthiness ---------------------------------------------------------
 inline bool cp3_truthy(double v) { return v != 0.0 && !std::isnan(v); }
 // The int64 fast path (D64) keeps a `number` as std::int64_t inside a fast
-// body; its truthiness and its formatting are those of the exactly equal
-// double, so these two overloads are what keeps `cp3_truthy(0LL)` and
-// `cp3_ts(5LL)` unambiguous (and correct) in an int64 body.
-inline bool cp3_truthy(std::int64_t v) { return v != 0; }
-inline std::string cp3_ts(std::int64_t v) {
-    return cp3::runtime::toString(static_cast<double>(v));
+// body; a native integer (D65) is std::int8_t .. std::uint64_t. Both keep their
+// exact value in the formatter (no double round-trip) and are truthy when
+// non-zero.
+template <class T, std::enable_if_t<std::is_integral_v<T> &&
+                                        !std::is_same_v<T, bool>,
+                                    int> = 0>
+inline bool cp3_truthy(T v) {
+    return v != 0;
 }
 inline bool cp3_truthy(const std::string& v) { return !v.empty(); }
 inline bool cp3_truthy(bool v) { return v; }
@@ -93,6 +109,10 @@ inline bool cp3_truthy(const std::optional<std::string>& v) {
     return v.has_value() && cp3_truthy(*v);
 }
 inline bool cp3_truthy(const std::optional<bool>& v) {
+    return v.has_value() && cp3_truthy(*v);
+}
+template <class T>
+inline bool cp3_truthy(const std::optional<T>& v) {
     return v.has_value() && cp3_truthy(*v);
 }
 template <class T>
@@ -357,6 +377,7 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     out += "#include <limits>\n";
     out += "#include <optional>\n";
     out += "#include <string>\n";
+    out += "#include <type_traits>\n";  // native integer formatter/truthiness
     if (needsTuple_) out += "#include <tuple>\n";  // enum-carrying object literals
     if (needsUnion_) out += "#include <variant>\n";  // primitive unions
     if (needsEventLoop_) out += "#include <vector>\n";  // Promise input lists

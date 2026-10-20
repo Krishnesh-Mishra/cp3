@@ -8,8 +8,11 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <optional>
 #include <string>
 #include <utility>
+
+#include "cp3/native_types.hpp"
 
 namespace cp3 {
 namespace {
@@ -55,6 +58,22 @@ std::string formatDouble(double value) {
     return std::string(buf);
 }
 
+// Native numeric conversions (D65): the frozen model follows the default C++
+// implicit conversion. A literal keeps its exact value check; whether a
+// conversion is *wanted* (strictNumericCasts) is a sema policy.
+std::optional<bool> nativeAssignable(const Type& from, const Type& to) {
+    if (to.kind == TypeKind::Native) {
+        if (from.isLiteral() && from.literalBase == TypeKind::Number) {
+            return nativeCanRepresentLiteral(to, from.numberValue);
+        }
+        return from.kind == TypeKind::Native;
+    }
+    if (from.kind == TypeKind::Native && to.kind == TypeKind::Number) {
+        return true;  // integer/float -> double widening
+    }
+    return std::nullopt;
+}
+
 }  // namespace
 
 const char* typeKindName(TypeKind kind) noexcept {
@@ -76,6 +95,7 @@ const char* typeKindName(TypeKind kind) noexcept {
         case TypeKind::Nullable: return "nullable";
         case TypeKind::TypeParam: return "typeparam";
         case TypeKind::Literal: return "literal";
+        case TypeKind::Native: return "native";
     }
     return "unknown";
 }
@@ -90,6 +110,7 @@ Type Type::boolean() { return Type(TypeKind::Boolean); }
 Type Type::undefined() { return Type(TypeKind::Undefined); }
 Type Type::nullType() { return Type(TypeKind::Null); }
 Type Type::voidType() { return Type(TypeKind::Void); }
+Type Type::native(std::string id) { return Type(TypeKind::Native, std::move(id)); }
 
 // --- literal constructors ----------------------------------------------------
 
@@ -188,6 +209,7 @@ bool isPrimitive(const Type& t) noexcept {
         case TypeKind::Boolean:
         case TypeKind::Undefined:
         case TypeKind::Null:
+        case TypeKind::Native:
             return true;
         default:
             return false;
@@ -245,6 +267,8 @@ std::string describe(const Type& t) {
         case TypeKind::Enum:
         case TypeKind::TypeParam:
             return t.name.empty() ? std::string(typeKindName(t.kind)) : t.name;
+        case TypeKind::Native:
+            return t.name.empty() ? std::string("native") : t.name;
         case TypeKind::Literal:
             switch (t.literalBase) {
                 case TypeKind::Number: return formatDouble(t.numberValue);
@@ -270,6 +294,9 @@ bool isAssignable(const Type& from, const Type& to) {
     if (from == to) {
         return true;
     }
+
+    // Native numeric conversions (D65).
+    if (auto native = nativeAssignable(from, to)) return *native;
 
     // A literal is assignable exactly when its base primitive is.
     if (from.isLiteral()) {
@@ -351,6 +378,25 @@ Type unify(const Type& a, const Type& b) {
     }
     if (a.isVoid() || b.isVoid()) {
         return Type::voidType();
+    }
+
+    // Native numeric joins (D65): C++ usual arithmetic conversions between two
+    // natives; a number widens a native to number; an integral literal that
+    // fits keeps the native type. Handled before the literal widening below so
+    // `i64` joined with `0` stays `i64`.
+    if (a.kind == TypeKind::Native || b.kind == TypeKind::Native) {
+        if (a.kind == TypeKind::Native && b.kind == TypeKind::Native) {
+            if (auto widened = nativeArithmeticResult(a, b)) return *widened;
+        }
+        const Type& nativeType = a.kind == TypeKind::Native ? a : b;
+        const Type& other = a.kind == TypeKind::Native ? b : a;
+        if (other.isLiteral() && other.literalBase == TypeKind::Number) {
+            if (nativeCanRepresentLiteral(nativeType, other.numberValue)) {
+                return nativeType;
+            }
+            return Type::number();
+        }
+        if (other.kind == TypeKind::Number) return Type::number();
     }
 
     // A literal expression widens to its base primitive when unified.

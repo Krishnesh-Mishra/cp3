@@ -20,6 +20,7 @@
 
 #include "detail/family.h"
 #include "detail/type_map.h"
+#include "cp3/native_types.hpp"
 
 namespace cp3 {
 
@@ -298,6 +299,15 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
             notImplemented(lit, "a spread element");
             continue;
         }
+        // A native element takes the literal as an integer token: the braced
+        // initializer would reject `1.0` as a narrowing conversion, and an
+        // i64 element must not round-trip through double.
+        if (isNativeType(elem)) {
+            if (const auto k = integralLiteralValue(*el)) {
+                out += std::to_string(*k);
+                continue;
+            }
+        }
         out += expr(*el);
     }
     return out + "})";
@@ -314,7 +324,8 @@ std::string Generator::declaratorInitText(const VariableDeclarator& d,
         return arrayCtorText(*args, arrayElemOf(declared), *d.init);
     }
     if (d.init->kind == NodeKind::ArrayLiteral &&
-        arrayElemOf(effectiveType(*d.init)).isUnknown()) {
+        (arrayElemOf(effectiveType(*d.init)).isUnknown() ||
+         isNativeType(arrayElemOf(declared)))) {
         return arrayLiteralText(static_cast<const ArrayLiteral&>(*d.init),
                                 arrayElemOf(declared));
     }

@@ -345,10 +345,11 @@ bool programCallsWorker(const Program& program) {
 }
 
 GeneratedModule generateWorkerModule(const WorkerUnit& worker, bool lineDirectives,
-                                     DiagnosticSink& sink) {
+                                     DiagnosticSink& sink,
+                                     const CompileOptions& compile) {
     if (worker.unit == nullptr || !worker.unit->ast) return GeneratedModule{};
     SemaResult sema;
-    SemanticAnalyzer analyzer(sink);
+    SemanticAnalyzer analyzer(sink, compile);
     if (!analyzer.analyze(*worker.unit->ast, sema)) {
         // The worker unit does not analyze cleanly: leave the entry's
         // `worker(...)` a skip rather than compiling a partial worker.
@@ -356,6 +357,7 @@ GeneratedModule generateWorkerModule(const WorkerUnit& worker, bool lineDirectiv
     }
     CodegenOptions options;
     options.workerModule = true;
+    options.typeSystem = compile.typeSystem;
     CodeGenerator codegen(sink, lineDirectives);
     return codegen.generate(*worker.unit->ast, sema, worker.moduleName, options);
 }

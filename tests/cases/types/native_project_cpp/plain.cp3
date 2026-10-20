@@ -1,0 +1,20 @@
+import console from "std/console";
+
+function scale(value: long long, factor: unsigned int): long long {
+  return value * factor;
+}
+
+let a: long long = 9007199254740992;
+a += 1;
+let b: unsigned long = 4000000000;
+let c: size_t = 7;
+let d: int64_t = -9;
+let e: std::string = "cpp";
+let f: char = 65;
+let g: bool = true;
+let h: double = 2.5;
+let i: float = 1.25;
+let j: unsigned short = 65535;
+
+console.log(`${a} ${b} ${c} ${d} ${e} ${f} ${g} ${h} ${i} ${j} ${scale(3, 4)}`);
+console.log(typeof a, typeof h, typeof g);

@@ -1,0 +1,9 @@
+import console from "std/console";
+
+let n: ts_'number' = 2.5;
+let s: ts_'string' = "ts";
+let b: ts_'boolean' = true;
+let u: ts_'undefined' = undefined;
+
+console.log(`${n} ${s} ${b} ${u}`);
+console.log(typeof n, typeof s, typeof b, typeof u);

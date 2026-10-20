@@ -1,0 +1,15 @@
+import console from "std/console";
+
+let high: r_'i64' = 9007199254740992;
+high += 1;
+let a: r_'i64' | undefined = high;
+let b: r_'u32' | null = null;
+b = 4000000000;
+let c: r_'i32' | undefined = 4;
+let d: c_'long long' | null = -9;
+console.log(`${a} ${high} ${b} ${c} ${d}`);
+console.log(typeof a, typeof b, typeof c, typeof d);
+
+let cleared: r_'i64' | undefined = high;
+cleared = undefined;
+console.log(`${cleared}`);
