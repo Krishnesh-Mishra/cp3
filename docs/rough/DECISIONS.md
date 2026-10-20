@@ -513,6 +513,22 @@ Amends D66.2 and extends D64:
    plus the root README tables (never hand-edit). The table diff is the
    wave's report card, kept per wave.
 
+### D67 addendum - multi-core rows must beat cpp; the two server rows (user directive, 2026-10-19)
+
+The 5% band is the single-core rule. Rows whose cp3 entry is deliberately
+parallel carry a stricter rule: they must be **faster** than the cpp
+comparator, because cp3 ships TBB and the parallel runtime is the thing being
+measured. The suite tags them (`MULTICORE_TASKS`: `compute-multi` today, plus
+the new `health-server-multi`): a time ratio above 1.00x cpp prints `WARN
+multi-core`, above 1.20x prints BIG WARN, and `--strict` fails on either.
+
+The server surface gains two rows so the comparison is honest in both shapes:
+the existing single-core `health-server` and the multi-loop
+`health-server-multi` (D79 `createServer({ threads })`), each against
+go/express/cpp/rust in their idiomatic modes. Single-core rows keep the ~5%
+target versus cpp/rust; noise explains small tilts either way. Rows slower
+than go/js/python remain BIG WARN without exception.
+
 ## D68 - Standard-module architecture: native packages behind mechanical tables (user architecture note, 2026-10-18)
 
 Clarifies the answer to "are the std modules codegen things?":
