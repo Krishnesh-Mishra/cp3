@@ -32,9 +32,12 @@
 # Performance gate (D67): every runnable row is gated against all five
 # references as a time ratio (lower is better for cp3). BIG WARN: cp3 over
 # 1.20x cpp/rust, or slower than any of go/js/python at all. WARN: cp3 over
-# 1.10x cpp/rust but under the big tier. Compute references under 10 ms are
-# noise-scale and not gated. D64 targets cp3 within about 5% of cpp/rust for
-# the native-type tiers; --strict turns any tier line into exit code 1.
+# 1.10x cpp/rust but under the big tier. Multi-core rows (compute-multi and
+# the health-server-multi row; MULTICORE_TASKS) must additionally be FASTER
+# than cpp: any ratio above 1.00 warns (user directive 2026-10-19). Compute
+# references under 10 ms are noise-scale and not gated. D64 targets cp3
+# within about 5% of cpp/rust for the native-type tiers; --strict turns any
+# tier line into exit code 1.
 #
 # Python 3 stdlib only. Usage:  python run_suite.py [options]
 # =============================================================================
@@ -121,11 +124,16 @@ CHURN_EXPECTED = {
 GATE_BIG_NATIVE = 1.20   # BIG WARN when cp3 is over this multiple of cpp/rust time
 GATE_WARN_NATIVE = 1.10  # WARN when cp3 is over this multiple, under the big tier
 GATE_SCRIPT = 1.00       # BIG WARN when cp3 is slower than go/js/python at all
+GATE_MULTI = 1.00        # multicore rows must be FASTER than cpp (user directive 2026-10-19)
 NOISE_FLOOR_MS = 10.0    # compute references faster than this are noise-scale
 GATE_REFERENCES = ("cpp", "rust", "go", "js", "python")
 NATIVE_REFERENCES = ("cpp", "rust")
+# Rows whose cp3 entry is deliberately parallel (TBB). cp3 ships TBB, so these
+# rows are expected to win against a cpp comparator, not merely tie it.
+MULTICORE_TASKS = {"compute-multi", "health-server-multi"}
 GATE_TARGET = ("D64 target: cp3 within about 5% of cpp/rust; BIG WARN over 1.20x "
-               "cpp/rust or slower than go/js/python at all; WARN over 1.10x cpp/rust")
+               "cpp/rust or slower than go/js/python at all; WARN over 1.10x cpp/rust; "
+               "multi-core rows must be faster than cpp")
 
 GATE_WARNINGS: list[str] = []   # tier lines (BIG WARN / WARN), printed at the end
 GATE_NOTES: list[str] = []      # noise-scale notes, printed with the gate block
@@ -739,6 +747,16 @@ def gate_row(task: str, cp3_value: float | None,
         else:
             subject = (f"cp3 {cp3_value:.0f} req/s is {ratio:.2f}x slower than "
                        f"{language} ({reference:.0f} req/s)")
+        if task in MULTICORE_TASKS and language == "cpp":
+            # User directive 2026-10-19: cp3 ships TBB, so parallel rows must
+            # beat the cpp comparator outright. Ties and losses both warn.
+            if ratio > GATE_MULTI:
+                tier = ("BIG WARN (fix this)" if ratio > GATE_BIG_NATIVE
+                        else "WARN")
+                GATE_WARNINGS.append(
+                    f"{tier} multi-core {task}: {subject}; multi-core rows must "
+                    f"be faster than cpp (target < {GATE_MULTI:.2f}x)")
+            continue
         if language in NATIVE_REFERENCES:
             if ratio > GATE_BIG_NATIVE:
                 GATE_WARNINGS.append(

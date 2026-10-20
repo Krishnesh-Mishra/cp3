@@ -135,11 +135,14 @@ are time ratios, lower is better for cp3:
 | --- | --- | --- |
 | BIG WARN | cp3 is over 1.20x cpp or rust, or slower than go/js/python at all (a native compiler should not lose to a scripted runtime) | one per reference, starting `BIG WARN (fix this):` |
 | WARN | cp3 is over 1.10x cpp or rust but under the big tier | one per reference, starting `WARN ` |
+| WARN multi-core | a multi-core row (`compute-multi`, `health-server-multi`) is not FASTER than cpp (ratio above 1.00) | one dedicated line per row, starting `WARN multi-core` or `BIG WARN (fix this) multi-core` |
 
 The footer counts both tiers, and `--strict` makes the runner exit 1 when any
 WARN or BIG WARN fired, so CI or a wave landing can gate on it. The D64
 target stays cp3 within about 5% of the native pack for the native-type
-tiers; 1.20x is the regression tripwire, not the goal.
+tiers; 1.20x is the regression tripwire, not the goal. Multi-core rows carry
+the stricter rule from the 2026-10-19 directive: cp3 ships TBB, so a parallel
+row is expected to win against the cpp comparator outright, not tie it.
 
 Noise floor: compute rows whose reference best is under 10 ms are not gated,
 because spawn jitter at that scale can exceed the ratio itself. When cp3 is
