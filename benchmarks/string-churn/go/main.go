@@ -66,9 +66,12 @@ func main() {
 		s := data
 		for round := 0; round < 8; round++ {
 			upper := toUpperASCII(s)
-			sliced := upper[3 : len(upper)-1]
+			// Owned slices: this row measures string churn, so every entry pays
+			// the same allocation for the intermediate copies (Go substring
+			// headers would otherwise share the backing array for free).
+			sliced := strings.Clone(upper[3 : len(upper)-1])
 			rebuilt := toLowerASCII(sliced) + sliced[:8]
-			s = rebuilt[2:]
+			s = strings.Clone(rebuilt[2:])
 		}
 		checksum = (checksum*31 + int64(strings.Index(s, "c")) + int64(len(s))) % 1000003
 	}

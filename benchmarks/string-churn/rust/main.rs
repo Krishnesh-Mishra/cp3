@@ -30,11 +30,13 @@ fn main() {
         let mut s = data.clone();
         for _ in 0..8 {
             let upper = s.to_uppercase();
-            let sliced = &upper[3..upper.len() - 1];
+            // Owned slice: this row measures string churn, so every entry pays
+            // the same copy for the intermediate slice (a &str view here would
+            // skip one allocation per round and make the comparison unfair).
+            let sliced = upper[3..upper.len() - 1].to_string();
             let mut rebuilt = sliced.to_lowercase();
             rebuilt.push_str(&sliced[..8]);
-            rebuilt.drain(..2);
-            s = rebuilt;
+            s = rebuilt[2..].to_string();
         }
         let position = s.find('c').map(|index| index as i64).unwrap_or(-1);
         let fold = position + s.len() as i64;

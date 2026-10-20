@@ -59,6 +59,15 @@ instead of languages:
 - JS/Python/cp3 use their built-in `toUpperCase`/`toLowerCase`, which in
   practice special-case ASCII and are the idiomatic choice; forcing a manual
   ASCII loop would fight each runtime's real string implementation.
+- Slice parity: the row measures string churn, so the intermediate slices are
+  owning strings in every entry. Rust and Go now materialize them
+  (`to_string`/`strings.Clone`); their native slice types are zero-copy views
+  that share the backing buffer and would skip one allocation per round.
+  Python slices copy, and C++/cp3 `substr`/`slice` copy. V8's `String.slice`
+  may return an internal thin string (a representation detail of the engine,
+  observably identical); that one cannot be forced to copy without distorting
+  the workload, so the JS row is read as a runtime reference rather than part
+  of the owned-string parity set.
 
 Both compiled entries carry an inline `Fairness note` comment saying the same
 thing so the source explains itself.
