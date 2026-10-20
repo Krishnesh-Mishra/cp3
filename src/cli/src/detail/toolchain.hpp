@@ -12,6 +12,11 @@
 // The first present in the order wins. The choice is probed once and cached;
 // --verbose reports it. Everything compiles as C++20.
 //
+// A saved choice takes precedence over D12 (detail/toolchain_select.hpp):
+//   --toolchain flag > CP3_TOOLCHAIN > project package.json > global config >
+//   D12 auto-detect. The first source that resolves to an existing driver wins;
+//   an unusable source is reported and the next one is tried.
+//
 // cp3 projects never use CMake: cp3c invokes the compiler driver directly, for
 // the compile (one object per TU) and link phases
 // (docs/cli-tooling/01-compilation-pipeline.md).
@@ -37,8 +42,33 @@ struct Toolchain {
     bool found() const noexcept { return !program.empty(); }
 };
 
-// Probes the D12 order once and caches the result.
+// Where the effective choice came from (detail/toolchain_select.cpp).
+enum class ToolchainSource {
+    None,         // no driver found by any source
+    Flag,         // --toolchain <id|path>
+    Environment,  // CP3_TOOLCHAIN
+    Project,      // nearest package.json "toolchain"
+    Global,       // user toolchain.conf
+    Auto,         // D12 auto-detect
+};
+
+// Resolves the precedence order once and caches the result. A saved source
+// whose driver vanished is reported once and skipped.
 const Toolchain& detectToolchain();
+
+// Probes the D12 order without consulting any saved choice.
+Toolchain probeAutoToolchain();
+
+// CLI wiring: the global --toolchain value (empty clears it) and the directory
+// whose nearest package.json supplies the project scope. Both reset the cache.
+void setToolchainOverride(std::string value);
+void setToolchainProjectDirectory(fs::path dir);
+void resetToolchainResolution();
+
+// Source of the cached choice, for --verbose and `cp3c toolchain list`.
+ToolchainSource toolchainSource() noexcept;
+std::string toolchainSourceDescription();
+std::string toolchainWarning();
 
 // Human-readable summary for --verbose and failure messages.
 std::string describeToolchain(const Toolchain& tc);

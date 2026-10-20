@@ -16,6 +16,11 @@ set(cp3_cli_sources
     src/pkg/cache.cpp
     src/detail/native_packages.cpp
     src/toolchain/toolchain.cpp
+    src/toolchain/toolchain_probe.cpp
+    src/toolchain/toolchain_config.cpp
+    src/toolchain/toolchain_select.cpp
+    src/toolchain/toolchain_menu.cpp
+    src/toolchain/toolchain_install.cpp
     src/toolchain/diagnostics.cpp
     src/toolchain/pipeline.cpp
     src/commands/common.cpp
@@ -37,6 +42,8 @@ set(cp3_cli_sources
     src/format/format.cpp
     src/commands/clean.cpp
     src/commands/init.cpp
+    src/commands/default_entry.cpp
+    src/commands/toolchain.cpp
     src/commands/exec.cpp
     src/commands/pack.cpp
     src/commands/install.cpp

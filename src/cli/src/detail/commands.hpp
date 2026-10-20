@@ -42,6 +42,9 @@ struct CliOptions {
     bool once = false;                    // dev --once (run one pass then exit)
     bool autoSelect = false;              // install --auto (GitHub selector)
     std::string initType;                 // init --type application|package
+    std::string toolchain;                // --toolchain <id|path> (one command)
+    bool projectScope = false;            // toolchain --project
+    bool globalScope = false;             // toolchain --global
 };
 
 // -----------------------------------------------------------------------------
@@ -50,6 +53,10 @@ struct CliOptions {
 
 // Reports `<command>` as unimplemented (exit 3 + marker) on stderr.
 int notImplemented(const std::string& command);
+
+// Resolves the default entry file for `build` with no explicit file argument:
+// package.json "main", then the conventional entry names.
+std::string defaultEntryFile();
 
 // True when every error/fatal diagnostic is the dedicated not-implemented code
 // (CP3002). Such a failure is reported with the exit-3 + marker convention so
@@ -75,6 +82,7 @@ int cmdDev(const CliOptions& opt);
 int cmdFmt(const CliOptions& opt);
 int cmdClean(const CliOptions& opt);
 int cmdInit(const CliOptions& opt);
+int cmdToolchain(const CliOptions& opt);
 int cmdExec(const CliOptions& opt);
 int cmdInstall(const CliOptions& opt);
 int cmdLsp(const CliOptions& opt);

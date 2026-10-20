@@ -27,6 +27,7 @@
 
 #include "detail/commands.hpp"
 #include "detail/scripts.hpp"
+#include "detail/toolchain.hpp"
 #include "detail/util.hpp"
 
 namespace cp3 {
@@ -47,6 +48,7 @@ void printUsage(std::FILE* out) {
         "  fmt <file.cp3>     Zero-config formatter\n"
         "  clean              Remove .cp3/build and .cp3/out (--all clears .cp3/packages)\n"
         "  init [dir]         Scaffold a new project (package.json + src/index.cp3)\n"
+        "  toolchain          Choose the C++ compiler (list/detect/use/clear)\n"
         "  install [src]      Install a .cp3pak / package dir (bare: package.json deps)\n"
         "  exec <pkg> [args]  Run a package's bundled tool\n"
         "  lsp [--stdio]      Language server on stdio (for editor integrations)\n"
@@ -60,6 +62,9 @@ void printUsage(std::FILE* out) {
         "      --release         (build/run) whole-program build with LTO\n"
         "      --debug           (build/run) -O0 plus debug info\n"
         "      --verbose         Show toolchain choice and pipeline steps\n"
+        "      --toolchain <id|path>  Use this compiler for one command\n"
+        "      --project         (toolchain) save the choice in package.json\n"
+        "      --global          (toolchain) save the choice for all projects\n"
         "      --max-memory <MB|N%>  Cap codegen-phase memory (default: 70% of system RAM)\n"
         "      --all             (clean) also remove .cp3/packages\n"
         "      --yes, -y         (init) accept defaults, never prompt\n"
@@ -105,57 +110,6 @@ bool parseMaxMemory(const std::string& value, std::uint64_t& outMb) {
     return true;
 }
 
-// Minimal `"main": "path"` extraction from package.json (default entry lookup).
-std::string extractJsonString(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const std::size_t kpos = json.find(needle);
-    if (kpos == std::string::npos) return {};
-    std::size_t i = kpos + needle.size();
-    while (i < json.size() && (json[i] == ' ' || json[i] == '\t' ||
-                               json[i] == '\r' || json[i] == '\n')) {
-        ++i;
-    }
-    if (i >= json.size() || json[i] != ':') return {};
-    ++i;
-    while (i < json.size() && (json[i] == ' ' || json[i] == '\t' ||
-                               json[i] == '\r' || json[i] == '\n')) {
-        ++i;
-    }
-    if (i >= json.size() || json[i] != '"') return {};
-    ++i;
-    std::string out;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            ++i;
-        }
-        out.push_back(json[i]);
-        ++i;
-    }
-    return out;
-}
-
-// For `build` with no explicit file: package.json "main", then common defaults.
-std::string defaultEntryFile() {
-    namespace fs = cp3::cli::fs;
-    std::error_code ec;
-    const fs::path cwd = fs::current_path(ec);
-
-    std::string pkg;
-    if (cp3::cli::readTextFile(cwd / "package.json", pkg)) {
-        const std::string main = extractJsonString(pkg, "main");
-        if (!main.empty()) {
-            const fs::path candidate = cwd / main;
-            if (fs::exists(candidate, ec)) return candidate.string();
-        }
-    }
-    for (const char* rel : {"src/main.cp3", "src/index.cp3", "index.cp3",
-                            "main.cp3"}) {
-        const fs::path candidate = cwd / rel;
-        if (fs::exists(candidate, ec)) return candidate.string();
-    }
-    return {};
-}
-
 // Simple boolean flags shared by every command. Returns true when `t` matched.
 bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease,
                bool& sawDebug) {
@@ -174,6 +128,8 @@ bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease
     if (t == "--yes" || t == "-y") { opt.yes = true; return true; }
     if (t == "--once") { opt.once = true; return true; }
     if (t == "--auto") { opt.autoSelect = true; return true; }
+    if (t == "--project") { opt.projectScope = true; return true; }
+    if (t == "--global") { opt.globalScope = true; return true; }
     return false;
 }
 
@@ -216,6 +172,19 @@ bool parseValueOption(const std::vector<std::string>& tokens, std::size_t& i,
         opt.initType = value;
         return true;
     }
+    if (t == "--toolchain" || cp3::cli::startsWith(t, "--toolchain=")) {
+        if (t == "--toolchain") {
+            if (i + 1 >= tokens.size()) {
+                err = "--toolchain requires an id or path";
+                return true;
+            }
+            opt.toolchain = tokens[++i];
+        } else {
+            opt.toolchain = t.substr(std::strlen("--toolchain="));
+        }
+        if (opt.toolchain.empty()) err = "--toolchain requires an id or path";
+        return true;
+    }
     return false;
 }
 
@@ -255,6 +224,12 @@ std::string parseOptions(const std::string& command,
     if (sawRelease && sawDebug) {
         return "--release and --debug are mutually exclusive";
     }
+    if (opt.projectScope && opt.globalScope) {
+        return "--project and --global are mutually exclusive";
+    }
+    if ((opt.projectScope || opt.globalScope) && command != "toolchain") {
+        return "--project and --global only apply to 'cp3c toolchain'";
+    }
     (void)command;
     return {};
 }
@@ -270,7 +245,7 @@ bool resolveCommand(const std::string& first, std::string& command,
     if (first == "run" || first == "build" || first == "check" ||
         first == "dev" || first == "fmt" || first == "clean" ||
         first == "init" || first == "exec" || first == "install" ||
-        first == "lsp" || first == "dap") {
+        first == "lsp" || first == "dap" || first == "toolchain") {
         command = first;
         return true;
     }
@@ -386,7 +361,7 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     if (command == "run" || command == "build") {
         if (opt.file.empty()) {
             if (command == "build") {
-                opt.file = defaultEntryFile();
+                opt.file = cp3::cli::defaultEntryFile();
             }
             if (opt.file.empty()) {
                 std::fprintf(stderr, "cp3c: %s needs a .cp3 file\n",
@@ -400,7 +375,7 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
 
     if (command == "dev") {
         if (opt.file.empty()) {
-            opt.file = defaultEntryFile();
+            opt.file = cp3::cli::defaultEntryFile();
         }
         return cp3::cli::cmdDev(opt);
     }
@@ -412,6 +387,9 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     }
     if (command == "init") {
         return cp3::cli::cmdInit(opt);
+    }
+    if (command == "toolchain") {
+        return cp3::cli::cmdToolchain(opt);
     }
     if (command == "install") {
         return cp3::cli::cmdInstall(opt);
@@ -483,6 +461,21 @@ int runCli(int argc, char** argv) {
         std::fprintf(stderr, "cp3c: %s\n", fileError.c_str());
         printUsage(stderr);
         return kExitUsageError;
+    }
+
+    // Apply the toolchain override and the project-scope search start before
+    // any command can probe the compiler. The project search starts at the
+    // entry file's directory (the working directory when there is no entry),
+    // so a project choice never leaks onto a file outside that project.
+    cp3::cli::setToolchainOverride(opt.toolchain);
+    {
+        std::error_code ec;
+        cp3::cli::fs::path start = cp3::cli::fs::current_path(ec);
+        if (!opt.file.empty()) {
+            const cp3::cli::fs::path entry(opt.file);
+            if (entry.has_parent_path()) start = entry.parent_path();
+        }
+        cp3::cli::setToolchainProjectDirectory(start);
     }
 
     return dispatchCommand(command, opt);

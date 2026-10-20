@@ -86,10 +86,7 @@ std::vector<std::string> profileCompileFlags(BuildProfile profile, bool msvc) {
 
 }  // namespace
 
-const Toolchain& detectToolchain() {
-    static const Toolchain cached = probeToolchain();
-    return cached;
-}
+Toolchain probeAutoToolchain() { return probeToolchain(); }
 
 std::string describeToolchain(const Toolchain& tc) {
     if (!tc.found()) return "(none found)";
