@@ -1,10 +1,10 @@
 /* ==========================================================================
-   C+++ local docs viewer — Apple-style pass
+   C+++ local docs viewer - Apple-style pass
    Materials (translucency + depth), size-specific typography, instant
    response on press, and reduced-motion / reduced-transparency fallbacks.
    ========================================================================== */
 
-/* Apple "system" palette — light. Mirrors the HIG tokens (systemBackground,
+/* Apple "system" palette - light. Mirrors the HIG tokens (systemBackground,
    secondarySystemBackground, label / secondaryLabel / tertiaryLabel, systemBlue)
    using Apple's own surface values: near-black #1d1d1f text on #f5f5f7. */
 :root {
@@ -47,7 +47,7 @@
   --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-/* Dark — systemBackground is true black; surfaces are #1c1c1e, text is
+/* Dark - systemBackground is true black; surfaces are #1c1c1e, text is
    #f5f5f7 (never pure white), and blue shifts to systemBlue dark #2997ff. */
 html[data-theme="dark"] {
   color-scheme: dark;
@@ -83,7 +83,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  /* System font first — it ships optical sizing + tuned tracking/leading. */
+  /* System font first - it ships optical sizing + tuned tracking/leading. */
   font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
   font-size: 16px;
@@ -460,7 +460,7 @@ a:hover { text-decoration: underline; }
 .home-card-links li .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--border-strong); flex: 0 0 auto; }
 .home-card-links li.more { color: var(--accent); font-weight: 600; padding-left: 14px; }
 
-/* emphasis band on the home page — the 2-day starter guide */
+/* emphasis band on the home page - the 2-day starter guide */
 .start-here {
   display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   gap: 30px; align-items: center;
@@ -548,7 +548,7 @@ a:hover { text-decoration: underline; }
 }
 
 @media (max-width: 900px) {
-  /* The drawer is driven by JS springs; no CSS transition — it must be
+  /* The drawer is driven by JS springs; no CSS transition - it must be
      interruptible and 1:1 with the finger (§2, §3). */
   .sidebar { transform: translateX(-100%); box-shadow: var(--shadow-md); }
   .sidebar .nav-close { display: inline-flex; }
