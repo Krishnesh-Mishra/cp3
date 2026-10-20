@@ -25,7 +25,9 @@
 #     the runner prints the reason per row and still gates go/js/python.
 #   * cp3 entries that need unlanded features are attempted like everything
 #     else; the compiler's own CP3xxx diagnostic is reported instead of a
-#     timing. When a feature lands, the entry participates automatically.
+#     timing. A CP3002 row is a hard gate failure, not a pending row: the
+#     benchmark gate must not look green while a documented language feature
+#     is missing. When a feature lands, the entry participates automatically.
 #
 # Every row also carries measured peak RSS (Windows: kernel PeakWorkingSetSize
 # sampled from Python; "-" when the process exits before a sample lands) and
@@ -176,6 +178,7 @@ GATE_TARGET = ("D64 target: cp3 within about 5% of cpp/rust (WARN over 1.05x); "
 
 GATE_WARNINGS: list[str] = []   # tier lines (BIG WARN / WARN), printed at the end
 GATE_NOTES: list[str] = []      # noise-scale notes, printed with the gate block
+GATE_BLOCKERS: list[str] = []   # CP3002 rows that cannot be measured at all
 SUMMARY_ROWS: list[dict] = []   # one {"task", "cpp", "rust"} ratio row per task
 
 
@@ -624,6 +627,8 @@ def run_server_trial(language: str, task: str, latency_count: int, warmup: int,
         row["build_ms"] = (time.perf_counter() - start) * 1000.0
         if not ok:
             row["note"] = f"not runnable yet: {detail}"
+            if "CP3002" in detail:
+                GATE_BLOCKERS.append(f"CP3002 BLOCKER {task}: {detail}")
             return row
         argv, variant = [detail, str(port)], f"std/network, os.cpus() loops" \
             if task.endswith("-multi") else "std/network (spec)"
@@ -778,6 +783,8 @@ def run_compute_trial(language: str, task: str, reps: int, cp3c: Path,
         row["build_ms"] = (time.perf_counter() - start) * 1000.0
         if not ok:
             row["note"] = f"not runnable yet: {detail}"
+            if "CP3002" in detail:
+                GATE_BLOCKERS.append(f"CP3002 BLOCKER {task}: {detail}")
             return row
         argv = [detail]  # cp3 entries have no argv surface yet; scales are baked in
         row["binary_kb"] = stripped_size_kb(Path(detail))
@@ -1054,11 +1061,16 @@ def print_gate_and_summary() -> None:
 
     print()
     print(f"== performance gate == {GATE_TARGET}")
+    for blocker in GATE_BLOCKERS:
+        print(blocker)
     for warning in GATE_WARNINGS:
         print(warning)
     for note in GATE_NOTES:
         print(note)
-    if GATE_WARNINGS:
+    if GATE_BLOCKERS:
+        print(f"gate: {len(GATE_BLOCKERS)} CP3002 blocker(s); "
+              f"a row that cannot compile is a hard failure")
+    elif GATE_WARNINGS:
         big = sum(1 for warning in GATE_WARNINGS if warning.startswith("BIG WARN "))
         plain = len(GATE_WARNINGS) - big
         print(f"gate: {big} BIG WARN(s), {plain} WARN(s); "
@@ -1274,6 +1286,8 @@ def main() -> int:
             sys.stdout = original_stdout
             results_log.close()
 
+    if GATE_BLOCKERS:
+        return 1
     if args.strict and GATE_WARNINGS:
         return 1
     return 0
