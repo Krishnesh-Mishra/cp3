@@ -12,10 +12,14 @@
 # =============================================================================
 from __future__ import annotations
 
+import json
+
 CHURN_MOD = 1000003
 FREQ_MOD = 1000000007
 OBJ_MOD = 1000000007
 MONO_MOD = 1000000007
+JSON_MOD = 1000003
+ASYNC_MOD = 1000003
 
 # --------------------------------------------------------------------------
 # compute-single / compute-single-int / compute-multi
@@ -164,6 +168,140 @@ def generics_mono_totals(n: int = 2000000):
     return total_generic, total_concrete
 
 
+# --------------------------------------------------------------------------
+# json-roundtrip
+# --------------------------------------------------------------------------
+# The literal JSON text every entry embeds verbatim (one representative API
+# record: scalars, strings, a boolean, a fractional score and two primitive
+# arrays). Kept ASCII-only on purpose: every entry folds lengths, and ASCII is
+# the one text domain where JS/Python character counts, Go/cp3 byte counts and
+# UTF-16 code units agree exactly.
+JSON_ITERATIONS = 20000
+JSON_PAYLOAD = (
+    '{"id":48271,"name":"Ada Lovelace","email":"ada.lovelace@example.com",'
+    '"active":true,"score":93.5,"title":"Principal Engineer",'
+    '"company":"Analytical Engines Ltd","city":"London","country":"GB",'
+    '"tags":["analyst","engineer","pioneer","mathematician","compiler",'
+    '"runtime"],"samples":[12,17,23,29,31,37,41,43,47,53]}'
+)
+
+
+def json_roundtrip_checksum(iterations: int = JSON_ITERATIONS) -> int:
+    checksum = 0
+    for _ in range(iterations):
+        u = json.loads(JSON_PAYLOAD)              # the parse half
+        out = json.dumps(                         # the stringify half
+            {
+                "id": u["id"],
+                "name": u["name"],
+                "email": u["email"],
+                "active": u["active"],
+                "score": u["score"],
+                "title": u["title"],
+                "company": u["company"],
+                "city": u["city"],
+                "country": u["country"],
+                "tags": u["tags"],
+                "samples": u["samples"],
+            },
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+        tags = u["tags"]
+        samples = u["samples"]
+        field_value = (
+            u["id"]
+            + len(u["name"])
+            + len(u["email"])
+            + (1 if u["active"] else 0)
+            + int(u["score"] * 10)
+            + len(u["title"])
+            + len(u["company"])
+            + len(u["city"])
+            + len(u["country"])
+            + len(tags)
+            + len(samples)
+            + sum(len(tag) for tag in tags)
+            + sum(samples)
+        )
+        checksum = (checksum * 31 + field_value + len(JSON_PAYLOAD) + len(out)) % JSON_MOD
+    return checksum
+
+
+def json_parse_only_checksum(iterations: int = JSON_ITERATIONS) -> int:
+    """Diagnostic probe: the parse half alone (no stringify).
+
+    Same field fold as json_roundtrip_checksum, minus the stringify length, so
+    a parse-only entry can be checked against an independent value.
+    """
+    u = json.loads(JSON_PAYLOAD)
+    tags = u["tags"]
+    samples = u["samples"]
+    field_value = (
+        u["id"]
+        + len(u["name"])
+        + len(u["email"])
+        + (1 if u["active"] else 0)
+        + int(u["score"] * 10)
+        + len(u["title"])
+        + len(u["company"])
+        + len(u["city"])
+        + len(u["country"])
+        + len(tags)
+        + len(samples)
+        + sum(len(tag) for tag in tags)
+        + sum(samples)
+    )
+    checksum = 0
+    for _ in range(iterations):
+        checksum = (checksum * 31 + field_value + len(JSON_PAYLOAD)) % JSON_MOD
+    return checksum
+
+
+def json_stringify_only_checksum(iterations: int = JSON_ITERATIONS) -> int:
+    """Diagnostic probe: the stringify half alone (fold the output length)."""
+    u = json.loads(JSON_PAYLOAD)
+    out = json.dumps(
+        {
+            "id": u["id"],
+            "name": u["name"],
+            "email": u["email"],
+            "active": u["active"],
+            "score": u["score"],
+            "title": u["title"],
+            "company": u["company"],
+            "city": u["city"],
+            "country": u["country"],
+            "tags": u["tags"],
+            "samples": u["samples"],
+        },
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    checksum = 0
+    for _ in range(iterations):
+        checksum = (checksum * 31 + len(out)) % JSON_MOD
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# async-fanout
+# --------------------------------------------------------------------------
+# Phase 1: 10,000 timers release 0..9,999, joined at once -> their sum.
+# Phase 2: 10,000 sequential awaits of an already-settled value, each folding
+# the loop index. Pure arithmetic: the point of the oracle here is the fold
+# order, not a re-implementation of the event loop.
+ASYNC_FANOUT = 10000
+ASYNC_CHAIN = 10000
+
+
+def async_fanout_checksum(fanout: int = ASYNC_FANOUT, chain: int = ASYNC_CHAIN) -> int:
+    checksum = (fanout * (fanout - 1) // 2) % ASYNC_MOD
+    for i in range(chain):
+        checksum = (checksum * 31 + i) % ASYNC_MOD
+    return checksum
+
+
 def main() -> None:
     print("collatz_total(1_000_000)          =", collatz_total())
     print("hello_world_output()              =", repr(hello_world_output()))
@@ -178,6 +316,11 @@ def main() -> None:
     print("interface_dispatch_totals()       =", a, b)
     a, b = generics_mono_totals()
     print("generics_mono_totals()            =", a, b)
+    print("json payload bytes                =", len(JSON_PAYLOAD))
+    print("json_roundtrip_checksum()         =", json_roundtrip_checksum())
+    print("json_parse_only_checksum()        =", json_parse_only_checksum())
+    print("json_stringify_only_checksum()    =", json_stringify_only_checksum())
+    print("async_fanout_checksum()           =", async_fanout_checksum())
 
 
 if __name__ == "__main__":

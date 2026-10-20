@@ -13,11 +13,14 @@
 #     a time; only processes this script started are ever stopped.
 #   * compute-style tasks (compute-single, compute-single-int, compute-multi,
 #     hello-world, string-churn, word-frequency, object-churn, array-growth,
-#     closure-capture, interface-dispatch, generics-mono): build (if needed),
+#     closure-capture, interface-dispatch, generics-mono, json-roundtrip,
+#     async-fanout): build (if needed),
 #     then run R times and report the best wall time; hello-world reports the
 #     best and the median over at least 15 runs. Outputs are cross-checked
 #     across languages and against the independent oracle values (see
-#     bench/oracle.py) where one exists.
+#     bench/oracle.py) where one exists. json-roundtrip and async-fanout omit
+#     cpp/rust on purpose (no stdlib JSON surface / no stdlib timer-event loop);
+#     the runner prints the reason per row and still gates go/js/python.
 #   * cp3 entries that need unlanded features are attempted like everything
 #     else; the compiler's own CP3xxx diagnostic is reported instead of a
 #     timing. When a feature lands, the entry participates automatically.
@@ -90,8 +93,28 @@ COMPUTE_TASKS = [
     "closure-capture",
     "interface-dispatch",
     "generics-mono",
+    "json-roundtrip",
+    "async-fanout",
 ]
 ALL_TASKS = SERVER_TASKS + COMPUTE_TASKS
+
+# Per-task language omissions. These rows compare standard-library surfaces
+# that two languages do not have: no JSON parser/serializer in C++ std or Rust
+# std without a crate, and no timer/event-loop surface in either standard
+# library. A single dependency-free file would have to vendor or hand-roll the
+# missing stack, which compares dependencies, not the language. The reason is
+# printed per row, and these languages are skipped only for these tasks; the
+# gate still applies to go/js/python.
+TASK_OMIT_LANGUAGES = {
+    "json-roundtrip": {
+        "cpp": "no JSON in the C++ standard library; a dependency-free file would vendor a parser",
+        "rust": "no JSON in Rust std without a crate; adding serde_json compares dependencies",
+    },
+    "async-fanout": {
+        "cpp": "no timers or event loop in the C++ standard library; a file would hand-roll both",
+        "rust": "no timers or executor in Rust std; adding tokio/async-std compares dependencies",
+    },
+}
 
 # Workload scale for string-churn. The cp3 entry has no argv surface yet, so
 # its committed source carries CHURN_DEFAULT_ITERATIONS; the runner builds a
@@ -115,6 +138,8 @@ EXPECTED = {
     "closure-capture": "16666688333331 998521500000",
     "interface-dispatch": "37999986 66000000",
     "generics-mono": "998986007 998986007",
+    "json-roundtrip": "664346",
+    "async-fanout": "99898",
 }
 CHURN_EXPECTED = {
     CHURN_DEFAULT_ITERATIONS: "852167",
@@ -1134,10 +1159,20 @@ def main() -> int:
                 header = f"expected = {EXPECTED[task]} (total Collatz steps for 1..1,000,000)"
             elif task == "compute-multi":
                 header = f"expected = {EXPECTED[task]} (same total split across all cores)"
+            elif task == "json-roundtrip":
+                header = (f"expected = {EXPECTED[task]} | 20,000 parse+stringify "
+                          f"round trips of one 310-byte record")
+            elif task == "async-fanout":
+                header = (f"expected = {EXPECTED[task]} | 10,000-timer fan-out joined "
+                          f"at once, then 10,000 chained awaits")
             else:
                 header = f"expected = {EXPECTED[task]}"
             rows = []
+            omitted = TASK_OMIT_LANGUAGES.get(task, {})
             for language in LANGUAGES:
+                if language in omitted:
+                    print(f"[omit] {task}: {language}: {omitted[language]}")
+                    continue
                 if not present(language):
                     print(f"[skip] {language}: toolchain not found on PATH")
                     continue

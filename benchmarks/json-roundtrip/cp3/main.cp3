@@ -1,0 +1,75 @@
+import console from "std/console";
+import JSON from "std/json";
+
+// json-roundtrip (cp3 entry) -- 20,000 iterations of parse + stringify of one
+// representative API record, folded into one integer.
+//
+// The payload is plain scalars plus two primitive arrays. The landed JSON
+// surface (src/std/json/codegen.cpp) registers an `interface` as a record
+// shape only when every field is a primitive or a one-level primitive array
+// (recordFields() -> recordFieldOf()), and `JSON.stringify` lowers a record
+// value only through an object literal (emitJsonStringify() accepts scalars,
+// arrays and composite literals, not object-shaped values). A nested object
+// field or an array of records is CP3002 today, so the payload uses what the
+// surface round-trips; benchmarks/json-roundtrip/README.md records the exact
+// gap and the report ranks the fix.
+//
+// The fold includes the length of the stringify result, so the serializer
+// cannot be optimized away: a language that formats the text differently
+// prints a different number. The payload is ASCII-only, the one text domain
+// where JS/Python character counts, Go/cp3 byte counts and UTF-16 units agree.
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  active: boolean;
+  score: number;
+  title: string;
+  company: string;
+  city: string;
+  country: string;
+  tags: string[];
+  samples: number[];
+}
+
+const TEXT = '{"id":48271,"name":"Ada Lovelace","email":"ada.lovelace@example.com","active":true,"score":93.5,"title":"Principal Engineer","company":"Analytical Engines Ltd","city":"London","country":"GB","tags":["analyst","engineer","pioneer","mathematician","compiler","runtime"],"samples":[12,17,23,29,31,37,41,43,47,53]}';
+const ITERATIONS = 20000;
+const MOD = 1000003;
+
+let checksum = 0;
+for (let i = 0; i < ITERATIONS; i++) {
+  let u = JSON.parse<User>(TEXT);
+  let out = JSON.stringify({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    active: u.active,
+    score: u.score,
+    title: u.title,
+    company: u.company,
+    city: u.city,
+    country: u.country,
+    tags: u.tags,
+    samples: u.samples,
+  });
+
+  let fieldValue = u.id + u.name.length + u.email.length;
+  if (u.active) {
+    fieldValue = fieldValue + 1;
+  }
+  fieldValue = fieldValue + u.score * 10 + u.title.length + u.company.length;
+  fieldValue = fieldValue + u.city.length + u.country.length;
+  fieldValue = fieldValue + u.tags.length + u.samples.length;
+  for (let j = 0; j < u.tags.length; j++) {
+    let tag = u.tags[j];
+    fieldValue = fieldValue + tag.length;
+  }
+  for (let j = 0; j < u.samples.length; j++) {
+    fieldValue = fieldValue + u.samples[j];
+  }
+
+  checksum = (checksum * 31 + fieldValue + TEXT.length + out.length) % MOD;
+}
+
+console.log(`${checksum}`);
