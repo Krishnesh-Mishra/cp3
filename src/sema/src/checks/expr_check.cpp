@@ -144,6 +144,22 @@ Type Analyzer::inferObject(ObjectLiteral& ol) {
     bool open = false;
     for (auto& p : ol.properties) {
         if (!p) continue;
+        if (p->value && p->value->kind == NodeKind::SpreadElement) {
+            // `{ ...src, b: 2 }`: a spread of a closed object shape contributes
+            // its fields (earlier fields win, JS order); any other source keeps
+            // the result open.
+            const Type st = inferExpr(*p->value);
+            const Shape* shape = shapeOf(st);
+            if (st.isUnknown() || shape == nullptr || shape->open ||
+                shape->tuple) {
+                open = true;
+                continue;
+            }
+            for (const Field& f : shape->fields) {
+                if (!hasFieldNamed(fields, f.name)) fields.push_back(f);
+            }
+            continue;
+        }
         std::string name;
         Type vt = Type::unknown();
         if (p->key && p->key->kind == NodeKind::Identifier && !p->computed) {

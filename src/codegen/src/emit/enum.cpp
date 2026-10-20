@@ -10,9 +10,9 @@
 //     `cp3_enum_<name>_toString` helper, and prepends it to the decls section;
 //   * `emitEnumMember`: `Color.Green` -> `Color::Green`, and the gated object
 //     field read over the tuple an enum-carrying object literal lowered to;
-//   * `emitEnumSwitch` / `lowerEnumSwitch`: a switch whose discriminant and
-//     every case test are the same enum lowers to a plain C++ switch with the
-//     JS fall-through intact (any other switch keeps the CP3002 stub);
+//   * `lowerEnumSwitch`: a switch whose discriminant and every case test are
+//     the same enum lowers to a plain C++ switch (any other switch is lowered
+//     by emit/control.cpp);
 //   * `classifyEnum` + `typeOfNode`: the enum type mapping and the Class->Enum
 //     rewrite of a type annotation (the enum arms type_map.cpp delegates here).
 // =============================================================================
@@ -284,15 +284,6 @@ std::string Generator::emitEnumObjectLiteral(const ObjectLiteral& ol) {
 // =============================================================================
 // A switch statement: the same-enum lowering when it applies, otherwise the
 // generic CP3002 statement stub (the path `stmt`'s fallback uses).
-void Generator::emitEnumSwitch(const Stmt& s, std::string& out, int indent) {
-    if (s.kind == NodeKind::SwitchStatement) {
-        const auto& sw = static_cast<const SwitchStatement&>(s);
-        if (lowerEnumSwitch(sw, out, indent)) return;
-    }
-    notImplemented(s, "this statement");
-    line(out, indent, "/* CP3002: unsupported statement */");
-}
-
 // Lowers `sw` when its discriminant and every case test are one enum; returns
 // false (emitting nothing) for any other switch shape.
 bool Generator::lowerEnumSwitch(const SwitchStatement& sw, std::string& out,

@@ -25,6 +25,9 @@ using namespace detail;
 void Generator::stmt(const Stmt& s, std::string& out, int indent) {
     // One source-mapping directive per statement (--debug only).
     emitLineDirective(s, out);
+    // Loops, switch, labels and break/continue carry generated labels and flow
+    // frames; their lowering unit runs before the ordinary arm table.
+    if (emitControlDispatch(s, out, indent)) return;
     switch (s.kind) {
         case NodeKind::BlockStatement: {
             pushScope();
@@ -59,42 +62,14 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
         case NodeKind::IfStatement:
             emitIf(static_cast<const IfStatement&>(s), out, indent);
             return;
-        case NodeKind::WhileStatement: {
-            const auto& ws = static_cast<const WhileStatement&>(s);
-            const std::string condition = ws.condition ? cond(*ws.condition) : "false";
-            line(out, indent, "while (" + condition + ") {");
-            if (ws.body) emitBranch(*ws.body, out, indent + 1);
-            line(out, indent, "}");
-            return;
-        }
-        case NodeKind::DoWhileStatement: {
-            const auto& dw = static_cast<const DoWhileStatement&>(s);
-            line(out, indent, "do {");
-            if (dw.body) emitBranch(*dw.body, out, indent + 1);
-            const std::string condition = dw.condition ? cond(*dw.condition) : "false";
-            line(out, indent, "} while (" + condition + ");");
-            return;
-        }
-        case NodeKind::ForStatement:
-            emitFor(static_cast<const ForStatement&>(s), out, indent);
-            return;
-        case NodeKind::ForOfStatement:
-            return ArrayEmitter::forOf(*this, static_cast<const ForOfStatement&>(s), out, indent);
         case NodeKind::ReturnStatement:
             emitReturn(static_cast<const ReturnStatement&>(s), out, indent);
-            return;
-        case NodeKind::BreakStatement:
-        case NodeKind::ContinueStatement:
-            line(out, indent, s.kind == NodeKind::BreakStatement ? "break;" : "continue;");
             return;
         case NodeKind::ThrowStatement:
             emitThrow(static_cast<const ThrowStatement&>(s), out, indent);
             return;
         case NodeKind::TryStatement:
             emitTry(static_cast<const TryStatement&>(s), out, indent);
-            return;
-        case NodeKind::SwitchStatement:
-            emitEnumSwitch(s, out, indent);  // same-enum switch; else CP3002
             return;
         default:
             notImplemented(s, "this statement");
@@ -127,6 +102,8 @@ void Generator::emitIf(const IfStatement& is, std::string& out, int indent) {
 void Generator::emitVarDecl(const VariableDeclaration& vd, std::string& out, int indent) {
     for (const auto& decl : vd.declarations) {
         if (!decl) continue;
+        // `let [a, b] = ...` / `let { a } = ...` unpacks in its own unit.
+        if (emitDestructureDecl(*decl, vd.kind, out, indent)) continue;
         std::string text = declaratorText(*decl, vd.kind);
         line(out, indent, text + ";");
         declareBinding(*decl);
@@ -196,32 +173,6 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
         return cv + typeSpelling + " " + name + "{}";
     }
     return cv + "auto " + name + " = cp3::runtime::undefined";
-}
-
-void Generator::emitFor(const ForStatement& f, std::string& out, int indent) {
-    pushScope();
-    std::string init;
-    if (f.init) {
-        if (f.init->kind == NodeKind::VariableDeclaration) {
-            const auto& vd = static_cast<const VariableDeclaration&>(*f.init);
-            std::vector<std::string> parts;
-            for (const auto& d : vd.declarations) {
-                if (d) parts.push_back(declaratorText(*d, vd.kind));
-            }
-            init = joinStrings(parts, ", ");
-            for (const auto& d : vd.declarations) {
-                if (d) declareBinding(*d);
-            }
-        } else if (auto exp = dynamic_cast<const Expr*>(f.init.get())) {
-            init = expr(*exp);
-        }
-    }
-    const std::string condition = f.condition ? cond(*f.condition) : "";
-    const std::string update = f.update ? expr(*f.update) : "";
-    line(out, indent, "for (" + init + "; " + condition + "; " + update + ") {");
-    if (f.body) emitBranch(*f.body, out, indent + 1);
-    line(out, indent, "}");
-    popScope();
 }
 
 void Generator::emitReturn(const ReturnStatement& r, std::string& out, int indent) {

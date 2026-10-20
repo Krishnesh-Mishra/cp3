@@ -71,11 +71,22 @@ struct ArrayEmitter {
     static std::string callbackText(Generator& g, const CallExpr& c,
                                     const MemberExpr& m, const CppInfo& ec,
                                     const std::string& recvText);
-    static void forOf(Generator& g, const ForOfStatement& f, std::string& out,
-                      int indent);
+    static void forOf(Generator& g, const ForOfStatement& f,
+                      const std::string& jsLabel, std::string& out, int indent);
 };
 struct ProgramAssembly;  // detail/program_assembly.h (emit/program.cpp)
+// The identifier a parameter binds directly, unwrapping a trailing `...rest`
+// (emit/patterns.cpp); nullptr for a destructuring pattern.
+const Identifier* parameterIdentifier(const Parameter& p);
 }  // namespace detail
+
+// One destructuring source: the C++ text of the value being unpacked, its cp3
+// type and whether the pattern's bindings are `const`.
+struct PatternSource {
+    std::string text;
+    Type type;
+    bool isConst = false;
+};
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
 // unit, and the CP3002 dedup set (the state block inherited from
@@ -138,7 +149,7 @@ private:
     std::optional<Type> lookup(const std::string& name) const;
     std::optional<Type> bindingType(const VariableDeclarator& d) const;
     std::optional<Type> resolvedBindingType(const VariableDeclarator& d) const;
-    // Annotation -> cp3 Type, with collected-enum Class parts rewritten.
+    // An annotation -> Type, with enum-named Class parts rewritten to Enum.
     std::optional<Type> typeOfNode(const TypeNode& tn) const;
     void rewriteEnumTypes(Type& t) const;
     Type effectiveType(const Expr& e) const;
@@ -169,7 +180,6 @@ private:
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
                              const detail::CppInfo& R, const std::string& lhs,
                              const std::string& rhs);
-    // The Shape::Union half of `==`/`===` (emit/equality.cpp).
     std::string unionEqualityText(const BinaryExpr& b, const detail::CppInfo& L,
                                   const detail::CppInfo& R, const std::string& lhs,
                                   const std::string& rhs);
@@ -197,6 +207,9 @@ private:
     // User call arguments, applying optional/default parameters to `undefined`.
     std::vector<std::string> emitCallArgs(const CallExpr& c,
                                           const FunctionDeclaration* decl);
+    std::vector<std::string> emitRestCallArgs(const CallExpr& c,
+                                              const FunctionDeclaration& decl,
+                                              std::size_t restIndex);
     bool isConsoleMember(const CallExpr& c) const;
 
     // --- parallel.* (emit/parallel.cpp) --------------------------------------
@@ -259,10 +272,8 @@ private:
     GeneratedModule runWorkerModule(const Program& program);
 
     // --- std/console lowering (src/std/console/codegen.cpp) ------------------
-    // Every `console.<member>(...)` call lands here (emit_call.cpp keeps only
-    // the `console.` receiver check). Each member lowers onto its contract in
-    // cp3/std/console.hpp; an object-literal argument gets the explicit D49
-    // object form.
+    // Each member lowers onto cp3/std/console.hpp; an object-literal argument
+    // gets the explicit D49 object form.
     std::string emitConsoleCall(const CallExpr& c, const MemberExpr& m);
     std::string emitConsoleLogCall(const CallExpr& c);
     std::string emitConsoleStreamCall(const CallExpr& c, const std::string& method);
@@ -275,21 +286,15 @@ private:
     std::string consoleNestedValue(const Expr& value);
 
     // --- the builtin EventEmitter (D74, cp3/async/emitter.hpp) ----------------
-    // `new EventEmitter()`; the boxed-listener value form (`let h = () => {}`,
-    // an inline arrow argument, a function-typed local passed on); and the
-    // on/once/off/emit method calls. Each returns "" when the form is not one
-    // of them, so the caller keeps its other paths.
+    // Construction, the boxed-listener value form and the on/once/off/emit
+    // calls; each returns "" for a form it does not own.
     std::string emitEventEmitterNew(const NewExpr& n);
     std::string emitListenerValue(const Expr& e);
     std::string emitEventEmitterCall(const CallExpr& c, const MemberExpr& m);
 
     // --- the JS-compat typed-array family (src/std/typed-arrays/codegen.cpp) ---
-    // Constructors with and without `new` (`Array(2)`, `Int8Array([1])`,
-    // `DataView(buf)`), the `Array.of`/`Array.from` statics, the method tables
-    // (`fill`/`join`/... on arrays and typed views, `get*`/`set*` on DataView,
-    // `slice` on the buffer classes), indexed reads/writes, and the declarator
-    // forms whose element type comes from the binding. Each entry point
-    // returns "" when the form is not one of them.
+    // Constructors, statics, method tables, indexed access and the declarator
+    // forms whose element type comes from the binding; "" outside the family.
     std::string emitFamilyCtorCall(const CallExpr& c, const std::string& name);
     // `emitCall` with the `new`-less constructor spelling tried first.
     std::string emitCallOrFamily(const CallExpr& c);
@@ -323,19 +328,32 @@ private:
     std::string emitObjectLiteral(const Expr& e);  // `{...}` literal values
     std::string emitObjectMemberWrite(const AssignmentExpr& a);  // `o.a = v`
 
+    // --- binding patterns + records (emit/patterns.cpp) -----------------------
+    // An existing record spelling: a `$o{...}` value struct or a materialized
+    // std/json interface record; false when neither represents the shape.
+    bool recordLayout(const Type& t, std::string& structName, std::vector<std::string>& fieldNames);
+    // A literal built for a known record type, including spread properties.
+    std::string recordLiteralText(const ObjectLiteral& lit, const Type& expected);
+    bool emitDestructureDecl(const VariableDeclarator& d, VarKind kind,
+                             std::string& out, int indent);
+    void emitPatternParams(const FunctionDeclaration& fd, std::string& out, int indent);
+    void unpackPattern(const Node& pattern, const PatternSource& src, std::string& out, int indent);
+    void unpackArrayPattern(const ArrayPattern& p, const PatternSource& src,
+                            std::string& out, int indent);
+    void unpackObjectPattern(const ObjectPattern& p, const PatternSource& src,
+                             std::string& out, int indent);
+    void bindPatternTarget(const Node& target, const PatternSource& value,
+                           std::string& out, int indent);
+
     // --- std/collections (src/std/collections/codegen.cpp) --------------------
-    // `new Map<K, V>()` / `new Set<T>()`, the member calls and the `size` /
-    // `entries().length` reads; each returns "" when the form is not one of them.
+    // `new Map<K, V>()` / `new Set<T>()` and the member calls; "" otherwise.
     std::string emitCollectionsNew(const NewExpr& n);
     std::string emitCollectionsMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitCollectionsMember(const MemberExpr& m);
 
     // --- std namespaces + primitive methods (src/std/*/codegen.cpp) ----------
-    // Lower `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*` calls, the
-    // `string` method surface and builtin property reads (`Math.PI`, `path.sep`,
-    // `process.argv`, `s.length`). Each returns "" for a form it does not
-    // implement, so the caller reports CP3002; the dispatch and the shared
-    // tables (detail/builtin_tables.h) stay in emit/std/common.cpp.
+    // `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*`, primitive methods
+    // and builtin reads; "" for an unimplemented form (the caller reports).
     std::string emitBuiltinCall(const CallExpr& c, const MemberExpr& m);
     std::string emitBuiltinMember(const MemberExpr& m);
     std::string emitMathCall(const CallExpr& c, const MemberExpr& m);
@@ -344,10 +362,9 @@ private:
     std::string emitPathMember(const MemberExpr& m);
     std::string emitOsCall(const CallExpr& c, const MemberExpr& m);
     std::string emitJsonCall(const CallExpr& c, const MemberExpr& m);
-    // The JSON record surface (STDLIB docs §04 / docs/language-spec §23): the
-    // unit's interface declarations are registered up front (collectJsonShapes)
-    // and a record shape is reified only when some `JSON.parse<T>` names it.
-    // A registered declaration emits nothing by itself.
+    // The JSON record surface (STDLIB §04 / language spec §23): interfaces are
+    // registered up front; a record is reified only when `JSON.parse<T>` names
+    // it, so a registered declaration emits nothing by itself.
     void collectJsonShapes(const Program& program);
     void emitJsonInterface(const InterfaceDeclaration& i);
     std::string emitJsonStringify(const CallExpr& c);
@@ -429,27 +446,46 @@ private:
     std::string emitPromiseResolve(const CallExpr& c);
     std::string emitPromiseReject(const CallExpr& c);
 
-    // --- statements (emit_stmt.cpp) ------------------------------------------
+    // --- statements (emit/stmt.cpp) ------------------------------------------
     void stmt(const Stmt& s, std::string& out, int indent);
     void emitBranch(const Stmt& s, std::string& out, int indent);
     void emitIf(const IfStatement& is, std::string& out, int indent);
     void emitVarDecl(const VariableDeclaration& vd, std::string& out, int indent);
     std::string declaratorText(const VariableDeclarator& d, VarKind kind);
-    void emitFor(const ForStatement& f, std::string& out, int indent);
     void emitReturn(const ReturnStatement& r, std::string& out, int indent);
     void emitThrow(const ThrowStatement& t, std::string& out, int indent);
     void emitTry(const TryStatement& ts, std::string& out, int indent);
 
+    // --- control flow (emit/control.cpp) -------------------------------------
+    // Generated labels plus `goto` lower break/continue and JS labels.
+    std::string freshLabel(const char* tag);
+    void pushFlowFrame(bool isLoop, const std::string& breakLabel,
+                       const std::string& continueLabel, const std::string& jsLabel);
+    void popFlowFrame();
+    std::string emitWhile(const WhileStatement& w, const std::string& jsLabel,
+                          std::string& out, int indent);
+    std::string emitDoWhile(const DoWhileStatement& d, const std::string& jsLabel,
+                            std::string& out, int indent);
+    std::string emitFor(const ForStatement& f, const std::string& jsLabel,
+                        std::string& out, int indent);
+    void emitForOf(const ForOfStatement& f, const std::string& jsLabel,
+                   std::string& out, int indent);
+    void emitForIn(const ForInStatement& f, const std::string& jsLabel,
+                   std::string& out, int indent);
+    std::string emitSwitch(const SwitchStatement& s, const std::string& jsLabel,
+                           std::string& out, int indent);
+    void emitLabeled(const LabeledStatement& l, std::string& out, int indent);
+    void emitBreak(const BreakStatement& b, std::string& out, int indent);
+    void emitContinue(const ContinueStatement& c, std::string& out, int indent);
+    bool emitControlDispatch(const Stmt& s, std::string& out, int indent);
+
     // --- enums (emit/enum.cpp) ------------------------------------------------
-    // `collectEnums` resolves top-level `enum` declarations (spec 04) and
-    // prepends the `enum class <name> : long long` text; `emitEnumMember` and
-    // `emitEnumObjectLiteral` lower member reads and enum-carrying literals;
-    // `emitEnumSwitch` handles switches (the same-enum lowering, else the stub).
+    // Top-level `enum class` declarations (spec 04), member reads, enum-carrying
+    // literals and the same-enum switch lowering.
     void collectEnums(const Program& program);
     std::string emitEnumMember(const MemberExpr& m);
     std::string emitEnumObjectLiteral(const ObjectLiteral& ol);
     bool lowerEnumSwitch(const SwitchStatement& sw, std::string& out, int indent);
-    void emitEnumSwitch(const Stmt& s, std::string& out, int indent);
 
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
     // Per function: a body with every `number` lowered to a guarded

@@ -36,6 +36,8 @@ set(cp3_codegen_sources
     src/emit/call.cpp
     src/emit/async.cpp
     src/emit/stmt.cpp
+    src/emit/control.cpp
+    src/emit/patterns.cpp
     src/emit/decl.cpp
     src/emit/enum.cpp
     src/emit/regex.cpp

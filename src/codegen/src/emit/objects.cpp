@@ -160,6 +160,14 @@ std::string Generator::emitObjectLiteral(const Expr& e) {
     if (std::string object = emitObject(e); !object.empty()) {
         return object;
     }
+    // A literal checked against a known record type (a JSON-interface argument,
+    // a spread merge) is assembled field by field by the pattern unit.
+    if (std::string record =
+            recordLiteralText(static_cast<const ObjectLiteral&>(e),
+                              effectiveType(e));
+        !record.empty()) {
+        return record;
+    }
     if (std::string literal =
             emitEnumObjectLiteral(static_cast<const ObjectLiteral&>(e));
         !literal.empty()) {

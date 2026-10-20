@@ -182,9 +182,13 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
 }
 
 // `for (const x of a)`: over a regular array; the binding takes the element
-// type (the alternative `for await` form is out of scope and reports).
+// type (the alternative `for await` form is out of scope and reports). The
+// source handle is bound to a named local before the range-for: iterating
+// `*(temporary Ref)` lets the backing vector die at the end of the range-init
+// full-expression (a use-after-free seen as std::bad_alloc).
 void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
-                                 std::string& out, int indent) {
+                                 const std::string& jsLabel, std::string& out,
+                                 int indent) {
     if (g.intOn()) g.intFail();
     const auto* vd = f.left && f.left->kind == NodeKind::VariableDeclaration
                          ? static_cast<const VariableDeclaration*>(f.left.get())
@@ -209,13 +213,24 @@ void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
     const std::string recv = g.familyReceiverText(*f.right, elem, f);
     const std::string name =
         mapIdent(static_cast<const Identifier&>(*d->id).name);
+    const std::string breakLabel = g.freshLabel("forof_end_");
+    const std::string continueLabel = g.freshLabel("forof_next_");
+    const std::string handle = g.freshLabel("forof_src_");
+    g.pushFlowFrame(true, breakLabel, continueLabel, jsLabel);
     g.pushScope();
-    line(out, indent,
-         "for (const " + ec.cpp + "& " + name + " : *(" + recv + ")) {");
+    line(out, indent, "auto " + handle + " = " + recv + ";");
+    line(out, indent, "for (auto " + name + " : *" + handle + ") {");
     g.declareBinding(*d);
-    if (f.body) g.emitBranch(*f.body, out, indent + 1);
+    if (f.body) {
+        line(out, indent + 1, "{");
+        g.emitBranch(*f.body, out, indent + 2);
+        line(out, indent + 1, "}");
+    }
+    line(out, indent + 1, continueLabel + ": ;");
     line(out, indent, "}");
     g.popScope();
+    g.popFlowFrame();
+    line(out, indent, breakLabel + ": ;");
 }
 
 }  // namespace cp3
