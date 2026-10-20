@@ -1,0 +1,7 @@
+{
+  "name": "exit-code",
+  "version": "1.0.0",
+  "description": "exits with a fixed status",
+  "type": "application",
+  "main": "src/index.cp3"
+}
