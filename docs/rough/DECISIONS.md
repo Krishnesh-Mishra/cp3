@@ -515,12 +515,15 @@ Amends D66.2 and extends D64:
 
 ### D67 addendum - multi-core rows must beat cpp; the two server rows (user directive, 2026-10-19)
 
-The 5% band is the single-core rule. Rows whose cp3 entry is deliberately
-parallel carry a stricter rule: they must be **faster** than the cpp
-comparator, because cp3 ships TBB and the parallel runtime is the thing being
-measured. The suite tags them (`MULTICORE_TASKS`: `compute-multi` today, plus
-the new `health-server-multi`): a time ratio above 1.00x cpp prints `WARN
-multi-core`, above 1.20x prints BIG WARN, and `--strict` fails on either.
+The 5% band is the single-core rule, and the same directive tightens its
+trigger: plain WARN now fires above 1.05x cpp/rust (was 1.10x), so anything
+past the D64 band is a fix-me line; BIG WARN stays at 1.20x and at any loss to
+go/js/python. Rows whose cp3 entry is deliberately parallel carry a stricter
+rule still: they must be **faster** than the cpp comparator, because cp3 ships
+TBB and the parallel runtime is the thing being measured. The suite tags them
+(`MULTICORE_TASKS`: `compute-multi` today, plus the new `health-server-multi`):
+a time ratio above 1.00x cpp prints `WARN multi-core`, above 1.20x prints BIG
+WARN, and `--strict` fails on either.
 
 The server surface gains two rows so the comparison is honest in both shapes:
 the existing single-core `health-server` and the multi-loop
