@@ -18,56 +18,12 @@
 
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
 
 using namespace detail;
-
-namespace {
-
-// A module-scope `const` may initialize in place only when its initializer is
-// a compile-time value. Anything that reads runtime state (a call,
-// interpolation, `process.argv`/`env`) must run inside `main` at the
-// statement's source position: a namespace-scope static initializer runs
-// before `main`, which is before initArgv and every other runtime store
-// exists. This classifies the literal subset (operators over literals
-// included) that is safe to hoist.
-bool isStaticInitExpr(const Expr& e) {
-    switch (e.kind) {
-        case NodeKind::NumberLiteral:
-        case NodeKind::StringLiteral:
-        case NodeKind::BoolLiteral:
-        case NodeKind::NullLiteral:
-        case NodeKind::UndefinedLiteral:
-            return true;
-        case NodeKind::UnaryExpr: {
-            const auto& u = static_cast<const UnaryExpr&>(e);
-            return u.operand && isStaticInitExpr(*u.operand);
-        }
-        case NodeKind::BinaryExpr: {
-            const auto& b = static_cast<const BinaryExpr&>(e);
-            return b.left && b.right && isStaticInitExpr(*b.left) &&
-                   isStaticInitExpr(*b.right);
-        }
-        case NodeKind::LogicalExpr: {
-            const auto& l = static_cast<const LogicalExpr&>(e);
-            return l.left && l.right && isStaticInitExpr(*l.left) &&
-                   isStaticInitExpr(*l.right);
-        }
-        case NodeKind::ConditionalExpr: {
-            const auto& c = static_cast<const ConditionalExpr&>(e);
-            return c.condition && c.whenTrue && c.whenFalse &&
-                   isStaticInitExpr(*c.condition) &&
-                   isStaticInitExpr(*c.whenTrue) &&
-                   isStaticInitExpr(*c.whenFalse);
-        }
-        default:
-            return false;
-    }
-}
-
-}  // namespace
 
 // Records every function declared in this unit (including `export function`)
 // so a call can be checked against them.
@@ -152,114 +108,6 @@ void Generator::emitExport(const ExportDeclaration& ed, std::string& decls,
     notImplemented(ed, "re-export");
 }
 
-// Module-scope `let`/`const`/`var` lowers to a namespace-scope global so that
-// functions declared in the unit can read it (a `main`-local cannot be seen by
-// them, S1). The declaration moves to the decls section; a non-const
-// initializer runs at the statement's original position in `main` (JS order),
-// while a const must initialize in place.
-void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
-                              std::string& mainBody) {
-    const bool isConst = vd.kind == VarKind::Const;
-    const std::string cv = isConst ? "const " : "";
-    for (const auto& declPtr : vd.declarations) {
-        const VariableDeclarator* d = declPtr.get();
-        if (!d) continue;
-        // A module-scope pattern binds in `main` at its source position.
-        if (emitDestructureDecl(*d, vd.kind, mainBody, 1)) continue;
-        if (!d->id || d->id->kind != NodeKind::Identifier) {
-            if (d->id) notImplemented(*d->id, "destructuring binding");
-            continue;
-        }
-        const std::string name =
-            mapIdent(static_cast<const Identifier&>(*d->id).name);
-        reportModuleVarType(*d);
-        const std::optional<Type> declared = resolvedBindingType(*d);
-        CppInfo ci = declared ? classify(*declared) : CppInfo{};
-        if (d->init && !ci.representable) {
-            const CppInfo fromInit = info(*d->init);
-            if (fromInit.representable) ci = fromInit;
-        }
-        if (!ci.representable) {
-            // No namespace-scope spelling (e.g. an arrow binding, or a
-            // top-level `await` initializer that needs the coroutine context):
-            // keep the binding a `main`-local, the pre-globals lowering.
-            emitLineDirective(*d, mainBody);
-            line(mainBody, 1, declaratorText(*d, vd.kind) + ";");
-            declare(static_cast<const Identifier&>(*d->id).name,
-                    resolvedBindingType(*d));
-            continue;
-        }
-        if (!d->init) {
-            emitModuleVarNoInit(ci, name, cv, decls);
-            continue;
-        }
-        // `let a: number[] = Array(3)` / `let a: number[] = []`: the
-        // annotation fixes an otherwise unknowable element type
-        // (src/std/typed-arrays/codegen.cpp).
-        std::string initText;
-        if (d->type && ci.shape == Shape::Object &&
-            d->init->kind == NodeKind::ObjectLiteral) {
-            initText = objectLiteralForType(
-                static_cast<const ObjectLiteral&>(*d->init), ci.type);
-        }
-        if (initText.empty()) initText = declaratorInitText(*d, ci.type);
-        if (initText.empty()) initText = expr(*d->init);
-        if (ci.shape == Shape::Optional && isNullishLiteral(*d->init)) {
-            initText = "std::nullopt";
-        }
-        if (isConst && initText.find("co_await") != std::string::npos) {
-            // A const initializer that awaits only compiles inside the entry
-            // coroutine: keep the binding a `main`-local (no static init).
-            emitLineDirective(*d, mainBody);
-            line(mainBody, 1, declaratorText(*d, vd.kind) + ";");
-            declare(static_cast<const Identifier&>(*d->id).name,
-                    resolvedBindingType(*d));
-            continue;
-        }
-        if (isConst) {
-            if (isStaticInitExpr(*d->init)) {
-                emitLineDirective(*d, decls);
-                line(decls, 1, cv + ci.cpp + " " + name + " = " + initText + ";");
-            } else {
-                // The initializer reads runtime state: evaluate it inside
-                // `main` at its source position, after initArgv and the rest
-                // of the runtime bootstrap. The binding keeps namespace scope
-                // so functions can read it; language-level const-ness is
-                // enforced by sema.
-                line(decls, 1, ci.cpp + " " + name + "{};");
-                emitLineDirective(*d, mainBody);
-                line(mainBody, 1, name + " = " + initText + ";");
-            }
-            continue;
-        }
-        line(decls, 1, ci.cpp + " " + name + "{};");
-        emitLineDirective(*d, mainBody);
-        line(mainBody, 1, name + " = " + initText + ";");
-    }
-}
-
-void Generator::emitModuleVarNoInit(const detail::CppInfo& ci,
-                                    const std::string& name,
-                                    const std::string& cv, std::string& decls) {
-    if (ci.representable && ci.shape != Shape::Void) {
-        line(decls, 1, cv + ci.cpp + " " + name + "{};");
-    } else {
-        line(decls, 1, cv + "auto " + name + " = cp3::runtime::undefined;");
-    }
-}
-
-// A declared type M1 cannot represent (`number | string`, an object / array /
-// class type, ...) keeps the unit "not implemented" instead of being quietly
-// mis-typed (same contract as local declarations).
-void Generator::reportModuleVarType(const VariableDeclarator& d) {
-    if (!d.type) return;
-    auto dt = typeOfNode(*d.type);
-    if (!dt || classify(*dt).representable || dt->isUnknown() || dt->isError() ||
-        isChannelHandleType(*dt)) {
-        return;
-    }
-    notImplemented(d, "this declared type");
-}
 
 void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
                             std::string& defs) {
@@ -320,19 +168,27 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
 // not an int64 fast path was kept) and the fallback the wrapper re-runs.
 std::string Generator::plainBody(const FunctionDeclaration& fd, const std::string& ret) {
     const std::string savedReturn = currentReturn_;
+    const std::optional<Type> savedReturnType = currentReturnType_;
     if (fd.isAsync) {
         // Inside the coroutine `return expr` yields the promise's VALUE type
         // (`co_return expr`), not the C++ signature's `Promise<T>` spelling.
-        const CppInfo value = classify(asyncValueType(fd));
-        currentReturn_ = (value.representable && value.shape != Shape::Void)
-                             ? value.cpp
+        const Type value = asyncValueType(fd);
+        const CppInfo ci = classify(value);
+        currentReturn_ = (ci.representable && ci.shape != Shape::Void)
+                             ? ci.cpp
                              : "void";
+        currentReturnType_ = value;
     } else {
         currentReturn_ = ret;
+        currentReturnType_ = returnValueType(fd);
     }
 
+    const std::optional<Type> savedExpected = expected_;
+    expected_ = currentReturnType_;
     const bool savedInAsync = inAsyncBody_;
     inAsyncBody_ = fd.isAsync;
+    const std::uint32_t savedFrame = currentFrameId_;
+    currentFrameId_ = fd.nodeId;
     ++nestingDepth_;
 
     std::string body;
@@ -360,9 +216,40 @@ std::string Generator::plainBody(const FunctionDeclaration& fd, const std::strin
     popScope();
 
     --nestingDepth_;
+    currentFrameId_ = savedFrame;
     inAsyncBody_ = savedInAsync;
+    expected_ = savedExpected;
     currentReturn_ = savedReturn;
+    currentReturnType_ = savedReturnType;
     return body;
+}
+
+// The cp3 type of the value a function returns: the annotation first, then
+// sema's resolved signature, then the first `return` in the body. The first
+// candidate with a C++ spelling wins, so a nominal annotation sema resolved to
+// a structural label still lowers by its shape; a function whose candidates
+// are all unrepresentable keeps the first one (the caller reports it).
+std::optional<Type> Generator::returnValueType(const FunctionDeclaration& fd) const {
+    std::vector<Type> candidates;
+    if (fd.returnType) {
+        if (auto t = typeOfNode(*fd.returnType)) candidates.push_back(*t);
+    }
+    auto it = sema_.functions.find(fd.nodeId);
+    if (it != sema_.functions.end()) {
+        const Type& t = it->second.returnType;
+        if (!t.isUnknown() && !t.isError()) candidates.push_back(t);
+    }
+    if (fd.body) {
+        if (const Expr* returned = firstReturnedExpr(*fd.body)) {
+            const Type t = effectiveType(*returned);
+            if (!t.isUnknown() && !t.isError()) candidates.push_back(t);
+        }
+    }
+    if (candidates.empty()) return std::nullopt;
+    for (const Type& t : candidates) {
+        if (classify(t).representable) return t;
+    }
+    return candidates.front();
 }
 
 std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
@@ -374,32 +261,13 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
         notImplemented(fd, "this async function's value type");
         return "void";
     }
-    if (fd.returnType) {
-        if (auto t = typeOfNode(*fd.returnType)) {
-            CppInfo ci = classify(*t);
-            if (ci.representable) return ci.cpp;
-            // A declared return type M1 cannot represent (e.g. a function
-            // type `() => T`, an object/array, a non-primitive union).
-            // Report CP3002 so the unit is treated as not-implemented rather
-            // than emitting a `void` signature with a dropped `return`.
-            notImplemented(fd, "this return type");
-        }
-    }
-    auto it = sema_.functions.find(fd.nodeId);
-    if (it != sema_.functions.end()) {
-        CppInfo ci = classify(it->second.returnType);
+    if (auto value = returnValueType(fd)) {
+        const CppInfo ci = classify(*value);
         if (ci.representable) return ci.cpp;
-        if (!it->second.returnType.isUnknown()) {
+        if (!value->isUnknown()) {
             notImplemented(fd, "this return type");
         }
-    }
-    // Fallback: infer from the first `return <expr>` in the body.
-    if (fd.body) {
-        if (const Expr* returned = firstReturnedExpr(*fd.body)) {
-            CppInfo ci = info(*returned);
-            if (ci.representable) return ci.cpp;
-            notImplemented(*returned, "this returned value");
-        }
+        return "void";
     }
     return "void";
 }

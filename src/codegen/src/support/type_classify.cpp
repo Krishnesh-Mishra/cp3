@@ -7,9 +7,11 @@
 // (`typeFromTypeNode`) and the shared helpers.
 // =============================================================================
 #include <string>
+#include <vector>
 
 #include "cp3/native_types.hpp"
 
+#include "detail/cpp_writer.h"
 #include "detail/parallel.h"
 #include "detail/type_map.h"
 
@@ -76,6 +78,46 @@ static CppInfo classifyClassValue(const Type& t) {
     return info;
 }
 
+// The Function-kind arm of `classify`: a void function over non-representable
+// parameters is the boxed Listener (D74); every other function is a
+// `std::function` built from the recursive shapes of its parts.
+static CppInfo classifyFunctionValue(const Type& t) {
+    CppInfo info;
+    info.type = t;
+    if (t.parts.empty()) return info;
+    // A void-returning function whose parameters have no value shape
+    // (an event handler's `unknown` payload) is the boxed `Listener`
+    // (D74): every copy shares one identity. A value-returning (or
+    // representable-parameter) function is a plain `std::function`
+    // built from the recursive shapes of its parts.
+    bool listener = t.parts.back().isVoid();
+    for (std::size_t i = 0; i + 1 < t.parts.size(); ++i) {
+        if (classify(t.parts[i]).representable) {
+            listener = false;
+            break;
+        }
+    }
+    if (listener) {
+        info.shape = Shape::Listener;
+        info.representable = true;
+        info.cpp = "::cp3::runtime::Listener";
+        return info;
+    }
+    std::vector<std::string> params;
+    for (std::size_t i = 0; i + 1 < t.parts.size(); ++i) {
+        const CppInfo part = classify(t.parts[i]);
+        if (!part.representable) return info;
+        params.push_back(part.cpp);
+    }
+    const CppInfo ret = classify(t.parts.back());
+    if (!ret.representable) return info;
+    info.shape = Shape::Function;
+    info.representable = true;
+    info.cpp = "std::function<" + ret.cpp + "(" +
+               joinStrings(params, ", ") + ")>";
+    return info;
+}
+
 CppInfo classify(const Type& raw) {
     CppInfo info;
     Type t = raw;
@@ -139,13 +181,7 @@ CppInfo classify(const Type& raw) {
             return classifyClassValue(t);
         case TypeKind::Enum: return classifyEnum(t);  // spec 04: enum class
         case TypeKind::Function:
-            // A function-typed value (D74): boxed as `Listener` so every copy
-            // shares one identity; only void-returning functions have one.
-            if (t.parts.empty() || !t.parts.back().isVoid()) return info;
-            info.shape = Shape::Listener;
-            info.representable = true;
-            info.cpp = "::cp3::runtime::Listener";
-            return info;
+            return classifyFunctionValue(t);
         case TypeKind::Array:
             // Regular arrays have a spelling when their element type does
             // (src/std/typed-arrays/codegen.cpp); otherwise they stay out of

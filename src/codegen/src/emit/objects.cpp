@@ -153,9 +153,59 @@ std::string Generator::emitObject(const Expr& e) {
     return "(" + receiver + ")." + member;
 }
 
+// A field write of a `$o{...}` value shape: `(<object>).field = value`. Only
+// the forms with a plain C++ spelling are lowered; anything else keeps CP3002.
+std::string Generator::emitMemberAssign(const AssignmentExpr& a,
+                                        const MemberExpr& m) {
+    if (!m.object || !a.value) return std::string();
+    Type object;
+    bool optional = false;
+    if (!objectReceiver(effectiveType(*m.object), object, optional)) {
+        return std::string();
+    }
+    // A possibly-null receiver has no plain field write.
+    if (optional) return std::string();
+    std::string structName;
+    std::vector<ObjectField> fields;
+    if (!objectShapeOf(object, structName, fields)) return std::string();
+    std::string field;
+    if (!fieldCppText(fields, m.property, field)) return std::string();
+    const std::string target =
+        "(" + expr(*m.object) + ")." + mapIdent(m.property);
+    const std::string value = expr(*a.value);
+    switch (a.op) {
+        case AssignOp::Assign:
+            if (field.rfind("std::optional<", 0) == 0 &&
+                isNullishLiteral(*a.value)) {
+                return "(" + target + " = std::nullopt)";
+            }
+            return "(" + target + " = " + value + ")";
+        case AssignOp::Add:
+        case AssignOp::Subtract:
+        case AssignOp::Multiply:
+        case AssignOp::Divide: {
+            const char* op = nullptr;
+            switch (a.op) {
+                case AssignOp::Add: op = "+="; break;
+                case AssignOp::Subtract: op = "-="; break;
+                case AssignOp::Multiply: op = "*="; break;
+                default: op = "/="; break;
+            }
+            return "(" + target + " " + op + " " + value + ")";
+        }
+        case AssignOp::Modulo:
+            return "(" + target + " = " + modCall(target, *a.value, value) + ")";
+        case AssignOp::Power:
+            return "(" + target + " = std::pow(" + target + ", " + value + "))";
+        default:
+            return std::string();
+    }
+}
+
 // The object-literal expression form: a `$o{...}` value shape lowers to the
-// generated value struct (emitObject above); a literal with an enum-typed field
-// lowers to a std::tuple (emit/enum.cpp); anything else stays CP3002.
+// generated value struct (emitObject above); a checked record literal is
+// assembled field by field (recordLiteralText); a literal with an enum-typed
+// field lowers to a std::tuple (emit/enum.cpp); anything else stays CP3002.
 std::string Generator::emitObjectLiteral(const Expr& e) {
     if (std::string object = emitObject(e); !object.empty()) {
         return object;
@@ -175,31 +225,6 @@ std::string Generator::emitObjectLiteral(const Expr& e) {
     }
     notImplemented(e, "this object literal");
     return "0.0";
-}
-
-// `obj.field = value` over a `$o{...}` value shape: a plain member write on the
-// generated struct. Only the plain assignment is in this wave (a compound write
-// keeps the CP3002 path); an optional receiver is left out for the same reason.
-std::string Generator::emitObjectMemberWrite(const AssignmentExpr& a) {
-    if (!a.target || a.target->kind != NodeKind::MemberExpr ||
-        a.op != AssignOp::Assign || !a.value) {
-        return std::string();
-    }
-    const auto& m = static_cast<const MemberExpr&>(*a.target);
-    if (!m.object || m.property.empty()) return std::string();
-    Type object;
-    bool optional = false;
-    if (!objectReceiver(effectiveType(*m.object), object, optional)) {
-        return std::string();
-    }
-    if (optional) return std::string();
-    std::string structName;
-    std::vector<ObjectField> fields;
-    if (!objectShapeOf(object, structName, fields)) return std::string();
-    std::string field;
-    if (!fieldCppText(fields, m.property, field)) return std::string();
-    return "((" + expr(*m.object) + ")." + mapIdent(m.property) + " = " +
-           expr(*a.value) + ")";
 }
 
 }  // namespace cp3

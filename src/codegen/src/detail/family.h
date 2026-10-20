@@ -62,7 +62,7 @@ inline bool isFamilyCtorName(const std::string& name) {
 inline bool isArrayElementShape(Shape s) {
     return s == Shape::Number || s == Shape::String || s == Shape::Bool ||
            s == Shape::Array || s == Shape::Enum || s == Shape::Union ||
-           s == Shape::Native;
+           s == Shape::Native || s == Shape::Function;
 }
 
 // The array-element spelling of `elem` (classify + shape gate).

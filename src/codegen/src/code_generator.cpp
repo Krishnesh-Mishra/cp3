@@ -100,6 +100,12 @@ void Generator::runUnit(const Program& program, std::string& decls,
     // the inline form is synthesized into the same site model (worker.cpp).
     collectWorkerSites(program);
 
+    // The closure-capture analysis (spec 10): classify every function frame's
+    // locals before the emit walk, so a shared mutable binding lowers to a
+    // `Cell<T>` from its first declaration on.
+    captures_ = analyzeCaptures(program);
+    currentFrameId_ = program.nodeId;
+
     for (const auto& stmtPtr : program.body) {
         if (stmtPtr) {
             emitTopLevel(*stmtPtr, decls, defs, mainBody);

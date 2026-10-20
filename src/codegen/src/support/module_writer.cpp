@@ -33,6 +33,7 @@ std::string Generator::buildHeader(const std::string& decls,
     out += "#define " + guard + "\n\n";
     out += "#include <optional>\n";
     out += "#include <string>\n";
+    out += "#include <functional>\n";  // std::function closures (spec 10)
     if (needsUnion_) {
         // A signature can name a primitive union (`std::variant<...>`).
         out += "#include <variant>\n";
@@ -68,6 +69,11 @@ std::string Generator::buildHeader(const std::string& decls,
         // can name `Ref<EventEmitter>`/`Listener`.
         out += "#include \"cp3/async/emitter.hpp\"\n";
     }
+    if (needsRegex_) {
+        // Core regex literals (D48): a signature or module-scope binding can
+        // name `::cp3::runtime::regex::Regex`.
+        out += "#include \"cp3/core/regex.hpp\"\n";
+    }
     if (needsWorker_) {
         // The worker channel ABI (`WorkerHandle`/`ThreadHandle`, spec 13): a
         // worker unit's signature names `ThreadHandle<In, Out>`.
@@ -94,12 +100,14 @@ std::string Generator::sourceIncludes() const {
     out += "#include <optional>\n";
     out += "#include <string>\n";
     out += "#include <type_traits>\n";  // native integer formatter/truthiness
+    out += "#include <functional>\n";  // std::function closures (spec 10)
     if (needsTuple_) out += "#include <tuple>\n";  // enum-carrying object literals
     if (needsUnion_) out += "#include <variant>\n";  // primitive unions
     if (needsEventLoop_) out += "#include <vector>\n";  // Promise input lists
     out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
     out += "#include \"cp3/core/error.hpp\"\n";
+    out += "#include \"cp3/core/value.hpp\"\n";  // Cell<T> (spec 10 closures)
     if (needsBitwise_) out += "#include \"cp3/core/bitwise.hpp\"\n";  // & | ^ ~ << >> >>>
     if (needsUnion_) out += "#include \"cp3/core/union.hpp\"\n";  // primitive unions
     if (needsArith_) {
@@ -108,6 +116,7 @@ std::string Generator::sourceIncludes() const {
     if (needsEventLoop_) {
         out += "#include \"cp3/async/promise.hpp\"\n";  // Promise/await/timers
     }
+    if (needsRegex_) out += "#include \"cp3/core/regex.hpp\"\n";  // regex literals
     if (needsTypedArray_) {
         out += "#include \"cp3/typed_array.hpp\"\n";  // the family (D69)
     }

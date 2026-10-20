@@ -78,6 +78,10 @@ struct ProgramAssembly;  // detail/program_assembly.h (emit/program.cpp)
 // The identifier a parameter binds directly, unwrapping a trailing `...rest`
 // (emit/patterns.cpp); nullptr for a destructuring pattern.
 const Identifier* parameterIdentifier(const Parameter& p);
+struct CallBuilder;
+struct PatternEmitter;
+struct ModuleVarEmitter;
+struct AssignEmitter;
 }  // namespace detail
 
 // One destructuring source: the C++ text of the value being unpacked, its cp3
@@ -111,6 +115,9 @@ public:
 
 private:
     friend struct detail::ArrayEmitter;  // src/std/arrays/codegen_methods.cpp
+    friend struct detail::PatternEmitter;  // emit/destructure.cpp
+    friend struct detail::ModuleVarEmitter;  // emit/module_var.cpp
+    friend struct detail::AssignEmitter;  // emit/assignment.cpp
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
 
@@ -139,14 +146,21 @@ private:
     std::string parameterText(const Parameter& p, const FunctionDeclaration& fd,
                               std::size_t index, bool includeDefault);
     std::string functionReturnType(const FunctionDeclaration& fd);
+    // The cp3 type of the value a function returns (annotation, sema, then the
+    // first `return`): it fixes `expected_` and the literal shape.
+    std::optional<Type> returnValueType(const FunctionDeclaration& fd) const;
     Type asyncValueType(const FunctionDeclaration& fd) const;
     const Expr* firstReturnedExpr(const Stmt& s) const;
 
     // --- declaration-type environment + type resolution (type_map.cpp) -------
     void pushScope();
     void popScope();
-    void declare(const std::string& name, const std::optional<Type>& type);
-    std::optional<Type> lookup(const std::string& name) const;
+    // `cell`: shared `Cell<T>`; `global`: module-scope (reference via moduleRef).
+    void declare(const std::string& name, const std::optional<Type>& type,
+                 bool cell = false, bool global = false);
+    std::optional<detail::Binding> lookup(const std::string& name) const;
+    // The C++ spelling of a module-scope entity, qualified with its namespace.
+    std::string moduleRef(const std::string& name) const;
     std::optional<Type> bindingType(const VariableDeclarator& d) const;
     std::optional<Type> resolvedBindingType(const VariableDeclarator& d) const;
     // An annotation -> Type, with enum-named Class parts rewritten to Enum.
@@ -197,19 +211,15 @@ private:
     // qualified C++ name ("" when the name is not linked, so the caller keeps
     // its ambient lowering); a link miss reports CP3002 at the use site.
     std::string emitLinkedCall(const CallExpr& c, const std::string& name);
-    // Linked-call helpers (emit/call.cpp): the member miss at the use site,
-    // and the identifier-callee chain (imports, builtins, user functions).
+    // Linked-call helpers (emit/call_args.cpp): the member miss at the use
+    // site, and the identifier-callee chain (imports, builtins, user
+    // functions).
     std::string linkedMemberMiss(const MemberExpr& m) const;
-    std::string emitIdentifierCall(const CallExpr& c, const std::string& name);
     // The documented global numeric parsers (`parseInt`/`parseFloat`):
     // argument coercion plus the runtime helper (STDLIB section 3).
     std::string emitParseBuiltin(const CallExpr& c, const std::string& name);
-    // User call arguments, applying optional/default parameters to `undefined`.
-    std::vector<std::string> emitCallArgs(const CallExpr& c,
-                                          const FunctionDeclaration* decl);
-    std::vector<std::string> emitRestCallArgs(const CallExpr& c,
-                                              const FunctionDeclaration& decl,
-                                              std::size_t restIndex);
+    // Argument lowering and calls through a function value (emit/call_args.cpp).
+    friend struct detail::CallBuilder;
     bool isConsoleMember(const CallExpr& c) const;
 
     // --- parallel.* (emit/parallel.cpp) --------------------------------------
@@ -289,6 +299,9 @@ private:
     // Construction, the boxed-listener value form and the on/once/off/emit
     // calls; each returns "" for a form it does not own.
     std::string emitEventEmitterNew(const NewExpr& n);
+    // A function value in a generic expression position (spec 10): boxed as a
+    // Listener when the context wants one, else a `std::function`.
+    std::string emitArrowValue(const Expr& e, const ArrowFunction& a);
     std::string emitListenerValue(const Expr& e);
     std::string emitEventEmitterCall(const CallExpr& c, const MemberExpr& m);
 
@@ -326,7 +339,6 @@ private:
     // --- object value shapes (emit/objects.cpp) -------------------------------
     std::string emitObject(const Expr& e);         // `o.a` / `o?.a` reads
     std::string emitObjectLiteral(const Expr& e);  // `{...}` literal values
-    std::string emitObjectMemberWrite(const AssignmentExpr& a);  // `o.a = v`
 
     // --- binding patterns + records (emit/patterns.cpp) -----------------------
     // An existing record spelling: a `$o{...}` value struct or a materialized
@@ -345,6 +357,12 @@ private:
     void bindPatternTarget(const Node& target, const PatternSource& value,
                            std::string& out, int indent);
 
+    // A structural object's field write (`o.a = v`); "" when not one.
+    std::string emitMemberAssign(const AssignmentExpr& a, const MemberExpr& m);
+
+    // --- closures (emit/destructure.cpp) --------------------------------------
+    // Is `name` a shared `Cell<T>` of the frame? (reads/writes use get/set)
+    bool isCell(const std::string& name) const;
     // --- std/collections (src/std/collections/codegen.cpp) --------------------
     // `new Map<K, V>()` / `new Set<T>()` and the member calls; "" otherwise.
     std::string emitCollectionsNew(const NewExpr& n);
@@ -436,10 +454,16 @@ private:
 
     // --- async / promises / errors (emit_async.cpp) --------------------------
     std::string emitAwait(const AwaitExpr& a);
-    std::string emitArrow(const ArrowFunction& a, const std::vector<std::string>& contextParams);
+    std::string emitArrow(const ArrowFunction& a,
+                          const std::vector<std::string>& contextParams,
+                          bool byValue = false);
     std::vector<std::string> arrowParamText(
-        const ArrowFunction& a, const std::vector<std::string>& contextParams);
-    std::string arrowReturnType(const ArrowFunction& a);
+        const ArrowFunction& a, const std::vector<std::string>& contextParams,
+        const std::optional<Type>& expectedFn);
+    std::optional<Type> arrowReturnCpType(
+        const ArrowFunction& a, const std::optional<Type>& expectedFn);
+    std::string arrowReturnType(const ArrowFunction& a,
+                                const std::optional<Type>& expectedFn);
     std::string emitTimerBuiltin(const CallExpr& c, const std::string& name);
     std::string emitPromiseMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitPromiseStatic(const CallExpr& c, const MemberExpr& m);

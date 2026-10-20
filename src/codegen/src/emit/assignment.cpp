@@ -92,26 +92,77 @@ std::optional<std::string> nullishAssignText(const CppInfo& T, const Expr& rhs,
 
 }  // namespace
 
-std::string Generator::emitAssignment(const AssignmentExpr& a) {
-    if (a.target->kind != NodeKind::Identifier) {
-        // Array/typed-view element writes (`a[1] = 9`, `u8[0] = 5`) lower to
-        // the family's checked writes first
-        // (src/std/typed-arrays/codegen_methods.cpp).
-        if (a.target->kind == NodeKind::IndexExpr) {
-            if (std::string w = emitFamilyIndexWrite(a); !w.empty()) return w;
+namespace detail {
+
+// The identifier-target half of `emitAssignment`: a shared `Cell<T>`, a
+// module global (qualified through `moduleRef`), or a plain local. It lives on
+// a friend helper so the dispatch function stays within the function budget.
+struct AssignEmitter {
+    explicit AssignEmitter(Generator& generator) : g(generator) {}
+
+    Generator& g;
+
+    std::string identifier(const AssignmentExpr& a, const Identifier& id);
+    std::optional<std::string> cell(AssignOp op, const std::string& target,
+                                    const std::string& current,
+                                    const std::string& value, const Expr& rhs);
+};
+
+std::optional<std::string> AssignEmitter::cell(AssignOp op,
+                                               const std::string& target,
+                                               const std::string& current,
+                                               const std::string& value,
+                                               const Expr& rhs) {
+    switch (op) {
+        case AssignOp::Assign:
+            return "(" + target + ".set(" + value + "), " + current + ")";
+        case AssignOp::Add:
+        case AssignOp::Subtract:
+        case AssignOp::Multiply:
+        case AssignOp::Divide: {
+            const char* text = nullptr;
+            switch (op) {
+                case AssignOp::Add: text = "+="; break;
+                case AssignOp::Subtract: text = "-="; break;
+                case AssignOp::Multiply: text = "*="; break;
+                default: text = "/="; break;
+            }
+            return "(" + target + ".set(" + current + " " + text + " " + value +
+                   "), " + current + ")";
         }
-        // A `$o{...}` record's field write (`obj.data = 1`): a plain member
-        // assignment on the generated value struct (src/emit/objects.cpp).
-        if (a.target->kind == NodeKind::MemberExpr) {
-            if (std::string w = emitObjectMemberWrite(a); !w.empty()) return w;
+        case AssignOp::Modulo:
+            return "(" + target + ".set(" + g.modCall(current, rhs, value) +
+                   "), " + current + ")";
+        case AssignOp::Power:
+            return "(" + target + ".set(std::pow(" + current + ", " + value +
+                   ")), " + current + ")";
+        default:
+            return std::nullopt;
+    }
+}
+
+std::string AssignEmitter::identifier(const AssignmentExpr& a,
+                                      const Identifier& id) {
+    const auto binding = g.lookup(id.name);
+    const std::string target =
+        (binding && binding->global) ? g.moduleRef(id.name) : mapIdent(id.name);
+    // The assigned value is emitted against the target's type (an object
+    // literal assigned to a fresh field, a lambda stored in a function slot).
+    const std::optional<Type> savedExpected = g.expected_;
+    if (binding) g.expected_ = binding->type;
+    std::string value = g.expr(*a.value);
+    g.expected_ = savedExpected;
+    if (binding && binding->cell) {
+        // A shared cell: `x = v` is `(x.set(v), x.get())`, so the assignment
+        // expression still evaluates to the assigned value.
+        const std::string current = target + ".get()";
+        if (auto text = cell(a.op, target, current, value, *a.value)) {
+            return *text;
         }
-        notImplemented(a, "assignment to a non-identifier target");
+        g.notImplemented(a, "compound assignment operator");
         return "0.0";
     }
-    const std::string target =
-        mapIdent(static_cast<const Identifier&>(*a.target).name);
-    const CppInfo T = info(*a.target);
-    std::string value = expr(*a.value);
+    const CppInfo T = g.info(*a.target);
     // A native target takes an in-range integral literal as an integer token.
     if (T.shape == Shape::Native) {
         if (const auto k = integralLiteralValue(*a.value)) value = std::to_string(*k);
@@ -151,7 +202,7 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
         case AssignOp::Divide:
             return arithAssignText(a.op, target, value);
         case AssignOp::Modulo:
-            return "(" + target + " = " + modCall(target, *a.value, value) + ")";
+            return "(" + target + " = " + g.modCall(target, *a.value, value) + ")";
         case AssignOp::Power:
             return "(" + target + " = std::pow(" + target + ", " + value + "))";
         case AssignOp::LogicalAnd:
@@ -168,8 +219,35 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
         default:
             break;
     }
-    notImplemented(a, "compound assignment operator");
+    g.notImplemented(a, "compound assignment operator");
     return "0.0";
+}
+
+}  // namespace detail
+
+std::string Generator::emitAssignment(const AssignmentExpr& a) {
+    if (a.target->kind == NodeKind::MemberExpr) {
+        // A structural object's field write (`h.onEvent = f`, `box.v = 1`).
+        if (std::string w =
+                emitMemberAssign(a, static_cast<const MemberExpr&>(*a.target));
+            !w.empty()) {
+            return w;
+        }
+        notImplemented(a, "assignment to a non-identifier target");
+        return "0.0";
+    }
+    if (a.target->kind != NodeKind::Identifier) {
+        // Array/typed-view element writes (`a[1] = 9`, `u8[0] = 5`) lower to
+        // the family's checked writes first
+        // (src/std/typed-arrays/codegen_methods.cpp).
+        if (a.target->kind == NodeKind::IndexExpr) {
+            if (std::string w = emitFamilyIndexWrite(a); !w.empty()) return w;
+        }
+        notImplemented(a, "assignment to a non-identifier target");
+        return "0.0";
+    }
+    return detail::AssignEmitter(*this).identifier(
+        a, static_cast<const Identifier&>(*a.target));
 }
 
 }  // namespace cp3

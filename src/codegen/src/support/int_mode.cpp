@@ -101,12 +101,13 @@ void Generator::declareBinding(const VariableDeclarator& d) {
     if (!d.id || d.id->kind != NodeKind::Identifier) return;
     const std::string& name = static_cast<const Identifier&>(*d.id).name;
     intNewBinding(name);
+    const bool cell = isCell(name);
     // A binding the fast path lowers to int64 is a `number` in the region, and
     // it is recorded as one so the type queries agree with the C++ type.
     if (intBinding(bindingCpp(d))) {
-        declare(name, Type::number());
+        declare(name, Type::number(), cell);
     } else {
-        declare(name, resolvedBindingType(d));
+        declare(name, resolvedBindingType(d), cell);
     }
 }
 
@@ -396,6 +397,15 @@ std::string Generator::intLogical(const LogicalExpr& l) {
 
 bool Generator::intEligible(const FunctionDeclaration& fd, const std::string& ret) const {
     if (fd.isAsync || !fd.body || ret != "double") return false;
+    // The fast path models no arrow, destructuring pattern, for-of loop or
+    // object literal, so a body containing any of them bails out here.
+    if (detail::bodyHasClosureOrPattern(*fd.body)) return false;
+    // A captured-and-reassigned local of this frame lowers to the shared
+    // `Cell<T>` representation, which the fast path does not model either.
+    const auto cells = captures_.frameCells.find(fd.nodeId);
+    if (cells != captures_.frameCells.end() && !cells->second.empty()) {
+        return false;
+    }
     for (std::size_t i = 0; i < fd.params.size(); ++i) {
         if (!fd.params[i]) return false;
         const Parameter& p = *fd.params[i];

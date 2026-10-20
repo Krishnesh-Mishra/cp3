@@ -160,7 +160,8 @@ std::string Generator::exprPlain(const Expr& e) {
         case NodeKind::MemberExpr:
             return emitMemberRead(static_cast<const MemberExpr&>(e));
         case NodeKind::ObjectLiteral: return emitObjectLiteral(e);
-        case NodeKind::ArrowFunction: return emitListenerValue(e);  // D74
+        case NodeKind::ArrowFunction:
+            return emitArrowValue(e, static_cast<const ArrowFunction&>(e));
         default:
             notImplemented(e, "this expression");
             return "0.0";
@@ -185,6 +186,26 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
     return "0.0";
 }
 
+// A function value: the context's expected function type first (a binding
+// annotation, a call argument, a field), else the arrow's own resolved type. A
+// Listener-shaped one is boxed; a plain value-returning one becomes a
+// `std::function`.
+std::string Generator::emitArrowValue(const Expr& e, const ArrowFunction& a) {
+    std::optional<Type> fnType;
+    if (expected_ && expected_->kind == TypeKind::Function) {
+        fnType = *expected_;
+    } else {
+        const Type own = effectiveType(a);
+        if (own.kind == TypeKind::Function) fnType = own;
+    }
+    if (fnType && classify(*fnType).shape == Shape::Listener) {
+        return emitListenerValue(e);
+    }
+    if (fnType) return emitArrow(a, {}, /*byValue=*/true);
+    notImplemented(e, "this function value");
+    return "0.0";
+}
+
 std::string Generator::emitIdentifier(const Identifier& id) {
     if (id.name == "undefined") return "cp3::runtime::undefined";
     if (id.name == "null") return "nullptr";
@@ -195,7 +216,8 @@ std::string Generator::emitIdentifier(const Identifier& id) {
     // A `var` read that precedes its declaration (the binding is hoisted and
     // sema typed the read `undefined`): the C++ declaration does not exist yet,
     // so emit the value the binding holds at that point in JS.
-    if (!lookup(id.name)) {
+    const auto binding = lookup(id.name);
+    if (!binding) {
         // An imported binding of a whole-program build: the target unit's
         // qualified C++ name, or the link miss reported at the use site.
         const auto linked = linkedNames_.find(id.name);
@@ -209,24 +231,17 @@ std::string Generator::emitIdentifier(const Identifier& id) {
         if (const Type* t = sema_.typeOf(id.nodeId); t && t->isUndefined()) {
             return "cp3::runtime::undefined";
         }
+        // A module-scope function used as a value (a named function passed as
+        // an argument) is namespace-owned like any other global.
+        return functions_.count(id.name) != 0 ? moduleRef(id.name)
+                                              : mapIdent(id.name);
     }
-    return mapIdent(id.name);
-}
-
-std::string Generator::emitTemplate(const TemplateLiteral& tl) {
-    std::string out;
-    for (std::size_t i = 0; i < tl.quasis.size(); ++i) {
-        const std::string cooked = tl.quasis[i] ? tl.quasis[i]->cooked : std::string();
-        out += (out.empty() ? "" : " + ");
-        out += "std::string(" + cppStringLiteral(cooked) + ")";
-        if (i < tl.expressions.size()) {
-            out += " + " + tsCall(*tl.expressions[i]);
-        }
+    const std::string text =
+        binding->global ? moduleRef(id.name) : mapIdent(id.name);
+    if (binding->cell) {
+        return text + ".get()";
     }
-    if (out.empty()) {
-        out = "std::string()";
-    }
-    return "(" + out + ")";
+    return text;
 }
 
 // console.log/format: route an argument into the runtime formatter. The
@@ -472,7 +487,21 @@ std::string Generator::emitUpdate(const UpdateExpr& u) {
         notImplemented(u, "update of a non-identifier target");
         return "0.0";
     }
-    const std::string target = mapIdent(static_cast<const Identifier&>(*u.operand).name);
+    const auto& id = static_cast<const Identifier&>(*u.operand);
+    const auto binding = lookup(id.name);
+    const std::string target = (binding && binding->global)
+                                   ? moduleRef(id.name)
+                                   : mapIdent(id.name);
+    if (binding && binding->cell) {
+        // A shared cell: `x++` / `++x` through `set`, keeping the JS result
+        // (postfix observes the old value, prefix the new one).
+        const char* delta = u.op == UpdateOp::Increment ? "+" : "-";
+        std::string out = "([&]{ auto cp3_o = " + target + ".get(); " + target +
+                          ".set(cp3_o " + delta + " 1.0); return ";
+        out += u.prefix ? (target + ".get();") : "cp3_o;";
+        out += " }())";
+        return out;
+    }
     if (u.op == UpdateOp::Increment) {
         return u.prefix ? "(++" + target + ")" : "(" + target + "++)";
     }

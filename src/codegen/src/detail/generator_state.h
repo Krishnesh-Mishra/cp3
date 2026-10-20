@@ -24,6 +24,7 @@
 #include "cp3/ast.hpp"
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic.hpp"
+#include "detail/captures.h"
 #include "detail/enums.h"
 #include "detail/mangle.h"
 #include "detail/program_link.h"
@@ -148,8 +149,18 @@ protected:
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)
     int uniqueCounter_ = 0;        // fresh names for generated scaffolding
     std::string currentReturn_ = "int";
+    // The cp3 type of the value the enclosing function/lambda returns, and the
+    // type the context expects of the next expression (a binding annotation, a
+    // call argument, an object field, a return type). Contextual typing fixes
+    // an otherwise untyped arrow's parameters and return value.
+    std::optional<Type> currentReturnType_;
+    std::optional<Type> expected_;
+    // The closure-capture analysis (support/captures.cpp): the shared cells of
+    // every frame, and the arrow each `let f = (...) => ...` binding names.
+    detail::CaptureInfo captures_;
+    std::uint32_t currentFrameId_ = 0;  // Program / function / arrow being emitted
 
-    std::vector<std::unordered_map<std::string, Type>> env_;
+    std::vector<std::unordered_map<std::string, detail::Binding>> env_;
     // Codegen type hints for the Map-shaped std/network fields; the open
     // marker hides their type in sema, so networkMapFieldType checks these.
     std::unordered_map<std::uint32_t, Type> exprTypeHints_;
