@@ -59,6 +59,10 @@ void Generator::emitTopLevel(const Stmt& s, std::string& decls, std::string& def
             emitExport(static_cast<const ExportDeclaration&>(s), decls, defs, mainBody);
             return;
         case NodeKind::ClassDeclaration:
+            // A class declaration (spec 15) is registered up front and emits
+            // its struct in `emitAllClasses` (after the walk).
+            emitTopLevelClass(static_cast<const ClassDeclaration&>(s));
+            return;
         case NodeKind::TypeAliasDeclaration:
             notImplemented(s, "top-level declaration");
             return;

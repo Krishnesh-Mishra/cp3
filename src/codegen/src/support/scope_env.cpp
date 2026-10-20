@@ -56,4 +56,8 @@ std::string Generator::moduleRef(const std::string& name) const {
     return namesp_ + "::" + detail::mapIdent(name);
 }
 
+bool Generator::hasValueBinding(const std::string& name) const {
+    return lookup(name).has_value() || moduleValues_.count(name) != 0;
+}
+
 }  // namespace cp3

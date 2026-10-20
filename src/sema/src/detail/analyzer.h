@@ -63,7 +63,6 @@ public:
         shapes_[kAmbientLabel] = Shape{};
         shapes_[kAmbientLabel].open = true;
     }
-
     // Top-level orchestration: builtins + program body (semantic_analyzer.cpp).
     void run(Program& program);
 
@@ -77,17 +76,14 @@ private:
                           std::string message,
                           std::vector<std::string> suggestions);
     void notImplemented(const SourceSpan& span, const std::string& what);
-    // CP3301 for a name that resolves nowhere: suggests the closest visible
-    // names and, when the name is a std module, its exact import statement.
+    // CP3301 for an unresolved name, with suggestions.
     void reportUndefinedName(const SourceSpan& span, const std::string& name);
-    // CP3305 for a miss on a known receiver (`'console'` / `object` text, the
-    // member accessed, and the implemented member names to rank).
+    // CP3305 for a miss on a known receiver.
     void reportMemberMiss(const std::string& receiver, const std::string& prop,
                           const SourceSpan& span,
                           const std::vector<std::string>& candidates);
     // Every name bound in the current scope stack (suggestion candidates).
     std::vector<std::string> visibleNames() const;
-
     // --- banned patterns (banned.cpp) ----------------------------------------
     void checkBannedAny(const SourceSpan& span);
     void reportBannedArguments(const SourceSpan& span);
@@ -117,7 +113,15 @@ private:
     void hoistVarsIn(Stmt& s);
     void hoistVarBody(StmtPtr& body);
     void registerTypeParams(TypeParamList& typeParams);
-
+    // Generic class scopes: save/restore type parameter names.
+    using TypeParamScope =
+        std::vector<std::pair<std::string, std::optional<Type>>>;
+    void enterClassTypeParams(const TypeParamList& typeParams,
+                              TypeParamScope& saved);
+    void leaveClassTypeParams(const TypeParamScope& saved);
+    // Substitute instantiation arguments for class type parameters.
+    Type substituteClassTypeParams(const Type& t, const ClassInfo& ci,
+                                   const std::vector<Type>& args) const;
     // --- declarations (declarations.cpp) -------------------------------------
     FuncSig buildSig(const std::string& name, ParamList& params, TypePtr& retType,
                      const SourceSpan* spanForTypeParams);
@@ -136,9 +140,52 @@ private:
     void declareForBinding(Node* left, const Type& elemType);
     void analyzeImport(ImportDeclaration& d);
     void registerInterface(InterfaceDeclaration& i);
-    // The enum declaration model (checks/enum_check.cpp): resolves members,
-    // registers the type name + value binding, reports CP3401/CP3706.
+    // Enum declaration model (enum_check.cpp).
     void registerEnum(EnumDeclaration& e);
+
+    // --- classes (class_check.cpp) -------------------------------------------
+    // Resolve class declarations into member tables before the body pass.
+    void resolveClasses(StmtList& body);
+    void resolveClass(ClassDeclaration& c);
+    void collectClassMembers(const ClassDeclaration& c, ClassInfo& info);
+    void collectClassMember(ClassMember& m, ClassInfo& info);
+    void collectClassProperty(PropertyDeclaration& p, ClassInfo& info);
+    void collectClassMethod(MethodDeclaration& md, ClassInfo& info);
+    const ClassInfo* findClass(const std::string& name) const;
+    const ClassMemberInfo* findClassMember(const ClassInfo& ci,
+                                           const std::string& name) const;
+    const ClassMemberInfo* findClassMemberChain(
+        const ClassInfo& ci, const std::string& name, const ClassInfo** owner) const;
+    bool classIsOrDerivesFrom(const ClassInfo& ci, const std::string& base) const;
+    bool classAccessAllowed(const ClassInfo& owner, const ClassMemberInfo& m) const;
+    bool memberImplementedInClass(const ClassInfo& ci,
+                                  const std::string& name) const;
+    Type classMemberType(const ClassMemberInfo& m) const;
+    // Member access on a user-class instance: privacy/weak/CP3305/CP3802 (15).
+    Type userClassMember(const Type& cls, const std::string& prop,
+                         const SourceSpan& span);
+    void checkAbstractConformance(const ClassDeclaration& c,
+                                  const ClassInfo& ci);
+    void checkClassBodies(ClassDeclaration& c);
+    void checkClassMemberBody(ClassMember& m);
+    void analyzeMethodBody(MethodDeclaration& md);
+    void analyzeCtorBody(ConstructorDeclaration& cd);
+    void analyzeAccessorBody(AccessorDeclaration& ad);
+    Type thisType() const;
+    // --- classes: conformance + `new` (class_conform_check.cpp) --------------
+    Type inferUserConstruct(Identifier& id, Binding& b, NewExpr& n);
+    bool functionTypesEquivalent(const Type& a, const Type& b);
+    // Structural class -> object/interface conformance (spec 15).
+    bool classConformsToShape(const ClassInfo& ci, const Type& to);
+    // Fresh object literal -> class conformance (excess-property rule).
+    bool literalConformsToClass(const Type& from, const ClassInfo& ci,
+                                bool fresh);
+    bool emitClassAssignDiff(const Type& from, const Type& to,
+                             const SourceSpan& span, bool fresh);
+    bool emitClassToShapeDiff(const ClassInfo& ci, const Type& to,
+                              const SourceSpan& span);
+    bool emitLiteralToClassDiff(const Type& from, const ClassInfo& ci,
+                                const SourceSpan& span, bool fresh);
 
     // --- type resolution + shapes (type_check.cpp) ---------------------------
     Shape* shapeOf(const Type& t);
@@ -165,7 +212,6 @@ private:
     void resolveParamSig(Parameter& p, std::vector<Type>& out);
     Type nullableIf(bool cond, const Type& t);
     Type withoutMember(const Type& t, const Type& remove);
-
     // --- assignability (assignability.cpp) -----------------------------------
     bool wouldAccept(const Type& from, const Type& to, bool freshLiteral);
     bool objectAccepts(const Type& from, const Type& to, bool fresh);
@@ -192,7 +238,6 @@ private:
                               std::vector<bool>& optional);
     void declareArrowParams(ArrowFunction& arrow, const std::vector<Type>& params);
     Type inferArrowReturn(ArrowFunction& arrow, const std::vector<Type>& params);
-
     // --- member / index / call expressions (member_check.cpp) ----------------
     Type inferMember(MemberExpr& m);
     Type memberOf(const Type& ot, const std::string& prop, const SourceSpan& span,
@@ -201,63 +246,52 @@ private:
     Type promiseMemberOf(const Type& ot, const std::string& prop);
     Type memberOfProbe(const Type& ot, const std::string& prop,
                        const SourceSpan& span);
+    // The builtin EventEmitter member table (D74, spec 14); a miss is CP3305.
+    Type eventEmitterMember(const std::string& prop, const SourceSpan& span);
     Type arrayMember(const Type& arr, const std::string& prop);
     // Enum member access (`Color.Green`, spec 04; checks/enum_check.cpp).
     Type enumMember(const Type& ot, const std::string& prop, const SourceSpan& span);
     Type stringMember(const std::string& prop);
-    // Typed views of the ambient std namespaces + the `String(x)` global
-    // (the per-family tables live in src/std/<family>/sema.cpp; STDLIB docs
-    // §04).
+    // Ambient std namespaces and the `String(x)` global.
     std::optional<Type> stdNamespaceMember(const std::string& ns,
                                            const std::string& prop);
     std::optional<Type> mathMember(const std::string& prop);
     std::optional<Type> pathMember(const std::string& prop);
     std::optional<Type> osMember(const std::string& prop);
     std::optional<Type> processMember(const std::string& prop);
-    // The documented `process` object shapes ("$process:ExecResult" /
-    // "$process:SpawnHandle"); codegen recognises them by name.
+    // Documented `process` shapes (`$process:` markers).
     Type processObjectType(const std::string& name);
     std::optional<Type> envMember(const std::string& prop);
     std::optional<Type> consoleMember(const std::string& prop);
     std::optional<Type> jsonMember(const std::string& prop);
-    // Native-backed std modules: a member outside the documented surface
-    // returns nullopt, so member access keeps the permissive ambient shape.
-    // Definitions live in the per-module src/std/<module>/sema.cpp units.
+    // Native std modules; nullopt keeps the ambient shape.
     std::optional<Type> cryptoMember(const std::string& prop);
     std::optional<Type> networkMember(const std::string& prop);
-    // std/date (src/std/date/sema.cpp): the namespace statics (`Date.now`,
-    // `Date.fromISOString`) and, for a Date value, its instance members.
+    // std/date statics and instance members.
     std::optional<Type> dateMember(const std::string& prop);
     std::optional<Type> dateInstanceMember(const Type& recv,
                                            const std::string& prop);
-    // Core regex literals (src/sema/src/checks/regex_check.cpp): a RegExp
-    // value's documented members (`.test`/`.match`/`.exec` + `.source`/`.flags`).
+    // RegExp value members (`test`/`match`/`exec`/`source`/`flags`).
     std::optional<Type> regexInstanceMember(const Type& recv,
                                             const std::string& prop);
-    // The closed-surface probe memberOfProbe calls for a RegExp receiver: a
-    // miss is CP3305 with the implemented names as candidates (like Date).
+    // RegExp probe; a miss is CP3305.
     Type memberOfRegex(const Type& recv, const std::string& prop,
                        const SourceSpan& span);
     std::optional<Type> fsMember(const std::string& prop);
-    // std/fs receiver field reads (src/std/fs/sema.cpp): the documented
-    // `FileStats` fields (`stat.modifiedAt` types as the nominal Date class);
-    // nullopt keeps the permissive ambient fallthrough for every other member.
+    // std/fs `FileStats` fields; nullopt keeps ambient fallthrough.
     std::optional<Type> fsReceiverMember(const Type& recv,
                                          const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
 
     // --- std/network (src/std/network/sema.cpp) ------------------------------
-    // One documented object shape per member table entry ("$network:<name>").
+    // One documented shape per network member.
     Type networkObjectType(const std::string& name);
-    // A documented field read on a marker receiver keeps its declared type
-    // (member_check.cpp hook). The marker shape itself stays open: an
-    // undocumented member still falls through to ambient.
+    // Documented marker field reads keep their declared type.
     std::optional<Type> networkObjectMember(const Type& recv,
                                             const std::string& prop);
     // Named-import call sites: `fetch(...)` / `createServer()`.
     bool tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& out);
-    // The generic instance member (`res.json<T>()` / `req.json<T>()`): the
-    // explicit T substitutes into Promise<T>, matching `JSON.parse<T>`.
+    // Generic instance member: explicit T substitutes into Promise<T>.
     bool tryInferNetworkMemberCall(CallExpr& call, MemberExpr& m, Type& out);
     // `new WebSocket(url)` / `new WebSocketServer({ port })`; unknown -> unknown.
     Type inferNetworkConstruct(const std::string& name, ExprList& args,
@@ -269,18 +303,14 @@ private:
     Type tupleIndexAt(const Shape& sh, IndexExpr& ix);
     Type inferCall(CallExpr& call);
     bool tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
-    // `parseInt(str)` / `parseFloat(str)` (STDLIB docs section 3): the
-    // documented global numeric parsers, typed `number`. `String(x)` is typed
-    // by tryInferStringBuiltin (std_check.cpp).
+    // `parseInt`/`parseFloat` are typed `number`; `String(x)` elsewhere.
     bool tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
     void reportUndefinedCall(CallExpr& call, Identifier& id);
     bool tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out);
     bool tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out);
-    // `env.get<T>(key, options?)` (src/std/env/sema.cpp): T from the explicit
-    // type argument, else the `{ default: v }` value type, else `string`.
+    // `env.get<T>`: explicit T, else `{ default }`, else `string`.
     bool tryInferEnvCall(CallExpr& call, MemberExpr& m, Type& out);
-    // The member-call site inference chain for a MemberExpr callee: the JSON,
-    // Promise-static, env, JS-compat-family and Buffer hooks in order.
+    // Member-call inference chain (JSON, Promise, env, family, Buffer).
     bool tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out);
     void inferArgs(CallExpr& call);
     void sigFromFunctionType(const Type& ct, FuncSig& localSig);
@@ -288,10 +318,8 @@ private:
     void checkArgs(const FuncSig& sig, CallExpr& call);
     std::string arityText(std::size_t required, std::size_t maxArgs,
                           bool rest) const;
-
     // --- overload resolution (member_check.cpp) ------------------------------
-    // Resolves a call whose callee names an overload set (Binding::overloads):
-    // accepts the call when a signature is viable and reports CP3416 otherwise.
+    // Overload resolution for a callee naming an overload set.
     Type inferOverloadCall(CallExpr& call, const Binding& binding,
                            Identifier& id);
     void collectArgTypes(CallExpr& call, std::vector<Type>& out,
@@ -300,13 +328,10 @@ private:
                         bool hasSpread);
 
     // --- the JS-compat typed-array family (src/std/typed-arrays/sema.cpp) ----
-    // Constructors registered by `declareBuiltins` (D69): `Array` extras plus
-    // the 11 typed classes, the buffer classes and DataView. Family types are
-    // nominal `TypeKind::Class` values; codegen owns the C++ mapping.
+    // Family constructors and nominal types (D69); codegen owns the C++.
     Type inferFamilyConstruct(const std::string& cls, ExprList& args,
                               const SourceSpan& span);
-    // `inferCall`'s family wrapper (the `new`-less constructor spelling types
-    // like `new`) and the member-side statics (`Array.of/from`) + `arr.fill`.
+    // Family call/member typing.
     Type inferCallOrFamily(CallExpr& call);
     bool tryInferFamilyMethodCall(CallExpr& call, MemberExpr& member, Type& out);
     Type inferArrayConstruct(const ExprList& args,
@@ -323,43 +348,32 @@ private:
                                  const SourceSpan& span);
     bool tryInferArrayStaticCall(CallExpr& call, MemberExpr& m, Type& out);
     bool tryInferFillCall(CallExpr& call, MemberExpr& m, Type& out);
-    // The regular-array callback folds whose result type depends on the
-    // callback (`map` / `reduce`; src/std/arrays/sema_methods.cpp).
+    // Array `map`/`reduce` result types.
     bool tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out);
     Type typedArrayMember(const Type& recv, const std::string& prop);
     Type bufferMember(const Type& recv, const std::string& prop);
     Type dataViewMember(const std::string& prop);
     Type typedIndexRead(IndexExpr& ix);
-    // True when `d` is the `Array(n)` length form (the family check owns its
-    // element typing, so the generic assign check must stand down).
+    // True for the `Array(n)` length form (family owns its element type).
     bool checkArrayCtorDeclarator(const VariableDeclarator& d, bool hasAnn,
                                   const Type& annType, const Type& initType);
     bool isReadOnlyFamilyProp(const Type& ot, const std::string& prop) const;
-
     // --- std/collections (src/std/collections/sema.cpp) ----------------------
-    // `new Map<K, V>()` / `new Set<T>()`: nominal class types carrying their
-    // type arguments (parts { K, V } / { T }); unknown for other names.
+    // `new Map/Set`: nominal types carrying their arguments.
     Type inferCollectionsConstruct(const std::string& name, TypeList& typeArgs);
-    // The docs/04 Map/Set member surface; a member outside it reports CP3305
-    // with the implemented member names as candidates.
+    // Map/Set member surface; a miss is CP3305.
     Type collectionsMember(const Type& recv, const std::string& prop,
                            const SourceSpan& span);
 
     // --- the std/buffer `Buffer` family (src/std/buffer/sema.cpp) ------------
-    // The documented member table (`length`/`toString`/`slice`), the
-    // `Buffer.from`/`Buffer.alloc` statics, the instance-member calls and the
-    // D47 literal-encoding check.
+    // Buffer member table, statics, and the D47 encoding check.
     Type byteBufferMember(const Type& recv, const std::string& prop);
     bool tryInferBufferStaticCall(CallExpr& call, MemberExpr& m, Type& out);
     bool tryInferBufferCall(CallExpr& call, MemberExpr& m, Type& out);
     bool checkByteBufferEncoding(const Expr* arg);
-
     // --- parallel.* capture safety (parallel_check.cpp) ----------------------
-    // Walks the closures passed to a `parallel.*` entry point and reports a
-    // captured-state write (CP3902) or an unsafe computed-index write (CP3901);
-    // writes through parallel.for's own induction variable are allowed.
+    // Parallel closure capture safety (CP3901/CP3902).
     void checkParallelCall(CallExpr& call);
-
     // --- operators (ops_check.cpp) -------------------------------------------
     Type inferUnary(UnaryExpr& u);
     Type arithmeticUnaryResult(UnaryExpr& u, const Type& ot);
@@ -382,7 +396,6 @@ private:
     Type targetTypeOf(Expr& target);
     void checkAssignToTarget(Expr& target, const Type& valType,
                              const SourceSpan& span, bool constCheck = true);
-
     // --- statements (stmt_check.cpp) -----------------------------------------
     void checkStmts(StmtList& body);
     void visitStmt(Stmt& s);
@@ -411,17 +424,14 @@ private:
     void analyzeTry(TryStatement& stmt);
     void analyzeFunctionBody(FunctionDeclaration& fn);
     bool allPathsReturn(Node* body);
-    // True when a switch has a `default` and every non-empty clause
-    // terminates, so it cannot fall through to the end of the function.
+    // True when every switch path terminates.
     bool switchCannotFallThrough(const SwitchStatement& sw);
-
     // --- publishing (symbols.cpp) --------------------------------------------
     void setType(const Node& n, const Type& t);
     Type withType(const Node& n, const Type& t);
     void publishSymbol(const Binding& b);
     void publishFunction(const FuncSig& sig, const std::string& name);
     void updateFunctionReturnType(std::uint32_t nodeId, const Type& ret);
-
     // --- state ----------------------------------------------------------------
     DiagnosticSink& sink_;
     SemaResult& out_;
@@ -440,10 +450,16 @@ private:
     // construct tables keyed on the canonical name still match.
     std::unordered_map<std::string, std::string> stdImportAliases_;
     std::vector<std::string> labels_;
-    // Call nodes already checked for parallel.* capture safety, so a node that
-    // is inferred more than once is never reported twice.
+    // Parallel-checked call nodes (report once).
     std::unordered_set<std::uint32_t> parallelChecked_;
-
+    // User classes: member tables, declaration guard, class stack, weak reads;
+    // `weakFieldHit_` is set by userClassMember and consumed by inferMember.
+    std::unordered_map<std::string, ClassInfo> classes_;
+    std::unordered_set<std::uint32_t> classResolved_;
+    std::vector<std::string> classStack_;
+    std::unordered_set<std::uint32_t> weakReads_;
+    bool weakFieldHit_ = false;
+    bool assignTarget_ = false;
     struct FuncCtx {
         bool annotated = false;
         Type ret;

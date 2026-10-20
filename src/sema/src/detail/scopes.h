@@ -136,6 +136,43 @@ struct BindingSpec {
     const FuncSig* sig = nullptr;  // borrowed; only read to seed Binding::sig
 };
 
+// -----------------------------------------------------------------------------
+// User classes (spec 15 / docs/language-spec/15-classes.md).
+//
+// A resolved class member. Methods carry their signature; a field declared
+// without an annotation takes the widened type of its initializer. Access
+// modifiers gate member reads/writes (class_check.cpp), and `weak` marks the
+// reference-cycle field of spec 11.
+// -----------------------------------------------------------------------------
+struct ClassMemberInfo {
+    std::string name;
+    Type type;                    // field type (methods: see ClassInfo helper)
+    FuncSig sig;                  // methods/ctors: the declared signature
+    std::vector<FuncSig> overloads;  // >= 2 same-name methods (permissive)
+    SourceSpan span{};
+    bool isStatic = false;
+    bool isPrivate = false;
+    bool isProtected = false;
+    bool isMethod = false;
+    bool isAbstract = false;
+    bool isWeak = false;
+    bool hasInitializer = false;
+    bool optional = false;
+};
+
+// A user class after resolution: its member table plus the `extends` parent.
+struct ClassInfo {
+    std::string name;
+    std::vector<std::string> typeParamNames;  // generic class parameters
+    std::string baseName;         // `extends` parent ("" when none)
+    bool isAbstract = false;
+    bool hasCtor = false;
+    FuncSig ctorSig;
+    std::vector<ClassMemberInfo> members;
+    SourceSpan span{};
+    std::uint32_t declNodeId = 0;
+};
+
 // --- free helpers on the frozen Type (defined in type_check.cpp) -------------
 
 bool isAmbientType(const Type& t);

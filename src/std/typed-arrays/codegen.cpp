@@ -350,11 +350,20 @@ std::string Generator::declaratorInitText(const VariableDeclarator& d,
     if (const ExprList* args = arrayCtorArgs(*d.init)) {
         return arrayCtorText(*args, arrayElemOf(declared), *d.init);
     }
-    if (d.init->kind == NodeKind::ArrayLiteral &&
-        (arrayElemOf(effectiveType(*d.init)).isUnknown() ||
-         isNativeType(arrayElemOf(declared)))) {
-        return arrayLiteralText(static_cast<const ArrayLiteral&>(*d.init),
-                                arrayElemOf(declared));
+    if (d.init->kind == NodeKind::ArrayLiteral) {
+        // The annotation's element type wins when it has a spelling: a class /
+        // interface element (`let s: Shape[] = [new Sq()]`) must lower to the
+        // annotated handle type, not the literal's inferred union. A native
+        // element annotation and an otherwise unknowable element type take the
+        // same path.
+        const Type elem = arrayElemOf(declared);
+        CppInfo dc;
+        if (arrayElementInfo(elem, dc) || isNativeType(elem) ||
+            arrayElemOf(effectiveType(*d.init)).isUnknown()) {
+            return arrayLiteralText(static_cast<const ArrayLiteral&>(*d.init),
+                                    elem);
+        }
+        return std::string();
     }
     return std::string();
 }

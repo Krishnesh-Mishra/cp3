@@ -17,6 +17,8 @@ set(cp3_sema_sources
     src/support/declarations.cpp
     src/checks/type_check.cpp
     src/checks/assignability.cpp
+    src/checks/class_check.cpp
+    src/checks/class_conform_check.cpp
     src/checks/expr_check.cpp
     src/checks/member_check.cpp
     src/checks/call_check.cpp

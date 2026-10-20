@@ -166,7 +166,8 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
     {
         const std::optional<Type> savedExpected = g.expected_;
         g.expected_ = ci.type;
-        if (d.type && ci.shape == Shape::Object &&
+        initText = g.modelInitText(d, ci.type);
+        if (initText.empty() && d.type && ci.shape == Shape::Object &&
             d.init->kind == NodeKind::ObjectLiteral) {
             // An explicitly annotated record fixes the struct type; build that
             // struct from the literal (a field may be a union/option, whose

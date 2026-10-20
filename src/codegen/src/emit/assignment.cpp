@@ -227,10 +227,13 @@ std::string AssignEmitter::identifier(const AssignmentExpr& a,
 
 std::string Generator::emitAssignment(const AssignmentExpr& a) {
     if (a.target->kind == NodeKind::MemberExpr) {
+        const auto& member = static_cast<const MemberExpr&>(*a.target);
+        // A class/interface/structural-object field write (spec 15).
+        if (std::string w = emitModelAssign(a, member); !w.empty()) {
+            return w;
+        }
         // A structural object's field write (`h.onEvent = f`, `box.v = 1`).
-        if (std::string w =
-                emitMemberAssign(a, static_cast<const MemberExpr&>(*a.target));
-            !w.empty()) {
+        if (std::string w = emitMemberAssign(a, member); !w.empty()) {
             return w;
         }
         notImplemented(a, "assignment to a non-identifier target");

@@ -39,6 +39,7 @@ enum class Shape {
     EventEmitter, // the builtin event type (D74): Ref<EventEmitter>
     Listener,     // a function-typed value (D74): the boxed callable
     Function,     // a value-returning function value: std::function<R(Params)>
+    ClassRef,     // a user class instance (spec 15): Ref<Class>
     Object,      // an all-primitive `$o{...}` shape: a generated value struct
     Native,      // a Rust/C++ native numeric value (D65): its exact C++ type
     Unknown, Unsupported
@@ -102,6 +103,8 @@ bool isEventEmitterType(const Type& t);
 bool optionalEmptyMatches(NullishKind kind, Shape nullishShape);
 
 // The C++ lowering of `raw`, including the optional/nullish flavor.
+CppInfo classifyPromise(const Type& t);
+
 CppInfo classify(const Type& raw);
 
 // The enum arm of `classify` (spec 04; src/emit/enum.cpp): a named enum ->
@@ -126,6 +129,13 @@ bool objectShapeOf(const Type& t, std::string& structName,
 bool fieldCppText(const std::vector<ObjectField>& fields,
                   const std::string& property, std::string& out);
 CppInfo classifyObjectValue(const Type& t);
+// The class and structural-model arms of `classify` (class_types.cpp): a user
+// class / generic instantiation is a `Ref<T>` handle; an interface/object model
+// uses its generated wrapper/struct.
+CppInfo classifyClassValue(const Type& t);
+CppInfo classifyObjectModel(const Type& t);
+// `Promise<T>` -> `::cp3::runtime::Promise<T>` (only spellable value types).
+CppInfo classifyPromise(const Type& t);
 // A `$o{...}` label another family owns (a std/json interface record): its
 // spelling is that family's, so the value-shape path must not claim it.
 // Registered before the emit walk (std/json's collectJsonShapes).
@@ -171,6 +181,11 @@ bool classifyByteBuffer(const Type& t, CppInfo& info);
 std::optional<Type> typeFromTypeNode(const TypeNode& tn,
                                      TypeSystem typeSystem =
                                          TypeSystem::TypeScript);
+
+// The annotation's cp3 type, or `unknown` when it has no mapping; the model
+// pass (support/class_walk.cpp) uses this where an annotation must always
+// yield a Type value.
+Type modelTypeFromTypeNode(const TypeNode& tn);
 
 bool isNullishLiteral(const Expr& e);
 

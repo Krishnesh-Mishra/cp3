@@ -29,6 +29,7 @@
 
 #include "cp3/native_types.hpp"
 
+#include "detail/class_model.h"
 #include "detail/cpp_writer.h"
 #include "detail/parallel.h"
 #include "detail/type_map.h"
@@ -138,7 +139,65 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn, TypeSystem typeSystem) 
                 p.parts.push_back(inner);
                 return p;
             }
-            return Type::named(TypeKind::Class, nt.name);
+            // An interface name resolves to its structural object type
+            // (spec 15); only names registered by the model pass qualify.
+            if (const ObjectModel* om =
+                    ModelRegistry::get().interfaceByName(nt.name)) {
+                return Type(TypeKind::Object, om->label);
+            }
+            Type named = Type::named(TypeKind::Class, nt.name);
+            for (const auto& ta : nt.typeArgs) {
+                if (!ta) continue;
+                auto mapped = typeFromTypeNode(*ta, typeSystem);
+                if (!mapped) return std::nullopt;
+                named.parts.push_back(*mapped);
+            }
+            return named;
+        }
+        case NodeKind::ObjectType: {
+            // `{ x: number }`: register the field struct and name it by the
+            // sema object label so the literal emitter can find it.
+            const auto& ot = static_cast<const ObjectType&>(tn);
+            std::vector<ObjectFieldModel> fields;
+            for (const auto& mp : ot.members) {
+                if (!mp) continue;
+                ObjectFieldModel f;
+                if (mp->kind == NodeKind::PropertySignature) {
+                    const auto& ps = static_cast<const PropertySignature&>(*mp);
+                    f.name = keyNameOf(ps.key.get());
+                    if (f.name.empty()) continue;
+                    if (ps.type) {
+                        f.type = typeFromTypeNode(*ps.type, typeSystem)
+                                     .value_or(Type::unknown());
+                    }
+                    f.optional = ps.optional;
+                } else if (mp->kind == NodeKind::MethodSignature) {
+                    const auto& ms = static_cast<const MethodSignature&>(*mp);
+                    f.name = keyNameOf(ms.key.get());
+                    if (f.name.empty()) continue;
+                    std::vector<Type> params;
+                    for (const auto& p : ms.params) {
+                        if (!p) continue;
+                        params.push_back(
+                            p->type ? typeFromTypeNode(*p->type, typeSystem)
+                                          .value_or(Type::unknown())
+                                    : Type::unknown());
+                    }
+                    const Type ret =
+                        ms.returnType
+                            ? typeFromTypeNode(*ms.returnType, typeSystem)
+                                  .value_or(Type::unknown())
+                            : Type::unknown();
+                    f.type = Type::function(std::move(params), ret);
+                    f.isFunction = true;
+                } else {
+                    continue;
+                }
+                fields.push_back(std::move(f));
+            }
+            const std::string label = objectLabelOf(fields);
+            ModelRegistry::get().ensureObject(label, fields);
+            return Type(TypeKind::Object, label);
         }
         case NodeKind::UnionType: {
             std::vector<Type> members;

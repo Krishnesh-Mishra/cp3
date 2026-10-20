@@ -22,6 +22,8 @@ extern const char* const kHelperBlock;
 extern const char* const kTypedArrayHelperBlock;
 extern const char* const kBufferHelperBlock;
 extern const char* const kEventEmitterHelperBlock;
+// spec 15 handles: `Ref<T>` / optional truthiness (cp3/core/value.hpp).
+extern const char* const kRefHelperBlock;
 
 // The primitive-union helpers (`cp3_ts`/`cp3_truthy` over a `std::variant`).
 const char* unionHelperBlock();

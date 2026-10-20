@@ -209,6 +209,20 @@ inline bool cp3_truthy(const cp3::runtime::EventValue& v) {
 
 )CP3HELPERS";
 
+// The spec 15 object surface helpers: a class/interface/object handle (and an
+// optional over one) is an object, so JS truthiness is always true. Added only
+// when the unit uses `Ref<T>` (cp3/core/value.hpp); without these, `if (obj)`
+// finds no overload (Ref's bool conversion is explicit).
+const char* const kRefHelperBlock = R"CP3HELPERS(namespace {
+
+// ----- spec 15 handles (Ref<T> / interfaces) ----------------------------------
+template <class T>
+inline bool cp3_truthy(const ::cp3::runtime::Ref<T>&) { return true; }
+
+}  // namespace
+
+)CP3HELPERS";
+
 const char* unionHelperBlock() {
     return R"CP3HELPERS(namespace {
 

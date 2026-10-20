@@ -45,6 +45,14 @@ void Generator::applyUsageIncludes(const std::string& familyUse) {
     if (familyUse.find("std::variant<") != std::string::npos) needsUnion_ = true;
     if (familyUse.find("::cp3::runtime::unions::") != std::string::npos) needsUnion_ = true;
     if (familyUse.find("cp3_obj_") != std::string::npos) needsObject_ = true;
+    // The spec 15 object surface: `Ref<T>` / `WeakRef<T>` come from
+    // cp3/core/value.hpp, which runtime.hpp does not drag in.
+    if (familyUse.find("::cp3::runtime::Ref<") != std::string::npos ||
+        familyUse.find("::cp3::runtime::WeakRef<") != std::string::npos ||
+        familyUse.find("makeRef") != std::string::npos ||
+        familyUse.find("std::shared_ptr<void>") != std::string::npos) {
+        needsRef_ = true;
+    }
     // The core regex value (D48): the same rule - a parameter or exported
     // binding can name the C++ spelling without a literal having been lowered
     // in this unit's own statements.

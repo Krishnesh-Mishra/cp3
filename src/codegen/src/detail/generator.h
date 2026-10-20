@@ -52,6 +52,7 @@
 #include "cp3/ast.hpp"
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic.hpp"
+#include "detail/class_model.h"
 #include "detail/enums.h"
 #include "detail/generator_state.h"
 #include "detail/type_map.h"
@@ -91,6 +92,12 @@ struct PatternSource {
     Type type;
     bool isConst = false;
 };
+
+// The spec 15 models are referenced by value in the private method signatures.
+using detail::ClassMemberModel;
+using detail::ClassModel;
+using detail::ObjectModel;
+
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
 // unit, and the CP3002 dedup set (the state block inherited from
@@ -127,6 +134,58 @@ private:
     // Pin each physical line of a raw structural chunk (int64 prologue).
     void emitMappedRaw(const Node& node, const std::string& raw, std::string& out);
 
+    // --- user classes / interfaces / object shapes (emit/class_decl.cpp) ------
+    // Models keyed as sema keys them; structs/methods land in the decl/def text.
+    void collectModels(const Program& program);
+    void collectClassNames(const Stmt& s);
+    void collectInterfaces(const Program& program);
+    void collectBodyModels(const Stmt& s);
+    void collectClassMemberModels(ClassModel& cm);
+    void collectClassAccessorModel(ClassModel& cm, const ClassMember& mp);
+    void emitTopLevelClass(const ClassDeclaration& c);
+    void emitAllClasses();
+    void emitLocalClass(const ClassDeclaration& c, std::string& out, int indent);
+    void emitClassStruct(const ClassModel& cm, std::string& out, int indent,
+                         std::string* defs);
+    void emitClassMember(const ClassModel& cm, const ClassMemberModel& m,
+                         std::string& out, int indent, std::string* defs);
+    void emitClassAccessorMember(const ClassModel& cm,
+                                 const ClassMemberModel& m, std::string& out,
+                                 int indent, std::string* defs);
+    std::string memberFieldText(const ClassMemberModel& m);
+    std::string methodReturnType(const MethodDeclaration& md,
+                                 const ClassModel* cm = nullptr);
+    std::string methodParamText(const Parameter& p,
+                                const ClassModel* cm = nullptr);
+    std::string accessorReturnType(const AccessorDeclaration& ad,
+                                   const ClassModel* cm = nullptr);
+    std::string accessorBodyText(const AccessorDeclaration& ad,
+                                 const ClassModel& cm, int indent);
+    std::string methodBodyText(const MethodDeclaration& md, const ClassModel& cm,
+                               int indent, bool isStatic);
+    std::string ctorBodyText(const ConstructorDeclaration& cd,
+                             const ClassModel& cm, int indent);
+    std::string weakPointee(const Type& fieldType);
+
+    // --- model expressions + initializers (emit/class_expr.cpp) ---------------
+    std::string emitModelNew(const NewExpr& n);
+    std::string emitModelMember(const MemberExpr& m);
+    std::string emitModelCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitModelAssign(const AssignmentExpr& a, const MemberExpr& m);
+    std::string emitSuperMemberAssign(const AssignmentExpr& a,
+                                      const MemberExpr& m,
+                                      const ClassModel& derived);
+    std::string emitModelObjectLiteral(const ObjectLiteral& lit);
+    std::string modelInitText(const VariableDeclarator& d, const Type& declared);
+    std::string objectInitText(const ObjectModel& om, const ObjectLiteral& lit);
+    std::string classLiteralInit(const ClassModel& cm, const ObjectLiteral& lit);
+    std::string detachedMethodLambda(
+        const ClassModel& cm, const ClassMemberModel& m, const std::string& recv);
+    std::string objectFieldDefaultText(const Type& t);
+    // One field store (weak/optional/compound); "" when the caller must report.
+    std::string storeText(const ClassMemberModel& m, const std::string& lvalue,
+                          const AssignmentExpr& a, const std::string& value);
+
     // --- declarations (emit_decl.cpp) ----------------------------------------
     void collectFunctionNames(const Stmt& s);
     void emitTopLevel(const Stmt& s, std::string& decls, std::string& defs, std::string& mainBody);
@@ -161,6 +220,8 @@ private:
     std::optional<detail::Binding> lookup(const std::string& name) const;
     // The C++ spelling of a module-scope entity, qualified with its namespace.
     std::string moduleRef(const std::string& name) const;
+    // True for a value binding; false for a class/interface name.
+    bool hasValueBinding(const std::string& name) const;
     std::optional<Type> bindingType(const VariableDeclarator& d) const;
     std::optional<Type> resolvedBindingType(const VariableDeclarator& d) const;
     // An annotation -> Type, with enum-named Class parts rewritten to Enum.
@@ -235,7 +296,6 @@ private:
     std::string emitParallelClosure(
         const ArrowFunction& a, const std::vector<Type>& paramTypes,
         const std::vector<std::string>& contextParams);
-
     // --- worker handles (emit/worker.cpp, emit/worker_scan.cpp) --------------
     // File and inline `new Worker` sites resolve to a worker unit (D80).
     void collectWorkerSites(const Program& program);
@@ -321,8 +381,7 @@ private:
     // The `IndexExpr` dispatch: the family read, else a not-implemented report.
     std::string emitIndexExpr(const IndexExpr& ix);
     std::string emitFamilyIndexWrite(const AssignmentExpr& a);
-    // The receiver text of a family method: an `Array(n)` constructor or an
-    // array literal takes the element type the call fixed (`elem`).
+    // Family method receiver; a ctor/literal takes the call's element type.
     std::string familyReceiverText(const Expr& obj, const Type& elem, const Node& site);
     std::string arrayCtorText(const ExprList& args, const Type& elem, const Node& site);
     std::string typedCtorText(const std::string& cls, const ExprList& args, const Node& site);
@@ -392,10 +451,7 @@ private:
     std::string emitJsonMember(const MemberExpr& m);
     std::string emitProcessCall(const CallExpr& c, const MemberExpr& m);
     std::string emitProcessMember(const MemberExpr& m);
-    // `std/process` value receivers are recognised by the sema marker names
-    // ("$process:*"), so the SpawnHandle hooks live on the receiver: the
-    // `p.on/write/kill` member calls plus the string[] argument-vector
-    // lowering exec/spawn share.
+    // `std/process` marker receivers: SpawnHandle members and argv lowering.
     bool isProcessObject(const Expr* e) const;
     std::string emitProcessObjectCall(const CallExpr& c, const MemberExpr& m);
     std::string processArgs(const Expr& e);
@@ -403,14 +459,10 @@ private:
     // get/has/load calls, backed by cp3/std/env.hpp (composed on process).
     std::string emitEnvCall(const CallExpr& c, const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
-    // Native-backed std modules (src/std/{crypto,network}/codegen.cpp): one
-    // lowering unit per module, each returning "" for a form it does not
-    // implement, so the caller keeps reporting CP3002 meanwhile.
+    // Native std modules: one lowering unit per module; "" = keep CP3002.
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
-    // `std/fs` (src/std/fs/codegen.cpp): the namespace table plus the
-    // FileStats / ReadStream / WriteStream receivers, recognised by the
-    // `$fs:` marker names.
+    // `std/fs`: namespace table plus the `$fs:` marker receivers.
     std::string emitFsCall(const CallExpr& c, const MemberExpr& m);
     bool isFsReceiver(const Expr* e) const;
     std::string emitFsMemberCall(const CallExpr& c, const MemberExpr& m);
@@ -422,17 +474,14 @@ private:
     std::string emitRegexLiteral(const RegExpLiteral& lit);  // D48, cp3/core/regex.hpp
     std::string emitRegexCall(const CallExpr& c, const MemberExpr& m);  // test/match/exec
     std::string emitRegexMember(const MemberExpr& m);  // source/flags reads
-    // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): the
-    // `Buffer.from`/`Buffer.alloc` statics, the `buf.toString`/`buf.slice`
-    // methods and the `buf.length` read; "" when the form is not one of them.
+    // `Buffer` statics, `buf.toString`/`slice`/`length`; "" = not mine.
     std::string emitByteBufferStaticCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMethodCall(const CallExpr& c, const MemberExpr& m);
     std::string emitByteBufferMember(const MemberExpr& m);
     // `std/network` receivers are recognised by the sema marker names
     // ("$network:*"): named imports, `new` forms, member calls/reads.
     bool isNetworkObject(const Expr* e) const;
-    // Std/network Map-shaped field reads (`res.headers`, `req.params`, ...):
-    // their `Map<string, string>` type, re-derived from the hints below.
+    // Network Map-shaped field reads, re-derived from the hints below.
     std::optional<Type> networkMapFieldType(const Expr& e) const;
     std::string emitNetworkMapFieldCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkMapFieldMember(const MemberExpr& m);
@@ -442,8 +491,7 @@ private:
     std::string emitNetworkMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkMemberRead(const MemberExpr& m);
     std::string emitNetworkFetch(const CallExpr& c, const ExprList& args);
-    // `res.json<T>()` / `req.json<T>()` (reified interface T; "" else) and
-    // `res.json(payload, status?)`: the json value tree serializes the latter.
+    // `json<T>()` with a reified interface, and `json(payload, status?)`.
     std::string networkJsonRecord(const MemberExpr& m, const CallExpr& c);
     std::string networkResponseJson(const CallExpr& c, const MemberExpr& m);
     std::string fetchInitText(const Expr& init);
@@ -474,6 +522,8 @@ private:
     void stmt(const Stmt& s, std::string& out, int indent);
     void emitBranch(const Stmt& s, std::string& out, int indent);
     void emitIf(const IfStatement& is, std::string& out, int indent);
+    void emitWhile(const WhileStatement& ws, std::string& out, int indent);
+    void emitDoWhile(const DoWhileStatement& dw, std::string& out, int indent);
     void emitVarDecl(const VariableDeclaration& vd, std::string& out, int indent);
     std::string declaratorText(const VariableDeclarator& d, VarKind kind);
     void emitReturn(const ReturnStatement& r, std::string& out, int indent);
@@ -512,8 +562,7 @@ private:
     bool lowerEnumSwitch(const SwitchStatement& sw, std::string& out, int indent);
 
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
-    // Per function: a body with every `number` lowered to a guarded
-    // std::int64_t, plus a double wrapper that re-runs it when a guard bails.
+    // A guarded int64 body plus its double wrapper (D64).
     bool intEligible(const FunctionDeclaration& fd, const std::string& ret) const;
     std::string intBody(const FunctionDeclaration& fd, bool& kept);
     std::string intSignature(const FunctionDeclaration& fd) const;
@@ -539,7 +588,7 @@ private:
     void declareBinding(const VariableDeclarator& d);
     // A fresh binding: a deferred-bound-check name may not be shadowed.
     void intNewBinding(const std::string& name);
-    // `name` is read only inside `return`s, so its bound check may be deferred.
+    // `name` is read only in `return`s, so its check may be deferred.
     bool intDeferable(const std::string& name) const;
     // The text of `a` for the identifier target `id` (checked or deferred).
     std::string intAssignText(const AssignmentExpr& a, const Identifier& id);
@@ -547,10 +596,7 @@ private:
     std::string intRawOperand(const Expr& e);   // a raw `+`/`-` operand
 
     // --- usage-based include flags (support/usage_includes.cpp) --------------
-    // The emitted text decides which family includes and helper blocks the
-    // generated unit carries (D69): the typed-array family, collections,
-    // buffer, the builtin EventEmitter (D74), the operator spellings and the
-    // D48 core regex value.
+    // Usage-based family includes/helper blocks (D69/74, operator spellings).
     void applyUsageIncludes(const std::string& familyUse);
 
     // --- assembly (code_generator.cpp) ---------------------------------------
@@ -560,12 +606,10 @@ private:
     std::string buildSource(const std::string& decls, const std::string& defs,
                             const std::string& globals,
                             const std::string& mainBody) const;
-    // The `int main` unit of the generated source: the std/process argument
-    // vector init, the top-level-await coroutine and the event-loop drain.
+    // `main`: process argv, top-level await, event-loop drain.
     void emitMain(std::string& out, const std::string& mainBody) const;
 
-    // The per-unit state block lives in `GeneratorState`
-    // (detail/generator_state.h), inherited privately above.
+    // Per-unit state lives in GeneratorState (generator_state.h).
 };
 
 }  // namespace cp3

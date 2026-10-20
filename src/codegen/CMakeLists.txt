@@ -25,6 +25,10 @@ set(cp3_codegen_sources
     src/support/value_shapes.cpp
     src/support/structural_walk.cpp
     src/support/captures.cpp
+    src/support/class_types.cpp
+    src/support/class_model.cpp
+    src/support/class_collect.cpp
+    src/support/class_walk.cpp
     src/support/helper_blocks.cpp
     src/support/int_mode.cpp
     src/support/int_reads.cpp
@@ -47,6 +51,9 @@ set(cp3_codegen_sources
     src/emit/patterns.cpp
     src/emit/decl.cpp
     src/emit/module_var.cpp
+    src/emit/class_decl.cpp
+    src/emit/class_shape.cpp
+    src/emit/class_expr.cpp
     src/emit/enum.cpp
     src/emit/regex.cpp
     src/emit/parallel.cpp

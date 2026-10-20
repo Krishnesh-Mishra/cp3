@@ -355,7 +355,10 @@ Type Analyzer::targetTypeOf(Expr& target) {
         case NodeKind::MemberExpr: {
             auto& m = static_cast<MemberExpr&>(target);
             Type ot = m.object ? inferExpr(*m.object) : Type::unknown();
+            const bool prevTarget = assignTarget_;
+            assignTarget_ = true;
             Type r = memberOf(ot, m.property, m.span, m.optional);
+            assignTarget_ = prevTarget;
             setType(m, r);
             return r;
         }
@@ -393,7 +396,10 @@ void Analyzer::checkAssignToTarget(Expr& target, const Type& valType,
         case NodeKind::MemberExpr: {
             auto& m = static_cast<MemberExpr&>(target);
             Type ot = m.object ? inferExpr(*m.object) : Type::unknown();
+            const bool prevTarget = assignTarget_;
+            assignTarget_ = true;
             Type mt = memberOf(ot, m.property, m.span, m.optional);
+            assignTarget_ = prevTarget;
             setType(m, mt);
             if (isReadOnlyFamilyProp(ot, m.property)) {
                 report(diagcode::kTypeMismatch, span,

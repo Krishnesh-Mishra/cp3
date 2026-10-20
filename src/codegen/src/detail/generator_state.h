@@ -133,6 +133,7 @@ protected:
     bool needsBitwise_ = false;       // bitwise/shift ops -> cp3/core/bitwise.hpp
     bool needsUnion_ = false;         // primitive unions -> cp3/core/union.hpp
     bool needsObject_ = false;        // object value shapes -> the object helper block
+    bool needsRef_ = false;           // classes/objects -> cp3/core/value.hpp include
     bool needsParallel_ = false;      // parallel.* -> cp3/parallel/parallel.hpp
     bool needsWorker_ = false;        // new Worker(...) -> cp3/parallel/worker.hpp
     bool workerModule_ = false;       // this unit IS the worker module
@@ -161,6 +162,21 @@ protected:
     std::uint32_t currentFrameId_ = 0;  // Program / function / arrow being emitted
 
     std::vector<std::unordered_map<std::string, detail::Binding>> env_;
+    // The spec 15 object surface: forward declarations (classFwdDecls_), structs
+    // and `cp3_ts` overloads (classDecls_, objectDecls_), and out-of-line
+    // method definitions (classDefs_).
+    std::string classFwdDecls_;
+    std::string classDecls_;
+    std::string classDefs_;
+    std::string objectDecls_;
+    std::unordered_set<std::uint32_t> modelEmitted_;
+    // Module-scope value names: globals emit at namespace scope and are not in
+    // `env_`, so a lowering that must tell a value binding from a type name
+    // (a class used as a static receiver) consults this set too.
+    std::unordered_set<std::string> moduleValues_;
+    // The class whose method/constructor body is currently emitting; `super`
+    // lowers against its base (spec 15, D22).
+    std::vector<const detail::ClassModel*> classStack_;
     // Codegen type hints for the Map-shaped std/network fields; the open
     // marker hides their type in sema, so networkMapFieldType checks these.
     std::unordered_map<std::uint32_t, Type> exprTypeHints_;

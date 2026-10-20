@@ -348,15 +348,41 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
                                     int indent) {
     std::string structName;
     std::vector<std::string> fields;
-    if (!recordLayout(src.type, structName, fields)) {
+    // The class / interface / plain-object models own the value spelling when
+    // they materialized (spec 15): an interface is a by-value wrapper with
+    // accessor methods, a class or plain object is a `Ref<T>` handle. The
+    // all-primitive value struct (and the std/json record) keeps `.field`.
+    const Type base = stripNullish(src.type);
+    const ObjectModel* om = objectModelOf(base);
+    const ClassModel* cm = classModelOf(base);
+    bool modelUsed = om != nullptr && objectModelUsed(*om);
+    if (om != nullptr && !modelUsed) om = nullptr;
+    if (cm == nullptr && om == nullptr &&
+        !recordLayout(src.type, structName, fields)) {
         notImplemented(p, "this destructuring source");
         return;
     }
+    const auto access = [&](const std::string& name) -> std::string {
+        if (om != nullptr) {
+            return om->isInterface ? src.text + "." + mapIdent(name) + "()"
+                                   : src.text + "->" + mapIdent(name);
+        }
+        if (cm != nullptr) return src.text + "->" + mapIdent(name);
+        return src.text + "." + mapIdent(name);
+    };
+    const auto known = [&](const std::string& name) -> bool {
+        if (om != nullptr) return findObjectField(*om, name) != nullptr;
+        if (cm != nullptr) {
+            const ClassMemberModel* m = findClassMember(*cm, name);
+            return m != nullptr && !m->isMethod && m->ctor == nullptr;
+        }
+        return hasField(fields, name);
+    };
     for (const auto& propPtr : p.properties) {
         if (!propPtr) continue;
         const ObjectPatternProperty& prop = *propPtr;
         const std::string name = patternKeyName(prop.key.get(), prop.computed);
-        if (name.empty() || !hasField(fields, name)) {
+        if (name.empty() || !known(name)) {
             notImplemented(prop, "this destructuring property");
             continue;
         }
@@ -367,7 +393,7 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
             target = static_cast<const AssignmentPattern&>(*target).left.get();
         }
         if (!target) continue;
-        const std::string valueText = src.text + "." + mapIdent(name);
+        const std::string valueText = access(name);
         bindPatternTarget(*target, PatternSource{valueText, Type::unknown(),
                                                  src.isConst},
                           out, indent);

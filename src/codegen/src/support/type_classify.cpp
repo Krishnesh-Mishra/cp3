@@ -12,6 +12,7 @@
 #include "cp3/native_types.hpp"
 
 #include "detail/cpp_writer.h"
+#include "detail/mangle.h"
 #include "detail/parallel.h"
 #include "detail/type_map.h"
 
@@ -21,7 +22,7 @@ namespace detail {
 // `Promise<T>` -> `::cp3::runtime::Promise<T>` (cp3/async/promise.hpp). Only
 // M1-representable value types (primitives and `void`) have a spelling;
 // anything else stays not-implemented. Implementation detail of `classify`.
-static CppInfo classifyPromise(const Type& t) {
+CppInfo classifyPromise(const Type& t) {
     CppInfo info;
     const Type inner = promiseValue(t);
     if (inner.isVoid()) {
@@ -37,45 +38,22 @@ static CppInfo classifyPromise(const Type& t) {
     return info;
 }
 
-// The single-member nullable over a primitive: `T | null`, `T | undefined`
-// and the `T?` shorthand all lower to `std::optional<T>` (the flavor is kept
-// in `emptyKind`). Implementation detail of `classify`.
+// The single-member nullable over a primitive or a class/object handle:
+// `T | null`, `T | undefined` and the `T?` shorthand all lower to
+// `std::optional<T>` (the flavor is kept in `emptyKind`). Implementation
+// detail of `classify`.
 static void classifyNullable(const Type& t, CppInfo& info) {
     if (t.parts.size() != 1) return;
     const CppInfo inner = classify(t.parts.front());
-    if (!inner.representable || !isPrimitiveShape(inner.shape)) return;
+    if (!inner.representable) return;
+    if (!isPrimitiveShape(inner.shape) && inner.shape != Shape::ClassRef &&
+        inner.shape != Shape::Object) {
+        return;
+    }
     info.shape = Shape::Optional;
     info.representable = true;
     info.cpp = "std::optional<" + inner.cpp + ">";
     info.emptyKind = NullishKind::Mixed;
-}
-
-// The Class-kind tail of `classify`: the family spellings (Buffer, typed
-// views, Map/Set, Date), then the builtin EventEmitter (D74), then `Promise<T>`
-// (the only other class with a spelling). Anything else stays out of M1.
-static CppInfo classifyClassValue(const Type& t) {
-    CppInfo info;
-    info.type = t;
-    // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp).
-    if (classifyByteBuffer(t, info)) return info;
-    // The JS-compat family (typed views, buffers, DataView).
-    if (classifyFamily(t, info)) return info;
-    // The std/collections family (`Map<K, V>` / `Set<T>`).
-    if (classifyCollections(t, info)) return info;
-    // The `std/date` value type (src/std/date/codegen.cpp).
-    if (classifyDate(t, info)) return info;
-    if (classifyRegex(t, info)) return info;  // core regex (src/emit/regex.cpp)
-    // The builtin EventEmitter (D74): a reference type, so its C++
-    // spelling is `Ref<EventEmitter>` (cp3/async/emitter.hpp).
-    if (t.name == "EventEmitter") {
-        info.shape = Shape::EventEmitter;
-        info.representable = true;
-        info.cpp = "::cp3::runtime::Ref<::cp3::runtime::EventEmitter>";
-        return info;
-    }
-    // `Promise<T>` is the only other class type with a spelling (M1).
-    if (isPromiseType(t)) return classifyPromise(t);
-    return info;
 }
 
 // The Function-kind arm of `classify`: a void function over non-representable
@@ -173,13 +151,24 @@ CppInfo classify(const Type& raw) {
             classifyValueUnion(t, info);
             if (!info.representable) classifyNullishUnion(t, info);
             return info;
-        case TypeKind::Object:
-            // A structural `$o{...}` shape: an all-primitive object becomes a
-            // generated value struct (support/value_shapes.cpp).
+        case TypeKind::Object: {
+            // A registered interface/structural model first; the all-primitive
+            // `$o{...}` value shape (support/value_shapes.cpp) otherwise.
+            CppInfo model = classifyObjectModel(t);
+            if (model.representable) return model;
             return classifyObjectValue(t);
+        }
         case TypeKind::Class:
             return classifyClassValue(t);
         case TypeKind::Enum: return classifyEnum(t);  // spec 04: enum class
+        case TypeKind::TypeParam:
+            // A generic field/method type: the C++ spelling is the template
+            // parameter itself (`T`), usable anywhere a value type is.
+            info.type = t;
+            info.shape = Shape::Unknown;
+            info.representable = true;
+            info.cpp = mapIdent(t.name);
+            return info;
         case TypeKind::Function:
             return classifyFunctionValue(t);
         case TypeKind::Array:

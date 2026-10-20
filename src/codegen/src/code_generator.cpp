@@ -106,6 +106,13 @@ void Generator::runUnit(const Program& program, std::string& decls,
     captures_ = analyzeCaptures(program);
     currentFrameId_ = program.nodeId;
 
+    // The spec 15 object surface: rebuild the class/interface/object models
+    // for this unit before anything is emitted, so a class used above its
+    // declaration (and a function taking one) already has a C++ spelling.
+    detail::ModelRegistry::get().reset();
+    detail::ModelRegistry::get().setNamespace(namesp_);
+    collectModels(program);
+
     for (const auto& stmtPtr : program.body) {
         if (stmtPtr) {
             emitTopLevel(*stmtPtr, decls, defs, mainBody);
@@ -117,11 +124,20 @@ void Generator::runUnit(const Program& program, std::string& decls,
     // declarations so their bodies can call this unit's top-level functions.
     emitInlineWorkerEntries(decls, defs);
 
+    // Class structs materialize after the walk (every class and signature is
+    // registered by then), before the structural object/interface structs (a
+    // method signature can still register a new object shape while it emits).
+    emitAllClasses();
+    objectDecls_ = objectStructsText();
+    if (!objectDecls_.empty()) needsRef_ = true;
+
     // Enums first (signatures and record shapes can name one), then the JSON
-    // record structs, which are namespace-scope and complete before any
-    // builder reads them, and the `$o{...}` value structs at global scope
-    // (guarded, so a worker TU spells the same nominal type).
-    decls = enumDecls_ + jsonShapeDecls_ + decls;
+    // record structs, class forward declarations and structs, the structural
+    // object value shapes, and then the unit's own declarations. All are
+    // namespace-scope and complete before any builder reads them.
+    decls = enumDecls_ + classFwdDecls_ + jsonShapeDecls_ + objectDecls_ +
+            classDecls_ + decls;
+    defs = classDefs_ + defs;
     globals = objectGlobalDeclsFor(decls + defs + mainBody, needsWorker_);
 
     // The family include (D69) follows the emitted spellings

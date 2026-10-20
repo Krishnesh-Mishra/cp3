@@ -72,6 +72,11 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
         case NodeKind::TryStatement:
             emitTry(static_cast<const TryStatement&>(s), out, indent);
             return;
+        case NodeKind::ClassDeclaration:
+            // A function-local class (spec 15) emits its struct inline: a
+            // local type cannot have out-of-line definitions at namespace scope.
+            emitLocalClass(static_cast<const ClassDeclaration&>(s), out, indent);
+            return;
         default:
             notImplemented(s, "this statement");
             line(out, indent, "/* CP3002: unsupported statement */");
@@ -87,6 +92,22 @@ void Generator::emitBranch(const Stmt& s, std::string& out, int indent) {
     } else {
         stmt(s, out, indent);
     }
+}
+
+void Generator::emitWhile(const WhileStatement& ws, std::string& out,
+                          int indent) {
+    const std::string condition = ws.condition ? cond(*ws.condition) : "false";
+    line(out, indent, "while (" + condition + ") {");
+    if (ws.body) emitBranch(*ws.body, out, indent + 1);
+    line(out, indent, "}");
+}
+
+void Generator::emitDoWhile(const DoWhileStatement& dw, std::string& out,
+                            int indent) {
+    line(out, indent, "do {");
+    if (dw.body) emitBranch(*dw.body, out, indent + 1);
+    const std::string condition = dw.condition ? cond(*dw.condition) : "false";
+    line(out, indent, "} while (" + condition + ");");
 }
 
 void Generator::emitIf(const IfStatement& is, std::string& out, int indent) {
@@ -154,6 +175,10 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
         std::string initText;
         if (ci.shape == Shape::Optional && isNullishLiteral(*d.init)) {
             initText = "std::nullopt";
+        } else if (std::string special = modelInitText(d, ci.type);
+                   !special.empty()) {
+            // A class-typed binding built from an object literal (spec 15).
+            initText = special;
         } else if (d.type && ci.shape == Shape::Object &&
                    d.init->kind == NodeKind::ObjectLiteral) {
             // An explicitly annotated record fixes the struct type; build that

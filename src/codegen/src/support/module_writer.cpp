@@ -40,6 +40,10 @@ std::string Generator::buildHeader(const std::string& decls,
     }
     out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
+    if (needsRef_) {
+        // Classes / structural objects / interfaces (spec 15) name `Ref<T>`.
+        out += "#include \"cp3/core/value.hpp\"\n";
+    }
     if (needsTuple_) {
         // An enum-carrying object literal can surface in a forward declaration
         // (a parameter default).
@@ -180,6 +184,7 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsTypedArray_) out += kTypedArrayHelperBlock;
     if (needsBuffer_) out += kBufferHelperBlock;
     if (needsEventEmitter_) out += kEventEmitterHelperBlock;
+    if (needsRef_) out += kRefHelperBlock;
     if (needsUnion_) out += unionHelperBlock();
     if (needsObject_) out += objectHelperBlock();
     out += "\nnamespace " + namesp_ + " {\n\n";

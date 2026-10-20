@@ -302,7 +302,8 @@ Type Analyzer::resolveTypeInner(TypeNode& node) {
 
 Type Analyzer::resolveNamedType(NamedType& nt) {
     // Type arguments are resolved eagerly (both for their own diagnostics and
-    // for the generic types M1 does model, `Promise<T>` and `Thread<In, Out>`).
+    // for the generic types M1 does model: `Promise<T>`, the concurrency
+    // channel types and user classes).
     std::vector<Type> args;
     for (auto& ta : nt.typeArgs) {
         if (!ta) continue;
@@ -347,7 +348,15 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
         if (lookup(nt.name, b) && b.isAmbient) return byteBufferType();
     }
     const auto it = typeNames_.find(nt.name);
-    if (it != typeNames_.end()) return it->second;
+    if (it != typeNames_.end()) {
+        Type base = it->second;
+        // A user class instantiation (`Box<number>`): the type arguments are
+        // carried in `parts` for member substitution and codegen spelling.
+        if (base.kind == TypeKind::Class && !args.empty()) {
+            base.parts = args;
+        }
+        return base;
+    }
     // A non-TypeScript project also accepts its own plain value-type names:
     // `let a: i64 = 10;` (rust) or `let a: long long = 10;` (cpp). Unsupported
     // spellings (i128, long double, ...) get their precise diagnostic; a name

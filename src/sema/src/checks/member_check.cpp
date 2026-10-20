@@ -23,6 +23,16 @@ namespace cp3 {
 // =============================================================================
 Type Analyzer::inferMember(MemberExpr& m) {
     Type ot = m.object ? inferExpr(*m.object) : Type::unknown();
+    // spec 11: reading a member through a weak field that has not been
+    // narrowed is a possible-undefined use (`c.parent.name` where `parent` is
+    // weak). Keyed on node identity, so a read through a local
+    // (`let x = a.next; x.value`) is not flagged.
+    if (m.object && m.object->kind == NodeKind::MemberExpr &&
+        weakReads_.count(m.object->nodeId) != 0) {
+        report(diagcode::kNotAssignable, m.span,
+               "value of a weak reference is possibly undefined; check it "
+               "before use");
+    }
     // Ambient std namespaces (Math / path / os / process): type the member
     // from the std tables instead of the permissive ambient shape
     // (std_check.cpp). A user binding that shadows the name is not ambient,
@@ -44,7 +54,15 @@ Type Analyzer::inferMember(MemberExpr& m) {
             }
         }
     }
+    const bool prevTarget = assignTarget_;
+    assignTarget_ = false;
+    weakFieldHit_ = false;
     Type result = memberOf(ot, m.property, m.span, m.optional);
+    // A weak-field read is recorded so a later member read through it can be
+    // diagnosed (spec 11); userClassMember set the flag (class_check.cpp).
+    if (weakFieldHit_) weakReads_.insert(m.nodeId);
+    weakFieldHit_ = false;
+    assignTarget_ = prevTarget;
     return withType(m, result);
 }
 
@@ -100,6 +118,29 @@ Type Analyzer::promiseMemberOf(const Type& ot, const std::string& prop) {
     return ambient();
 }
 
+// The builtin EventEmitter surface (D74, spec 14): on/once/off/emit.
+Type Analyzer::eventEmitterMember(const std::string& prop,
+                                  const SourceSpan& span) {
+    Type listener(TypeKind::Function);
+    listener.parts.push_back(Type::unknown());
+    listener.parts.push_back(Type::voidType());
+    listener.name = kVariadicLabel;
+    if (prop == "on" || prop == "once" || prop == "off") {
+        return Type::function({Type::string(), listener}, Type::voidType());
+    }
+    if (prop == "emit") {
+        // `emit(event, ...args)`: at least `event`, any tail (only the first
+        // value reaches a listener; see emitter.hpp).
+        Type f = Type::function({Type::string(), Type::unknown()},
+                                Type::voidType());
+        f.name = kVariadicOptionalTailLabel;
+        return f;
+    }
+    reportMemberMiss("EventEmitter", prop, span,
+                     {"on", "once", "off", "emit"});
+    return Type::unknown();
+}
+
 // Same as memberOf but for a single (non-union) type; emits CP3305 for a
 // genuinely missing property on a fixed-shape object.
 Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
@@ -133,25 +174,7 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             // `(...args: unknown[]) => void`; `emit`'s rest parameter is
             // `unknown`, so it accepts any trailing arguments.
             if (isEventEmitterType(ot)) {
-                Type listener(TypeKind::Function);
-                listener.parts.push_back(Type::unknown());
-                listener.parts.push_back(Type::voidType());
-                listener.name = kVariadicLabel;
-                if (prop == "on" || prop == "once" || prop == "off") {
-                    return Type::function({Type::string(), listener},
-                                          Type::voidType());
-                }
-                if (prop == "emit") {
-                    // `emit(event, ...args)`: at least `event`, any tail (only
-                    // the first value reaches a listener; see emitter.hpp).
-                    Type f = Type::function({Type::string(), Type::unknown()},
-                                            Type::voidType());
-                    f.name = kVariadicOptionalTailLabel;
-                    return f;
-                }
-                reportMemberMiss("EventEmitter", prop, span,
-                                 {"on", "once", "off", "emit"});
-                return Type::unknown();
+                return eventEmitterMember(prop, span);
             }
             // The JS-compat family (src/std/typed-arrays/sema.cpp): typed
             // views, the buffer classes and DataView have their own tables.
@@ -169,6 +192,9 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             if (isRegexClass(ot)) return memberOfRegex(ot, prop, span);  // D48
             // The nominal std/buffer `Buffer` (src/std/buffer/sema.cpp).
             if (isByteBufferClass(ot)) return byteBufferMember(ot, prop);
+            // User classes (spec 15): resolved member tables with privacy
+            // and weak-field reads (class_check.cpp).
+            if (findClass(ot.name)) return userClassMember(ot, prop, span);
             return ambient();
         case TypeKind::String:
             return stringMember(prop);

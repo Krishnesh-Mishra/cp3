@@ -20,6 +20,7 @@
 #include "detail/generator.h"
 
 #include <string>
+#include <vector>
 
 #include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
@@ -286,6 +287,31 @@ std::string Generator::workerPayloadText(const Type& raw,
         return std::string();
     }
     if (t.kind == TypeKind::Function) return std::string();
+    // A structural record is a payload only when every field is one too: a
+    // record carrying a function (or another non-copyable value) is not.
+    if (t.kind == TypeKind::Object) {
+        std::string structName;
+        std::vector<ObjectField> fields;
+        if (!objectShapeOf(t, structName, fields)) return std::string();
+        for (const ObjectField& field : fields) {
+            if (workerPayloadText(field.type, ownerNS).empty()) {
+                return std::string();
+            }
+        }
+    }
+    // Arrays, unions and options recurse: a non-copyable element/part makes
+    // the whole value non-copyable.
+    if (t.kind == TypeKind::Array) {
+        if (!t.parts.empty() && workerPayloadText(t.parts.front(), ownerNS).empty()) {
+            return std::string();
+        }
+    }
+    if (t.kind == TypeKind::Union || t.kind == TypeKind::Nullable) {
+        for (const Type& part : t.parts) {
+            if (part.isNullish()) continue;
+            if (workerPayloadText(part, ownerNS).empty()) return std::string();
+        }
+    }
     const CppInfo ci = classify(t);
     if (!ci.representable) return std::string();
     switch (ci.shape) {
