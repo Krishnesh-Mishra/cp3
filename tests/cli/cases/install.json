@@ -235,7 +235,7 @@
       "description": "missing source",
       "argv": [
         "install",
-        "nope"
+        "./nope"
       ],
       "setup": {
         "fixtures": [
@@ -496,7 +496,7 @@
         "exit": 1,
         "stderr": {
           "contains": [
-            "cannot install 'missing-kit'",
+            "does not exist",
             "installed local-kit",
             "1 of 2 dependencies could not be installed"
           ]
@@ -510,8 +510,8 @@
     },
     {
       "group": "install",
-      "name": "bare-registry-spec-not-implemented",
-      "description": "bare registry spec not implemented",
+      "name": "bare-registry-spec-rejected",
+      "description": "bare registry spec rejected in beta one",
       "argv": [
         "install"
       ],
@@ -527,7 +527,7 @@
         "exit": 1,
         "stderr": {
           "contains": [
-            "registry lookups are not implemented",
+            "named registry installs are not available in beta one",
             "1 of 1 dependencies"
           ]
         }
@@ -535,8 +535,8 @@
     },
     {
       "group": "install",
-      "name": "bare-github-url-not-implemented",
-      "description": "bare github url not implemented",
+      "name": "bare-github-url-api-error",
+      "description": "bare github url reports an api error",
       "argv": [
         "install"
       ],
@@ -551,14 +551,17 @@
       "expect": {
         "exit": 1,
         "stderr": {
-          "contains": "GitHub repo installs are not implemented"
+          "contains": "download failed"
         }
+      },
+      "env": {
+        "CP3_GITHUB_API_URL": "http://127.0.0.1:1"
       }
     },
     {
       "group": "install",
-      "name": "direct-github-url-exit-3",
-      "description": "direct github url exit 3",
+      "name": "direct-github-url-api-error",
+      "description": "direct github url reports an api error",
       "argv": [
         "install",
         "https://github.com/acme/kit"
@@ -569,13 +572,13 @@
         ]
       },
       "expect": {
-        "exit": 3,
+        "exit": 1,
         "stderr": {
-          "contains": [
-            "not implemented",
-            "install a local .cp3pak"
-          ]
+          "contains": "download failed"
         }
+      },
+      "env": {
+        "CP3_GITHUB_API_URL": "http://127.0.0.1:1"
       }
     },
     {
@@ -594,7 +597,7 @@
       "expect": {
         "exit": 2,
         "stderr": {
-          "contains": "only https://github.com/<user>/<repo> URLs are recognized"
+          "contains": "only https://github.com/<owner>/<repo> URLs are supported"
         }
       }
     },

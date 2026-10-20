@@ -6,9 +6,9 @@
 // Scaffolds `package.json`, `src/index.cp3` (the spec's default entry - see
 // CLI-README §5.1) and, for `"type": "package"`, a README.md listed in
 // `build.files`. Interactive prompts appear only on a TTY and only when --yes
-// is absent; the prompt order follows the spec: type -> name -> description
-// (the type-system question is deliberately not asked yet - that lands with
-// the native-types wave).
+// is absent; the prompt order follows the spec: type -> name -> description ->
+// type-system pattern. `--type-system <value>` supplies the last answer for
+// scripts and non-TTY use.
 //
 // `package.json` parity with CLI-README §5.1: name, version, description,
 // type, main, typeSystem, the standard dev/build/start/check `scripts` block
@@ -57,7 +57,8 @@ std::string scriptsBlock(const std::string& entry) {
 
 std::string packageJsonFor(const std::string& name,
                            const std::string& description,
-                           const std::string& type) {
+                           const std::string& type,
+                           const std::string& typeSystem) {
     const bool isPackage = (type == "package");
     const std::string entry = "src/index.cp3";
     std::string out;
@@ -67,7 +68,7 @@ std::string packageJsonFor(const std::string& name,
     out += "  \"description\": \"" + jsonEscape(description) + "\",\n";
     out += "  \"type\": \"" + jsonEscape(type) + "\",\n";
     out += "  \"main\": \"" + entry + "\",\n";
-    out += "  \"typeSystem\": \"typescript\",\n";
+    out += "  \"typeSystem\": \"" + jsonEscape(typeSystem) + "\",\n";
     out += scriptsBlock(entry);
     out += "  \"build\": {\n";
     if (isPackage) {
@@ -130,6 +131,10 @@ std::string prompt(const std::string& question, const std::string& fallback) {
     return answer.substr(first, last - first + 1);
 }
 
+bool validTypeSystem(const std::string& value) {
+    return value == "typescript" || value == "cpp" || value == "rust";
+}
+
 // Writes one scaffold file; a pre-existing file is left unchanged (and
 // reported) rather than clobbered. Returns false only on a write failure.
 bool writeScaffold(const fs::path& path, const std::string& content) {
@@ -156,13 +161,25 @@ int cmdInit(const CliOptions& opt) {
     if (name.empty() || name == "." || name == "..") name = "cp3-app";
     std::string description = "a C+++ project";
     std::string type = opt.initType.empty() ? "application" : opt.initType;
+    std::string typeSystem =
+        opt.initTypeSystem.empty() ? "typescript" : opt.initTypeSystem;
+    if (!validTypeSystem(typeSystem)) {
+        std::fprintf(stderr,
+                     "cp3c: invalid type system '%s' (expected typescript, "
+                     "cpp or rust)\n",
+                     typeSystem.c_str());
+        return kExitUsageError;
+    }
 
     if (!opt.yes && isTty(stdin)) {
-        // Spec prompt order: type -> name -> description (CLI-README §5.1).
+        // Spec prompt order: type -> name -> description -> type-system
+        // (CLI-README §5.1).
         type = prompt("Type (application/package)", type);
         if (type != "application" && type != "package") type = "application";
         name = prompt("Project name", name);
         description = prompt("Description", description);
+        typeSystem = prompt("Type system (typescript/cpp/rust)", typeSystem);
+        if (!validTypeSystem(typeSystem)) typeSystem = "typescript";
     }
     const bool isPackage = (type == "package");
 
@@ -173,7 +190,7 @@ int cmdInit(const CliOptions& opt) {
     }
 
     if (!writeScaffold(target / "package.json",
-                       packageJsonFor(name, description, type))) {
+                       packageJsonFor(name, description, type, typeSystem))) {
         return kExitCompileError;
     }
     const fs::path entryFile = target / "src" / "index.cp3";

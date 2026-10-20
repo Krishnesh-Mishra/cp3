@@ -42,10 +42,14 @@ struct CliOptions {
     bool once = false;                    // dev --once (run one pass then exit)
     bool autoSelect = false;              // install --auto (GitHub selector)
     bool interactive = false;             // editor-plugin --interactive
-    bool json = false;                    // editor-plugin --json
-    bool dryRun = false;                  // editor-plugin --dry-run
-    bool force = false;                   // editor-plugin --force
+    bool force = false;                   // publish/link/install/editor overwrite
+    bool dryRun = false;                  // publish/editor dry run
+    bool json = false;                    // machine-readable command output
+    bool listLinks = false;               // link --list
     std::string initType;                 // init --type application|package
+    std::string initTypeSystem;           // init --type-system typescript|cpp|rust
+    std::string outDir;                   // publish --out <dir|file>
+    std::string name;                     // link --name <name>
     std::string editor;                   // editor-plugin --editor <id|path>
     std::string vsix;                     // editor-plugin --vsix <path>
     std::string extensionsDir;            // editor-plugin --extensions-dir <dir>
@@ -93,6 +97,9 @@ int cmdInit(const CliOptions& opt);
 int cmdToolchain(const CliOptions& opt);
 int cmdExec(const CliOptions& opt);
 int cmdInstall(const CliOptions& opt);
+int cmdPublish(const CliOptions& opt);
+int cmdLink(const CliOptions& opt);
+int cmdUnlink(const CliOptions& opt);
 int cmdEditorPlugin(const CliOptions& opt);
 int cmdLsp(const CliOptions& opt);
 int cmdDap(const CliOptions& opt);

@@ -84,10 +84,10 @@ One page. Keep it open while you port code.
 | `cp3 fmt` | Format |
 | `cp3 build` | Native `.exe` (app) or `.cp3pak` (package) |
 | `cp3 clean [--all]` | Clear generated output |
-| `cp3 install [pkg]` | Install dependencies |
+| `cp3 install [path-or-github-url]` | Install a local package or a public GitHub release; no named registry in beta one |
 | `cp3 exec <pkg> [args]` | Run a package's CLI |
-| `cp3 publish` | Publish your package |
-| `cp3 link <file.cp3pak>` | Link a local package |
+| `cp3 publish [--out <dir>]` | Build and report/copy the `.cp3pak` (artifact only) |
+| `cp3 link <dir-or-cp3pak>` | Link a local package; `cp3 link --list`, `cp3 unlink <name>` |
 
 ```
 my-app/
