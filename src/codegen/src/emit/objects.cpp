@@ -51,19 +51,44 @@ const Expr* propertyValue(const ObjectProperty& p) {
 }
 
 // The C++ spelling of the shape field named `property` (false when the shape
-// has no such field).
-bool fieldCppText(const std::vector<ObjectField>& fields,
-                  const std::string& property, std::string& out) {
-    for (const ObjectField& f : fields) {
-        if (f.name == property) {
-            out = f.cpp;
-            return true;
-        }
-    }
-    return false;
-}
-
+// has no such field). Defined in support/value_shapes.cpp.
 }  // namespace
+
+std::string Generator::objectLiteralForType(const ObjectLiteral& lit,
+                                            const Type& declared) {
+    std::string structName;
+    std::vector<ObjectField> fields;
+    if (!objectShapeOf(declared, structName, fields)) return std::string();
+    std::vector<std::string> values;
+    for (const ObjectField& field : fields) {
+        const Expr* value = nullptr;
+        for (const auto& propertyPtr : lit.properties) {
+            if (!propertyPtr) continue;
+            if (fieldName(*propertyPtr) == field.name) {
+                value = propertyValue(*propertyPtr);
+                break;
+            }
+        }
+        if (value == nullptr) return std::string();
+        if (field.type.kind == TypeKind::Object &&
+            value->kind == NodeKind::ObjectLiteral) {
+            const std::string nested = objectLiteralForType(
+                static_cast<const ObjectLiteral&>(*value), field.type);
+            if (!nested.empty()) {
+                values.push_back(nested);
+                continue;
+            }
+        }
+        values.push_back(expr(*value));
+    }
+    std::string out = structName + "{";
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        if (i != 0) out += ", ";
+        out += values[i];
+    }
+    out += "}";
+    return out;
+}
 
 std::string Generator::emitObject(const Expr& e) {
     if (e.kind == NodeKind::ObjectLiteral) {
@@ -128,18 +153,10 @@ std::string Generator::emitObject(const Expr& e) {
     return "(" + receiver + ")." + member;
 }
 
-// The object-literal expression form: a worker-marked literal (the `worker(...)`
-// kernel form, spec 13) lowers to a std::tuple first (its node id is the
-// pre-scan's explicit gate, so it outranks the shape forms); a `$o{...}` value
-// shape lowers to the generated value struct (emitObject above); a literal with
-// an enum-typed field lowers to a std::tuple (emit/enum.cpp); anything else
-// stays CP3002.
+// The object-literal expression form: a `$o{...}` value shape lowers to the
+// generated value struct (emitObject above); a literal with an enum-typed field
+// lowers to a std::tuple (emit/enum.cpp); anything else stays CP3002.
 std::string Generator::emitObjectLiteral(const Expr& e) {
-    if (std::string worker =
-            emitWorkerObjectLiteral(static_cast<const ObjectLiteral&>(e));
-        !worker.empty()) {
-        return worker;
-    }
     if (std::string object = emitObject(e); !object.empty()) {
         return object;
     }
@@ -150,6 +167,31 @@ std::string Generator::emitObjectLiteral(const Expr& e) {
     }
     notImplemented(e, "this object literal");
     return "0.0";
+}
+
+// `obj.field = value` over a `$o{...}` value shape: a plain member write on the
+// generated struct. Only the plain assignment is in this wave (a compound write
+// keeps the CP3002 path); an optional receiver is left out for the same reason.
+std::string Generator::emitObjectMemberWrite(const AssignmentExpr& a) {
+    if (!a.target || a.target->kind != NodeKind::MemberExpr ||
+        a.op != AssignOp::Assign || !a.value) {
+        return std::string();
+    }
+    const auto& m = static_cast<const MemberExpr&>(*a.target);
+    if (!m.object || m.property.empty()) return std::string();
+    Type object;
+    bool optional = false;
+    if (!objectReceiver(effectiveType(*m.object), object, optional)) {
+        return std::string();
+    }
+    if (optional) return std::string();
+    std::string structName;
+    std::vector<ObjectField> fields;
+    if (!objectShapeOf(object, structName, fields)) return std::string();
+    std::string field;
+    if (!fieldCppText(fields, m.property, field)) return std::string();
+    return "((" + expr(*m.object) + ")." + mapIdent(m.property) + " = " +
+           expr(*a.value) + ")";
 }
 
 }  // namespace cp3

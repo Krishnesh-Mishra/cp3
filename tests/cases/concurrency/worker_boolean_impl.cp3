@@ -1,0 +1,5 @@
+export default (thread: Thread<number, boolean>) => {
+  thread.on("message", (data) => {
+    thread.postMessage(data > 0);
+  });
+};

@@ -1,4 +1,6 @@
-export default (data: { value: number }): number => {
-  data.value = 99;
-  return data.value;
+export default (thread: Thread<{ value: number }, number>) => {
+  thread.on("message", (data) => {
+    data.value = 99;
+    thread.postMessage(data.value);
+  });
 };

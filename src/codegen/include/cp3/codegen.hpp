@@ -14,8 +14,10 @@
 // =============================================================================
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "cp3/analysis.hpp"
 #include "cp3/ast.hpp"
@@ -29,22 +31,50 @@ struct GeneratedModule {
     std::string source;  // contents of the generated .cpp
 };
 
-// `worker(...)` (spec 13): the entry unit lowers the call onto a worker
-// module's default export. The CLI resolves `import worker from "<local>.cp3"`
-// and hands codegen the module's name and generated-header include path;
-// codegen itself never walks the dependency graph.
-struct WorkerImport {
-    std::string moduleName;  // the worker module's logical name
-    std::string headerPath;  // its generated .hpp, as written in the include
+// One `new Worker(...)` site the entry unit lowers (spec 13, D80). The CLI
+// resolves each static `.cp3` path to a worker unit, generates that unit's
+// TU, and hands codegen the site: the entry names the generated header and
+// spells the channel's direction types. A site's `nodeId` is the `NewExpr` in
+// the entry unit; codegen matches it during its own walk, so the entry's
+// expression lowering never re-resolves a path. Inline sites (`new Worker(
+// (thread: Thread<In, Out>) => ...)`) are synthesized by codegen itself into
+// the entry TU and never carry a header path.
+struct WorkerSite {
+    std::uint32_t nodeId = 0;  // the NewExpr's node id in the entry unit
+    std::string moduleName;    // the worker unit's logical name
+    std::string headerPath;    // its generated .hpp, as written in the include
+    Type in;                   // main -> worker (the Thread<In, ...> type)
+    Type out;                  // worker -> main (the Thread<..., Out> type)
+    bool inlineSite = false;   // the inline arrow form (defined in this unit)
 };
 
 // Per-unit codegen options outside the AST/sema side tables. All-default for
-// every ordinary unit; the CLI sets `worker` for an entry unit that imports a
-// worker and `workerModule` while generating the worker unit itself.
+// every ordinary unit; the CLI fills `workers` for an entry unit that starts
+// workers and sets `workerModule` while generating a worker unit itself.
 struct CodegenOptions {
-    std::optional<WorkerImport> worker;
     bool workerModule = false;
+    std::vector<WorkerSite> workers;
+    // Top-level enums declared in the unit's local imports. Imports are
+    // compile-time, and an enum can travel as a worker payload; each unit
+    // re-emits the names it imported as its own `enum class`, and same-named
+    // enums are structurally compatible at the channel boundary (D80).
+    std::vector<const EnumDeclaration*> importedEnums;
 };
+
+// The typed channel of a worker unit's entry (D80): the `thread: Thread<In, Out>`
+// annotation on its default-export arrow is the single source of truth.
+struct WorkerChannel {
+    Type in;   // main -> worker
+    Type out;  // worker -> main
+};
+
+// Resolves `program`'s default-export arrow's `Thread<In, Out>` annotation via
+// the sema type-node side table. Returns nullopt when the unit has no
+// default-export arrow or its entry lacks a usable annotation (codegen reports
+// CP3905 when it lowers such a unit). Used by the CLI, which needs the same
+// channel types the worker TU's `cp3_default` signature spells.
+std::optional<WorkerChannel> resolveWorkerChannel(const Program& program,
+                                                  const SemaResult& sema);
 
 class CodeGenerator {
 public:

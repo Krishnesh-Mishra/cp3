@@ -309,6 +309,12 @@ void Analyzer::analyzeImport(ImportDeclaration& d) {
         if (!sp) continue;
         const std::string& local = sp->local.empty() ? sp->imported : sp->local;
         declareAmbient(local, sp->span, sp->nodeId);
+        // A named import may also be a type (an exported local enum used as a
+        // worker channel payload). Imports are compile-time and sema does not
+        // fetch the other unit; registering the name as an ambient nominal
+        // type lets `Thread<Color, Color>` resolve. Codegen re-emits imported
+        // enum declarations from the module graph (CodegenOptions).
+        typeNames_.emplace(local, Type::named(TypeKind::Class, local));
     }
 }
 

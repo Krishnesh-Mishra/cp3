@@ -1,0 +1,8 @@
+export default (thread: Thread<number, number>) => {
+  thread.on("message", (data) => {
+    if (data == 1) {
+      throw "boom";
+    }
+    thread.postMessage(data * 2);
+  });
+};

@@ -80,15 +80,15 @@ Reading a captured `let`/`var`/`const` from many closures at once is fine, since
 
 The supported tools are the ones above: read-only sharing, `parallel.reduce` for combining, and the disjoint loop-index write for filling arrays.
 
-## `worker` - isolated threads with message events (decided - handle wave queued, D80)
+## `worker` - isolated threads with message events (decided - D80)
 
-Rather than sharing memory between threads (which would leave two threads free to mutate the same object with no safe way to coordinate, since cp3 exposes no locks or atomics to users), workers avoid shared memory entirely. Each worker runs on its own real OS thread with its own independent event loop ([§14](14-async.md)) - not a separate OS process. A thread is far cheaper to spawn than a process, and the safety a worker provides comes from the compiler's discipline around what's reachable inside it, not from OS-level process isolation. The tradeoff this accepts: a hard crash inside a worker thread can take the whole program down with it, the same as any other unhandled crash - full process-level fault isolation isn't part of what workers provide in beta one. A thrown handler error is not a crash: it is delivered to the other side as an `"error"` event (below).
+Rather than sharing memory between threads (which would leave two threads free to mutate the same object with no safe way to coordinate, since cp3 exposes no locks or atomics to users), workers avoid shared memory entirely. Each worker runs on its own real OS thread with its own independent event loop ([§14](14-async.md)) - not a separate OS process. A thread is far cheaper to spawn than a process, and the safety a worker provides comes from the compiler's discipline around what's reachable inside it, not from OS-level process isolation. The tradeoff this accepts: a hard crash inside a worker thread can take the whole program down with it, the same as any other unhandled crash - full process-level fault isolation isn't part of what workers provide in beta one. A thrown handler error is not a crash: it is delivered to the other side as a catchable `"error"` event (below).
 
-Workers are explicit handles, the JS Web Worker model: `new Worker(path)` starts the thread, messages go both ways with `postMessage` and arrive as events. The worker file's default export is the worker body; it runs once at thread start and receives the worker-side handle.
+Workers are explicit handles, the JS Web Worker model: `new Worker(path)` starts the thread and returns a `Worker<In, Out>` handle on the main side; messages go both ways with `postMessage` and arrive as events. The worker unit's default export is the worker body - it runs once at thread start and receives the worker-side handle - and its one annotation, `thread: Thread<In, Out>` (`In` is main-to-worker, `Out` is worker-to-main), declares the typed channel both sides speak.
 
 ```cp3
-// sum.cp3
-export default (thread) => {
+// sum.cp3 - the worker unit; the entry annotates the worker-side handle
+export default (thread: Thread<{ n: number }, { total: number }>) => {
   thread.on("message", (msg) => {
     thread.postMessage({ total: msg.n * 2 });
   });
@@ -96,25 +96,41 @@ export default (thread) => {
 ```
 
 ```cp3
-// main.cp3
+// main.cp3 - Worker<{ n: number }, { total: number }> is inferred; no annotations here
 const w = new Worker("./sum.cp3");
 w.on("message", (msg) => {
-  console.log(`${msg.total}`);
+  console.log(`${msg.total}`);          // prints 42
+});
+w.on("error", (err) => {
+  console.log("worker error", err);
 });
 w.postMessage({ n: 21 });
 // the main event loop keeps running between messages
 w.terminate();
 ```
 
-- `new Worker(path)` takes a **static string literal** naming a `.cp3` file, resolved at compile time like an import - a computed path is a compile error. Starting a worker is explicit: `new Worker` is the only way, and an ordinary default import of a `.cp3` file stays an ordinary cross-module call (there is no name-based inference).
-- `w.postMessage(v)` / `thread.postMessage(v)` sends a structured-clone **deep copy**; messages queue until the other side attaches a listener and arrive in order per sender. Nothing blocks the main loop: it keeps turning between messages.
-- `w.on("message", listener)` and `w.on("error", listener)` exist on both sides (`w` on the main thread, `thread` inside the worker); multiple listeners may be attached. A thrown error inside a message handler arrives on the other side as an `"error"` event, never as a silent death.
-- `await w.request(v)` is the optional one-shot ask/answer sugar over the same channel (correlation-tagged); it resolves with the next `"message"`, so code that just wants one answer does not manage events by hand.
-- `w.terminate()` stops the worker's loop and frees its thread; pending messages are dropped; it is idempotent.
+- `new Worker(path)` takes a **static string literal** naming a `.cp3` file, resolved at compile time like an import - a computed path is a compile error. Starting a worker is explicit: `new Worker` is the only way, and an ordinary default import of a `.cp3` file stays an ordinary cross-module call. The earlier call shape (`import worker from "./x.cp3"; await worker(v)`) and its binding-name inference are **removed**.
+- `thread: Thread<In, Out>` is the **single source of truth** for the channel: the main side infers `Worker<In, Out>` from the resolved worker unit, so main-side code needs no annotations of its own, and a missing annotation on the worker entry (`export default` or inline arrow) is a compile error.
+- **`void` in one direction makes that direction's send surface a compile error**: a `Thread<In, void>` worker cannot `thread.postMessage`, and `w.postMessage` / `w.request` on a `Worker<void, Out>` cannot send. (`Thread<unknown, unknown>` waits for the runtime unknown carrier, opt-in, later.)
+- **Payloads are ordinary copyable cp3 value types** - numbers, strings, booleans, arrays, records, enums, unions of those - and **copy on send exactly like an assignment copy**. Functions, closures, promises, live handles and unresolved (`unknown`) payload types are compile errors.
+- `w.postMessage(v)` / `thread.postMessage(v)` sends a structured-clone **deep copy**; messages queue until the other side attaches a listener and arrive **FIFO per sender**. Nothing blocks the main loop: it keeps turning between messages.
+- `w.on("message", listener)` / `w.on("error", listener)` exist on both sides (`w` on the main thread, `thread` inside the worker); multiple listeners may be attached. A thrown error inside a message handler arrives on the other side as a catchable `"error"` event, never as a silent death; the throwing side's loop keeps serving.
+- `await w.request(v)` is the optional **one-shot ask/answer sugar** over the same channel (correlation-tagged); it resolves with the next `Out` message, so code that just wants one answer does not manage events by hand. On the worker side the request arrives as an ordinary `"message"` event.
+- `w.terminate()` stops the worker's loop and frees its thread; pending messages are dropped; it is idempotent. Termination is the main side's: `thread` has only `on` and `postMessage`. A live worker keeps the main loop alive until `w.terminate()` (or the worker unit ending), and the process exits when the loop is idle and no handles remain.
+- **The inline arrow compiles through the same worker-unit pipeline as a file** - a synthesized unit with its own module state - and has **no access to enclosing locals**: pass data with messages; a reference to an enclosing binding is a compile error. The file form stays the recommendation for anything with structure; moving from inline to file is moving the body and swapping the arrow for a path.
 
-Whatever crosses a worker boundary is **copied in as a genuine deep copy**, not a shared reference - nothing else is implicitly reachable from inside it. This has to be a real copy rather than a shared handle across the thread boundary: atomic refcounts ([§10](10-memory-management.md)) keep the *counter* safe, but two threads mutating the same object's fields would still be a data race, and cp3 deliberately gives users no locks to prevent one. This mirrors how JS Web Workers already behave (message-passing, not shared memory), so it matches the existing JS mental model.
+```cp3
+// inline form - same worker-unit pipeline; the main side still infers Worker<number, number>
+const w = new Worker((thread: Thread<number, number>) => {
+  thread.on("message", (n) => {
+    thread.postMessage(n * 2);
+  });
+});
+```
 
-Status: the current build still accepts the earlier call-shaped form (`import worker from "./worker.cp3"; await worker(data)`, `worker(...)` returning a `Promise`); the handle surface above is the decided replacement (**D80**), and the handle wave (M2-PLAN) lands it and migrates the worker corpus cases.
+Whatever crosses a worker boundary is a **genuine deep copy** in both directions, not a shared reference - nothing else is implicitly reachable from inside the worker. This has to be a real copy rather than a shared handle across the thread boundary: atomic refcounts ([§10](10-memory-management.md)) keep the *counter* safe, but two threads mutating the same object's fields would still be a data race, and cp3 deliberately gives users no locks to prevent one. This mirrors how JS Web Workers already behave (message-passing, not shared memory), so it matches the existing JS mental model. Module state follows the same isolation: every worker holds its own copy of its unit's module-level bindings.
+
+Status: the handle wave (M2-PLAN) implements this surface (**D80** and its typed-channel addendum); the lead flips this paragraph to landed at landing. The earlier call-shaped form (`import worker from "./x.cp3"; await worker(v)`) is removed, not deprecated.
 
 ## When to use which
 

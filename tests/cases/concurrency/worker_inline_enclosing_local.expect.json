@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3909",
+    "line": 4,
+    "col": 31,
+    "contains": "'base' is module state of the enclosing unit"
+  }
+}

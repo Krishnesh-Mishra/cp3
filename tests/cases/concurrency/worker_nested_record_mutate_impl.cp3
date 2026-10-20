@@ -1,0 +1,6 @@
+export default (thread: Thread<{ inner: { x: number } }, number>) => {
+  thread.on("message", (data) => {
+    data.inner.x = 99;
+    thread.postMessage(data.inner.x);
+  });
+};

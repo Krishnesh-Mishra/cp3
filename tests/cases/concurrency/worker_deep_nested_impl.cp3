@@ -1,0 +1,6 @@
+export default (thread: Thread<{ list: number[] }, number>) => {
+  thread.on("message", (data) => {
+    data.list[0] = 9;
+    thread.postMessage(data.list[0]);
+  });
+};

@@ -1,0 +1,7 @@
+import { Color } from "./worker_shared_enum.cp3";
+
+export default (thread: Thread<Color, Color>) => {
+  thread.on("message", (data) => {
+    thread.postMessage(data);
+  });
+};

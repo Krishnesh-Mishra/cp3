@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3905",
+    "line": 1,
+    "col": 22,
+    "contains": "must default-export an arrow"
+  }
+}

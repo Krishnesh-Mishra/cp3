@@ -1,0 +1,13 @@
+import console from "std/console";
+
+function triple(n: number): number {
+  return n * 3;
+}
+
+const w = new Worker((thread: Thread<number, number>) => {
+  thread.on("message", (data) => {
+    thread.postMessage(triple(data));
+  });
+});
+console.log(`${await w.request(4)}`);
+w.terminate();

@@ -1,53 +1,105 @@
 // =============================================================================
 // src/cli/src/toolchain/worker_module.cpp - implements detail/worker_module.hpp.
 //
-// OWNERSHIP: cli module (src/cli/**). The worker linkage of spec 13:
+// OWNERSHIP: cli module (src/cli/**). The worker-file linkage of spec 13 / D80:
 //
-//   * `findWorkerUnit` resolves the canonical `import worker from "<local>.cp3"`
-//     of the entry unit against the module graph. Two or more canonical imports,
-//     a non-local resolution, a missing unit or a missing AST all resolve to
-//     nullopt (the entry's `worker(...)` then stays a CP3002 skip);
-//   * `programCallsWorker` is a conservative scan for a `worker(...)` call, so
-//     an unused import never pays for a worker TU. It over-approximates (an
-//     unknown node kind reports true) and never under-approximates;
-//   * `generateWorkerModule` runs sema on the worker unit with its own
-//     `SemaResult` and lowers it with `CodegenOptions::workerModule` (only the
-//     default export becomes `cp3_default`).
+//   * resolve each `new Worker("./x.cp3")` literal against the entry file's
+//     folder, appending `.cp3` when the literal omits it (the same rule
+//     `ProgramLoader::loadLocal` applies to imports);
+//   * load the worker unit in a fresh module graph (its own imports, preludes
+//     and folder-relative resolutions), run sema on it with its own
+//     `SemaResult`, and read its `Thread<In, Out>` annotation - the channel's
+//     single source of truth;
+//   * generate the worker TU with `CodegenOptions::workerModule`, and hand the
+//     entry's codegen one `WorkerSite` per call site plus the generated module
+//     for the toolchain to compile and link.
 //
-// The scan splits each direction over two functions (`…MentionsWorker` and
-// `…Rest`), purely to keep every function inside the 80-line budget.
+// Two sites that name the same file share one generated TU (deduped by
+// canonical path) but each keeps its own node id. Unit diagnostics - a missing
+// file, a failed sema, a missing annotation, a codegen error - are collected in
+// `ResolvedWorkers::diagnostics`; the caller renders them and stops when
+// `failed` is set, so a broken worker never silently compiles without its TU.
 // =============================================================================
 #include "detail/worker_module.hpp"
 
+#include <cctype>
 #include <filesystem>
-#include <initializer_list>
+#include <map>
+#include <memory>
 #include <optional>
+#include <set>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
-#include "cp3/sema.hpp"
+#include "cp3/diagnostic_codes.hpp"
+#include "cp3/module.hpp"
 
-#include "detail/util.hpp"
+#include "detail/commands.hpp"
+#include "detail/pipeline.hpp"
 
 namespace cp3::cli {
 
 namespace {
 
-// The one `import worker from "<local>.cp3"` of the unit; nullptr when the unit
-// has none, and also when it has two or more (the target would be ambiguous).
-const ImportDeclaration* canonicalWorkerImport(const Program& program) {
-    const ImportDeclaration* found = nullptr;
-    for (const auto& stmtPtr : program.body) {
-        if (!stmtPtr || stmtPtr->kind != NodeKind::ImportDeclaration) continue;
-        const auto& imp = static_cast<const ImportDeclaration&>(*stmtPtr);
-        if (imp.kind != ImportKind::Default || imp.defaultBinding != "worker") {
-            continue;
-        }
-        if (!endsWith(imp.source, ".cp3")) continue;
-        if (found != nullptr) return nullptr;
-        found = &imp;
+namespace fs = std::filesystem;
+
+bool endsWith(const std::string& value, const std::string& suffix) {
+    return value.size() >= suffix.size() &&
+           value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+fs::path resolveWorkerPath(const fs::path& folder, const std::string& literal) {
+    std::error_code ec;
+    fs::path candidate = folder / fs::path(literal);
+    if (!fs::is_regular_file(candidate, ec) && !endsWith(literal, ".cp3")) {
+        candidate += ".cp3";
     }
-    return found;
+    if (!fs::is_regular_file(candidate, ec)) return {};
+    return candidate;
+}
+
+std::string canonicalKey(const fs::path& path) {
+    std::error_code ec;
+    const fs::path canonical = fs::weakly_canonical(path, ec);
+    return (ec ? path : canonical).generic_string();
+}
+
+std::string sanitizeStem(std::string stem) {
+    for (char& c : stem) {
+        const unsigned char byte = static_cast<unsigned char>(c);
+        if (!(std::isalnum(byte) != 0 || c == '_')) c = '_';
+    }
+    if (stem.empty()) stem = "worker";
+    return stem;
+}
+
+std::string uniqueModuleName(const std::string& literal,
+                             std::set<std::string>& used) {
+    const std::string stem = sanitizeStem(fs::path(literal).stem().string());
+    std::string name = stem;
+    int suffix = 2;
+    while (!used.insert(name).second) {
+        name = stem + "_" + std::to_string(suffix);
+        ++suffix;
+    }
+    return name;
+}
+
+// The enum a top-level statement declares, including `export enum`.
+const EnumDeclaration* topLevelEnum(const Stmt& s) {
+    if (s.kind == NodeKind::EnumDeclaration) {
+        return &static_cast<const EnumDeclaration&>(s);
+    }
+    if (s.kind == NodeKind::ExportDeclaration) {
+        const auto& ed = static_cast<const ExportDeclaration&>(s);
+        if (ed.declaration &&
+            ed.declaration->kind == NodeKind::EnumDeclaration) {
+            return static_cast<const EnumDeclaration*>(ed.declaration.get());
+        }
+    }
+    return nullptr;
 }
 
 // The include path of the worker's generated header as seen from the entry's
@@ -61,303 +113,124 @@ std::string workerHeaderPath(const std::string& entryModuleName,
     return hpp.lexically_relative(from).generic_string();
 }
 
-// --- the conservative `worker(...)` scan ------------------------------------
+// One entry compile's worker resolution state: the dedupe maps, the modules
+// already generated, and the diagnostics collected on the way.
+struct WorkerResolver {
+    SourceManager& sm;
+    bool lineDirectives;
+    CollectingDiagnosticSink& sink;
+    const std::string& entryModuleName;
+    const fs::path& entryFolder;
+    ResolvedWorkers& out;
+    std::unordered_map<std::string, std::string> nameByKey;
+    std::unordered_map<std::string, WorkerChannel> channelByKey;
+    std::set<std::string> usedNames;
 
-bool exprMentionsWorker(const Expr& e);
-bool exprRestMentionsWorker(const Expr& e);
-bool stmtMentionsWorker(const Stmt& s);
-bool stmtRestMentionsWorker(const Stmt& s);
-bool forHeaderMentionsWorker(const NodePtr& left, const ExprPtr& right);
+    std::string resolveSite(const WorkerPathSite& site);
+    bool generateUnit(const fs::path& resolved, const WorkerPathSite& site,
+                      const std::string& key);
+};
 
-bool exprChildMentions(const ExprPtr& p) {
-    return p != nullptr && exprMentionsWorker(*p);
-}
-
-bool stmtChildMentions(const StmtPtr& p) {
-    return p != nullptr && stmtMentionsWorker(*p);
-}
-
-bool anyExprChildMentions(std::initializer_list<const ExprPtr*> children) {
-    for (const ExprPtr* child : children) {
-        if (child != nullptr && exprChildMentions(*child)) return true;
+bool WorkerResolver::generateUnit(const fs::path& resolved,
+                                  const WorkerPathSite& site,
+                                  const std::string& key) {
+    SourceFile* file = nullptr;
+    std::string error;
+    if (!loadEntrySource(resolved.string(), sm, file, error)) {
+        sink.error(diagcode::kModuleNotFound, site.span, error);
+        return false;
     }
-    return false;
+    std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sm, *file, sink);
+    CompilationUnit* unit = graph != nullptr ? graph->entry() : nullptr;
+    if (unit == nullptr || !unit->ast) {
+        sink.error(diagcode::kModuleNotFound, site.span,
+                   "cannot load worker module '" + site.literal + "'");
+        return false;
+    }
+    SemaResult sema;
+    if (!analyzeProgram(*unit->ast, sema, sink)) return false;
+    const std::optional<WorkerChannel> channel =
+        resolveWorkerChannel(*unit->ast, sema);
+    if (!channel) {
+        sink.error(diagcode::kWorkerMissingAnnotation, site.span,
+                   "the worker module '" + site.literal + "' must default-export "
+                   "an arrow whose single parameter is `thread: Thread<In, Out>` "
+                   "(the annotation is the single source of truth for its "
+                   "channel)");
+        return false;
+    }
+    const std::string moduleName = uniqueModuleName(site.literal, usedNames);
+    CodegenOptions options;
+    options.workerModule = true;
+    options.importedEnums = importedEnumsFor(*graph, *unit);
+    GeneratedModule module =
+        generateModule({*unit->ast, sema, moduleName, sink, lineDirectives, options});
+    if (module.source.empty()) return false;  // codegen diagnostics explain
+    nameByKey[key] = moduleName;
+    channelByKey[key] = *channel;
+    out.moduleNames.push_back(moduleName);
+    out.sourceKeys.push_back(key);
+    out.modules.push_back(std::move(module));
+    return true;
 }
 
-bool anyStmtChildMentions(std::initializer_list<const StmtPtr*> children) {
-    for (const StmtPtr* child : children) {
-        if (child != nullptr && stmtChildMentions(*child)) return true;
+std::string WorkerResolver::resolveSite(const WorkerPathSite& site) {
+    const fs::path resolved = resolveWorkerPath(entryFolder, site.literal);
+    if (resolved.empty()) {
+        sink.error(diagcode::kModuleNotFound, site.span,
+                   "cannot find worker module '" + site.literal + "'");
+        return std::string();
     }
-    return false;
-}
-
-bool anyListedExprMentions(const std::vector<ExprPtr>& list) {
-    for (const auto& item : list) {
-        if (item && exprMentionsWorker(*item)) return true;
-    }
-    return false;
-}
-
-// The expression kinds that head ordinary entry code: leaves, the call itself,
-// and the recurse shapes that are not containers.
-bool exprMentionsWorker(const Expr& e) {
-    switch (e.kind) {
-        case NodeKind::Identifier:
-        case NodeKind::NumberLiteral:
-        case NodeKind::StringLiteral:
-        case NodeKind::BoolLiteral:
-        case NodeKind::NullLiteral:
-        case NodeKind::UndefinedLiteral:
-        case NodeKind::ThisExpr:
-            return false;
-        case NodeKind::CallExpr: {
-            const auto& c = static_cast<const CallExpr&>(e);
-            if (c.callee && c.callee->kind == NodeKind::Identifier &&
-                static_cast<const Identifier&>(*c.callee).name == "worker") {
-                return true;
-            }
-            return exprChildMentions(c.callee) || anyListedExprMentions(c.arguments);
-        }
-        case NodeKind::NewExpr: {
-            const auto& n = static_cast<const NewExpr&>(e);
-            return exprChildMentions(n.callee) || anyListedExprMentions(n.arguments);
-        }
-        case NodeKind::UnaryExpr:
-            return exprChildMentions(static_cast<const UnaryExpr&>(e).operand);
-        case NodeKind::UpdateExpr:
-            return exprChildMentions(static_cast<const UpdateExpr&>(e).operand);
-        case NodeKind::AwaitExpr:
-            return exprChildMentions(static_cast<const AwaitExpr&>(e).argument);
-        case NodeKind::SpreadElement:
-            return exprChildMentions(static_cast<const SpreadElement&>(e).argument);
-        case NodeKind::MemberExpr:
-            return exprChildMentions(static_cast<const MemberExpr&>(e).object);
-        default:
-            return exprRestMentionsWorker(e);
-    }
-}
-
-// The container expression kinds: literals of expressions and the operators.
-bool exprRestMentionsWorker(const Expr& e) {
-    switch (e.kind) {
-        case NodeKind::BinaryExpr: {
-            const auto& b = static_cast<const BinaryExpr&>(e);
-            return anyExprChildMentions({&b.left, &b.right});
-        }
-        case NodeKind::LogicalExpr: {
-            const auto& l = static_cast<const LogicalExpr&>(e);
-            return anyExprChildMentions({&l.left, &l.right});
-        }
-        case NodeKind::AssignmentExpr: {
-            const auto& a = static_cast<const AssignmentExpr&>(e);
-            return anyExprChildMentions({&a.target, &a.value});
-        }
-        case NodeKind::ConditionalExpr: {
-            const auto& c = static_cast<const ConditionalExpr&>(e);
-            return anyExprChildMentions({&c.condition, &c.whenTrue, &c.whenFalse});
-        }
-        case NodeKind::IndexExpr: {
-            const auto& ix = static_cast<const IndexExpr&>(e);
-            return anyExprChildMentions({&ix.object, &ix.index});
-        }
-        case NodeKind::RangeExpr: {
-            const auto& r = static_cast<const RangeExpr&>(e);
-            return anyExprChildMentions({&r.start, &r.end});
-        }
-        case NodeKind::ArrayLiteral:
-            return anyListedExprMentions(
-                static_cast<const ArrayLiteral&>(e).elements);
-        case NodeKind::TemplateLiteral:
-            return anyListedExprMentions(
-                static_cast<const TemplateLiteral&>(e).expressions);
-        case NodeKind::ObjectLiteral: {
-            const auto& ol = static_cast<const ObjectLiteral&>(e);
-            for (const auto& propertyPtr : ol.properties) {
-                const ObjectProperty* p = propertyPtr.get();
-                if (p == nullptr) continue;
-                if (p->computed && exprChildMentions(p->key)) return true;
-                if (exprChildMentions(p->value)) return true;
-            }
-            return false;
-        }
-        case NodeKind::ArrowFunction: {
-            const auto& a = static_cast<const ArrowFunction&>(e);
-            if (!a.body) return false;
-            if (a.expressionBody) {
-                return exprMentionsWorker(*static_cast<const Expr*>(a.body.get()));
-            }
-            return stmtMentionsWorker(*static_cast<const Stmt*>(a.body.get()));
-        }
-        default:
-            // Unknown shape (weak link, class expression, ...): assume it
-            // might mention worker(...).
-            return true;
-    }
-}
-
-// The statement kinds that head ordinary entry code: the value-producing and
-// nested-block shapes.
-bool stmtMentionsWorker(const Stmt& s) {
-    switch (s.kind) {
-        case NodeKind::ExpressionStatement:
-            return exprChildMentions(
-                static_cast<const ExpressionStatement&>(s).expression);
-        case NodeKind::VariableDeclaration: {
-            const auto& vd = static_cast<const VariableDeclaration&>(s);
-            for (const auto& d : vd.declarations) {
-                if (d && exprChildMentions(d->init)) return true;
-            }
-            return false;
-        }
-        case NodeKind::BlockStatement: {
-            const auto& b = static_cast<const BlockStatement&>(s);
-            for (const auto& child : b.body) {
-                if (stmtChildMentions(child)) return true;
-            }
-            return false;
-        }
-        case NodeKind::IfStatement: {
-            const auto& is = static_cast<const IfStatement&>(s);
-            return exprChildMentions(is.condition) ||
-                   anyStmtChildMentions({&is.thenBranch, &is.elseBranch});
-        }
-        case NodeKind::ReturnStatement:
-            return exprChildMentions(
-                static_cast<const ReturnStatement&>(s).argument);
-        case NodeKind::ThrowStatement:
-            return exprChildMentions(
-                static_cast<const ThrowStatement&>(s).argument);
-        case NodeKind::TryStatement: {
-            const auto& t = static_cast<const TryStatement&>(s);
-            if (anyStmtChildMentions({&t.tryBlock, &t.finallyBlock})) return true;
-            return t.handler && stmtChildMentions(t.handler->body);
-        }
-        case NodeKind::FunctionDeclaration:
-            return stmtChildMentions(
-                static_cast<const FunctionDeclaration&>(s).body);
-        case NodeKind::ExportDeclaration: {
-            const auto& ed = static_cast<const ExportDeclaration&>(s);
-            return stmtChildMentions(ed.declaration) ||
-                   exprChildMentions(ed.defaultExpr);
-        }
-        case NodeKind::ImportDeclaration:
-        case NodeKind::TypeAliasDeclaration:
-        case NodeKind::InterfaceDeclaration:
-            return false;  // no expression can hide a call in these
-        default:
-            return stmtRestMentionsWorker(s);
-    }
-}
-
-// The loop / switch / label statement kinds.
-bool stmtRestMentionsWorker(const Stmt& s) {
-    switch (s.kind) {
-        case NodeKind::WhileStatement: {
-            const auto& w = static_cast<const WhileStatement&>(s);
-            return exprChildMentions(w.condition) || stmtChildMentions(w.body);
-        }
-        case NodeKind::DoWhileStatement: {
-            const auto& w = static_cast<const DoWhileStatement&>(s);
-            return exprChildMentions(w.condition) || stmtChildMentions(w.body);
-        }
-        case NodeKind::ForStatement: {
-            const auto& f = static_cast<const ForStatement&>(s);
-            if (f.init) {
-                const bool fromInit =
-                    f.init->kind == NodeKind::VariableDeclaration
-                        ? stmtMentionsWorker(static_cast<const Stmt&>(*f.init))
-                        : exprMentionsWorker(static_cast<const Expr&>(*f.init));
-                if (fromInit) return true;
-            }
-            return exprChildMentions(f.condition) ||
-                   exprChildMentions(f.update) || stmtChildMentions(f.body);
-        }
-        case NodeKind::ForOfStatement: {
-            const auto& f = static_cast<const ForOfStatement&>(s);
-            return forHeaderMentionsWorker(f.left, f.right) ||
-                   stmtChildMentions(f.body);
-        }
-        case NodeKind::ForInStatement: {
-            const auto& f = static_cast<const ForInStatement&>(s);
-            return forHeaderMentionsWorker(f.left, f.right) ||
-                   stmtChildMentions(f.body);
-        }
-        case NodeKind::SwitchStatement: {
-            const auto& sw = static_cast<const SwitchStatement&>(s);
-            if (exprChildMentions(sw.discriminant)) return true;
-            for (const auto& casePtr : sw.cases) {
-                if (!casePtr) continue;
-                if (exprChildMentions(casePtr->test)) return true;
-                for (const auto& child : casePtr->statements) {
-                    if (stmtChildMentions(child)) return true;
-                }
-            }
-            return false;
-        }
-        case NodeKind::LabeledStatement:
-            return stmtChildMentions(
-                static_cast<const LabeledStatement&>(s).body);
-        default:
-            // Unknown shape (class / enum declaration, ...): assume it might
-            // mention worker(...).
-            return true;
-    }
-}
-
-// The for-of/for-in header: the left binding when it is a declaration, plus
-// the iterated expression.
-bool forHeaderMentionsWorker(const NodePtr& left, const ExprPtr& right) {
-    if (left && left->kind == NodeKind::VariableDeclaration &&
-        stmtMentionsWorker(static_cast<const Stmt&>(*left))) {
-        return true;
-    }
-    return exprChildMentions(right);
+    const std::string key = canonicalKey(resolved);
+    const auto known = nameByKey.find(key);
+    if (known != nameByKey.end()) return known->second;
+    if (!generateUnit(resolved, site, key)) return std::string();
+    return nameByKey[key];
 }
 
 }  // namespace
 
-std::optional<WorkerUnit> findWorkerUnit(const Program& entry,
-                                         const ModuleGraph& graph,
-                                         const std::string& entryModuleName) {
-    const ImportDeclaration* imp = canonicalWorkerImport(entry);
-    const CompilationUnit* entryUnit = graph.entry();
-    if (imp == nullptr || entryUnit == nullptr) return std::nullopt;
-    for (const ModuleDependency& dep : graph.dependencies()) {
-        if (dep.importer != entryUnit->id || dep.specifier != imp->source) continue;
-        if (dep.resolution != ModuleResolution::Local || !dep.resolved) continue;
-        const CompilationUnit* unit = graph.unit(dep.imported);
-        if (unit == nullptr || !unit->ast) return std::nullopt;
-        WorkerUnit out;
-        out.unit = unit;
-        out.moduleName = fs::path(imp->source).stem().string();
-        out.sourceKey = unit->file != nullptr ? unit->file->path : std::string();
-        out.headerPath = workerHeaderPath(entryModuleName, out.moduleName);
-        return out;
+std::vector<const EnumDeclaration*> importedEnumsFor(const ModuleGraph& graph,
+                                                     const CompilationUnit& unit) {
+    std::vector<const EnumDeclaration*> out;
+    for (const CompilationUnit* other : graph.units()) {
+        if (other == nullptr || other == &unit || !other->ast) continue;
+        for (const auto& stmtPtr : other->ast->body) {
+            if (!stmtPtr) continue;
+            const EnumDeclaration* e = topLevelEnum(*stmtPtr);
+            if (e != nullptr && !e->name.empty()) out.push_back(e);
+        }
     }
-    return std::nullopt;
+    return out;
 }
 
-bool programCallsWorker(const Program& program) {
-    for (const auto& stmtPtr : program.body) {
-        if (stmtPtr && stmtMentionsWorker(*stmtPtr)) return true;
+ResolvedWorkers resolveWorkerUnits(const std::vector<WorkerPathSite>& sites,
+                                   const fs::path& entryFolder,
+                                   const std::string& entryModuleName,
+                                   SourceManager& sm, bool lineDirectives) {
+    ResolvedWorkers out;
+    CollectingDiagnosticSink sink;
+    WorkerResolver resolver{sm,          lineDirectives, sink,
+                            entryModuleName, entryFolder,   out,
+                            {},          {},             {}};
+    for (const WorkerPathSite& site : sites) {
+        const std::string moduleName = resolver.resolveSite(site);
+        if (moduleName.empty()) continue;
+        const fs::path resolved = resolveWorkerPath(entryFolder, site.literal);
+        const auto channel = resolver.channelByKey.find(canonicalKey(resolved));
+        if (channel == resolver.channelByKey.end()) continue;  // unreachable
+        WorkerSite workerSite;
+        workerSite.nodeId = site.nodeId;
+        workerSite.moduleName = moduleName;
+        workerSite.headerPath = workerHeaderPath(entryModuleName, moduleName);
+        workerSite.in = channel->second.in;
+        workerSite.out = channel->second.out;
+        workerSite.inlineSite = false;
+        out.sites.push_back(std::move(workerSite));
     }
-    return false;
-}
-
-GeneratedModule generateWorkerModule(const WorkerUnit& worker, bool lineDirectives,
-                                     DiagnosticSink& sink) {
-    if (worker.unit == nullptr || !worker.unit->ast) return GeneratedModule{};
-    SemaResult sema;
-    SemanticAnalyzer analyzer(sink);
-    if (!analyzer.analyze(*worker.unit->ast, sema)) {
-        // The worker unit does not analyze cleanly: leave the entry's
-        // `worker(...)` a skip rather than compiling a partial worker.
-        return GeneratedModule{};
-    }
-    CodegenOptions options;
-    options.workerModule = true;
-    CodeGenerator codegen(sink, lineDirectives);
-    return codegen.generate(*worker.unit->ast, sema, worker.moduleName, options);
+    out.diagnostics = sink.diagnostics();
+    out.failed = sink.hasErrors();
+    return out;
 }
 
 }  // namespace cp3::cli

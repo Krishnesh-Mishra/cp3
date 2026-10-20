@@ -1,0 +1,9 @@
+import console from "std/console";
+
+const a = new Worker("./worker_counter_impl.cp3");
+const b = new Worker("./worker_counter_impl.cp3");
+console.log(`${await a.request(0)}`);
+console.log(`${await a.request(0)}`);
+console.log(`${await b.request(0)}`);
+a.terminate();
+b.terminate();

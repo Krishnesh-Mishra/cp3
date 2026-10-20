@@ -1,0 +1,9 @@
+import console from "std/console";
+
+function innerSum(): number {
+  let inner = parallel.run(() => 10, () => 20);
+  return inner[0] + inner[1];
+}
+
+let outer = parallel.run(() => innerSum(), () => 3);
+console.log(`${outer[0] + outer[1]}`);

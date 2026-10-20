@@ -1,0 +1,2 @@
+const w = new Worker("./worker_void_thread_send_impl.cp3");
+w.terminate();

@@ -1,0 +1,7 @@
+const base = 10;
+const w = new Worker((thread: Thread<number, number>) => {
+  thread.on("message", (data) => {
+    thread.postMessage(data + base);
+  });
+});
+w.terminate();

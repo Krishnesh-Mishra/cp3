@@ -114,13 +114,16 @@ protected:
     bool needsUnion_ = false;         // primitive unions -> cp3/core/union.hpp
     bool needsObject_ = false;        // object value shapes -> the object helper block
     bool needsParallel_ = false;      // parallel.* -> cp3/parallel/parallel.hpp
-    bool needsWorker_ = false;        // worker(...) -> cp3/parallel/worker.hpp
+    bool needsWorker_ = false;        // new Worker(...) -> cp3/parallel/worker.hpp
     bool workerModule_ = false;       // this unit IS the worker module
-    // Worker-object pre-scan state: the object-literal node ids handed to
-    // `worker(...)` (or bound to a never-assigned binding), and the sema object
-    // labels that lowered to a `std::tuple` (the read/write hooks key on these).
-    std::unordered_set<std::uint32_t> workerLiterals_;
-    std::unordered_set<std::string> workerObjectLabels_;
+    // The entry unit's resolved worker sites, keyed by the `NewExpr` node id:
+    // the file sites from `options.workers` plus the inline sites the pre-scan
+    // synthesizes (src/emit/worker.cpp). `inlineWorkerOrder_` keeps the inline
+    // entry functions' emission order deterministic.
+    std::unordered_map<std::uint32_t, WorkerSite> workerSites_;
+    std::vector<std::uint32_t> inlineWorkerOrder_;
+    // The inline form's entry arrow per site (needed to emit its function).
+    std::unordered_map<std::uint32_t, const ArrowFunction*> inlineWorkerArrows_;
     bool topLevelAwait_ = false;   // an `await` appeared at top level
     bool inAsyncBody_ = false;     // current function body lowers to a coroutine
     int nestingDepth_ = 0;         // function + arrow nesting (0 == top level)

@@ -1,196 +1,257 @@
 // =============================================================================
-// cp3/parallel/worker.hpp - `worker(...)`: an isolated, message-passing task on its own
-// OS thread, exposing a `Promise` (docs/language-spec/13-concurrency-...).
+// cp3/parallel/worker.hpp - `new Worker(...)`: an isolated OS thread with a
+// typed, message-passing channel (docs/language-spec/13-concurrency-...,
+// DECISIONS D80 + addendum).
 //
 // OWNERSHIP: runtime module. Part of the generated-code ABI.
 //
 // -----------------------------------------------------------------------------
 // CODEGEN CONTRACT
 // -----------------------------------------------------------------------------
-//   cp3 `worker(data)` where `import worker from "./x.cp3"`
-//        -> `::cp3::runtime::worker(data, xDefaultExport)`
-//     `xDefaultExport` may be a function pointer or a captureless lambda; it is
-//     the module's default export. If the default export is `async`, it returns
-//     a `Promise<T>` and `worker` unwraps it, so the cp3 result type is `T`
-//     either way.
+//   cp3 `new Worker("./x.cp3")` / `new Worker((thread: Thread<In, Out>) => ...)`
+//        -> `::cp3::runtime::startWorker<In, Out>(&::<worker-unit>::cp3_default)`
+//     which yields a `WorkerHandle<In, Out>`. `In` is main-to-worker, `Out` is
+//     worker-to-main, exactly as the worker entry's `Thread<In, Out>` annotation
+//     spells them.
 //
-//   The argument is deep-copied across the boundary by `cp3::runtime::clone`
-//   (see cp3/core/value.hpp), so codegen MUST specialize `Cloner<T>` for every
-//   object/class type that can be passed to (or returned from) a worker.
+//   Main side (`w`):
+//     w.postMessage(v)   -> w.postMessage(v)         (deep copy in)
+//     w.on("message", l) -> w.onMessage(l)           (l: (const Out&) -> void)
+//     w.on("error", l)   -> w.onError(l)             (l: (const Thrown&) -> void)
+//     await w.request(v) -> ::cp3::runtime::awaitValue(w.request(v))
+//                           (`Promise<Out>`; resolves with the next Out message)
+//     w.terminate()      -> w.terminate()
+//
+//   Worker side (`thread`):
+//     thread.on("message", l) -> thread.onMessage(l) (l: (const In&) -> void)
+//     thread.on("error", l)   -> thread.onError(l)
+//     thread.postMessage(v)   -> thread.postMessage(v)  (deep copy out)
+//
+//   The worker unit's default export is compiled as
+//     `void cp3_default(::cp3::runtime::ThreadHandle<In, Out>& thread)`.
+//
+//   Every payload crosses the boundary through `cp3::runtime::clone` (see
+//   cp3/core/value.hpp), the same deep copy an assignment performs, so codegen
+//   MUST specialize `Cloner<T>` for every object/class type that can be sent
+//   or received - exactly as the old worker surface required.
 //
 // -----------------------------------------------------------------------------
-// SEMANTICS (spec §13)
+// SEMANTICS (spec §13, D80)
 // -----------------------------------------------------------------------------
-//   * one real OS thread per call - never a process;
-//   * nothing is implicitly reachable inside it: the argument is a genuine deep
-//     copy in, and the result is deep-copied out;
-//   * the worker thread runs its *own* independent event loop (cp3/async/eventloop.hpp
-//     `currentLoop()` is per-thread), so an async worker body works;
-//   * the returned `Promise` resolves with the body's value, or rejects with the
-//     value the body threw (a plain `try`/`catch` around `await worker(...)`
-//     catches it - DECISIONS D36);
-//   * a crash inside the worker thread still takes the process down, exactly as
-//     the spec allows for beta one.
-//
-// The thread is detached once it has handed its result back; the caller's loop
-// is woken through `EventLoop::postFromThread`.
+//   * `new Worker` starts one real OS thread that runs a *synthesized worker
+//     unit*: the entry function runs once, then that thread's own event loop
+//     (`currentLoop()` is per-thread) serves its messages until the main side
+//     terminates it.
+//   * Nothing is shared: messages are genuine deep copies in both directions.
+//     Delivery is FIFO per sender and a message queues until the receiving
+//     side attaches a listener (attaching later still receives it).
+//   * A thrown error inside a message handler is delivered to the other side as
+//     a catchable `"error"` event; the throwing side's loop keeps serving. A
+//     throw at worker start-up is an `"error"` event to the main side and the
+//     thread ends.
+//   * A live worker keeps the main loop alive (an outstanding worker IS pending
+//     work, eventloop.hpp). `terminate()` stops the worker's loop, frees the
+//     thread, drops queued messages and pending `request`s, and is idempotent.
+//     The process then exits once the main loop is idle and no live handles
+//     remain. A hard crash still takes the process down, per the D80 ruling.
+//   * Nothing blocks the main loop: it keeps turning between messages, so
+//     timers stay live while a worker answers.
 // =============================================================================
 #pragma once
 
-#include <exception>
+#include <cstddef>
+#include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
-#include <string>
+#include <mutex>
 #include <thread>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "cp3/async/eventloop.hpp"
 #include "cp3/async/promise.hpp"
+#include "cp3/core/error.hpp"
 #include "cp3/core/runtime.hpp"
 #include "cp3/core/value.hpp"
 
+#include "cp3/parallel/worker_channel.hpp"
+
 namespace cp3::runtime {
 
-// The exit code used when a worker failure cannot cross the boundary as a
-// rejection. DECISIONS D36 defers the exact value; single place to change.
-inline constexpr int kWorkerFailureExitCode = kFailureExitCode;
 
-// Named spelling of the structured-clone primitive (same as `clone`).
-template <class T>
-T structuredClone(const T& value) {
-    return clone(value);
-}
+// ---------------------------------------------------------------------------
+// ThreadHandle<In, Out> - the worker side (`thread` in the entry's annotation).
+//
+// The worker-side surface is receive-only plus `postMessage`: termination is
+// the main side's (D80).
+// ---------------------------------------------------------------------------
+template <class In, class Out>
+class ThreadHandle {
+public:
+    using MessageListener = typename ChannelPort<In>::MessageListener;
+    using ErrorListener = typename ChannelPort<In>::ErrorListener;
 
+    explicit ThreadHandle(std::shared_ptr<WorkerChannel<In, Out>> channel)
+        : channel_(std::move(channel)) {}
+
+    ThreadHandle(const ThreadHandle&) = delete;
+    ThreadHandle& operator=(const ThreadHandle&) = delete;
+
+    void onMessage(MessageListener listener) {
+        channel_->toWorker().onMessage(std::move(listener));
+    }
+
+    void onError(ErrorListener listener) {
+        channel_->toWorker().onError(std::move(listener));
+    }
+
+    template <class U = Out, std::enable_if_t<!std::is_void_v<U>, int> = 0>
+    void postMessage(const U& value) {
+        channel_->toMain().send(value);
+    }
+
+private:
+    std::shared_ptr<WorkerChannel<In, Out>> channel_;
+};
+
+// ---------------------------------------------------------------------------
+// WorkerHandle<In, Out> - the main side (`w`).
+//
+// Owning handle: destructing it terminates the worker (an unreferenced active
+// worker would otherwise keep the process alive forever). Movable, not
+// copyable.
+// ---------------------------------------------------------------------------
+template <class In, class Out>
+class WorkerHandle {
+public:
+    using MessageListener = typename ChannelPort<Out>::MessageListener;
+    using ErrorListener = typename ChannelPort<Out>::ErrorListener;
+    using RequestPromise = typename ChannelPort<Out>::RequestPromise;
+
+    WorkerHandle(std::shared_ptr<WorkerChannel<In, Out>> channel, std::thread thread)
+        : channel_(std::move(channel)), thread_(std::move(thread)) {}
+
+    ~WorkerHandle() { terminate(); }
+
+    WorkerHandle(WorkerHandle&& other) noexcept
+        : channel_(std::move(other.channel_)), thread_(std::move(other.thread_)) {}
+
+    WorkerHandle& operator=(WorkerHandle&& other) noexcept {
+        if (this != &other) {
+            terminate();
+            channel_ = std::move(other.channel_);
+            thread_ = std::move(other.thread_);
+        }
+        return *this;
+    }
+
+    WorkerHandle(const WorkerHandle&) = delete;
+    WorkerHandle& operator=(const WorkerHandle&) = delete;
+
+    // Fire-and-forget structured clone to the worker.
+    template <class U = In, std::enable_if_t<!std::is_void_v<U>, int> = 0>
+    void postMessage(const U& value) {
+        channel_->toWorker().send(value);
+    }
+
+    void onMessage(MessageListener listener) {
+        channel_->toMain().onMessage(std::move(listener));
+    }
+
+    void onError(ErrorListener listener) {
+        channel_->toMain().onError(std::move(listener));
+    }
+
+    // One-shot ask/answer: resolves with the next Out message.
+    template <class U = In, std::enable_if_t<!std::is_void_v<U>, int> = 0>
+    RequestPromise request(const U& value) {
+        RequestPromise promise = RequestPromise::pending();
+        channel_->toMain().addRequest(promise);
+        channel_->toWorker().send(value);
+        return promise;
+    }
+
+    // Stop the worker loop, free the thread. Idempotent.
+    void terminate() noexcept {
+        if (channel_) {
+            channel_->requestStop();
+            channel_.reset();
+        }
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+    }
+
+    bool terminated() const noexcept { return !channel_; }
+
+private:
+    std::shared_ptr<WorkerChannel<In, Out>> channel_;
+    std::thread thread_;
+};
+
+// ---------------------------------------------------------------------------
+// startWorker - spawn the worker thread and return its main-side handle.
+//
+// `entry` is the worker unit's default export (a function pointer). It runs
+// once on the new thread; the thread then serves the channel's loop until the
+// main side terminates it. The main loop is held open (retainExternal) while
+// the thread lives, and released exactly once when the thread exits - including
+// the start-up-throw path, which reports the error to the main side first.
+// ---------------------------------------------------------------------------
 namespace detail {
 
-// Run the worker thread's own loop until `promise` settles, then return the
-// value (or `void`), throwing the rejection reason on failure.
-template <class R>
-R settleWorkerBody(Promise<R> promise) {
-    EventLoop& loop = currentLoop();  // this worker thread's own loop
-    if (!promise.settled()) {
-        // Observe the promise so a rejection doesn't count as unhandled on this
-        // thread, then drain this thread's loop.
-        addFulfilledContinuation<R>(promise.sharedState(), []() {});
-        addRejectedContinuation<R>(promise.sharedState(), []() {});
-        loop.run();
-    }
-    if (promise.rejected()) {
-        throw promise.reason();
-    }
-    if (!promise.settled()) {
-        throw Thrown::make(std::string("worker: async body never settled"));
-    }
-    if constexpr (std::is_void_v<R>) {
-        return;
-    } else {
-        return promise.value();
-    }
-}
+template <class In, class Out>
+void workerThreadMain(const std::shared_ptr<WorkerChannel<In, Out>>& channel,
+                      void (*entry)(ThreadHandle<In, Out>&), EventLoop& mainLoop) {
+    struct MainLoopRelease {
+        EventLoop* loop;
+        ~MainLoopRelease() { loop->releaseExternal(); }
+    } release{&mainLoop};
 
-// Call the worker body on the worker thread, then drain that thread's own loop.
-// Used when the body is synchronous.
-template <class R, class Fn, class Arg>
-R runSyncWorkerBody(Fn& fn, Arg&& argument) {
-    if constexpr (std::is_void_v<R>) {
-        fn(std::forward<Arg>(argument));
-        currentLoop().run();
-        return;
-    } else {
-        R out = fn(std::forward<Arg>(argument));
-        currentLoop().run();
-        return out;
+    EventLoop& workerLoop = currentLoop();
+    if (!channel->bindWorker(workerLoop)) {
+        return;  // terminate() won the race: never started
     }
-}
+    struct WorkerLoopRelease {
+        WorkerChannel<In, Out>* channel;
+        ~WorkerLoopRelease() { channel->workerExiting(); }
+    } workerRelease{channel.get()};
 
-// Run the worker body and produce its result, async or not.
-template <class R, class Fn, class Arg>
-R runWorkerBody(Fn& fn, Arg&& argument) {
-    using Raw = std::invoke_result_t<Fn, Arg>;
-    if constexpr (is_promise_v<Raw>) {
-        Promise<R> inner = fn(std::forward<Arg>(argument));
-        return settleWorkerBody<R>(inner);
-    } else {
-        return runSyncWorkerBody<R>(fn, std::forward<Arg>(argument));
-    }
-}
-
-// Hand a fulfilled result back to the caller's loop (deep-copied out).
-template <class R>
-void postWorkerResult(EventLoop& callerLoop, Promise<R> result, R value) {
-    R copied = clone<R>(value);
-    callerLoop.postFromThread([result, copied = std::move(copied)]() mutable {
-        result.fulfill(copied);
-    });
-}
-
-inline void postWorkerResult(EventLoop& callerLoop, Promise<void> result) {
-    callerLoop.postFromThread([result]() mutable { result.fulfill(); });
-}
-
-// Hand a rejection back to the caller's loop (deep-copied out).
-template <class R>
-void postWorkerRejection(EventLoop& callerLoop, Promise<R> result, const Thrown& reason) {
-    Thrown copied = reason.deepCopy();
-    callerLoop.postFromThread([result, copied]() mutable { result.rejectWith(copied); });
-}
-
-// The whole worker-thread body: run, then post the outcome to the caller loop.
-template <class R, class Fn, class Arg>
-void workerThreadMain(EventLoop& callerLoop, Promise<R> result, Fn& fn, Arg& argument) {
+    ThreadHandle<In, Out> thread(channel);
     try {
-        if constexpr (std::is_void_v<R>) {
-            runWorkerBody<void>(fn, std::move(argument));
-            postWorkerResult(callerLoop, result);
-        } else {
-            postWorkerResult(callerLoop, result, runWorkerBody<R>(fn, std::move(argument)));
-        }
-    } catch (const Thrown& thrown) {
-        postWorkerRejection(callerLoop, result, thrown);
-    } catch (const std::exception& ex) {
-        postWorkerRejection(callerLoop, result, Thrown::make(std::string(ex.what())));
+        entry(thread);
     } catch (...) {
-        postWorkerRejection(callerLoop, result, Thrown::fromCurrentException());
+        // Start-up throw: an "error" event to the main side, then the thread
+        // ends (D80). A rejected/observed promise is not involved here.
+        channel->toMain().sendError(Thrown::fromCurrentException());
+        return;
     }
+    workerLoop.run();
 }
 
 }  // namespace detail
 
-// ---------------------------------------------------------------------------
-// worker(arg, body)
-// ---------------------------------------------------------------------------
-template <class A, class F>
-auto worker(A&& arg, F&& body)
-    -> Promise<detail::unwrap_t<std::invoke_result_t<std::remove_cvref_t<F>,
-                                                    std::remove_cvref_t<A>>>> {
-    using Arg = std::remove_cvref_t<A>;
-    using Fn = std::remove_cvref_t<F>;
-    using Raw = std::invoke_result_t<Fn, Arg>;
-    using R = detail::unwrap_t<Raw>;
+template <class In, class Out>
+WorkerHandle<In, Out> startWorker(void (*entry)(ThreadHandle<In, Out>&)) {
+    EventLoop& mainLoop = currentLoop();
+    auto channel = std::make_shared<WorkerChannel<In, Out>>();
+    channel->bindMain(mainLoop);
 
-    EventLoop& callerLoop = currentLoop();
-    Promise<R> result = Promise<R>::pending();
+    // A live worker keeps the main loop alive until the thread exits.
+    mainLoop.retainExternal();
 
-    // Deep copy IN on the caller thread: the worker owns its own graph.
-    Arg argument = clone<Arg>(arg);
-    Fn fn = std::forward<F>(body);
-
-    // Hold the caller's loop open until the worker has posted its result; the
-    // loop would otherwise drain and the process exit before the result arrives.
-    callerLoop.retainExternal();
+    std::thread thread;
     try {
-        std::thread thread([argument = std::move(argument), fn = std::move(fn), &callerLoop,
-                            result]() mutable {
-            detail::workerThreadMain<R>(callerLoop, result, fn, argument);
-            callerLoop.releaseExternal();
+        thread = std::thread([channel, entry, &mainLoop]() {
+            detail::workerThreadMain<In, Out>(channel, entry, mainLoop);
         });
-        thread.detach();
     } catch (...) {
-        callerLoop.releaseExternal();
+        mainLoop.releaseExternal();
         throw;
     }
-    return result;
+    return WorkerHandle<In, Out>(std::move(channel), std::move(thread));
 }
 
 }  // namespace cp3::runtime

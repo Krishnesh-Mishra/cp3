@@ -100,10 +100,10 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
         if (a.target->kind == NodeKind::IndexExpr) {
             if (std::string w = emitFamilyIndexWrite(a); !w.empty()) return w;
         }
-        // A worker object's field write (`obj.data = 1`): a `std::get<i>`
-        // assignment, gated on the worker labels (src/emit/worker.cpp).
+        // A `$o{...}` record's field write (`obj.data = 1`): a plain member
+        // assignment on the generated value struct (src/emit/objects.cpp).
         if (a.target->kind == NodeKind::MemberExpr) {
-            if (std::string w = emitWorkerMemberWrite(a); !w.empty()) return w;
+            if (std::string w = emitObjectMemberWrite(a); !w.empty()) return w;
         }
         notImplemented(a, "assignment to a non-identifier target");
         return "0.0";

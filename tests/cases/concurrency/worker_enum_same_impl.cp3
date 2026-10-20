@@ -1,0 +1,7 @@
+enum Mode { A, B }
+
+export default (thread: Thread<Mode, Mode>) => {
+  thread.on("message", (data) => {
+    thread.postMessage(data);
+  });
+};

@@ -55,6 +55,7 @@
 #include "detail/enums.h"
 #include "detail/generator_state.h"
 #include "detail/type_map.h"
+#include "detail/worker.h"
 
 namespace cp3 {
 
@@ -93,11 +94,9 @@ private:
     void notImplemented(const Node& node, const std::string& what);
 
     // --- source mapping (support/line_map.cpp) --------------------------------
-    // `emitLineDirective` appends `#line <line> "<source>"` for `node`'s span
-    // so DWARF (and gdb) see the .cp3 file; a no-op unless mapping is on.
+    // `#line <line> "<source>"` for `node` (DWARF/gdb); no-op without mapping.
     void emitLineDirective(const Node& node, std::string& out);
-    // `emitMappedRaw` pins each physical line of a raw structural chunk (the
-    // int64 wrapper prologue) to `node`; verbatim when mapping is off.
+    // Pin each physical line of a raw structural chunk (int64 prologue).
     void emitMappedRaw(const Node& node, const std::string& raw, std::string& out);
 
     // --- declarations (emit_decl.cpp) ----------------------------------------
@@ -109,9 +108,7 @@ private:
     std::string plainBody(const FunctionDeclaration& fd, const std::string& ret);
     void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
                        std::string& mainBody);
-    // Reports a module-variable type M1 cannot represent (`number | string`,
-    // an object / array / class type, ...): the unit stays "not implemented"
-    // instead of being quietly mis-typed (same contract as local declarations).
+    // A module-variable type M1 cannot represent stays "not implemented".
     void reportModuleVarType(const VariableDeclarator& d);
     void emitModuleVarNoInit(const detail::CppInfo& ci, const std::string& name,
                              const std::string& cv, std::string& decls);
@@ -131,11 +128,11 @@ private:
     std::optional<Type> lookup(const std::string& name) const;
     std::optional<Type> bindingType(const VariableDeclarator& d) const;
     std::optional<Type> resolvedBindingType(const VariableDeclarator& d) const;
-    // A type annotation -> a cp3 Type (detail::typeFromTypeNode), with every
-    // Class part named like a collected enum rewritten to TypeKind::Enum.
+    // Annotation -> cp3 Type, with collected-enum Class parts rewritten.
     std::optional<Type> typeOfNode(const TypeNode& tn) const;
     void rewriteEnumTypes(Type& t) const;
     Type effectiveType(const Expr& e) const;
+    Type memberReadType(const MemberExpr& m) const;
     Type inferBinary(const BinaryExpr& b) const;
     Type inferLogical(const LogicalExpr& l) const;
     Type inferUnary(const UnaryExpr& u) const;
@@ -149,9 +146,7 @@ private:
     std::string emitTemplate(const TemplateLiteral& tl);
     std::string tsCall(const Expr& e);
     std::string cond(const Expr& e);
-    // A whole array in a formatter or truthiness test pulls the arr family
-    // block (D69), even when this unit never spells the C++ type itself (a
-    // cross-module call's result, say).
+    // A whole array in a formatter/truthiness test pulls the arr family (D69).
     void noteFamilyUse(const Expr& e);
     std::string emitBinary(const BinaryExpr& b);
     std::string emitEquality(const BinaryExpr& b, const detail::CppInfo& L,
@@ -171,21 +166,16 @@ private:
 
     // --- calls (emit/call.cpp) -----------------------------------------------
     std::string emitCall(const CallExpr& c);
-    // The documented global numeric parsers (`parseInt`/`parseFloat`):
-    // argument coercion plus the runtime helper (STDLIB section 3).
+    // Documented global numeric parsers (`parseInt`/`parseFloat`).
     std::string emitParseBuiltin(const CallExpr& c, const std::string& name);
-    // Lowers a user-function call's argument list, applying the callee's
-    // optional/default parameters to arguments that are explicit `undefined`.
+    // User call arguments, applying optional/default parameters to `undefined`.
     std::vector<std::string> emitCallArgs(const CallExpr& c,
                                           const FunctionDeclaration* decl);
     bool isConsoleMember(const CallExpr& c) const;
 
-    // --- parallel.* / worker(...) (emit/parallel.cpp, emit/worker.cpp) --------
-    // `parallel` and `worker` are ambient builtins (spec §13); each entry point
-    // lowers onto cp3/parallel/** and reports CP3002 for anything outside the
-    // documented shapes. `parallelCallType` types the calls sema leaves
-    // ambient (the reduce accumulator's type, the `parallel.run` result
-    // marker); `effectiveType`/`bindingType` consult it first.
+    // --- parallel.* (emit/parallel.cpp) --------------------------------------
+    // Ambient builtin (spec 13): documented shapes lower onto cp3/parallel/**,
+    // everything else reports CP3002. `parallelCallType` types ambient results.
     std::optional<Type> parallelCallType(const CallExpr& c) const;
     bool parallelRange(const Expr& range, std::string& begin, std::string& end);
     bool parallelClosureShape(const ArrowFunction& a, std::size_t count) const;
@@ -196,22 +186,50 @@ private:
     std::string emitParallelClosure(
         const ArrowFunction& a, const std::vector<Type>& paramTypes,
         const std::vector<std::string>& contextParams);
-    // `worker(...)`: the entry-unit call and its argument forms (a primitive, a
-    // worker-marked object binding, a marked object literal -> a tuple), the
-    // worker-object pre-scan, and the worker unit's own lowering
-    // (`runWorkerModule` emits only its default export as `cp3_default`).
-    std::string emitWorkerCall(const CallExpr& c);
-    std::string workerArgText(const Expr& arg);
-    std::string emitWorkerObjectLiteral(const ObjectLiteral& ol);
-    std::string emitWorkerMemberWrite(const AssignmentExpr& a);
-    void collectWorkerObjects(const Program& program);
-    void registerWorkerObject(const Type& objType, std::vector<std::string> names);
-    std::string workerParamText(const Parameter& p, const ArrowFunction& arrow,
-                                std::size_t index);
-    std::string workerObjectParamText(const ObjectType& ot, const std::string& name,
-                                      const std::optional<Type>& pt);
-    std::string workerReturnType(const ArrowFunction& arrow);
-    std::string workerBody(const ArrowFunction& arrow, const std::string& ret);
+
+    // --- worker handles (emit/worker.cpp, emit/worker_scan.cpp) --------------
+    // File and inline `new Worker` sites resolve to a worker unit (D80).
+    void collectWorkerSites(const Program& program);
+    void emitInlineWorkerEntries(std::string& decls, std::string& defs);
+    std::string emitWorkerNew(const NewExpr& n);
+    std::string emitWorkerHandleCall(const CallExpr& c, const MemberExpr& m);
+    std::string workerOnText(const CallExpr& c, const std::string& recv,
+                             const Type& direction, const std::string& ownerNS,
+                             bool workerSide);
+    std::string workerSendText(const CallExpr& c, const std::string& recv,
+                               const WorkerChannel& channel,
+                               const std::string& ownerNS,
+                               detail::WorkerSendSurface surface);
+    std::string workerTerminateText(const CallExpr& c, const std::string& recv);
+    std::string workerListenerText(const ArrowFunction& arrow, const Type& direction,
+                                   const std::string& ownerNS, bool error);
+    std::string workerListenerLambda(const ArrowFunction& arrow,
+                                     const std::string& paramType, const Type& bound);
+    std::string workerPayloadText(const Type& t, const std::string& ownerNS) const;
+    std::optional<Type> workerSendArgumentType(const Expr& arg) const;
+    bool workerPayloadAccepts(const Type& expected, const Type& actual,
+                              const std::string& ownerNS) const;
+    std::string workerPayloadConversion(const Type& expected, const std::string& expectedCpp,
+                                        const Type& actual, const std::string& text) const;
+    std::string workerObjectConversion(const Type& expected, const Type& actual,
+                                       const std::string& text, const std::string& ownerNS) const;
+    std::string objectLiteralForType(const ObjectLiteral& lit,
+                                     const Type& declared);
+    std::optional<Type> workerCallType(const CallExpr& c) const;
+    std::optional<Type> workerBindingFor(const NewExpr& n) const;
+    const WorkerSite* workerSiteAt(std::uint32_t nodeId) const;
+    std::size_t workerInlineIndex(std::uint32_t nodeId) const;
+    void emitWorkerEntryBody(const ArrowFunction& arrow, const Type& in,
+                             const Type& outType, std::string& out);
+    void reportWorkerCode(const Node& node, const std::string& code,
+                          const std::string& message);
+    // The worker side: lowers a worker unit's full module (imports, functions,
+    // enums, `thread_local` module vars, and its default-export arrow as
+    // `void cp3_default(ThreadHandle<In, Out>& thread)`).
+    void emitWorkerTopLevel(const Stmt& s, std::string& decls,
+                            std::string& defs, std::string& prologue);
+    void emitWorkerModuleVar(const VariableDeclaration& vd, std::string& defs,
+                             std::string& prologue);
     GeneratedModule runWorkerModule(const Program& program);
 
     // --- std/console lowering (src/std/console/codegen.cpp) ------------------
@@ -277,6 +295,7 @@ private:
     // --- object value shapes (emit/objects.cpp) -------------------------------
     std::string emitObject(const Expr& e);         // `o.a` / `o?.a` reads
     std::string emitObjectLiteral(const Expr& e);  // `{...}` literal values
+    std::string emitObjectMemberWrite(const AssignmentExpr& a);  // `o.a = v`
 
     // --- std/collections (src/std/collections/codegen.cpp) --------------------
     // `new Map<K, V>()` / `new Set<T>()`, the member calls and the `size` /
@@ -425,27 +444,28 @@ private:
     std::string intLogical(const LogicalExpr& l);
     // `a % b`: `modConst<K>` for an integral literal divisor, else `mod`.
     std::string modCall(const std::string& lhs, const Expr& rhs, const std::string& rhsText);
-    // The C++ type source of a local binding (declared, else inferred from the
-    // initializer) and whether int mode lowers it to std::int64_t.
+    // The C++ type of a local binding (declared, else inferred) + int-mode flag.
     detail::CppInfo bindingCpp(const VariableDeclarator& d) const;
     bool intBinding(const detail::CppInfo& ci) const;
     void declareBinding(const VariableDeclarator& d);
-    // A fresh binding: a name with a deferred bound check may not be shadowed
-    // (the marks are keyed by name), so shadowing fails the attempt.
+    // A fresh binding: a deferred-bound-check name may not be shadowed.
     void intNewBinding(const std::string& name);
     // `name` is read only inside `return`s, so its bound check may be deferred.
     bool intDeferable(const std::string& name) const;
     // The text of `a` for the identifier target `id` (checked or deferred).
     std::string intAssignText(const AssignmentExpr& a, const Identifier& id);
-    // The value of a deferred assignment: `x +/- <small literal>`, or empty.
-    std::string intAssignValue(const Expr& e);
-    // An operand of a raw `+`/`-`: a deferred read stays unchecked.
-    std::string intRawOperand(const Expr& e);
+    std::string intAssignValue(const Expr& e);  // `x +/- <small literal>`
+    std::string intRawOperand(const Expr& e);   // a raw `+`/`-` operand
 
     // --- assembly (code_generator.cpp) ---------------------------------------
-    std::string buildHeader(const std::string& decls) const;
+    std::string buildHeader(const std::string& decls,
+                            const std::string& globals) const;
+    std::string sourceIncludes() const;
     std::string buildSource(const std::string& decls, const std::string& defs,
+                            const std::string& globals,
                             const std::string& mainBody) const;
+    // Sets the include flags from the spellings a unit actually emitted.
+    void noteEmittedSpellings(const std::string& text);
     // The `int main` unit of the generated source: the std/process argument
     // vector init, the top-level-await coroutine and the event-loop drain.
     void emitMain(std::string& out, const std::string& mainBody) const;

@@ -122,11 +122,6 @@ std::string Generator::emitCall(const CallExpr& c) {
             functions_.find(name) == functions_.end()) {
             return emitParseBuiltin(c, name);
         }
-        if (name == "worker" && functions_.find(name) == functions_.end()) {
-            // The ambient `worker(...)` lowering (spec 13); a user-declared
-            // `worker` function wins (checked here, before the disambiguation).
-            return emitWorkerCall(c);
-        }
         if (!c.typeArgs.empty()) {
             notImplemented(c, "calls with type arguments");
             return "0.0";
@@ -156,6 +151,12 @@ std::string Generator::emitCall(const CallExpr& c) {
         if (m.object && m.object->kind == NodeKind::Identifier &&
             static_cast<const Identifier&>(*m.object).name == "Promise") {
             return emitPromiseStatic(c, m);
+        }
+        // The typed worker handle surface (D80, spec 13): `w.postMessage`,
+        // `w.on(...)`, `await w.request(v)`, `w.terminate()`, and the worker
+        // side's `thread.on(...)` / `thread.postMessage(v)`.
+        if (std::string handle = emitWorkerHandleCall(c, m); !handle.empty()) {
+            return handle;
         }
         // A Promise method (`then`/`catch`/`finally`); `on/once/off/emit` (D74).
         if (m.object && detail::isPromiseType(effectiveType(*m.object))) {

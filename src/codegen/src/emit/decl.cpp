@@ -177,14 +177,14 @@ void Generator::emitModuleVar(const VariableDeclaration& vd, std::string& decls,
         // `let a: number[] = Array(3)` / `let a: number[] = []`: the
         // annotation fixes an otherwise unknowable element type
         // (src/std/typed-arrays/codegen.cpp).
-        std::string initText = declaratorInitText(*d, ci.type);
-        if (initText.empty()) initText = expr(*d->init);
-        // A worker-marked object literal lowers to a `std::tuple`; the binding
-        // type follows the emitted text, not the ordinary value shape.
-        if (d->init->kind == NodeKind::ObjectLiteral &&
-            workerLiterals_.count(d->init->nodeId) != 0) {
-            ci.cpp = "decltype(" + initText + ")";
+        std::string initText;
+        if (d->type && ci.shape == Shape::Object &&
+            d->init->kind == NodeKind::ObjectLiteral) {
+            initText = objectLiteralForType(
+                static_cast<const ObjectLiteral&>(*d->init), ci.type);
         }
+        if (initText.empty()) initText = declaratorInitText(*d, ci.type);
+        if (initText.empty()) initText = expr(*d->init);
         if (ci.shape == Shape::Optional && isNullishLiteral(*d->init)) {
             initText = "std::nullopt";
         }
@@ -235,7 +235,8 @@ void Generator::emitModuleVarNoInit(const detail::CppInfo& ci,
 void Generator::reportModuleVarType(const VariableDeclarator& d) {
     if (!d.type) return;
     auto dt = typeOfNode(*d.type);
-    if (!dt || classify(*dt).representable || dt->isUnknown() || dt->isError()) {
+    if (!dt || classify(*dt).representable || dt->isUnknown() || dt->isError() ||
+        isChannelHandleType(*dt)) {
         return;
     }
     notImplemented(d, "this declared type");

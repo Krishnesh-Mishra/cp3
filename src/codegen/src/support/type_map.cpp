@@ -29,6 +29,7 @@
 
 #include "detail/parallel.h"
 #include "detail/type_map.h"
+#include "detail/worker.h"
 
 namespace cp3 {
 
@@ -347,50 +348,24 @@ bool isStaticallyNullish(const Type& t) {
 // Generator: type resolution
 // -----------------------------------------------------------------------------
 
-std::optional<Type> Generator::bindingType(const VariableDeclarator& d) const {
-    if (d.type) {
-        if (auto t = typeOfNode(*d.type)) {
-            return t;
-        }
-    }
-    // A `parallel.reduce` result takes the accumulator type even though sema
-    // leaves the ambient call unknown (the binding must not be `auto`: its
-    // closure was lowered against the init's C++ type).
-    if (d.init && d.init->kind == NodeKind::CallExpr) {
-        if (auto t = parallelCallType(static_cast<const CallExpr&>(*d.init))) {
-            return *t;
-        }
-    }
-    if (const Type* t = sema_.typeOf(d.nodeId)) {
-        if (!t->isUnknown() && !t->isError()) return *t;
-    }
-    if (d.id) {
-        if (const Type* t = sema_.typeOf(d.id->nodeId)) {
-            if (!t->isUnknown() && !t->isError()) return *t;
-        }
-    }
-    return std::nullopt;
-}
-
-// The binding's effective type: declared/annotated first, then inferred from
-// its initializer. This is what we both emit and register in the scope env.
-std::optional<Type> Generator::resolvedBindingType(const VariableDeclarator& d) const {
-    if (auto declared = bindingType(d)) {
-        return declared;
-    }
-    if (d.init) {
-        const Type inferred = effectiveType(*d.init);
-        if (!inferred.isUnknown() && !inferred.isError()) {
-            return inferred;
-        }
-    }
-    return std::nullopt;
-}
 
 Type Generator::effectiveType(const Expr& e) const {
     if (const auto t = networkMapFieldType(e)) return *t;
     if (e.kind == NodeKind::CallExpr) {
         if (auto t = parallelCallType(static_cast<const CallExpr&>(e))) return *t;
+        // The worker handle's calls (D80): `w.request(v)` is a `Promise<Out>`;
+        // every other member call is void.
+        if (auto t = workerCallType(static_cast<const CallExpr&>(e))) return *t;
+    }
+    // `await w.request(v)` resolves with the next Out message.
+    if (e.kind == NodeKind::AwaitExpr) {
+        const auto& await = static_cast<const AwaitExpr&>(e);
+        if (await.argument && await.argument->kind == NodeKind::CallExpr) {
+            if (auto t = workerCallType(
+                    static_cast<const CallExpr&>(*await.argument))) {
+                if (isPromiseType(*t)) return promiseValue(*t);
+            }
+        }
     }
     if (e.kind == NodeKind::Identifier) {
         const auto& id = static_cast<const Identifier&>(e);
@@ -399,7 +374,15 @@ Type Generator::effectiveType(const Expr& e) const {
         if (id.name == "null") return Type::nullType();
     }
     if (const Type* t = sema_.typeOf(e.nodeId)) {
-        if (!t->isUnknown() && !t->isError()) return *t;
+        // `$ambient` is sema's permissive/"not statically known" marker: an
+        // expression over an unannotated worker listener parameter is ambient
+        // there even though the channel fixes the parameter's type. Falling
+        // through to codegen's own inference recovers the concrete shape the
+        // emitted C++ actually has (an unannotated listener parameter is the
+        // main case: spec 13's typed worker surface).
+        const bool ambient =
+            t->kind == TypeKind::Object && t->name == "$ambient";
+        if (!t->isUnknown() && !t->isError() && !ambient) return *t;
     }
     switch (e.kind) {
         case NodeKind::NumberLiteral: return Type::number();
@@ -419,6 +402,18 @@ Type Generator::effectiveType(const Expr& e) const {
         }
         case NodeKind::AssignmentExpr:
             return effectiveType(*static_cast<const AssignmentExpr&>(e).target);
+        case NodeKind::MemberExpr:
+            return memberReadType(static_cast<const MemberExpr&>(e));
+        case NodeKind::IndexExpr: {
+            const auto& index = static_cast<const IndexExpr&>(e);
+            if (!index.object) return Type::unknown();
+            const Type recv = effectiveType(*index.object);
+            if (recv.kind == TypeKind::Array && !recv.parts.empty()) {
+                return recv.parts.front();
+            }
+            if (recv.kind == TypeKind::String) return Type::string();
+            return Type::unknown();
+        }
         default: return Type::unknown();
     }
 }

@@ -131,9 +131,14 @@ std::string Generator::exprPlain(const Expr& e) {
         case NodeKind::CallExpr:
             return emitCallOrFamily(static_cast<const CallExpr&>(e));
         case NodeKind::NewExpr: {
-            // std/network + std/collections constructors first, then the
-            // builtin `new EventEmitter()` (D74), then the JS-compat family
-            // constructors; anything else reports.
+            // `new Worker(...)` (D80) first: it is a channel handle, not a
+            // class/family/newable value. Then std/network + std/collections
+            // constructors, the builtin `new EventEmitter()` (D74), and the
+            // JS-compat family constructors; anything else reports.
+            if (std::string worker = emitWorkerNew(static_cast<const NewExpr&>(e));
+                !worker.empty()) {
+                return worker;
+            }
             if (std::string net = emitNetworkNew(static_cast<const NewExpr&>(e));
                 !net.empty()) {
                 return net;

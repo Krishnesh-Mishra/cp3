@@ -1,0 +1,8 @@
+export default (thread: Thread<number, { value: number, count: number }>) => {
+  thread.on("message", (data) => {
+    let out = { value: 5, count: 1 };
+    thread.postMessage(out);
+    out.value = 99;
+    out.count = 99;
+  });
+};

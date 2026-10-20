@@ -1,1 +1,5 @@
-export default (data: number): number => { throw "boom"; };
+export default (thread: Thread<number, number>) => {
+  thread.on("message", (data) => {
+    throw "boom";
+  });
+};

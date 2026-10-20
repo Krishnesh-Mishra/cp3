@@ -71,7 +71,7 @@ emitter.emit("greet", "world");
 emitter.off("greet", handler);
 ```
 
-Pure cp3 - no native dependency at all, since this is just a data structure (event name → list of listener callbacks), not something that needs to reach the OS; it adds no linkage of its own, the same "no runtime tax if you don't use it" rule as every other builtin. Every other std module's event-emitting handle (`fs`'s `ReadStream`/`WriteStream`, `process`'s `SpawnHandle`, `worker`'s error surface) follows this same `.on`/`.off`/`.emit` shape for consistency, even where it isn't literally built on top of this class internally.
+Pure cp3 - no native dependency at all, since this is just a data structure (event name → list of listener callbacks), not something that needs to reach the OS; it adds no linkage of its own, the same "no runtime tax if you don't use it" rule as every other builtin. Every other std module's event-emitting handle (`fs`'s `ReadStream`/`WriteStream`, `process`'s `SpawnHandle`, `worker`'s message/error surface) follows this same `.on`/`.off`/`.emit` shape for consistency, even where it isn't literally built on top of this class internally.
 
 ## Explicitly deferred, not silently missing
 

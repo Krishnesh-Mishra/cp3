@@ -1,3 +1,8 @@
 import console from "std/console";
-import worker from "worker_throw_impl.cp3";
-try { let r = await worker(1); console.log("no"); } catch (e) { console.log("rejected"); }
+
+const w = new Worker("./worker_throw_impl.cp3");
+w.on("error", (e) => {
+  console.log("rejected");
+  w.terminate();
+});
+w.postMessage(1);

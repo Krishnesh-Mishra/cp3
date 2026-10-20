@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: is `worker(...)` the called default export of an imported `.cp3` file (as the §13 example implies), and is `import worker from \"x.cp3\"` the canonical shape?"
-  }
-}

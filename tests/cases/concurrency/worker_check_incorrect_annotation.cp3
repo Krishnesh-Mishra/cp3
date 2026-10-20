@@ -1,0 +1,2 @@
+const w = new Worker("./worker_bad_annotation_impl.cp3");
+w.terminate();

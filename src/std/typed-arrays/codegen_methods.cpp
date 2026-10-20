@@ -260,6 +260,13 @@ std::string Generator::emitFamilyMember(const MemberExpr& m) {
     }
     const Type recv = effectiveType(*m.object);
     if (m.property == "length") {
+        if (isParallelRunType(recv)) {
+            // A `$parallelRun` result is a fixed-extent `std::array` (the
+            // runtime sized it from the callable count); `.length` is its
+            // extent, exactly like an ordinary array's.
+            needsTypedArray_ = true;
+            return "static_cast<double>((" + expr(*m.object) + ").size())";
+        }
         if (recv.kind == TypeKind::Array && info(*m.object).representable) {
             needsTypedArray_ = true;
             return "static_cast<double>((" + expr(*m.object) + ")->size())";

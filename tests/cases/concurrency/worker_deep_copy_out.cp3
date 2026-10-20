@@ -1,0 +1,6 @@
+import console from "std/console";
+
+const w = new Worker("./worker_out_copy_impl.cp3");
+const r = await w.request(1);
+console.log(`${r.value},${r.count}`);
+w.terminate();

@@ -16,6 +16,7 @@
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
+#include "detail/worker.h"
 
 namespace cp3 {
 
@@ -144,12 +145,19 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
     // treated as not-implemented instead of being quietly mis-typed.
     if (d.type) {
         if (auto dt = typeOfNode(*d.type)) {
-            if (!classify(*dt).representable && !dt->isUnknown() && !dt->isError()) {
+            if (!classify(*dt).representable && !dt->isUnknown() &&
+                !dt->isError() && !isChannelHandleType(*dt)) {
                 notImplemented(d, "this declared type");
             }
         }
     }
     const CppInfo ci = bindingCpp(d);
+    // A worker handle (D80) is a movable, owning runtime value: `const auto`
+    // would make its members unusable (`postMessage` is non-const), so the
+    // binding form drops the cp3 `const` and lets C++ deduce the handle type.
+    if (d.init && isChannelHandleType(ci.type)) {
+        return "auto " + name + " = " + expr(*d.init);
+    }
     // Inside an int64 attempt a `number` binding is a std::int64_t, and its
     // initializer must therefore be a region value: a `number` in C++ that the
     // fast path cannot account for would make the two bodies disagree.
@@ -161,6 +169,14 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
         std::string initText;
         if (ci.shape == Shape::Optional && isNullishLiteral(*d.init)) {
             initText = "std::nullopt";
+        } else if (d.type && ci.shape == Shape::Object &&
+                   d.init->kind == NodeKind::ObjectLiteral) {
+            // An explicitly annotated record fixes the struct type; build that
+            // struct from the literal (a field may be a union/option, whose
+            // struct differs from the literal's narrower shape).
+            initText = objectLiteralForType(
+                static_cast<const ObjectLiteral&>(*d.init), ci.type);
+            if (initText.empty()) initText = expr(*d.init);
         } else if (std::string special = declaratorInitText(d, ci.type);
                    !special.empty()) {
             // `let a: number[] = Array(3)` / `let a: number[] = []` (the

@@ -1,3 +1,5 @@
-export default (data: number): number => {
-  return data * 2;
+export default (thread: Thread<number, number>) => {
+  thread.on("message", (data) => {
+    thread.postMessage(data * 2);
+  });
 };

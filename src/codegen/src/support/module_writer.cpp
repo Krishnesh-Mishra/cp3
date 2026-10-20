@@ -1,0 +1,422 @@
+// =============================================================================
+// src/codegen/src/support/module_writer.cpp - the generated module assembly.
+//
+// OWNERSHIP: codegen module. Implements the Generator assembly members declared
+// in detail/generator.h: the generated .hpp/.cpp writer, the per-TU helper
+// blocks, the include selection driven by the emitted spellings, and the
+// generated `main()` (top-level await + worker/event-loop drain). Split from
+// code_generator.cpp to keep both files within the file budget (STYLE.md ?2).
+// =============================================================================
+#include "detail/generator.h"
+
+#include <string>
+#include <vector>
+
+#include "cp3/codegen.hpp"
+#include "detail/cpp_writer.h"
+#include "detail/helper_blocks.h"
+#include "detail/mangle.h"
+
+namespace cp3 {
+
+using namespace detail;
+
+namespace {
+
+// The generated per-TU helper block (anonymous namespace in the .cpp).
+const char* const kHelperBlock = R"CP3HELPERS(namespace {
+
+// ----- cp3 value formatting (routes into the D9 runtime formatter) -----------
+inline std::string cp3_ts(double v) { return cp3::runtime::toString(v); }
+inline std::string cp3_ts(const std::string& v) { return cp3::runtime::toString(v); }
+inline std::string cp3_ts(bool v) { return cp3::runtime::toString(v); }
+inline std::string cp3_ts(cp3::runtime::Undefined v) { return cp3::runtime::toString(v); }
+inline std::string cp3_ts(std::nullptr_t v) { return cp3::runtime::toString(v); }
+// Defensive: keeps a raw C string from binding to cp3_ts(bool) through the
+// pointer->bool conversion (which would format every literal as "true").
+inline std::string cp3_ts(const char* v) {
+    return cp3::runtime::toString(std::string(v ? v : ""));
+}
+inline std::string cp3_ts(const std::optional<double>& v) {
+    return v.has_value() ? cp3::runtime::toString(*v) : std::string("undefined");
+}
+inline std::string cp3_ts(const std::optional<std::string>& v) {
+    return v.has_value() ? cp3::runtime::toString(*v) : std::string("undefined");
+}
+inline std::string cp3_ts(const std::optional<bool>& v) {
+    return v.has_value() ? cp3::runtime::toString(*v) : std::string("undefined");
+}
+// A `T | null` optional: its empty case is `null`, not `undefined`.
+inline std::string cp3_ts_null(const std::optional<double>& v) {
+    return v.has_value() ? cp3::runtime::toString(*v) : std::string("null");
+}
+inline std::string cp3_ts_null(const std::optional<std::string>& v) {
+    return v.has_value() ? cp3::runtime::toString(*v) : std::string("null");
+}
+inline std::string cp3_ts_null(const std::optional<bool>& v) {
+    return v.has_value() ? cp3::runtime::toString(*v) : std::string("null");
+}
+// A three-way nullable (`T | null | undefined`): Maybe stores the flavor, so
+// the empty case prints the flavor itself.
+template <class T>
+inline std::string cp3_ts(const cp3::runtime::Maybe<T>& v) {
+    if (v.isNull()) return std::string("null");
+    if (v.isUndefined()) return std::string("undefined");
+    return cp3::runtime::toString(v.value());
+}
+// A boxed erroneous value (cp3/core/error.hpp): `catch (e)` binds one, and cp3
+// renders it as the thrown value itself.
+inline std::string cp3_ts(const ::cp3::runtime::Thrown& v) { return v.toString(); }
+
+// ----- JS truthiness ---------------------------------------------------------
+inline bool cp3_truthy(double v) { return v != 0.0 && !std::isnan(v); }
+// The int64 fast path (D64) keeps a `number` as std::int64_t inside a fast
+// body; its truthiness and its formatting are those of the exactly equal
+// double, so these two overloads are what keeps `cp3_truthy(0LL)` and
+// `cp3_ts(5LL)` unambiguous (and correct) in an int64 body.
+inline bool cp3_truthy(std::int64_t v) { return v != 0; }
+inline std::string cp3_ts(std::int64_t v) {
+    return cp3::runtime::toString(static_cast<double>(v));
+}
+inline bool cp3_truthy(const std::string& v) { return !v.empty(); }
+inline bool cp3_truthy(bool v) { return v; }
+inline bool cp3_truthy(cp3::runtime::Undefined) { return false; }
+inline bool cp3_truthy(std::nullptr_t) { return false; }
+// Defensive: JS truthiness of a C string is "non-empty", not "non-null".
+inline bool cp3_truthy(const char* v) { return v != nullptr && *v != '\0'; }
+inline bool cp3_truthy(const std::optional<double>& v) {
+    return v.has_value() && cp3_truthy(*v);
+}
+inline bool cp3_truthy(const std::optional<std::string>& v) {
+    return v.has_value() && cp3_truthy(*v);
+}
+inline bool cp3_truthy(const std::optional<bool>& v) {
+    return v.has_value() && cp3_truthy(*v);
+}
+template <class T>
+inline bool cp3_truthy(const cp3::runtime::Maybe<T>& v) {
+    return v.hasValue() && cp3_truthy(v.value());
+}
+
+// ----- cp3 `finally` (spec §07, DECISIONS D37) -------------------------------
+// Runs the finally block on every exit of the enclosing scope - normal
+// completion, `break`/`continue`/`return`, or a propagating throw - exactly
+// once. The normal path calls `runNow()`, which deactivates the guard before
+// invoking the block, so a throw from `finally` propagates instead of being
+// silently repeated. The destructor is `noexcept(false)` for the same reason
+// on a `return`/`break` path (JS replaces that completion with the throw); a
+// throw while another exception is already in flight terminates the process.
+template <class F>
+class cp3_finally_guard {
+public:
+    explicit cp3_finally_guard(F fn) : fn_(fn) {}
+    cp3_finally_guard(const cp3_finally_guard&) = delete;
+    cp3_finally_guard& operator=(const cp3_finally_guard&) = delete;
+    ~cp3_finally_guard() noexcept(false) {
+        if (active_) {
+            active_ = false;
+            fn_();
+        }
+    }
+    void runNow() {
+        if (active_) {
+            active_ = false;
+            fn_();
+        }
+    }
+
+private:
+    F fn_;
+    bool active_ = true;
+};
+
+}  // namespace
+
+)CP3HELPERS";
+
+// The family's per-TU helpers (formatter + truthiness), added only when the
+// unit uses the family: the templates name cp3::runtime types that exist only
+// with the cp3/typed_array.hpp include.
+const char* const kTypedArrayHelperBlock = R"CP3HELPERS(namespace {
+
+// ----- the JS-compat typed-array family (D69) --------------------------------
+// A whole typed view formats as `Int8Array(2) [1, 0]`. The overload must be a
+// member template: a Ref<T> would otherwise bind to `cp3_ts(bool)` through the
+// pointer conversion.
+template <class Tag>
+inline std::string cp3_ts(const cp3::runtime::TypedArray<Tag>& a) {
+    return cp3::runtime::typedArrayText(a);
+}
+// A whole regular array formats as `[1, 2, 3]` (the pinned corpus form:
+// element text in ", " spacing, no class prefix and no inner padding).
+template <class E>
+inline std::string cp3_ts(const cp3::runtime::Array<E>& a) {
+    return "[" + cp3::runtime::arrayJoin(a, std::string(", ")) + "]";
+}
+// Every array is an object: JS truthiness is always true, the empty array
+// included. Without these, `if (a)` finds no overload (Ref's bool conversion
+// is explicit).
+template <class Tag>
+inline bool cp3_truthy(const cp3::runtime::TypedArray<Tag>&) { return true; }
+template <class E>
+inline bool cp3_truthy(const cp3::runtime::Array<E>&) { return true; }
+
+}  // namespace
+
+)CP3HELPERS";
+
+// std/buffer's per-TU helpers: `console.log(buf)` renders the Node form and a
+// Buffer is always truthy. Added only when the unit uses the module (the
+// overloads name ::cp3::runtime::buffer::Buffer, which exists only with the
+// cp3/std/buffer.hpp include).
+const char* const kBufferHelperBlock = R"CP3HELPERS(namespace {
+
+// ----- std/buffer (the nominal Buffer) ---------------------------------------
+inline std::string cp3_ts(const ::cp3::runtime::buffer::Buffer& b) {
+    return ::cp3::runtime::buffer::inspect(b);
+}
+inline bool cp3_truthy(const ::cp3::runtime::buffer::Buffer&) { return true; }
+
+}  // namespace
+
+)CP3HELPERS";
+
+// The builtin EventEmitter's per-TU helpers (D74), added only when the unit
+// uses the builtin: `EventValue` exists only with the cp3/async/emitter.hpp
+// include, and a listener parameter arrives as one.
+const char* const kEventEmitterHelperBlock = R"CP3HELPERS(namespace {
+
+// ----- the builtin EventEmitter (D74) -----------------------------------------
+// A listener parameter is the erased emitted value; formatting and truthiness
+// follow the value it carries.
+inline std::string cp3_ts(const cp3::runtime::EventValue& v) {
+    return v.toString();
+}
+inline bool cp3_truthy(const cp3::runtime::EventValue& v) {
+    return v.truthy();
+}
+
+}  // namespace
+
+)CP3HELPERS";
+
+}  // namespace
+// Sets the include flags from the spellings a unit actually emitted.
+void Generator::noteEmittedSpellings(const std::string& text) {
+    if (text.find("::cp3::runtime::Array") != std::string::npos ||
+        text.find("::cp3::runtime::TypedArray") != std::string::npos ||
+        text.find("::cp3::runtime::SharedArrayBuffer") != std::string::npos ||
+        text.find("::cp3::runtime::DataView") != std::string::npos ||
+        text.find("std::variant<") != std::string::npos) {  // union slot (docs 09)
+        needsTypedArray_ = true;
+    }
+    if (text.find("::cp3::runtime::collections::") != std::string::npos) {
+        needsCollections_ = true;
+    }
+    if (text.find("::cp3::runtime::buffer::Buffer") != std::string::npos) {
+        needsBuffer_ = true;
+    }
+    if (text.find("::cp3::runtime::EventEmitter") != std::string::npos ||
+        text.find("::cp3::runtime::Listener") != std::string::npos) {
+        needsEventEmitter_ = true;
+    }
+    if (text.find("::cp3::runtime::bitwise::") != std::string::npos) needsBitwise_ = true;
+    if (text.find("std::variant<") != std::string::npos) needsUnion_ = true;
+    if (text.find("::cp3::runtime::unions::") != std::string::npos) needsUnion_ = true;
+    if (text.find("cp3_obj_") != std::string::npos) needsObject_ = true;
+}
+
+// --- Generator - assembly (generated .hpp / .cpp) -----------------------------
+
+std::string Generator::buildHeader(const std::string& decls,
+                                   const std::string& globals) const {
+    const std::string guard =
+        "CP3_GENERATED_" + upperSnake(sanitizeIdent(moduleName_)) + "_HPP";
+    std::string out;
+    out += "// Generated by cp3c codegen from `" + moduleName_ + "` - do not edit.\n";
+    out += "#ifndef " + guard + "\n";
+    out += "#define " + guard + "\n\n";
+    out += "#include <optional>\n";
+    out += "#include <string>\n";
+    if (needsUnion_) {
+        // A signature can name a primitive union (`std::variant<...>`).
+        out += "#include <variant>\n";
+    }
+    out += "\n";
+    out += "#include \"cp3/core/runtime.hpp\"\n";
+    if (needsTuple_) {
+        // An enum-carrying object literal can surface in a forward declaration
+        // (a parameter default).
+        out += "#include <tuple>\n";
+    }
+    if (needsEventLoop_) {
+        // A declared `async function` returns `Promise<T>` (spec §14), so the
+        // alias must be complete for callers of this header.
+        out += "#include \"cp3/async/promise.hpp\"\n";
+    }
+    if (needsTypedArray_) {
+        // The JS-compat typed-array family (D69): a signature or module-scope
+        // binding can name `Array<T>`/the typed views.
+        out += "#include \"cp3/typed_array.hpp\"\n";
+    }
+    if (needsCollections_) {
+        // std/collections (D44): a signature or module-scope binding can name
+        // `Map<K, V>`/`Set<T>`.
+        out += "#include \"cp3/std/collections.hpp\"\n";
+    }
+    if (needsBuffer_) {
+        // std/buffer: a signature or module-scope binding can name `Buffer`.
+        out += "#include \"cp3/std/buffer.hpp\"\n";
+    }
+    if (needsEventEmitter_) {
+        // The builtin EventEmitter (D74): a signature or module-scope binding
+        // can name `Ref<EventEmitter>`/`Listener`.
+        out += "#include \"cp3/async/emitter.hpp\"\n";
+    }
+    if (needsWorker_) {
+        // The worker channel ABI (`WorkerHandle`/`ThreadHandle`, spec 13): a
+        // worker unit's signature names `ThreadHandle<In, Out>`.
+        out += "#include \"cp3/parallel/worker.hpp\"\n";
+    }
+    out += "\n";
+    out += globals;  // guarded global `$o{...}` value structs
+    if (!globals.empty()) out += "\n";
+    out += "namespace " + namesp_ + " {\n\n";
+    out += decls;
+    out += "\n}  // namespace " + namesp_ + "\n\n";
+    out += "#endif  // " + guard + "\n";
+    return out;
+}
+
+// The generated .cpp's include block, selected from the spellings the unit
+// actually emitted (plus the worker unit headers the entry links against).
+std::string Generator::sourceIncludes() const {
+    std::string out;
+    out += "#include <cmath>\n";
+    out += "#include <cstddef>\n";
+    out += "#include <cstdint>\n";
+    out += "#include <limits>\n";
+    out += "#include <optional>\n";
+    out += "#include <string>\n";
+    if (needsTuple_) out += "#include <tuple>\n";  // enum-carrying object literals
+    if (needsUnion_) out += "#include <variant>\n";  // primitive unions
+    if (needsEventLoop_) out += "#include <vector>\n";  // Promise input lists
+    out += "\n";
+    out += "#include \"cp3/core/runtime.hpp\"\n";
+    out += "#include \"cp3/core/error.hpp\"\n";
+    if (needsBitwise_) out += "#include \"cp3/core/bitwise.hpp\"\n";  // & | ^ ~ << >> >>>
+    if (needsUnion_) out += "#include \"cp3/core/union.hpp\"\n";  // primitive unions
+    if (needsArith_) {
+        out += "#include \"cp3/core/arith.hpp\"\n";  // `%` lowering / int64 fast path
+    }
+    if (needsEventLoop_) {
+        out += "#include \"cp3/async/promise.hpp\"\n";  // Promise/await/timers
+    }
+    if (needsTypedArray_) {
+        out += "#include \"cp3/typed_array.hpp\"\n";  // the family (D69)
+    }
+    if (needsEventEmitter_) {
+        out += "#include \"cp3/async/emitter.hpp\"\n";  // the builtin (D74)
+    }
+    if (consoleStderr_ || needsConsoleAbi_) {
+        out += "#include \"cp3/std/console.hpp\"\n";  // the console family
+    }
+    if (needsMath_) out += "#include \"cp3/std/math.hpp\"\n";
+    if (needsString_) out += "#include \"cp3/std/string.hpp\"\n";
+    if (needsPath_) out += "#include \"cp3/std/path.hpp\"\n";
+    if (needsOs_) out += "#include \"cp3/std/os.hpp\"\n";
+    if (needsJson_) out += "#include \"cp3/std/json.hpp\"\n";
+    if (needsProcess_) out += "#include \"cp3/std/process.hpp\"\n";
+    if (needsEnv_) out += "#include \"cp3/std/env.hpp\"\n";
+    if (needsCrypto_) out += "#include \"cp3/std/crypto.hpp\"\n";
+    if (needsDate_) out += "#include \"cp3/std/date.hpp\"\n";
+    if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
+    if (needsCollections_) {
+        out += "#include \"cp3/std/collections.hpp\"\n";  // Map/Set (D44)
+    }
+    if (needsBuffer_) out += "#include \"cp3/std/buffer.hpp\"\n";
+    if (needsFs_) out += "#include \"cp3/std/fs.hpp\"\n";
+    if (needsParallel_) {
+        out += "#include \"cp3/parallel/parallel.hpp\"\n";  // parallel.* (spec 13)
+    }
+    if (needsWorker_) {
+        out += "#include \"cp3/parallel/worker.hpp\"\n";  // new Worker(...) (spec 13)
+        if (!workerModule_) {
+            // Each file worker's generated unit header exposes its
+            // `cp3_default` and its channel's enum/record declarations.
+            std::vector<std::string> included;
+            for (const WorkerSite& site : options_.workers) {
+                if (site.inlineSite || site.headerPath.empty()) continue;
+                bool seen = false;
+                for (const std::string& existing : included) {
+                    if (existing == site.headerPath) seen = true;
+                }
+                if (seen) continue;
+                included.push_back(site.headerPath);
+                out += "#include \"" + site.headerPath + "\"\n";
+            }
+        }
+    }
+    out += "\n";
+    return out;
+}
+
+std::string Generator::buildSource(const std::string& decls, const std::string& defs,
+                                   const std::string& globals,
+                                   const std::string& mainBody) const {
+    std::string out;
+    out += "// Generated by cp3c codegen from `" + moduleName_ + "` - do not edit.\n";
+    out += sourceIncludes();
+    if (!globals.empty()) {
+        out += globals;  // guarded global `$o{...}` value structs
+        out += "\n";
+    }
+    out += kHelperBlock;
+    if (needsTypedArray_) out += kTypedArrayHelperBlock;
+    if (needsBuffer_) out += kBufferHelperBlock;
+    if (needsEventEmitter_) out += kEventEmitterHelperBlock;
+    if (needsUnion_) out += unionHelperBlock();
+    if (needsObject_) out += objectHelperBlock();
+    out += "\nnamespace " + namesp_ + " {\n\n";
+    out += decls;
+    out += "\n";
+    out += defs;
+    out += "\n}  // namespace " + namesp_ + "\n\n";
+    if (!workerModule_) {
+        out += "using namespace " + namesp_ + ";\n\n";
+        emitMain(out, mainBody);
+    }
+    return out;
+}
+
+void Generator::emitMain(std::string& out, const std::string& mainBody) const {
+    if (needsProcess_) {
+        // std/process argv: hand the C argument vector to the runtime before
+        // any cp3 statement runs (process.argv, pinned by
+        // process_argv_is_array).
+        out += "int main(int cp3_argc, char** cp3_argv) {\n";
+        out += "    ::cp3::runtime::process::initArgv(cp3_argc, cp3_argv);\n";
+    } else {
+        out += "int main() {\n";
+    }
+    if (topLevelAwait_) {
+        // Top-level `await` (spec §14): the entry unit's statements run inside
+        // an eagerly-started coroutine, driven to completion by the loop below.
+        out += "    auto cp3_top_level = [&]() -> ::cp3::runtime::Promise<void> {\n";
+        out += indentText(mainBody, "    ");
+        out += "        co_return;\n";
+        out += "    };\n";
+        out += "    cp3_top_level();\n";
+    } else {
+        out += mainBody;
+    }
+    if (needsEventLoop_ || needsWorker_) {
+        // A live worker retains the main loop (spec 13, D80): the process stays
+        // alive until every handle is terminated and the loop is idle.
+        out += "    ::cp3::runtime::runEventLoop();\n";
+    }
+    out += "    return 0;\n";
+    out += "}\n";
+}
+
+}  // namespace cp3

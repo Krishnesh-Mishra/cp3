@@ -1,0 +1,3 @@
+const p = "./worker_shape_impl.cp3";
+const w = new Worker(p);
+w.terminate();

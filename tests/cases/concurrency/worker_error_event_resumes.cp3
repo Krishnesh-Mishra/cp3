@@ -1,0 +1,12 @@
+import console from "std/console";
+
+const w = new Worker("./worker_resume_impl.cp3");
+w.on("error", (err) => {
+  console.log("error");
+  w.postMessage(2);
+});
+w.on("message", (msg) => {
+  console.log(`${msg}`);
+  w.terminate();
+});
+w.postMessage(1);

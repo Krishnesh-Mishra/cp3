@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3907",
+    "line": 2,
+    "col": 15,
+    "contains": "deep-copied: payloads must be copyable value types"
+  }
+}

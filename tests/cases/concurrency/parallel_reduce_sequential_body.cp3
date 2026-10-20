@@ -1,0 +1,4 @@
+import console from "std/console";
+
+let v = parallel.reduce(0..5, 0, (acc, i) => acc - i);
+console.log(`${v}`);

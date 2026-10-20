@@ -109,7 +109,7 @@ dap::BuildOutcome buildDebugProgram(const std::string& program,
         // .cp3 file (the whole point of the debug adapter).
         const GeneratedModule mod =
             generateModule({*entry->ast, sema, moduleName, cgSink,
-                            /*lineDirectives=*/true});
+                            /*lineDirectives=*/true, CodegenOptions{}});
         log += renderToText(cgSink.diagnostics(), render);
         if (cgSink.hasErrors() || (mod.source.empty() && mod.header.empty())) {
             outcome.log = log.empty() ? "cp3c: code generation produced no module\n" : log;
