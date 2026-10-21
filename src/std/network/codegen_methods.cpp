@@ -296,9 +296,13 @@ std::string Generator::networkJsonRecord(const MemberExpr& m, const CallExpr& c)
     if (jsonShapeUsed_.insert(name).second) {
         jsonShapeDecls_ += structIt->second + "\n";
     }
-    return "(" + expr(*m.object) + ").json<" + mapIdent(name) +
-           ">([](const ::cp3::runtime::json::Fields& cp3_f) { " + builderIt->second +
-           " })";
+    // A registered record is a reference value (spec 10), like the
+    // `JSON.parse<T>` path: the builder produces the field struct and the
+    // reference model wraps it before it reaches an interface binding.
+    return "(" + expr(*m.object) + ").json<::cp3::runtime::Ref<" + mapIdent(name) +
+           ">>([](const ::cp3::runtime::json::Fields& cp3_f) { auto cp3_value = [&]() { " +
+           builderIt->second + " }(); return ::cp3::runtime::makeRef<" + mapIdent(name) +
+           ">(cp3_value); })";
 }
 
 /// `res.json(payload, status?)` for an array/object literal payload: the json
