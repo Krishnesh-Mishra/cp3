@@ -9,10 +9,12 @@
 // =============================================================================
 #include "detail/util.hpp"
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <string_view>
 #include <system_error>
 
 #if defined(_WIN32)
@@ -23,11 +25,8 @@
 #    define NOMINMAX
 #  endif
 #  include <io.h>
-#  include <process.h>
 #  include <windows.h>
 #else
-#  include <cerrno>
-#  include <sys/wait.h>
 #  include <unistd.h>
 #endif
 
@@ -141,49 +140,6 @@ bool findExecutable(const std::string& name, std::string& found) {
         start = end + 1;
     }
     return false;
-}
-
-int runProcess(const std::vector<std::string>& args) {
-    if (args.empty()) return -1;
-
-#if defined(_WIN32)
-    std::vector<const char*> argv;
-    argv.reserve(args.size() + 1);
-    for (const std::string& a : args) argv.push_back(a.c_str());
-    argv.push_back(nullptr);
-    const intptr_t rc = _spawnvp(_P_WAIT, argv[0], argv.data());
-    return rc < 0 ? -1 : static_cast<int>(rc);
-#else
-    std::vector<char*> argv;
-    argv.reserve(args.size() + 1);
-    for (const std::string& a : args) argv.push_back(const_cast<char*>(a.c_str()));
-    argv.push_back(nullptr);
-
-    const pid_t pid = fork();
-    if (pid < 0) return -1;
-    if (pid == 0) {
-        execvp(argv[0], argv.data());
-        _exit(127);
-    }
-    int status = 0;
-    while (waitpid(pid, &status, 0) < 0) {
-        if (errno != EINTR) return -1;
-    }
-    if (WIFEXITED(status)) return WEXITSTATUS(status);
-    return -1;
-#endif
-}
-
-std::string describeCommand(const std::vector<std::string>& args) {
-    std::string out;
-    for (std::size_t i = 0; i < args.size(); ++i) {
-        if (i != 0) out.push_back(' ');
-        const bool needsQuote = args[i].find(' ') != std::string::npos;
-        if (needsQuote) out.push_back('"');
-        out += args[i];
-        if (needsQuote) out.push_back('"');
-    }
-    return out;
 }
 
 // -----------------------------------------------------------------------------
@@ -332,7 +288,82 @@ std::vector<fs::path> compilerIncludeRoots() {
     return roots;
 }
 
-std::vector<fs::path> runtimeSourcePaths() {
+namespace {
+
+// The runtime TUs, in the order they are linked, each with the markers that
+// make it part of a program (a '|'-separated any-of list; "" means always).
+//
+//   runtime.cpp   - toString / print / println / Undefined
+//                   (cp3/core/runtime.hpp): the frozen ABI every generated
+//                   unit includes, so it is unconditional.
+//   error.cpp     - `Thrown` (cp3/core/error.hpp): `throw` boxing and the
+//                   unhandled-rejection report; error.hpp is also part of
+//                   every generated unit.
+//   eventloop.cpp - the single-threaded loop + the timer builtins
+//                   (cp3/async/eventloop.hpp): setTimeout/setInterval,
+//                   runEventLoop(), the worker runtime, and every std family
+//                   whose ABI is Promise-shaped. A program that never names
+//                   any of them does not link the loop (startup perf wave: the
+//                   unused loop still cost a libwinpthread-1.dll load and
+//                   ~64 KB of image).
+//   promise.cpp   - `Promise<T>` + await/sleep (cp3/async/promise.hpp). Always
+//                   paired with eventloop.cpp.
+//   parallel.cpp  - the `parallel.*` engine (spec 13). `worker(...)` uses the
+//                   loop, not the pool, so worker.hpp does not select it.
+//
+// Since D72 the console family's TUs are selected by the console native row
+// (src/std/console/native.hpp), not discovered here.
+struct RuntimeUnit {
+    const char* file;
+    const char* markers;
+};
+constexpr RuntimeUnit kRuntimeUnits[] = {
+    {"runtime.cpp", ""},
+    {"error.cpp", ""},
+    {"eventloop.cpp",
+     "cp3/async/|cp3/parallel/|runEventLoop|cp3/std/console.hpp|"
+     "cp3/std/network.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
+    {"promise.cpp",
+     "cp3/async/|cp3/parallel/|runEventLoop|cp3/std/console.hpp|"
+     "cp3/std/network.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
+    {"parallel.cpp", "cp3/parallel/parallel.hpp|parallelRunAll|ThreadPool"},
+};
+
+// Every .cpp under the runtime directory, so discovery tracks the layout. The
+// structure sweep moved the sources into per-family subdirectories (core/,
+// async/, parallel/), so the walk is recursive; the legacy flat directory
+// still works.
+std::vector<fs::path> discoverRuntimeSources(const fs::path& dir) {
+    std::vector<fs::path> present;
+    std::error_code ec;
+    for (const fs::directory_entry& entry :
+         fs::recursive_directory_iterator(dir, ec)) {
+        if (!entry.is_regular_file(ec)) continue;
+        if (entry.path().extension() == ".cpp") {
+            present.push_back(entry.path());
+        }
+    }
+    return present;
+}
+
+}  // namespace
+
+bool markerListMatches(const std::string& text, std::string_view markers) {
+    if (markers.empty()) return true;
+    std::string_view rest = markers;
+    while (!rest.empty()) {
+        const std::size_t bar = rest.find('|');
+        const std::string_view marker = rest.substr(0, bar);
+        if (!marker.empty() && text.find(marker) != std::string::npos) {
+            return true;
+        }
+        if (bar == std::string_view::npos) break;
+        rest.remove_prefix(bar + 1);
+    }
+    return false;
+}
+
+std::vector<fs::path> runtimeSourcePaths(const std::string& programText) {
     const fs::path repo = repositoryRoot();
 
     // Prefer the refactored layout; fall back to the legacy flat directory.
@@ -346,46 +377,13 @@ std::vector<fs::path> runtimeSourcePaths() {
         }
     }
     if (dir.empty()) return {};
+    const std::vector<fs::path> present = discoverRuntimeSources(dir);
 
-    // What the tree actually contains, so discovery tracks the layout. Since
-    // the structure sweep the sources live in per-family subdirectories
-    // (core/, async/, parallel/), so the walk is recursive; the legacy flat
-    // directory still works.
-    std::vector<fs::path> present;
-    for (const fs::directory_entry& entry :
-         fs::recursive_directory_iterator(dir, ec)) {
-        if (!entry.is_regular_file(ec)) continue;
-        if (entry.path().extension() == ".cpp") {
-            present.push_back(entry.path());
-        }
-    }
-
-    // Keep only the required, documented set, in a stable order.
-    //
-    //   runtime.cpp   - toString / print / println / Undefined (cp3/core/runtime.hpp);
-    //                   M1 `console.log` lowers onto `println`.
-    //   error.cpp     - `Thrown` (cp3/core/error.hpp): `throw` boxing and the
-    //                   unhandled-rejection report.
-    //   eventloop.cpp - the single-threaded loop + the timer builtins
-    //                   (cp3/async/eventloop.hpp): `setTimeout`/`setInterval`/... and
-    //                   the `runEventLoop()` every generated `main()` ends with
-    //                   when the unit uses async (§14).
-    //   promise.cpp   - `Promise<T>` + `await`/`sleep` (cp3/async/promise.hpp).
-    //
-    // Since D72 `console.cpp` is the console family's runtime TU
-    // (src/std/console/runtime.cpp), selected by the console native row when a
-    // program imports "std/console" (native_packages.cpp), so it is not
-    // discovered here.
-    //
-    // parallel.cpp is the `parallel.*` / `worker(...)` engine (spec 13);
-    // worker.hpp is header-only, so it contributes no TU.
-    static const char* const kRequired[] = {"runtime.cpp", "error.cpp",
-                                            "eventloop.cpp", "promise.cpp",
-                                            "parallel.cpp"};
     std::vector<fs::path> sources;
-    for (const char* name : kRequired) {
+    for (const RuntimeUnit& unit : kRuntimeUnits) {
+        if (!markerListMatches(programText, unit.markers)) continue;
         for (const fs::path& file : present) {
-            if (file.filename() == name) {
+            if (file.filename() == unit.file) {
                 sources.push_back(file);
                 break;
             }

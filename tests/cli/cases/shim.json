@@ -1,0 +1,618 @@
+{
+  "group": "shim",
+  "cases": [
+    {
+      "group": "shim",
+      "name": "version-forwarded",
+      "description": "version forwarded",
+      "argv": [
+        "version"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "regex": "^cp3c \\d+\\.\\d+\\.\\d+"
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "help-forwarded",
+      "description": "help forwarded",
+      "argv": [
+        "help"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "Usage:",
+            "Commands:"
+          ]
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "unknown-command-exit-code",
+      "description": "unknown command exit code",
+      "argv": [
+        "bogus"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unknown command 'bogus'"
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "check-forwarded",
+      "description": "check forwarded",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "shim",
+      "name": "check-failure-exit-code",
+      "description": "check failure exit code",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "bad-syntax"
+        ]
+      },
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "CP3201"
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "doctor-fields",
+      "description": "doctor fields",
+      "argv": [
+        "doctor"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "cp3 doctor",
+            "install root",
+            "cp3c version",
+            "C++ toolchain",
+            "shipped trees",
+            "VS Code CLI"
+          ]
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "doctor-install-root",
+      "description": "doctor install root",
+      "argv": [
+        "doctor"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "regex": "install root : .*_shim"
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "doctor-missing-cp3c",
+      "description": "doctor missing cp3c",
+      "argv": [
+        "doctor"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3-no-cp3c",
+      "expect": {
+        "exit": 1,
+        "stdout": {
+          "contains": [
+            "cp3c         : MISSING",
+            "cp3c version : unknown"
+          ]
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "doctor-no-editor",
+      "description": "doctor no editor",
+      "argv": [
+        "doctor"
+      ],
+      "env": {
+        "PATH_MODE": "minimal"
+      },
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "VS Code CLI  : not found"
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "doctor-bundled-vsix",
+      "description": "doctor bundled vsix",
+      "argv": [
+        "doctor"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "bundled vsix :",
+          "not_contains": "none bundled"
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "doctor-trees",
+      "description": "doctor trees",
+      "argv": [
+        "doctor"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "shipped trees: include=no src=yes third_party=yes"
+          ]
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "init-default-writes-main-entry",
+      "description": "init default writes main entry",
+      "argv": [
+        "init"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "initialized project",
+            "src/main.cp3"
+          ]
+        },
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "main": "src/main.cp3"
+            }
+          },
+          "src/main.cp3": {
+            "contains": "Hello from work"
+          },
+          "README.md": {
+            "contains": "scaffolded by `cp3 init`"
+          }
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "init-named-target",
+      "description": "init named target",
+      "argv": [
+        "init",
+        "app"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "app/package.json": {
+            "json_paths": {
+              "name": "app",
+              "main": "src/main.cp3"
+            }
+          },
+          "app/src/main.cp3": {
+            "contains": "Hello from app"
+          }
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "init-path-with-spaces",
+      "description": "init path with spaces",
+      "argv": [
+        "init",
+        "my app"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "my app/package.json": {
+            "json_paths": {
+              "name": "my app"
+            }
+          },
+          "my app/src/main.cp3": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "init-refuses-nonempty-target",
+      "description": "init refuses nonempty target",
+      "argv": [
+        "init"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 2,
+        "stdout": {
+          "contains": [
+            "is not empty",
+            "Re-run with --force"
+          ]
+        },
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "main": "src/index.cp3"
+            }
+          },
+          "src/index.cp3": {
+            "exists": true
+          },
+          "src/main.cp3": {
+            "absent": true
+          }
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "init-force-overwrites-scaffold",
+      "description": "init force overwrites scaffold",
+      "argv": [
+        "init",
+        "--force"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "main": "src/main.cp3"
+            }
+          },
+          "src/main.cp3": {
+            "exists": true
+          },
+          "README.md": {
+            "contains": "scaffolded by `cp3 init`"
+          }
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "init-short-force-alias",
+      "description": "init short force alias",
+      "argv": [
+        "init",
+        "-f"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "src/main.cp3": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "init-rejects-two-targets",
+      "description": "init rejects two targets",
+      "argv": [
+        "init",
+        "a",
+        "b"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 2,
+        "stdout": {
+          "contains": "usage: cp3 init [target] [--force]"
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "init-yes-is-not-a-flag",
+      "description": "init yes is not a flag",
+      "argv": [
+        "init",
+        "--yes"
+      ],
+      "xfail": {
+        "id": "shim-init-ignores-yes",
+        "reason": "cp3.cmd init has its own parser and treats --yes as a target directory"
+      },
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "not_contains": "initialized project \"--yes\""
+        },
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "name": "work"
+            }
+          },
+          "--yes": {
+            "absent": true
+          }
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "init-entry-diverges-from-cp3c",
+      "description": "init entry diverges from cp3c",
+      "argv": [
+        "init",
+        "--force"
+      ],
+      "setup": {
+        "files": {
+          "package.json": "{\n  \"name\": \"app\",\n  \"version\": \"1.0.0\",\n  \"description\": \"a C+++ project\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"typeSystem\": \"typescript\",\n  \"scripts\": {\n    \"dev\": \"cp3c dev src/index.cp3\",\n    \"build\": \"cp3c build src/index.cp3\",\n    \"start\": \"cp3c run src/index.cp3\",\n    \"check\": \"cp3c check src/index.cp3\"\n  },\n  \"build\": {\n    \"bundleNativeDlls\": true\n  }\n}\n",
+          "src/index.cp3": "import console from \"std/console\";\n\nconsole.log(\"Hello from app!\");\n"
+        }
+      },
+      "xfail": {
+        "id": "shim-init-duplicate-command",
+        "reason": "cp3 init is a shim-only duplicate that writes src/main.cp3 while cp3c init writes src/index.cp3"
+      },
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "files": {
+          "package.json": {
+            "json_paths": {
+              "main": "src/index.cp3"
+            }
+          },
+          "src/index.cp3": {
+            "equals_file": "init-application-entry.cp3"
+          }
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "path-with-spaces-version",
+      "description": "path with spaces version",
+      "argv": [
+        "version"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3-space",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "regex": "^cp3c \\d+\\.\\d+\\.\\d+"
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "path-with-spaces-runs-project",
+      "description": "path with spaces runs project",
+      "argv": [
+        "run",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "xfail": {
+        "id": "paths-with-spaces-break-build",
+        "reason": "a shim installed under a path containing a space passes an unquoted include root to g++, so the runtime header is not found"
+      },
+      "requires": [
+        "windows",
+        "command:cp3",
+        "compiler"
+      ],
+      "tool": "cp3-space",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "shim",
+      "name": "forwards-global-flags-after-command",
+      "description": "forwards global flags after command",
+      "argv": [
+        "check",
+        "src/index.cp3",
+        "--verbose"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0
+      }
+    },
+    {
+      "group": "shim",
+      "name": "doctor-reports-cp3c-version",
+      "description": "doctor reports cp3c version",
+      "argv": [
+        "doctor"
+      ],
+      "requires": [
+        "windows",
+        "command:cp3"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "regex": "cp3c version : cp3c \\d+\\.\\d+\\.\\d+"
+        }
+      }
+    }
+  ]
+}

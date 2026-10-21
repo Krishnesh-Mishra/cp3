@@ -1,9 +1,9 @@
-// C+++ local docs viewer — client behaviour.
+// C+++ local docs viewer - client behaviour.
 //
 // Motion here follows Apple's "Designing Fluid Interfaces": springs with a
 // damping ratio + response (not a fixed duration), velocity hand-off from
 // gesture to animation, momentum projection for flick decisions, rubber-band
-// boundaries, and full interruptibility. See the skill's §4–§6, §9–§10, §14.
+// boundaries, and full interruptibility. See the skill's §4-§6, §9-§10, §14.
 (function () {
   "use strict";
 
@@ -39,7 +39,7 @@
   /* ============================================================== springs
      A critically damped spring at damping 1.0 is the house default; a little
      bounce (0.82) is reserved for gestures that carried real momentum, where
-     overshoot reads as physical. Response is in seconds and is NOT a duration —
+     overshoot reads as physical. Response is in seconds and is NOT a duration -
      the settle time emerges from the parameters. */
   function createSpring(opts) {
     var x0 = opts.from;
@@ -56,7 +56,7 @@
     // Exact solution of the damped harmonic oscillator (m = 1). Integrating
     // numerically at 60 fps silently over-damps the motion and erases the
     // overshoot a momentum spring is supposed to have, so we evaluate the
-    // closed form instead — it is frame-rate independent and interruption-safe.
+    // closed form instead - it is frame-rate independent and interruption-safe.
     function valueAt(t) {
       var a = x0 - to;
       if (zeta < 1 - 1e-6) {
@@ -97,7 +97,7 @@
     };
   }
 
-  /** Apple's momentum projection — where a flick is *going* (§6). */
+  /** Apple's momentum projection - where a flick is *going* (§6). */
   function project(vel, decel) {
     decel = decel == null ? 0.998 : decel;
     return (vel / 1000) * decel / (1 - decel);
@@ -261,7 +261,7 @@
       grab = null;
       try { sidebar.releasePointerCapture(g.id); } catch (err) {}
       if (scrim) scrim.classList.remove("dragging");
-      if (!g.moved) return; // a tap — let the link click through
+      if (!g.moved) return; // a tap - let the link click through
 
       var a = samples[0];
       var b = samples[samples.length - 1];

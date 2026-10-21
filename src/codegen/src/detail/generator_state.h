@@ -124,6 +124,11 @@ protected:
     bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
     bool needsRegex_ = false;      // regex literals -> cp3/core/regex.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
+    // D79: this unit opted into `createServer({ threads })`. Namespace-scope
+    // module bindings become `thread_local`, and their runtime initializers are
+    // replayed on every loop thread through `cp3_init_module_state()`.
+    bool scaleMode_ = false;
+    std::vector<std::string> moduleInitLines_;
     bool needsFs_ = false;         // std/fs -> cp3/std/fs.hpp include
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp

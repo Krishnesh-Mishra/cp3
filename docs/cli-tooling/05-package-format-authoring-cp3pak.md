@@ -8,6 +8,14 @@ cp3 init
 
 Prompts: project **type** (`application` or `package`) → **name** → **description** → **type-system pattern** (TypeScript / C++ / Rust - see [README.md §3](../language-spec/03-type-system.md)). Generates `src/`, `package.json`, and a hello-world entry file (`index.cp3` by default).
 
+Interactive prompts appear only on a terminal and only without `--yes`. For scripts and CI, pass the answers explicitly:
+
+```bash
+cp3 init --yes --type package --type-system rust
+```
+
+`--type-system` accepts `typescript` (the default), `cpp`, or `rust`; the chosen value is written to `package.json` as `"typeSystem"`. Without a terminal or `--type-system`, the default is `typescript`.
+
 **`package.json`**
 
 ```json
@@ -29,6 +37,7 @@ Prompts: project **type** (`application` or `package`) → **name** → **descri
 - `"type": "package"` → `cp3 build` produces a `.cp3pak` (see below).
 - `"main"` - the entry point; defaults to `index.cp3` (or `main.cp3`) if omitted. The compiler starts here and bundles only whatever is actually reached through `import`.
 - `"typeSystem"` - which type-name vocabulary is the project default ([README.md §3](../language-spec/03-type-system.md)).
+- `"toolchain"` - optional C++ compiler family, version and policy for this project. The preferred form is an object such as `{ "id": "gcc", "version": "16.1.0", "policy": "latest" }`; `latest` uses the newest installed version of the family and records the selected version, while `exact` pins that version for CI, releases, benchmarks or prebuilt native libraries. The legacy string `"clang"` and `{ "id": "clang" }` mean `latest`; a version without a policy keeps the older exact behavior. The field may also be an explicit path to a compiler driver. Written by `cp3 toolchain use <id[@version]> --project` or by the interactive `cp3 toolchain` selector's "This project" scope; the writer preserves every other byte of `package.json`. Resolution order is `--toolchain`, then `CP3_TOOLCHAIN`, then this field, then the global config, then automatic detection ([§1](01-compilation-pipeline.md)). Prefer a standard id so the project stays portable; a machine-specific path is only written when explicitly forced.
 - `"build.files"` - optional extra files (README, license, etc.) to include in the package output alongside the code.
 - `"build.cacheBinary"` - optional. See [§5.4](05-package-format-authoring-cp3pak.md).
 - `"build.bundleNativeDlls"` - optional, default `true`. Relevant for `"type": "application"` projects specifically (a `"package"` doesn't produce a final deployable executable itself, so there's nothing to bundle alongside). When `true`, `cp3 build` copies every non-system shared library an `import native` dependency needs into the output folder next to the executable (`.dll`/`.so`/`.dylib`, auto-detected per platform) - full detail and when to set it `false` in [§1](01-compilation-pipeline.md).
@@ -148,10 +157,13 @@ export default { add, sub, mul, div }
 ```
 
 ```bash
-cp3 build      # → basickit.cp3pak
-cp3 publish    # push to the registry, or:
-cp3 link ./basickit.cp3pak   # local/private use
+cp3 build      # → .cp3/out/basickit.cp3pak
+cp3 publish    # build + report/copy the artifact; beta one has no registry push
+cp3 publish --out ./dist   # copy basickit.cp3pak into ./dist
+cp3 link ../basickit       # local/private use from a source checkout
 ```
+
+`cp3 publish` builds the package exactly as `cp3 build` does and reports the absolute `.cp3pak` path, name, version, size, and SHA-256; `--out` copies it, and `--dry-run` only reports. To share the package, attach that `.cp3pak` to a public GitHub release. Consumers can then install it with `cp3 install https://github.com/<owner>/<repo>` (see [§4](04-package-manager.md)).
 
 Consuming project:
 

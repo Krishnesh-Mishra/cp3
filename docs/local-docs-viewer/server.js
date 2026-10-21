@@ -43,13 +43,13 @@ const LABELS = {
 
 const DESCRIPTIONS = {
   "getting-started":
-    "Know TypeScript already? Get productive in cp3 in about two days — what stays the same, what changes, what's new, plus the std library and CLI you actually need.",
+    "Know TypeScript already? Get productive in cp3 in about two days - what stays the same, what changes, what's new, plus the std library and CLI you actually need.",
   "language-spec":
     "Syntax, the type system, memory model, concurrency, classes, and everything else you write in a `.cp3` file.",
   "cli-tooling":
-    "The `cp3` command-line tool — build/run pipeline, diagnostics and crash reporting, the package manager, `.cp3pak`, and native bindgen.",
+    "The `cp3` command-line tool - build/run pipeline, diagnostics and crash reporting, the package manager, `.cp3pak`, and native bindgen.",
   "standard-library":
-    "The `std/*` modules with exact signatures — `console`, `JSON`, `Math`, `fs`, `network`, `Date`, `process`, `crypto` and more.",
+    "The `std/*` modules with exact signatures - `console`, `JSON`, `Math`, `fs`, `network`, `Date`, `process`, `crypto` and more.",
 };
 
 function prettifyLabel(name) {
@@ -436,7 +436,7 @@ function homePage() {
     <div class="start-here-copy">
       <span class="start-here-kicker">New here? You already know TypeScript?</span>
       <h2 class="start-here-title">From TypeScript to C+++ in 2 days</h2>
-      <p class="start-here-sub">Skip the internals — no memory model, no compiler internals. Just what stays the same, what changes, what's new, and the std library and CLI commands you need for everyday work.</p>
+      <p class="start-here-sub">Skip the internals - no memory model, no compiler internals. Just what stays the same, what changes, what's new, and the std library and CLI commands you need for everyday work.</p>
       <a class="btn btn-primary start-here-cta" href="${guideHref}">Start the 2-day guide →</a>
     </div>
     <div class="start-here-steps">
@@ -490,7 +490,7 @@ function homePage() {
     content: `<div class="home">
   <section class="hero">
     <h1 class="hero-title">C+++ <span class="hero-lang">(.cp3)</span></h1>
-    <p class="hero-sub">A JS/TS-flavored language that compiles to native code — no garbage collector, no manual memory management. Documentation for the language, its tooling, and its standard library.</p>
+    <p class="hero-sub">A JS/TS-flavored language that compiles to native code - no garbage collector, no manual memory management. Documentation for the language, its tooling, and its standard library.</p>
     <div class="hero-actions">
       <a class="btn btn-primary" href="${guideHref}">New from TypeScript? Start here</a>
       <a class="btn" href="/view/language-spec/00-overview.md">Read the language spec</a>
@@ -656,7 +656,7 @@ const server = http.createServer((req, res) => {
             title: "Not found",
             currentRel: "",
             crumb: `<a href="/">Home</a><span class="sep">/</span><span class="current">Not found</span>`,
-            content: `<h1>404 — not found</h1><p>No document at <code>${escapeHtml(rel)}</code>.</p><p><a href="/">Back to the docs home</a></p>`,
+            content: `<h1>404 - not found</h1><p>No document at <code>${escapeHtml(rel)}</code>.</p><p><a href="/">Back to the docs home</a></p>`,
           }),
         );
       }

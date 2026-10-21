@@ -134,6 +134,8 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
                                std::string& decls, std::string& mainBody) {
     const bool isConst = kind == VarKind::Const;
     const std::string cv = isConst ? "const " : "";
+    // D79: a scaled server gives every loop thread its own module bindings.
+    const std::string tl = g.scaleMode_ ? "thread_local " : "";
     const std::string name =
         mapIdent(static_cast<const Identifier&>(*d.id).name);
     const std::string& rawName = static_cast<const Identifier&>(*d.id).name;
@@ -193,33 +195,42 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
     if (isConst) {
         if (isStaticInitExpr(*d.init)) {
             g.emitLineDirective(d, decls);
-            line(decls, 1, cv + ci.cpp + " " + name + " = " + initText + ";");
+            line(decls, 1, tl + cv + ci.cpp + " " + name + " = " +
+                              initText + ";");
         } else {
             // The initializer reads runtime state: evaluate it inside
             // `main` at its source position, after initArgv and the rest
             // of the runtime bootstrap. The binding keeps namespace scope
             // so functions can read it; language-level const-ness is
             // enforced by sema.
-            line(decls, 1, ci.cpp + " " + name + "{};");
+            line(decls, 1, tl + ci.cpp + " " + name + "{};");
             g.emitLineDirective(d, mainBody);
             line(mainBody, 1, g.moduleRef(rawName) + " = " + initText + ";");
+            if (g.scaleMode_) {
+                g.moduleInitLines_.push_back(name + " = " + initText + ";");
+            }
         }
         g.declare(rawName, declared, /*cell=*/false, /*global=*/true);
         return;
     }
-    line(decls, 1, ci.cpp + " " + name + "{};");
+    line(decls, 1, tl + ci.cpp + " " + name + "{};");
     g.emitLineDirective(d, mainBody);
     line(mainBody, 1, g.moduleRef(rawName) + " = " + initText + ";");
+    if (g.scaleMode_) {
+        g.moduleInitLines_.push_back(name + " = " + initText + ";");
+    }
     g.declare(rawName, declared, /*cell=*/false, /*global=*/true);
 }
 
 void ModuleVarEmitter::noInit(const detail::CppInfo& ci,
                               const std::string& name,
                               const std::string& cv, std::string& decls) {
+    const std::string tl = g.scaleMode_ ? "thread_local " : "";
     if (ci.representable && ci.shape != Shape::Void) {
-        line(decls, 1, cv + ci.cpp + " " + name + "{};");
+        line(decls, 1, tl + cv + ci.cpp + " " + name + "{};");
     } else {
-        line(decls, 1, cv + "auto " + name + " = cp3::runtime::undefined;");
+        line(decls, 1, tl + cv + "auto " + name +
+                          " = cp3::runtime::undefined;");
     }
 }
 

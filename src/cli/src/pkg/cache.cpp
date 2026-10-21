@@ -45,7 +45,8 @@ BuildLayout makeBuildLayout(const fs::path& entryFile) {
     // .cp3/out/<entry-stem>.
     layout.exePath = layout.outDir / (entryFile.stem().string() + suffix);
     layout.includeDirs = compilerIncludeRoots();
-    layout.runtimeSources = runtimeSourcePaths();
+    // runtimeSources is filled by the build driver from the generated program
+    // text (runtimeSourcePaths in detail/util.hpp): the set is per program.
     return layout;
 }
 
@@ -77,8 +78,8 @@ std::vector<CacheEntry> loadManifest(const fs::path& manifestPath) {
     std::ifstream in(manifestPath);
     if (!in) return entries;
     std::string line;
-    if (!std::getline(in, line) || line != "cp3c-manifest-v2") {
-        return entries;  // v1 (or corrupt): retire every object once.
+    if (!std::getline(in, line) || line != "cp3c-manifest-v3") {
+        return entries;  // v2/v1 (or corrupt): retire every object once.
     }
     while (std::getline(in, line)) {
         if (line.empty() || line[0] == '#') continue;
@@ -88,6 +89,7 @@ std::vector<CacheEntry> loadManifest(const fs::path& manifestPath) {
         if (!std::getline(ss, e.source, '\t')) continue;
         if (!std::getline(ss, e.hash, '\t')) continue;
         if (!std::getline(ss, e.header, '\t')) continue;
+        if (!std::getline(ss, e.compiler, '\t')) continue;
         if (!std::getline(ss, e.cpp, '\t')) continue;
         if (!std::getline(ss, e.obj, '\t')) continue;
         entries.push_back(std::move(e));
@@ -98,10 +100,11 @@ std::vector<CacheEntry> loadManifest(const fs::path& manifestPath) {
 void saveManifest(const fs::path& manifestPath,
                   const std::vector<CacheEntry>& entries) {
     std::ostringstream out;
-    out << "cp3c-manifest-v2\n";
+    out << "cp3c-manifest-v3\n";
     for (const CacheEntry& e : entries) {
         out << e.profile << '\t' << e.source << '\t' << e.hash << '\t'
-            << e.header << '\t' << e.cpp << '\t' << e.obj << '\n';
+            << e.header << '\t' << e.compiler << '\t' << e.cpp << '\t'
+            << e.obj << '\n';
     }
     writeTextFile(manifestPath, out.str(), nullptr);
 }

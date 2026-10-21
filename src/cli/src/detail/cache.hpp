@@ -27,6 +27,11 @@
 // fingerprint also feeds the executable's link stamp (commands/build.cpp), so
 // a rebuilt header or runtime object cannot leave an executable linked
 // against the previous ones.
+//
+// Manifest v3 also records the effective compiler key (family, exact parsed
+// version and driver path). A compiler update under `latest`, or an exact pin
+// that resolves to a different version, retires every object and the link
+// stamp instead of reusing code produced by another compiler.
 // =============================================================================
 #pragma once
 
@@ -55,6 +60,7 @@ struct CacheEntry {
     std::string source;   // logical source key (the .cp3 path or the real .cpp)
     std::string hash;     // hash of the generated/real .cpp content
     std::string header;   // include-tree fingerprint when the object was built
+    std::string compiler; // effective compiler key (family, version, path)
     std::string cpp;      // generated .cpp path
     std::string obj;      // object path
 };

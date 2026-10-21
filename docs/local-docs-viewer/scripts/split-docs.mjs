@@ -45,7 +45,7 @@ const SOURCES = [
     dir: "language-spec",
     label: "Language Spec",
     blurb:
-      "The C+++ core language — syntax, the type system, memory model, concurrency, classes, and everything else you write in a `.cp3` file.",
+      "The C+++ core language - syntax, the type system, memory model, concurrency, classes, and everything else you write in a `.cp3` file.",
     aliases: ["README.md", "README"],
   },
   {
@@ -53,7 +53,7 @@ const SOURCES = [
     dir: "cli-tooling",
     label: "CLI & Tooling",
     blurb:
-      "The `cp3` command-line tool itself — the build/run pipeline, diagnostics and crash reporting, the package manager, the `.cp3pak` format, and native-library bindgen.",
+      "The `cp3` command-line tool itself - the build/run pipeline, diagnostics and crash reporting, the package manager, the `.cp3pak` format, and native-library bindgen.",
     aliases: ["CLI-README.md"],
   },
   {
@@ -61,7 +61,7 @@ const SOURCES = [
     dir: "standard-library",
     label: "Standard Library",
     blurb:
-      "The `std/*` modules — `console`, `JSON`, `Math`, `fs`, `network`, `Date`, `process`, `path`, `os`, `events`, `crypto`, `env`, `Map`/`Set`, `buffer` — with exact function signatures.",
+      "The `std/*` modules - `console`, `JSON`, `Math`, `fs`, `network`, `Date`, `process`, `path`, `os`, `events`, `crypto`, `env`, `Map`/`Set`, `buffer` - with exact function signatures.",
     aliases: ["STDLIB-README.md"],
   },
 ];
@@ -376,7 +376,7 @@ function build() {
 
   // Landing page.
   const indexLines = [
-    "# C+++ (`.cp3`) — Documentation",
+    "# C+++ (`.cp3`) - Documentation",
     "",
     "A browsable, section-by-section breakdown of the C+++ language, its CLI and tooling, and its standard library.",
     "",
@@ -384,11 +384,11 @@ function build() {
     "",
     "## Start Here",
     "",
-    "New from TypeScript? Get productive in cp3 in about two days — what stays the same, what changes, what's new, plus the std library and CLI commands you actually need.",
+    "New from TypeScript? Get productive in cp3 in about two days - what stays the same, what changes, what's new, plus the std library and CLI commands you actually need.",
     "",
     "- [From TypeScript to C+++ in two days](getting-started/00-overview.md)",
-    "- [Day 1 — the language](getting-started/01-day-1-the-language.md)",
-    "- [Day 2 — the std library & the CLI](getting-started/02-day-2-stdlib-and-cli.md)",
+    "- [Day 1 - the language](getting-started/01-day-1-the-language.md)",
+    "- [Day 2 - the std library & the CLI](getting-started/02-day-2-stdlib-and-cli.md)",
     "- [TypeScript → C+++ cheat sheet](getting-started/03-cheatsheet.md)",
     "",
   ];

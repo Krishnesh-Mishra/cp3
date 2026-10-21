@@ -116,15 +116,16 @@ You met `run`/`check`/`dev` on Day 1. Here's the full set, grouped by when you'd
 
 | Command | What it does |
 | --- | --- |
-| `cp3 install <name-or-url>` | Install a published package (pure cp3, or one with native bindings baked in) |
-| `cp3 install` | Install everything listed in `package.json` |
-| `cp3 native-install <sdk>` | *Author-side:* generate bindings from a C/C++ SDK. Not the everyday path - most people just `cp3 install` a package someone already published |
+| `cp3 install <path-or-github-url>` | Install a local `.cp3pak`/package directory, or the latest release of a public GitHub repo |
+| `cp3 install` | Install everything listed in `package.json` (linked entries stay linked) |
+| `cp3 native-install <sdk>` | *Author-side:* generate bindings from a C/C++ SDK. Not the everyday path - most people just `cp3 install` a package someone already shared |
 | `cp3 exec <package> [args]` | Run a package's bundled CLI tool |
-| `cp3 publish` | Publish your package |
-| `cp3 link <file.cp3pak>` | Link a local package (your `npm link`) |
+| `cp3 publish [--out <dir>]` | Build the package and report/copy the `.cp3pak`; beta one has no registry upload |
+| `cp3 link <dir-or-cp3pak>` | Link a local package for development (your `npm link`) |
+| `cp3 link --list` / `cp3 unlink <name>` | Inspect or remove local links |
 | `cp3 recompile <file.cp3pak>` | Rebuild a package from source |
 
-> `cp3 install` and `cp3 native-install` are **not** two names for the same thing. `install` consumes an already-published package; `native-install` is what an *author* runs once to wrap a native library before publishing. Details in [CLI §4 Package manager](../cli-tooling/04-package-manager.md).
+> `cp3 install` and `cp3 native-install` are **not** two names for the same thing. `install` consumes an already-built package; `native-install` is what an *author* runs once to wrap a native library before sharing it. Beta one has no registry: a bare name like `cp3 install some-package` exits with a usage error and points at a local path, a GitHub release URL, or `cp3 link`. Details in [CLI §4 Package manager](../cli-tooling/04-package-manager.md).
 
 ### The project it manages
 

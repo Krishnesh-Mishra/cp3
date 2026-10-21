@@ -1,0 +1,7 @@
+import console from "std/console";
+import process from "std/process";
+
+let args = process.argv;
+for (let i = 0; i < args.length; i++) {
+  console.log(args[i]);
+}

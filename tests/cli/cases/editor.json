@@ -1,0 +1,881 @@
+{
+  "group": "editor",
+  "cases": [
+    {
+      "group": "editor",
+      "name": "status-no-editors",
+      "description": "status no editors",
+      "argv": [
+        "editor-plugin",
+        "status"
+      ],
+      "env": {
+        "PATH_MODE": "minimal"
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "no editor",
+            "cp3"
+          ]
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "status-one-fake-editor",
+      "description": "status one fake editor",
+      "argv": [
+        "editor-plugin",
+        "status"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "Visual Studio Code",
+            "code"
+          ]
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "status-multiple-fake-editors",
+      "description": "status multiple fake editors",
+      "argv": [
+        "editor-plugin",
+        "status"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "Visual Studio Code",
+            "Cursor",
+            "VSCodium"
+          ]
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "status-current",
+      "description": "status current",
+      "argv": [
+        "editor-plugin",
+        "status"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "setup": {
+        "home_fixtures": [
+          "editor-home-current"
+        ]
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "current",
+            "0.1.0"
+          ]
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "status-update-available",
+      "description": "status update available",
+      "argv": [
+        "editor-plugin",
+        "status"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "setup": {
+        "home_fixtures": [
+          "editor-home-older"
+        ]
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "update available",
+            "0.0.9"
+          ]
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "status-newer-installed",
+      "description": "status newer installed",
+      "argv": [
+        "editor-plugin",
+        "status"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "setup": {
+        "home_fixtures": [
+          "editor-home-newer"
+        ]
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "newer than bundled",
+            "0.2.0"
+          ]
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "status-not-installed",
+      "description": "status not installed",
+      "argv": [
+        "editor-plugin",
+        "status"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "not installed"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "status-json-shape",
+      "description": "status json shape",
+      "argv": [
+        "editor-plugin",
+        "status",
+        "--json"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "setup": {
+        "home_fixtures": [
+          "editor-home-current"
+        ]
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--json"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "ok": true,
+          "action": "status",
+          "result": "ok"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "install-current-does-not-invoke-editor",
+      "description": "install current does not invoke editor",
+      "argv": [
+        "editor-plugin",
+        "install"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin",
+        "FAKE_EDITOR_LOG": "{root}/editor.log"
+      },
+      "setup": {
+        "home_fixtures": [
+          "editor-home-current"
+        ]
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "already installed"
+        },
+        "files": {
+          "{root}/editor.log": {
+            "not_contains": "--install-extension"
+          }
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "install-older-invokes-editor",
+      "description": "install older invokes editor",
+      "argv": [
+        "editor-plugin",
+        "install"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin",
+        "FAKE_EDITOR_LOG": "{root}/editor.log"
+      },
+      "setup": {
+        "home_fixtures": [
+          "editor-home-older"
+        ]
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "updated"
+        },
+        "files": {
+          "{root}/editor.log": {
+            "contains": "--install-extension"
+          }
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "install-force-reinstalls-current",
+      "description": "install force reinstalls current",
+      "argv": [
+        "editor-plugin",
+        "install",
+        "--force"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin",
+        "FAKE_EDITOR_LOG": "{root}/editor.log"
+      },
+      "setup": {
+        "home_fixtures": [
+          "editor-home-current"
+        ]
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "updated"
+        },
+        "files": {
+          "{root}/editor.log": {
+            "contains": "--install-extension"
+          }
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "install-no-editor-exits-2",
+      "description": "install no editor exits 2",
+      "argv": [
+        "editor-plugin",
+        "install"
+      ],
+      "env": {
+        "PATH_MODE": "minimal"
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "code",
+            "cursor"
+          ]
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "install-all-with-yes",
+      "description": "install all with yes",
+      "argv": [
+        "editor-plugin",
+        "install",
+        "--editor",
+        "all",
+        "--yes"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin",
+        "FAKE_EDITOR_LOG": "{root}/editor.log"
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--editor"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "{root}/editor.log": {
+            "contains": [
+              "code",
+              "--install-extension"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "install-all-without-yes-non-tty",
+      "description": "install all without yes non tty",
+      "argv": [
+        "editor-plugin",
+        "install",
+        "--editor",
+        "all"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--editor"
+      ],
+      "expect": {
+        "exit": 2
+      }
+    },
+    {
+      "group": "editor",
+      "name": "uninstall-absent",
+      "description": "uninstall absent",
+      "argv": [
+        "editor-plugin",
+        "uninstall"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "not installed"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "uninstall-present",
+      "description": "uninstall present",
+      "argv": [
+        "editor-plugin",
+        "uninstall"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin",
+        "FAKE_EDITOR_LOG": "{root}/editor.log"
+      },
+      "setup": {
+        "home_fixtures": [
+          "editor-home-current"
+        ]
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "uninstalled"
+        },
+        "files": {
+          "{root}/editor.log": {
+            "contains": [
+              "--uninstall-extension",
+              "cp3.cp3-vscode"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "export-default-path",
+      "description": "export default path",
+      "argv": [
+        "editor-plugin",
+        "export"
+      ],
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "cp3-vscode-0.1.0.vsix"
+        },
+        "files": {
+          "cp3-vscode-0.1.0.vsix": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "export-to-file",
+      "description": "export to file",
+      "argv": [
+        "editor-plugin",
+        "export",
+        "--out",
+        "bundle.vsix"
+      ],
+      "requires": [
+        "command:editor-plugin",
+        "flag:--out"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "bundle.vsix": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "export-to-directory",
+      "description": "export to directory",
+      "argv": [
+        "editor-plugin",
+        "export",
+        "--out",
+        "dist"
+      ],
+      "setup": {
+        "dirs": [
+          "dist"
+        ]
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--out"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "dist/cp3-vscode-0.1.0.vsix": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "export-refuses-overwrite",
+      "description": "export refuses overwrite",
+      "argv": [
+        "editor-plugin",
+        "export",
+        "--out",
+        "bundle.vsix"
+      ],
+      "setup": {
+        "files": {
+          "bundle.vsix": "old\n"
+        }
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--out"
+      ],
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "exists"
+        },
+        "files": {
+          "bundle.vsix": {
+            "equals": "old\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "export-force-overwrites",
+      "description": "export force overwrites",
+      "argv": [
+        "editor-plugin",
+        "export",
+        "--out",
+        "bundle.vsix",
+        "--force"
+      ],
+      "setup": {
+        "files": {
+          "bundle.vsix": "old\n"
+        }
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--out"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "bundle.vsix": {
+            "not_contains": "old"
+          }
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "no-vsix-exits-1",
+      "description": "no vsix exits 1",
+      "argv": [
+        "editor-plugin",
+        "install"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": "command:editor-plugin",
+      "tool": "cp3-no-vsix",
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "extension",
+            "without"
+          ]
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "no-vsix-export-exits-1",
+      "description": "no vsix export exits 1",
+      "argv": [
+        "editor-plugin",
+        "export"
+      ],
+      "requires": "command:editor-plugin",
+      "tool": "cp3-no-vsix",
+      "expect": {
+        "exit": 1
+      }
+    },
+    {
+      "group": "editor",
+      "name": "custom-vsix",
+      "description": "custom vsix",
+      "argv": [
+        "editor-plugin",
+        "install",
+        "--vsix",
+        "custom.vsix"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "setup": {
+        "files": {
+          "custom.vsix": "custom extension\n"
+        }
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--vsix"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "installed"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "custom-editor-cli-path",
+      "description": "custom editor cli path",
+      "argv": [
+        "editor-plugin",
+        "status",
+        "--editor",
+        "{fixtures}/editor/bin/code.cmd"
+      ],
+      "requires": [
+        "command:editor-plugin",
+        "flag:--editor"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "Visual Studio Code"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "extensions-dir-override",
+      "description": "extensions dir override",
+      "argv": [
+        "editor-plugin",
+        "status",
+        "--editor",
+        "code",
+        "--extensions-dir",
+        "extensions"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "setup": {
+        "dirs": [
+          "extensions/cp3.cp3-vscode-0.1.0"
+        ]
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--extensions-dir"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "current"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "dry-run-prints-argv",
+      "description": "dry run prints argv",
+      "argv": [
+        "editor-plugin",
+        "install",
+        "--dry-run",
+        "--json"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--dry-run"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "ok": true,
+          "action": "install"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "interactive-wizard-install",
+      "description": "interactive wizard install",
+      "argv": [
+        "editor-plugin",
+        "--interactive"
+      ],
+      "stdin": "1\n1\ny\n",
+      "env": {
+        "PATH_PREPEND": "editor/bin",
+        "FAKE_EDITOR_LOG": "{root}/editor.log"
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--interactive"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "cp3 editor support",
+            "What do you want to do?"
+          ]
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "interactive-invalid-choice-reprompts",
+      "description": "interactive invalid choice reprompts",
+      "argv": [
+        "editor-plugin",
+        "--interactive"
+      ],
+      "stdin": "99\n1\n1\ny\n",
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--interactive"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "What do you want to do?"
+          ]
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "interactive-eof-exits-cleanly",
+      "description": "interactive eof exits cleanly",
+      "argv": [
+        "editor-plugin",
+        "--interactive"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--interactive"
+      ],
+      "expect": {
+        "exit": 2
+      }
+    },
+    {
+      "group": "editor",
+      "name": "path-command",
+      "description": "path command",
+      "argv": [
+        "editor-plugin",
+        "path"
+      ],
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "cp3-vscode-0.1.0.vsix"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "json-has-no-ansi",
+      "description": "json has no ansi",
+      "argv": [
+        "editor-plugin",
+        "status",
+        "--json"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "setup": {
+        "home_fixtures": [
+          "editor-home-current"
+        ]
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--json"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "not_contains": "\u001b"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "antigravity-cli-unavailable",
+      "description": "antigravity cli unavailable",
+      "argv": [
+        "editor-plugin",
+        "status"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": "command:editor-plugin",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "Antigravity"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "codium-status",
+      "description": "codium status",
+      "argv": [
+        "editor-plugin",
+        "status",
+        "--editor",
+        "codium"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--editor"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "VSCodium"
+        }
+      }
+    },
+    {
+      "group": "editor",
+      "name": "install-current-json-result",
+      "description": "install current json result",
+      "argv": [
+        "editor-plugin",
+        "install",
+        "--json"
+      ],
+      "env": {
+        "PATH_PREPEND": "editor/bin"
+      },
+      "setup": {
+        "home_fixtures": [
+          "editor-home-current"
+        ]
+      },
+      "requires": [
+        "command:editor-plugin",
+        "flag:--json"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "ok": true,
+          "result": "already-installed"
+        }
+      }
+    }
+  ]
+}

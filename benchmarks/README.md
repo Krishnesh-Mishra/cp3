@@ -29,7 +29,7 @@ python benchmarks/run_benchmark.py --only hello-world,string-churn
 python benchmarks/run_benchmark.py --reps 3         # compute reps (best reported)
 python benchmarks/run_benchmark.py --churn-scale stress
 python benchmarks/run_benchmark.py --cp3c build/bin/cp3c.exe
-python benchmarks/run_benchmark.py --strict         # exit 1 on any gate WARN or BIG WARN
+python benchmarks/run_benchmark.py --strict         # exit 1 on any performance WARN or BIG WARN (CP3002 always fails)
 python benchmarks/run_benchmark.py --results DIR    # tee raw output to DIR
 ```
 
@@ -44,9 +44,11 @@ in PowerShell, `.\run.ps1 --only word-frequency` does the same.
 | `--hello-reps N` | hello-world runs; best and median are reported (default 15) |
 | `--churn-scale V` | string-churn scale: `default` (50,000), `stress` (300,000) or an integer |
 | `--cp3c PATH` | cp3 compiler (default `build/bin/cp3c.exe`) |
-| `--strict` | exit code 1 when the performance gate prints any WARN or BIG WARN |
+| `--strict` | exit code 1 when the performance gate prints any WARN or BIG WARN; CP3002 blockers always exit 1 |
 | `--results DIR` | tee the raw output to `DIR/run.txt` plus `DIR/meta.txt` (provenance, incl. the cp3c SHA-256) |
 | `--seconds S`, `--concurrency C`, `--latency N`, `--warmup N` | server load phases (defaults 3 s, 8 connections, 300 latency requests, 100 warmup) |
+| `--clients N` | client OS processes for `health-server-multi` (default 4, minimum useful 2); each owns `--concurrency` keep-alive connections |
+| `--single-clients N` | client OS processes for `health-server` (default 2, the quiet-probe shape); each owns `--concurrency` `http.client` sessions |
 
 The test harness runs the suite for you automatically (D67): after the
 conformance corpus pass it invokes `benchmarks/run_benchmark.py`, streams its
@@ -63,9 +65,9 @@ python tests/runner/run_tests.py --no-bench         # corpus only
 `--no-bench` skips the bench pass; `--json` skips it with a note so machine
 output stays parseable. The harness exit code stays `max(corpus, bench)`.
 
-The runner needs Python 3 only. It never stops a process it did not start:
-servers are launched with `subprocess.Popen`, measured, and killed by exact
-process id.
+The runner needs Python 3 only. Servers are launched with `subprocess.Popen`,
+measured, and stopped by exact process id together with the process tree they
+created (cluster or multiprocessing workers); no unrelated process is touched.
 
 ## The tasks
 
@@ -84,7 +86,8 @@ process id.
 | `generics-mono` | generic `Box<T>` loop vs a hand-written concrete copy | `998986007 998986007` | pending generic classes + generic functions |
 | `json-roundtrip` | 20,000 parse + stringify round trips of one 310-byte record | `664346` | runs (cp3/go/js/python; cpp/rust omitted) |
 | `async-fanout` | 10,000 zero-delay timers joined at once, then 10,000 chained awaits | `99898` | runs (cp3/go/js/python; cpp/rust omitted) |
-| `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404` | wire contract (below) | runs (contract verified; timing joins the next suite run) |
+| `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404`, single core | wire contract (below) | runs (contract verified; timing joins the next suite run) |
+| `health-server-multi` | the same contract with one worker per logical CPU in every language | wire contract (below) | runs (`createServer({ threads: os.cpus() })`) |
 
 Every value above is re-derived independently by `bench/oracle.py`, which
 re-implements every workload again in plain Python; the runner cross-checks
@@ -104,8 +107,16 @@ The health-server contract: every language listens on `127.0.0.1` only and
 answers `GET /healthz` with `200` text/plain `ok`, `GET /` with `200`
 text/plain `health-server ok`, and anything else with `404` text/plain
 `not found`. The port comes from `argv[1]` (the suite assigns 18080-18085 per
-language, default 8080); the cp3 entry reads `process.argv` like every other
-entry and was smoke-verified on its own port.
+language to the single-core row and 18090-18095 to the multicore row, default
+8080); the cp3 entry reads `process.argv` like every other entry.
+
+`health-server-multi` is the multicore sibling: cp3 uses
+`createServer({ threads: os.cpus() })` (one event loop and one uWS app per
+logical CPU), cpp and rust run one accept/handler worker per core on a shared
+listener, go uses `net/http` with `GOMAXPROCS`, js uses `node:cluster`, and
+python passes one listening socket to `multiprocessing` workers. The runner
+drives this row from `--clients` separate client OS processes (default 4),
+each with `--concurrency` raw keep-alive connections.
 
 Each task folder has its own README with the exact workload definition, the
 expected output, the per-language build/run commands, and a link back to the
@@ -130,9 +141,13 @@ Compute tables:
 Server table adds `variant` (e.g. Express vs zero-dep `node:http`), `boot_ms`
 (process start to first `200` on `/healthz`), `p50_ms`/`p95_ms` (per-request
 round trips on one persistent keep-alive connection) and `req/s` (successful
-requests over the load window at fixed concurrency). For servers the
-`cp3/cpp` and `cp3/rust` columns are time-per-request ratios (lower is better
-for cp3), computed from the throughputs.
+requests over the load window at fixed concurrency). The single-core row uses
+`--single-clients` client processes (default 2), each with `--concurrency`
+`http.client` sessions, matching the diagnosis quiet probe; the multicore row
+uses `--clients` client processes, each with `--concurrency` raw-socket
+keep-alive sessions. For servers the `cp3/cpp` and `cp3/rust` columns are
+time-per-request ratios (lower is better for cp3), computed from the
+throughputs.
 
 The summary table at the end collects one ratio pair per task and prints a
 geomean footer over every runnable pair.
@@ -144,12 +159,15 @@ are time ratios, lower is better for cp3:
 
 | tier | when it fires | lines |
 | --- | --- | --- |
+| CP3002 blocker | any cp3 row fails to build with CP3002 | one per row, starting `CP3002 BLOCKER`; always exits 1 |
 | BIG WARN | cp3 is over 1.20x cpp or rust, or slower than go/js/python at all (a native compiler should not lose to a scripted runtime) | one per reference, starting `BIG WARN (fix this):` |
 | WARN | cp3 is over 1.05x cpp or rust (the D64 5% band; tightened from 1.10x by the 2026-10-19 directive) | one per reference, starting `WARN ` |
 | WARN multi-core | a multi-core row (`compute-multi`, `health-server-multi`) is not FASTER than cpp (ratio above 1.00) | one dedicated line per row, starting `WARN multi-core` or `BIG WARN (fix this) multi-core` |
 
-The footer counts both tiers, and `--strict` makes the runner exit 1 when any
-WARN or BIG WARN fired, so CI or a wave landing can gate on it. The D64
+The footer counts both performance tiers, and `--strict` makes the runner exit
+1 when any WARN or BIG WARN fired, so CI or a wave landing can gate on it. A
+CP3002 blocker always exits 1, even without `--strict`: a row that cannot
+compile is not a pending measurement. The D64
 target stays cp3 within about 5% of the native pack for the native-type
 tiers, and the WARN trigger now sits exactly on that band: anything past 5%
 is a fix-me line, 1.20x is the regression tripwire. Multi-core rows carry
@@ -165,9 +183,10 @@ single-digit milliseconds, is the row the floor exists for.
 The gate deliberately fires on rows where the beta-one compiler is genuinely
 behind (see the labeled run below): those lines are the performance wave's
 checklist, and they should only ever become shorter and quieter. The labeled
-runs below were recorded before the tiered gate landed and still show the
-older single 1.2x `WARN` format; their raw files are kept as recorded, and
-the next labeled refresh will show the tier format.
+runs below were recorded before the tiered gate and the CP3002 blocker landed;
+they still show the older single 1.2x `WARN` format and the old
+`not runnable yet` rows. Their raw files are kept as recorded, and the next
+labeled refresh will show the blocker and tier format.
 
 ## The fairness contract
 
@@ -467,10 +486,11 @@ gate: 2 BIG WARN(s), 0 WARN(s); rerun with --strict to fail on warnings
 Rust stays well under two seconds at this scale because its string handling
 is simply that fast; that is the result, not a measurement problem.
 
-## Pending cp3 entries, precisely
+## CP3002 blockers, precisely
 
 Snapshot 2026-10-19 (`build\bin\cp3c.exe`; one `cp3c build main.cp3` per entry
-from a scratch copy; the quoted text is the compiler's own first diagnostic):
+from a scratch copy; the quoted text is the compiler's own first diagnostic).
+This is the removal checklist, not a list of accepted pending rows:
 
 - `compute-single-int`: `main.cp3:25:10: error: CP3002: not implemented yet: this returned value` (the native-type tier, D65)
 - `compute-multi`: `main.cp3:34:15: error: CP3002: not implemented yet: parallel.*`
@@ -488,12 +508,12 @@ from a scratch copy; the quoted text is the compiler's own first diagnostic):
 `compute-single/cp3`, `hello-world/cp3` and `string-churn/cp3` keep their real
 timings.
 
-Every pending line maps to a live wave: arrays (word-frequency, array-growth),
+Every blocker line maps to a live wave: arrays (word-frequency, array-growth),
 classes/interfaces (object-churn, interface-dispatch), closures
 (closure-capture), generics (generics-mono), `parallel.*` (compute-multi) and
-the native-type tier (compute-single-int). A pending row is not a failure: it
-is the compiler's own diagnostic, captured verbatim, and the row fills in
-when the feature lands without any change to the entry or the runner.
+the native-type tier (compute-single-int). A CP3002 row is a hard failure: the
+gate prints `CP3002 BLOCKER <task>` and exits 1. The row joins the timing table
+when the feature lands, without any change to the entry or the runner.
 
 ## Refresh policy
 

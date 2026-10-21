@@ -1,9 +1,15 @@
 # 4. Package manager
 
 ```bash
-cp3 install some-utility-package   # a package someone already published - pure cp3, or with native bindings baked in
+cp3 install ./basickit.cp3pak      # a local .cp3pak file or an unpacked package directory
+cp3 install https://github.com/someuser/somelib  # the latest release of a public repo
 cp3 install                        # installs everything already listed in package.json
 ```
+
+Beta one has **no registry server**. A bare package name such as
+`cp3 install some-utility-package` exits with a usage error and points at the
+three supported sources: a local path, a GitHub release URL, or `cp3 link`.
+The command never guesses that a package name is a directory on disk.
 
 **`cp3 install` and `cp3 native-install` solve two different problems - they are not two names for the same thing.** This is worth stating plainly, since both commands touch "getting a C/C++ library working in cp3" and it's an easy pair to mix up otherwise:
 
@@ -20,7 +26,8 @@ MyProject/
 ├── src/
 │   └── index.cp3
 └── .cp3/                  ← the only hidden/generated path - one line in .gitignore
-    ├── packages/          ← downloaded .cp3pak packages (from `cp3 install`)
+    ├── packages/          ← installed .cp3pak packages (from `cp3 install`)
+    ├── link/              ← extracted `.cp3pak` link cache (from `cp3 link`)
     ├── native/            ← generated native bindings (from `cp3 native-install`, below)
     │   └── opencv/
     │       ├── index.cp3  ← auto-generated declaration file (types/signatures only)
@@ -66,7 +73,56 @@ cp3 install https://github.com/someuser/somelib --auto
   `--auto` skips the prompt and picks automatically: it reads each candidate `.cp3pak`'s `package.json` `"engines"` field (below) and selects the one compatible with the currently-installed `cp3` compiler version, silently skipping any that require a version it doesn't have. If more than one candidate is still compatible after filtering, or if none declare an `"engines"` field at all, it falls back to the interactive selector rather than guessing - `--auto` resolves an unambiguous compatibility question, it doesn't invent an answer to an ambiguous one.
 - **None found** → a clear error naming the repo and release tag, not a silent failure or a generic "not found."
 
-This is scoped specifically to GitHub (using GitHub's own release API) for beta one, not a generic "any git URL" feature - keeping the implementation surface small and predictable. Whatever gets installed this way is recorded in `.cp3/lock.json` with the exact repo, release tag, asset filename, and a SHA256 hash of the downloaded file - since a GitHub release isn't a curated registry with its own integrity guarantees the way `.cp3pak`'s normal install path can rely on, pinning the hash at install time means a later `cp3 install` (or a CI run) can detect if the same tag's asset ever silently changes, rather than trusting it blindly every time.
+This is scoped specifically to GitHub (using GitHub's own release API) for beta one, not a generic "any git URL" feature - keeping the implementation surface small and predictable. Downloads use the system HTTP client (`curl.exe` on Windows, `curl` on POSIX), never a bundled third-party library. `CP3_GITHUB_API_URL` overrides the API base for tests, and `CP3_GITHUB_TOKEN`, when set, adds an authorization header to API requests only; the token is never printed.
+
+Whatever gets installed this way is recorded in `.cp3/lock.json` with the exact repo, release tag, asset filename, download URL, and a SHA256 hash of the downloaded bytes:
+
+```json
+{
+  "lockfileVersion": 1,
+  "packages": {
+    "mathkit": {
+      "version": "1.2.0",
+      "source": "github",
+      "repo": "someuser/mathkit",
+      "tag": "v1.2.0",
+      "asset": "mathkit-1.2.0.cp3pak",
+      "resolved": "https://github.com/someuser/mathkit/releases/download/v1.2.0/mathkit-1.2.0.cp3pak",
+      "integrity": "sha256:9f2c..."
+    }
+  }
+}
+```
+
+Since a GitHub release isn't a curated registry with its own integrity guarantees the way `.cp3pak`'s normal install path can rely on, pinning the hash at install time means a later `cp3 install` (or a CI run) can detect if the same tag's asset ever silently changes, rather than trusting it blindly every time. Reinstalling the same repo/tag/asset with a different hash fails with an explanation; `--force` accepts the new bytes and updates the pin.
+
+## Local links: `cp3 link` and `cp3 unlink`
+
+`cp3 link` points a consuming project at a package you are developing locally. It records a lock entry without going through a registry:
+
+```bash
+cp3 link ../mathkit              # a package directory, used in place
+cp3 link ./mathkit.cp3pak        # an artifact, extracted into .cp3/link/mathkit/
+cp3 link ./mathkit.cp3pak --name mathkit-dev --force
+cp3 link --list [--json]
+cp3 unlink mathkit
+```
+
+- **Directory packages are not copied.** The lock records `"source": "link"`, `"kind": "directory"`, the absolute resolved path in both `resolved` and `target`, and the package version. Edits are visible to the next build.
+- **A `.cp3pak` is immutable input.** `cp3 link` extracts it into `.cp3/link/<name>/` (a link cache, separate from `.cp3/packages/`) and records `"kind": "artifact"`, the artifact path, and its SHA-256. Re-running `cp3 link` on the same artifact replaces the cache when the bytes changed, and reuses the existing extraction when they did not. A cache path owned by a different link source is only replaced with `--force`.
+- `cp3 link --list` prints name, version, kind, source, and target.
+- `cp3 unlink <name>` removes only the lock entry and, for an artifact link, the `.cp3/link/<name>/` cache. It never deletes your source directory or the original `.cp3pak`.
+- `cp3 install` (with no arguments) leaves linked entries untouched. Installing a package under a linked name fails unless `--force` is passed, which replaces the link.
+
+## Publishing in beta one: artifact only
+
+```bash
+cp3 publish [<dir>] [--out <dir|file>] [--force] [--dry-run] [--json]
+```
+
+`cp3 publish` runs exactly the same package build as `cp3 build` for a `"type": "package"` project. The default output is `.cp3/out/<name>.cp3pak`; `--out` copies it to a directory or an explicit file. It prints the absolute artifact path, name, version, size, and SHA-256, and refuses to overwrite an existing `--out` target without `--force`. `--dry-run` reports what would be built and copied without building anything.
+
+There is no upload path in beta one: **publishing means producing an artifact**. Attach the `.cp3pak` to a GitHub release yourself; consumers can then install it with `cp3 install https://github.com/<owner>/<repo>`. Registry push, version resolution, and authentication are post-beta work.
 
 ## Native/legacy packages - the offline bindgen tool
 

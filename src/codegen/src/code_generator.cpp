@@ -59,6 +59,9 @@ GeneratedModule Generator::run(const Program& program) {
     if (options_.workerModule) {
         return runWorkerModule(program);
     }
+    // D79: a scaled `createServer` opts the whole unit into per-loop module
+    // state. Units without the option keep the exact pre-D79 lowering.
+    scaleMode_ = sema_.networkScaleMode;
     std::string decls;   // function forward declarations
     std::string defs;    // function definitions
     std::string mainBody;
@@ -117,6 +120,19 @@ void Generator::runUnit(const Program& program, std::string& decls,
         if (stmtPtr) {
             emitTopLevel(*stmtPtr, decls, defs, mainBody);
         }
+    }
+
+    if (scaleMode_) {
+        // D79: replay the module-scope runtime initializers on every child loop
+        // thread (the main thread already ran them in `mainBody` in source
+        // order). The runtime calls this after the loop is created and before
+        // the loop's uWS App exists.
+        std::string hook = "\nvoid cp3_init_module_state() {\n";
+        for (const std::string& initLine : moduleInitLines_) {
+            hook += "    " + initLine + "\n";
+        }
+        hook += "}\n";
+        defs += hook;
     }
 
     // The inline worker entries (D80) are ordinary functions of this unit: one

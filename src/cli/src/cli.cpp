@@ -14,10 +14,7 @@
 // =============================================================================
 #include "cp3/cli.hpp"
 
-#include <cstdint>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -25,8 +22,11 @@
 
 #include "cp3/version.hpp"
 
+#include "detail/arguments.hpp"
 #include "detail/commands.hpp"
+#include "detail/editor_plugin.hpp"
 #include "detail/scripts.hpp"
+#include "detail/toolchain.hpp"
 #include "detail/util.hpp"
 
 namespace cp3 {
@@ -47,7 +47,12 @@ void printUsage(std::FILE* out) {
         "  fmt <file.cp3>     Zero-config formatter\n"
         "  clean              Remove .cp3/build and .cp3/out (--all clears .cp3/packages)\n"
         "  init [dir]         Scaffold a new project (package.json + src/index.cp3)\n"
-        "  install [src]      Install a .cp3pak / package dir (bare: package.json deps)\n"
+        "  toolchain          Choose the C++ compiler (list/detect/use/clear)\n"
+        "  install [src]      Install a local .cp3pak/dir or GitHub release\n"
+        "  publish [dir]      Build a package and report/copy the .cp3pak (no registry)\n"
+        "  link <path>        Link a local package directory or .cp3pak\n"
+        "  unlink <name>      Remove a link and its link cache\n"
+        "  editor-plugin      Editor extension wizard/actions (alias editor-plugins)\n"
         "  exec <pkg> [args]  Run a package's bundled tool\n"
         "  lsp [--stdio]      Language server on stdio (for editor integrations)\n"
         "  dap [--stdio]      Debug adapter on stdio (for editor debugging)\n"
@@ -60,12 +65,26 @@ void printUsage(std::FILE* out) {
         "      --release         (build/run) whole-program build with LTO\n"
         "      --debug           (build/run) -O0 plus debug info\n"
         "      --verbose         Show toolchain choice and pipeline steps\n"
+        "      --toolchain <id[@version]|path>  Use this compiler for one command\n"
+        "      --strict-toolchain  Fail when a saved toolchain pin is missing\n"
+        "      --project         (toolchain) save the choice in package.json\n"
+        "      --global          (toolchain) save the choice for all projects\n"
         "      --max-memory <MB|N%>  Cap codegen-phase memory (default: 70% of system RAM)\n"
         "      --all             (clean) also remove .cp3/packages\n"
         "      --yes, -y         (init) accept defaults, never prompt\n"
         "      --type <t>        (init) pre-select project type (application|package)\n"
+        "      --type-system <s> (init) typescript|cpp|rust (default: typescript)\n"
         "      --auto            (install) auto-pick a GitHub release asset\n"
+        "      --force           (publish/link/install) overwrite existing output or link\n"
+        "      --dry-run         (publish) print what would be built/copied\n"
+        "      --json            (publish/link/unlink/install) machine-readable output\n"
+        "      --list            (link) list linked packages\n"
+        "      --out <dir|file>  (publish) copy the .cp3pak to this directory/file\n"
+        "      --name <name>     (link) record the link under a different name\n"
         "      --once            (dev) run one watch pass and exit\n"
+        "      --json, --interactive, --dry-run, --force  (editor-plugin) output/prompts\n"
+        "      --editor <id|path>, --vsix <path>  (editor-plugin) target and package\n"
+        "      --extensions-dir <dir>, --out <path>  (editor-plugin) overrides\n"
         "\n"
         "Exit codes:\n"
         "  0 success   1 compile error   2 usage error   3 not implemented\n",
@@ -83,182 +102,6 @@ std::vector<std::string> collectArgs(int argc, char** argv) {
     return args;
 }
 
-// Parses "<MB>" or "<N%>" into a megabyte cap. Returns false when malformed.
-bool parseMaxMemory(const std::string& value, std::uint64_t& outMb) {
-    if (value.empty()) return false;
-    if (value.back() == '%') {
-        const std::string number = value.substr(0, value.size() - 1);
-        if (number.empty()) return false;
-        char* end = nullptr;
-        const double pct = std::strtod(number.c_str(), &end);
-        if (end == number.c_str() || *end != '\0' || pct <= 0.0) return false;
-        const std::uint64_t total = cp3::cli::totalPhysicalMemoryMb();
-        if (total == 0) return false;
-        outMb = static_cast<std::uint64_t>(static_cast<double>(total) * pct / 100.0);
-        if (outMb == 0) outMb = 1;
-        return true;
-    }
-    char* end = nullptr;
-    const long mb = std::strtol(value.c_str(), &end, 10);
-    if (end == value.c_str() || *end != '\0' || mb <= 0) return false;
-    outMb = static_cast<std::uint64_t>(mb);
-    return true;
-}
-
-// Minimal `"main": "path"` extraction from package.json (default entry lookup).
-std::string extractJsonString(const std::string& json, const std::string& key) {
-    const std::string needle = "\"" + key + "\"";
-    const std::size_t kpos = json.find(needle);
-    if (kpos == std::string::npos) return {};
-    std::size_t i = kpos + needle.size();
-    while (i < json.size() && (json[i] == ' ' || json[i] == '\t' ||
-                               json[i] == '\r' || json[i] == '\n')) {
-        ++i;
-    }
-    if (i >= json.size() || json[i] != ':') return {};
-    ++i;
-    while (i < json.size() && (json[i] == ' ' || json[i] == '\t' ||
-                               json[i] == '\r' || json[i] == '\n')) {
-        ++i;
-    }
-    if (i >= json.size() || json[i] != '"') return {};
-    ++i;
-    std::string out;
-    while (i < json.size() && json[i] != '"') {
-        if (json[i] == '\\' && i + 1 < json.size()) {
-            ++i;
-        }
-        out.push_back(json[i]);
-        ++i;
-    }
-    return out;
-}
-
-// For `build` with no explicit file: package.json "main", then common defaults.
-std::string defaultEntryFile() {
-    namespace fs = cp3::cli::fs;
-    std::error_code ec;
-    const fs::path cwd = fs::current_path(ec);
-
-    std::string pkg;
-    if (cp3::cli::readTextFile(cwd / "package.json", pkg)) {
-        const std::string main = extractJsonString(pkg, "main");
-        if (!main.empty()) {
-            const fs::path candidate = cwd / main;
-            if (fs::exists(candidate, ec)) return candidate.string();
-        }
-    }
-    for (const char* rel : {"src/main.cp3", "src/index.cp3", "index.cp3",
-                            "main.cp3"}) {
-        const fs::path candidate = cwd / rel;
-        if (fs::exists(candidate, ec)) return candidate.string();
-    }
-    return {};
-}
-
-// Simple boolean flags shared by every command. Returns true when `t` matched.
-bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease,
-               bool& sawDebug) {
-    if (t == "--release") {
-        sawRelease = true;
-        opt.compile.profile = cp3::BuildProfile::Release;
-        return true;
-    }
-    if (t == "--debug") {
-        sawDebug = true;
-        opt.compile.profile = cp3::BuildProfile::Debug;
-        return true;
-    }
-    if (t == "--verbose" || t == "-v") { opt.verbose = true; return true; }
-    if (t == "--all") { opt.all = true; return true; }
-    if (t == "--yes" || t == "-y") { opt.yes = true; return true; }
-    if (t == "--once") { opt.once = true; return true; }
-    if (t == "--auto") { opt.autoSelect = true; return true; }
-    return false;
-}
-
-// Handles the value-taking options (--max-memory, --type). Returns true when
-// `t` was recognized; a malformed value is reported through `err` (the caller
-// aborts). `i` is advanced past a separate value token.
-bool parseValueOption(const std::vector<std::string>& tokens, std::size_t& i,
-                      cp3::cli::CliOptions& opt, std::string& err) {
-    const std::string& t = tokens[i];
-    if (t == "--max-memory" || cp3::cli::startsWith(t, "--max-memory=")) {
-        std::string value;
-        if (t == "--max-memory") {
-            if (i + 1 >= tokens.size()) {
-                err = "--max-memory requires a value (<MB> or <N%>)";
-                return true;
-            }
-            value = tokens[++i];
-        } else {
-            value = t.substr(std::strlen("--max-memory="));
-        }
-        std::uint64_t mb = 0;
-        if (!parseMaxMemory(value, mb)) {
-            err = "invalid --max-memory value '" + value + "'";
-            return true;
-        }
-        opt.compile.maxMemoryMb = mb;
-        return true;
-    }
-    if (t == "--type") {
-        if (i + 1 >= tokens.size()) {
-            err = "--type requires a value (application|package)";
-            return true;
-        }
-        const std::string value = tokens[++i];
-        if (value != "application" && value != "package") {
-            err = "invalid --type '" + value +
-                  "' (expected application or package)";
-            return true;
-        }
-        opt.initType = value;
-        return true;
-    }
-    return false;
-}
-
-// Parses the tokens following the command word into `opt`. Returns an empty
-// string on success or an error message on a usage problem.
-std::string parseOptions(const std::string& command,
-                         const std::vector<std::string>& tokens,
-                         cp3::cli::CliOptions& opt) {
-    bool sawRelease = false;
-    bool sawDebug = false;
-    bool afterSeparator = false;
-
-    for (std::size_t i = 0; i < tokens.size(); ++i) {
-        const std::string& t = tokens[i];
-
-        if (afterSeparator) {
-            opt.positionals.push_back(t);
-            continue;
-        }
-        if (t == "--") {
-            afterSeparator = true;
-            continue;
-        }
-        if (matchFlag(t, opt, sawRelease, sawDebug)) continue;
-
-        std::string err;
-        if (parseValueOption(tokens, i, opt, err)) {
-            if (!err.empty()) return err;
-            continue;
-        }
-        if (startsWithDash(t)) {
-            return "unknown option '" + t + "'";
-        }
-        opt.positionals.push_back(t);
-    }
-
-    if (sawRelease && sawDebug) {
-        return "--release and --debug are mutually exclusive";
-    }
-    (void)command;
-    return {};
-}
-
 // Recognizes `first` as a command word (or a bare `.cp3` path meaning `run`).
 bool resolveCommand(const std::string& first, std::string& command,
                     bool& filePreseeded) {
@@ -270,7 +113,9 @@ bool resolveCommand(const std::string& first, std::string& command,
     if (first == "run" || first == "build" || first == "check" ||
         first == "dev" || first == "fmt" || first == "clean" ||
         first == "init" || first == "exec" || first == "install" ||
-        first == "lsp" || first == "dap") {
+        first == "publish" || first == "link" || first == "unlink" ||
+        first == "editor-plugin" || first == "editor-plugins" ||
+        first == "lsp" || first == "dap" || first == "toolchain") {
         command = first;
         return true;
     }
@@ -309,6 +154,12 @@ std::string resolveFile(const std::string& command, bool filePreseeded,
         return "'clean' takes no file argument";
     } else if (command == "install" && opt.positionals.size() > 1) {
         return "'install' takes at most one path or URL";
+    } else if (command == "publish" && opt.positionals.size() > 1) {
+        return "'publish' takes at most one directory";
+    } else if (command == "link" && opt.positionals.size() > 1) {
+        return "'link' takes at most one path";
+    } else if (command == "unlink" && opt.positionals.size() > 1) {
+        return "'unlink' takes exactly one package name";
     }
     return {};
 }
@@ -386,7 +237,7 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     if (command == "run" || command == "build") {
         if (opt.file.empty()) {
             if (command == "build") {
-                opt.file = defaultEntryFile();
+                opt.file = cp3::cli::defaultEntryFile();
             }
             if (opt.file.empty()) {
                 std::fprintf(stderr, "cp3c: %s needs a .cp3 file\n",
@@ -400,7 +251,7 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
 
     if (command == "dev") {
         if (opt.file.empty()) {
-            opt.file = defaultEntryFile();
+            opt.file = cp3::cli::defaultEntryFile();
         }
         return cp3::cli::cmdDev(opt);
     }
@@ -413,8 +264,23 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     if (command == "init") {
         return cp3::cli::cmdInit(opt);
     }
+    if (command == "toolchain") {
+        return cp3::cli::cmdToolchain(opt);
+    }
     if (command == "install") {
         return cp3::cli::cmdInstall(opt);
+    }
+    if (command == "publish") {
+        return cp3::cli::cmdPublish(opt);
+    }
+    if (command == "link") {
+        return cp3::cli::cmdLink(opt);
+    }
+    if (command == "unlink") {
+        return cp3::cli::cmdUnlink(opt);
+    }
+    if (command == "editor-plugin" || command == "editor-plugins") {
+        return cp3::cli::cmdEditorPlugin(opt);
     }
     if (command == "exec") {
         return cp3::cli::cmdExec(opt);
@@ -483,6 +349,22 @@ int runCli(int argc, char** argv) {
         std::fprintf(stderr, "cp3c: %s\n", fileError.c_str());
         printUsage(stderr);
         return kExitUsageError;
+    }
+
+    // Apply the toolchain override and the project-scope search start before
+    // any command can probe the compiler. The project search starts at the
+    // entry file's directory (the working directory when there is no entry),
+    // so a project choice never leaks onto a file outside that project.
+    cp3::cli::setToolchainOverride(opt.toolchain);
+    cp3::cli::setToolchainStrict(opt.strictToolchain);
+    {
+        std::error_code ec;
+        cp3::cli::fs::path start = cp3::cli::fs::current_path(ec);
+        if (!opt.file.empty()) {
+            const cp3::cli::fs::path entry(opt.file);
+            if (entry.has_parent_path()) start = entry.parent_path();
+        }
+        cp3::cli::setToolchainProjectDirectory(start);
     }
 
     return dispatchCommand(command, opt);

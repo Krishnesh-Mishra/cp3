@@ -11,9 +11,30 @@
 #include <string>
 #include <vector>
 
+#include "detail/toolchain_select.hpp"
+#include "detail/util.hpp"
+
 namespace cp3::cli {
 
 namespace {
+
+std::string firstOutputLine(const std::string& text) {
+    const std::size_t end = text.find('\n');
+    std::string line = text.substr(0, end);
+    while (!line.empty() &&
+           (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) {
+        line.pop_back();
+    }
+    return line;
+}
+
+std::string programVersion(const std::string& program, bool msvc) {
+    std::vector<std::string> args{program};
+    if (!msvc) args.push_back("--version");
+    std::string out;
+    if (runProcessCapture(args, out) < 0) return {};
+    return normalizeCompilerVersion(firstOutputLine(out));
+}
 
 struct Candidate {
     const char* exe;
@@ -59,6 +80,9 @@ Toolchain probeToolchain() {
             tc.name = c.name;
             tc.msvc = c.msvc;
             tc.clang = c.clang;
+            tc.id = c.msvc ? "msvc" : (c.clang ? "clang" : "gcc");
+            tc.version = programVersion(found, c.msvc);
+            tc.policy = "auto";
             return tc;
         }
     }
@@ -86,14 +110,19 @@ std::vector<std::string> profileCompileFlags(BuildProfile profile, bool msvc) {
 
 }  // namespace
 
-const Toolchain& detectToolchain() {
-    static const Toolchain cached = probeToolchain();
-    return cached;
-}
+Toolchain probeAutoToolchain() { return probeToolchain(); }
 
 std::string describeToolchain(const Toolchain& tc) {
     if (!tc.found()) return "(none found)";
-    return tc.name + " (" + tc.program + ")";
+    std::string text = tc.name;
+    if (!tc.version.empty()) text += " " + tc.version;
+    return text + " (" + tc.program + ")";
+}
+
+std::string toolchainCacheKey(const Toolchain& tc) {
+    if (!tc.found()) return "none";
+    return (tc.id.empty() ? tc.name : tc.id) + "|" +
+           (tc.version.empty() ? "unknown" : tc.version) + "|" + tc.program;
 }
 
 std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
@@ -150,6 +179,16 @@ std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
         args.push_back(step.exe.string());
         for (const fs::path& obj : step.objects) args.push_back(obj.string());
         if (profile == BuildProfile::Release) args.push_back("-flto");
+#if defined(_WIN32)
+        // Startup (startup perf wave): every dynamically linked C++ runtime DLL
+        // is one more image the loader maps and one more DllMain that runs
+        // before main. On Windows there is no dlopen/NSS contract to keep, so a
+        // fully static runtime is safe and measurably cheaper: libstdc++-6.dll,
+        // libgcc_s_seh-1.dll and libwinpthread-1.dll disappear from the import
+        // table. Linux keeps the dynamic runtime (static glibc breaks
+        // getaddrinfo/NSS for std/network).
+        args.push_back("-static");
+#endif
     }
     // Native-backend libraries last: -L dirs then -l archives, after every
     // object, so static-archive resolution order is correct.

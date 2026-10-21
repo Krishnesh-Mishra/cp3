@@ -12,14 +12,25 @@
 set(cp3_cli_sources
     src/cli.cpp
     src/toolchain/util.cpp
+    src/toolchain/process.cpp
     src/toolchain/worker_module.cpp
     src/toolchain/worker_sites.cpp
     src/pkg/cache.cpp
     src/detail/native_packages.cpp
     src/toolchain/toolchain.cpp
+    src/toolchain/toolchain_probe.cpp
+    src/toolchain/toolchain_versions.cpp
+    src/toolchain/toolchain_available.cpp
+    src/toolchain/toolchain_config.cpp
+    src/toolchain/toolchain_manifest.cpp
+    src/toolchain/toolchain_select.cpp
+    src/toolchain/toolchain_menu.cpp
+    src/toolchain/toolchain_wizard.cpp
+    src/toolchain/toolchain_install.cpp
     src/toolchain/diagnostics.cpp
     src/toolchain/pipeline.cpp
     src/commands/common.cpp
+    src/commands/arguments.cpp
     src/commands/check.cpp
     src/commands/lsp.cpp
     src/commands/lsp_intel.cpp
@@ -38,12 +49,29 @@ set(cp3_cli_sources
     src/format/format.cpp
     src/commands/clean.cpp
     src/commands/init.cpp
+    src/commands/default_entry.cpp
+    src/commands/toolchain.cpp
+    src/commands/toolchain_json.cpp
     src/commands/exec.cpp
     src/commands/pack.cpp
     src/commands/install.cpp
+    src/commands/publish.cpp
+    src/commands/link.cpp
+    src/commands/editor_plugin.cpp
+    src/commands/editor_actions.cpp
+    src/commands/editor_install.cpp
+    src/commands/editor_detect.cpp
+    src/commands/editor_vsix.cpp
+    src/commands/editor_process.cpp
+    src/commands/editor_prompt.cpp
+    src/commands/editor_wizard.cpp
     src/pkg/package_json.cpp
     src/pkg/signatures.cpp
     src/pkg/lockfile.cpp
+    src/pkg/install.cpp
+    src/pkg/link.cpp
+    src/pkg/github.cpp
+    src/pkg/github_install.cpp
     src/pkg/scripts.cpp
     src/pkg/json.cpp
     src/pkg/checksum.cpp

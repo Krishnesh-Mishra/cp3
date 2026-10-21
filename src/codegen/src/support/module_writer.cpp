@@ -209,6 +209,12 @@ void Generator::emitMain(std::string& out, const std::string& mainBody) const {
     } else {
         out += "int main() {\n";
     }
+    if (scaleMode_) {
+        // D79: every child loop thread replays the module-scope initializers
+        // before its uWS App is constructed.
+        out += "    ::cp3::runtime::network::setModuleInitHook(&" + namesp_ +
+               "::cp3_init_module_state);\n";
+    }
     if (topLevelAwait_) {
         // Top-level `await` (spec §14): the entry unit's statements run inside
         // an eagerly-started coroutine, driven to completion by the loop below.
