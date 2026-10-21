@@ -2,13 +2,13 @@
 // src/codegen/src/emit/objects.cpp - object value shapes: member reads and
 // literal construction (STYLE.md §8).
 //
-// The two expression forms of a `$o{...}` value shape (Shape::Object, a
-// generated value struct; support/value_shapes.cpp):
+// The two expression forms of a `$o{...}` shape (Shape::Object, a generated
+// struct `cp3_obj_*` held through the reference model `Ref<struct>`, spec 10):
 //
 //   * a member read `o.a` - or the optional read `o?.a` on a `{...} | null`
 //     receiver, which yields `std::optional<F>`;
-//   * an object literal used as a value, `{ a: 1 }` -> the generated struct
-//     built from its fields.
+//   * an object literal used as a value, `{ a: 1 }` -> a fresh `makeRef` of the
+//     generated struct built from its fields (share on copy, spec 10).
 //
 // Everything else (a computed/method key, a missing or extra field, a plain
 // read through a possibly-null receiver) returns "" so the caller keeps its
@@ -81,12 +81,13 @@ std::string Generator::objectLiteralForType(const ObjectLiteral& lit,
         }
         values.push_back(expr(*value));
     }
-    std::string out = structName + "{";
+    std::string out = "::cp3::runtime::makeRef<" + structName + ">(" +
+                      structName + "{";
     for (std::size_t i = 0; i < values.size(); ++i) {
         if (i != 0) out += ", ";
         out += values[i];
     }
-    out += "}";
+    out += "})";
     return out;
 }
 
@@ -119,7 +120,8 @@ std::string Generator::emitObject(const Expr& e) {
             if (!value) return std::string();  // missing / odd property
             init.push_back(expr(*value));
         }
-        return structName + "{" + joinStrings(init, ", ") + "}";
+        return "::cp3::runtime::makeRef<" + structName + ">(" + structName +
+               "{" + joinStrings(init, ", ") + "})";
     }
     if (e.kind != NodeKind::MemberExpr) return std::string();
     const auto& m = static_cast<const MemberExpr&>(e);
@@ -143,17 +145,17 @@ std::string Generator::emitObject(const Expr& e) {
         if (!m.optional) return std::string();
         return "([&]{ auto cp3_o = (" + receiver +
                "); return cp3_o.has_value() ? std::optional<" + field +
-               ">(cp3_o->" + member + ") : std::nullopt; }())";
+               ">((*cp3_o)->" + member + ") : std::nullopt; }())";
     }
     if (m.optional && info(m).shape == Shape::Optional) {
         // `o?.a` where the receiver cannot be nullish: the read itself, sold as
         // the optional its cp3 type names.
-        return "std::optional<" + field + ">((" + receiver + ")." + member + ")";
+        return "std::optional<" + field + ">((" + receiver + ")->" + member + ")";
     }
-    return "(" + receiver + ")." + member;
+    return "(" + receiver + ")->" + member;
 }
 
-// A field write of a `$o{...}` value shape: `(<object>).field = value`. Only
+// A field write of a `$o{...}` value shape: `(<object>)->field = value`. Only
 // the forms with a plain C++ spelling are lowered; anything else keeps CP3002.
 std::string Generator::emitMemberAssign(const AssignmentExpr& a,
                                         const MemberExpr& m) {
@@ -171,7 +173,7 @@ std::string Generator::emitMemberAssign(const AssignmentExpr& a,
     std::string field;
     if (!fieldCppText(fields, m.property, field)) return std::string();
     const std::string target =
-        "(" + expr(*m.object) + ")." + mapIdent(m.property);
+        "(" + expr(*m.object) + ")->" + mapIdent(m.property);
     const std::string value = expr(*a.value);
     switch (a.op) {
         case AssignOp::Assign:

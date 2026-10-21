@@ -60,6 +60,19 @@ inline std::string typeOf(const std::variant<Ts...>& v) {
         [](const auto& held) { return ::cp3::runtime::typeOf(held); }, v);
 }
 
+// Rendering of one alternative: the generated object-shape renderer visits the
+// variant with this and each alternative renders through its own formatter.
+inline std::string textOf(double v) { return ::cp3::runtime::toString(v); }
+inline std::string textOf(const std::string& v) {
+    return ::cp3::runtime::toString(v);
+}
+inline std::string textOf(bool v) { return ::cp3::runtime::toString(v); }
+// A reference-object alternative renders through its pointee.
+template <class T>
+inline auto textOf(const Ref<T>& v) -> decltype(v->cp3ToText()) {
+    return v->cp3ToText();
+}
+
 // JS truthiness of one alternative (the generated `cp3_truthy` cannot be named
 // here: it lives in the generated unit's anonymous namespace).
 inline bool jsTruthy(double v) { return v != 0.0 && !std::isnan(v); }
