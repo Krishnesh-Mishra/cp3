@@ -123,9 +123,22 @@ std::string Generator::recordLiteralText(const ObjectLiteral& lit,
                                          const Type& expected) {
     std::string structName;
     std::vector<std::string> fields;
-    if (!recordLayout(expected, structName, fields)) return std::string();
+    std::vector<ObjectField> shapeFields;
+    // A plain object shape is a reference type (spec 10): assembled through a
+    // `Ref<Struct>` handle. A JSON-interface record stays a by-value struct.
+    const bool plainShape = objectShapeOf(expected, structName, shapeFields);
+    if (plainShape) {
+        for (const ObjectField& field : shapeFields) fields.push_back(field.name);
+    } else if (!recordLayout(expected, structName, fields)) {
+        return std::string();
+    }
     const std::string outName = freshLabel("record_");
-    std::string body = structName + " " + outName + "{};";
+    const std::string outAccess = plainShape ? "->" : ".";
+    std::string body =
+        plainShape
+            ? "auto " + outName + " = ::cp3::runtime::makeRef<" + structName +
+                  ">(" + structName + "{});"
+            : structName + " " + outName + "{};";
     for (const auto& propertyPtr : lit.properties) {
         const ObjectProperty* p = propertyPtr.get();
         if (p == nullptr) continue;
@@ -134,17 +147,26 @@ std::string Generator::recordLiteralText(const ObjectLiteral& lit,
             if (!sp.argument) return std::string();
             std::string sourceStruct;
             std::vector<std::string> sourceFields;
-            if (!recordLayout(effectiveType(*sp.argument), sourceStruct,
-                              sourceFields)) {
+            std::vector<ObjectField> sourceShapeFields;
+            const bool sourcePlain =
+                objectShapeOf(effectiveType(*sp.argument), sourceStruct,
+                              sourceShapeFields);
+            if (sourcePlain) {
+                for (const ObjectField& field : sourceShapeFields) {
+                    sourceFields.push_back(field.name);
+                }
+            } else if (!recordLayout(effectiveType(*sp.argument), sourceStruct,
+                                     sourceFields)) {
                 notImplemented(*p->value, "this spread property");
                 return std::string();
             }
             const std::string source = freshLabel("spread_");
+            const std::string sourceAccess = sourcePlain ? "->" : ".";
             body += " { const auto& " + source + " = " + expr(*sp.argument) + ";";
             for (const std::string& field : sourceFields) {
                 if (!hasField(fields, field)) continue;
-                body += " " + outName + "." + mapIdent(field) + " = " + source +
-                        "." + mapIdent(field) + ";";
+                body += " " + outName + outAccess + mapIdent(field) + " = " +
+                        source + sourceAccess + mapIdent(field) + ";";
             }
             body += " }";
             continue;
@@ -155,8 +177,8 @@ std::string Generator::recordLiteralText(const ObjectLiteral& lit,
             return std::string();
         }
         if (const Expr* value = propertyValue(*p)) {
-            body += " " + outName + "." + mapIdent(name) + " = " + expr(*value) +
-                    ";";
+            body += " " + outName + outAccess + mapIdent(name) + " = " +
+                    expr(*value) + ";";
         }
     }
     body += " return " + outName + ";";
@@ -351,13 +373,15 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
     // The class / interface / plain-object models own the value spelling when
     // they materialized (spec 15): an interface is a by-value wrapper with
     // accessor methods, a class or plain object is a `Ref<T>` handle. The
-    // all-primitive value struct (and the std/json record) keeps `.field`.
+    // std/json record keeps `.field`.
     const Type base = stripNullish(src.type);
     const ObjectModel* om = objectModelOf(base);
     const ClassModel* cm = classModelOf(base);
     bool modelUsed = om != nullptr && objectModelUsed(*om);
     if (om != nullptr && !modelUsed) om = nullptr;
-    if (cm == nullptr && om == nullptr &&
+    std::vector<ObjectField> shapeFields;
+    const bool plainShape = objectShapeOf(base, structName, shapeFields);
+    if (cm == nullptr && om == nullptr && !plainShape &&
         !recordLayout(src.type, structName, fields)) {
         notImplemented(p, "this destructuring source");
         return;
@@ -368,6 +392,7 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
                                    : src.text + "->" + mapIdent(name);
         }
         if (cm != nullptr) return src.text + "->" + mapIdent(name);
+        if (plainShape) return src.text + "->" + mapIdent(name);
         return src.text + "." + mapIdent(name);
     };
     const auto known = [&](const std::string& name) -> bool {

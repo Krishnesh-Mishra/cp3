@@ -144,6 +144,13 @@ std::string Generator::exprPlain(const Expr& e) {
 }
 
 std::string Generator::emitMemberRead(const MemberExpr& m) {
+    // An imported enum is linked as a type-only export (no C++ binding), but
+    // its member surface still lowers: `Color.Green` is `Color::Green` in the
+    // importing unit's namespace. Try the enum member before the link-miss
+    // report so a known enum is not shadowed by `this type-only export`.
+    if (std::string enumMember = emitEnumMember(m); !enumMember.empty()) {
+        return enumMember;
+    }
     // A property read through a namespace import/re-export: the link miss is
     // the use site's diagnostic.
     if (std::string miss = linkedMemberMiss(m); !miss.empty()) {

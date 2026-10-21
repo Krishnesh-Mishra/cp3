@@ -9,10 +9,12 @@
 //     lowers to the canonical `std::variant<double, std::string[, bool]>`
 //     (member order Number -> String -> Bool, so the spelling is stable
 //     whatever order the annotation used);
-//   * a `$o{...}` object shape whose every field is primitive lowers to a
-//     generated value struct `cp3_obj_<fnv1a(label)>`; the shape's fields
-//     become public members with a `cp3ToText()`/`cp3Truthy()` pair for the
-//     formatter and truthiness dispatchers.
+//   * a `$o{...}` object shape whose every field is a spellable value lowers
+//     to a generated struct `cp3_obj_<fnv1a(label)>` held through the
+//     reference model (`Ref<struct>`, spec 10): objects are reference types, so
+//     `let b = a` shares the object. The shape's fields become public members
+//     with a `cp3ToText()`/`cp3Truthy()` pair for the formatter and truthiness
+//     dispatchers.
 //
 // The struct texts are registered here (idempotently, keyed by shape label)
 // and re-emitted by `objectDeclsFor` for the shapes a unit actually names; the
@@ -241,13 +243,13 @@ std::string fieldTextExpr(const ObjectField& f) {
     const CppInfo ci = classify(f.type);
     switch (ci.shape) {
         case Shape::Object:
-            return member + ".cp3ToText()";
+            return member + "->cp3ToText()";
         case Shape::Array:
             return "::cp3::runtime::arrayJoin(" + member +
                    ", std::string(\",\"))";
         case Shape::Union:
             return "std::visit([](const auto& cp3_v) { return "
-                   "::cp3::runtime::toString(cp3_v); }, " +
+                   "::cp3::runtime::unions::textOf(cp3_v); }, " +
                    member + ")";
         case Shape::Optional:
             return member + ".has_value() ? "
@@ -258,9 +260,10 @@ std::string fieldTextExpr(const ObjectField& f) {
     }
 }
 
-// The generated value struct: primitive members in label order, a D49-style
-// rendering, and object truthiness. `cp3ToText` names only runtime.hpp
-// (`toString`), so the generated header stays self-contained.
+// The generated object struct: members in label order, a D49-style rendering,
+// and object truthiness. The struct is the pointee of the `Ref<T>` handle the
+// value shape classifies as (spec 10 reference objects); `cp3ToText` names
+// only runtime.hpp (`toString`), so the generated header stays self-contained.
 std::string structTextFor(const std::string& name,
                           const std::vector<ObjectField>& fields) {
     std::string out = "// A cp3 object value shape (built from its literal).\n";
@@ -374,7 +377,9 @@ CppInfo classifyObjectValue(const Type& t) {
     if (!objectShapeOf(t, name, fields)) return info;
     info.shape = Shape::Object;
     info.representable = true;
-    info.cpp = std::move(name);
+    // Plain objects are reference types (spec 10): the handle shares the
+    // object on assignment, argument passing, and field storage.
+    info.cpp = "::cp3::runtime::Ref<" + name + ">";
     return info;
 }
 

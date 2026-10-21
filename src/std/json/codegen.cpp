@@ -385,9 +385,13 @@ std::string Generator::jsonRecordParse(const std::string& shape,
     if (jsonShapeUsed_.insert(shape).second) {
         jsonShapeDecls_ += jsonShapeStructs_[shape] + "\n";
     }
-    return "::cp3::runtime::json::parseRecord(" + text +
+    // A registered record is a plain object (spec 10): the parse builds the
+    // field struct and the reference model wraps it, so the value converts to
+    // the interface wrapper (`cp3_iface_<T>`) and reads through the handle.
+    return "::cp3::runtime::makeRef<" + mapIdent(shape) +
+           ">(::cp3::runtime::json::parseRecord(" + text +
            ", [](const ::cp3::runtime::json::Fields& cp3_f) { " +
-           jsonShapeBuilders_[shape] + " })";
+           jsonShapeBuilders_[shape] + " }))";
 }
 
 }  // namespace cp3

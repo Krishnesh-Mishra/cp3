@@ -218,6 +218,14 @@ const char* const kRefHelperBlock = R"CP3HELPERS(namespace {
 // ----- spec 15 handles (Ref<T> / interfaces) ----------------------------------
 template <class T>
 inline bool cp3_truthy(const ::cp3::runtime::Ref<T>&) { return true; }
+// A generated object value shape is formatted by its pointee; without this,
+// `console.log(obj)` binds a `Ref<T>` to `cp3_ts(bool)` through the pointer
+// conversion. SFINAE keeps it out of the overload set for handles without a
+// `cp3ToText()` (class instances format through their own surface).
+template <class T>
+inline auto cp3_ts(const ::cp3::runtime::Ref<T>& v) -> decltype(v->cp3ToText()) {
+    return v->cp3ToText();
+}
 
 }  // namespace
 

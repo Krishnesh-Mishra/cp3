@@ -5,7 +5,7 @@
 // (`auto cp3_d<N> = <source>;`) and then emitting one plain binding per bound
 // name:
 //
-//   * an object field reads `((cp3_d0).f)` (a value struct);
+//   * an object field reads `((cp3_d0)->f)` (a reference object);
 //   * an array element reads `(*(cp3_d0))[i]`;
 //   * an array rest slice is a fresh `Array<E>` over the tail
 //     (`makeArray<E>(std::vector<E>(it + k, end))`);
@@ -197,7 +197,7 @@ void PatternEmitter::walkObjectPattern(const ObjectPattern& op, const Site& site
             emitPatternFallback(op, out, indent);
             return;
         }
-        const std::string access = "((" + site.access + ")." + mapIdent(name) + ")";
+        const std::string access = "((" + site.access + ")->" + mapIdent(name) + ")";
         walkPattern(*prop->value, Site{access, std::nullopt}, out, indent);
     }
     if (op.rest) emitPatternFallback(*op.rest, out, indent);

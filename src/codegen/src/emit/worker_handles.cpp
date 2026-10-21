@@ -448,6 +448,10 @@ std::string Generator::workerObjectConversion(const Type& expected,
         !objectShapeOf(actualObject, actualName, actualFields)) {
         return std::string();
     }
+    // Plain objects are reference handles (`Ref<Struct>`): the fields are read
+    // through the pointee, and an optional source is opened once so the
+    // conversion keeps the empty case.
+    const std::string source = expectedOptional ? "(*cp3_o)" : text;
     std::vector<std::string> values;
     for (const ObjectField& expectedField : expectedFields) {
         const ObjectField* actualField = nullptr;
@@ -456,7 +460,7 @@ std::string Generator::workerObjectConversion(const Type& expected,
         }
         if (actualField == nullptr) return std::string();
         const std::string fieldText =
-            text + "." + mapIdent(actualField->name);
+            source + "->" + mapIdent(actualField->name);
         if (!workerPayloadAccepts(expectedField.type, actualField->type,
                                   ownerNS)) {
             return std::string();
@@ -478,13 +482,17 @@ std::string Generator::workerObjectConversion(const Type& expected,
             expectedField.type, expectedField.cpp, actualField->type,
             fieldText));
     }
-    std::string out = expectedName + "{";
+    std::string out = "::cp3::runtime::makeRef<" + expectedName + ">(" +
+                      expectedName + "{";
     for (std::size_t i = 0; i < values.size(); ++i) {
         if (i != 0) out += ", ";
         out += values[i];
     }
-    out += "}";
-    return out;
+    out += "})";
+    if (!expectedOptional) return out;
+    return "([&]{ auto cp3_o = (" + text +
+           "); return cp3_o.has_value() ? std::optional<::cp3::runtime::Ref<" +
+           expectedName + ">>(" + out + ") : std::nullopt; }())";
 }
 
 }  // namespace cp3
