@@ -157,12 +157,30 @@ subdirectory (`emit/`, `checks/`, `support/`, `commands/`, `pkg/`, `archive/`,
 
 ## 9. Enforcement
 
+The developer lint path runs two checks:
+
 ```
+python tools/lint.py                   # layout checks + zero-placeholder gate
 python tools/lint_layout.py            # report; exit 1 on hard violations
 python tools/lint_layout.py --warn-only
+python tools/check_cp3002.py           # zero-placeholder gate; exit 1 on any hit
 cmake --build <build> --target lint
+cmake --build <build> --target lint-cp3002
 ```
 
-The lint target is advisory because module authors run in parallel and a warning
+The layout pass is advisory because module authors run in parallel and a warning
 from one module must never block another; **hard violations must be fixed before
 a module is considered done.**
+
+The zero-placeholder gate is hard. `tools/check_cp3002.py` scans `src/`,
+`tests/`, `docs/` and `packaging/` for the retired placeholder code and its
+source spellings, prints every hit as `path:line`, and exits 1 while any remain.
+`--report` groups the hits by marker; `--baseline FILE` is a temporary
+comparison mode for a wave that is still removing existing hits, and the
+baseline must be empty before the final landing:
+
+```
+python tools/check_cp3002.py --report
+python tools/check_cp3002.py --write-baseline tools/cp3002_baseline.txt
+python tools/check_cp3002.py --baseline tools/cp3002_baseline.txt
+```

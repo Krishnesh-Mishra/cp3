@@ -901,9 +901,9 @@ explicitly deferred with named exit-3 errors per the M2 plan, not scaffold.
   case `network_fetch_404.cp3`; a real example.com round trip cannot be a cold
   corpus case) and `fs_readdir_order` (the deferred list; ordering is
   OS-dependent by design and corpus tests must sort).
-- Still open: `array_slice_exists` and `binarysearch_return_value` (both
-  decided or documented surfaces but still CP3002 gaps - arrays/strings
-  effort), `json_parse_untyped_typeof_narrow` (waits for the runtime `unknown`
+- Resolved later: `array_slice_exists` and `binarysearch_return_value` (both
+  landed in the arrays/strings wave; see the promotion record below).
+- Still open: `json_parse_untyped_typeof_narrow` (waits for the runtime `unknown`
   carrier; candidate after the types wave), and
   `stdlib/_ambiguous/regex_test_method` (carried by the new regex wave, M2
   wave 19, as a lead-authorized promotion).

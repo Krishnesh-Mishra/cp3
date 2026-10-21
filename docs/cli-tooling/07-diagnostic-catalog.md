@@ -50,7 +50,7 @@ Name-resolution failures never dead-end when a close match exists in scope:
 * **A missing standard-module import gets the exact statement**: ``cannot find name 'Math'; add `import Math from "std/math";` ``, with the same text as the `help:` line.
 * **An import-form mistake gets the working form**: importing a named binding from a default-only module (or the reverse) reports the correct spellings; a misspelled export gets ranked candidates plus `named exports: 'a', 'b', or 'c'`.
 
-Candidates come from what is actually visible at the reference: names in scope, the implemented member list of a standard namespace (Math, path, os, crypto, console, JSON) or of a typed receiver's shape, and the export surface of the module being imported. Where a family's shape is still open (for example `network`, `process`), member misses stay pending (`CP3002`) instead of guessing.
+Candidates come from what is actually visible at the reference: names in scope, the implemented member list of a standard namespace (Math, path, os, crypto, console, JSON) or of a typed receiver's shape, and the export surface of the module being imported. Where a family's shape is still open (currently `network`), member misses stay permissive instead of guessing.
 
 ## Internal (3001-3009)
 
