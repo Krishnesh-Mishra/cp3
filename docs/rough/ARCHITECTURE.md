@@ -23,8 +23,8 @@ flow downward only; there are no cycles.
 | `cp3_lexer` | `src/lexer/` | `src/lexer/include/` | `.cp3` text → `TokenStream`. | Implemented (full token set) |
 | `cp3_parser` | `src/parser/` | `src/parser/include/` | `TokenStream` → AST (`Program`). | Implemented (full grammar) |
 | `cp3_modules` | `src/modules/` | `src/modules/include/` | Module discovery, §18 prelude injection, D4 import resolution + validation (`cp3::ModuleLoader`). | Complete (M1 scope) |
-| `cp3_sema` | `src/sema/`, `src/std/*/sema*.cpp` | `src/sema/include/` | AST → diagnostics + nodeId-keyed side tables. | M1 subset (beyond-M1 features report CP3002) |
-| `cp3_codegen` | `src/codegen/`, `src/std/*/codegen*.cpp` | `src/codegen/include/` | Checked AST → generated C++20 (+ source map). | M1 subset (beyond-M1 features report CP3002) |
+| `cp3_sema` | `src/sema/`, `src/std/*/sema*.cpp` | `src/sema/include/` | AST → diagnostics + nodeId-keyed side tables. | Implemented (language waves; remaining gaps tracked per wave) |
+| `cp3_codegen` | `src/codegen/`, `src/std/*/codegen*.cpp` | `src/codegen/include/` | Checked AST → generated C++20 (+ source map). | Implemented (language waves; remaining gaps tracked per wave) |
 | `cp3_runtime` | `src/runtime/`, `src/std/*/runtime*.cpp` | `src/runtime/include/`, `src/std/*/include/` | Generated-code runtime support (std family TUs included, D72). | Minimal |
 | `cp3_cli` | `src/cli/`, `src/std/*/native.hpp` | `src/cli/include/` | Command surface, argument parsing, all rendering. | Scaffold |
 | `cp3c` | `src/main.cpp` | - | Executable; forwards `argv` to `runCli`. | Complete |
@@ -163,7 +163,7 @@ default so the normal build stays lean.
 
 ```bash
 cmake --build build --target cp3c-tests   # Python 3 required (see below)
-cmake --build build --target lint         # advisory STYLE.md check (see 3.4)
+cmake --build build --target lint         # layout + zero-placeholder checks (see 3.4)
 ```
 
 If Python 3 is found at configure time, `cp3c-tests` runs the conformance
@@ -179,9 +179,9 @@ Warnings are enabled (`-Wall -Wextra`, or `/W4 /permissive-` on MSVC) but
 **`-Werror` is deliberately never set**, so one module author's warning cannot
 block another's build. (See §11 for the one known warning.)
 
-### 3.4 Layout lint (advisory)
+### 3.4 Layout lint and zero-placeholder gate
 
-The `lint` target runs `python tools/lint_layout.py`, which enforces the STYLE.md
+The `lint` target runs `python tools/lint.py`, which runs the STYLE.md
 §2 hard budgets (file, function, type, line length, parameters, nesting) and the
 §4 naming spot-checks (file names, macro names) over `src/**`. It is **advisory
 by design**: it is not part of the default build (not in `ALL`), never depends
@@ -198,6 +198,19 @@ python tools/lint_layout.py --warn-only
 Hard violations must be fixed before a module is considered done; the
 suppression marker and the documented allow-list are described in the script
 header.
+
+The wrapper then runs `python tools/check_cp3002.py`, a hard gate over `src/`, `tests/`,
+`docs/` and `packaging/`. The gate prints every retired placeholder marker as
+`path:line` and exits 1 while any remain. Run it on its own with
+`cmake --build build --target lint-cp3002` or directly:
+
+```bash
+python tools/check_cp3002.py
+python tools/check_cp3002.py --report
+```
+
+The full usage and the temporary baseline mode are documented in STYLE.md
+section 9.
 
 ---
 

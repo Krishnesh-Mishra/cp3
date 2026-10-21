@@ -178,8 +178,8 @@ From the core-semantics growth pass:
    `concurrency/_ambiguous/worker_call_shape` (imports an absent `x.cp3`),
    `modules/_ambiguous/prelude_strong_weak_order` (ships no `_prelude*.cp3`).
 4. **Passing-but-stub-blocked audit** - `concurrency/parallel_field_write` and
-   `generics/decorator_banned` pass on a real diagnostic but also carry a
-   `CP3002: class declarations`; re-audit when wave 2 lands.
+   `generics/decorator_banned` pass on their real diagnostics; the classes wave
+   cleared the old class-declaration placeholder, so this item is closed.
 5. **Six red corpus cases - wave-1 targets (spec-pinned bug fuel):**
    - `variables/var_hoist_use_before_declaration` - `var` must hoist
      (`undefined` read before assignment; JS/§8 parity); currently CP3301.
