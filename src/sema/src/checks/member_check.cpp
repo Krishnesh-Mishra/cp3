@@ -156,8 +156,7 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             if (auto fs = fsReceiverMember(ot, prop)) return *fs;
             Shape* sh = shapeOf(ot);
             if (!sh) return ambient();
-            if (sh->open) return ambient();
-            if (sh->tuple) return ambient();
+            if (sh->open || sh->tuple) return ambient();
             if (const Field* f = findField(sh, prop)) return f->type;
             std::vector<std::string> candidates;
             candidates.reserve(sh->fields.size());
@@ -204,7 +203,8 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
         case TypeKind::Boolean:
             return ambient();
         case TypeKind::Literal:
-            return memberOfProbe(ot.literalBaseType(), prop, span);
+        case TypeKind::TypeParam:
+            return memberOfProbe(probeBase(ot), prop, span);
         default:
             return ambient();
     }
@@ -360,7 +360,8 @@ Type Analyzer::indexOfProbe(const Type& ot, IndexExpr& ix) {
         case TypeKind::Object:
             return indexOfObject(ot, ix);
         case TypeKind::Literal:
-            return indexOfProbe(ot.literalBaseType(), ix);
+        case TypeKind::TypeParam:
+            return indexOfProbe(probeBase(ot), ix);
         case TypeKind::Class:
             // Typed-array elements are `number` when the literal index is
             // provably in range, `number | undefined` otherwise

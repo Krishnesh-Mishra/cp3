@@ -82,6 +82,8 @@ Type Analyzer::inferCall(CallExpr& call) {
     }
 
     if (sig != nullptr) {
+        // A generic function substitutes its type arguments first (spec §16).
+        if (!sig->typeParams.empty()) return inferGenericCall(call, *sig);
         checkArgs(*sig, call);
         return withType(call, sig->ret);
     }

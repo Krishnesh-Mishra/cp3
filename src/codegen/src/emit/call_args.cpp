@@ -42,7 +42,7 @@ struct CallBuilder {
 
     ArgTexts callArgTexts(const CallExpr& c, const ParamList* params,
                           const std::vector<std::optional<Type>>& ptypes,
-                          bool applyDefaults);
+                          bool applyDefaults, bool reifyObjectArgs);
     bool findRestParam(const ParamList* params, std::size_t& restAt) const;
     std::optional<Type> restElemType(
         const std::vector<std::optional<Type>>& ptypes, std::size_t restAt) const;
@@ -55,7 +55,8 @@ struct CallBuilder {
                                           bool applyDefaults);
     std::vector<std::string> callArgs(
         const CallExpr& c, const ParamList* params,
-        const std::vector<std::optional<Type>>& ptypes, bool applyDefaults);
+        const std::vector<std::optional<Type>>& ptypes, bool applyDefaults,
+        bool reifyObjectArgs = false);
     std::string emitFunctionCall(const CallExpr& c, const std::string& text,
                                  const Type& fnType, const ParamList* params);
     std::string emitIdentifierCall(const CallExpr& c);
@@ -106,7 +107,8 @@ std::optional<Type> CallBuilder::restElemType(
 // parameter's expected type (`ptypes`).
 CallBuilder::ArgTexts CallBuilder::callArgTexts(
     const CallExpr& c, const ParamList* params,
-    const std::vector<std::optional<Type>>& ptypes, bool applyDefaults) {
+    const std::vector<std::optional<Type>>& ptypes, bool applyDefaults,
+    bool reifyObjectArgs) {
     const std::size_t count = c.arguments.size();
     const std::size_t paramCount = params ? params->size() : 0;
     std::size_t restAt = paramCount;
@@ -136,6 +138,14 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
             } else {
                 g.notImplemented(*arg, "spread argument");
             }
+            continue;
+        }
+        // A generic function's parameter type is opaque at the call site, so
+        // an object-literal argument is reified into a generated aggregate
+        // struct (support/generic.cpp).
+        if (reifyObjectArgs && arg->kind == NodeKind::ObjectLiteral) {
+            texts.value[i] =
+                g.reifyObjectArg(static_cast<const ObjectLiteral&>(*arg));
             continue;
         }
         const bool optionalHere = i < paramCount && optionalParamAt(*params, i);
@@ -239,10 +249,12 @@ std::vector<std::string> CallBuilder::plainArgList(const ArgTexts& texts,
 
 std::vector<std::string> CallBuilder::callArgs(
     const CallExpr& c, const ParamList* params,
-    const std::vector<std::optional<Type>>& ptypes, bool applyDefaults) {
+    const std::vector<std::optional<Type>>& ptypes, bool applyDefaults,
+    bool reifyObjectArgs) {
     std::size_t restAt = params ? params->size() : 0;
     const bool hasRest = findRestParam(params, restAt);
-    const ArgTexts texts = callArgTexts(c, params, ptypes, applyDefaults);
+    const ArgTexts texts =
+        callArgTexts(c, params, ptypes, applyDefaults, reifyObjectArgs);
     if (hasRest) {
         return packRestArgs(c, texts, restElemType(ptypes, restAt), restAt);
     }
@@ -311,7 +323,11 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
         g.functions_.find(name) == g.functions_.end()) {
         return g.emitParseBuiltin(c, name);
     }
-    if (!c.typeArgs.empty()) {
+    const auto declIt = g.functionDecls_.find(name);
+    const FunctionDeclaration* decl =
+        declIt != g.functionDecls_.end() ? declIt->second : nullptr;
+    const bool generic = decl != nullptr && !decl->typeParams.empty();
+    if (!c.typeArgs.empty() && !generic) {
         g.notImplemented(c, "calls with type arguments");
         return "0.0";
     }
@@ -339,9 +355,6 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
         // only run when the loop does.
         g.needsEventLoop_ = true;
     }
-    const auto declIt = g.functionDecls_.find(name);
-    const FunctionDeclaration* decl =
-        declIt != g.functionDecls_.end() ? declIt->second : nullptr;
     std::vector<std::optional<Type>> ptypes;
     if (decl) {
         ptypes.reserve(decl->params.size());
@@ -351,9 +364,11 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
                                  : std::nullopt);
         }
     }
-    return g.moduleRef(name) + "(" +
+    const std::string callee =
+        generic ? g.calleeText(name, c) : g.moduleRef(name);
+    return callee + "(" +
            joinStrings(callArgs(c, decl ? &decl->params : nullptr, ptypes,
-                                /*applyDefaults=*/false),
+                                /*applyDefaults=*/false, generic),
                        ", ") +
            ")";
 }
@@ -388,6 +403,20 @@ std::string CallBuilder::emitMemberCall(const CallExpr& c,
     }
     if (m.object && detail::isEventEmitterType(g.effectiveType(*m.object))) {
         return g.emitEventEmitterCall(c, m);
+    }
+    // A method call on a generic function's type parameter (`s.area()` where
+    // `s: T extends Shape`): `cp3_member_base` dereferences a Ref<T> class
+    // handle and leaves a value struct alone.
+    if (m.object && g.info(*m.object).shape == Shape::TypeParam) {
+        return "cp3_member_base(" + g.expr(*m.object) + ")." +
+               mapIdent(m.property) + "(" +
+               joinStrings(g.emitPlainArgs(c), ", ") + ")";
+    }
+    // A class method / interface method call (spec 15) before the builtin
+    // namespace surface: a class member name owns its spelling. This hook lived
+    // in the pre-redrive dispatcher and was lost in the call_args split.
+    if (std::string model = g.emitModelCall(c, m); !model.empty()) {
+        return model;
     }
     // `Math.*`, `path.*`, `os.*`, `JSON.stringify`, `process.*`, and the
     // primitive `string` method surface (emit_builtin.cpp).

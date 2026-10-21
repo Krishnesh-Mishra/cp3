@@ -148,13 +148,24 @@ void Generator::runUnit(const Program& program, std::string& decls,
     if (!objectDecls_.empty()) needsRef_ = true;
 
     // Enums first (signatures and record shapes can name one), then the JSON
-    // record structs, class forward declarations and structs, the structural
-    // object value shapes, and then the unit's own declarations. All are
-    // namespace-scope and complete before any builder reads them.
+    // record structs, the structs reifying generic-call object literals
+    // (support/generic.cpp), class forward declarations and structs, the
+    // structural object value shapes, and then the unit's own declarations.
+    // All are namespace-scope and complete before any builder reads them.
     decls = enumDecls_ + classFwdDecls_ + jsonShapeDecls_ + objectDecls_ +
-            classDecls_ + decls;
+            genericDecls_ + classDecls_ + decls;
     defs = classDefs_ + defs;
     globals = objectGlobalDeclsFor(decls + defs + mainBody, needsWorker_);
+
+    // A tuple can surface only in a signature (a tuple return type or a tuple
+    // parameter) with no literal or index read to raise the flag; scan the
+    // emitted spellings before the header chooses its includes.
+    const std::string unitText = decls + defs + mainBody;
+    if (unitText.find("std::tuple") != std::string::npos ||
+        unitText.find("std::make_tuple") != std::string::npos ||
+        unitText.find("std::get<") != std::string::npos) {
+        needsTuple_ = true;
+    }
 
     // The family include (D69) follows the emitted spellings
     // (support/usage_includes.cpp).

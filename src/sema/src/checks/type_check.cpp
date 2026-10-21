@@ -246,10 +246,14 @@ Type Analyzer::makeObjectType(std::vector<Field> fields, bool open, bool tuple,
         Shape s;
         s.fields = std::move(fields);
         s.tuple = tuple;
-        s.tupleElems = std::move(tupleElems);
+        s.tupleElems = tupleElems;  // copied: the type below keeps them too
         shapes_.emplace(label, std::move(s));
     }
-    return Type(TypeKind::Object, label);
+    Type t(TypeKind::Object, label);
+    // A tuple's element types ride in `parts` so downstream consumers (codegen)
+    // can classify the tuple without decoding the shape label.
+    if (tuple) t.parts = std::move(tupleElems);
+    return t;
 }
 
 const Field* Analyzer::findField(const Shape* shape,

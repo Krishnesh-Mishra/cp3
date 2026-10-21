@@ -42,6 +42,7 @@ enum class Shape {
     ClassRef,     // a user class instance (spec 15): Ref<Class>
     Object,      // an all-primitive `$o{...}` shape: a generated value struct
     Native,      // a Rust/C++ native numeric value (D65): its exact C++ type
+    TypeParam,   // a generic function's type parameter (spec §16)
     Unknown, Unsupported
 };
 
@@ -98,6 +99,14 @@ Type promiseValue(const Type& t);
 // The builtin `EventEmitter` (D74): a nominal class type with name
 // "EventEmitter"; codegen lowers it to cp3/async/emitter.hpp.
 bool isEventEmitterType(const Type& t);
+
+// A sema tuple type: an Object-kind type whose label starts `$t` and whose
+// element types ride in `parts` (type_check.cpp's makeObjectType).
+bool isTupleType(const Type& t);
+
+// The C++ spelling of a tuple's element list (`std::tuple<A, B>`), when every
+// element carries one (the generic signature sites in emit/decl.cpp).
+bool tupleCpp(const Type& t, std::string& out);
 
 // Does an empty optional of `kind` compare strictly equal to `nullishShape`?
 bool optionalEmptyMatches(NullishKind kind, Shape nullishShape);

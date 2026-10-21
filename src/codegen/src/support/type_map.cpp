@@ -216,6 +216,20 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn, TypeSystem typeSystem) 
             if (!element) return std::nullopt;
             return Type::array(*element);
         }
+        case NodeKind::TupleType: {
+            // `[A, B]` -> a tuple Type (label `$t`, elements in `parts`); the
+            // sema-built spelling carries the full label, but codegen only
+            // needs the prefix and the elements.
+            const auto& tt = static_cast<const TupleType&>(tn);
+            Type out(TypeKind::Object, "$t");
+            for (const auto& element : tt.elements) {
+                if (!element) return std::nullopt;
+                auto mapped = typeFromTypeNode(*element, typeSystem);
+                if (!mapped) return std::nullopt;
+                out.parts.push_back(*mapped);
+            }
+            return out;
+        }
         case NodeKind::ParenthesizedType: {
             const auto& pt = static_cast<const ParenthesizedType&>(tn);
             if (!pt.inner) return std::nullopt;

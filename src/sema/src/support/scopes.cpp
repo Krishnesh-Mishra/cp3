@@ -203,15 +203,18 @@ void Analyzer::hoistFunction(FunctionDeclaration& fn) {
     if (declaredFns_.count(fn.nodeId) != 0) return;
     declaredFns_.insert(fn.nodeId);
 
-    if (!fn.typeParams.empty()) {
-        notImplemented(fn.span, "generic functions");
-        // Register the type parameters so `T` resolves to a TypeParam rather
-        // than cascading into CP3302.
-        registerTypeParams(fn.typeParams);
-    }
+    // Generic functions (spec §16): the type parameters are registered before
+    // the signature is built so `T` resolves to a TypeParam (carrying its
+    // `extends` constraint in `parts[0]`) inside every annotation.
+    registerTypeParams(fn.typeParams);
 
     FuncSig sig = buildSig(fn.name, fn.params, fn.returnType, &fn.span);
     sig.declNodeId = fn.nodeId;
+    for (auto& tp : fn.typeParams) {
+        if (!tp) continue;
+        auto it = typeNames_.find(tp->name);
+        if (it != typeNames_.end()) sig.typeParams.push_back(it->second);
+    }
     if (fn.isAsync) {
         // spec §14: calling an async function yields a Promise. The annotation
         // is `Promise<T>`, and the body's `return` statements are checked
@@ -229,12 +232,6 @@ void Analyzer::hoistFunction(FunctionDeclaration& fn) {
             sig.asyncValueRet = Type::unknown();
         }
     }
-    if (!fn.typeParams.empty()) {
-        // Generic function bodies are out of scope for M1. Keep the resolved
-        // return type for callers but do not enforce return statements against
-        // it (avoids spurious cascades after CP3002).
-        sig.annotatedReturn = false;
-    }
     Type fnType = Type::function(sig.params, sig.ret);
     declareBinding(fn.name, fnType, fn.span,
                    BindingSpec{.isConst = true, .isFunction = true,
@@ -247,7 +244,23 @@ void Analyzer::hoistFunction(FunctionDeclaration& fn) {
 void Analyzer::registerTypeParams(TypeParamList& typeParams) {
     for (auto& tp : typeParams) {
         if (!tp) continue;
-        typeNames_.emplace(tp->name, Type::named(TypeKind::TypeParam, tp->name));
+        Type t = Type::named(TypeKind::TypeParam, tp->name);
+        if (tp->constraint) {
+            Type constraint = resolveType(*tp->constraint);
+            // Remember a named constraint's spelling so a violation diagnostic
+            // can print `Shape` rather than the resolved shape's `object`.
+            if (tp->constraint->kind == NodeKind::NamedType) {
+                typeParamConstraintNames_[typeKey(constraint)] =
+                    static_cast<NamedType&>(*tp->constraint).name;
+            }
+            t.parts.push_back(std::move(constraint));
+        }
+        // Bind the name to the type parameter unless a real declared type
+        // already owns it (a type parameter must never shadow `Point`, say).
+        auto it = typeNames_.find(tp->name);
+        if (it == typeNames_.end() || it->second.kind == TypeKind::TypeParam) {
+            typeNames_[tp->name] = std::move(t);
+        }
     }
 }
 

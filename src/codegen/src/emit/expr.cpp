@@ -159,6 +159,13 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
     if (value.empty()) value = emitBuiltinMember(m);
     if (value.empty()) value = emitObject(m);
     if (!value.empty()) return value;
+    // A type-parameter receiver (`p.x` where `p: T extends Point2`, spec §16)
+    // reads the member off the C++ template parameter. `cp3_member_base`
+    // dereferences a Ref<T> class handle and leaves a value struct alone.
+    if (m.object && info(*m.object).shape == Shape::TypeParam) {
+        return "cp3_member_base(" + expr(*m.object) + ")." +
+               mapIdent(m.property);
+    }
     notImplemented(m, "this property access");
     return "0.0";
 }

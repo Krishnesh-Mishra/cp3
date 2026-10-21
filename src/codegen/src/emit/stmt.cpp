@@ -227,7 +227,10 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
         if (intOn() && !numberTyped(*r.argument)) intFail();
         // Always lower the returned expression so its own out-of-scope
         // parts report CP3002 instead of being silently dropped.
-        const std::string value = expr(*r.argument);
+        const std::string value =
+            currentReturnTuple_ && r.argument->kind == NodeKind::ArrayLiteral
+                ? emitTupleLiteral(static_cast<const ArrayLiteral&>(*r.argument))
+                : expr(*r.argument);
         if (currentReturn_ == "void") {
             // The enclosing signature is `void` either because the cp3
             // return type is out of M1 scope or the function is genuinely

@@ -21,6 +21,7 @@ set(cp3_codegen_sources
     src/support/binding_types.cpp
     src/support/type_classify.cpp
     src/support/type_resolve.cpp
+    src/support/generic.cpp
     src/support/scope_env.cpp
     src/support/value_shapes.cpp
     src/support/structural_walk.cpp

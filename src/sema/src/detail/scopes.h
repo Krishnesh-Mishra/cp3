@@ -87,6 +87,11 @@ struct Shape {
 // parameter type checking and published (minus optionality) as FunctionInfo.
 struct FuncSig {
     std::string name;
+    // The declared type parameters of a generic function (`function f<T
+    // extends C>(...)`), in declaration order; empty for ordinary functions.
+    // Each entry is a `TypeKind::TypeParam` whose name is the parameter and
+    // whose `parts[0]`, when present, is its resolved constraint.
+    std::vector<Type> typeParams;
     std::vector<Type> params;
     std::vector<bool> optional;
     bool rest = false;
@@ -186,6 +191,9 @@ Type stripNullish(const Type& t);
 bool isStaticallyNullish(const Type& t);
 bool hasNullish(const Type& t);
 bool isTupleType(const Type& t);
+// The type a non-concrete receiver probes as: a literal's widened base type, or
+// a type parameter's `extends` constraint (generic_check.cpp).
+Type probeBase(const Type& t);
 std::string pretty(const Type& t);
 std::string prettyFunction(const Type& t);
 

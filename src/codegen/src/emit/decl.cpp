@@ -4,8 +4,8 @@
 //
 // Top-level dispatch, exported declarations, and function emission: forward
 // declarations + definitions (default arguments live on the forward declaration
-// only), parameter type spelling, and return-type resolution (annotated, sema,
-// then the first `return` in the body). `async function` bodies lower to C++20
+// only) and the definition body. Parameter spelling and return-type resolution
+// live in emit/patterns.cpp and this unit; `async function` bodies lower to C++20
 // coroutines whose promise type is the runtime's `Promise<T>` (spec §14).
 // Out-of-scope declarations report CP3002.
 // =============================================================================
@@ -121,9 +121,9 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
         // continuations (and any rejection report) run.
         needsEventLoop_ = true;
     }
-    if (!fd.typeParams.empty()) {
-        notImplemented(fd, "generic function");
-    }
+    // Real C++ function templates (spec §16): every signature line carries the
+    // `template <typename T, ...>` prefix (support/generic.cpp).
+    const std::string prefix = templatePrefix(fd);
     const std::string ret = functionReturnType(fd);
     std::vector<std::string> paramsDecl;
     std::vector<std::string> paramsDef;
@@ -137,8 +137,8 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
     const std::string head = ret + " " + mapIdent(fd.name) + "(";
     // Default arguments belong on the forward declaration only; repeating
     // them on the definition is a C++ error.
-    const std::string signatureDecl = head + joinStrings(paramsDecl, ", ") + ")";
-    const std::string signatureDef = head + joinStrings(paramsDef, ", ") + ")";
+    const std::string signatureDecl = prefix + head + joinStrings(paramsDecl, ", ") + ")";
+    const std::string signatureDef = prefix + head + joinStrings(paramsDef, ", ") + ")";
     line(decls, 1, signatureDecl + ";");
 
     // int64 fast path (D64, int_mode.cpp): attempt the body once with every
@@ -146,7 +146,7 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
     // the ordinary double body below as the only lowering; a kept one is
     // emitted next to it, and the wrapper guards the arguments once and calls
     // it, falling through to the ordinary body when a guard bails.
-    const bool tryFast = fd.body && intEligible(fd, ret);
+    const bool tryFast = fd.typeParams.empty() && fd.body && intEligible(fd, ret);
     std::string fastBody;
     bool fastKept = false;
     if (tryFast) fastBody = intBody(fd, fastKept);
@@ -193,10 +193,21 @@ std::string Generator::plainBody(const FunctionDeclaration& fd, const std::strin
     inAsyncBody_ = fd.isAsync;
     const std::uint32_t savedFrame = currentFrameId_;
     currentFrameId_ = fd.nodeId;
+    const bool savedTuple = currentReturnTuple_;
+    // A tuple-returning body lowers `return [a, b]` to `std::make_tuple`
+    // (support/generic.cpp).
+    currentReturnTuple_ = currentReturn_.rfind("std::tuple<", 0) == 0;
     ++nestingDepth_;
 
     std::string body;
     pushScope();
+    // A generic function's type parameters are names in its body scope; the
+    // parameter/return spellings resolved above already use them (spec §16).
+    for (const auto& tp : fd.typeParams) {
+        if (!tp) continue;
+        declare(mapIdent(tp->name),
+                Type::named(TypeKind::TypeParam, tp->name));
+    }
     for (std::size_t i = 0; i < fd.params.size(); ++i) {
         const Parameter& p = *fd.params[i];
         if (const Identifier* id = parameterIdentifier(p)) {
@@ -223,6 +234,7 @@ std::string Generator::plainBody(const FunctionDeclaration& fd, const std::strin
     currentFrameId_ = savedFrame;
     inAsyncBody_ = savedInAsync;
     expected_ = savedExpected;
+    currentReturnTuple_ = savedTuple;
     currentReturn_ = savedReturn;
     currentReturnType_ = savedReturnType;
     return body;
@@ -264,6 +276,24 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
         if (ci.representable) return ci.cpp;
         notImplemented(fd, "this async function's value type");
         return "void";
+    }
+    // A generic function's annotation names its own type parameters (`T`, `T[]`,
+    // `[A, B]`); the resolved signature is the only place those are known
+    // (spec §16).
+    if (!fd.typeParams.empty()) {
+        auto it = sema_.functions.find(fd.nodeId);
+        if (it != sema_.functions.end()) {
+            // A tuple return type (`function pair<A, B>(): [A, B]`) has no
+            // `classify` arm outside the generic signature sites (to keep the
+            // plain tuple-annotation status unchanged); spell it directly.
+            std::string tuple;
+            if (isTupleType(it->second.returnType) &&
+                tupleCpp(it->second.returnType, tuple)) {
+                return tuple;
+            }
+            const CppInfo ci = classify(it->second.returnType);
+            if (ci.representable) return ci.cpp;
+        }
     }
     if (auto value = returnValueType(fd)) {
         const CppInfo ci = classify(*value);
