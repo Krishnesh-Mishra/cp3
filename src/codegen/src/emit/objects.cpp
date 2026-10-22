@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "detail/class_model.h"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
@@ -31,16 +32,10 @@ using namespace detail;
 namespace {
 
 // The literal name of an object-literal field key ("" when the property is out
-// of this wave's scope: computed, a method, or a non-name key).
+// of this wave's scope: a method, or a computed name that is not a literal).
 std::string fieldName(const ObjectProperty& p) {
-    if (p.computed || p.isMethod || !p.key) return std::string();
-    if (p.key->kind == NodeKind::Identifier) {
-        return static_cast<const Identifier&>(*p.key).name;
-    }
-    if (p.key->kind == NodeKind::StringLiteral) {
-        return static_cast<const StringLiteral&>(*p.key).value;
-    }
-    return std::string();
+    if (p.isMethod) return std::string();
+    return classMemberName(p.key.get(), p.computed);
 }
 
 // The value expression of a property (a shorthand `{ a }` reads its key).

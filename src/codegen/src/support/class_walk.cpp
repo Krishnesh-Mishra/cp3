@@ -144,9 +144,11 @@ std::vector<ObjectFieldModel> literalFields(const ObjectLiteral& lit,
                                             const SemaResult& sema) {
     std::vector<ObjectFieldModel> fields;
     for (const auto& p : lit.properties) {
-        if (!p || p->computed) continue;
+        if (!p) continue;
+        // A computed key names the property at runtime; only a literal key
+        // (whose value the compiler knows) is a fixed field of the shape.
         ObjectFieldModel f;
-        f.name = keyNameOf(p->key.get());
+        f.name = classMemberName(p->key.get(), p->computed);
         if (f.name.empty()) continue;
         const Expr* value = p->value.get();
         const Expr* typed = value != nullptr ? value : p->key.get();

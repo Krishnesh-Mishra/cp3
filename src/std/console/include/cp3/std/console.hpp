@@ -126,6 +126,20 @@ std::string renderAll(const Ts&... args) {
 void writeLineStdout(const std::string& text);
 void writeLineStderr(const std::string& text);
 
+// The parts form: a call with a spread argument (`console.log(...parts)`)
+// collects the rendered arguments first - a spread contributes the array's
+// elements - and the runtime joins them with a single space, exactly like the
+// variadic form.
+inline void logParts(const std::vector<std::string>& parts) {
+    writeLineStdout(detail::join(parts));
+}
+inline void warnParts(const std::vector<std::string>& parts) {
+    writeLineStderr(detail::join(parts));
+}
+inline void errorParts(const std::vector<std::string>& parts) {
+    writeLineStderr(detail::join(parts));
+}
+
 // `.log` / `.info` -> stdout.
 template <class... Ts>
 void log(const Ts&... args) {
@@ -154,6 +168,21 @@ void assertCondition(bool condition, const Ts&... args) {
         return;
     }
     const std::string rendered = detail::renderAll(args...);
+    if (rendered.empty()) {
+        writeLineStderr("Assertion failed");
+    } else {
+        writeLineStderr("Assertion failed: " + rendered);
+    }
+}
+
+// The parts form of `assert`: the message arguments are collected first (a
+// spread contributes the array's elements) and then joined.
+inline void assertConditionParts(bool condition,
+                                  const std::vector<std::string>& parts) {
+    if (condition) {
+        return;
+    }
+    const std::string rendered = detail::join(parts);
     if (rendered.empty()) {
         writeLineStderr("Assertion failed");
     } else {

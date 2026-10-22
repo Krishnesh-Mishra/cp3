@@ -109,6 +109,8 @@ Candidates come from what is actually visible at the reference: names in scope, 
 | CP3415 | `kInvalidCondition` | A condition position received a `void` expression (a call that returns nothing). | `invalid condition: a void expression is not a valid condition` | Test an actual value, or change the callee to return one. |
 | CP3416 | `kNoMatchingOverload` | A call matches none of the overloads of a function or member: the arity fits, but the argument types do not. | `no overload of 'map' matches the supplied arguments` | Adjust the arguments to match one overload; the member's docs table lists them. |
 | CP3417 | `kTypeArgsOnNonGeneric` | A call passes explicit type arguments (`f<number>(x)`) to a function that declares no type parameters. | `type arguments are not allowed here: 'f' is not a generic function` | Drop the type arguments, or call the generic function that declares them. |
+| CP3418 | `kInvalidTypeArgument` | A type argument does not match what the generic declaration expects: the count differs from the declaration's type parameters, or the type itself has no C++ spelling. | `generic class 'Box' expects 1 type argument, got 2` | Pass exactly the declared number of type arguments, and only types the language can represent. |
+| CP3419 | `kInvalidArgumentValue` | An argument is not one the callee can accept: its value is not among the accepted set (the console events, for example), or its form is not one the callee supports (a spread whose source is not an array, a spread that is not the call's last argument, a computed property key whose value is not known). | `unknown console event 'data'; expected "keypress", "line" or "close"` | Use one of the documented values/forms; the message names what the callee accepts. |
 
 ## Statements and control flow (3500-3599)
 
@@ -133,6 +135,14 @@ Candidates come from what is actually visible at the reference: names in scope, 
 | CP3608 | `kNativeBindingStale` | The binding's `index.cp3` no longer matches the `contentHash` its `native.json` records, so the declaration view and the metadata disagree. | `the native binding 'demo' is stale: its index.cp3 no longer matches the contentHash recorded in native.json; re-run 'cp3 native-install <sdk> --name demo --force'` | Re-run the install with `--force`, which rewrites both files. |
 | CP3609 | `kNativeUnknownMember` | A member of a native binding does not exist: the alias names a declaration the binding does not expose. | `the native binding 'demo' has no declaration named 'addd'` | Fix the spelling, or use a declaration the binding exposes (the binding's `index.cp3` lists them). |
 | CP3610 | `kNativeArgumentType` | An argument of a native call does not match the parameter the binding recorded. The message names the argument, its type, the parameter and the conversion the binding records for it (`const char*`, a byte pointer plus a length, a number pointer plus a length). | `native call 'add': argument 1 has type 'string', but parameter 'a' expects 'number'` | Pass a value of the recorded type; the binding's `index.cp3` shows the signature. |
+
+## Classes and interfaces (3700-3799)
+
+The other codes of this range are listed in the reserved-codes table below.
+
+| Code | Name | Meaning | Example message | Fix |
+| ---- | ---- | ------- | --------------- | --- |
+| CP3708 | `kComputedMemberName` | A class member's name is computed (`[expr]`), so it is only known at runtime. A cp3 class is a fixed set of members, so the name must be a compile-time constant. | `a computed class member name must be a literal: a cp3 class has a fixed set of members` | Write the member's name out (`x = 1`), or use a literal computed key (`["x"] = 1`). |
 
 ## Banned JS patterns (3800-3899)
 

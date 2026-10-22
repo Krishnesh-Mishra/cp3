@@ -1,0 +1,9 @@
+import console from "std/console";
+class Point {
+  x: number;
+  y: number;
+  constructor(x: number, y: number) { this.x = x; this.y = y; }
+}
+const args = [1, 2];
+const p = new Point(...args);
+console.log(`${p.x},${p.y}`);

@@ -21,23 +21,13 @@
 #include "detail/mangle.h"
 #include "detail/type_map.h"
 
+#include "cp3/diagnostic_codes.hpp"
+
 namespace cp3 {
 
 using namespace detail;
 
 namespace {
-
-// The literal property matching model field `name` (null when absent). A
-// shorthand property (`{ x }`) carries its value in the key.
-const Expr* literalValueOf(const ObjectLiteral& lit, const std::string& name) {
-    for (const auto& p : lit.properties) {
-        if (!p || p->computed) continue;
-        if (keyNameOf(p->key.get()) != name) continue;
-        if (p->value) return p->value.get();
-        return p->key.get();
-    }
-    return nullptr;
-}
 
 // A setter store (`c.value = v`, D21) as an expression: evaluates to the
 // assigned value, like an assignment does.
@@ -48,15 +38,26 @@ std::string setterStoreText(const std::string& setter,
 }
 
 // A generic class instantiation spelling (`::ns::Box<double>`); "" when an
-// argument has no C++ spelling or the arity is wrong.
+// argument has no C++ spelling or the arity is wrong. `error` then names the
+// reason.
 std::string instanceSpelling(const ClassModel& cm,
-                             const std::vector<Type>& args) {
+                              const std::vector<Type>& args,
+                              std::string& error) {
     if (cm.typeParams.empty()) return cm.cpp;
-    if (args.size() != cm.typeParams.size()) return std::string();
+    if (args.size() != cm.typeParams.size()) {
+        error = "generic class '" + cm.name + "' expects " +
+                std::to_string(cm.typeParams.size()) +
+                " type argument(s), got " + std::to_string(args.size());
+        return std::string();
+    }
     std::string out = cm.cpp + "<";
     for (std::size_t i = 0; i < args.size(); ++i) {
         const CppInfo ci = classify(args[i]);
-        if (!ci.representable) return std::string();
+        if (!ci.representable) {
+            error = "the type argument '" + args[i].name + "' of class '" +
+                    cm.name + "' has no C++ spelling";
+            return std::string();
+        }
         if (i != 0) out += ", ";
         out += ci.cpp;
     }
@@ -115,20 +116,38 @@ std::string Generator::emitModelNew(const NewExpr& n) {
     for (const auto& ta : n.typeArgs) {
         if (ta) instArgs.push_back(modelTypeFromTypeNode(*ta));
     }
-    const std::string self = instanceSpelling(*cm, instArgs);
+    std::string error;
+    const std::string self = instanceSpelling(*cm, instArgs, error);
     if (self.empty()) {
-        notImplemented(n, "this generic class instantiation");
+        // D25: a generic class needs explicit type arguments, and they must
+        // match the declaration.
+        sink_.error(diagcode::kInvalidTypeArgument, n.span, error);
         return std::string();
     }
-    std::vector<std::string> texts;
+    // A spread argument stands for the constructor's arguments, so the call
+    // is dispatched on the array's length instead of being spelled out.
+    std::size_t spreadAt = n.arguments.size();
+    for (std::size_t i = 0; i < n.arguments.size(); ++i) {
+        const Expr* arg = n.arguments[i].get();
+        if (!arg || arg->kind != NodeKind::SpreadElement) continue;
+        spreadAt = i;
+        break;
+    }
+    if (spreadAt < n.arguments.size()) {
+        if (spreadAt + 1 != n.arguments.size()) {
+            sink_.error(diagcode::kInvalidArgumentValue, n.span,
+                        "a spread argument must be the last argument of a "
+                        "constructor call");
+            return std::string();
+        }
+        return newSpreadText(*cm, self, n.arguments, spreadAt);
+    }
+    std::string args;
     for (const auto& argPtr : n.arguments) {
         const Expr* arg = argPtr.get();
         if (arg == nullptr) continue;
-        if (arg->kind == NodeKind::SpreadElement) {
-            notImplemented(*arg, "spread argument");
-            continue;
-        }
-        texts.push_back(expr(*arg));
+        if (!args.empty()) args += ", ";
+        args += expr(*arg);
     }
     // A constructor with a rest parameter takes the trailing arguments as
     // one array (spec 15).
@@ -379,85 +398,6 @@ std::string Generator::emitModelAssign(const AssignmentExpr& a,
 // -----------------------------------------------------------------------------
 // Object literals + initializers
 // -----------------------------------------------------------------------------
-
-// `{ x: 1 }`: the generated literal/field struct behind a `Ref<T>`, arguments
-// in model order (a missing optional field becomes `std::nullopt`).
-std::string Generator::objectInitText(const ObjectModel& om,
-                                      const ObjectLiteral& lit) {
-    needsRef_ = true;
-    std::vector<std::string> args;
-    args.reserve(om.fields.size());
-    for (const ObjectFieldModel& f : om.fields) {
-        const Expr* value = literalValueOf(lit, f.name);
-        if (value == nullptr) {
-            args.push_back(f.optional ? "std::nullopt"
-                                      : objectFieldDefaultText(f.type));
-            continue;
-        }
-        if (f.optional && isNullishLiteral(*value)) {
-            args.push_back("std::nullopt");
-            continue;
-        }
-        args.push_back(expr(*value));
-    }
-    const std::string& structName =
-        om.literalName.empty() ? om.structName : om.literalName;
-    return "::cp3::runtime::makeRef<" + structName + ">(" +
-           joinStrings(args, ", ") + ")";
-}
-
-std::string Generator::emitModelObjectLiteral(const ObjectLiteral& lit) {
-    const std::vector<ObjectFieldModel> fields = literalFields(lit, sema_);
-    if (fields.empty()) return std::string();
-    const std::string label = objectLabelOf(fields);
-    ModelRegistry& reg = ModelRegistry::get();
-    const ObjectModel* om = reg.objectByLabel(label);
-    if (om == nullptr || !reg.objectUsable(label)) return std::string();
-    // A plain all-primitive shape keeps master's value-struct literal path
-    // (support/value_shapes.cpp); only a model-owned shape lowers here.
-    if (!objectModelUsed(*om)) return std::string();
-    return objectInitText(*om, lit);
-}
-
-// `let c: C = { x: 1 }`: a class instance built field by field. A class with a
-// constructor cannot be built from a literal (construction is the ctor).
-std::string Generator::classLiteralInit(const ClassModel& cm,
-                                        const ObjectLiteral& lit) {
-    if (hasClassCtor(cm)) {
-        notImplemented(lit, "an object literal for a class with a constructor");
-        return std::string();
-    }
-    needsRef_ = true;
-    std::string out = "([&]{ auto cp3_v = ::cp3::runtime::makeRef<" + cm.cpp +
-                      ">();";
-    for (const ClassMemberModel& m : cm.members) {
-        if (m.ctor != nullptr || m.isMethod) continue;
-        const Expr* value = literalValueOf(lit, m.name);
-        if (value == nullptr) continue;
-        const std::string field = "cp3_v->" + mapIdent(m.name);
-        const bool nullish = isNullishLiteral(*value);
-        if (m.isWeak) {
-            out += " " + field + (nullish ? ".reset()" : " = " + expr(*value)) +
-                   ";";
-            continue;
-        }
-        const CppInfo ci = classify(m.type);
-        if (nullish &&
-            (ci.shape == Shape::Optional || ci.shape == Shape::Maybe)) {
-            out += " " + field + " = std::nullopt;";
-            continue;
-        }
-        out += " " + field + " = " + expr(*value) + ";";
-    }
-    out += " return cp3_v; }())";
-    return out;
-}
-
-std::string Generator::objectFieldDefaultText(const Type& t) {
-    const CppInfo ci = classify(t);
-    if (!ci.representable) return "double{}";
-    return ci.cpp + "{}";
-}
 
 // The special initializer of a declaration whose declared type is a class and
 // whose initializer is an object literal ("" otherwise).

@@ -70,6 +70,10 @@ inline constexpr const char* kUnknownType       = "CP3414";
 inline constexpr const char* kInvalidCondition  = "CP3415";
 inline constexpr const char* kNoMatchingOverload = "CP3416";
 inline constexpr const char* kTypeArgsOnNonGeneric = "CP3417";
+// The console event name is outside the documented set (D75).
+inline constexpr const char* kInvalidArgumentValue = "CP3419";
+// A generic class instantiation without the explicit type arguments (D25).
+inline constexpr const char* kInvalidTypeArgument = "CP3418";
 
 // --- statements / control flow (sema) ----------------------------------------
 inline constexpr const char* kReturnOutsideFunction = "CP3501";
@@ -101,6 +105,9 @@ inline constexpr const char* kInvalidOverride   = "CP3704";
 inline constexpr const char* kDuplicateMember   = "CP3705";
 inline constexpr const char* kMixedEnumBacking  = "CP3706";
 inline constexpr const char* kGenericLocalMethod = "CP3707";
+// A computed class member name: only a literal names a member of a class
+// with a fixed member set.
+inline constexpr const char* kComputedMemberName = "CP3708";
 
 // --- banned JS patterns (sema) - language-spec 08 / 23 -----------------------
 inline constexpr const char* kDeleteBanned      = "CP3801";

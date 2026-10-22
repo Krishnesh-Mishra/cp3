@@ -74,13 +74,14 @@ bool Generator::isConsoleMember(const CallExpr& c) const {
     if (c.callee->kind != NodeKind::MemberExpr) return false;
     const auto& m = static_cast<const MemberExpr&>(*c.callee);
     if (!m.object || m.object->kind != NodeKind::Identifier) return false;
-    const std::string& name = static_cast<const Identifier&>(*m.object).name;
-    if (name != "console") return false;
-    // A local binding named `console` shadows the imported one: the call is an
-    // ordinary member call on that value, not a console member. The import
-    // itself is not a value binding in the scope environment, so an
-    // unshadowed `console` still reaches the console family.
-    return !lookup(name).has_value();
+    if (static_cast<const Identifier&>(*m.object).name != "console") return false;
+    // A user binding named `console` shadows the standard module: the call
+    // belongs to that object, not to the std/console family.
+    if (hasValueBinding("console")) return false;
+    // The std/console family needs its import: without it the module's ABI is
+    // not part of the program (the sema rejects the un-imported name with
+    // CP3301 and the exact import statement).
+    return consoleImported_;
 }
 
 // -----------------------------------------------------------------------------

@@ -245,6 +245,12 @@ private:
     void addMethodSignature(std::vector<Field>& fields, bool& open,
                             MethodSignature& ms);
     std::string keyName(Expr* key) const;
+    // A class member's name: "" when the key is a computed name that is not a
+    // literal (a cp3 class has a fixed set of members).
+    std::string classMemberName(Expr* key, bool computed);
+    // The argument types of a `new` call; a spread argument's type is unknown.
+    void inferNewArgs(const ExprList& args, std::vector<Type>& types,
+                      std::vector<bool>& spread);
     void resolveParamSig(Parameter& p, std::vector<Type>& out);
     Type nullableIf(bool cond, const Type& t);
     Type withoutMember(const Type& t, const Type& remove);

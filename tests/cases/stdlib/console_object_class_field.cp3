@@ -1,0 +1,4 @@
+import console from "std/console";
+class P { name: string = "Ada"; function toString(): string { return "P(" + this.name + ")"; } }
+const p = new P();
+console.log({ a: p });

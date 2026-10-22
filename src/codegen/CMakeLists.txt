@@ -72,6 +72,7 @@ set(cp3_codegen_sources
     src/emit/class_shape.cpp
     src/emit/class_expr.cpp
     src/emit/class_params.cpp
+    src/emit/class_init.cpp
     src/emit/enum.cpp
     src/emit/regex.cpp
     src/emit/parallel.cpp
