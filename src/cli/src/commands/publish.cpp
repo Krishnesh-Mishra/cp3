@@ -121,6 +121,15 @@ bool copyArtifact(const fs::path& source, const fs::path& target, bool force,
               "' already exists; pass --force to overwrite it";
         return false;
     }
+    // The target's directory is created on the way: `publish --out
+    // dist/bundle.cp3pak` must not need a pre-made `dist`.
+    fs::create_directories(target.parent_path(), ec);
+    if (ec) {
+        err = "cannot create " + target.parent_path().string() + " (" +
+              ec.message() + ")";
+        return false;
+    }
+    ec.clear();
     fs::copy_file(source, target, fs::copy_options::overwrite_existing, ec);
     if (ec) {
         err = "cannot copy to " + target.string() + " (" + ec.message() + ")";
