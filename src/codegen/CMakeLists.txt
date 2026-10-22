@@ -29,6 +29,7 @@ set(cp3_codegen_sources
     src/support/class_types.cpp
     src/support/class_model.cpp
     src/support/class_collect.cpp
+    src/support/enum_values.cpp
     src/support/class_walk.cpp
     src/support/helper_blocks.cpp
     src/support/int_mode.cpp

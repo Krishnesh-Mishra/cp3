@@ -170,7 +170,7 @@ private:
     std::string accessorBodyText(const AccessorDeclaration& ad,
                                  const ClassModel& cm, int indent);
     std::string methodBodyText(const MethodDeclaration& md, const ClassModel& cm,
-                               int indent, bool isStatic,
+                               int indent,
                                const std::vector<std::string>& methodTypeParams = {});
     std::string ctorBodyText(const ConstructorDeclaration& cd,
                              const ClassModel& cm, int indent);
