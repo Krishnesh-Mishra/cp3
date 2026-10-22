@@ -62,6 +62,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import textwrap
 import threading
 import time
 from datetime import datetime
@@ -817,7 +818,7 @@ def run_compute_trial(language: str, task: str, reps: int, cp3c: Path,
 
 
 # --------------------------------------------------------------------------
-# reporting
+# gate + ratio bookkeeping (no printing here)
 # --------------------------------------------------------------------------
 def best_ms_of(rows: list[dict], language: str) -> float | None:
     row = next((r for r in rows if r["language"] == language), None)
@@ -907,13 +908,458 @@ def binary_cell(row: dict) -> str:
     return f"{row['binary_kb']:.0f}" if row["binary_kb"] is not None else "-"
 
 
-def print_server_table(task: str, rows: list[dict]) -> None:
+# --------------------------------------------------------------------------
+# terminal UI -- presentation only. Nothing in this section starts a process,
+# takes a measurement, or changes a number; it only decides how rows look.
+#
+#   * colour + unicode are auto-detected (tty, encoding); NO_COLOR disables
+#     colour, FORCE_COLOR forces it; piped output degrades to plain text
+#   * the --results file always receives plain text (escape codes stripped)
+#   * tables shrink to the terminal width: the speed bar is dropped first,
+#     then long cells are ellipsised and their full text is printed below
+# --------------------------------------------------------------------------
+ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
+class _Ui:
+    """Terminal capabilities, decided once by ui_setup()."""
+    color = False        # emit ANSI styling
+    unicode = False      # box-drawing / block glyphs (else ASCII)
+    live = False         # in-place progress line (needs a colour tty)
+    width = 120          # terminal columns
+    wrap = 120           # wrap width for prose lines
+    out = None           # the real terminal stream (never the results tee)
+    live_dirty = False   # a live line is currently on screen
+
+
+UI = _Ui()
+
+SGR = {
+    "bold": "1",
+    "dim": "38;5;245",
+    "red": "38;5;203",
+    "green": "38;5;114",
+    "yellow": "38;5;221",
+    "blue": "38;5;75",
+    "magenta": "38;5;213",
+    "cyan": "38;5;80",
+    "orange": "38;5;208",
+    "white": "38;5;255",
+}
+LANG_STYLE = {
+    "cpp": "blue", "rust": "orange", "go": "cyan",
+    "js": "yellow", "python": "green", "cp3": "magenta",
+}
+
+GLYPH_UNI = {
+    "h": "─", "thin": "┈", "tl": "╭", "tr": "╮", "bl": "╰", "br": "╯", "v": "│",
+    "title": "◆", "run": "▶", "ok": "✓", "bad": "✗", "warn": "▲", "info": "·",
+    "ell": "…", "cur": "▸", "pend": "·", "fill": "█", "track": "·", "mark": "│",
+    "over": "»", "arrow": "↳", "partial": "▏▎▍▌▋▊▉", "sep": " · ",
+}
+GLYPH_ASCII = {
+    "h": "-", "thin": ".", "tl": "+", "tr": "+", "bl": "+", "br": "+", "v": "|",
+    "title": "*", "run": ">", "ok": "+", "bad": "x", "warn": "!", "info": "-",
+    "ell": "..", "cur": ">", "pend": ".", "fill": "#", "track": ".", "mark": "|",
+    "over": ">", "arrow": "->", "partial": "", "sep": " | ",
+}
+
+
+def g(name: str) -> str:
+    return (GLYPH_UNI if UI.unicode else GLYPH_ASCII)[name]
+
+
+def paint(text: str, *styles: str) -> str:
+    if not UI.color or not styles or not text:
+        return text
+    codes = ";".join(SGR[style] for style in styles)
+    return f"\x1b[{codes}m{text}\x1b[0m"
+
+
+def _enable_windows_vt() -> bool:
+    """Turn on ANSI escape processing for the Windows console."""
+    try:
+        import ctypes as _ctypes
+        kernel32 = _ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = _ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, _ctypes.byref(mode)):
+            return False
+        if mode.value & 0x0004:
+            return True
+        return bool(kernel32.SetConsoleMode(handle, mode.value | 0x0004))
+    except Exception:
+        return False
+
+
+def ui_setup(stream) -> None:
+    UI.out = stream
+    try:
+        is_tty = bool(stream.isatty())
+    except Exception:
+        is_tty = False
+    encoding = (getattr(stream, "encoding", None) or "").lower()
+    UI.unicode = "utf" in encoding
+    color = is_tty
+    if os.environ.get("NO_COLOR") or os.environ.get("TERM") == "dumb":
+        color = False
+    elif os.environ.get("FORCE_COLOR"):
+        color = True
+    if color and is_tty and os.name == "nt":
+        color = _enable_windows_vt()
+    UI.color = color
+    UI.live = bool(color and is_tty)
+    UI.width = shutil.get_terminal_size(fallback=(120 if is_tty else 140, 30)).columns
+    UI.wrap = min(UI.width, 130)
+
+
+def live_clear() -> None:
+    if UI.live and UI.live_dirty and UI.out is not None:
+        UI.out.write("\r\x1b[2K")
+        UI.out.flush()
+        UI.live_dirty = False
+
+
+def live_status(text: str) -> None:
+    UI.out.write("\r\x1b[2K" + text)
+    UI.out.flush()
+    UI.live_dirty = True
+
+
+def shorten(text: str, width: int) -> str:
+    if len(text) <= width:
+        return text
+    ell = g("ell")
+    if width <= len(ell):
+        return text[:width]
+    return text[: width - len(ell)] + ell
+
+
+def cell(text: str, *styles: str, rendered: str | None = None):
+    """A table cell: (plain text, styles, optional pre-rendered string)."""
+    return (text, styles, rendered)
+
+
+class Col:
+    def __init__(self, key: str, header: str, align: str = "r", flex: bool = False,
+                 min_width: int = 0, optional: bool = False):
+        self.key = key
+        self.header = header
+        self.align = align
+        self.flex = flex
+        self.min_width = min_width
+        self.optional = optional
+
+
+def render_table(columns: list[Col], rows: list, indent: int = 2, gap: int = 2) -> None:
+    """Print a rule-style table sized to the terminal.
+
+    `rows` holds dicts {"label", "cells", "styles"}; a None entry draws a thin
+    separator. Optional columns are dropped first when the table is too wide,
+    then flexible columns are ellipsised; ellipsised text is listed in full
+    underneath so nothing is lost."""
+    cols = list(columns)
+    widths: dict[str, int] = {}
+    for col in cols:
+        width = len(col.header)
+        for row in rows:
+            if row is not None and col.key in row["cells"]:
+                width = max(width, len(row["cells"][col.key][0]))
+        widths[col.key] = width
+
+    def total() -> int:
+        return indent + sum(widths[c.key] for c in cols) + gap * (len(cols) - 1)
+
+    available = max(40, UI.width - 2)
+    while total() > available:
+        optional = [c for c in cols if c.optional]
+        if not optional:
+            break
+        cols.remove(optional[-1])
+    # shrink flexible columns toward their minimum first; only on a very narrow
+    # terminal go below it (hard floor of 6) rather than letting rows wrap
+    for floor in (None, 6):
+        while total() > available:
+            flexible = [c for c in cols if c.flex and
+                        widths[c.key] > (c.min_width if floor is None else floor)]
+            if not flexible:
+                break
+            widest = max(flexible, key=lambda c: widths[c.key])
+            widths[widest.key] -= 1
+
+    span = total() - indent
+    lead = " " * indent
+    joiner = " " * gap
+
+    def join(parts: list[str]) -> str:
+        return lead + joiner.join(parts)
+
+    print(lead + paint(g("h") * span, "dim"))
+    header_parts = []
+    for col in cols:
+        text = shorten(col.header, widths[col.key])
+        pad = " " * (widths[col.key] - len(text))
+        header_parts.append(pad + paint(text, "bold", "dim") if col.align == "r"
+                            else paint(text, "bold", "dim") + pad)
+    print(join(header_parts).rstrip())
+    print(lead + paint(g("h") * span, "dim"))
+
+    truncated: list[tuple[str, str, str]] = []
+    for row in rows:
+        if row is None:
+            print(lead + paint(g("thin") * span, "dim"))
+            continue
+        parts = []
+        for index, col in enumerate(cols):
+            text, styles, rendered = row["cells"].get(col.key, ("", (), None))
+            width = widths[col.key]
+            if len(text) > width:
+                shown = shorten(text, width)
+                truncated.append((row["label"], col.header, text))
+                body = paint(shown, *(tuple(row.get("styles", ())) + tuple(styles)))
+            elif rendered is not None:
+                shown, body = text, rendered
+            else:
+                shown = text
+                body = paint(shown, *(tuple(row.get("styles", ())) + tuple(styles)))
+            pad = " " * (width - len(shown))
+            if col.align == "r":
+                parts.append(pad + body)
+            else:
+                parts.append(body if index == len(cols) - 1 else body + pad)
+        print(join(parts).rstrip())
+    print(lead + paint(g("h") * span, "dim"))
+    for label, header, full in truncated:
+        print(f"{lead}  {paint(g('arrow'), 'dim')} {paint(label, 'dim')} "
+              f"{paint(header + ':', 'dim')} {paint(full, 'dim')}")
+
+
+def banner(title: str, subtitle: str = "") -> None:
     print()
-    print(f"== {task} ==")
-    print(f"{'lang':<7} {'variant':<30} {'build_ms':>9} {'boot_ms':>8} "
-          f"{'p50_ms':>8} {'p95_ms':>8} {'req/s':>9} {'cp3/cpp':>8} {'cp3/rust':>9} "
-          f"{'peak_rss_mb':>11} {'binary_kb':>9}  note")
-    print("-" * 160)
+    print(f"  {paint(g('title'), 'cyan')} {paint(title, 'bold', 'white')}")
+    if subtitle:
+        for line in textwrap.wrap(subtitle, width=max(40, UI.wrap - 4)):
+            print("    " + paint(line, "dim"))
+
+
+def note_line(tag: str, tag_styles: tuple, text: str, text_styles: tuple = ("dim",),
+              indent: int = 4) -> None:
+    """A tagged, hanging-indent prose line (wraps to the terminal)."""
+    prefix_len = indent + len(tag) + 2
+    width = max(30, UI.wrap - prefix_len)
+    lines = textwrap.wrap(text, width=width, break_on_hyphens=False) or [""]
+    for number, line in enumerate(lines):
+        if number == 0:
+            print(" " * indent + paint(tag, *tag_styles) + "  " + paint(line, *text_styles))
+        else:
+            print(" " * prefix_len + paint(line, *text_styles))
+
+
+def box(lines: list[tuple[str, tuple]], border: str = "cyan") -> None:
+    inner = max(len(text) for text, _ in lines)
+    edge = g("h") * (inner + 4)
+    print("  " + paint(g("tl") + edge + g("tr"), border))
+    for text, styles in lines:
+        print("  " + paint(g("v"), border) + "  " + paint(text, *styles)
+              + " " * (inner - len(text)) + "  " + paint(g("v"), border))
+    print("  " + paint(g("bl") + edge + g("br"), border))
+
+
+def bar(fraction: float | None, width: int, style: str) -> tuple[str, str]:
+    """Horizontal bar -> (plain, rendered) of identical visible width."""
+    fraction = 0.0 if fraction is None else max(0.0, min(1.0, fraction))
+    if UI.unicode:
+        eighths = int(round(fraction * width * 8))
+        if fraction > 0:
+            eighths = max(1, eighths)
+        full, part = divmod(eighths, 8)
+        filled = g("fill") * full + (g("partial")[part - 1] if part else "")
+    else:
+        count = int(round(fraction * width))
+        if fraction > 0:
+            count = max(1, count)
+        filled = g("fill") * count
+    empty = g("track") * (width - len(filled))
+    return filled + empty, paint(filled, style) + paint(empty, "dim")
+
+
+def ratio_bar(ratio: float | None, style: tuple, half: int = 10) -> tuple[str, str]:
+    """Ratio gauge: 0x .. 1.00x (centre tick) .. 2x+; (plain, rendered)."""
+    width = half * 2 + 2
+    if ratio is None:
+        return " " * width, " " * width
+    eighths = int(round(min(ratio, 2.0) * half * 8))
+    if ratio > 0:
+        eighths = max(1, eighths)
+    plain: list[str] = []
+    rendered: list[str] = []
+    for index in range(half * 2):
+        if index == half:
+            plain.append(g("mark"))
+            rendered.append(paint(g("mark"), "dim"))
+        level = max(0, min(8, eighths - index * 8))
+        if UI.unicode and 0 < level < 8:
+            char = g("partial")[level - 1]
+            rendered.append(paint(char, *style))
+        elif level >= (8 if UI.unicode else 4):
+            char = g("fill")
+            rendered.append(paint(char, *style))
+        else:
+            char = g("track")
+            rendered.append(paint(char, "dim"))
+        plain.append(char)
+    if ratio > 2.0:
+        plain.append(g("over"))
+        rendered.append(paint(g("over"), *style))
+    else:
+        plain.append(" ")
+        rendered.append(" ")
+    return "".join(plain) + " ", "".join(rendered) + " "
+
+
+def ratio_style(ratio: float | None) -> tuple:
+    if ratio is None:
+        return ("dim",)
+    if ratio <= GATE_WARN_NATIVE:
+        return ("green",)
+    if ratio <= GATE_BIG_NATIVE:
+        return ("yellow",)
+    return ("red", "bold")
+
+
+def best_langs(values: dict, higher: bool = False) -> set:
+    """Languages holding the best value of a column (needs 2+ values)."""
+    present = {key: value for key, value in values.items() if value is not None}
+    if len(present) < 2:
+        return set()
+    target = max(present.values()) if higher else min(present.values())
+    return {key for key, value in present.items() if value == target}
+
+
+def value_cell(text: str, is_best: bool = False):
+    if text == "-":
+        return cell(text, "dim")
+    return cell(text, "green") if is_best else cell(text)
+
+
+def build_cell(row: dict, cached: bool):
+    ms = row["build_ms"]
+    if ms is not None:
+        return cell(f"{ms / 1000:.1f} s" if ms >= 1000 else f"{ms:.0f} ms")
+    if cached:
+        return cell("cached", "dim")
+    return cell("-", "dim")
+
+
+def lang_cell(language: str):
+    return cell(language, LANG_STYLE[language], "bold")
+
+
+PROBLEM_PREFIXES = ("not runnable", "build failed", "run failed", "never became ready")
+
+
+def split_note(note: str) -> tuple[bool, str]:
+    """('build: cached' flag, remaining note text)."""
+    text = note or ""
+    cached = False
+    if text.startswith("build: cached"):
+        cached = True
+        text = text[len("build: cached"):].lstrip(", ")
+    return cached, text
+
+
+def print_row_notes(rows: list[dict]) -> None:
+    """Failures first (red/yellow), then shared run details once (grey)."""
+    problems: list[tuple[str, str]] = []
+    details: dict[str, list[str]] = {}
+    for row in rows:
+        _, rest = split_note(row["note"])
+        if not rest:
+            continue
+        if rest.startswith(PROBLEM_PREFIXES):
+            problems.append((row["language"], rest))
+        else:
+            details.setdefault(rest, []).append(row["language"])
+    for language, text in problems:
+        hard = "CP3002" in text or not text.startswith("not runnable")
+        style = "red" if hard else "yellow"
+        glyph = g("bad") if hard else g("warn")
+        note_line(f"{glyph} {language}", (style, "bold"), text, (style,))
+    for text, languages in details.items():
+        scope = "" if len(languages) == len(rows) else ", ".join(languages) + ": "
+        note_line(g("info"), ("dim",), scope + text.replace(", ", g("sep")))
+
+
+def announce_run(task: str, language: str, index: int, total: int) -> None:
+    """Progress before each trial: an in-place live line on a terminal."""
+    if not UI.live:
+        print(f"  {g('run')} {task}: {language} ...", flush=True)
+        return
+    current = LANGUAGES.index(language)
+    parts = []
+    for position, name in enumerate(LANGUAGES):
+        if position < current:
+            parts.append(paint(g("ok"), "green") + " " + paint(name, "dim"))
+        elif position == current:
+            parts.append(paint(g("cur"), LANG_STYLE[name]) + " "
+                         + paint(name, LANG_STYLE[name], "bold"))
+        else:
+            parts.append(paint(g("pend"), "dim") + " " + paint(name, "dim"))
+    live_status(f"  {paint(g('run'), 'cyan')} {paint(f'{index}/{total}', 'dim')}  "
+                f"{paint(task, 'bold')}   " + "  ".join(parts))
+
+
+def announce_skip(language: str) -> None:
+    live_clear()
+    note_line(f"{g('warn')} skip", ("yellow",), f"{language}: toolchain not found on PATH",
+              ("yellow",), indent=2)
+
+
+def announce_omit(task: str, language: str, reason: str) -> None:
+    live_clear()
+    note_line(f"{g('info')} omit", ("dim",), f"{task}: {language}: {reason}", ("dim",), indent=2)
+
+
+# --------------------------------------------------------------------------
+# reporting
+# --------------------------------------------------------------------------
+def print_header(cpu_text: str, probes: list) -> None:
+    stamp = datetime.now().isoformat(timespec="seconds")
+    print()
+    box([("benchmarks" + g("sep") + "comparison suite", ("bold", "white")),
+         (stamp, ("dim",))])
+    print()
+    for key, value in (("machine", f"{cpu_text}{g('sep')}{os.cpu_count()} logical CPUs"),
+                       ("os", platform.platform()),
+                       ("runner", f"python {platform.python_version()} ({sys.executable})")):
+        print(f"  {paint(key.ljust(9), 'dim')} {value}")
+    print()
+    print("  " + paint("toolchains", "bold"))
+    for name, argv in probes:
+        version = probe_version(argv)
+        good = version not in ("missing", "error")
+        mark = paint(g("ok"), "green") if good else paint(g("bad"), "red", "bold")
+        text = paint(version, "dim") if good else paint(version, "red")
+        print(f"   {mark} {paint(name.ljust(7), LANG_STYLE.get(name, 'white'))} {text}")
+    print()
+    for line in textwrap.wrap("every number below is a wall-clock measurement from this run; "
+                              "load phases use persistent keep-alive connections "
+                              "(one per client)", width=max(40, UI.wrap - 4)):
+        print("  " + paint(line, "dim"))
+
+
+def print_time_wait_warning(waiting: int) -> None:
+    print()
+    note_line(f"{g('warn')} warn", ("yellow", "bold"),
+              f"{waiting} sockets are in TIME_WAIT; a previous fresh-connection "
+              "tool may still be congesting ephemeral ports -- failures below may "
+              "be that, not the servers. Wait a couple of minutes and rerun for "
+              "clean numbers.", ("yellow",), indent=2)
+
+
+def print_server_table(task: str, rows: list[dict]) -> None:
+    live_clear()
+    banner(task)
     cp3_row = next((r for r in rows if r["language"] == "cp3"), None)
     cp3_rps = cp3_row["rps"] if cp3_row and cp3_row["rps"] else None
     cpp_row = next((r for r in rows if r["language"] == "cpp"), None)
@@ -931,152 +1377,257 @@ def print_server_table(task: str, rows: list[dict]) -> None:
     gate_row(task, cp3_rps,
              {"cpp": cpp_rps, "rust": rust_rps, "go": go_rps, "js": js_rps,
               "python": python_rps}, unit="rps")
+
+    ran = {r["language"]: r["boot_ms"] is not None for r in rows}
+    top_rps = max((r["rps"] for r in rows if ran[r["language"]] and r["rps"]), default=None)
+    best_boot = best_langs({r["language"]: r["boot_ms"] for r in rows})
+    best_p50 = best_langs({r["language"]: r["p50"] for r in rows})
+    best_p95 = best_langs({r["language"]: r["p95"] for r in rows})
+    best_rps = best_langs({r["language"]: r["rps"] for r in rows if ran[r["language"]]},
+                          higher=True)
+    best_rss = best_langs({r["language"]: r["peak_rss_mb"] for r in rows})
+    best_bin = best_langs({r["language"]: r["binary_kb"] for r in rows})
+
+    columns = [
+        Col("lang", "lang", "l"),
+        Col("variant", "variant", "l", flex=True, min_width=14),
+        Col("build", "build"),
+        Col("boot", "boot ms"),
+        Col("p50", "p50 ms"),
+        Col("p95", "p95 ms"),
+        Col("rps", "req/s"),
+        Col("cpp", "cp3/cpp"),
+        Col("rust", "cp3/rust"),
+        Col("rss", "rss MiB"),
+        Col("bin", "bin KiB"),
+        Col("bar", "speed", "l", optional=True),
+    ]
+    table_rows: list = []
     for row in rows:
-        build_cell = f"{row['build_ms']:>9.0f}" if row["build_ms"] is not None else f"{'-':>9}"
-        ratio_cpp = ratio_cell(cpp_ratio) if row["language"] == "cp3" else "-"
-        ratio_rust = ratio_cell(rust_ratio) if row["language"] == "cp3" else "-"
-        if row["note"].startswith("not runnable"):
-            print(f"{row['language']:<7} {'-':<30} {build_cell} {'-':>8} "
-                  f"{'-':>8} {'-':>8} {'-':>9} {ratio_cpp:>8} {ratio_rust:>9} "
-                  f"{rss_cell(row):>11} {binary_cell(row):>9}  {row['note']}")
-            continue
-        if row["boot_ms"] is None:
-            print(f"{row['language']:<7} {row['variant']:<30} {build_cell} {'-':>8} "
-                  f"{'-':>8} {'-':>8} {'-':>9} {ratio_cpp:>8} {ratio_rust:>9} "
-                  f"{rss_cell(row):>11} {binary_cell(row):>9}  {row['note']}")
-            continue
-        print(f"{row['language']:<7} {row['variant']:<30} {build_cell} "
-              f"{row['boot_ms']:>8.1f} {row['p50']:>8.2f} {row['p95']:>8.2f} "
-              f"{row['rps']:>9.1f} {ratio_cpp:>8} {ratio_rust:>9} "
-              f"{rss_cell(row):>11} {binary_cell(row):>9}  {row['note']}")
-        if row["errors"]:
-            print(f"{'':<7} ^ {row['errors']} request(s) failed during measurement")
+        language = row["language"]
+        cached, _ = split_note(row["note"])
+        is_cp3 = language == "cp3"
+        cells = {
+            "lang": lang_cell(language),
+            "variant": cell(row["variant"] or "-", "dim"),
+            "build": build_cell(row, cached),
+            "rss": value_cell(rss_cell(row), language in best_rss),
+            "bin": value_cell(binary_cell(row), language in best_bin),
+        }
+        if ran[language]:
+            cells["boot"] = value_cell(f"{row['boot_ms']:.1f}", language in best_boot)
+            cells["p50"] = value_cell(f"{row['p50']:.2f}", language in best_p50)
+            cells["p95"] = value_cell(f"{row['p95']:.2f}", language in best_p95)
+            cells["rps"] = value_cell(f"{row['rps']:.1f}", language in best_rps)
+            if top_rps:
+                plain, rendered = bar(row["rps"] / top_rps, 10, LANG_STYLE[language])
+                cells["bar"] = cell(plain, rendered=rendered)
+        else:
+            for key in ("boot", "p50", "p95"):
+                cells[key] = cell("-", "dim")
+            cells["rps"] = cell("no run", "red", "bold")
+        if is_cp3:
+            cells["cpp"] = cell(ratio_cell(cpp_ratio), *ratio_style(cpp_ratio))
+            cells["rust"] = cell(ratio_cell(rust_ratio), *ratio_style(rust_ratio))
+        else:
+            cells["cpp"] = cell("-", "dim")
+            cells["rust"] = cell("-", "dim")
+        if is_cp3 and table_rows:
+            table_rows.append(None)
+        table_rows.append({"label": language, "cells": cells,
+                           "styles": ("bold",) if is_cp3 else ()})
+    render_table(columns, table_rows)
+    print_row_notes(rows)
+    for row in rows:
+        if ran[row["language"]] and row["errors"]:
+            note_line(f"{g('warn')} {row['language']}", ("yellow", "bold"),
+                      f"{row['errors']} request(s) failed during measurement", ("yellow",))
+
+
+def _print_compute_like(task: str, rows: list[dict], header_text: str,
+                        expected: str | None, with_median: bool) -> None:
+    live_clear()
+    banner(task, header_text)
+    cp3_best = best_ms_of(rows, "cp3")
+    cpp_ratio, rust_ratio = register_ratios(
+        task, cp3_best, best_ms_of(rows, "cpp"), best_ms_of(rows, "rust"),
+        best_ms_of(rows, "go"), best_ms_of(rows, "js"), best_ms_of(rows, "python"))
+
+    bests = {r["language"]: (min(r["runs_ms"]) if r["runs_ms"] else None) for r in rows}
+    medians = {r["language"]: (percentile(r["runs_ms"], 50) if r["runs_ms"] else None)
+               for r in rows}
+    fastest = min((v for v in bests.values() if v), default=None)
+    best_best = best_langs(bests)
+    best_median = best_langs(medians)
+    best_rss = best_langs({r["language"]: r["peak_rss_mb"] for r in rows})
+    best_bin = best_langs({r["language"]: r["binary_kb"] for r in rows})
+
+    columns = [Col("lang", "lang", "l"), Col("build", "build"), Col("best", "best ms")]
+    if with_median:
+        columns.append(Col("median", "median ms"))
+    columns += [
+        Col("runs", "runs ms", "l", flex=True, min_width=10),
+        Col("output", "output", "l", flex=True, min_width=16),
+        Col("match", "match", "l"),
+        Col("cpp", "cp3/cpp"),
+        Col("rust", "cp3/rust"),
+        Col("rss", "rss MiB"),
+        Col("bin", "bin KiB"),
+        Col("bar", "speed", "l", optional=True),
+    ]
+
+    reference = None
+    table_rows: list = []
+    for row in rows:
+        language = row["language"]
+        cached, _ = split_note(row["note"])
+        is_cp3 = language == "cp3"
+        cells = {
+            "lang": lang_cell(language),
+            "build": build_cell(row, cached),
+            "rss": value_cell(rss_cell(row), language in best_rss),
+            "bin": value_cell(binary_cell(row), language in best_bin),
+        }
+        if row["runs_ms"]:
+            best = bests[language]
+            digits = ".1f" if with_median else ".0f"
+            cells["best"] = value_cell(format(best, digits), language in best_best)
+            if with_median:
+                cells["median"] = value_cell(format(medians[language], ".1f"),
+                                             language in best_median)
+            cells["runs"] = cell("/".join(f"{ms:.0f}" for ms in row["runs_ms"]), "dim")
+            if reference is None:
+                reference = row["output"]
+                match = "ref"
+            elif row["output"] == reference:
+                match = "ok"
+            else:
+                match = "MISMATCH"
+            if match == "ref":
+                cells["match"] = cell("ref", "dim")
+            elif match == "ok":
+                cells["match"] = cell(f"{g('ok')} ok", "green")
+            else:
+                cells["match"] = cell(f"{g('bad')} MISMATCH", "red", "bold")
+            cells["output"] = cell(row["output"] or "", "dim" if match != "MISMATCH" else "red")
+            if fastest:
+                plain, rendered = bar(fastest / best, 10, LANG_STYLE[language])
+                cells["bar"] = cell(plain, rendered=rendered)
+        else:
+            cells["best"] = cell("-", "dim")
+            if with_median:
+                cells["median"] = cell("-", "dim")
+            cells["runs"] = cell("-", "dim")
+            cells["output"] = cell("-", "dim")
+            cells["match"] = cell(f"{g('bad')} no run", "red", "bold")
+        if is_cp3:
+            cells["cpp"] = cell(ratio_cell(cpp_ratio), *ratio_style(cpp_ratio))
+            cells["rust"] = cell(ratio_cell(rust_ratio), *ratio_style(rust_ratio))
+        else:
+            cells["cpp"] = cell("-", "dim")
+            cells["rust"] = cell("-", "dim")
+        if is_cp3 and table_rows:
+            table_rows.append(None)
+        table_rows.append({"label": language, "cells": cells,
+                           "styles": ("bold",) if is_cp3 else ()})
+    render_table(columns, table_rows)
+    print_row_notes(rows)
+
+    outputs = {row["output"] for row in rows if row["output"] is not None}
+    if len(outputs) > 1:
+        note_line(g("bad"), ("red", "bold"),
+                  f"outputs differ across languages: {sorted(outputs)}", ("red",))
+    if expected is not None:
+        for row in rows:
+            if row["runs_ms"] and row["output"] != expected:
+                note_line(g("bad"), ("red", "bold"),
+                          f"{task}: {row['language']} output {row['output']!r} "
+                          f"does not match the oracle {expected!r}", ("red",))
 
 
 def print_compute_table(task: str, rows: list[dict], header_text: str,
                         expected: str | None = None) -> None:
-    print()
-    print(f"== {task} == {header_text}")
-    print(f"{'lang':<7} {'build_ms':>9} {'best_ms':>9} {'all_runs_ms':<20} "
-          f"{'output':<26} {'match':<7} {'cp3/cpp':>8} {'cp3/rust':>9} "
-          f"{'peak_rss_mb':>11} {'binary_kb':>9}  note")
-    print("-" * 165)
-    cp3_best = best_ms_of(rows, "cp3")
-    cpp_ratio, rust_ratio = register_ratios(
-        task, cp3_best, best_ms_of(rows, "cpp"), best_ms_of(rows, "rust"),
-        best_ms_of(rows, "go"), best_ms_of(rows, "js"), best_ms_of(rows, "python"))
-    reference = None
-    for row in rows:
-        build_cell = f"{row['build_ms']:>9.0f}" if row["build_ms"] is not None else f"{'-':>9}"
-        if not row["runs_ms"]:
-            print(f"{row['language']:<7} {build_cell} {'-':>9} {'-':<20} "
-                  f"{'-':<26} {'-':<7} {'-':>8} {'-':>9} "
-                  f"{rss_cell(row):>11} {binary_cell(row):>9}  {row['note']}")
-            continue
-        best = min(row["runs_ms"])
-        runs = "/".join(f"{ms:.0f}" for ms in row["runs_ms"])
-        if reference is None:
-            reference = row["output"]
-            match = "ref"
-        elif row["output"] == reference:
-            match = "ok"
-        else:
-            match = "MISMATCH"
-        ratio_cpp_cell = ratio_cell(cpp_ratio) if row["language"] == "cp3" else "-"
-        ratio_rust_cell = ratio_cell(rust_ratio) if row["language"] == "cp3" else "-"
-        print(f"{row['language']:<7} {build_cell} {best:>9.0f} {runs:<20} "
-              f"{(row['output'] or ''):<26} {match:<7} {ratio_cpp_cell:>8} {ratio_rust_cell:>9} "
-              f"{rss_cell(row):>11} {binary_cell(row):>9}  {row['note']}")
-    outputs = {row["output"] for row in rows if row["output"] is not None}
-    if len(outputs) > 1:
-        print(f"!! outputs differ across languages: {sorted(outputs)}")
-    if expected is not None:
-        for row in rows:
-            if row["runs_ms"] and row["output"] != expected:
-                print(f"!! {task}: {row['language']} output {row['output']!r} "
-                      f"does not match the oracle {expected!r}")
+    _print_compute_like(task, rows, header_text, expected, with_median=False)
 
 
 def print_hello_table(task: str, rows: list[dict], header_text: str,
                       expected: str | None = None) -> None:
-    print()
-    print(f"== {task} == {header_text}")
-    print(f"{'lang':<7} {'build_ms':>9} {'best_ms':>9} {'median_ms':>9} {'all_runs_ms':<20} "
-          f"{'output':<16} {'match':<7} {'cp3/cpp':>8} {'cp3/rust':>9} "
-          f"{'peak_rss_mb':>11} {'binary_kb':>9}  note")
-    print("-" * 170)
-    cp3_best = best_ms_of(rows, "cp3")
-    cpp_ratio, rust_ratio = register_ratios(
-        task, cp3_best, best_ms_of(rows, "cpp"), best_ms_of(rows, "rust"),
-        best_ms_of(rows, "go"), best_ms_of(rows, "js"), best_ms_of(rows, "python"))
-    reference = None
-    for row in rows:
-        build_cell = f"{row['build_ms']:>9.0f}" if row["build_ms"] is not None else f"{'-':>9}"
-        if not row["runs_ms"]:
-            print(f"{row['language']:<7} {build_cell} {'-':>9} {'-':>9} {'-':<20} "
-                  f"{'-':<16} {'-':<7} {'-':>8} {'-':>9} "
-                  f"{rss_cell(row):>11} {binary_cell(row):>9}  {row['note']}")
-            continue
-        best = min(row["runs_ms"])
-        median = percentile(row["runs_ms"], 50)
-        runs = "/".join(f"{ms:.0f}" for ms in row["runs_ms"])
-        if reference is None:
-            reference = row["output"]
-            match = "ref"
-        elif row["output"] == reference:
-            match = "ok"
-        else:
-            match = "MISMATCH"
-        ratio_cpp_cell = ratio_cell(cpp_ratio) if row["language"] == "cp3" else "-"
-        ratio_rust_cell = ratio_cell(rust_ratio) if row["language"] == "cp3" else "-"
-        print(f"{row['language']:<7} {build_cell} {best:>9.1f} {median:>9.1f} {runs:<20} "
-              f"{(row['output'] or ''):<16} {match:<7} {ratio_cpp_cell:>8} {ratio_rust_cell:>9} "
-              f"{rss_cell(row):>11} {binary_cell(row):>9}  {row['note']}")
-    outputs = {row["output"] for row in rows if row["output"] is not None}
-    if len(outputs) > 1:
-        print(f"!! outputs differ across languages: {sorted(outputs)}")
-    if expected is not None:
-        for row in rows:
-            if row["runs_ms"] and row["output"] != expected:
-                print(f"!! {task}: {row['language']} output {row['output']!r} "
-                      f"does not match the oracle {expected!r}")
+    _print_compute_like(task, rows, header_text, expected, with_median=True)
 
 
 def print_gate_and_summary() -> None:
-    print()
-    print("== summary: cp3 vs native ==")
-    print(f"{'task':<20} {'cp3/cpp':>9} {'cp3/rust':>10}")
-    print("-" * 42)
+    live_clear()
+    banner("summary: cp3 vs native",
+           "ratios are cp3 time divided by the reference time; lower is better "
+           "(the tick marks 1.00x = parity)")
+    axis = ("0" + " " * 9 + "1x").ljust(19) + "2x+"
+    columns = [
+        Col("task", "task", "l"),
+        Col("cpp", "cp3/cpp"),
+        Col("cppbar", axis, "l", optional=True),
+        Col("rust", "cp3/rust"),
+        Col("rustbar", axis, "l", optional=True),
+    ]
+
+    def ratio_cells(prefix: str, ratio: float | None, text: str | None = None) -> dict:
+        style = ratio_style(ratio)
+        plain, rendered = ratio_bar(ratio, style)
+        return {
+            prefix: cell(text if text is not None else ratio_cell(ratio), *style),
+            prefix + "bar": cell(plain, rendered=rendered),
+        }
+
+    table_rows: list = []
     for row in SUMMARY_ROWS:
-        print(f"{row['task']:<20} {ratio_cell(row['cpp']):>9} {ratio_cell(row['rust']):>10}")
+        cells = {"task": cell(row["task"])}
+        cells.update(ratio_cells("cpp", row["cpp"]))
+        cells.update(ratio_cells("rust", row["rust"]))
+        table_rows.append({"label": row["task"], "cells": cells, "styles": ()})
     cpp_values = [row["cpp"] for row in SUMMARY_ROWS if row["cpp"] is not None]
     rust_values = [row["rust"] for row in SUMMARY_ROWS if row["rust"] is not None]
     cpp_geo = geomean(cpp_values)
     rust_geo = geomean(rust_values)
-    print("-" * 42)
+    cells = {"task": cell("geomean")}
+    cells.update(ratio_cells("cpp", cpp_geo, f"{cpp_geo:.2f}x" if cpp_geo is not None else "n/a"))
+    cells.update(ratio_cells("rust", rust_geo, f"{rust_geo:.2f}x" if rust_geo is not None else "n/a"))
+    if table_rows:
+        table_rows.append(None)
+    table_rows.append({"label": "geomean", "cells": cells, "styles": ("bold",)})
+    render_table(columns, table_rows)
     cpp_text = f"{cpp_geo:.2f}x (n={len(cpp_values)})" if cpp_geo is not None else "n/a"
     rust_text = f"{rust_geo:.2f}x (n={len(rust_values)})" if rust_geo is not None else "n/a"
-    print(f"{'geomean over runnable rows':<20} {cpp_text:>15} {rust_text:>15}")
-    print("ratios are cp3 time divided by the reference time; lower is better")
+    note_line(g("info"), ("dim",),
+              f"geomean over runnable rows: cp3/cpp {cpp_text}{g('sep')}cp3/rust {rust_text}")
 
-    print()
-    print(f"== performance gate == {GATE_TARGET}")
+    banner("performance gate", GATE_TARGET)
+    print("  " + paint(g("h") * max(10, min(UI.wrap, 110) - 2), "dim"))
     for blocker in GATE_BLOCKERS:
-        print(blocker)
+        note_line(f"{g('bad')} BLOCKER".ljust(10), ("red", "bold"),
+                  re.sub(r"^CP3002 BLOCKER\s*", "", blocker), ("red",), indent=2)
+    tier_re = re.compile(r"^(BIG WARN(?: \(fix this\))?|WARN):?\s*")
     for warning in GATE_WARNINGS:
-        print(warning)
+        big = warning.startswith("BIG WARN")
+        tag = f"{g('warn')} {'BIG WARN' if big else 'WARN'}".ljust(10)
+        note_line(tag, ("red", "bold") if big else ("yellow", "bold"),
+                  tier_re.sub("", warning, count=1),
+                  ("red",) if big else ("yellow",), indent=2)
     for note in GATE_NOTES:
-        print(note)
+        note_line(g("info").ljust(10), ("dim",), re.sub(r"^note:\s*", "", note),
+                  ("dim",), indent=2)
+    print("  " + paint(g("h") * max(10, min(UI.wrap, 110) - 2), "dim"))
     if GATE_BLOCKERS:
-        print(f"gate: {len(GATE_BLOCKERS)} CP3002 blocker(s); "
-              f"a row that cannot compile is a hard failure")
+        verdict = (f"gate: {len(GATE_BLOCKERS)} CP3002 blocker(s); "
+                   f"a row that cannot compile is a hard failure")
+        print(f"  {paint(g('bad'), 'red', 'bold')} {paint(verdict, 'red', 'bold')}")
     elif GATE_WARNINGS:
         big = sum(1 for warning in GATE_WARNINGS if warning.startswith("BIG WARN "))
         plain = len(GATE_WARNINGS) - big
-        print(f"gate: {big} BIG WARN(s), {plain} WARN(s); "
-              f"rerun with --strict to fail on warnings")
+        verdict = (f"gate: {big} BIG WARN(s), {plain} WARN(s); "
+                   f"rerun with --strict to fail on warnings")
+        print(f"  {paint(g('warn'), 'yellow', 'bold')} {paint(verdict, 'yellow', 'bold')}")
     else:
-        print("gate: no warnings")
+        print(f"  {paint(g('ok'), 'green', 'bold')} {paint('gate: no warnings', 'green', 'bold')}")
+    print()
 
 
 def cp3c_provenance() -> list[str]:
@@ -1100,7 +1651,9 @@ def cp3c_provenance() -> list[str]:
 # main
 # --------------------------------------------------------------------------
 class Tee:
-    """Writes everywhere the runner prints: console plus the results file."""
+    """Writes everywhere the runner prints: console plus the results file.
+
+    The console keeps colour; the results file is always plain text."""
 
     def __init__(self, primary, secondary):
         self.primary = primary
@@ -1108,7 +1661,7 @@ class Tee:
 
     def write(self, text: str):
         self.primary.write(text)
-        self.secondary.write(text)
+        self.secondary.write(ANSI_RE.sub("", text))
 
     def flush(self):
         self.primary.flush()
@@ -1171,6 +1724,7 @@ def main() -> int:
     churn_iterations, churn_label = resolve_churn_scale(args.churn_scale)
 
     original_stdout = sys.stdout
+    ui_setup(original_stdout)
     results_log = None
     if args.results:
         results_dir = Path(args.results)
@@ -1189,24 +1743,15 @@ def main() -> int:
         sys.stdout = Tee(original_stdout, results_log)
 
     try:
-        print(f"benchmarks bench suite -- {datetime.now().isoformat(timespec='seconds')}")
-        print(f"machine: {platform.processor() or platform.machine()} | "
-              f"{os.cpu_count()} logical CPUs | {platform.platform()}")
-        print(f"runner:  python {platform.python_version()} ({sys.executable})")
         probes = [
             ("g++", ["g++", "--version"]), ("rustc", ["rustc", "--version"]),
             ("go", ["go", "version"]), ("node", ["node", "--version"]),
             ("python", [sys.executable, "--version"]), ("cp3c", [str(cp3c), "version"]),
         ]
-        for name, argv in probes:
-            print(f"  {name:<7} {probe_version(argv)}")
-        print("every number below is a wall-clock measurement from this run; "
-              "load phases use persistent keep-alive connections (one per client)")
+        print_header(platform.processor() or platform.machine(), probes)
         waiting = time_wait_count()
         if waiting is not None and waiting > 4000:
-            print(f"[warn] {waiting} sockets are in TIME_WAIT; a previous fresh-connection "
-                  "tool may still be congesting ephemeral ports -- failures below may be "
-                  "that, not the servers. Wait a couple of minutes and rerun for clean numbers.")
+            print_time_wait_warning(waiting)
 
         def present(language: str) -> bool:
             if language == "cp3":
@@ -1217,15 +1762,19 @@ def main() -> int:
                 return True
             return have({"cpp": "g++", "rust": "rustc", "go": "go"}[language])
 
+        task_total = sum(1 for name in ALL_TASKS if name in wanted)
+        task_index = 0
+
         for task in SERVER_TASKS:
             if task not in wanted:
                 continue
+            task_index += 1
             rows = []
             for language in LANGUAGES:
                 if not present(language):
-                    print(f"[skip] {language}: toolchain not found on PATH")
+                    announce_skip(language)
                     continue
-                print(f"[run ] {task}: {language} ...", flush=True)
+                announce_run(task, language, task_index, task_total)
                 rows.append(run_server_trial(language, task, args.latency, args.warmup,
                                              args.seconds, args.concurrency, cp3c,
                                              clients=args.clients,
@@ -1235,6 +1784,7 @@ def main() -> int:
         for task in COMPUTE_TASKS:
             if task not in wanted:
                 continue
+            task_index += 1
             extra: tuple[str, ...] = ()
             cp3_entry = None
             expected = EXPECTED.get(task)
@@ -1267,12 +1817,12 @@ def main() -> int:
             omitted = TASK_OMIT_LANGUAGES.get(task, {})
             for language in LANGUAGES:
                 if language in omitted:
-                    print(f"[omit] {task}: {language}: {omitted[language]}")
+                    announce_omit(task, language, omitted[language])
                     continue
                 if not present(language):
-                    print(f"[skip] {language}: toolchain not found on PATH")
+                    announce_skip(language)
                     continue
-                print(f"[run ] {task}: {language} ...", flush=True)
+                announce_run(task, language, task_index, task_total)
                 rows.append(run_compute_trial(language, task, reps, cp3c,
                                               extra=extra, cp3_entry=cp3_entry))
             if task == "hello-world":
@@ -1282,6 +1832,7 @@ def main() -> int:
 
         print_gate_and_summary()
     finally:
+        live_clear()
         if results_log is not None:
             sys.stdout = original_stdout
             results_log.close()
