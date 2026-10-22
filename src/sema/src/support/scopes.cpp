@@ -190,8 +190,9 @@ void Analyzer::hoistType(Stmt& s) {
         }
         case NodeKind::TypeAliasDeclaration: {
             auto& t = static_cast<TypeAliasDeclaration&>(s);
-            typeNames_[t.name] = t.type ? resolveType(*t.type) : Type::unknown();
-            declaredTypes_.insert(s.nodeId);
+            // A type alias is a compile-time name for a type; its own type
+            // parameters are in scope while the aliased type is resolved.
+            declareTypeAlias(t);
             return;
         }
         default:

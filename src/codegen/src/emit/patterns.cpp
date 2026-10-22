@@ -594,6 +594,7 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
             // A field that is always present never misses: the default has
             // nothing to fire on, and the field value is the binding.
             target = fallback->left.get();
+        }
         if (!target) continue;
         bindPatternTarget(*target, PatternSource{valueText, Type::unknown(),
                                                  src.isConst},

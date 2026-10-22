@@ -174,6 +174,7 @@ These codes are defined in the header and reserved inside their stages' ranges. 
 | CP3704 | `kInvalidOverride` | classes/interfaces | An `override` that does not match a base member. |
 | CP3705 | `kDuplicateMember` | classes/interfaces | The same member declared twice in a class or interface. |
 | CP3706 | `kMixedEnumBacking` | classes/interfaces | An enum mixing string and number values. |
+| CP3707 | `kGenericLocalMethod` | classes/interfaces | A generic method on a function-local class: C++ has no member template in a local class, so the method has no lowering. |
 | CP3802 | `kUndeclaredProperty` | banned JS patterns | Assigning to a field the class never declared (still a banned shape). Member misses on known receivers report CP3305; CP3802 stays reserved for its banned-pattern role. |
 | CP3807 | `kGeneratorsUnsupported` | banned JS patterns | `function*` and `yield`; today the parser reports CP3201 with `generators are not supported`. |
 | CP3808 | `kDecoratorsUnsupported` | banned JS patterns | `@decorator` syntax; today the parser reports CP3201 with `decorators are not supported`. |

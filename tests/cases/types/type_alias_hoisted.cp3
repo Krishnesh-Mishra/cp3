@@ -1,0 +1,7 @@
+import console from "std/console";
+
+let early: Later = 5;
+
+type Later = number;
+
+console.log(early);

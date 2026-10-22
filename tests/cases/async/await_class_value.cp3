@@ -1,0 +1,5 @@
+import console from "std/console";
+class Point { x: number = 1; }
+async function makePoint(): Point { return new Point(); }
+let p = await makePoint();
+console.log(`${p.x}`);

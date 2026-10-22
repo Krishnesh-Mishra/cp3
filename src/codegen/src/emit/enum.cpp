@@ -19,12 +19,14 @@
 #include "detail/enums.h"
 #include "detail/generator.h"
 
+#include <cmath>
 #include <cstddef>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
@@ -35,41 +37,169 @@ using namespace detail;
 
 namespace {
 
-// The integral value of a number initializer (`A = 5` / `A = -1`); nullopt for
-// an initializer that is not a (possibly signed) number literal.
-std::optional<long long> enumNumberValue(const Expr* init) {
-    if (init == nullptr) return std::nullopt;
-    double value = 0.0;
-    if (init->kind == NodeKind::NumberLiteral) {
-        value = static_cast<const NumberLiteral&>(*init).value;
-    } else if (init->kind == NodeKind::UnaryExpr) {
-        const auto& u = static_cast<const UnaryExpr&>(*init);
-        if ((u.op != UnaryOp::Negate && u.op != UnaryOp::Plus) || !u.operand ||
-            u.operand->kind != NodeKind::NumberLiteral) {
-            return std::nullopt;
-        }
-        value = static_cast<const NumberLiteral&>(*u.operand).value;
-        if (u.op == UnaryOp::Negate) value = -value;
-    } else {
-        return std::nullopt;
+// The compile-time value of an enum member initializer: a number or a string
+// (spec 04). The sema accepts exactly the initializers this evaluator can
+// evaluate (src/sema/src/checks/enum_check.cpp keeps the two in step: it
+// rejects a non-constant initializer before codegen runs), so a nullopt here
+// means the initializer slipped through and is reported as an error.
+struct EnumConst {
+    bool isNumber = false;
+    double number = 0.0;
+    std::string text;
+};
+
+// The compile-time value of an enum member initializer, or nullopt when the
+// initializer is not a constant expression.
+std::optional<EnumConst> evalEnumInit(const Expr* init,
+                                      const std::vector<EnumCppMember>& known,
+                                      const std::string& enumName);
+
+// The member of `known` with this name, or nullptr. A linked member
+// initializer (`B = A`) reads the value of an earlier member.
+const EnumCppMember* linkedMember(const std::vector<EnumCppMember>& known,
+                                   const std::string& name) {
+    for (const EnumCppMember& m : known) {
+        if (m.name == name) return &m;
     }
-    // The backing type is `long long`; enum values are integral (a fractional
-    // literal has no documented value and truncates here).
-    return static_cast<long long>(value);
+    return nullptr;
 }
 
-// The per-member string of a `A = "x"` initializer, or nullopt.
-std::optional<std::string> enumStringValue(const Expr* init) {
-    if (init == nullptr || init->kind != NodeKind::StringLiteral) {
+// The linked member an initializer names, or nullptr: a bare name (`A`) or the
+// enum's own name with a member (`Color.A`).
+const EnumCppMember* linkedTarget(const Expr* e,
+                                  const std::vector<EnumCppMember>& known,
+                                  const std::string& enumName) {
+    if (e == nullptr) return nullptr;
+    if (e->kind == NodeKind::Identifier) {
+        return linkedMember(known, static_cast<const Identifier&>(*e).name);
+    }
+    if (e->kind != NodeKind::MemberExpr) return nullptr;
+    const auto& m = static_cast<const MemberExpr&>(*e);
+    if (!m.object || m.object->kind != NodeKind::Identifier) return nullptr;
+    if (static_cast<const Identifier&>(*m.object).name != enumName) return nullptr;
+    return linkedMember(known, m.property);
+}
+
+// A unary sign or bit-not over a number constant.
+std::optional<EnumConst> evalEnumUnary(
+    const UnaryExpr& u, const std::vector<EnumCppMember>& known,
+    const std::string& enumName) {
+    if (u.op != UnaryOp::Negate && u.op != UnaryOp::Plus &&
+        u.op != UnaryOp::BitNot) {
         return std::nullopt;
     }
-    return static_cast<const StringLiteral&>(*init).value;
+    const std::optional<EnumConst> operand =
+        evalEnumInit(u.operand.get(), known, enumName);
+    if (!operand || !operand->isNumber) return std::nullopt;
+    EnumConst value;
+    value.isNumber = true;
+    if (u.op == UnaryOp::Negate) {
+        value.number = -operand->number;
+    } else if (u.op == UnaryOp::BitNot) {
+        value.number =
+            static_cast<double>(~static_cast<long long>(operand->number));
+    } else {
+        value.number = operand->number;
+    }
+    return value;
+}
+
+// A binary operator over two constants: `+` adds numbers or concatenates
+// strings, the arithmetic operators work on numbers.
+std::optional<EnumConst> evalEnumBinary(
+    const BinaryExpr& b, const std::vector<EnumCppMember>& known,
+    const std::string& enumName) {
+    const std::optional<EnumConst> left =
+        evalEnumInit(b.left.get(), known, enumName);
+    const std::optional<EnumConst> right =
+        evalEnumInit(b.right.get(), known, enumName);
+    if (!left || !right) return std::nullopt;
+    EnumConst value;
+    if (b.op == BinaryOp::Add) {
+        if (left->isNumber && right->isNumber) {
+            value.isNumber = true;
+            value.number = left->number + right->number;
+            return value;
+        }
+        if (!left->isNumber && !right->isNumber) {
+            value.text = left->text + right->text;
+            return value;
+        }
+        return std::nullopt;
+    }
+    if (!left->isNumber || !right->isNumber) return std::nullopt;
+    value.isNumber = true;
+    switch (b.op) {
+        case BinaryOp::Subtract:
+            value.number = left->number - right->number;
+            break;
+        case BinaryOp::Multiply:
+            value.number = left->number * right->number;
+            break;
+        case BinaryOp::Divide:
+            // A division by zero has no value: the initializer is not a
+            // constant the enum can carry.
+            if (right->number == 0.0) return std::nullopt;
+            value.number = left->number / right->number;
+            break;
+        case BinaryOp::Modulo:
+            if (right->number == 0.0) return std::nullopt;
+            value.number = std::fmod(left->number, right->number);
+            break;
+        default:
+            return std::nullopt;
+    }
+    return value;
+}
+
+// The compile-time value of an enum member initializer, or nullopt when the
+// initializer is not a constant expression.
+std::optional<EnumConst> evalEnumInit(const Expr* init,
+                                      const std::vector<EnumCppMember>& known,
+                                      const std::string& enumName) {
+    if (init == nullptr) return std::nullopt;
+    switch (init->kind) {
+        case NodeKind::NumberLiteral: {
+            EnumConst value;
+            value.isNumber = true;
+            value.number = static_cast<const NumberLiteral&>(*init).value;
+            return value;
+        }
+        case NodeKind::StringLiteral: {
+            EnumConst value;
+            value.text = static_cast<const StringLiteral&>(*init).value;
+            return value;
+        }
+        case NodeKind::UnaryExpr:
+            return evalEnumUnary(static_cast<const UnaryExpr&>(*init), known,
+                                 enumName);
+        case NodeKind::BinaryExpr:
+            return evalEnumBinary(static_cast<const BinaryExpr&>(*init), known,
+                                  enumName);
+        default:
+            break;
+    }
+    // A linked member (`B = A`): the value of the member it names.
+    const EnumCppMember* target = linkedTarget(init, known, enumName);
+    if (target == nullptr) return std::nullopt;
+    EnumConst value;
+    if (target->isString) {
+        value.text = target->stringValue;
+        return value;
+    }
+    value.isNumber = true;
+    value.number = static_cast<double>(target->value);
+    return value;
 }
 
 // Resolves the declaration's members in order: a string member takes the index
 // of the first member with the same string (TS identity), a number member its
-// literal, and an initializer-less member the previous value + 1.
-EnumCppInfo buildEnumInfo(const EnumDeclaration& e) {
+// constant value, and an initializer-less member the previous value + 1.
+// `failed` collects the members whose initializer is not a constant the
+// evaluator can read - the sema rejects those first, so a non-empty list
+// means the two disagree.
+EnumCppInfo buildEnumInfo(const EnumDeclaration& e,
+                           std::vector<const EnumMember*>& failed) {
     EnumCppInfo info;
     info.name = e.name;
     info.cpp = mapIdent(e.name);
@@ -85,24 +215,32 @@ EnumCppInfo buildEnumInfo(const EnumDeclaration& e) {
         out.name = member->name;
         out.text = mapIdent(member->name);
 
-        if (auto text = enumStringValue(member->initializer.get())) {
+        const std::optional<EnumConst> value =
+            evalEnumInit(member->initializer.get(), info.members, e.name);
+        if (value && value->isNumber) {
+            // The backing type is `long long`; enum values are integral (a
+            // fractional value has no documented value and truncates here).
+            out.value = static_cast<long long>(value->number);
+            nextNumber = out.value + 1;
+            previousString = false;
+        } else if (value) {
+            // A string member takes the index of the first member with the
+            // same string (TS identity).
             const EnumCppMember* twin = nullptr;
             for (const EnumCppMember& prev : info.members) {
-                if (prev.isString && prev.stringValue == *text) twin = &prev;
+                if (prev.isString && prev.stringValue == value->text) {
+                    twin = &prev;
+                }
             }
             out.isString = true;
-            out.stringValue = *text;
+            out.stringValue = value->text;
             if (twin != nullptr) {
                 out.value = twin->value;
             } else {
                 out.value = distinctStrings++;
             }
             previousString = true;
-        } else if (auto number = enumNumberValue(member->initializer.get())) {
-            out.value = *number;
-            nextNumber = out.value + 1;
-            previousString = false;
-        } else {
+        } else if (member->initializer == nullptr) {
             // Initializer-less: the previous value + 1 for a numeric enum; a
             // string-backed member's successor is a sema error already, so the
             // distinct-string ordinal keeps the generated C++ valid.
@@ -112,6 +250,10 @@ EnumCppInfo buildEnumInfo(const EnumDeclaration& e) {
                 out.value = nextNumber;
                 nextNumber = out.value + 1;
             }
+        } else {
+            // Not a constant the evaluator can read: the sema rejected it, so
+            // this is only the fail-closed fallback.
+            failed.push_back(member);
         }
         info.members.push_back(std::move(out));
     }
@@ -172,7 +314,17 @@ const EnumDeclaration* topLevelEnum(const Stmt& s) {
 void Generator::collectEnums(const Program& program) {
     const auto collect = [this](const EnumDeclaration* e) {
         if (e == nullptr || e->name.empty() || enums_.count(e->name) != 0) return;
-        EnumCppInfo info = buildEnumInfo(*e);
+        std::vector<const EnumMember*> failed;
+        EnumCppInfo info = buildEnumInfo(*e, failed);
+        // A member whose initializer is not a constant the evaluator can read
+        // is an error the sema reports first; the codegen repeats it so a
+        // unit that reached codegen without the sema gate still fails.
+        for (const EnumMember* member : failed) {
+            sink_.error(diagcode::kTypeMismatch, member->span,
+                        "type mismatch: enum member '" + member->name +
+                            "' must be initialized with a constant number or "
+                            "string expression");
+        }
         enumDecls_ += enumDeclText(info) + "\n";
         enums_.emplace(e->name, std::move(info));
     };
@@ -310,20 +462,17 @@ bool Generator::lowerEnumSwitch(const SwitchStatement& sw, std::string& out,
         if (member == nullptr) return false;
         tests[i] = member;
     }
-    // Two case tests sharing one backing value cannot be two C++ case labels.
-    for (std::size_t i = 0; i < tests.size(); ++i) {
-        for (std::size_t j = i + 1; j < tests.size(); ++j) {
-            if (tests[i] != nullptr && tests[j] != nullptr &&
-                tests[i]->value == tests[j]->value) {
-                notImplemented(sw, "a switch with duplicate enum case values");
-                line(out, indent, "/* CP3002: duplicate enum case values */");
-                return true;
-            }
-        }
-    }
-
     // The JS fall-through is the C++ fall-through; each case group is braced so
     // a declaration in one group cannot be jumped over by a later label.
+    //
+    // Two case tests may share one backing value (`case Color.Red` and
+    // `case Color.Crimson` when both are 1). C++ allows only one label per
+    // value, but JS has no labels at all: the switch runs the *first* matching
+    // test and then falls through. So the second test is never selected - its
+    // statements run only when the fall-through reaches them. The lowering
+    // therefore keeps the first label and emits every later duplicate as an
+    // unlabelled block, which is exactly that reachability.
+    std::vector<long long> labelled;
     line(out, indent, "switch (" + expr(*sw.discriminant) + ") {");
     for (std::size_t i = 0; i < sw.cases.size(); ++i) {
         const SwitchCase* c = sw.cases[i].get();
@@ -331,8 +480,18 @@ bool Generator::lowerEnumSwitch(const SwitchStatement& sw, std::string& out,
         if (c->isDefault) {
             line(out, indent + 1, "default: {");
         } else {
-            line(out, indent + 1,
-                 "case " + info.cpp + "::" + tests[i]->text + ": {");
+            const EnumCppMember* member = tests[i];
+            bool duplicate = false;
+            for (long long value : labelled) {
+                if (value == member->value) duplicate = true;
+            }
+            if (duplicate) {
+                line(out, indent + 1, "{");
+            } else {
+                labelled.push_back(member->value);
+                line(out, indent + 1,
+                     "case " + info.cpp + "::" + member->text + ": {");
+            }
         }
         for (const auto& statement : c->statements) {
             if (statement) stmt(*statement, out, indent + 2);
@@ -367,6 +526,12 @@ CppInfo classifyEnum(const Type& t) {
 // of a structural record, and enum kinds the structural re-parse cannot see.
 // `collectEnums` runs before the emit walk, so `enums_` is complete here.
 std::optional<Type> Generator::typeOfNode(const TypeNode& tn) const {
+    // A generic interface (D26): the use site instantiates the interface, so
+    // the shape (and its wrapper) is registered even when sema's published
+    // type is the one that answers the annotation.
+    if (tn.kind == NodeKind::NamedType) {
+        (void)detail::instantiateGenericInterface(tn);
+    }
     std::optional<Type> mapped;
     if (const Type* published = sema_.typeOf(tn.nodeId)) {
         if (!published->isUnknown() && !published->isError()) mapped = *published;

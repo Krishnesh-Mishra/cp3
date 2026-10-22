@@ -59,6 +59,14 @@ struct ObjectModel {
     std::vector<ObjectFieldModel> fields;
 };
 
+// A generic interface (D26): its declaration and its own type parameters. A
+// use site substitutes the type arguments into the members and registers the
+// instantiated shape as an interface model.
+struct GenericInterfaceModel {
+    const InterfaceDeclaration* decl = nullptr;
+    std::vector<std::string> typeParams;
+};
+
 // One class member (field or method). Overloaded methods appear as one entry
 // each, in declaration order.
 struct ClassMemberModel {
@@ -76,6 +84,9 @@ struct ClassMemberModel {
     const ConstructorDeclaration* ctor = nullptr;
     const AccessorDeclaration* accessor = nullptr;
     bool isGetter = false;
+    // A generic method's own type parameters (spec §16): the method lowers to
+    // a C++ member function template over them.
+    std::vector<std::string> typeParams;
 };
 
 // A non-generic class declaration lowered to a C++ struct.
@@ -112,8 +123,18 @@ public:
 
     // Registers an interface: its sema label, cp3 name, wrapper spelling and
     // members. A literal struct is generated when the members are fields only.
+    // A generic interface (D26) is registered per instantiation, so its
+    // wrapper carries a per-shape suffix.
     ObjectModel& addInterface(const std::string& name, const std::string& label,
-                              const std::vector<ObjectFieldModel>& fields);
+                              const std::vector<ObjectFieldModel>& fields,
+                              bool generic = false);
+
+    // Registers a generic interface (D26): its declaration and type
+    // parameters, so a use site can instantiate it.
+    void addGenericInterface(const std::string& name,
+                             GenericInterfaceModel model);
+    const GenericInterfaceModel* genericInterface(
+        const std::string& name) const;
 
     const ObjectModel* objectByLabel(const std::string& label) const;
     const ObjectModel* interfaceByName(const std::string& name) const;
@@ -133,10 +154,12 @@ private:
     std::vector<std::string> classOrder_;
     std::unordered_map<std::string, ObjectModel> objects_;
     std::unordered_map<std::string, std::string> ifaceLabelByName_;
+    std::unordered_map<std::string, GenericInterfaceModel> genericIfaces_;
     std::vector<std::string> objectOrder_;
     std::unordered_set<std::string> usableInProgress_;
     int objectCounter_ = 0;
     int litCounter_ = 0;
+    int ifaceCounter_ = 0;
 };
 
 // Does this model supply the value spelling? Interfaces always do; a plain
@@ -186,6 +209,20 @@ std::string classRefCpp(const ClassModel& cm);
 // Rewrites every Class part named like one of `typeParams` to TypeKind::
 // TypeParam, recursing through parts (function signatures, arrays, ...).
 void rewriteTypeParams(Type& t, const std::vector<std::string>& typeParams);
+
+// The type `t` with the type arguments `args` substituted for the type
+// parameters `names` (the parameter at the same position). A generic
+// interface's members are substituted this way at every use.
+Type substituteTypeArgs(const Type& t, const std::vector<std::string>& names,
+                         const std::vector<Type>& args);
+
+// `template <typename T, typename U>` for a list of type parameter names
+// ("" for an empty list). A generic method's own parameters are named here.
+std::string templateHeadOf(const std::vector<std::string>& names);
+
+// `<T, U>` ("" for a non-generic class): the type arguments of a class
+// template at a use site.
+std::string templateUseOf(const ClassModel& cm);
 
 // The C++ struct text of every usable registered object/interface shape, in
 // dependency order (an interface whose wrapper is a by-value field of another

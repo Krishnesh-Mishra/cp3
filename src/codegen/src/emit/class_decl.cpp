@@ -56,13 +56,7 @@ std::string templateHead(const ClassModel& cm) {
 
 // `<T, U>` ("" for a non-generic class).
 std::string templateUse(const ClassModel& cm) {
-    if (cm.typeParams.empty()) return "";
-    std::string out = "<";
-    for (std::size_t i = 0; i < cm.typeParams.size(); ++i) {
-        if (i != 0) out += ", ";
-        out += mapIdent(cm.typeParams[i]);
-    }
-    return out + ">";
+    return templateUseOf(cm);
 }
 
 // Does the class (or an ancestor) define a `toString` with a body? The
@@ -238,34 +232,7 @@ void Generator::emitClassMember(const ClassModel& cm,
         line(out, indent, memberFieldText(m) + ";");
         return;
     }
-    const MethodDeclaration& md = *m.method;
-    const std::string ret = methodReturnType(md, &cm);
-    std::vector<std::string> params;
-    for (const auto& p : md.params) {
-        if (p) params.push_back(methodParamText(*p, &cm));
-    }
-    const std::string name = mapIdent(m.name);
-    const std::string declText = (md.isStatic ? "static " : "") + ret + " " +
-                                 name + "(" + joinStrings(params, ", ") + ")";
-    // An abstract method (or a signature without a body) stays a declaration.
-    if (md.body == nullptr) {
-        line(out, indent, declText + ";");
-        return;
-    }
-    if (defs == nullptr) {
-        line(out, indent, declText + " {");
-        out += methodBodyText(md, cm, indent + 1, md.isStatic);
-        line(out, indent, "}");
-        return;
-    }
-    line(out, indent, declText + ";");
-    // The definition lands inside the module namespace, so the declarator is
-    // the bare `Class::method` (STYLE: a `RET ::ns::Class::method` declarator
-    // misparses as a qualified return type when RET is a class type).
-    *defs += (cm.typeParams.empty() ? "" : templateHead(cm) + "\n") + ret +
-             " " + mapIdent(cm.name) + templateUse(cm) + "::" + name + "(" +
-             joinStrings(params, ", ") + ") {\n" +
-             methodBodyText(md, cm, 1, md.isStatic) + "}\n\n";
+    emitClassMethodMember(cm, m, out, indent, defs);
 }
 
 // D21: one get/set accessor becomes a generated `get_name` / `set_name`
@@ -335,10 +302,12 @@ std::string Generator::memberFieldText(const ClassMemberModel& m) {
 }
 
 std::string Generator::methodReturnType(const MethodDeclaration& md,
-                                        const ClassModel* cm) {
+                                        const ClassModel* cm,
+                                        const std::vector<std::string>& methodTypeParams) {
     if (md.returnType) {
         if (auto t = typeFromTypeNode(*md.returnType)) {
             if (cm != nullptr) rewriteTypeParams(*t, cm->typeParams);
+            rewriteTypeParams(*t, methodTypeParams);
             CppInfo ci = classify(*t);
             if (ci.representable) return ci.cpp;
             notImplemented(md, "this return type");
@@ -355,7 +324,8 @@ std::string Generator::methodReturnType(const MethodDeclaration& md,
 }
 
 std::string Generator::methodParamText(const Parameter& p,
-                                       const ClassModel* cm) {
+                                       const ClassModel* cm,
+                                       const std::vector<std::string>& methodTypeParams) {
     const std::string name = paramNameOf(p);
     if (p.isRest) {
         // `...nums: number[]`: the C++ parameter is one array; the call site
@@ -376,6 +346,7 @@ std::string Generator::methodParamText(const Parameter& p,
         if (const Type* st = sema_.typeOf(p.name->nodeId)) t = *st;
     }
     if (cm != nullptr) rewriteTypeParams(t, cm->typeParams);
+    rewriteTypeParams(t, methodTypeParams);
     if (p.optional && !t.isUnknown()) t = Type::nullable(t);
     const CppInfo ci = classify(t);
     if (!ci.representable) {
@@ -435,9 +406,10 @@ std::string Generator::accessorBodyText(const AccessorDeclaration& ad,
 
 std::string Generator::methodBodyText(const MethodDeclaration& md,
                                       const ClassModel& cm, int indent,
-                                      bool isStatic) {
+                                      bool isStatic,
+                                      const std::vector<std::string>& methodTypeParams) {
     const std::string savedReturn = currentReturn_;
-    currentReturn_ = methodReturnType(md, &cm);
+    currentReturn_ = methodReturnType(md, &cm, methodTypeParams);
     ++nestingDepth_;
     pushScope();
     classStack_.push_back(&cm);
@@ -450,6 +422,10 @@ std::string Generator::methodBodyText(const MethodDeclaration& md,
         const Identifier* id = parameterIdentifier(*p);
         if (id == nullptr) continue;
         Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
+        // A method of a generic class, or a generic method, names its own
+        // type parameters in the signature.
+        rewriteTypeParams(t, cm.typeParams);
+        rewriteTypeParams(t, methodTypeParams);
         if (p->optional && !t.isUnknown()) t = Type::nullable(t);
         declare(id->name, t);
     }

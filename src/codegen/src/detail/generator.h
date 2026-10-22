@@ -154,6 +154,7 @@ private:
     void collectInterfaces(const Program& program);
     void collectBodyModels(const Stmt& s);
     void collectClassMemberModels(ClassModel& cm);
+    void collectClassMethodModel(ClassModel& cm, const MethodDeclaration& md);
     void collectClassAccessorModel(ClassModel& cm, const ClassMember& mp);
     void emitTopLevelClass(const ClassDeclaration& c);
     void emitAllClasses();
@@ -162,20 +163,25 @@ private:
                          std::string* defs);
     void emitClassMember(const ClassModel& cm, const ClassMemberModel& m,
                          std::string& out, int indent, std::string* defs);
+    void emitClassMethodMember(const ClassModel& cm, const ClassMemberModel& m,
+                                std::string& out, int indent, std::string* defs);
     void emitClassAccessorMember(const ClassModel& cm,
                                  const ClassMemberModel& m, std::string& out,
                                  int indent, std::string* defs);
     std::string memberFieldText(const ClassMemberModel& m);
     std::string methodReturnType(const MethodDeclaration& md,
-                                 const ClassModel* cm = nullptr);
+                                 const ClassModel* cm = nullptr,
+                                 const std::vector<std::string>& methodTypeParams = {});
     std::string methodParamText(const Parameter& p,
-                                const ClassModel* cm = nullptr);
+                                const ClassModel* cm = nullptr,
+                                const std::vector<std::string>& methodTypeParams = {});
     std::string accessorReturnType(const AccessorDeclaration& ad,
                                    const ClassModel* cm = nullptr);
     std::string accessorBodyText(const AccessorDeclaration& ad,
                                  const ClassModel& cm, int indent);
     std::string methodBodyText(const MethodDeclaration& md, const ClassModel& cm,
-                               int indent, bool isStatic);
+                               int indent, bool isStatic,
+                               const std::vector<std::string>& methodTypeParams = {});
     std::string ctorBodyText(const ConstructorDeclaration& cd,
                              const ClassModel& cm, int indent);
     std::string weakPointee(const Type& fieldType);

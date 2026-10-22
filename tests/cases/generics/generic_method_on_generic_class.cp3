@@ -1,0 +1,13 @@
+import console from "std/console";
+
+class Box<T> {
+  value: T;
+  function pair<U>(other: U): U {
+    return other;
+  }
+}
+
+const b = new Box<number>();
+b.value = 7;
+console.log(b.pair("x"));
+console.log(b.value);

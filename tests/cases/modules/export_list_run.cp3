@@ -1,0 +1,7 @@
+import console from "std/console";
+
+function add(a: number, b: number): number { return a + b; }
+
+export { add };
+
+console.log(add(2, 3));

@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3707",
+    "line": 5,
+    "col": 5,
+    "contains": "function-local class"
+  }
+}
