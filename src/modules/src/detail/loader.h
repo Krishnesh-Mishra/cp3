@@ -68,6 +68,16 @@ private:
     CompilationUnit* loadLocal(const std::string& specifier, const fs::path& fromFolder,
                                const SourceSpan& span);
 
+    // --- native_import.cpp ----------------------------------------------------
+    // Resolves `import native "id" as alias` to the binding's metadata and
+    // parks the loaded model in the graph.
+    bool loadNativeBinding(const ImportDeclaration& decl);
+    void reportNativeFailure(const std::string& id, const fs::path& dir,
+                              const NativeReadResult& result,
+                              const SourceSpan& span);
+    // A binding's recorded paths are absolute, or relative to the project root.
+    void resolveNativePaths(NativeModule& module, const fs::path& projectRoot);
+
     // --- export_surface.cpp --------------------------------------------------
     const ExportSurface& surfaceOf(CompilationUnit& unit);
     ExportSurface computeSurface(CompilationUnit& unit);
@@ -81,6 +91,9 @@ private:
     DiagnosticSink& sink_;
     SourceManager* sm_ = nullptr;
     ModuleGraph* graph_ = nullptr;
+    // The project root and the native binding root (`<root>/.cp3/native`).
+    fs::path projectRoot_;
+    fs::path nativeRoot_;
     std::unordered_map<std::string, CompilationUnit*> byKey_;
     std::unordered_map<std::uint32_t, UnitInfo> info_;
     std::unordered_map<std::string, std::vector<Token>> preludeTokenCache_;

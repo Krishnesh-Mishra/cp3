@@ -1,0 +1,320 @@
+{
+  "group": "native-import",
+  "cases": [
+    {
+      "group": "native-import",
+      "name": "check-accepts-a-native-call",
+      "description": "check accepts a program that imports a binding and calls it",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-build-sdk",
+            "to": "sdk"
+          },
+          {
+            "name": "native-binding",
+            "to": ".cp3/native/demo"
+          }
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"native-app\",\n  \"version\": \"1.0.0\",\n  \"main\": \"src/index.cp3\"\n}\n",
+          "src/index.cp3": "import native \"demo\" as dm;\nimport console from \"std/console\";\n\nconsole.log(dm.add(2, 3));\nconsole.log(dm.greet(\"world\"));\nconsole.log(dm.version());\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "empty": true
+        },
+        "stderr": {
+          "empty": true
+        }
+      }
+    },
+    {
+      "group": "native-import",
+      "name": "check-rejects-a-wrong-argument",
+      "description": "a native call with a wrong argument is a cp3-native type error",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-build-sdk",
+            "to": "sdk"
+          },
+          {
+            "name": "native-binding",
+            "to": ".cp3/native/demo"
+          }
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"native-app\",\n  \"version\": \"1.0.0\",\n  \"main\": \"src/index.cp3\"\n}\n",
+          "src/index.cp3": "import native \"demo\" as dm;\nimport console from \"std/console\";\n\nconsole.log(dm.add(\"two\", 3));\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3610",
+            "native call 'add'",
+            "argument 1 has type 'string'",
+            "parameter 'a' expects 'number'"
+          ]
+        }
+      }
+    },
+    {
+      "group": "native-import",
+      "name": "check-rejects-an-unknown-member",
+      "description": "a member the binding does not expose is named",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-build-sdk",
+            "to": "sdk"
+          },
+          {
+            "name": "native-binding",
+            "to": ".cp3/native/demo"
+          }
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"native-app\",\n  \"version\": \"1.0.0\",\n  \"main\": \"src/index.cp3\"\n}\n",
+          "src/index.cp3": "import native \"demo\" as dm;\nimport console from \"std/console\";\n\nconsole.log(dm.nope(2, 3));\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3609",
+            "the native binding 'demo' has no declaration named 'nope'"
+          ]
+        }
+      }
+    },
+    {
+      "group": "native-import",
+      "name": "check-rejects-an-unknown-binding",
+      "description": "an import of a binding that does not exist names the folder",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-build-sdk",
+            "to": "sdk"
+          }
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"native-app\",\n  \"version\": \"1.0.0\",\n  \"main\": \"src/index.cp3\"\n}\n",
+          "src/index.cp3": "import native \"nope\" as dm;\nimport console from \"std/console\";\n\nconsole.log(dm.add(2, 3));\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3606",
+            "no native binding 'nope'",
+            "cp3 native-install"
+          ]
+        }
+      }
+    },
+    {
+      "group": "native-import",
+      "name": "check-rejects-a-stale-binding",
+      "description": "a binding whose index.cp3 no longer matches its contentHash is stale",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-build-sdk",
+            "to": "sdk"
+          },
+          {
+            "name": "native-binding",
+            "to": ".cp3/native/demo"
+          }
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"native-app\",\n  \"version\": \"1.0.0\",\n  \"main\": \"src/index.cp3\"\n}\n",
+          "src/index.cp3": "import native \"demo\" as dm;\nimport console from \"std/console\";\n\nconsole.log(dm.add(2, 3));\n",
+          ".cp3/native/demo/index.cp3": "// an index.cp3 that was edited behind the compiler's back\n"
+        }
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3608",
+            "the native binding 'demo' is stale",
+            "re-run 'cp3 native-install <sdk> --name demo --force'"
+          ]
+        }
+      }
+    },
+    {
+      "group": "native-import",
+      "name": "build-links-the-recorded-library",
+      "description": "build adds the binding's include root, define and library to the build",
+      "argv": [
+        "build",
+        "src/index.cp3",
+        "--verbose"
+      ],
+      "requires": [
+        "compiler"
+      ],
+      "slow": true,
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-build-sdk",
+            "to": "sdk"
+          },
+          {
+            "name": "native-binding",
+            "to": ".cp3/native/demo"
+          }
+        ],
+        "dirs": [
+          "sdk/lib"
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"native-app\",\n  \"version\": \"1.0.0\",\n  \"main\": \"src/index.cp3\"\n}\n",
+          "src/index.cp3": "import native \"demo\" as dm;\nimport console from \"std/console\";\n\nconsole.log(dm.add(2, 3));\n",
+          ".cp3/native/demo/native.json": "{\n  \"schema\": \"cp3-native-binding/1\",\n  \"id\": \"demo\",\n  \"source\": \"sdk\",\n  \"includeDirs\": [\"sdk/include\"],\n  \"defines\": [\"DEMO_FEATURE=1\"],\n  \"headers\": [\"demo/native_demo.h\"],\n  \"libDirs\": [\"sdk/lib\"],\n  \"linkNames\": [\"m\"],\n  \"staticLibraries\": [],\n  \"sharedLibraries\": [],\n  \"runtimeDlls\": [],\n  \"abi\": \"cxx20-libstdc++\",\n  \"target\": \"x86_64-w64-mingw32\",\n  \"libclangVersion\": \"20.1.0\",\n  \"contentHash\": \"b312feb7d4059388abff5a224104d578a38bc8d9e8f5d7a6512a0479175bdb4a\",\n  \"functions\": [\n    {\n      \"name\": \"add\",\n      \"cppName\": \"demo::add\",\n      \"returnType\": {\"kind\": \"number\"},\n      \"returnsCStr\": false,\n      \"isStatic\": false,\n      \"params\": [\n        {\"name\": \"a\", \"kind\": \"value\", \"type\": {\"kind\": \"number\"}, \"cppType\": \"int\", \"cppPointer\": \"\", \"cppArgCount\": 1},\n        {\"name\": \"b\", \"kind\": \"value\", \"type\": {\"kind\": \"number\"}, \"cppType\": \"int\", \"cppPointer\": \"\", \"cppArgCount\": 1}\n      ]\n    }\n  ],\n  \"classes\": [],\n  \"enums\": [],\n  \"rejected\": []\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "-DDEMO_FEATURE=1",
+            "-lm"
+          ]
+        },
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          },
+          ".cp3/build/src/index.cpp": {
+            "contains": [
+              "#include \"demo/native_demo.h\"",
+              "demo::add("
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "native-import",
+      "name": "build-copies-the-runtime-library",
+      "description": "the binding's runtime library is copied next to the executable",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "requires": [
+        "compiler"
+      ],
+      "slow": true,
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-build-sdk",
+            "to": "sdk"
+          },
+          {
+            "name": "native-binding",
+            "to": ".cp3/native/demo"
+          },
+          {
+            "name": "native-binding-dll",
+            "to": ".cp3/native/demo"
+          }
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"native-app\",\n  \"version\": \"1.0.0\",\n  \"main\": \"src/index.cp3\"\n}\n",
+          "src/index.cp3": "import native \"demo\" as dm;\nimport console from \"std/console\";\n\nconsole.log(dm.add(2, 3));\n",
+          "sdk/bin/demo.dll": "a stand-in for the native library's runtime DLL\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          },
+          ".cp3/out/demo.dll": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "native-import",
+      "name": "build-can-leave-the-runtime-library-alone",
+      "description": "package.json's bundleNativeDlls:false turns the copying off",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "requires": [
+        "compiler"
+      ],
+      "slow": true,
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-build-sdk",
+            "to": "sdk"
+          },
+          {
+            "name": "native-binding",
+            "to": ".cp3/native/demo"
+          },
+          {
+            "name": "native-binding-dll",
+            "to": ".cp3/native/demo"
+          }
+        ],
+        "files": {
+          "package.json": "{\n  \"name\": \"native-app\",\n  \"version\": \"1.0.0\",\n  \"main\": \"src/index.cp3\",\n  \"build\": {\n    \"bundleNativeDlls\": false\n  }\n}\n",
+          "src/index.cp3": "import native \"demo\" as dm;\nimport console from \"std/console\";\n\nconsole.log(dm.add(2, 3));\n",
+          "sdk/bin/demo.dll": "a stand-in for the native library's runtime DLL\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          }
+        },
+        "files_absent": [
+          ".cp3/out/demo.dll"
+        ]
+      }
+    }
+  ]
+}

@@ -1,6 +1,12 @@
 # `cp3c native-install` - partial (beta-one command half)
 
-**Status: partial feature, landed on `merge/native-partial`.**
+**Status: the command half of the feature; the compiler half landed after it.**
+**Superseded (as a whole) by [`native-install-complete.md`](native-install-complete.md)**,
+which records the finished feature: the `native.json` reader, the
+`import native "id" as alias` surface, the sema type check, the codegen
+lowering, the build integration, the spec-19 pointer decision and the final
+completion percentage. This document stays as the record of the command half.
+
 **Scope of this pass: the `cp3c native-install` command itself.**
 **Not in this pass: the compiler half** - `cp3 check` / `cp3 build` do not read
 `native.json`, and `import native "id" as alias` is not a thing yet.

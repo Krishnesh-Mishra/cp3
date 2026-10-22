@@ -144,6 +144,11 @@ std::string Generator::exprPlain(const Expr& e) {
 }
 
 std::string Generator::emitMemberRead(const MemberExpr& m) {
+    // A native binding's own member (`dm.Color`, `dm.Color.Red`): the
+    // binding's recorded C++ names are the source of truth.
+    if (std::string native = emitNativeMember(m); !native.empty()) {
+        return native;
+    }
     // An imported enum is linked as a type-only export (no C++ binding), but
     // its member surface still lowers: `Color.Green` is `Color::Green` in the
     // importing unit's namespace. Try the enum member before the link-miss

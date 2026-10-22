@@ -8,6 +8,8 @@
 #include "cp3/module.hpp"
 
 #include <cstdint>
+#include <string>
+#include <utility>
 
 namespace cp3 {
 
@@ -54,6 +56,24 @@ CompilationUnit* ModuleGraph::unit(std::uint32_t id) const {
 
 void ModuleGraph::addDependency(ModuleDependency dep) {
     deps_.push_back(std::move(dep));
+}
+
+void ModuleGraph::addNativeBinding(NativeBinding binding) {
+    // One binding per id: a second import of the same id is the same binding.
+    for (NativeBinding& existing : nativeBindings_) {
+        if (existing.id == binding.id) {
+            existing = std::move(binding);
+            return;
+        }
+    }
+    nativeBindings_.push_back(std::move(binding));
+}
+
+const NativeBinding* ModuleGraph::findNativeBinding(const std::string& id) const {
+    for (const NativeBinding& binding : nativeBindings_) {
+        if (binding.id == id) return &binding;
+    }
+    return nullptr;
 }
 
 std::vector<CompilationUnit*> ModuleGraph::compilationOrder() const {

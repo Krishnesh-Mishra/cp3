@@ -34,6 +34,11 @@ bool loadPackageJson(const std::filesystem::path& root, JsonValue& out,
 // True when package.json declares `"type": "package"`.
 bool isPackageProject(const std::filesystem::path& root);
 
+// True when the project wants the native bindings' runtime DLLs copied next to
+// the executable. The default is true; package.json's
+// `"build": { "bundleNativeDlls": false }` turns the copying off.
+bool bundleNativeDlls(const std::filesystem::path& root);
+
 std::string packageName(const JsonValue& manifest,
                         const std::filesystem::path& root);
 std::string packageVersion(const JsonValue& manifest);

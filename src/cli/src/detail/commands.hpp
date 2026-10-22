@@ -19,6 +19,7 @@
 #include "cp3/ast.hpp"
 #include "cp3/codegen.hpp"
 #include "cp3/diagnostic.hpp"
+#include "cp3/native_bindings.hpp"
 #include "cp3/options.hpp"
 #include "cp3/source.hpp"
 
@@ -134,6 +135,9 @@ struct BuildRequest {
     const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
     const std::vector<std::string>* importedStdModules = nullptr;  // D68 selection
     const std::vector<ExtraModule>* extraModules = nullptr;  // worker modules
+    // The native bindings the program imports (`import native "id" as alias`)
+    // travel with the compile options: their include roots, defines,
+    // libraries and runtime DLLs join the build.
     bool execute = false;                     // `cp3c run` was requested
 };
 

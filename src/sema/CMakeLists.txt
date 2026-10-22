@@ -25,6 +25,7 @@ set(cp3_sema_sources
     src/checks/generic_check.cpp
     src/checks/ops_check.cpp
     src/checks/native_types.cpp
+    src/checks/native_check.cpp
     src/checks/stmt_check.cpp
     src/checks/flow_check.cpp
     src/checks/regex_check.cpp

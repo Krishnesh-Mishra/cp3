@@ -94,6 +94,9 @@ void Analyzer::run(Program& program) {
     pushScope();
     declareBuiltins();
     pushScope();
+    // The native bindings this unit imports are known before the statements
+    // are checked, so a call may appear before its import statement.
+    collectNativeAliases(program);
     checkStmts(program.body);
     popScope();
     popScope();

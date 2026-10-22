@@ -47,11 +47,21 @@
 #include "cp3/analysis.hpp"
 #include "cp3/ast.hpp"
 #include "cp3/diagnostic.hpp"
+#include "cp3/native_bindings.hpp"
 #include "cp3/options.hpp"
 #include "detail/enums.h"
 #include "detail/scopes.h"
 
 namespace cp3 {
+
+// One argument of a native call: the parameter it is checked against, the
+// argument's inferred type, its 1-based position and where it was written.
+struct NativeArgSite {
+    const NativeParam* param = nullptr;
+    Type type;
+    std::size_t position = 0;
+    SourceSpan span{};
+};
 
 // The sema implementation. One instance per `SemanticAnalyzer::analyze` call;
 // it owns the scope stack, the private shape/signature tables and the
@@ -394,9 +404,27 @@ private:
     // --- parallel.* capture safety (parallel_check.cpp) ----------------------
     // Parallel closure capture safety (CP3901/CP3902).
     void checkParallelCall(CallExpr& call);
+    // --- native interop (checks/native_check.cpp) -----------------------------
+    // The alias -> binding map, built before the statements are checked.
+    void collectNativeAliases(const Program& program);
+    // The binding's enums join the enum table (`dm.Color.Red`).
+    void registerNativeEnums(const NativeModule& module);
+    // The binding a native alias names, or nullptr.
+    const NativeModule* nativeModuleFor(const std::string& alias) const;
+    // The cp3 type of one member of a binding (a function, class or enum).
+    // Type::error() means "not a native member": the receiver is not a native
+    // alias, so the caller keeps its own lowering.
+    Type nativeMemberType(MemberExpr& m);
+    Type nativeMemberTypeOf(const NativeModule& module, const std::string& name,
+                            const SourceSpan& span);
+    // The call check of a native call: the arity, then every argument.
+    void checkNativeCall(const CallExpr& call, const NativeFunction& fn);
+    void checkNativeArgument(const NativeFunction& fn, const NativeArgSite& site);
+    // The member-call hook: `alias.f(...)` is a call into the binding.
+    bool tryInferNativeCall(CallExpr& call, MemberExpr& m, Type& out);
+
     // --- operators (ops_check.cpp) -------------------------------------------
-    Type inferUnary(UnaryExpr& u);
-    Type arithmeticUnaryResult(UnaryExpr& u, const Type& ot);
+    Type inferUnary(UnaryExpr& u);    Type arithmeticUnaryResult(UnaryExpr& u, const Type& ot);
     std::string unaryText(UnaryOp op) const;
     Type inferUpdate(UpdateExpr& up);
     Type inferBinary(BinaryExpr& be);
@@ -473,6 +501,10 @@ private:
     // `import { Map as M } from "std/collections"` records M -> Map so the
     // construct tables keyed on the canonical name still match.
     std::unordered_map<std::string, std::string> stdImportAliases_;
+    // The native bindings this unit imports, keyed by their local alias
+    // (`import native "demo" as dm` -> dm). The models live in the compile
+    // options; the map points into them.
+    std::unordered_map<std::string, const NativeModule*> nativeAliases_;
     std::vector<std::string> labels_;
     // Parallel-checked call nodes (report once).
     std::unordered_set<std::uint32_t> parallelChecked_;

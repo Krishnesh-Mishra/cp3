@@ -64,6 +64,9 @@ int cmdCheck(const CliOptions& opt) {
 
     CollectingDiagnosticSink sink;
     const std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sm, *file, sink);
+    // The native bindings the program imports: sema type-checks the calls
+    // against them, codegen lowers them.
+    effective.compile.nativeBindings = graph->nativeBindings();
     SemaResult sema;
     CompilationUnit* entry = graph->entry();
     if (entry != nullptr && entry->ast) {
@@ -84,6 +87,7 @@ int cmdCheck(const CliOptions& opt) {
     CodegenOptions options;
     options.importedEnums = importedEnumsFor(*graph, *entry);
     options.typeSystem = effective.compile.typeSystem;
+    options.nativeBindings = effective.compile.nativeBindings;
 
     // File-form worker units: load/sema/lower each one in its own graph, the
     // same way build/run does. Their diagnostics are compile errors.

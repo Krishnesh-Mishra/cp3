@@ -66,6 +66,16 @@ std::string toString(bool value);
 std::string toString(std::nullptr_t);   // -> "null"
 std::string toString(Undefined);        // -> "undefined"
 
+// --- native interop (spec 19) ------------------------------------------------
+//
+// A native function that returns a `const char*` yields a cp3 `string`. A null
+// pointer is the empty string: the C++ contract of `std::string(nullptr)` is
+// undefined behavior, and a native library that reports "no result" must not
+// take the program down.
+inline std::string nativeString(const char* text) {
+    return text == nullptr ? std::string() : std::string(text);
+}
+
 // --- global numeric parsing builtins (STDLIB docs section 3) ----------------
 //
 // `parseInt` / `parseFloat` are core-language globals in cp3, not string

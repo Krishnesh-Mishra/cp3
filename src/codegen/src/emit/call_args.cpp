@@ -60,6 +60,7 @@ struct CallBuilder {
     std::string emitFunctionCall(const CallExpr& c, const std::string& text,
                                  const Type& fnType, const ParamList* params);
     std::string emitIdentifierCall(const CallExpr& c);
+    std::string emitOwnedCall(const CallExpr& c, const MemberExpr& m);
     std::string emitMemberCall(const CallExpr& c, const MemberExpr& m);
 };
 
@@ -373,18 +374,33 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
            ")";
 }
 
+// The member-call hooks for the receiver shapes that own a call outright: a
+// native binding's own function (`dm.add(...)`, lowered against the binding's
+// recorded C++ name and parameter list) and the parallel family (spec 13).
+// "" when neither owns the call.
+std::string CallBuilder::emitOwnedCall(const CallExpr& c, const MemberExpr& m) {
+    if (std::string native = g.emitNativeCall(c, m); !native.empty()) {
+        return native;
+    }
+    if (m.object && m.object->kind == NodeKind::Identifier &&
+        static_cast<const Identifier&>(*m.object).name == "parallel") {
+        return g.emitParallelCall(c, m);
+    }
+    return std::string();
+}
+
 std::string CallBuilder::emitMemberCall(const CallExpr& c,
                                         const MemberExpr& m) {
+    // The receiver shapes that own a call outright: a native binding's own
+    // function and the parallel family.
+    if (std::string owned = emitOwnedCall(c, m); !owned.empty()) {
+        return owned;
+    }
     // A call through an import form with no C++ lowering (a namespace
     // import/re-export): report its link miss at the use site.
     if (std::string miss = g.linkedMemberMiss(m); !miss.empty()) {
         g.notImplemented(*m.object, miss);
         return "0.0";
-    }
-    if (m.object && m.object->kind == NodeKind::Identifier &&
-        static_cast<const Identifier&>(*m.object).name == "parallel") {
-        // `parallel.for` / `parallel.reduce` / `parallel.run` (spec 13).
-        return g.emitParallelCall(c, m);
     }
     // The typed worker handle surface (D80, spec 13): `w.postMessage`,
     // `w.on(...)`, `await w.request(v)`, `w.terminate()`, and the worker

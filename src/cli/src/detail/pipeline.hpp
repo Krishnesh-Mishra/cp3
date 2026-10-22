@@ -36,6 +36,10 @@ namespace cp3::cli {
 std::unique_ptr<ModuleGraph> loadModuleGraph(SourceManager& sm, const SourceFile& entry,
                                              DiagnosticSink& sink);
 
+// The "std/..." specifiers the graph resolved (as written): they select the
+// native backends a build links (DECISIONS D68).
+std::vector<std::string> importedStdModules(const ModuleGraph& graph);
+
 // Runs sema with the project-aware signature (spec 03: `typeSystem` and
 // `strictNumericCasts`), publishing the nodeId-keyed side tables into `out`.
 // Returns true when no error/fatal diagnostic was reported.

@@ -32,6 +32,7 @@
 
 #include "detail/cache.hpp"
 #include "detail/commands.hpp"
+#include "detail/native_build.hpp"
 #include "detail/native_packages.hpp"
 #include "detail/toolchain.hpp"
 #include "detail/util.hpp"
@@ -39,12 +40,6 @@
 namespace cp3::cli::detail {
 
 namespace {
-
-// Flags the native backends selected for one program contribute (D68).
-struct NativeBuildFlags {
-    std::vector<std::string> compile;
-    std::vector<std::string> link;
-};
 
 // Mutable state threaded through one build's translation units.
 struct BuildState {
@@ -409,6 +404,14 @@ std::optional<NativeBuildFlags> resolveNativeFlags(
                                generatedProgramText(request, mod));
 }
 
+// The native bindings the program imports: their include roots, defines,
+// libraries and runtime DLLs join the build (detail/native_build.hpp).
+bool applyRequestNativeBindings(const BuildRequest& request, BuildLayout& layout,
+                                 NativeBuildFlags& flags, const Toolchain& tc) {
+    return applyNativeBindings(request.opt->compile.nativeBindings, layout,
+                                flags, tc.msvc);
+}
+
 }  // namespace
 
 int buildWithToolchain(const BuildRequest& request) {
@@ -435,10 +438,16 @@ int buildWithToolchain(const BuildRequest& request) {
     const std::string programText = generatedProgramText(request, mod);
 
     const Toolchain* tcPtr = nullptr;
-    const std::optional<NativeBuildFlags> nativeFlags =
+    std::optional<NativeBuildFlags> nativeFlags =
         resolveNativeFlags(opt, request, mod, layout, tcPtr);
     if (!nativeFlags.has_value()) return kExitCompileError;
     const Toolchain& tc = *tcPtr;
+
+    // The native bindings the program imports: their include roots, defines,
+    // libraries and runtime DLLs join the build (detail/native_build.hpp).
+    if (!applyRequestNativeBindings(request, layout, *nativeFlags, tc)) {
+        return kExitCompileError;
+    }
 
     selectRuntimeSources(opt, layout, programText);
 

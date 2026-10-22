@@ -148,6 +148,11 @@ std::string Generator::sourceIncludes() const {
     if (needsParallel_) {
         out += "#include \"cp3/parallel/parallel.hpp\"\n";  // parallel.* (spec 13)
     }
+    // The native bindings' own headers (`import native "id" as alias`): the
+    // generated code calls into the C++ library, so its headers are here.
+    for (const std::string& header : nativeHeaders_) {
+        out += "#include \"" + header + "\"\n";
+    }
     if (needsWorker_) {
         out += "#include \"cp3/parallel/worker.hpp\"\n";  // new Worker(...) (spec 13)
         if (!workerModule_) {

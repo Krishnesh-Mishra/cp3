@@ -45,6 +45,7 @@ set(cp3_cli_sources
     src/commands/dap.cpp
     src/commands/run.cpp
     src/commands/build.cpp
+    src/commands/build_native.cpp
     src/commands/dev.cpp
     src/commands/fmt.cpp
     src/format/format.cpp

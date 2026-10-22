@@ -92,6 +92,7 @@ std::vector<lsp::RawDiagnostic> checkTextOnce(const std::string& path,
     if (findPackageRoot(std::filesystem::path(path).parent_path(), root)) {
         applyProjectTypeSettings(root, compile);
     }
+    if (graph != nullptr) compile.nativeBindings = graph->nativeBindings();
     if (entry != nullptr && entry->ast != nullptr) {
         analyzeProgram(*entry->ast, sema, sink, compile);
     }
