@@ -129,6 +129,11 @@ private:
     friend struct detail::PushReserveEmitter;  // emit/push_reserve.cpp
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
+    // A hard type error at a use site: the form is known and known to be
+    // wrong (an element type with no spelling, an element type that cannot
+    // be inferred), so the diagnostic says why instead of skipping the
+    // program. The CP3002 marker stays for the forms that are *unknown*.
+    void reportTypeError(const Node& node, const std::string& message);
 
     // --- source mapping (support/line_map.cpp) --------------------------------
     // `#line <line> "<source>"` for `node` (DWARF/gdb); no-op without mapping.
@@ -397,7 +402,15 @@ private:
     // Family method receiver; a ctor/literal takes the call's element type.
     std::string familyReceiverText(const Expr& obj, const Type& elem, const Node& site);
     std::string arrayCtorText(const ExprList& args, const Type& elem, const Node& site);
+    // The diagnostic for an element type an array cannot hold: the type is
+    // unknown (nothing says what the elements are) or it has no C++ spelling.
+    void reportArrayElementType(const Type& elem, const Node& site,
+                                const std::string& what);
     std::string typedCtorText(const std::string& cls, const ExprList& args, const Node& site);
+    // `new Int8Array([1, 2])` / `new Int8Array([...a, 1])`: the element list
+    // becomes the view's values.
+    std::string typedCtorLiteralText(const std::string& t,
+                                     const ArrayLiteral& lit);
     std::string arrayStaticCallText(const CallExpr& c, const std::string& prop);
     std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
     std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
@@ -521,15 +534,35 @@ private:
     std::vector<std::string> arrowParamText(
         const ArrowFunction& a, const std::vector<std::string>& contextParams,
         const std::optional<Type>& expectedFn);
+    // A rest parameter's check: it must be the last parameter and its element
+    // type must be known.
+    void checkRestParam(const Parameter& p, bool last,
+                        std::optional<Type>& type);
     std::optional<Type> arrowReturnCpType(
         const ArrowFunction& a, const std::optional<Type>& expectedFn);
     std::string arrowReturnType(const ArrowFunction& a,
                                 const std::optional<Type>& expectedFn);
     std::string emitTimerBuiltin(const CallExpr& c, const std::string& name);
+    // The delay a timer call's spread argument supplies.
+    std::string timerSpreadDelay(const SpreadElement& sp);
     std::string emitPromiseMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitPromiseStatic(const CallExpr& c, const MemberExpr& m);
     std::string emitPromiseResolve(const CallExpr& c);
     std::string emitPromiseReject(const CallExpr& c);
+
+    // --- spread arguments / spread elements (emit/spread.cpp) ----------------
+    // The C++ text of a spread source's first element (`f(...values)` in a
+    // one-parameter call); "" when the source is not an array with a known
+    // element type. `wantCpp` is the spelling the element must have.
+    std::string spreadFirstText(const SpreadElement& sp,
+                                const std::string& wantCpp);
+    // The C++ text of a spread source that is an array whose elements have the
+    // wanted spelling; "" when the source is not such an array.
+    std::string spreadArrayText(const SpreadElement& sp,
+                                 const std::string& wantCpp);
+    // The C++ text of a runtime-built `std::vector<E>`: the parts in order,
+    // each either an element expression or a spread of an array.
+    std::string spreadListText(const Type& elemType, const ExprList& parts);
 
     // --- statements (emit/stmt.cpp) ------------------------------------------
     void stmt(const Stmt& s, std::string& out, int indent);

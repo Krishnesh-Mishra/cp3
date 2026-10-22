@@ -61,12 +61,22 @@ inline bool isFamilyCtorName(const std::string& name) {
 // The element shapes `Array<E>` has a C++ spelling for (elements recurse).
 // Class instances, structural objects and interface wrappers are reference
 // handles / small wrappers (spec 15), so they are storable in cp3 arrays too.
+//
+// The gate is "can a `std::vector<E>` hold one", not "is it a primitive":
+// the value-like wrappers and handles with a C++ spelling (a promise, an
+// optional, a typed view, a buffer, a DataView, a boxed listener) are
+// copyable values too, so an array of them is a statically typed array like
+// any other (the spec's "no fully dynamic array" rule is about the *element
+// type* being known, not about the element being a primitive).
 inline bool isArrayElementShape(Shape s) {
     return s == Shape::Number || s == Shape::String || s == Shape::Bool ||
            s == Shape::Array || s == Shape::Enum || s == Shape::Union ||
            s == Shape::Native || s == Shape::Function ||
            s == Shape::ClassRef || s == Shape::Object ||
-           s == Shape::TypeParam;
+           s == Shape::TypeParam ||
+           s == Shape::Promise || s == Shape::Optional || s == Shape::Maybe ||
+           s == Shape::TypedArray || s == Shape::ArrayBuffer ||
+           s == Shape::DataView || s == Shape::Listener;
 }
 
 // The array-element spelling of `elem` (classify + shape gate).

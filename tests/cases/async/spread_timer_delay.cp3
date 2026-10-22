@@ -1,0 +1,2 @@
+import console from "std/console";
+setTimeout(() => { console.log("tick"); }, ...[10]);

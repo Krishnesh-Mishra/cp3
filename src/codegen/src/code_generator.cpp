@@ -53,6 +53,15 @@ void Generator::notImplemented(const Node& node, const std::string& what) {
                 "not implemented yet: " + what);
 }
 
+// A hard type error at a use site. The int64 fast-path attempt is discarded
+// on any diagnostic and the ordinary pass reports in place - the same rule
+// as the CP3002 marker.
+void Generator::reportTypeError(const Node& node, const std::string& message) {
+    if (intMode_) intMode_->failed = true;
+    if (suppressDiagnostics_) return;
+    sink_.error(diagcode::kTypeMismatch, node.span, message);
+}
+
 GeneratedModule Generator::run(const Program& program) {
     // The worker unit lowers only its default-export arrow (spec 13); the
     // entry unit's ordinary walk follows.

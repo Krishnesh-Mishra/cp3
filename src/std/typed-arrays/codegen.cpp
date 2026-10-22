@@ -2,11 +2,11 @@
 // src/std/typed-arrays/codegen.cpp - the JS-compat typed-array family (D69).
 //
 // Lowers the family registered by sema (src/std/typed-arrays/sema.cpp) onto
-// cp3/typed_array.hpp: the constructors and statics (`Array(n)`,
-// `Array(x, y)`, `Array.of`, `Array.from`, the typed views, the buffer
-// classes, DataView), the array-literal lowering and the declarator
-// special-cases (`let a: number[] = Array(3)`). The member / property / index
-// emitters live in the sibling codegen_methods.cpp.
+// cp3/typed_array.hpp: the regular array's statics (`Array.of`, `Array.from`),
+// the array-literal lowering and the declarator special-cases
+// (`let a: number[] = Array(3)`). The family constructors live in the sibling
+// codegen_constructors.cpp and the member / property / index emitters in
+// codegen_methods.cpp.
 //
 // `classifyFamily` (type_map.h) owns the type model; these units own the
 // emission only. Every form the corpus does not pin reports CP3002 through
@@ -64,137 +64,19 @@ bool classifyFamily(const Type& t, CppInfo& info) {
 
 using namespace detail;
 
-// =============================================================================
-// Constructors
-// =============================================================================
-// `Array(...)` / `Int8Array(...)` without `new`: sema pins both spellings to
-// the same constructor.
-std::string Generator::emitFamilyCtorCall(const CallExpr& c,
-                                          const std::string& name) {
-    if (!isFamilyCtorName(name)) return std::string();
-    return emitFamilyCtorText(name, c.arguments, arrayElemOf(effectiveType(c)),
-                              c);
-}
-
-// `emitCall`, but the `new`-less spelling of a family constructor lowers like
-// its `new` form first. A user-declared or shadowing binding wins over the
-// ambient family name.
-std::string Generator::emitCallOrFamily(const CallExpr& c) {
-    if (c.callee && c.callee->kind == NodeKind::Identifier &&
-        c.typeArgs.empty()) {
-        const std::string& name =
-            static_cast<const Identifier&>(*c.callee).name;
-        if (functions_.find(name) == functions_.end() && !lookup(name)) {
-            std::string family = emitFamilyCtorCall(c, name);
-            if (!family.empty()) return family;
-        }
+// The diagnostic for an element type an array cannot hold: the type is
+// unknown (nothing says what the elements are) or it has no C++ spelling.
+// cp3 has no fully dynamic array (the language spec's rule), so the binding
+// has to name the element type.
+void Generator::reportArrayElementType(const Type& elem, const Node& site,
+                                        const std::string& what) {
+    if (elem.isUnknown()) {
+        reportTypeError(site, "cannot infer the element type of " + what +
+                              "; annotate the binding");
+        return;
     }
-    return emitCall(c);
-}
-
-// `new Array(2)` / `new DataView(buf)`. A `new` of anything else keeps the
-// ordinary not-implemented form.
-std::string Generator::emitFamilyNew(const NewExpr& n) {
-    if (n.callee && n.callee->kind == NodeKind::Identifier) {
-        const std::string name = static_cast<const Identifier&>(*n.callee).name;
-        if (isFamilyCtorName(name)) {
-            return emitFamilyCtorText(name, n.arguments,
-                                      arrayElemOf(effectiveType(n)), n);
-        }
-    }
-    notImplemented(n, "this new expression");
-    return "0.0";
-}
-
-std::string Generator::emitFamilyCtorText(const std::string& cls,
-                                          const ExprList& args,
-                                          const Type& resultElem,
-                                          const Node& site) {
-    if (cls == "Array") return arrayCtorText(args, resultElem, site);
-    if (cls == "ArrayBuffer" || cls == "SharedArrayBuffer") {
-        if (args.size() != 1 || !args.front()) {
-            notImplemented(site, "the buffer length constructor");
-            return "0.0";
-        }
-        needsTypedArray_ = true;
-        const std::string fn = cls == "ArrayBuffer" ? "makeArrayBuffer"
-                                                    : "makeSharedArrayBuffer";
-        return "::cp3::runtime::" + fn + "(" + expr(*args.front()) + ")";
-    }
-    if (cls == "DataView") {
-        if (args.empty() || args.size() > 3) {
-            notImplemented(site, "the DataView constructor");
-            return "0.0";
-        }
-        needsTypedArray_ = true;
-        std::string out = "::cp3::runtime::makeDataView(";
-        for (std::size_t i = 0; i < args.size(); ++i) {
-            if (i != 0) out += ", ";
-            out += args[i] ? expr(*args[i]) : "0.0";
-        }
-        return out + ")";
-    }
-    return typedCtorText(cls, args, site);
-}
-
-// `new Int8Array(...)` (and its `new`-less spelling): a length, a literal
-// list, a cp3 array, another view, or a buffer view.
-std::string Generator::typedCtorText(const std::string& cls,
-                                     const ExprList& args, const Node& site) {
-    const char* tag = familyTag(cls);
-    if (tag == nullptr) {
-        notImplemented(site, "the family constructor");
-        return "0.0";
-    }
-    const std::string t = "::cp3::runtime::" + std::string(tag);
-    needsTypedArray_ = true;
-    if (args.empty()) return "::cp3::runtime::makeTypedArray<" + t + ">(0.0)";
-    if (args.size() > 1 && args.size() <= 3) {
-        std::string out = "::cp3::runtime::makeTypedArrayView<" + t + ">(";
-        for (std::size_t i = 0; i < args.size(); ++i) {
-            if (i != 0) out += ", ";
-            out += args[i] ? expr(*args[i]) : "0.0";
-        }
-        return out + ")";
-    }
-    if (args.size() != 1 || !args.front()) {
-        notImplemented(site, "the typed-array constructor");
-        return "0.0";
-    }
-    const Expr& arg = *args.front();
-    if (arg.kind == NodeKind::ArrayLiteral) {
-        const auto& lit = static_cast<const ArrayLiteral&>(arg);
-        std::string out = "::cp3::runtime::makeTypedArrayOf<" + t + ">({";
-        for (std::size_t i = 0; i < lit.elements.size(); ++i) {
-            if (i != 0) out += ", ";
-            const Expr* el = lit.elements[i].get();
-            if (el == nullptr || el->kind == NodeKind::SpreadElement) {
-                notImplemented(site, "a spread argument");
-                continue;
-            }
-            out += expr(*el);
-        }
-        return out + "})";
-    }
-    switch (info(arg).shape) {
-        case Shape::Number:
-        case Shape::Unknown:
-            return "::cp3::runtime::makeTypedArray<" + t + ">(" + expr(arg) +
-                   ")";
-        case Shape::Array:
-            return "::cp3::runtime::makeTypedArrayFromArray<" + t + ">(" +
-                   expr(arg) + ")";
-        case Shape::TypedArray:
-            return "::cp3::runtime::makeTypedArrayFrom<" + t + ">(" + expr(arg) +
-                   ")";
-        case Shape::ArrayBuffer:
-            return "::cp3::runtime::makeTypedArrayView<" + t + ">(" +
-                   expr(arg) + ", 0.0)";
-        default:
-            break;
-    }
-    notImplemented(site, "the typed-array constructor argument");
-    return "0.0";
+    reportTypeError(site, "type mismatch: an array cannot hold elements of "
+                          "type '" + describe(elem) + "'");
 }
 
 // `Array(...)`: the single-number length form (dense, default-initialized) and
@@ -208,24 +90,42 @@ std::string Generator::arrayCtorText(const ExprList& args, const Type& elem,
     }
     CppInfo ec;
     if (!arrayElementInfo(elem, ec)) {
-        notImplemented(site, "the Array(...) element type");
+        // The element type is known but has no C++ spelling (an error type, a
+        // void, ...): the program cannot be lowered, and the diagnostic says
+        // why instead of leaving a silent stub behind.
+        reportArrayElementType(elem, site, "Array(...)");
         return "0.0";
     }
     needsTypedArray_ = true;
-    if (args.size() == 1 && args.front()) {
+    // The length form: a single number argument. A spread argument is never
+    // a length - it is the literal form (JS parity).
+    if (args.size() == 1 && args.front() &&
+        args.front()->kind != NodeKind::SpreadElement) {
         const Shape s = info(*args.front()).shape;
         if (s == Shape::Number || s == Shape::Unknown) {
             return "::cp3::runtime::makeArrayDefault<" + ec.cpp + ">(" +
                    expr(*args.front()) + ")";
         }
     }
+    // `Array(...a)`: a spread's elements join the literal list, so the
+    // vector is built at runtime instead of in a braced initializer.
+    bool hasSpread = false;
+    for (const auto& arg : args) {
+        if (arg && arg->kind == NodeKind::SpreadElement) hasSpread = true;
+    }
+    if (hasSpread) {
+        const std::string list = spreadListText(elem, args);
+        if (list.empty()) return "0.0";
+        return "::cp3::runtime::makeArray<" + ec.cpp + ">(" + list + ")";
+    }
     std::string out = "::cp3::runtime::makeArray<" + ec.cpp + ">(std::vector<" +
                       ec.cpp + ">{";
     for (std::size_t i = 0; i < args.size(); ++i) {
         if (i != 0) out += ", ";
         const Expr* arg = args[i].get();
-        if (arg == nullptr || arg->kind == NodeKind::SpreadElement) {
-            notImplemented(site, "a spread argument");
+        if (arg == nullptr) {
+            // A hole (`Array(1, , 2)`) is `undefined` in JS.
+            out += "::cp3::runtime::undefined";
             continue;
         }
         out += expr(*arg);
@@ -237,9 +137,16 @@ std::string Generator::arrayCtorText(const ExprList& args, const Type& elem,
 std::string Generator::arrayStaticCallText(const CallExpr& c,
                                            const std::string& prop) {
     if (prop == "of") {
+        // The element type comes from the call's own type; an empty
+        // `Array.of()` has none, so the context's expected type (the binding
+        // annotation) supplies it - `let a: number[] = Array.of()`.
+        Type elem = arrayElemOf(effectiveType(c));
+        if (elem.isUnknown() && expected_ && expected_->kind == TypeKind::Array) {
+            elem = arrayElemOf(*expected_);
+        }
         CppInfo ec;
-        if (!arrayElementInfo(arrayElemOf(effectiveType(c)), ec)) {
-            notImplemented(c, "the Array.of element type");
+        if (!arrayElementInfo(elem, ec)) {
+            reportArrayElementType(elem, c, "Array.of()");
             return "0.0";
         }
         needsTypedArray_ = true;
@@ -287,7 +194,7 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
     if (elem.isUnknown()) elem = arrayElemOf(effectiveType(lit));
     CppInfo ec;
     if (!arrayElementInfo(elem, ec)) {
-        notImplemented(lit, "the array literal element type");
+        reportArrayElementType(elem, lit, "an empty array literal");
         return "0.0";
     }
     needsTypedArray_ = true;

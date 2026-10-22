@@ -6,7 +6,6 @@
 // (cp3/async/promise.hpp, cp3/async/eventloop.hpp):
 //
 //   await expr            -> `(co_await ::cp3::runtime::awaitValue(expr))`
-//   arrow functions       -> C++ lambdas (`[&](params) -> T { ... }`)
 //   setTimeout/setInterval/clearTimeout/clearInterval/sleep
 //                         -> `::cp3::runtime::<name>(...)`
 //   Promise.all/race/allSettled([...])
@@ -14,10 +13,8 @@
 //   p.then(f)/p.catch(f)/p.finally(f)
 //                         -> `p.then(f)` / `p.catchError(f)` / `p.finally(f)`
 //
-// Arrows are emitted only where a context requires one (a timer callback or a
-// promise handler) - the generic expression dispatcher in emit_expr.cpp has no
-// `ArrowFunction` case, which keeps unrelated closure cases out of scope.
-// Anything else reports CP3002 and emits a compilable stub.
+// The arrow-function lowering lives in the sibling unit (emit/arrow.cpp) and
+// the spread lowering in emit/spread.cpp.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -61,17 +58,48 @@ std::string Generator::emitAwait(const AwaitExpr& a) {
 // Core timer builtins and `sleep` (spec §14, STDLIB docs §03)
 // -----------------------------------------------------------------------------
 
+// The delay a timer call's spread argument supplies: the source's first
+// element (an empty source is the JS default of 0).
+std::string Generator::timerSpreadDelay(const SpreadElement& sp) {
+    const std::string src = spreadArrayText(sp, "double");
+    if (src.empty()) {
+        reportTypeError(sp, "type mismatch: a spread argument of a timer call "
+                            "must be a number array (the delay)");
+        return "0.0";
+    }
+    needsTypedArray_ = true;
+    return "([&]{ const auto& cp3_src = " + src +
+           "; return cp3_src->empty() ? 0.0 : "
+           "::cp3::runtime::arrayAt<double>(cp3_src, 0.0); })()";
+}
+
 std::string Generator::emitTimerBuiltin(const CallExpr& c, const std::string& name) {
     needsEventLoop_ = true;
     std::vector<std::string> args;
-    for (const auto& arg : c.arguments) {
+    const std::size_t count = c.arguments.size();
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto& arg = c.arguments[i];
         if (!arg) {
             args.push_back("0.0");
             continue;
         }
         if (arg->kind == NodeKind::SpreadElement) {
-            notImplemented(*arg, "spread argument");
-            continue;
+            // A timer call takes a callback and a delay. A spread supplies the
+            // delay; the extra arguments a JS timer would hand to the
+            // callback are dropped, because a cp3 timer callback takes none.
+            const auto& sp = static_cast<const SpreadElement&>(*arg);
+            if (i == 0) {
+                reportTypeError(sp, "a timer call takes a callback and a delay;"
+                                   " a spread argument cannot supply the "
+                                   "callback");
+                args.push_back("0.0");
+                continue;
+            }
+            if (i == 1) {
+                args.push_back(timerSpreadDelay(sp));
+                continue;
+            }
+            continue;  // the extra arguments the callback cannot take
         }
         if (arg->kind == NodeKind::ArrowFunction) {
             // Timer callbacks take no cp3-level arguments.
@@ -113,13 +141,20 @@ std::string Generator::emitPromiseStatic(const CallExpr& c, const MemberExpr& m)
         notImplemented(c, "Promise." + prop + " over non-primitive promises");
         return "0.0";
     }
+    // A spread element (`Promise.all([...a, p])`) joins the list, so the
+    // vector is built at runtime instead of in a braced initializer.
+    bool hasSpread = false;
+    for (const auto& el : array.elements) {
+        if (el && el->kind == NodeKind::SpreadElement) hasSpread = true;
+    }
+    if (hasSpread) {
+        const std::string list = spreadListText(elem, array.elements);
+        if (list.empty()) return "0.0";
+        return "::cp3::runtime::" + prop + "(" + list + ")";
+    }
     std::vector<std::string> elems;
     for (const auto& el : array.elements) {
         if (!el) continue;
-        if (el->kind == NodeKind::SpreadElement) {
-            notImplemented(*el, "spread argument");
-            continue;
-        }
         elems.push_back(expr(*el));
     }
     return "::cp3::runtime::" + prop + "(std::vector<" + elemInfo.cpp + ">{" +
@@ -133,21 +168,38 @@ std::string Generator::emitPromiseStatic(const CallExpr& c, const MemberExpr& m)
 // surrounding declaration uses.
 std::string Generator::emitPromiseResolve(const CallExpr& c) {
     const Expr* arg = c.arguments.empty() ? nullptr : c.arguments.front().get();
-    if (arg && arg->kind == NodeKind::SpreadElement) {
-        notImplemented(*arg, "spread argument");
-        return "0.0";
-    }
-    if (arg && detail::isPromiseType(effectiveType(*arg))) {
-        return expr(*arg);  // `Promise.resolve(p)` is `p` itself in JS
-    }
-    // `Promise<T>` has a spelling only for the M1 value types (void included);
-    // `Promise<undefined>` (a no-argument resolve) stays not-implemented.
+    // `Promise<T>` has a spelling only for the M1 value types (void
+    // included); `Promise<undefined>` (a no-argument resolve) stays
+    // not-implemented.
     const CppInfo info = classify(effectiveType(c));
     if (!info.representable) {
         notImplemented(c, "Promise.resolve over a value with no C++ spelling");
         return "0.0";
     }
-    const std::string value = arg ? expr(*arg) : "::cp3::runtime::undefined";
+    std::string value;
+    if (arg && arg->kind == NodeKind::SpreadElement) {
+        // `Promise.resolve(...values)`: the first element is the value (the
+        // extra elements are ignored, exactly as JS ignores the extra
+        // arguments of a one-parameter call).
+        const CppInfo valueInfo =
+            classify(detail::promiseValue(effectiveType(c)));
+        const std::string first =
+            spreadFirstText(static_cast<const SpreadElement&>(*arg),
+                            valueInfo.representable ? valueInfo.cpp
+                                                    : std::string());
+        if (first.empty()) {
+            reportTypeError(*arg, "type mismatch: a spread argument of "
+                                  "Promise.resolve must be an array of '" +
+                                      describe(detail::promiseValue(
+                                          effectiveType(c))) + "'");
+            return "0.0";
+        }
+        value = first;
+    } else if (arg && detail::isPromiseType(effectiveType(*arg))) {
+        return expr(*arg);  // `Promise.resolve(p)` is `p` itself in JS
+    } else {
+        value = arg ? expr(*arg) : "::cp3::runtime::undefined";
+    }
     return info.cpp + "::resolve(" + value + ")";
 }
 
@@ -156,16 +208,27 @@ std::string Generator::emitPromiseResolve(const CallExpr& c) {
 // `Thrown` (the `.catch` handler unboxes it). Sema types the call the same way.
 std::string Generator::emitPromiseReject(const CallExpr& c) {
     const Expr* arg = c.arguments.empty() ? nullptr : c.arguments.front().get();
-    if (arg && arg->kind == NodeKind::SpreadElement) {
-        notImplemented(*arg, "spread argument");
-        return "0.0";
-    }
     const CppInfo info = classify(detail::promiseValue(effectiveType(c)));
     if (!info.representable || info.shape != Shape::Void) {
         notImplemented(c, "Promise.reject whose value type is not void");
         return "0.0";
     }
-    const std::string reason = arg ? expr(*arg) : "::cp3::runtime::undefined";
+    std::string reason;
+    if (arg && arg->kind == NodeKind::SpreadElement) {
+        // `Promise.reject(...reasons)`: the first element is the reason (the
+        // extra elements are ignored, exactly as JS ignores the extra
+        // arguments of a one-parameter call).
+        const std::string first =
+            spreadFirstText(static_cast<const SpreadElement&>(*arg), "");
+        if (first.empty()) {
+            reportTypeError(*arg, "type mismatch: a spread argument of "
+                                  "Promise.reject must be an array");
+            return "0.0";
+        }
+        reason = first;
+    } else {
+        reason = arg ? expr(*arg) : "::cp3::runtime::undefined";
+    }
     return "::cp3::runtime::Promise<void>::reject(::cp3::runtime::Thrown::make(" +
            reason + "))";
 }
@@ -203,7 +266,18 @@ std::string Generator::emitPromiseMemberCall(const CallExpr& c, const MemberExpr
     for (const auto& arg : c.arguments) {
         if (!arg) continue;
         if (arg->kind == NodeKind::SpreadElement) {
-            notImplemented(*arg, "spread argument");
+            // `p.then(...handlers)`: the first element is the handler (the
+            // extra elements are ignored, exactly as JS ignores the extra
+            // arguments of a one-parameter call).
+            const std::string first =
+                spreadFirstText(static_cast<const SpreadElement&>(*arg), "");
+            if (first.empty()) {
+                reportTypeError(*arg, "type mismatch: a spread argument of a "
+                                      "Promise handler must be an array of "
+                                      "functions");
+                continue;
+            }
+            args.push_back(first);
             continue;
         }
         if (arg->kind == NodeKind::ArrowFunction) {
@@ -215,168 +289,6 @@ std::string Generator::emitPromiseMemberCall(const CallExpr& c, const MemberExpr
     }
     return "(" + expr(*m.object) + ")." + method + "(" +
            joinStrings(args, ", ") + ")";
-}
-
-// -----------------------------------------------------------------------------
-// Arrow functions -> C++ lambdas
-// -----------------------------------------------------------------------------
-
-// A lambda parameter list: the annotation wins, then sema's parameter type,
-// then the type the surrounding context expects (the expected function type
-// on `expected_`), then the call context (a timer callback or a promise
-// handler). An untyped parameter becomes a C++20 generic-lambda parameter,
-// which keeps the emitted lambda valid without knowing the cp3 type.
-std::vector<std::string> Generator::arrowParamText(
-    const ArrowFunction& a, const std::vector<std::string>& contextParams,
-    const std::optional<Type>& expectedFn) {
-    const auto fnIt = sema_.functions.find(a.nodeId);
-    std::vector<std::string> params;
-    params.reserve(a.params.size());
-    for (std::size_t i = 0; i < a.params.size(); ++i) {
-        const Parameter* p = a.params[i].get();
-        if (!p) continue;
-        if (p->isRest) notImplemented(*p, "rest parameter");
-        std::string name = "cp3_param" + std::to_string(i);
-        const bool named = p->name && p->name->kind == NodeKind::Identifier;
-        if (named) {
-            name = mapIdent(static_cast<const Identifier&>(*p->name).name);
-        } else if (p->name) {
-            notImplemented(*p->name, "destructuring parameter");
-        }
-        std::optional<Type> type;
-        if (p->type) {
-            if (auto t = typeOfNode(*p->type)) type = t;
-        }
-        if (!type && fnIt != sema_.functions.end() &&
-            i < fnIt->second.paramTypes.size()) {
-            type = fnIt->second.paramTypes[i];
-        }
-        if (!type && expectedFn && expectedFn->kind == TypeKind::Function &&
-            i + 1 < expectedFn->parts.size()) {
-            type = expectedFn->parts[i];
-        }
-        // An untyped parameter whose sema type is still `unknown` (or sema's
-        // open `$ambient` object placeholder) takes the spelling the context
-        // hands it. Leave any binding the context already declared
-        // (parallel.reduce declares its accumulator as the init type) in place
-        // instead of shadowing it with a placeholder.
-        const bool placeholder =
-            type && (type->isUnknown() || type->isError() ||
-                     (type->kind == TypeKind::Object &&
-                      type->name == "$ambient"));
-        if (named && type && !placeholder) {
-            declare(static_cast<const Identifier&>(*p->name).name, type);
-        }
-        std::string cpp;
-        if (type) {
-            const CppInfo ci = classify(*type);
-            if (ci.representable && ci.shape != Shape::Void) cpp = ci.cpp;
-        }
-        if (cpp.empty() && i < contextParams.size()) cpp = contextParams[i];
-        params.push_back(cpp.empty() ? ("auto " + name) : (cpp + " " + name));
-    }
-    return params;
-}
-
-// The cp3 type of the lambda's return value: the annotation, then sema, then
-// the expected function type's return slot. `nullopt` for a void lambda (its
-// C++ return type is deduced).
-std::optional<Type> Generator::arrowReturnCpType(
-    const ArrowFunction& a, const std::optional<Type>& expectedFn) {
-    if (a.returnType) {
-        if (auto annotated = typeOfNode(*a.returnType)) {
-            return annotated->isVoid() ? std::nullopt : annotated;
-        }
-    }
-    const auto it = sema_.functions.find(a.nodeId);
-    if (it != sema_.functions.end()) {
-        const Type& t = it->second.returnType;
-        if (!t.isUnknown() && !t.isError() && !t.isVoid()) return t;
-    }
-    if (expectedFn && expectedFn->kind == TypeKind::Function &&
-        !expectedFn->parts.empty()) {
-        const Type& t = expectedFn->parts.back();
-        if (!t.isUnknown() && !t.isError() && !t.isVoid()) return t;
-    }
-    return std::nullopt;
-}
-
-// The lambda's explicit return type, or "" to let C++ deduce it (a `void`
-// arrow stays deduced, which also covers a block body with bare `return;`).
-std::string Generator::arrowReturnType(const ArrowFunction& a,
-                                       const std::optional<Type>& expectedFn) {
-    if (auto t = arrowReturnCpType(a, expectedFn)) {
-        const CppInfo ci = classify(*t);
-        if (ci.representable && ci.shape != Shape::Void) return ci.cpp;
-    }
-    return std::string();
-}
-
-std::string Generator::emitArrow(const ArrowFunction& a,
-                                 const std::vector<std::string>& contextParams,
-                                 bool byValue) {
-    if (a.isAsync) {
-        // D40 admits `async () => {}`; lowering them is out of this wave.
-        notImplemented(a, "async arrow function");
-        return "0.0";
-    }
-    if (!a.typeParams.empty()) {
-        notImplemented(a, "generic arrow");
-    }
-    if (intOn()) intFail();
-
-    // The context's expected function type (a binding annotation, a call
-    // argument, a field, a return type) fixes the lambda's parameters and
-    // return value where the arrow's own resolved types are not concrete.
-    std::optional<Type> expectedFn;
-    if (expected_ && expected_->kind == TypeKind::Function) expectedFn = *expected_;
-
-    ++nestingDepth_;
-    pushScope();
-    const std::vector<std::string> params =
-        arrowParamText(a, contextParams, expectedFn);
-    const std::string ret = arrowReturnType(a, expectedFn);
-    const std::optional<Type> retCp = arrowReturnCpType(a, expectedFn);
-
-    // A lambda body returns from the LAMBDA, and a lambda is never a
-    // coroutine: swap in the arrow's own context for the enclosing one.
-    const std::string savedReturn = currentReturn_;
-    const std::optional<Type> savedReturnType = currentReturnType_;
-    const std::optional<Type> savedExpected = expected_;
-    const std::uint32_t savedFrame = currentFrameId_;
-    const bool savedInAsync = inAsyncBody_;
-    currentReturn_ = ret.empty() ? "void" : ret;
-    currentReturnType_ = retCp;
-    currentFrameId_ = a.nodeId;
-    inAsyncBody_ = false;
-    expected_ = retCp;
-
-    std::string body;
-    if (a.body && a.expressionBody) {
-        body = "return " + expr(*static_cast<const Expr*>(a.body.get())) + ";";
-    } else if (a.body) {
-        stmt(*static_cast<const Stmt*>(a.body.get()), body, 1);
-    }
-
-    expected_ = savedExpected;
-    inAsyncBody_ = savedInAsync;
-    currentFrameId_ = savedFrame;
-    currentReturnType_ = savedReturnType;
-    currentReturn_ = savedReturn;
-    popScope();
-    --nestingDepth_;
-
-    // `[=] mutable` for a value the enclosing scope may not outlive (a
-    // returned closure, a stored field, a call argument, a listener box):
-    // copies of a Cell handle still share the binding, and the copy semantics
-    // are exactly what spec 10 requires for a non-reassigned local. `mutable`
-    // keeps a `count.set(...)` through a by-value cell handle well-formed.
-    std::string out = byValue ? "[=](" : "[&](";
-    out += joinStrings(params, ", ") + ")";
-    if (byValue) out += " mutable";
-    if (!ret.empty()) out += " -> " + ret;
-    out += " {\n" + body + "}";
-    return out;
 }
 
 }  // namespace cp3

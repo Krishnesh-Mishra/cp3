@@ -1,0 +1,8 @@
+{
+  "mode": "run",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "contains": "element type"
+  }
+}
