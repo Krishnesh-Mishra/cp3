@@ -97,15 +97,46 @@ AREA_OF_FILE = {
 MESSAGE_RE = re.compile(r'notImplemented\s*\(')
 
 
+def call_text(text: str, open_paren: int) -> str:
+    """The text of the call whose opening paren is at `open_paren`.
+
+    The marker call is `notImplemented(<node>, "<message>")` and the call
+    often spans several lines, so the text is read up to the matching close
+    paren - never a fixed window, which would swallow the string literals of
+    the code that follows.
+    """
+    depth = 0
+    index = open_paren
+    while index < len(text):
+        char = text[index]
+        if char == '"':
+            # Skip a string literal so a paren inside it does not count.
+            index += 1
+            while index < len(text):
+                if text[index] == "\\":
+                    index += 2
+                    continue
+                if text[index] == '"':
+                    break
+                index += 1
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return text[open_paren + 1: index]
+        index += 1
+    return text[open_paren + 1:]
+
+
 def scan_file(path: Path) -> list[tuple[int, str]]:
     """Every notImplemented( call site in one file: (line, message)."""
     text = path.read_text(encoding="utf-8", errors="replace")
     out: list[tuple[int, str]] = []
     for match in MESSAGE_RE.finditer(text):
-        # The message is the last string literal of the call, which may sit on
-        # a later line. Look at the next 400 characters, bounded by the call.
-        window = text[match.end(): match.end() + 400]
-        strings = re.findall(r'"((?:[^"\\]|\\.)*)"', window)
+        open_paren = match.end() - 1
+        arguments = call_text(text, open_paren)
+        strings = re.findall(r'"((?:[^"\\]|\\.)*)"', arguments)
         message = strings[-1] if strings else "<unparsed>"
         line = text.count("\n", 0, match.start()) + 1
         out.append((line, message))
