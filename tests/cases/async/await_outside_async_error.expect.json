@@ -1,0 +1,8 @@
+{
+  "mode": "check",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3506",
+    "contains": "'await' is only allowed in an async function or at the top level"
+  }
+}

@@ -273,6 +273,9 @@ void Analyzer::inferArg(Expr* a) {
 }
 
 void Analyzer::checkArgs(const FuncSig& sig, CallExpr& call) {
+    // A type argument list on a callee that declares no type parameters is a
+    // type error (the generics unit owns the rule).
+    checkTypeArgs(sig, call);
     bool hasSpread = false;
     for (auto& a : call.arguments) {
         if (a && a->kind == NodeKind::SpreadElement) hasSpread = true;

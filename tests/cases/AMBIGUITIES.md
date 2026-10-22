@@ -8,12 +8,11 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 35** across 12 categories.
+**Total markers: 34** across 11 categories.
 
 | Category | Markers |
 | --- | ---: |
 | `arrays-strings` | 1 |
-| `async` | 1 |
 | `classes` | 4 |
 | `concurrency` | 2 |
 | `control-flow` | 6 |
@@ -24,19 +23,13 @@ python tests/runner/run_tests.py --write-registry
 | `modules` | 3 |
 | `stdlib` | 1 |
 | `types` | 4 |
-| **Total** | **35** |
+| **Total** | **34** |
 
 ## `arrays-strings`
 
 | case file | question |
 | --- | --- |
 | `arrays-strings/_ambiguous/forin_map_order.expect.json` | `for...in` over a `Map`: iteration order is unspecified (unordered_map) |
-
-## `async`
-
-| case file | question |
-| --- | --- |
-| `async/_ambiguous/async_arrow_function.expect.json` | is `async () => {}` (async arrow function) supported? The spec only shows `async function`. |
 
 ## `classes`
 

@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: is `async () => {}` (async arrow function) supported? The spec only shows `async function`."
-  }
-}

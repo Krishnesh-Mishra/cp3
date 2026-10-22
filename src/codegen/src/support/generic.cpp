@@ -31,6 +31,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
@@ -41,10 +42,21 @@ using namespace detail;
 
 namespace {
 
-// The declared name of an object-literal property (`{ x: 5 }` -> "x"); empty
-// for a computed or method field.
+// The declared name of an object-literal property (`{ x: 5 }` -> "x"). A
+// computed key names the same field as its literal value (`{ ["x"]: 5 }`);
+// a computed key with a dynamic name - and a method field - has no static
+// name at all (the object's shape is fixed at compile time).
 std::string objectFieldName(const ObjectProperty& p) {
     if (!p.key) return std::string();
+    if (p.computed) {
+        if (p.key->kind == NodeKind::StringLiteral) {
+            return static_cast<const StringLiteral&>(*p.key).value;
+        }
+        if (p.key->kind == NodeKind::NumberLiteral) {
+            return static_cast<const NumberLiteral&>(*p.key).raw;
+        }
+        return std::string();
+    }
     if (p.key->kind == NodeKind::Identifier) {
         return static_cast<const Identifier&>(*p.key).name;
     }
@@ -109,7 +121,13 @@ std::string Generator::reifyObjectArg(const ObjectLiteral& lit) {
         if (p == nullptr || !p->value) continue;
         const std::string key = objectFieldName(*p);
         if (key.empty()) {
-            notImplemented(*p, "a computed or method object field");
+            // The object's shape is fixed at compile time: a computed key
+            // with a dynamic name (and a method field) names no field the
+            // generic body could read.
+            reportUnsupported(
+                *p, diagcode::kIndexSignatureBanned,
+                "a computed object key is not supported: an object's keys are "
+                "fixed at compile time (use Map<K, V> for dynamic keys)");
             continue;
         }
         std::string type;
@@ -138,6 +156,34 @@ std::string Generator::reifyObjectArg(const ObjectLiteral& lit) {
     return name + "{" + values + "}";
 }
 
+// The tuple declarator's initializer: `let t: [string, number] = ["a", 1]`.
+// The tuple annotation fixes the element types, so the literal is
+// brace-initialized into the std::tuple directly instead of lowering as an
+// Array (spec 03). "" means the declaration is not a tuple literal.
+std::string Generator::tupleDeclaratorInitText(const VariableDeclarator& d,
+                                                const Type& declared) {
+    if (!d.init || !isTupleType(declared) ||
+        d.init->kind != NodeKind::ArrayLiteral) {
+        return std::string();
+    }
+    const auto& lit = static_cast<const ArrayLiteral&>(*d.init);
+    std::string cpp;
+    if (lit.elements.size() != declared.parts.size() ||
+        !tupleCpp(declared, cpp)) {
+        return std::string();
+    }
+    needsTuple_ = true;
+    std::string out = cpp + "{";
+    for (std::size_t i = 0; i < lit.elements.size(); ++i) {
+        const Expr* element = lit.elements[i].get();
+        if (element == nullptr || element->kind == NodeKind::SpreadElement) {
+            return std::string();
+        }
+        out += (i == 0 ? "" : ", ") + expr(*element);
+    }
+    return out + "}";
+}
+
 // `return [a, b]` in a tuple-returning body -> `std::make_tuple(a, b)`.
 std::string Generator::emitTupleLiteral(const ArrayLiteral& lit) {
     needsTuple_ = true;
@@ -146,7 +192,11 @@ std::string Generator::emitTupleLiteral(const ArrayLiteral& lit) {
         if (i != 0) out += ", ";
         const Expr* el = lit.elements[i].get();
         if (el == nullptr || el->kind == NodeKind::SpreadElement) {
-            notImplemented(lit, "a spread element");
+            // A tuple's shape is fixed (`std::tuple<A, B>`), so a spread
+            // element has no position in it (sema reports it as CP3401).
+            reportUnsupported(lit, diagcode::kTypeMismatch,
+                              "type mismatch: a spread element has no fixed "
+                              "position in a tuple literal");
             continue;
         }
         out += expr(*el);

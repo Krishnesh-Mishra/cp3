@@ -129,6 +129,11 @@ private:
     friend struct detail::PushReserveEmitter;  // emit/push_reserve.cpp
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
+    // A real compile error (not the CP3002 "not built yet" marker): the
+    // construct has no lowering at all, so the program must not compile.
+    // Same dedup and int-path bail as `notImplemented`.
+    void reportUnsupported(const Node& node, const char* code,
+                           const std::string& message);
 
     // --- source mapping (support/line_map.cpp) --------------------------------
     // `#line <line> "<source>"` for `node` (DWARF/gdb); no-op without mapping.
@@ -398,6 +403,9 @@ private:
     std::string familyReceiverText(const Expr& obj, const Type& elem, const Node& site);
     std::string arrayCtorText(const ExprList& args, const Type& elem, const Node& site);
     std::string typedCtorText(const std::string& cls, const ExprList& args, const Node& site);
+    // `new Int8Array([...])`: the literal's elements (a spread contributes its
+    // own elements).
+    std::string typedCtorListText(const std::string& tag, const ArrayLiteral& lit);
     std::string arrayStaticCallText(const CallExpr& c, const std::string& prop);
     std::string arrayFillCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
     std::string arrayJoinCallText(const CallExpr& c, const MemberExpr& m, const Type& recv);
@@ -406,6 +414,9 @@ private:
     std::string typedMethodCallText(const CallExpr& c, const MemberExpr& m, const char* tag);
     std::string dataViewCallText(const CallExpr& c, const MemberExpr& m);
     std::string arrayLiteralText(const ArrayLiteral& lit, const Type& elemOverride);
+    // The tuple declarator's initializer: src/codegen/src/support/generic.cpp.
+    std::string tupleDeclaratorInitText(const VariableDeclarator& d,
+                                         const Type& declared);
     std::string declaratorInitText(const VariableDeclarator& d, const Type& declared);
 
     // --- object value shapes (emit/objects.cpp) -------------------------------
@@ -500,6 +511,8 @@ private:
     std::string emitNetworkMapFieldMember(const MemberExpr& m);
     std::string emitNetworkIdentifier(const CallExpr& c, const std::string& name);
     std::string emitUnresolvedCall(const CallExpr& c, const std::string& name);
+    // `String(value)`: the scalar conversion global (emit/call.cpp).
+    std::string emitStringBuiltin(const CallExpr& c);
     std::string emitNetworkNew(const NewExpr& n);
     std::string emitNetworkMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkMemberRead(const MemberExpr& m);
@@ -525,6 +538,15 @@ private:
         const ArrowFunction& a, const std::optional<Type>& expectedFn);
     std::string arrowReturnType(const ArrowFunction& a,
                                 const std::optional<Type>& expectedFn);
+    // --- closures (emit/closures.cpp) ----------------------------------------
+    // The cp3 type of an arrow's parameter (annotation, sema, then context).
+    std::optional<Type> arrowParamType(const ArrowFunction& a,
+                                       std::size_t index,
+                                       const std::optional<Type>& expectedFn);
+    // The arrow's body statements and its C++ signature (the out-parameter).
+    std::string arrowBodyText(const ArrowFunction& a, bool isAsync,
+                              const std::optional<Type>& expectedFn,
+                              std::string& signature);
     std::string emitTimerBuiltin(const CallExpr& c, const std::string& name);
     std::string emitPromiseMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitPromiseStatic(const CallExpr& c, const MemberExpr& m);

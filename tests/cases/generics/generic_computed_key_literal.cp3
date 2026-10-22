@@ -1,0 +1,5 @@
+import console from "std/console";
+// A computed key with a literal value names the same field as the plain form.
+interface Point2 { x: number; }
+function getX<T extends Point2>(p: T): number { return p.x; }
+console.log(`${getX({ ["x"]: 5 })}`);

@@ -1,3 +1,4 @@
 import console from "std/console";
+// An async arrow with an expression body yields its value.
 let f = async (): Promise<number> => 1;
 console.log(`${await f()}`);

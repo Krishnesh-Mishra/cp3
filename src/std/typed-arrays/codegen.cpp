@@ -5,8 +5,8 @@
 // cp3/typed_array.hpp: the constructors and statics (`Array(n)`,
 // `Array(x, y)`, `Array.of`, `Array.from`, the typed views, the buffer
 // classes, DataView), the array-literal lowering and the declarator
-// special-cases (`let a: number[] = Array(3)`). The member / property / index
-// emitters live in the sibling codegen_methods.cpp.
+// special-cases (`let a: number[] = Array(3)`). The member / property /
+// index emitters live in the sibling codegen_methods.cpp.
 //
 // `classifyFamily` (type_map.h) owns the type model; these units own the
 // emission only. Every form the corpus does not pin reports CP3002 through
@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/family.h"
 #include "detail/type_map.h"
 #include "cp3/native_types.hpp"
@@ -29,7 +30,7 @@ namespace detail {
 
 // The family's C++ mapping (see type_map.h): the regular array value type, the
 // typed views, the buffer classes and DataView. Every other type is left for
-// the caller (`classify`'s own arms handle primitives, Promise, ...).
+// the caller (`classify`'s own arms).
 bool classifyFamily(const Type& t, CppInfo& info) {
     if (t.kind == TypeKind::Array) {
         CppInfo ec;
@@ -163,18 +164,11 @@ std::string Generator::typedCtorText(const std::string& cls,
     }
     const Expr& arg = *args.front();
     if (arg.kind == NodeKind::ArrayLiteral) {
+        // A literal lowers as an array (a spread element contributes its own
+        // elements); the view copies the array's elements.
         const auto& lit = static_cast<const ArrayLiteral&>(arg);
-        std::string out = "::cp3::runtime::makeTypedArrayOf<" + t + ">({";
-        for (std::size_t i = 0; i < lit.elements.size(); ++i) {
-            if (i != 0) out += ", ";
-            const Expr* el = lit.elements[i].get();
-            if (el == nullptr || el->kind == NodeKind::SpreadElement) {
-                notImplemented(site, "a spread argument");
-                continue;
-            }
-            out += expr(*el);
-        }
-        return out + "})";
+        return "::cp3::runtime::makeTypedArrayFromArray<" + t + ">(" +
+               arrayLiteralText(lit, Type::unknown()) + ")";
     }
     switch (info(arg).shape) {
         case Shape::Number:
@@ -219,15 +213,44 @@ std::string Generator::arrayCtorText(const ExprList& args, const Type& elem,
                    expr(*args.front()) + ")";
         }
     }
+    bool hasSpread = false;
+    for (const auto& arg : args) {
+        if (arg && arg->kind == NodeKind::SpreadElement) hasSpread = true;
+    }
+    if (hasSpread) {
+        // `Array(...xs, 3)`: the spread's elements come first (JS semantics).
+        // A braced list cannot splice an existing array, so the elements are
+        // collected into a vector first.
+        const std::string v = freshLabel("elems_");
+        std::string body = "std::vector<" + ec.cpp + "> " + v + ";";
+        for (const auto& arg : args) {
+            if (!arg) continue;
+            if (arg->kind != NodeKind::SpreadElement) {
+                body += " " + v + ".push_back(" + expr(*arg) + ");";
+                continue;
+            }
+            const auto& sp = static_cast<const SpreadElement&>(*arg);
+            if (!sp.argument || info(*sp.argument).shape != Shape::Array) {
+                // A spread argument has to be an array (the element list is
+                // spliced from it).
+                reportUnsupported(*arg, diagcode::kTypeMismatch,
+                                  "type mismatch: a spread argument must be an "
+                                  "array");
+                continue;
+            }
+            body += " { const auto& cp3_src = " + expr(*sp.argument) + "; " + v +
+                    ".insert(" + v +
+                    ".end(), cp3_src->begin(), cp3_src->end()); }";
+        }
+        return "[&]{ " + body + " return ::cp3::runtime::makeArray<" + ec.cpp +
+               ">(std::move(" + v + ")); }()";
+    }
     std::string out = "::cp3::runtime::makeArray<" + ec.cpp + ">(std::vector<" +
                       ec.cpp + ">{";
     for (std::size_t i = 0; i < args.size(); ++i) {
         if (i != 0) out += ", ";
         const Expr* arg = args[i].get();
-        if (arg == nullptr || arg->kind == NodeKind::SpreadElement) {
-            notImplemented(site, "a spread argument");
-            continue;
-        }
+        if (arg == nullptr) continue;
         out += expr(*arg);
     }
     return out + "})";
@@ -268,17 +291,6 @@ std::string Generator::arrayStaticCallText(const CallExpr& c,
     return std::string();  // not a form this unit lowers
 }
 
-std::string Generator::familyReceiverText(const Expr& obj, const Type& elem,
-                                          const Node& site) {
-    if (const ExprList* args = arrayCtorArgs(obj)) {
-        return arrayCtorText(*args, elem, site);
-    }
-    if (obj.kind == NodeKind::ArrayLiteral) {
-        return arrayLiteralText(static_cast<const ArrayLiteral&>(obj), elem);
-    }
-    return expr(obj);
-}
-
 // An array literal; `elemOverride` supplies the element type when the literal
 // set none (an empty literal with an annotated binding).
 std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
@@ -312,7 +324,8 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
                 continue;
             }
             body += " { const auto& cp3_src = " + expr(*sp.argument) + "; " + v +
-                    ".insert(" + v + ".end(), cp3_src->begin(), cp3_src->end()); }";
+                    ".insert(" + v +
+                    ".end(), cp3_src->begin(), cp3_src->end()); }";
         }
         return "[&]{ " + body + " return ::cp3::runtime::makeArray<" + ec.cpp +
                ">(std::move(" + v + ")); }()";
@@ -322,8 +335,10 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
     for (std::size_t i = 0; i < lit.elements.size(); ++i) {
         if (i != 0) out += ", ";
         const Expr* el = lit.elements[i].get();
-        if (el == nullptr || el->kind == NodeKind::SpreadElement) {
-            notImplemented(lit, "a spread element");
+        if (el == nullptr) {
+            // A hole: a cp3 array is dense (D69.4 - no hole state exists), so
+            // the slot holds the element type's default value.
+            out += ec.cpp + "{}";
             continue;
         }
         // A native element takes the literal as an integer token: the braced
@@ -339,56 +354,5 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
     }
     return out + "})";
 }
-
-// The initializer of a declaration that lowers specially: `let a: number[] =
-// Array(3)` (element from the annotation) and `let a: number[] = []` (the
-// annotation fixes an otherwise unknowable element type). "" means the caller
-// lowers the initializer normally.
-std::string Generator::declaratorInitText(const VariableDeclarator& d,
-                                          const Type& declared) {
-    // `let t: [string, number] = ["a", 1]`: the tuple annotation fixes the
-    // element types, so brace-initialize the std::tuple directly instead of
-    // lowering the literal as an Array (spec 03).
-    if (d.init && isTupleType(declared) &&
-        d.init->kind == NodeKind::ArrayLiteral) {
-        const auto& lit = static_cast<const ArrayLiteral&>(*d.init);
-        std::string cpp;
-        if (lit.elements.size() != declared.parts.size() ||
-            !tupleCpp(declared, cpp)) {
-            return std::string();
-        }
-        needsTuple_ = true;
-        std::string out = cpp + "{";
-        for (std::size_t i = 0; i < lit.elements.size(); ++i) {
-            const Expr* element = lit.elements[i].get();
-            if (element == nullptr || element->kind == NodeKind::SpreadElement) {
-                return std::string();
-            }
-            out += (i == 0 ? "" : ", ") + expr(*element);
-        }
-        return out + "}";
-    }
-    if (!d.init || declared.kind != TypeKind::Array) return std::string();
-    if (const ExprList* args = arrayCtorArgs(*d.init)) {
-        return arrayCtorText(*args, arrayElemOf(declared), *d.init);
-    }
-    if (d.init->kind == NodeKind::ArrayLiteral) {
-        // The annotation's element type wins when it has a spelling: a class /
-        // interface element (`let s: Shape[] = [new Sq()]`) must lower to the
-        // annotated handle type, not the literal's inferred union. A native
-        // element annotation and an otherwise unknowable element type take the
-        // same path.
-        const Type elem = arrayElemOf(declared);
-        CppInfo dc;
-        if (arrayElementInfo(elem, dc) || isNativeType(elem) ||
-            arrayElemOf(effectiveType(*d.init)).isUnknown()) {
-            return arrayLiteralText(static_cast<const ArrayLiteral&>(*d.init),
-                                    elem);
-        }
-        return std::string();
-    }
-    return std::string();
-}
-
 
 }  // namespace cp3

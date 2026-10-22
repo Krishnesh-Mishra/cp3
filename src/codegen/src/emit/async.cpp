@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
@@ -42,7 +43,12 @@ std::string Generator::emitAwait(const AwaitExpr& a) {
     // (spec §14's top-level await) and for `async function` bodies; anywhere
     // else the enclosing C++ is a plain function or lambda.
     if (nestingDepth_ > 0 && !inAsyncBody_) {
-        notImplemented(a, "await outside an async function or the top level");
+        // `await` needs a coroutine, and only an async function (or the top
+        // level) is one: sema reports it as CP3506, and the codegen repeats
+        // it so a codegen-only pass stays honest.
+        reportUnsupported(a, diagcode::kAwaitOutsideAsync,
+                          "'await' is only allowed in an async function or at "
+                          "the top level");
         return "0.0";
     }
     // Awaiting something means a continuation will be scheduled on the loop.
@@ -226,10 +232,13 @@ std::string Generator::emitPromiseMemberCall(const CallExpr& c, const MemberExpr
 // on `expected_`), then the call context (a timer callback or a promise
 // handler). An untyped parameter becomes a C++20 generic-lambda parameter,
 // which keeps the emitted lambda valid without knowing the cp3 type.
+//
+// A destructuring parameter (`({ a, b }) => ...`) keeps the source value as
+// the C++ parameter (`cp3_param<i>`); the body prologue unpacks it
+// (emit/closures.cpp).
 std::vector<std::string> Generator::arrowParamText(
     const ArrowFunction& a, const std::vector<std::string>& contextParams,
     const std::optional<Type>& expectedFn) {
-    const auto fnIt = sema_.functions.find(a.nodeId);
     std::vector<std::string> params;
     params.reserve(a.params.size());
     for (std::size_t i = 0; i < a.params.size(); ++i) {
@@ -240,21 +249,8 @@ std::vector<std::string> Generator::arrowParamText(
         const bool named = p->name && p->name->kind == NodeKind::Identifier;
         if (named) {
             name = mapIdent(static_cast<const Identifier&>(*p->name).name);
-        } else if (p->name) {
-            notImplemented(*p->name, "destructuring parameter");
         }
-        std::optional<Type> type;
-        if (p->type) {
-            if (auto t = typeOfNode(*p->type)) type = t;
-        }
-        if (!type && fnIt != sema_.functions.end() &&
-            i < fnIt->second.paramTypes.size()) {
-            type = fnIt->second.paramTypes[i];
-        }
-        if (!type && expectedFn && expectedFn->kind == TypeKind::Function &&
-            i + 1 < expectedFn->parts.size()) {
-            type = expectedFn->parts[i];
-        }
+        const std::optional<Type> type = arrowParamType(a, i, expectedFn);
         // An untyped parameter whose sema type is still `unknown` (or sema's
         // open `$ambient` object placeholder) takes the spelling the context
         // hands it. Leave any binding the context already declared
@@ -315,15 +311,16 @@ std::string Generator::arrowReturnType(const ArrowFunction& a,
 std::string Generator::emitArrow(const ArrowFunction& a,
                                  const std::vector<std::string>& contextParams,
                                  bool byValue) {
-    if (a.isAsync) {
-        // D40 admits `async () => {}`; lowering them is out of this wave.
-        notImplemented(a, "async arrow function");
-        return "0.0";
-    }
     if (!a.typeParams.empty()) {
         notImplemented(a, "generic arrow");
     }
     if (intOn()) intFail();
+
+    // An async arrow (D40) is a C++20 coroutine: its signature is the
+    // runtime's `Promise<T>`, its body yields `T` with `co_return`, and its
+    // frame outlives the call - so it captures by value.
+    const bool isAsync = a.isAsync;
+    if (isAsync) needsEventLoop_ = true;
 
     // The context's expected function type (a binding annotation, a call
     // argument, a field, a return type) fixes the lambda's parameters and
@@ -335,34 +332,8 @@ std::string Generator::emitArrow(const ArrowFunction& a,
     pushScope();
     const std::vector<std::string> params =
         arrowParamText(a, contextParams, expectedFn);
-    const std::string ret = arrowReturnType(a, expectedFn);
-    const std::optional<Type> retCp = arrowReturnCpType(a, expectedFn);
-
-    // A lambda body returns from the LAMBDA, and a lambda is never a
-    // coroutine: swap in the arrow's own context for the enclosing one.
-    const std::string savedReturn = currentReturn_;
-    const std::optional<Type> savedReturnType = currentReturnType_;
-    const std::optional<Type> savedExpected = expected_;
-    const std::uint32_t savedFrame = currentFrameId_;
-    const bool savedInAsync = inAsyncBody_;
-    currentReturn_ = ret.empty() ? "void" : ret;
-    currentReturnType_ = retCp;
-    currentFrameId_ = a.nodeId;
-    inAsyncBody_ = false;
-    expected_ = retCp;
-
-    std::string body;
-    if (a.body && a.expressionBody) {
-        body = "return " + expr(*static_cast<const Expr*>(a.body.get())) + ";";
-    } else if (a.body) {
-        stmt(*static_cast<const Stmt*>(a.body.get()), body, 1);
-    }
-
-    expected_ = savedExpected;
-    inAsyncBody_ = savedInAsync;
-    currentFrameId_ = savedFrame;
-    currentReturnType_ = savedReturnType;
-    currentReturn_ = savedReturn;
+    std::string ret;
+    const std::string body = arrowBodyText(a, isAsync, expectedFn, ret);
     popScope();
     --nestingDepth_;
 
@@ -371,9 +342,12 @@ std::string Generator::emitArrow(const ArrowFunction& a,
     // copies of a Cell handle still share the binding, and the copy semantics
     // are exactly what spec 10 requires for a non-reassigned local. `mutable`
     // keeps a `count.set(...)` through a by-value cell handle well-formed.
-    std::string out = byValue ? "[=](" : "[&](";
+    // An async arrow always captures by value: its coroutine frame outlives
+    // the call that created it.
+    const bool captureByValue = byValue || isAsync;
+    std::string out = captureByValue ? "[=](" : "[&](";
     out += joinStrings(params, ", ") + ")";
-    if (byValue) out += " mutable";
+    if (captureByValue) out += " mutable";
     if (!ret.empty()) out += " -> " + ret;
     out += " {\n" + body + "}";
     return out;

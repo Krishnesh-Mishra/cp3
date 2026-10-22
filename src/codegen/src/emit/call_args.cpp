@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/timers.h"
@@ -201,12 +202,15 @@ std::vector<std::string> CallBuilder::packRestArgs(
     }
     if (texts.spreadRest) {
         out.push_back(texts.value[0]);
-    } else if (count == 0) {
+    } else if (count <= restAt) {
+        // No trailing argument: the rest parameter is an empty array.
         out.push_back("::cp3::runtime::makeArray<" + elemCpp + ">()");
     } else {
+        // The rest parameter collects the arguments *after* the fixed ones
+        // (JS: `f(a, ...rest)` binds only the trailing arguments).
         std::vector<std::string> elems;
-        elems.reserve(count);
-        for (std::size_t i = 0; i < count; ++i) {
+        elems.reserve(count - restAt);
+        for (std::size_t i = restAt; i < count; ++i) {
             elems.push_back(texts.value[i].empty() ? "0.0" : texts.value[i]);
         }
         out.push_back("::cp3::runtime::makeArray<" + elemCpp +
@@ -308,16 +312,10 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
         isTimerBuiltinName(name)) {
         return g.emitTimerBuiltin(c, name);
     }
-    // `String(value)` (bug 9 surface): the scalar conversion global. A
-    // user-declared `String` function wins (checked above).
+    // `String(value)`: the scalar conversion global (a user-declared `String`
+    // function wins - checked above).
     if (name == "String" && g.functions_.find(name) == g.functions_.end()) {
-        if (c.arguments.size() == 1 && c.arguments.front() &&
-            c.arguments.front()->kind != NodeKind::SpreadElement) {
-            return "::cp3::runtime::toString(" + g.expr(*c.arguments.front()) +
-                   ")";
-        }
-        g.notImplemented(c, "String(...)");
-        return "0.0";
+        return g.emitStringBuiltin(c);
     }
     if ((name == "parseInt" || name == "parseFloat") &&
         g.functions_.find(name) == g.functions_.end()) {
@@ -328,7 +326,12 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
         declIt != g.functionDecls_.end() ? declIt->second : nullptr;
     const bool generic = decl != nullptr && !decl->typeParams.empty();
     if (!c.typeArgs.empty() && !generic) {
-        g.notImplemented(c, "calls with type arguments");
+        // A type argument list on a function that declares no type parameters
+        // is a type error (sema reports it first; the codegen repeats it so a
+        // codegen-only pass stays honest).
+        g.reportUnsupported(c, diagcode::kTypeArgsOnNonGeneric,
+                            "type arguments are not allowed here: '" + name +
+                                "' is not a generic function");
         return "0.0";
     }
     // A name that is not a function declared in this unit: a locally bound
@@ -455,9 +458,23 @@ std::string Generator::emitLinkedCall(const CallExpr& c,
         notImplemented(c, "this call");
         return "0.0";
     }
+    // The explicit type-argument list of the call (`f<number>(...)` ->
+    // `<double>`): the target unit's template is instantiated at the call
+    // site, exactly like a call inside the unit itself.
+    std::string callee = ln.cpp;
     if (!c.typeArgs.empty()) {
-        notImplemented(c, "calls with type arguments");
-        return "0.0";
+        if (ln.fn->typeParams.empty()) {
+            reportUnsupported(c, diagcode::kTypeArgsOnNonGeneric,
+                              "type arguments are not allowed here: '" + name +
+                                  "' is not a generic function");
+            return "0.0";
+        }
+        std::vector<std::string> typeArgs;
+        typeArgs.reserve(c.typeArgs.size());
+        for (const auto& ta : c.typeArgs) {
+            if (ta) typeArgs.push_back(typeArgText(*ta));
+        }
+        callee += "<" + joinStrings(typeArgs, ", ") + ">";
     }
     if (ln.isAsync) {
         // Calling an async function starts async work whose continuations only
@@ -472,7 +489,7 @@ std::string Generator::emitLinkedCall(const CallExpr& c,
                              ? parameterType(*ln.fn->params[i], *ln.fn, i)
                              : std::nullopt);
     }
-    return ln.cpp + "(" +
+    return callee + "(" +
            joinStrings(calls.callArgs(c, &ln.fn->params, ptypes,
                                       /*applyDefaults=*/false),
                        ", ") +

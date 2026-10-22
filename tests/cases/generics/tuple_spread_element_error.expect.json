@@ -1,0 +1,8 @@
+{
+  "mode": "check",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "contains": "a spread element has no fixed position in a tuple literal"
+  }
+}

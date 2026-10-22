@@ -218,8 +218,10 @@ Type Analyzer::inferFamilyConstruct(const std::string& cls, ExprList& args,
     for (auto& a : args) {
         if (a && a->kind == NodeKind::SpreadElement) {
             auto& sp = static_cast<SpreadElement&>(*a);
-            types.push_back(sp.argument ? inferExpr(*sp.argument)
-                                        : Type::unknown());
+            Type at = sp.argument ? inferExpr(*sp.argument) : Type::unknown();
+            // A spread contributes its *elements* to the constructed array.
+            types.push_back(at.kind == TypeKind::Array ? elemOf(at)
+                                                        : Type::unknown());
             continue;
         }
         types.push_back(a ? inferExpr(*a) : Type::unknown());

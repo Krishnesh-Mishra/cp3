@@ -69,6 +69,7 @@ inline constexpr const char* kCannotInstantiateAbstract = "CP3413";
 inline constexpr const char* kUnknownType       = "CP3414";
 inline constexpr const char* kInvalidCondition  = "CP3415";
 inline constexpr const char* kNoMatchingOverload = "CP3416";
+inline constexpr const char* kTypeArgsOnNonGeneric = "CP3417";
 
 // --- statements / control flow (sema) ----------------------------------------
 inline constexpr const char* kReturnOutsideFunction = "CP3501";
@@ -76,6 +77,8 @@ inline constexpr const char* kBreakOutsideLoop  = "CP3502";
 inline constexpr const char* kContinueOutsideLoop = "CP3503";
 inline constexpr const char* kMissingReturn     = "CP3504";
 inline constexpr const char* kUnreachableCode   = "CP3505";
+inline constexpr const char* kAwaitOutsideAsync = "CP3506";
+inline constexpr const char* kMissingDestructuringInit = "CP3507";
 
 // --- modules / imports --------------------------------------------------------
 inline constexpr const char* kModuleNotFound    = "CP3601";

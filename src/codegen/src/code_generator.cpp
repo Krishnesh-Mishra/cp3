@@ -53,6 +53,21 @@ void Generator::notImplemented(const Node& node, const std::string& what) {
                 "not implemented yet: " + what);
 }
 
+void Generator::reportUnsupported(const Node& node, const char* code,
+                                   const std::string& message) {
+    // The same shape as `notImplemented`, but a real error: the construct has
+    // no lowering, so the program must not compile (the CLI stops before the
+    // C++ step). Inside an int64 fast-path attempt nothing is reported.
+    if (intMode_) intMode_->failed = true;
+    if (suppressDiagnostics_) return;
+    if (node.nodeId != 0) {
+        if (!reported_.insert(node.nodeId).second) {
+            return;
+        }
+    }
+    sink_.error(code, node.span, message);
+}
+
 GeneratedModule Generator::run(const Program& program) {
     // The worker unit lowers only its default-export arrow (spec 13); the
     // entry unit's ordinary walk follows.

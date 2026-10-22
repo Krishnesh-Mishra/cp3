@@ -19,6 +19,7 @@
 #include <optional>
 #include <string>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
 
@@ -37,6 +38,36 @@ std::string Generator::emitParseBuiltin(const CallExpr& c,
     }
     notImplemented(c, name + "(...)");
     return "0.0";
+}
+
+// `String(value)`: the scalar conversion global (DECISIONS D46). JS
+// semantics (spec §03): no argument converts `undefined`, the extra
+// arguments are ignored, and a spread contributes its elements as arguments -
+// so only the first one is converted.
+std::string Generator::emitStringBuiltin(const CallExpr& c) {
+    const Expr* arg = c.arguments.empty() ? nullptr : c.arguments.front().get();
+    if (arg == nullptr) {
+        return "::cp3::runtime::toString(::cp3::runtime::undefined)";
+    }
+    if (arg->kind != NodeKind::SpreadElement) {
+        return "::cp3::runtime::toString(" + expr(*arg) + ")";
+    }
+    const auto& spread = static_cast<const SpreadElement&>(*arg);
+    if (!spread.argument) {
+        return "::cp3::runtime::toString(::cp3::runtime::undefined)";
+    }
+    if (info(*spread.argument).shape != Shape::Array) {
+        reportUnsupported(*arg, diagcode::kTypeMismatch,
+                          "type mismatch: a spread argument must be an array");
+        return "0.0";
+    }
+    // `String(...xs)` == `String(xs[0])`, and `String()` when the spread is
+    // empty.
+    const std::string src = expr(*spread.argument);
+    return "[&]{ const auto& cp3_spread = " + src +
+           "; if (cp3_spread->empty()) return "
+           "::cp3::runtime::toString(::cp3::runtime::undefined); return "
+           "::cp3::runtime::toString(cp3_spread->at(0)); }()";
 }
 
 bool Generator::isConsoleMember(const CallExpr& c) const {

@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
@@ -195,7 +196,11 @@ bool Generator::emitDestructureDecl(const VariableDeclarator& d, VarKind kind,
     if (!isArray && !isObject) return false;
     if (intOn()) intFail();
     if (!d.init) {
-        notImplemented(d, "destructuring without an initializer");
+        // A destructuring declaration without an initializer has no value to
+        // destructure (sema reports it as CP3507; the codegen repeats it so a
+        // codegen-only pass stays honest).
+        reportUnsupported(d, diagcode::kMissingDestructuringInit,
+                          "a destructuring declaration needs an initializer");
         return true;
     }
     const std::string temp = freshLabel("src_");
@@ -262,7 +267,9 @@ std::string Generator::parameterText(const Parameter& p, const FunctionDeclarati
         // whose contents the body prologue unpacks.
         name = "cp3_param_" + std::to_string(index);
     } else {
-        if (p.name) notImplemented(*p.name, "destructuring parameter");
+        // The parser binds a parameter to an identifier, a binding pattern or
+        // a rest element, and the rest form returns above - so this is the
+        // defensive spelling for a name shape the parser cannot produce.
         name = "cp3_param";
     }
 
@@ -278,13 +285,6 @@ std::string Generator::parameterText(const Parameter& p, const FunctionDeclarati
         }
         if (!id || elem.empty()) {
             notImplemented(p, "this rest parameter type");
-            return "/* rest */";
-        }
-        if (index != 0) {
-            // Only a trailing `...rest` after fixed parameters stays out of
-            // this wave: the `rest_param_leading` ruling belongs to the
-            // closures lane (its expectation is per-JS wrong; see the report).
-            notImplemented(p, "a rest parameter after fixed parameters");
             return "/* rest */";
         }
         needsTypedArray_ = true;
