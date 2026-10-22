@@ -1,0 +1,10 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3404",
+    "line": 4,
+    "contains": "is not callable"
+  }
+}

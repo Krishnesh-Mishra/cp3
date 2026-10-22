@@ -1,0 +1,11 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// An inline `forEach` callback that declares fewer parameters than the
+// collection passes: JS hands it the leading arguments only.
+let m = new Map<string, number>();
+m.set("a", 1); m.set("b", 2);
+
+let sum = 0;
+m.forEach((v) => { sum = sum + v; });
+console.log(`${sum}`);

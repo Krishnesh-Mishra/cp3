@@ -1,0 +1,17 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// `fetch(url, undefined)` is `fetch(url)`: the options are optional
+// (docs 04 network, `fetch(url, init?)`).
+const app = createServer();
+app.get("/ping", (req, res) => {
+  res.text("pong");
+});
+app.listen(48963, () => {
+  console.log("listening");
+});
+
+let res = await fetch("http://127.0.0.1:48963/ping", undefined);
+console.log(`${res.status}`);
+console.log(await res.text());
+app.close();

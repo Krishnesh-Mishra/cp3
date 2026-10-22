@@ -99,6 +99,7 @@ Candidates come from what is actually visible at the reference: names in scope, 
 | CP3402 | `kNotAssignable` | A value is used where none can go: the reported case is returning a value from a `void` function. | `a void function cannot return a value` | Give the function a return type and return the value, or drop the `return` expression. |
 | CP3403 | `kArityMismatch` | A call passes the wrong number of arguments for the callee's signature. | `arity mismatch: expected 2, got 1 argument` | Pass the expected count, or make parameters optional in the signature if the shorter call is intended. |
 | CP3404 | `kNotCallable` | The callee expression resolves to a value that is not a function. | `value of type 'number' is not callable` | Call a function; check for a missing property access or a shadowed binding. |
+| CP3405 | `kNotIndexable` | Indexing a value whose type provides no index operation. | `value of type 'Box' is not indexable` | Index an array, a string or a typed array; a fixed-key record is read by its member names. |
 | CP3406 | `kInvalidOperandTypes` | A unary or comparison operator got an operand type it does not accept. | `invalid operand type 'string' for unary '-'` | Convert the operand to the type the operator needs; comparisons need both sides compatible. |
 | CP3407 | `kUnknownTypeArgument` | A raw C pointer or reference type appears where only a cp3 type argument is allowed. | `raw pointer/reference types are not permitted here` | Use a wrapper or value type; raw pointers belong behind native bindings, not ordinary type positions. |
 | CP3408 | `kConstReassignment` | Assignment targets a binding declared `const`. | `cannot reassign to const 'total'` | Declare it `let` if it must change, or assign to a different variable. |
@@ -162,7 +163,6 @@ These codes are defined in the header and reserved inside their stages' ranges. 
 | CP3001 | `kInternalError` | internal | Unexpected compiler-internal states; the last-resort code. |
 | CP3203 | `kUnexpectedEof` | syntax | A dedicated "unexpected end of input" message; today truncated input surfaces as CP3201/CP3202 at the last token. |
 | CP3205 | `kInvalidStatement` | syntax | A statement in a position where no statement can start. |
-| CP3405 | `kNotIndexable` | types | Indexing a value whose type provides no index operation. |
 | CP3412 | `kConstraintNotSatisfied` | types | A generic argument that does not satisfy its constraint (generics are still landing). |
 | CP3413 | `kCannotInstantiateAbstract` | types | `new` on an abstract class. |
 | CP3505 | `kUnreachableCode` | statements | Statements after `return`, `throw`, `break` or `continue`. |

@@ -1,0 +1,4 @@
+import { Map } from "std/collections";
+
+// `Map` is a generic class: its type arguments are required (D25).
+let m = new Map();

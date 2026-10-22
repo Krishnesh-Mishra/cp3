@@ -1,0 +1,10 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3405",
+    "line": 7,
+    "contains": "is not indexable"
+  }
+}

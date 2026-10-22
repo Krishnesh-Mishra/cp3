@@ -10,9 +10,10 @@
 // owns the emission only.
 //
 // A member outside the sema table never reaches this unit: sema reports CP3305
-// (src/std/collections/sema.cpp). Forms this unit cannot lower report CP3002
-// through `notImplemented` and return a compilable stub, so they stay a
-// graceful skip.
+// (src/std/collections/sema.cpp). A `Map`/`Set` type the runtime cannot hold
+// (a key that is not hashable, a value the runtime cannot compare) is a type
+// error (CP3401), and a `forEach` callback that does not fit the collection's
+// parameter list is one too.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -23,31 +24,63 @@
 
 #include "detail/cpp_writer.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
 namespace detail {
 
+namespace {
+
+// The shapes a `Map` value / a `Set` element can have: the runtime holds the
+// value and compares it with `==` (a `Set` deduplicates its elements that
+// way), so a primitive, an enum, a handle (an object, a class instance, an
+// array, a nested collection - identity, like JS), a value union and an
+// optional all fit.
+bool comparableShape(Shape s) {
+    switch (s) {
+        case Shape::Number:
+        case Shape::String:
+        case Shape::Bool:
+        case Shape::Native:
+        case Shape::Enum:
+        case Shape::Array:
+        case Shape::Object:
+        case Shape::ClassRef:
+        case Shape::Collections:
+        case Shape::Union:
+        case Shape::Optional:
+            return true;
+        default:
+            return false;
+    }
+}
+
+}  // namespace
+
 // The family's C++ mapping (see type_map.h): `Map<K, V>` -> the runtime's
-// insertion-ordered `Map<K, V>` handle, `Set<T>` likewise. Keys and values
-// must have an M1 spelling (primitives); every other type is left for
-// `classify`'s own arms (a CP3002 skip at the use site).
+// insertion-ordered `Map<K, V>` handle, `Set<T>` likewise. A Map's key is
+// hashed, so it must be a primitive; the value (and a Set's element) is a
+// value type the runtime can hold and compare.
 bool classifyCollections(const Type& t, CppInfo& info) {
     if (t.kind != TypeKind::Class) return false;
     const bool isMap = t.name == "Map";
     if (!isMap && t.name != "Set") return false;
-    const CppInfo first = t.parts.empty() ? CppInfo{} : classify(t.parts.front());
-    if (!first.representable || !isPrimitiveShape(first.shape)) return false;
+    if (t.parts.empty()) return false;
+    const CppInfo first = classify(t.parts.front());
+    if (!first.representable) return false;
     std::string cpp;
     if (isMap) {
+        if (!isPrimitiveShape(first.shape)) return false;
         const CppInfo second =
             t.parts.size() >= 2 ? classify(t.parts[1]) : CppInfo{};
-        if (!second.representable || !isPrimitiveShape(second.shape)) {
+        if (!second.representable || !comparableShape(second.shape)) {
             return false;
         }
         cpp = "::cp3::runtime::collections::Map<" + first.cpp + ", " +
               second.cpp + ">";
     } else {
+        if (!comparableShape(first.shape)) return false;
         cpp = "::cp3::runtime::collections::Set<" + first.cpp + ">";
     }
     info.shape = Shape::Collections;
@@ -83,7 +116,111 @@ const ArrowFunction* arrowCallback(const CallExpr& c) {
     return static_cast<const ArrowFunction*>(arg);
 }
 
+// The diagnostic for a `Map`/`Set` type the runtime cannot hold: the key is
+// hashed (a primitive only), the value (and a Set's element) is a value type
+// the runtime can compare.
+std::string collectionsTypeMessage(const Type& t) {
+    const bool isMap = isMapType(t);
+    const std::string kind = isMap ? "Map" : "Set";
+    const std::string needsArgs =
+        "type mismatch: '" + kind +
+        "' needs its type arguments (e.g. `new Map<string, number>()`)";
+    if (t.parts.empty()) return needsArgs;
+    const CppInfo first = classify(t.parts.front());
+    if (!first.representable) {
+        // An unknown type argument is a missing one.
+        if (t.parts.front().isUnknown()) return needsArgs;
+        return "type mismatch: the " + std::string(isMap ? "key" : "element") +
+               " type of a " + kind + " is not known";
+    }
+    if (isMap) {
+        if (!isPrimitiveShape(first.shape)) {
+            return "type mismatch: a Map's key must be a number, a string or "
+                   "a boolean (the runtime hashes it)";
+        }
+        const CppInfo second = classify(t.parts[1]);
+        if (!second.representable) {
+            if (t.parts[1].isUnknown()) return needsArgs;
+            return "type mismatch: the value type of a Map is not known";
+        }
+    }
+    return "type mismatch: a " +
+           std::string(isMap ? "Map's value" : "Set's element") +
+           " must be a number, a string, a boolean, an object, a class instance "
+           "or an array";
+}
+
 }  // namespace
+
+// The `forEach` callback. The runtime calls the callback with the value (and,
+// for a `Map`, the key), so the callback's own signature has to fit: JS allows
+// a callback with fewer parameters, and only the ones it declares are passed.
+// An inline arrow takes the collection's own types as its parameters; any
+// other callback (a named function, a function-valued binding) is adapted, and
+// a declared parameter whose type does not match the value the runtime passes
+// is a type error. `expected` is the collection's parameter list, in call
+// order (`(value, key)` for a `Map`, `(value)` for a `Set`).
+std::string Generator::collectionsForEachCallback(
+    const CallExpr& c, const std::vector<std::string>& expected) {
+    if (c.arguments.size() != 1 || !c.arguments.front()) {
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "arity mismatch: forEach takes exactly one callback");
+        return std::string();
+    }
+    const Expr& arg = *c.arguments.front();
+    const ArrowFunction* arrow = arrowCallback(c);
+    const Type fnType = effectiveType(arg);
+    if (arrow == nullptr && fnType.kind != TypeKind::Function) {
+        reportTypeError(arg, "type mismatch: the forEach callback must be a function");
+        return std::string();
+    }
+    // A function type's parts are the parameters, then the return type.
+    const std::size_t arity =
+        fnType.kind == TypeKind::Function && !fnType.parts.empty()
+            ? fnType.parts.size() - 1
+            : (arrow != nullptr ? arrow->params.size() : 0);
+    if (arity > expected.size()) {
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "arity mismatch: the forEach callback takes at most " +
+                               std::to_string(expected.size()) +
+                               " argument(s), got " + std::to_string(arity));
+        return std::string();
+    }
+    for (std::size_t i = 0;
+         i < arity && fnType.kind == TypeKind::Function; ++i) {
+        const CppInfo actual = classify(fnType.parts[i]);
+        // An untyped parameter fits any value, so only a typed one is checked.
+        if (!actual.representable) continue;
+        if (actual.cpp != expected[i]) {
+            reportTypeError(arg,
+                            "type mismatch: the forEach callback's parameter " +
+                                std::to_string(i + 1) +
+                                " does not match the value the collection passes");
+            return std::string();
+        }
+    }
+    const std::string callback =
+        arrow != nullptr ? emitArrow(*arrow, expected) : expr(arg);
+    if (arrow != nullptr && arity == expected.size()) {
+        // The arrow's own parameters are the collection's: the runtime can
+        // call it directly.
+        return callback;
+    }
+    // The adapter: the collection's parameter types, and only the parameters
+    // the callback declares. The callback value is evaluated once (an
+    // init-capture), exactly like the JS argument.
+    std::string params;
+    std::string call;
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        if (i != 0) params += ", ";
+        params += expected[i] + " cp3_value" + std::to_string(i);
+    }
+    for (std::size_t i = 0; i < arity; ++i) {
+        if (i != 0) call += ", ";
+        call += "cp3_value" + std::to_string(i);
+    }
+    return "[cp3_cb = (" + callback + ")](" + params + ") { cp3_cb(" + call + "); }";
+}
 
 // `new Map<string, number>()` / `new Set<number>()`.
 std::string Generator::emitCollectionsNew(const NewExpr& n) {
@@ -91,7 +228,7 @@ std::string Generator::emitCollectionsNew(const NewExpr& n) {
     if (!isMapType(t) && !isSetType(t)) return std::string();
     const CppInfo ci = classify(t);
     if (!ci.representable || t.parts.empty()) {
-        notImplemented(n, "this Map/Set type");
+        reportTypeError(n, collectionsTypeMessage(t));
         return "0.0";
     }
     needsCollections_ = true;
@@ -113,7 +250,7 @@ std::string Generator::emitCollectionsMemberCall(const CallExpr& c,
     const bool isMap = isMapType(recv);
     if (!isMap && !isSetType(recv)) return std::string();
     if (!classify(recv).representable) {
-        notImplemented(c, "this Map/Set receiver");
+        reportTypeError(c, collectionsTypeMessage(recv));
         return "0.0";
     }
     needsCollections_ = true;
@@ -137,18 +274,15 @@ std::string Generator::emitCollectionsMemberCall(const CallExpr& c,
         if (prop == "values") return obj + "->values()";
         if (prop == "entries") return obj + "->entries()";
         if (prop == "forEach") {
-            const ArrowFunction* cb = arrowCallback(c);
-            if (cb == nullptr) {
-                notImplemented(c, "a non-arrow Map forEach callback");
-                return "0.0";
-            }
             const CppInfo k = recv.parts.empty()
                                   ? CppInfo{}
                                   : classify(recv.parts.front());
             const CppInfo v = recv.parts.size() >= 2
                                   ? classify(recv.parts[1])
                                   : CppInfo{};
-            return obj + "->forEach(" + emitArrow(*cb, {v.cpp, k.cpp}) + ")";
+            const std::string cb = collectionsForEachCallback(c, {v.cpp, k.cpp});
+            if (cb.empty()) return "0.0";
+            return obj + "->forEach(" + cb + ")";
         }
         return std::string();
     }
@@ -158,14 +292,11 @@ std::string Generator::emitCollectionsMemberCall(const CallExpr& c,
     if (prop == "clear") return obj + "->clear()";
     if (prop == "values") return obj + "->values()";
     if (prop == "forEach") {
-        const ArrowFunction* cb = arrowCallback(c);
-        if (cb == nullptr) {
-            notImplemented(c, "a non-arrow Set forEach callback");
-            return "0.0";
-        }
         const CppInfo t =
             recv.parts.empty() ? CppInfo{} : classify(recv.parts.front());
-        return obj + "->forEach(" + emitArrow(*cb, {t.cpp}) + ")";
+        const std::string cb = collectionsForEachCallback(c, {t.cpp});
+        if (cb.empty()) return "0.0";
+        return obj + "->forEach(" + cb + ")";
     }
     return std::string();
 }

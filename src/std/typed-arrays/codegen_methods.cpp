@@ -17,10 +17,23 @@
 #include "detail/family.h"
 #include "detail/parallel.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
 using namespace detail;
+
+namespace {
+
+// The cp3 type label of an index receiver, for the not-indexable diagnostic:
+// the class/enum name when the type has one, the kind's stable name
+// otherwise ("number", "array", "object", ...).
+std::string typeLabel(const Type& t) {
+    if (!t.name.empty()) return t.name;
+    return typeKindName(t.kind);
+}
+
+}  // namespace
 
 // =============================================================================
 // Methods
@@ -319,11 +332,23 @@ std::string Generator::indexOperandText(const Expr& index) {
     if (ci.shape != Shape::Enum) return expr(index);
     const auto found = enums_.find(ci.type.name);
     if (found == enums_.end()) {
-        notImplemented(index, "this enum value");
+        // The enum's declaration is not in this unit (a top-level enum, an
+        // imported one and a function-local one are all collected), so the
+        // member has no C++ spelling: the operand is a type error, not a
+        // missing feature.
+        reportTypeError(index, "type mismatch: the enum '" + ci.type.name +
+                                   "' is not declared in this unit");
         return "0.0";
     }
     if (found->second.stringBacked) {
-        notImplemented(index, "this index expression");
+        // A string-backed enum member has no numeric value: its C++ spelling
+        // is an ordinal, so it cannot be an index operand. The decision of
+        // 2026-10-19 says the read reports instead of emitting a
+        // non-convertible operand - and a report is a type error, not a
+        // missing feature.
+        reportTypeError(index,
+                        "type mismatch: a string-backed enum member cannot be "
+                        "used as an array index");
         return "0.0";
     }
     return "static_cast<double>(" + expr(index) + ")";
@@ -379,11 +404,26 @@ std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
 }
 
 // The `IndexExpr` dispatch (expr.cpp): the family read when the receiver is
-// one, otherwise the ordinary not-implemented report.
+// one, otherwise the type error for a receiver with no index operation.
 std::string Generator::emitIndexExpr(const IndexExpr& ix) {
     std::string value = emitFamilyIndexRead(ix);
     if (!value.empty()) return value;
-    notImplemented(ix, "this index access");
+    Type recv = ix.object ? effectiveType(*ix.object) : Type::unknown();
+    if (recv.isLiteral()) recv = recv.literalBaseType();
+    if (recv.isUnknown() || recv.isError()) {
+        // The receiver's type is not resolved (an ambient value sema left
+        // open): the read may still be an array read, so the unit keeps the
+        // skip instead of claiming the value has no index operation.
+        notImplemented(ix, "this index access");
+        return "0.0";
+    }
+    // The receiver carries no index operation at all (a class instance, a
+    // `Map`/`Set`, a namespace object): the read is a program error, not a
+    // missing feature, so it gets the not-indexable diagnostic.
+    reportCodegenError(ix, diagcode::kNotIndexable,
+                       "value of type '" + typeLabel(recv) +
+                           "' is not indexable (an index read is defined on "
+                           "arrays, strings and typed arrays)");
     return "0.0";
 }
 

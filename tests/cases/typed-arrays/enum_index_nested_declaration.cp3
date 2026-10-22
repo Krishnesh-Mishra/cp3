@@ -1,0 +1,11 @@
+import console from "std/console";
+
+// An enum declared inside a function: the declaration is namespace scoped in
+// the generated C++, and its member is the underlying number when it is used
+// as an index (spec 04).
+let a = [10, 20, 30];
+function pick(): number {
+  enum Color { Red, Green, Blue }
+  return a[Color.Green];
+}
+console.log(`${pick()}`);

@@ -1,0 +1,7 @@
+import console from "std/console";
+
+// A class instance has no index operation: an index read is defined on
+// arrays, strings and typed arrays only.
+class Box { value: number; }
+let b = new Box();
+console.log(b[0]);
