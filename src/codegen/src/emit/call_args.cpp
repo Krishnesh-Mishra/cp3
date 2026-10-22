@@ -19,6 +19,7 @@
 #include "detail/call_builder.h"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/spread_call.h"
 #include "detail/timers.h"
 #include "detail/type_map.h"
 #include "cp3/diagnostic_codes.hpp"

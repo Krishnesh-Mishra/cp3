@@ -21,6 +21,8 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <string>
 
@@ -94,6 +96,15 @@ double parseFloat(const std::string& text);
 // println: writes the string followed by a newline.
 void print(const std::string& text);
 void println(const std::string& text);
+
+// A fatal runtime error: the program cannot continue (a call whose arguments
+// do not fit the callee). The message follows the std families' spec-
+// violation path: a diagnostic line on stderr and exit code 1.
+[[noreturn]] inline void fatalError(const char* message) {
+    std::fprintf(stderr, "cp3: Error: %s\n", message);
+    std::fflush(stderr);
+    std::exit(1);
+}
 
 // --- provenance (unchanged) --------------------------------------------------
 //

@@ -45,6 +45,7 @@ set(cp3_codegen_sources
     src/support/program_link.cpp
     src/emit/program.cpp
     src/emit/expr.cpp
+    src/emit/expr_mixed.cpp
     src/emit/typeof.cpp
     src/emit/template.cpp
     src/emit/equality.cpp
@@ -60,6 +61,8 @@ set(cp3_codegen_sources
     src/emit/async.cpp
     src/emit/arrow.cpp
     src/emit/spread.cpp
+    src/emit/spread_call.cpp
+    src/emit/object_rest.cpp
     src/emit/async_promise.cpp
     src/emit/stmt.cpp
     src/emit/push_reserve.cpp

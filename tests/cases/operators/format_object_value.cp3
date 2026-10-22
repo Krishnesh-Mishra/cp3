@@ -1,0 +1,3 @@
+import console from "std/console";
+let o = { x: 1, s: "t" };
+console.log(o);

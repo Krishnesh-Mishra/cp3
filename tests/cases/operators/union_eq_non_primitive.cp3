@@ -1,0 +1,5 @@
+import console from "std/console";
+let u: number | string = "1";
+let o = { x: 1 };
+console.log(u == o);
+console.log(u === o);

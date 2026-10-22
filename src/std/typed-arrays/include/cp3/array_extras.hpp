@@ -63,6 +63,14 @@ template <class E>
 std::string arrayElementText(const Array<E>& a) {
     return arrayJoin(a, std::string(","));
 }
+// An object element (a `Ref<T>` handle): the pointee renders itself. The
+// SFINAE keeps a handle whose pointee has no renderer out of the overload set
+// (an interface wrapper is a by-value struct, not a handle).
+template <class T>
+inline auto arrayElementText(const ::cp3::runtime::Ref<T>& v)
+    -> decltype(v->cp3ToText()) {
+    return v->cp3ToText();
+}
 
 template <class E>
 std::string arrayJoin(const Array<E>& a, const std::string& sep) {

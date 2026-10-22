@@ -16,10 +16,12 @@
 #include <vector>
 
 #include "detail/cpp_writer.h"
+#include "detail/expr_mixed.h"
 #include "detail/expr_ops.h"
 #include "detail/family.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -238,9 +240,10 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
         return enumMember;
     }
     // A property read through a namespace import/re-export: the link miss is
-    // the use site's diagnostic.
+    // the use site's diagnostic (the same CP3304 the call path reports).
     if (std::string miss = linkedMemberMiss(m); !miss.empty()) {
-        notImplemented(*m.object, miss);
+        reportCodegenError(*m.object, diagcode::kUnresolvedImport,
+                           "unresolved import: " + miss);
         return "0.0";
     }
     // A class / interface / object model member read first (spec 15); then the
@@ -309,10 +312,14 @@ std::string Generator::emitIdentifier(const Identifier& id) {
     if (!binding) {
         // An imported binding of a whole-program build: the target unit's
         // qualified C++ name, or the link miss reported at the use site.
-        const auto linked = linkedNames_.find(id.name);
-        if (linked != linkedNames_.end()) {
+        if (const auto linked = linkedNames_.find(id.name);
+            linked != linkedNames_.end()) {
             if (linked->second.cpp.empty()) {
-                notImplemented(id, linked->second.miss);
+                // The imported name has no C++ lowering (a namespace import, a
+                // type-only export): the use site is a program error, the same
+                // CP3304 the call path reports.
+                reportCodegenError(id, diagcode::kUnresolvedImport,
+                                   "unresolved import: " + linked->second.miss);
                 return "0.0";
             }
             return linked->second.cpp;
@@ -587,22 +594,19 @@ std::string Generator::emitLogical(const LogicalExpr& l) {
     const CppInfo R = info(*l.right);
     if (!L.representable || !R.representable || L.shape == Shape::Unsupported ||
         R.shape == Shape::Unsupported || L.cpp != R.cpp) {
-        // A primitive-union result (`0 || "x"`): each branch is wrapped into
-        // the canonical variant so the lambda has a single return type.
-        const CppInfo whole = info(l);
-        if (whole.representable && whole.shape == Shape::Union &&
-            isPrimitiveShape(L.shape) && isPrimitiveShape(R.shape)) {
-            const std::string lhs = expr(*l.left);
-            const std::string rhs = expr(*l.right);
-            const std::string cast = "static_cast<" + whole.cpp + ">";
-            if (l.op == LogicalOp::And) {
-                return "([&]{ auto cp3_l = (" + cast + "(" + lhs +
-                       ")); return cp3_truthy(cp3_l) ? (" + cast + "(" + rhs +
-                       ")) : cp3_l; }())";
-            }
-            return "([&]{ auto cp3_l = (" + cast + "(" + lhs +
-                   ")); return cp3_truthy(cp3_l) ? cp3_l : (" + cast + "(" +
-                   rhs + ")); }())";
+        // Mixed operand types: the result is the union of the two operand
+        // types, spelled through the value model (detail/expr_mixed.h).
+        detail::MixedBranches m;
+        m.left = L;
+        m.right = R;
+        m.whole = info(l);
+        m.leftText = expr(*l.left);
+        m.rightText = expr(*l.right);
+        m.conditionText = "true";
+        if (const std::string mixed =
+                detail::mixedLogical(m, l.op == LogicalOp::And);
+            !mixed.empty()) {
+            return mixed;
         }
         notImplemented(l, "logical operator with mixed operand types");
         return "0.0";
@@ -858,8 +862,19 @@ std::string Generator::emitConditional(const ConditionalExpr& c) {
                    B.cpp + ">(" + b + "))";
         }
     }
+    // Mixed branches: the result is the union of the two branch types, spelled
+    // through the value model (detail/expr_mixed.h).
+    detail::MixedBranches m;
+    m.left = A;
+    m.right = B;
+    m.whole = whole;
+    m.leftText = a;
+    m.rightText = b;
+    m.conditionText = cond(*c.condition);
+    if (const std::string mixed = detail::mixedConditional(m); !mixed.empty()) {
+        return mixed;
+    }
     notImplemented(c, "ternary with non-uniform branch types");
     return "0.0";
 }
-
 }  // namespace cp3

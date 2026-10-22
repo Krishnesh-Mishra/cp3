@@ -1,0 +1,5 @@
+import console from "std/console";
+let a: number | string = 1;
+let b: number | boolean = true;
+console.log(a == b);
+console.log(a === b);

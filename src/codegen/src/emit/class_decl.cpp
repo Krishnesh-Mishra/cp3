@@ -172,6 +172,14 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
         }
         emitClassMember(cm, m, out, indent + 1, defs);
     }
+    // The `cp3ToText()` pair makes a class instance formattable: its own
+    // `toString` when it defines one, the JS default "[object Object]"
+    // otherwise.
+    const std::string render =
+        hasToString(cm)
+            ? "std::string cp3ToText() { return toString(); }"
+            : "std::string cp3ToText() { return std::string(\"[object Object]\"); }";
+    line(out, indent + 1, render);
     line(out, indent, "};");
     line(out, indent, "");
     if (cm.local) return;

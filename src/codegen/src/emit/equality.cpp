@@ -50,24 +50,26 @@ bool enumNumberCompare(const CppInfo& l, const CppInfo& r) {
 }  // namespace
 
 // A primitive union (`std::variant`, Shape::Union): the union side is always
-// passed first, so the runtime helper can `visit` it; two unions of the same
-// C++ spelling compare directly. Impossible pairs report through
-// `notImplemented` and answer with a constant (D15).
+// passed first, so the runtime helper can `visit` it; two unions compare
+// through the held alternatives (the helper visits both, so the two
+// alternative sets may differ).
 std::string Generator::unionEqualityText(const BinaryExpr& b, const CppInfo& L,
                                          const CppInfo& R, const std::string& lhs,
                                          const std::string& rhs) {
     const bool isEqual = (b.op == BinaryOp::Equal || b.op == BinaryOp::StrictEqual);
     const bool isStrict = (b.op == BinaryOp::StrictEqual || b.op == BinaryOp::StrictNotEqual);
-    const char* op = isEqual ? "==" : "!=";
 
     const bool lUnion = (L.shape == Shape::Union);
     const bool rUnion = (R.shape == Shape::Union);
     if (lUnion && rUnion) {
-        if (L.cpp == R.cpp) {
-            return "(" + lhs + " " + op + " " + rhs + ")";
-        }
-        notImplemented(b, "== between different union types");
-        return isEqual ? "false" : "true";
+        // Two unions: the held alternatives decide the answer. `===` needs
+        // the same alternative on both sides; `==` coerces them with ToNumber
+        // (ECMAScript abstract equality, the same rule the one-sided helper
+        // uses).
+        const std::string call = "::cp3::runtime::unions::variantEq(" + lhs +
+                                 ", " + rhs + ", " +
+                                 (isStrict ? "true" : "false") + ")";
+        return isEqual ? "(" + call + ")" : "(! " + call + ")";
     }
     const std::string uni = lUnion ? lhs : rhs;
     const std::string val = lUnion ? rhs : lhs;
@@ -83,8 +85,11 @@ std::string Generator::unionEqualityText(const BinaryExpr& b, const CppInfo& L,
                                  ", " + val + ")";
         return isEqual ? "(" + call + ")" : "(! " + call + ")";
     }
-    notImplemented(b, "== involving a union and a non-primitive value");
-    return isEqual ? "false" : "true";
+    // A union against a non-primitive value (an object, an array, a class
+    // instance): cp3 has no ToPrimitive for its object models, and D15 keeps a
+    // type mismatch false - the same answer the fixed-type path gives
+    // (`1 == { a: 1 }` is false there too). The operands are still evaluated.
+    return "(" + lhs + ", " + rhs + ", " + (isEqual ? "false" : "true") + ")";
 }
 
 std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
