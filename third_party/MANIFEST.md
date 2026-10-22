@@ -56,6 +56,28 @@ timestamps); the SHA-256 values above identify exactly the delivered bytes.
 | uWebSockets/LICENSE | Apache-2.0 |
 | uWebSockets/LICENSE-uSockets | Apache-2.0 (uSockets) |
 | pcre2/LICENCE.md | BSD-3-Clause WITH PCRE2-exception |
+| clang-c/LICENSE | Apache-2.0 WITH LLVM-exception |
+
+## clang-c (headers only, no build)
+
+`clang-c` is the one entry here that is **not** a compiled vendor build: it is
+the public libclang C API header set (`clang/include/clang-c/*.h`,
+CINDEX_VERSION 0.64) copied verbatim from `llvmorg-23.1.0`
+(commit `ea7d852a70e8bdfaf601d6626a760f9771b2c4b4`), with the upstream LICENSE
+and a VERSION.txt pin.
+
+It exists so that `cp3c native-install` can be **compiled** without an LLVM
+installation: `src/cli/src/native/*` needs the libclang C declarations at
+compile time, and `src/cli/CMakeLists.txt` adds
+`third_party/clang-c/include` to the include path. The libclang *library* is
+never vendored and never linked: `src/cli/src/native/libclang.cpp` loads it
+dynamically at runtime from the user's own LLVM installation
+(`CP3_LIBCLANG` overrides the search), and reports a clear install hint when
+it is missing.
+
+Point `-DCP3_LIBCLANG_INCLUDE_DIR=<dir>` at a system LLVM include directory
+(for example `C:/Program Files/LLVM/include`) to build against that copy
+instead of the vendored headers.
 
 ## What got copied
 

@@ -69,6 +69,8 @@ ISOLATED_VARIABLES = (
     "CP3_CONFIG_DIR",
     "CP3_TOOLCHAIN",
     "CP3_SCRIPT_GUARD",
+    "CP3_LIBCLANG",
+    "CP3_NATIVE_SDK_PATH",
     "HOME",
     "USERPROFILE",
     "LOCALAPPDATA",
@@ -243,6 +245,39 @@ def json_subset_mismatches(actual: Any, expected: Any, prefix: str = "") -> list
     return problems
 
 
+def find_libclang() -> Optional[Path]:
+    """Best-effort libclang discovery for the `libclang` requires predicate.
+
+    The CLI cases never inherit CP3_LIBCLANG (it is in ISOLATED_VARIABLES); a
+    live case points CP3_LIBCLANG at the path found here, or is skipped. This
+    mirrors the product's Windows-first search without adding a dependency.
+    """
+    candidates: list[Path] = []
+    override = os.environ.get("CP3_LIBCLANG", "")
+    if override:
+        candidates.append(Path(override))
+    if os.name == "nt":
+        for variable in ("ProgramFiles", "ProgramFiles(x86)"):
+            base = os.environ.get(variable)
+            if base:
+                candidates.append(Path(base) / "LLVM" / "bin" / "libclang.dll")
+        candidates.append(Path(r"C:\Program Files\LLVM\bin\libclang.dll"))
+    else:
+        candidates.extend(
+            [
+                Path("/opt/homebrew/opt/llvm/lib/libclang.dylib"),
+                Path("/usr/local/opt/llvm/lib/libclang.dylib"),
+                Path("/usr/lib/llvm/lib/libclang.so"),
+                Path("/usr/lib/x86_64-linux-gnu/libclang.so.1"),
+                Path("/usr/local/lib/libclang.so"),
+            ]
+        )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
 def expand_template(value: str, dirs: CaseDirs, run_root: Path) -> str:
     replacements = {
         "{case}": str(dirs.work),
@@ -257,6 +292,7 @@ def expand_template(value: str, dirs: CaseDirs, run_root: Path) -> str:
         "{run}": str(run_root),
         "{repo}": str(REPO_ROOT),
         "{fixtures}": str(FIXTURES_DIR),
+        "{libclang}": str(find_libclang() or ""),
     }
     out = value
     for token, replacement in replacements.items():
@@ -603,6 +639,7 @@ class Probe:
         self.flags: set[str] = set()
         self.compiler: Optional[str] = None
         self.clang: Optional[str] = None
+        self.libclang: Optional[Path] = find_libclang()
         self._probe_help()
         self._probe_compiler()
 
@@ -674,6 +711,11 @@ class Probe:
             )
         if predicate == "clang":
             return (self.clang is not None, "requires clang++ on PATH")
+        if predicate == "libclang":
+            return (
+                self.libclang is not None,
+                "requires libclang (set CP3_LIBCLANG or install LLVM)",
+            )
         if predicate == "editor":
             return (True, "")
         if predicate.startswith("command:"):

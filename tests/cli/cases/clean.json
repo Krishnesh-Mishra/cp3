@@ -228,6 +228,54 @@
           ".cp3/build"
         ]
       }
+    },
+    {
+      "group": "clean",
+      "name": "keeps-native-bindings",
+      "description": "clean keeps generated native bindings",
+      "argv": [
+        "clean"
+      ],
+      "setup": {
+        "files": {
+          ".cp3/build/stale.o": "o\n",
+          ".cp3/native/demo/native.json": "{}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/native/demo/native.json": {
+            "exists": true
+          }
+        },
+        "files_absent": [
+          ".cp3/build"
+        ]
+      }
+    },
+    {
+      "group": "clean",
+      "name": "all-removes-native-bindings",
+      "description": "clean --all also removes generated native bindings",
+      "argv": [
+        "clean",
+        "--all"
+      ],
+      "setup": {
+        "files": {
+          ".cp3/native/demo/native.json": "{}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": ".cp3/native"
+        },
+        "files_absent": [
+          ".cp3/native"
+        ]
+      }
     }
   ]
 }

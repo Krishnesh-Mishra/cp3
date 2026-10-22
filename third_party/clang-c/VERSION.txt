@@ -1,0 +1,8 @@
+https://github.com/llvm/llvm-project.git llvmorg-23.1.0 ea7d852a70e8bdfaf601d6626a760f9771b2c4b4 2026-10-22
+
+Only the public clang-c C API headers are vendored (clang/include/clang-c/*.h,
+CINDEX_VERSION 0.64). No LLVM library, tool or source tree is included: the
+libclang runtime is loaded dynamically from the user's own LLVM installation
+(see src/cli/src/native/libclang.cpp, honouring CP3_LIBCLANG).
+
+License: Apache-2.0 WITH LLVM-exception - see LICENSE in this directory.

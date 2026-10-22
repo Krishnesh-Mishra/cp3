@@ -110,6 +110,9 @@ int cmdUnlink(const CliOptions& opt);
 int cmdEditorPlugin(const CliOptions& opt);
 int cmdLsp(const CliOptions& opt);
 int cmdDap(const CliOptions& opt);
+// `native-install` owns its arguments (SDK paths and repeatable options) and
+// therefore receives the raw token list, including the command word.
+int cmdNativeInstall(const std::vector<std::string>& args);
 
 namespace detail {
 
