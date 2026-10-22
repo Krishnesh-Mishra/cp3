@@ -270,10 +270,18 @@ as passing.
 
 ### CLI suite
 
-`python tests/cli/run_cli_tests.py --jobs 1 --full`: 335 cases, 334 ok, 15
-xfail. The single failure before the `.cp3pak` lane was the pre-existing
-`package/publish-out-file` (a `fs::copy_file` into a non-existent `dist/`
-parent), which `0443049` fixed.
+`python tests/cli/run_cli_tests.py --jobs 1 --full`: **346 cases, 346 ok, 0
+failing**, 15 xfail (the pre-existing expected failures). The one failure that
+existed before the `.cp3pak` lane - `package/publish-out-file`, a
+`fs::copy_file` into a non-existent `dist/` parent - was fixed by `0443049`.
+
+| Group | Result |
+|---|---|
+| native-install | 10/10 |
+| recompile | 5/5 |
+| package | 17/17 |
+| toolchain | 35/35 |
+| build / check / clean / dev / editor / fmt / global / hooks / init / install / run / shim | all pass |
 
 ### Baseline benchmark
 
