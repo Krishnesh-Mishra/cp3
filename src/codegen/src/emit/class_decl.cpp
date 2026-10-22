@@ -406,14 +406,13 @@ std::string Generator::accessorBodyText(const AccessorDeclaration& ad,
 
 std::string Generator::methodBodyText(const MethodDeclaration& md,
                                       const ClassModel& cm, int indent,
-                                      bool isStatic,
                                       const std::vector<std::string>& methodTypeParams) {
     const std::string savedReturn = currentReturn_;
     currentReturn_ = methodReturnType(md, &cm, methodTypeParams);
     ++nestingDepth_;
     pushScope();
     classStack_.push_back(&cm);
-    if (!isStatic) {
+    if (!md.isStatic) {
         declare("this", Type::named(TypeKind::Class, cm.name));
     }
     for (const auto& p : md.params) {

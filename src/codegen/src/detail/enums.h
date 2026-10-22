@@ -11,8 +11,11 @@
 // =============================================================================
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
+
+#include "cp3/ast.hpp"
 
 namespace cp3 {
 namespace detail {
@@ -28,6 +31,24 @@ struct EnumCppMember {
     bool isString = false;
     std::string stringValue;  // the decoded literal (string-backed members)
 };
+
+// The compile-time value of an enum member initializer: a number or a string
+// (spec 04). The sema accepts exactly the initializers the evaluator can read
+// (src/sema/src/checks/enum_check.cpp keeps the two in step: it rejects a
+// non-constant initializer before codegen runs), so a nullopt from
+// `evalEnumInit` means the initializer slipped through and is reported as an
+// error.
+struct EnumConst {
+    bool isNumber = false;
+    double number = 0.0;
+    std::string text;
+};
+
+// The compile-time value of an enum member initializer, or nullopt when the
+// initializer is not a constant expression (support/enum_values.cpp).
+std::optional<EnumConst> evalEnumInit(const Expr* init,
+                                      const std::vector<EnumCppMember>& known,
+                                      const std::string& enumName);
 
 // The resolved model of one `enum` declaration, in declaration order. `cpp` is
 // the C++ enum-class name (`mapIdent(name)`).

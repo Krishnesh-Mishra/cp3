@@ -59,12 +59,55 @@ const EnumMemberInfo* linkedTarget(const Expr* e,
 }
 
 // The kind of a constant expression in the context of one enum declaration.
+ConstKind constKind(const Expr* e, const std::vector<EnumMemberInfo>& members,
+                    const std::string& enumName);
+
+// The kind of a unary operator over a constant: a sign or a bit-not over a
+// number.
+ConstKind unaryConstKind(const UnaryExpr& u,
+                          const std::vector<EnumMemberInfo>& members,
+                          const std::string& enumName) {
+    if (u.op != UnaryOp::Negate && u.op != UnaryOp::Plus &&
+        u.op != UnaryOp::BitNot) {
+        return ConstKind::None;
+    }
+    return constKind(u.operand.get(), members, enumName) == ConstKind::Number
+               ? ConstKind::Number
+               : ConstKind::None;
+}
+
+// The kind of a binary operator over two constants: the arithmetic operators
+// work on numbers, `+` also concatenates two strings.
+ConstKind binaryConstKind(const BinaryExpr& b,
+                          const std::vector<EnumMemberInfo>& members,
+                          const std::string& enumName) {
+    const ConstKind left = constKind(b.left.get(), members, enumName);
+    const ConstKind right = constKind(b.right.get(), members, enumName);
+    if (b.op == BinaryOp::Add) {
+        if (left == ConstKind::Number && right == ConstKind::Number) {
+            return ConstKind::Number;
+        }
+        if (left == ConstKind::String && right == ConstKind::String) {
+            return ConstKind::String;
+        }
+        return ConstKind::None;
+    }
+    const bool arithmetic = b.op == BinaryOp::Subtract ||
+                            b.op == BinaryOp::Multiply ||
+                            b.op == BinaryOp::Divide || b.op == BinaryOp::Modulo;
+    if (!arithmetic) return ConstKind::None;
+    return left == ConstKind::Number && right == ConstKind::Number
+               ? ConstKind::Number
+               : ConstKind::None;
+}
+
+// The kind of a constant expression in the context of one enum declaration.
 // `members` are the members of the same enum resolved so far; a linked member
 // initializer takes the kind of the member it names.
 //
 // The accepted forms are the ones the codegen evaluator can read
-// (src/codegen/src/emit/enum.cpp keeps the two in step): a literal, a unary
-// sign / bit-not, an arithmetic operator over constants, and a link to an
+// (src/codegen/src/support/enum_values.cpp keeps the two in step): a literal, a
+// unary sign / bit-not, an arithmetic operator over constants, and a link to an
 // earlier member.
 ConstKind constKind(const Expr* e, const std::vector<EnumMemberInfo>& members,
                     const std::string& enumName) {
@@ -74,38 +117,12 @@ ConstKind constKind(const Expr* e, const std::vector<EnumMemberInfo>& members,
             return ConstKind::Number;
         case NodeKind::StringLiteral:
             return ConstKind::String;
-        case NodeKind::UnaryExpr: {
-            const auto& u = static_cast<const UnaryExpr&>(*e);
-            if (u.op != UnaryOp::Negate && u.op != UnaryOp::Plus &&
-                u.op != UnaryOp::BitNot) {
-                return ConstKind::None;
-            }
-            return constKind(u.operand.get(), members, enumName) ==
-                           ConstKind::Number
-                       ? ConstKind::Number
-                       : ConstKind::None;
-        }
-        case NodeKind::BinaryExpr: {
-            const auto& b = static_cast<const BinaryExpr&>(*e);
-            const ConstKind left = constKind(b.left.get(), members, enumName);
-            const ConstKind right = constKind(b.right.get(), members, enumName);
-            if (b.op == BinaryOp::Add) {
-                if (left == ConstKind::Number && right == ConstKind::Number) {
-                    return ConstKind::Number;
-                }
-                if (left == ConstKind::String && right == ConstKind::String) {
-                    return ConstKind::String;
-                }
-                return ConstKind::None;
-            }
-            const bool arithmetic =
-                b.op == BinaryOp::Subtract || b.op == BinaryOp::Multiply ||
-                b.op == BinaryOp::Divide || b.op == BinaryOp::Modulo;
-            if (!arithmetic) return ConstKind::None;
-            return left == ConstKind::Number && right == ConstKind::Number
-                       ? ConstKind::Number
-                       : ConstKind::None;
-        }
+        case NodeKind::UnaryExpr:
+            return unaryConstKind(static_cast<const UnaryExpr&>(*e), members,
+                                  enumName);
+        case NodeKind::BinaryExpr:
+            return binaryConstKind(static_cast<const BinaryExpr&>(*e), members,
+                                   enumName);
         default:
             break;
     }

@@ -48,7 +48,7 @@ void Generator::emitClassMethodMember(const ClassModel& cm,
         // function-local class is reported in the model pass.
         if (!memberHead.empty()) line(out, indent, memberHead);
         line(out, indent, declText + " {");
-        out += methodBodyText(md, cm, indent + 1, md.isStatic, m.typeParams);
+        out += methodBodyText(md, cm, indent + 1, m.typeParams);
         line(out, indent, "}");
         return;
     }
@@ -65,7 +65,7 @@ void Generator::emitClassMethodMember(const ClassModel& cm,
     *defs += defHead + ret + " " +
              mapIdent(cm.name) + templateUseOf(cm) + "::" + name + "(" +
              joinStrings(params, ", ") + ") {\n" +
-             methodBodyText(md, cm, 1, md.isStatic, m.typeParams) + "}\n\n";
+             methodBodyText(md, cm, 1, m.typeParams) + "}\n\n";
 }
 
 }  // namespace cp3
