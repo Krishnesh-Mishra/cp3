@@ -505,4 +505,43 @@ void Generator::declareMemberParams(const ParamList& params) {
     }
 }
 std::string Generator::modelCallArgs(const CallExpr& c,
+                                     const ClassMemberModel& m) {
+    const MethodDeclaration* md = m.method;
+    std::size_t restAt = 0;
+    bool hasRest = false;
+    if (md != nullptr) {
+        for (std::size_t i = 0; i < md->params.size(); ++i) {
+            const Parameter* p = md->params[i].get();
+            if (p && p->isRest) {
+                restAt = i;
+                hasRest = true;
+                break;
+            }
+        }
+    }
+    const std::vector<std::string> args = emitPlainArgs(c);
+    if (!hasRest) return joinStrings(args, ", ");
+    // The element type of the rest parameter (`E` of its `E[]`).
+    std::string elem = "double";
+    if (md != nullptr && restAt < md->params.size()) {
+        const Parameter* rp = md->params[restAt].get();
+        if (rp && rp->type) {
+            const Type t = modelTypeFromTypeNode(*rp->type);
+            if (t.kind == TypeKind::Array && !t.parts.empty()) {
+                const CppInfo ec = classify(t.parts.front());
+                if (ec.representable) elem = ec.cpp;
+            }
+        }
+    }
+    needsTypedArray_ = true;
+    std::vector<std::string> out;
+    for (std::size_t i = 0; i < restAt && i < args.size(); ++i) {
+        out.push_back(args[i]);
+    }
+    std::vector<std::string> tail;
+    for (std::size_t i = restAt; i < args.size(); ++i) tail.push_back(args[i]);
+    out.push_back("::cp3::runtime::makeArray<" + elem + ">(std::vector<" +
+                  elem + ">{" + joinStrings(tail, ", ") + "})");
+    return joinStrings(out, ", ");
+}
 }  // namespace cp3
