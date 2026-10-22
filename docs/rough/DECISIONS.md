@@ -1154,3 +1154,45 @@ and canonical probes on the landed concurrency surface.
 
 Four markers promoted (registry 40 to 36); concurrency keeps the two D80
 markers. Probes: `build/scratch/rounds/evidence/concurrency/batch7-probe.txt`.
+
+## Toolchain target is cp3c's problem, not the user's (2026-10-22, lead)
+
+A stock Windows LLVM install with no MSVC was reported as `not usable`:
+`clang++` defaults to the `x86_64-pc-windows-msvc` target, and with MSVC
+absent that target has no C++ standard library at all, so even
+`#include <cstdio>` fails. The driver was fine; the target was wrong. The
+same driver compiles and links a C++20 program against the installed MinGW
+GCC under `--target=x86_64-w64-windows-gnu`.
+
+Ruling:
+
+- **A driver is `ready` only if it can build.** The existing probe (compile,
+  link, run) stays the definition of usability; nothing is reported ready on
+  the strength of being on PATH.
+- **The target is derived, never asked for.** cp3c asks the driver for its
+  default triple (`-print-target-triple`) and rewrites a Windows MSVC triple
+  to the matching GNU triple for the same architecture. The architecture comes
+  from the driver, never from a guess or a hardcoded path.
+- **The derived target is verified, not assumed.** The candidate target must
+  compile, link and run the probe program before it is used. A target that
+  fails is not used; the family falls back to the driver's own default and is
+  reported `not usable` with the reason.
+- **The probe and the build use the same flags.** The verified flags are part
+  of the toolchain identity and are used by every real compile and link, so a
+  family that reports `ready` is a family that builds. The target is part of
+  the build-cache key: the same driver under a different target produces
+  different objects.
+- **No cross-compilation.** Only the current machine's architecture and its
+  own installed toolchain are considered.
+- **Windows static link under the GNU target names `libwinpthread`
+  explicitly.** MinGW's `libstdc++` keeps its thread support there; the GCC
+  driver adds the library itself, the Clang driver does not. Naming it keeps
+  a Clang-built binary as static as a GCC-built one.
+- **The user passes nothing.** No `--target`, no `--gcc-toolchain`, no include
+  paths. A Clang install beside a MinGW GCC install is simply `ready`.
+
+Evidence: `cp3c toolchain list` reports `clang ... ready` on the machine that
+previously reported `not usable`; `cp3c run benchmarks/hello-world/cp3/main.cp3
+--toolchain clang` prints `Hello, world!`; the GCC path is unchanged. Two CLI
+regression cases (`clang-is-usable-when-installed`, `clang-builds-and-runs`)
+skip cleanly where no Clang is installed.

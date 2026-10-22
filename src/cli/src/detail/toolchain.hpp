@@ -40,6 +40,10 @@ struct Toolchain {
     std::string version;  // exact parsed effective compiler version
     std::string recordedVersion;  // version recorded in the choice, if any
     std::string policy;   // latest | exact | custom | auto
+    // Extra driver flags this machine needs (e.g. the GNU target triple for a
+    // Windows Clang without MSVC). They are part of the compiler identity:
+    // the same driver with a different target produces different objects.
+    std::vector<std::string> targetFlags;
     bool msvc = false;
     bool clang = false;
 

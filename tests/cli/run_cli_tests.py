@@ -602,6 +602,7 @@ class Probe:
         self.commands: set[str] = set()
         self.flags: set[str] = set()
         self.compiler: Optional[str] = None
+        self.clang: Optional[str] = None
         self._probe_help()
         self._probe_compiler()
 
@@ -637,7 +638,29 @@ class Probe:
             found = shutil.which(name)
             if found:
                 self.compiler = found
-                return
+                break
+        self.clang = shutil.which("clang++") or self._clang_in_standard_location()
+
+    @staticmethod
+    def _clang_in_standard_location() -> Optional[str]:
+        """Clang in the standard install directory, which is not on PATH.
+
+        cp3c looks in the standard system locations as well as PATH, so a
+        Windows LLVM install that was never added to PATH still counts as
+        installed. The probe must agree with the compiler, or the case would
+        skip on a machine where Clang in fact works.
+        """
+        if os.name != "nt":
+            return None
+        for root in (
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "LLVM",
+            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
+            / "LLVM",
+        ):
+            candidate = root / "bin" / "clang++.exe"
+            if candidate.is_file():
+                return str(candidate)
+        return None
 
     def check(self, predicate: str) -> tuple[bool, str]:
         if predicate == "windows":
@@ -649,6 +672,8 @@ class Probe:
                 self.compiler is not None,
                 "requires a C++ compiler (g++, clang++ or cl) on PATH",
             )
+        if predicate == "clang":
+            return (self.clang is not None, "requires clang++ on PATH")
         if predicate == "editor":
             return (True, "")
         if predicate.startswith("command:"):

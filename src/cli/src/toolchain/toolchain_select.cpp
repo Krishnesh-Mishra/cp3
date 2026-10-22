@@ -114,6 +114,7 @@ Toolchain toolchainFromInstall(const ToolchainCandidate& candidate,
     tc.policy = policy;
     tc.msvc = candidate.msvc;
     tc.clang = candidate.clang;
+    tc.targetFlags = toolchainTargetFlags(tc.clang, tc.msvc, tc.program);
     return tc;
 }
 
@@ -139,6 +140,7 @@ ChoiceResolution resolveCustom(const ToolchainChoice& choice, Toolchain& out,
     out.policy = "custom";
     out.msvc = family.msvc;
     out.clang = family.clang;
+    out.targetFlags = toolchainTargetFlags(out.clang, out.msvc, out.program);
     return ChoiceResolution::Ok;
 }
 

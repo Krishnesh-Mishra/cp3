@@ -126,6 +126,12 @@ bool validateProgram(const ToolchainCandidate& candidate,
         args.push_back("/Fe:" + exe.string());
         args.push_back("/Fo:" + obj.string());
     } else {
+        // The same target flags the real build uses, so a family that probes
+        // clean is a family that builds (detail/toolchain_target.cpp).
+        for (const std::string& flag :
+             toolchainTargetFlags(candidate.clang, candidate.msvc, program)) {
+            args.push_back(flag);
+        }
         args.push_back("-std=c++20");
         args.push_back(cpp.string());
         args.push_back("-o");

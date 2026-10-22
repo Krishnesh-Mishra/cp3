@@ -80,6 +80,59 @@ benchmark and it does not depend on the compiler version. An explicit project or
 user choice is resolved before automatic detection, and version policies decide
 whether that choice tracks the newest installed compiler or pins an exact one.
 
+### A driver is usable only if it can actually build
+
+"Found on PATH" is not the same as "usable". A driver is reported as `ready`
+only after a tiny C++20 program **compiles, links and runs** with it - the same
+thing the real build does. A driver that exists but cannot produce a binary is
+reported as `not usable` with the reason, never silently accepted.
+
+That check is what makes the next part necessary.
+
+### The target is cp3c's problem, not the user's
+
+A driver can be installed and still be unable to build, because a compiler
+targets a platform, and the target decides which C++ standard library exists.
+
+The common case is a stock **Windows LLVM install with no MSVC**: the driver
+defaults to the MSVC target (`x86_64-pc-windows-msvc`), and since MSVC is not
+installed there is no standard library for that target at all - a plain
+`#include <cstdio>` fails and the family is reported as `not usable`. The very
+same driver works against a MinGW GCC installation once it targets the GNU
+triple (`x86_64-w64-windows-gnu`).
+
+So cp3c handles it, automatically:
+
+- The driver's own default target is asked for (`clang++ -print-target-triple`).
+- On Windows, an MSVC triple is rewritten to the matching GNU triple for the
+  same architecture - the architecture is never guessed, it comes from the
+  driver.
+- The candidate target is then **verified** by compiling, linking and running
+  the probe program. A target that does not work is not used.
+- The verified flags are used by the probe **and** by every real build, so a
+  family that reports `ready` is a family that builds. The target is part of
+  the build-cache identity: the same driver under a different target produces
+  different objects.
+- Nothing here forces cross-compilation. Only the current machine's own
+  architecture and its own installed toolchain are ever considered.
+
+The user never passes `--target` or `--gcc-toolchain`, and never edits include
+paths. A Clang install next to a MinGW GCC install is simply `ready`:
+
+```
+$ cp3 toolchain list
+C++ toolchains
+  gcc         GCC           ready      C:\...\g++.exe (16.1.0)
+  clang       Clang         ready      C:\Program Files\LLVM\bin\clang++.exe (23.1.4)
+  msvc        MSVC cl       missing    not installed
+```
+
+One link detail follows from the same choice: MinGW's `libstdc++` keeps its
+thread support in `libwinpthread`, and the GCC driver names that library
+itself while the Clang driver does not. For a fully static Windows link under
+the GNU target, cp3c names it explicitly, so the Clang-built binary is static
+in exactly the same way the GCC-built one is.
+
 ## Build progress: numbered steps, not a percentage bar
 
 Progress is shown as real pipeline stages (`Step 1 of 7`, `Step 2 of 7`, etc.) - e.g. parsing, type-checking, cp3→C++ codegen, invoking the toolchain. If a toolchain step fails and the build falls through to the next one in the fallback order, the total step count **grows to reflect the retry** (e.g. `Step 6 of 8`, then `Step 7 of 9` if it falls through again) - so the user visibly sees "this pipeline attempt failed, now trying the next one," rather than the build silently restarting with no feedback.
@@ -183,7 +236,8 @@ since disappeared is reported once and the next source or newest same-family
 version is used, so a stale choice does not break normal builds.
 
 The build cache keys the effective compiler identity: family, exact parsed
-version and driver path. A system compiler update therefore invalidates objects
+version, driver path and the target flags the driver needed. A system compiler
+update therefore invalidates objects
 and the link stamp under `latest`, while an unchanged compiler keeps the cache
 warm. No compiler is copied into a cp3 project or cache; discovery reads system
 locations and installation is delegated to winget, Visual Studio Installer,

@@ -83,6 +83,11 @@ Toolchain probeToolchain() {
             tc.id = c.msvc ? "msvc" : (c.clang ? "clang" : "gcc");
             tc.version = programVersion(found, c.msvc);
             tc.policy = "auto";
+            // The target flags the driver needs on this machine (a Windows
+            // Clang without MSVC needs the GNU triple to find a C++
+            // standard library at all).
+            tc.targetFlags =
+                toolchainTargetFlags(tc.clang, tc.msvc, tc.program);
             return tc;
         }
     }
@@ -121,8 +126,30 @@ std::string describeToolchain(const Toolchain& tc) {
 
 std::string toolchainCacheKey(const Toolchain& tc) {
     if (!tc.found()) return "none";
-    return (tc.id.empty() ? tc.name : tc.id) + "|" +
-           (tc.version.empty() ? "unknown" : tc.version) + "|" + tc.program;
+    std::string key = (tc.id.empty() ? tc.name : tc.id) + "|" +
+                      (tc.version.empty() ? "unknown" : tc.version) + "|" +
+                      tc.program;
+    // The target is part of the compiler identity: the same driver under a
+    // different target produces different objects.
+    for (const std::string& flag : tc.targetFlags) key += "|" + flag;
+    return key;
+}
+
+// Does this toolchain compile for a MinGW-style Windows target?
+//
+// A Clang driver under the GNU target links against MinGW's libstdc++, whose
+// thread support lives in libwinpthread. The GCC driver adds that library
+// itself; the Clang driver does not, so a fully static link would fail with
+// undefined pthread symbols. Naming it explicitly keeps the static runtime
+// identical to the GCC path.
+bool usesMingwTarget(const Toolchain& tc) {
+    for (const std::string& flag : tc.targetFlags) {
+        if (flag.rfind("--target=", 0) == 0 &&
+            flag.find("windows-gnu") != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
@@ -143,6 +170,7 @@ std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
             args.push_back(std::move(f));
         }
     } else {
+        for (const std::string& flag : tc.targetFlags) args.push_back(flag);
         args.push_back("-std=c++20");
         // Generated code may throw (cp3/Error derives from std::exception), so
         // exceptions stay enabled - that is the default for g++/clang++, and we
@@ -175,6 +203,7 @@ std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
         if (profile == BuildProfile::Release) args.push_back("/LTCG");
     } else {
         args.push_back(tc.program);
+        for (const std::string& flag : tc.targetFlags) args.push_back(flag);
         args.push_back("-o");
         args.push_back(step.exe.string());
         for (const fs::path& obj : step.objects) args.push_back(obj.string());
@@ -188,6 +217,9 @@ std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
         // table. Linux keeps the dynamic runtime (static glibc breaks
         // getaddrinfo/NSS for std/network).
         args.push_back("-static");
+#  if defined(_WIN32)
+        if (tc.clang && usesMingwTarget(tc)) args.push_back("-lwinpthread");
+#  endif
 #endif
     }
     // Native-backend libraries last: -L dirs then -l archives, after every

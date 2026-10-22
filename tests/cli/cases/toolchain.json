@@ -3,6 +3,55 @@
   "cases": [
     {
       "group": "toolchain",
+      "name": "clang-is-usable-when-installed",
+      "description": "clang is usable when installed",
+      "argv": [
+        "toolchain",
+        "list"
+      ],
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "clang",
+            "ready"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "clang-builds-and-runs",
+      "description": "clang builds and runs a program",
+      "argv": [
+        "run",
+        "src/index.cp3",
+        "--toolchain",
+        "clang"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "hello from hello"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
       "name": "list-with-no-pin",
       "description": "list with no pin",
       "argv": [

@@ -73,6 +73,17 @@ struct CandidateStatus {
 std::vector<ToolchainCandidate> toolchainCandidates();
 const ToolchainCandidate* findToolchainCandidate(const std::string& id);
 
+// Extra driver flags this machine needs for the driver to work at all.
+//
+// A stock Windows LLVM install defaults to the MSVC target, which has no C++
+// standard library unless MSVC is installed; the same driver works against a
+// MinGW GCC installation under the GNU target. The returned flags are the ones
+// that were verified by compiling, linking and running a probe program, so
+// the probe and the real build always agree. Empty when the driver's own
+// default target is already correct.
+std::vector<std::string> toolchainTargetFlags(bool clang, bool msvc,
+                                               const std::string& program);
+
 // Parses and compares compiler versions. Missing patch components become zero.
 std::string normalizeCompilerVersion(std::string_view text);
 int compareCompilerVersions(const std::string& left, const std::string& right);
