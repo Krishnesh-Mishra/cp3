@@ -1,0 +1,19 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: delete b succeeds and leaves a,c. Re-adding b appends it last:
+// a,c,b with values 1,3,4. Deleting a missing key returns false and leaves
+// the order untouched.
+{
+  const m = new Map<string, number>();
+  m.set("a", 1);
+  m.set("b", 2);
+  m.set("c", 3);
+  console.log(m.delete("b") ? "yes" : "no");
+  console.log(m.keys().join(","));
+  m.set("b", 4);
+  console.log(m.keys().join(","));
+  console.log(m.values().join(","));
+  console.log(m.delete("zz") ? "yes" : "no");
+  console.log(m.keys().join(","));
+}

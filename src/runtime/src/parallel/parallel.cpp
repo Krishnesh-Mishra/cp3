@@ -7,6 +7,7 @@
 #include "cp3/parallel/parallel.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <mutex>
 #include <thread>
 
@@ -108,9 +109,44 @@ std::size_t parallelChunkCount(std::uint64_t total) {
     if (total == 0) {
         return 1;
     }
-    const std::size_t threads = inPoolWorker ? 1 : ThreadPool::global().size();
+    // A nested call is already on a worker the outer pool is waiting for.
+    // Running one inline chunk keeps the nested work off the pool queue and
+    // avoids the guarded chunk/combine work that cannot be parallelized here.
+    if (inPoolWorker) {
+        return 1;
+    }
+    const std::size_t threads = ThreadPool::global().size();
     const std::size_t limit = threads == 0 ? 1 : threads;
-    return static_cast<std::size_t>(std::min<std::uint64_t>(total, limit));
+    // Four chunks per worker: the machine's logical processors are not equal
+    // (6 P-cores + 8 E-cores on the reference laptop), so a contiguous split
+    // with one chunk per worker is paced by the slowest core. Oversubscribing
+    // lets an idle worker take the next queued chunk; the ordered combine
+    // keeps the result identical. Measured on compute-multi: 20 chunks 42.5 ms,
+    // 40 -> 33.6, 80 -> 32.3, 160 -> 31.2, cpp 33.0.
+    const std::size_t chunks =
+        limit <= std::numeric_limits<std::size_t>::max() / 4 ? limit * 4
+                                                             : limit;
+    const std::uint64_t cap = static_cast<std::uint64_t>(chunks);
+    return static_cast<std::size_t>(total < cap ? total : cap);
+}
+
+std::int64_t parallelChunkBoundary(std::int64_t begin, std::uint64_t total,
+                                   std::size_t chunk, std::size_t chunks) {
+    if (chunks == 0) {
+        return begin;
+    }
+    // Balanced split: q elements per chunk, and the first r chunks get one
+    // extra. Every intermediate value is bounded by `total`, so the old
+    // `total * chunk` product (which could overflow uint64/2^64) is gone.
+    const std::uint64_t q = total / chunks;
+    const std::uint64_t r = total % chunks;
+    const std::uint64_t c = static_cast<std::uint64_t>(chunk);
+    const std::uint64_t extra = c < r ? c : r;
+    const std::uint64_t offset = q * c + extra;
+    // The unsigned addition wraps modulo 2^64; the C++20 conversion back to
+    // int64 is the same two's-complement value, so a range that starts
+    // negative or crosses zero keeps exact boundaries.
+    return static_cast<std::int64_t>(static_cast<std::uint64_t>(begin) + offset);
 }
 
 void parallelRunAll(const std::vector<std::function<void()>>& tasks) {

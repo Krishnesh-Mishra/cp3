@@ -231,6 +231,9 @@ protected:
     // Whole-program build: module-link export forms carry no C++ of their own.
     bool programMode_ = false;
     std::unordered_set<std::string> functions_;
+    // Local names introduced by imports. A builtin rewrite must not fire when
+    // one of these shadows the builtin (e.g. `import { sleep } from "./lib"`).
+    std::unordered_set<std::string> importBindings_;
     std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
     // Entry-body int64 locals: the proven records (by source name), the
     // statements the rewrite consumes, and node-id lookups for the loop and the

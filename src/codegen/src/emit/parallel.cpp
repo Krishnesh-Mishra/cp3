@@ -14,11 +14,13 @@
 // The range bounds lower to `static_cast<std::int64_t>(expr)`; the closures
 // lower through `emitParallelClosure`, which declares the closure's parameters
 // with the cp3 types the callee hands them (a number index; the accumulator's
-// type for a reduce) before lowering the arrow itself. A reduce body that is
-// exactly one of the associative shapes (`acc + i` from 0, `acc * i` from 1,
-// `i > acc ? i : acc` from 0) gets the chunked 5-argument lowering with a
-// synthesized combine op; every other reduce keeps the sequential 4-argument
-// form, which is still exact. Anything else reports CP3002 and emits a stub.
+// type for a reduce) before lowering the arrow itself. A reduce body that is one
+// of the associative shapes (`acc + <expr>` from 0 where the expression never
+// reads the accumulator, `acc * <expr>` from 1, the max/min conditional) gets
+// the chunked 5-argument lowering with a synthesized combine op, but only when
+// support/parallel_combine.cpp proves the expression pure and integer exact;
+// every other reduce keeps the sequential 4-argument form, which is still
+// exact. Anything else reports CP3002 and emits a stub.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -30,6 +32,7 @@
 #include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/parallel.h"
+#include "detail/parallel_combine.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -38,80 +41,10 @@ using namespace detail;
 
 namespace {
 
-// True when `e` is exactly the identifier `name` (no fallback lowering).
-bool isNamed(const Expr* e, const std::string& name) {
-    if (e == nullptr || e->kind != NodeKind::Identifier) return false;
-    return static_cast<const Identifier&>(*e).name == name;
-}
-
 // A printable label for a diagnostic message: the nominal label when the type
 // carries one (class, enum, type parameter), the kind name otherwise.
 std::string parallelTypeLabel(const Type& t) {
     return t.name.empty() ? typeKindName(t.kind) : t.name;
-}
-
-// The two plain parameter names of a reduce body; false for anything else
-// (rest/default/missing names), which keeps the shape out of the combine gate.
-bool reduceParamNames(const ArrowFunction& body, std::string& accParam,
-                      std::string& indexParam) {
-    if (body.params.size() != 2 || !body.params[0] || !body.params[1]) return false;
-    if (body.params[0]->isRest || body.params[1]->isRest) return false;
-    const Identifier* acc = asIdentifier(body.params[0]->name.get());
-    const Identifier* index = asIdentifier(body.params[1]->name.get());
-    if (acc == nullptr || index == nullptr) return false;
-    accParam = acc->name;
-    indexParam = index->name;
-    return true;
-}
-
-// `[](auto cp3_a, auto cp3_b) { return cp3_a <op> cp3_b; }`.
-std::string combineOpText(const char* op) {
-    return std::string("[](auto cp3_a, auto cp3_b) { return cp3_a ") + op +
-           " cp3_b; }";
-}
-
-// `[](auto cp3_a, auto cp3_b) { return cp3_a > cp3_b ? cp3_a : cp3_b; }`.
-const char* const kCombineMax =
-    "[](auto cp3_a, auto cp3_b) { return cp3_a > cp3_b ? cp3_a : cp3_b; }";
-
-// The synthesized combine op when the reduce body is one of the exact
-// associative shapes and `init` is its identity literal; nullopt keeps the
-// sequential 4-argument lowering (still correct, just not chunked).
-std::optional<std::string> reduceCombine(const ArrowFunction& body,
-                                         const Expr& init) {
-    std::string accParam;
-    std::string indexParam;
-    if (!reduceParamNames(body, accParam, indexParam)) return std::nullopt;
-    if (!body.expressionBody || !body.body) return std::nullopt;
-    const Expr& value = *static_cast<const Expr*>(body.body.get());
-    const std::optional<std::int64_t> identity = integralLiteralValue(init);
-    if (!identity) return std::nullopt;
-    if (value.kind == NodeKind::BinaryExpr) {
-        const auto& b = static_cast<const BinaryExpr&>(value);
-        if (!isNamed(b.left.get(), accParam) || !isNamed(b.right.get(), indexParam)) {
-            return std::nullopt;
-        }
-        if (b.op == BinaryOp::Add && *identity == 0) return combineOpText("+");
-        if (b.op == BinaryOp::Multiply && *identity == 1) return combineOpText("*");
-        return std::nullopt;
-    }
-    if (value.kind == NodeKind::ConditionalExpr && *identity == 0) {
-        const auto& c = static_cast<const ConditionalExpr&>(value);
-        if (!c.condition || c.condition->kind != NodeKind::BinaryExpr) {
-            return std::nullopt;
-        }
-        const auto& cmp = static_cast<const BinaryExpr&>(*c.condition);
-        if (cmp.op != BinaryOp::GreaterThan) return std::nullopt;
-        if (!isNamed(cmp.left.get(), indexParam) || !isNamed(cmp.right.get(), accParam)) {
-            return std::nullopt;
-        }
-        if (!isNamed(c.whenTrue.get(), indexParam) ||
-            !isNamed(c.whenFalse.get(), accParam)) {
-            return std::nullopt;
-        }
-        return std::string(kCombineMax);
-    }
-    return std::nullopt;
 }
 
 }  // namespace
@@ -245,12 +178,17 @@ std::string Generator::emitParallelReduce(const CallExpr& c) {
     const std::string init = expr(*c.arguments[1]);
     const std::string closure = emitParallelClosure(
         body, {initInfo.type, Type::number()}, {initInfo.cpp, "double"});
-    std::string out = "::cp3::runtime::parallelReduce(" + begin + ", " + end +
-                      ", " + init + ", " + closure;
-    if (auto combine = reduceCombine(body, *c.arguments[1])) {
-        out += ", " + *combine;
+    std::string out = "::cp3::runtime::parallelReduce";
+    if (auto combine = parallelReduceCombine(body, *c.arguments[1],
+                                             functionDecls_, sema_)) {
+        out += std::string("<::cp3::runtime::ParallelCombineKind::") +
+               combine->kind + ">";
+        out += "(" + begin + ", " + end + ", " + init + ", " + closure + ", " +
+               combine->lambda + ")";
+        return out;
     }
-    return out + ")";
+    return out + "(" + begin + ", " + end + ", " + init + ", " + closure +
+           ")";
 }
 
 std::string Generator::emitParallelRun(const CallExpr& c) {

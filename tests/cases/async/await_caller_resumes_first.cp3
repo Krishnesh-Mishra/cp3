@@ -1,0 +1,12 @@
+import console from "std/console";
+
+// An async function always returns to its caller at a settled await; its
+// continuation runs from the microtask queue. Inlining that continuation would
+// print "callee" before "caller".
+async function f(): Promise<void> {
+  await Promise.resolve(1);
+  console.log("callee");
+}
+
+f();
+console.log("caller");

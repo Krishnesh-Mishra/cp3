@@ -1,0 +1,15 @@
+// A pure integer body whose chunk partials would leave the exact-integer
+// range. The runtime must detect the 2^53 boundary and rerun sequentially;
+// the unsafe chunked grouping prints 2560 instead of the sequential 2.
+// Oracle: independent Python double loop over the same alternating values.
+import console from "std/console";
+
+function value(i: number): number {
+  if (i % 2 === 0) {
+    return 9007199254740991;
+  }
+  return -9007199254740990;
+}
+
+const total = parallel.reduce(0..10000, 0, (acc, i) => acc + value(i));
+console.log(`${total}`);

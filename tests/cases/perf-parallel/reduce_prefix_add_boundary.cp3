@@ -1,0 +1,31 @@
+// The chunked sum can be exact while the *sequential* left fold is not: a
+// chunk that ends at 2^53-1 followed by a chunk whose local values are [+2,-2]
+// rounds once when the running total adds +2. The ordered chunk combine never
+// sees that intermediate, so the old guard returned 2^53-1 instead of the
+// sequential 2^53-2.
+//
+// Oracle: the explicit left-to-right loop below. The parallel result must
+// match it, which forces the prefix guard to rerun sequentially.
+//
+// The range is two elements per chunk on any machine: os.cpus() * 4 is the
+// runtime's chunk cap, and the argument is twice that. The first chunk holds
+// the large value and a zero; the second holds +2 and -2.
+import console from "std/console";
+import os from "std/os";
+
+function value(i: number): number {
+  if (i === 0) return 9007199254740991;
+  if (i === 2) return 2;
+  if (i === 3) return -2;
+  return 0;
+}
+
+const total = os.cpus() * 8;
+const par = parallel.reduce(0..total, 0, (acc, i) => acc + value(i));
+
+let seq = 0;
+for (let i = 0; i < total; i++) {
+  seq = seq + value(i);
+}
+
+console.log(par === seq ? "match" : "differ");

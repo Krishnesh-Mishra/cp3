@@ -1,0 +1,12 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: miss, the fallback is arr[1] = 20, the value adds arr[0] = 10, so
+// k = 30. A fallback with a valid index must still run on a miss.
+{
+  const arr: number[] = [10, 20];
+  const m = new Map<string, number>();
+  const v = m.get("k") ?? arr[1];
+  m.set("k", v + arr[0]);
+  console.log(`${m.get("k")}`);
+}

@@ -1,0 +1,11 @@
+// `acc + i` over ranges below, at, and above the chunk count, including an
+// empty range and a range whose lower bound is not zero.
+import console from "std/console";
+
+const empty = parallel.reduce(0..0, 0, (acc, i) => acc + i);
+const one = parallel.reduce(0..1, 0, (acc, i) => acc + i);
+const single = parallel.reduce(5..6, 0, (acc, i) => acc + i);
+const hundred = parallel.reduce(1..101, 0, (acc, i) => acc + i);
+const negative = parallel.reduce(-7..13, 0, (acc, i) => acc + i);
+
+console.log(`${empty} ${one} ${single} ${hundred} ${negative}`);

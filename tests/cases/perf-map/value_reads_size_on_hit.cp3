@@ -1,0 +1,15 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: hit on "x" = 10, size stays 2 before the store, so x = 10 + 2 = 12.
+// The hit path must not move or resize the map.
+{
+  const m = new Map<string, number>();
+  m.set("a", 1);
+  m.set("x", 10);
+  const v = m.get("x") ?? 0;
+  m.set("x", v + m.size);
+  console.log(`${m.get("x")}`);
+  console.log(`${m.size}`);
+  console.log(m.keys().join(","));
+}

@@ -38,6 +38,8 @@ set(cp3_codegen_sources
     src/support/top_int64.cpp
     src/support/top_int64_scan_expr.cpp
     src/support/top_int64_scan_stmt.cpp
+    src/support/parallel_combine.cpp
+    src/support/parallel_safety.cpp
     src/support/usage_includes.cpp
     src/support/program_link.cpp
     src/emit/program.cpp
@@ -83,6 +85,7 @@ set(cp3_codegen_sources
     ../std/network/codegen.cpp
     ../std/network/codegen_methods.cpp
     ../std/collections/codegen.cpp
+    ../std/collections/codegen_map.cpp
     ../std/date/codegen.cpp
     ../std/buffer/codegen.cpp
     ../std/console/codegen.cpp

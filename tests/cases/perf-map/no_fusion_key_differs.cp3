@@ -1,0 +1,15 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: get reads "a" (1), set writes "b" = 1 + 5 = 6. Different key text
+// must not fuse; both entries remain.
+{
+  const m = new Map<string, number>();
+  m.set("a", 1);
+  m.set("b", 10);
+  const v = m.get("a") ?? 0;
+  m.set("b", v + 5);
+  console.log(`${m.get("a")}`);
+  console.log(`${m.get("b")}`);
+  console.log(`${m.size}`);
+}

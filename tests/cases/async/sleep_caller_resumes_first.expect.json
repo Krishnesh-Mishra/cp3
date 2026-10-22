@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "before\ncaller\nafter\ntimer\n",
+  "exitCode": 0
+}

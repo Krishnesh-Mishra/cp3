@@ -1,0 +1,16 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: the key is the pure template `k2`; the map has k2 = 5, so v = 5 and
+// the update stores 6. Size stays 1. The key is evaluated once, before the
+// probe, and the same value feeds both the probe and the insert.
+{
+  const prefix = "k";
+  const i = 2;
+  const m = new Map<string, number>();
+  m.set("k2", 5);
+  const v = m.get(`${prefix}${i}`) ?? 0;
+  m.set(`${prefix}${i}`, v + 1);
+  console.log(`${m.get("k2")}`);
+  console.log(`${m.size}`);
+}

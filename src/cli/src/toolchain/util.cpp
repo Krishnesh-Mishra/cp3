@@ -299,13 +299,15 @@ namespace {
 //   error.cpp     - `Thrown` (cp3/core/error.hpp): `throw` boxing and the
 //                   unhandled-rejection report; error.hpp is also part of
 //                   every generated unit.
-//   eventloop.cpp - the single-threaded loop + the timer builtins
-//                   (cp3/async/eventloop.hpp): setTimeout/setInterval,
-//                   runEventLoop(), the worker runtime, and every std family
-//                   whose ABI is Promise-shaped. A program that never names
-//                   any of them does not link the loop (startup perf wave: the
-//                   unused loop still cost a libwinpthread-1.dll load and
-//                   ~64 KB of image).
+//   eventloop.cpp - the single-threaded loop
+//                   (cp3/async/eventloop.hpp): runEventLoop(), the worker
+//                   runtime, and every std family whose ABI is Promise-shaped.
+//                   A program that never names any of them does not link the
+//                   loop (startup perf wave: the unused loop still cost a
+//                   libwinpthread-1.dll load and ~64 KB of image).
+//   timers.cpp    - the timer builtins (setTimeout/setInterval/...). It is
+//                   selected by the same markers as eventloop.cpp, so a
+//                   program that does not use the loop does not pay for it.
 //   promise.cpp   - `Promise<T>` + await/sleep (cp3/async/promise.hpp). Always
 //                   paired with eventloop.cpp.
 //   parallel.cpp  - the `parallel.*` engine (spec 13). `worker(...)` uses the
@@ -321,6 +323,9 @@ constexpr RuntimeUnit kRuntimeUnits[] = {
     {"runtime.cpp", ""},
     {"error.cpp", ""},
     {"eventloop.cpp",
+     "cp3/async/|cp3/parallel/|runEventLoop|cp3/std/console.hpp|"
+     "cp3/std/network.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
+    {"timers.cpp",
      "cp3/async/|cp3/parallel/|runEventLoop|cp3/std/console.hpp|"
      "cp3/std/network.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
     {"promise.cpp",

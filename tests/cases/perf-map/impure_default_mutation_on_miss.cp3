@@ -1,0 +1,23 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: the default is impure, so the pair must not fuse. On the miss the
+// call runs after the probe: it increments side, inserts "s", and returns 5.
+// The value then sees size 1, so x = 5 + 1 = 6 and the final order is s,x.
+let side = 0;
+const shared = new Map<string, number>();
+function touch(): number {
+  side = side + 1;
+  shared.set("s", 1);
+  return 5;
+}
+
+{
+  const m = shared;
+  const v = m.get("x") ?? touch();
+  m.set("x", v + m.size);
+  console.log(`${side}`);
+  console.log(m.keys().join(","));
+  console.log(`${m.get("x")}`);
+  console.log(`${m.size}`);
+}

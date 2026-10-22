@@ -1,0 +1,7 @@
+// A floating-point expression is not integer exact, so the chunked combine
+// must not apply. Oracle: the sequential left-to-right double sum of
+// 1 / (i + 1) for i in 0..99999, computed independently in Python.
+import console from "std/console";
+
+const total = parallel.reduce(0..100000, 0, (acc, i) => acc + 1 / (i + 1));
+console.log(`${total}`);

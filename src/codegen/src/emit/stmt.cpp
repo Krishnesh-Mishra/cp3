@@ -34,8 +34,15 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
             pushScope();
             line(out, indent, "{");
             const auto& block = static_cast<const BlockStatement&>(s);
-            for (const auto& child : block.body) {
-                if (!child || int64SkipStmts_.count(child->nodeId) != 0) continue;
+            for (std::size_t i = 0; i < block.body.size(); ++i) {
+                const Stmt* child = block.body[i].get();
+                if (!child) continue;
+                // The int64 fast path owns the statements it rewrote; it
+                // marks them so the ordinary walker skips them.
+                if (int64SkipStmts_.count(child->nodeId) != 0) continue;
+                // The fused map update replaces the pair it consumes, so it
+                // must not start on a statement the int64 path owns.
+                if (emitFusedMapUpdate(block.body, i, out, indent + 1)) continue;
                 stmt(*child, out, indent + 1);
             }
             line(out, indent, "}");
@@ -88,8 +95,12 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
 
 void Generator::emitBranch(const Stmt& s, std::string& out, int indent) {
     if (s.kind == NodeKind::BlockStatement) {
-        for (const auto& child : static_cast<const BlockStatement&>(s).body) {
-            if (!child || int64SkipStmts_.count(child->nodeId) != 0) continue;
+        const auto& block = static_cast<const BlockStatement&>(s);
+        for (std::size_t i = 0; i < block.body.size(); ++i) {
+            const Stmt* child = block.body[i].get();
+            if (!child) continue;
+            if (int64SkipStmts_.count(child->nodeId) != 0) continue;
+            if (emitFusedMapUpdate(block.body, i, out, indent)) continue;
             stmt(*child, out, indent);
         }
     } else {

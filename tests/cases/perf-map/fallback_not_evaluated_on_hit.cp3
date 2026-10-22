@@ -1,0 +1,14 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: the map has "k" = 99, so `??` short-circuits and arr[3] must never
+// run. v = 99, set 100, print 100. The fused form must not evaluate the
+// fallback on a hit (arr[3] would panic).
+{
+  const arr: number[] = [10, 20];
+  const m = new Map<string, number>();
+  m.set("k", 99);
+  const v = m.get("k") ?? arr[3];
+  m.set("k", v + 1);
+  console.log(`${m.get("k")}`);
+}

@@ -1,0 +1,13 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: -0 and +0 are the same key. The hit keeps size 1 and stores
+// 1 + 10 = 11, readable through -0.
+{
+  const m = new Map<number, number>();
+  m.set(-0, 1);
+  const v = m.get(0) ?? 0;
+  m.set(0, v + 10);
+  console.log(`${m.size}`);
+  console.log(`${m.get(-0)}`);
+}

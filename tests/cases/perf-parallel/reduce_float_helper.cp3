@@ -1,0 +1,11 @@
+// A pure helper whose return is not integer exact must also keep the
+// sequential lowering: 1 / (i + 1) is fractional, so chunk order changes the
+// double sum. Oracle: independent Python sequential sum for 0..99999.
+import console from "std/console";
+
+function part(i: number): number {
+  return 1 / (i + 1);
+}
+
+const total = parallel.reduce(0..100000, 0, (acc, i) => acc + part(i));
+console.log(`${total}`);

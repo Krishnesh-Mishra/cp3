@@ -1,0 +1,16 @@
+// Integer sum through a pure helper across chunk counts: empty, one element,
+// fewer elements than workers, and a range larger than the pool.
+// Oracle: sum(i * i + 1) computed independently in Python.
+import console from "std/console";
+
+function step(i: number): number {
+  return i * i + 1;
+}
+
+const empty = parallel.reduce(3..3, 0, (acc, i) => acc + step(i));
+const one = parallel.reduce(3..4, 0, (acc, i) => acc + step(i));
+const below = parallel.reduce(0..5, 0, (acc, i) => acc + step(i));
+const at = parallel.reduce(0..8, 0, (acc, i) => acc + step(i));
+const above = parallel.reduce(0..257, 0, (acc, i) => acc + step(i));
+
+console.log(`${empty} ${one} ${below} ${at} ${above}`);

@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "a,b,c\n1,2,3\n3\n3\n6\nyes\nyes\nno\na,c\n0\n0\n",
+  "exitCode": 0
+}

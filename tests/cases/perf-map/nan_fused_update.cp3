@@ -1,0 +1,13 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: hit on NaN with 5, so v = 5, the store makes it 6, and size stays 1.
+{
+  const m = new Map<number, number>();
+  m.set(NaN, 5);
+  const v = m.get(NaN) ?? 0;
+  m.set(NaN, v + 1);
+  console.log(`${m.get(NaN)}`);
+  console.log(`${m.size}`);
+  console.log(`${m.keys().length}`);
+}

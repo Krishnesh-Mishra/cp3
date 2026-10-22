@@ -1,0 +1,15 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: cp3_slot0 is a user binding, and suffix 0 is otherwise free, so the
+// fused lambda declares a local cp3_slot0 in its own C++ scope. That shadows
+// the user binding only inside the lambda; the print after the pair still
+// sees 7 and the map gets 1 + 1 = 2.
+{
+  const cp3_slot0 = 7;
+  const m = new Map<string, number>();
+  const v = m.get("x") ?? 1;
+  m.set("x", v + 1);
+  console.log(`${cp3_slot0}`);
+  console.log(`${m.get("x")}`);
+}

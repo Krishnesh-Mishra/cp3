@@ -1,0 +1,14 @@
+// A pure helper that reads a module binding is not proven pure by this gate:
+// the binding is mutable state outside the helper's locals, and another
+// closure could write it. The reduce keeps the sequential lowering and still
+// prints the exact sum: sum(i + 1000) for i in 0..9 = 10045.
+import console from "std/console";
+
+let bias = 1000;
+
+function biased(i: number): number {
+  return i + bias;
+}
+
+const total = parallel.reduce(0..10, 0, (acc, i) => acc + biased(i));
+console.log(`${total}`);

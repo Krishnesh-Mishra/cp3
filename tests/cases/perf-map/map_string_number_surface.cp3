@@ -1,0 +1,26 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: keys a,b,c; values 1,2,3; entries 3; size 3; forEach sum 6;
+// has b yes; delete b yes; has b no; keys a,c; clear leaves size 0 and
+// entries 0.
+{
+  const m = new Map<string, number>();
+  m.set("a", 1);
+  m.set("b", 2);
+  m.set("c", 3);
+  console.log(m.keys().join(","));
+  console.log(m.values().join(","));
+  console.log(`${m.entries().length}`);
+  console.log(`${m.size}`);
+  let sum = 0;
+  m.forEach((v, k) => { sum = sum + v; });
+  console.log(`${sum}`);
+  console.log(m.has("b") ? "yes" : "no");
+  console.log(m.delete("b") ? "yes" : "no");
+  console.log(m.has("b") ? "yes" : "no");
+  console.log(m.keys().join(","));
+  m.clear();
+  console.log(`${m.size}`);
+  console.log(`${m.entries().length}`);
+}

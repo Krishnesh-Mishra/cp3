@@ -1,0 +1,22 @@
+// Pure integer helper with a parity-dominated division. `n / 2` is exact
+// because the then branch is guarded by `n % 2 === 0`; the helper must qualify
+// for the chunked combine. Oracle: independent Python collatz-step total for
+// start values 1..99.
+import console from "std/console";
+
+function collatzSteps(start: number): number {
+  let n = start;
+  let steps = 0;
+  while (n !== 1) {
+    if (n % 2 === 0) {
+      n = n / 2;
+    } else {
+      n = 3 * n + 1;
+    }
+    steps = steps + 1;
+  }
+  return steps;
+}
+
+const total = parallel.reduce(1..100, 0, (acc, i) => acc + collatzSteps(i));
+console.log(`${total}`);

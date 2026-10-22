@@ -1,0 +1,13 @@
+// A reduce inside a pool worker: parallel.for runs each index on a worker,
+// and the nested reduce must run inline instead of queueing behind the busy
+// pool (or it would deadlock).
+import console from "std/console";
+
+let results = [0, 0, 0, 0, 0, 0, 0, 0];
+
+parallel.for(0..8, (r) => {
+  const inner = parallel.reduce(0..101, 0, (acc, i) => acc + i);
+  results[r] = inner + r;
+});
+
+console.log(results.join(","));

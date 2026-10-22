@@ -23,6 +23,7 @@
 
 #include <cstddef>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "detail/cpp_writer.h"
@@ -32,6 +33,69 @@
 namespace cp3 {
 
 using namespace detail;
+
+namespace {
+
+// True when a promise appears in the type at any depth. The fast `valueAwait`
+// path only accepts a value whose representation cannot contain a promise: a
+// promise nested in an array/tuple/union would need the ordinary settlement
+// path to be observed, and copying it into the awaiter would silently keep the
+// wrong contract.
+bool containsPromiseType(const Type& t) {
+    if (detail::isPromiseType(t)) return true;
+    for (const Type& part : t.parts) {
+        if (containsPromiseType(part)) return true;
+    }
+    return false;
+}
+
+// The delay expression of a direct `sleep(ms)` call, or nullptr when the await
+// target is not the builtin (wrong shape, or a user declaration, import, or
+// local binding shadows the name). Zero-argument calls are left to the
+// ordinary call path so their arity is checked the same way as any other call.
+const Expr* directSleepDelay(const Expr* argument,
+                             const std::unordered_set<std::string>& functions,
+                             const std::unordered_set<std::string>& imports,
+                             bool localBinding) {
+    if (argument == nullptr || argument->kind != NodeKind::CallExpr) return nullptr;
+    if (localBinding || functions.count("sleep") != 0 ||
+        imports.count("sleep") != 0) {
+        return nullptr;
+    }
+    const auto& call = static_cast<const CallExpr&>(*argument);
+    if (!call.callee || call.callee->kind != NodeKind::Identifier) return nullptr;
+    if (static_cast<const Identifier&>(*call.callee).name != "sleep") return nullptr;
+    if (call.arguments.size() != 1) return nullptr;
+    const Expr* delay = call.arguments.front().get();
+    if (delay == nullptr || delay->kind == NodeKind::SpreadElement) return nullptr;
+    return delay;
+}
+
+}  // namespace
+
+// The value of a temporary `Promise.resolve(v)` (with non-promise `v`), or
+// nullptr when the await target is not that shape. The value is safe to pass
+// straight to `valueAwait`: the temporary promise has no other observer.
+const Expr* Generator::temporaryResolveValue(const Expr* argument) const {
+    if (argument == nullptr || argument->kind != NodeKind::CallExpr) return nullptr;
+    if (functions_.count("Promise") != 0 || importBindings_.count("Promise") != 0 ||
+        hasValueBinding("Promise")) {
+        return nullptr;
+    }
+    const auto& call = static_cast<const CallExpr&>(*argument);
+    if (!call.callee || call.callee->kind != NodeKind::MemberExpr) return nullptr;
+    const auto& member = static_cast<const MemberExpr&>(*call.callee);
+    if (member.property != "resolve" || !member.object ||
+        member.object->kind != NodeKind::Identifier ||
+        static_cast<const Identifier&>(*member.object).name != "Promise") {
+        return nullptr;
+    }
+    if (call.arguments.size() != 1 || !call.arguments.front()) return nullptr;
+    const Expr* value = call.arguments.front().get();
+    if (value->kind == NodeKind::SpreadElement) return nullptr;
+    if (containsPromiseType(effectiveType(*value))) return nullptr;
+    return value;
+}
 
 // -----------------------------------------------------------------------------
 // await (spec §14)
@@ -51,6 +115,23 @@ std::string Generator::emitAwait(const AwaitExpr& a) {
         // A top-level `await`: `main()`'s body becomes a coroutine and the
         // loop is driven at exit (cp3/async/promise.hpp's codegen contract).
         topLevelAwait_ = true;
+    }
+    // `await sleep(ms)`: the temporary promise is never observed, so lower
+    // straight to the timer awaiter (no Promise<void> state or settlement
+    // bookkeeping; the resume is still posted as a microtask).
+    if (const Expr* delay =
+            directSleepDelay(a.argument.get(), functions_, importBindings_,
+                             hasValueBinding("sleep"))) {
+        return "(co_await ::cp3::runtime::sleepAwait(" + expr(*delay) + "))";
+    }
+    // `await Promise.resolve(v)` for a non-promise `v`: the temporary state has
+    // no other observer, so lower straight to the value awaiter. It still
+    // suspends, preserving caller and FIFO microtask order.
+    if (const Expr* value = temporaryResolveValue(a.argument.get())) {
+        const CppInfo info = classify(effectiveType(*value));
+        if (info.representable && info.shape != Shape::Void) {
+            return "(co_await ::cp3::runtime::valueAwait(" + expr(*value) + "))";
+        }
     }
     const std::string arg =
         a.argument ? expr(*a.argument) : "cp3::runtime::undefined";

@@ -566,7 +566,7 @@ let port = env.get<number>("PORT", default: 3000);
 
 ## Map / Set
 
-Included. `Map<K, V>` and `Set<T>` keep JavaScript's insertion-order contract (DECISIONS D44): iteration visits entries in the order they were inserted, and a repeated `Set` insertion keeps its first position. That rules out `std::unordered_map` / `std::unordered_set` as the backing store; the implementation uses a small insertion-ordered structure with `==` dedup instead. Method names match JS's Map/Set API closely enough that there's no meaningful design gap here.
+Included. `Map<K, V>` and `Set<T>` keep JavaScript's insertion-order contract (DECISIONS D44): iteration visits entries in the order they were inserted, and a repeated `Set` insertion keeps its first position. That rules out `std::unordered_map` / `std::unordered_set` as *the iteration order*: `Set` stores its values in an insertion-ordered vector with `==` dedup, and `Map` stores the keys in an insertion-ordered vector and the values in a hash map keyed by that same key (so `set`/`get`/`has` are one probe, while iteration still walks insertion order; `delete` erases from both). Method names match JS's Map/Set API closely enough that there's no meaningful design gap here.
 
 ```cp3
 class Map<K, V> {

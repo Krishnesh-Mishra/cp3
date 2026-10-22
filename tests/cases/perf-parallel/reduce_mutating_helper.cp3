@@ -1,0 +1,15 @@
+// A helper that writes a module binding is not pure. The reduce must keep the
+// sequential 4-argument lowering: 1,000,000 calls, calls = 1,000,000, and the
+// sum 1..1,000,000 = 500,000,500,000. The chunked lowering races on `calls`
+// (measured on 93adb33: 712500, 812500, 625000, 425000, 437500, 400000).
+import console from "std/console";
+
+let calls = 0;
+
+function tick(): number {
+  calls = calls + 1;
+  return calls;
+}
+
+const total = parallel.reduce(0..1000000, 0, (acc, i) => acc + tick());
+console.log(`${total} ${calls}`);

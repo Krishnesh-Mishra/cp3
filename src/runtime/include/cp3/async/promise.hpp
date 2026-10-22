@@ -109,6 +109,131 @@ struct ValueSlot<void> {};
 
 enum class PromiseStatus { Pending, Fulfilled, Rejected };
 
+/// What settlement a continuation observes.
+enum class ContinuationKind : unsigned char {
+    Fulfilled,
+    Rejected,
+    Both,
+};
+
+/// A FIFO of continuations with inline storage for the first few.
+///
+/// A promise state almost always carries one or two continuations, so a
+/// `std::vector` would allocate a heap block for nearly every promise. Two
+/// inline slots cover that case with no allocation; the third and later
+/// continuations spill to a vector.
+///
+/// The two settlement paths share one list, each entry tagged with the kinds it
+/// runs for. A single registration can observe both paths (an `await`, or a
+/// `Promise.all` slot that copies on fulfilment and rejects on rejection), so
+/// the common shapes need one entry instead of the former fulfil/reject pair.
+/// Settling walks the list once and runs only the matching entries: FIFO order
+/// within each path is unchanged, so the observable microtask order is
+/// identical to separate fulfil and reject lists.
+class ContinuationList {
+public:
+    ContinuationList() = default;
+    ContinuationList(const ContinuationList&) = delete;
+    ContinuationList& operator=(const ContinuationList&) = delete;
+
+    // Moving leaves the source empty (unlike the defaulted move, which would
+    // copy `size_` and leave a moved-from list reporting entries it no longer
+    // holds). Settling relies on "moved out means empty".
+    ContinuationList(ContinuationList&& other) noexcept { takeAll(other); }
+    ContinuationList& operator=(ContinuationList&& other) noexcept {
+        if (this != &other) {
+            clear();
+            takeAll(other);
+        }
+        return *this;
+    }
+
+    bool empty() const noexcept { return size_ == 0 && spill_.empty(); }
+    std::size_t size() const noexcept { return size_ + spill_.size(); }
+
+    /// True when a rejected settlement would have an observer (DECISIONS D43).
+    bool hasRejectedObserver() const noexcept {
+        for (std::size_t i = 0; i < size_; ++i) {
+            if (inline_[i].kind != ContinuationKind::Fulfilled) {
+                return true;
+            }
+        }
+        for (const Continuation& entry : spill_) {
+            if (entry.kind != ContinuationKind::Fulfilled) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void push_back(Task fn, ContinuationKind kind) {
+        if (size_ < kInline) {
+            inline_[size_++] = Continuation{std::move(fn), kind};
+            return;
+        }
+        spill_.push_back(Continuation{std::move(fn), kind});
+    }
+
+    /// Post every continuation that observes `fulfilled` to `loop` in FIFO
+    /// order, then empty the list. Posting only queues (continuations are
+    /// microtasks), so the list is empty before any of them runs - the same
+    /// re-entrancy contract the previous "move the vector out first"
+    /// implementation gave its callers. Entries for the other settlement never
+    /// run; their tasks are released here, as the old per-path vectors did.
+    void drainTo(EventLoop& loop, bool fulfilled) {
+        for (std::size_t i = 0; i < size_; ++i) {
+            drainEntry(loop, inline_[i], fulfilled);
+        }
+        for (Continuation& entry : spill_) {
+            drainEntry(loop, entry, fulfilled);
+        }
+        size_ = 0;
+        spill_.clear();
+    }
+
+    void clear() noexcept {
+        for (std::size_t i = 0; i < size_; ++i) {
+            inline_[i].task = nullptr;
+        }
+        size_ = 0;
+        spill_.clear();
+    }
+
+private:
+    struct Continuation {
+        Task task;
+        ContinuationKind kind = ContinuationKind::Fulfilled;
+    };
+
+    static constexpr std::size_t kInline = 2;
+    Continuation inline_[kInline];
+    std::size_t size_ = 0;
+    std::vector<Continuation> spill_;
+
+    static void drainEntry(EventLoop& loop, Continuation& entry, bool fulfilled) {
+        const bool observes =
+            fulfilled ? entry.kind != ContinuationKind::Rejected
+                      : entry.kind != ContinuationKind::Fulfilled;
+        if (observes) {
+            loop.post(std::move(entry.task));
+        } else {
+            // Dropped: destroy the capture now instead of leaving it in the
+            // abandoned inline slot until the state itself is destroyed.
+            entry.task = nullptr;
+        }
+    }
+
+    void takeAll(ContinuationList& other) noexcept {
+        for (std::size_t i = 0; i < other.size_; ++i) {
+            inline_[i] = std::move(other.inline_[i]);
+        }
+        size_ = other.size_;
+        spill_ = std::move(other.spill_);
+        other.size_ = 0;
+        other.spill_.clear();
+    }
+};
+
 /// The shared state behind a `Promise<T>` handle. Reference-counted; the promise
 /// handle is just a `shared_ptr` to it. The boxed state outlives the coroutine
 /// frame (which is why `final_suspend` may destroy the frame immediately).
@@ -117,8 +242,7 @@ struct PromiseState {
     PromiseStatus status = PromiseStatus::Pending;
     ValueSlot<T> slot;                 // valid iff Fulfilled
     Thrown reason;                     // valid iff Rejected
-    std::vector<std::function<void()>> onFulfilled;
-    std::vector<std::function<void()>> onRejected;
+    ContinuationList continuations;    // both settlement paths, tagged
 
     // Set while this (rejected, unobserved) promise is tracked as an unhandled
     // rejection; cleared as soon as a rejection handler observes it.
@@ -213,11 +337,20 @@ void boxCurrentException(const std::shared_ptr<PromiseState<T>>& state) noexcept
 
 // --- continuation registration (defined in cp3/async/promise_impl.hpp) ----------
 template <class T>
-void addFulfilledContinuation(const std::shared_ptr<PromiseState<T>>& state,
-                              std::function<void()> fn);
+void addContinuation(const std::shared_ptr<PromiseState<T>>& state, Task fn,
+                     ContinuationKind kind);
 template <class T>
-void addRejectedContinuation(const std::shared_ptr<PromiseState<T>>& state,
-                             std::function<void()> fn);
+void addFulfilledContinuation(const std::shared_ptr<PromiseState<T>>& state, Task fn) {
+    addContinuation(state, std::move(fn), ContinuationKind::Fulfilled);
+}
+template <class T>
+void addRejectedContinuation(const std::shared_ptr<PromiseState<T>>& state, Task fn) {
+    addContinuation(state, std::move(fn), ContinuationKind::Rejected);
+}
+template <class T>
+void addSettledContinuation(const std::shared_ptr<PromiseState<T>>& state, Task fn) {
+    addContinuation(state, std::move(fn), ContinuationKind::Both);
+}
 
 // --- unhandled-rejection tracking (defined in promise.cpp) ----------------
 void trackUnhandled(const std::shared_ptr<bool>& flag, const Thrown& reason);
@@ -388,61 +521,6 @@ struct PromiseCoroutine<void> {
 };
 
 // =============================================================================
-// Awaiter
-// =============================================================================
-
-/// `co_await awaitValue(promise)`. The coroutine always suspends: a settled
-/// promise resumes from the microtask queue (behind already-queued
-/// continuations, like JS `await`); a pending one resumes when it settles.
-template <class T>
-struct PromiseAwaiter {
-    Promise<T> promise;
-
-    bool await_ready() const noexcept { return false; }
-
-    void await_suspend(std::coroutine_handle<> handle) {
-        const std::shared_ptr<detail::PromiseState<T>> st = promise.sharedState();
-        // Registering the rejection side also marks the promise observed, so
-        // `await` counts as handling a rejection (DECISIONS D43).
-        detail::addFulfilledContinuation<T>(st, [handle]() { handle.resume(); });
-        detail::addRejectedContinuation<T>(st, [handle]() { handle.resume(); });
-    }
-
-    /// A rejection rethrows `Thrown`; the enclosing async body turns it back
-    /// into a rejection (PromiseCoroutine::unhandled_exception).
-    T await_resume() {
-        if (promise.rejected()) {
-            // The `await` itself observes the rejection (DECISIONS D43); the
-            // registration in `await_suspend` already did for settled ones.
-            detail::markObserved(promise.sharedState());
-            throw promise.reason();
-        }
-        return detail::ValueAccess<T>::get(*promise.sharedState());
-    }
-};
-
-/// `co_await awaitValue(nonPromise)` - DECISIONS D41: yields the value itself.
-template <class T>
-struct ReadyAwaiter {
-    T value;
-
-    bool await_ready() const noexcept { return true; }
-    void await_suspend(std::coroutine_handle<>) const noexcept {}
-    T await_resume() { return std::move(value); }
-};
-
-/// The one spelling codegen uses for every `await`.
-template <class T>
-PromiseAwaiter<T> awaitValue(Promise<T> promise) {
-    return PromiseAwaiter<T>{std::move(promise)};
-}
-
-template <class X, std::enable_if_t<!detail::is_promise_v<X>, int> = 0>
-ReadyAwaiter<std::remove_cvref_t<X>> awaitValue(X&& value) {
-    return ReadyAwaiter<std::remove_cvref_t<X>>{std::forward<X>(value)};
-}
-
-// =============================================================================
 // `sleep(ms)` - core builtin, `Promise<void>` (STDLIB docs §03)
 // =============================================================================
 Promise<void> sleep(double milliseconds);
@@ -453,3 +531,4 @@ Promise<void> sleep(double milliseconds);
 // here so `#include "cp3/async/promise.hpp"` is the single codegen entry point.
 #include "cp3/async/promise_impl.hpp"
 #include "cp3/async/promise_combinators.hpp"
+#include "cp3/async/awaiters.hpp"

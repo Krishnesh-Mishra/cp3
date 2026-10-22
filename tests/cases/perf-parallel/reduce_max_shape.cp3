@@ -1,0 +1,11 @@
+// Max shape. The zero initializer is not a universal identity for max, but
+// max(init, elements) is associative and idempotent, so every chunk starting
+// from init combines to the same result as the sequential fold.
+import console from "std/console";
+
+const small = parallel.reduce(0..5, 0, (best, i) => i > best ? i : best);
+const floor = parallel.reduce(0..5, 10, (best, i) => i > best ? i : best);
+const negative = parallel.reduce(-3..1, 0, (best, i) => i > best ? i : best);
+const large = parallel.reduce(0..1000, 0, (best, i) => i > best ? i : best);
+
+console.log(`${small} ${floor} ${negative} ${large}`);

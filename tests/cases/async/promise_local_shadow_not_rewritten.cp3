@@ -1,0 +1,20 @@
+// A local `Promise` binding shadows the global. `Promise.resolve(1)` returns a
+// plain number, so `await` must use the ready (non-suspending) path: the callee
+// prints before the caller after f() returns. The valueAwait fast path would
+// wrongly suspend and print caller first.
+import console from "std/console";
+
+class FakePromise {
+  function resolve(v: number): number {
+    return v;
+  }
+}
+
+async function f(): Promise<void> {
+  const Promise = new FakePromise();
+  await Promise.resolve(1);
+  console.log("callee");
+}
+
+f();
+console.log("caller");

@@ -1,0 +1,12 @@
+// Ranges of 0 and 1 element for all three chunked shapes. Each reduce must
+// return the sequential value without starting a pool task per element.
+import console from "std/console";
+
+const sumEmpty = parallel.reduce(9..9, 0, (acc, i) => acc + i);
+const sumOne = parallel.reduce(9..10, 0, (acc, i) => acc + i);
+const productEmpty = parallel.reduce(9..9, 1, (acc, i) => acc * (i + 1));
+const productOne = parallel.reduce(9..10, 1, (acc, i) => acc * (i + 1));
+const maxOne = parallel.reduce(9..10, 0, (best, i) => i > best ? i : best);
+const maxEmpty = parallel.reduce(9..9, 0, (best, i) => i > best ? i : best);
+
+console.log(`${sumEmpty} ${sumOne} ${productEmpty} ${productOne} ${maxOne} ${maxEmpty}`);

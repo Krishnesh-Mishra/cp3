@@ -1,0 +1,20 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: the key is present, so the fallback call short-circuits: calls stays
+// 0, k becomes 100, size stays 1. A call in the fallback must block fusion.
+let calls = 0;
+function makeDefault(): number {
+  calls = calls + 1;
+  return 77;
+}
+
+{
+  const m = new Map<string, number>();
+  m.set("k", 99);
+  const v = m.get("k") ?? makeDefault();
+  m.set("k", v + 1);
+  console.log(`${calls}`);
+  console.log(`${m.get("k")}`);
+  console.log(`${m.size}`);
+}

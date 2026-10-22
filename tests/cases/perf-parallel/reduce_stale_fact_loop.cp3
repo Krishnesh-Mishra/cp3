@@ -1,0 +1,25 @@
+// A fact proved before a loop cannot be assumed on later iterations: x is
+// incremented inside the body, so x % 7 === 0 stops holding. The classifier
+// must reject x / 7 and keep the sequential lowering. The zero(i) call keeps
+// the helper out of the int64 fast path, so the unsafe chunked grouping prints
+// 9184102045.714321 instead of the Python sequential sum 9184102045.71651.
+import console from "std/console";
+
+function zero(i: number): number {
+  return i - i;
+}
+
+function part(i: number): number {
+  let x = i + zero(i);
+  let total = 0;
+  if (x % 7 === 0) {
+    while (x < i + 10) {
+      total = total + x / 7;
+      x = x + 1;
+    }
+  }
+  return total;
+}
+
+const total = parallel.reduce(0..300000, 0, (acc, i) => acc + part(i));
+console.log(`${total}`);

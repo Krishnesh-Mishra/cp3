@@ -1,0 +1,19 @@
+// A nested conditional mutates x after the outer branch proved x % 3 === 0.
+// Facts do not merge across the inner conditional, so x / 3 must not be
+// accepted: the safe lowering is sequential. The unsafe chunked grouping
+// prints 4999983332.999979 instead of the Python sequential sum.
+import console from "std/console";
+
+function part(i: number): number {
+  let x = i;
+  if (x % 3 === 0) {
+    if (i > 0) {
+      x = x + 1;
+    }
+    return x / 3;
+  }
+  return 0;
+}
+
+const total = parallel.reduce(0..300000, 0, (acc, i) => acc + part(i));
+console.log(`${total}`);

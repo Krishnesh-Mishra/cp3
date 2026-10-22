@@ -1,0 +1,12 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: hit, v = 7, fallback 100 is not used, k becomes 14, size stays 1.
+{
+  const m = new Map<string, number>();
+  m.set("k", 7);
+  const v = m.get("k") ?? 100;
+  m.set("k", v * 2);
+  console.log(`${m.get("k")}`);
+  console.log(`${m.size}`);
+}
