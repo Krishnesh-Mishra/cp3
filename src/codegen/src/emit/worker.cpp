@@ -36,6 +36,7 @@
 #include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
 #include "detail/worker.h"
 
@@ -358,7 +359,30 @@ void Generator::emitWorkerModuleVar(const VariableDeclaration& vd,
         if (!declPtr) continue;
         const VariableDeclarator& d = *declPtr;
         if (!d.id || d.id->kind != NodeKind::Identifier) {
-            notImplemented(d, "destructuring binding in a worker module");
+            // A destructuring binding: the source is materialized and every
+            // name the pattern binds is read out of it. The names are the
+            // worker's module state (`thread_local` globals), because the
+            // entry body returns before the message handlers run - a local
+            // would dangle.
+            if (!d.init) {
+                reportTypeError(d, "a destructuring binding needs an "
+                                   "initializer");
+                continue;
+            }
+            const std::optional<Type> srcType = resolvedBindingType(d);
+            std::string initText;
+            {
+                const std::optional<Type> savedExpected = expected_;
+                expected_ = srcType;
+                initText = expr(*d.init);
+                expected_ = savedExpected;
+            }
+            const std::string tmp =
+                "cp3_d" + std::to_string(uniqueCounter_++);
+            line(prologue, 1, "auto " + tmp + " = " + initText + ";");
+            PatternEmitter emitter(*this);
+            emitter.globals = &defs;
+            emitter.emitBindings(*d.id, tmp, srcType, prologue, 1);
             continue;
         }
         const CppInfo ci = bindingCpp(d);

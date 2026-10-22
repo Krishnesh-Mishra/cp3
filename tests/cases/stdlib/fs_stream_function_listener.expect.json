@@ -1,0 +1,5 @@
+﻿{
+  "mode": "run",
+  "stdout": "ENOENT: no such file, open '__cp3_fs_missing__.txt'\n",
+  "exitCode": 0
+}

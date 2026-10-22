@@ -36,6 +36,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/builtin_tables.h"
 #include "detail/cpp_writer.h"
 #include "detail/type_map.h"
@@ -78,6 +79,56 @@ Type listenerParamType(const std::string& event) {
     if (event == "data") return Type::named(TypeKind::Class, "Buffer");
     if (event == "error") return Type::string();
     return Type::unknown();
+}
+
+/// The arity of a function-typed value (-1 when the type is not a function,
+/// or not known yet).
+int functionArity(const Type& t) {
+    if (t.kind != TypeKind::Function || t.parts.empty()) return -1;
+    return static_cast<int>(t.parts.size()) - 1;
+}
+
+/// The number of parameters a listener takes: an arrow's own parameter list,
+/// or the arity of a function-typed value. -1 when it is not known.
+int listenerArity(const Expr& listener, const Type& type) {
+    if (listener.kind == NodeKind::ArrowFunction) {
+        return static_cast<int>(
+            static_cast<const ArrowFunction&>(listener).params.size());
+    }
+    return functionArity(type);
+}
+
+/// True when a listener can take the event's payload. A listener with no
+/// parameters is fine for every event (the runtime's payload-less overload
+/// fires on "data", "error" and "end"); a listener with a parameter must
+/// take the payload's type.
+bool listenerFits(const Type& listener, const Type& payload) {
+    const int arity = functionArity(listener);
+    if (arity < 0) return true;          // the shape is not known here
+    if (arity == 0) return true;         // the payload-less overload
+    if (arity > 1) return false;         // the runtime takes one payload
+    if (payload.isUnknown()) return true;
+    const Type& first = listener.parts.front();
+    if (first.isUnknown() || first.isError()) return true;
+    if (first.kind == TypeKind::Object && first.name == "$ambient") return true;
+    if (payload.kind == TypeKind::Class || first.kind == TypeKind::Class) {
+        return payload.kind == first.kind && payload.name == first.name;
+    }
+    return payload.kind == first.kind;
+}
+
+/// The diagnostic a listener value carries, or "" when it fits the event.
+std::string listenerDiagnostic(const Type& listener, const Type& payload,
+                               const std::string& event) {
+    if (listener.kind != TypeKind::Function && !listener.isUnknown() &&
+        !listener.isError()) {
+        return "the stream listener must be a function";
+    }
+    if (!listenerFits(listener, payload)) {
+        return "the stream listener does not take the payload of the \"" + event +
+               "\" event";
+    }
+    return std::string();
 }
 
 }  // namespace
@@ -149,47 +200,63 @@ std::string Generator::emitFsMemberRead(const MemberExpr& m) {
 // =============================================================================
 std::string Generator::emitFsStreamOn(const CallExpr& c, const MemberExpr& m) {
     if (c.arguments.size() < 2 || !c.arguments[0] || !c.arguments[1]) {
-        notImplemented(c, "stream.on(event, listener)");
+        // The documented surface is `on(event, listener)`: a call with fewer
+        // arguments is a program error, not a missing feature.
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "stream.on(event, listener) takes two arguments");
         return "0.0";
     }
     const Expr& first = *c.arguments[0];
-    if (first.kind != NodeKind::StringLiteral) {
-        notImplemented(first, "a literal stream event name");
+    const Expr& listener = *c.arguments[1];
+    const bool literal = first.kind == NodeKind::StringLiteral;
+    const std::string event =
+        literal ? static_cast<const StringLiteral&>(first).value : std::string();
+    // The payload type depends on the event name ("data" -> Buffer, "error"
+    // -> string, "end" -> nothing), so a computed name carries a listener
+    // that takes no payload: the runtime dispatches it on the name it sees.
+    const Type payload = literal ? listenerParamType(event) : Type::unknown();
+    if (!literal && listenerArity(listener, effectiveType(listener)) != 0) {
+        reportTypeError(first, "the stream event name must be a string literal "
+                                "(\"data\", \"end\" or \"error\"): the listener's "
+                                "payload type depends on it");
         return "0.0";
     }
-    const std::string event = static_cast<const StringLiteral&>(first).value;
-    const Type param = listenerParamType(event);
     std::vector<std::string> context;
-    if (!param.isUnknown()) {
-        // The chunk is the nominal std/buffer `Buffer`; the error message is a
-        // string. Handing the spelling to emitArrow also types the lambda's
-        // parameter for callers of this unit.
-        context = {classify(param).cpp};
-    } else if (event != "end") {
+    if (!payload.isUnknown()) {
+        // The chunk is the nominal std/buffer `Buffer`; the error message is
+        // a string. The spelling types the lambda's parameter.
+        context = {classify(payload).cpp};
+    } else if (literal && event != "end") {
         notImplemented(c, "stream event '" + event + "'");
         return "0.0";
     }
-    const Expr& listener = *c.arguments[1];
+    needsEventLoop_ = true;
+    const std::string call = "(" + expr(*m.object) + ").on(" + expr(first) + ", ";
     if (listener.kind != NodeKind::ArrowFunction) {
-        notImplemented(c, "a function listener");
-        return "0.0";
+        // A function value: a named function, or a binding holding one. The
+        // runtime's overloads pick the shape that fits the event.
+        const std::string problem =
+            listenerDiagnostic(effectiveType(listener), payload, event);
+        if (!problem.empty()) {
+            reportTypeError(listener, problem);
+            return "0.0";
+        }
+        return call + expr(listener) + ")";
     }
     const auto& arrow = static_cast<const ArrowFunction&>(listener);
-    // Type the lambda's own parameter names for the body emission only: sema
-    // keeps callback parameters permissive, so `chunk.toString()` inside the
-    // body needs this declaration to lower through the std/buffer unit. The
-    // temporary scope keeps the names out of the enclosing scope.
+    // Type the lambda's own parameter names for the body emission only:
+    // sema keeps callback parameters permissive, so `chunk.toString()`
+    // inside the body needs this declaration to lower through std/buffer.
     pushScope();
-    if (!arrow.params.empty()) {
-        const Parameter* p = arrow.params.front().get();
-        if (p && p->name && p->name->kind == NodeKind::Identifier && !param.isUnknown()) {
-            declare(static_cast<const Identifier&>(*p->name).name, param);
-        }
+    const Parameter* p =
+        arrow.params.empty() ? nullptr : arrow.params.front().get();
+    if (p && p->name && p->name->kind == NodeKind::Identifier &&
+        !payload.isUnknown()) {
+        declare(static_cast<const Identifier&>(*p->name).name, payload);
     }
     const std::string lambda = emitArrow(arrow, context);
     popScope();
-    needsEventLoop_ = true;
-    return "(" + expr(*m.object) + ").on(" + expr(first) + ", " + lambda + ")";
+    return call + lambda + ")";
 }
 
 }  // namespace cp3

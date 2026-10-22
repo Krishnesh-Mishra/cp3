@@ -1,0 +1,10 @@
+﻿import console from "std/console";
+import os from "std/os";
+import process from "std/process";
+let windows = os.platform() === "windows";
+let cmd = windows ? "cmd" : "sh";
+let head = windows ? ["/c"] : ["-c"];
+let tail = windows ? ["exit", "0"] : ["exit 0"];
+let p = process.spawn(cmd, [...head, ...tail]);
+let ev = "exit";
+p.on(ev, () => { console.log("spawn-exit"); });

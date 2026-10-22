@@ -20,6 +20,7 @@
 
 #include <string>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -54,6 +55,19 @@ const Expr* defaultOption(const Expr* options) {
     return nullptr;
 }
 
+/// True when the options argument is an object literal with no properties at
+/// all: the documented `{ default?: T }` shape without a default. The call
+/// then throws when the key is unset, exactly like `get<T>(key)`.
+bool emptyOptions(const Expr* options) {
+    if (!options || options->kind != NodeKind::ObjectLiteral) return false;
+    const auto& literal = static_cast<const ObjectLiteral&>(*options);
+    for (const auto& prop : literal.properties) {
+        if (!prop) continue;
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 std::string Generator::emitEnvCall(const CallExpr& c, const MemberExpr& m) {
@@ -72,18 +86,29 @@ std::string Generator::emitEnvCall(const CallExpr& c, const MemberExpr& m) {
     // form all land on the same classification.
     const CppInfo value = classify(effectiveType(c));
     if (!value.representable || !isPrimitiveShape(value.shape)) {
-        notImplemented(c, "env.get whose value type has no C++ spelling");
+        // The documented surface reads a string, a number or a boolean
+        // (cp3/std/env.hpp): a value type with no C++ spelling cannot be
+        // read out of the environment.
+        reportTypeError(c, "type mismatch: env.get<T> reads a string, a "
+                           "number or a boolean");
         return "0.0";
     }
     needsEnv_ = true;
     std::string text = std::string(kRuntimeNs) + "get<" + value.cpp + ">(" +
                        expr(*key);
     if (c.arguments.size() > 1) {
-        const Expr* fallback = defaultOption(c.arguments[1].get());
-        if (fallback == nullptr) {
-            notImplemented(c, "env.get options other than { default: ... }");
-        } else {
+        const Expr* options = c.arguments[1].get();
+        const Expr* fallback = defaultOption(options);
+        if (fallback != nullptr) {
             text += ", " + expr(*fallback);
+        } else if (!emptyOptions(options)) {
+            // The documented options object is `{ default?: T }`: an empty
+            // object carries no default (the call throws when the key is
+            // unset); any other shape is off the documented surface.
+            reportTypeError(*options,
+                            "type mismatch: the env.get options must be an "
+                            "object literal with a `default` property");
+            return "0.0";
         }
     }
     return text + ")";

@@ -1,0 +1,9 @@
+﻿import console from "std/console";
+import os from "std/os";
+import process from "std/process";
+let windows = os.platform() === "windows";
+let cmd = windows ? "cmd" : "sh";
+let head = windows ? ["/c"] : ["-c"];
+let tail = windows ? ["echo", "spread-ok"] : ["echo spread-ok"];
+let result = await process.exec(cmd, [...head, ...tail]);
+console.log(result.stdout.trim());

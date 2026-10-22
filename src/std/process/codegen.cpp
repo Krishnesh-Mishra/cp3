@@ -31,6 +31,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/builtin_tables.h"
 #include "detail/cpp_writer.h"
 #include "detail/type_map.h"
@@ -99,13 +100,25 @@ std::string Generator::emitProcessCall(const CallExpr& c, const MemberExpr& m) {
 std::string Generator::processArgs(const Expr& e) {
     if (e.kind == NodeKind::ArrayLiteral) {
         const auto& literal = static_cast<const ArrayLiteral&>(e);
+        bool spread = false;
+        for (const auto& element : literal.elements) {
+            if (element && element->kind == NodeKind::SpreadElement) {
+                spread = true;
+                break;
+            }
+        }
+        if (spread) {
+            // `[...a, "b"]`: the elements are spliced at run time into the
+            // vector the runtime takes (emit/spread.cpp).
+            const std::string text =
+                spreadListText(Type::string(), literal.elements);
+            if (!text.empty()) return text;
+            reportTypeError(e, "the process arguments must be a string[]");
+            return "std::vector<std::string>{}";
+        }
         std::vector<std::string> elems;
         for (const auto& element : literal.elements) {
             if (!element) continue;
-            if (element->kind == NodeKind::SpreadElement) {
-                notImplemented(*element, "spread argument");
-                continue;
-            }
             elems.push_back(expr(*element));
         }
         return "std::vector<std::string>{" + joinStrings(elems, ", ") + "}";
@@ -113,7 +126,11 @@ std::string Generator::processArgs(const Expr& e) {
     if (info(e).shape == Shape::Array) {
         return "(*" + expr(e) + ")";
     }
-    notImplemented(e, "a process argument list (a string[] literal or array)");
+    // The documented surface is `string[]` (docs 04, process section): an
+    // argument list the compiler cannot prove to be one is a type error, not
+    // a missing feature.
+    reportTypeError(e, "the process arguments must be a string[] (an array "
+                       "literal or an array binding)");
     return "std::vector<std::string>{}";
 }
 
@@ -147,15 +164,25 @@ std::string Generator::emitProcessObjectCall(const CallExpr& c,
     }
     needsProcess_ = true;
     needsEventLoop_ = true;
-    const std::vector<std::string> context =
-        spawnEventParams(stringLiteralOf(event));
+    const std::string eventName = stringLiteralOf(event);
+    const std::vector<std::string> context = spawnEventParams(eventName);
     const std::string call = "(" + expr(*m.object) + ").on(" + expr(*event) + ", ";
     if (listener->kind != NodeKind::ArrowFunction) {
         return call + expr(*listener) + ")";
     }
     const auto& arrow = static_cast<const ArrowFunction&>(*listener);
-    if (stringLiteralOf(event).empty()) {
-        notImplemented(c, "a spawn listener whose event name is not a literal");
+    if (eventName.empty()) {
+        // A computed event name: the payload type depends on the name
+        // ("data"/"stderr" -> a string chunk, "exit" -> the exit code), so
+        // only a listener that takes no payload can be lowered. The runtime
+        // dispatches that one on the name it sees at run time.
+        if (!arrow.params.empty()) {
+            reportTypeError(*event, "the spawn event name must be a string "
+                                    "literal (\"data\", \"stderr\" or "
+                                    "\"exit\"): the listener's payload type "
+                                    "depends on it");
+            return "0.0";
+        }
     }
     pushScope();
     for (std::size_t i = 0; i < arrow.params.size() && i < context.size(); ++i) {

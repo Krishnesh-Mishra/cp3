@@ -1,0 +1,3 @@
+﻿import fs from "std/fs";
+let rs = fs.readFileStream("x.txt");
+rs.on("data");

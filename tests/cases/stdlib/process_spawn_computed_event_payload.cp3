@@ -1,0 +1,4 @@
+﻿import process from "std/process";
+let p = process.spawn("cmd", ["--version"]);
+let ev = "exit";
+p.on(ev, (code) => { });

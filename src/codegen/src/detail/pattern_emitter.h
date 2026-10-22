@@ -31,6 +31,12 @@ struct PatternEmitter {
 
     Generator& g;
 
+    // When set, a bound name is a module-scope global: its DECLARATION goes
+    // here and the binding site only ASSIGNS it. The worker module's
+    // `thread_local` state needs this: the worker entry body returns before
+    // the worker's message handlers run, so a local binding would dangle.
+    std::string* globals = nullptr;
+
     // One destructuring site: the C++ value text and its cp3 type.
     struct Site {
         std::string access;

@@ -210,8 +210,16 @@ void PatternEmitter::emitPatternFallback(const Node& p, std::string& out, int in
     std::vector<std::string> names;
     collectNames(p, names);
     for (const std::string& name : names) {
-        line(out, indent,
-             "auto " + mapIdent(name) + " = cp3::runtime::undefined;");
+        if (globals != nullptr) {
+            // A module-scope global: the declaration lives in `globals`, and
+            // the binding site only assigns it.
+            line(*globals, 0, "thread_local cp3::runtime::Undefined " +
+                                  mapIdent(name) + "{};");
+            line(out, indent, mapIdent(name) + " = cp3::runtime::undefined;");
+        } else {
+            line(out, indent,
+                 "auto " + mapIdent(name) + " = cp3::runtime::undefined;");
+        }
         g.declare(name, Type::unknown());
     }
 }
@@ -247,6 +255,16 @@ void PatternEmitter::bindPatternName(const Identifier& id, const Site& site,
     }
     const std::string spelling =
         (ci.representable && ci.shape != Shape::Void) ? ci.cpp : "auto";
+    if (globals != nullptr) {
+        // A module-scope global: the declaration lives in `globals`, and the
+        // binding site only assigns it (the name outlives the frame that
+        // created it).
+        line(*globals, 0, "thread_local " + spelling + " " + mapIdent(id.name) +
+                              "{};");
+        line(out, indent, mapIdent(id.name) + " = " + site.access + ";");
+        g.declare(id.name, bt);
+        return;
+    }
     line(out, indent, spelling + " " + mapIdent(id.name) + " = " + site.access +
                           ";");
     g.declare(id.name, bt);

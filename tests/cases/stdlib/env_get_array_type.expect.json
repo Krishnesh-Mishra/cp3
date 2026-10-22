@@ -1,0 +1,10 @@
+﻿{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 2,
+    "contains": "env.get<T> reads a string, a number or a boolean"
+  }
+}
