@@ -52,6 +52,12 @@ The consolidated history contains:
 - `8cc6b28` - tuple-typed declarations lower (port from the parked types
   worktree).
 - `364d803` - a Windows Clang install is usable with no user flags.
+- `ac3568b` - `cp3c native-install`, the command half of native interop (55%
+  of the feature).
+- `68a2839` - array read references and counted-push reserve, ported from the
+  parked perf array/closure branches.
+- `ef61707` - a per-platform binary cache inside `.cp3pak` archives
+  (`cacheBinary`, `cp3 recompile`, `excludeSource`).
 
 The pre-cleanup inventory had 42 branch names. After the final fast-forward,
 32 of the 41 non-master tips are ancestors of `master`; those workstreams are
@@ -146,21 +152,91 @@ permanent recovery source.
 
 ## 3b. Native-install completion
 
-The native-install feature is being landed in two steps rather than one
-unsound merge.
+The native-install feature is landed in two steps rather than one unsound
+merge. **Step 1 is merged** as `ac3568b` (merge `0e8a0e2`).
 
 | Step | Scope | Status |
 |---|---|---|
-| 1 | The `cp3c native-install` command end to end: SDK/header resolution, libclang loading, parsing free functions and enums, `index.cp3` + `native.json` generation, the full flag surface, dry-run/JSON/force, named diagnostics for rejected declarations, and a fixture-based test suite. | In flight on `merge/native-partial` |
-| 2 | The consumption half: `check`/`build` read `native.json`, sema types `import native` calls against it, codegen lowers them, plus the full test suite. | Not started; starts when step 1 lands |
+| 1 | The `cp3c native-install` command end to end: SDK/header resolution, libclang loading, parsing free functions, enums and simple classes, `index.cp3` + `native.json` generation, the full flag surface, dry-run/JSON/force, named diagnostics for rejected declarations, and a fixture-based test suite. | **MERGED** (`ac3568b`) |
+| 2 | The consumption half: `check`/`build` read `native.json`, sema types `import native` calls against it, codegen lowers them, plus the full test suite. | Not started |
 
-The exact completion percentage for step 1, and the measured surface, are
-recorded in `docs/rough/native-install-partial.md` when the lane lands. The
-honest current position is that **the command half is the larger, more
-self-contained half of the feature and is being landed first; the sema and
-codegen consumption half is what remains**, which is the reverse of the
-original single-merge plan but is the only split that keeps every landed part
-working and tested.
+**Native-install completion: 55%.** Measured as 8 of 14 equally weighted work
+items done - all 8 command-half items done, all 6 compiler-half items not
+started. The full table and the calculation are in
+`docs/rough/native-install-partial.md` §5, kept in sync with the
+supported/unsupported matrix.
+
+What works today, verified on this machine against the fixture SDK:
+
+```
+$ cp3c native-install sdk/include/demo/native_demo.h --name demo --out bindings
+  declarations: 8 functions, 2 classes (3 methods), 1 enums
+  rejected: 5 (listed in index.cp3)
+  wrote .../bindings/demo/index.cp3
+  wrote .../bindings/demo/native.json
+```
+
+The generated `index.cp3` is ordinary cp3 source (`export class Point`,
+`export enum Color`, `export function add(a: number, b: number): number`), and
+`native.json` carries the `cp3-native-binding/1` schema with the C++ names,
+argument conversions, ABI, content hash and link metadata. Unsupported shapes
+are rejected with named diagnostics - never dropped silently - and are listed
+in both files.
+
+The libclang **headers** are vendored (`third_party/clang-c`, pinned
+`llvmorg-23.1.0`, Apache-2.0 WITH LLVM-exception), so cp3c still compiles with
+no LLVM installed; the libclang **library** is loaded dynamically at runtime
+and `CP3_LIBCLANG` is honoured. 10/10 CLI cases pass, including the live
+generation case, which skips cleanly where no libclang is present.
+
+The follow-up agent must still do: the `native.json` reader and staleness
+check, `import native "id" as alias` resolution in the module resolver, sema
+type-checking of native calls, codegen lowering (include emission, `cppName` /
+`cppArgCount` / `returnsCStr` use), build integration (include dirs, defines,
+lib dirs, link names, `runtimeDlls` bundling), the spec-19 pointer-ownership
+and object-lifetime story, and compiler-side tests for `check` and `build`
+against a binding.
+
+## 3c. The `.cp3pak` binary cache
+
+`cacheBinary` and `cp3 recompile` were specified in CLI-README §5.4 but only
+warned and returned exit 3. They are now **implemented** and merged as
+`ef61707` (merge `cb85d5c`), with `0443049` fixing the pre-existing
+`publish --out` failure on the way.
+
+| Behavior | Result |
+|---|---|
+| `build.cacheBinary: true` | Resolves to this machine's canonical platform id, recorded in the archive. |
+| `build.cacheBinary: [...]` | The listed ids. A family claim (`windows`) is satisfied by any arch of that family; an unknown id is a manifest error. |
+| Package build | Compiles the generated C++ into a plain object for the current platform only, never cross-compiling. `cp3pak.json` gains the cache fields; an archive without a cache is byte-identical to before. |
+| `cp3 recompile <file.cp3pak>` | Replaces only the current platform's cache, preserves every other member and other platform caches, is idempotent, and errors clearly when the archive has no source. |
+| `build.excludeSource` | Requires a non-empty `cacheBinary` (build error otherwise). The source is dropped only once every claimed platform is cached; headers and `index.cp3` are always kept. Installing an excluded-source package with no cache for this platform gives the named "No precompiled binary found for your platform" error. |
+
+Archive layout:
+
+```
+cp3pak.json                  + optional "cachePlatforms" / "cacheClaims"
+package.json  index.cp3
+pak/<module>.cpp             dropped by excludeSource
+pak/<module>.hpp             always kept
+pak/<platform>/cache.json    platform, abi, per-artifact hashes, compiler identity
+pak/<platform>/<module>.o    the compiled object
+```
+
+Platform ids are always canonical and arch-qualified (`windows-x64`,
+`linux-x64`, `mac-arm64`); family aliases (`win32`, `mingw`, `macos`,
+`darwin`, `aarch64`, ...) are normalized, case-folded, and an unknown id is a
+clear manifest error.
+
+**The `.cp3pak` binary cache is 94% complete** (8.5 of 9 items). The one
+open item is the consumer no-recompile link path, and it is blocked by
+something outside this feature: the frontend does not yet resolve a package
+import to C++, so a consumer program links no package code at all - there is
+no "recompile the package source" step to skip yet. What landed is the
+archive and install validation, the cached-artifact-vs-source selection, and
+the install-time report. The remaining step is to resolve a package import to
+the installed package and then add `pak/<platform>/<module>.o` to the link
+inputs when the cache matches.
 
 ## 4. Verification detail
 
@@ -169,11 +245,10 @@ working and tested.
 - Main build: green.
 - `python tools/check_diagnostics.py`: 72 codes defined, 72 documented, 435
   source files scanned, 0 findings.
-- `python tools/check_cp3002.py`: 391 hits. The zero-placeholder gate in
-  `tools/lint.py` fails on this count - it is pre-existing red on `master` and
-  is not a regression from the cleanup work.
-- `python tools/lint.py`: unchanged from the pre-cleanup baseline (the same
-  391 marker hits, nothing added).
+- `python tools/check_cp3002.py`: 391 hits, unchanged by the cleanup and the
+  perf array/closure lane. The zero-placeholder gate in `tools/lint.py` fails
+  on this count - it is pre-existing red on `master`, not a regression.
+- `python tools/lint.py`: no new error from any lane.
 
 ### Corpus
 
@@ -192,6 +267,13 @@ must be run with `--jobs 1`.
 
 The 29 skipped cases are the CP3002 not-implemented cases. They are not counted
 as passing.
+
+### CLI suite
+
+`python tests/cli/run_cli_tests.py --jobs 1 --full`: 335 cases, 334 ok, 15
+xfail. The single failure before the `.cp3pak` lane was the pre-existing
+`package/publish-out-file` (a `fs::copy_file` into a non-existent `dist/`
+parent), which `0443049` fixed.
 
 ### Baseline benchmark
 
@@ -303,11 +385,8 @@ Done:
 
 In flight:
 
-- Three performance lanes (foundation/int, runtime map/parallel/async,
-  array/closure) porting the parked perf stack onto current master.
-- The native-install command half.
-- The `.cp3pak` current-platform binary cache (`cacheBinary`, `cp3 recompile`,
-  `excludeSource`).
+- Two performance lanes (foundation/int, runtime map/parallel/async) porting
+  the parked perf stack onto current master.
 - Editor documentation: JSDoc-style doc comments in cp3 source, standard
   library member documentation, and LSP hover/completion surfacing, plus the
   cp3 logo and the `.cp3` file icon.
@@ -317,7 +396,9 @@ Not done, by instruction:
 - No CP3002 feature implementation.
 - No 10-lane launch.
 - No server benchmark measurement.
-- The native-install consumption half (sema/codegen).
+- The native-install consumption half (sema/codegen), 45% of that feature.
+- The consumer no-recompile link path for the `.cp3pak` cache, blocked on the
+  frontend not resolving package imports to C++ yet.
 - No re-measurement of the benchmark baseline after the perf lanes land.
 
 The next decision is which of the 18 CP3002 groups to attack first, and
