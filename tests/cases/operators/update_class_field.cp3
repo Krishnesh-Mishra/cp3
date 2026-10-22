@@ -1,0 +1,5 @@
+import console from "std/console";
+class Counter { n: number = 1; }
+const c = new Counter();
+console.log(c.n++);
+console.log(c.n);

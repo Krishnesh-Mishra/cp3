@@ -289,6 +289,13 @@ private:
     // A whole array in a formatter/truthiness test pulls the arr family (D69).
     void noteFamilyUse(const Expr& e);
     std::string emitBinary(const BinaryExpr& b);
+    // The `in` operator: a Map/Set membership test, an index-in-range test
+    // over an array or a typed view, a field test over a fixed-shape object.
+    std::string emitInOperator(const BinaryExpr& b);
+    std::string emitInObject(const BinaryExpr& b, const Type& container);
+    // A construction: the class / worker / network / collections / emitter /
+    // family dispatch.
+    std::string emitNewExprValue(const NewExpr& n);
     // Native `%`, bitwise and shift lowering (nullopt keeps the number path).
     std::optional<std::string> nativeBinaryText(const BinaryExpr& b,
                                                 const detail::CppInfo& L,
@@ -305,7 +312,23 @@ private:
     std::string emitNullish(const LogicalExpr& l);
     std::string emitUnary(const UnaryExpr& u);
     std::string emitTypeof(const UnaryExpr& u);
+    // The answer of a nullish option (the empty slot and the held value).
+    std::string emitTypeofOption(const UnaryExpr& u, const detail::CppInfo& ci);
     std::string emitUpdate(const UpdateExpr& u);
+    // An update of a target that is not a name: a property or an element.
+    std::string emitUpdateTarget(const UpdateExpr& u);
+    std::string emitUpdateMember(const UpdateExpr& u, const MemberExpr& m);
+    std::string emitUpdateIndex(const UpdateExpr& u, const IndexExpr& ix);
+    // The C++ lvalue of a writable member (a field of a value shape or of a
+    // class) plus the field's cp3 type.
+    bool memberFieldTarget(const MemberExpr& m, std::string& lvalue,
+                           Type& fieldType);
+    // The expression forms the ordinary table does not own: the weak-link
+    // wrapper (`{ weak: value }`, spec §11), a range used as a value
+    // (`0..5`) and a spread outside its legal position.
+    std::string emitExtendedExpr(const Expr& e);
+    std::string emitWeakValue(const WeakExpr& w);
+    std::string emitRangeValue(const RangeExpr& r);
     std::string emitConditional(const ConditionalExpr& c);
     std::string emitAssignment(const AssignmentExpr& a);
 

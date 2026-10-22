@@ -1,0 +1,4 @@
+import console from "std/console";
+const o = { a: 1 };
+console.log("a" in o);
+console.log("b" in o);

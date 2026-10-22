@@ -17,6 +17,7 @@
 
 #include "detail/cpp_writer.h"
 #include "detail/expr_ops.h"
+#include "detail/family.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
 
@@ -102,26 +103,8 @@ std::string Generator::exprPlain(const Expr& e) {
             return emitAssignment(static_cast<const AssignmentExpr&>(e));
         case NodeKind::CallExpr:
             return emitCallOrFamily(static_cast<const CallExpr&>(e));
-        case NodeKind::NewExpr: {
-            // A user class / interface / object model first (spec 15), then
-            // `new Worker(...)` (D80): a channel handle, not a class/family
-            // value. Then std/network + std/collections constructors, the
-            // builtin `new EventEmitter()` (D74), and the JS-compat family
-            // constructors; anything else reports.
-            const auto& n = static_cast<const NewExpr&>(e);
-            if (std::string model = emitModelNew(n); !model.empty()) {
-                return model;
-            }
-            if (std::string worker = emitWorkerNew(n); !worker.empty()) {
-                return worker;
-            }
-            if (std::string net = emitNetworkNew(n); !net.empty()) {
-                return net;
-            }
-            if (std::string coll = emitCollectionsNew(n); !coll.empty()) return coll;
-            if (std::string em = emitEventEmitterNew(n); !em.empty()) return em;
-            return emitFamilyNew(n);
-        }
+        case NodeKind::NewExpr:
+            return emitNewExprValue(static_cast<const NewExpr&>(e));
         case NodeKind::ArrayLiteral:
             return arrayLiteralText(static_cast<const ArrayLiteral&>(e), Type::unknown());
         case NodeKind::IndexExpr:
@@ -141,10 +124,104 @@ std::string Generator::exprPlain(const Expr& e) {
         }
         case NodeKind::ArrowFunction:
             return emitArrowValue(e, static_cast<const ArrowFunction&>(e));
+        case NodeKind::WeakExpr:
+        case NodeKind::RangeExpr:
+        case NodeKind::SpreadElement:
         default:
-            notImplemented(e, "this expression");
+            // The expression forms the ordinary table does not own: the weak
+            // link wrapper, a range used as a value, a spread outside its
+            // legal position.
+            return emitExtendedExpr(e);
+    }
+}
+
+// The expression forms the ordinary table does not own.
+std::string Generator::emitExtendedExpr(const Expr& e) {
+    switch (e.kind) {
+        case NodeKind::WeakExpr:
+            return emitWeakValue(static_cast<const WeakExpr&>(e));
+        case NodeKind::RangeExpr:
+            return emitRangeValue(static_cast<const RangeExpr&>(e));
+        case NodeKind::SpreadElement:
+            // A spread is only meaningful in an argument list or an array /
+            // object literal; every one of those forms handles it before the
+            // expression emitter sees it, so reaching this point is a program
+            // error.
+            reportTypeError(e, "a spread element is only valid in an argument "
+                               "list or an array/object literal");
+            return "0.0";
+        default:
+            reportTypeError(e, "unsupported expression");
             return "0.0";
     }
+}
+
+// `{ weak: value }` is the weak-link wrapper (spec §11): the value is stored
+// as a weak reference, so the link does not add to the target's strong count.
+// The link's target type comes from the value (a class instance), so the C++
+// spelling is a `WeakRef<T>` built from the strong handle.
+std::string Generator::emitWeakValue(const WeakExpr& w) {
+    if (!w.value) {
+        reportTypeError(w, "a weak link needs a target value");
+        return "0.0";
+    }
+    needsRef_ = true;
+    if (isNullishLiteral(*w.value)) {
+        // An empty link: the target type can only come from the context (a
+        // `T | null` binding or field).
+        std::string pointee;
+        if (expected_) pointee = weakPointee(stripNullish(*expected_));
+        if (pointee.empty()) {
+            reportTypeError(w, "a weak link needs a target type");
+            return "0.0";
+        }
+        return "::cp3::runtime::WeakRef<" + pointee + ">(std::nullptr_t{})";
+    }
+    const Type value = effectiveType(*w.value);
+    if (classify(value).shape != Shape::ClassRef) {
+        reportTypeError(w, "a weak link needs a class instance");
+        return "0.0";
+    }
+    // The class template argument is deduced from the strong handle.
+    return "::cp3::runtime::WeakRef(" + expr(*w.value) + ")";
+}
+
+// A range used as a value (`const r = 0..5;`): sema types a range as a
+// `number[]`, so the value is the range's elements - end-exclusive, the rule
+// the `parallel.*` ranges use (D35).
+std::string Generator::emitRangeValue(const RangeExpr& r) {
+    if (!r.start || !r.end) {
+        reportTypeError(r, "a range needs a start and an end");
+        return "0.0";
+    }
+    needsTypedArray_ = true;
+    const std::string values = freshLabel("range_");
+    return "[&]{ std::vector<double> " + values +
+           "; for (std::int64_t cp3_i = static_cast<std::int64_t>(" +
+           expr(*r.start) + "); cp3_i < static_cast<std::int64_t>(" +
+           expr(*r.end) + "); ++cp3_i) " + values +
+           ".push_back(static_cast<double>(cp3_i)); return "
+           "::cp3::runtime::makeArray<double>(std::move(" + values + ")); }()";
+}
+
+// A construction: a user class / interface / object model first (spec 15),
+// then `new Worker(...)` (D80): a channel handle, not a class/family value.
+// Then std/network + std/collections constructors, the builtin
+// `new EventEmitter()` (D74), and the JS-compat family constructors;
+// anything else reports.
+std::string Generator::emitNewExprValue(const NewExpr& n) {
+    if (std::string model = emitModelNew(n); !model.empty()) {
+        return model;
+    }
+    if (std::string worker = emitWorkerNew(n); !worker.empty()) {
+        return worker;
+    }
+    if (std::string net = emitNetworkNew(n); !net.empty()) {
+        return net;
+    }
+    if (std::string coll = emitCollectionsNew(n); !coll.empty()) return coll;
+    if (std::string em = emitEventEmitterNew(n); !em.empty()) return em;
+    return emitFamilyNew(n);
 }
 
 std::string Generator::emitMemberRead(const MemberExpr& m) {
@@ -169,8 +246,8 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
     // A class / interface / object model member read first (spec 15); then the
     // builtin property reads (`Math.PI`, `path.sep`, `process.argv`,
     // `s.length`) and a std/json record field, then a member read of an object
-    // value shape (`o.a`, `o?.a`); anything else stays CP3002
-    // (emit_builtin.cpp, emit/objects.cpp).
+    // value shape (`o.a`, `o?.a`); a receiver that may be null is a program
+    // error, every other unowned read stays a not-implemented form.
     std::string value = emitModelMember(m);
     if (value.empty()) value = emitBuiltinMember(m);
     if (value.empty()) value = emitObject(m);
@@ -181,6 +258,16 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
     if (m.object && info(*m.object).shape == Shape::TypeParam) {
         return "cp3_member_base(" + expr(*m.object) + ")." +
                mapIdent(m.property);
+    }
+    // A receiver that may be null needs `?.`: reading it unguarded is a
+    // program error in a statically typed language. A receiver whose value
+    // shape has no spelling (a weak field read, a value the type map cannot
+    // spell) stays a not-implemented form.
+    const CppInfo recv = m.object ? info(*m.object) : CppInfo{};
+    if (recv.shape == Shape::Optional || recv.shape == Shape::Maybe) {
+        reportTypeError(m, "the receiver of '" + m.property +
+                             "' may be null; use '?.' to read it safely");
+        return "0.0";
     }
     notImplemented(m, "this property access");
     return "0.0";
@@ -378,10 +465,86 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
         case BinaryOp::StrictEqual:
         case BinaryOp::StrictNotEqual:
             return emitEquality(b, L, R, lhs, rhs);
-        default:
-            notImplemented(b, "this binary operator");
-            return "0.0";
+        case BinaryOp::In:
+            return emitInOperator(b);
     }
+    return "false";
+}
+
+// `key in container`: the container is a Map (a key lookup), a Set (a value
+// lookup), an array or a typed view (an index in range) or a fixed-shape
+// object (a known field). The spec bans `for...in` over a plain object (its
+// keys are known at compile time), so the object form answers from the shape:
+// a literal key that names a field is in the object, any other key is not.
+std::string Generator::emitInOperator(const BinaryExpr& b) {
+    if (!b.left || !b.right) return "false";
+    const Type container = effectiveType(*b.right);
+    const CppInfo key = info(*b.left);
+    switch (classify(container).shape) {
+        case Shape::Collections: {
+            // A Map looks the key up, a Set the value.
+            if (container.parts.empty()) break;
+            const CppInfo element = classify(container.parts.front());
+            if (!element.representable || !isPrimitiveShape(element.shape)) break;
+            if (key.shape != element.shape) {
+                reportTypeError(*b.left,
+                                "the 'in' operator needs a key of type '" +
+                                    element.cpp + "'");
+                return "false";
+            }
+            needsCollections_ = true;
+            return "(" + expr(*b.right) + ")->has(" + expr(*b.left) + ")";
+        }
+        case Shape::Array:
+        case Shape::TypedArray: {
+            // An index in range: the array's length is the bound.
+            if (key.shape != Shape::Number) {
+                reportTypeError(*b.left,
+                                "the 'in' operator over an array needs a "
+                                "number index");
+                return "false";
+            }
+            noteFamilyUse(*b.right);
+            const std::string recv = expr(*b.right);
+            const std::string index = expr(*b.left);
+            const std::string bound =
+                (classify(container).shape == Shape::TypedArray)
+                    ? "static_cast<double>(" + recv + "->length)"
+                    : "static_cast<double>(" + recv + "->size())";
+            return "((" + index + " >= 0.0) && (" + index + " < " + bound +
+                   "))";
+        }
+        case Shape::Object: {
+            const std::string answer = emitInObject(b, container);
+            if (!answer.empty()) return answer;
+            break;
+        }
+        default:
+            break;
+    }
+    reportTypeError(b, "the 'in' operator needs a Map, Set, array or object on "
+                       "the right");
+    return "false";
+}
+
+// `"name" in object`: a fixed-shape object's fields are known at compile
+// time, so the answer is the field's presence. The spec bans `for...in` over
+// a plain object (its keys are known), so only a literal key can name one;
+// "" when the receiver is not a value shape the emitter knows.
+std::string Generator::emitInObject(const BinaryExpr& b, const Type& container) {
+    if (b.left->kind != NodeKind::StringLiteral) {
+        reportTypeError(*b.left,
+                        "the 'in' operator over an object needs a literal key");
+        return "false";
+    }
+    const std::string name = static_cast<const StringLiteral&>(*b.left).value;
+    std::string structName;
+    std::vector<ObjectField> fields;
+    if (!objectShapeOf(container, structName, fields)) return std::string();
+    for (const ObjectField& field : fields) {
+        if (field.name == name) return "true";
+    }
+    return "false";
 }
 
 // Native (`r_'...'` / `c_'...'`) integral operators keep the raw C++ operator:
@@ -506,8 +669,7 @@ std::string Generator::emitUnary(const UnaryExpr& u) {
 
 std::string Generator::emitUpdate(const UpdateExpr& u) {
     if (u.operand->kind != NodeKind::Identifier) {
-        notImplemented(u, "update of a non-identifier target");
-        return "0.0";
+        return emitUpdateTarget(u);
     }
     const auto& id = static_cast<const Identifier&>(*u.operand);
     const auto binding = lookup(id.name);
@@ -528,6 +690,144 @@ std::string Generator::emitUpdate(const UpdateExpr& u) {
         return u.prefix ? "(++" + target + ")" : "(" + target + "++)";
     }
     return u.prefix ? "(--" + target + ")" : "(" + target + "--)";
+}
+
+// The C++ lvalue of a member write target (a field of a value shape or of a
+// class) plus the field's cp3 type; false when the member is not a writable
+// field (a method, a weak link, a static or an accessor).
+bool Generator::memberFieldTarget(const MemberExpr& m, std::string& lvalue,
+                                   Type& fieldType) {
+    if (!m.object) return false;
+    const Type receiver = effectiveType(*m.object);
+    // A value shape (`$o{...}`): the field is a member of the generated
+    // struct behind the handle.
+    Type object;
+    bool optional = false;
+    if (objectReceiver(receiver, object, optional) && !optional) {
+        std::string structName;
+        std::vector<ObjectField> fields;
+        if (objectShapeOf(object, structName, fields)) {
+            for (const ObjectField& field : fields) {
+                if (field.name != m.property) continue;
+                lvalue = "((" + expr(*m.object) + ")->" +
+                         mapIdent(m.property) + ")";
+                fieldType = field.type;
+                return true;
+            }
+        }
+    }
+    // A class instance: the field is a member of the class handle's struct.
+    const ClassModel* cm = classModelOf(stripNullish(receiver));
+    if (cm == nullptr) return false;
+    const ClassMemberModel* member =
+        findClassMemberChain(*cm, m.property, nullptr);
+    if (member == nullptr || member->isMethod || member->isStatic ||
+        member->isWeak) {
+        return false;
+    }
+    lvalue = "((" + expr(*m.object) + ")->" + mapIdent(m.property) + ")";
+    fieldType = member->type;
+    return true;
+}
+
+// `o.a++`, `a[i]++`: the target's value changes by one. The expression yields
+// the old value (postfix) or the new one (prefix), and the target is read and
+// written exactly once.
+std::string Generator::emitUpdateTarget(const UpdateExpr& u) {
+    const Expr& operand = *u.operand;
+    if (operand.kind == NodeKind::MemberExpr) {
+        return emitUpdateMember(u, static_cast<const MemberExpr&>(operand));
+    }
+    if (operand.kind == NodeKind::IndexExpr) {
+        return emitUpdateIndex(u, static_cast<const IndexExpr&>(operand));
+    }
+    // A call result or a `new` expression: not a value a program can write to
+    // (the same rule the assignment target check states).
+    reportTypeError(u, "invalid update target: assign to a name, a property "
+                       "or an index");
+    return "0.0";
+}
+
+// `o.a++`: the field of a value shape or of a class.
+std::string Generator::emitUpdateMember(const UpdateExpr& u,
+                                         const MemberExpr& m) {
+    const char* op = u.op == UpdateOp::Increment ? "+" : "-";
+    const char* amount = "1";
+    std::string lvalue;
+    Type fieldType;
+    if (!memberFieldTarget(m, lvalue, fieldType)) {
+        reportTypeError(u, "cannot update this property");
+        return "0.0";
+    }
+    const CppInfo field = classify(fieldType);
+    if (field.shape != Shape::Number && field.shape != Shape::Native) {
+        reportTypeError(u, "cannot increment a value that is not a number");
+        return "0.0";
+    }
+    const std::string step = lvalue + " " + op + "= " + amount;
+    if (u.prefix) return "(" + step + ")";
+    return "([&]{ const auto cp3_old = " + lvalue + "; " + step +
+           "; return cp3_old; }())";
+}
+
+// `a[i]++`: an element of a regular array or of a typed view.
+std::string Generator::emitUpdateIndex(const UpdateExpr& u,
+                                        const IndexExpr& ix) {
+    const char* op = u.op == UpdateOp::Increment ? "+" : "-";
+    const char* amount = "1";
+    if (!ix.object || !ix.index) {
+        reportTypeError(u, "cannot update this element");
+        return "0.0";
+    }
+    Type receiver = effectiveType(*ix.object);
+    if (receiver.isLiteral()) receiver = receiver.literalBaseType();
+    const CppInfo shape = classify(receiver);
+    const std::string recv = expr(*ix.object);
+    const std::string index = indexOperandText(*ix.index);
+    // The read and the write, with the receiver and the index bound once.
+    std::string read;
+    std::string write;
+    if (shape.shape == Shape::TypedArray) {
+        const char* tag = familyTag(receiver.name);
+        if (tag == nullptr) {
+            reportTypeError(u, "cannot update this element");
+            return "0.0";
+        }
+        needsTypedArray_ = true;
+        const std::string view = "::cp3::runtime::" + std::string(tag);
+        read = "::cp3::runtime::typedArrayAtChecked<" + view +
+               ">(cp3_recv, cp3_idx)";
+        write = "::cp3::runtime::typedArrayWriteAt<" + view +
+                ">(cp3_recv, cp3_idx, ";
+    } else if (receiver.kind == TypeKind::Array) {
+        CppInfo element;
+        if (!arrayElementInfo(arrayElemOf(receiver), element)) {
+            reportTypeError(u, "cannot update this element");
+            return "0.0";
+        }
+        if (element.shape != Shape::Number && element.shape != Shape::Native) {
+            reportTypeError(u, "cannot increment an element that is not a "
+                               "number");
+            return "0.0";
+        }
+        needsTypedArray_ = true;
+        read = "::cp3::runtime::arrayAt<" + element.cpp +
+               ">(cp3_recv, cp3_idx)";
+        write = "::cp3::runtime::arrayWriteAt<" + element.cpp +
+                ">(cp3_recv, cp3_idx, ";
+    } else {
+        reportTypeError(u, "cannot update this element");
+        return "0.0";
+    }
+    const std::string head = "([&]{ auto&& cp3_recv = " + recv +
+                             "; const double cp3_idx = " + index + "; ";
+    const std::string step = std::string("(cp3_old ") + op + " " + amount + ")";
+    if (u.prefix) {
+        return head + "const auto cp3_old = " + read + "; " + write + step +
+               "); return cp3_old " + op + " " + amount + "; }())";
+    }
+    return head + "const auto cp3_old = " + read + "; " + write + step +
+           "); return cp3_old; }())";
 }
 
 std::string Generator::emitConditional(const ConditionalExpr& c) {
