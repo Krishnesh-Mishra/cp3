@@ -204,7 +204,9 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
                 texts.spreadAt = i;
                 texts.value[i] = g.expr(*spread.argument);
             } else {
-                g.notImplemented(*arg, "spread argument");
+                // A spread without a source (the parser already reported the
+                // syntax error): the argument keeps a placeholder.
+                texts.value[i] = "0.0";
             }
             continue;
         }

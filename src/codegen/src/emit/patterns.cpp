@@ -440,8 +440,6 @@ std::string Generator::untypedParamTemplate(std::size_t index) const {
 std::string Generator::parameterText(const Parameter& p, const FunctionDeclaration& fd,
                                      std::size_t index, bool includeDefault) {
     const Identifier* id = parameterIdentifier(p);
-    const bool pattern = p.name && (p.name->kind == NodeKind::ArrayPattern ||
-                                    p.name->kind == NodeKind::ObjectPattern);
     // A rest parameter with a destructuring target (`f(...[a, b])`): the C++
     // parameter is the array the rest collects, and the body prologue unpacks
     // it into the pattern.
@@ -457,13 +455,11 @@ std::string Generator::parameterText(const Parameter& p, const FunctionDeclarati
     std::string name;
     if (id) {
         name = mapIdent(id->name);
-    } else if (pattern || restPattern != nullptr) {
-        // A destructured parameter: the C++ parameter is the generated handle
-        // whose contents the body prologue unpacks.
-        name = "cp3_param_" + std::to_string(index);
     } else {
-        if (p.name) notImplemented(*p.name, "destructuring parameter");
-        name = "cp3_param";
+        // A destructured parameter (a binding pattern, or a rest parameter
+        // with one): the C++ parameter is the generated handle whose contents
+        // the body prologue unpacks.
+        name = "cp3_param_" + std::to_string(index);
     }
 
     const std::optional<Type> pt = parameterType(p, fd, index);
