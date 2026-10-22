@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = [];
+let x = a[0];
+console.log(`${x}`);

@@ -214,6 +214,24 @@ inline std::string charAt(const std::string& s, double index) {
     return std::string();
 }
 
+// The string's code points, in order: the elements a `for (const ch of s)`
+// walks (the JS for-of order - a whole code point, not a byte). cp3 strings
+// are UTF-8 (docs 09), so a multi-byte character is one element.
+inline std::vector<std::string> codePoints(const std::string& s) {
+    std::vector<std::string> out;
+    std::size_t at = 0;
+    while (at < s.size()) {
+        std::size_t next = at + 1;
+        while (next < s.size() &&
+               !detail::isCodePointStart(static_cast<unsigned char>(s[next]))) {
+            ++next;
+        }
+        out.push_back(s.substr(at, next - at));
+        at = next;
+    }
+    return out;
+}
+
 /// Docs 09: `str[i]` is the raw UTF-8 byte at byte position `i` as a number
 /// (a deliberate departure from JS's UTF-16 code unit: a multi-byte character
 /// yields one of its bytes, not the character). An out-of-range or

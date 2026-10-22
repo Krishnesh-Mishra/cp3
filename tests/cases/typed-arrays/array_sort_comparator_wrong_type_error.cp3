@@ -1,0 +1,4 @@
+import console from "std/console";
+function cmp(x: string, y: string): number { return 0; }
+let a = [3, 1, 2];
+a.sort(cmp);

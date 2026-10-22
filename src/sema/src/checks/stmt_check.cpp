@@ -318,6 +318,11 @@ void Analyzer::analyzeForOf(ForOfStatement& stmt) {
     Type elem = Type::unknown();
     if (rt.kind == TypeKind::Array) {
         elem = elemOf(rt);
+    } else if (rt.kind == TypeKind::String) {
+        // `for (const ch of s)`: the string's code points, in order (the JS
+        // for-of order; docs 09: cp3 strings are UTF-8, so the element is a
+        // whole character).
+        elem = Type::string();
     } else if (isTupleType(rt)) {
         if (Shape* sh = shapeOf(rt)) {
             std::vector<Type> es = sh->tupleElems;

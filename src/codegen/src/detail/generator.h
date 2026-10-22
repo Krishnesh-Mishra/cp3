@@ -75,6 +75,15 @@ struct ArrayEmitter {
                                     const std::string& recvText);
     static void forOf(Generator& g, const ForOfStatement& f,
                       const std::string& jsLabel, std::string& out, int indent);
+    // The `for...of` source: the C++ type of one element (its cp3 type is
+    // `ec.type`), and whether the source is a string (its code points)
+    // rather than an array. False when the source is not one cp3 can walk.
+    static bool forOfSource(Generator& g, const ForOfStatement& f, CppInfo& ec,
+                             bool& isString);
+    // The assignment the loop makes to a target that is not a binding (a
+    // member field or an array element).
+    static std::string forOfTargetAssign(Generator& g, const Node& target,
+                                         const std::string& item);
 };
 struct ProgramAssembly;  // detail/program_assembly.h (emit/program.cpp)
 // The identifier a parameter binds directly, unwrapping a trailing `...rest`
@@ -408,6 +417,11 @@ private:
     // The `IndexExpr` dispatch: the family read, else a not-implemented report.
     std::string emitIndexExpr(const IndexExpr& ix);
     std::string emitFamilyIndexWrite(const AssignmentExpr& a);
+    // The element write of a family index target (`a[i] = v`), with the
+    // assigned value already spelled (the `for...of` loop stores the element
+    // it bound).
+    std::string familyIndexWriteText(const IndexExpr& ix,
+                                     const std::string& value);
     // Family method receiver; a ctor/literal takes the call's element type.
     std::string familyReceiverText(const Expr& obj, const Type& elem, const Node& site);
     std::string arrayCtorText(const ExprList& args, const Type& elem, const Node& site);

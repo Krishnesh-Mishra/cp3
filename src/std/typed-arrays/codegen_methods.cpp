@@ -22,6 +22,40 @@ namespace cp3 {
 
 using namespace detail;
 
+namespace {
+
+// The element-type gate's diagnostic. An array whose element type has no C++
+// spelling cannot be lowered - cp3 has no dynamic array (docs 09) - so the
+// site reports the type error the array declaration sites report (CP3401),
+// not a "not implemented" skip: the program is ill-typed, and the fix is to
+// name the element type.
+std::string elementTypeMessage(const Type& elem, const std::string& what) {
+    if (elem.isUnknown()) {
+        return "cannot infer the element type of " + what + "; annotate the binding";
+    }
+    return "type mismatch: an array cannot hold elements of type '" +
+           describe(elem) + "'";
+}
+
+// The comparator a `sort` call takes: two elements in, a number out (the JS
+// comparator contract, docs 09). A named comparator is checked here, because
+// sema treats every function-typed argument as compatible with a
+// function-typed parameter (the structural check is deferred).
+bool sortComparatorMatches(const Type& fnType, const CppInfo& elem) {
+    if (fnType.kind != TypeKind::Function || fnType.parts.size() != 3) {
+        return false;
+    }
+    for (std::size_t i = 0; i < 2; ++i) {
+        const CppInfo param = classify(fnType.parts[i]);
+        if (!param.representable || param.cpp != elem.cpp) return false;
+    }
+    const CppInfo ret = classify(fnType.parts[2]);
+    return ret.representable &&
+           (ret.shape == Shape::Number || ret.shape == Shape::Native);
+}
+
+}  // namespace
+
 // =============================================================================
 // Methods
 // =============================================================================
@@ -36,7 +70,7 @@ std::string Generator::arrayFillCallText(const CallExpr& c, const MemberExpr& m,
                                                          : arrayElemOf(recv);
         CppInfo ec;
         if (!arrayElementInfo(elem, ec)) {
-            notImplemented(c, "the array fill element type");
+            reportTypeError(c, elementTypeMessage(elem, "a fill"));
             return "0.0";
         }
         needsTypedArray_ = true;
@@ -70,7 +104,7 @@ std::string Generator::arrayJoinCallText(const CallExpr& c, const MemberExpr& m,
     }
     CppInfo ec;
     if (!arrayElementInfo(arrayElemOf(recv), ec)) {
-        notImplemented(c, "the array join element type");
+        reportTypeError(c, elementTypeMessage(arrayElemOf(recv), "a join"));
         return "0.0";
     }
     needsTypedArray_ = true;
@@ -95,7 +129,7 @@ std::string Generator::arraySortCallText(const CallExpr& c, const MemberExpr& m,
     }
     CppInfo ec;
     if (!arrayElementInfo(arrayElemOf(recv), ec)) {
-        notImplemented(c, "the array sort element type");
+        reportTypeError(c, elementTypeMessage(arrayElemOf(recv), "a sort"));
         return "0.0";
     }
     needsTypedArray_ = true;
@@ -105,14 +139,29 @@ std::string Generator::arraySortCallText(const CallExpr& c, const MemberExpr& m,
         return "::cp3::runtime::arraySort<" + ec.cpp + ">(" + recvText + ")";
     }
     const Expr* arg = c.arguments.front().get();
-    if (arg == nullptr || arg->kind != NodeKind::ArrowFunction) {
+    if (arg == nullptr) {
         notImplemented(c, "a non-arrow sort comparator");
         return "0.0";
     }
-    const std::string cmp =
-        emitArrow(static_cast<const ArrowFunction&>(*arg), {ec.cpp, ec.cpp});
+    if (arg->kind == NodeKind::ArrowFunction) {
+        const std::string cmp =
+            emitArrow(static_cast<const ArrowFunction&>(*arg), {ec.cpp, ec.cpp});
+        return "::cp3::runtime::arraySortWith<" + ec.cpp + ">(" + recvText + ", " +
+               cmp + ")";
+    }
+    // A named comparator (`a.sort(cmp)`): a function value the runtime calls
+    // with the two elements. It must take the element type and return a
+    // number; sema accepts any function-typed argument here (the structural
+    // function check is deferred), so the signature is checked in codegen.
+    const CppInfo ci = info(*arg);
+    if (ci.shape != Shape::Function || !sortComparatorMatches(ci.type, ec)) {
+        reportTypeError(c, "type mismatch: the sort comparator must take two "
+                           "elements of the array's element type and return a "
+                           "number");
+        return "0.0";
+    }
     return "::cp3::runtime::arraySortWith<" + ec.cpp + ">(" + recvText + ", " +
-           cmp + ")";
+           expr(*arg) + ")";
 }
 
 // `arr.includes(value)` (docs/language-spec/09-arrays-strings.md): the
@@ -362,7 +411,8 @@ std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
     if (ot.kind == TypeKind::Array) {
         CppInfo ec;
         if (!arrayElementInfo(arrayElemOf(ot), ec)) {
-            notImplemented(ix, "the array index read");
+            reportTypeError(ix, elementTypeMessage(arrayElemOf(ot),
+                                                   "an element read"));
             return "0.0";
         }
         needsTypedArray_ = true;
@@ -395,11 +445,17 @@ std::string Generator::emitFamilyIndexWrite(const AssignmentExpr& a) {
         return std::string();
     }
     const auto& ix = static_cast<const IndexExpr&>(*a.target);
+    return familyIndexWriteText(ix, expr(*a.value));
+}
+
+// The element write of a family index target, with the assigned value
+// already spelled (the `for...of` loop stores the element it bound).
+std::string Generator::familyIndexWriteText(const IndexExpr& ix,
+                                            const std::string& value) {
     if (!ix.object || !ix.index) return std::string();
     Type ot = effectiveType(*ix.object);
     if (ot.isLiteral()) ot = ot.literalBaseType();
     const std::string idxText = indexOperandText(*ix.index);
-    const std::string value = expr(*a.value);
     if (isParallelRunType(ot)) {
         // A `parallel.run` result element write: `std::array` subscript.
         return "((" + expr(*ix.object) + ")[static_cast<std::size_t>(" + idxText +
@@ -416,7 +472,8 @@ std::string Generator::emitFamilyIndexWrite(const AssignmentExpr& a) {
     if (ot.kind == TypeKind::Array) {
         CppInfo ec;
         if (!arrayElementInfo(arrayElemOf(ot), ec)) {
-            notImplemented(a, "the array element write");
+            reportTypeError(ix, elementTypeMessage(arrayElemOf(ot),
+                                                   "an element write"));
             return "0.0";
         }
         needsTypedArray_ = true;

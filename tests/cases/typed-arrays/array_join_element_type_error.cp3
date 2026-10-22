@@ -1,0 +1,3 @@
+import console from "std/console";
+let a = [];
+console.log(a.join(","));

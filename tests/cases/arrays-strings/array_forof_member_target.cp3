@@ -1,0 +1,5 @@
+import console from "std/console";
+class Box { value: number = 0; }
+let b = new Box();
+let a = [1, 2, 3];
+for (b.value of a) { console.log(`${b.value}`); }
