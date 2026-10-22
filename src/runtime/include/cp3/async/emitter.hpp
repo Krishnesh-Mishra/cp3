@@ -13,8 +13,17 @@
 //   `e.off(ev, f)`         -> `(e)->off(ev, <boxed listener>)`
 //   `e.emit(ev)`           -> `(e)->emit(ev)`
 //   `e.emit(ev, a)`        -> `(e)->emit(ev, ::cp3::runtime::EventValue(a))`
+//   `e.emit(ev, a, b)`     -> `(e)->emit(ev, EventValue(a), EventValue(b))`
 //   a function-typed value -> `::cp3::runtime::Listener`
 //   an arrow value         -> `::cp3::runtime::Listener::box([&](...) { ... })`
+//
+// EMITTED VALUES. The listener surface is `(...args: unknown[]) => void`
+// (spec §14), so an emit carries a LIST of values, not one: `emit(ev, a, b)`
+// hands the listener both. The values are erased into `EventValue`s (the
+// runtime has no dynamic value), and a listener takes the values it declares:
+// a nullary listener takes none, a one-parameter listener takes the first, and
+// a listener that declares more parameters than were emitted sees `undefined`
+// for the missing ones (JS parity).
 //
 // LISTENER IDENTITY (D74). `off(event, listener)` removes the listener that is
 // the same box the matching `on`/`once` registered: `Listener` is a handle to a
@@ -22,7 +31,10 @@
 // (`let h = () => { ... }`) is boxed once at its declaration, so the `h` handed
 // to `on` and the one handed to `off` are the same box. Two inline arrows are
 // two different boxes, so `off("go", () => { ... })` never removes an earlier
-// `on("go", () => { ... })`, matching JS function identity.
+// `on("go", () => { ... })`, matching JS function identity. A value that is not
+// boxed at its declaration (a named function, a `std::function` local) is boxed
+// with an identity - the address of the value it came from - so every box of
+// that value is the same listener.
 //
 // The include is gated by codegen: a program that never mentions the builtin
 // does not see this header (code_generator.cpp's include assembly).
@@ -30,6 +42,8 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdlib>
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -42,10 +56,15 @@
 
 namespace cp3::runtime {
 
+// The most values one listener can take (and so the most one `emit` carries
+// to a listener that declares that many parameters).
+inline constexpr std::size_t kMaxListenerArgs = 8;
+
 // The erased value handed to a listener. cp3's listener surface is
 // `(...args: unknown[]) => void` and C++ callables are arity-fixed, so the
-// runtime passes at most the first emitted value; a nullary listener ignores
-// it and an untyped listener parameter sees it as an `EventValue`.
+// runtime hands a listener the values it declares: a nullary listener ignores
+// them, and a listener parameter sees the erased `EventValue` (or the value
+// the codegen converted it to).
 class EventValue {
 public:
     EventValue() = default;  // cp3 `undefined`
@@ -67,6 +86,20 @@ public:
         }
     }
 
+    // The value as a number (the ECMAScript `Number(value)` conversion): a
+    // number is itself, a boolean is 1/0, `null` is 0, a string is its numeric
+    // value (0 when it is empty, NaN when it is not a number) and `undefined`
+    // is NaN.
+    double toNumber() const {
+        switch (kind_) {
+            case Kind::Number: return number_;
+            case Kind::Bool: return boolean_ ? 1.0 : 0.0;
+            case Kind::Null: return 0.0;
+            case Kind::String: return stringToNumber(text_);
+            default: return std::numeric_limits<double>::quiet_NaN();
+        }
+    }
+
     // JS truthiness of the carried value ("" and 0 and NaN are falsy).
     bool truthy() const {
         switch (kind_) {
@@ -84,6 +117,19 @@ private:
     double number_ = 0.0;
     bool boolean_ = false;
     std::string text_;
+
+    // The numeric value of a string (ECMAScript `Number(string)`).
+    static double stringToNumber(const std::string& text) {
+        const char* begin = text.c_str();
+        char* end = nullptr;
+        const double value = std::strtod(begin, &end);
+        if (end == begin) return 0.0;
+        while (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r') {
+            ++end;
+        }
+        if (*end != '\0') return std::numeric_limits<double>::quiet_NaN();
+        return value;
+    }
 };
 
 namespace detail {
@@ -92,27 +138,61 @@ namespace detail {
 // identity (see the header comment).
 struct ListenerBox {
     virtual ~ListenerBox() = default;
-    virtual void invoke(const EventValue* arg) = 0;
+    // The emitted values (0..kMaxListenerArgs of them reach a listener).
+    virtual void invoke(const EventValue* args, std::size_t count) = 0;
 };
+
+// The EventValue arguments a listener callable takes: `N` of them.
+template <std::size_t>
+struct EventValueArg {
+    using type = const EventValue&;
+};
+
+// Can the callable take `N` EventValue arguments?
+template <class F, std::size_t... I>
+constexpr bool acceptsValues(std::index_sequence<I...>) {
+    return std::is_invocable_v<F&, typename EventValueArg<I>::type...>;
+}
 
 template <class F>
 struct TypedListenerBox final : ListenerBox {
     explicit TypedListenerBox(F fn) : fn_(std::move(fn)) {}
 
-    void invoke(const EventValue* arg) override {
-        if (arg != nullptr) {
-            if constexpr (std::is_invocable_v<F&, const EventValue&>) {
-                fn_(*arg);
-            } else {
-                (void)arg;  // a nullary listener ignores the emitted value
-                fn_();
-            }
-        } else if constexpr (std::is_invocable_v<F&>) {
-            fn_();
-        } else {
-            fn_(EventValue{});  // the listener's parameter is `undefined`
-        }
+    void invoke(const EventValue* args, std::size_t count) override {
+        // The callable takes a fixed number of values: the largest number it
+        // accepts (at most kMaxListenerArgs). The emitted values fill it, the
+        // missing ones are `undefined`, and the extra ones are dropped (JS
+        // drops the extra arguments too).
+        Dispatch<kMaxListenerArgs>::run(*this, args, count);
     }
+
+    // Calls the boxed callable with `N` values.
+    template <std::size_t N>
+    void callWith(const EventValue* args, std::size_t count) {
+        call(args, count, std::make_index_sequence<N>{});
+    }
+
+private:
+    template <std::size_t... I>
+    void call(const EventValue* args, std::size_t count, std::index_sequence<I...>) {
+        const EventValue undef;
+        fn_(count > I ? args[I] : undef...);
+    }
+
+    // The dispatch: the largest number of values the callable accepts.
+    template <std::size_t N>
+    struct Dispatch {
+        static void run(TypedListenerBox& box, const EventValue* args,
+                        std::size_t count) {
+            if constexpr (N == 0) {
+                box.template callWith<0>(args, count);
+            } else if constexpr (acceptsValues<F>(std::make_index_sequence<N>{})) {
+                box.template callWith<N>(args, count);
+            } else {
+                Dispatch<N - 1>::run(box, args, count);
+            }
+        }
+    };
 
     F fn_;
 };
@@ -133,23 +213,38 @@ public:
         return out;
     }
 
+    // Boxes a callable with an identity (the address of the value it came
+    // from: a named function, a `std::function` local). Every box of that
+    // value is the same listener, so `off(event, handler)` removes the
+    // listener `on(event, handler)` registered.
+    template <class F>
+    static Listener boxIdentified(F fn, const void* id) {
+        Listener out;
+        out.box_ = std::make_shared<detail::TypedListenerBox<F>>(std::move(fn));
+        out.id_ = id;
+        return out;
+    }
+
     bool valid() const noexcept { return static_cast<bool>(box_); }
 
-    // Identity: true when both handles refer to the same box.
+    // Identity: true when both handles refer to the same box (or to the same
+    // identified value).
     bool same(const Listener& other) const noexcept {
+        if (id_ != nullptr && other.id_ != nullptr) return id_ == other.id_;
         return box_ == other.box_;
     }
 
-    void invoke() const {
-        if (box_) box_->invoke(nullptr);
-    }
+    void invoke() const { invoke(nullptr, 0); }
 
-    void invoke(const EventValue& arg) const {
-        if (box_) box_->invoke(&arg);
+    void invoke(const EventValue& arg) const { invoke(&arg, 1); }
+
+    void invoke(const EventValue* args, std::size_t count) const {
+        if (box_) box_->invoke(args, count);
     }
 
 private:
     std::shared_ptr<detail::ListenerBox> box_;
+    const void* id_ = nullptr;
 };
 
 // The builtin event type (spec §14). Listeners fire in registration order;
@@ -180,10 +275,27 @@ public:
         }
     }
 
-    void emit(const std::string& event) { emitWith(event, nullptr); }
+    void emit(const std::string& event) { emitWith(event, nullptr, 0); }
 
     void emit(const std::string& event, const EventValue& arg) {
-        emitWith(event, &arg);
+        emitWith(event, &arg, 1);
+    }
+
+    void emit(const std::string& event, const EventValue& first,
+              const EventValue& second) {
+        const EventValue args[2] = {first, second};
+        emitWith(event, args, 2);
+    }
+
+    void emit(const std::string& event, const EventValue& first,
+              const EventValue& second, const EventValue& third) {
+        const EventValue args[3] = {first, second, third};
+        emitWith(event, args, 3);
+    }
+
+    // The wide form: an emit with more values than the fixed-arity overloads.
+    void emit(const std::string& event, const std::vector<EventValue>& args) {
+        emitWith(event, args.empty() ? nullptr : args.data(), args.size());
     }
 
 private:
@@ -200,18 +312,15 @@ private:
     // The snapshot is what fires (Node's clone-then-iterate): a listener added
     // while emitting does not run in this emit, and one removed while emitting
     // still runs in it unless it was a `once` that already fired.
-    void emitWith(const std::string& event, const EventValue* arg) {
+    void emitWith(const std::string& event, const EventValue* args,
+                  std::size_t count) {
         const auto it = listeners_.find(event);
         if (it == listeners_.end()) return;
         const std::vector<Entry> snapshot = it->second;
         for (const Entry& entry : snapshot) {
             if (!entry.listener.valid()) continue;
             if (entry.once) removeById(event, entry.id);
-            if (arg != nullptr) {
-                entry.listener.invoke(*arg);
-            } else {
-                entry.listener.invoke();
-            }
+            entry.listener.invoke(args, count);
         }
     }
 

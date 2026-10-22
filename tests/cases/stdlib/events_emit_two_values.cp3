@@ -1,0 +1,4 @@
+import console from "std/console";
+let e = new EventEmitter();
+e.on("go", (a: string, b: number) => { console.log(`${a} ${b}`); });
+e.emit("go", "x", 1);
