@@ -181,11 +181,20 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
     line(out, indent, "};");
     line(out, indent, "");
     if (cm.local) return;
-    // A generic class's formatter would need its own template; classes in the
-    // generic surface do not define `toString` today.
-    if (cm.typeParams.empty() && hasToString(cm)) {
-        line(out, indent, "inline std::string cp3_ts(const " + classRefCpp(cm) +
-                              "& v) { return v->toString(); }");
+    // A generic class's formatter is a template over its own type parameters,
+    // so a `Ref<Box<T>>` formats through the class's `toString` (spec §15).
+    if (hasToString(cm)) {
+        if (cm.typeParams.empty()) {
+            line(out, indent, "inline std::string cp3_ts(const " +
+                                  classRefCpp(cm) +
+                                  "& v) { return v->toString(); }");
+        } else {
+            const std::string ref = "::cp3::runtime::Ref<" + cm.cpp +
+                                    templateUse(cm) + ">";
+            line(out, indent, templateHead(cm));
+            line(out, indent, "inline std::string cp3_ts(const " + ref +
+                                  "& v) { return v->toString(); }");
+        }
         line(out, indent, "");
     }
 }
