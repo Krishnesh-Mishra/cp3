@@ -107,6 +107,10 @@ struct CallBuilder {
     std::string emitFunctionCall(const CallExpr& c, const std::string& text,
                                  const Type& fnType, const ParamList* params);
     std::string emitIdentifierCall(const CallExpr& c);
+    // The member-call hooks for the receiver shapes that own a call outright:
+    // a native binding's own function and the parallel family. "" when
+    // neither owns the call.
+    std::string emitOwnedCall(const CallExpr& c, const MemberExpr& m);
     std::string emitMemberCall(const CallExpr& c, const MemberExpr& m);
 };
 

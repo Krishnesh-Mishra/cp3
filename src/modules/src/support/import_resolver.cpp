@@ -50,6 +50,15 @@ void ProgramLoader::processImport(CompilationUnit& unit, const ImportDeclaration
     dep.resolution = decl.kind == ImportKind::Native ? ModuleResolution::Native
                                                      : classifyModuleSpecifier(decl.source);
 
+    if (dep.resolution == ModuleResolution::Native) {
+        // The native import kind: the binding is loaded from
+        // `<project>/.cp3/native/<id>` and parked in the graph, so sema and
+        // codegen can type-check and lower its calls.
+        dep.resolved = loadNativeBinding(decl);
+        graph_->addDependency(std::move(dep));
+        return;
+    }
+
     const fs::path from = folderOfSource(decl.span.file ? *decl.span.file : *unit.file);
     if (dep.resolution == ModuleResolution::Local) {
         CompilationUnit* target = loadLocal(decl.source, from, decl.span);

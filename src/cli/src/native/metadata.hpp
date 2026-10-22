@@ -15,8 +15,8 @@
 
 namespace cp3::cli::native {
 
-// The metadata schema written by this compiler.
-inline constexpr const char* kNativeMetadataSchema = "cp3-native-binding/1";
+// The metadata schema written by this compiler (the shared model owns it).
+inline constexpr const char* kNativeMetadataSchema = cp3::kNativeMetadataSchema;
 
 // Renders `native.json` for `module` with the hash of `indexText`.
 std::string renderMetadata(const NativeModule& module,

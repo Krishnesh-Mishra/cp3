@@ -38,6 +38,11 @@ std::unique_ptr<ModuleGraph> ProgramLoader::load(SourceManager& sm,
     auto graph = std::make_unique<ModuleGraph>();
     graph_ = graph.get();
 
+    // The native binding root: `<project>/.cp3/native` (the project root is
+    // the nearest ancestor with a package.json, as everywhere else).
+    projectRoot_ = projectRootFor(fs::path(entry.path));
+    nativeRoot_ = projectRoot_ / ".cp3" / "native";
+
     CompilationUnit* entryUnit = addUnitFor(entry, true);
     const std::string key = canonicalKey(fs::path(entry.path));
     byKey_.emplace(key, entryUnit);

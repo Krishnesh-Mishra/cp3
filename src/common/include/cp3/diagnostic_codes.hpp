@@ -83,6 +83,12 @@ inline constexpr const char* kPackageNotFound   = "CP3602";
 inline constexpr const char* kNativeImportUnsupported = "CP3603";
 inline constexpr const char* kMissingDefaultExport = "CP3604";
 inline constexpr const char* kPreludeError      = "CP3605";
+// --- native interop (the `import native "id" as alias` surface) ---------------
+inline constexpr const char* kNativeBindingNotFound = "CP3606";
+inline constexpr const char* kNativeBindingInvalid  = "CP3607";
+inline constexpr const char* kNativeBindingStale    = "CP3608";
+inline constexpr const char* kNativeUnknownMember   = "CP3609";
+inline constexpr const char* kNativeArgumentType    = "CP3610";
 
 // --- classes / interfaces (sema) ---------------------------------------------
 inline constexpr const char* kMissingInterfaceMember = "CP3701";

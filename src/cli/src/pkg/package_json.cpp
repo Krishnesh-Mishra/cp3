@@ -52,6 +52,17 @@ bool isPackageProject(const fs::path& root) {
     return type != nullptr && *type == "package";
 }
 
+bool bundleNativeDlls(const fs::path& root) {
+    JsonValue manifest;
+    std::string err;
+    if (!loadPackageJson(root, manifest, err)) return true;
+    const JsonValue* build = manifest.find("build");
+    if (build == nullptr || !build->isObject()) return true;
+    const JsonValue* bundle = build->find("bundleNativeDlls");
+    if (bundle == nullptr || bundle->type != JsonValue::Type::Bool) return true;
+    return bundle->boolean;
+}
+
 std::string packageName(const JsonValue& manifest, const fs::path& root) {
     if (const std::string* name = manifest.stringField("name")) {
         if (!name->empty()) return *name;

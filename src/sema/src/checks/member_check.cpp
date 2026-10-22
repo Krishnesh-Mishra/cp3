@@ -33,12 +33,13 @@ Type Analyzer::inferMember(MemberExpr& m) {
                "value of a weak reference is possibly undefined; check it "
                "before use");
     }
-    // Ambient std namespaces (Math / path / os / process): type the member
-    // from the std tables instead of the permissive ambient shape
-    // (std_check.cpp). A user binding that shadows the name is not ambient,
-    // so it keeps its own shape.
+    // A native binding's own member (`dm.add`, `dm.Point`, `dm.Color`): the
+    // binding's declaration model is the source of truth. The ambient std
+    // namespaces (Math / path / os / process) are typed from the std tables
+    // instead of the permissive ambient shape (std_check.cpp).
     if (m.object && m.object->kind == NodeKind::Identifier) {
         const auto& id = static_cast<Identifier&>(*m.object);
+        if (Type native = nativeMemberType(m); !native.isError()) return withType(m, native);
         Binding b;
         if (lookup(id.name, b) && b.isAmbient) {
             if (auto t = stdNamespaceMember(id.name, m.property)) {

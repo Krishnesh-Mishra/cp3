@@ -17,6 +17,7 @@ set(cp3_modules_sources
     src/support/unit_loader.cpp
     src/support/prelude_scan.cpp
     src/support/import_resolver.cpp
+    src/support/native_import.cpp
     src/support/export_surface.cpp
     src/support/std_registry.cpp
     src/support/specifier.cpp

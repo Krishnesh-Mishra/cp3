@@ -20,6 +20,10 @@ set(cp3_common_sources
     src/types.cpp
     src/native_types.cpp
     src/native_bindings.cpp
+    src/native_bindings_read.cpp
+    src/detail/native_json.cpp
+    src/detail/native_fields.cpp
+    src/checksum.cpp
     src/options.cpp
     src/suggest.cpp
     src/version.cpp
@@ -27,4 +31,6 @@ set(cp3_common_sources
 
 add_library(cp3_common STATIC ${cp3_common_sources})
 target_include_directories(cp3_common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+# Private headers resolve as `detail/...` from the units under src/.
+target_include_directories(cp3_common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 cp3_set_warnings(cp3_common)

@@ -317,7 +317,10 @@ void Analyzer::analyzeImport(ImportDeclaration& d) {
         declareAmbient(d.defaultBinding, d.span, d.nodeId);
     if (!d.namespaceBinding.empty())
         declareAmbient(d.namespaceBinding, d.span, d.nodeId);
-    if (!d.alias.empty()) declareAmbient(d.alias, d.span, d.nodeId);
+    // A native import's alias was declared by the native pre-pass
+    // (collectNativeAliases), which knows the binding behind it.
+    if (!d.alias.empty() && d.kind != ImportKind::Native)
+        declareAmbient(d.alias, d.span, d.nodeId);
     const bool fromStd = d.source.rfind("std/", 0) == 0;
     for (auto& sp : d.specifiers) {
         if (!sp) continue;

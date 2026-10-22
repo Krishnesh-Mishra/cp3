@@ -228,6 +228,11 @@ protected:
     std::unordered_map<std::uint32_t, Type> exprTypeHints_;
     // Whole-program imports (emit/program.cpp): local spelling -> linked name.
     std::unordered_map<std::string, detail::LinkedName> linkedNames_;
+    // The native bindings this unit imports, keyed by their local alias
+    // (`import native "demo" as dm` -> dm), and the headers the generated
+    // .cpp must include for them.
+    std::unordered_map<std::string, const NativeModule*> nativeAliases_;
+    std::vector<std::string> nativeHeaders_;
     // Whole-program build: module-link export forms carry no C++ of their own.
     bool programMode_ = false;
     std::unordered_set<std::string> functions_;

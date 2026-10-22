@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "cp3/ast.hpp"
+#include "cp3/native_bindings.hpp"
 #include "cp3/source.hpp"
 
 namespace cp3 {
@@ -85,6 +86,16 @@ public:
     void addDependency(ModuleDependency dep);
     const std::vector<ModuleDependency>& dependencies() const noexcept { return deps_; }
 
+    // The native bindings the program imports (`import native "id" as alias`).
+    // The module resolver loads each one (native.json + its index.cp3) and
+    // parks it here; sema and codegen read the model from this list.
+    void addNativeBinding(NativeBinding binding);
+    const std::vector<NativeBinding>& nativeBindings() const noexcept {
+        return nativeBindings_;
+    }
+    // The binding with this id, or nullptr.
+    const NativeBinding* findNativeBinding(const std::string& id) const;
+
     void setEntry(CompilationUnit* unit) noexcept { entry_ = unit; }
     CompilationUnit* entry() const noexcept { return entry_; }
 
@@ -100,6 +111,7 @@ private:
     std::vector<std::unique_ptr<CompilationUnit>> storage_;
     std::vector<CompilationUnit*> unitsView_;
     std::vector<ModuleDependency> deps_;
+    std::vector<NativeBinding> nativeBindings_;
     CompilationUnit* entry_ = nullptr;
 };
 

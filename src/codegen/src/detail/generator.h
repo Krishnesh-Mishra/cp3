@@ -312,6 +312,34 @@ private:
     friend struct detail::CallBuilder;
     bool isConsoleMember(const CallExpr& c) const;
 
+    // --- native interop (emit/native_call.cpp) --------------------------------
+    // The native bindings this unit imports, keyed by their local alias, and
+    // the headers the generated .cpp must include for them.
+    void collectNativeImports(const Program& program);
+    // One imported binding: the alias map, the headers and the enums.
+    void collectNativeBinding(const NativeBinding& binding,
+                              const ImportDeclaration& imp);
+    // The binding's enums join the enum table (the C++ enum class itself
+    // comes from the native library).
+    void collectNativeEnums(const NativeModule& module);
+    // The C++ arguments of one native call (a buffer or number array
+    // parameter expands to a pointer and a length).
+    std::vector<std::string> nativeArgTexts(const CallExpr& c,
+                                            const NativeFunction& fn,
+                                            const std::vector<std::string>& temporaries);
+    // The name of the temporary a twice-read argument is bound to.
+    std::string nativeTempName(std::size_t index);
+    // The `const unsigned char*` a byte-buffer parameter takes.
+    std::string nativeBytesPointer(const std::string& text);
+    // The cp3 spelling of a native result (a number is a double, a
+    // `const char*` result the empty string for a null pointer).
+    std::string nativeResultText(const NativeFunction& fn,
+                                  const std::string& call);
+    // `alias.f(...)` -> the recorded C++ call; "" when it is not one.
+    std::string emitNativeCall(const CallExpr& c, const MemberExpr& m);
+    // `dm.Color` / `dm.Color.Red` -> the enum's C++ name / member.
+    std::string emitNativeMember(const MemberExpr& m);
+
     // --- generic functions + tuples (support/generic.cpp) ---------------------
     // Real C++ function templates: the `template <typename T, ...>` prefix
     // from the declared type parameters, the callee spelling with any explicit

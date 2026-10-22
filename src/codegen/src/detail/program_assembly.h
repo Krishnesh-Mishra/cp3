@@ -46,6 +46,8 @@ struct ProgramNeeds {
     bool parallel = false;       // parallel.* -> cp3/parallel/parallel.hpp
     bool worker = false;         // new Worker(...) -> cp3/parallel/worker.hpp
     std::vector<std::string> workerHeaders;  // generated worker unit headers
+    // The native bindings' headers (`import native "id" as alias`).
+    std::vector<std::string> nativeHeaders;
 };
 
 // One unit's contribution to the assembled translation unit.

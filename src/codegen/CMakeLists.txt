@@ -54,6 +54,7 @@ set(cp3_codegen_sources
     src/emit/call.cpp
     src/emit/call_args.cpp
     src/emit/call_spread.cpp
+    src/emit/native_call.cpp
     src/emit/async.cpp
     src/emit/arrow.cpp
     src/emit/spread.cpp

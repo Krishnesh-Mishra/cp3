@@ -22,6 +22,7 @@
 #include "cp3/analysis.hpp"
 #include "cp3/ast.hpp"
 #include "cp3/diagnostic.hpp"
+#include "cp3/native_bindings.hpp"
 #include "cp3/options.hpp"
 
 namespace cp3 {
@@ -64,6 +65,10 @@ struct CodegenOptions {
     // prefixes work in every project; this only affects bare `i64`-style
     // annotations in a rust/cpp project.
     TypeSystem typeSystem = TypeSystem::TypeScript;
+    // The native bindings this unit imports (`import native "id" as alias`).
+    // The module resolver loaded them; codegen lowers `alias.f(...)` against
+    // the recorded C++ names and includes the binding's headers.
+    std::vector<NativeBinding> nativeBindings;
 };
 
 // The typed channel of a worker unit's entry (D80): the `thread: Thread<In, Out>`

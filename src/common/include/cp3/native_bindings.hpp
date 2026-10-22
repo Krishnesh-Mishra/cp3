@@ -3,8 +3,9 @@
 //
 // OWNERSHIP: common module. `cp3c native-install` builds this model from
 // libclang and writes it as `.cp3/native/<id>/native.json`; the generated
-// `index.cp3` is the human-readable view. The compiler's sema/codegen
-// consumption of this model is a separate follow-up (spec 19).
+// `index.cp3` is the human-readable view. The compiler half (the module
+// resolver, sema and codegen) reads the same model back through
+// `readNativeBinding` below (spec 19).
 //
 // This is deliberately the slice the binding command needs: one module, its
 // functions, simple classes and enums, and the cp3 value types those map to.
@@ -12,7 +13,9 @@
 #pragma once
 
 #include <cstddef>
+#include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "cp3/types.hpp"
@@ -115,5 +118,65 @@ Type nativeEnumType(const std::string& id, const std::string& cppQualified);
 
 bool isNativeClassType(const Type& t);
 bool isNativeEnumType(const Type& t);
+
+// --- lookups -----------------------------------------------------------------
+
+// The free function / class / enum a binding exposes under `name`, or nullptr.
+const NativeFunction* findNativeFunction(const NativeModule& module,
+                                         const std::string& name);
+const NativeBoundClass* findNativeClass(const NativeModule& module,
+                                         const std::string& name);
+const NativeEnum* findNativeEnum(const NativeModule& module,
+                                 const std::string& name);
+
+// --- the reader (compiler half) ----------------------------------------------
+
+// The metadata schema this compiler reads and writes.
+inline constexpr const char* kNativeMetadataSchema = "cp3-native-binding/1";
+
+// Why a binding could not be loaded. `Ok` is the only status that carries a
+// usable module.
+enum class NativeReadStatus {
+    Ok,
+    Missing,        // the binding directory has no native.json
+    IoError,        // the file exists but could not be read
+    ParseError,     // the text is not a JSON object
+    SchemaMismatch, // `schema` is not "cp3-native-binding/1"
+    Invalid,        // a required field is missing or malformed
+    Stale,          // `contentHash` does not match the on-disk index.cp3
+};
+
+// The outcome of reading one binding.
+struct NativeReadResult {
+    NativeReadStatus status = NativeReadStatus::Ok;
+    // What went wrong (empty when the status is Ok).
+    std::string message;
+    // What the user can do about it (empty when the status is Ok).
+    std::string remedy;
+    // The parsed binding (populated only when the status is Ok).
+    NativeModule module;
+};
+
+// Parses and validates one `native.json` document. The schema must be
+// "cp3-native-binding/1"; every function/class/enum is checked for the
+// fields the compiler half relies on.
+NativeReadResult readNativeMetadata(std::string_view text);
+
+// Reads `<dir>/native.json` and verifies its `contentHash` against the
+// on-disk `<dir>/index.cp3`. A binding whose index was edited or replaced
+// after the metadata was written is reported as Stale, with the remedy
+// `re-run 'cp3 native-install <sdk> --name <id> --force'`.
+NativeReadResult readNativeBinding(const std::filesystem::path& dir);
+
+// The remedy text a stale binding reports.
+std::string nativeStaleRemedy(const std::string& id);
+
+// One native binding a program imports (`import native "id" as alias`).
+struct NativeBinding {
+    std::string id;       // the binding id ("demo")
+    std::string alias;    // the local alias ("dm")
+    std::string dir;      // the binding directory
+    NativeModule module;  // the parsed binding
+};
 
 }  // namespace cp3

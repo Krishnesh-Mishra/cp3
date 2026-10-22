@@ -207,6 +207,10 @@ std::string programSource(const ProgramAssembly& assembly,
             out += "#include \"" + header + "\"\n";
         }
     }
+    // The native bindings' own headers (`import native "id" as alias`).
+    for (const std::string& header : n.nativeHeaders) {
+        out += "#include \"" + header + "\"\n";
+    }
     out += "\n";
     out += kHelperBlock;
     if (n.typedArray) out += kTypedArrayHelperBlock;
@@ -277,8 +281,10 @@ void Generator::emitProgramUnit(const ProgramLink& link,
         return;
     }
     // Only the entry unit carries options (its worker import, spec 13); an
-    // imported unit always generates with the defaults.
-    const CodegenOptions options = unit.isEntry ? options_ : CodegenOptions{};
+    // imported unit always generates with the defaults. The native bindings
+    // are the program's, so every unit gets them.
+    CodegenOptions options = unit.isEntry ? options_ : CodegenOptions{};
+    options.nativeBindings = options_.nativeBindings;
     Generator inner(sink_, *semaIt->second, unit.moduleName, lineMapping_,
                     options);
     inner.programMode_ = true;
@@ -320,6 +326,13 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     n.regex |= inner.needsRegex_;
     n.parallel |= inner.needsParallel_;
     n.worker |= inner.needsWorker_;
+    for (const std::string& header : inner.nativeHeaders_) {
+        bool seen = false;
+        for (const std::string& existing : n.nativeHeaders) {
+            if (existing == header) seen = true;
+        }
+        if (!seen) n.nativeHeaders.push_back(header);
+    }
     if (unit.isEntry) {
         for (const WorkerSite& site : options.workers) {
             if (site.inlineSite || site.headerPath.empty()) continue;

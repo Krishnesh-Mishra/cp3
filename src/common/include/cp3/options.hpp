@@ -9,6 +9,9 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
+
+#include "cp3/native_bindings.hpp"
 
 namespace cp3 {
 
@@ -40,6 +43,12 @@ struct CompileOptions {
 
     // Entry point (.cp3) for run/build; empty for a bare check of a project.
     std::string entryPath;
+
+    // The native bindings the program imports (`import native "id" as alias`).
+    // The module resolver loads them (one model per binding id) and hands
+    // them to sema and codegen through this field: sema type-checks the
+    // calls against them, codegen lowers them.
+    std::vector<NativeBinding> nativeBindings;
 };
 
 }  // namespace cp3

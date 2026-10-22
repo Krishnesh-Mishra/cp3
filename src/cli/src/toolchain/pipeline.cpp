@@ -25,6 +25,16 @@ std::unique_ptr<ModuleGraph> loadModuleGraph(SourceManager& sm, const SourceFile
     return loader.load(sm, entry);
 }
 
+std::vector<std::string> importedStdModules(const ModuleGraph& graph) {
+    std::vector<std::string> modules;
+    for (const ModuleDependency& dep : graph.dependencies()) {
+        if (dep.resolution == ModuleResolution::Std) {
+            modules.push_back(dep.specifier);
+        }
+    }
+    return modules;
+}
+
 bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink,
                     const CompileOptions& compile) {
     SemanticAnalyzer analyzer(sink, compile);

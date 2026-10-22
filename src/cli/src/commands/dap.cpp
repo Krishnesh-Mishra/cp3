@@ -96,6 +96,7 @@ dap::BuildOutcome buildDebugProgram(const std::string& program,
         std::string log;
         CollectingDiagnosticSink feSink;
         std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sm, *file, feSink);
+        opt.compile.nativeBindings = graph->nativeBindings();
         CompilationUnit* entry = graph != nullptr ? graph->entry() : nullptr;
         SemaResult sema;
         if (entry != nullptr && entry->ast) {
@@ -122,18 +123,13 @@ dap::BuildOutcome buildDebugProgram(const std::string& program,
             outcome.log = log.empty() ? "cp3c: code generation produced no module\n" : log;
             return outcome;
         }
-        std::vector<std::string> importedStdModules;
-        for (const ModuleDependency& dep : graph->dependencies()) {
-            if (dep.resolution == ModuleResolution::Std) {
-                importedStdModules.push_back(dep.specifier);
-            }
-        }
+        std::vector<std::string> stdModules = importedStdModules(*graph);
         detail::BuildRequest request;
         request.opt = &opt;
         request.entry = &entryPath;
         request.moduleName = &moduleName;
         request.module = &mod;
-        request.importedStdModules = &importedStdModules;
+        request.importedStdModules = &stdModules;
         request.execute = false;
         const int exitCode = detail::buildWithToolchain(request);
         if (exitCode != kExitSuccess) {

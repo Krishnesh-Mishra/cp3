@@ -145,6 +145,10 @@ void Generator::runUnit(const Program& program, std::string& decls,
     // The unit's enums (spec 04): resolved before the emit walk (emit/enum.cpp).
     collectEnums(program);
 
+    // The native bindings this unit imports (`import native "id" as alias`):
+    // the alias map and the headers the generated .cpp must include.
+    collectNativeImports(program);
+
     // Array element reads that can bind a const reference (array_refs.cpp).
     analyzeArrayRefs(program);
 

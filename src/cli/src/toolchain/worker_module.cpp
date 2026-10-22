@@ -148,8 +148,12 @@ bool WorkerResolver::generateUnit(const fs::path& resolved,
                    "cannot load worker module '" + site.literal + "'");
         return false;
     }
+    // The worker unit's own native bindings (an `import native` in the
+    // worker): they are type-checked and lowered like the entry's.
+    CompileOptions workerCompile = compile;
+    workerCompile.nativeBindings = graph->nativeBindings();
     SemaResult sema;
-    if (!analyzeProgram(*unit->ast, sema, sink, compile)) return false;
+    if (!analyzeProgram(*unit->ast, sema, sink, workerCompile)) return false;
     const std::optional<WorkerChannel> channel =
         resolveWorkerChannel(*unit->ast, sema);
     if (!channel) {
@@ -165,6 +169,7 @@ bool WorkerResolver::generateUnit(const fs::path& resolved,
     options.workerModule = true;
     options.typeSystem = compile.typeSystem;
     options.importedEnums = importedEnumsFor(*graph, *unit);
+    options.nativeBindings = workerCompile.nativeBindings;
     GeneratedModule module =
         generateModule({*unit->ast, sema, moduleName, sink, lineDirectives, options});
     if (module.source.empty()) return false;  // codegen diagnostics explain

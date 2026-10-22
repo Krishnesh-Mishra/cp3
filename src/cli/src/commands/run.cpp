@@ -36,7 +36,7 @@ namespace {
 
 // Everything the frontend + codegen steps need beyond the source itself.
 struct BuildContext {
-    const CliOptions* opt = nullptr;
+    CliOptions* opt = nullptr;
     const RenderOptions* render = nullptr;
     const std::string* moduleName = nullptr;  // e.g. "src/index"
     bool execute = false;                     // `cp3c run` was requested
@@ -90,6 +90,9 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
     FrontendResult result;
     CollectingDiagnosticSink feSink;
     result.graph = loadModuleGraph(sm, file, feSink);
+    // The native bindings the program imports: sema type-checks the calls
+    // against them, codegen lowers them.
+    ctx.opt->compile.nativeBindings = result.graph->nativeBindings();
     CompilationUnit* entry = result.graph->entry();
     if (entry != nullptr && entry->ast) {
         analyzeProgram(*entry->ast, result.sema, feSink, ctx.opt->compile);
@@ -261,6 +264,7 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     CodegenOptions options;
     options.importedEnums = importedEnumsFor(*frontend.graph, *entry);
     options.typeSystem = effective.compile.typeSystem;
+    options.nativeBindings = effective.compile.nativeBindings;
     std::vector<GeneratedModule> workerModules;
     std::vector<detail::BuildRequest::ExtraModule> extras;
     const int workerExit = prepareWorkers(
@@ -296,12 +300,8 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
 
     // Every resolved "std/..." specifier in the whole graph (any unit, not just
     // the entry) selects that module's native backend for this build (D68).
-    std::vector<std::string> importedStdModules;
-    for (const ModuleDependency& dep : frontend.graph->dependencies()) {
-        if (dep.resolution == ModuleResolution::Std) {
-            importedStdModules.push_back(dep.specifier);
-        }
-    }
+    const std::vector<std::string> importedStdModules =
+        cp3::cli::importedStdModules(*frontend.graph);
     detail::BuildRequest request;
     request.opt = &effective;
     request.entry = &entryPath;
