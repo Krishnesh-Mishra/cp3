@@ -337,6 +337,37 @@ Near-parity rows:
 - string-churn: 0.18x cpp, 1.00x rust. The cpp entry is unusually slow for
   this row; rust is the meaningful reference.
 
+### What the perf lanes have landed so far
+
+The parked perf stack is being ported lane by lane, and each port is judged
+against the safety brief rather than merged wholesale.
+
+**Landed: array reads and counted-push reserve** (`68a2839`, merge `aa8f020`)
+- `const word = words[i]` used to lower to `arrayAt<E>`, which returns a fresh
+  `std::string` per lookup. It now binds a `const E&` into the vector, so the
+  per-lookup copy disappears. This is gap 5's "array read references" work and
+  it feeds gap 2's "array reference reads".
+- `while (i < bound) { a.push(v); i = i + 1; }` now reserves the remaining
+  pushes once, so the vector allocates once instead of growing geometrically.
+  Capacity is not an observable cp3 value, so the hint cannot change a
+  program's result. This is gap 4's "reserve counted push loops".
+- The proof is whole-unit and complete-or-nothing: the array must be private
+  storage, never mutated in any frame, never escaped or exported, and must
+  outlive the reference; the candidate must be a `const` with no declared type,
+  never written, and read only in its declaring frame. Anything the analysis
+  does not model fails closed - no candidate in the unit is accepted.
+- The lane also found and fixed six defects in the inherited port, including a
+  `let` candidate that broke `ref` parameters (the generated C++ did not
+  compile) and a silently dropped declared type.
+- 35/35 `perf-array` cases, 186 `arrays-strings` passed, 60
+  `functions-closures` passed (8 pre-existing skips).
+
+**In flight:** the foundation/int lane (gaps 1 and 2) and the runtime lane
+(gap 1 parallel reduce, gap 2 map update, gap 5 async fanout).
+
+The baseline table above is the pre-port measurement. The re-measurement after
+the remaining perf lanes land is what decides whether a gap is closed.
+
 ## 6. The eighteen missing CP3002 feature groups
 
 The gate counts 378 marker hits. The `notImplemented` marker is 232: 230 are
