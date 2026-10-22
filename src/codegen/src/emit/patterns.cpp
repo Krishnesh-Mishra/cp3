@@ -553,6 +553,53 @@ void Generator::unpackPattern(const Node& pattern, const PatternSource& src,
     notImplemented(pattern, "this binding pattern");
 }
 
+// The runtime value of a rest object binding: a fresh object shape that holds
+// the source's fields except the ones the pattern named (the TypeScript Omit).
+//
+// The Omit type is the one sema computed for the rest binding (the type model
+// grows the operation, so the binding's declared type and the value built
+// here are the same shape). The value is a new object holding the source's
+// remaining fields, in the order the source declared them.
+//
+// Empty when the source has no enumerable shape (an open shape, a class, a
+// primitive): the caller reports the reason.
+std::string Generator::restObjectText(const ObjectPattern& p,
+                                      const std::string& source,
+                                      const Type& sourceType, Type& restType) {
+    restType = Type::unknown();
+    if (!p.rest) return std::string();
+    const auto& re = static_cast<const RestElement&>(*p.rest);
+    if (!re.argument || re.argument->kind != NodeKind::Identifier) {
+        return std::string();
+    }
+    const auto& id = static_cast<const Identifier&>(*re.argument);
+    const Type* published = sema_.typeOf(id.nodeId);
+    if (published == nullptr || published->isUnknown() ||
+        published->isError()) {
+        return std::string();
+    }
+    restType = *published;
+    std::string structName;
+    std::vector<ObjectField> restFields;
+    if (!objectShapeOf(restType, structName, restFields)) {
+        return std::string();
+    }
+    // The rest reads the source's own fields, so the source must be the
+    // shape the Omit was taken from.
+    std::string sourceStruct;
+    std::vector<ObjectField> sourceFields;
+    if (!objectShapeOf(sourceType, sourceStruct, sourceFields)) {
+        return std::string();
+    }
+    std::vector<std::string> values;
+    for (const ObjectField& field : restFields) {
+        if (!hasShapeField(sourceFields, field.name)) return std::string();
+        values.push_back("((" + source + ")->" + mapIdent(field.name) + ")");
+    }
+    return "::cp3::runtime::makeRef<" + structName + ">(" + structName + "{" +
+           joinStrings(values, ", ") + "})";
+}
+
 void Generator::unpackObjectPattern(const ObjectPattern& p,
                                     const PatternSource& src, std::string& out,
                                     int indent) {
@@ -631,30 +678,27 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
                                                  src.isConst},
                           out, indent);
     }
-    if (p.rest) unpackObjectRest(p, src, out, indent);
-}
-
-// The object rest (`{ a, ...rest }`): the rest binding of an object pattern.
-// The rest object is a fresh value of the source's type that holds the
-// properties the pattern does not name.
-void Generator::unpackObjectRest(const ObjectPattern& p, const PatternSource& src,
-                                 std::string& out, int indent) {
-    const std::string text = detail::objectRestText(p, src.type, src.text);
-    if (text.empty()) {
-        // A class instance, an interface wrapper or a std/json record: cp3
-        // has no way to build a rest object for them.
-        notImplemented(*p.rest, "...rest object pattern");
-        return;
-    }
-    bindPatternTarget(*p.rest, PatternSource{text, src.type, src.isConst}, out,
-                      indent);
-    // The rest binding's cp3 type is the source's own type: sema models the
-    // rest as an array of the remaining elements, which cp3 cannot spell for
-    // an object source.
-    const Node* target =
-        static_cast<const RestElement&>(*p.rest).argument.get();
-    if (target && target->kind == NodeKind::Identifier) {
-        declare(static_cast<const Identifier&>(*target).name, src.type);
+    if (p.rest) {
+        // The rest object: a fresh shape holding the source's fields except
+        // the ones the pattern named (the TypeScript Omit).
+        const auto& re = static_cast<const RestElement&>(*p.rest);
+        if (!re.argument || re.argument->kind != NodeKind::Identifier) {
+            reportTypeError(*p.rest,
+                            "type mismatch: a rest object pattern must bind a "
+                            "name");
+            return;
+        }
+        Type restType;
+        const std::string value =
+            restObjectText(p, src.text, src.type, restType);
+        if (value.empty()) {
+            reportTypeError(*p.rest,
+                            "type mismatch: a rest object pattern needs a "
+                            "source with known properties");
+            return;
+        }
+        bindPatternTarget(*p.rest, PatternSource{value, restType, src.isConst},
+                          out, indent);
     }
 }
 

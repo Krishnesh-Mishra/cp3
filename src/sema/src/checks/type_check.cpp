@@ -8,6 +8,7 @@
 // =============================================================================
 #include "detail/analyzer.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -23,6 +24,16 @@ namespace cp3 {
 // =============================================================================
 bool isAmbientType(const Type& t) {
     return t.kind == TypeKind::Object && t.name == kAmbientLabel;
+}
+
+// Can a rest object pattern read this source? A structural object shape is
+// the case the Omit is defined for; a class instance is an object too, but
+// its members are nominal, so the rest of one is not a shape. A nullish
+// option is peeled: the rest reads the object it may hold.
+bool isRestSource(const Type& t) {
+    const Type peeled = stripNullish(t);
+    if (peeled.isUnion()) return false;
+    return peeled.kind == TypeKind::Object || peeled.kind == TypeKind::Class;
 }
 
 Type ambient() { return Type(TypeKind::Object, kAmbientLabel); }
@@ -263,6 +274,30 @@ const Field* Analyzer::findField(const Shape* shape,
         if (f.name == name) return &f;
     }
     return nullptr;
+}
+
+// =============================================================================
+// The Omit operation (the rest object of a destructuring pattern)
+// =============================================================================
+// `let { a, ...rest } = obj` types `rest` as the source's shape MINUS the
+// properties the pattern named (TypeScript's Omit). The omitted shape is a
+// shape of its own: the kept fields, in the order the source declared them.
+//
+// A source without an enumerable shape has no Omit: an open shape (ambient)
+// accepts any property, a class is nominal, and a primitive is not an object
+// at all. Those keep the `unknown` type, and the use site reports why.
+Type Analyzer::omitShape(const Type& source,
+                         const std::vector<std::string>& named) {
+    const Shape* sh = shapeOf(source);
+    if (sh == nullptr || sh->open) return Type::unknown();
+    std::vector<Field> kept;
+    for (const Field& f : sh->fields) {
+        if (std::find(named.begin(), named.end(), f.name) != named.end()) {
+            continue;
+        }
+        kept.push_back(f);
+    }
+    return makeObjectType(std::move(kept), false, false, {});
 }
 
 // =============================================================================

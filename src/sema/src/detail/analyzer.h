@@ -227,6 +227,10 @@ private:
     Shape* shapeOf(const Type& t);
     Type makeObjectType(std::vector<Field> fields, bool open, bool tuple,
                         std::vector<Type> tupleElems);
+    // The source's shape minus the properties a pattern named: the type of a
+    // rest object binding (TypeScript's Omit). `unknown` when the source has
+    // no enumerable shape (an open shape, a class, a primitive).
+    Type omitShape(const Type& source, const std::vector<std::string>& named);
     const Field* findField(const Shape* shape, const std::string& name) const;
     Type resolveType(TypeNode& node);
     Type resolveTypeInner(TypeNode& node);

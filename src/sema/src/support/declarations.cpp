@@ -290,16 +290,34 @@ void Analyzer::declareArrayPattern(ArrayPattern& ap, const Type& type,
 void Analyzer::declareObjectPattern(ObjectPattern& op, const Type& type,
                                     bool isConst, std::uint32_t declNodeId) {
     Shape* sh = shapeOf(type);
+    std::vector<std::string> named;
     for (auto& prop : op.properties) {
         if (!prop) continue;
         std::string name = keyName(prop->key.get());
         Type pt = Type::unknown();
         if (const Field* f = findField(sh, name)) pt = f->type;
+        named.push_back(name);
         declarePattern(prop->value.get(), pt, isConst, declNodeId);
     }
-    if (op.rest) {
-        declarePattern(op.rest.get(), ambient(), isConst, declNodeId);
+    if (!op.rest) return;
+    // The rest binding is the source's shape MINUS the properties the pattern
+    // named (TypeScript's Omit): `let { a, ...rest } = obj` types `rest` as
+    // `obj` without `a`. The removed property is gone from the type, not read
+    // as its default value.
+    const auto& re = static_cast<RestElement&>(*op.rest);
+    if (!isRestSource(type)) {
+        // A rest object needs an object source (TypeScript: "Rest types may
+        // only be created from object types"). A source whose type is known
+        // and is not an object is a type error; a source whose type is not
+        // known yet stays a skip, and the codegen reports the reason.
+        if (!type.isUnknown() && !type.isError()) {
+            report(diagcode::kTypeMismatch, re.span,
+                   "type mismatch: a rest object pattern needs an object "
+                   "source");
+        }
     }
+    declarePattern(re.argument.get(), omitShape(type, named), isConst,
+                   declNodeId);
 }
 
 void Analyzer::declareForBinding(Node* left, const Type& elemType) {

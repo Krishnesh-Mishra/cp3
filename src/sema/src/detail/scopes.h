@@ -181,6 +181,9 @@ struct ClassInfo {
 // --- free helpers on the frozen Type (defined in type_check.cpp) -------------
 
 bool isAmbientType(const Type& t);
+// Can a rest object pattern read this source? An object source is a
+// structural shape (the Omit of a shape is a shape) or a class instance.
+bool isRestSource(const Type& t);
 Type ambient();
 Type elemOf(const Type& arrayLike);
 Type widen(const Type& t);
