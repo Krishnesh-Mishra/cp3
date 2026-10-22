@@ -723,13 +723,39 @@ arrow needs a parser production the spec does not define, a generic class
 value needs a `TypeParam` inside an object annotation, and a spread into a
 fixed-argument signature needs the shared type mapping that another lane owns.
 
-### Wave 2 - in flight
+### Wave 2 - merging, one lane at a time
 
 Ten lanes, one hundred work items, assigned by the same plan. The lanes cover
 the expression operators, the control-flow surfaces, the array and typed-array
 methods, the Map/Set and network surfaces, the FS/process/env surfaces, the
 whole `parallel.*` family, the worker modules, the CLI `build`/`check` paths and
 the call forms.
+
+**The lanes were stopped and committed as-is** at the spec owner's direction,
+and the lead merges them one at a time: merge the lane, resolve its conflicts
+by hand, build, run the families it touches, check the marker count, and only
+then merge the next. A lane that fails the check goes back to its branch for
+repair rather than into `master`.
+
+| Lane | Merge | What it retired |
+|---|---|---|
+| wave 2, lane 9 | `fb01f66` | the parallel accumulator type, the `parallel.run` closure shape, the worker entry/listener/module forms, the `parse` builtin's arity |
+| wave 2, lane 10 | `7767a6f` | the call forms and the CLI `build`/`check` surfaces |
+| wave 2, lane 8 | `776d8c1` | the class and object surfaces |
+
+**The conflicts were design conflicts, not textual ones.** Two lanes had
+rebuilt the same machinery differently: one had a `parallel.run`-specific
+closure check, the other a general `ClosureFault` that also verifies arity
+and parameter shape for `for` and `reduce`. The merge keeps the general one
+**and** the accumulator-type rule the other lane had added, because that rule
+reports a real error where the general one would have left a marker.
+
+**The conflict footprint is known in advance.** The lead measured each pending
+branch against `master` before merging it, so the cost of each merge is known:
+wave 2 lanes 2 and 6 touch one file each (the generated wave plan and the
+generator header), lanes 4 and 5 touch two and four, lane 3 touches ten, lane
+1 touches nine, and the wave-1 lane 6 touches fourteen - the class-model files
+that three other lanes also edit.
 
 ### What wave 2 does not cover - the third wave
 
