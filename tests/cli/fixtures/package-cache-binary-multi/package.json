@@ -1,0 +1,11 @@
+{
+  "name": "cache-binary-multi",
+  "version": "1.0.0",
+  "description": "package that claims every platform family",
+  "type": "package",
+  "main": "src/index.cp3",
+  "build": {
+    "cacheBinary": ["windows", "linux", "mac"],
+    "excludeSource": true
+  }
+}

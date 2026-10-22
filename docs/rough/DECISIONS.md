@@ -880,6 +880,48 @@ lane's pack/install round trip. Post-beta-one CLI features (GitHub repo
 installs, registry-style specs, `build.cacheBinary`/`excludeSource`) stay
 explicitly deferred with named exit-3 errors per the M2 plan, not scaffold.
 
+## The `.cp3pak` binary cache (2026-10-22, cache-binary lane)
+
+`build.cacheBinary` / `build.excludeSource` are no longer deferred: they are
+implemented, with the following rulings.
+
+- **Platform ids are normalized explicitly.** A platform id is a family name
+  (`windows`, `linux`, `mac`) or an arch-qualified name (`windows-x64`,
+  `linux-x64`, `mac-arm64`). The case is folded, the family aliases (`win`,
+  `macos`, `osx`, `darwin`, ...) and the architecture aliases (`x86_64`,
+  `amd64`, `aarch64`, `armv7`, ...) fold to their canonical spelling, and an
+  unknown id is a **manifest error** at build time - never a silent ignore.
+- **`cacheBinary: true` means "the platform this build runs on".** It resolves
+  to the current machine's canonical id at build time, and the resolved id is
+  recorded in the archive (`cp3pak.json`), so the archive means the same thing
+  on every machine. An array lists the platforms the package claims; a family
+  claim is satisfied by any artifact of that family, an arch-qualified claim
+  only by that exact platform.
+- **The archive layout is `pak/<platform>/cache.json` + `pak/<platform>/<module>.o`**,
+  where `<platform>` is always the canonical arch-qualified id. The container
+  manifest gains the optional `cachePlatforms` and `cacheClaims` arrays; an
+  archive without a cache keeps the manifest shape it always had, and the
+  container `formatVersion` does not move (the new members are additive).
+- **The artifact is a plain (non-LTO) object file** compiled from the
+  package's own transpiled C++ with the ordinary toolchain driver. The
+  package's entry `main` is renamed while it is compiled, so the artifact is a
+  library object and never collides with the consumer program's own `main`.
+  A static archive was considered and rejected: it would need `ar`/`lib.exe`
+  next to the compiler driver, which the toolchain contract does not promise.
+- **The source is dropped only when the archive carries every cache the
+  package claims.** `excludeSource` with an empty/missing `cacheBinary` is a
+  build-time validation error; `excludeSource` with a claim this machine
+  cannot target keeps the source (with a warning) so `cp3 recompile` can add
+  that platform from another machine, and drops it as soon as the last claimed
+  platform is cached. `index.cp3` and the C++ headers are never dropped.
+- **`cp3 recompile <file.cp3pak>` is idempotent and additive.** It replaces
+  only the current platform's cache, preserves every other member and every
+  other platform's cache, leaves an already-current cache byte-identical, and
+  refuses an archive that carries no C++ source (the `excludeSource` case)
+  with a clear message.
+- **Cross-compilation is never forced.** Only the platform the tool runs on is
+  produced, by the build and by `cp3 recompile` alike.
+
 ## Audit promotions, third batch (2026-10-19, lead)
 
 - D49 promotion: `stdlib/_ambiguous/console_log_array_format` is now the

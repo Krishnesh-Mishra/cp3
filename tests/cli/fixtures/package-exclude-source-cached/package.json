@@ -1,0 +1,11 @@
+{
+  "name": "exclude-source-cached",
+  "version": "1.0.0",
+  "description": "package that ships a cached binary and no C++ source",
+  "type": "package",
+  "main": "src/index.cp3",
+  "build": {
+    "cacheBinary": true,
+    "excludeSource": true
+  }
+}

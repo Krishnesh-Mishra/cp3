@@ -57,6 +57,7 @@ set(cp3_cli_sources
     src/commands/toolchain_json.cpp
     src/commands/exec.cpp
     src/commands/pack.cpp
+    src/commands/recompile.cpp
     src/commands/install.cpp
     src/commands/publish.cpp
     src/commands/link.cpp
@@ -69,6 +70,10 @@ set(cp3_cli_sources
     src/commands/editor_prompt.cpp
     src/commands/editor_wizard.cpp
     src/pkg/package_json.cpp
+    src/pkg/package_cache.cpp
+    src/pkg/platform.cpp
+    src/pkg/cache_binary.cpp
+    src/pkg/cache_build.cpp
     src/pkg/signatures.cpp
     src/pkg/lockfile.cpp
     src/pkg/install.cpp

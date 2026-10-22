@@ -123,7 +123,7 @@ You met `run`/`check`/`dev` on Day 1. Here's the full set, grouped by when you'd
 | `cp3 publish [--out <dir>]` | Build the package and report/copy the `.cp3pak`; beta one has no registry upload |
 | `cp3 link <dir-or-cp3pak>` | Link a local package for development (your `npm link`) |
 | `cp3 link --list` / `cp3 unlink <name>` | Inspect or remove local links |
-| `cp3 recompile <file.cp3pak>` | Rebuild a package from source |
+| `cp3 recompile <file.cp3pak>` | *Author-side:* add this machine's platform to a package's binary cache (the C++ source already inside the archive is compiled and appended) |
 
 > `cp3 install` and `cp3 native-install` are **not** two names for the same thing. `install` consumes an already-built package; `native-install` is what an *author* runs once to wrap a native library before sharing it. Beta one has no registry: a bare name like `cp3 install some-package` exits with a usage error and points at a local path, a GitHub release URL, or `cp3 link`. Details in [CLI §4 Package manager](../cli-tooling/04-package-manager.md).
 

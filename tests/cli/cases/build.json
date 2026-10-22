@@ -497,8 +497,8 @@
     },
     {
       "group": "build",
-      "name": "package-exclude-source-not-implemented",
-      "description": "package exclude source not implemented",
+      "name": "package-exclude-source-needs-cache-binary",
+      "description": "package exclude source without cacheBinary is refused",
       "argv": [
         "build",
         "src/index.cp3"
@@ -509,19 +509,22 @@
         ]
       },
       "expect": {
-        "exit": 3,
+        "exit": 1,
         "stderr": {
           "contains": [
-            "excludeSource needs cacheBinary",
-            "not implemented"
+            "build.excludeSource needs a non-empty build.cacheBinary list",
+            "no .cp3pak was produced"
           ]
-        }
+        },
+        "files_absent": [
+          ".cp3/out/exclude-source.cp3pak"
+        ]
       }
     },
     {
       "group": "build",
       "name": "package-cache-binary-packs",
-      "description": "package cache binary packs",
+      "description": "package cache binary packs a cached artifact",
       "argv": [
         "build",
         "src/index.cp3"
@@ -532,14 +535,180 @@
         ]
       },
       "slow": true,
+      "requires": "compiler",
       "expect": {
         "exit": 0,
         "stderr": {
-          "contains": "packed"
+          "contains": [
+            "packed",
+            "cached binary for"
+          ]
         },
         "files": {
           ".cp3/out/cache-binary.cp3pak": {
-            "exists": true
+            "exists": true,
+            "archive_contains": [
+              "cp3pak.json",
+              "package.json",
+              "index.cp3",
+              "pak/src/index.cpp",
+              "pak/src/index.hpp",
+              "pak/{platform}/cache.json",
+              "pak/{platform}/src/index.o"
+            ],
+            "archive_text_contains": {
+              "cp3pak.json": [
+                "\"cachePlatforms\": [\"{platform}\"]",
+                "\"cacheClaims\": [\"{platform}\"]"
+              ],
+              "pak/{platform}/cache.json": [
+                "\"platform\": \"{platform}\"",
+                "\"kind\": \"object\"",
+                "\"abi\":"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "package-cache-binary-invalid-platform",
+      "description": "package cache binary rejects an unknown platform id",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "package-cache-binary-invalid"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "build.cacheBinary",
+            "unknown platform 'solaris'"
+          ]
+        },
+        "files_absent": [
+          ".cp3/out/cache-binary-invalid.cp3pak"
+        ]
+      }
+    },
+    {
+      "group": "build",
+      "name": "package-cache-binary-foreign-platform",
+      "description": "package cache binary never cross-compiles",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "package-cache-binary-foreign"
+        ]
+      },
+      "slow": true,
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "build.cacheBinary lists windows-arm32",
+            "cp3c never cross-compiles"
+          ]
+        },
+        "files": {
+          ".cp3/out/cache-binary-foreign.cp3pak": {
+            "exists": true,
+            "archive_contains": [
+              "pak/src/index.cpp",
+              "pak/src/index.hpp"
+            ],
+            "archive_absent": [
+              "pak/{platform}/cache.json"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "package-exclude-source-drops-the-cpp",
+      "description": "package exclude source drops the C++ source but keeps the header",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "package-exclude-source-cached"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "excluded the C++ source",
+            "the headers and index.cp3 stay"
+          ]
+        },
+        "files": {
+          ".cp3/out/exclude-source-cached.cp3pak": {
+            "exists": true,
+            "archive_contains": [
+              "index.cp3",
+              "pak/src/index.hpp",
+              "pak/{platform}/cache.json",
+              "pak/{platform}/src/index.o"
+            ],
+            "archive_absent": [
+              "pak/src/index.cpp"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
+      "name": "package-exclude-source-keeps-the-cpp-until-every-platform-is-cached",
+      "description": "package exclude source keeps the source until every claimed platform is cached",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "package-cache-binary-multi"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "build.excludeSource is set, but no cached binary exists",
+            "the C++ source is kept"
+          ]
+        },
+        "files": {
+          ".cp3/out/cache-binary-multi.cp3pak": {
+            "exists": true,
+            "archive_contains": [
+              "pak/src/index.cpp",
+              "pak/src/index.hpp",
+              "pak/{platform}/cache.json",
+              "pak/{platform}/src/index.o"
+            ],
+            "archive_text_contains": {
+              "cp3pak.json": [
+                "\"cacheClaims\": [\"windows\", \"linux\", \"mac\"]"
+              ]
+            }
           }
         }
       }

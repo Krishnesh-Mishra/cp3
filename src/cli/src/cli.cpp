@@ -51,6 +51,7 @@ void printUsage(std::FILE* out) {
         "  toolchain          Choose the C++ compiler (list/detect/use/clear)\n"
         "  install [src]      Install a local .cp3pak/dir or GitHub release\n"
         "  publish [dir]      Build a package and report/copy the .cp3pak (no registry)\n"
+        "  recompile <pak>    Add this platform's cached binary to a .cp3pak\n"
         "  link <path>        Link a local package directory or .cp3pak\n"
         "  unlink <name>      Remove a link and its link cache\n"
         "  editor-plugin      Editor extension wizard/actions (alias editor-plugins)\n"
@@ -116,9 +117,9 @@ bool resolveCommand(const std::string& first, std::string& command,
         first == "dev" || first == "fmt" || first == "clean" ||
         first == "init" || first == "exec" || first == "install" ||
         first == "publish" || first == "link" || first == "unlink" ||
-        first == "editor-plugin" || first == "editor-plugins" ||
-        first == "lsp" || first == "dap" || first == "toolchain" ||
-        first == "native-install") {
+        first == "recompile" || first == "editor-plugin" ||
+        first == "editor-plugins" || first == "lsp" || first == "dap" ||
+        first == "toolchain" || first == "native-install") {
         command = first;
         return true;
     }
@@ -163,6 +164,8 @@ std::string resolveFile(const std::string& command, bool filePreseeded,
         return "'link' takes at most one path";
     } else if (command == "unlink" && opt.positionals.size() > 1) {
         return "'unlink' takes exactly one package name";
+    } else if (command == "recompile" && opt.positionals.size() > 1) {
+        return "'recompile' takes exactly one .cp3pak file";
     }
     return {};
 }
@@ -281,6 +284,9 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     }
     if (command == "unlink") {
         return cp3::cli::cmdUnlink(opt);
+    }
+    if (command == "recompile") {
+        return cp3::cli::cmdRecompile(opt);
     }
     if (command == "editor-plugin" || command == "editor-plugins") {
         return cp3::cli::cmdEditorPlugin(opt);

@@ -1,0 +1,147 @@
+{
+  "group": "recompile",
+  "cases": [
+    {
+      "group": "recompile",
+      "name": "adds-the-current-platform-cache",
+      "description": "recompile adds the current platform's cache and keeps every other member",
+      "argv": [
+        "recompile",
+        "deps/local-kit.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "local-dep-source.cp3pak",
+            "to": "deps/local-kit.cp3pak"
+          }
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "recompiled"
+        },
+        "files": {
+          "deps/local-kit.cp3pak": {
+            "exists": true,
+            "archive_contains": [
+              "cp3pak.json",
+              "package.json",
+              "index.cp3",
+              "README.md",
+              "pak/src/index.cpp",
+              "pak/src/index.hpp",
+              "pak/{platform}/cache.json",
+              "pak/{platform}/src/index.o"
+            ],
+            "archive_text_contains": {
+              "cp3pak.json": [
+                "\"cachePlatforms\": [\"{platform}\"]"
+              ],
+              "pak/{platform}/cache.json": [
+                "\"platform\": \"{platform}\"",
+                "\"kind\": \"object\""
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "recompile",
+      "name": "is-idempotent",
+      "description": "recompiling a current cache changes nothing",
+      "argv": [
+        "recompile",
+        "deps/local-kit.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "local-dep-source.cp3pak",
+            "to": "deps/local-kit.cp3pak"
+          }
+        ]
+      },
+      "repeat": 2,
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "recompiled",
+            "already carries a current"
+          ]
+        },
+        "files": {
+          "deps/local-kit.cp3pak": {
+            "exists": true,
+            "archive_contains": [
+              "pak/src/index.cpp",
+              "pak/{platform}/cache.json"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "recompile",
+      "name": "archive-without-source",
+      "description": "recompile refuses an archive that carries no C++ source",
+      "argv": [
+        "recompile",
+        "deps/local-kit.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "local-dep.cp3pak",
+            "to": "deps/local-kit.cp3pak"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "carries no C++ source to compile",
+            "build.excludeSource"
+          ]
+        }
+      }
+    },
+    {
+      "group": "recompile",
+      "name": "missing-file",
+      "description": "recompile without an argument is a usage error",
+      "argv": [
+        "recompile"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "recompile needs a .cp3pak file"
+        }
+      }
+    },
+    {
+      "group": "recompile",
+      "name": "unknown-file",
+      "description": "recompile of a file that does not exist fails",
+      "argv": [
+        "recompile",
+        "nope.cp3pak"
+      ],
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "does not exist"
+        }
+      }
+    }
+  ]
+}

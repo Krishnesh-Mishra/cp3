@@ -89,6 +89,7 @@ Top-level fields:
 | `setup` | files, directories, and fixtures to create before the run |
 | `timeout` | per-case timeout in seconds; default 30 |
 | `slow` | if true, skipped in fast mode |
+| `repeat` | run the command this many times; the streams are concatenated and the exit codes must agree (idempotence checks); default 1 |
 | `requires` | list of availability predicates |
 | `xfail` | stable id plus one-line reason for a known product defect |
 | `expect` | exit code and output/file assertions |
@@ -120,6 +121,9 @@ Special fixture names generate deterministic data instead of copying a tree:
 - `local-dep-bad-version.cp3pak`
 - `local-dep-no-package-json.cp3pak`
 - `not-a-pak.cp3pak`
+- `local-dep-source.cp3pak` (carries the C++ source `cp3 recompile` compiles)
+- `local-dep-excluded-source.cp3pak` (excludes the source, ships no cache)
+- `local-dep-cached.cp3pak` (carries a cache for this machine's platform)
 
 `.cp3pak` archives use USTAR tar and gzip with mtime zero so repeated runs
 produce identical bytes.
@@ -130,11 +134,14 @@ Paths and `env` values may use these tokens:
 
 `{case}`, `{root}`, `{home}`, `{config}`, `{localappdata}`, `{appdata}`,
 `{temp}`, `{programfiles}`, `{programfiles86}`, `{run}`, `{repo}`,
-`{fixtures}`.
+`{fixtures}`, `{platform}`.
 
 `{case}` is the work root. `{root}` is the case root containing work, home,
 config, and temporary directories. `{programfiles}` and `{programfiles86}`
 point at empty directories so the shim cannot discover a real editor install.
+`{platform}` is this machine's canonical platform id (`windows-x64`,
+`linux-x64`, `mac-arm64`, ...), spelled the way `cp3c` spells it - it makes
+the per-platform archive members assertable without hardcoding a platform.
 
 Before assertions, CRLF and bare CR are converted to LF, ANSI escapes are
 removed, and backslashes become `/`. Case and run roots are replaced with the
@@ -185,9 +192,13 @@ File expectation objects support:
 - `json_equals`: exact parsed JSON value
 - `json_subset`: recursive subset match
 - `json_paths`: dotted paths to exact values
+- `archive_contains`: member names a `.cp3pak` archive must carry
+- `archive_absent`: member names a `.cp3pak` archive must not carry
+- `archive_text_contains`: map of archive member name to the text it must contain
 
 An existence-only file expectation returns immediately after confirming the
-file is present.
+file is present. The `archive_*` expectations read the file as a `.cp3pak`
+(gzip + tar) and check its members.
 
 ## Availability and expected failures
 
@@ -243,23 +254,25 @@ programs that log their argv and honor `FAKE_EDITOR_EXIT`.
 
 ## Groups and counts
 
-The suite currently discovers 307 cases:
+The suite currently discovers 332 cases:
 
 | Group | Cases |
-| --- | --- |
+| --- | ---: |
 | `global` | 33 |
 | `init` | 34 |
 | `check` | 18 |
-| `build` | 29 |
+| `build` | 33 |
 | `run` | 17 |
 | `fmt` | 12 |
 | `dev` | 8 |
 | `clean` | 10 |
-| `install` | 32 |
+| `install` | 34 |
+| `package` | 17 |
+| `recompile` | 5 |
 | `exec` | 6 |
 | `hooks` | 13 |
-| `shim` | 30 |
-| `toolchain` | 30 |
+| `shim` | 24 |
+| `toolchain` | 33 |
 | `editor` | 35 |
 
 Fast mode runs everything except `slow` cases and cases whose `requires`

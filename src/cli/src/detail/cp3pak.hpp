@@ -26,6 +26,12 @@ struct Cp3pakManifest {
     std::string name;
     std::string version;
     std::string main;
+    // The platforms the archive carries a cached artifact for, and the
+    // platform ids the package claims (CLI-README §5.4). Both are optional:
+    // an archive without a binary cache omits them, and an archive written
+    // before the cache existed still reads.
+    std::vector<std::string> cachePlatforms;
+    std::vector<std::string> cacheClaims;
 };
 
 // Writes `outPath` (manifest header + `entries` in order).

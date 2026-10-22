@@ -92,6 +92,48 @@ Since every consumer compiling every dependency's C++ from scratch is real overh
 - On `cp3 install`, if a cached binary matching the consumer's platform is present, it's used directly (fast path, no compile). If not present, the compiler falls back to compiling the included C++ source itself.
 - Cross-compiling for every OS from one machine isn't realistic (each OS's toolchain differs), so `cacheBinary` only produces binaries for platforms the current build machine can already target - it does not force cross-compilation.
 
+### 5.4.1 Platform ids and how they are normalized
+
+A platform id is either a **family** name or an **arch-qualified** name:
+
+| Form | Examples | Meaning |
+| --- | --- | --- |
+| family | `windows`, `linux`, `mac` | any architecture of that family |
+| arch-qualified | `windows-x64`, `linux-x64`, `mac-arm64` | exactly that family and architecture |
+
+Ids are normalized explicitly, so the same platform is always spelled the same way in `package.json`, in the archive layout and in the cache manifests:
+
+- the case is folded (`Windows-X64` = `windows-x64`);
+- the family aliases `win`, `win32`, `win64`, `winnt`, `mingw` fold to `windows`; `macos`, `macosx`, `osx`, `darwin`, `apple` fold to `mac`;
+- the architecture aliases `x86_64`, `x86-64`, `amd64` fold to `x64`; `aarch64` folds to `arm64`; `i386`/`i486`/`i586`/`i686`/`ia32` fold to `x86`; `arm`, `armv6`, `armv7`, `armv7l`, `armhf` fold to `arm32`;
+- an id that names no known family or architecture is a **manifest error**: `cp3 build` refuses it with a clear message rather than silently ignoring it.
+
+`build.cacheBinary` accepts two forms:
+
+- **`true`** - "the platform this build runs on". It resolves to the current machine's canonical id (e.g. `windows-x64`) at build time, and the resolved id is recorded in the archive, so the archive means the same thing on every machine.
+- **an array of ids** - the platforms the package claims. A family id (`windows`) is satisfied by any cached artifact of that family; an arch-qualified id (`windows-x64`) only by that exact platform.
+
+A family claim is *not* a cross-compilation request: `cp3 build` only ever produces the artifact of the platform it runs on. A claim for another platform is simply not satisfied yet - which is what `cp3 recompile` is for.
+
+### 5.4.2 The archive layout
+
+A package with a binary cache carries these members in addition to the usual ones (§5.3):
+
+```
+cp3pak.json                    container manifest; adds "cachePlatforms" and
+                               "cacheClaims" when the package ships a cache
+package.json
+index.cp3                      never dropped
+pak/<module>.cpp               the transpiled C++ (dropped by excludeSource)
+pak/<module>.hpp               the transpiled C++ header (always kept)
+pak/<platform>/cache.json      the cache manifest of that platform
+pak/<platform>/<module>.o      the compiled artifact of that module
+```
+
+`<platform>` is the canonical arch-qualified id (`windows-x64`, `linux-x64`, `mac-arm64`). `cache.json` records the platform, the C++ ABI the artifact was built for, the artifact kind, the source and header hashes of every artifact, and the compiler identity (family, exact version, driver path) that built it.
+
+The artifact itself is a plain object file, compiled from the package's own transpiled C++ with the same toolchain driver the rest of the build uses. It is deliberately **not** an LTO object, so it links into a consumer build that does not link with LTO, and the package's entry `main` is renamed while it is compiled, so the artifact is a library object and never collides with the consumer program's own entry point.
+
 **`cp3 recompile`** - adds more platform binaries to an already-built `.cp3pak`, incrementally, from a different machine:
 
 ```bash
@@ -99,6 +141,10 @@ cp3 recompile mathkit.cp3pak
 ```
 
 Run on a machine of a platform not yet cached (e.g. a Mac, after the package was originally built on Windows) - it reads the C++ source already inside the file, compiles it for the current machine's platform, and appends that binary into the same `.cp3pak`. No source re-fetch needed; the file simply grows to cover more platforms over time, one real machine per platform, with no cross-compilation toolchain required anywhere.
+
+- Every other member of the archive is preserved, and so is every other platform's cache.
+- The command is idempotent: an archive whose cache for the current platform is already current (same source, same header, same compiler) is left byte-identical.
+- An archive that carries no C++ source (because `excludeSource` dropped it) is refused with a clear message - there is nothing left to compile.
 
 **Optional: `excludeSource`, an explicit opt-out from the default guarantee above.** The default is that a `.cp3pak` always carries its C++ source as a universal fallback ([§5.3](05-package-format-authoring-cp3pak.md)) - that default doesn't change. But for an author who has already committed to `cacheBinary` covering every platform they intend to support, carrying the source too makes the downloadable archive dead weight nobody needs: a heavy native-wrapping package (OpenCV-style bindings, say) could have tens of megabytes of generated C++ that a consumer receiving a matching precompiled binary will never touch or compile.
 
@@ -109,8 +155,9 @@ Run on a machine of a platform not yet cached (e.g. a Mac, after the package was
 }
 ```
 
-- **`index.cp3` is never excluded, regardless of this setting** - the IDE/LSP needs it for autocomplete and type-checking, and it's tiny (signatures only, no bodies) compared to the C++ source this option is actually meant to drop.
+- **`index.cp3` is never excluded, regardless of this setting** - the IDE/LSP needs it for autocomplete and type-checking, and it's tiny (signatures only, no bodies) compared to the C++ source this option is actually meant to drop. The C++ headers are kept too, so the archive still describes the package's interface.
 - **`cp3 build` refuses to produce a package with `excludeSource: true` and an empty or missing `cacheBinary` list** - that combination would make the package permanently uninstallable for every platform, which is never the intent; it's a build-time validation error, not a runtime surprise for whoever installs it later.
+- **The source is dropped only once the archive really carries the caches the package claims.** If `build.cacheBinary` names a platform this machine cannot target, `cp3 build` keeps the source (and says so) so `cp3 recompile` can add that platform's cache from another machine; the source is dropped as soon as the last claimed platform is cached - by the build itself, or by the `cp3 recompile` that adds the final cache.
 - **The real, accepted cost:** a platform outside the author's `cacheBinary` list has no fallback at all for this package. `cp3 install` fails with a clear, specific message rather than a raw linker error:
 
 ```
@@ -121,6 +168,7 @@ Run on a machine of a platform not yet cached (e.g. a Mac, after the package was
 ```
 
 This is a deliberate, visible trade an author opts into - smaller, faster installs for the platforms they've covered, at the cost of zero fallback for the ones they haven't - not a silent gap in the "install once, run anywhere" story most packages still get by default.
+
 
 ## 5.5 Importing and using a package
 
