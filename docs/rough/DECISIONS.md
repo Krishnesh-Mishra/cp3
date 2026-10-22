@@ -1266,3 +1266,44 @@ call now uses the class member table's signature**, so the arity and
 assignability checks see the declared optional and rest parameters. That is
 what makes a class rest parameter work; it also means a class-method call is
 checked the same way a function call is.
+
+## Four spec rulings from the spec owner (2026-10-22)
+
+The CP3002 wave hit four points where the implementation cannot proceed
+without a spec decision. The spec owner ruled:
+
+1. **Non-primitive unions are supported, as a runtime variant.**
+   `number | string | null` lowers to a real variant value, not to a skip.
+   This is the largest unblock: it retires the "this declared type", "this
+   destructured binding", "env.get whose value type has no C++ spelling", "==
+   between different union types", "logical operator with mixed operand
+   types" and "ternary with non-uniform branch types" markers together, and
+   the `==` / logical / ternary rules follow from the variant.
+
+2. **Generic arrows are valid cp3.** `<T>(x: T) => x` is a function with its
+   own type parameters, inferred at the call site. The spec extends to
+   generics on arrows, and the parser grows a production for it. The
+   "generic arrow functions" marker is implemented, not skipped.
+
+3. **The rest object in a destructuring pattern follows TypeScript.**
+   `let { a, ...rest } = obj` types `rest` as the source's shape minus the
+   named properties - the type-level Omit. cp3's type model grows the
+   operation rather than faking a same-shape rest (which would read the
+   removed properties as their default value, a wrong program).
+
+4. **The language aligns with TypeScript, 99.99% TS-like syntax, with C++
+   performance.** Applied to the class question: **a class IS a first-class
+   value** in cp3, like a constructor reference in TypeScript - it can be
+   passed and stored.
+
+   This CORRECTS a ruling that was merged earlier: the class-literal rule.
+   TypeScript REJECTS an object literal for a class with a constructor, so
+   cp3 must too. The merged behaviour - "the literal's values are the
+   constructor's arguments and the literal's field values are the instance's
+   state" - is a cp3-specific invention and is now wrong. The class-literal
+   case and its implementation move to a TypeScript-shaped error, and the
+   follow-up lane is tracked in the roadmap.
+
+Ruling 4 is the reason the "align with our principles" note matters: where
+TypeScript has an answer, cp3 takes TypeScript's answer, and only the C++
+implementation differs.
