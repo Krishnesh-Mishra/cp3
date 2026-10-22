@@ -62,6 +62,22 @@ void Generator::reportTypeError(const Node& node, const std::string& message) {
     sink_.error(diagcode::kTypeMismatch, node.span, message);
 }
 
+// A codegen-stage diagnostic that is not the CP3002 marker: the construct the
+// program used is a program error (a member outside a documented surface, a
+// value no C++ spelling can carry), so it gets its own code and the ordinary
+// compile-error exit, not the "not implemented" skip.
+void Generator::reportCodegenError(const Node& node, const std::string& code,
+                                    const std::string& message) {
+    if (intMode_) intMode_->failed = true;
+    if (suppressDiagnostics_) return;
+    if (node.nodeId != 0) {
+        if (!reported_.insert(node.nodeId).second) {
+            return;
+        }
+    }
+    sink_.error(code, node.span, message);
+}
+
 GeneratedModule Generator::run(const Program& program) {
     // The worker unit lowers only its default-export arrow (spec 13); the
     // entry unit's ordinary walk follows.

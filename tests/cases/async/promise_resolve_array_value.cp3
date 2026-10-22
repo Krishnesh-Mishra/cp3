@@ -1,0 +1,5 @@
+import console from "std/console";
+let p = Promise.resolve([1, 2, 3]);
+let v = await p;
+console.log(`${v.length}`);
+console.log(`${v[2]}`);

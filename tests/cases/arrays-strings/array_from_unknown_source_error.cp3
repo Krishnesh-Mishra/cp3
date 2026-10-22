@@ -1,0 +1,6 @@
+import console from "std/console";
+function copy(src: unknown): void {
+  let arr = Array.from(src);
+  console.log("x");
+}
+copy([1, 2]);

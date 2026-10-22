@@ -56,6 +56,7 @@ set(cp3_codegen_sources
     src/emit/async.cpp
     src/emit/arrow.cpp
     src/emit/spread.cpp
+    src/emit/async_promise.cpp
     src/emit/stmt.cpp
     src/emit/push_reserve.cpp
     src/emit/control.cpp

@@ -20,6 +20,7 @@
 #include "detail/mangle.h"
 #include "detail/timers.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -377,9 +378,10 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
 std::string CallBuilder::emitMemberCall(const CallExpr& c,
                                         const MemberExpr& m) {
     // A call through an import form with no C++ lowering (a namespace
-    // import/re-export): report its link miss at the use site.
+    // import/re-export): the use site is a program error.
     if (std::string miss = g.linkedMemberMiss(m); !miss.empty()) {
-        g.notImplemented(*m.object, miss);
+        g.reportCodegenError(*m.object, diagcode::kUnresolvedImport,
+                             "unresolved import: " + miss);
         return "0.0";
     }
     if (m.object && m.object->kind == NodeKind::Identifier &&
@@ -454,7 +456,11 @@ std::string Generator::emitLinkedCall(const CallExpr& c,
     if (it == linkedNames_.end()) return std::string();
     const LinkedName& ln = it->second;
     if (ln.cpp.empty()) {
-        notImplemented(c, ln.miss);
+        // The imported name has no C++ lowering (a namespace import, a
+        // type-only export, a binding whose type cp3 cannot spell): calling
+        // it is a program error, not a missing feature.
+        reportCodegenError(c, diagcode::kUnresolvedImport,
+                           "unresolved import: " + ln.miss);
         return "0.0";
     }
     if (ln.fn == nullptr) {

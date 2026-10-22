@@ -30,6 +30,7 @@ AREA_OF_FILE = {
     "src/codegen/src/emit/call_args.cpp": "1 Spread arguments and spreads",
     "src/codegen/src/emit/patterns.cpp": "1 Spread arguments and spreads",
     "src/codegen/src/emit/async.cpp": "1 Spread arguments and spreads",
+    "src/codegen/src/emit/async_promise.cpp": "1 Spread arguments and spreads",
     "src/std/typed-arrays/codegen.cpp": "1 Spread arguments and spreads",
     "src/codegen/src/support/generic.cpp": "1 Spread arguments and spreads",
     # 2 - rest parameters

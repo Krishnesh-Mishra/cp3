@@ -1,0 +1,8 @@
+import console from "std/console";
+let p = Promise.reject("boom");
+try {
+  await p;
+  console.log("no");
+} catch (e) {
+  console.log("rejected");
+}

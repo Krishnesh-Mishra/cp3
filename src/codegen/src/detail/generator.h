@@ -135,6 +135,11 @@ private:
     // be inferred), so the diagnostic says why instead of skipping the
     // program. The CP3002 marker stays for the forms that are *unknown*.
     void reportTypeError(const Node& node, const std::string& message);
+    // A codegen-stage diagnostic with its own code (not the CP3002 marker):
+    // the construct is a program error, not a missing feature (a member
+    // outside a documented surface, a value no C++ spelling can carry).
+    void reportCodegenError(const Node& node, const std::string& code,
+                             const std::string& message);
 
     // --- source mapping (support/line_map.cpp) --------------------------------
     // `#line <line> "<source>"` for `node` (DWARF/gdb); no-op without mapping.
@@ -558,6 +563,10 @@ private:
     std::string emitPromiseStatic(const CallExpr& c, const MemberExpr& m);
     std::string emitPromiseResolve(const CallExpr& c);
     std::string emitPromiseReject(const CallExpr& c);
+    // The Promise combinators (`Promise.all` / `race` / `allSettled`): the
+    // operand is an array of promises (or of plain values, which are already
+    // resolved), in emit/async_promise.cpp.
+    std::string emitPromiseCombinator(const CallExpr& c, const std::string& prop);
 
     // --- spread arguments / spread elements (emit/spread.cpp) ----------------
     // The C++ text of a spread source's first element (`f(...values)` in a

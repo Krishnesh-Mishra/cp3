@@ -1,11 +1,12 @@
-// =============================================================================
+﻿// =============================================================================
 // src/sema/src/checks/call_check.cpp - call inference and overload resolution.
 //
 // Owns `inferCall` (the call-expression dispatcher), argument arity/type
-// checking (`checkArgs`), the per-callable special cases (`Promise.resolve`,
-// `JSON.parse`/`stringify`, the timer builtins) and overload resolution
-// (spec §17). Member/index inference lives in member_check.cpp; primary
-// expressions live in expr_check.cpp (STYLE.md §8).
+// checking (`checkArgs`), the per-callable special cases (`JSON.parse`/
+// `stringify`, the timer builtins) and overload resolution
+// (spec Â§17). The Promise statics live in the sibling promise_call.cpp;
+// member/index inference lives in member_check.cpp; primary
+// expressions live in expr_check.cpp (STYLE.md Â§8).
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -58,7 +59,7 @@ Type Analyzer::inferCall(CallExpr& call) {
     } else if (call.callee) {
         ct = inferExpr(*call.callee);
         // JSON.parse returns `unknown`: the shape is only known at runtime, so
-        // callers must narrow before use (spec §20).
+        // callers must narrow before use (spec Â§20).
         if (call.callee->kind == NodeKind::MemberExpr) {
             checkParallelCall(call);
             auto& member = static_cast<MemberExpr&>(*call.callee);
@@ -82,7 +83,7 @@ Type Analyzer::inferCall(CallExpr& call) {
     }
 
     if (sig != nullptr) {
-        // A generic function substitutes its type arguments first (spec §16).
+        // A generic function substitutes its type arguments first (spec Â§16).
         if (!sig->typeParams.empty()) return inferGenericCall(call, *sig);
         checkArgs(*sig, call);
         return withType(call, sig->ret);
@@ -118,7 +119,7 @@ bool Analyzer::tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
     return tryInferBufferCall(call, m, out);
 }
 
-// Core timer builtins (spec §14, STDLIB docs §03): honest result types so
+// Core timer builtins (spec Â§14, STDLIB docs Â§03): honest result types so
 // `let id = setInterval(...)`, `clearTimeout(id)` and `await sleep(...)` type
 // correctly (the ambient table is permissive by default). Returns true when
 // `id` is one of them and `out` is set.
@@ -193,48 +194,6 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
         return true;
     }
     return false;
-}
-
-// `Promise.resolve(v)` / `Promise.reject(v)` (DECISIONS D40): the value type of
-// the promise a call yields, so a `let p = …` initializer lowers to a real
-// `cp3::runtime::Promise<T>` instead of falling back to ambient. Codegen
-// (emit_async.cpp) derives the exact C++ spelling from this type.
-bool Analyzer::tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out) {
-    if (m.property != "resolve" && m.property != "reject") return false;
-    if (!m.object || m.object->kind != NodeKind::Identifier ||
-        static_cast<Identifier&>(*m.object).name != "Promise") {
-        return false;
-    }
-    inferArgs(call);
-    if (m.property == "reject") {
-        // A rejection carries no observable value; cp3 models it as
-        // `Promise<void>` (JS types it `Promise<never>`).
-        out = withType(call, promiseOf(Type::voidType()));
-        return true;
-    }
-    // `Promise.resolve(v)`: the promise carries `v`'s type. An existing promise
-    // passes through unchanged (JS identity); no argument resolves with
-    // `undefined`.
-    Type value = Type::undefined();
-    Expr* arg = call.arguments.empty() ? nullptr : call.arguments.front().get();
-    if (arg) {
-        if (arg->kind == NodeKind::SpreadElement) {
-            // `Promise.resolve(...values)`: the promise carries the source array's element type.
-            auto& sp = static_cast<SpreadElement&>(*arg);
-            Type st = sp.argument ? typeOfExpr(*sp.argument) : Type::unknown();
-            Type elem = st.kind == TypeKind::Array && !st.parts.empty()
-                            ? st.parts.front() : Type::unknown();
-            out = withType(call, promiseOf(elem));
-            return true;
-        }
-        value = typeOfExpr(*arg);
-        if (isPromiseType(value)) {
-            out = withType(call, value);
-            return true;
-        }
-    }
-    out = withType(call, promiseOf(value));
-    return true;
 }
 
 void Analyzer::inferArgs(CallExpr& call) {
@@ -332,7 +291,7 @@ std::string Analyzer::arityText(std::size_t required, std::size_t maxArgs,
 }
 
 // =============================================================================
-// Overload resolution (spec §17)
+// Overload resolution (spec Â§17)
 // =============================================================================
 Type Analyzer::inferOverloadCall(CallExpr& call, const Binding& binding,
                                  Identifier& id) {

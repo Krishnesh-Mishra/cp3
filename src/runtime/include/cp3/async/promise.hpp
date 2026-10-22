@@ -26,6 +26,9 @@
 //   `Promise.reject(v)`         -> `Promise<T>::reject(Thrown::make(v))`
 //   `Promise.all/race/allSettled([...])`
 //                               -> `::cp3::runtime::all|race|allSettled(vec)`
+//                               (`all` and `allSettled` resolve with a cp3
+//                               array - `Array<T>` - so the awaited value has
+//                               the array surface)
 //   `sleep(ms)`                 -> `::cp3::runtime::sleep(ms)` (Promise<void>)
 //
 // A rejection handler (`.catch`, `then`'s second argument) takes a

@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3304",
+    "line": 3,
+    "col": 1,
+    "contains": "unresolved import"
+  }
+}

@@ -145,6 +145,12 @@ CppInfo classifyClassValue(const Type& t);
 CppInfo classifyObjectModel(const Type& t);
 // `Promise<T>` -> `::cp3::runtime::Promise<T>` (only spellable value types).
 CppInfo classifyPromise(const Type& t);
+// The general `Promise<T>` spelling: the runtime promise is a template over
+// the value type, so every value type cp3 can represent (a primitive, an
+// array, an object shape, a class handle) has a promise spelling. The
+// `classify` arm keeps the primitive-only rule; this one is the wide form
+// (the promise combinators and the array element gate need it).
+CppInfo classifyPromiseValue(const Type& t);
 // A `$o{...}` label another family owns (a std/json interface record): its
 // spelling is that family's, so the value-shape path must not claim it.
 // Registered before the emit walk (std/json's collectJsonShapes).
