@@ -1,0 +1,10 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 3,
+    "contains": "for-of needs an array or a string"
+  }
+}

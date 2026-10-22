@@ -1,0 +1,4 @@
+import console from "std/console";
+import { Map } from "std/collections";
+let m = new Map<string, number>();
+Array(3).fill(m);

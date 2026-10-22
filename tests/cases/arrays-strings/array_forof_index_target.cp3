@@ -1,0 +1,4 @@
+import console from "std/console";
+let out = [0, 0, 0];
+let a = [1, 2, 3];
+for (out[0] of a) { console.log(`${out[0]}`); }

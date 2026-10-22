@@ -86,10 +86,17 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
             return "::cp3::runtime::arrayReduce<" + rc.cpp + ">(" + recvText +
                    ", " + fold + ", " + g.expr(*c.arguments[1]) + ")";
         }
-        // A no-initial fold keeps the element type; a callback that changes it
-        // has no lowering yet.
+        // A no-initial fold keeps the element type as the accumulator type
+        // (JS seeds the accumulator with the first element), so a callback
+        // that returns another type cannot be typed: the program is
+        // ill-typed, not a missing feature (the rule TypeScript's `reduce`
+        // overload follows).
         if (rc.cpp != ec.cpp) {
-            g.notImplemented(c, "this no-initial reduce (changing type)");
+            g.reportTypeError(c, "type mismatch: a reduce without an initial "
+                                 "value keeps the element type '" +
+                                 describe(ec.type) + "' as the accumulator "
+                                 "type, but the callback returns '" +
+                                 describe(rc.type) + "'");
             return "0.0";
         }
         return "::cp3::runtime::arrayReduceNoInit<" + rc.cpp + ">(" + recvText +
@@ -182,11 +189,69 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
     return "::cp3::runtime::arrayFlat<" + ic.cpp + ">(" + recvText + ")";
 }
 
-// `for (const x of a)`: over a regular array; the binding takes the element
-// type (the alternative `for await` form is out of scope and reports). The
-// source handle is bound to a named local before the range-for: iterating
-// `*(temporary Ref)` lets the backing vector die at the end of the range-init
-// full-expression (a use-after-free seen as std::bad_alloc).
+// The `for...of` source: the element type the loop binds and the C++ type of
+// one element. False when the source is not one cp3 can walk - an array whose
+// element type has no C++ spelling, or a source with no iterator surface (the
+// JSC proposal defers the iterator protocol, so only arrays and strings are
+// walkable today).
+bool detail::ArrayEmitter::forOfSource(Generator& g, const ForOfStatement& f,
+                                       CppInfo& ec, bool& isString) {
+    const Type source = f.right ? g.effectiveType(*f.right) : Type::unknown();
+    isString = source.kind == TypeKind::String;
+    if (isString) {
+        // A string source walks its UTF-8 code points (the JS for-of order;
+        // docs 09: cp3 strings are UTF-8, so the element is a whole
+        // character, not a byte).
+        ec = classify(Type::string());
+        return true;
+    }
+    if (source.kind == TypeKind::Array) {
+        const Type elem = arrayElemOf(source);
+        if (arrayElementInfo(elem, ec)) return true;
+        // cp3 has no dynamic array, so an element type with no C++ spelling
+        // is a type error, not a missing feature.
+        g.reportTypeError(f, "type mismatch: an array cannot hold elements of "
+                             "type '" + describe(elem) + "'");
+        return false;
+    }
+    g.reportTypeError(f, "type mismatch: for-of needs an array or a string");
+    return false;
+}
+
+// The assignment a `for...of` loop makes to a target that is not a binding: a
+// member field or an array element (`for (box.value of a)`,
+// `for (out[0] of a)`). The ordinary assignment lowering owns the spelling,
+// so the loop reuses it with the loop's element as the assigned value.
+std::string detail::ArrayEmitter::forOfTargetAssign(Generator& g,
+                                                    const Node& target,
+                                                    const std::string& item) {
+    // The value the assignment stores: the loop's element, spelled as the
+    // C++ local the range-for binds.
+    AssignmentExpr assign(target.span);
+    assign.op = AssignOp::Assign;
+    assign.value = std::make_unique<Identifier>(target.span, item);
+    if (target.kind == NodeKind::MemberExpr) {
+        const auto& member = static_cast<const MemberExpr&>(target);
+        // A class/interface field write, then a structural object's field
+        // write - the same order the ordinary assignment uses.
+        if (std::string w = g.emitModelAssign(assign, member); !w.empty()) {
+            return w;
+        }
+        return g.emitMemberAssign(assign, member);
+    }
+    if (target.kind == NodeKind::IndexExpr) {
+        return g.familyIndexWriteText(static_cast<const IndexExpr&>(target),
+                                      item);
+    }
+    return std::string();
+}
+
+// `for (const x of a)`: over a regular array or a string; the binding takes
+// the element type (the alternative `for await` form is out of scope and
+// reports). The source handle is bound to a named local before the
+// range-for: iterating `*(temporary Ref)` lets the backing vector die at the
+// end of the range-init full-expression (a use-after-free seen as
+// std::bad_alloc).
 void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
                                  const std::string& jsLabel, std::string& out,
                                  int indent) {
@@ -195,15 +260,14 @@ void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
     const auto* vd = f.left && f.left->kind == NodeKind::VariableDeclaration
                          ? static_cast<const VariableDeclaration*>(f.left.get())
                          : nullptr;
-    const Type elem = f.right ? arrayElemOf(g.effectiveType(*f.right))
-                              : Type::unknown();
     CppInfo ec;
-    if (!f.right || !arrayElementInfo(elem, ec)) {
-        g.notImplemented(f, "this for-of source");
-        line(out, indent, "/* CP3002: unsupported for-of source */");
+    bool isString = false;
+    if (!forOfSource(g, f, ec, isString)) {
+        line(out, indent, "/* CP3401: the for-of source is not walkable */");
         return;
     }
-    g.needsTypedArray_ = true;
+    const Type elem = ec.type;
+    if (!isString) g.needsTypedArray_ = true;
     const std::string recv = g.familyReceiverText(*f.right, elem, f);
     const std::string item = "cp3_item" + std::to_string(g.uniqueCounter_++);
     const std::string range = "cp3_range" + std::to_string(g.uniqueCounter_++);
@@ -216,9 +280,16 @@ void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
     // lifetime extension is C++23 only).
     g.pushFlowFrame(true, breakLabel, continueLabel, jsLabel);
     g.pushScope();
+    // A string walks its code points; an array its elements (through the
+    // handle's vector).
+    const std::string rangeInit =
+        isString ? "auto " + range + " = ::cp3::runtime::strings::codePoints(" +
+                       recv + ")"
+                 : "auto " + range + " = " + recv;
+    if (isString) g.needsString_ = true;
     line(out, indent,
-         "for (auto " + range + " = " + recv + "; " + ec.cpp + " " + item + " : *" +
-             range + ") {");
+         "for (" + rangeInit + "; " + ec.cpp + " " + item + " : " +
+             (isString ? range : "*" + range) + ") {");
     if (vd != nullptr) {
         const std::string cv = (vd->kind == VarKind::Const) ? "const " : "";
         for (const auto& declPtr : vd->declarations) {
@@ -243,8 +314,18 @@ void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
     } else if (f.left && isPatternNode(*f.left)) {
         PatternEmitter(g).emitBindings(*f.left, item, elem, out, indent + 1);
     } else {
-        g.notImplemented(f, "this for-of binding");
-        line(out, indent + 1, "/* CP3002: unsupported for-of binding */");
+        // A target that is not a binding: the loop assigns the element to it
+        // (a field or an element); any other target is ill-typed.
+        const std::string assign =
+            f.left ? forOfTargetAssign(g, *f.left, item) : std::string();
+        if (assign.empty()) {
+            g.reportTypeError(f, "type mismatch: the for-of target must be a "
+                                 "binding, a field or an array element");
+            line(out, indent + 1,
+                 "/* CP3401: the for-of target is not an assignment target */");
+        } else {
+            line(out, indent + 1, assign + ";");
+        }
     }
     if (f.body) g.emitBranch(*f.body, out, indent + 1);
     line(out, indent + 1, continueLabel + ": ;");
