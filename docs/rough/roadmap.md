@@ -731,6 +731,25 @@ methods, the Map/Set and network surfaces, the FS/process/env surfaces, the
 whole `parallel.*` family, the worker modules, the CLI `build`/`check` paths and
 the call forms.
 
+### What wave 2 does not cover - the third wave
+
+Of the 133 work items still open after wave 1, the ten wave-2 lanes own 66.
+**The other 67 need a third wave**, and they are not a random tail - they are
+the three big families, which is where the cross-family seams are:
+
+| Third wave | Area | Items | The seam it needs |
+|---|---|---:|---|
+| R1 | typed-array element types | 10 | the index read/write, the fill/includes/join/sort element types, the enum value - all one shared "what may an array hold" question |
+| R2 | Map/Set + the network family | 10 | the non-arrow `forEach` callbacks, the Map/Set receiver and type, `fetch`, `WebSocket`, `WebSocketServer` |
+| R3 | network methods + fs/process | 10 | `req.body` needs the fs ReadStream; `res.json`, `json<T>()`, the stream events, the process argument list |
+| R4 | process/env + worker + parallel | 10 | the spawn listener, `env.get` options, `stream.on`, the worker module, `parallel.for` |
+| R5 | the whole `parallel.*` family | 10 | `reduce`, `run`, the closure shapes, the re-export - one shared range/combine protocol |
+| R6-R7 | the call forms and the CLI | 17 | the listener argument, the method call, the top-level declaration, `cp3c build`/`check` |
+
+This is why the marker count will not reach zero in one more wave: the
+remaining work is concentrated where the families meet, and those seams are a
+design decision, not ten independent markers.
+
 ### Rules every lane obeys
 
 - **No marker is deleted to make a number go down.** A marker is retired only
