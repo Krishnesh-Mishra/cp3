@@ -1,0 +1,8 @@
+import console from "std/console";
+const words: string[] = ["alpha", "bravo"];
+{
+  const word = words[0];
+  console.log(word);
+}
+words.push("charlie");
+console.log(words.length);

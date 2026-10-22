@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "three\ntwo\ntwo\none\none\nthree\none\none\n",
+  "exitCode": 0
+}

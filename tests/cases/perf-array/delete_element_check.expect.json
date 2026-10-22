@@ -1,0 +1,10 @@
+{
+  "mode": "check",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3801",
+    "line": 5,
+    "col": 1,
+    "contains": "delete"
+  }
+}

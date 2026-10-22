@@ -1,0 +1,9 @@
+import console from "std/console";
+const words: string[] = ["alpha", "bravo"];
+function grow(): void { words.push("charlie"); }
+{
+  const word = words[0];
+  grow();
+  console.log(word);
+}
+console.log(words.join(","));

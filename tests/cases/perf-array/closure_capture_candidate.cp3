@@ -1,0 +1,11 @@
+import console from "std/console";
+const words: string[] = ["alpha", "bravo"];
+function make(): () => string {
+  const w = words[0];
+  return (): string => w;
+}
+const f = make();
+console.log(f());
+// The binding is captured by the returned arrow, so it must keep the copying
+// spelling: a capture can outlive the frame the reference points into. The
+// oracle is the element value the copy holds.

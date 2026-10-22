@@ -1,0 +1,15 @@
+import console from "std/console";
+function makeCounter(): (() => number)[] {
+  let n = 0;
+  const bump = (): number => { n = n + 1; return n; };
+  const read = (): number => n;
+  return [bump, read];
+}
+const c = makeCounter();
+let sum = 0;
+let i = 0;
+while (i < 5) {
+  sum = sum + c[0]();
+  i = i + 1;
+}
+console.log(`${sum} ${c[1]()} ${c[0]()}`);

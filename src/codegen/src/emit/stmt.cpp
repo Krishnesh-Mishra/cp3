@@ -138,6 +138,11 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
         return "auto cp3_error = 0.0";
     }
     const std::string name = mapIdent(static_cast<const Identifier&>(*d.id).name);
+    // A proven-safe index read binds the element by const reference.
+    if (!intOn()) {
+        const std::string ref = arrayRefDeclText(d, name);
+        if (!ref.empty()) return ref;
+    }
     const std::string cv = (kind == VarKind::Const) ? "const " : "";
     // A declared type M1 cannot represent (`number | string`, an object /
     // array / class type, ...) is out of scope: report it so the unit is

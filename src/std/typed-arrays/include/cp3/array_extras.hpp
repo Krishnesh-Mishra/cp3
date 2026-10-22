@@ -117,6 +117,19 @@ const E& arrayAt(const Array<E>& a, double index) {
     return (*a)[static_cast<std::size_t>(index)];
 }
 
+// The reference form of `arrayAt` (codegen: support/array_refs.cpp): the same
+// bounds check and panic, without copying the element. VALID ONLY WHILE THE
+// ARRAY IS NOT MUTATED: any push, pop, element write, sort or other
+// size/content change may reallocate the vector and leave this reference
+// dangling. Codegen binds it only after a whole-unit proof that the array is
+// never mutated, aliased or escaped, and the result binding is never written
+// or captured.
+template <class E>
+const E& arrayAtRef(const Array<E>& a, double index) {
+    if (!indexInRange(index, a->size())) typedArrayPanic("Array index out of range");
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
 template <class E>
 void arrayWriteAt(const Array<E>& a, double index, const E& value) {
     if (!indexInRange(index, a->size())) typedArrayPanic("Array index out of range");
@@ -156,6 +169,31 @@ template <class E>
 double arrayPush(const Array<E>& a, E&& value) {
     a->push_back(std::move(value));
     return static_cast<double>(a->size());
+}
+
+// A capacity hint for a counted push loop (codegen: emit/push_reserve.cpp).
+// Capacity is not an observable cp3 value, so this can never change a program's
+// result: it only reserves room for the pushes the loop is about to perform.
+// The reservation is capped at 256 MiB of element storage so an unrelated huge
+// loop bound cannot commit an unreasonable amount, and a failed reservation is
+// ignored because ordinary push growth is always correct.
+template <class E>
+void arrayReservePush(const Array<E>& a, double count) {
+    if (!(count > 0.0) || !std::isfinite(count)) return;
+    constexpr double kCapBytes = 268435456.0;  // 256 MiB
+    const double cap = kCapBytes / static_cast<double>(sizeof(E));
+    const std::size_t current = a->size();
+    if (static_cast<double>(current) >= cap) return;
+    if (count > cap - static_cast<double>(current)) return;
+    const std::size_t add = static_cast<std::size_t>(count);
+    if (add == 0) return;
+    const std::size_t total = current + add;
+    if (total <= a->capacity()) return;
+    try {
+        a->reserve(total);
+    } catch (...) {
+        // The hint is optional: pushes still grow the vector normally.
+    }
 }
 
 // `a.pop()`: removes and returns the last element; an empty array yields

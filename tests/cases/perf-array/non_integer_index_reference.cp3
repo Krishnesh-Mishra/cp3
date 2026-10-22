@@ -1,0 +1,6 @@
+import console from "std/console";
+const nums: number[] = [10, 20, 30];
+{
+  const value = nums[1.5];
+  console.log(value);
+}
