@@ -1,0 +1,10 @@
+import console from "std/console";
+// A class WITHOUT a constructor still takes an object literal (the structural
+// shape is the instance type). Only a class with a constructor must be made
+// with `new`.
+class Point {
+  x: number;
+  y: number;
+}
+const p: Point = { x: 1, y: 2 };
+console.log(`${p.x},${p.y}`);

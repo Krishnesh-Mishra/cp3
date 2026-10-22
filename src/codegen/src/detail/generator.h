@@ -223,9 +223,6 @@ private:
     std::string modelInitText(const VariableDeclarator& d, const Type& declared);
     std::string objectInitText(const ObjectModel& om, const ObjectLiteral& lit);
     std::string classLiteralInit(const ClassModel& cm, const ObjectLiteral& lit);
-    // The constructor's arguments for a class literal.
-    std::string ctorArgsText(const ClassMemberModel& ctor, const ClassModel& decl,
-                             const ObjectLiteral& lit);
     // `new C(...args)`: the spread array's elements are the constructor's
     // arguments.
     std::string newSpreadText(const ClassModel& cm, const std::string& self,

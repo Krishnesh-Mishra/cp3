@@ -206,104 +206,24 @@ std::string Generator::emitModelObjectLiteral(const ObjectLiteral& lit) {
 // matched to the constructor's parameters by name and then - for the
 // parameters no name matched - in the literal's property order. A parameter
 // the literal does not supply keeps the parameter's own default.
-std::string Generator::ctorArgsText(const ClassMemberModel& ctor,
-                                    const ClassModel& decl,
-                                    const ObjectLiteral& lit) {
-    const ParamList& params = ctor.ctor->params;
-    std::vector<const ObjectProperty*> props;
-    for (const auto& p : lit.properties) {
-        if (p) props.push_back(p.get());
-    }
-    std::vector<bool> claimed(props.size(), false);
-    std::vector<const Expr*> values(params.size(), nullptr);
-    // The parameters a name matches take that property's value.
-    for (std::size_t i = 0; i < params.size(); ++i) {
-        const Parameter* p = params[i].get();
-        if (!p || !p->name || p->name->kind != NodeKind::Identifier) continue;
-        const std::string& pname =
-            static_cast<const Identifier&>(*p->name).name;
-        for (std::size_t k = 0; k < props.size(); ++k) {
-            if (claimed[k]) continue;
-            if (keyNameOf(props[k]->key.get()) != pname) continue;
-            claimed[k] = true;
-            values[i] = props[k]->value ? props[k]->value.get()
-                                        : props[k]->key.get();
-            break;
-        }
-    }
-    // The parameters no name matched take the remaining properties, in the
-    // literal's own order.
-    std::size_t next = 0;
-    for (std::size_t i = 0; i < params.size(); ++i) {
-        if (values[i] != nullptr) continue;
-        while (next < props.size() && claimed[next]) ++next;
-        if (next >= props.size()) break;
-        claimed[next] = true;
-        values[i] = props[next]->value ? props[next]->value.get()
-                                       : props[next]->key.get();
-        ++next;
-    }
-    std::string args;
-    for (std::size_t i = 0; i < params.size(); ++i) {
-        const Parameter* p = params[i].get();
-        if (!p) continue;
-        if (!args.empty()) args += ", ";
-        const Type pt = ctorParamType(sema_, *p, decl);
-        if (values[i] != nullptr) {
-            // The literal's value must fit the parameter (the sema checked the
-            // literal against the class's fields; the parameters usually
-            // carry the same types).
-            const CppInfo pi = classify(pt);
-            const CppInfo vi = info(*values[i]);
-            if (pi.representable && vi.representable && !p->optional &&
-                isPrimitiveShape(pi.shape) && isPrimitiveShape(vi.shape) &&
-                pi.cpp != vi.cpp) {
-                sink_.error(diagcode::kTypeMismatch, values[i]->span,
-                            "type mismatch: the object literal's value for '" +
-                                std::string(p->name
-                                                ? static_cast<const Identifier&>(
-                                                          *p->name).name
-                                                : std::string()) +
-                                "' does not fit the constructor's parameter");
-                return std::string();
-            }
-            args += expr(*values[i]);
-            continue;
-        }
-        if (p->defaultValue != nullptr) {
-            args += expr(*p->defaultValue);
-            continue;
-        }
-        const CppInfo pi = classify(pt);
-        if (!pi.representable) {
-            sink_.error(diagcode::kTypeMismatch, p->span,
-                        "the constructor's parameter has no C++ spelling");
-            return std::string();
-        }
-        args += pi.shape == Shape::Optional || pi.shape == Shape::Maybe
-                    ? "std::nullopt"
-                    : objectFieldDefaultText(pt);
-    }
-    return args;
-}
-
-// `let c: C = { x: 1 }`: a class instance built field by field. A class with a
-// constructor is built through it: the literal's values are the constructor's
-// arguments (matched to its parameters by name, then in the literal's
-// property order) and the literal's field values are the instance's state.
+// `let c: C = { x: 1 }`: a class instance built field by field. A class
+// **with a constructor** is made with `new`, so an object literal is not one
+// of its instances: the sema reports that (CP3401) and the codegen repeats
+// it, so a unit that reached codegen without the sema gate still fails.
 std::string Generator::classLiteralInit(const ClassModel& cm,
                                         const ObjectLiteral& lit) {
     needsRef_ = true;
     const ClassModel* owner = nullptr;
     const ClassMemberModel* ctor = ctorOf(cm, &owner);
-    const ClassModel& decl = owner != nullptr ? *owner : cm;
-    std::string args;
     if (ctor != nullptr && ctor->ctor != nullptr) {
-        args = ctorArgsText(*ctor, decl, lit);
-        if (args.empty() && !ctor->ctor->params.empty()) {
-            return std::string();  // the report is already out
-        }
+        sink_.error(diagcode::kTypeMismatch, lit.span,
+                    "type mismatch: an object literal is not assignable to type '" +
+                        cm.name +
+                        "': a class with a constructor must be created with `new " +
+                        cm.name + "(...)`");
+        return std::string();
     }
+    std::string args;
     std::string out = "([&]{ auto cp3_v = ::cp3::runtime::makeRef<" + cm.cpp +
                       ">(" + args + ");";
     for (const ClassMemberModel& m : cm.members) {

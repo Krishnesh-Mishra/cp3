@@ -60,6 +60,10 @@ bool Analyzer::wouldAccept(const Type& from, const Type& to, bool freshLiteral) 
     }
     if (from.kind == TypeKind::Object && to.kind == TypeKind::Class) {
         if (const ClassInfo* ci = findClass(to.name)) {
+            // A class with a constructor is made with `new`; an object literal
+            // is not one of its instances. cp3 follows TypeScript here (the
+            // spec owner's ruling), so the literal never conforms.
+            if (ci->hasCtor) return false;
             return literalConformsToClass(from, *ci, freshLiteral);
         }
     }
@@ -151,6 +155,20 @@ void Analyzer::checkAssign(const Type& from, const Type& to,
     if (to.kind == TypeKind::Object && !isAmbientType(to) &&
         from.kind == TypeKind::Object) {
         if (emitObjectDiff(from, to, span, freshLiteral)) return;
+    }
+    if (from.kind == TypeKind::Object && to.kind == TypeKind::Class &&
+        !to.name.empty()) {
+        const ClassInfo* ci = findClass(to.name);
+        if (ci != nullptr && ci->hasCtor) {
+            // A class with a constructor is made with `new`. TypeScript
+            // rejects an object literal for such a class, and so does cp3.
+            report(diagcode::kTypeMismatch, span,
+                   "type mismatch: an object literal is not assignable to type '" +
+                       pretty(to) +
+                       "': a class with a constructor must be created with `new " +
+                       to.name + "(...)`");
+            return;
+        }
     }
     if (emitClassAssignDiff(from, to, span, freshLiteral)) return;
     if (isTupleType(to) && from.kind == TypeKind::Array) {

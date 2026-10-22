@@ -1,5 +1,11 @@
 {
-  "mode": "run",
-  "stdout": "1,2\n",
-  "exitCode": 0
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 7,
+    "col": 1,
+    "contains": "must be created with `new Point(...)`"
+  }
 }
