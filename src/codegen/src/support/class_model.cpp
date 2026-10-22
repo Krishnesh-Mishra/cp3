@@ -80,6 +80,13 @@ std::string paramNameOf(const Parameter& p) {
     if (p.name && p.name->kind == NodeKind::Identifier) {
         return mapIdent(static_cast<const Identifier&>(*p.name).name);
     }
+    // A rest parameter binds its name through the `...` wrapper.
+    if (p.name && p.name->kind == NodeKind::RestElement) {
+        const auto& re = static_cast<const RestElement&>(*p.name);
+        if (re.argument && re.argument->kind == NodeKind::Identifier) {
+            return mapIdent(static_cast<const Identifier&>(*re.argument).name);
+        }
+    }
     return "cp3_param";
 }
 

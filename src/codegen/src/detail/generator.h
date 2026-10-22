@@ -562,6 +562,14 @@ private:
                            const CallExpr& c, const Expr& arg, std::size_t index);
     std::string networkArgs(const Type& receiver, const std::string& property, const CallExpr& c);
     std::vector<std::string> emitPlainArgs(const CallExpr& c);
+    // The argument list of a class method / constructor call: a rest parameter
+    // takes the trailing arguments as one array (spec 15).
+    std::vector<std::string> classRestArgs(const std::vector<std::string>& args,
+                                           const ParamList* params);
+    // The argument list of a class method call: a rest parameter takes the
+    // trailing arguments as one array (spec 15).
+    std::vector<std::string> classMethodArgs(const CallExpr& c,
+                                             const ClassMemberModel& mem);
 
     // --- async / promises / errors (emit_async.cpp) --------------------------
     std::string emitAwait(const AwaitExpr& a);

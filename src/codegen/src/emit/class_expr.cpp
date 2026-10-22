@@ -120,7 +120,7 @@ std::string Generator::emitModelNew(const NewExpr& n) {
         notImplemented(n, "this generic class instantiation");
         return std::string();
     }
-    std::string args;
+    std::vector<std::string> texts;
     for (const auto& argPtr : n.arguments) {
         const Expr* arg = argPtr.get();
         if (arg == nullptr) continue;
@@ -128,10 +128,16 @@ std::string Generator::emitModelNew(const NewExpr& n) {
             notImplemented(*arg, "spread argument");
             continue;
         }
-        if (!args.empty()) args += ", ";
-        args += expr(*arg);
+        texts.push_back(expr(*arg));
     }
-    return "::cp3::runtime::makeRef<" + self + ">(" + args + ")";
+    // A constructor with a rest parameter takes the trailing arguments as
+    // one array (spec 15).
+    if (const ClassMemberModel* ctor = findClassMember(*cm, "constructor");
+        ctor != nullptr && ctor->ctor != nullptr) {
+        texts = classRestArgs(texts, &ctor->ctor->params);
+    }
+    return "::cp3::runtime::makeRef<" + self + ">(" +
+           joinStrings(texts, ", ") + ")";
 }
 
 // A member read: `C.staticField`, `(recv)->field` on a class handle, an
@@ -231,7 +237,7 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
             return std::string();
         }
         return base->cpp + "::" + mapIdent(mem->name) + "(" +
-               joinStrings(emitPlainArgs(c), ", ") + ")";
+               joinStrings(classMethodArgs(c, *mem), ", ") + ")";
     }
     const bool viaClassName =
         m.object->kind == NodeKind::Identifier &&
@@ -246,7 +252,7 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
             return std::string();
         }
         return cm->cpp + "::" + mapIdent(mem->name) + "(" +
-               joinStrings(emitPlainArgs(c), ", ") + ")";
+               joinStrings(classMethodArgs(c, *mem), ", ") + ")";
     }
     const Type rt = effectiveType(*m.object);
     const CppInfo ri = classify(rt);
@@ -261,7 +267,7 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
             return std::string();
         }
         return "(" + expr(*m.object) + ")->" + mapIdent(mem->name) + "(" +
-               joinStrings(emitPlainArgs(c), ", ") + ")";
+               joinStrings(classMethodArgs(c, *mem), ", ") + ")";
     }
     if (const ObjectModel* om = objectModelOf(base);
         om != nullptr && ModelRegistry::get().objectUsable(om->label) &&

@@ -358,13 +358,21 @@ std::string Generator::methodParamText(const Parameter& p,
                                        const ClassModel* cm) {
     const std::string name = paramNameOf(p);
     if (p.isRest) {
-        notImplemented(p, "rest parameter");
-        return "std::vector<double> " + name;
+        // `...nums: number[]`: the C++ parameter is one array; the call site
+        // packs the trailing arguments into it (emit/class_params.cpp).
+        Type t = p.type ? modelTypeFromTypeNode(*p.type) : Type::unknown();
+        if (cm != nullptr) rewriteTypeParams(t, cm->typeParams);
+        Type elem = Type::unknown();
+        if (t.kind == TypeKind::Array && !t.parts.empty()) elem = t.parts.front();
+        const CppInfo ec = classify(elem);
+        if (!ec.representable || ec.shape == Shape::Void) {
+            notImplemented(p, "this rest parameter type");
+            return "std::vector<double> " + name;
+        }
+        return "::cp3::runtime::Array<" + ec.cpp + "> " + name;
     }
-    Type t = Type::unknown();
-    if (p.type) {
-        t = modelTypeFromTypeNode(*p.type);
-    } else if (p.name) {
+    Type t = p.type ? modelTypeFromTypeNode(*p.type) : Type::unknown();
+    if (!p.type && p.name) {
         if (const Type* st = sema_.typeOf(p.name->nodeId)) t = *st;
     }
     if (cm != nullptr) rewriteTypeParams(t, cm->typeParams);
@@ -438,11 +446,12 @@ std::string Generator::methodBodyText(const MethodDeclaration& md,
     }
     for (const auto& p : md.params) {
         if (!p) continue;
-        if (p->name && p->name->kind == NodeKind::Identifier) {
-            Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
-            if (p->optional && !t.isUnknown()) t = Type::nullable(t);
-            declare(static_cast<const Identifier&>(*p->name).name, t);
-        }
+        // A rest parameter binds its name through the `...` wrapper.
+        const Identifier* id = parameterIdentifier(*p);
+        if (id == nullptr) continue;
+        Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
+        if (p->optional && !t.isUnknown()) t = Type::nullable(t);
+        declare(id->name, t);
     }
     std::string body;
     if (md.body) stmt(*md.body, body, indent);
@@ -463,10 +472,10 @@ std::string Generator::ctorBodyText(const ConstructorDeclaration& cd,
     declare("this", Type::named(TypeKind::Class, cm.name));
     for (const auto& p : cd.params) {
         if (!p) continue;
-        if (p->name && p->name->kind == NodeKind::Identifier) {
-            Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
-            declare(static_cast<const Identifier&>(*p->name).name, t);
-        }
+        const Identifier* id = parameterIdentifier(*p);
+        if (id == nullptr) continue;
+        Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
+        declare(id->name, t);
     }
     std::string body;
     if (cd.body) stmt(*cd.body, body, indent);

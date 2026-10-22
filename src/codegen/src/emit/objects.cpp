@@ -58,7 +58,20 @@ std::string Generator::objectLiteralForType(const ObjectLiteral& lit,
                                             const Type& declared) {
     std::string structName;
     std::vector<ObjectField> fields;
-    if (!objectShapeOf(declared, structName, fields)) return std::string();
+    if (!objectShapeOf(declared, structName, fields)) {
+        // The declared shape has no value-shape spelling (an optional field,
+        // say): the object model owns it, and its struct is the field list.
+        const ObjectModel* om = objectModelOf(declared);
+        if (om == nullptr || !objectModelUsed(*om)) return std::string();
+        // An interface is built through its literal struct (the wrapper takes
+        // a class handle instead).
+        structName = om->isInterface ? om->literalName : om->structName;
+        if (structName.empty()) return std::string();
+        for (const ObjectFieldModel& f : om->fields) {
+            if (f.isFunction) continue;
+            fields.push_back(ObjectField{f.name, objectFieldCpp(f), f.type});
+        }
+    }
     std::vector<std::string> values;
     for (const ObjectField& field : fields) {
         const Expr* value = nullptr;
@@ -69,7 +82,15 @@ std::string Generator::objectLiteralForType(const ObjectLiteral& lit,
                 break;
             }
         }
-        if (value == nullptr) return std::string();
+        if (value == nullptr) {
+            // An optional field may be absent: the empty optional is the
+            // cp3 `undefined` a pattern default fills.
+            if (field.cpp.rfind("std::optional<", 0) == 0) {
+                values.push_back("std::nullopt");
+                continue;
+            }
+            return std::string();
+        }
         if (field.type.kind == TypeKind::Object &&
             value->kind == NodeKind::ObjectLiteral) {
             const std::string nested = objectLiteralForType(

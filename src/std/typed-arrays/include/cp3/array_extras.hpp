@@ -117,6 +117,15 @@ const E& arrayAt(const Array<E>& a, double index) {
     return (*a)[static_cast<std::size_t>(index)];
 }
 
+// The element at `index`, or `fallback` when the array is shorter. A binding
+// pattern's default (`[a = 1]`) reads the element or the default, so a short
+// array fills the missing slot instead of running off its end.
+template <class E, class F>
+E arrayAtOr(const Array<E>& a, double index, F fallback) {
+    if (!indexInRange(index, a->size())) return static_cast<E>(fallback);
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
 // The reference form of `arrayAt` (codegen: support/array_refs.cpp): the same
 // bounds check and panic, without copying the element. VALID ONLY WHILE THE
 // ARRAY IS NOT MUTATED: any push, pop, element write, sort or other

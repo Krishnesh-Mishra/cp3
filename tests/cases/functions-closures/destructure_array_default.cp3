@@ -1,0 +1,6 @@
+import console from "std/console";
+function show(): string {
+  let [a, b = 2] = [1];
+  return `${a} ${b}`;
+}
+console.log(show());
