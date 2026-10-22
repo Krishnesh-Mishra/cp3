@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 3,
+    "col": 1,
+    "contains": "parallel.run's arguments must be closures"
+  }
+}

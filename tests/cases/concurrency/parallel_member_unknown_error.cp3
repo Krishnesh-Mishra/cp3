@@ -1,0 +1,3 @@
+import console from "std/console";
+
+parallel.map(0..10, (i) => i);

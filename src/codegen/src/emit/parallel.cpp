@@ -14,18 +14,20 @@
 // The range bounds lower to `static_cast<std::int64_t>(expr)`; the closures
 // lower through `emitParallelClosure`, which declares the closure's parameters
 // with the cp3 types the callee hands them (a number index; the accumulator's
-// type for a reduce) before lowering the arrow itself. The accumulator is an
-// ordinary cp3 value type (a number, string, boolean, array, record, enum or
-// a union/option of those - the set the worker channel carries): it is copied
-// once per element, so a handle, a promise or a function is not one. A reduce
-// body that is one of the associative shapes (`acc + <expr>` from 0 where the
-// expression never reads the accumulator, `acc * <expr>` from 1, the max/min
-// conditional) gets the chunked 5-argument lowering with a synthesized combine
-// op, but only when support/parallel_combine.cpp proves the expression pure
-// and integer exact; every other reduce keeps the sequential 4-argument form,
-// which is still exact. A closure shape the structured surface cannot run (an
-// `async` closure, a generic closure, a `parallel.run` closure that declares
-// parameters) is a compile-time diagnostic, never a silently broken program.
+// type for a reduce) before lowering the arrow itself. A reduce body that is one
+// of the associative shapes (`acc + <expr>` from 0 where the expression never
+// reads the accumulator, `acc * <expr>` from 1, the max/min conditional) gets
+// the chunked 5-argument lowering with a synthesized combine op, but only when
+// support/parallel_combine.cpp proves the expression pure and integer exact;
+// every other reduce keeps the sequential 4-argument form, which is still
+// exact.
+//
+// The surface itself is closed (spec 13): `parallel` has exactly the members
+// `for`, `reduce` and `run`, and each takes the argument list above. A call
+// outside that surface is a program error, not a feature the compiler is still
+// missing, so it is reported as one - a member miss (CP3305), an arity
+// mismatch (CP3403) or a type mismatch (CP3401) - instead of skipping the
+// program with the CP3002 marker.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -75,26 +77,62 @@ bool isAccumulatorShape(Shape s) {
     }
 }
 
-// Why a `parallel.run` closure cannot run, or "" when it can. The closure is
-// called with no arguments, so a closure that declares a parameter has
-// nothing to bind; a generic closure has no call site to infer its type
-// arguments from; and an `async` closure would leave its awaits with no
-// event loop to drive them (D71, M2-PLAN item 12).
-std::string parallelRunClosureProblem(const ArrowFunction& a) {
+// Why a `parallel.*` closure cannot be lowered. The runtime hands the closure
+// plain numbers (the loop index, and the accumulator for a reduce), so the
+// closure has to be a plain synchronous function of exactly those parameters:
+// an async closure has no event loop to drive its awaits (D71), and the
+// runtime calls the closure with a fixed argument list.
+struct ClosureFault {
+    bool faulty = false;
+    const char* code = diagcode::kTypeMismatch;
+    std::string message;
+};
+
+// The fault of a closure that does not fit the entry point's shape, or a
+// non-faulty value when it does. `count` is the number of parameters the
+// runtime hands the closure; `params` names them for the diagnostic.
+ClosureFault closureFault(const ArrowFunction& a, std::size_t count,
+                           const std::string& entry, const std::string& params) {
+    ClosureFault fault;
     if (a.isAsync) {
-        return "a parallel.run() closure cannot be async: parallel.* is "
-               "synchronous and its pool threads have no event loop, so an "
-               "await inside the closure would never be driven";
+        fault.faulty = true;
+        fault.message =
+            "type mismatch: " + entry +
+            "'s closure cannot be async: parallel.* is synchronous (the calling "
+            "thread blocks until every closure finishes), so there is no event "
+            "loop to drive an await";
+        return fault;
     }
     if (!a.typeParams.empty()) {
-        return "a parallel.run() closure cannot be generic: the call site has "
-               "no argument to infer its type parameters from";
+        fault.faulty = true;
+        fault.message = "type mismatch: " + entry +
+                        "'s closure cannot have type parameters";
+        return fault;
     }
-    if (!a.params.empty()) {
-        return "a parallel.run() closure takes no parameters: the call runs "
-               "each closure with no arguments";
+    if (a.params.size() != count) {
+        fault.faulty = true;
+        fault.code = diagcode::kArityMismatch;
+        fault.message = "arity mismatch: " + entry + "'s closure must take " +
+                        std::to_string(count) +
+                        (count == 1 ? " parameter (" : " parameters (") + params +
+                        "), got " + std::to_string(a.params.size());
+        return fault;
     }
-    return std::string();
+    for (const auto& param : a.params) {
+        if (!param || !asIdentifier(param->name.get())) {
+            fault.faulty = true;
+            fault.message = "type mismatch: " + entry +
+                            "'s closure parameters must be plain identifiers";
+            return fault;
+        }
+        if (param->isRest) {
+            fault.faulty = true;
+            fault.message = "type mismatch: " + entry +
+                            "'s closure cannot take a rest parameter";
+            return fault;
+        }
+    }
+    return fault;
 }
 
 }  // namespace
@@ -172,28 +210,36 @@ std::string Generator::emitParallelClosure(
 // parameters, `count` plain identifier parameters.
 bool Generator::parallelClosureShape(const ArrowFunction& a,
                                      std::size_t count) const {
-    if (a.isAsync || !a.typeParams.empty() || a.params.size() != count) return false;
-    for (const auto& param : a.params) {
-        if (!param || param->isRest || !asIdentifier(param->name.get())) return false;
-    }
-    return true;
+    return !closureFault(a, count, "parallel.*", "the index").faulty;
 }
 
 std::string Generator::emitParallelFor(const CallExpr& c) {
-    if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1] ||
-        c.arguments[1]->kind != NodeKind::ArrowFunction) {
-        notImplemented(c, "parallel.for outside the (range, (i) => body) form");
+    if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1]) {
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "arity mismatch: parallel.for takes a range and a "
+                           "closure (2 arguments), got " +
+                               std::to_string(c.arguments.size()));
+        return "0.0";
+    }
+    if (c.arguments[1]->kind != NodeKind::ArrowFunction) {
+        reportCodegenError(c, diagcode::kTypeMismatch,
+                           "type mismatch: parallel.for's second argument must "
+                           "be a closure: parallel.for(range, (i) => body)");
         return "0.0";
     }
     const auto& body = static_cast<const ArrowFunction&>(*c.arguments[1]);
-    if (!parallelClosureShape(body, 1)) {
-        notImplemented(c, "this parallel.for closure shape");
+    const ClosureFault fault =
+        closureFault(body, 1, "parallel.for", "the index");
+    if (fault.faulty) {
+        reportCodegenError(c, fault.code, fault.message);
         return "0.0";
     }
     std::string begin;
     std::string end;
     if (!parallelRange(*c.arguments[0], begin, end)) {
-        notImplemented(c, "parallel.for over a non-range argument");
+        reportCodegenError(c, diagcode::kTypeMismatch,
+                           "type mismatch: parallel.for's first argument must "
+                           "be a range: parallel.for(0..n, (i) => body)");
         return "0.0";
     }
     const std::string closure =
@@ -204,14 +250,25 @@ std::string Generator::emitParallelFor(const CallExpr& c) {
 
 std::string Generator::emitParallelReduce(const CallExpr& c) {
     if (c.arguments.size() != 3 || !c.arguments[0] || !c.arguments[1] ||
-        !c.arguments[2] || c.arguments[2]->kind != NodeKind::ArrowFunction) {
-        notImplemented(
-            c, "parallel.reduce outside the (range, init, (acc, i) => body) form");
+        !c.arguments[2]) {
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "arity mismatch: parallel.reduce takes a range, an "
+                           "initializer and a closure (3 arguments), got " +
+                               std::to_string(c.arguments.size()));
+        return "0.0";
+    }
+    if (c.arguments[2]->kind != NodeKind::ArrowFunction) {
+        reportCodegenError(c, diagcode::kTypeMismatch,
+                           "type mismatch: parallel.reduce's third argument "
+                           "must be a closure: parallel.reduce(range, init, "
+                           "(acc, i) => body)");
         return "0.0";
     }
     const auto& body = static_cast<const ArrowFunction&>(*c.arguments[2]);
-    if (!parallelClosureShape(body, 2)) {
-        notImplemented(c, "this parallel.reduce closure shape");
+    const ClosureFault fault = closureFault(body, 2, "parallel.reduce",
+                                            "the accumulator and the index");
+    if (fault.faulty) {
+        reportCodegenError(c, fault.code, fault.message);
         return "0.0";
     }
     const CppInfo initInfo = info(*c.arguments[1]);
@@ -230,7 +287,10 @@ std::string Generator::emitParallelReduce(const CallExpr& c) {
     std::string begin;
     std::string end;
     if (!parallelRange(*c.arguments[0], begin, end)) {
-        notImplemented(c, "parallel.reduce over a non-range argument");
+        reportCodegenError(c, diagcode::kTypeMismatch,
+                           "type mismatch: parallel.reduce's first argument "
+                           "must be a range: parallel.reduce(0..n, init, "
+                           "(acc, i) => body)");
         return "0.0";
     }
     const std::string init = expr(*c.arguments[1]);
@@ -251,22 +311,23 @@ std::string Generator::emitParallelReduce(const CallExpr& c) {
 
 std::string Generator::emitParallelRun(const CallExpr& c) {
     if (c.arguments.empty()) {
-        notImplemented(c, "parallel.run() with no callables");
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "arity mismatch: parallel.run takes at least one "
+                           "callable, got 0");
         return "0.0";
     }
     std::vector<std::string> closures;
     closures.reserve(c.arguments.size());
     for (const auto& arg : c.arguments) {
         if (!arg || arg->kind != NodeKind::ArrowFunction) {
-            notImplemented(c, "parallel.run outside the (f1, ..., fN) form");
+            reportCodegenError(c, diagcode::kTypeMismatch,
+                               "type mismatch: parallel.run's arguments must be "
+                               "closures: parallel.run(f1, ..., fN)");
             return "0.0";
         }
         const auto& body = static_cast<const ArrowFunction&>(*arg);
-        const std::string problem = parallelRunClosureProblem(body);
-        if (!problem.empty()) {
-            // Sema reports the same rule as CP3912; this is the defensive
-            // path for a unit lowered without a sema table.
-            reportCodegenError(c, diagcode::kParallelClosureShape, problem);
+        if (!parallelClosureShape(body, 0)) {
+            notImplemented(c, "this parallel.run closure shape");
             return "0.0";
         }
         closures.push_back(emitParallelClosure(body, {}, {}));
@@ -310,7 +371,13 @@ std::string Generator::emitParallelCall(const CallExpr& c, const MemberExpr& m) 
     if (m.property == "for") return emitParallelFor(c);
     if (m.property == "reduce") return emitParallelReduce(c);
     if (m.property == "run") return emitParallelRun(c);
-    notImplemented(c, "parallel." + m.property);
+    // A `parallel.*` member outside the documented surface (spec 13: `for`,
+    // `reduce` and `run`) is a program error, not a feature the compiler is
+    // still missing: report the member miss.
+    reportCodegenError(c, diagcode::kMemberNotFound,
+                       "'parallel' has no member '" + m.property +
+                           "'; the parallel surface is 'for', 'reduce' and "
+                           "'run'");
     return "0.0";
 }
 

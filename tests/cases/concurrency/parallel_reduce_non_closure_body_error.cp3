@@ -1,0 +1,7 @@
+import console from "std/console";
+
+function body(acc: number, i: number): number {
+  return acc + i;
+}
+
+parallel.reduce(0..10, 0, body);
