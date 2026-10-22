@@ -330,7 +330,10 @@ Expr* Analyzer::dynamicExpr(Node& n) {
 // Arrow functions
 // =============================================================================
 Type Analyzer::inferArrow(ArrowFunction& arrow) {
-    if (!arrow.typeParams.empty()) notImplemented(arrow.span, "generic arrow functions");
+    // A generic arrow (spec §16): the arrow owns its type parameters, so they
+    // are registered before its signature is built - `T` then resolves to a
+    // TypeParam inside every annotation of the parameter list, the return
+    // type and the body, exactly like a generic function's.
     registerTypeParams(arrow.typeParams);
 
     std::vector<Type> params;
@@ -370,6 +373,14 @@ Type Analyzer::inferArrow(ArrowFunction& arrow) {
         as.isAsync = arrow.isAsync;
         as.asyncValueRet = isPromiseType(ret) ? promiseValue(ret) : ret;
         as.declNodeId = arrow.nodeId;
+        // The arrow's own type parameters: a call through the binding infers
+        // them from the argument types, or takes them from an explicit
+        // type-argument list (`f<number>(x)`).
+        for (auto& tp : arrow.typeParams) {
+            if (!tp) continue;
+            auto it = typeNames_.find(tp->name);
+            if (it != typeNames_.end()) as.typeParams.push_back(it->second);
+        }
         publishFunction(as, "");
         arrowSigs_[arrow.nodeId] = std::move(as);
     }

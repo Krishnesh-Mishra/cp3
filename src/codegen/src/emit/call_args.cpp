@@ -344,7 +344,12 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
     const auto declIt = g.functionDecls_.find(name);
     const FunctionDeclaration* decl =
         declIt != g.functionDecls_.end() ? declIt->second : nullptr;
-    const bool generic = decl != nullptr && !decl->typeParams.empty();
+    // A `let f = <T>(x: T) => x` binding: the arrow owns the type parameters,
+    // so an explicit type-argument list names them (spec §16) exactly like a
+    // declared generic function's.
+    const bool genericArrow = g.isGenericArrowBinding(name);
+    const bool generic =
+        genericArrow || (decl != nullptr && !decl->typeParams.empty());
     if (!c.typeArgs.empty() && !generic) {
         // A type argument list on a function that declares no type parameters
         // is a type error (sema reports it first; the codegen repeats it so a
@@ -367,9 +372,15 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
                 arrow != g.captures_.arrowOf.end()) {
                 params = &arrow->second->params;
             }
-            return emitFunctionCall(
-                c, g.emitIdentifier(static_cast<const Identifier&>(*c.callee)),
-                b->type, params);
+            std::string callee =
+                g.emitIdentifier(static_cast<const Identifier&>(*c.callee));
+            if (genericArrow && !c.typeArgs.empty()) {
+                // `f<number>(x)`: the explicit type argument names the
+                // arrow's own type parameter, so the C++ call instantiates
+                // the generic lambda's template explicitly.
+                callee = g.genericArrowCallee(callee, c);
+            }
+            return emitFunctionCall(c, callee, b->type, params);
         }
         return g.emitUnresolvedCall(c, name);
     }

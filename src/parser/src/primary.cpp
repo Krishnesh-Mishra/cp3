@@ -3,8 +3,8 @@
 //
 // Implements the leaf expressions (literals, identifiers, template literals),
 // array/object literals, `new`, calls and member/index access (including
-// optional chaining and explicit call type arguments), and arrow functions.
-// The operator-precedence chain lives in expressions.cpp.
+// optional chaining and explicit call type arguments), and arrow functions
+// (plain and generic). The operator-precedence chain lives in expressions.cpp.
 // =============================================================================
 #include "detail/tokens.h"
 
@@ -158,6 +158,11 @@ ExprPtr ParserImpl::parsePrimary() {
             return parseObjectLiteral();
         case TokenKind::LParen:
             return parseParenOrArrow();
+        case TokenKind::Less:
+            // A generic arrow function (`<T,>(x: T) => x`): the only cp3
+            // expression that starts with `<`.
+            if (ExprPtr arrow = parseGenericArrow()) return arrow;
+            break;
         case TokenKind::KwAsync:
             return parseAsyncPrimary(t);
         default:
@@ -356,6 +361,47 @@ ExprPtr ParserImpl::parseSingleParamArrow(bool isAsync) {
     auto fn = std::make_unique<ArrowFunction>(start.span);
     fn->isAsync = isAsync;
     fn->params = std::move(params);
+    if (check(TokenKind::LBrace)) {
+        fn->body = parseBlock();
+        fn->expressionBody = false;
+    } else {
+        fn->body = parseAssignment();
+        fn->expressionBody = true;
+    }
+    fn->span = spanFrom(start);
+    return fn;
+}
+
+// `<T,>(x: T) => x` - a generic arrow function (spec §16): the arrow owns
+// its type parameters, and they are inferred (or written) at the call site.
+//
+// The spelling is TypeScript's: the trailing comma that disambiguates the
+// arrow from a JSX element in TypeScript is optional in cp3, which has no
+// JSX, so `<T>(x: T) => x` reads the same way.
+//
+// The production is a trial parse: `<` also opens a relational expression, so
+// the type-parameter list, the parameter list and the `=>` all have to line
+// up before the arrow is committed. A failed trial restores the cursor and
+// lets the ordinary expression parser report the real error.
+ExprPtr ParserImpl::parseGenericArrow() {
+    const Token start = peek();
+    Trial trial(*this);
+    TypeParamList typeParams = parseTypeParamsIfPresent();
+    // `<>` is not a type-parameter list: an empty one is no arrow.
+    if (typeParams.empty()) return nullptr;
+    if (!check(TokenKind::LParen)) return nullptr;
+    (void)advance();  // (
+    ParamList params;
+    if (!parseParamsBody(params)) return nullptr;
+    TypePtr returnType;
+    if (match(TokenKind::Colon)) returnType = parseType();
+    if (!check(TokenKind::Arrow)) return nullptr;
+    trial.commit();
+    (void)advance();  // =>
+    auto fn = std::make_unique<ArrowFunction>(start.span);
+    fn->typeParams = std::move(typeParams);
+    fn->params = std::move(params);
+    fn->returnType = std::move(returnType);
     if (check(TokenKind::LBrace)) {
         fn->body = parseBlock();
         fn->expressionBody = false;
