@@ -26,18 +26,6 @@ namespace cp3 {
 // =============================================================================
 
 // Is the member `name` implemented by the class (or one of its bases)?
-bool Analyzer::memberImplementedInClass(const ClassInfo& ci,
-                                        const std::string& name) const {
-    const ClassInfo* k = &ci;
-    int guard = 0;
-    while (k && guard++ < 64) {
-        const ClassMemberInfo* m = findClassMember(*k, name);
-        if (m) return !m->isMethod || !m->isAbstract;
-        k = k->baseName.empty() ? nullptr : findClass(k->baseName);
-    }
-    return false;
-}
-
 // A concrete class must implement every abstract member of its bases.
 void Analyzer::checkAbstractConformance(const ClassDeclaration& c,
                                         const ClassInfo& ci) {

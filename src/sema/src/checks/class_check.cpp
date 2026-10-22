@@ -253,29 +253,6 @@ void Analyzer::collectClassMember(ClassMember& m, ClassInfo& info) {
 // =============================================================================
 // Abstract conformance + bodies
 // =============================================================================
-void Analyzer::checkAbstractConformance(const ClassDeclaration& c,
-                                        const ClassInfo& ci) {
-    if (ci.isAbstract) return;
-    std::string missing;
-    const ClassInfo* k = ci.baseName.empty() ? nullptr : findClass(ci.baseName);
-    int guard = 0;
-    while (k && guard++ < 64 && missing.empty()) {
-        for (const ClassMemberInfo& m : k->members) {
-            if (!m.isAbstract) continue;
-            if (!memberImplementedInClass(ci, m.name)) {
-                missing = m.name;
-                break;
-            }
-        }
-        k = k->baseName.empty() ? nullptr : findClass(k->baseName);
-    }
-    if (!missing.empty()) {
-        report(diagcode::kMissingInterfaceMember, c.span,
-               "class '" + c.name + "' must implement abstract member '" +
-                   missing + "'");
-    }
-}
-
 void Analyzer::checkClassBodies(ClassDeclaration& c) {
     if (!findClass(c.name)) return;
     // Generic class bodies check once, with the parameters bound to TypeParam.
