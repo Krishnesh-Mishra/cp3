@@ -1,0 +1,400 @@
+{
+  "group": "native-install",
+  "cases": [
+    {
+      "group": "native-install",
+      "name": "help-lists-options",
+      "description": "native-install --help lists the binding surface",
+      "argv": [
+        "native-install",
+        "--help"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "usage: cp3c native-install <sdk-path-or-name> [options]",
+            "--include <dir>",
+            "--define <name[=val]>",
+            "--lib-dir <dir>",
+            "--link <name>",
+            "--name <id>",
+            "--out <dir>",
+            "--force",
+            "--dry-run",
+            "--json",
+            "--verbose",
+            "exit codes:"
+          ]
+        },
+        "stderr": {
+          "empty": true
+        }
+      }
+    },
+    {
+      "group": "native-install",
+      "name": "missing-input-is-usage-error",
+      "description": "native-install without an SDK is a usage error",
+      "argv": [
+        "native-install"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "native-install needs an SDK path or package name",
+            "usage: cp3c native-install"
+          ]
+        }
+      }
+    },
+    {
+      "group": "native-install",
+      "name": "unknown-option-is-usage-error",
+      "description": "unknown native-install options are named",
+      "argv": [
+        "native-install",
+        "--bogus"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "unknown option '--bogus'"
+        }
+      }
+    },
+    {
+      "group": "native-install",
+      "name": "invalid-sdk-is-usage-error",
+      "description": "an unresolved SDK name lists what was searched",
+      "argv": [
+        "native-install",
+        "definitely-not-an-sdk"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "native SDK 'definitely-not-an-sdk' was not found.",
+            "Searched:",
+            "CP3_NATIVE_SDK_PATH (not set)"
+          ]
+        }
+      }
+    },
+    {
+      "group": "native-install",
+      "name": "missing-libclang-is-usage-error",
+      "description": "a missing libclang names the override and the install hint",
+      "argv": [
+        "native-install",
+        "sdk/include/demo/native_demo.h",
+        "--name",
+        "demo"
+      ],
+      "env": {
+        "CP3_LIBCLANG": "{temp}/no-such-libclang.dll"
+      },
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-sdk",
+            "to": "sdk"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "libclang was not found",
+            "CP3_LIBCLANG",
+            "Searched:",
+            "no-such-libclang.dll"
+          ]
+        }
+      }
+    },
+    {
+      "group": "native-install",
+      "name": "generates-index-and-metadata",
+      "description": "binds a fixture header and writes index.cp3 + native.json",
+      "argv": [
+        "native-install",
+        "sdk",
+        "--name",
+        "demo",
+        "--include",
+        "sdk/include",
+        "--define",
+        "DEMO_FEATURE=1",
+        "--lib-dir",
+        "sdk/lib",
+        "--link",
+        "native_demo"
+      ],
+      "env": {
+        "CP3_LIBCLANG": "{libclang}"
+      },
+      "requires": [
+        "libclang",
+        "compiler"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-sdk",
+            "to": "sdk"
+          }
+        ],
+        "files": {
+          "sdk/lib/libnative_demo.a": "fake archive for metadata discovery\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "native-install: binding 'demo'",
+            "declarations: 9 functions, 2 classes (3 methods), 1 enums",
+            "wrote"
+          ]
+        },
+        "stderr": {
+          "contains": [
+            "rejected function 'demo::fill_bytes'",
+            "non-const pointer",
+            "rejected function 'demo::overloaded'",
+            "overload sets are not supported",
+            "rejected function 'demo::sum_all'",
+            "variadic functions are not supported",
+            "rejected function template 'identity'",
+            "templates are not supported",
+            "rejected method 'demo::Point::operator+'",
+            "operator overloading is not supported"
+          ]
+        },
+        "files": {
+          ".cp3/native/demo/index.cp3": {
+            "contains": [
+              "export enum Color",
+              "export class Point",
+              "export class Counter",
+              "export function add(a: number, b: number): number;",
+              "export function checksum(data: Buffer): number;",
+              "export function sum_values(values: number[]): number;",
+              "export function feature_enabled(): number;",
+              "import { Buffer } from \"std/buffer\";",
+              "fill_bytes",
+              "Rejected declarations"
+            ],
+            "not_contains": "export function overloaded"
+          },
+          ".cp3/native/demo/native.json": {
+            "json_paths": {
+              "schema": "cp3-native-binding/1",
+              "id": "demo",
+              "defines.0": "DEMO_FEATURE=1",
+              "headers.0": "demo/native_demo.h",
+              "linkNames.0": "native_demo",
+              "functions.0.name": "add",
+              "classes.0.name": "Point",
+              "enums.0.name": "Color",
+              "functions.6.params.0.kind": "byteBuffer",
+              "functions.7.params.0.kind": "numberArray",
+              "functions.6.params.0.cppArgCount": 2,
+              "functions.6.params.0.type.kind": "buffer"
+            },
+            "contains": [
+              "\"staticLibraries\": [",
+              "\"kind\": \"byteBuffer\"",
+              "\"kind\": \"numberArray\"",
+              "\"cppArgCount\": 2",
+              "\"rejected\": [",
+              "fill_bytes",
+              "identity"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "native-install",
+      "name": "dry-run-writes-nothing",
+      "description": "dry-run reports counts and leaves the binding root absent",
+      "argv": [
+        "native-install",
+        "sdk",
+        "--name",
+        "demo",
+        "--out",
+        "custom-out",
+        "--dry-run",
+        "--json"
+      ],
+      "env": {
+        "CP3_LIBCLANG": "{libclang}"
+      },
+      "requires": [
+        "libclang",
+        "compiler"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-sdk",
+            "to": "sdk"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "ok": true,
+          "id": "demo",
+          "dryRun": true,
+          "counts.functions": 8,
+          "counts.classes": 2,
+          "counts.methods": 3,
+          "counts.enums": 1,
+          "counts.rejected": 5
+        },
+        "files_absent": [
+          "custom-out",
+          ".cp3/native"
+        ]
+      }
+    },
+    {
+      "group": "native-install",
+      "name": "refuses-to-overwrite-without-force",
+      "description": "an existing binding is only replaced with --force",
+      "argv": [
+        "native-install",
+        "sdk",
+        "--name",
+        "demo"
+      ],
+      "env": {
+        "CP3_LIBCLANG": "{libclang}"
+      },
+      "requires": [
+        "libclang",
+        "compiler"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-sdk",
+            "to": "sdk"
+          }
+        ],
+        "files": {
+          ".cp3/native/demo/index.cp3": "stale binding\n"
+        }
+      },
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": [
+            "already exists",
+            "--force"
+          ]
+        },
+        "files": {
+          ".cp3/native/demo/index.cp3": {
+            "equals": "stale binding\n"
+          }
+        }
+      }
+    },
+    {
+      "group": "native-install",
+      "name": "force-overwrites-existing-binding",
+      "description": "--force replaces an existing binding",
+      "argv": [
+        "native-install",
+        "sdk",
+        "--name",
+        "demo",
+        "--force"
+      ],
+      "env": {
+        "CP3_LIBCLANG": "{libclang}"
+      },
+      "requires": [
+        "libclang",
+        "compiler"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-sdk",
+            "to": "sdk"
+          }
+        ],
+        "files": {
+          ".cp3/native/demo/index.cp3": "stale binding\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": "wrote"
+        },
+        "files": {
+          ".cp3/native/demo/index.cp3": {
+            "contains": "export function add(a: number, b: number): number;"
+          },
+          ".cp3/native/demo/native.json": {
+            "json_paths": {
+              "schema": "cp3-native-binding/1",
+              "id": "demo"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "native-install",
+      "name": "verbose-reports-discovery",
+      "description": "--verbose names the libclang build and the parsed headers",
+      "argv": [
+        "native-install",
+        "sdk",
+        "--name",
+        "demo",
+        "--dry-run",
+        "--verbose"
+      ],
+      "env": {
+        "CP3_LIBCLANG": "{libclang}"
+      },
+      "requires": [
+        "libclang",
+        "compiler"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-sdk",
+            "to": "sdk"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "cp3c: libclang:",
+            "cp3c: libclang version:",
+            "cp3c: target:",
+            "cp3c: headers:",
+            "native_demo.h"
+          ]
+        }
+      }
+    }
+  ]
+}

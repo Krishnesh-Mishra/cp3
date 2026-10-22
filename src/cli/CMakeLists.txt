@@ -48,6 +48,8 @@ set(cp3_cli_sources
     src/commands/fmt.cpp
     src/format/format.cpp
     src/commands/clean.cpp
+    src/commands/native_install.cpp
+    src/commands/native_install_support.cpp
     src/commands/init.cpp
     src/commands/default_entry.cpp
     src/commands/toolchain.cpp
@@ -81,12 +83,46 @@ set(cp3_cli_sources
     src/archive/tar.cpp
     src/pkg/cp3pak.cpp
     src/pkg/semver.cpp
+    src/native/libclang.cpp
+    src/native/bindgen.cpp
+    src/native/bindgen_members.cpp
+    src/native/bindgen_types.cpp
+    src/native/bindgen_index.cpp
+    src/native/metadata.cpp
+    src/native/sdk.cpp
+    src/native/sdk_libs.cpp
 )
 
 add_library(cp3_cli STATIC ${cp3_cli_sources})
 target_include_directories(cp3_cli PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 # Private headers resolve as `detail/...` from every unit subdirectory.
 target_include_directories(cp3_cli PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+# -----------------------------------------------------------------------------
+# libclang C API headers for `native-install`.
+#
+# Only the declarations are needed at build time: libclang itself is loaded
+# dynamically at runtime from the user's LLVM installation (CP3_LIBCLANG may
+# override the search), so building cp3c never requires LLVM to be present.
+#
+# The public clang-c headers are vendored under third_party/clang-c/include
+# (Apache-2.0 WITH LLVM-exception, pinned in third_party/clang-c/VERSION.txt),
+# which keeps `cmake -S . -B build` working on a machine without LLVM. Point
+# -DCP3_LIBCLANG_INCLUDE_DIR=<dir> at a system LLVM include directory to build
+# against that copy instead.
+# -----------------------------------------------------------------------------
+if(NOT CP3_LIBCLANG_INCLUDE_DIR)
+    set(CP3_LIBCLANG_INCLUDE_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/clang-c/include")
+endif()
+if(NOT EXISTS "${CP3_LIBCLANG_INCLUDE_DIR}/clang-c/Index.h")
+    message(FATAL_ERROR
+        "clang-c/Index.h was not found under '${CP3_LIBCLANG_INCLUDE_DIR}'. "
+        "The vendored copy in third_party/clang-c/include is missing, or "
+        "-DCP3_LIBCLANG_INCLUDE_DIR points at a directory without the libclang "
+        "C API headers (for example 'C:/Program Files/LLVM/include').")
+endif()
+target_include_directories(cp3_cli PRIVATE "${CP3_LIBCLANG_INCLUDE_DIR}")
 
 # -----------------------------------------------------------------------------
 # cp3c lsp - the language server module (src/lsp/**, PKG-CONTRACTS sec.2/sec.5).

@@ -4,7 +4,9 @@
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdClean.
 //
 // Removes the local .cp3/build intermediate cache and the .cp3/out executable
-// (D61); --all also removes .cp3/packages.
+// (D61); --all also removes .cp3/packages, .cp3/lock.json and `.cp3/native`.
+// Native bindings are deliberately kept by a plain `clean`: they come from an
+// external SDK and re-running native-install can be expensive.
 // =============================================================================
 #include <cstdio>
 #include <system_error>
@@ -45,6 +47,15 @@ int cmdClean(const CliOptions& opt) {
             if (!rmEc) {
                 std::fprintf(stderr, "cp3c: removed %s\n", lock.string().c_str());
             }
+        }
+        const fs::path natives = root / ".cp3" / "native";
+        if (fs::exists(natives, ec)) {
+            removeTree(natives);
+            std::fprintf(stderr, "cp3c: removed %s\n",
+                         natives.string().c_str());
+        } else if (opt.verbose) {
+            std::fprintf(stderr, "cp3c: nothing to remove (%s)\n",
+                         natives.string().c_str());
         }
     }
     return kExitSuccess;

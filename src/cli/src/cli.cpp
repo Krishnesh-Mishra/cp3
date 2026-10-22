@@ -45,7 +45,8 @@ void printUsage(std::FILE* out) {
         "  check <file.cp3>   Frontend only: parse + type-check (no C++ generation)\n"
         "  dev [file.cp3]     Watch mode: re-check on save (--once for a single pass)\n"
         "  fmt <file.cp3>     Zero-config formatter\n"
-        "  clean              Remove .cp3/build and .cp3/out (--all clears .cp3/packages)\n"
+        "  clean              Remove .cp3/build and .cp3/out; keeps .cp3/native\n"
+        "                     (--all also clears .cp3/packages and .cp3/native)\n"
         "  init [dir]         Scaffold a new project (package.json + src/index.cp3)\n"
         "  toolchain          Choose the C++ compiler (list/detect/use/clear)\n"
         "  install [src]      Install a local .cp3pak/dir or GitHub release\n"
@@ -56,6 +57,7 @@ void printUsage(std::FILE* out) {
         "  exec <pkg> [args]  Run a package's bundled tool\n"
         "  lsp [--stdio]      Language server on stdio (for editor integrations)\n"
         "  dap [--stdio]      Debug adapter on stdio (for editor debugging)\n"
+        "  native-install <sdk> [options]  Bind a native SDK (libclang required)\n"
         "  version            Print the compiler version\n"
         "  help               Print this help\n"
         "\n"
@@ -70,7 +72,7 @@ void printUsage(std::FILE* out) {
         "      --project         (toolchain) save the choice in package.json\n"
         "      --global          (toolchain) save the choice for all projects\n"
         "      --max-memory <MB|N%>  Cap codegen-phase memory (default: 70% of system RAM)\n"
-        "      --all             (clean) also remove .cp3/packages\n"
+        "      --all             (clean) also remove .cp3/packages and .cp3/native\n"
         "      --yes, -y         (init) accept defaults, never prompt\n"
         "      --type <t>        (init) pre-select project type (application|package)\n"
         "      --type-system <s> (init) typescript|cpp|rust (default: typescript)\n"
@@ -115,7 +117,8 @@ bool resolveCommand(const std::string& first, std::string& command,
         first == "init" || first == "exec" || first == "install" ||
         first == "publish" || first == "link" || first == "unlink" ||
         first == "editor-plugin" || first == "editor-plugins" ||
-        first == "lsp" || first == "dap" || first == "toolchain") {
+        first == "lsp" || first == "dap" || first == "toolchain" ||
+        first == "native-install") {
         command = first;
         return true;
     }
@@ -291,6 +294,23 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     return cp3::kExitUsageError;
 }
 
+// Commands that own their whole argument list: they parse repeatable options
+// themselves and never run package.json lifecycle hooks. Returns -1 when the
+// command is not one of them.
+int runSelfOwnedCommand(const std::string& command,
+                         const std::vector<std::string>& args) {
+    if (command == "lsp") {
+        return runLsp(args);
+    }
+    if (command == "dap") {
+        return runDap(args);
+    }
+    if (command == "native-install") {
+        return cp3::cli::cmdNativeInstall(args);
+    }
+    return -1;
+}
+
 }  // namespace
 
 int runCli(int argc, char** argv) {
@@ -325,13 +345,11 @@ int runCli(int argc, char** argv) {
         return kExitUsageError;
     }
 
-    // `lsp` and `dap` validate their own flags and never run package.json
-    // hooks.
-    if (command == "lsp") {
-        return runLsp(args);
-    }
-    if (command == "dap") {
-        return runDap(args);
+    // `lsp`, `dap` and `native-install` validate their own flags and never run
+    // package.json hooks.
+    const int selfOwned = runSelfOwnedCommand(command, args);
+    if (selfOwned >= 0) {
+        return selfOwned;
     }
 
     std::vector<std::string> rest(args.begin() + 1, args.end());
