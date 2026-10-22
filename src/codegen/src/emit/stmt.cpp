@@ -86,6 +86,11 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
             // local type cannot have out-of-line definitions at namespace scope.
             emitLocalClass(static_cast<const ClassDeclaration&>(s), out, indent);
             return;
+        case NodeKind::EnumDeclaration:
+            // A function-local enum (spec 04): its `enum class` is declared at
+            // namespace scope, so the statement itself emits nothing.
+            emitLocalEnum(s);
+            return;
         default:
             notImplemented(s, "this statement");
             line(out, indent, "/* CP3002: unsupported statement */");

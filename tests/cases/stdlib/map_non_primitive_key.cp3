@@ -1,0 +1,5 @@
+import { Map } from "std/collections";
+
+// A `Map`'s key is hashed by the runtime, so it must be a primitive.
+class Key { id: number; }
+let m = new Map<Key, number>();

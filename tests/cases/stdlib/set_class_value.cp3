@@ -1,0 +1,17 @@
+import console from "std/console";
+import { Set } from "std/collections";
+
+// A `Set` whose element is a class instance: the element is a handle, so the
+// set compares it by identity (docs 04 Set).
+class Point {
+  x: number;
+  constructor(x: number) { this.x = x; }
+}
+
+let p = new Point(1);
+let s = new Set<Point>();
+s.add(p);
+s.add(new Point(2));
+console.log(`${s.size}`);
+console.log(`${s.has(p)}`);
+console.log(`${s.has(new Point(1))}`);

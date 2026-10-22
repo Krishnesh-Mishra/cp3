@@ -601,6 +601,10 @@ private:
     std::string emitCollectionsNew(const NewExpr& n);
     std::string emitCollectionsMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitCollectionsMember(const MemberExpr& m);
+    // The `forEach` callback (inline arrow or a named function / function
+    // value) against the collection's own parameter list.
+    std::string collectionsForEachCallback(const CallExpr& c,
+                                           const std::vector<std::string>& expected);
     // WS2.8: `const v = m.get(k) ?? d;` immediately followed by
     // `m.set(k, value)` lowers to one probe plus an in-place store when the
     // pure-read proof holds; consumes both statements and returns true.
@@ -794,6 +798,12 @@ private:
     // Top-level `enum class` declarations (spec 04), member reads, enum-carrying
     // literals and the same-enum switch lowering.
     void collectEnums(const Program& program);
+    // One enum declaration (a top-level one, or a function-local one the walk
+    // reaches): the resolved model, the `enum class` text and the table entry.
+    void collectEnum(const EnumDeclaration* e);
+    // A function-local enum declaration: the namespace-scoped `enum class`
+    // the statement stands for (the statement itself emits nothing).
+    void emitLocalEnum(const Stmt& s);
     std::string emitEnumMember(const MemberExpr& m);
     std::string emitEnumObjectLiteral(const ObjectLiteral& ol);
     bool lowerEnumSwitch(const SwitchStatement& sw, std::string& out, int indent);

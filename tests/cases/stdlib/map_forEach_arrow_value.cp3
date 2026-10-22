@@ -1,0 +1,10 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// A `forEach` callback that is a function-valued binding (a `let`-bound
+// arrow), not an inline arrow.
+let m = new Map<string, number>();
+m.set("a", 1); m.set("b", 2);
+
+let addValue = (v: number, k: string) => { console.log(`${k}=${v}`); };
+m.forEach(addValue);

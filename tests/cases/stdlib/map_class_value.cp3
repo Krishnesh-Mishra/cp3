@@ -1,0 +1,19 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// A `Map` whose value is a class instance: the value is a handle, so the
+// map holds it by reference (docs 04 Map).
+class Point {
+  x: number;
+  y: number;
+  constructor(x: number, y: number) { this.x = x; this.y = y; }
+}
+
+let m = new Map<string, Point>();
+m.set("a", new Point(1, 2));
+console.log(`${m.size}`);
+console.log(`${m.has("a")}`);
+console.log(`${m.has("b")}`);
+let seen = 0;
+m.forEach((v) => { seen = seen + 1; });
+console.log(`${seen}`);

@@ -1,0 +1,4 @@
+import { WebSocket } from "std/network";
+
+// `WebSocket` is a class: calling it without `new` is not a call at all.
+let ws = WebSocket("ws://127.0.0.1:1/");

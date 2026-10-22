@@ -153,6 +153,18 @@ const EnumDeclaration* topLevelEnum(const Stmt& s) {
 // =============================================================================
 // Declaration collection
 // =============================================================================
+// One enum declaration: the resolved model, the `enum class` decl text and the
+// table entry the member read and the type rewrite use. A name that is
+// already taken is skipped (the C++ declaration is namespace scoped, so two
+// declarations of one name cannot both exist; the caller that can report the
+// duplicate does).
+void Generator::collectEnum(const EnumDeclaration* e) {
+    if (e == nullptr || e->name.empty() || enums_.count(e->name) != 0) return;
+    EnumCppInfo info = buildEnumInfo(*e);
+    enumDecls_ += enumDeclText(info) + "\n";
+    enums_.emplace(e->name, std::move(info));
+}
+
 void Generator::collectEnums(const Program& program) {
     const auto collect = [this](const EnumDeclaration* e) {
         if (e == nullptr || e->name.empty() || enums_.count(e->name) != 0) return;
@@ -172,13 +184,13 @@ void Generator::collectEnums(const Program& program) {
     };
     for (const auto& stmtPtr : program.body) {
         if (!stmtPtr) continue;
-        collect(topLevelEnum(*stmtPtr));
+        collectEnum(topLevelEnum(*stmtPtr));
     }
     // Imported local enums are compile-time declarations: each unit re-emits
     // them in its own namespace so a payload annotation can name the enum and
     // the main side can spell a member value. Same-named enums on both sides of
     // a worker channel are structurally compatible (workerPayloadAccepts).
-    for (const EnumDeclaration* e : options_.importedEnums) collect(e);
+    for (const EnumDeclaration* e : options_.importedEnums) collectEnum(e);
 }
 
 // =============================================================================

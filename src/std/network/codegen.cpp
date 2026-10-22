@@ -7,6 +7,9 @@
 // (emit/call.cpp, emit/expr.cpp). Everything lowers onto cp3/std/network.hpp:
 //
 //   fetch(url[, init])       -> ::cp3::runtime::network::fetch(url[, FetchInit])
+//                              (`init` is an options object literal, an options
+//                              object in a binding, or `undefined`/`null` for
+//                              "no options")
 //   createServer()           -> ::cp3::runtime::network::HttpServer()
 //   new WebSocket(url)       -> ::cp3::runtime::network::WebSocket(url)
 //   new WebSocketServer(o)   -> ::cp3::runtime::network::WebSocketServer(port[, path])
@@ -110,12 +113,57 @@ bool Generator::isNetworkObject(const Expr* e) const {
 // fetch / createServer
 // =============================================================================
 
+/// The RequestInit fields of an options object held in a binding: the
+/// generated value struct carries the fields by name, so the FetchInit reads
+/// them off the object. "" when a field has a type the runtime cannot carry.
+std::string fetchInitFromFields(const std::string& recv,
+                                const std::vector<ObjectField>& fields) {
+    std::string method = "std::string(\"GET\")";
+    std::string body = "std::string()";
+    std::string timeout = "0.0";
+    bool hasBody = false;
+    for (const ObjectField& field : fields) {
+        const std::string member = mapIdent(field.name);
+        if (field.name == "method") {
+            if (field.cpp != "std::string") return std::string();
+            method = recv + "->" + member;
+        } else if (field.name == "body") {
+            if (field.cpp != "std::string") return std::string();
+            body = recv + "->" + member;
+            hasBody = true;
+        } else if (field.name == "timeout") {
+            if (field.cpp != "double") return std::string();
+            timeout = recv + "->" + member;
+        }
+    }
+    return std::string(kRuntimeNs) + "FetchInit{" + method + ", " + body + ", " +
+           (hasBody ? "true" : "false") + ", " + timeout + "}";
+}
+
 /// `{ method, body, timeout, headers }` ->
 /// `FetchInit{method, body, hasBody, timeoutMs, headers}` (the positional
-/// generated-code contract in cp3/std/network.hpp).
+/// generated-code contract in cp3/std/network.hpp). "" when the options are
+/// `undefined` or `null` (the JS "no options" spelling: `fetch(url, undefined)`
+/// is `fetch(url)`).
 std::string Generator::fetchInitText(const Expr& init) {
+    if (init.kind == NodeKind::UndefinedLiteral ||
+        init.kind == NodeKind::NullLiteral) {
+        return std::string();
+    }
     if (init.kind != NodeKind::ObjectLiteral) {
-        notImplemented(init, "fetch options (an object literal)");
+        // An options object in a binding: the fields are read off the shape.
+        const Type shape = effectiveType(init);
+        std::string structName;
+        std::vector<ObjectField> fields;
+        if (shape.kind == TypeKind::Object &&
+            objectShapeOf(shape, structName, fields)) {
+            const std::string text =
+                fetchInitFromFields("(" + expr(init) + ")", fields);
+            if (!text.empty()) return text;
+        }
+        reportTypeError(init,
+                        "type mismatch: the fetch options must be an object "
+                        "literal (a RequestInit)");
         return std::string(kRuntimeNs) + "FetchInit{}";
     }
     const auto& literal = static_cast<const ObjectLiteral&>(init);
@@ -173,7 +221,11 @@ std::string Generator::emitNetworkFetch(const CallExpr& c, const ExprList& args)
     if (args.size() < 2 || !args[1]) {
         return std::string(kRuntimeNs) + "fetch(" + url + ")";
     }
-    return std::string(kRuntimeNs) + "fetch(" + url + ", " + fetchInitText(*args[1]) + ")";
+    // `fetch(url, undefined)` (and `null`) is `fetch(url)`: the options are
+    // optional.
+    const std::string init = fetchInitText(*args[1]);
+    if (init.empty()) return std::string(kRuntimeNs) + "fetch(" + url + ")";
+    return std::string(kRuntimeNs) + "fetch(" + url + ", " + init + ")";
 }
 
 /// The named-import call sites: `fetch(...)` / `createServer()`. Returns "" when
@@ -219,12 +271,22 @@ std::string Generator::emitUnresolvedCall(const CallExpr& c, const std::string& 
     if (binding && binding->type.name == kNextMarker) {
         needsNetwork_ = true;
         if (!c.arguments.empty()) {
-            notImplemented(c, "arguments to the std/network next() continuation");
+            // The documented continuation takes no argument (docs 04 §network:
+            // `type NextFunction = () => Promise<void>`), so `next(x)` is an
+            // arity error - a program error, not a missing feature.
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "arity mismatch: the std/network next() "
+                               "continuation takes no arguments, got " +
+                                   std::to_string(c.arguments.size()));
             return "0.0";
         }
         return mapIdent(name) + "()";
     }
-    notImplemented(c, "call to function '" + name + "' not declared in this unit");
+    // The name has no declaration in this unit and no lowering of its own: it
+    // is a namespace object or a class, not a function. The same call on a
+    // user class reports "not callable" (CP3404), so this is the house rule.
+    reportCodegenError(c, diagcode::kNotCallable,
+                       "value of type '" + name + "' is not callable");
     return "0.0";
 }
 

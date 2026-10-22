@@ -1,0 +1,10 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3403",
+    "line": 7,
+    "contains": "next() continuation takes no arguments"
+  }
+}

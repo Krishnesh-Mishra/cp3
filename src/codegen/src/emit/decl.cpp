@@ -21,6 +21,7 @@
 #include "detail/mangle.h"
 #include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -141,6 +142,30 @@ void Generator::emitTopLevel(const Stmt& s, std::string& decls, std::string& def
             stmt(s, mainBody, 1);
             return;
     }
+}
+
+// A function-local enum (spec 04): the C++ `enum class` cannot live inside a
+// function, so the declaration is namespace scoped - the same shape as a
+// top-level enum, whose text `collectEnums` (emit/enum.cpp) emits. The
+// statement itself emits nothing. A name that is already taken cannot have a
+// second namespace-scoped declaration: that is a duplicate.
+void Generator::emitLocalEnum(const Stmt& s) {
+    if (intMode_) {
+        // The int64 fast-path attempt emits the body twice (the fast one and
+        // the ordinary fallback): fail the attempt and let the ordinary pass
+        // declare the enum once.
+        intFail();
+        return;
+    }
+    const auto& e = static_cast<const EnumDeclaration&>(s);
+    if (!e.name.empty() && enums_.count(e.name) != 0) {
+        reportCodegenError(s, diagcode::kDuplicateDeclaration,
+                           "duplicate enum name '" + e.name +
+                               "' (the enum declarations of a unit share one "
+                               "namespace scope)");
+        return;
+    }
+    collectEnum(&e);
 }
 
 void Generator::emitExport(const ExportDeclaration& ed, std::string& decls,

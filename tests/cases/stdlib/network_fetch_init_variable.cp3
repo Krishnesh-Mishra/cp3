@@ -1,0 +1,18 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// The fetch options may live in a binding: the RequestInit fields are read
+// off the options object (docs 04 network, `fetch(url, init?)`).
+const app = createServer();
+app.post("/echo", (req, res) => {
+  res.text("pong");
+});
+app.listen(48962, () => {
+  console.log("listening");
+});
+
+let init = { method: "POST", body: "ping" };
+let res = await fetch("http://127.0.0.1:48962/echo", init);
+console.log(`${res.status}`);
+console.log(await res.text());
+app.close();
