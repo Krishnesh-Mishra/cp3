@@ -512,12 +512,12 @@ hits, 11 test hits, and the marker definition itself). The 224 sites carry
 **138 distinct work items** - one per marker message per feature area.
 
 The work is planned from the live inventory, not by hand:
-`build/scratch/rounds/cp3002_wave_plan.py` scans `src/`, extracts every
+`tools/cp3002_wave_plan.py` scans `src/`, extracts every
 `notImplemented(` site with its message, groups the sites by the feature area
 that owns them (the group table in section 6), and chunks the result into
-agent-sized assignments. It writes
-`build/scratch/rounds/CP3002-WAVE-PLAN.md`, which is the lane sheet every
-agent reads.
+agent-sized assignments. It writes `docs/rough/CP3002-WAVE-PLAN.md`, which is
+the lane sheet every agent reads, and it is regenerated after every merged
+wave.
 
 | Measure | Count |
 |---|---:|
