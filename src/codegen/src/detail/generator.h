@@ -204,6 +204,13 @@ private:
     std::optional<Type> parameterType(const Parameter& p,
                                       const FunctionDeclaration& fd,
                                       std::size_t index) const;
+    // The C++ spelling of a parameter's own type ("" when it has none: an
+    // untyped parameter is spelled as a template parameter instead).
+    std::string parameterCppType(const Parameter& p,
+                                 const FunctionDeclaration& fd,
+                                 std::size_t index);
+    // The template parameter carrying an untyped parameter's type.
+    std::string untypedParamTemplate(std::size_t index) const;
     std::string parameterText(const Parameter& p, const FunctionDeclaration& fd,
                               std::size_t index, bool includeDefault);
     std::string functionReturnType(const FunctionDeclaration& fd);
@@ -291,9 +298,16 @@ private:
     // call-site type arguments (`identity<number>(...)`), the tuple lowering
     // (`std::make_tuple`, `std::get<N>`) and the object-literal argument
     // reification (`getX({ x: 5 })` -> a struct named after the literal).
-    std::string templatePrefix(const FunctionDeclaration& fd) const;
+    std::string templatePrefix(const FunctionDeclaration& fd);
     std::string calleeText(const std::string& name, const CallExpr& c);
     std::string typeArgText(const TypeNode& tn);
+    // The explicit type arguments of a generic call, resolved to cp3 types,
+    // and the substitution of the callee's type parameters by them.
+    std::vector<Type> resolvedTypeArgs(const CallExpr& c) const;
+    Type substituteTypeArgs(const Type& t, const FunctionDeclaration& fd,
+                            const CallExpr& c) const;
+    Type substituteTypeParams(const Type& t, const FunctionDeclaration& fd,
+                              const std::vector<Type>& args) const;
     std::string reifyObjectArg(const ObjectLiteral& lit);
     std::string emitTupleLiteral(const ArrayLiteral& lit);
     std::string emitGenericIndexRead(const IndexExpr& ix);
@@ -418,6 +432,15 @@ private:
     bool recordLayout(const Type& t, std::string& structName, std::vector<std::string>& fieldNames);
     // A literal built for a known record type, including spread properties.
     std::string recordLiteralText(const ObjectLiteral& lit, const Type& expected);
+    // A literal filling a structural object model's struct.
+    std::string recordModelText(const ObjectLiteral& lit, const ObjectModel& om);
+    // The statements that copy a spread source's fields into a record.
+    bool spreadCopyText(const Expr& argument,
+                        const std::vector<std::string>& targetFields,
+                        const std::string& outName, const std::string& outAccess,
+                        std::string& out);
+    // The excess-property diagnostic for an object literal.
+    void reportExcessProperty(const Node& site, const std::string& name);
     bool emitDestructureDecl(const VariableDeclarator& d, VarKind kind,
                              std::string& out, int indent);
     void emitPatternParams(const FunctionDeclaration& fd, std::string& out, int indent);

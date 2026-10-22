@@ -21,6 +21,7 @@
 
 #include "detail/family.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 #include "cp3/native_types.hpp"
 
 namespace cp3 {
@@ -307,12 +308,43 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
                 continue;
             }
             const auto& sp = static_cast<const SpreadElement&>(*el);
-            if (!sp.argument || info(*sp.argument).shape != Shape::Array) {
-                notImplemented(*el, "this spread element");
+            if (!sp.argument) {
+                sink_.error(diagcode::kTypeMismatch, el->span,
+                            "type mismatch: cannot spread this value into the "
+                            "array literal");
                 continue;
             }
-            body += " { const auto& cp3_src = " + expr(*sp.argument) + "; " + v +
-                    ".insert(" + v + ".end(), cp3_src->begin(), cp3_src->end()); }";
+            const CppInfo si = info(*sp.argument);
+            if (si.shape == Shape::Array) {
+                body += " { const auto& cp3_src = " + expr(*sp.argument) + "; " +
+                        v + ".insert(" + v + ".end(), cp3_src->begin(), cp3_src->end()); }";
+                continue;
+            }
+            if (si.shape == Shape::TypedArray && ec.cpp == "double") {
+                // A typed view spreads as its numbers (JS parity: the elements
+                // of an Int8Array are numbers).
+                body += " { const auto& cp3_src = ::cp3::runtime::arrayFromTyped(" +
+                        expr(*sp.argument) + "); " + v + ".insert(" + v +
+                        ".end(), cp3_src->begin(), cp3_src->end()); }";
+                continue;
+            }
+            if (si.shape == Shape::String && ec.cpp == "std::string") {
+                // A string spreads as its characters (JS parity; cp3 counts
+                // code points, like `charAt`).
+                body += " { const std::string& cp3_src = " + expr(*sp.argument) +
+                        "; std::size_t cp3_i = 0; while (cp3_i < cp3_src.size()) "
+                        "{ std::size_t cp3_n = 1; while (cp3_i + cp3_n < cp3_src.size() "
+                        "&& (static_cast<unsigned char>(cp3_src[cp3_i + cp3_n]) & 0xC0u) "
+                        "== 0x80u) ++cp3_n; " + v +
+                        ".push_back(cp3_src.substr(cp3_i, cp3_n)); cp3_i += cp3_n; } }";
+                continue;
+            }
+            // A value cp3 cannot iterate (a class instance, a Map, ...) or one
+            // whose elements do not fit the literal's element type.
+            sink_.error(diagcode::kTypeMismatch, el->span,
+                        "type mismatch: cannot spread '" + describe(si.type) +
+                            "' into the array literal");
+            continue;
         }
         return "[&]{ " + body + " return ::cp3::runtime::makeArray<" + ec.cpp +
                ">(std::move(" + v + ")); }()";

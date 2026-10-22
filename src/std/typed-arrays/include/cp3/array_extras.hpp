@@ -130,6 +130,16 @@ const E& arrayAtRef(const Array<E>& a, double index) {
     return (*a)[static_cast<std::size_t>(index)];
 }
 
+// A bounds-checked read with a default: the element at `index`, or `fallback`
+// when the array is shorter. A destructuring pattern default (`[a = 1] = xs`)
+// reads its element this way, so a missing element takes the default instead
+// of panicking.
+template <class E>
+E arrayAtOrDefault(const Array<E>& a, double index, E fallback) {
+    if (!indexInRange(index, a->size())) return fallback;
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
 template <class E>
 void arrayWriteAt(const Array<E>& a, double index, const E& value) {
     if (!indexInRange(index, a->size())) typedArrayPanic("Array index out of range");

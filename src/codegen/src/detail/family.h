@@ -61,11 +61,14 @@ inline bool isFamilyCtorName(const std::string& name) {
 // The element shapes `Array<E>` has a C++ spelling for (elements recurse).
 // Class instances, structural objects and interface wrappers are reference
 // handles / small wrappers (spec 15), so they are storable in cp3 arrays too.
+// A nullish element (`T | undefined`) is storable as well: it lowers to the
+// optional wrapper, which is an ordinary value.
 inline bool isArrayElementShape(Shape s) {
     return s == Shape::Number || s == Shape::String || s == Shape::Bool ||
            s == Shape::Array || s == Shape::Enum || s == Shape::Union ||
            s == Shape::Native || s == Shape::Function ||
            s == Shape::ClassRef || s == Shape::Object ||
+           s == Shape::Optional || s == Shape::Maybe ||
            s == Shape::TypeParam;
 }
 
