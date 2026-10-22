@@ -8,22 +8,21 @@ This file is generated. Regenerate it with:
 python tests/runner/run_tests.py --write-registry
 ```
 
-**Total markers: 34** across 11 categories.
+**Total markers: 28** across 10 categories.
 
 | Category | Markers |
 | --- | ---: |
 | `arrays-strings` | 1 |
-| `classes` | 4 |
-| `concurrency` | 2 |
+| `concurrency` | 1 |
 | `control-flow` | 6 |
 | `errors` | 1 |
 | `functions-closures` | 4 |
-| `generics` | 2 |
+| `generics` | 1 |
 | `memory-weak` | 6 |
 | `modules` | 3 |
 | `stdlib` | 1 |
 | `types` | 4 |
-| **Total** | **34** |
+| **Total** | **28** |
 
 ## `arrays-strings`
 
@@ -31,20 +30,10 @@ python tests/runner/run_tests.py --write-registry
 | --- | --- |
 | `arrays-strings/_ambiguous/forin_map_order.expect.json` | `for...in` over a `Map`: iteration order is unspecified (unordered_map) |
 
-## `classes`
-
-| case file | question |
-| --- | --- |
-| `classes/_ambiguous/getter_setter_syntax.expect.json` | Exact getter/setter declaration syntax: TS-style `get value()` (no `function` keyword, as used here) vs. cp3's `function name()` method form. The spec says only 'getters/setters (get/set)'. |
-| `classes/_ambiguous/multiple_inheritance.expect.json` | How is 'multiple class inheritance is not supported' surfaced - as a parser error on `extends A, B`, or a semantic error? (A, B, C order here is illustrative.) |
-| `classes/_ambiguous/static_via_instance.expect.json` | Is reading a static member through an instance (`c.x`) allowed, or must it be `C.x`? Spec maps statics to C++ but does not state the access rule. |
-| `classes/_ambiguous/super_call.expect.json` | Is a `super` keyword provided to call a parent method? The spec documents single `extends` but never mentions `super`. |
-
 ## `concurrency`
 
 | case file | question |
 | --- | --- |
-| `concurrency/_ambiguous/worker_call_shape.expect.json` | is `worker(...)` the called default export of an imported `.cp3` file (as the §13 example implies), and is `import worker from "x.cp3"` the canonical shape? |
 | `concurrency/_ambiguous/worker_crash_takes_process_down.expect.json` | the spec says a worker-thread crash can take the whole program down, but the observable exit code/output is not pinned. |
 
 ## `control-flow`
@@ -77,7 +66,6 @@ python tests/runner/run_tests.py --write-registry
 
 | case file | question |
 | --- | --- |
-| `generics/_ambiguous/generic_interface.expect.json` | Are generic interfaces (`interface Box<T>`) part of the language? The spec documents generics on classes and functions only. |
 | `generics/_ambiguous/infer_class_type_arg.expect.json` | Can a generic class's type argument be inferred from later usage (`new Box()` with no `<T>`), or must it always be written explicitly (`new Box<number>()` as every spec example does)? |
 
 ## `memory-weak`
