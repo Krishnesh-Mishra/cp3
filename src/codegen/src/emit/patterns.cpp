@@ -214,6 +214,13 @@ void Generator::emitPatternParams(const FunctionDeclaration& fd, std::string& ou
             p->name->kind != NodeKind::ObjectPattern) {
             continue;
         }
+        if (p->defaultValue) {
+            // A defaulted destructuring parameter: the C++ parameter carries
+            // the default (a C++ default argument), so the bindings read the
+            // parameter itself (emit/destructure.cpp).
+            emitDestructuringParam(*p, fd, i, out);
+            continue;
+        }
         const std::optional<Type> pt = parameterType(*p, fd, i);
         const std::string source = "cp3_param_" + std::to_string(i);
         const PatternSource src{source, pt.value_or(Type::unknown()), false};

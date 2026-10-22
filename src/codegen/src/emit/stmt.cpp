@@ -149,18 +149,53 @@ void Generator::emitIf(const IfStatement& is, std::string& out, int indent) {
 void Generator::emitVarDecl(const VariableDeclaration& vd, std::string& out, int indent) {
     for (const auto& decl : vd.declarations) {
         if (!decl) continue;
-        // `let [a, b] = ...` / `let { a } = ...` unpacks in its own unit.
-        if (emitDestructureDecl(*decl, vd.kind, out, indent)) continue;
-        std::string text = declaratorText(*decl, vd.kind);
-        line(out, indent, text + ";");
-        declareBinding(*decl);
+        emitDeclaratorStmt(*decl, vd.kind, out, indent);
     }
+}
+
+// One declarator as a statement. A plain binding is one C++ declaration; a
+// binding pattern (`let [a, b] = ...` / `let { a } = ...`) unpacks in its own
+// unit (the source temporary plus one binding per name).
+void Generator::emitDeclaratorStmt(const VariableDeclarator& d, VarKind kind,
+                                   std::string& out, int indent) {
+    if (emitDestructureDecl(d, kind, out, indent)) return;
+    const std::string text = declaratorText(d, kind);
+    if (!text.empty()) line(out, indent, text + ";");
+    declareBinding(d);
+}
+
+// The `for` header's init text. A binding pattern (`for (let [a, b] = ...; ...)`)
+// cannot live in a C++ `for` header: such an init is emitted as statements
+// before the loop, in the loop's own scope, and the header stays empty.
+std::string Generator::forInitText(const VariableDeclaration& vd,
+                                   std::string& out, int indent) {
+    bool pattern = false;
+    std::vector<std::string> parts;
+    for (const auto& d : vd.declarations) {
+        if (!d) continue;
+        if (d->id && d->id->kind != NodeKind::Identifier) {
+            pattern = true;
+            break;
+        }
+        parts.push_back(declaratorText(*d, vd.kind));
+    }
+    if (pattern) {
+        for (const auto& d : vd.declarations) {
+            if (d) emitDeclaratorStmt(*d, vd.kind, out, indent);
+        }
+        return std::string();
+    }
+    for (const auto& d : vd.declarations) {
+        if (d) declareBinding(*d);
+    }
+    return joinStrings(parts, ", ");
 }
 
 std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind) {
     if (!d.id || d.id->kind != NodeKind::Identifier) {
-        if (d.id) notImplemented(*d.id, "destructuring binding");
-        return "auto cp3_error = 0.0";
+        // A binding pattern is lowered by emitDeclaratorStmt (the destructuring
+        // path); this helper only spells a plain-name declarator.
+        return std::string();
     }
     const std::string name = mapIdent(static_cast<const Identifier&>(*d.id).name);
     // A proven entry-body int64 binding declares its int64 spelling; the

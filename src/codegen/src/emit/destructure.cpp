@@ -261,11 +261,23 @@ void PatternEmitter::emitParam(const Parameter& p, const FunctionDeclaration& fd
     // only a binding pattern lowers bindings at the top of the body.
     if (parameterIdentifier(p)) return;
     if (!p.name) return;
-    if (p.defaultValue) g.notImplemented(p, "a defaulted destructuring parameter");
-    emitBindings(*p.name, "cp3_param" + std::to_string(index),
+    // A defaulted destructuring parameter (`{ a } = { a: 1 }`) needs no
+    // special handling here: the C++ parameter carries the default (a C++
+    // default argument, emit/patterns.cpp's parameterText), so the bindings
+    // read the parameter itself - the default value is already in place.
+    emitBindings(*p.name, "cp3_param_" + std::to_string(index),
                  g.parameterType(p, fd, index), body, 1);
 }
 
 }  // namespace detail
+
+// One destructuring parameter: the C++ parameter is the generated handle
+// `parameterText` spelled (emit/patterns.cpp), so the bindings are emitted at
+// the top of the body.
+void Generator::emitDestructuringParam(const Parameter& p,
+                                       const FunctionDeclaration& fd,
+                                       std::size_t index, std::string& body) {
+    PatternEmitter(*this).emitParam(p, fd, index, body);
+}
 
 }  // namespace cp3

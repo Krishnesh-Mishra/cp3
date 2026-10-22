@@ -21,6 +21,7 @@
 #include "detail/class_model.h"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -102,19 +103,23 @@ void Generator::emitAllClasses() {
     const std::vector<ClassModel*> all = reg.allClasses();
     // Forward-declare every non-local class: a struct may name another's
     // handle (`Ref<T>`) before the definition, and a pair of classes may
-    // reference each other.
+    // reference each other. A generic local class is emitted at the unit's
+    // namespace scope too (a C++ local class cannot be a template).
     for (ClassModel* cm : all) {
-        if (cm->local || cm->decl == nullptr) continue;
+        if (cm->decl == nullptr) continue;
+        if (cm->local && !cm->namespaceScope) continue;
         if (!cm->typeParams.empty()) {
             line(classFwdDecls_, 1, templateHead(*cm));
         }
-        line(classFwdDecls_, 1, "struct " + mapIdent(cm->name) + ";");
+        line(classFwdDecls_, 1, "struct " + cm->structName + ";");
     }
     if (!classFwdDecls_.empty()) line(classFwdDecls_, 0, "");
     // Base-first: a derived struct must see a complete base type.
     std::vector<ClassModel*> ordered;
     for (ClassModel* cm : all) {
-        if (!cm->local && cm->decl != nullptr) ordered.push_back(cm);
+        if (cm->decl == nullptr) continue;
+        if (cm->local && !cm->namespaceScope) continue;
+        ordered.push_back(cm);
     }
     std::stable_sort(ordered.begin(), ordered.end(),
                      [](const ClassModel* a, const ClassModel* b) {
@@ -135,17 +140,20 @@ void Generator::emitLocalClass(const ClassDeclaration& c, std::string& out,
         intFail();
         return;
     }
-    if (!c.typeParams.empty()) {
-        notImplemented(c, "generic class");
-        line(out, indent, "/* CP3002: unsupported local class */");
-        return;
-    }
     const ClassModel* cm = ModelRegistry::get().classByName(c.name);
     if (cm == nullptr || !cm->local) {
         notImplemented(c, "this class declaration");
         return;
     }
+    if (cm->namespaceScope) {
+        // A generic local class is a namespace-scope template (a C++ local
+        // class cannot be a template): emitAllClasses emits its struct.
+        return;
+    }
     if (!modelEmitted_.insert(c.nodeId).second) return;
+    // A generic local class is a C++ local class template: the struct is
+    // emitted inline in the body that declares it, with its own type
+    // parameters.
     emitClassStruct(*cm, out, indent, nullptr);
 }
 
@@ -162,7 +170,7 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
     if (!cm.typeParams.empty()) {
         line(out, indent, templateHead(cm));
     }
-    std::string head = "struct " + mapIdent(cm.name);
+    std::string head = "struct " + cm.structName;
     if (!cm.baseName.empty()) {
         const ClassModel* base = ModelRegistry::get().classByName(cm.baseName);
         head += " : public " + (base != nullptr ? base->cpp : mapIdent(cm.baseName));
@@ -180,7 +188,7 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
     }
     line(out, indent, "};");
     line(out, indent, "");
-    if (cm.local) return;
+    if (cm.local && !cm.namespaceScope) return;
     // A generic class's formatter is a template over its own type parameters,
     // so a `Ref<Box<T>>` formats through the class's `toString` (spec §15).
     if (hasToString(cm)) {
@@ -208,7 +216,7 @@ void Generator::emitClassMember(const ClassModel& cm,
         for (const auto& p : cd.params) {
             if (p) params.push_back(methodParamText(*p, &cm));
         }
-        const std::string local = mapIdent(cm.name);
+        const std::string local = cm.structName;
         const std::string declText =
             local + "(" + joinStrings(params, ", ") + ")";
         if (cd.body == nullptr) {
@@ -223,7 +231,7 @@ void Generator::emitClassMember(const ClassModel& cm,
         }
         line(out, indent, declText + ";");
         const std::string qualifier =
-            mapIdent(cm.name) + templateUse(cm) + "::" + mapIdent(cm.name);
+            cm.structName + templateUse(cm) + "::" + cm.structName;
         *defs += (cm.typeParams.empty() ? "" : templateHead(cm) + "\n") +
                  qualifier + "(" + joinStrings(params, ", ") + ") {\n" +
                  ctorBodyText(cd, cm, 1) + "}\n\n";
@@ -263,7 +271,7 @@ void Generator::emitClassMember(const ClassModel& cm,
     // the bare `Class::method` (STYLE: a `RET ::ns::Class::method` declarator
     // misparses as a qualified return type when RET is a class type).
     *defs += (cm.typeParams.empty() ? "" : templateHead(cm) + "\n") + ret +
-             " " + mapIdent(cm.name) + templateUse(cm) + "::" + name + "(" +
+             " " + cm.structName + templateUse(cm) + "::" + name + "(" +
              joinStrings(params, ", ") + ") {\n" +
              methodBodyText(md, cm, 1, md.isStatic) + "}\n\n";
 }
@@ -299,192 +307,10 @@ void Generator::emitClassAccessorMember(const ClassModel& cm,
     }
     line(out, indent, declText + ";");
     *defs += (cm.typeParams.empty() ? "" : templateHead(cm) + "\n") + ret +
-             " " + mapIdent(cm.name) + templateUse(cm) + "::" + name + "(" +
+             " " + cm.structName + templateUse(cm) + "::" + name + "(" +
              joinStrings(params, ", ") + ") {\n" +
              accessorBodyText(ad, cm, 1) + "}\n\n";
 }
 
-// -----------------------------------------------------------------------------
-// Generator: member/method spelling helpers
-// -----------------------------------------------------------------------------
-
-std::string Generator::memberFieldText(const ClassMemberModel& m) {
-    const std::string name = mapIdent(m.name);
-    const std::string stat = m.isStatic ? "static inline " : "";
-    if (m.isWeak) {
-        const std::string pointee = weakPointee(m.type);
-        if (pointee.empty()) {
-            if (m.field) notImplemented(*m.field, "this weak field type");
-            return stat + "double " + name + "{}";
-        }
-        return stat + "::cp3::runtime::WeakRef<" + pointee + "> " + name + "{}";
-    }
-    const CppInfo ci = classify(m.type);
-    if (!ci.representable) {
-        if (m.field) notImplemented(*m.field, "this field type");
-        return stat + "double " + name + "{}";
-    }
-    if (m.hasInitializer && m.field && m.field->initializer) {
-        if (ci.shape == Shape::Optional &&
-            isNullishLiteral(*m.field->initializer)) {
-            return stat + ci.cpp + " " + name + " = std::nullopt";
-        }
-        return stat + ci.cpp + " " + name + " = " + expr(*m.field->initializer);
-    }
-    return stat + ci.cpp + " " + name + "{}";
-}
-
-std::string Generator::methodReturnType(const MethodDeclaration& md,
-                                        const ClassModel* cm) {
-    if (md.returnType) {
-        if (auto t = typeFromTypeNode(*md.returnType)) {
-            if (cm != nullptr) rewriteTypeParams(*t, cm->typeParams);
-            CppInfo ci = classify(*t);
-            if (ci.representable) return ci.cpp;
-            notImplemented(md, "this return type");
-            return "void";
-        }
-    }
-    if (md.body) {
-        if (const Expr* returned = firstReturnedExpr(*md.body)) {
-            const CppInfo ci = info(*returned);
-            if (ci.representable && ci.shape != Shape::Void) return ci.cpp;
-        }
-    }
-    return "void";
-}
-
-std::string Generator::methodParamText(const Parameter& p,
-                                       const ClassModel* cm) {
-    const std::string name = paramNameOf(p);
-    if (p.isRest) {
-        notImplemented(p, "rest parameter");
-        return "std::vector<double> " + name;
-    }
-    Type t = Type::unknown();
-    if (p.type) {
-        t = modelTypeFromTypeNode(*p.type);
-    } else if (p.name) {
-        if (const Type* st = sema_.typeOf(p.name->nodeId)) t = *st;
-    }
-    if (cm != nullptr) rewriteTypeParams(t, cm->typeParams);
-    if (p.optional && !t.isUnknown()) t = Type::nullable(t);
-    const CppInfo ci = classify(t);
-    if (!ci.representable) {
-        notImplemented(p, "untyped parameter");
-        return "double " + name;
-    }
-    return ci.cpp + " " + name;
-}
-
-std::string Generator::accessorReturnType(const AccessorDeclaration& ad,
-                                          const ClassModel* cm) {
-    if (ad.returnType) {
-        if (auto t = typeFromTypeNode(*ad.returnType)) {
-            if (cm != nullptr) rewriteTypeParams(*t, cm->typeParams);
-            CppInfo ci = classify(*t);
-            if (ci.representable) return ci.cpp;
-            notImplemented(ad, "this accessor return type");
-            return "void";
-        }
-    }
-    if (ad.body) {
-        if (const Expr* returned = firstReturnedExpr(*ad.body)) {
-            const CppInfo ci = info(*returned);
-            if (ci.representable && ci.shape != Shape::Void) return ci.cpp;
-        }
-    }
-    return "void";
-}
-
-std::string Generator::accessorBodyText(const AccessorDeclaration& ad,
-                                        const ClassModel& cm, int indent) {
-    const std::string savedReturn = currentReturn_;
-    currentReturn_ =
-        ad.accessor == AccessorKind::Get ? accessorReturnType(ad, &cm) : "void";
-    ++nestingDepth_;
-    pushScope();
-    classStack_.push_back(&cm);
-    if (!ad.isStatic) {
-        declare("this", Type::named(TypeKind::Class, cm.name));
-    }
-    for (const auto& p : ad.params) {
-        if (!p) continue;
-        if (p->name && p->name->kind == NodeKind::Identifier) {
-            Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
-            if (p->optional && !t.isUnknown()) t = Type::nullable(t);
-            declare(static_cast<const Identifier&>(*p->name).name, t);
-        }
-    }
-    std::string body;
-    if (ad.body) stmt(*ad.body, body, indent);
-    classStack_.pop_back();
-    popScope();
-    --nestingDepth_;
-    currentReturn_ = savedReturn;
-    return body;
-}
-
-std::string Generator::methodBodyText(const MethodDeclaration& md,
-                                      const ClassModel& cm, int indent,
-                                      bool isStatic) {
-    const std::string savedReturn = currentReturn_;
-    currentReturn_ = methodReturnType(md, &cm);
-    ++nestingDepth_;
-    pushScope();
-    classStack_.push_back(&cm);
-    if (!isStatic) {
-        declare("this", Type::named(TypeKind::Class, cm.name));
-    }
-    for (const auto& p : md.params) {
-        if (!p) continue;
-        if (p->name && p->name->kind == NodeKind::Identifier) {
-            Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
-            if (p->optional && !t.isUnknown()) t = Type::nullable(t);
-            declare(static_cast<const Identifier&>(*p->name).name, t);
-        }
-    }
-    std::string body;
-    if (md.body) stmt(*md.body, body, indent);
-    classStack_.pop_back();
-    popScope();
-    --nestingDepth_;
-    currentReturn_ = savedReturn;
-    return body;
-}
-
-std::string Generator::ctorBodyText(const ConstructorDeclaration& cd,
-                                    const ClassModel& cm, int indent) {
-    const std::string savedReturn = currentReturn_;
-    currentReturn_ = "void";
-    ++nestingDepth_;
-    pushScope();
-    classStack_.push_back(&cm);
-    declare("this", Type::named(TypeKind::Class, cm.name));
-    for (const auto& p : cd.params) {
-        if (!p) continue;
-        if (p->name && p->name->kind == NodeKind::Identifier) {
-            Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
-            declare(static_cast<const Identifier&>(*p->name).name, t);
-        }
-    }
-    std::string body;
-    if (cd.body) stmt(*cd.body, body, indent);
-    classStack_.pop_back();
-    popScope();
-    --nestingDepth_;
-    currentReturn_ = savedReturn;
-    return body;
-}
-
-std::string Generator::weakPointee(const Type& fieldType) {
-    const CppInfo ci = classify(stripNullish(fieldType));
-    const std::string prefix = "::cp3::runtime::Ref<";
-    if (ci.shape != Shape::ClassRef ||
-        ci.cpp.compare(0, prefix.size(), prefix) != 0) {
-        return std::string();
-    }
-    return ci.cpp.substr(prefix.size(), ci.cpp.size() - prefix.size() - 1);
-}
 
 }  // namespace cp3

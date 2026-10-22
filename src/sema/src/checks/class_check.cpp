@@ -228,18 +228,6 @@ void Analyzer::collectClassMember(ClassMember& m, ClassInfo& info) {
 // =============================================================================
 // Abstract conformance + bodies
 // =============================================================================
-bool Analyzer::memberImplementedInClass(const ClassInfo& ci,
-                                        const std::string& name) const {
-    const ClassInfo* k = &ci;
-    int guard = 0;
-    while (k && guard++ < 64) {
-        const ClassMemberInfo* m = findClassMember(*k, name);
-        if (m) return !m->isMethod || !m->isAbstract;
-        k = k->baseName.empty() ? nullptr : findClass(k->baseName);
-    }
-    return false;
-}
-
 void Analyzer::checkAbstractConformance(const ClassDeclaration& c,
                                         const ClassInfo& ci) {
     if (ci.isAbstract) return;
@@ -452,7 +440,12 @@ bool Analyzer::classAccessAllowed(const ClassInfo& owner,
 Type Analyzer::classMemberType(const ClassMemberInfo& m) const {
     if (!m.isMethod) return m.type;
     if (!m.overloads.empty()) return ambient();
-    return Type::function(m.sig.params, m.sig.ret);
+    Type t = Type::function(m.sig.params, m.sig.ret);
+    // A rest parameter takes an unbounded argument list, which the fixed-arity
+    // function type cannot express: the tag widens the signature's `rest` flag
+    // at the call site (the marker the variadic array mutators use, scopes.h).
+    if (m.sig.rest) t.name = kVariadicOptionalTailLabel;
+    return t;
 }
 
 Type Analyzer::userClassMember(const Type& cls, const std::string& prop,

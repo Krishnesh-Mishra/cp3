@@ -98,8 +98,10 @@ void ModuleVarEmitter::run(const VariableDeclaration& vd, std::string& decls,
                            std::string& mainBody) {
     for (const auto& declPtr : vd.declarations) {
         const VariableDeclarator* d = declPtr.get();
-        if (!d || !d->id) {
-            if (d) g.notImplemented(*d, "destructuring binding");
+        if (!d) continue;
+        if (!d->id) {
+            // A declarator without a binding name is a syntax error the parser
+            // already reported; there is no binding to lower.
             continue;
         }
         if (d->id->kind != NodeKind::Identifier) {

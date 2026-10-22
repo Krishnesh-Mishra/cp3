@@ -82,7 +82,21 @@ struct ClassMemberModel {
 struct ClassModel {
     std::string name;     // cp3 name
     std::string cpp;      // qualified struct spelling
+    // The C++ struct name (unqualified). It differs from `mapIdent(name)` for
+    // a generic local class, whose struct moves to the unit's namespace scope
+    // under a unique name (a C++ local class cannot be a template).
+    std::string structName;
     bool local = false;   // declared inside a function body
+    // The struct is emitted at the unit's namespace scope although the class
+    // is declared inside a function body (a generic local class).
+    bool namespaceScope = false;
+    // The member models were already collected (the collection pass runs
+    // twice: once after the statement walk and once after the body walk,
+    // which reaches classes no statement walk sees).
+    bool membersCollected = false;
+    // The type parameters were already recorded (the class may be reached by
+    // more than one walk, and the parameters must be listed once).
+    bool typeParamsRecorded = false;
     const ClassDeclaration* decl = nullptr;
     std::string baseName; // `extends` target ("" for none)
     std::vector<std::string> typeParams;  // generic class parameters
@@ -100,6 +114,8 @@ public:
 
     ClassModel& addClass(const std::string& name, bool local,
                          const ClassDeclaration* decl);
+    // A unique C++ struct name for a namespace-scope local class template.
+    std::string nextLocalClassName(const std::string& name);
     ClassModel* classByName(const std::string& name);
     const ClassModel* classByName(const std::string& name) const;
     // The classes in declaration order (deterministic struct emission).
@@ -137,6 +153,7 @@ private:
     std::unordered_set<std::string> usableInProgress_;
     int objectCounter_ = 0;
     int litCounter_ = 0;
+    int localClassCounter_ = 0;
 };
 
 // Does this model supply the value spelling? Interfaces always do; a plain

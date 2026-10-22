@@ -28,7 +28,14 @@ void walkClassesForModels(const Stmt& s, bool local, const SemaResult& sema);
 // Registers the object/interface shapes reachable from a statement / a whole
 // body: object-literal labels and `{ ... }` annotation types, including inside
 // class member bodies.
-void walkStmtModels(const Stmt& s, const SemaResult& sema);
+//
+// `local` says whether the statement sits inside a function / block body: a
+// class declaration there is function-local (its struct is emitted inline in
+// the body that declares it), while a class at the unit's root is a
+// namespace-scope struct. The walk registers the class declarations it meets,
+// so a class inside an arrow-function body - which no statement walk reaches -
+// still gets its model before the emit walk.
+void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local);
 void walkExprModels(const Expr* e, const SemaResult& sema);
 
 // The model fields of an object literal, in property order, with the
