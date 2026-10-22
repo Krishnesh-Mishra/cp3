@@ -142,12 +142,11 @@ std::string Generator::emitModelNew(const NewExpr& n) {
         }
         return newSpreadText(*cm, self, n.arguments, spreadAt);
     }
-    std::string args;
+    std::vector<std::string> texts;
     for (const auto& argPtr : n.arguments) {
         const Expr* arg = argPtr.get();
         if (arg == nullptr) continue;
-        if (!args.empty()) args += ", ";
-        args += expr(*arg);
+        texts.push_back(expr(*arg));
     }
     // A constructor with a rest parameter takes the trailing arguments as
     // one array (spec 15).
