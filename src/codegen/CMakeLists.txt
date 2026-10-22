@@ -32,8 +32,12 @@ set(cp3_codegen_sources
     src/support/class_walk.cpp
     src/support/helper_blocks.cpp
     src/support/int_mode.cpp
+    src/support/int_mode_body.cpp
     src/support/int_reads.cpp
     src/support/array_refs.cpp
+    src/support/top_int64.cpp
+    src/support/top_int64_scan_expr.cpp
+    src/support/top_int64_scan_stmt.cpp
     src/support/usage_includes.cpp
     src/support/program_link.cpp
     src/emit/program.cpp

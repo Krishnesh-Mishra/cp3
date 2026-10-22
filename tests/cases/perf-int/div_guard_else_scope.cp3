@@ -1,0 +1,13 @@
+import console from "std/console";
+
+// The fact is scoped to the then-branch; the else-branch must keep the
+// checked division. Oracle: 6 is not a multiple of 4, 6 / 4 = 1.5.
+function quarter(x: number): number {
+  if (x % 4 === 0) {
+    return 1;
+  } else {
+    return x / 4;
+  }
+}
+
+console.log(quarter(6));

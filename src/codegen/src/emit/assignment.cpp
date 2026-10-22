@@ -90,6 +90,20 @@ std::optional<std::string> nullishAssignText(const CppInfo& T, const Expr& rhs,
     return std::nullopt;
 }
 
+// The C++ compound operator a native integer target keeps (full width,
+// integer `%`); nullptr for every other operator.
+const char* nativeCompoundOp(AssignOp op) {
+    switch (op) {
+        case AssignOp::Modulo: return "%";
+        case AssignOp::BitAnd: return "&";
+        case AssignOp::BitOr: return "|";
+        case AssignOp::BitXor: return "^";
+        case AssignOp::ShiftLeft: return "<<";
+        case AssignOp::ShiftRight: return ">>";
+        default: return nullptr;
+    }
+}
+
 }  // namespace
 
 namespace detail {
@@ -103,6 +117,9 @@ struct AssignEmitter {
     Generator& g;
 
     std::string identifier(const AssignmentExpr& a, const Identifier& id);
+    // The one proven R2 write, in the int64 register (empty when this
+    // assignment is not it).
+    std::string int64WriteText(const AssignmentExpr& a);
     std::optional<std::string> cell(AssignOp op, const std::string& target,
                                     const std::string& current,
                                     const std::string& value, const Expr& rhs);
@@ -141,11 +158,26 @@ std::optional<std::string> AssignEmitter::cell(AssignOp op,
     }
 }
 
+std::string AssignEmitter::int64WriteText(const AssignmentExpr& a) {
+    const auto it = g.int64Writes_.find(a.nodeId);
+    if (it == g.int64Writes_.end()) return std::string();
+    // The one proven R2 write, in the int64 register (the product and
+    // remainder are exact because the value stays below 2^53). The cast keeps
+    // the expression's C++ type the `double` the original assignment had, so
+    // a nested write hands back the same value in the same type as before: the
+    // formatter and the numeric operators see a `number`, not an int64.
+    const TopInt64Binding& b = *it->second;
+    return "(static_cast<double>(" + b.alias + " = " + b.alias +
+           " * std::int64_t(" + std::to_string(b.mul) + ") % std::int64_t(" +
+           std::to_string(b.mod) + ")))";
+}
+
 std::string AssignEmitter::identifier(const AssignmentExpr& a,
                                       const Identifier& id) {
     const auto binding = g.lookup(id.name);
     const std::string target =
         (binding && binding->global) ? g.moduleRef(id.name) : mapIdent(id.name);
+    if (const std::string r2 = int64WriteText(a); !r2.empty()) return r2;
     // The assigned value is emitted against the target's type (an object
     // literal assigned to a fresh field, a lambda stored in a function slot).
     const std::optional<Type> savedExpected = g.expected_;
@@ -171,17 +203,7 @@ std::string AssignEmitter::identifier(const AssignmentExpr& a,
     // A native integer keeps the C++ compound operator (full width, integer
     // `%`); the bitwise helpers below are the ToInt32 `number` path.
     if (T.shape == Shape::Native) {
-        const char* op = nullptr;
-        switch (a.op) {
-            case AssignOp::Modulo: op = "%"; break;
-            case AssignOp::BitAnd: op = "&"; break;
-            case AssignOp::BitOr: op = "|"; break;
-            case AssignOp::BitXor: op = "^"; break;
-            case AssignOp::ShiftLeft: op = "<<"; break;
-            case AssignOp::ShiftRight: op = ">>"; break;
-            default: break;
-        }
-        if (op != nullptr) {
+        if (const char* op = nativeCompoundOp(a.op); op != nullptr) {
             return "(" + target + " " + op + "= " + value + ")";
         }
     }

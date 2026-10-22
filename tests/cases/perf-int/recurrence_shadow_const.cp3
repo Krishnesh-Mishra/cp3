@@ -1,0 +1,12 @@
+import console from "std/console";
+
+// The modulus K is a module const shadowed by a block local. The rewrite must
+// use the block value, or reject.
+// Oracle: 3 * 2 % 4 = 2.
+const K = 10;
+let x = 3;
+{
+  let K = 4;
+  x = (x * 2) % K;
+}
+console.log(x);

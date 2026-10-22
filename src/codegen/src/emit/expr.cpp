@@ -39,6 +39,10 @@ void Generator::noteFamilyUse(const Expr& e) {
 // a `number` operand of a non-number expression (a truthiness test, a
 // comparison, a template hole) is the int64 value.
 std::string Generator::expr(const Expr& e) {
+    // A call/construction/await/delete or a write outside a statement position
+    // is an observable side effect the fast body must not run (the wrapper
+    // re-runs the double body after a bail, so it would happen twice).
+    if (intOn()) intGuardExpr(e);
     if (intOn() && numberTyped(e)) return intNumberExpr(e);
     return exprPlain(e);
 }
@@ -234,6 +238,11 @@ std::string Generator::emitIdentifier(const Identifier& id) {
         // an argument) is namespace-owned like any other global.
         return functions_.count(id.name) != 0 ? moduleRef(id.name)
                                               : mapIdent(id.name);
+    }
+    // The binding lives in an int64 register; |value| <= 2^53 under the proof,
+    // so the conversion to cp3's double `number` is exact.
+    if (const std::string text = int64ReadText(id.name); !text.empty()) {
+        return text;
     }
     const std::string text =
         binding->global ? moduleRef(id.name) : mapIdent(id.name);

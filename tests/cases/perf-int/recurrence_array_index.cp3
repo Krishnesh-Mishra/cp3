@@ -1,0 +1,15 @@
+import console from "std/console";
+
+// R2 state used as an array index must stay in range; x is in [0, 2^24), so
+// x % 8 is in [0, 8). Oracle: x = 3666707, acc = 600.
+const weights = [10, 20, 30, 40, 50, 60, 70, 80];
+let x = 3;
+let n = 0;
+let acc = 0;
+while (n < 20) {
+  x = (x * 1103515) % 16777216;
+  acc = acc + weights[x % 8];
+  n = n + 1;
+}
+console.log(x);
+console.log(acc);

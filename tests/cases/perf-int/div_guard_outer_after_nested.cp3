@@ -1,0 +1,16 @@
+import console from "std/console";
+
+// A nested if with its own fact must not disturb the outer fact.
+// Oracle: 12 % 4 == 0, b = 3 is odd so the inner branch is skipped, and
+// 12 / 2 = 6.
+function f(a: number, b: number): number {
+  if (a % 4 === 0) {
+    if (b % 2 === 0) {
+      return 1;
+    }
+    return a / 2;
+  }
+  return 0;
+}
+
+console.log(f(12, 3));

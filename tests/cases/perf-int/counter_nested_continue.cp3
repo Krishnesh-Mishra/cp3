@@ -1,0 +1,20 @@
+import console from "std/console";
+
+// A continue in the nested loop belongs to j and must not reject or confuse
+// the outer counter rewrite. Inner body adds 10 for j = 1 and j = 3.
+// Oracle: acc = 3 outer iterations * 20 = 60, c = 3.
+let c = 0;
+let acc = 0;
+while (c < 3) {
+  let j = 0;
+  while (j < 3) {
+    j = j + 1;
+    if (j === 2) {
+      continue;
+    }
+    acc = acc + 10;
+  }
+  c = c + 1;
+}
+console.log(c);
+console.log(acc);

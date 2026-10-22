@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// A nested R2 write whose value is observed by the formatter. The value is a
+// large integer, so the `number` spelling and an int64 spelling could
+// format differently.
+// Oracle: 1000000000000 * 3 = 3000000000000, minus 2 * 1099511627776 =
+// 800976744448.
+let x = 1000000000000;
+console.log(x = (x * 3) % 1099511627776);
+console.log(800976744448);

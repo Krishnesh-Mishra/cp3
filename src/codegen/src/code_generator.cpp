@@ -78,6 +78,27 @@ GeneratedModule Generator::run(const Program& program) {
 // and shapes, lower its top-level statements into the three sections, then
 // prepend the resolved enum/object/JSON declarations and select the family
 // includes from the emitted spellings.
+// Whether the module bindings must stay at namespace scope, and the entry-body
+// int64 proof when they need not.
+void Generator::decideModuleScope(const Program& program) {
+    moduleNeedsGlobals_ = programMode_ || scaleMode_ ||
+                          !functions_.empty() || !workerSites_.empty() ||
+                          !options_.workers.empty();
+    if (!moduleNeedsGlobals_) {
+        for (const auto& stmtPtr : program.body) {
+            if (stmtPtr && (stmtPtr->kind == NodeKind::ExportDeclaration ||
+                            stmtPtr->kind == NodeKind::ClassDeclaration)) {
+                moduleNeedsGlobals_ = true;
+                break;
+            }
+        }
+    }
+    if (!moduleNeedsGlobals_) {
+        moduleNeedsGlobals_ = moduleUsesBeforeDecl(program);
+    }
+    if (!moduleNeedsGlobals_) analyzeTopInt64(program);
+}
+
 void Generator::runUnit(const Program& program, std::string& decls,
                         std::string& defs, std::string& mainBody,
                         std::string& globals) {
@@ -105,6 +126,14 @@ void Generator::runUnit(const Program& program, std::string& decls,
     // The worker sites (spec 13, D80): file sites arrive resolved from the CLI;
     // the inline form is synthesized into the same site model (worker.cpp).
     collectWorkerSites(program);
+
+    // Module bindings become `main` locals only when this entry function is
+    // their sole possible reader: any declared function, class, export or
+    // worker can name them from outside `main`, as can a reference that
+    // precedes the declaration (namespace scope hoists, a local does not).
+    // The entry-body int64 proof (support/top_int64.cpp) requires this
+    // lowering, so it runs only after the condition is settled.
+    decideModuleScope(program);
 
     // The closure-capture analysis (spec 10): classify every function frame's
     // locals before the emit walk, so a shared mutable binding lowers to a

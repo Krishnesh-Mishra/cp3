@@ -1,0 +1,11 @@
+import console from "std/console";
+
+// The R2 write is nested inside another expression, so its value is observed
+// by that expression. The int64 rewrite must hand back the same value in the
+// same type the original assignment had (a `number`, not an int64), or the
+// formatter and the numeric operators would see a different value.
+// Oracle: 3 * 5 = 15, 15 % 7 = 1, so x = 1 and y = 1.
+let x = 3;
+const y = (x = (x * 5) % 7);
+console.log(x);
+console.log(y);

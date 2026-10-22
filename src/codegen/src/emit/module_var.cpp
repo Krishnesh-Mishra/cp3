@@ -78,6 +78,8 @@ struct ModuleVarEmitter {
     void pattern(const VariableDeclarator& d, std::string& mainBody);
     void binding(const VariableDeclarator& d, VarKind kind, std::string& decls,
                  std::string& mainBody);
+    void entryLocal(const VariableDeclarator& d, VarKind kind,
+                    std::string& mainBody);
     void noInit(const CppInfo& ci, const std::string& name,
                 const std::string& cv, std::string& decls);
     void reportType(const VariableDeclarator& d);
@@ -140,6 +142,10 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
         mapIdent(static_cast<const Identifier&>(*d.id).name);
     const std::string& rawName = static_cast<const Identifier&>(*d.id).name;
     reportType(d);
+    if (!g.moduleNeedsGlobals_) {
+        entryLocal(d, kind, mainBody);
+        return;
+    }
     const std::optional<Type> declared = g.resolvedBindingType(d);
     CppInfo ci = declared ? classify(*declared) : CppInfo{};
     if (d.init && !ci.representable) {
@@ -220,6 +226,18 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
         g.moduleInitLines_.push_back(name + " = " + initText + ";");
     }
     g.declare(rawName, declared, /*cell=*/false, /*global=*/true);
+}
+
+// The entry function is the only reader (no declared function, class, export
+// or worker): declare the binding in `main`, where a loop body's calls cannot
+// alias it, so the compiler keeps it in a register across the body.
+void ModuleVarEmitter::entryLocal(const VariableDeclarator& d, VarKind kind,
+                                   std::string& mainBody) {
+    const std::string& rawName =
+        static_cast<const Identifier&>(*d.id).name;
+    g.emitLineDirective(d, mainBody);
+    line(mainBody, 1, g.declaratorText(d, kind) + ";");
+    g.declare(rawName, g.resolvedBindingType(d));
 }
 
 void ModuleVarEmitter::noInit(const detail::CppInfo& ci,

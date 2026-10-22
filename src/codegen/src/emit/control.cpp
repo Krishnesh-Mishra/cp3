@@ -53,6 +53,27 @@ std::string Generator::emitWhile(const WhileStatement& w,
     const std::string breakLabel = freshLabel("while_end_");
     const std::string continueLabel = freshLabel("while_next_");
     pushFlowFrame(true, breakLabel, continueLabel, jsLabel);
+    // A proven entry-body counter: the increment is the body's last statement
+    // (skipped by emitBranch), so the `for` header performs it. The proof
+    // rejected a `continue` in this loop, so the header step is never skipped.
+    const auto counter = int64Loops_.find(w.nodeId);
+    if (counter != int64Loops_.end()) {
+        const TopInt64Binding& b = *counter->second;
+        const std::string op = b.inclusive ? " <= " : " < ";
+        line(out, indent, "for (; " + b.alias + op + std::to_string(b.bound) +
+                              "; " + b.alias + " += " +
+                              std::to_string(b.step) + ") {");
+        if (w.body) {
+            line(out, indent + 1, "{");
+            emitBranch(*w.body, out, indent + 2);
+            line(out, indent + 1, "}");
+        }
+        line(out, indent + 1, continueLabel + ": ;");
+        line(out, indent, "}");
+        popFlowFrame();
+        line(out, indent, breakLabel + ": ;");
+        return continueLabel;
+    }
     const std::string condition = w.condition ? cond(*w.condition) : "false";
     line(out, indent, "while (" + condition + ") {");
     if (w.body) {

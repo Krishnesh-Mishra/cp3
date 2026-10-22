@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// The R2 recurrence is never executed, so x keeps its negative-zero start.
+// The int64 rewrite cannot represent -0.
+// Oracle: 1 / -0 is -Infinity.
+let x = -0;
+if (false) {
+  x = (x * 3) % 7;
+}
+console.log(1 / x);

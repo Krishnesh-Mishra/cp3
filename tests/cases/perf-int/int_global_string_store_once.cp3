@@ -1,0 +1,13 @@
+import console from "std/console";
+
+// A non-number module global is shared state too. The fast body must not run
+// the store and then bail into the double body, which would append twice.
+// Oracle: 3 / 2 = 1.5, then the global is "x".
+let g = "";
+
+function f(a: number): number {
+  g = g + "x";
+  return a / 2;
+}
+console.log(f(3));
+console.log(g);

@@ -1,0 +1,17 @@
+import console from "std/console";
+
+// R2 at several seeds and two moduli, twelve steps each.
+// Oracle: a = 15823057, b = 15289993, c = 1781420120 (computed independently).
+let a = 1;
+let b = 12345;
+let c = 999;
+let n = 0;
+while (n < 12) {
+  a = (a * 1103515) % 16777216;
+  b = (b * 1103515) % 16777216;
+  c = (c * 48271) % 2147483647;
+  n = n + 1;
+}
+console.log(a);
+console.log(b);
+console.log(c);

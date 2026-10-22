@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// A void call is a side effect. The int64 fast body must not run it and then
+// bail into the double body, which would execute it a second time.
+// Oracle: one "hello", then 3 / 2 = 1.5.
+function f(a: number): number {
+  console.log("hello");
+  return a / 2;
+}
+console.log(f(3));

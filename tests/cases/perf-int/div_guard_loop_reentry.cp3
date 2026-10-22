@@ -1,0 +1,18 @@
+import console from "std/console";
+
+// The divisibility fact comes from the enclosing guard, but the loop re-runs
+// the emitted division after the counter value changed. The fact must not be
+// established across a loop.
+// Oracle: 4 / 4 = 1, 1 / 4 = 0.25, return 0.25.
+function f(x: number): number {
+  if (x % 4 === 0) {
+    let i = 0;
+    while (i < 2) {
+      x = x / 4;
+      i = i + 1;
+    }
+    return x;
+  }
+  return x;
+}
+console.log(f(4));

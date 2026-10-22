@@ -1,0 +1,9 @@
+import console from "std/console";
+
+// R1 with start greater than the bound: the loop never runs.
+// Oracle: c stays 10.
+let c = 10;
+while (c < 5) {
+  c = c + 1;
+}
+console.log(c);

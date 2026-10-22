@@ -1,0 +1,18 @@
+import console from "std/console";
+
+// R1 must reject a body with continue before the increment. The body runs six
+// times: c = 0, 1, 2 (continue), 2 (retry), 3, 4.
+// Oracle: c = 5, times = 6. A fused for would run the body five times.
+let c = 0;
+let skip = 0;
+let times = 0;
+while (c < 5) {
+  times = times + 1;
+  if (c === 2 && skip === 0) {
+    skip = 1;
+    continue;
+  }
+  c = c + 1;
+}
+console.log(c);
+console.log(times);

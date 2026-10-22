@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "abc!\n6\ntrue\n",
+  "exitCode": 0
+}

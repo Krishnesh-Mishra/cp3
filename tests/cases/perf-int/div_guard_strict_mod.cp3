@@ -1,0 +1,13 @@
+import console from "std/console";
+
+// The divisibility fact is guarded by a strict `=== 0` test on the exact
+// modulo form. A nonzero remainder takes the fallback path.
+// Oracle: 10 % 5 == 0 and 10 / 5 = 2; 9 % 5 != 0 so the second call is 0.
+function fifth(x: number): number {
+  if (x % 5 === 0) {
+    return x / 5;
+  }
+  return 0;
+}
+console.log(fifth(10));
+console.log(fifth(9));

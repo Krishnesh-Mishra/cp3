@@ -1,0 +1,11 @@
+import console from "std/console";
+
+// WS1.3: a mix of entry-only and function-read bindings. When any declared
+// function exists every module binding keeps namespace scope. Oracle:
+// scale(4) = 4 * 3 = 12.
+let factor = 3;
+let local = 4;
+function scale(n: number): number {
+  return n * factor;
+}
+console.log(scale(local));

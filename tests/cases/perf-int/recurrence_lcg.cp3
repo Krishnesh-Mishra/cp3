@@ -1,0 +1,11 @@
+import console from "std/console";
+
+// R2: a small LCG, ten steps. Oracle computed independently:
+// x0 = 7, x := (x * 1103515) % 16777216, 10 times -> 11471375.
+let x = 7;
+let n = 0;
+while (n < 10) {
+  x = (x * 1103515) % 16777216;
+  n = n + 1;
+}
+console.log(x);

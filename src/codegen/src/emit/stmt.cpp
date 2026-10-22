@@ -33,8 +33,10 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
         case NodeKind::BlockStatement: {
             pushScope();
             line(out, indent, "{");
-            for (const auto& child : static_cast<const BlockStatement&>(s).body) {
-                if (child) stmt(*child, out, indent + 1);
+            const auto& block = static_cast<const BlockStatement&>(s);
+            for (const auto& child : block.body) {
+                if (!child || int64SkipStmts_.count(child->nodeId) != 0) continue;
+                stmt(*child, out, indent + 1);
             }
             line(out, indent, "}");
             popScope();
@@ -87,7 +89,8 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
 void Generator::emitBranch(const Stmt& s, std::string& out, int indent) {
     if (s.kind == NodeKind::BlockStatement) {
         for (const auto& child : static_cast<const BlockStatement&>(s).body) {
-            if (child) stmt(*child, out, indent);
+            if (!child || int64SkipStmts_.count(child->nodeId) != 0) continue;
+            stmt(*child, out, indent);
         }
     } else {
         stmt(s, out, indent);
@@ -111,9 +114,31 @@ void Generator::emitDoWhile(const DoWhileStatement& dw, std::string& out,
 }
 
 void Generator::emitIf(const IfStatement& is, std::string& out, int indent) {
+    // `x % k == 0` in the then-branch proves divisibility, so the division
+    // inside it needs no remainder check (intBinary). The fact is scoped to the
+    // then-branch and invalidated by any write to `x`.
+    std::optional<std::pair<std::string, std::int64_t>> fact;
+    if (intOn() && is.condition) fact = divisibleGuard(*is.condition);
+    // The fact is a claim about every later point in the branch: only a
+    // straight-line branch that cannot defer, repeat or outsource work may use
+    // it.
+    if (fact && is.thenBranch && !factStableBranch(*is.thenBranch)) {
+        fact.reset();
+    }
     const std::string condition = is.condition ? cond(*is.condition) : "false";
+    std::size_t factDepth = 0;
+    if (fact) {
+        factDepth = intMode_->divisible.size();
+        intMode_->divisible.push_back(
+            IntMode::DivisibleFact{fact->first, fact->second, true});
+    }
     line(out, indent, "if (" + condition + ") {");
     if (is.thenBranch) emitBranch(*is.thenBranch, out, indent + 1);
+    // A write inside the branch may have invalidated the fact in place, so
+    // never grow past the entry depth and drop any entry the branch left.
+    if (fact && intMode_->divisible.size() > factDepth) {
+        intMode_->divisible.resize(factDepth);
+    }
     if (is.elseBranch) {
         line(out, indent, "} else {");
         emitBranch(*is.elseBranch, out, indent + 1);
@@ -138,7 +163,14 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
         return "auto cp3_error = 0.0";
     }
     const std::string name = mapIdent(static_cast<const Identifier&>(*d.id).name);
-    // A proven-safe index read binds the element by const reference.
+    // A proven entry-body int64 binding declares its int64 spelling; the
+    // name-keyed reads convert back (support/top_int64.cpp).
+    if (const std::string text = int64DeclaratorText(d); !text.empty()) {
+        return text;
+    }
+    // A proven-safe index read binds the element by const reference. The
+    // int64 fast path owns the int64-mode bindings, so the two never
+    // compete for the same declarator.
     if (!intOn()) {
         const std::string ref = arrayRefDeclText(d, name);
         if (!ref.empty()) return ref;

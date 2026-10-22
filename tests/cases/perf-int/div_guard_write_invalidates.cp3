@@ -1,0 +1,13 @@
+import console from "std/console";
+
+// A write to x invalidates the fact: 12 + 2 = 14, and 14 / 4 = 3.5 is not an
+// integer quotient, so the checked path must fall back to the double body.
+function f(x: number): number {
+  if (x % 4 === 0) {
+    x = x + 2;
+    return x / 4;
+  }
+  return 0;
+}
+
+console.log(f(12));

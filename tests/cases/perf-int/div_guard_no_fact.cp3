@@ -1,0 +1,12 @@
+import console from "std/console";
+
+// No fact on the return path: 10 / 4 = 2.5, a non-integral quotient that the
+// checked int64 divide must hand back to the double body.
+function f(x: number): number {
+  if (x % 4 === 0) {
+    return 7;
+  }
+  return x / 4;
+}
+
+console.log(f(10));

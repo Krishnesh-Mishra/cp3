@@ -1,0 +1,13 @@
+import console from "std/console";
+
+// WS1.4: the guarded division `x % 4 === 0` licenses an exact `x / 2` in the
+// then-branch. Oracle: 12 / 2 = 6; 10 is not a multiple of 4, so 0.
+function half(x: number): number {
+  if (x % 4 === 0) {
+    return x / 2;
+  }
+  return 0;
+}
+
+console.log(half(12));
+console.log(half(10));

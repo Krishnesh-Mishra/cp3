@@ -1,0 +1,23 @@
+import console from "std/console";
+
+// A try/catch/finally in the counter body. The rewrite must keep the finally
+// effects and the final counter value.
+// Oracle: c = 0 adds 10 + 100; c = 1 throws, adds 1 + 100; c = 2 adds 10 +
+// 100. n = 321, c = 3.
+let c = 0;
+let n = 0;
+while (c < 3) {
+  try {
+    if (c === 1) {
+      throw 7;
+    }
+    n = n + 10;
+  } catch (e) {
+    n = n + 1;
+  } finally {
+    n = n + 100;
+  }
+  c = c + 1;
+}
+console.log(c);
+console.log(n);
