@@ -664,6 +664,85 @@ Three waves clear all fourteen assignments.
 - The CP3002 count, the diagnostics gate (0 findings) and the corpus (0
   failures) are checked by the lead after every merge.
 
+## 6b. The CP3002 implementation wave (in progress)
+
+CP3002 implementation is now authorized. The gate is at 388 hits, of which
+**224 are live marker call sites in `src/`** (the rest are 30 documentation
+hits, 11 test hits, and the marker definition itself). The 224 sites carry
+**138 distinct work items** - one per marker message per feature area.
+
+The work is planned from the live inventory, not by hand:
+`tools/cp3002_wave_plan.py` scans `src/`, extracts every `notImplemented(` site
+with its message, groups the sites by the feature area that owns them (the
+group table in section 6), and chunks the result into agent-sized assignments.
+It writes `docs/rough/CP3002-WAVE-PLAN.md`, which is the lane sheet every
+agent reads, and it is regenerated after every merged wave.
+
+| Measure | Count |
+|---|---:|
+| Marker call sites in `src/` | 224 |
+| Distinct work items | 138 |
+| Agent assignments (~10 items each) | 19 |
+| Waves of 5 parallel agents | 4 |
+
+### The wave protocol
+
+**HARD RULE: no new agent is launched until a previous agent's work has been
+tested and merged by the lead. The queue advances only on a completed merge,
+never on an agent's report alone.**
+
+1. Five agents run at once, each owning one assignment from the plan - about
+   ten work items, scoped to one feature area so the work is coherent.
+2. An agent implements its items, builds, runs the corpus cases its area
+   touches, and reports. It does not merge to `master`.
+3. The lead verifies the agent's commit on canonical `master` - rebuild, the
+   affected corpus cases, the diagnostics gate and the CP3002 count - and
+   merges it serially.
+4. **Only after that merge** does the lead launch the next agent, so five
+   lanes are always running.
+5. A lane that fails verification is sent back with the reason; it is never
+   merged on the agent's word alone, and it never frees a slot.
+
+Three waves clear all nineteen assignments.
+
+### Wave 1 - merged
+
+| Assignment | Merge | Items | What it retired |
+|---|---|---|---|
+| 1 | `afe44f6` | 9/10 | Promise combinators over any operand, the Promise static and member surfaces, `Array(...)` and `Array.from` type errors, the unresolved-import error, spread sources |
+| 2 | `2b606c3` | - | Spread arguments, async arrows, explicit type arguments, the await-outside-async error |
+| 3 | `31af082` | 6/10 | Array read references, counted-push reserve, the array element type gate, the spread element |
+| 4 | `802e973` | 4/10 | A spread into a fixed-argument callee, a class rest parameter, a tuple destructuring source, a pattern default |
+| 5 | `55ef5ce` | 9/10 | Rest parameter types, a pattern default, the spread element and property, an untyped parameter, the excess-property error |
+| 7 | `dcb9b39` | 4/10 + 2 partial | A destructuring binding without an initializer, the destructuring assignment, the shared-cell compound assignment, `??=`, the console event and `assert` surfaces |
+| 8 | `c0d698a` | 8/10 + 1 partial | A computed object key, an object literal for a class with a constructor, the console event and import surfaces, `console.assert`, a spread into a constructor, the generic class instantiation, the computed class member name |
+| 9 | `c98f983` | 7 | An enum member initializer, a duplicate enum case, type aliases, a re-export, an async function's value type, generic methods, generic interfaces |
+
+The items that stayed markers did so for reasons worth keeping: a generic
+arrow needs a parser production the spec does not define, a generic class
+value needs a `TypeParam` inside an object annotation, and a spread into a
+fixed-argument signature needs the shared type mapping that another lane owns.
+
+### Wave 2 - in flight
+
+Ten lanes, one hundred work items, assigned by the same plan. The lanes cover
+the expression operators, the control-flow surfaces, the array and typed-array
+methods, the Map/Set and network surfaces, the FS/process/env surfaces, the
+whole `parallel.*` family, the worker modules, the CLI `build`/`check` paths and
+the call forms.
+
+### Rules every lane obeys
+
+- **No marker is deleted to make a number go down.** A marker is retired only
+  when the construct actually works, and a corpus case proves it. A "not
+  implemented" that becomes a wrong program is worse than a skip.
+- A construct that cannot be completed correctly stays a marker, and the
+  report says why. A skipped item is honest; a wrong implementation is not.
+- Every retired marker gets a corpus case that would fail before the change
+  and passes after it.
+- The CP3002 count, the diagnostics gate (0 findings) and the corpus are
+  checked by the lead after every merge.
+
 ## 7. Work already done vs not done
 
 Done:
