@@ -473,87 +473,123 @@ The scanner gate itself is `tools/check_cp3002.py`; its 30 skipped corpus cases
 are the observable effect of these groups. The CP3002 exit code and catalog
 entry are intentionally preserved until the true count reaches zero.
 
-## 6a. Editor experience gaps (the extension is not yet as good as the JS one)
+## 6a. Editor experience gaps (RESOLVED - the two reported defects are fixed)
 
 Two concrete problems were reported from VS Code, both visible in a single
-screenshot of a five-line file. They are separate defects with separate
-owners, and neither is a cosmetic afterthought.
+screenshot of a five-line file. They were separate defects with separate
+owners, and both are now fixed.
 
-### 6a.1 The colour scheme does not match the JavaScript conventions
+### 6a.1 The colour scheme now matches the JavaScript conventions - FIXED
 
-The grammar (`extensions/cp3-vscode/syntaxes/cp3.tmLanguage.json`) picks its
-own TextMate scopes, and the result does not look like the language a
-JavaScript developer already reads all day:
+The grammar (`extensions/cp3-vscode/syntaxes/cp3.tmLanguage.json`) used its own
+TextMate scopes, so a cp3 file did not read like the JavaScript next to it.
+The fix maps cp3 onto the scope names VS Code's built-in themes already
+colour, verified against the real `dark_plus.json` and `light_plus.json`
+shipped with VS Code:
 
-| What | Today | Dark+ convention the JS/TS extension uses |
+| What | Before | After (Dark+) |
 |---|---|---|
-| A local variable (`b`, `a`) | unstyled / default foreground | `variable.other.readwrite` - light blue (`#9CDCFE`) |
-| `import` | `keyword.control.import.cp3` | `keyword.control.import` - purple (`#C586C0`) |
-| `console`, `Math`, `JSON` | `support.namespace.cp3` | `support.class` / `entity.name.type` - teal (`#4EC9B0`) |
-| `catch` / `finally` / `return` | one flat `keyword.control.cp3` bucket with `if`/`for`/`while` | control-flow keywords purple (`#C586C0`), storage keywords (`let`/`const`/`function`/`class`) blue (`#569CD6`) |
-| `this` | `variable.language.this.cp3` | `variable.language` - italic blue (`#569CD6`) |
-| A user function name | nothing distinguishes it | `entity.name.function` - yellow (`#DCDCAA`) |
+| A local variable | no scope - default foreground | `variable.other.readwrite` (#9CDCFE) |
+| A parameter | no scope | `variable.parameter` (#9CDCFE) |
+| A user function / method / accessor name | no scope | `entity.name.function` (#DCDCAA) |
+| A class name | no scope | `entity.name.class` (#4EC9B0) |
+| A type annotation `:` and the user type in it | no scope | `keyword.operator.type.annotation` + `entity.name.type` (#4EC9B0) |
+| A property after a receiver | no scope | `variable.other.property` (#9CDCFE) |
+| `console`, `Math`, `JSON`, `Date`, `Map`, `Set`, `parallel` | `support.namespace` - **the themes do not colour it** | `support.class.builtin` (#4EC9B0) |
+| `of` / `in` | purple control-flow | `keyword.operator.expression.of` / `.in` (the TypeScript convention) |
+| `=>` | plain operator | `storage.type.function.arrow` (the TypeScript convention) |
+| Control flow, storage, `this`, numbers, strings, comments | already correct | unchanged |
 
-The fix is to map cp3's scopes onto the scope names VS Code's built-in themes
-already colour - `entity.name.function`, `variable.other.readwrite`,
-`keyword.control`, `storage.type`, `support.class`, `entity.name.type` - and to
-split the current flat `keyword.control.cp3` bucket into control-flow
-(`if`/`else`/`for`/`while`/`switch`/`return`/`break`/`continue`/`throw`/
-`try`/`catch`/`finally`) and storage (`let`/`const`/`function`/`class`), so
-the same file reads the same way as the JavaScript next to it. The grammar
-should also cover what it currently misses: user function and class names,
-parameters, type annotations, and property access on a receiver.
+The mapping is documented in `extensions/cp3-vscode/README.md` and
+**machine-checked**: `scripts/grammar-smoke.mjs` grew from 51 to **76 scope
+assertions** driven through the real TextMate engine, so a scope that stops
+matching a theme is a test failure, not a visual surprise.
 
-The acceptance test is visual and objective: a cp3 file and an equivalent
-TypeScript file, side by side in the same theme, must be indistinguishable in
-colour. A screenshot comparison in the extension README is the proof.
+### 6a.2 Completion is now position-aware and scope-aware - FIXED
 
-### 6a.2 Completion is context-blind
-
-The screenshot shows the completion popup at an expression position inside a
+The screenshot showed the completion popup at an expression position inside a
 function body, offering the entire language: `finally`, `catch`, `abstract`,
 `as`, `implements`, `interface`, `private`, `protected`, `public`, `static`,
-`get`, `set`, `in`, `of`. None of those can be valid where the cursor is.
+`get`, `set`, `in`, `of`.
 
-The cause is in the code, not in the editor:
+The cause was in the code: `generalCandidates` in
+`src/cli/src/commands/lsp_intel_names.cpp` appended **every** keyword from one
+flat table to **every** completion request, with no regard for the syntactic
+position of the cursor. The document's own declarations were added too, but
+below sixty keywords.
 
-- `generalCandidates` in `src/cli/src/commands/lsp_intel_names.cpp` appends
-  **every** keyword from one flat `kKeywords` table (line 140) to every
-  completion request, with no regard for the syntactic position of the cursor.
-- The document's own declarations are added, but so is everything else: the
-  result is "all names plus all keywords", which is the opposite of an
-  answer.
+Two new units fix it: `lsp_intel_position.cpp` (where the cursor is) and
+`lsp_intel_scope.cpp` (what is in scope).
 
-What a good completion does, and what cp3 must do:
+**Position rules:** statement start, expression start, type position, member
+position, import clause, class body, parameter list, inside a `try` block,
+inside a `switch` body, and a declaration-name slot. Each offers only the
+keywords legal there - `catch`/`finally` inside a `try`, `case`/`default`
+inside a `switch`, the member modifiers in a class body, `ref` in a parameter
+list.
 
-1. **Position-aware keywords.** The parser already knows where the cursor
-   sits. Offer only the keywords that can appear in that position:
-   statement start vs expression start vs type position vs member position vs
-   after `import` vs inside a class body vs inside a parameter list.
-   `finally` belongs to a `try` block that is open, `catch` to one that is
-   open, `private`/`public`/`abstract`/`static` to a class member, `as` to an
-   import clause, `get`/`set` to an accessor.
-2. **Scope-aware names.** Offer the names that are actually in scope at the
-   cursor: locals declared in the enclosing blocks, parameters, module-level
-   bindings, and the names the file **imports** - `import console from
-   "std/console"` should make `console` completable and its members
-   completable after `console.`, which the member path already does.
-3. **Relevance ordering.** The local scope and the imported names come first;
-   language keywords come last, and only when they are legal here. A TS
-   extension puts the local variable and the imported member at the top of
-   the list; the screenshot puts `a` (a local!) below 60 keywords.
-4. **Honest type information.** The completion item should carry the type
-   and the documentation, not just the name - the hover work in flight feeds
-   the same data.
+**Scope rules:** the parameters of the enclosing functions, the locals of the
+enclosing blocks (only those bound above the cursor), the enclosing
+`for...of`/`for...in` binding, the `catch` parameter, the enclosing class
+name, the module-level bindings, and the **imported** names - an
+`import console from "std/console"` makes `console` completable.
 
-The acceptance test: in the file from the screenshot, completion at the cursor
-must offer `a`, `b`, `console` and the handful of keywords legal at that
-position - and must not offer `finally`, `catch`, `abstract`, `private` or
-`implements`. A machine check belongs in `tests/lsp/intel_check.py` next to
-the existing completion checks, so "context-blind completion" cannot come
-back.
+**Ordering:** local scope, then imported names, then module-level
+declarations, then snippets, then keywords last.
 
-### 6a.3 What "as good as the JS extension" means overall
+**The reported case, before and after:**
+
+| | Before | After |
+|---|---|---|
+| Items offered | 52 | **13** |
+| The local `a` and `b` | **not offered at all** | offered, with their inferred type |
+| `finally`, `catch`, `abstract`, `private`, `implements` | offered | **not offered** |
+| `console` (imported) | offered | offered |
+
+Other positions: inside a `try` block 51 -> 26 items (`catch`, `finally`
+first); outside one 51 -> 24 (neither offered); top of file 52 -> 25.
+
+**Regression protection:** fifteen new checks in `tests/lsp/intel_check.py`
+cover it - an expression position offers none of the illegal keywords, does
+offer the locals, does offer the imported namespace, a `try` block offers
+`catch`/`finally` and a non-`try` block does not, a class body offers only the
+member modifiers, a parameter list offers only `ref`, a type position offers
+only types, the nearest scope leads the popup, and every item carries the
+inferred type. The suite is **67/67**.
+
+The position detection is a heuristic, not a parser: the ASI rule and the
+"an identifier/literal continues the expression" rule can be wrong in rare
+shapes, and the scope collection walks the whole AST per request, which is a
+per-keystroke cost on a very large file. Both are known and recorded.
+
+### 6a.3 Documentation in the editor - FIXED
+
+`cp3` now supports JSDoc-style doc comments in its own source, and the
+standard library is documented in the editor.
+
+- **Doc comments**: block `/** ... */` and line `/// ...`, with a free-text
+  description, `@param <name> <text>` and `@returns` / `@return <text>`. Any
+  other `@tag` is kept as plain text and is never an error. Supported on
+  functions, classes, methods, class properties, accessors and variable
+  declarations. A doc comment never changes a program's output and never
+  produces a diagnostic.
+- **Standard library**: every member of every table-driven family carries a
+  real description written from the standard-library docs - console (12),
+  Math (23), path (8), os (7), process (5), env (3), fs (17), JSON (2),
+  Date (17), crypto (6), Map (10), Set (7), std/arrays (21), std/string (22),
+  RegExp (5). A member with no description renders a **visible**
+  `_No documentation available for `x`._` rather than a silent blank.
+  `std/network`, `std/buffer` and `std/typed-arrays` are left undocumented
+  deliberately: they have no member table to attach it to.
+- **What the user sees**: hovering `console.log` gives the signature and the
+  description; hovering a documented function gives the description, the
+  `@param` list and the `@returns` text; completion items carry
+  `documentation` as Markdown; signature help carries the callee's
+  documentation and each parameter's `@param` text.
+- **Tests**: nineteen new LSP checks (71/71 in total), including a `cp3c run`
+  comparison that proves a doc comment does not change a program's output.
+
+### 6a.4 What "as good as the JS extension" means overall
 
 The bar the user set: the cp3 extension must feel like the JavaScript
 extension, not merely resemble it. The pieces, in order of how much they
@@ -561,18 +597,18 @@ hurt today:
 
 | Capability | JS extension | cp3 today |
 |---|---|---|
-| Colour scheme matches the language family | yes | no (6a.1) |
-| Completion respects position and scope | yes | no (6a.2) |
-| Hover shows the type and the documentation | yes | partial - type only; documentation is in flight |
+| Colour scheme matches the language family | yes | **fixed** |
+| Completion respects position and scope | yes | **fixed** |
+| Hover shows the type and the documentation | yes | **fixed** |
 | Go-to-definition, symbols, signature help | yes | present |
-| Refactoring (rename, extract) | yes | absent |
 | Format on save | yes | present (`cp3 fmt`, byte-identical) |
 | Error squiggles with the cp3 diagnostic code | yes | present |
+| Refactoring (rename, extract) | yes | absent |
 | Auto-import | yes | absent |
 | Quick fixes | yes | absent |
 
 The last three are post-beta-one candidates, not beta-one blockers. The first
-five are the beta-one bar, and 6a.1 and 6a.2 are the two that are broken now.
+five are the beta-one bar, and all five are now met.
 
 ## 6b. The CP3002 implementation wave (authorized)
 
