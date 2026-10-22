@@ -19,6 +19,7 @@
 #include "detail/checksum.hpp"
 #include "detail/cp3pak.hpp"
 #include "detail/json.hpp"
+#include "detail/package_cache.hpp"
 #include "detail/package_json.hpp"
 #include "detail/semver.hpp"
 #include "detail/tar.hpp"
@@ -160,6 +161,14 @@ bool installFromDirectory(const fs::path& source, const fs::path& projectRoot,
     JsonValue manifest;
     if (!loadPackageJson(source, manifest, err)) return false;
     const std::string name = packageName(manifest, source);
+    const std::string version = packageVersion(manifest);
+    // A package that excluded its C++ source is only usable on a platform it
+    // ships a cached binary for (CLI-README §5.4).
+    PlatformCacheManifest cache;
+    const bool hasCache = installedPlatformCache(source, cache);
+    if (!checkPackageUsable(name, version, manifest, hasCache, err)) {
+        return false;
+    }
     fs::path packageDir;
     if (!packageDirFor(projectRoot, name, packageDir, err)) return false;
 
@@ -170,6 +179,7 @@ bool installFromDirectory(const fs::path& source, const fs::path& projectRoot,
     entry.resolved = "file:" + relativeName(projectRoot, source);
     entry.integrity = "dir-sha256:" + treeDigest(packageDir);
     warnUnsatisfiedEngines(packageDir, name);
+    reportPackageArtifactMode(name, packageDir);
     return true;
 }
 
@@ -224,6 +234,14 @@ bool installArchivePackage(const fs::path& archive, const fs::path& projectRoot,
         return false;
     }
     const std::string name = *declared;
+    const std::string version = packageVersion(manifest);
+    // A package that excluded its C++ source is only usable on a platform it
+    // ships a cached binary for (CLI-README §5.4).
+    const bool hasCache =
+        archiveHasPlatformCache(members, currentPlatform());
+    if (!checkPackageUsable(name, version, manifest, hasCache, err)) {
+        return false;
+    }
     fs::path packageDir;
     if (!packageDirFor(projectRoot, name, packageDir, err)) return false;
 
@@ -244,10 +262,11 @@ bool installArchivePackage(const fs::path& archive, const fs::path& projectRoot,
         return false;
     }
     entry.name = name;
-    entry.version = packageVersion(manifest);
+    entry.version = version;
     entry.resolved = "file:" + relativeName(projectRoot, archive);
     entry.integrity = "sha256:" + sha256Hex(bytes);
     warnUnsatisfiedEngines(packageDir, name);
+    reportPackageArtifactMode(name, packageDir);
     return true;
 }
 

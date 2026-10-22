@@ -1,0 +1,10 @@
+{
+  "name": "cache-binary-invalid",
+  "version": "1.0.0",
+  "description": "package that names a platform cp3c does not know",
+  "type": "package",
+  "main": "src/index.cp3",
+  "build": {
+    "cacheBinary": ["windows", "solaris"]
+  }
+}

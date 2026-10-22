@@ -935,6 +935,73 @@
           "contains": "'install' takes at most one path or URL"
         }
       }
+    },
+    {
+      "group": "install",
+      "name": "excluded-source-without-a-cache",
+      "description": "an excluded-source package without a cache for this platform is refused",
+      "argv": [
+        "install",
+        "deps/local-kit.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project",
+          {
+            "name": "local-dep-excluded-source.cp3pak",
+            "to": "deps/local-kit.cp3pak"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "Installation failed for 'local-kit@1.2.3'",
+            "No precompiled binary found for your platform",
+            "The author excluded the C++ source from this package",
+            "or to drop excludeSource"
+          ]
+        },
+        "files_absent": [
+          ".cp3/packages/local-kit"
+        ]
+      }
+    },
+    {
+      "group": "install",
+      "name": "cached-binary-for-this-platform",
+      "description": "a package with a cache for this platform installs and uses the cached binary",
+      "argv": [
+        "install",
+        "deps/local-kit.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          "install-project",
+          {
+            "name": "local-dep-cached.cp3pak",
+            "to": "deps/local-kit.cp3pak"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "installed local-kit 1.2.3",
+            "carries a cached binary for"
+          ]
+        },
+        "files": {
+          ".cp3/packages/local-kit/pak/{platform}/cache.json": {
+            "exists": true
+          },
+          ".cp3/packages/local-kit/pak/{platform}/src/index.o": {
+            "exists": true
+          }
+        }
+      }
     }
   ]
 }

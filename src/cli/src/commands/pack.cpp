@@ -9,22 +9,29 @@
 //   package.json     the author's manifest, verbatim
 //   index.cp3        signatures/types only, generated from the entry AST
 //   pak/<module>.*   the transpiled C++ (cpp + hpp)
+//   pak/<platform>/   the optional cached binary of that platform (§5.4)
 //   <build.files>    extra files listed in package.json, verbatim
 //
-// No C++ toolchain is involved: a package build produces source, not a
-// binary (CLI-README §5.3). `excludeSource` is refused - it requires cached
-// binaries, which this build does not produce yet (§5.4).
+// A package build produces source; the binary cache is opt-in through
+// `build.cacheBinary` and only ever covers the platform the build machine
+// runs on - cp3c never forces a cross-compilation (§5.4). `build.excludeSource`
+// drops the C++ source, but only once the archive carries every cache the
+// package claims; the headers and index.cp3 always stay.
 // =============================================================================
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <system_error>
 #include <vector>
 
 #include "detail/cache.hpp"
+#include "detail/cache_binary.hpp"
+#include "detail/cache_build.hpp"
 #include "detail/commands.hpp"
 #include "detail/cp3pak.hpp"
 #include "detail/json.hpp"
 #include "detail/package_json.hpp"
+#include "detail/platform.hpp"
 #include "detail/signatures.hpp"
 #include "detail/tar.hpp"
 #include "detail/util.hpp"
@@ -34,20 +41,6 @@ namespace cp3::cli {
 namespace detail {
 
 namespace {
-
-bool hasExcludeSource(const JsonValue& manifest) {
-    const JsonValue* build = manifest.find("build");
-    if (build == nullptr) return false;
-    const JsonValue* flag = build->find("excludeSource");
-    return flag != nullptr && flag->type == JsonValue::Type::Bool && flag->boolean;
-}
-
-bool hasCacheBinaries(const JsonValue& manifest) {
-    const JsonValue* build = manifest.find("build");
-    if (build == nullptr) return false;
-    const JsonValue* list = build->arrayField("cacheBinary");
-    return list != nullptr && !list->array.empty();
-}
 
 std::string genericName(std::string name) {
     for (char& c : name) {
@@ -94,11 +87,9 @@ bool appendBuildFiles(const JsonValue& manifest, const fs::path& projectRoot,
     return true;
 }
 
-// Refuses/annotates the properties of a package build this build cannot honor.
+// Refuses the properties of a package build this build cannot honor.
 // Returns kExitSuccess when packing may proceed.
-int checkPackManifest(const JsonValue& manifest, const std::string& entryText,
-                      const Program& program) {
-    // CLI-README §5.2: `export default { ... }` is mandatory for packages.
+int checkPackManifest(const std::string& entryText, const Program& program) {
     if (!hasDefaultExport(program)) {
         std::fprintf(stderr,
                      "cp3c: %s: 'type: package' projects need an "
@@ -106,22 +97,6 @@ int checkPackManifest(const JsonValue& manifest, const std::string& entryText,
                      "§5.2); no .cp3pak was produced\n",
                      entryText.c_str());
         return kExitCompileError;
-    }
-    // CLI-README §5.4: excludeSource requires cached binaries to replace the
-    // dropped source; cached-binary packing is not implemented in this build.
-    if (hasExcludeSource(manifest)) {
-        std::fprintf(stderr,
-                     "cp3c: build.excludeSource needs cacheBinary binaries to "
-                     "keep the package installable (CLI-README §5.4); "
-                     "cacheBinary production is not implemented in this "
-                     "build\n");
-        return notImplemented("pack (excludeSource)");
-    }
-    if (hasCacheBinaries(manifest)) {
-        std::fprintf(stderr,
-                     "cp3c: warning: build.cacheBinary is set, but cached "
-                     "binaries are not produced in this build; the package "
-                     "ships source only\n");
     }
     return kExitSuccess;
 }
@@ -168,21 +143,173 @@ bool collectEntries(const PackInput& input, const JsonValue& manifest,
     return appendBuildFiles(manifest, projectRoot, entries, err);
 }
 
+// The claim list of a plan, spelled the way the archive records it.
+std::vector<std::string> claimTexts(const std::vector<PlatformId>& claims) {
+    std::vector<std::string> out;
+    for (const PlatformId& claim : claims) out.push_back(platformIdText(claim));
+    return out;
+}
+
+// The claim list as one comma-separated phrase.
+std::string claimList(const std::vector<PlatformId>& claims) {
+    std::string list;
+    for (const PlatformId& claim : claims) {
+        if (!list.empty()) list += ", ";
+        list += platformIdText(claim);
+    }
+    return list;
+}
+
+// True when the current machine's platform is one of the claimed platforms.
+bool claimsCurrentPlatform(const std::vector<PlatformId>& claims) {
+    const PlatformId& here = currentPlatform();
+    return std::any_of(claims.begin(), claims.end(),
+                       [&](const PlatformId& claim) {
+                           return platformSatisfies(claim, here);
+                       });
+}
+
+// The state of one package build's binary cache.
+struct CacheProduction {
+    const PackInput* input = nullptr;
+    const CacheBinaryPlan* plan = nullptr;
+    fs::path projectRoot;
+    std::vector<TarEntry>* entries = nullptr;
+    std::vector<PlatformId>* cached = nullptr;
+};
+
+// The cached artifact of the current platform, when the package asks for one
+// and this machine is one of the claimed platforms (CLI-README §5.4).
+bool produceCache(const CacheProduction& work, std::string& err) {
+    const PackInput& input = *work.input;
+    const CacheBinaryPlan& plan = *work.plan;
+    if (!plan.requested || plan.claims.empty()) return true;
+    if (!claimsCurrentPlatform(plan.claims)) {
+        std::fprintf(stderr,
+                     "cp3c: warning: build.cacheBinary lists %s, but this "
+                     "machine is %s; no cached binary was produced for it "
+                     "(cp3c never cross-compiles)\n",
+                     claimList(plan.claims).c_str(),
+                     platformIdText(currentPlatform()).c_str());
+        return true;
+    }
+    const PlatformId& here = currentPlatform();
+    CacheBuildRequest request;
+    request.module = *input.moduleName;
+    request.source = input.module->source;
+    request.header = input.module->header;
+    request.workDir = work.projectRoot / ".cp3" / "build" / "cache" /
+                      fs::path(platformIdText(here));
+    request.verbose = input.opt->verbose;
+    PlatformCacheBuild artifact;
+    if (!buildPlatformArtifact(request, artifact, err)) return false;
+
+    PlatformCacheManifest cache;
+    if (!planPlatformCache({CacheSourceRef{request.module, request.source,
+                                          request.header}},
+                           cache, err)) {
+        return false;
+    }
+    work.entries->push_back(TarEntry{platformCacheManifestMember(here),
+                                     platformCacheManifestToJson(cache)});
+    work.entries->push_back(TarEntry{artifact.member, artifact.data});
+    work.cached->push_back(here);
+    std::fprintf(stderr,
+                 "cp3c: cached binary for %s (pak/%s/%s.o)\n",
+                 platformIdText(here).c_str(), platformIdText(here).c_str(),
+                 request.module.c_str());
+    return true;
+}
+
+// `build.excludeSource` drops the C++ source - but only once the archive
+// carries every cache the package claims, so a package is never shipped
+// without a fallback it does not actually have (CLI-README §5.4).
+void applyExcludeSource(const CacheBinaryPlan& plan, bool excludeSource,
+                        std::vector<TarEntry>& entries,
+                        const std::vector<PlatformId>& cached) {
+    if (!excludeSource) return;
+    const std::vector<std::string> missing =
+        unsatisfiedClaims(plan.claims, cached);
+    if (!missing.empty()) {
+        std::string list;
+        for (const std::string& id : missing) {
+            if (!list.empty()) list += ", ";
+            list += id;
+        }
+        std::fprintf(stderr,
+                     "cp3c: warning: build.excludeSource is set, but no cached "
+                     "binary exists for %s; the C++ source is kept so "
+                     "'cp3 recompile' can add it from another machine\n",
+                     list.c_str());
+        return;
+    }
+    std::vector<TarEntry> kept;
+    kept.reserve(entries.size());
+    for (TarEntry& entry : entries) {
+        if (isPakSourceMember(entry.name)) continue;
+        kept.push_back(std::move(entry));
+    }
+    entries = std::move(kept);
+    std::fprintf(stderr,
+                 "cp3c: excluded the C++ source (build.excludeSource); the "
+                 "headers and index.cp3 stay\n");
+}
+
+// The package's manifest and its binary-cache plan. The plan is validated
+// here, so a malformed platform id is reported before anything is written.
+bool readPackManifest(const fs::path& projectRoot, JsonValue& manifest,
+                       CacheBinaryPlan& plan, bool& excludeSource,
+                       std::string& err) {
+    if (!loadPackageJson(projectRoot, manifest, err)) return false;
+    if (!parseCacheBinary(manifest, plan, err)) return false;
+    excludeSource = excludeSourceRequested(manifest);
+    if (excludeSource && plan.claims.empty()) {
+        err = "build.excludeSource needs a non-empty build.cacheBinary list: "
+              "without a cached binary the package would be uninstallable on "
+              "every platform (CLI-README §5.4); no .cp3pak was produced";
+        return false;
+    }
+    return true;
+}
+
+// Everything the packed archive records about itself.
+struct PackOutput {
+    std::string name;
+    std::string version;
+    std::string main;
+    CacheBinaryPlan plan;
+    std::vector<PlatformId> cached;
+};
+
+// Writes the .cp3pak: the container manifest plus the archive members.
+bool writePackArchive(const fs::path& pakPath, const PackOutput& out,
+                       const std::vector<TarEntry>& entries, std::string& err) {
+    Cp3pakManifest pak;
+    pak.formatVersion = kCp3pakFormatVersion;
+    pak.name = out.name;
+    pak.version = out.version;
+    pak.main = out.main;
+    pak.cachePlatforms = claimTexts(out.cached);
+    pak.cacheClaims = claimTexts(out.plan.claims);
+    return writeCp3pak(pakPath, pak, entries, err);
+}
+
 }  // namespace
 
 int packProject(const PackInput& input) {
     const fs::path projectRoot = findProjectRoot(*input.entryPath);
 
     JsonValue manifest;
+    CacheBinaryPlan plan;
+    bool excludeSource = false;
     std::string err;
-    if (!loadPackageJson(projectRoot, manifest, err)) {
+    if (!readPackManifest(projectRoot, manifest, plan, excludeSource, err)) {
         std::fprintf(stderr, "cp3c: %s\n", err.c_str());
         return kExitCompileError;
     }
-    const std::string name = packageName(manifest, projectRoot);
-    const std::string version = packageVersion(manifest);
+
     const int policy =
-        checkPackManifest(manifest, input.entryPath->string(), *input.program);
+        checkPackManifest(input.entryPath->string(), *input.program);
     if (policy != kExitSuccess) return policy;
     if (!writeIntermediates(input, projectRoot, err)) {
         std::fprintf(stderr, "cp3c: %s\n", err.c_str());
@@ -195,6 +322,19 @@ int packProject(const PackInput& input) {
         return kExitCompileError;
     }
 
+    std::vector<PlatformId> cached;
+    CacheProduction production;
+    production.input = &input;
+    production.plan = &plan;
+    production.projectRoot = projectRoot;
+    production.entries = &entries;
+    production.cached = &cached;
+    if (!produceCache(production, err)) {
+        std::fprintf(stderr, "cp3c: %s\n", err.c_str());
+        return kExitCompileError;
+    }
+    applyExcludeSource(plan, excludeSource, entries, cached);
+
     const fs::path outDir = projectRoot / ".cp3" / "out";
     std::error_code ec;
     fs::create_directories(outDir, ec);
@@ -203,13 +343,14 @@ int packProject(const PackInput& input) {
                      outDir.string().c_str(), ec.message().c_str());
         return kExitCompileError;
     }
-    const fs::path pakPath = outDir / (name + ".cp3pak");
-    Cp3pakManifest pak;
-    pak.formatVersion = kCp3pakFormatVersion;
-    pak.name = name;
-    pak.version = version;
-    pak.main = packageMain(manifest);
-    if (!writeCp3pak(pakPath, pak, entries, err)) {
+    PackOutput out;
+    out.name = packageName(manifest, projectRoot);
+    out.version = packageVersion(manifest);
+    out.main = packageMain(manifest);
+    out.plan = plan;
+    out.cached = cached;
+    const fs::path pakPath = outDir / (out.name + ".cp3pak");
+    if (!writePackArchive(pakPath, out, entries, err)) {
         std::fprintf(stderr, "cp3c: %s\n", err.c_str());
         return kExitCompileError;
     }
@@ -219,7 +360,7 @@ int packProject(const PackInput& input) {
                      entries.size() + 1, kCp3pakFormatVersion);
     }
     std::fprintf(stderr, "cp3c: packed %s (%s %s)\n", pakPath.string().c_str(),
-                 name.c_str(), version.c_str());
+                 out.name.c_str(), out.version.c_str());
     return kExitSuccess;
 }
 

@@ -16,6 +16,7 @@
 #include "detail/checksum.hpp"
 #include "detail/cp3pak.hpp"
 #include "detail/json.hpp"
+#include "detail/package_cache.hpp"
 #include "detail/package_json.hpp"
 #include "detail/semver.hpp"
 #include "detail/tar.hpp"
@@ -147,6 +148,16 @@ bool linkDirectory(const LinkRequest& request, const fs::path& source,
     std::string name;
     std::string version;
     if (!validateDirectoryPackage(source, name, version, err)) return false;
+    // A package that excluded its C++ source is only usable on a platform it
+    // ships a cached binary for (CLI-README §5.4).
+    JsonValue manifest;
+    std::string manifestError;
+    PlatformCacheManifest cache;
+    if (loadPackageJson(source, manifest, manifestError) &&
+        !checkPackageUsable(name, version, manifest,
+                            installedPlatformCache(source, cache), err)) {
+        return false;
+    }
     const std::string linkName =
         request.nameOverride.empty() ? name : request.nameOverride;
     if (!usableLinkName(linkName, err)) return false;
@@ -167,11 +178,42 @@ bool linkDirectory(const LinkRequest& request, const fs::path& source,
     return true;
 }
 
+// A package that excluded its C++ source is only usable on a platform it
+// ships a cached binary for (CLI-README §5.4).
+bool checkArchiveUsable(const fs::path& archive, const std::string& name,
+                        const std::string& version, std::string& err) {
+    Cp3pakManifest pak;
+    std::vector<TarEntry> members;
+    if (!readCp3pak(archive, pak, members, err)) return false;
+    const TarEntry* packageJson = nullptr;
+    for (const TarEntry& member : members) {
+        if (member.name == "package.json") {
+            packageJson = &member;
+            break;
+        }
+    }
+    if (packageJson == nullptr) {
+        err = "archive has no package.json";
+        return false;
+    }
+    JsonValue manifest;
+    std::string manifestError;
+    if (!JsonValue::parse(packageJson->data, manifest, manifestError)) {
+        err = "archive's package.json is invalid: " + manifestError;
+        return false;
+    }
+    return checkPackageUsable(name, version, manifest,
+                               archiveHasPlatformCache(members,
+                                                       currentPlatform()),
+                               err);
+}
+
 bool linkArtifact(const LinkRequest& request, const fs::path& source,
                   LinkResult& result, std::string& err) {
     std::string name;
     std::string version;
     if (!validateArchivePackage(source, name, version, err)) return false;
+    if (!checkArchiveUsable(source, name, version, err)) return false;
     const std::string linkName =
         request.nameOverride.empty() ? name : request.nameOverride;
     if (!usableLinkName(linkName, err)) return false;

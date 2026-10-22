@@ -1,0 +1,10 @@
+{
+  "name": "cache-binary-foreign",
+  "version": "1.0.0",
+  "description": "package that claims a platform this machine cannot target",
+  "type": "package",
+  "main": "src/index.cp3",
+  "build": {
+    "cacheBinary": ["windows-arm32"]
+  }
+}

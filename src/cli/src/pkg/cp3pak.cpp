@@ -21,6 +21,18 @@ namespace {
 
 constexpr const char* kManifestName = "cp3pak.json";
 
+// Reads an optional array of strings from the manifest. A malformed value is
+// ignored: the field is advisory, and a reader must never reject an archive
+// over it.
+void readStringList(const JsonValue& doc, const char* key,
+                    std::vector<std::string>& out) {
+    const JsonValue* list = doc.arrayField(key);
+    if (list == nullptr) return;
+    for (const JsonValue& item : list->array) {
+        if (item.type == JsonValue::Type::String) out.push_back(item.string);
+    }
+}
+
 std::string manifestToJson(const Cp3pakManifest& manifest) {
     std::string out;
     out += "{\n";
@@ -28,8 +40,26 @@ std::string manifestToJson(const Cp3pakManifest& manifest) {
            std::to_string(manifest.formatVersion) + ",\n";
     out += "  \"name\": " + jsonQuote(manifest.name) + ",\n";
     out += "  \"version\": " + jsonQuote(manifest.version) + ",\n";
-    out += "  \"main\": " + jsonQuote(manifest.main) + "\n";
-    out += "}\n";
+    out += "  \"main\": " + jsonQuote(manifest.main);
+    // The binary-cache fields are optional: an archive without a cache keeps
+    // the exact manifest shape it always had.
+    if (!manifest.cachePlatforms.empty()) {
+        out += ",\n  \"cachePlatforms\": [";
+        for (std::size_t i = 0; i < manifest.cachePlatforms.size(); ++i) {
+            if (i != 0) out += ", ";
+            out += jsonQuote(manifest.cachePlatforms[i]);
+        }
+        out += "]";
+    }
+    if (!manifest.cacheClaims.empty()) {
+        out += ",\n  \"cacheClaims\": [";
+        for (std::size_t i = 0; i < manifest.cacheClaims.size(); ++i) {
+            if (i != 0) out += ", ";
+            out += jsonQuote(manifest.cacheClaims[i]);
+        }
+        out += "]";
+    }
+    out += "\n}\n";
     return out;
 }
 
@@ -62,6 +92,8 @@ bool parseManifest(const std::string& text, Cp3pakManifest& manifest,
     if (const std::string* main = doc.stringField("main")) {
         manifest.main = *main;
     }
+    readStringList(doc, "cachePlatforms", manifest.cachePlatforms);
+    readStringList(doc, "cacheClaims", manifest.cacheClaims);
     return true;
 }
 

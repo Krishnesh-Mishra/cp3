@@ -107,6 +107,7 @@ int cmdInstall(const CliOptions& opt);
 int cmdPublish(const CliOptions& opt);
 int cmdLink(const CliOptions& opt);
 int cmdUnlink(const CliOptions& opt);
+int cmdRecompile(const CliOptions& opt);
 int cmdEditorPlugin(const CliOptions& opt);
 int cmdLsp(const CliOptions& opt);
 int cmdDap(const CliOptions& opt);
