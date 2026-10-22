@@ -1238,3 +1238,31 @@ previously reported `not usable`; `cp3c run benchmarks/hello-world/cp3/main.cp3
 --toolchain clang` prints `Hello, world!`; the GCC path is unchanged. Two CLI
 regression cases (`clang-is-usable-when-installed`, `clang-builds-and-runs`)
 skip cleanly where no Clang is installed.
+
+## Spread arguments: two language rules (2026-10-22, lead)
+
+The CP3002 spread lane raised two questions that are language decisions, not
+implementation details. Ruling:
+
+- **A spread into a fixed-argument signature must be the last argument**
+  (`f(a, ...xs)` is fine; `f(...xs, 1)` is **CP3403**). A spread fills the
+  parameters it reaches, so an argument after it would have to be filled
+  before the spread's elements are known. The alternative - letting the
+  spread fill only the trailing parameters and leaving the later argument to
+  the front - makes the arity depend on the spread's runtime length, which
+  cp3 cannot check at compile time. The rule is a compile-time error.
+
+- **A spread too short for a required parameter is a runtime out-of-range
+  error, not a compile error.** The alternative - JS's `undefined` - has no
+  cp3 spelling: a cp3 parameter type never admits `undefined` unless it is
+  declared optional (`a?: T`), and a declared-optional parameter is a
+  *different* type. So the program that cannot be typed is the program that
+  reads out of range, and it fails the way any out-of-range read fails. A
+  parameter the call may leave out (a default, or `?`) takes its default
+  instead.
+
+A related behaviour change, recorded because it is observable: **a class-method
+call now uses the class member table's signature**, so the arity and
+assignability checks see the declared optional and rest parameters. That is
+what makes a class rest parameter work; it also means a class-method call is
+checked the same way a function call is.
