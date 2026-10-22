@@ -182,6 +182,13 @@ private:
     std::string modelInitText(const VariableDeclarator& d, const Type& declared);
     std::string objectInitText(const ObjectModel& om, const ObjectLiteral& lit);
     std::string classLiteralInit(const ClassModel& cm, const ObjectLiteral& lit);
+    // The constructor's arguments for a class literal.
+    std::string ctorArgsText(const ClassMemberModel& ctor, const ClassModel& decl,
+                             const ObjectLiteral& lit);
+    // `new C(...args)`: the spread array's elements are the constructor's
+    // arguments.
+    std::string newSpreadText(const ClassModel& cm, const std::string& self,
+                               const ExprList& arguments, std::size_t spreadAt);
     std::string detachedMethodLambda(
         const ClassModel& cm, const ClassMemberModel& m, const std::string& recv);
     std::string objectFieldDefaultText(const Type& t);
@@ -371,6 +378,8 @@ private:
     std::string consoleArgText(const Expr& arg);
     std::string consoleObjectText(const ObjectLiteral& literal);
     std::string consoleNestedValue(const Expr& value);
+    // The parts form of a console call that carries a spread argument.
+    std::string consolePartsText(const CallExpr& c, std::size_t from);
 
     // --- the builtin EventEmitter (D74, cp3/async/emitter.hpp) ----------------
     // Construction, the boxed-listener value form and the on/once/off/emit

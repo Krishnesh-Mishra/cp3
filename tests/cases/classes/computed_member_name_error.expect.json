@@ -1,0 +1,8 @@
+{
+  "mode": "check",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3707",
+    "contains": "computed class member name"
+  }
+}

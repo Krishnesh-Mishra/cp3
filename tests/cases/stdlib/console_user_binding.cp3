@@ -1,0 +1,6 @@
+import process from "std/process";
+class Logger {
+  function log(message: string): void { process.exit(message === "hello" ? 0 : 1); }
+}
+const console = new Logger();
+console.log("hello");

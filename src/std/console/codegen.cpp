@@ -19,6 +19,11 @@
 // explicit `formatObject({...})` form. warn/error keep their family header
 // (consoleStderr_); the other members pull it via needsConsoleAbi_, and the
 // async members also need the loop in `main` (needsEventLoop_).
+//
+// A spread argument (`console.log(...parts)`) contributes the array's
+// elements to the line, so the call lowers onto the runtime's `*Parts` form
+// (cp3/std/console.hpp): the parts are rendered and joined with one space,
+// exactly like the variadic form.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -26,6 +31,8 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
+#include "detail/class_model.h"
 #include "detail/cpp_writer.h"
 #include "detail/type_map.h"
 
@@ -43,14 +50,17 @@ bool knownEvent(const std::string& event) {
 }
 
 // The literal text of an object-literal field key ("" when the field is out of
-// this wave's scope: computed, a method, or a non-name key).
+// this wave's scope: a method, or a non-name key).
 std::string fieldKey(const ObjectProperty& p) {
-    if (p.computed || p.isMethod || !p.key) return std::string();
+    if (p.isMethod || !p.key) return std::string();
     if (p.key->kind == NodeKind::Identifier) {
         return static_cast<const Identifier&>(*p.key).name;
     }
     if (p.key->kind == NodeKind::StringLiteral) {
         return static_cast<const StringLiteral&>(*p.key).value;
+    }
+    if (p.key->kind == NodeKind::NumberLiteral) {
+        return static_cast<const NumberLiteral&>(*p.key).raw;
     }
     return std::string();
 }
@@ -60,13 +70,21 @@ std::string fieldKey(const ObjectProperty& p) {
 // (sema keeps callback parameters permissive, like std/network's handlers).
 std::string listenerParamType() { return "std::string"; }
 
+// Does the call carry a spread argument? A spread contributes several
+// arguments to the line, so the call lowers onto the parts form.
+bool hasSpread(const CallExpr& c) {
+    for (const auto& arg : c.arguments) {
+        if (arg && arg->kind == NodeKind::SpreadElement) return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 std::string Generator::emitConsoleCall(const CallExpr& c, const MemberExpr& m) {
-    if (!consoleImported_) {
-        notImplemented(c, "console used without `import console from \"std/console\"`");
-        return "0.0";
-    }
+    // The `console` name reaches this lowering only when it is the imported
+    // standard module: the dispatcher (emit/call.cpp) checks the import and
+    // lets a user binding named `console` keep its own calls.
     const std::string& prop = m.property;
     if (prop == "log" || prop == "info") return emitConsoleLogCall(c);
     if (prop == "warn" || prop == "error") return emitConsoleStreamCall(c, prop);
@@ -87,10 +105,21 @@ std::string Generator::emitConsoleCall(const CallExpr& c, const MemberExpr& m) {
 }
 
 // `.log` / `.info`: the joined string goes to `println` (stdout), exactly as
-// before; only an object-literal argument changed form (formatObject).
+// before; only an object-literal argument changed form (formatObject). A
+// spread argument contributes the array's elements to the line, so the call
+// lowers onto the parts form (the runtime joins them with one space).
 std::string Generator::emitConsoleLogCall(const CallExpr& c) {
     if (c.arguments.empty()) {
         return "cp3::runtime::println(std::string())";
+    }
+    if (hasSpread(c)) {
+        const std::string parts = consolePartsText(c, 0);
+        if (!parts.empty()) {
+            // The parts form lives in the console family's header.
+            needsConsoleAbi_ = true;
+            return std::string(kConsoleNs) + "logParts(" + parts + ")";
+        }
+        // The spread was reported; the plain form keeps the unit compilable.
     }
     std::string joined = consoleArgText(*c.arguments.front());
     for (std::size_t i = 1; i < c.arguments.size(); ++i) {
@@ -104,6 +133,15 @@ std::string Generator::emitConsoleLogCall(const CallExpr& c) {
 std::string Generator::emitConsoleStreamCall(const CallExpr& c,
                                              const std::string& method) {
     consoleStderr_ = true;
+    if (hasSpread(c)) {
+        const std::string parts = consolePartsText(c, 0);
+        if (!parts.empty()) {
+            // The parts form lives in the console family's header.
+            needsConsoleAbi_ = true;
+            return std::string(kConsoleNs) + method + "Parts(" + parts + ")";
+        }
+        // The spread was reported; the plain form keeps the unit compilable.
+    }
     std::vector<std::string> args;
     for (const auto& arg : c.arguments) {
         if (arg) args.push_back(consoleArgText(*arg));
@@ -112,12 +150,22 @@ std::string Generator::emitConsoleStreamCall(const CallExpr& c,
 }
 
 // `.assert(condition, ...args)`: stderr only when the condition is falsy; the
-// runtime never throws and never exits (STDLIB docs §04).
+// runtime never throws and never exits (STDLIB docs §04). An omitted
+// condition is falsy (Node parity: `console.assert()` reports the failure).
 std::string Generator::emitConsoleAssert(const CallExpr& c) {
     needsConsoleAbi_ = true;
     if (c.arguments.empty() || !c.arguments.front()) {
-        notImplemented(c, "console.assert(...)");
-        return "0.0";
+        return std::string(kConsoleNs) + "assertCondition(false)";
+    }
+    if (hasSpread(c)) {
+        const std::string parts = consolePartsText(c, 1);
+        if (!parts.empty()) {
+            // The parts form lives in the console family's header.
+            needsConsoleAbi_ = true;
+            return std::string(kConsoleNs) + "assertConditionParts(" +
+                   cond(*c.arguments.front()) + ", " + parts + ")";
+        }
+        // The spread was reported; the plain form keeps the unit compilable.
     }
     std::string out =
         std::string(kConsoleNs) + "assertCondition(" + cond(*c.arguments.front());
@@ -155,8 +203,11 @@ std::string Generator::emitConsoleListener(const CallExpr& c,
     const std::string event =
         static_cast<const StringLiteral&>(*c.arguments[0]).value;
     if (!knownEvent(event)) {
-        notImplemented(*c.arguments[0],
-                       "console event name (\"keypress\"/\"line\"/\"close\")");
+        // D75: the three documented events are the only ones that can fire,
+        // so any other name is a program error, not a missing feature.
+        sink_.error(diagcode::kInvalidArgumentValue, c.arguments[0]->span,
+                    "unknown console event '" + event +
+                        "'; expected \"keypress\", \"line\" or \"close\"");
         return "0.0";
     }
     return std::string(kConsoleNs) + method + "(" + cppStringLiteral(event) +
@@ -180,17 +231,53 @@ std::string Generator::consoleListenerArg(const Expr& arg) {
     return text;
 }
 
-// One console argument: an object literal renders through the D49 object form;
-// everything else goes through tsCall (a top-level string stays unquoted).
+// One console argument: an object literal renders through the D49 object
+// form; everything else goes through tsCall (a top-level string stays
+// unquoted). A spread is handled by the parts form (consolePartsText), so it
+// never reaches this helper.
 std::string Generator::consoleArgText(const Expr& arg) {
     if (arg.kind == NodeKind::SpreadElement) {
-        notImplemented(arg, "spread argument");
         return "std::string()";
     }
     if (arg.kind == NodeKind::ObjectLiteral) {
         return consoleObjectText(static_cast<const ObjectLiteral&>(arg));
     }
     return tsCall(arg);
+}
+
+// The console argument list of a call that carries a spread: the fixed
+// arguments are rendered strings, a spread contributes the array's elements.
+// The parts are collected in a vector in argument order (JS parity: the
+// arguments are evaluated left to right) and the runtime joins them with one
+// space. "" when a spread has no C++ spelling (the report is raised).
+std::string Generator::consolePartsText(const CallExpr& c, std::size_t from) {
+    std::string body;
+    for (std::size_t i = from; i < c.arguments.size(); ++i) {
+        const Expr* arg = c.arguments[i].get();
+        if (!arg) continue;
+        if (arg->kind == NodeKind::SpreadElement) {
+            // The spread's array: its elements are the line's parts.
+            const auto& spread = static_cast<const SpreadElement&>(*arg);
+            const Type type = spread.argument
+                                   ? effectiveType(*spread.argument)
+                                   : Type::unknown();
+            const CppInfo ec = type.kind == TypeKind::Array && !type.parts.empty()
+                                   ? classify(type.parts.front())
+                                   : CppInfo{};
+            if (!ec.representable || !isPrimitiveShape(ec.shape)) {
+                sink_.error(diagcode::kInvalidArgumentValue, arg->span,
+                            "a spread argument must be an array of primitive "
+                            "values");
+                return std::string();
+            }
+            body += " for (const auto& cp3_e : *" + expr(*spread.argument) +
+                    ") cp3_parts.push_back(::cp3::runtime::formatValue(cp3_e));";
+            continue;
+        }
+        body += " cp3_parts.push_back(" + consoleArgText(*arg) + ");";
+    }
+    return "([&]() { std::vector<std::string> cp3_parts;" + body +
+           " return cp3_parts; }())";
 }
 
 // `{ a: 1 }` -> `::cp3::runtime::formatObject({{"a", ...}})`: fields in
@@ -201,14 +288,33 @@ std::string Generator::consoleObjectText(const ObjectLiteral& literal) {
     for (const auto& propertyPtr : literal.properties) {
         const ObjectProperty* p = propertyPtr.get();
         if (!p || !p->value) continue;
-        const std::string key = fieldKey(*p);
-        if (key.empty()) {
-            notImplemented(*p, "a computed or method object field");
-            continue;
+        std::string key;
+        if (p->computed) {
+            // A computed key names the property at runtime, so the key text is
+            // the key expression's own value.
+            if (!p->key) continue;
+            const CppInfo ci = info(*p->key);
+            if (ci.shape == Shape::String) {
+                key = expr(*p->key);
+            } else if (ci.shape == Shape::Number) {
+                key = "::cp3::runtime::toString(" + expr(*p->key) + ")";
+            } else if (ci.representable && valueFormattable(ci.type)) {
+                key = "cp3_ts(" + expr(*p->key) + ")";
+            } else {
+                // The key's value is not known here, so the property has no
+                // name to render under.
+                sink_.error(diagcode::kInvalidArgumentValue, p->key->span,
+                            "a computed property key must have a known value");
+                continue;
+            }
+        } else {
+            // A plain key: its text names the property.
+            const std::string name = fieldKey(*p);
+            if (name.empty()) continue;  // a method field (not parseable)
+            key = cppStringLiteral(name);
         }
         if (!fields.empty()) fields += ", ";
-        fields += "{" + cppStringLiteral(key) + ", " +
-                  consoleNestedValue(*p->value) + "}";
+        fields += "{" + key + ", " + consoleNestedValue(*p->value) + "}";
     }
     return "::cp3::runtime::formatObject({" + fields + "})";
 }
@@ -233,8 +339,10 @@ std::string Generator::consoleNestedValue(const Expr& value) {
         ci.shape == Shape::Undefined || ci.shape == Shape::Null) {
         return "::cp3::runtime::formatNested(" + expr(value) + ")";
     }
-    notImplemented(value, "this object field value");
-    return "std::string()";
+    // A class instance, an object, an array or an enum: the unit's own
+    // formatter renders it, exactly as the top-level `console.log` does (a
+    // value with no formatter is reported there).
+    return tsCall(value);
 }
 
 }  // namespace cp3

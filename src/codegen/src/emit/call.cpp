@@ -42,8 +42,15 @@ std::string Generator::emitParseBuiltin(const CallExpr& c,
 bool Generator::isConsoleMember(const CallExpr& c) const {
     if (c.callee->kind != NodeKind::MemberExpr) return false;
     const auto& m = static_cast<const MemberExpr&>(*c.callee);
-    return m.object && m.object->kind == NodeKind::Identifier &&
-           static_cast<const Identifier&>(*m.object).name == "console";
+    if (!m.object || m.object->kind != NodeKind::Identifier) return false;
+    if (static_cast<const Identifier&>(*m.object).name != "console") return false;
+    // A user binding named `console` shadows the standard module: the call
+    // belongs to that object, not to the std/console family.
+    if (hasValueBinding("console")) return false;
+    // The std/console family needs its import: without it the module's ABI is
+    // not part of the program (the sema rejects the un-imported name with
+    // CP3301 and the exact import statement).
+    return consoleImported_;
 }
 
 // -----------------------------------------------------------------------------

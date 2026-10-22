@@ -22,24 +22,82 @@
 namespace cp3 {
 
 // =============================================================================
+// Abstract conformance
+// =============================================================================
+
+// Is the member `name` implemented by the class (or one of its bases)?
+bool Analyzer::memberImplementedInClass(const ClassInfo& ci,
+                                        const std::string& name) const {
+    const ClassInfo* k = &ci;
+    int guard = 0;
+    while (k && guard++ < 64) {
+        const ClassMemberInfo* m = findClassMember(*k, name);
+        if (m) return !m->isMethod || !m->isAbstract;
+        k = k->baseName.empty() ? nullptr : findClass(k->baseName);
+    }
+    return false;
+}
+
+// A concrete class must implement every abstract member of its bases.
+void Analyzer::checkAbstractConformance(const ClassDeclaration& c,
+                                        const ClassInfo& ci) {
+    if (ci.isAbstract) return;
+    std::string missing;
+    const ClassInfo* k = ci.baseName.empty() ? nullptr : findClass(ci.baseName);
+    int guard = 0;
+    while (k && guard++ < 64 && missing.empty()) {
+        for (const ClassMemberInfo& m : k->members) {
+            if (!m.isAbstract) continue;
+            if (!memberImplementedInClass(ci, m.name)) {
+                missing = m.name;
+                break;
+            }
+        }
+        k = k->baseName.empty() ? nullptr : findClass(k->baseName);
+    }
+    if (!missing.empty()) {
+        report(diagcode::kMissingInterfaceMember, c.span,
+               "class '" + c.name + "' must implement abstract member '" +
+                   missing + "'");
+    }
+}
+
+// =============================================================================
 // `new C(args)` (spec §15)
 // =============================================================================
-Type Analyzer::inferUserConstruct(Identifier& id, Binding& b, NewExpr& n) {
-    const ClassInfo* ci = findClass(id.name);
-    setType(id, b.type);
-    std::vector<Type> argTypes;
-    for (const ExprPtr& a : n.arguments) {
+// The argument types of a `new` call. A spread argument stands for an unknown
+// number of arguments, so its type is unknown and its arity is the codegen's
+// business (the spread's elements are checked against the constructor's
+// parameters there).
+void Analyzer::inferNewArgs(const ExprList& args, std::vector<Type>& types,
+                            std::vector<bool>& spread) {
+    for (const ExprPtr& a : args) {
         if (!a) {
-            argTypes.push_back(Type::undefined());
+            types.push_back(Type::undefined());
+            spread.push_back(false);
             continue;
         }
         if (a->kind == NodeKind::SpreadElement) {
             auto& sp = static_cast<SpreadElement&>(*a);
             if (sp.argument) inferExpr(*sp.argument);
-            argTypes.push_back(Type::unknown());
+            types.push_back(Type::unknown());
+            spread.push_back(true);
             continue;
         }
-        argTypes.push_back(inferExpr(*a));
+        types.push_back(inferExpr(*a));
+        spread.push_back(false);
+    }
+}
+
+Type Analyzer::inferUserConstruct(Identifier& id, Binding& b, NewExpr& n) {
+    const ClassInfo* ci = findClass(id.name);
+    setType(id, b.type);
+    std::vector<Type> argTypes;
+    std::vector<bool> spreadArg;
+    inferNewArgs(n.arguments, argTypes, spreadArg);
+    bool hasSpread = false;
+    for (bool isSpread : spreadArg) {
+        if (isSpread) hasSpread = true;
     }
     if (!ci) return withType(n, ambient());
     // `new Box<number>()`: resolve the instantiation arguments once.
@@ -56,14 +114,25 @@ Type Analyzer::inferUserConstruct(Identifier& id, Binding& b, NewExpr& n) {
                "cannot instantiate abstract class '" + id.name + "'");
         return withType(n, Type::named(TypeKind::Class, id.name));
     }
+    // D25: a generic class needs explicit type arguments at `new`
+    // (`new Box<number>()`); the count must match the declaration's.
+    if (!ci->typeParamNames.empty() &&
+        instArgs.size() != ci->typeParamNames.size()) {
+        report(diagcode::kInvalidTypeArgument, n.span,
+               "generic class '" + id.name + "' expects " +
+                   std::to_string(ci->typeParamNames.size()) +
+                   " type argument(s), got " + std::to_string(instArgs.size()));
+    }
     if (ci->hasCtor) {
         const FuncSig& sig = ci->ctorSig;
         std::size_t required = 0;
         for (bool opt : sig.optional) {
             if (!opt) ++required;
         }
-        if (argTypes.size() < required ||
-            (!sig.rest && argTypes.size() > sig.params.size())) {
+        const bool arityOk =
+            hasSpread || (argTypes.size() >= required &&
+                          (sig.rest || argTypes.size() <= sig.params.size()));
+        if (!arityOk) {
             report(diagcode::kArityMismatch, n.span,
                    "constructor of class '" + id.name + "' expects " +
                        arityText(required, sig.params.size(), sig.rest) +
@@ -71,12 +140,13 @@ Type Analyzer::inferUserConstruct(Identifier& id, Binding& b, NewExpr& n) {
         } else {
             for (std::size_t i = 0; i < argTypes.size() &&
                                     i < sig.params.size(); ++i) {
+                if (spreadArg[i]) continue;  // the spread's type is unknown
                 const SourceSpan& as =
                     n.arguments[i] ? n.arguments[i]->span : n.span;
                 checkAssign(argTypes[i], instantiated(sig.params[i]), as, false);
             }
         }
-    } else if (!argTypes.empty()) {
+    } else if (!argTypes.empty() && !hasSpread) {
         report(diagcode::kArityMismatch, n.span,
                "class '" + id.name + "' has no constructor taking arguments");
     }

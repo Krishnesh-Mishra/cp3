@@ -108,6 +108,8 @@ Candidates come from what is actually visible at the reference: names in scope, 
 | CP3414 | `kUnknownType` | An `unknown` value is used before it is narrowed: assigned, read as a property, or indexed. | `value of type 'unknown' is not assignable to 'number' without a type check` | Narrow first with a runtime check (`typeof`, a discriminant test), then use the narrowed value. |
 | CP3415 | `kInvalidCondition` | A condition position received a `void` expression (a call that returns nothing). | `invalid condition: a void expression is not a valid condition` | Test an actual value, or change the callee to return one. |
 | CP3416 | `kNoMatchingOverload` | A call matches none of the overloads of a function or member: the arity fits, but the argument types do not. | `no overload of 'map' matches the supplied arguments` | Adjust the arguments to match one overload; the member's docs table lists them. |
+| CP3417 | `kInvalidArgumentValue` | An argument is not one the callee can accept: its value is not among the accepted set (the console events, for example), or its form is not one the callee supports (a spread whose source is not an array, a spread that is not the call's last argument, a computed property key whose value is not known). | `unknown console event 'data'; expected "keypress", "line" or "close"` | Use one of the documented values/forms; the message names what the callee accepts. |
+| CP3418 | `kInvalidTypeArgument` | A type argument does not match what the generic declaration expects: the count differs from the declaration's type parameters, or the type itself has no C++ spelling. | `generic class 'Box' expects 1 type argument, got 2` | Pass exactly the declared number of type arguments, and only types the language can represent. |
 
 ## Statements and control flow (3500-3599)
 
@@ -125,6 +127,14 @@ Candidates come from what is actually visible at the reference: names in scope, 
 | CP3601 | `kModuleNotFound` | An import specifier resolves to no local file, installed package or standard module (or exists but cannot be read). | `cannot find module 'std/mathx'` | Check the specifier, the path, or the package; standard modules have a fixed, documented name list. |
 | CP3604 | `kMissingDefaultExport` | `import x from "..."` was used where the module has no default export; only named exports exist. | ``module 'std/collections' has no default export; named exports: 'Map' or 'Set'`` | Use a named import (``import { Map } from "std/collections";``), or import the default of a default-only module. |
 | CP3605 | `kPreludeError` | An internal support file shipped with the toolchain could not be read; usually a damaged install or cache. | `cannot read prelude file '...'` | Repair or reinstall the toolchain; report it if it persists. |
+
+## Classes and interfaces (3700-3799)
+
+The other codes of this range are listed in the reserved-codes table below.
+
+| Code | Name | Meaning | Example message | Fix |
+| ---- | ---- | ------- | --------------- | --- |
+| CP3707 | `kComputedMemberName` | A class member's name is computed (`[expr]`), so it is only known at runtime. A cp3 class is a fixed set of members, so the name must be a compile-time constant. | `a computed class member name must be a literal: a cp3 class has a fixed set of members` | Write the member's name out (`x = 1`), or use a literal computed key (`["x"] = 1`). |
 
 ## Banned JS patterns (3800-3899)
 

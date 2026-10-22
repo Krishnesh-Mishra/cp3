@@ -114,11 +114,26 @@ void Analyzer::collectClassMembers(const ClassDeclaration& c, ClassInfo& info) {
     }
 }
 
+// A class member's name: the key of a property, method or accessor. A
+// computed key (`[expr]`) names the member at runtime, which a cp3 class
+// (a fixed set of members) cannot express - unless the key is a literal, the
+// one form whose value is known at compile time.
+std::string Analyzer::classMemberName(Expr* key, bool computed) {
+    if (key == nullptr) return {};
+    if (computed && key->kind != NodeKind::StringLiteral &&
+        key->kind != NodeKind::NumberLiteral) {
+        return {};
+    }
+    return keyName(key);
+}
+
 // One property member: its name/key, modifiers and resolved field type.
 void Analyzer::collectClassProperty(PropertyDeclaration& p, ClassInfo& info) {
-    std::string name = keyName(p.key.get());
+    std::string name = classMemberName(p.key.get(), p.computed);
     if (name.empty()) {
-        notImplemented(p.span, "computed class member names");
+        report(diagcode::kComputedMemberName, p.span,
+               "a computed class member name must be a literal: a cp3 class "
+               "has a fixed set of members");
         return;
     }
     ClassMemberInfo mi;
@@ -142,9 +157,11 @@ void Analyzer::collectClassProperty(PropertyDeclaration& p, ClassInfo& info) {
 
 // One method member: its signature (a same-name method extends the overloads).
 void Analyzer::collectClassMethod(MethodDeclaration& md, ClassInfo& info) {
-    std::string name = keyName(md.key.get());
+    std::string name = classMemberName(md.key.get(), md.computed);
     if (name.empty()) {
-        notImplemented(md.span, "computed class member names");
+        report(diagcode::kComputedMemberName, md.span,
+               "a computed class member name must be a literal: a cp3 class "
+               "has a fixed set of members");
         return;
     }
     if (!md.typeParams.empty()) {
@@ -205,9 +222,14 @@ void Analyzer::collectClassMember(ClassMember& m, ClassInfo& info) {
             auto& ad = static_cast<AccessorDeclaration&>(m);
             // D21: TS-style accessors. The getter's return type governs reads;
             // the setter writes through the same type.
+            std::string name = classMemberName(ad.key.get(), ad.computed);
+            if (name.empty()) {
+                report(diagcode::kComputedMemberName, ad.span,
+                       "a computed class member name must be a literal: a cp3 "
+                       "class has a fixed set of members");
+                return;
+            }
             if (ad.accessor != AccessorKind::Get) return;
-            std::string name = keyName(ad.key.get());
-            if (name.empty()) return;
             ClassMemberInfo mi;
             mi.name = name;
             mi.span = ad.span;
@@ -228,41 +250,6 @@ void Analyzer::collectClassMember(ClassMember& m, ClassInfo& info) {
 // =============================================================================
 // Abstract conformance + bodies
 // =============================================================================
-bool Analyzer::memberImplementedInClass(const ClassInfo& ci,
-                                        const std::string& name) const {
-    const ClassInfo* k = &ci;
-    int guard = 0;
-    while (k && guard++ < 64) {
-        const ClassMemberInfo* m = findClassMember(*k, name);
-        if (m) return !m->isMethod || !m->isAbstract;
-        k = k->baseName.empty() ? nullptr : findClass(k->baseName);
-    }
-    return false;
-}
-
-void Analyzer::checkAbstractConformance(const ClassDeclaration& c,
-                                        const ClassInfo& ci) {
-    if (ci.isAbstract) return;
-    std::string missing;
-    const ClassInfo* k = ci.baseName.empty() ? nullptr : findClass(ci.baseName);
-    int guard = 0;
-    while (k && guard++ < 64 && missing.empty()) {
-        for (const ClassMemberInfo& m : k->members) {
-            if (!m.isAbstract) continue;
-            if (!memberImplementedInClass(ci, m.name)) {
-                missing = m.name;
-                break;
-            }
-        }
-        k = k->baseName.empty() ? nullptr : findClass(k->baseName);
-    }
-    if (!missing.empty()) {
-        report(diagcode::kMissingInterfaceMember, c.span,
-               "class '" + c.name + "' must implement abstract member '" +
-                   missing + "'");
-    }
-}
-
 void Analyzer::checkClassBodies(ClassDeclaration& c) {
     if (!findClass(c.name)) return;
     // Generic class bodies check once, with the parameters bound to TypeParam;

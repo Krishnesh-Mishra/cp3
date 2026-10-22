@@ -69,6 +69,8 @@ inline constexpr const char* kCannotInstantiateAbstract = "CP3413";
 inline constexpr const char* kUnknownType       = "CP3414";
 inline constexpr const char* kInvalidCondition  = "CP3415";
 inline constexpr const char* kNoMatchingOverload = "CP3416";
+inline constexpr const char* kInvalidArgumentValue = "CP3417";
+inline constexpr const char* kInvalidTypeArgument = "CP3418";
 
 // --- statements / control flow (sema) ----------------------------------------
 inline constexpr const char* kReturnOutsideFunction = "CP3501";
@@ -91,6 +93,7 @@ inline constexpr const char* kMultipleInheritance = "CP3703";
 inline constexpr const char* kInvalidOverride   = "CP3704";
 inline constexpr const char* kDuplicateMember   = "CP3705";
 inline constexpr const char* kMixedEnumBacking  = "CP3706";
+inline constexpr const char* kComputedMemberName = "CP3707";
 
 // --- banned JS patterns (sema) - language-spec 08 / 23 -----------------------
 inline constexpr const char* kDeleteBanned      = "CP3801";

@@ -154,6 +154,12 @@ std::string objectLabelOf(const std::vector<ObjectFieldModel>& fields);
 // The property key of a member/signature (`x`, `"x"`, `0`); "" when computed.
 std::string keyNameOf(const Expr* key);
 
+// A class member's name: the key of a property, method or accessor. A
+// computed key (`[expr]`) names the member at runtime, which a cp3 class (a
+// fixed set of members) cannot express - unless the key is a literal, the one
+// form whose value is known at compile time. "" when the name is not fixed.
+std::string classMemberName(const Expr* key, bool computed);
+
 // The C++ parameter name of one parameter (`cp3_param` when the parameter is
 // unnamed), shared by class methods, interface thunks and detached methods.
 std::string paramNameOf(const Parameter& p);

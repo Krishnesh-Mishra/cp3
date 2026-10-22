@@ -95,7 +95,9 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
         if (!mp) continue;
         if (mp->kind == NodeKind::PropertyDeclaration) {
             const auto& p = static_cast<const PropertyDeclaration&>(*mp);
-            const std::string name = keyNameOf(p.key.get());
+            const std::string name = classMemberName(p.key.get(), p.computed);
+            // A computed name that is not a literal has no C++ spelling; the
+            // sema reported it (CP3707), so the member is left out here.
             if (name.empty()) continue;
             ClassMemberModel m;
             m.name = name;
@@ -118,11 +120,8 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
         }
         if (mp->kind == NodeKind::MethodDeclaration) {
             const auto& md = static_cast<const MethodDeclaration&>(*mp);
-            const std::string name = keyNameOf(md.key.get());
-            if (name.empty()) {
-                notImplemented(md, "computed class member names");
-                continue;
-            }
+            const std::string name = classMemberName(md.key.get(), md.computed);
+            if (name.empty()) continue;
             ClassMemberModel m;
             m.name = name;
             m.isStatic = md.isStatic;
@@ -164,11 +163,10 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
 // type governs reads of the property name.
 void Generator::collectClassAccessorModel(ClassModel& cm, const ClassMember& mp) {
     const auto& ad = static_cast<const AccessorDeclaration&>(mp);
-    const std::string name = keyNameOf(ad.key.get());
-    if (name.empty()) {
-        notImplemented(ad, "computed class member names");
-        return;
-    }
+    const std::string name = classMemberName(ad.key.get(), ad.computed);
+    // A computed name that is not a literal has no C++ spelling; the sema
+    // reported it (CP3707), so the accessor is left out here.
+    if (name.empty()) return;
     ClassMemberModel m;
     m.name = name;
     m.isStatic = ad.isStatic;
