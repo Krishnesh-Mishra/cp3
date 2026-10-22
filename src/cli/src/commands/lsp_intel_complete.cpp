@@ -187,7 +187,7 @@ std::vector<lsp::CompletionCandidate> completeAt(const std::string& path,
     CollectingDiagnosticSink sink;
     Lexer lexer(*lexed, sink);
     const std::vector<Token> tokens = lexer.lex().tokens();
-    const CompletionContext context = detectContext(tokens, text, offset);
+    CompletionContext context = detectContext(tokens, text, offset);
     if (context.blocked) return {};
     if (context.importSpecifier) {
         return importSpecifierCandidates(text, context, offset);
@@ -195,7 +195,10 @@ std::vector<lsp::CompletionCandidate> completeAt(const std::string& path,
     if (context.member) {
         return memberCandidates(*document, text, context, offset);
     }
-    return generalCandidates(*document);
+    // The syntactic position decides which keywords may be offered and which
+    // names are in scope (lsp_intel_scope.cpp).
+    context.position = classifyPosition(*document, tokens, text, offset);
+    return generalCandidates(*document, context, offset);
 }
 
 }  // namespace cp3::cli

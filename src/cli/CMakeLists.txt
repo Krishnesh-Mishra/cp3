@@ -40,6 +40,8 @@ set(cp3_cli_sources
     src/commands/lsp_intel_complete.cpp
     src/commands/lsp_intel_members.cpp
     src/commands/lsp_intel_names.cpp
+    src/commands/lsp_intel_position.cpp
+    src/commands/lsp_intel_scope.cpp
     src/commands/lsp_intel_walk.cpp
     src/commands/lsp_intel_walk_children.cpp
     src/commands/dap.cpp

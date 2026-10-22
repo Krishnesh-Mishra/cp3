@@ -5,8 +5,8 @@
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //
 // completeAt (detail/lsp_intel.hpp) detects the cursor context in
-// lsp_intel_complete.cpp; the three answer builders live in
-// lsp_intel_members.cpp and lsp_intel_names.cpp. This header exists so those
+// lsp_intel_complete.cpp; the answer builders live in lsp_intel_members.cpp,
+// lsp_intel_names.cpp and lsp_intel_scope.cpp. This header exists so those
 // units agree on the context record and nothing else crosses the boundary.
 // =============================================================================
 #pragma once
@@ -16,15 +16,36 @@
 #include <vector>
 
 #include "cp3/lsp.hpp"
+#include "cp3/token.hpp"
 #include "detail/lsp_intel.hpp"
 
 namespace cp3::cli {
+
+// Where the cursor sits, syntactically.
+//
+// The completion popup answers "what can I write here?", so the position
+// decides two things: which keywords may legally appear, and which names are
+// in scope. A keyword that cannot appear at the cursor is never offered.
+enum class CompletionPosition {
+    Unknown,         // the cursor is nowhere the parser could place it
+    StatementStart,  // a statement may begin here
+    ExpressionStart, // an expression may begin here
+    TypePosition,    // a type name is expected
+    MemberPosition,  // after a `receiver.`
+    ImportClause,    // inside an import clause
+    ClassBody,       // directly inside a class body
+    ParameterList,   // inside a declaration's parameter list
+    TryBlock,        // inside a `try` block (or its catch clause)
+    SwitchBlock,     // inside a `switch` body
+    DeclarationName, // a declaration's name is expected (`let `, `function `)
+};
 
 // What the raw text and the token stream say about the cursor.
 struct CompletionContext {
     bool member = false;           // `receiver.|`
     bool importSpecifier = false;  // inside an `import ... from "|"` string
     bool blocked = false;          // inside a comment / non-import string
+    CompletionPosition position = CompletionPosition::Unknown;
     std::uint32_t wordBegin = 0;   // start of the partial word
     std::uint32_t dot = 0;         // member: offset of the '.'
     std::uint32_t receiverBegin = 0;
@@ -46,9 +67,28 @@ std::vector<lsp::CompletionCandidate> importSpecifierCandidates(
     const std::string& text, const CompletionContext& context,
     std::uint32_t offset);
 
-// Code candidates: names declared in the document, language keywords and a
-// few snippets.
+// The syntactic position of the cursor, from the token stream (what may
+// follow the cursor) and the AST (what encloses it).
+CompletionPosition classifyPosition(const AnalyzedDocument& document,
+                                    const std::vector<Token>& tokens,
+                                    const std::string& text,
+                                    std::uint32_t offset);
+
+// The names in scope at the cursor, most local first: the parameters of the
+// enclosing function, the locals of the enclosing blocks and the bindings of
+// the enclosing loop or catch clause. In a type position only the names that
+// name a type are returned.
+std::vector<lsp::CompletionCandidate> scopeCandidates(
+    const AnalyzedDocument& document, CompletionPosition position,
+    std::uint32_t offset);
+
+// The keywords that may legally appear at `position`, in popup order.
+std::vector<std::string> legalKeywords(CompletionPosition position);
+
+// Code candidates: the names in scope, the names the module declares, the
+// legal keywords and a few snippets.
 std::vector<lsp::CompletionCandidate> generalCandidates(
-    const AnalyzedDocument& document);
+    const AnalyzedDocument& document, const CompletionContext& context,
+    std::uint32_t offset);
 
 }  // namespace cp3::cli

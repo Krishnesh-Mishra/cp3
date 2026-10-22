@@ -91,6 +91,32 @@ keeps `node_modules` and the sources out of the `.vsix`.
 `npm run typecheck` runs `tsc --noEmit`. The grammar is plain TextMate JSON in
 `syntaxes/cp3.tmLanguage.json`.
 
+## Highlighting conventions
+
+The grammar does not invent its own colours: it maps cp3 onto the TextMate
+scope names the built-in Dark+ and Light+ themes already colour, so a cp3
+file reads exactly like the TypeScript file next to it.
+
+| What | Scope |
+| --- | --- |
+| a local variable | `variable.other.readwrite.cp3` |
+| a parameter | `variable.parameter.cp3` |
+| a function or method name | `entity.name.function.cp3` |
+| a class name | `entity.name.class.cp3` |
+| an interface, enum or type alias | `entity.name.type.*.cp3` |
+| a type annotation | `keyword.operator.type.annotation.cp3` |
+| a property after a receiver | `variable.other.property.cp3` |
+| control flow (`if`, `for`, `return`, `try`, ...) | `keyword.control.cp3` |
+| storage (`let`, `const`, `function`, `class`, ...) | `storage.type.cp3` |
+| member modifiers (`private`, `static`, `abstract`, ...) | `storage.modifier.cp3` |
+| a builtin class (`Promise`, `Array`, ...) | `support.class.builtin.cp3` |
+| a builtin namespace (`console`, `Math`, `JSON`) | `support.class.builtin.cp3` + `support.namespace.cp3` |
+| `this` | `variable.language.this.cp3` |
+| numbers, strings, comments, operators | `constant.*`, `string.*`, `comment.*`, `keyword.operator` |
+
+`npm run smoke:grammar` checks these scopes through the real TextMate engine
+(`vscode-textmate` plus `vscode-oniguruma`, the pair VS Code uses).
+
 ## Known limits
 
 - Template literal interpolation is tokenized with a `$self` recursion, so

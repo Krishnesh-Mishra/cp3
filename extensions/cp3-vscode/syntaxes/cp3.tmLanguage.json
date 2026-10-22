@@ -16,6 +16,12 @@
       "include": "#numbers"
     },
     {
+      "include": "#declarations"
+    },
+    {
+      "include": "#inheritance"
+    },
+    {
       "include": "#keywords"
     },
     {
@@ -23,6 +29,15 @@
     },
     {
       "include": "#builtins"
+    },
+    {
+      "include": "#members"
+    },
+    {
+      "include": "#calls"
+    },
+    {
+      "include": "#identifiers"
     },
     {
       "include": "#operators"
@@ -189,6 +204,235 @@
         }
       ]
     },
+    "declarations": {
+      "patterns": [
+        {
+          "include": "#function-declaration"
+        },
+        {
+          "include": "#class-declaration"
+        },
+        {
+          "include": "#interface-declaration"
+        },
+        {
+          "include": "#enum-declaration"
+        },
+        {
+          "include": "#type-alias-declaration"
+        },
+        {
+          "include": "#variable-declaration"
+        },
+        {
+          "include": "#accessor-declaration"
+        },
+        {
+          "include": "#constructor-declaration"
+        }
+      ]
+    },
+    "inheritance": {
+      "name": "meta.inherits.cp3",
+      "match": "\\b(extends|implements)\\s+([A-Za-z_$][A-Za-z0-9_$]*)",
+      "captures": {
+        "1": {
+          "name": "storage.modifier.extends.cp3"
+        },
+        "2": {
+          "name": "entity.other.inherited-class.cp3"
+        }
+      }
+    },
+    "function-declaration": {
+      "name": "meta.function.cp3",
+      "begin": "\\b(function)\\s+([A-Za-z_$][A-Za-z0-9_$]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.function.cp3"
+        },
+        "2": {
+          "name": "entity.name.function.cp3"
+        }
+      },
+      "end": "(?=[{;])|(?<=\\))(?![ \\t]*:)|(?=\\})",
+      "patterns": [
+        {
+          "include": "#parameter-list"
+        },
+        {
+          "include": "#type-annotation"
+        },
+        {
+          "include": "#code"
+        }
+      ]
+    },
+    "class-declaration": {
+      "name": "meta.class.cp3",
+      "match": "\\b(class)\\s+([A-Za-z_$][A-Za-z0-9_$]*)",
+      "captures": {
+        "1": {
+          "name": "storage.type.class.cp3"
+        },
+        "2": {
+          "name": "entity.name.class.cp3"
+        }
+      }
+    },
+    "interface-declaration": {
+      "name": "meta.interface.cp3",
+      "match": "\\b(interface)\\s+([A-Za-z_$][A-Za-z0-9_$]*)",
+      "captures": {
+        "1": {
+          "name": "storage.type.interface.cp3"
+        },
+        "2": {
+          "name": "entity.name.type.interface.cp3"
+        }
+      }
+    },
+    "enum-declaration": {
+      "name": "meta.enum.cp3",
+      "begin": "\\b(enum)\\s+([A-Za-z_$][A-Za-z0-9_$]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.enum.cp3"
+        },
+        "2": {
+          "name": "entity.name.type.enum.cp3"
+        }
+      },
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#enum-member"
+        },
+        {
+          "include": "#code"
+        }
+      ]
+    },
+    "enum-member": {
+      "name": "variable.other.enummember.cp3",
+      "match": "(?<![A-Za-z0-9_$])([A-Za-z_$][A-Za-z0-9_$]*)(?=[ \\t]*(?:=|,|\\}))"
+    },
+    "type-alias-declaration": {
+      "name": "meta.type.declaration.cp3",
+      "match": "\\b(type)\\s+([A-Za-z_$][A-Za-z0-9_$]*)",
+      "captures": {
+        "1": {
+          "name": "storage.type.cp3"
+        },
+        "2": {
+          "name": "entity.name.type.alias.cp3"
+        }
+      }
+    },
+    "variable-declaration": {
+      "name": "meta.var.cp3",
+      "begin": "\\b(let|var|const)\\s+([A-Za-z_$][A-Za-z0-9_$]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.cp3"
+        },
+        "2": {
+          "name": "variable.other.readwrite.cp3"
+        }
+      },
+      "end": "(?=[;,=])|(?=\\})",
+      "patterns": [
+        {
+          "include": "#type-annotation"
+        },
+        {
+          "include": "#code"
+        }
+      ]
+    },
+    "accessor-declaration": {
+      "name": "meta.accessor.cp3",
+      "match": "\\b(get|set)\\s+([A-Za-z_$][A-Za-z0-9_$]*)",
+      "captures": {
+        "1": {
+          "name": "storage.modifier.cp3"
+        },
+        "2": {
+          "name": "entity.name.function.cp3"
+        }
+      }
+    },
+    "constructor-declaration": {
+      "name": "meta.constructor.cp3",
+      "match": "\\b(constructor)\\s*(?=\\()",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.cp3"
+        }
+      }
+    },
+    "parameter-list": {
+      "name": "meta.parameters.cp3",
+      "begin": "\\(",
+      "end": "\\)",
+      "patterns": [
+        {
+          "include": "#parameter"
+        },
+        {
+          "include": "#code"
+        }
+      ]
+    },
+    "parameter": {
+      "name": "meta.parameter.cp3",
+      "begin": "(?<=[(,])[ \\t]*(?:(ref)[ \\t]+)?([A-Za-z_$][A-Za-z0-9_$]*)[ \\t]*(\\?)?",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.modifier.cp3"
+        },
+        "2": {
+          "name": "variable.parameter.cp3"
+        },
+        "3": {
+          "name": "keyword.operator.optional.cp3"
+        }
+      },
+      "end": "(?=[,)])|(?==)",
+      "patterns": [
+        {
+          "include": "#type-annotation"
+        },
+        {
+          "include": "#code"
+        }
+      ]
+    },
+    "type-annotation": {
+      "name": "meta.type.annotation.cp3",
+      "begin": "(:)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.operator.type.annotation.cp3"
+        }
+      },
+      "end": "(?<=[A-Za-z0-9_$])(?![A-Za-z0-9_$])|(?=[;={)}\\]])",
+      "patterns": [
+        {
+          "include": "#types"
+        },
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#type-name"
+        }
+      ]
+    },
+    "type-name": {
+      "name": "entity.name.type.cp3",
+      "match": "(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*"
+    },
     "keywords": {
       "patterns": [
         {
@@ -197,11 +441,27 @@
         },
         {
           "name": "storage.type.cp3",
-          "match": "\\b(?:let|var|const|function|class|interface|enum|type)\\b"
+          "match": "\\b(?:let|var|const|type)\\b"
+        },
+        {
+          "name": "storage.type.function.cp3",
+          "match": "\\bfunction\\b"
+        },
+        {
+          "name": "storage.type.class.cp3",
+          "match": "\\bclass\\b"
+        },
+        {
+          "name": "storage.type.interface.cp3",
+          "match": "\\binterface\\b"
+        },
+        {
+          "name": "storage.type.enum.cp3",
+          "match": "\\benum\\b"
         },
         {
           "name": "storage.modifier.cp3",
-          "match": "\\b(?:static|abstract|public|private|protected|async|get|set|weak|ref)\\b"
+          "match": "\\b(?:static|abstract|public|private|protected|async|get|set|weak|ref|readonly)\\b"
         },
         {
           "name": "storage.modifier.extends.cp3",
@@ -209,7 +469,15 @@
         },
         {
           "name": "keyword.control.cp3",
-          "match": "\\b(?:if|else|while|do|for|of|in|switch|case|default|break|continue|return|throw|try|catch|finally|await)\\b"
+          "match": "\\b(?:if|else|while|do|for|switch|case|default|break|continue|return|throw|try|catch|finally|await)\\b"
+        },
+        {
+          "name": "keyword.operator.expression.of.cp3",
+          "match": "\\bof\\b"
+        },
+        {
+          "name": "keyword.operator.expression.in.cp3",
+          "match": "\\bin\\b"
         },
         {
           "name": "keyword.control.import.cp3",
@@ -256,13 +524,97 @@
           "match": "\\b(?:Promise|EventEmitter|Symbol|BigInt|Object|String|Number|Boolean|Array|Int8Array|Uint8Array|Uint8ClampedArray|Int16Array|Uint16Array|Int32Array|Uint32Array|Float32Array|Float64Array|BigInt64Array|BigUint64Array|ArrayBuffer|SharedArrayBuffer|DataView)\\b"
         },
         {
-          "name": "support.namespace.cp3",
+          "name": "support.class.builtin.cp3 support.namespace.cp3",
           "match": "\\b(?:console|Math|JSON|Date|Map|Set|RegExp|Error|parallel)\\b"
+        }
+      ]
+    },
+    "members": {
+      "patterns": [
+        {
+          "include": "#member-call"
+        },
+        {
+          "include": "#member-property"
+        }
+      ]
+    },
+    "member-call": {
+      "name": "entity.name.function.cp3",
+      "match": "(?<=\\.)[ \\t]*([A-Za-z_$][A-Za-z0-9_$]*)[ \\t]*(?=\\()"
+    },
+    "member-property": {
+      "name": "variable.other.property.cp3",
+      "match": "(?<=\\.)[ \\t]*([A-Za-z_$][A-Za-z0-9_$]*)"
+    },
+    "calls": {
+      "patterns": [
+        {
+          "include": "#call"
+        }
+      ]
+    },
+    "call": {
+      "name": "entity.name.function.cp3",
+      "match": "(?<![.A-Za-z0-9_$])([A-Za-z_$][A-Za-z0-9_$]*)[ \\t]*(?=\\()"
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "include": "#identifier"
+        }
+      ]
+    },
+    "identifier": {
+      "name": "variable.other.readwrite.cp3",
+      "match": "(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*"
+    },
+    "code": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#inheritance"
+        },
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "include": "#builtins"
+        },
+        {
+          "include": "#members"
+        },
+        {
+          "include": "#calls"
+        },
+        {
+          "include": "#identifiers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
         }
       ]
     },
     "operators": {
       "patterns": [
+        {
+          "name": "storage.type.function.arrow.cp3",
+          "match": "=>"
+        },
         {
           "name": "keyword.operator.spread.cp3",
           "match": "\\.\\.\\."
