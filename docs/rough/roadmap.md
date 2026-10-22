@@ -2,29 +2,36 @@
 
 Date: 2026-10-22
 
-Status: consolidation complete, no implementation lane started. This file is the
-single decision document for the next step. It records what is already in
-`master`, what is preserved, what is still missing, and the measured baseline.
+Status: consolidation complete. The parked-worktree cleanup is done: every
+preserved non-perf worktree has been classified as merged, corrected-and-merged,
+deferred, or waste. Implementation lanes for performance, native-install, the
+`.cp3pak` binary cache and editor documentation are in flight.
 
-No benchmark, performance change, or CP3002 fix is currently running.
+This file is the single decision document. It records what is in `master`, what
+was preserved and what happened to it, what is still missing, and the measured
+baseline.
 
 ## 1. Repository state
 
 | Item | State |
 |---|---|
 | Long-lived local branch | `master` only |
-| `master` tip at consolidation | `c6ea90c` |
-| Worktrees | main repository only |
+| `master` tip | `364d803` (Clang target fix) |
+| Worktrees | main repository plus temporary per-lane worktrees |
 | Working tree | clean |
 | Compiler build | green, Ninja, `build/bin/cp3c.exe` |
 | Diagnostics | 72/72 codes documented, 0 findings |
-| CP3002 gate | 378 hits in 91 files |
-| Full corpus | 1482 found, 1404 passed, 30 skipped, 30 ambiguous; 18 load timeouts all pass serially |
+| CP3002 gate | 391 marker hits (the zero-placeholder gate is pre-existing red) |
+| Full corpus | 1483 found, 1424 passed, **0 failed**, 29 skipped, 30 ambiguous |
+| Toolchains | GCC 16.1.0 and Clang 23.1.4 both `ready`; MSVC not installed |
 | Benchmark baseline | measured on compiler `6f1fa2c`; reporting commit `c6ea90c` does not change C++ |
 
 The benchmark WIP in `benchmarks/bench/run_suite.py` was consolidated into
 `c6ea90c` (`bench: consolidate terminal UI and gate reporting WIP`). It is
 presentation and reporting only; it does not change any measurement.
+
+The corpus is now clean: 0 failures. The 29 skipped cases are the CP3002
+not-implemented cases; they are not counted as passing.
 
 ## 2. What was combined into master
 
@@ -39,6 +46,12 @@ The consolidated history contains:
 - `6f1fa2c` - typed network JSON records wrap in `makeRef`, matching plain
   record reference values and `JSON.parse<T>`.
 - `c6ea90c` - benchmark terminal UI and gate reporting WIP.
+- `0876540` - post-consolidation roadmap and gap inventory.
+- `6785dc4` - generic classes format through `toString` (port from the parked
+  classes worktree).
+- `8cc6b28` - tuple-typed declarations lower (port from the parked types
+  worktree).
+- `364d803` - a Windows Clang install is usable with no user flags.
 
 The pre-cleanup inventory had 42 branch names. After the final fast-forward,
 32 of the 41 non-master tips are ancestors of `master`; those workstreams are
@@ -89,39 +102,95 @@ Do not merge those old tips directly. The perf stack predates the current
 `emitControlDispatch`, class, object, and closure redrive. Use the patches and
 the safety reports as inputs, then port the behavior into current `master`.
 
+## 3a. Worktree cleanup ledger
+
+Every preserved worktree outside the perf lanes has been classified. The
+decision for each one, with its evidence, is in
+`C:\Users\Krishnesh\dev\cp3-preserved\2026-10-21\WORKTREE-DECISIONS.md`, and
+each surviving directory carries a `DECISION.txt`.
+
+**Merged (correction ported onto current master, built, tested, committed):**
+
+| Worktree | Commit | What it fixed |
+|---|---|---|
+| classes-redrive | `6785dc4` | A generic class with a `toString` body emitted no `cp3_ts` overload, so `console.log` of a generic-class instance failed in C++. The formatter is now a template over the class type parameters. |
+| types | `8cc6b28` | A `let t: [string, number] = [...]` annotation had no classify arm and reported CP3002, even though tuple returns and index reads already worked. Tuples now classify as their `std::tuple` spelling and brace-initialize. |
+
+**Already in master, archive deleted:** `cp3002-generics`, `cp3-base-3d48a05`,
+`worker-handles`, `native-types`, `cp3002-zero`, `control-flow-core`,
+`generics`, `generics-redrive`, `modules`.
+
+**Deferred (real feature, indivisible, preserved intact for a dedicated
+branch):**
+
+| Directory | What it is | Why deferred |
+|---|---|---|
+| `deferred/native-install` | The whole native-install/bindgen subsystem: CLI command, libclang loader, SDK resolution, `native.json` + `index.cp3` generation, sema checker, codegen lowering. | ~470 KB across 29 modified and 39 new files, 16 apply conflicts against current codegen, no tests, and a new libclang runtime dependency. No half or quarter of it compiles or changes behavior. |
+| `deferred/classes-hoisting` | The 24-file local-generic hoisting/capture/lexical-scope rewrite. | Its generic-`toString` hunk is already merged as `6785dc4`; the rest conflicts in three central files and master still reports CP3002 for a local generic class. |
+| `deferred/closures-optionals` | Optional object-literal fields and function-typed interface fields. | 4 of 9 files fail to apply against current layouts; it is a multi-file feature, and 8 corpus cases stay skipped because of it. |
+
+**Waste (0% unique behavior, deleted after inspection):** `control-flow` (older
+copies of the control/object emitters; every hunk conflicts),
+`cp3002-cli` (removes the deliberate exit-3 not-implemented scaffold and adds
+unused fields), `modules-redrive` (header-only declarations with no
+definitions and no emitter use), `functions-closures` (a superseded 31-file
+closure/codegen rewrite with no tests), `w2-classes` (the pre-redrive class
+implementation; its only unique test edit replaced a `CP3xxxx` placeholder that
+master intentionally keeps), `cp3` (a trailing space and a removed final
+newline in one benchmark file).
+
+The rule that decided each one: **0% useful -> deleted; a real feature that
+cannot be split -> deferred intact; a bounded usable delta -> ported and
+merged.** Nothing was silently dropped; the 70-ref bundle remains the
+permanent recovery source.
+
+## 3b. Native-install completion
+
+The native-install feature is being landed in two steps rather than one
+unsound merge.
+
+| Step | Scope | Status |
+|---|---|---|
+| 1 | The `cp3c native-install` command end to end: SDK/header resolution, libclang loading, parsing free functions and enums, `index.cp3` + `native.json` generation, the full flag surface, dry-run/JSON/force, named diagnostics for rejected declarations, and a fixture-based test suite. | In flight on `merge/native-partial` |
+| 2 | The consumption half: `check`/`build` read `native.json`, sema types `import native` calls against it, codegen lowers them, plus the full test suite. | Not started; starts when step 1 lands |
+
+The exact completion percentage for step 1, and the measured surface, are
+recorded in `docs/rough/native-install-partial.md` when the lane lands. The
+honest current position is that **the command half is the larger, more
+self-contained half of the feature and is being landed first; the sema and
+codegen consumption half is what remains**, which is the reverse of the
+original single-merge plan but is the only split that keeps every landed part
+working and tested.
+
 ## 4. Verification detail
 
 ### Build and static gates
 
 - Main build: green.
-- `python tools/check_diagnostics.py`: 72 codes defined, 72 documented, 434
+- `python tools/check_diagnostics.py`: 72 codes defined, 72 documented, 435
   source files scanned, 0 findings.
-- `python tools/check_cp3002.py`: 378 hits in 91 files.
-  - `src`: 348
-  - `tests`: 11
-  - `docs`: 19
-  - `packaging`: 0
-  - markers: `CP3002` 123, `kNotImplemented` 9, `notImplemented` 232,
-    `NotImplemented` 14.
+- `python tools/check_cp3002.py`: 391 hits. The zero-placeholder gate in
+  `tools/lint.py` fails on this count - it is pre-existing red on `master` and
+  is not a regression from the cleanup work.
+- `python tools/lint.py`: unchanged from the pre-cleanup baseline (the same
+  391 marker hits, nothing added).
 
 ### Corpus
 
-First full pass at `--jobs 12 --timeout 60`:
+Current full pass on `master` at `--jobs 4`:
 
-- 1482 found
-- 1404 passed
-- 18 failed
-- 30 skipped
+- 1483 found
+- 1424 passed
+- 0 failed
+- 29 skipped
 - 30 ambiguous
 
-All 18 failures were timeouts: 17 network cases and
-`stdlib/map_forEach_sum`. Every one passed when rerun serially with
-`--jobs 1`. A second pass at `--jobs 4` also stalled in the same network path
-and was stopped. This is test-harness oversubscription (fixed ports plus many
-compiler processes), not a compiler regression. Network tests must be run with
-`--jobs 1`.
+The earlier 18 failures were all load timeouts (17 network cases and
+`stdlib/map_forEach_sum`) from test-harness oversubscription - fixed ports plus
+many compiler processes - and every one of them passes serially. Network tests
+must be run with `--jobs 1`.
 
-The 30 skipped cases are the CP3002 not-implemented cases. They are not counted
+The 29 skipped cases are the CP3002 not-implemented cases. They are not counted
 as passing.
 
 ### Baseline benchmark
@@ -218,23 +287,38 @@ entry are intentionally preserved until the true count reaches zero.
 Done:
 
 - Full-history preservation and per-worktree WIP capture.
-- Fast-forward of `master`; one local branch and one worktree.
+- Fast-forward of `master`; one long-lived local branch.
 - Worker merge and the typed network JSON regression fix.
-- Build, diagnostics, CP3002 scan, full corpus pass plus serial rerun of every
-  timeout case.
+- Build, diagnostics, CP3002 scan, full corpus pass with 0 failures.
 - Baseline benchmark table for the runnable compute rows.
 - Benchmark reporting WIP consolidated.
 - Ten-lane ownership plan drafted at
-  `build/scratch/rounds/TEN-LANE-PLAN.md` (not started).
+  `build/scratch/rounds/TEN-LANE-PLAN.md`.
+- Parked-worktree cleanup: 20 non-perf worktrees classified, 2 bounded
+  corrections merged, 9 already-merged archives deleted, 3 real features
+  deferred intact, 6 waste entries deleted after inspection.
+- The Windows Clang toolchain gap closed: a stock LLVM install beside a MinGW
+  GCC install is now `ready` and builds real programs with no user flags.
+- A 0-failure corpus.
+
+In flight:
+
+- Three performance lanes (foundation/int, runtime map/parallel/async,
+  array/closure) porting the parked perf stack onto current master.
+- The native-install command half.
+- The `.cp3pak` current-platform binary cache (`cacheBinary`, `cp3 recompile`,
+  `excludeSource`).
+- Editor documentation: JSDoc-style doc comments in cp3 source, standard
+  library member documentation, and LSP hover/completion surfacing, plus the
+  cp3 logo and the `.cp3` file icon.
 
 Not done, by instruction:
 
 - No CP3002 feature implementation.
-- No performance optimization or branch port.
 - No 10-lane launch.
 - No server benchmark measurement.
-- No merge of the nine unique old workstreams into the current architecture.
+- The native-install consumption half (sema/codegen).
+- No re-measurement of the benchmark baseline after the perf lanes land.
 
-The next decision is which of the 18 CP3002 groups and which of the five
-performance gaps to attack first, and whether the 10-lane split should follow
-the measured groups or the older five perf branches.
+The next decision is which of the 18 CP3002 groups to attack first, and
+whether to re-measure the five performance gaps after the perf lanes land.
