@@ -158,6 +158,20 @@ Type Analyzer::inferUserConstruct(Identifier& id, Binding& b, NewExpr& n) {
 // =============================================================================
 // Structural conformance (spec §15: structural, not nominal)
 // =============================================================================
+// Is the member `name` implemented in `ci` (or in one of its bases)? The
+// abstract-conformance check (class_check.cpp) asks this per abstract member.
+bool Analyzer::memberImplementedInClass(const ClassInfo& ci,
+                                        const std::string& name) const {
+    const ClassInfo* k = &ci;
+    int guard = 0;
+    while (k && guard++ < 64) {
+        const ClassMemberInfo* m = findClassMember(*k, name);
+        if (m) return !m->isMethod || !m->isAbstract;
+        k = k->baseName.empty() ? nullptr : findClass(k->baseName);
+    }
+    return false;
+}
+
 bool Analyzer::functionTypesEquivalent(const Type& a, const Type& b) {
     if (a.kind != TypeKind::Function || b.kind != TypeKind::Function) {
         return false;

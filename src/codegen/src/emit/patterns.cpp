@@ -379,6 +379,13 @@ void Generator::emitPatternParams(const FunctionDeclaration& fd, std::string& ou
                 pattern = target;
             }
         }
+        if (p->defaultValue) {
+            // A defaulted destructuring parameter: the C++ parameter carries
+            // the default (a C++ default argument), so the bindings read the
+            // parameter itself (emit/destructure.cpp).
+            emitDestructuringParam(*p, fd, i, out);
+            continue;
+        }
         if (pattern == nullptr) continue;
         const std::optional<Type> pt = parameterType(*p, fd, i);
         const std::string source = "cp3_param_" + std::to_string(i);

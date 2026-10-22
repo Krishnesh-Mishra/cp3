@@ -1,0 +1,2 @@
+import console from "std/console";
+for (let [a, b] = [1, 2]; a < b; a = a + 1) { console.log(`${a}`); }

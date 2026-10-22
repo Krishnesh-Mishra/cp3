@@ -21,6 +21,7 @@
 #include "detail/class_model.h"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -96,19 +97,23 @@ void Generator::emitAllClasses() {
     const std::vector<ClassModel*> all = reg.allClasses();
     // Forward-declare every non-local class: a struct may name another's
     // handle (`Ref<T>`) before the definition, and a pair of classes may
-    // reference each other.
+    // reference each other. A generic local class is emitted at the unit's
+    // namespace scope too (a C++ local class cannot be a template).
     for (ClassModel* cm : all) {
-        if (cm->local || cm->decl == nullptr) continue;
+        if (cm->decl == nullptr) continue;
+        if (cm->local && !cm->namespaceScope) continue;
         if (!cm->typeParams.empty()) {
             line(classFwdDecls_, 1, templateHead(*cm));
         }
-        line(classFwdDecls_, 1, "struct " + mapIdent(cm->name) + ";");
+        line(classFwdDecls_, 1, "struct " + cm->structName + ";");
     }
     if (!classFwdDecls_.empty()) line(classFwdDecls_, 0, "");
     // Base-first: a derived struct must see a complete base type.
     std::vector<ClassModel*> ordered;
     for (ClassModel* cm : all) {
-        if (!cm->local && cm->decl != nullptr) ordered.push_back(cm);
+        if (cm->decl == nullptr) continue;
+        if (cm->local && !cm->namespaceScope) continue;
+        ordered.push_back(cm);
     }
     std::stable_sort(ordered.begin(), ordered.end(),
                      [](const ClassModel* a, const ClassModel* b) {
@@ -129,17 +134,20 @@ void Generator::emitLocalClass(const ClassDeclaration& c, std::string& out,
         intFail();
         return;
     }
-    if (!c.typeParams.empty()) {
-        notImplemented(c, "generic class");
-        line(out, indent, "/* CP3002: unsupported local class */");
-        return;
-    }
     const ClassModel* cm = ModelRegistry::get().classByName(c.name);
     if (cm == nullptr || !cm->local) {
         notImplemented(c, "this class declaration");
         return;
     }
+    if (cm->namespaceScope) {
+        // A generic local class is a namespace-scope template (a C++ local
+        // class cannot be a template): emitAllClasses emits its struct.
+        return;
+    }
     if (!modelEmitted_.insert(c.nodeId).second) return;
+    // A generic local class is a C++ local class template: the struct is
+    // emitted inline in the body that declares it, with its own type
+    // parameters.
     emitClassStruct(*cm, out, indent, nullptr);
 }
 
@@ -156,7 +164,7 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
     if (!cm.typeParams.empty()) {
         line(out, indent, templateHead(cm));
     }
-    std::string head = "struct " + mapIdent(cm.name);
+    std::string head = "struct " + cm.structName;
     if (!cm.baseName.empty()) {
         const ClassModel* base = ModelRegistry::get().classByName(cm.baseName);
         head += " : public " + (base != nullptr ? base->cpp : mapIdent(cm.baseName));
@@ -182,7 +190,7 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
     line(out, indent + 1, render);
     line(out, indent, "};");
     line(out, indent, "");
-    if (cm.local) return;
+    if (cm.local && !cm.namespaceScope) return;
     // A generic class's formatter is a template over its own type parameters,
     // so a `Ref<Box<T>>` formats through the class's `toString` (spec §15).
     if (hasToString(cm)) {
@@ -210,7 +218,7 @@ void Generator::emitClassMember(const ClassModel& cm,
         for (const auto& p : cd.params) {
             if (p) params.push_back(methodParamText(*p, &cm));
         }
-        const std::string local = mapIdent(cm.name);
+        const std::string local = cm.structName;
         const std::string declText =
             local + "(" + joinStrings(params, ", ") + ")";
         if (cd.body == nullptr) {
@@ -225,7 +233,7 @@ void Generator::emitClassMember(const ClassModel& cm,
         }
         line(out, indent, declText + ";");
         const std::string qualifier =
-            mapIdent(cm.name) + templateUse(cm) + "::" + mapIdent(cm.name);
+            cm.structName + templateUse(cm) + "::" + cm.structName;
         *defs += (cm.typeParams.empty() ? "" : templateHead(cm) + "\n") +
                  qualifier + "(" + joinStrings(params, ", ") + ") {\n" +
                  ctorBodyText(cd, cm, 1) + "}\n\n";
@@ -274,7 +282,7 @@ void Generator::emitClassAccessorMember(const ClassModel& cm,
     }
     line(out, indent, declText + ";");
     *defs += (cm.typeParams.empty() ? "" : templateHead(cm) + "\n") + ret +
-             " " + mapIdent(cm.name) + templateUse(cm) + "::" + name + "(" +
+             " " + cm.structName + templateUse(cm) + "::" + name + "(" +
              joinStrings(params, ", ") + ") {\n" +
              accessorBodyText(ad, cm, 1) + "}\n\n";
 }
@@ -479,4 +487,22 @@ std::string Generator::weakPointee(const Type& fieldType) {
     return ci.cpp.substr(prefix.size(), ci.cpp.size() - prefix.size() - 1);
 }
 
+
+
+// The member helpers the class surface needs: the parameter
+// declarations a member body reads, and the argument list a
+// model call passes (a rest parameter packs the extra
+// arguments into an array).
+
+void Generator::declareMemberParams(const ParamList& params) {
+    for (const auto& p : params) {
+        if (!p) continue;
+        const Identifier* id = parameterIdentifier(*p);
+        if (id == nullptr) continue;
+        Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
+        if (p->optional && !p->isRest && !t.isUnknown()) t = Type::nullable(t);
+        declare(id->name, t);
+    }
+}
+std::string Generator::modelCallArgs(const CallExpr& c,
 }  // namespace cp3

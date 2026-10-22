@@ -1,0 +1,8 @@
+import console from "std/console";
+function make(): number {
+  class Box<T> { value: T; }
+  let b = new Box<number>();
+  b.value = 7;
+  return b.value;
+}
+console.log(`${make()}`);

@@ -776,6 +776,14 @@ private:
     void emitWhile(const WhileStatement& ws, std::string& out, int indent);
     void emitDoWhile(const DoWhileStatement& dw, std::string& out, int indent);
     void emitVarDecl(const VariableDeclaration& vd, std::string& out, int indent);
+    // One declarator as a statement: a plain binding is one C++ declaration, a
+    // binding pattern is the source temporary plus one binding per name.
+    void emitDeclaratorStmt(const VariableDeclarator& d, VarKind kind,
+                            std::string& out, int indent);
+    // The `for` header's init text (a binding pattern is emitted as
+    // statements before the loop instead).
+    std::string forInitText(const VariableDeclaration& vd, std::string& out,
+                            int indent);
     std::string declaratorText(const VariableDeclarator& d, VarKind kind);
     // The const-reference spelling for a proven array-read binding, or "" when
     // the declarator was not proven (support/array_refs.cpp).
@@ -787,6 +795,17 @@ private:
     void emitThrow(const ThrowStatement& t, std::string& out, int indent);
     void emitTry(const TryStatement& ts, std::string& out, int indent);
 
+    // One destructuring parameter: the bindings are emitted at the top of the
+    // body (emit/destructure.cpp).
+    void emitDestructuringParam(const Parameter& p, const FunctionDeclaration& fd,
+                                std::size_t index, std::string& body);
+    // The arguments of a class method call: a method with a rest parameter
+    // takes the trailing arguments packed into the one array it declares
+    // (emit/class_expr.cpp).
+    std::string modelCallArgs(const CallExpr& c, const ClassMemberModel& m);
+    // The bindings a member's parameter list introduces in its body
+    // (emit/class_decl.cpp).
+    void declareMemberParams(const ParamList& params);
     // --- control flow (emit/control.cpp) -------------------------------------
     // Generated labels plus `goto` lower break/continue and JS labels.
     std::string freshLabel(const char* tag);

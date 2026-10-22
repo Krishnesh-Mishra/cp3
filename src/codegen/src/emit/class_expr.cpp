@@ -237,6 +237,7 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
     return std::string();
 }
 
+
 // A method call: `C.staticMethod(...)`, `(recv)->method(...)` on a class
 // handle, or an interface method through its wrapper thunk.
 std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
@@ -255,7 +256,7 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
             return std::string();
         }
         return base->cpp + "::" + mapIdent(mem->name) + "(" +
-               joinStrings(classMethodArgs(c, *mem), ", ") + ")";
+               modelCallArgs(c, *mem) + ")";
     }
     const bool viaClassName =
         m.object->kind == NodeKind::Identifier &&
@@ -270,7 +271,7 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
             return std::string();
         }
         return cm->cpp + "::" + mapIdent(mem->name) + "(" +
-               joinStrings(classMethodArgs(c, *mem), ", ") + ")";
+               modelCallArgs(c, *mem) + ")";
     }
     const Type rt = effectiveType(*m.object);
     const CppInfo ri = classify(rt);
@@ -285,7 +286,7 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
             return std::string();
         }
         return "(" + expr(*m.object) + ")->" + mapIdent(mem->name) + "(" +
-               joinStrings(classMethodArgs(c, *mem), ", ") + ")";
+               modelCallArgs(c, *mem) + ")";
     }
     if (const ObjectModel* om = objectModelOf(base);
         om != nullptr && ModelRegistry::get().objectUsable(om->label) &&

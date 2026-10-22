@@ -30,8 +30,19 @@ void walkArrowModels(const ArrowFunction& a, const SemaResult& sema);
 void addClassModel(const ClassDeclaration& c, bool local) {
     ModelRegistry& reg = ModelRegistry::get();
     ClassModel& cm = reg.addClass(c.name, local, &c);
+    // The class may be reached by more than one walk (the statement walk and
+    // the body walk): its type parameters are listed once.
+    if (cm.typeParamsRecorded) return;
+    cm.typeParamsRecorded = true;
     for (const auto& tp : c.typeParams) {
         if (tp) cm.typeParams.push_back(tp->name);
+    }
+    if (local && !cm.typeParams.empty()) {
+        // A C++ local class cannot be a template: the struct moves to the
+        // unit's namespace scope under a name of its own.
+        cm.structName = reg.nextLocalClassName(c.name);
+        cm.cpp = "::" + reg.namesp() + "::" + cm.structName;
+        cm.namespaceScope = true;
     }
     if (c.extendsType && c.extendsType->kind == NodeKind::NamedType) {
         cm.baseName = static_cast<const NamedType&>(*c.extendsType).name;
@@ -53,14 +64,17 @@ void walkExprList(const ExprList& list, const SemaResult& sema) {
     }
 }
 
-void walkStmtList(const std::vector<StmtPtr>& body, const SemaResult& sema) {
+void walkStmtList(const std::vector<StmtPtr>& body, const SemaResult& sema,
+                   bool local) {
     for (const auto& child : body) {
-        if (child) walkStmtModels(*child, sema);
+        if (child) walkStmtModels(*child, sema, local);
     }
 }
 
 void walkBodyStmt(const StmtPtr& body, const SemaResult& sema) {
-    if (body) walkStmtModels(*body, sema);
+    // A function / method / arrow body is always nested: a class declared in
+    // it is function-local.
+    if (body) walkStmtModels(*body, sema, true);
 }
 
 void walkClassesInBody(const StmtPtr& body, const SemaResult& sema) {
@@ -246,7 +260,7 @@ namespace {
 void walkForModels(const ForStatement& f, const SemaResult& sema) {
     if (f.init) {
         if (f.init->kind == NodeKind::VariableDeclaration) {
-            walkStmtModels(static_cast<const Stmt&>(*f.init), sema);
+            walkStmtModels(static_cast<const Stmt&>(*f.init), sema, true);
         } else {
             walkExprModels(dynamic_cast<const Expr*>(f.init.get()), sema);
         }
@@ -261,7 +275,7 @@ void walkSwitchModels(const SwitchStatement& sw, const SemaResult& sema) {
     for (const auto& c : sw.cases) {
         if (c == nullptr) continue;
         walkExprPtr(c->test, sema);
-        walkStmtList(c->statements, sema);
+        walkStmtList(c->statements, sema, true);
     }
 }
 
@@ -290,14 +304,6 @@ void walkTryModels(const TryStatement& ts, const SemaResult& sema) {
     walkBodyStmt(ts.finallyBlock, sema);
 }
 
-// A class declaration: its `implements` annotations and member models.
-void walkClassDeclModels(const ClassDeclaration& c, const SemaResult& sema) {
-    for (const auto& t : c.implementsTypes) {
-        if (t) (void)modelTypeFromTypeNode(*t);
-    }
-    walkClassMembers(c.members, sema);
-}
-
 // An object literal: walk the property values, then register the shape.
 void walkObjectLiteralModels(const ObjectLiteral& lit, const SemaResult& sema) {
     for (const auto& p : lit.properties) {
@@ -308,10 +314,10 @@ void walkObjectLiteralModels(const ObjectLiteral& lit, const SemaResult& sema) {
 
 }  // namespace
 
-void walkStmtModels(const Stmt& s, const SemaResult& sema) {
+void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local) {
     switch (s.kind) {
         case NodeKind::BlockStatement:
-            walkStmtList(static_cast<const BlockStatement&>(s).body, sema);
+            walkStmtList(static_cast<const BlockStatement&>(s).body, sema, true);
             return;
         case NodeKind::ExpressionStatement:
             walkExprPtr(static_cast<const ExpressionStatement&>(s).expression,
@@ -372,7 +378,11 @@ void walkStmtModels(const Stmt& s, const SemaResult& sema) {
             return;
         }
         case NodeKind::ClassDeclaration:
-            walkClassDeclModels(static_cast<const ClassDeclaration&>(s), sema);
+            // A class declaration registers its model: a class inside a body is
+            // function-local (its struct is emitted inline in that body), a
+            // class at the unit's root is a namespace-scope struct.
+            registerClassTree(static_cast<const ClassDeclaration&>(s), local,
+                              sema);
             return;
         case NodeKind::ExportDeclaration: {
             const auto& ed = static_cast<const ExportDeclaration&>(s);
@@ -477,7 +487,7 @@ void walkArrowModels(const ArrowFunction& a, const SemaResult& sema) {
     if (a.expressionBody) {
         walkExprModels(dynamic_cast<const Expr*>(a.body.get()), sema);
     } else {
-        walkStmtModels(static_cast<const Stmt&>(*a.body), sema);
+        walkStmtModels(static_cast<const Stmt&>(*a.body), sema, true);
     }
 }
 

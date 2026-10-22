@@ -73,6 +73,7 @@ set(cp3_codegen_sources
     src/emit/module_var.cpp
     src/emit/class_decl.cpp
     src/emit/class_method.cpp
+
     src/emit/class_shape.cpp
     src/emit/class_expr.cpp
     src/emit/class_params.cpp

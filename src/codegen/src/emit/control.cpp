@@ -124,14 +124,7 @@ std::string Generator::emitFor(const ForStatement& f,
     if (f.init) {
         if (f.init->kind == NodeKind::VariableDeclaration) {
             const auto& vd = static_cast<const VariableDeclaration&>(*f.init);
-            std::vector<std::string> parts;
-            for (const auto& d : vd.declarations) {
-                if (d) parts.push_back(declaratorText(*d, vd.kind));
-            }
-            init = joinStrings(parts, ", ");
-            for (const auto& d : vd.declarations) {
-                if (d) declareBinding(*d);
-            }
+            init = forInitText(vd, out, indent);
         } else if (auto exp = dynamic_cast<const Expr*>(f.init.get())) {
             init = expr(*exp);
         }

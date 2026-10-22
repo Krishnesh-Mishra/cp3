@@ -1,0 +1,7 @@
+import console from "std/console";
+let make = (): number => {
+  class Inner { value: number = 9; }
+  let i = new Inner();
+  return i.value;
+};
+console.log(`${make()}`);

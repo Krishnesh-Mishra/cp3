@@ -343,6 +343,7 @@ void ModelRegistry::reset() {
     usableInProgress_.clear();
     objectCounter_ = 0;
     litCounter_ = 0;
+    localClassCounter_ = 0;
 }
 
 void ModelRegistry::setNamespace(const std::string& ns) { namesp_ = ns; }
@@ -355,10 +356,19 @@ ClassModel& ModelRegistry::addClass(const std::string& name, bool local,
     cm.name = name;
     cm.local = local;
     cm.decl = decl;
-    cm.cpp = local ? mapIdent(name)
-                   : "::" + namesp_ + "::" + mapIdent(name);
+    cm.structName = mapIdent(name);
+    cm.cpp = local ? cm.structName
+                   : "::" + namesp_ + "::" + cm.structName;
     classOrder_.push_back(name);
     return classes_.emplace(name, std::move(cm)).first->second;
+}
+
+// A unique C++ struct name for a local class template: a C++ local class
+// cannot be a template, so such a class is emitted at the unit's namespace
+// scope under a name of its own.
+std::string ModelRegistry::nextLocalClassName(const std::string& name) {
+    return "cp3_local_" + mapIdent(name) + "_" +
+           std::to_string(localClassCounter_++);
 }
 
 ClassModel* ModelRegistry::classByName(const std::string& name) {

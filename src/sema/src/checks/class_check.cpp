@@ -253,6 +253,29 @@ void Analyzer::collectClassMember(ClassMember& m, ClassInfo& info) {
 // =============================================================================
 // Abstract conformance + bodies
 // =============================================================================
+void Analyzer::checkAbstractConformance(const ClassDeclaration& c,
+                                        const ClassInfo& ci) {
+    if (ci.isAbstract) return;
+    std::string missing;
+    const ClassInfo* k = ci.baseName.empty() ? nullptr : findClass(ci.baseName);
+    int guard = 0;
+    while (k && guard++ < 64 && missing.empty()) {
+        for (const ClassMemberInfo& m : k->members) {
+            if (!m.isAbstract) continue;
+            if (!memberImplementedInClass(ci, m.name)) {
+                missing = m.name;
+                break;
+            }
+        }
+        k = k->baseName.empty() ? nullptr : findClass(k->baseName);
+    }
+    if (!missing.empty()) {
+        report(diagcode::kMissingInterfaceMember, c.span,
+               "class '" + c.name + "' must implement abstract member '" +
+                   missing + "'");
+    }
+}
+
 void Analyzer::checkClassBodies(ClassDeclaration& c) {
     if (!findClass(c.name)) return;
     // Generic class bodies check once, with the parameters bound to TypeParam.
@@ -452,7 +475,12 @@ bool Analyzer::classAccessAllowed(const ClassInfo& owner,
 Type Analyzer::classMemberType(const ClassMemberInfo& m) const {
     if (!m.isMethod) return m.type;
     if (!m.overloads.empty()) return ambient();
-    return Type::function(m.sig.params, m.sig.ret);
+    Type t = Type::function(m.sig.params, m.sig.ret);
+    // A rest parameter takes an unbounded argument list, which the fixed-arity
+    // function type cannot express: the tag widens the signature's `rest` flag
+    // at the call site (the marker the variadic array mutators use, scopes.h).
+    if (m.sig.rest) t.name = kVariadicOptionalTailLabel;
+    return t;
 }
 
 Type Analyzer::userClassMember(const Type& cls, const std::string& prop,

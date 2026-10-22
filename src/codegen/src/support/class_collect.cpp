@@ -35,6 +35,12 @@ void Generator::collectModels(const Program& program) {
     for (const auto& s : program.body) {
         if (s) collectBodyModels(*s);
     }
+    // The body walk reaches places no statement walk does (a class inside an
+    // arrow-function body), so it may have registered classes the first member
+    // pass never saw: collect their members now.
+    for (ClassModel* cm : ModelRegistry::get().allClasses()) {
+        collectClassMemberModels(*cm);
+    }
 }
 
 // A class declared at the module root is top-level; anything the statement
@@ -99,9 +105,11 @@ void Generator::collectInterfaces(const Program& program) {
     }
 }
 
-void Generator::collectBodyModels(const Stmt& s) { walkStmtModels(s, sema_); }
+void Generator::collectBodyModels(const Stmt& s) { walkStmtModels(s, sema_, false); }
 
 void Generator::collectClassMemberModels(ClassModel& cm) {
+    if (cm.membersCollected) return;
+    cm.membersCollected = true;
     const ClassDeclaration& c = *cm.decl;
     for (const auto& mp : c.members) {
         if (!mp) continue;
