@@ -1,0 +1,6 @@
+import { WebSocketServer } from "std/network";
+
+// `new WebSocketServer({ port, path? })` (docs 04 §network): the options
+// object is required, so a construction without one is an arity error, not a
+// missing feature.
+const wss = new WebSocketServer();

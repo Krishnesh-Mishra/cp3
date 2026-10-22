@@ -246,6 +246,13 @@ std::optional<Type> Analyzer::networkMember(const std::string& prop) {
 bool Analyzer::tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& out) {
     if (id.name == "fetch") {
         inferArgs(call);
+        // `fetch(url, options?)` (docs 04 §network): the URL is required, the
+        // options object is optional. A call without the URL is a program
+        // error here, not a codegen skip: the runtime has no URL to fetch.
+        if (call.arguments.size() > 2 || call.arguments.empty()) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "fetch(url, options?) takes one or two arguments");
+        }
         out = promiseOf(networkObjectType(kFetchResponse));
         return true;
     }
@@ -328,9 +335,18 @@ bool Analyzer::checkCreateServerOptions(CallExpr& call) {
 Type Analyzer::inferNetworkConstruct(const std::string& name, ExprList& args,
                                      const SourceSpan& span) {
     if (name != "WebSocket" && name != "WebSocketServer") return Type::unknown();
-    (void)span;
     for (auto& arg : args) {
         if (arg) inferExpr(*arg);
+    }
+    // `new WebSocket(url)` and `new WebSocketServer({ port, path? })`
+    // (docs 04 §network): both take exactly one argument. A call without it
+    // is a program error here (the runtime has no URL / no port to bind), not
+    // a codegen skip.
+    if (args.size() != 1) {
+        report(diagcode::kArityMismatch, anchorSpan(span),
+               name == "WebSocket" ? "new WebSocket(url) takes one argument"
+                                   : "new WebSocketServer(options) takes one "
+                                     "argument");
     }
     return name == "WebSocket" ? networkObjectType(kWebSocket)
                                : networkObjectType(kWebSocketServer);

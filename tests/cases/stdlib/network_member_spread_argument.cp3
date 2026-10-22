@@ -1,0 +1,18 @@
+import console from "std/console";
+import { createServer, fetch } from "std/network";
+
+// A spread argument in a std/network member call: the runtime members are
+// fixed-arity, so the spread source is expanded into the positional
+// arguments.
+const app = createServer();
+app.get(...["/spread-args", (req, res) => {
+  res.text("ok");
+}]);
+app.listen(48132, () => {
+  console.log("listening");
+});
+
+let res = await fetch("http://127.0.0.1:48132/spread-args");
+console.log(`${res.status}`);
+console.log(await res.text());
+app.close();

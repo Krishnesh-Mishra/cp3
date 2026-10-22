@@ -1,0 +1,6 @@
+import { fetch } from "std/network";
+
+// D77: RequestInit.headers is the documented `Map<string, string>`, so a
+// plain object literal in that position is a type error, not a missing
+// feature.
+let res = await fetch("http://127.0.0.1:1/", { headers: { "x-test": "1" } });

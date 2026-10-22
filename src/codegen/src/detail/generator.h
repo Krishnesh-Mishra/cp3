@@ -660,6 +660,15 @@ private:
     std::string emitNetworkFetch(const CallExpr& c, const ExprList& args);
     // `json<T>()` with a reified interface, and `json(payload, status?)`.
     std::string networkJsonRecord(const MemberExpr& m, const CallExpr& c);
+    // `res.json<T>(data, status?)`: the response's typed JSON writer.
+    std::string networkJsonWriter(const MemberExpr& m, const CallExpr& c,
+                                  const std::string& name);
+    // The json value tree text of a response payload literal (a computed key
+    // and a spread element included).
+    std::string networkJsonValueText(const Expr& e);
+    // The C++ spelling of one field read of a record value (`u.id`).
+    std::string networkFieldRead(const std::string& recv, const Type& type,
+                                 const std::string& field);
     std::string networkResponseJson(const CallExpr& c, const MemberExpr& m);
     std::string fetchInitText(const Expr& init);
     std::string networkArg(const Type& receiver, const std::string& property,

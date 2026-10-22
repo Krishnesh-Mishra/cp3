@@ -1,0 +1,10 @@
+import { createServer } from "std/network";
+
+// `json<T>()` (docs 04 §network) carries a primitive T (number, string,
+// boolean) or a record interface; an array type has no C++ spelling, so the
+// call is a type error, not a missing feature.
+const app = createServer();
+app.get("/x", (req, res) => {
+  res.json<string[]>();
+});
+app.close();

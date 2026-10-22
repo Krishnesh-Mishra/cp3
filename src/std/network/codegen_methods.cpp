@@ -17,8 +17,10 @@
 #include <vector>
 
 #include "detail/cpp_writer.h"
+#include "detail/class_model.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -65,6 +67,30 @@ std::vector<std::string> eventParams(const std::string& event) {
                 std::string("::cp3::runtime::network::HttpRequest")};
     }
     return {};  // "open" and anything unlisted: no parameters
+}
+
+/// The event name of a listener registration: the first argument's literal.
+/// A spread argument carries the name inside its array literal, so the lookup
+/// looks through it (`ws.on(...["message", handler])`).
+std::string networkEventName(const CallExpr& c) {
+    if (c.arguments.empty() || !c.arguments.front()) return std::string();
+    const Expr* first = c.arguments.front().get();
+    if (first->kind == NodeKind::SpreadElement) {
+        const auto& spread = static_cast<const SpreadElement&>(*first);
+        if (!spread.argument ||
+            spread.argument->kind != NodeKind::ArrayLiteral) {
+            return std::string();
+        }
+        const auto& literal = static_cast<const ArrayLiteral&>(*spread.argument);
+        if (literal.elements.empty() || !literal.elements.front()) {
+            return std::string();
+        }
+        const Expr* head = literal.elements.front().get();
+        if (!head || head->kind != NodeKind::StringLiteral) return std::string();
+        return static_cast<const StringLiteral&>(*head).value;
+    }
+    if (first->kind != NodeKind::StringLiteral) return std::string();
+    return static_cast<const StringLiteral&>(*first).value;
 }
 
 /// The sema marker type behind one documented C++ parameter. Sema keeps the
@@ -197,9 +223,9 @@ std::string Generator::networkArg(const Type& receiver, const std::string& prope
     } else if (receiver.name == kWebSocket || receiver.name == kWebSocketServer) {
         // The event name is the first literal argument.
         std::string event = "open";
-        if (index > 0 && !c.arguments.empty() && c.arguments.front() &&
-            c.arguments.front()->kind == NodeKind::StringLiteral) {
-            event = static_cast<const StringLiteral&>(*c.arguments.front()).value;
+        if (index > 0) {
+            const std::string named = networkEventName(c);
+            if (!named.empty()) event = named;
         }
         context = eventParams(event);
     }
@@ -225,15 +251,46 @@ std::string Generator::networkArg(const Type& receiver, const std::string& prope
 std::string Generator::networkArgs(const Type& receiver, const std::string& property,
                                    const CallExpr& c) {
     std::string args;
+    std::size_t index = 0;
     for (std::size_t i = 0; i < c.arguments.size(); ++i) {
         const Expr* arg = c.arguments[i].get();
         if (!arg) continue;
         if (arg->kind == NodeKind::SpreadElement) {
-            notImplemented(*arg, "spread argument");
+            // A spread argument in a std/network member call: the runtime
+            // members are fixed-arity (`get(path, handler)`), so the spread
+            // source is expanded into the positional arguments. An array
+            // literal is the shape that can be expanded at compile time; any
+            // other source is a type error (the C++ member has no variadic
+            // form to forward it into).
+            const auto& spread = static_cast<const SpreadElement&>(*arg);
+            if (!spread.argument ||
+                spread.argument->kind != NodeKind::ArrayLiteral) {
+                reportTypeError(*arg,
+                                "type mismatch: a spread argument of a "
+                                "std/network member call needs an array "
+                                "literal");
+                continue;
+            }
+            const auto& literal = static_cast<const ArrayLiteral&>(*spread.argument);
+            for (const auto& elementPtr : literal.elements) {
+                const Expr* element = elementPtr.get();
+                if (!element) continue;
+                if (element->kind == NodeKind::SpreadElement) {
+                    reportTypeError(*element,
+                                    "type mismatch: a spread argument of a "
+                                    "std/network member call cannot nest a "
+                                    "spread");
+                    continue;
+                }
+                if (!args.empty()) args += ", ";
+                args += networkArg(receiver, property, c, *element, index);
+                ++index;
+            }
             continue;
         }
         if (!args.empty()) args += ", ";
-        args += networkArg(receiver, property, c, *arg, i);
+        args += networkArg(receiver, property, c, *arg, index);
+        ++index;
     }
     return args;
 }
@@ -259,13 +316,20 @@ std::string Generator::emitNetworkMemberCall(const CallExpr& c, const MemberExpr
         }
     }
     const std::string args = networkArgs(receiver, m.property, c);
-    // Explicit generics (`res.json<T>()`); a T with no C++ spelling keeps the
-    // CP3002 skip (see networkTypeArgsText).
+    // Explicit generics (`res.json<T>()`): a T with no C++ spelling (a
+    // compound type, a type the runtime's json<T> cannot carry, a member that
+    // takes no type argument at all) is a type error at the use site, not a
+    // missing feature.
     std::string typeArgs;
     if (!networkTypeArgsText(c.typeArgs, typeArgs)) {
-        notImplemented(c, "std/network member call with a type argument that has "
-                          "no C++ spelling yet (json<T> supports a primitive T or a "
-                          "reified interface)");
+        if (m.property == "json") {
+            reportTypeError(c,
+                            "type mismatch: json<T>() supports number, string, "
+                            "boolean or a record interface");
+        } else {
+            reportTypeError(c, "type mismatch: " + m.property +
+                                   "() does not take a type argument");
+        }
         return "0.0";
     }
     return "(" + expr(*m.object) + ")." + networkMemberName(receiver, m.property) +
@@ -284,12 +348,22 @@ std::string Generator::networkJsonRecord(const MemberExpr& m, const CallExpr& c)
     const std::string& name = static_cast<const NamedType&>(tn).name;
     const auto structIt = jsonShapeStructs_.find(name);
     if (structIt == jsonShapeStructs_.end()) return std::string();
-    if (!c.arguments.empty()) {
-        notImplemented(c, "std/network json<T>() takes no arguments");
-        return "0.0";
-    }
     const auto builderIt = jsonShapeBuilders_.find(name);
     if (builderIt == jsonShapeBuilders_.end()) return std::string();
+    // The response's `json` is a writer (`res.json<T>(data, status?)`, docs
+    // 04 §network); the request's and the fetch response's `json` is a reader
+    // (`await res.json<T>()`). The receiver decides which one it is.
+    if (effectiveType(*m.object).name == kHttpResponse) {
+        return networkJsonWriter(m, c, name);
+    }
+    if (!c.arguments.empty()) {
+        // The reader takes no arguments: the body is already buffered (D73).
+        // Sema reports the arity error for the fetch/request receivers; this
+        // is the defensive path.
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "json<T>() takes no arguments");
+        return "0.0";
+    }
     // Usage-based reification: materialize the struct on first use, exactly
     // like jsonRecordParse (src/std/json/codegen.cpp).
     needsJson_ = true;
@@ -305,6 +379,71 @@ std::string Generator::networkJsonRecord(const MemberExpr& m, const CallExpr& c)
            ">(cp3_value); })";
 }
 
+/// `res.json<T>(data, status?)`: the response's typed JSON writer (docs 04
+/// §network). The payload is either a literal (the json dynamic value tree
+/// serializes it) or a record value of the interface T (the record's fields
+/// become the members of the json object); the response's
+/// `json(const Value&)` overload sends it.
+std::string Generator::networkJsonWriter(const MemberExpr& m, const CallExpr& c,
+                                         const std::string& name) {
+    if (c.arguments.empty() || !c.arguments.front()) {
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "res.json<T>(data) needs a payload");
+        return "0.0";
+    }
+    const Expr& payload = *c.arguments.front();
+    std::string value;
+    if (payload.kind == NodeKind::ArrayLiteral ||
+        payload.kind == NodeKind::ObjectLiteral) {
+        // A literal payload: the json value tree carries it (the explicit T
+        // names the shape the literal has).
+        value = networkJsonValueText(payload);
+        if (value.empty()) {
+            reportTypeError(payload,
+                            "type mismatch: res.json<T>(data) cannot serialize "
+                            "this payload");
+            return "0.0";
+        }
+    } else {
+        // A record value of T: the shape label of its type names the
+        // interface (the json family's label -> interface table), and the
+        // record's fields become the json object's members.
+        const auto fieldsIt = jsonShapeFields_.find(name);
+        const Type payloadType = effectiveType(payload);
+        const auto labelIt = jsonShapeByLabel_.find(payloadType.name);
+        if (fieldsIt == jsonShapeFields_.end() || labelIt == jsonShapeByLabel_.end() ||
+            labelIt->second != name) {
+            reportTypeError(payload,
+                            "type mismatch: res.json<T>(data) needs a value of "
+                            "the interface " + name);
+            return "0.0";
+        }
+        const std::string record = expr(payload);
+        std::string members;
+        for (const std::string& field : fieldsIt->second) {
+            const std::string read = networkFieldRead(record, payloadType, field);
+            if (read.empty()) {
+                reportTypeError(payload,
+                                "type mismatch: res.json<T>(data) cannot read the "
+                                "field '" + field + "' of the interface " + name);
+                return "0.0";
+            }
+            if (!members.empty()) members += ", ";
+            // The record's field carries the value; the json value tree's
+            // overloads pick the field's own type.
+            members += "{\"" + field + "\", ::cp3::runtime::json::value(" + read +
+                       ")}";
+        }
+        value = "::cp3::runtime::json::objectValue({" + members + "})";
+    }
+    needsJson_ = true;
+    std::string text = "(" + expr(*m.object) + ").json(" + value;
+    if (c.arguments.size() >= 2 && c.arguments[1]) {
+        text += ", " + expr(*c.arguments[1]);
+    }
+    return text + ")";
+}
+
 /// `res.json(payload, status?)` for an array/object literal payload: the json
 /// dynamic value tree serializes it and the runtime's `json(const Value&)`
 /// overload answers it (docs 04 §network's `res.json({ ... })` example).
@@ -316,9 +455,15 @@ std::string Generator::networkResponseJson(const CallExpr& c, const MemberExpr& 
     if (payload.kind != NodeKind::ArrayLiteral && payload.kind != NodeKind::ObjectLiteral) {
         return std::string();
     }
-    const std::string value = jsonValueText(payload);
+    const std::string value = networkJsonValueText(payload);
     if (value.empty()) {
-        notImplemented(payload, "res.json(payload)");
+        // A payload form the json value tree cannot carry (a method property,
+        // a computed key that is not a string, a nested spread). It is a type
+        // error at the use site, not a missing feature.
+        reportTypeError(payload,
+                        "type mismatch: res.json(payload) cannot serialize this "
+                        "payload (a computed key must be a string and a spread "
+                        "element cannot nest)");
         return "0.0";
     }
     needsJson_ = true;
@@ -327,6 +472,136 @@ std::string Generator::networkResponseJson(const CallExpr& c, const MemberExpr& 
         text += ", " + expr(*c.arguments[1]);
     }
     return text + ")";
+}
+
+/// The C++ spelling of one field read of a record value (`u.id`): the
+/// interface wrapper's accessor, the value shape's member, or "" when the
+/// value is not a record (or the field has no C++ spelling).
+std::string Generator::networkFieldRead(const std::string& recv, const Type& type,
+                                        const std::string& field) {
+    const detail::ObjectModel* model = detail::objectModelOf(type);
+    if (model == nullptr) return std::string();
+    if (!ModelRegistry::get().objectUsable(model->label)) return std::string();
+    const detail::ObjectFieldModel* f = detail::findObjectField(*model, field);
+    if (f == nullptr || f->isFunction) return std::string();
+    if (model->isInterface) {
+        return "(" + recv + ")." + mapIdent(f->name) + "()";
+    }
+    return "(" + recv + ")->" + mapIdent(f->name);
+}
+
+/// The json value tree text of a response payload literal (docs 04
+/// §network). The json family's jsonValueText carries the plain literal
+/// forms; a payload also accepts a computed key (`{ [k]: 1 }`, whose key is a
+/// runtime expression) and a spread element (`{ ...base, b: 2 }`, whose source
+/// fields become members). "" when the payload holds a form the tree cannot
+/// carry (a method property, a computed key that is not a string, a nested
+/// spread).
+std::string Generator::networkJsonValueText(const Expr& e) {
+    if (e.kind == NodeKind::ArrayLiteral) {
+        const auto& literal = static_cast<const ArrayLiteral&>(e);
+        std::vector<std::string> items;
+        for (const auto& elementPtr : literal.elements) {
+            const Expr* element = elementPtr.get();
+            if (!element) return std::string();
+            if (element->kind == NodeKind::SpreadElement) return std::string();
+            const std::string text = networkJsonValueText(*element);
+            if (text.empty()) return std::string();
+            items.push_back(std::move(text));
+        }
+        return "::cp3::runtime::json::arrayValue({" + joinStrings(items, ", ") +
+               "})";
+    }
+    if (e.kind == NodeKind::ObjectLiteral) {
+        const auto& literal = static_cast<const ObjectLiteral&>(e);
+        // The members in source order: the key's C++ text (a literal name or
+        // a computed expression), the value's text, and the key the dedupe
+        // compares (a later member with the same key wins, the JS object
+        // semantics, so an earlier one is dropped).
+        struct Member {
+            std::string key;
+            std::string keyText;
+            std::string value;
+        };
+        std::vector<Member> members;
+        for (const auto& propertyPtr : literal.properties) {
+            const ObjectProperty* property = propertyPtr.get();
+            if (!property) return std::string();
+            if (property->isMethod) return std::string();
+            if (!property->value) return std::string();
+            if (property->value->kind == NodeKind::SpreadElement) {
+                // A spread element: the source's fields become members (the
+                // source is a record value, so its fields are read through
+                // the model's own spelling).
+                const auto& spread =
+                    static_cast<const SpreadElement&>(*property->value);
+                if (!spread.argument) return std::string();
+                const Type sourceType = effectiveType(*spread.argument);
+                const detail::ObjectModel* model =
+                    detail::objectModelOf(sourceType);
+                if (model == nullptr) {
+                    return std::string();
+                }
+                const std::string source = expr(*spread.argument);
+                for (const detail::ObjectFieldModel& field : model->fields) {
+                    if (field.isFunction) return std::string();
+                    const CppInfo ci = classify(field.type);
+                    if (!ci.representable ||
+                        (ci.shape != Shape::Number && ci.shape != Shape::String &&
+                         ci.shape != Shape::Bool && ci.shape != Shape::Array)) {
+                        return std::string();
+                    }
+                    const std::string read =
+                        networkFieldRead(source, sourceType, field.name);
+                    if (read.empty()) return std::string();
+                    members.push_back(Member{field.name, "\"" + field.name + "\"",
+                                             "::cp3::runtime::json::value(" +
+                                                 read + ")"});
+                }
+                continue;
+            }
+            if (property->computed) {
+                // A computed key: the key is a runtime expression and must be
+                // a string.
+                if (!property->key) return std::string();
+                const CppInfo ci = info(*property->key);
+                if (!ci.representable || ci.shape != Shape::String) {
+                    return std::string();
+                }
+                const std::string text = networkJsonValueText(*property->value);
+                if (text.empty()) return std::string();
+                const std::string keyText = expr(*property->key);
+                members.push_back(Member{keyText, keyText, text});
+                continue;
+            }
+            std::string key;
+            if (property->key) {
+                if (property->key->kind == NodeKind::Identifier) {
+                    key = static_cast<const Identifier&>(*property->key).name;
+                } else if (property->key->kind == NodeKind::StringLiteral) {
+                    key = static_cast<const StringLiteral&>(*property->key).value;
+                }
+            }
+            if (key.empty()) return std::string();
+            const std::string text = networkJsonValueText(*property->value);
+            if (text.empty()) return std::string();
+            members.push_back(Member{key, "\"" + key + "\"", text});
+        }
+        std::vector<std::string> pairs;
+        for (std::size_t i = 0; i < members.size(); ++i) {
+            bool shadowed = false;
+            for (std::size_t j = i + 1; j < members.size(); ++j) {
+                if (members[j].key == members[i].key) shadowed = true;
+            }
+            if (shadowed) continue;
+            pairs.push_back("{" + members[i].keyText + ", " + members[i].value +
+                            "}");
+        }
+        return "::cp3::runtime::json::objectValue({" + joinStrings(pairs, ", ") +
+               "})";
+    }
+    // A scalar leaf (or an array value): the json family's own builder.
+    return jsonValueText(e);
 }
 
 std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {

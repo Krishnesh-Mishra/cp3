@@ -28,9 +28,12 @@
 // construction/entry lowering.
 //
 // SEAMS (blocked on an in-flight or unlanded family; each is marked where it
-// fires): req.body -> the fs ReadStream (fs), async handlers (the async codegen
-// still reports CP3002 for `async () =>`), and the fetch-headers object-literal
-// form (the `_ambiguous/network_headers_object_vs_map` proposal: the Map wins).
+// fires): req.body -> the fs ReadStream (fs) and async handlers (the async
+// codegen still reports CP3002 for `async () =>`).
+//
+// The fetch-headers ambiguity is closed (D77): RequestInit.headers is the
+// documented `Map<string, string>`, so an object literal in that position is a
+// type error at the use site, not a skip.
 //
 // Receivers are recognised by the `$network:` marker names sema publishes
 // (src/std/network/sema.cpp). Handler arrows are emitted with declared parameter types
@@ -47,6 +50,7 @@
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -131,17 +135,17 @@ std::string Generator::fetchInitText(const Expr& init) {
         } else if (key == "timeout") {
             timeout = expr(*p->value);
         } else if (key == "headers") {
-            // RequestInit.headers is `Map<string, string>` (docs 04 §network):
-            // the Map expression reaches FetchInit.headers and buildRequest
-            // (runtime_fetch.cpp) writes one `Name: value` line per entry. An
-            // object-literal form stays a CP3002 skip: that is precisely the
-            // `_ambiguous/network_headers_object_vs_map` question, and the wave
-            // report's proposal answers it with the Map (the docs example
-            // aside), so the skipped shape is the one the ambiguity names.
+            // RequestInit.headers is `Map<string, string>` (docs 04 §network,
+            // D77): the Map expression reaches FetchInit.headers and
+            // buildRequest (runtime_fetch.cpp) writes one `Name: value` line
+            // per entry. A plain object literal in that position is off the
+            // documented surface, so it is a type error at the use site (the
+            // lead's D77 ruling: the Map wins, the doc's object-literal
+            // example was the doc side of the disagreement).
             if (p->value->kind == NodeKind::ObjectLiteral) {
-                notImplemented(*p->value,
-                               "fetch headers as an object literal (the documented "
-                               "shape is a Map<string, string>; headers ambiguity)");
+                reportTypeError(*p->value,
+                                "type mismatch: fetch options 'headers' is a "
+                                "Map<string, string>, not an object literal");
                 continue;
             }
             headers = expr(*p->value);
@@ -158,7 +162,11 @@ std::string Generator::emitNetworkFetch(const CallExpr& c, const ExprList& args)
     needsNetwork_ = true;
     needsEventLoop_ = true;
     if (args.empty() || !args.front()) {
-        notImplemented(c, "fetch(...)");
+        // `fetch(url, options?)` (docs 04 §network): the URL is required.
+        // Sema reports the arity error (src/std/network/sema.cpp); this is the
+        // defensive path for a unit that reaches codegen without it.
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "fetch(url, options?) takes one or two arguments");
         return "0.0";
     }
     const std::string url = expr(*args.front());
@@ -231,7 +239,10 @@ std::string Generator::emitNetworkNew(const NewExpr& n) {
         needsNetwork_ = true;
         needsEventLoop_ = true;
         if (n.arguments.empty() || !n.arguments.front()) {
-            notImplemented(n, "new WebSocket(...)");
+            // `new WebSocket(url)` (docs 04 §network): the URL is required.
+            // Sema reports the arity error (src/std/network/sema.cpp).
+            reportCodegenError(n, diagcode::kArityMismatch,
+                               "new WebSocket(url) takes one argument");
             return "0.0";
         }
         return std::string(kRuntimeNs) + "WebSocket(" + expr(*n.arguments.front()) + ")";
@@ -240,7 +251,10 @@ std::string Generator::emitNetworkNew(const NewExpr& n) {
     needsNetwork_ = true;
     needsEventLoop_ = true;
     if (n.arguments.empty() || !n.arguments.front()) {
-        notImplemented(n, "new WebSocketServer(...)");
+        // `new WebSocketServer({ port, path? })` (docs 04 §network): the
+        // options object is required. Sema reports the arity error.
+        reportCodegenError(n, diagcode::kArityMismatch,
+                           "new WebSocketServer(options) takes one argument");
         return "0.0";
     }
     const Expr* first = n.arguments.front().get();

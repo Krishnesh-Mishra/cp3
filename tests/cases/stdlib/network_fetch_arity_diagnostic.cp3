@@ -1,0 +1,5 @@
+import { fetch } from "std/network";
+
+// `fetch(url, options?)` (docs 04 §network): the URL is required, so a call
+// without one is an arity error, not a missing feature.
+let res = await fetch();
