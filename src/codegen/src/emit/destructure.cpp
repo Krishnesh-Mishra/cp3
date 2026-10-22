@@ -203,7 +203,27 @@ void PatternEmitter::walkObjectPattern(const ObjectPattern& op, const Site& site
         const std::string access = "((" + site.access + ")->" + mapIdent(name) + ")";
         walkPattern(*prop->value, Site{access, std::nullopt}, out, indent);
     }
-    if (op.rest) emitPatternFallback(*op.rest, out, indent);
+    if (op.rest) {
+        // The rest object: a fresh shape holding the source's fields except
+        // the ones the pattern named (the TypeScript Omit).
+        const auto& re = static_cast<const RestElement&>(*op.rest);
+        if (!re.argument || re.argument->kind != NodeKind::Identifier) {
+            g.reportTypeError(*op.rest,
+                              "type mismatch: a rest object pattern must bind "
+                              "a name");
+            return;
+        }
+        Type restType;
+        const std::string value =
+            g.restObjectText(op, site.access, *site.type, restType);
+        if (value.empty()) {
+            g.reportTypeError(*op.rest,
+                              "type mismatch: a rest object pattern needs a "
+                              "source with known properties");
+            return;
+        }
+        walkPattern(*re.argument, Site{value, restType}, out, indent);
+    }
 }
 
 void PatternEmitter::emitPatternFallback(const Node& p, std::string& out, int indent) {

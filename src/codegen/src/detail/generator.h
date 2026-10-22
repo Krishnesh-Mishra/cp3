@@ -522,6 +522,14 @@ private:
                             std::string& out, int indent);
     void unpackObjectPattern(const ObjectPattern& p, const PatternSource& src,
                              std::string& out, int indent);
+    // The runtime value of a rest object binding: a fresh object shape that
+    // holds the source's fields except the ones the pattern named (the
+    // TypeScript Omit). `source` is the C++ expression holding the source
+    // value and `sourceType` its cp3 type; `restType` is filled with the
+    // Omit type. Empty when the source has no enumerable shape - the caller
+    // reports the reason.
+    std::string restObjectText(const ObjectPattern& p, const std::string& source,
+                                const Type& sourceType, Type& restType);
     void bindPatternTarget(const Node& target, const PatternSource& value,
                            std::string& out, int indent);
     // A destructuring *assignment* (`[a, b] = expr`, `{ x } = expr`): the
