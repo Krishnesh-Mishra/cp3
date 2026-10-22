@@ -322,6 +322,16 @@ private:
     void sigFromFunctionType(const Type& ct, FuncSig& localSig);
     void inferArg(Expr* a);
     void checkArgs(const FuncSig& sig, CallExpr& call);
+    // The signature the call's arguments are checked against.
+    const FuncSig* callSig(const CallExpr& call, const Type& ct,
+                           FuncSig& localSig);
+    // The element type a spread argument carries, checked against the
+    // parameters it reaches.
+    void checkSpreadArg(const FuncSig& sig, Expr* a, std::size_t index);
+    // The signature of the class method a member call names (the rest flag and
+    // the optional parameters live in the class member table, not in the
+    // function type the member read yields).
+    const FuncSig* classMemberSig(const MemberExpr& m);
     std::string arityText(std::size_t required, std::size_t maxArgs,
                           bool rest) const;
     // --- generic functions (generic_check.cpp) -------------------------------

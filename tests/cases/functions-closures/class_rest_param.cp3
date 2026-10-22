@@ -1,0 +1,5 @@
+import console from "std/console";
+class Adder { function sum(...nums: number[]): number { let t = 0; for (const n of nums) { t = t + n; } return t; } }
+let a = new Adder();
+console.log(`${a.sum(1, 2, 3)}`);
+console.log(`${a.sum()}`);

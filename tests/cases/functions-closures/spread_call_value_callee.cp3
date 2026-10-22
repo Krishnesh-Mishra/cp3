@@ -1,0 +1,7 @@
+import console from "std/console";
+function show(): string {
+  let f = (a: number, b: number) => a + b;
+  let args = [3, 4];
+  return `${f(...args)}`;
+}
+console.log(show());

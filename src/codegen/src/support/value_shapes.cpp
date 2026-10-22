@@ -177,7 +177,9 @@ bool parseObjectLabel(const std::string& label, std::vector<ObjectField>& out) {
         const std::size_t colon = label.find(':', pos);
         if (colon == std::string::npos || colon >= end) return false;
         const std::string name = label.substr(pos, colon - pos);
-        // A trailing '?' marks an optional field: no member spelling here.
+        // A trailing '?' marks an optional field: the value-shape path spells
+        // only the all-present fields, so such a shape belongs to the object
+        // model (which keeps the optional field as an `std::optional<T>`).
         if (!isIdentifier(name)) return false;
         pos = colon + 1;
         Type fieldType;

@@ -86,6 +86,27 @@ bool hasField(const std::vector<std::string>& fields, const std::string& name) {
     return false;
 }
 
+// The field named `name` in a plain object shape's field list.
+bool hasShapeField(const std::vector<ObjectField>& fields,
+                    const std::string& name) {
+    for (const ObjectField& field : fields) {
+        if (field.name == name) return true;
+    }
+    return false;
+}
+
+// Is the field named `name` an optional one (an `std::optional<T>` member, so
+// the field may be absent)?
+bool optionalShapeField(const std::vector<ObjectField>& fields,
+                         const std::string& name) {
+    for (const ObjectField& field : fields) {
+        if (field.name == name) {
+            return field.cpp.rfind("std::optional<", 0) == 0;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 // The existing record spelling of a type, or false. A JSON interface record is
@@ -345,38 +366,6 @@ void Generator::unpackPattern(const Node& pattern, const PatternSource& src,
     notImplemented(pattern, "this binding pattern");
 }
 
-void Generator::unpackArrayPattern(const ArrayPattern& p, const PatternSource& src,
-                                   std::string& out, int indent) {
-    if (src.type.kind != TypeKind::Array || src.type.parts.empty()) {
-        notImplemented(p, "this destructuring source");
-        return;
-    }
-    const Type elem = src.type.parts.front();
-    const CppInfo ec = classify(elem);
-    if (!ec.representable) {
-        notImplemented(p, "this array element type");
-        return;
-    }
-    needsTypedArray_ = true;
-    std::size_t index = 0;
-    for (const auto& targetPtr : p.elements) {
-        if (targetPtr) {
-            const std::string at = "::cp3::runtime::arrayAt(" + src.text + ", " +
-                                   std::to_string(index) + ".0)";
-            bindPatternTarget(*targetPtr, PatternSource{at, elem, src.isConst},
-                              out, indent);
-        }
-        ++index;
-    }
-    if (!p.rest) return;
-    const std::string rest =
-        "::cp3::runtime::makeArray<" + ec.cpp + ">(std::vector<" + ec.cpp +
-        ">(" + src.text + "->begin() + " + std::to_string(index) + ", " +
-        src.text + "->end()))";
-    bindPatternTarget(*p.rest, PatternSource{rest, Type::array(elem), src.isConst},
-                      out, indent);
-}
-
 void Generator::unpackObjectPattern(const ObjectPattern& p,
                                     const PatternSource& src, std::string& out,
                                     int indent) {
@@ -413,7 +402,18 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
             const ClassMemberModel* m = findClassMember(*cm, name);
             return m != nullptr && !m->isMethod && m->ctor == nullptr;
         }
+        // A plain object shape carries its own field list (the record layout
+        // is the only other field table).
+        if (plainShape) return hasShapeField(shapeFields, name);
         return hasField(fields, name);
+    };
+    // An optional field may be empty: a pattern default fills that case.
+    const auto optional = [&](const std::string& name) -> bool {
+        if (om != nullptr) {
+            const ObjectFieldModel* f = findObjectField(*om, name);
+            return f != nullptr && f->optional;
+        }
+        return optionalShapeField(shapeFields, name);
     };
     for (const auto& propPtr : p.properties) {
         if (!propPtr) continue;
@@ -424,13 +424,22 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
             continue;
         }
         const Node* target = prop.value.get();
+        const AssignmentPattern* fallback = nullptr;
         if (target && target->kind == NodeKind::AssignmentPattern) {
-            // Record fields are always present in this representation, so a
-            // default has nothing to fire on; keep the binding target only.
-            target = static_cast<const AssignmentPattern&>(*target).left.get();
+            fallback = &static_cast<const AssignmentPattern&>(*target);
+        }
+        std::string valueText = access(name);
+        if (fallback != nullptr) {
+            if (optional(name)) {
+                // `{ age = 18 }`: the default fills the empty optional.
+                valueText = "((" + valueText + ").has_value() ? *(" + valueText +
+                            ") : (" + expr(*fallback->right) + "))";
+            }
+            // A field that is always present never misses: the default has
+            // nothing to fire on, and the field value is the binding.
+            target = fallback->left.get();
         }
         if (!target) continue;
-        const std::string valueText = access(name);
         bindPatternTarget(*target, PatternSource{valueText, Type::unknown(),
                                                  src.isConst},
                           out, indent);
@@ -444,10 +453,10 @@ void Generator::bindPatternTarget(const Node& target, const PatternSource& value
     if (bound->kind == NodeKind::RestElement) {
         bound = static_cast<const RestElement&>(*bound).argument.get();
     } else if (bound->kind == NodeKind::AssignmentPattern) {
-        // A pattern default (`[a = 1]`) is out of scope: arrayPattern defaults
-        // are not specified through `arrayAt`, and object record fields are
-        // always present.
-        notImplemented(target, "this pattern default");
+        // A pattern default (`[a = 1]`) is resolved by the pattern that owns
+        // the target: the array pattern reads the element or the default, the
+        // object pattern reads the field or the default. What is left here is
+        // the bound name.
         bound = static_cast<const AssignmentPattern&>(*bound).left.get();
     }
     if (!bound) return;

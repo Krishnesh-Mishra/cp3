@@ -1,0 +1,7 @@
+import console from "std/console";
+function show(): string {
+  let person = { name: "Ada", age: 36 };
+  let { name: n, age: a } = person;
+  return `${n} ${a}`;
+}
+console.log(show());

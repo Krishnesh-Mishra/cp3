@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "detail/call_builder.h"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/timers.h"
@@ -26,42 +27,6 @@ namespace cp3 {
 using namespace detail;
 
 namespace detail {
-
-struct CallBuilder {
-    explicit CallBuilder(Generator& generator) : g(generator) {}
-
-    Generator& g;
-
-    // One lowered argument text plus the explicit `undefined`s that were
-    // dropped (stored back as the parameter's default or `std::nullopt`).
-    struct ArgTexts {
-        std::vector<std::string> value;
-        std::vector<bool> drop;
-        bool spreadRest = false;  // a lone `f(...xs)` passes the array itself
-    };
-
-    ArgTexts callArgTexts(const CallExpr& c, const ParamList* params,
-                          const std::vector<std::optional<Type>>& ptypes,
-                          bool applyDefaults, bool reifyObjectArgs);
-    bool findRestParam(const ParamList* params, std::size_t& restAt) const;
-    std::optional<Type> restElemType(
-        const std::vector<std::optional<Type>>& ptypes, std::size_t restAt) const;
-    std::vector<std::string> packRestArgs(const CallExpr& c,
-                                          const ArgTexts& texts,
-                                          const std::optional<Type>& elem,
-                                          std::size_t restAt);
-    std::vector<std::string> plainArgList(const ArgTexts& texts,
-                                          const ParamList* params,
-                                          bool applyDefaults);
-    std::vector<std::string> callArgs(
-        const CallExpr& c, const ParamList* params,
-        const std::vector<std::optional<Type>>& ptypes, bool applyDefaults,
-        bool reifyObjectArgs = false);
-    std::string emitFunctionCall(const CallExpr& c, const std::string& text,
-                                 const Type& fnType, const ParamList* params);
-    std::string emitIdentifierCall(const CallExpr& c);
-    std::string emitMemberCall(const CallExpr& c, const MemberExpr& m);
-};
 
 // A parameter that may absorb an explicit `undefined` argument: it carries a
 // default expression, or is declared optional (`a?: T` lowers to
@@ -126,16 +91,8 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
             continue;
         }
         if (arg->kind == NodeKind::SpreadElement) {
-            const auto& spread = static_cast<const SpreadElement&>(*arg);
-            if (hasRest && restAt == 0 && i == 0 && count == 1 &&
-                spread.argument) {
-                // `f(...xs)` for a rest-only callee: the array itself.
-                texts.spreadRest = true;
-                const std::optional<Type> saved = g.expected_;
-                if (restAt < ptypes.size()) g.expected_ = ptypes[restAt];
-                texts.value[i] = g.expr(*spread.argument);
-                g.expected_ = saved;
-            } else {
+            texts.spreadIndex = i;
+            if (!spreadArg(c, params, ptypes, texts)) {
                 g.notImplemented(*arg, "spread argument");
             }
             continue;
@@ -223,6 +180,17 @@ std::vector<std::string> CallBuilder::packRestArgs(
 std::vector<std::string> CallBuilder::plainArgList(const ArgTexts& texts,
                                                    const ParamList* params,
                                                    bool applyDefaults) {
+    if (texts.hasSpread) {
+        // A trailing spread: the fixed arguments come first, then the ones the
+        // spread fills. The extra fixed arguments (more than the callee takes)
+        // are dropped, as JS does.
+        const std::size_t fixed = texts.fixedCount;
+        std::vector<std::string> out(texts.value.begin(),
+                                     texts.value.begin() +
+                                         static_cast<std::ptrdiff_t>(fixed));
+        for (const std::string& value : texts.spreadValues) out.push_back(value);
+        return out;
+    }
     const std::size_t paramCount = params ? params->size() : 0;
     std::size_t passed = texts.value.size();
     if (!applyDefaults) {
@@ -247,7 +215,7 @@ std::vector<std::string> CallBuilder::plainArgList(const ArgTexts& texts,
     return out;
 }
 
-std::vector<std::string> CallBuilder::callArgs(
+CallBuilder::CallArgs CallBuilder::callArgs(
     const CallExpr& c, const ParamList* params,
     const std::vector<std::optional<Type>>& ptypes, bool applyDefaults,
     bool reifyObjectArgs) {
@@ -255,11 +223,18 @@ std::vector<std::string> CallBuilder::callArgs(
     const bool hasRest = findRestParam(params, restAt);
     const ArgTexts texts =
         callArgTexts(c, params, ptypes, applyDefaults, reifyObjectArgs);
+    CallArgs out;
     if (hasRest) {
-        return packRestArgs(c, texts, restElemType(ptypes, restAt), restAt);
+        out.values = packRestArgs(c, texts, restElemType(ptypes, restAt), restAt);
+        return out;
     }
-    return plainArgList(texts, params, applyDefaults);
+    out.values = plainArgList(texts, params, applyDefaults);
+    out.prologue = texts.prologue;
+    return out;
 }
+
+// The call text, the trailing-spread lowering and the parameter texts a
+// spread fills live in emit/call_spread.cpp.
 
 // A call through a function-typed value: `text(...)` for the
 // `std::function` spelling, `text.invoke(...)` for the boxed Listener.
@@ -278,9 +253,8 @@ std::string CallBuilder::emitFunctionCall(const CallExpr& c,
         }
         // A lambda cannot carry C++ default arguments, so a value callee's
         // defaults are passed at the call site.
-        const std::vector<std::string> args =
-            callArgs(c, params, ptypes, params != nullptr);
-        return text + "(" + joinStrings(args, ", ") + ")";
+        const CallArgs args = callArgs(c, params, ptypes, params != nullptr);
+        return callText(text, args);
     }
     if (ci.shape == Shape::Listener) {
         g.needsEventEmitter_ = true;
@@ -366,11 +340,10 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
     }
     const std::string callee =
         generic ? g.calleeText(name, c) : g.moduleRef(name);
-    return callee + "(" +
-           joinStrings(callArgs(c, decl ? &decl->params : nullptr, ptypes,
-                                /*applyDefaults=*/false, generic),
-                       ", ") +
-           ")";
+    const CallArgs args =
+        callArgs(c, decl ? &decl->params : nullptr, ptypes,
+                 /*applyDefaults=*/false, generic);
+    return callText(callee, args);
 }
 
 std::string CallBuilder::emitMemberCall(const CallExpr& c,
@@ -472,11 +445,9 @@ std::string Generator::emitLinkedCall(const CallExpr& c,
                              ? parameterType(*ln.fn->params[i], *ln.fn, i)
                              : std::nullopt);
     }
-    return ln.cpp + "(" +
-           joinStrings(calls.callArgs(c, &ln.fn->params, ptypes,
-                                      /*applyDefaults=*/false),
-                       ", ") +
-           ")";
+    const detail::CallBuilder::CallArgs args =
+        calls.callArgs(c, &ln.fn->params, ptypes, /*applyDefaults=*/false);
+    return calls.callText(ln.cpp, args);
 }
 
 // The link miss for a member access whose object is an imported binding with

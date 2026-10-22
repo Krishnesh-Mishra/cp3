@@ -77,8 +77,7 @@ Type Analyzer::inferCall(CallExpr& call) {
     }
 
     if (sig == nullptr && ct.kind == TypeKind::Function) {
-        sig = &localSig;
-        sigFromFunctionType(ct, localSig);
+        sig = callSig(call, ct, localSig);
     }
 
     if (sig != nullptr) {
@@ -262,6 +261,58 @@ void Analyzer::sigFromFunctionType(const Type& ct, FuncSig& localSig) {
     }
 }
 
+// The signature of the class method a member call names: the class member
+// table keeps the rest parameter and the optional parameters, which the
+// function type the member read yields does not carry. Null when the
+// receiver is not a user class or the member is not a method.
+const FuncSig* Analyzer::classMemberSig(const MemberExpr& m) {
+    if (!m.object) return nullptr;
+    const Type rt = typeOfExpr(*m.object);
+    if (rt.kind != TypeKind::Class) return nullptr;
+    const ClassInfo* ci = findClass(rt.name);
+    if (ci == nullptr) return nullptr;
+    const ClassMemberInfo* member = findClassMember(*ci, m.property);
+    if (member == nullptr || !member->isMethod) return nullptr;
+    return &member->sig;
+}
+
+// The element type a spread argument carries, checked against the parameters
+// it reaches: a rest parameter takes the elements, a fixed-argument signature
+// fills the parameters from the spread's position on.
+void Analyzer::checkSpreadArg(const FuncSig& sig, Expr* a, std::size_t index) {
+    auto& sp = static_cast<SpreadElement&>(*a);
+    if (!sp.argument) return;
+    const Type at = inferExpr(*sp.argument);
+    const Type elem = at.kind == TypeKind::Array && !at.parts.empty()
+                          ? at.parts.front()
+                          : Type::unknown();
+    if (sig.rest && !sig.params.empty()) {
+        checkAssign(elem, sig.params.back(), a->span, false);
+        return;
+    }
+    for (std::size_t j = index; j < sig.params.size(); ++j) {
+        // A parameter that takes an array is a rest parameter (the signature
+        // of a function value carries the array, not its element type).
+        if (sig.params[j].kind == TypeKind::Array) continue;
+        checkAssign(elem, sig.params[j], a->span, false);
+    }
+}
+
+// The signature the call's arguments are checked against: a class method
+// keeps its rest parameter in the class member table (the function type the
+// member read yields does not carry it), everything else comes from the
+// function type.
+const FuncSig* Analyzer::callSig(const CallExpr& call, const Type& ct,
+                                 FuncSig& localSig) {
+    if (call.callee && call.callee->kind == NodeKind::MemberExpr) {
+        const FuncSig* member =
+            classMemberSig(static_cast<const MemberExpr&>(*call.callee));
+        if (member != nullptr) return member;
+    }
+    sigFromFunctionType(ct, localSig);
+    return &localSig;
+}
+
 void Analyzer::inferArg(Expr* a) {
     if (!a) return;
     if (a->kind == NodeKind::SpreadElement) {
@@ -274,8 +325,13 @@ void Analyzer::inferArg(Expr* a) {
 
 void Analyzer::checkArgs(const FuncSig& sig, CallExpr& call) {
     bool hasSpread = false;
-    for (auto& a : call.arguments) {
-        if (a && a->kind == NodeKind::SpreadElement) hasSpread = true;
+    std::size_t firstSpread = call.arguments.size();
+    for (std::size_t i = 0; i < call.arguments.size(); ++i) {
+        if (call.arguments[i] && call.arguments[i]->kind == NodeKind::SpreadElement) {
+            hasSpread = true;
+            firstSpread = i;
+            break;
+        }
     }
     std::size_t required = 0;
     for (std::size_t i = 0; i < sig.params.size(); ++i) {
@@ -292,12 +348,23 @@ void Analyzer::checkArgs(const FuncSig& sig, CallExpr& call) {
                    std::to_string(given) + " argument" +
                    (given == 1 ? "" : "s"));
     }
+    if (hasSpread && !sig.rest) {
+        // A spread into a fixed-argument signature fills the parameters it
+        // reaches positionally: a parameter the spread does not reach is
+        // `undefined`, which no cp3 parameter type takes, so the spread must
+        // be the last argument (the arguments after it would shift with the
+        // spread's length).
+        if (firstSpread + 1 != given) {
+            report(diagcode::kArityMismatch, call.span,
+                   "a spread argument must be the last argument of a call "
+                   "with a fixed argument list");
+        }
+    }
     for (std::size_t i = 0; i < call.arguments.size(); ++i) {
         Expr* a = call.arguments[i].get();
         if (!a) continue;
         if (a->kind == NodeKind::SpreadElement) {
-            auto& sp = static_cast<SpreadElement&>(*a);
-            if (sp.argument) inferExpr(*sp.argument);
+            checkSpreadArg(sig, a, i);
             continue;
         }
         Type at = inferExpr(*a);

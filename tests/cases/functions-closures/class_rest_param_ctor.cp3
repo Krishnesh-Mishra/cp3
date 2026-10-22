@@ -1,0 +1,4 @@
+import console from "std/console";
+class Bag { items: number[]; constructor(...nums: number[]) { this.items = nums; } function total(): number { let t = 0; for (const n of this.items) { t = t + n; } return t; } }
+let b = new Bag(1, 2, 3);
+console.log(`${b.total()}`);

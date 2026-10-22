@@ -1,0 +1,6 @@
+import console from "std/console";
+function add(a: number, b: number = 10): number { return a + b; }
+let one = [1];
+console.log(`${add(...one)}`);
+let two = [2, 3];
+console.log(`${add(...two)}`);

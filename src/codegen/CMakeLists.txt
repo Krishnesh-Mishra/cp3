@@ -47,16 +47,19 @@ set(cp3_codegen_sources
     src/emit/assignment.cpp
     src/emit/call.cpp
     src/emit/call_args.cpp
+    src/emit/call_spread.cpp
     src/emit/async.cpp
     src/emit/stmt.cpp
     src/emit/push_reserve.cpp
     src/emit/control.cpp
     src/emit/patterns.cpp
+    src/emit/pattern_array.cpp
     src/emit/decl.cpp
     src/emit/module_var.cpp
     src/emit/class_decl.cpp
     src/emit/class_shape.cpp
     src/emit/class_expr.cpp
+    src/emit/class_params.cpp
     src/emit/enum.cpp
     src/emit/regex.cpp
     src/emit/parallel.cpp
