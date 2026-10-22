@@ -14,13 +14,18 @@
 // The range bounds lower to `static_cast<std::int64_t>(expr)`; the closures
 // lower through `emitParallelClosure`, which declares the closure's parameters
 // with the cp3 types the callee hands them (a number index; the accumulator's
-// type for a reduce) before lowering the arrow itself. A reduce body that is one
-// of the associative shapes (`acc + <expr>` from 0 where the expression never
-// reads the accumulator, `acc * <expr>` from 1, the max/min conditional) gets
-// the chunked 5-argument lowering with a synthesized combine op, but only when
-// support/parallel_combine.cpp proves the expression pure and integer exact;
-// every other reduce keeps the sequential 4-argument form, which is still
-// exact. Anything else reports CP3002 and emits a stub.
+// type for a reduce) before lowering the arrow itself. The accumulator is an
+// ordinary cp3 value type (a number, string, boolean, array, record, enum or
+// a union/option of those - the set the worker channel carries): it is copied
+// once per element, so a handle, a promise or a function is not one. A reduce
+// body that is one of the associative shapes (`acc + <expr>` from 0 where the
+// expression never reads the accumulator, `acc * <expr>` from 1, the max/min
+// conditional) gets the chunked 5-argument lowering with a synthesized combine
+// op, but only when support/parallel_combine.cpp proves the expression pure
+// and integer exact; every other reduce keeps the sequential 4-argument form,
+// which is still exact. A closure shape the structured surface cannot run (an
+// `async` closure, a generic closure, a `parallel.run` closure that declares
+// parameters) is a compile-time diagnostic, never a silently broken program.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -45,6 +50,51 @@ namespace {
 // carries one (class, enum, type parameter), the kind name otherwise.
 std::string parallelTypeLabel(const Type& t) {
     return t.name.empty() ? typeKindName(t.kind) : t.name;
+}
+
+// The accumulator of a `parallel.reduce` is copied once per element, so it
+// must be an ordinary cp3 value type - the same set the worker channel
+// carries (D80): a number, string, boolean, array, record, enum, or a
+// union/option of those. A live handle, a promise or a function has no
+// per-element copy, so it is not an accumulator.
+bool isAccumulatorShape(Shape s) {
+    switch (s) {
+        case Shape::Number:
+        case Shape::String:
+        case Shape::Bool:
+        case Shape::Native:
+        case Shape::Array:
+        case Shape::Object:
+        case Shape::Enum:
+        case Shape::Union:
+        case Shape::Optional:
+        case Shape::Maybe:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Why a `parallel.run` closure cannot run, or "" when it can. The closure is
+// called with no arguments, so a closure that declares a parameter has
+// nothing to bind; a generic closure has no call site to infer its type
+// arguments from; and an `async` closure would leave its awaits with no
+// event loop to drive them (D71, M2-PLAN item 12).
+std::string parallelRunClosureProblem(const ArrowFunction& a) {
+    if (a.isAsync) {
+        return "a parallel.run() closure cannot be async: parallel.* is "
+               "synchronous and its pool threads have no event loop, so an "
+               "await inside the closure would never be driven";
+    }
+    if (!a.typeParams.empty()) {
+        return "a parallel.run() closure cannot be generic: the call site has "
+               "no argument to infer its type parameters from";
+    }
+    if (!a.params.empty()) {
+        return "a parallel.run() closure takes no parameters: the call runs "
+               "each closure with no arguments";
+    }
+    return std::string();
 }
 
 }  // namespace
@@ -165,8 +215,16 @@ std::string Generator::emitParallelReduce(const CallExpr& c) {
         return "0.0";
     }
     const CppInfo initInfo = info(*c.arguments[1]);
-    if (!initInfo.representable || !isPrimitiveShape(initInfo.shape)) {
-        notImplemented(c, "this parallel.reduce initializer type");
+    if (!initInfo.representable || !isAccumulatorShape(initInfo.shape)) {
+        // The accumulator is copied once per element, so it must be an
+        // ordinary cp3 value type; a handle, a promise or a function is not
+        // one. Sema reports the same rule as CP3913; this is the defensive
+        // path for a unit lowered without a sema table.
+        reportCodegenError(c, diagcode::kParallelAccumulatorType,
+                           "a parallel.reduce accumulator must be a cp3 value "
+                           "type (a number, string, boolean, array, record, "
+                           "enum, or a union of those), not '" +
+                               parallelTypeLabel(initInfo.type) + "'");
         return "0.0";
     }
     std::string begin;
@@ -204,8 +262,11 @@ std::string Generator::emitParallelRun(const CallExpr& c) {
             return "0.0";
         }
         const auto& body = static_cast<const ArrowFunction&>(*arg);
-        if (!parallelClosureShape(body, 0)) {
-            notImplemented(c, "this parallel.run closure shape");
+        const std::string problem = parallelRunClosureProblem(body);
+        if (!problem.empty()) {
+            // Sema reports the same rule as CP3912; this is the defensive
+            // path for a unit lowered without a sema table.
+            reportCodegenError(c, diagcode::kParallelClosureShape, problem);
             return "0.0";
         }
         closures.push_back(emitParallelClosure(body, {}, {}));

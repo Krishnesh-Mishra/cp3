@@ -1,0 +1,8 @@
+import console from "std/console";
+
+const w = new Worker("./worker_listener_destructured_impl.cp3");
+w.on("message", (msg) => {
+  console.log(`${msg}`);
+  w.terminate();
+});
+w.postMessage({ a: 3, b: 4 });

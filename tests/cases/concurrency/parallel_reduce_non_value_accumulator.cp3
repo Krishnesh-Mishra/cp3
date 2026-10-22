@@ -1,0 +1,11 @@
+import console from "std/console";
+
+class Counter {
+  value: number = 0;
+}
+
+// A class instance is not a value type: the accumulator is copied per
+// element, so it must be a number, string, boolean, array, record, enum or a
+// union of those.
+let c = parallel.reduce(0..3, new Counter(), (acc, i) => acc);
+console.log("unreachable");

@@ -18,11 +18,11 @@
 //     records, enums, unions/options of those); a void direction has no send
 //     surface (CP3906).
 //
-// The worker unit itself (`runWorkerModule`) is the same lowering as the entry
-// form: its default-export arrow becomes
-// `void cp3_default(::cp3::runtime::ThreadHandle<In, Out>& thread)`, with the
-// unit's functions, enums and imports visible and its module variables held as
-// `thread_local` state initialized by the entry prologue.
+// The worker UNIT's own lowering (its full module: the `thread_local`
+// bindings, the classes and the statements that run when the worker thread
+// starts) lives in emit/worker_module.cpp; the handle member surface in
+// emit/worker_handles.cpp; the inline-worker pre-scan in
+// emit/worker_scan.cpp.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -42,31 +42,6 @@
 namespace cp3 {
 
 using namespace detail;
-
-namespace {
-
-// The worker unit's entry: its (first) default-export arrow, or nullptr.
-const ArrowFunction* defaultExportArrow(const Program& program) {
-    for (const auto& stmtPtr : program.body) {
-        if (!stmtPtr || stmtPtr->kind != NodeKind::ExportDeclaration) continue;
-        const auto& ed = static_cast<const ExportDeclaration&>(*stmtPtr);
-        if (ed.kind != ExportKind::Default || !ed.defaultExpr) continue;
-        if (ed.defaultExpr->kind != NodeKind::ArrowFunction) return nullptr;
-        return static_cast<const ArrowFunction*>(ed.defaultExpr.get());
-    }
-    return nullptr;
-}
-
-// The parameter name of an entry arrow as written in source ("" when absent).
-// `declare` keys by the cp3 name; the C++ spelling maps it at the use site.
-std::string entryParamName(const ArrowFunction& arrow) {
-    if (arrow.params.size() != 1 || !arrow.params[0]) return std::string();
-    const Parameter& p = *arrow.params[0];
-    if (!p.name || p.name->kind != NodeKind::Identifier) return std::string();
-    return static_cast<const Identifier&>(*p.name).name;
-}
-
-}  // namespace
 
 // -----------------------------------------------------------------------------
 // The handle marker model (detail/worker.h)
@@ -314,139 +289,7 @@ void Generator::emitWorkerEntryBody(const ArrowFunction& arrow, const Type& in,
     --nestingDepth_;
 }
 
-// -----------------------------------------------------------------------------
-// The worker unit: full module -> `cp3_default(ThreadHandle<In, Out>&)`
-// -----------------------------------------------------------------------------
-
-void Generator::emitWorkerTopLevel(const Stmt& s, std::string& decls,
-                                   std::string& defs, std::string& prologue) {
-    switch (s.kind) {
-        case NodeKind::ImportDeclaration:
-            return;  // imports are compile-time; console was noted by the caller
-        case NodeKind::FunctionDeclaration:
-            addFunction(static_cast<const FunctionDeclaration&>(s), decls, defs);
-            return;
-        case NodeKind::EnumDeclaration:
-            return;  // collectEnums ran before the walk
-        case NodeKind::InterfaceDeclaration:
-        case NodeKind::TypeAliasDeclaration:
-            return;  // type-only: erased by sema
-        case NodeKind::VariableDeclaration:
-            emitWorkerModuleVar(static_cast<const VariableDeclaration&>(s), defs,
-                                prologue);
-            return;
-        case NodeKind::ExportDeclaration: {
-            const auto& ed = static_cast<const ExportDeclaration&>(s);
-            if (ed.defaultExpr) return;  // the entry arrow
-            if (ed.declaration) {
-                emitWorkerTopLevel(*ed.declaration, decls, defs, prologue);
-                return;
-            }
-            notImplemented(ed, "re-export in a worker module");
-            return;
-        }
-        default:
-            notImplemented(s, "this worker-module statement");
-            return;
-    }
-}
-
-void Generator::emitWorkerModuleVar(const VariableDeclaration& vd,
-                                    std::string& defs,
-                                    std::string& prologue) {
-    for (const auto& declPtr : vd.declarations) {
-        if (!declPtr) continue;
-        const VariableDeclarator& d = *declPtr;
-        if (!d.id || d.id->kind != NodeKind::Identifier) {
-            notImplemented(d, "destructuring binding in a worker module");
-            continue;
-        }
-        const CppInfo ci = bindingCpp(d);
-        if (!ci.representable || ci.shape == Shape::Void) {
-            notImplemented(d, "this worker module variable");
-            continue;
-        }
-        const std::string raw = static_cast<const Identifier&>(*d.id).name;
-        const std::string name = mapIdent(raw);
-        defs += "thread_local " + ci.cpp + " " + name + "{};\n";
-        if (d.init) line(prologue, 1, name + " = " + expr(*d.init) + ";");
-        declare(raw, resolvedBindingType(d));
-    }
-}
-
-GeneratedModule Generator::runWorkerModule(const Program& program) {
-    workerModule_ = true;
-    needsWorker_ = true;
-    // Resolve the unit's types before the entry signature: a channel payload
-    // may be an enum (locally declared or imported from a local module), and
-    // its C++ spelling depends on `enums_`.
-    collectJsonShapes(program);
-    collectEnums(program);
-    const ArrowFunction* entry = defaultExportArrow(program);
-    const std::string threadName = entry ? entryParamName(*entry) : std::string();
-    std::optional<WorkerChannel> channel =
-        entry ? channelOfArrow(*entry, sema_) : std::nullopt;
-    if (channel) {
-        rewriteEnumTypes(channel->in);
-        rewriteEnumTypes(channel->out);
-    }
-    if (entry == nullptr) {
-        notImplemented(program, "a worker module without a default-export arrow");
-        return GeneratedModule{};
-    }
-    if (!channel) {
-        reportWorkerCode(*entry, diagcode::kWorkerMissingAnnotation,
-                         "a worker entry must annotate its parameter as "
-                         "`thread: Thread<In, Out>`; the annotation is the "
-                         "single source of truth for the worker's channel");
-        return GeneratedModule{};
-    }
-    if (entry->isAsync || !entry->typeParams.empty() || threadName.empty()) {
-        notImplemented(*entry, "this worker entry arrow");
-        return GeneratedModule{};
-    }
-    const std::string inCpp = workerPayloadText(channel->in, namesp_);
-    const std::string outCpp = workerPayloadText(channel->out, namesp_);
-    if (inCpp.empty() || outCpp.empty()) {
-        reportWorkerCode(*entry, diagcode::kWorkerPayloadNotCopyable,
-                         "worker channel payloads must be copyable value types "
-                         "(numbers, strings, booleans, arrays, records, enums, "
-                         "or unions/options of those)");
-        return GeneratedModule{};
-    }
-    for (const auto& stmtPtr : program.body) {
-        if (!stmtPtr) continue;
-        collectDeclaredNames(*stmtPtr);
-        if (stmtPtr->kind == NodeKind::ImportDeclaration) {
-            const auto& imp = static_cast<const ImportDeclaration&>(*stmtPtr);
-            if (imp.source == "std/console") consoleImported_ = true;
-        }
-    }
-    std::string decls;
-    std::string defs;
-    std::string prologue;
-    for (const auto& stmtPtr : program.body) {
-        if (stmtPtr) emitWorkerTopLevel(*stmtPtr, decls, defs, prologue);
-    }
-    // The worker TU is a full module: its own enums must precede the entry
-    // signature that spells a channel payload enum.
-    decls = enumDecls_ + decls;
-    const std::string signature =
-        "void cp3_default(::cp3::runtime::ThreadHandle<" + inCpp + ", " +
-        outCpp + ">& " + mapIdent(threadName) + ")";
-    line(decls, 0, signature + ";");
-    defs += signature + " {\n" + prologue;
-    std::string body;
-    emitWorkerEntryBody(*entry, channel->in, channel->out, body);
-    defs += body;
-    defs += "}\n";
-    const std::string globals =
-        objectGlobalDeclsFor(decls + defs + inCpp + outCpp, true);
-    applyUsageIncludes(decls + defs + globals + inCpp + outCpp);
-    GeneratedModule module;
-    module.header = buildHeader(decls, globals);
-    module.source = buildSource(decls, defs, globals, std::string());
-    return module;
-}
-
+// The worker unit's own lowering (its full module: the `thread_local`
+// bindings, the classes and the statements that run when the worker thread
+// starts) lives in emit/worker_module.cpp.
 }  // namespace cp3

@@ -1,0 +1,6 @@
+import console from "std/console";
+
+// The accumulator of a reduce is an ordinary cp3 value type: a record is
+// copied per element, exactly like a number.
+let total = parallel.reduce(0..5, { sum: 0 }, (acc, i) => acc);
+console.log(`${total.sum}`);

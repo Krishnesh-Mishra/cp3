@@ -1,0 +1,6 @@
+// A message listener may destructure the payload it receives.
+export default (thread: Thread<{ a: number, b: number }, number>) => {
+  thread.on("message", ({ a, b }) => {
+    thread.postMessage(a + b);
+  });
+};

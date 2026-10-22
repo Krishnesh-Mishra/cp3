@@ -1,0 +1,7 @@
+// A worker entry runs once at worker start-up: it is not a coroutine.
+const w = new Worker(async (thread: Thread<number, number>) => {
+  thread.on("message", (n) => {
+    thread.postMessage(n);
+  });
+});
+w.terminate();

@@ -1,0 +1,12 @@
+import console from "std/console";
+
+// A worker unit's own statements may await: they run in the worker thread's
+// own event loop (D71: one loop per thread).
+await Promise.resolve(1);
+console.log("worker ready");
+
+export default (thread: Thread<number, number>) => {
+  thread.on("message", (n) => {
+    thread.postMessage(n);
+  });
+};

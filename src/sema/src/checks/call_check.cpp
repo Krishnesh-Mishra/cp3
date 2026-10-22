@@ -146,8 +146,27 @@ bool Analyzer::tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& o
 // and `parseFloat` both return cp3 `number`, so `let n = parseInt(s)` and
 // ternaries over the result type correctly. Codegen lowers the calls to the
 // runtime helpers in cp3/core/runtime.hpp.
+//
+// The documented surface is one argument - the text to parse. Any other
+// argument list is a program error (CP3403), not an unimplemented feature: the
+// runtime helper takes exactly one string.
 bool Analyzer::tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& out) {
     if (id.name != "parseInt" && id.name != "parseFloat") return false;
+    bool hasSpread = false;
+    for (auto& a : call.arguments) {
+        if (a && a->kind == NodeKind::SpreadElement) hasSpread = true;
+    }
+    if (hasSpread) {
+        report(diagcode::kArityMismatch, call.span,
+               id.name + "() takes exactly one argument (the text to parse); a "
+                        "spread argument cannot be counted here");
+    } else if (call.arguments.size() != 1) {
+        const std::size_t given = call.arguments.size();
+        report(diagcode::kArityMismatch, call.span,
+               "arity mismatch: " + id.name + "() expects exactly 1 argument (the "
+               "text to parse), got " + std::to_string(given) +
+                   (given == 1 ? " argument" : " arguments"));
+    }
     inferArgs(call);
     out = Type::number();
     return true;

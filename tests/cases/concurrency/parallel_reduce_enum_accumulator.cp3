@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// An enum is a value type too: the accumulator is copied per element.
+enum Color {
+  Red,
+  Green
+}
+
+let c = parallel.reduce(0..3, Color.Red, (acc, i) => Color.Green);
+console.log(`${c}`);

@@ -1,0 +1,14 @@
+// A worker unit is a full module: it may declare a class, and a module
+// binding may hold an instance of it.
+class Box {
+  value: number = 0;
+}
+
+let box = new Box();
+box.value = 5;
+
+export default (thread: Thread<number, number>) => {
+  thread.on("message", (n) => {
+    thread.postMessage(n + box.value);
+  });
+};

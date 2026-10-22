@@ -163,9 +163,23 @@ void walkWorkerNew(const NewExpr& n, SiteScan& scan) {
                    "`thread: Thread<In, Out>`; the annotation is the single "
                    "source of truth for the worker's channel",
                    scan);
-    } else if (arrow.isAsync || !arrow.typeParams.empty() || !named) {
-        reportOnce(n, diagcode::kNotImplemented,
-                   "not implemented yet: this inline worker entry", scan);
+    } else if (arrow.isAsync) {
+        // The entry runs once at worker start-up: it is not a coroutine.
+        reportOnce(n, diagcode::kWorkerEntryShape,
+                   "an inline worker entry cannot be async: it runs once at "
+                   "worker start-up and its body is the worker thread's setup",
+                   scan);
+    } else if (!arrow.typeParams.empty()) {
+        reportOnce(n, diagcode::kWorkerEntryShape,
+                   "an inline worker entry cannot be generic: the worker's "
+                   "channel types come from its `Thread<In, Out>` annotation, "
+                   "so there is nothing to infer a type parameter from",
+                   scan);
+    } else if (!named) {
+        reportOnce(n, diagcode::kWorkerEntryShape,
+                   "an inline worker entry's parameter must be a plain name: it "
+                   "is the worker-side handle (`thread: Thread<In, Out>`)",
+                   scan);
     } else {
         WorkerSite site;
         site.nodeId = n.nodeId;

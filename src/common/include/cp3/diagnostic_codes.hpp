@@ -113,5 +113,10 @@ inline constexpr const char* kWorkerPayloadMismatch = "CP3908";
 inline constexpr const char* kWorkerEnclosingCapture = "CP3909";
 inline constexpr const char* kWorkerComputedPath = "CP3910";
 inline constexpr const char* kWorkerHandleMember = "CP3911";
+inline constexpr const char* kParallelClosureShape = "CP3912";
+inline constexpr const char* kParallelAccumulatorType = "CP3913";
+inline constexpr const char* kWorkerEntryShape = "CP3914";
+inline constexpr const char* kWorkerListenerParameter = "CP3915";
+inline constexpr const char* kWorkerModuleForm = "CP3916";
 
 }  // namespace cp3::diagcode

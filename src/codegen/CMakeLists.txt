@@ -71,6 +71,8 @@ set(cp3_codegen_sources
     src/emit/parallel.cpp
     src/emit/worker.cpp
     src/emit/worker_handles.cpp
+    src/emit/worker_listener.cpp
+    src/emit/worker_module.cpp
     src/emit/worker_scan.cpp
     src/emit/worker_scan_stmt.cpp
     ../std/typed-arrays/codegen.cpp

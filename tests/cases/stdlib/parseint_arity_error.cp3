@@ -1,0 +1,5 @@
+import console from "std/console";
+
+// parseInt takes exactly one argument: the text to parse.
+let n = parseInt();
+console.log(`${n}`);

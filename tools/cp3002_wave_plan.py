@@ -80,6 +80,8 @@ AREA_OF_FILE = {
     # 18 - worker and parallel modules
     "src/codegen/src/emit/worker.cpp": "18 Worker and parallel modules",
     "src/codegen/src/emit/worker_handles.cpp": "18 Worker and parallel modules",
+    "src/codegen/src/emit/worker_listener.cpp": "18 Worker and parallel modules",
+    "src/codegen/src/emit/worker_module.cpp": "18 Worker and parallel modules",
     "src/codegen/src/emit/worker_scan.cpp": "18 Worker and parallel modules",
     "src/codegen/src/emit/parallel.cpp": "18 Worker and parallel modules",
     # CLI scaffolding
