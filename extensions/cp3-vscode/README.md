@@ -9,12 +9,23 @@ statically typed, JS/TS-shaped language that compiles through C++:
 - comment/bracket/indent behavior for `.cp3` documents;
 - live compiler diagnostics: the extension starts the language server built
   into the compiler, `cp3c lsp --stdio`, and shows its diagnostics as you
-  type.
+  type;
+- **hover with documentation**: hovering a name shows its type *and* what it
+  does - the doc comment of a `.cp3` declaration (`/** ... */` or `/// ...`,
+  see [the language spec](../../docs/language-spec/24-doc-comments.md)) or the
+  standard library's own description of a member such as `console.log` or
+  `Math.abs`;
+- **completion with documentation**: every candidate in the completion popup
+  carries the same description, so the popup explains what a member does
+  before it is inserted;
+- **signature help with documentation**: the active call shows what the
+  callee does and what each parameter is for;
+- go-to-definition, document symbols and formatting, all answered by the
+  same language server.
 
-The scope of this round is deliberately small: highlighting plus the
-compiler's own diagnostics. Hover, completion, go-to-definition, formatting
-and rename are not implemented yet - neither in this extension nor in the
-server.
+The documentation is Markdown: the server sends it as LSP `MarkupContent`,
+which VS Code renders as formatted text (a description, a `@param` list, a
+signature).
 
 ## Requirements
 

@@ -35,6 +35,7 @@ set(cp3_cli_sources
     src/commands/check.cpp
     src/commands/lsp.cpp
     src/commands/lsp_intel.cpp
+    src/commands/lsp_intel_docs.cpp
     src/commands/lsp_intel_query.cpp
     src/commands/lsp_intel_define.cpp
     src/commands/lsp_intel_complete.cpp

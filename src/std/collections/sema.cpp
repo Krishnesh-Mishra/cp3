@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include "detail/std_tables.hpp"
+
 namespace cp3 {
 
 namespace {
@@ -40,6 +42,48 @@ const char* const kMapMemberNames[] = {"set",     "get",     "has",     "delete"
                                        "forEach", "size"};
 const char* const kSetMemberNames[] = {"add",   "has",   "delete",  "clear",
                                        "values", "forEach", "size"};
+
+// The documented members of a `Map` (docs/standard-library/04, Map / Set).
+const DocRow kMapDocRows[] = {
+    {"set", "set(key: K, value: V): void",
+     "Stores `value` under `key`, replacing an earlier value."},
+    {"get", "get(key: K): V | undefined",
+     "Returns the value stored under `key`, or `undefined` when the key is "
+     "not in the map."},
+    {"has", "has(key: K): boolean",
+     "True when `key` is in the map."},
+    {"delete", "delete(key: K): boolean",
+     "Removes `key` from the map and returns whether a key was actually "
+     "removed."},
+    {"clear", "clear(): void", "Removes every entry from the map."},
+    {"keys", "keys(): K[]",
+     "Returns the keys of the map, in insertion order."},
+    {"values", "values(): V[]",
+     "Returns the values of the map, in insertion order."},
+    {"entries", "entries(): [K, V][]",
+     "Returns the `[key, value]` pairs of the map, in insertion order."},
+    {"forEach", "forEach(callback: (value: V, key: K) => void): void",
+     "Calls `callback` for every entry, with the value first and the key "
+     "second, in insertion order."},
+    {"size", "size: number", "The number of entries in the map."},
+};
+
+// The documented members of a `Set` (docs/standard-library/04, Map / Set).
+const DocRow kSetDocRows[] = {
+    {"add", "add(value: T): void",
+     "Adds `value` to the set. A value that is already in the set keeps its "
+     "first position."},
+    {"has", "has(value: T): boolean", "True when `value` is in the set."},
+    {"delete", "delete(value: T): boolean",
+     "Removes `value` from the set and returns whether a value was actually "
+     "removed."},
+    {"clear", "clear(): void", "Removes every value from the set."},
+    {"values", "values(): T[]",
+     "Returns the values of the set, in insertion order."},
+    {"forEach", "forEach(callback: (value: T) => void): void",
+     "Calls `callback` for every value, in insertion order."},
+    {"size", "size: number", "The number of values in the set."},
+};
 
 template <std::size_t N>
 std::vector<std::string> candidateNames(const char* const (&names)[N]) {
@@ -130,6 +174,19 @@ Type Analyzer::collectionsMember(const Type& recv, const std::string& prop,
     if (prop == "clear") return Type::function({}, Type::voidType());
     reportMemberMiss("Set", prop, span, candidateNames(kSetMemberNames));
     return Type::unknown();
+}
+
+StdMemberDoc collectionsMemberDoc(const std::string& family,
+                                   const std::string& prop) {
+    if (family == "Map") return memberDoc(kMapDocRows, prop);
+    if (family == "Set") return memberDoc(kSetDocRows, prop);
+    return StdMemberDoc{};
+}
+
+std::vector<std::string> collectionsMemberNames(const std::string& family) {
+    if (family == "Map") return docRowNames(kMapDocRows);
+    if (family == "Set") return docRowNames(kSetDocRows);
+    return {};
 }
 
 }  // namespace cp3

@@ -55,12 +55,24 @@ Json rangeJson(const std::string& text, std::uint32_t line,
     return range;
 }
 
+// A Markdown documentation block (the LSP `MarkupContent` shape the editor
+// renders as formatted text).
+Json markdownDoc(const std::string& value) {
+    Json doc = jsonObject();
+    doc.set("kind", jsonString("markdown"));
+    doc.set("value", jsonString(value));
+    return doc;
+}
+
 Json completionItemJson(const CompletionCandidate& candidate) {
     Json item = jsonObject();
     item.set("label", jsonString(candidate.label));
     item.set("kind", jsonInt(candidate.kind));
     if (!candidate.detail.empty()) {
         item.set("detail", jsonString(candidate.detail));
+    }
+    if (!candidate.documentation.empty()) {
+        item.set("documentation", markdownDoc(candidate.documentation));
     }
     if (candidate.insertTextFormat == 2 && !candidate.insertText.empty()) {
         item.set("insertText", jsonString(candidate.insertText));
@@ -160,10 +172,23 @@ Json hoverResult(const DocumentView& document, std::uint32_t line,
     } catch (...) {
         answer.reset();
     }
-    if (!answer || answer->contents.empty()) return jsonNull();
+    if (!answer || (answer->contents.empty() && answer->documentation.empty())) {
+        return jsonNull();
+    }
+    // The signature (or the inferred type) goes into a code block; the
+    // documentation is appended as markdown, so the editor formats the
+    // description and the parameter list.
+    std::string value;
+    if (!answer->contents.empty()) {
+        value = "```cp3\n" + answer->contents + "\n```";
+    }
+    if (!answer->documentation.empty()) {
+        if (!value.empty()) value += "\n\n";
+        value += answer->documentation;
+    }
     Json contents = jsonObject();
     contents.set("kind", jsonString("markdown"));
-    contents.set("value", jsonString("```cp3\n" + answer->contents + "\n```"));
+    contents.set("value", jsonString(value));
     Json result = jsonObject();
     result.set("contents", std::move(contents));
     return result;
@@ -227,13 +252,20 @@ Json signatureHelpResult(const DocumentView& document, std::uint32_t line,
     }
     if (!answer || answer->label.empty()) return jsonNull();
     Json parameters = jsonArray();
-    for (const std::string& parameter : answer->parameters) {
+    for (std::size_t i = 0; i < answer->parameters.size(); ++i) {
         Json item = jsonObject();
-        item.set("label", jsonString(parameter));
+        item.set("label", jsonString(answer->parameters[i]));
+        if (i < answer->parameterDocs.size() &&
+            !answer->parameterDocs[i].empty()) {
+            item.set("documentation", markdownDoc(answer->parameterDocs[i]));
+        }
         parameters.push(std::move(item));
     }
     Json signature = jsonObject();
     signature.set("label", jsonString(answer->label));
+    if (!answer->documentation.empty()) {
+        signature.set("documentation", markdownDoc(answer->documentation));
+    }
     signature.set("parameters", std::move(parameters));
     Json signatures = jsonArray();
     signatures.push(std::move(signature));

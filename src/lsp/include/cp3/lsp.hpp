@@ -57,14 +57,17 @@ struct CompletionCandidate {
     std::string label;         // insert text and filter text
     int kind = 1;              // LSP CompletionItemKind (3 function, 5 field, ...)
     std::string detail;        // type or signature line; may be empty
+    std::string documentation; // Markdown documentation; may be empty
     std::string insertText;    // when non-empty and different from `label`
     int insertTextFormat = 1;  // 1 plain text, 2 snippet
 };
 
-// A hover answer: plain text lines (types, signatures). The server wraps them
-// into a markdown code block.
+// A hover answer: the signature/type line and the documentation. The server
+// wraps the line into a markdown code block and appends the documentation as
+// markdown, so the editor formats the description and the parameter list.
 struct HoverAnswer {
-    std::string contents;
+    std::string contents;       // the signature or type line; may be empty
+    std::string documentation;  // the Markdown documentation; may be empty
 };
 
 // A jump target in compiler coordinates (1-based line, 1-based BYTE column).
@@ -92,6 +95,8 @@ struct SymbolEntry {
 struct SignatureAnswer {
     std::string label;                      // full signature line
     std::vector<std::string> parameters;    // one entry per parameter
+    std::string documentation;              // the Markdown documentation
+    std::vector<std::string> parameterDocs; // one entry per parameter
     int activeParameter = 0;                // 0-based index
 };
 

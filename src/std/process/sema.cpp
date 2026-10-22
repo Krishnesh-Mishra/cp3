@@ -28,6 +28,8 @@
 #include <string>
 #include <vector>
 
+#include "detail/std_tables.hpp"
+
 namespace cp3 {
 
 namespace {
@@ -41,6 +43,45 @@ const char* const kSpawnHandle = "$process:SpawnHandle";
 Type callbackOf(std::size_t arity) {
     return Type::function(std::vector<Type>(arity, ambient()), Type::voidType());
 }
+
+// The documented members of the `process` namespace
+// (docs/standard-library/04-imported-std-modules.md, process section).
+const DocRow kProcessRows[] = {
+    {"argv", "argv: string[]",
+     "The command-line arguments the program was started with."},
+    {"env", "env: Map<string, string>",
+     "The environment variables of the process, as a `Map` of names to "
+     "values."},
+    {"exit", "exit(code: number): void",
+     "Ends the program with the exit code `code`."},
+    {"exec", "exec(cmd: string, args: string[]): Promise<ExecResult>",
+     "Runs `cmd` with `args` and resolves once the process has finished, with "
+     "its `ExecResult`.\n\n"
+     "A non-zero exit code does not reject the promise - check "
+     "`result.exitCode` yourself. A rejection is reserved for a command that "
+     "cannot be launched at all."},
+    {"spawn", "spawn(cmd: string, args: string[]): SpawnHandle",
+     "Runs `cmd` with `args` and returns a live `SpawnHandle` right away, so "
+     "the output can be consumed as it arrives."},
+};
+
+// The documented fields of an `ExecResult` value.
+const DocRow kExecResultRows[] = {
+    {"stdout", "stdout: string", "Everything the command wrote to stdout."},
+    {"stderr", "stderr: string", "Everything the command wrote to stderr."},
+    {"exitCode", "exitCode: number", "The exit code the command finished with."},
+};
+
+// The documented members of a `SpawnHandle` value.
+const DocRow kSpawnHandleRows[] = {
+    {"on", "on(event: \"data\" | \"stderr\" | \"exit\", listener: (value: string) => void): void",
+     "Registers a listener for the `\"data\"` (stdout chunks), `\"stderr\"` "
+     "(stderr chunks) or `\"exit\"` (the exit code) event."},
+    {"write", "write(input: string): void",
+     "Writes `input` to the child's stdin."},
+    {"kill", "kill(): void",
+     "Ends the child process."},
+};
 
 }  // namespace
 
@@ -107,6 +148,26 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
 
 std::vector<std::string> processMemberNames() {
     return {"exit", "argv", "exec", "spawn", "env"};
+}
+
+StdMemberDoc processMemberDoc(const std::string& prop) {
+    return memberDoc(kProcessRows, prop);
+}
+
+StdMemberDoc processExecResultDoc(const std::string& prop) {
+    return memberDoc(kExecResultRows, prop);
+}
+
+StdMemberDoc processSpawnHandleDoc(const std::string& prop) {
+    return memberDoc(kSpawnHandleRows, prop);
+}
+
+std::vector<std::string> processExecResultMemberNames() {
+    return docRowNames(kExecResultRows);
+}
+
+std::vector<std::string> processSpawnHandleMemberNames() {
+    return docRowNames(kSpawnHandleRows);
 }
 
 }  // namespace cp3

@@ -72,6 +72,11 @@ const Node* innermostNodeAt(const Program& program, const SourceFile& file,
 // True when an analysis produced a program to answer from.
 bool analysisReady(const AnalyzedDocument& document);
 
+// True for the placeholder types the compiler uses for "some ambient value"
+// (the shape behind an unresolved import). Their printable label is an
+// internal name ("$ambient"), so callers must not surface it.
+bool isPlaceholderType(const Type& type);
+
 // The nearest declaration of `name` at or before `offset` in `file`, or
 // nullptr. The binding table carries every declaration site; the greatest
 // offset not past the cursor is the binding that shadows the earlier ones.

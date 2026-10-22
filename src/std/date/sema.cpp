@@ -1,5 +1,5 @@
 // =============================================================================
-// src/std/date/sema.cpp - `std/date` surface typing.
+// src/std/date/sema.cpp - `std/date` surface typing and documentation.
 //
 // OWNERSHIP: the std/date family (src/std/date/**). One per-module check unit;
 // the core dispatch rows (std_check.cpp / member_check.cpp) forward here, so
@@ -15,8 +15,12 @@
 //
 // Both the namespace object (`Date.now`) and a Date VALUE (`d.getFullYear()`)
 // are CLOSED: a member outside the tables is CP3305 with the implemented names
-// as candidates instead of a CP3002 skip. The tables drive member typing and
-// the candidate lists at once, so the two can never drift apart.
+// as candidates instead of a CP3002 skip. The tables drive member typing, the
+// candidate lists and the editor documentation at once, so the three can never
+// drift apart.
+//
+// A Date is immutable: every "change" operation returns a NEW Date and leaves
+// the receiver untouched (deliberately unlike JS's mutable Date).
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -42,21 +46,50 @@ Type dateToNumber() { return Type::function({dateValue()}, Type::number()); }
 
 // The namespace object's statics (docs 04).
 const MemberRow kDateStaticRows[] = {
-    {"now", zeroToDate},
-    {"fromISOString", stringToDate},
+    {"now", zeroToDate, "now(): Date",
+     "Returns the current date and time as a new `Date`."},
+    {"fromISOString", stringToDate, "fromISOString(s: string): Date",
+     "Parses an ISO-8601 date string into a `Date`."},
 };
 
 // The members of a Date value. Every "change" returns a NEW Date: the type
 // says so, and the runtime keeps the receiver untouched.
 const MemberRow kDateInstanceRows[] = {
-    {"toISOString", zeroToString}, {"toString", zeroToString},
-    {"getFullYear", zeroToNumber}, {"getMonth", zeroToNumber},
-    {"getDate", zeroToNumber},     {"getHours", zeroToNumber},
-    {"getMinutes", zeroToNumber},  {"getSeconds", zeroToNumber},
-    {"addDays", numberToDate},     {"addHours", numberToDate},
-    {"addMinutes", numberToDate},  {"addSeconds", numberToDate},
-    {"isBefore", dateToBoolean},   {"isAfter", dateToBoolean},
-    {"diffMs", dateToNumber},
+    {"toISOString", zeroToString, "toISOString(): string",
+     "Returns the date and time as an ISO-8601 string."},
+    {"toString", zeroToString, "toString(): string",
+     "Returns the date and time as a human-readable string."},
+    {"getFullYear", zeroToNumber, "getFullYear(): number",
+     "Returns the year of the date."},
+    {"getMonth", zeroToNumber, "getMonth(): number",
+     "Returns the month of the date, 0-indexed (0 = January), matching JS."},
+    {"getDate", zeroToNumber, "getDate(): number",
+     "Returns the day of the month of the date."},
+    {"getHours", zeroToNumber, "getHours(): number",
+     "Returns the hour of the day of the date."},
+    {"getMinutes", zeroToNumber, "getMinutes(): number",
+     "Returns the minute of the hour of the date."},
+    {"getSeconds", zeroToNumber, "getSeconds(): number",
+     "Returns the second of the minute of the date."},
+    {"addDays", numberToDate, "addDays(n: number): Date",
+     "Returns a NEW `Date` moved `n` days forward; the receiver is "
+     "untouched."},
+    {"addHours", numberToDate, "addHours(n: number): Date",
+     "Returns a NEW `Date` moved `n` hours forward; the receiver is "
+     "untouched."},
+    {"addMinutes", numberToDate, "addMinutes(n: number): Date",
+     "Returns a NEW `Date` moved `n` minutes forward; the receiver is "
+     "untouched."},
+    {"addSeconds", numberToDate, "addSeconds(n: number): Date",
+     "Returns a NEW `Date` moved `n` seconds forward; the receiver is "
+     "untouched."},
+    {"isBefore", dateToBoolean, "isBefore(other: Date): boolean",
+     "True when this date is earlier than `other`."},
+    {"isAfter", dateToBoolean, "isAfter(other: Date): boolean",
+     "True when this date is later than `other`."},
+    {"diffMs", dateToNumber, "diffMs(other: Date): number",
+     "Returns the difference between this date and `other` in milliseconds "
+     "(this minus other)."},
 };
 
 }  // namespace
@@ -84,6 +117,14 @@ std::vector<std::string> dateMemberNames() {
 
 std::vector<std::string> dateInstanceMemberNames() {
     return memberNames(kDateInstanceRows);
+}
+
+StdMemberDoc dateMemberDoc(const std::string& prop) {
+    return memberDoc(kDateStaticRows, prop);
+}
+
+StdMemberDoc dateInstanceMemberDoc(const std::string& prop) {
+    return memberDoc(kDateInstanceRows, prop);
 }
 
 }  // namespace cp3

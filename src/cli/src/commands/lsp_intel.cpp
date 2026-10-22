@@ -110,6 +110,12 @@ bool analysisReady(const AnalyzedDocument& document) {
            document.entry->ast != nullptr;
 }
 
+bool isPlaceholderType(const Type& type) {
+    if (type.isUnknown() || type.isError()) return true;
+    return type.kind == TypeKind::Object && !type.name.empty() &&
+           type.name.front() == '$';
+}
+
 const SymbolInfo* nearestSymbolAt(const SemaResult& sema, const std::string& name,
                                   const SourceFile& file, std::uint32_t offset) {
     const SymbolInfo* best = nullptr;

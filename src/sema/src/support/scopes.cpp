@@ -238,6 +238,7 @@ void Analyzer::hoistFunction(FunctionDeclaration& fn) {
                                .declNodeId = fn.nodeId, .sig = &sig});
     sigs_[fn.nodeId] = sig;
     publishFunction(sig, fn.name);
+    publishDoc(fn.nodeId, fn.span);
     setType(fn, fnType);
 }
 

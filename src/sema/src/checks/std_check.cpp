@@ -78,6 +78,69 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns) {
     return {};
 }
 
+// -----------------------------------------------------------------------------
+// Documentation
+// -----------------------------------------------------------------------------
+//
+// The same dispatch as above, for the documentation the editor shows: the
+// documented signature and the Markdown description of one member. The tables
+// live with their families, so the documentation can never describe a member
+// the compiler does not have (or the other way round).
+
+// The receiver markers of the families whose values carry documented fields
+// (the same names the family units and the codegen recognise).
+const char* const kFileStatsMarker = "$fs:FileStats";
+const char* const kExecResultMarker = "$process:ExecResult";
+const char* const kSpawnHandleMarker = "$process:SpawnHandle";
+
+StdMemberDoc stdNamespaceMemberDoc(const std::string& ns,
+                                   const std::string& member) {
+    if (ns == "Math") return mathMemberDoc(member);
+    if (ns == "path") return pathMemberDoc(member);
+    if (ns == "os") return osMemberDoc(member);
+    if (ns == "process") return processMemberDoc(member);
+    if (ns == "env") return envMemberDoc(member);
+    if (ns == "crypto") return cryptoMemberDoc(member);
+    if (ns == "console") return consoleMemberDoc(member);
+    if (ns == "JSON") return jsonMemberDoc(member);
+    if (ns == "Date") return dateMemberDoc(member);
+    if (ns == "fs") return fsMemberDoc(member);
+    return StdMemberDoc{};
+}
+
+StdMemberDoc stdInstanceMemberDoc(const std::string& family,
+                                   const std::string& member) {
+    if (family == "Date") return dateInstanceMemberDoc(member);
+    if (family == "Map") return collectionsMemberDoc("Map", member);
+    if (family == "Set") return collectionsMemberDoc("Set", member);
+    if (family == kFileStatsMarker) return fsStatsMemberDoc(member);
+    if (family == kExecResultMarker) return processExecResultDoc(member);
+    if (family == kSpawnHandleMarker) return processSpawnHandleDoc(member);
+    return StdMemberDoc{};
+}
+
+std::vector<std::string> stdInstanceMemberNames(const std::string& family) {
+    if (family == "Date") return dateInstanceMemberNames();
+    if (family == "Map") return collectionsMemberNames("Map");
+    if (family == "Set") return collectionsMemberNames("Set");
+    if (family == kFileStatsMarker) return fsStatsMemberNames();
+    if (family == kExecResultMarker) return processExecResultMemberNames();
+    if (family == kSpawnHandleMarker) return processSpawnHandleMemberNames();
+    return {};
+}
+
+StdMemberDoc stdArrayMemberDoc(const std::string& member) {
+    return arrayMemberDoc(member);
+}
+
+std::vector<std::string> stdArrayMemberNames() { return arrayMemberNames(); }
+
+StdMemberDoc stdStringMemberDoc(const std::string& member) {
+    return stringMemberDoc(member);
+}
+
+std::vector<std::string> stdStringMemberNames() { return stringMemberNames(); }
+
 std::string stdImportHint(const std::string& name) {
     struct ModuleHint {
         const char* binding;

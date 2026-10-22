@@ -19,6 +19,8 @@
 #include "cp3/lsp.hpp"
 #include "cp3/std_modules.hpp"
 
+#include "detail/lsp_intel_docs.hpp"
+
 namespace cp3::cli {
 
 // -----------------------------------------------------------------------------
@@ -36,14 +38,30 @@ bool hasLabel(const std::vector<lsp::CompletionCandidate>& items,
     return false;
 }
 
+// One named candidate: its label, the LSP kind, the detail line and the
+// documentation the editor shows next to it.
+struct NamedCandidate {
+    std::string name;
+    int kind = 1;
+    std::string detail;
+    std::string documentation;
+};
+
+NamedCandidate namedCandidate(std::string name, int kind, std::string detail,
+                              std::string documentation = "") {
+    return NamedCandidate{std::move(name), kind, std::move(detail),
+                          std::move(documentation)};
+}
+
 void appendNamed(std::vector<lsp::CompletionCandidate>& out,
-                 const std::string& name, int kind, const std::string& detail) {
-    if (name.empty() || hasLabel(out, name)) return;
-    lsp::CompletionCandidate candidate;
-    candidate.label = name;
-    candidate.kind = kind;
-    candidate.detail = detail;
-    out.push_back(std::move(candidate));
+                 const NamedCandidate& candidate) {
+    if (candidate.name.empty() || hasLabel(out, candidate.name)) return;
+    lsp::CompletionCandidate item;
+    item.label = candidate.name;
+    item.kind = candidate.kind;
+    item.detail = candidate.detail;
+    item.documentation = candidate.documentation;
+    out.push_back(std::move(item));
 }
 
 void appendSnippet(std::vector<lsp::CompletionCandidate>& out,
@@ -62,55 +80,72 @@ void appendSnippet(std::vector<lsp::CompletionCandidate>& out,
 void appendImportCandidates(const ImportDeclaration& import,
                             std::vector<lsp::CompletionCandidate>& out) {
     const std::string detail = "imported from \"" + import.source + "\"";
-    appendNamed(out, import.defaultBinding, 6, detail);  // Variable
-    appendNamed(out, import.namespaceBinding, 9, detail);  // Module
-    appendNamed(out, import.alias, 6, detail);
+    appendNamed(out, namedCandidate(import.defaultBinding, 6, detail));  // Variable
+    appendNamed(out, namedCandidate(import.namespaceBinding, 9, detail));  // Module
+    appendNamed(out, namedCandidate(import.alias, 6, detail));
     for (const ImportSpecifierPtr& specifier : import.specifiers) {
         if (specifier == nullptr) continue;
         const std::string& local =
             specifier->local.empty() ? specifier->imported : specifier->local;
-        appendNamed(out, local, 6, detail);
+        appendNamed(out, namedCandidate(local, 6, detail));
     }
 }
 
-void appendStatementCandidates(const Stmt& statement,
+// The variables a document declares, with the doc comment of the
+// declaration they were introduced by.
+void appendVariableCandidates(const AnalyzedDocument& document,
+                              const VariableDeclaration& declaration,
+                              std::vector<lsp::CompletionCandidate>& out) {
+    const bool isConst = declaration.kind == VarKind::Const;
+    for (const VariableDeclaratorPtr& declarator : declaration.declarations) {
+        if (declarator == nullptr || declarator->id == nullptr) continue;
+        if (declarator->id->kind != NodeKind::Identifier) continue;
+        appendNamed(out,
+                    namedCandidate(
+                        static_cast<const Identifier&>(*declarator->id).name,
+                        isConst ? 21 : 6, isConst ? "const" : "let",
+                        docCommentFor(document, declarator->nodeId)));
+    }
+}
+
+void appendStatementCandidates(const AnalyzedDocument& document,
+                               const Stmt& statement,
                                std::vector<lsp::CompletionCandidate>& out) {
     switch (statement.kind) {
         case NodeKind::FunctionDeclaration:
-            appendNamed(out, static_cast<const FunctionDeclaration&>(statement).name,
-                        3, "function");
+            appendNamed(out,
+                        namedCandidate(
+                            static_cast<const FunctionDeclaration&>(statement).name,
+                            3, "function", docCommentFor(document, statement.nodeId)));
             return;
         case NodeKind::ClassDeclaration:
-            appendNamed(out, static_cast<const ClassDeclaration&>(statement).name,
-                        7, "class");
+            appendNamed(out,
+                        namedCandidate(
+                            static_cast<const ClassDeclaration&>(statement).name,
+                            7, "class", docCommentFor(document, statement.nodeId)));
             return;
         case NodeKind::InterfaceDeclaration:
             appendNamed(out,
-                        static_cast<const InterfaceDeclaration&>(statement).name,
-                        8, "interface");
+                        namedCandidate(
+                            static_cast<const InterfaceDeclaration&>(statement).name,
+                            8, "interface"));
             return;
         case NodeKind::EnumDeclaration:
-            appendNamed(out, static_cast<const EnumDeclaration&>(statement).name,
-                        13, "enum");
+            appendNamed(out,
+                        namedCandidate(
+                            static_cast<const EnumDeclaration&>(statement).name,
+                            13, "enum"));
             return;
         case NodeKind::TypeAliasDeclaration:
             appendNamed(out,
-                        static_cast<const TypeAliasDeclaration&>(statement).name,
-                        22, "type");
+                        namedCandidate(
+                            static_cast<const TypeAliasDeclaration&>(statement).name,
+                            22, "type"));
             return;
-        case NodeKind::VariableDeclaration: {
-            const auto& declaration =
-                static_cast<const VariableDeclaration&>(statement);
-            const bool isConst = declaration.kind == VarKind::Const;
-            for (const VariableDeclaratorPtr& declarator : declaration.declarations) {
-                if (declarator == nullptr || declarator->id == nullptr) continue;
-                if (declarator->id->kind != NodeKind::Identifier) continue;
-                appendNamed(out,
-                            static_cast<const Identifier&>(*declarator->id).name,
-                            isConst ? 21 : 6, isConst ? "const" : "let");
-            }
+        case NodeKind::VariableDeclaration:
+            appendVariableCandidates(
+                document, static_cast<const VariableDeclaration&>(statement), out);
             return;
-        }
         case NodeKind::ImportDeclaration:
             appendImportCandidates(static_cast<const ImportDeclaration&>(statement),
                                    out);
@@ -119,7 +154,7 @@ void appendStatementCandidates(const Stmt& statement,
             const auto& declaration =
                 static_cast<const ExportDeclaration&>(statement);
             if (declaration.declaration != nullptr) {
-                appendStatementCandidates(*declaration.declaration, out);
+                appendStatementCandidates(document, *declaration.declaration, out);
             }
             return;
         }
@@ -133,7 +168,7 @@ void appendDeclarationCandidates(const AnalyzedDocument& document,
     for (const StmtPtr& statement : document.entry->ast->body) {
         if (statement == nullptr || !statement->span.valid()) continue;
         if (statement->span.file != document.file) continue;  // prelude tail
-        appendStatementCandidates(*statement, out);
+        appendStatementCandidates(document, *statement, out);
     }
 }
 
@@ -182,7 +217,7 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
                   "declare an interface");
     appendDeclarationCandidates(document, candidates);
     for (const char* keyword : kKeywords) {
-        appendNamed(candidates, keyword, 14, "keyword");
+        appendNamed(candidates, namedCandidate(keyword, 14, "keyword"));
     }
     return candidates;
 }

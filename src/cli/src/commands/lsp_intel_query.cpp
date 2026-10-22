@@ -26,17 +26,10 @@
 #include "cp3/source.hpp"
 #include "cp3/types.hpp"
 
+#include "detail/lsp_intel_docs.hpp"
+
 namespace cp3::cli {
 namespace {
-
-// True for the placeholder types the compiler uses for "some ambient value".
-// Their printable label is an internal name ("$ambient"), so callers must not
-// surface it.
-bool isPlaceholder(const Type& type) {
-    if (type.isUnknown() || type.isError()) return true;
-    return type.kind == TypeKind::Object && !type.name.empty() &&
-           type.name.front() == '$';
-}
 
 // The name a hover/definition works on. Empty for nodes that carry none.
 std::string nameOfNode(const Node& node) {
@@ -62,6 +55,18 @@ std::string nameOfNode(const Node& node) {
                 return static_cast<const Identifier&>(*declarator.id).name;
             }
             return std::string();
+        }
+        case NodeKind::MethodDeclaration: {
+            const auto& method = static_cast<const MethodDeclaration&>(node);
+            return keyName(method.key.get());
+        }
+        case NodeKind::PropertyDeclaration: {
+            const auto& property = static_cast<const PropertyDeclaration&>(node);
+            return keyName(property.key.get());
+        }
+        case NodeKind::AccessorDeclaration: {
+            const auto& accessor = static_cast<const AccessorDeclaration&>(node);
+            return keyName(accessor.key.get());
         }
         default:
             return std::string();
@@ -305,16 +310,29 @@ std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,
     if (node == nullptr) return std::nullopt;
     const std::string name = nameOfNode(*node);
     const Type* type = document->sema.typeOf(node->nodeId);
+    const SymbolInfo* symbol = nullptr;
     if (type == nullptr && !name.empty()) {
         const std::uint32_t offset =
             offsetOf(*document->file, line, column);
-        const SymbolInfo* symbol =
-            nearestSymbolAt(document->sema, name, *document->file, offset);
+        symbol = nearestSymbolAt(document->sema, name, *document->file, offset);
         if (symbol != nullptr) type = &symbol->type;
     }
-    if (type == nullptr || isPlaceholder(*type)) return std::nullopt;
+    // The documentation: the std surface's own description, or the doc
+    // comment of the declaration the name refers to.
+    const DocAnswer doc = documentationAt(*document, *node, name, symbol);
     lsp::HoverAnswer answer;
+    if (type == nullptr || isPlaceholderType(*type)) {
+        // An ambient std surface: the compiler has no precise type for it, so
+        // the documented signature is what the editor shows.
+        if (doc.empty()) return std::nullopt;
+        answer.contents = doc.signature;
+        answer.documentation = doc.body;
+        return answer;
+    }
     answer.contents = name.empty() ? describe(*type) : name + ": " + describe(*type);
+    answer.documentation = doc.signature.empty()
+                               ? doc.body
+                               : renderStdDoc(doc.signature, doc.body);
     return answer;
 }
 
@@ -342,11 +360,13 @@ std::optional<lsp::SignatureAnswer> signatureAt(const std::string& path,
                                            *document->file, line, column, cursor);
     if (call == nullptr || call->callee == nullptr) return std::nullopt;
     const Type* calleeType = document->sema.typeOf(call->callee->nodeId);
-    if (calleeType == nullptr && call->callee->kind == NodeKind::Identifier) {
+    const SymbolInfo* symbol = nullptr;
+    if (call->callee->kind == NodeKind::Identifier) {
         const auto& id = static_cast<const Identifier&>(*call->callee);
-        const SymbolInfo* symbol =
-            nearestSymbolAt(document->sema, id.name, *document->file, cursor);
-        if (symbol != nullptr) calleeType = &symbol->type;
+        symbol = nearestSymbolAt(document->sema, id.name, *document->file, cursor);
+        if (calleeType == nullptr && symbol != nullptr) {
+            calleeType = &symbol->type;
+        }
     }
     if (calleeType == nullptr || calleeType->kind != TypeKind::Function ||
         calleeType->parts.size() < 2) {
@@ -362,6 +382,18 @@ std::optional<lsp::SignatureAnswer> signatureAt(const std::string& path,
     }
     answer.activeParameter =
         countArguments(document->file->text, open, cursor);
+    // The documentation of the callee: the std surface's own description, or
+    // the doc comment of the declaration the name refers to.
+    const DocAnswer doc =
+        documentationAt(*document, *call->callee,
+                        call->callee->kind == NodeKind::Identifier
+                            ? static_cast<const Identifier&>(*call->callee).name
+                            : std::string(),
+                        symbol);
+    answer.documentation = doc.signature.empty()
+                               ? doc.body
+                               : renderStdDoc(doc.signature, doc.body);
+    answer.parameterDocs = parameterDocs(*document, symbol, answer.parameters.size());
     return answer;
 }
 

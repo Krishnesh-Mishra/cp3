@@ -36,10 +36,21 @@ Comments and string literals work exactly like JS:
 /* multi-line
    comment */
 
+/**
+ * A doc comment: the editor shows it on hover and in the completion popup.
+ * @param a The first number.
+ */
+function documented(a: number): number {
+  return a;
+}
+
 let a: string = "double quotes";
 let b: string = 'single quotes';
 let c: string = `template literal with ${a} interpolation`;
 ```
 
 Numeric literal formats also match JS/C++ conventions: hex (`0x1F`), binary (`0b101`), and underscore digit separators (`1_000_000`).
+
+The doc-comment syntax (the `/** ... */` and `///` forms, and the
+`@param` / `@returns` tags) is specified in [§24](24-doc-comments.md).
 

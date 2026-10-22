@@ -1,5 +1,5 @@
 // =============================================================================
-// src/std/env/sema.cpp - `std/env` surface typing (`{ env }` named import).
+// src/std/env/sema.cpp - `std/env` surface typing and documentation.
 //
 // OWNERSHIP: the std/env family (src/std/env/**). `std/env` is a named-only
 // module (src/modules/src/support/std_registry.cpp, named export `env`), so
@@ -15,6 +15,9 @@
 // value type, else `string` (the raw value). That typing lives in
 // `tryInferEnvCall`, hooked from call_check.cpp; the table entry stays
 // permissive so the generic call path never rejects a valid form.
+//
+// The signatures and the descriptions are the documented ones
+// (docs/standard-library/04-imported-std-modules.md, env section).
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -38,9 +41,17 @@ Type envHasMember() { return Type::function({Type::string()}, Type::boolean()); 
 Type envLoadMember() { return Type::function({Type::string()}, Type::voidType()); }
 
 const MemberRow kEnvRows[] = {
-    {"get", envGetMember},
-    {"has", envHasMember},
-    {"load", envLoadMember},
+    {"get", envGetMember, "get<T>(key: string, options?: { default?: T }): T",
+     "Returns the value of the environment variable `key`.\n\n"
+     "**Parameters**\n\n"
+     "- `key` - the name of the environment variable.\n"
+     "- `options` - the `default` value to fall back to. Without a default "
+     "and without the variable, the call throws."},
+    {"has", envHasMember, "has(key: string): boolean",
+     "True when the environment variable `key` is set."},
+    {"load", envLoadMember, "load(path: string): void",
+     "Parses the `.env`-style file at `path` into `process.env`. The call "
+     "throws when the file does not exist."},
 };
 
 /// The literal property name of an object-literal entry ("" when computed).
@@ -76,6 +87,10 @@ std::optional<Type> Analyzer::envMember(const std::string& prop) {
 }
 
 std::vector<std::string> envMemberNames() { return memberNames(kEnvRows); }
+
+StdMemberDoc envMemberDoc(const std::string& prop) {
+    return memberDoc(kEnvRows, prop);
+}
 
 bool Analyzer::tryInferEnvCall(CallExpr& call, MemberExpr& m, Type& out) {
     if (m.property != "get") return false;
