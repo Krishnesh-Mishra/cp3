@@ -235,7 +235,8 @@ Type Analyzer::inferFamilyConstruct(const std::string& cls, ExprList& args,
 Type Analyzer::inferArrayConstruct(const ExprList& args,
                                    const std::vector<Type>& types,
                                    const SourceSpan& span) {
-    if (args.size() == 1) {
+    // A spread argument contributes its *elements* (the literal form, JS parity).
+    if (args.size() == 1 && args.front() && args.front()->kind != NodeKind::SpreadElement) {
         double lit = 0.0;
         if (args.front() && literalLengthValue(*args.front(), lit)) {
             if (lit < 0.0 || std::trunc(lit) != lit) {
@@ -253,10 +254,14 @@ Type Analyzer::inferArrayConstruct(const ExprList& args,
                "length; write an array literal [x] instead");
         return Type::error();
     }
-    if (args.empty()) return Type::array(Type::unknown());
-    Type elem = widen(types.front());
-    for (std::size_t i = 1; i < types.size(); ++i) {
-        elem = unify(elem, widen(types[i]));
+    // The element type: a spread argument contributes its *element* type.
+    Type elem = Type::unknown();
+    for (std::size_t i = 0; i < types.size(); ++i) {
+        Type t = types[i];
+        if (args[i] && args[i]->kind == NodeKind::SpreadElement) {
+            t = t.kind == TypeKind::Array && !t.parts.empty() ? t.parts.front() : t;
+        }
+        elem = i == 0 ? widen(t) : unify(elem, widen(t));
     }
     return Type::array(elem);
 }

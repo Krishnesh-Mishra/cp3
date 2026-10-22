@@ -54,6 +54,8 @@ set(cp3_codegen_sources
     src/emit/call.cpp
     src/emit/call_args.cpp
     src/emit/async.cpp
+    src/emit/arrow.cpp
+    src/emit/spread.cpp
     src/emit/stmt.cpp
     src/emit/push_reserve.cpp
     src/emit/control.cpp
@@ -71,6 +73,7 @@ set(cp3_codegen_sources
     src/emit/worker_scan.cpp
     src/emit/worker_scan_stmt.cpp
     ../std/typed-arrays/codegen.cpp
+    ../std/typed-arrays/codegen_constructors.cpp
     ../std/typed-arrays/codegen_methods.cpp
     ../std/arrays/codegen_methods.cpp
     src/emit/std/common.cpp

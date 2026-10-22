@@ -1,0 +1,3 @@
+// An empty array literal has no element type of its own, and cp3 has no
+// fully dynamic array: the binding has to name the element type.
+let a = [];

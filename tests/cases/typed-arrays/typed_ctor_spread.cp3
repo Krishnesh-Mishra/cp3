@@ -1,0 +1,4 @@
+import console from "std/console";
+let nums: number[] = [1, 2];
+let t = new Int8Array([...nums, 3]);
+console.log(t.join(","));

@@ -219,7 +219,12 @@ bool Analyzer::tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& ou
     Expr* arg = call.arguments.empty() ? nullptr : call.arguments.front().get();
     if (arg) {
         if (arg->kind == NodeKind::SpreadElement) {
-            out = withType(call, promiseOf(Type::unknown()));
+            // `Promise.resolve(...values)`: the promise carries the source array's element type.
+            auto& sp = static_cast<SpreadElement&>(*arg);
+            Type st = sp.argument ? typeOfExpr(*sp.argument) : Type::unknown();
+            Type elem = st.kind == TypeKind::Array && !st.parts.empty()
+                            ? st.parts.front() : Type::unknown();
+            out = withType(call, promiseOf(elem));
             return true;
         }
         value = typeOfExpr(*arg);

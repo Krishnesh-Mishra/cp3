@@ -1,0 +1,4 @@
+import console from "std/console";
+let n: number | null = 5;
+let a = Array.of(n);
+console.log(a.length);

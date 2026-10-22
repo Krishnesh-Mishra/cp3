@@ -328,6 +328,25 @@ Type Analyzer::inferArrow(ArrowFunction& arrow) {
     std::vector<Type> params;
     std::vector<bool> optional;
     buildArrowParamTypes(arrow, params, optional);
+    // A rest parameter (`...rest: T[]`) is ONE array in the arrow's type, but
+    // the call signature takes the trailing arguments one by one: its
+    // parameter is the element type and the signature is variadic - the shape
+    // a declared function's rest parameter has (buildSig).
+    std::vector<Type> callParams = params;
+    std::vector<bool> callOptional = optional;
+    bool rest = false;
+    for (std::size_t i = 0; i < arrow.params.size() && i < params.size(); ++i) {
+        const Parameter* p = arrow.params[i].get();
+        if (!p || !p->isRest) continue;
+        rest = true;
+        Type elem = Type::unknown();
+        if (p->type) {
+            const Type ann = resolveType(*p->type);
+            if (ann.kind == TypeKind::Array) elem = elemOf(ann);
+        }
+        callParams[i] = elem;
+        callOptional[i] = true;
+    }
     Type ret = inferArrowReturn(arrow, params);
     if (arrow.isAsync && !isPromiseType(ret)) {
         // spec §14 / D40: calling an async arrow yields a Promise.
@@ -336,8 +355,9 @@ Type Analyzer::inferArrow(ArrowFunction& arrow) {
     Type ft = Type::function(params, ret);
     if (arrow.nodeId != 0) {
         FuncSig as;
-        as.params = params;
-        as.optional = optional;
+        as.params = callParams;
+        as.optional = callOptional;
+        as.rest = rest;
         as.ret = ret;
         as.isAsync = arrow.isAsync;
         as.asyncValueRet = isPromiseType(ret) ? promiseValue(ret) : ret;

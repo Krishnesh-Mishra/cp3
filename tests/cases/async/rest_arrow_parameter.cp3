@@ -1,0 +1,9 @@
+import console from "std/console";
+let count = (...nums: number[]) => nums.length;
+let first = (...nums: number[]) => {
+  if (nums.length > 0) { return nums[0]; }
+  return -1;
+};
+console.log(count(1, 2, 3));
+console.log(first(7, 8));
+console.log(count());
