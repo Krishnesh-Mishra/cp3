@@ -504,6 +504,55 @@ hurt today:
 The last three are post-beta-one candidates, not beta-one blockers. The first
 five are the beta-one bar, and 6a.1 and 6a.2 are the two that are broken now.
 
+## 6b. The CP3002 implementation wave (authorized)
+
+CP3002 implementation is now authorized. The gate is at 388 hits, of which
+**224 are live marker call sites in `src/`** (the rest are 30 documentation
+hits, 11 test hits, and the marker definition itself). The 224 sites carry
+**138 distinct work items** - one per marker message per feature area.
+
+The work is planned from the live inventory, not by hand:
+`build/scratch/rounds/cp3002_wave_plan.py` scans `src/`, extracts every
+`notImplemented(` site with its message, groups the sites by the feature area
+that owns them (the group table in section 6), and chunks the result into
+agent-sized assignments. It writes
+`build/scratch/rounds/CP3002-WAVE-PLAN.md`, which is the lane sheet every
+agent reads.
+
+| Measure | Count |
+|---|---:|
+| Marker call sites in `src/` | 224 |
+| Distinct work items | 138 |
+| Agent assignments (~10 items each) | 14 |
+| Waves of 5 parallel agents | 3 |
+
+### The wave protocol
+
+1. Five agents run at once, each owning one assignment from the plan - about
+   ten work items, scoped to one feature area so the work is coherent.
+2. An agent implements its items, builds, runs the corpus cases its area
+   touches, and reports. It does not merge to `master`.
+3. The lead verifies the agent's commit on canonical `master` - rebuild, the
+   affected corpus cases, the diagnostics gate and the CP3002 count - and
+   merges it serially.
+4. The lead then launches the next agent, so five lanes are always running.
+5. A lane that fails verification is sent back with the reason; it is never
+   merged on the agent's word alone.
+
+Three waves clear all fourteen assignments.
+
+### Rules every lane obeys
+
+- **No marker is deleted to make a number go down.** A marker is retired only
+  when the construct it stood for actually works, and a corpus case proves
+  it. A "not implemented" that becomes a wrong program is worse than a skip.
+- A construct that cannot be completed correctly stays a marker, and the
+  report says why. A skipped item is honest; a wrong implementation is not.
+- Every retired marker gets a corpus case that would fail before the change
+  and passes after it.
+- The CP3002 count, the diagnostics gate (0 findings) and the corpus (0
+  failures) are checked by the lead after every merge.
+
 ## 7. Work already done vs not done
 
 Done:
@@ -534,12 +583,17 @@ In flight:
 
 Not done, by instruction:
 
-- No CP3002 feature implementation.
 - No 10-lane launch.
 - No server benchmark measurement.
 - The consumer no-recompile link path for the `.cp3pak` cache, blocked on the
   frontend not resolving package imports to C++ yet.
 - No re-measurement of the benchmark baseline after the perf lanes land.
+
+Authorized and queued:
+
+- The CP3002 implementation wave (section 6b): 138 work items, 14
+  assignments, 3 waves of 5 parallel agents, with a verify-and-merge gate
+  after every lane.
 
 Known open, recorded in §6a:
 
