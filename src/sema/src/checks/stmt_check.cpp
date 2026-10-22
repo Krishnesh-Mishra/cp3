@@ -441,6 +441,8 @@ void Analyzer::analyzeFunctionBody(FunctionDeclaration& fn) {
     ctx.annotated = sig.annotatedReturn;
     // An async function's `return` yields the Promise's value type (spec §14).
     ctx.ret = sig.isAsync ? sig.asyncValueRet : sig.ret;
+    // Only an async function may await inside its body.
+    ctx.isAsync = sig.isAsync;
     funcStack_.push_back(ctx);
     if (fn.body) visitStmt(*fn.body);
     FuncCtx finalCtx = funcStack_.back();

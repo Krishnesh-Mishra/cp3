@@ -1,0 +1,5 @@
+// `Array(...nums)` builds an array from the spread's elements alone.
+let nums: number[] = [1, 2];
+let a = Array(...nums);
+console.log(a.length);
+console.log(a.join(","));

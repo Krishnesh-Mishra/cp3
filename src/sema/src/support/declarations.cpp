@@ -176,12 +176,14 @@ void Analyzer::checkArrayLiteral(ArrayLiteral& lit, const Type& target) {
         target.kind == TypeKind::Array && !target.parts.empty() &&
         isNativeType(target.parts.front());
     std::vector<Type> elems;
+    bool hasSpread = false;
     for (auto& e : lit.elements) {
         if (!e) {
             elems.push_back(Type::undefined());
             continue;
         }
         if (e->kind == NodeKind::SpreadElement) {
+            hasSpread = true;
             auto& sp = static_cast<SpreadElement&>(*e);
             Type at = sp.argument ? inferExpr(*sp.argument) : Type::unknown();
             elems.push_back(at.kind == TypeKind::Array ? elemOf(at)
@@ -192,6 +194,14 @@ void Analyzer::checkArrayLiteral(ArrayLiteral& lit, const Type& target) {
         elems.push_back(nativeElement ? inferred : widen(inferred));
     }
     if (isTupleType(target)) {
+        // A tuple's shape is fixed (`[A, B]`), so a spread element has no
+        // position in it.
+        if (hasSpread) {
+            report(diagcode::kTypeMismatch, lit.span,
+                   "type mismatch: a spread element has no fixed position in a "
+                   "tuple literal");
+            return;
+        }
         Shape* sh = shapeOf(target);
         const std::vector<Type>* ts = sh ? &sh->tupleElems : nullptr;
         if (!ts || ts->size() != elems.size()) {

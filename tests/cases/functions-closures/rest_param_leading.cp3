@@ -1,3 +1,5 @@
 import console from "std/console";
+// JS semantics: a rest parameter collects the arguments *after* the fixed
+// ones, so `rest` is [2, 3] and `rest.length` is 2.
 function f(a: number, ...rest: number[]): number { return a + rest.length; }
 console.log(f(1, 2, 3));

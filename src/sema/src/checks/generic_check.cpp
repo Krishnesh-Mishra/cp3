@@ -213,4 +213,18 @@ Type Analyzer::inferGenericCall(CallExpr& call, const FuncSig& sig) {
     return withType(call, sub.ret);
 }
 
+// A type argument list on a callee that declares no type parameters is a type
+// error: there is nothing to substitute (the generic call's own arguments
+// are inferred, and a generic callee takes them). A member call is left to
+// its own family (`JSON.parse<T>`, `res.json<T>()`, `env.get<T>()`).
+void Analyzer::checkTypeArgs(const FuncSig& sig, CallExpr& call) {
+    if (call.typeArgs.empty() || !sig.typeParams.empty()) return;
+    if (!call.callee || call.callee->kind != NodeKind::Identifier) return;
+    const std::string callee =
+        "'" + static_cast<Identifier&>(*call.callee).name + "'";
+    report(diagcode::kTypeArgsOnNonGeneric, call.span,
+           "type arguments are not allowed here: " + callee +
+               " is not a generic function");
+}
+
 }  // namespace cp3

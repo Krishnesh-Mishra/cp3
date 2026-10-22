@@ -1,0 +1,7 @@
+import console from "std/console";
+// A tuple's shape is fixed, so a spread element has no position in it.
+function pair(): [number, number] {
+  let b = [1];
+  return [1, ...b];
+}
+console.log(`${pair()[0]}`);

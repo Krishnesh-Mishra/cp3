@@ -78,6 +78,21 @@ void Generator::reportCodegenError(const Node& node, const std::string& code,
     sink_.error(code, node.span, message);
 }
 
+// A real compile error (not the CP3002 "not built yet" marker): the construct
+// has no lowering, so the program must not compile (the CLI stops before the
+// C++ step). Inside an int64 fast-path attempt nothing is reported.
+void Generator::reportUnsupported(const Node& node, const char* code,
+                                   const std::string& message) {
+    if (intMode_) intMode_->failed = true;
+    if (suppressDiagnostics_) return;
+    if (node.nodeId != 0) {
+        if (!reported_.insert(node.nodeId).second) {
+            return;
+        }
+    }
+    sink_.error(code, node.span, message);
+}
+
 GeneratedModule Generator::run(const Program& program) {
     // The worker unit lowers only its default-export arrow (spec 13); the
     // entry unit's ordinary walk follows.

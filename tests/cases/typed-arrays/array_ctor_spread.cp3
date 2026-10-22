@@ -1,5 +1,4 @@
-import console from "std/console";
-let nums: number[] = [1, 2];
-let a = Array(...nums);
-console.log(a.length);
-console.log(a.join(","));
+// `Array(...xs)` builds an array from the spread's elements (JS semantics).
+let xs = [1, 2];
+let t: number[] = Array(...xs, 3);
+console.log(`${t.length}:${t[0]}:${t[2]}`);

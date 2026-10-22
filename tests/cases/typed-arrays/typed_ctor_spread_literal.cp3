@@ -1,0 +1,6 @@
+import console from "std/console";
+// A typed-array constructor over a literal with a spread: the spread's
+// elements come first.
+let a = [1, 2];
+let t = new Int8Array([...a, 3]);
+console.log(`${t.length}:${t[0]}:${t[2]}`);

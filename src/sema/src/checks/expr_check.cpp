@@ -268,6 +268,14 @@ Type Analyzer::inferNew(NewExpr& n) {
 }
 
 Type Analyzer::inferAwait(AwaitExpr& a) {
+    // Only an `async` function (or an async arrow) and the top level may
+    // await: a plain function or a non-async arrow has no coroutine to
+    // suspend in.
+    if (!funcStack_.empty() && !funcStack_.back().isAsync) {
+        report(diagcode::kAwaitOutsideAsync, a.span,
+               "'await' is only allowed in an async function or at the top "
+               "level");
+    }
     Type arg = a.argument ? inferExpr(*a.argument) : Type::unknown();
     if (arg.isError()) return withType(a, Type::error());
     // `Promise<T>` unwraps to T; DECISIONS D41: any other value yields itself.
@@ -405,6 +413,8 @@ Type Analyzer::inferArrowReturn(ArrowFunction& arrow,
     Type ret = Type::unknown();
     FuncCtx ctx;
     ctx.annotated = false;
+    // Only an async arrow may await inside its body.
+    ctx.isAsync = arrow.isAsync;
     funcStack_.push_back(ctx);
     if (arrow.body) {
         if (arrow.expressionBody) {

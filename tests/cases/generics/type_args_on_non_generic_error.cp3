@@ -1,0 +1,4 @@
+import console from "std/console";
+// Type arguments on a function that declares none are a type error.
+function f(x: number): number { return x; }
+console.log(`${f<number>(1)}`);

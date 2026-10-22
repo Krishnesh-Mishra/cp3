@@ -1,0 +1,7 @@
+import console from "std/console";
+// A rest parameter after fixed parameters collects the trailing arguments
+// only (JS semantics): `rest` is [2, 3].
+function f(a: number, ...rest: number[]): string {
+  return `${a}:${rest.length}:${rest[0]}`;
+}
+console.log(f(1, 2, 3));

@@ -1,0 +1,7 @@
+import console from "std/console";
+// A computed key with a dynamic name cannot be represented: an object's keys
+// are fixed at compile time (use Map<K, V> for dynamic keys).
+interface Point2 { x: number; }
+function getX<T extends Point2>(p: T): number { return p.x; }
+let k = "x";
+console.log(`${getX({ [k]: 5 })}`);

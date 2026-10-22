@@ -108,6 +108,7 @@ Candidates come from what is actually visible at the reference: names in scope, 
 | CP3414 | `kUnknownType` | An `unknown` value is used before it is narrowed: assigned, read as a property, or indexed. | `value of type 'unknown' is not assignable to 'number' without a type check` | Narrow first with a runtime check (`typeof`, a discriminant test), then use the narrowed value. |
 | CP3415 | `kInvalidCondition` | A condition position received a `void` expression (a call that returns nothing). | `invalid condition: a void expression is not a valid condition` | Test an actual value, or change the callee to return one. |
 | CP3416 | `kNoMatchingOverload` | A call matches none of the overloads of a function or member: the arity fits, but the argument types do not. | `no overload of 'map' matches the supplied arguments` | Adjust the arguments to match one overload; the member's docs table lists them. |
+| CP3417 | `kTypeArgsOnNonGeneric` | A call passes explicit type arguments (`f<number>(x)`) to a function that declares no type parameters. | `type arguments are not allowed here: 'f' is not a generic function` | Drop the type arguments, or call the generic function that declares them. |
 
 ## Statements and control flow (3500-3599)
 
@@ -117,6 +118,8 @@ Candidates come from what is actually visible at the reference: names in scope, 
 | CP3502 | `kBreakOutsideLoop` | A `break` is not inside a loop or switch. | `break outside of a loop or switch` | Move the `break` inside a loop or switch, or remove it. |
 | CP3503 | `kContinueOutsideLoop` | A `continue` is not inside a loop. | `continue outside of a loop` | Move the `continue` inside a loop, or remove it. |
 | CP3504 | `kMissingReturn` | A function declared to return a value can finish without returning one. | `function 'f' is declared to return a value but may fall off the end of its body` | Return a value on every path, or change the return type to `void`. |
+| CP3506 | `kAwaitOutsideAsync` | An `await` sits in a function that is not `async` (a plain function, or a non-async arrow). Only an `async` function and the top level may await. | `'await' is only allowed in an async function or at the top level` | Mark the enclosing function `async`, or move the `await` into one that is. |
+| CP3507 | `kMissingDestructuringInit` | A destructuring declaration has no initializer (`let { a, b };`). There is no value to destructure. | `a destructuring declaration needs an initializer` | Give the declaration an initializer (`let { a, b } = obj;`). |
 
 ## Modules and imports (3600-3699)
 

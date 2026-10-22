@@ -81,6 +81,7 @@ set(cp3_codegen_sources
     ../std/typed-arrays/codegen.cpp
     ../std/typed-arrays/codegen_constructors.cpp
     ../std/typed-arrays/codegen_methods.cpp
+    ../std/arrays/codegen.cpp
     ../std/arrays/codegen_methods.cpp
     src/emit/std/common.cpp
     ../std/math/codegen.cpp

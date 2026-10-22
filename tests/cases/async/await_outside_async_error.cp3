@@ -1,0 +1,9 @@
+import console from "std/console";
+// `await` outside an async function (and outside the top level) is a compile
+// error: only an async function has a coroutine to suspend in.
+async function g(): Promise<number> { return 7; }
+function f(): number {
+  let v = await g();
+  return v;
+}
+console.log(`${f()}`);

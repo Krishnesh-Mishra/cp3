@@ -1,0 +1,5 @@
+import console from "std/console";
+// An arrow may destructure its parameter: the C++ parameter is the source
+// value and the body prologue unpacks it.
+let f = ([a, b]: number[]): number => a + b;
+console.log(`${f([1, 2])}`);

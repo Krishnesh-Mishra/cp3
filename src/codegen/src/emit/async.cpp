@@ -106,7 +106,12 @@ std::string Generator::emitAwait(const AwaitExpr& a) {
     // (spec §14's top-level await) and for `async function` bodies; anywhere
     // else the enclosing C++ is a plain function or lambda.
     if (nestingDepth_ > 0 && !inAsyncBody_) {
-        notImplemented(a, "await outside an async function or the top level");
+        // `await` needs a coroutine, and only an async function (or the top
+        // level) is one: sema reports it as CP3506, and the codegen repeats
+        // it so a codegen-only pass stays honest.
+        reportUnsupported(a, diagcode::kAwaitOutsideAsync,
+                          "'await' is only allowed in an async function or at "
+                          "the top level");
         return "0.0";
     }
     // Awaiting something means a continuation will be scheduled on the loop.

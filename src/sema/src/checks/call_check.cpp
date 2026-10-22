@@ -291,6 +291,9 @@ void Analyzer::inferArg(Expr* a) {
 }
 
 void Analyzer::checkArgs(const FuncSig& sig, CallExpr& call) {
+    // A type argument list on a callee that declares no type parameters is a
+    // type error (the generics unit owns the rule).
+    checkTypeArgs(sig, call);
     bool hasSpread = false;
     std::size_t firstSpread = call.arguments.size();
     for (std::size_t i = 0; i < call.arguments.size(); ++i) {

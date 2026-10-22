@@ -367,6 +367,9 @@ private:
     // the optional parameters live in the class member table, not in the
     // function type the member read yields).
     const FuncSig* classMemberSig(const MemberExpr& m);
+    // A type argument list on a non-generic callee is a type error
+    // (generic_check.cpp).
+    void checkTypeArgs(const FuncSig& sig, CallExpr& call);
     std::string arityText(std::size_t required, std::size_t maxArgs,
                           bool rest) const;
     // --- generic functions (generic_check.cpp) -------------------------------
@@ -569,6 +572,9 @@ private:
         Type ret;
         bool sawReturn = false;
         std::vector<Type> returnTypes;
+        // The frame is an `async` function (or an async arrow): only such a
+        // frame may `await` (the top level may too).
+        bool isAsync = false;
     };
     std::vector<FuncCtx> funcStack_;
     int loopDepth_ = 0;

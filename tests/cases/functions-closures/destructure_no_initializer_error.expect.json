@@ -1,0 +1,8 @@
+{
+  "mode": "run",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3507",
+    "contains": "a destructuring declaration needs an initializer"
+  }
+}
