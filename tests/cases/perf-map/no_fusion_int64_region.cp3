@@ -1,0 +1,19 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+const counts = new Map<string, number>();
+
+// `bump` is a number-in/number-out function, so the int64 fast path owns its
+// lowering. The fused map form must not fire inside that region: a fused
+// `double` binding would contradict the region's int64 assumption for the
+// same name. Oracle: the map starts empty, so the first call reads 0 and
+// stores 0 + 3 = 3; the second reads 3 and stores 3 + 4 = 7.
+function bump(n: number): number {
+  const v = counts.get("k") ?? 0;
+  counts.set("k", v + n);
+  return v;
+}
+
+console.log(`${bump(3)}`);
+console.log(`${bump(4)}`);
+console.log(`${counts.get("k")}`);

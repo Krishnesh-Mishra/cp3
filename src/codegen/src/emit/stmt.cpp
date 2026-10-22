@@ -33,8 +33,12 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
         case NodeKind::BlockStatement: {
             pushScope();
             line(out, indent, "{");
-            for (const auto& child : static_cast<const BlockStatement&>(s).body) {
-                if (child) stmt(*child, out, indent + 1);
+            const auto& block = static_cast<const BlockStatement&>(s);
+            for (std::size_t i = 0; i < block.body.size(); ++i) {
+                const Stmt* child = block.body[i].get();
+                if (!child) continue;
+                if (emitFusedMapUpdate(block.body, i, out, indent + 1)) continue;
+                stmt(*child, out, indent + 1);
             }
             line(out, indent, "}");
             popScope();
@@ -86,8 +90,12 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
 
 void Generator::emitBranch(const Stmt& s, std::string& out, int indent) {
     if (s.kind == NodeKind::BlockStatement) {
-        for (const auto& child : static_cast<const BlockStatement&>(s).body) {
-            if (child) stmt(*child, out, indent);
+        const auto& block = static_cast<const BlockStatement&>(s);
+        for (std::size_t i = 0; i < block.body.size(); ++i) {
+            const Stmt* child = block.body[i].get();
+            if (!child) continue;
+            if (emitFusedMapUpdate(block.body, i, out, indent)) continue;
+            stmt(*child, out, indent);
         }
     } else {
         stmt(s, out, indent);

@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "2,1\nTWO,one\n2\none\nmissing\n2\nTWO\n",
+  "exitCode": 0
+}

@@ -1,0 +1,15 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: the if branch sees a miss on y. The map still has one entry (x)
+// when the value runs, so y = 6 + 1 = 7 and the map ends with size 2.
+{
+  const m = new Map<string, number>();
+  m.set("x", 4);
+  if (m.has("y") === false) {
+    const v = m.get("y") ?? 6;
+    m.set("y", v + m.size);
+  }
+  console.log(`${m.get("y")}`);
+  console.log(`${m.size}`);
+}

@@ -1,0 +1,11 @@
+// Product overflow: chunk partials stay exact at first, then the ordered
+// combine crosses 2^53. The runtime guard must discard the chunked result and
+// rerun sequentially, matching the Python double product 3^600.
+import console from "std/console";
+
+function factor(i: number): number {
+  return i - i + 3;
+}
+
+const total = parallel.reduce(0..600, 1, (acc, i) => acc * factor(i));
+console.log(`${total}`);

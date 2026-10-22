@@ -24,6 +24,7 @@ set(cp3_runtime_sources
     src/core/error.cpp
     src/core/regex.cpp
     src/async/eventloop.cpp
+    src/async/timers.cpp
     src/parallel/parallel.cpp
     src/async/promise.cpp
     src/core/runtime.cpp

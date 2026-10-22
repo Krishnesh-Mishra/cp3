@@ -4,10 +4,7 @@
 #include "cp3/async/eventloop.hpp"
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
-#include <map>
-#include <memory>
 #include <utility>
 #include <vector>
 
@@ -32,22 +29,127 @@ void EventLoop::postFromThread(Task task) {
 }
 
 EventLoop::TimerId EventLoop::addTimer(std::int64_t delayMs, Task task) {
+    const TimerId id = nextTimerId_++;
+    if (delayMs == 0) {
+        // Due on the next turn. These deadlines are nondecreasing in insertion
+        // order (the clock only moves forward) and every one is due at the next
+        // pump, so FIFO order is exactly the (deadline, id) order of the heap.
+        // The common `sleep(0)`/`setTimeout(_, 0)` path never touches the heap.
+        readyPush(TimerEntry{nowMs(), id, std::move(task)});
+        return id;
+    }
     // A negative delay keeps its (past) deadline instead of collapsing to
     // "now": a repeating timer re-arms against a fixed schedule and its overdue
     // firings must sort ahead of later-deadlined timers by true deadline, the
     // way `uv__run_timers` heaps them (see `setInterval` below).
-    const TimerId id = nextTimerId_++;
     const std::int64_t deadline = nowMs() + delayMs;
-    timers_.emplace(std::make_pair(deadline, id), std::move(task));
+    heapPush(TimerEntry{deadline, id, std::move(task)});
     return id;
 }
 
 bool EventLoop::cancelTimer(TimerId id) {
-    for (auto it = timers_.begin(); it != timers_.end(); ++it) {
-        if (it->first.second == id) {
-            timers_.erase(it);
+    for (std::size_t index = readyHead_; index < readyTimers_.size(); ++index) {
+        if (readyTimers_[index].id == id) {
+            readyTimers_.erase(readyTimers_.begin() + static_cast<std::ptrdiff_t>(index));
+            if (readyHead_ >= readyTimers_.size()) {
+                readyTimers_.clear();
+                readyHead_ = 0;
+            }
             return true;
         }
+    }
+    return cancelFromHeap(id);
+}
+
+// --- timer heap -------------------------------------------------------------
+
+void EventLoop::heapPush(TimerEntry entry) {
+    timers_.push_back(std::move(entry));
+    heapSiftUp(timers_.size() - 1);
+}
+
+void EventLoop::heapSiftUp(std::size_t index) {
+    while (index > 0) {
+        const std::size_t parent = (index - 1) / 2;
+        if (!timerBefore(timers_[index], timers_[parent])) {
+            return;
+        }
+        std::swap(timers_[index], timers_[parent]);
+        index = parent;
+    }
+}
+
+void EventLoop::heapSiftDown(std::size_t index) {
+    const std::size_t size = timers_.size();
+    while (true) {
+        const std::size_t left = 2 * index + 1;
+        if (left >= size) {
+            return;
+        }
+        std::size_t next = left;
+        const std::size_t right = left + 1;
+        if (right < size && timerBefore(timers_[right], timers_[left])) {
+            next = right;
+        }
+        if (!timerBefore(timers_[next], timers_[index])) {
+            return;
+        }
+        std::swap(timers_[index], timers_[next]);
+        index = next;
+    }
+}
+
+void EventLoop::heapPopFront() {
+    if (timers_.size() == 1) {
+        timers_.pop_back();
+        return;
+    }
+    timers_.front() = std::move(timers_.back());
+    timers_.pop_back();
+    heapSiftDown(0);
+}
+
+bool EventLoop::cancelFromHeap(TimerId id) {
+    for (std::size_t index = 0; index < timers_.size(); ++index) {
+        if (timers_[index].id != id) {
+            continue;
+        }
+        const std::size_t last = timers_.size() - 1;
+        if (index != last) {
+            timers_[index] = std::move(timers_[last]);
+            timers_.pop_back();
+            // The replacement can belong above or below its new slot.
+            heapSiftUp(index);
+            heapSiftDown(index);
+        } else {
+            timers_.pop_back();
+        }
+        return true;
+    }
+    return false;
+}
+
+bool EventLoop::nextDueIsReady(std::int64_t now) const noexcept {
+    if (readyEmpty()) {
+        return false;
+    }
+    if (timers_.empty() || timers_.front().deadline > now) {
+        return true;
+    }
+    // Equal deadlines fire in insertion order across both containers.
+    return timerBefore(readyTimers_[readyHead_], timers_.front());
+}
+
+bool EventLoop::popNextDue(std::int64_t now, Task& out) {
+    if (nextDueIsReady(now)) {
+        out = std::move(readyTimers_[readyHead_].task);
+        readyPopFront();
+        return true;
+    }
+    if (!timers_.empty() && timers_.front().deadline <= now) {
+        out = std::move(timers_.front().task);
+        heapPopFront();
+        return true;
     }
     return false;
 }
@@ -90,9 +192,9 @@ void EventLoop::setExternalSource(ExternalPoll poll, ExternalWait waitTurn,
 namespace {
 
 // Move every cross-thread task into the loop-thread queue.
-void takeIncomingLocked(std::mutex& mutex, std::deque<EventLoop::Task>& incoming,
-                        std::deque<EventLoop::Task>& ready, bool& any) {
-    std::deque<EventLoop::Task> local;
+void takeIncomingLocked(std::mutex& mutex, std::deque<Task>& incoming,
+                        std::deque<Task>& ready, bool& any) {
+    std::deque<Task> local;
     {
         std::lock_guard<std::mutex> lock(mutex);
         local.swap(incoming);
@@ -110,12 +212,16 @@ void takeIncomingLocked(std::mutex& mutex, std::deque<EventLoop::Task>& incoming
 
 std::size_t EventLoop::drainMicrotasks() {
     std::size_t drained = 0;
-    while (!microtasks_.empty()) {
-        Task task = std::move(microtasks_.front());
-        microtasks_.pop_front();
+    while (!microtasksEmpty()) {
+        Task task = std::move(microtasks_[microtaskHead_]);
+        ++microtaskHead_;
         task();
         ++drained;
     }
+    // The whole queue was consumed: keep the buffer (its peak size is the next
+    // burst's capacity) but reset the head so the next push starts at 0.
+    microtasks_.clear();
+    microtaskHead_ = 0;
     return drained;
 }
 
@@ -145,12 +251,12 @@ bool EventLoop::runOnce() {
 
     const std::int64_t now = nowMs();
     std::vector<Task> due;
-    while (!timers_.empty() && timers_.begin()->first.first <= now) {
-        due.push_back(std::move(timers_.begin()->second));
-        timers_.erase(timers_.begin());
+    Task task;
+    while (popNextDue(now, task)) {
+        due.push_back(std::move(task));
     }
-    for (Task& task : due) {
-        task();
+    for (Task& ready : due) {
+        ready();
         didWork = true;
     }
 
@@ -166,10 +272,13 @@ std::size_t EventLoop::pending() const noexcept {
         std::lock_guard<std::mutex> lock(mutex_);
         queued = incoming_.size() + external_;
     }
-    return microtasks_.size() + readyTasks_.size() + timers_.size() + queued;
+    return (microtasks_.size() - microtaskHead_) + readyTasks_.size() +
+           (readyTimers_.size() - readyHead_) + timers_.size() + queued;
 }
 
-std::size_t EventLoop::microtaskCount() const noexcept { return microtasks_.size(); }
+std::size_t EventLoop::microtaskCount() const noexcept {
+    return microtasks_.size() - microtaskHead_;
+}
 
 std::int64_t EventLoop::nowMs() noexcept {
     using namespace std::chrono;
@@ -200,14 +309,13 @@ bool EventLoop::pumpReadyTasks() {
 
 bool EventLoop::pumpDueTimers() {
     bool didWork = false;
+    Task task;
     // Re-check "due" after every fired timer, the shape of libuv's
     // `uv__run_timers`: a repeating timer re-armed on its fixed schedule can
     // still be overdue (the loop woke late), and its catch-up firing must
     // happen in this same phase, ahead of later-deadlined timers that are also
     // due (e.g. an `await sleep(...)` that expired while the loop was blocked).
-    while (!timers_.empty() && timers_.begin()->first.first <= nowMs()) {
-        Task task = std::move(timers_.begin()->second);
-        timers_.erase(timers_.begin());
+    while (popNextDue(nowMs(), task)) {
         task();
         drainMicrotasks();
         didWork = true;
@@ -216,10 +324,13 @@ bool EventLoop::pumpDueTimers() {
 }
 
 bool EventLoop::waitForNext() {
+    if (!readyEmpty()) {
+        return true;  // zero-delay timers are due now; pump them next turn
+    }
     // The nearest runtime timer deadline (unset when there are no timers).
     std::int64_t timerWait = -1;
     if (!timers_.empty()) {
-        timerWait = timers_.begin()->first.first - nowMs();
+        timerWait = timers_.front().deadline - nowMs();
         if (timerWait <= 0) {
             return true;  // already due; pump it on the next turn
         }
@@ -237,7 +348,7 @@ bool EventLoop::waitForNext() {
         // A std/network event source is installed: one non-blocking libuv
         // turn. Its callbacks may queue microtasks/timers on this loop.
         poll();
-        if (!microtasks_.empty() || !readyTasks_.empty()) {
+        if (!microtasksEmpty() || !readyTasks_.empty()) {
             return true;  // work arrived: run it on the next turn
         }
     }
@@ -319,86 +430,7 @@ EventLoop& currentLoop() {
 
 void runEventLoop() { currentLoop().run(); }
 
-// --- timer builtins ---------------------------------------------------------
-
-TimerHandle setTimeout(EventLoop::Task fn, double delayMs) {
-    return currentLoop().addTimer(static_cast<std::int64_t>(delayMs < 0 ? 0 : delayMs),
-                                  std::move(fn));
-}
-
-void clearTimeout(TimerHandle handle) { currentLoop().cancelTimer(handle); }
-
-namespace {
-
-struct IntervalState {
-    EventLoop* loop = nullptr;
-    EventLoop::Task fn;
-    std::int64_t periodMs = 1;
-    std::int64_t nextDeadline = 0;
-    EventLoop::TimerId current = 0;
-    bool active = true;
-    std::function<void()> arm;
-};
-
-std::mutex intervalMutex;
-std::map<TimerHandle, std::shared_ptr<IntervalState>> intervals;
-TimerHandle nextInterval = 1;
-
-}  // namespace
-
-TimerHandle setInterval(EventLoop::Task fn, double intervalMs) {
-    EventLoop& loop = currentLoop();
-    auto state = std::make_shared<IntervalState>();
-    state->loop = &loop;
-    state->fn = std::move(fn);
-    // libuv/Node clamp a timer's period to at least 1 ms; a zero period would
-    // re-arm on a never-advancing deadline and spin without yielding.
-    state->periodMs = static_cast<std::int64_t>(intervalMs) < 1
-                          ? 1
-                          : static_cast<std::int64_t>(intervalMs);
-    state->nextDeadline = EventLoop::nowMs() + state->periodMs;
-    state->arm = [state]() {
-        // Fixed schedule: every firing is due `periodMs` after the previous
-        // *deadline*, not after the previous firing, so a late wake-up (coarse
-        // OS timer granularity, a busy loop) never shifts the phase. `addTimer`
-        // keeps the overdue deadline, so missed slots fire back-to-back in the
-        // current timer phase, ahead of later timers - the no-drift catch-up
-        // `uv__run_timers` gives a repeating timer.
-        const std::int64_t delay = state->nextDeadline - EventLoop::nowMs();
-        state->current = state->loop->addTimer(delay, [state]() {
-            if (!state->active) {
-                return;
-            }
-            state->nextDeadline += state->periodMs;
-            state->fn();
-            if (state->active) {
-                state->arm();
-            }
-        });
-    };
-
-    std::lock_guard<std::mutex> lock(intervalMutex);
-    const TimerHandle handle = nextInterval++;
-    intervals.emplace(handle, state);
-    state->arm();
-    return handle;
-}
-
-void clearInterval(TimerHandle handle) {
-    std::shared_ptr<IntervalState> state;
-    {
-        std::lock_guard<std::mutex> lock(intervalMutex);
-        auto it = intervals.find(handle);
-        if (it == intervals.end()) {
-            return;
-        }
-        state = it->second;
-        intervals.erase(it);
-    }
-    state->active = false;
-    if (state->current != 0) {
-        state->loop->cancelTimer(state->current);
-    }
-}
+// The timer builtins (`setTimeout`/`setInterval`/`clearTimeout`/
+// `clearInterval`) live in timers.cpp.
 
 }  // namespace cp3::runtime

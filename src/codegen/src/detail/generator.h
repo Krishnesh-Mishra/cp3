@@ -187,7 +187,7 @@ private:
                           const AssignmentExpr& a, const std::string& value);
 
     // --- declarations (emit_decl.cpp) ----------------------------------------
-    void collectFunctionNames(const Stmt& s);
+    void collectDeclaredNames(const Stmt& s);
     void emitTopLevel(const Stmt& s, std::string& decls, std::string& defs, std::string& mainBody);
     void emitExport(const ExportDeclaration& ed, std::string& decls,
                     std::string& defs, std::string& mainBody);
@@ -228,6 +228,9 @@ private:
     std::optional<Type> typeOfNode(const TypeNode& tn) const;
     void rewriteEnumTypes(Type& t) const;
     Type effectiveType(const Expr& e) const;
+    // The value of a temporary `Promise.resolve(v)` over a non-promise, or
+    // nullptr when the awaited expression is not that shape.
+    const Expr* temporaryResolveValue(const Expr* argument) const;
     Type memberReadType(const MemberExpr& m) const;
     Type inferBinary(const BinaryExpr& b) const;
     Type inferLogical(const LogicalExpr& l) const;
@@ -438,6 +441,11 @@ private:
     std::string emitCollectionsNew(const NewExpr& n);
     std::string emitCollectionsMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitCollectionsMember(const MemberExpr& m);
+    // WS2.8: `const v = m.get(k) ?? d;` immediately followed by
+    // `m.set(k, value)` lowers to one probe plus an in-place store when the
+    // pure-read proof holds; consumes both statements and returns true.
+    bool emitFusedMapUpdate(const StmtList& body, std::size_t& index,
+                            std::string& out, int indent);
 
     // --- std namespaces + primitive methods (src/std/*/codegen.cpp) ----------
     // `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*`, primitive methods

@@ -1,0 +1,13 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: v = 1, the set stores 99. The value does not mention v, so the pair
+// does not fuse; either way the output is the same.
+{
+  const m = new Map<string, number>();
+  m.set("x", 1);
+  const v = m.get("x") ?? 7;
+  m.set("x", 99);
+  console.log(`${v}`);
+  console.log(`${m.get("x")}`);
+}

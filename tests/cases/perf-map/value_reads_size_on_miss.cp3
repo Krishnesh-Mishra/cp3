@@ -1,0 +1,12 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: the key is absent, v = 5, the map is still empty when the value is
+// evaluated, so the stored value is 5 + 0 = 5. Size is 1 afterwards.
+{
+  const m = new Map<string, number>();
+  const v = m.get("x") ?? 5;
+  m.set("x", v + m.size);
+  console.log(`${m.get("x")}`);
+  console.log(`${m.size}`);
+}

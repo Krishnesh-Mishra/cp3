@@ -26,8 +26,9 @@ namespace cp3 {
 using namespace detail;
 
 // Records every function declared in this unit (including `export function`)
-// so a call can be checked against them.
-void Generator::collectFunctionNames(const Stmt& s) {
+// and every local binding introduced by an import, so a builtin call/await
+// rewrite can be checked against the names the unit actually declares.
+void Generator::collectDeclaredNames(const Stmt& s) {
     if (s.kind == NodeKind::FunctionDeclaration) {
         const auto& fd = static_cast<const FunctionDeclaration&>(s);
         functions_.insert(fd.name);
@@ -35,9 +36,21 @@ void Generator::collectFunctionNames(const Stmt& s) {
         if (fd.isAsync) {
             asyncFunctions_.insert(fd.name);
         }
+    } else if (s.kind == NodeKind::ImportDeclaration) {
+        const auto& imp = static_cast<const ImportDeclaration&>(s);
+        auto note = [this](const std::string& name) {
+            if (!name.empty()) importBindings_.insert(name);
+        };
+        note(imp.defaultBinding);
+        note(imp.namespaceBinding);
+        note(imp.alias);
+        for (const auto& specifier : imp.specifiers) {
+            if (!specifier) continue;
+            note(specifier->local.empty() ? specifier->imported : specifier->local);
+        }
     } else if (s.kind == NodeKind::ExportDeclaration) {
         const auto& ed = static_cast<const ExportDeclaration&>(s);
-        if (ed.declaration) collectFunctionNames(*ed.declaration);
+        if (ed.declaration) collectDeclaredNames(*ed.declaration);
     }
 }
 

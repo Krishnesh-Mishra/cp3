@@ -17,9 +17,11 @@
 #include "detail/generator.h"
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <vector>
 
+#include "detail/cpp_writer.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -187,5 +189,6 @@ std::string Generator::emitCollectionsMember(const MemberExpr& m) {
     }
     return std::string();
 }
+
 
 }  // namespace cp3

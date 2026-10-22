@@ -1,0 +1,10 @@
+// `acc * (i + 1)` from identity 1, including an empty and a single-element
+// range.
+import console from "std/console";
+
+const full = parallel.reduce(1..6, 1, (acc, i) => acc * (i + 1));
+const empty = parallel.reduce(0..0, 1, (acc, i) => acc * (i + 1));
+const single = parallel.reduce(12..13, 1, (acc, i) => acc * (i + 1));
+const one = parallel.reduce(0..1, 1, (acc, i) => acc * (i + 1));
+
+console.log(`${full} ${empty} ${single} ${one}`);

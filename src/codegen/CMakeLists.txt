@@ -33,6 +33,8 @@ set(cp3_codegen_sources
     src/support/helper_blocks.cpp
     src/support/int_mode.cpp
     src/support/int_reads.cpp
+    src/support/parallel_combine.cpp
+    src/support/parallel_safety.cpp
     src/support/usage_includes.cpp
     src/support/program_link.cpp
     src/emit/program.cpp
@@ -77,6 +79,7 @@ set(cp3_codegen_sources
     ../std/network/codegen.cpp
     ../std/network/codegen_methods.cpp
     ../std/collections/codegen.cpp
+    ../std/collections/codegen_map.cpp
     ../std/date/codegen.cpp
     ../std/buffer/codegen.cpp
     ../std/console/codegen.cpp

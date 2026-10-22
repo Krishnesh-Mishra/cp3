@@ -1,0 +1,16 @@
+// A local `sleep` binding shadows the builtin. The `await sleep(7)` must call
+// the local number-returning function and use the ordinary non-promise await
+// (which does not suspend), not the direct sleep timer lowering.
+// Oracle: local-7 then done, both before f() returns.
+import console from "std/console";
+
+async function f(): Promise<void> {
+  const sleep = (ms: number): number => {
+    console.log(`local-${ms}`);
+    return ms;
+  };
+  await sleep(7);
+  console.log("done");
+}
+
+await f();

@@ -65,27 +65,54 @@ struct Settled<void> {
 
 namespace detail {
 
+/// One allocation per `Promise.all` call: the input states, the result slots,
+/// the countdown and the derived promise live together, so the per-element
+/// continuation captures only this state and its index (24 bytes, inline in the
+/// continuation) instead of the element's own state as well (40 bytes, which
+/// spilled to the heap). The finished vector moves into the derived promise
+/// instead of being copied.
+template <class T>
+struct AllState {
+    // The input handles, moved in (not copied) so the combinator does not pay
+    // a refcount pair per element. They keep the element states alive.
+    std::vector<Promise<T>> elements;
+    std::vector<T> results;
+    std::size_t remaining = 0;
+    Promise<std::vector<T>> derived;
+
+    AllState(Promise<std::vector<T>> promise, std::vector<Promise<T>> inputs)
+        : elements(std::move(inputs)), results(elements.size()),
+          remaining(elements.size()), derived(std::move(promise)) {}
+};
+
 template <class T, std::enable_if_t<!std::is_void_v<T>, int> = 0>
-Promise<std::vector<T>> allImpl(const std::vector<Promise<T>>& promises) {
+Promise<std::vector<T>> allImpl(std::vector<Promise<T>> promises) {
     Promise<std::vector<T>> derived = Promise<std::vector<T>>::pending();
     const std::size_t count = promises.size();
     if (count == 0) {
         derived.fulfill(std::vector<T>{});
         return derived;
     }
-    auto results = std::make_shared<std::vector<T>>(count);
-    auto remaining = std::make_shared<std::size_t>(count);
+    auto all = std::make_shared<AllState<T>>(derived, std::move(promises));
     for (std::size_t i = 0; i < count; ++i) {
-        const std::shared_ptr<PromiseState<T>> st = promises[i].sharedState();
-        addFulfilledContinuation<T>(st, [st, results, remaining, derived, i]() mutable {
-            (*results)[i] = st->slot.value;
-            if (--*remaining == 0) {
-                derived.fulfill(*results);
+        // One continuation per element observes both settlements: fulfilment
+        // copies the value into input order, rejection settles the derived
+        // promise with the first reason (later ones are no-ops). The element
+        // state is kept alive by `all->elements`, so the continuation captures
+        // only this state and its index.
+        const std::shared_ptr<PromiseState<T>> element = all->elements[i].sharedState();
+        addSettledContinuation<T>(element, [all, i]() {
+            const std::shared_ptr<PromiseState<T>>& st = all->elements[i].sharedState();
+            if (st->status == PromiseStatus::Rejected) {
+                if (!all->derived.settled()) {
+                    all->derived.rejectWith(st->reason);
+                }
+                return;
             }
-        });
-        addRejectedContinuation<T>(st, [st, derived]() mutable {
-            if (!derived.settled()) {
-                derived.rejectWith(st->reason);
+            all->results[i] = st->slot.value;
+            if (--all->remaining == 0) {
+                std::vector<T> results = std::move(all->results);
+                all->derived.fulfill(std::move(results));
             }
         });
     }
@@ -214,8 +241,8 @@ inline Promise<std::vector<Settled<void>>> allSettledVoidImpl(
 
 /// `Promise.all([...])`.
 template <class T, std::enable_if_t<!std::is_void_v<T>, int> = 0>
-Promise<std::vector<T>> all(const std::vector<Promise<T>>& promises) {
-    return detail::allImpl<T>(promises);
+Promise<std::vector<T>> all(std::vector<Promise<T>> promises) {
+    return detail::allImpl<T>(std::move(promises));
 }
 inline Promise<void> all(const std::vector<Promise<void>>& promises) {
     return detail::allVoidImpl(promises);

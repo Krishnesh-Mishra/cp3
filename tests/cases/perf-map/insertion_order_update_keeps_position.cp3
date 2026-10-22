@@ -1,0 +1,16 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: updating an existing key must keep its first-insertion position:
+// keys a,b,c and values 11,2,3, size 3.
+{
+  const m = new Map<string, number>();
+  m.set("a", 1);
+  m.set("b", 2);
+  m.set("c", 3);
+  const v = m.get("a") ?? 0;
+  m.set("a", v + 10);
+  console.log(m.keys().join(","));
+  console.log(m.values().join(","));
+  console.log(`${m.size}`);
+}

@@ -1,0 +1,10 @@
+// Min shape. Every chunk starts from the declared init and the ordered
+// combine applies min, which is associative and idempotent, so the result
+// equals the sequential fold.
+import console from "std/console";
+
+const window = parallel.reduce(5..10, 100, (best, i) => i < best ? i : best);
+const early = parallel.reduce(1..6, 100, (best, i) => i < best ? i : best);
+const empty = parallel.reduce(0..0, 100, (best, i) => i < best ? i : best);
+
+console.log(`${window} ${early} ${empty}`);

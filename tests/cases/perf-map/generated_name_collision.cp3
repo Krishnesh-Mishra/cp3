@@ -1,0 +1,19 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: a user binding named like a fused temporary is shadowed inside the
+// immediately invoked lambda, never redeclared. The fallback reads cp3_map0
+// (5), the value reads cp3_value0 (3), and the key is cp3_key0. The suffix
+// chooser must skip 0 because all three expressions mention it: the map gets
+// 5 + 3 = 8 and the outer bindings keep 5 and 3.
+{
+  const cp3_map0 = 5;
+  const cp3_key0 = "x";
+  const cp3_value0 = 3;
+  const m = new Map<string, number>();
+  const v = m.get(cp3_key0) ?? cp3_map0;
+  m.set(cp3_key0, v + cp3_value0);
+  console.log(`${m.get("x")}`);
+  console.log(`${cp3_map0}`);
+  console.log(`${cp3_value0}`);
+}

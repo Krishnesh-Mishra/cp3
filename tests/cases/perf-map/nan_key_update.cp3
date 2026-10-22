@@ -1,0 +1,17 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: NaN matches itself, so the second set updates in place: size stays
+// 1 and the stored value becomes "b". Delete of NaN succeeds.
+{
+  const m = new Map<number, string>();
+  m.set(NaN, "a");
+  console.log(`${m.size}`);
+  m.set(NaN, "b");
+  console.log(`${m.size}`);
+  console.log(`${m.get(NaN)}`);
+  console.log(m.values().join(","));
+  console.log(m.delete(NaN) ? "yes" : "no");
+  console.log(`${m.size}`);
+  console.log(m.has(NaN) ? "yes" : "no");
+}

@@ -1,0 +1,26 @@
+// The multiplication counterpart: chunk 0 locally multiplies to 2^53-1 and
+// chunk 1 ([5,3]) locally multiplies to 15. The ordered chunk combine computes
+// (2^53-1)*15 in one rounded step; the sequential fold rounds (2^53-1)*5 first
+// and then multiplies by 3, and the two doubles differ. The prefix-magnitude
+// guard must rerun sequentially.
+//
+// Oracle: the explicit left-to-right loop below.
+import console from "std/console";
+import os from "std/os";
+
+function value(i: number): number {
+  if (i === 0) return 9007199254740991;
+  if (i === 2) return 5;
+  if (i === 3) return 3;
+  return 1;
+}
+
+const total = os.cpus() * 8;
+const par = parallel.reduce(0..total, 1, (acc, i) => acc * value(i));
+
+let seq = 1;
+for (let i = 0; i < total; i++) {
+  seq = seq * value(i);
+}
+
+console.log(par === seq ? "match" : "differ");

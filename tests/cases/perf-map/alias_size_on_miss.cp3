@@ -1,0 +1,15 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: alias is the same map as m. The miss leaves the map empty while the
+// value runs, so a = 5 + alias.size (0) = 5. The alias sees the same entry and
+// the map has size 1.
+{
+  const m = new Map<string, number>();
+  const alias = m;
+  const v = m.get("a") ?? 5;
+  m.set("a", v + alias.size);
+  console.log(`${m.get("a")}`);
+  console.log(alias.keys().join(","));
+  console.log(`${m.size}`);
+}

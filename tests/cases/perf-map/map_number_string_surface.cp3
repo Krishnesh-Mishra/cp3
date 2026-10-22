@@ -1,0 +1,19 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: insertion order 2,1; the repeated set on 2 updates in place to
+// "TWO"; get(1) is "one"; get(9) is missing; delete(1) leaves just 2.
+{
+  const m = new Map<number, string>();
+  m.set(2, "two");
+  m.set(1, "one");
+  m.set(2, "TWO");
+  console.log(m.keys().join(","));
+  console.log(m.values().join(","));
+  console.log(`${m.size}`);
+  console.log(m.get(1) ?? "missing");
+  console.log(m.get(9) ?? "missing");
+  m.delete(1);
+  console.log(m.keys().join(","));
+  console.log(m.values().join(","));
+}

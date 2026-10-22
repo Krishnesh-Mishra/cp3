@@ -1,0 +1,13 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: miss, v = 1 and the object field b.n is 3, so x = 4 and size is 1.
+// A general member read is not proven pure, so this pair stays unfused.
+{
+  const b = { n: 3 };
+  const m = new Map<string, number>();
+  const v = m.get("x") ?? 1;
+  m.set("x", v + b.n);
+  console.log(`${m.get("x")}`);
+  console.log(`${m.size}`);
+}

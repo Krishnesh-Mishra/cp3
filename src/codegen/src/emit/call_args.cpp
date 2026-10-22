@@ -305,7 +305,8 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
         return linked;
     }
     if (g.functions_.find(name) == g.functions_.end() &&
-        isTimerBuiltinName(name)) {
+        g.importBindings_.find(name) == g.importBindings_.end() &&
+        !g.hasValueBinding(name) && isTimerBuiltinName(name)) {
         return g.emitTimerBuiltin(c, name);
     }
     // `String(value)` (bug 9 surface): the scalar conversion global. A
@@ -392,9 +393,14 @@ std::string CallBuilder::emitMemberCall(const CallExpr& c,
     if (std::string handle = g.emitWorkerHandleCall(c, m); !handle.empty()) {
         return handle;
     }
-    // `Promise.all/race/allSettled(...)`.
+    // `Promise.all/race/allSettled(...)`. A declared function, imported
+    // binding, or local value shadows the global; the member call then goes
+    // through the ordinary class/value path.
     if (m.object && m.object->kind == NodeKind::Identifier &&
-        static_cast<const Identifier&>(*m.object).name == "Promise") {
+        static_cast<const Identifier&>(*m.object).name == "Promise" &&
+        g.functions_.find("Promise") == g.functions_.end() &&
+        g.importBindings_.find("Promise") == g.importBindings_.end() &&
+        !g.hasValueBinding("Promise")) {
         return g.emitPromiseStatic(c, m);
     }
     // A Promise method (`then`/`catch`/`finally`); `on/once/off/emit` (D74).

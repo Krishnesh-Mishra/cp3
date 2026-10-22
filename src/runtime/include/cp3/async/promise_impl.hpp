@@ -29,12 +29,10 @@ void settleFulfilled(const std::shared_ptr<PromiseState<T>>& state) {
         return;
     }
     state->status = PromiseStatus::Fulfilled;
-    std::vector<std::function<void()>> continuations = std::move(state->onFulfilled);
-    state->onRejected.clear();
     state->unhandled.reset();
-    for (std::function<void()>& fn : continuations) {
-        currentLoop().post(std::move(fn));
-    }
+    // The rejected-only entries the promise can no longer run are dropped by
+    // the drain, after the fulfilment entries have been posted.
+    state->continuations.drainTo(currentLoop(), true);
 }
 
 template <class T, class V>
@@ -45,12 +43,8 @@ void settleFulfilled(const std::shared_ptr<PromiseState<T>>& state, V&& value) {
     }
     state->status = PromiseStatus::Fulfilled;
     state->slot.value = std::forward<V>(value);
-    std::vector<std::function<void()>> continuations = std::move(state->onFulfilled);
-    state->onRejected.clear();
     state->unhandled.reset();
-    for (std::function<void()>& fn : continuations) {
-        currentLoop().post(std::move(fn));
-    }
+    state->continuations.drainTo(currentLoop(), true);
 }
 
 template <class T>
@@ -60,10 +54,12 @@ void settleRejected(const std::shared_ptr<PromiseState<T>>& state, Thrown reason
     }
     state->status = PromiseStatus::Rejected;
     state->reason = std::move(reason);
-    std::vector<std::function<void()>> continuations = std::move(state->onRejected);
-    state->onFulfilled.clear();
 
-    if (continuations.empty()) {
+    if (!state->continuations.hasRejectedObserver()) {
+        // Fulfilment-only continuations can no longer run. Drop them now, as the
+        // separate fulfilment list did, so a rejected promise does not keep
+        // their captures (and the states they hold) alive.
+        state->continuations.clear();
         // No observer: unhandled unless one arrives before the loop drains (D43).
         if (!state->unhandled) {
             state->unhandled = std::make_shared<bool>(true);
@@ -72,9 +68,7 @@ void settleRejected(const std::shared_ptr<PromiseState<T>>& state, Thrown reason
         return;
     }
     state->unhandled.reset();
-    for (std::function<void()>& fn : continuations) {
-        currentLoop().post(std::move(fn));
-    }
+    state->continuations.drainTo(currentLoop(), false);
 }
 
 template <class T>
@@ -93,32 +87,22 @@ void boxCurrentException(const std::shared_ptr<PromiseState<T>>& state) noexcept
 // --- continuation registration ---------------------------------------------
 
 template <class T>
-void addFulfilledContinuation(const std::shared_ptr<PromiseState<T>>& state,
-                              std::function<void()> fn) {
+void addContinuation(const std::shared_ptr<PromiseState<T>>& state, Task fn,
+                     ContinuationKind kind) {
     switch (state->status) {
         case PromiseStatus::Fulfilled:
-            currentLoop().post(std::move(fn));
+            if (kind != ContinuationKind::Rejected) {
+                currentLoop().post(std::move(fn));
+            }
             break;
         case PromiseStatus::Pending:
-            state->onFulfilled.push_back(std::move(fn));
+            state->continuations.push_back(std::move(fn), kind);
             break;
         case PromiseStatus::Rejected:
-            break;  // the fulfilment path never runs on a rejected promise
-    }
-}
-
-template <class T>
-void addRejectedContinuation(const std::shared_ptr<PromiseState<T>>& state,
-                             std::function<void()> fn) {
-    switch (state->status) {
-        case PromiseStatus::Rejected:
-            markObserved(state);
-            currentLoop().post(std::move(fn));
-            break;
-        case PromiseStatus::Pending:
-            state->onRejected.push_back(std::move(fn));
-            break;
-        case PromiseStatus::Fulfilled:
+            if (kind != ContinuationKind::Fulfilled) {
+                markObserved(state);
+                currentLoop().post(std::move(fn));
+            }
             break;
     }
 }

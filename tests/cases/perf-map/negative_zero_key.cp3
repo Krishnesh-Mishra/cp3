@@ -1,0 +1,14 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: -0 and +0 are the same key under SameValueZero, so the second set
+// updates the first entry: size 1 and both reads return "pos".
+{
+  const m = new Map<number, string>();
+  m.set(-0, "neg");
+  m.set(0, "pos");
+  console.log(`${m.size}`);
+  console.log(`${m.get(-0)}`);
+  console.log(`${m.get(0)}`);
+  console.log(`${m.keys().length}`);
+}

@@ -83,7 +83,7 @@ void Generator::runUnit(const Program& program, std::string& decls,
                         std::string& globals) {
     for (const auto& stmtPtr : program.body) {
         if (!stmtPtr) continue;
-        collectFunctionNames(*stmtPtr);
+        collectDeclaredNames(*stmtPtr);
         if (stmtPtr->kind == NodeKind::ImportDeclaration) {
             const auto& imp = static_cast<const ImportDeclaration&>(*stmtPtr);
             if (imp.source == "std/console") {

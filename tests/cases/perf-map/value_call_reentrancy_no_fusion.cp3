@@ -1,0 +1,26 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: the value calls a helper that deletes the probed key and inserts
+// "s". A fused form that cached the slot would dangle here. The call must
+// block fusion: v = 10, the helper returns 2, the set re-inserts x = 12, and
+// the final order is s,x.
+let side = 0;
+const shared = new Map<string, number>();
+function removeAndTouch(): number {
+  side = side + 1;
+  shared.delete("x");
+  shared.set("s", 1);
+  return 2;
+}
+
+{
+  const m = shared;
+  m.set("x", 10);
+  const v = m.get("x") ?? 0;
+  m.set("x", v + removeAndTouch());
+  console.log(`${side}`);
+  console.log(m.keys().join(","));
+  console.log(`${m.get("x")}`);
+  console.log(`${m.size}`);
+}

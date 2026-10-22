@@ -1,0 +1,10 @@
+// Negative bounds, empty ranges, and a one-element range exercise the chunk
+// boundary arithmetic (begin need not be 0 and the total need not divide).
+import console from "std/console";
+
+const sum = parallel.reduce(-7..13, 0, (acc, i) => acc + i);
+const product = parallel.reduce(-4..-1, 1, (acc, i) => acc * i);
+const empty = parallel.reduce(-3..-3, 0, (acc, i) => acc + i);
+const single = parallel.reduce(-1..0, 0, (acc, i) => acc + i);
+
+console.log(`${sum} ${product} ${empty} ${single}`);

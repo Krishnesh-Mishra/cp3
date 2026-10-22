@@ -1,0 +1,21 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+const counts = new Map<string, number>();
+
+// Oracle: `v` is captured and reassigned by the closure, so it is a shared
+// cell (the frame reads it through `get()` and writes it through `set()`).
+// The fused form declares a plain value, which would break the cell, so the
+// pair keeps the ordinary lowering. The map starts empty: v = 0, the set
+// stores 0 + 1 = 1, the closure then adds 1 to the cell (v = 1), and the map
+// still holds 1.
+function run(): void {
+  let v = counts.get("k") ?? 0;
+  counts.set("k", v + 1);
+  const bump = (): void => { v = v + 1; };
+  bump();
+  console.log(`${v}`);
+  console.log(`${counts.get("k")}`);
+}
+
+run();
