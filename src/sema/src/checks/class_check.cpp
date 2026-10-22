@@ -89,6 +89,8 @@ void Analyzer::resolveClass(ClassDeclaration& c) {
     enterClassTypeParams(c.typeParams, saved);
     collectClassMembers(c, info);
     leaveClassTypeParams(saved);
+    // The doc comments of the class and of its members (class_docs.cpp).
+    publishClassDocs(c);
     const std::string name = info.name;
     classes_[name] = std::move(info);
     // The class name is also a value (statics + `new`); declaring it in the

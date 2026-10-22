@@ -11,6 +11,11 @@
 // member access on a std namespace (CP3305 candidates), so an editor that
 // offers these names can never offer something the compiler rejects as
 // unknown, and never hides something it resolves.
+//
+// The same tables carry the DOCUMENTATION of every member: the documented
+// signature and the Markdown description the editor shows on hover and in the
+// completion popup. A member with no documented entry answers an empty doc,
+// which the caller renders as a visible gap rather than as nothing at all.
 // =============================================================================
 #pragma once
 
@@ -18,6 +23,16 @@
 #include <vector>
 
 namespace cp3 {
+
+// The documentation of one std member.
+struct StdMemberDoc {
+    std::string signature;  // the documented signature, e.g. "log(...args: Printable[]): void"
+    std::string body;       // the Markdown description (summary, parameters, notes)
+
+    bool empty() const noexcept {
+        return signature.empty() && body.empty();
+    }
+};
 
 // True for the std namespaces with a closed member table (Math / path / os /
 // crypto / console / JSON / Date / fs / process / env): an unknown member is
@@ -28,5 +43,33 @@ bool isClosedStdNamespace(const std::string& ns);
 // The implemented member names of the closed namespace `ns`, in table order;
 // empty when `ns` names no closed family.
 std::vector<std::string> stdNamespaceMemberNames(const std::string& ns);
+
+// The documentation of `ns`.`member` on a namespace surface (Math, path, os,
+// console, JSON, Date, fs, process, env, crypto). Empty when the namespace or
+// the member has no documented entry.
+StdMemberDoc stdNamespaceMemberDoc(const std::string& ns,
+                                   const std::string& member);
+
+// The documentation of a member of a std VALUE surface - a Date instance, a
+// Map, a Set. Empty when the family or the member has no documented entry.
+StdMemberDoc stdInstanceMemberDoc(const std::string& family,
+                                   const std::string& member);
+
+// The member names of the std VALUE surfaces (a Date instance, a Map, a Set).
+// A member that is listed here but has no documentation is a visible gap, not
+// a member that does not exist.
+std::vector<std::string> stdInstanceMemberNames(const std::string& family);
+
+// The documentation of the array method surface (`length`, `push`, `map`, ...).
+StdMemberDoc stdArrayMemberDoc(const std::string& member);
+
+// The member names of the array method surface.
+std::vector<std::string> stdArrayMemberNames();
+
+// The documentation of the string method surface (`length`, `charAt`, ...).
+StdMemberDoc stdStringMemberDoc(const std::string& member);
+
+// The member names of the string method surface.
+std::vector<std::string> stdStringMemberNames();
 
 }  // namespace cp3

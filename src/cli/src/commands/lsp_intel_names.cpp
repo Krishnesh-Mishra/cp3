@@ -17,6 +17,7 @@
 // keywords last - and only the ones that may legally appear at the cursor.
 // =============================================================================
 #include "detail/lsp_intel_complete.hpp"
+#include "detail/lsp_intel_docs.hpp"
 
 #include <cstdint>
 #include <string>
@@ -52,6 +53,21 @@ void appendNamed(std::vector<lsp::CompletionCandidate>& out,
     candidate.label = name;
     candidate.kind = kind;
     candidate.detail = detail;
+    out.push_back(std::move(candidate));
+}
+
+// One named candidate with the documentation the editor shows next to it.
+// A candidate that has a doc comment carries it; one that does not carries an
+// empty string, and the editor shows the detail line alone.
+void appendNamed(std::vector<lsp::CompletionCandidate>& out,
+                 const std::string& name, int kind, const std::string& detail,
+                 const std::string& documentation) {
+    if (name.empty() || hasLabel(out, name)) return;
+    lsp::CompletionCandidate candidate;
+    candidate.label = name;
+    candidate.kind = kind;
+    candidate.detail = detail;
+    candidate.documentation = documentation;
     out.push_back(std::move(candidate));
 }
 
@@ -94,7 +110,8 @@ void appendImportCandidates(const ImportDeclaration& import,
     }
 }
 
-// The names a variable declaration binds, with the type the compiler gave.
+// The names a variable declaration binds, with the type the compiler gave
+// and the doc comment of the declaration they came from.
 void appendVariableDeclaration(const AnalyzedDocument& document,
                                 const VariableDeclaration& declaration,
                                 std::vector<lsp::CompletionCandidate>& out) {
@@ -105,7 +122,8 @@ void appendVariableDeclaration(const AnalyzedDocument& document,
         appendNamed(out, static_cast<const Identifier&>(*declarator->id).name,
                     isConst ? 21 : 6,
                     typeDetail(document.sema, declarator->id->nodeId,
-                               isConst ? "const" : "let"));
+                               isConst ? "const" : "let"),
+                    docCommentFor(document, declarator->nodeId));
     }
 }
 
@@ -119,33 +137,38 @@ void appendStatementCandidates(const AnalyzedDocument& document,
             const auto& declaration =
                 static_cast<const FunctionDeclaration&>(statement);
             appendNamed(out, declaration.name, 3,
-                        typeDetail(document.sema, statement.nodeId, "function"));
+                        typeDetail(document.sema, statement.nodeId, "function"),
+                        docCommentFor(document, statement.nodeId));
             return;
         }
         case NodeKind::ClassDeclaration: {
             const auto& declaration = static_cast<const ClassDeclaration&>(statement);
             appendNamed(out, declaration.name, 7,
-                        typeDetail(document.sema, statement.nodeId, "class"));
+                        typeDetail(document.sema, statement.nodeId, "class"),
+                        docCommentFor(document, statement.nodeId));
             return;
         }
         case NodeKind::InterfaceDeclaration: {
             const auto& declaration =
                 static_cast<const InterfaceDeclaration&>(statement);
             appendNamed(out, declaration.name, 8,
-                        typeDetail(document.sema, statement.nodeId, "interface"));
+                        typeDetail(document.sema, statement.nodeId, "interface"),
+                        docCommentFor(document, statement.nodeId));
             return;
         }
         case NodeKind::EnumDeclaration: {
             const auto& declaration = static_cast<const EnumDeclaration&>(statement);
             appendNamed(out, declaration.name, 13,
-                        typeDetail(document.sema, statement.nodeId, "enum"));
+                        typeDetail(document.sema, statement.nodeId, "enum"),
+                        docCommentFor(document, statement.nodeId));
             return;
         }
         case NodeKind::TypeAliasDeclaration: {
             const auto& declaration =
                 static_cast<const TypeAliasDeclaration&>(statement);
             appendNamed(out, declaration.name, 22,
-                        typeDetail(document.sema, statement.nodeId, "type"));
+                        typeDetail(document.sema, statement.nodeId, "type"),
+                        docCommentFor(document, statement.nodeId));
             return;
         }
         case NodeKind::VariableDeclaration:

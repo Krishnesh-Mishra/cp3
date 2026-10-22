@@ -1,5 +1,5 @@
 // =============================================================================
-// src/std/crypto/sema.cpp - `std/crypto` surface typing.
+// src/std/crypto/sema.cpp - `std/crypto` surface typing and documentation.
 //
 // OWNERSHIP: the std/crypto family (src/std/crypto/**). One per-module check unit; the rest
 // of sema never needs to change for this module (the dispatch row already
@@ -17,8 +17,14 @@
 //   AES256(key: string, data: string): string
 //   AES256Decrypt(key: string, encrypted: string): string
 //
-// The family is CLOSED (std_check.cpp isClosedStdNamespace): a member outside
-// the table is CP3305 with these names as candidates instead of a CP3002 skip.
+// The same table drives member typing, the CP3305 candidate list and the
+// editor documentation, so the three can never drift apart. The family is
+// CLOSED (std_check.cpp isClosedStdNamespace): a member outside the table is
+// CP3305 with these names as candidates instead of a CP3002 skip.
+//
+// The descriptions are the documented ones
+// (docs/standard-library/04-imported-std-modules.md, crypto section):
+// libsodium-backed, with authenticated encryption by default.
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -27,16 +33,11 @@
 #include <string>
 #include <vector>
 
+#include "detail/std_tables.hpp"
+
 namespace cp3 {
 
 namespace {
-
-// One implemented member: the name and its type factory. Same table drives
-// member typing and the CP3305 candidate list.
-struct CryptoRow {
-    const char* name;
-    Type (*make)();
-};
 
 Type zeroToString() { return Type::function({}, Type::string()); }
 Type numberToBuffer() {
@@ -50,26 +51,43 @@ Type twoStringToString() {
     return Type::function({Type::string(), Type::string()}, Type::string());
 }
 
-const CryptoRow kRows[] = {
-    {"randomUUID", zeroToString},       {"randomBytes", numberToBuffer},
-    {"sha256", stringOrBufferToString}, {"sha512", stringOrBufferToString},
-    {"AES256", twoStringToString},      {"AES256Decrypt", twoStringToString},
+// One implemented member: its name, its type factory and its documentation.
+// The same table drives member typing and the CP3305 candidate list.
+const MemberRow kRows[] = {
+    {"randomUUID", zeroToString, "randomUUID(): string",
+     "Returns a random UUID (version 4). This one is dependency-free - no "
+     "libsodium needed."},
+    {"randomBytes", numberToBuffer, "randomBytes(length: number): Buffer",
+     "Returns `length` cryptographically strong random bytes as a `Buffer`."},
+    {"sha256", stringOrBufferToString, "sha256(data: string | Buffer): string",
+     "Returns the hex-encoded SHA-256 digest of `data`."},
+    {"sha512", stringOrBufferToString, "sha512(data: string | Buffer): string",
+     "Returns the hex-encoded SHA-512 digest of `data`."},
+    {"AES256", twoStringToString, "AES256(key: string, data: string): string",
+     "Encrypts `data` with `key` and returns the base64 result: the nonce, "
+     "the ciphertext and the authentication tag are bundled together.\n\n"
+     "The encryption is authenticated (AES-256-GCM) by default, so the "
+     "nonce never has to be managed by hand."},
+    {"AES256Decrypt", twoStringToString,
+     "AES256Decrypt(key: string, encrypted: string): string",
+     "Decrypts the base64 `encrypted` value with `key` and returns the "
+     "plaintext. A tampered ciphertext or a wrong key fails the "
+     "authentication check and throws a catchable error - it never returns "
+     "silently-wrong plaintext."},
 };
 
 }  // namespace
 
 std::optional<Type> Analyzer::cryptoMember(const std::string& prop) {
-    for (const CryptoRow& row : kRows) {
-        if (prop == row.name) return row.make();
-    }
-    return std::nullopt;
+    return lookupMember(kRows, prop);
 }
 
 std::vector<std::string> cryptoMemberNames() {
-    std::vector<std::string> names;
-    names.reserve(std::size(kRows));
-    for (const CryptoRow& row : kRows) names.push_back(row.name);
-    return names;
+    return memberNames(kRows);
+}
+
+StdMemberDoc cryptoMemberDoc(const std::string& prop) {
+    return memberDoc(kRows, prop);
 }
 
 }  // namespace cp3

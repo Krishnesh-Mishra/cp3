@@ -46,11 +46,16 @@ Type stringToStrings() {
 Type stringValue() { return Type::string(); }
 
 const MemberRow kRegexInstanceRows[] = {
-    {"test", stringToBoolean},
-    {"match", stringToStrings},
-    {"exec", stringToStrings},
-    {"source", stringValue},
-    {"flags", stringValue},
+    {"test", stringToBoolean, "test(subject: string): boolean",
+     "True when the pattern matches somewhere in `subject`."},
+    {"match", stringToStrings, "match(subject: string): string[]",
+     "Returns every match of the pattern in `subject`."},
+    {"exec", stringToStrings, "exec(subject: string): string[]",
+     "Runs the pattern against `subject` and returns the match it found."},
+    {"source", stringValue, "source: string",
+     "The source text of the pattern."},
+    {"flags", stringValue, "flags: string",
+     "The flags of the pattern (`g`, `i`, `m`, `s`, `u`, `y`)."},
 };
 
 }  // namespace

@@ -181,6 +181,77 @@ MESSY = (
     '\r\n'
 )
 
+# A documented program: a JSDoc-style block comment above a function, a `///`
+# line comment above another one, and a documented class with a documented
+# method.
+DOCUMENTED = (
+    'import console from "std/console";\n'
+    '\n'
+    '/**\n'
+    ' * Adds two numbers.\n'
+    ' * @param a The first number.\n'
+    ' * @param b The second number.\n'
+    ' * @returns The sum of a and b.\n'
+    ' */\n'
+    'function add(a: number, b: number): number {\n'
+    '  return a + b;\n'
+    '}\n'
+    '\n'
+    '/// Greets the world.\n'
+    'function greet(): string {\n'
+    '  return "hello";\n'
+    '}\n'
+    '\n'
+    '/// A greeter.\n'
+    'class Greeter {\n'
+    '  /// Greets the given name.\n'
+    '  function speak(name: string): string {\n'
+    '    return "hi " + name;\n'
+    '  }\n'
+    '}\n'
+    '\n'
+    'const total = add(1, 2);\n'
+    'console.log(total);\n'
+    'console.log(greet());\n'
+)
+
+# The same program without a single doc comment: a doc comment must never
+# change what a program does.
+UNDOCUMENTED = (
+    'import console from "std/console";\n'
+    '\n'
+    'function add(a: number, b: number): number {\n'
+    '  return a + b;\n'
+    '}\n'
+    '\n'
+    'function greet(): string {\n'
+    '  return "hello";\n'
+    '}\n'
+    '\n'
+    'class Greeter {\n'
+    '  function speak(name: string): string {\n'
+    '    return "hi " + name;\n'
+    '  }\n'
+    '}\n'
+    '\n'
+    'const total = add(1, 2);\n'
+    'console.log(total);\n'
+    'console.log(greet());\n'
+)
+
+# The std surfaces whose members must all carry documentation.
+DOC_STD = (
+    'import console from "std/console";\n'
+    'import Math from "std/math";\n'
+    'import path from "std/path";\n'
+    '\n'
+    'const probeConsole = console.\n'
+    'const probeMath = Math.\n'
+    'const probePath = path.\n'
+    'const useConsole = console.log("x");\n'
+    'const useMath = Math.abs(-1);\n'
+)
+
 
 # -----------------------------------------------------------------------------
 # JSON-RPC over stdio
@@ -365,6 +436,36 @@ def hover_value(response):
     contents = result.get("contents")
     if isinstance(contents, dict):
         return contents.get("value", "")
+    return ""
+
+
+def item_documentation(item):
+    """The documentation text of one completion item ("" when it has none)."""
+    if not isinstance(item, dict):
+        return ""
+    documentation = item.get("documentation")
+    if isinstance(documentation, dict):
+        value = documentation.get("value")
+        return value if isinstance(value, str) else ""
+    if isinstance(documentation, str):
+        return documentation
+    return ""
+
+
+def signature_documentation(response):
+    """The documentation of the first signature of a signature-help answer."""
+    result = response.get("result")
+    if not isinstance(result, dict):
+        return ""
+    signatures = result.get("signatures")
+    if not isinstance(signatures, list) or not signatures:
+        return ""
+    documentation = signatures[0].get("documentation")
+    if isinstance(documentation, dict):
+        value = documentation.get("value")
+        return value if isinstance(value, str) else ""
+    if isinstance(documentation, str):
+        return documentation
     return ""
 
 
@@ -695,6 +796,169 @@ def check_context_completion(report, session, scope_uri, try_uri, notry_uri,
         items is not None and len(found) > 1 and found[0] == "inner"
         and found[1] == "outer",
         found,
+def check_documentation(report, session, uri, std_uri):
+    """The documentation the editor shows: hover, completion, signature help."""
+    response = session.request("textDocument/hover", {
+        "textDocument": {"uri": uri},
+        "position": position(DOCUMENTED, "function add", 9),
+    })
+    value = hover_value(response)
+    report.check(
+        "hover: a documented function shows its description",
+        "Adds two numbers." in value,
+        value,
+    )
+    report.check(
+        "hover: a documented function shows its @param list",
+        "The first number." in value and "The second number." in value,
+        value,
+    )
+    report.check(
+        "hover: a documented function shows its @returns text",
+        "The sum of a and b." in value,
+        value,
+    )
+
+    response = session.request("textDocument/hover", {
+        "textDocument": {"uri": uri},
+        "position": position(DOCUMENTED, "add(1, 2)", 1),
+    })
+    value = hover_value(response)
+    report.check(
+        "hover: the call site shows the documentation too",
+        "Adds two numbers." in value and "The first number." in value,
+        value,
+    )
+
+    response = session.request("textDocument/hover", {
+        "textDocument": {"uri": uri},
+        "position": position(DOCUMENTED, "function greet", 9),
+    })
+    value = hover_value(response)
+    report.check(
+        "hover: a `///` documented function shows its description",
+        "Greets the world." in value,
+        value,
+    )
+
+    response = session.request("textDocument/hover", {
+        "textDocument": {"uri": uri},
+        "position": position(DOCUMENTED, "function speak", 9),
+    })
+    value = hover_value(response)
+    report.check(
+        "hover: a documented method shows its description",
+        "Greets the given name." in value,
+        value,
+    )
+
+    # The std surface: the documented signature and the description.
+    response = session.request("textDocument/hover", {
+        "textDocument": {"uri": std_uri},
+        "position": position(DOC_STD, "console.log", 8),
+    })
+    value = hover_value(response)
+    report.check(
+        "hover: console.log shows the std documentation",
+        "console.log(" in value and "stdout" in value,
+        value,
+    )
+    response = session.request("textDocument/hover", {
+        "textDocument": {"uri": std_uri},
+        "position": position(DOC_STD, "Math.abs", 5),
+    })
+    value = hover_value(response)
+    report.check(
+        "hover: Math.abs shows the documented signature",
+        "Math.abs(x: number): number" in value,
+        value,
+    )
+
+    # The completion popup: every std member carries its documentation.
+    for probe, namespace in (("const probeConsole = console.", "console"),
+                             ("const probeMath = Math.", "Math"),
+                             ("const probePath = path.", "path")):
+        response = session.request("textDocument/completion", {
+            "textDocument": {"uri": std_uri},
+            "position": position(DOC_STD, probe, len(probe)),
+        })
+        items = completion_items(response)
+        found = labels(items)
+        report.check(
+            "completion: %s. offers its members" % namespace,
+            items is not None and len(found) > 0,
+            found,
+        )
+        missing = [name for name, item in zip(found, items or [])
+                   if not item_documentation(item)]
+        report.check(
+            "completion: every %s member carries documentation" % namespace,
+            items is not None and not missing,
+            missing,
+        )
+
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": std_uri},
+        "position": position(DOC_STD, "const probeConsole = console.",
+                             len("const probeConsole = console.")),
+    })
+    items = completion_items(response) or []
+    log_doc = ""
+    for item in items:
+        if item.get("label") == "log":
+            log_doc = item_documentation(item)
+    report.check(
+        "completion: the log member documents what it prints",
+        "stdout" in log_doc,
+        log_doc,
+    )
+
+    # The signature help: the callee's documentation and its parameters.
+    response = session.request("textDocument/signatureHelp", {
+        "textDocument": {"uri": uri},
+        "position": position(DOCUMENTED, "add(1, 2)", 4),
+    })
+    documentation = signature_documentation(response)
+    report.check(
+        "signatureHelp: the callee's documentation is shown",
+        "Adds two numbers." in documentation,
+        documentation,
+    )
+    result = response.get("result")
+    parameters = []
+    if isinstance(result, dict) and isinstance(result.get("signatures"), list):
+        if result["signatures"]:
+            parameters = result["signatures"][0].get("parameters") or []
+    documented = [
+        item for item in parameters
+        if isinstance(item, dict) and item.get("documentation")
+    ]
+    report.check(
+        "signatureHelp: the parameters carry their documentation",
+        len(documented) == 2,
+        parameters,
+    )
+
+
+def check_doc_comment_output(report, cp3c, work):
+    """A doc comment never changes what a program does."""
+    documented = write_fixture(work, "doc_documented.cp3", DOCUMENTED)
+    undocumented = write_fixture(work, "doc_undocumented.cp3", UNDOCUMENTED)
+    with_run = subprocess.run([cp3c, "run", documented], capture_output=True,
+                              timeout=300)
+    without_run = subprocess.run([cp3c, "run", undocumented], capture_output=True,
+                                 timeout=300)
+    with_out = with_run.stdout.replace(b"\r\n", b"\n")
+    without_out = without_run.stdout.replace(b"\r\n", b"\n")
+    report.check(
+        "doc comment: the program's output is unchanged",
+        with_out == without_out and with_run.returncode == without_run.returncode,
+        "documented=%r undocumented=%r" % (with_out[:200], without_out[:200]),
+    )
+    report.check(
+        "doc comment: the documented program still runs",
+        with_run.returncode == 0 and b"3" in with_out and b"hello" in with_out,
+        "%r / %r" % (with_out[:200], with_run.stderr[:200]),
     )
 
 
@@ -1007,6 +1271,8 @@ def main():
         "param": write_fixture(work, "intel_param.cp3", PARAM_LIST),
         "type": write_fixture(work, "intel_type.cp3", TYPE_POS),
         "nested": write_fixture(work, "intel_nested.cp3", NESTED),
+        "documented": write_fixture(work, "intel_documented.cp3", DOCUMENTED),
+        "std": write_fixture(work, "intel_std_docs.cp3", DOC_STD),
     }
     uris = {key: file_uri(path) for key, path in paths.items()}
 
@@ -1028,6 +1294,8 @@ def main():
                           ("try", TRY_BLOCK), ("notry", NO_TRY),
                           ("class", CLASS_BODY), ("param", PARAM_LIST),
                           ("type", TYPE_POS), ("nested", NESTED)):
+                          ("local", LOCAL_SPEC), ("documented", DOCUMENTED),
+                          ("std", DOC_STD)):
             session.notify("textDocument/didOpen", {
                 "textDocument": {
                     "uri": uris[key],
@@ -1054,8 +1322,10 @@ def main():
         check_symbols(report, session, uris["main"], uris["util"],
                       paths["util"])
         check_signature(report, session, uris["main"])
+        check_documentation(report, session, uris["documented"], uris["std"])
         check_formatting(report, session, cp3c, work, evidence)
         check_sweep(report, session, uris["main"], MAIN)
+        check_doc_comment_output(report, cp3c, work)
 
         # Liveness after the broken documents and the sweep.
         response = session.request("textDocument/hover", {

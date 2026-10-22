@@ -15,6 +15,7 @@
 // here guesses: a name is offered because the compiler bound it there.
 // =============================================================================
 #include "detail/lsp_intel_complete.hpp"
+#include "detail/lsp_intel_docs.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -91,6 +92,14 @@ struct BindingStyle {
     const char* fallback = "let";  // the detail when the type is unknown
 };
 
+// The rendered doc comment of a declaration, or an empty string. The doc
+// table lives in the sema result, so the scope builder needs no document.
+std::string docFor(const SemaResult& sema, std::uint32_t nodeId) {
+    const auto it = sema.docs.find(nodeId);
+    if (it == sema.docs.end() || it->second.empty()) return {};
+    return renderDocComment(it->second);
+}
+
 // Appends the names a pattern binds, each with the type the compiler gave it.
 void appendBoundNames(const Node* pattern, const SemaResult& sema,
                       const BindingStyle& style,
@@ -104,6 +113,7 @@ void appendBoundNames(const Node* pattern, const SemaResult& sema,
         candidate.label = name;
         candidate.kind = style.kind;
         candidate.detail = typeDetail(sema, node->nodeId, style.fallback);
+        candidate.documentation = docFor(sema, node->nodeId);
         out.push_back(std::move(candidate));
     }
 }

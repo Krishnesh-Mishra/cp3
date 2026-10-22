@@ -24,6 +24,8 @@
 #include "cp3/std_surface.hpp"
 #include "cp3/types.hpp"
 
+#include "detail/lsp_intel_docs.hpp"
+
 namespace cp3::cli {
 namespace {
 
@@ -221,6 +223,21 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
         return candidates;
     }
     const Type* control = probed->sema.typeOf(array->elements.back()->nodeId);
+    // The receiver's type (an array, a string, a user class) and the std
+    // namespace the receiver names: both decide what a candidate's
+    // documentation is.
+    const std::string namespaceName =
+        stdNamespaceMemberNames(lastIdentifier(receiver)).empty()
+            ? std::string()
+            : lastIdentifier(receiver);
+    const Type* receiverType = nullptr;
+    if (!array->elements.empty() && array->elements.front() != nullptr &&
+        array->elements.front()->kind == NodeKind::MemberExpr) {
+        const auto& member = static_cast<const MemberExpr&>(*array->elements.front());
+        if (member.object != nullptr) {
+            receiverType = probed->sema.typeOf(member.object->nodeId);
+        }
+    }
     for (std::size_t i = 0; i < names.size(); ++i) {
         const ExprPtr& element = array->elements[i];
         if (element == nullptr) continue;
@@ -230,7 +247,12 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
         lsp::CompletionCandidate candidate;
         candidate.label = names[i];
         candidate.kind = type->kind == TypeKind::Function ? 3 : 5;
-        candidate.detail = describe(*type);
+        // An ambient surface has no printable type of its own: the
+        // documented signature (in the documentation) is what the editor
+        // shows instead of the internal placeholder label.
+        candidate.detail = isPlaceholderType(*type) ? "" : describe(*type);
+        candidate.documentation =
+            completionMemberDoc(namespaceName, receiverType, names[i]);
         candidates.push_back(std::move(candidate));
     }
     return candidates;

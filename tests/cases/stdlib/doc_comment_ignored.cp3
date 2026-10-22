@@ -1,0 +1,8 @@
+import console from "std/console";
+
+/**
+ * A doc comment above a declaration the compiler does not know is dropped
+ * silently: it is documentation, never a diagnostic.
+ */
+const stillWorks = 1;
+console.log(`${stillWorks}`);

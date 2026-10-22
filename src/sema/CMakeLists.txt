@@ -15,9 +15,11 @@ set(cp3_sema_sources
     src/semantic_analyzer.cpp
     src/support/scopes.cpp
     src/support/declarations.cpp
+    src/support/docs.cpp
     src/checks/type_check.cpp
     src/checks/assignability.cpp
     src/checks/class_check.cpp
+    src/checks/class_docs.cpp
     src/checks/class_conform_check.cpp
     src/checks/expr_check.cpp
     src/checks/member_check.cpp
@@ -50,6 +52,8 @@ set(cp3_sema_sources
     ../std/collections/sema.cpp
     ../std/date/sema.cpp
     ../std/buffer/sema.cpp
+    ../std/arrays/sema_docs.cpp
+    ../std/string/sema_docs.cpp
 )
 
 add_library(cp3_sema STATIC ${cp3_sema_sources})

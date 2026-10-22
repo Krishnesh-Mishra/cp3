@@ -13,6 +13,8 @@
 #include <string>
 #include <utility>
 
+#include "detail/docs.h"
+
 namespace cp3 {
 
 void Analyzer::setType(const Node& n, const Type& t) {
@@ -50,6 +52,16 @@ void Analyzer::updateFunctionReturnType(std::uint32_t nodeId, const Type& ret) {
     if (nodeId == 0) return;
     auto fit = out_.functions.find(nodeId);
     if (fit != out_.functions.end()) fit->second.returnType = ret;
+}
+
+void Analyzer::publishDoc(std::uint32_t nodeId, const SourceSpan& declSpan) {
+    if (nodeId == 0) return;
+    if (!declSpan.valid() || declSpan.file == nullptr) return;
+    // A doc comment is documentation only: it is read, never reported on, and
+    // it never influences what the program does.
+    const DocComment doc = readDocComment(*declSpan.file, declSpan.begin.offset);
+    if (doc.empty()) return;
+    out_.docs[nodeId] = doc;
 }
 
 }  // namespace cp3

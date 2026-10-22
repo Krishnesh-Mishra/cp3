@@ -1,0 +1,29 @@
+import console from "std/console";
+
+/**
+ * Adds two numbers.
+ * @param a The first number.
+ * @param b The second number.
+ * @returns The sum of a and b.
+ */
+function add(a: number, b: number): number {
+  return a + b;
+}
+
+/// Greets the world.
+function greet(): string {
+  return "hello";
+}
+
+/// A greeter.
+class Greeter {
+  /// Greets the given name.
+  function speak(name: string): string {
+    return "hi " + name;
+  }
+}
+
+const total = add(1, 2);
+console.log(`${total}`);
+console.log(greet());
+console.log(new Greeter().speak("cp3"));

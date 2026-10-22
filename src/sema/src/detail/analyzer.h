@@ -24,6 +24,7 @@
 //   checks/banned.cpp       banned-pattern diagnostics (delete/arguments/for-in/any)
 //   checks/std_check.cpp    std-namespace dispatch + `String(x)`
 //   checks/enum_check.cpp   the enum declaration model (spec 04)
+//   support/docs.cpp        the doc-comment reader (JSDoc-style comments)
 //   src/std/<family>/sema.cpp per-family std member tables (math / path / os /
 //                           process / console / JSON)
 //   src/std/typed-arrays/sema.cpp the JS-compat typed-array family (D69)
@@ -48,6 +49,7 @@
 #include "cp3/ast.hpp"
 #include "cp3/diagnostic.hpp"
 #include "cp3/options.hpp"
+#include "cp3/std_surface.hpp"
 #include "detail/enums.h"
 #include "detail/scopes.h"
 
@@ -452,6 +454,14 @@ private:
     void publishSymbol(const Binding& b);
     void publishFunction(const FuncSig& sig, const std::string& name);
     void updateFunctionReturnType(std::uint32_t nodeId, const Type& ret);
+    // Publishes the doc comment that documents the declaration starting at
+    // `declSpan`, under `nodeId` (the declaration's own node id). The comment
+    // is read from the source text (support/docs.cpp); a declaration without
+    // one publishes nothing.
+    void publishDoc(std::uint32_t nodeId, const SourceSpan& declSpan);
+    // Publishes the doc comments of a class and of its members, plus the
+    // members' own types (checks/class_docs.cpp).
+    void publishClassDocs(ClassDeclaration& c);
     // --- state ----------------------------------------------------------------
     DiagnosticSink& sink_;
     SemaResult& out_;
@@ -519,6 +529,36 @@ std::vector<std::string> cryptoMemberNames();
 std::vector<std::string> fsMemberNames();
 std::vector<std::string> dateMemberNames();
 std::vector<std::string> dateInstanceMemberNames();
+
+// The documentation of one family member: the documented signature and the
+// Markdown description the editor shows. Each family unit defines its own
+// next to the table it already owns, so the two cannot drift apart.
+StdMemberDoc mathMemberDoc(const std::string& prop);
+StdMemberDoc pathMemberDoc(const std::string& prop);
+StdMemberDoc osMemberDoc(const std::string& prop);
+StdMemberDoc processMemberDoc(const std::string& prop);
+StdMemberDoc envMemberDoc(const std::string& prop);
+StdMemberDoc consoleMemberDoc(const std::string& prop);
+StdMemberDoc jsonMemberDoc(const std::string& prop);
+StdMemberDoc cryptoMemberDoc(const std::string& prop);
+StdMemberDoc fsMemberDoc(const std::string& prop);
+StdMemberDoc fsStatsMemberDoc(const std::string& prop);
+std::vector<std::string> fsStatsMemberNames();
+StdMemberDoc dateMemberDoc(const std::string& prop);
+StdMemberDoc dateInstanceMemberDoc(const std::string& prop);
+StdMemberDoc processExecResultDoc(const std::string& prop);
+StdMemberDoc processSpawnHandleDoc(const std::string& prop);
+std::vector<std::string> processExecResultMemberNames();
+std::vector<std::string> processSpawnHandleMemberNames();
+// The `Map` / `Set` members (std/collections).
+StdMemberDoc collectionsMemberDoc(const std::string& family,
+                                   const std::string& prop);
+std::vector<std::string> collectionsMemberNames(const std::string& family);
+// The array and string method surfaces.
+StdMemberDoc arrayMemberDoc(const std::string& prop);
+std::vector<std::string> arrayMemberNames();
+StdMemberDoc stringMemberDoc(const std::string& prop);
+std::vector<std::string> stringMemberNames();
 
 // The nominal Date value type (std/date; src/std/date/sema.cpp). member_check
 // routes a Date receiver's members to the family table and reports CP3305 for

@@ -43,6 +43,7 @@ The C+++ core language - syntax, the type system, memory model, concurrency, cla
 - [21. Design goal: 2-day onboarding for JS/TS devs](language-spec/21-design-goal-2-day-onboarding-for-js-ts-devs.md)
 - [22. What C+++ combines](language-spec/22-what-cp3-combines.md)
 - [23. Open design questions](language-spec/23-open-design-questions.md)
+- [24. Doc comments](language-spec/24-doc-comments.md)
 
 ## CLI & Tooling
 

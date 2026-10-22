@@ -69,6 +69,11 @@ void Analyzer::declareVariableDeclaration(VariableDeclaration& vd) {
     for (auto& d : vd.declarations) {
         if (d) declareDeclarator(*d, vd.kind);
     }
+    // A doc comment sits above the whole statement, so it documents every
+    // declarator it introduces.
+    for (auto& d : vd.declarations) {
+        if (d) publishDoc(d->nodeId, vd.span);
+    }
 }
 
 void Analyzer::declareDeclarator(VariableDeclarator& d, VarKind kind) {

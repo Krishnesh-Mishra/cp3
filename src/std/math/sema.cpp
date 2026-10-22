@@ -1,5 +1,5 @@
 // =============================================================================
-// src/std/math/sema.cpp - `std/math` member typing.
+// src/std/math/sema.cpp - `std/math` member typing and documentation.
 //
 // OWNERSHIP: the std/math family (src/std/math/**). The member table moved
 // here from src/sema/src/checks/std_check.cpp (D72 stage 2); that core unit
@@ -7,10 +7,15 @@
 // and forwards here, so the rest of sema never needs to change for this
 // family.
 //
-// The same table drives member typing and the CP3305 candidate list, so the
-// two can never drift apart. Math is a CLOSED family
-// (std_check.cpp isClosedStdNamespace): a member outside the table is CP3305
-// with these names as candidates instead of a CP3002 skip.
+// The same table drives member typing, the CP3305 candidate list and the
+// documentation the editor shows, so the three can never drift apart. Math is
+// a CLOSED family (std_check.cpp isClosedStdNamespace): a member outside the
+// table is CP3305 with these names as candidates instead of a CP3002 skip.
+//
+// The signatures and the descriptions are the documented ones
+// (docs/standard-library/04-imported-std-modules.md, Math section): the
+// helpers are backed directly by `<numeric>`/`<cmath>`, and `gcd`/`lcm`
+// operate on `number` (a 64-bit double), not on a true integer type.
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -45,18 +50,57 @@ Type threeNumberToNumber() {
 }
 
 const MemberRow kMathRows[] = {
-    {"PI", numberValue},             {"E", numberValue},
-    {"random", zeroToNumber},        {"min", variadicNumberToNumber},
-    {"max", variadicNumberToNumber}, {"pow", twoNumberToNumber},
-    {"gcd", twoNumberToNumber},      {"lcm", twoNumberToNumber},
-    {"clamp", threeNumberToNumber},  {"lerp", threeNumberToNumber},
-    {"sqrt", numberUnary},           {"abs", numberUnary},
-    {"floor", numberUnary},          {"ceil", numberUnary},
-    {"round", numberUnary},          {"trunc", numberUnary},
-    {"cbrt", numberUnary},           {"log", numberUnary},
-    {"log2", numberUnary},           {"log10", numberUnary},
-    {"sin", numberUnary},            {"cos", numberUnary},
-    {"tan", numberUnary},
+    {"PI", numberValue, "PI: number",
+     "The ratio of a circle's circumference to its diameter."},
+    {"E", numberValue, "E: number",
+     "Euler's number - the base of the natural logarithm."},
+    {"random", zeroToNumber, "random(): number",
+     "Returns a pseudo-random number in the half-open interval [0, 1)."},
+    {"min", variadicNumberToNumber, "min(...values: number[]): number",
+     "Returns the smallest of the given values."},
+    {"max", variadicNumberToNumber, "max(...values: number[]): number",
+     "Returns the largest of the given values."},
+    {"pow", twoNumberToNumber, "pow(base: number, exponent: number): number",
+     "Returns `base` raised to `exponent`."},
+    {"gcd", twoNumberToNumber, "gcd(a: number, b: number): number",
+     "Returns the greatest common divisor of `a` and `b`.\n\n"
+     "`number` is a 64-bit double, so this is an exact-integer gcd only for "
+     "values a double represents exactly."},
+    {"lcm", twoNumberToNumber, "lcm(a: number, b: number): number",
+     "Returns the least common multiple of `a` and `b`."},
+    {"clamp", threeNumberToNumber,
+     "clamp(x: number, min: number, max: number): number",
+     "Returns `x` limited to the range [`min`, `max`]."},
+    {"lerp", threeNumberToNumber,
+     "lerp(start: number, end: number, t: number): number",
+     "Returns the linear interpolation between `start` and `end` at `t` "
+     "(`t` = 0 gives `start`, `t` = 1 gives `end`)."},
+    {"sqrt", numberUnary, "sqrt(x: number): number",
+     "Returns the square root of `x`."},
+    {"abs", numberUnary, "abs(x: number): number",
+     "Returns the absolute value of `x`."},
+    {"floor", numberUnary, "floor(x: number): number",
+     "Returns the largest integer not greater than `x`."},
+    {"ceil", numberUnary, "ceil(x: number): number",
+     "Returns the smallest integer not less than `x`."},
+    {"round", numberUnary, "round(x: number): number",
+     "Returns `x` rounded to the nearest integer."},
+    {"trunc", numberUnary, "trunc(x: number): number",
+     "Returns `x` with its fractional part removed."},
+    {"cbrt", numberUnary, "cbrt(x: number): number",
+     "Returns the cube root of `x`."},
+    {"log", numberUnary, "log(x: number): number",
+     "Returns the natural logarithm of `x`."},
+    {"log2", numberUnary, "log2(x: number): number",
+     "Returns the base-2 logarithm of `x`."},
+    {"log10", numberUnary, "log10(x: number): number",
+     "Returns the base-10 logarithm of `x`."},
+    {"sin", numberUnary, "sin(x: number): number",
+     "Returns the sine of `x` (in radians)."},
+    {"cos", numberUnary, "cos(x: number): number",
+     "Returns the cosine of `x` (in radians)."},
+    {"tan", numberUnary, "tan(x: number): number",
+     "Returns the tangent of `x` (in radians)."},
 };
 
 }  // namespace
@@ -66,5 +110,9 @@ std::optional<Type> Analyzer::mathMember(const std::string& prop) {
 }
 
 std::vector<std::string> mathMemberNames() { return memberNames(kMathRows); }
+
+StdMemberDoc mathMemberDoc(const std::string& prop) {
+    return memberDoc(kMathRows, prop);
+}
 
 }  // namespace cp3

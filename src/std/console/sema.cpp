@@ -1,5 +1,5 @@
 // =============================================================================
-// src/std/console/sema.cpp - `std/console` member typing.
+// src/std/console/sema.cpp - `std/console` member typing and documentation.
 //
 // OWNERSHIP: the std/console family (src/std/console/**). The implemented-set
 // table and the member function moved here from
@@ -12,12 +12,19 @@
 // against with "did you mean". Since the round-1 wave all twelve documented
 // members are implemented, so every one of them is a suggestion candidate and
 // an unknown member is exactly the documented-shape CP3305.
+//
+// The same table drives member typing, the CP3305 candidate list and the
+// documentation the editor shows, so the three can never drift apart. The
+// signatures and the descriptions are the documented ones
+// (docs/standard-library/04-imported-std-modules.md, console section).
 // =============================================================================
 #include "detail/analyzer.h"
 
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "detail/std_tables.hpp"
 
 namespace cp3 {
 
@@ -26,28 +33,80 @@ namespace {
 // The twelve documented members (docs/standard-library/04-imported-std-modules.md
 // §console): log, info, warn, error, input, readKey, clear, assert, on, off,
 // hide, show. All are real, so all are candidate suggestions for a typo.
-const char* const kConsoleImplemented[] = {
-    "log",   "info",  "warn", "error", "input", "readKey",
-    "clear", "assert", "on",   "off",   "hide",  "show",
+//
+// The members type as ambient (permissive signatures, like the other std
+// families' surface members): the documented signature below is the precise
+// spelling, and anything else keeps the CP3305 closed-shape report with the
+// implemented set as candidates.
+const MemberRow kConsoleRows[] = {
+    {"log", ambient, "log(...args: Printable[]): void",
+     "Prints the arguments to **stdout**, separated by a space and followed by "
+     "a newline.\n\n"
+     "**Parameters**\n\n"
+     "- `args` - the values to print. A user class may implement "
+     "`toString(): string` to control its own printed form; without one, a "
+     "default representation is generated for the classes that are actually "
+     "printed."},
+    {"info", ambient, "info(...args: Printable[]): void",
+     "Prints the arguments to **stdout**, separated by a space and followed by "
+     "a newline - the informational counterpart of `log`."},
+    {"warn", ambient, "warn(...args: Printable[]): void",
+     "Prints the arguments to **stderr**, separated by a space and followed by "
+     "a newline."},
+    {"error", ambient, "error(...args: Printable[]): void",
+     "Prints the arguments to **stderr**, separated by a space and followed by "
+     "a newline - the error counterpart of `warn`."},
+    {"input", ambient, "input(prompt?: string): Promise<string>",
+     "Reads one line from stdin and resolves with it; on EOF it resolves with "
+     "an empty string instead of rejecting.\n\n"
+     "**Parameters**\n\n"
+     "- `prompt` - the text written to the terminal before the line is read.\n\n"
+     "The read is asynchronous: it never blocks the event loop, exactly like "
+     "every other I/O primitive in the standard library."},
+    {"readKey", ambient, "readKey(): Promise<string>",
+     "Reads a single keypress and resolves with it - a named key such as "
+     "`\"ArrowUp\"` or `\"Enter\"`, or the literal character typed. The "
+     "terminal is put into raw mode while the read is pending."},
+    {"clear", ambient, "clear(): void",
+     "Clears the terminal screen."},
+    {"assert", ambient, "assert(condition: boolean, ...args: Printable[]): void",
+     "Logs the arguments to **stderr** only when `condition` is false. It "
+     "never throws and never exits the program - it is a diagnostic aid, not "
+     "a control-flow mechanism.\n\n"
+     "**Parameters**\n\n"
+     "- `condition` - the condition to check.\n"
+     "- `args` - the values to log when the condition is false."},
+    {"on", ambient,
+     "on(event: \"keypress\" | \"line\" | \"close\", "
+     "listener: (value: string) => void): void",
+     "Keeps listening: `\"keypress\"` delivers every key, `\"line\"` delivers "
+     "each completed line without its terminator, and `\"close\"` fires once "
+     "with `\"\"` when stdin reaches EOF. Listeners persist until `off` "
+     "removes them."},
+    {"off", ambient,
+     "off(event: \"keypress\" | \"line\" | \"close\", "
+     "listener: (value: string) => void): void",
+     "Stops listening: the listener is removed from the event it was "
+     "registered for."},
+    {"hide", ambient, "hide(): void",
+     "Hides the console window the program runs in (Windows). The program "
+     "keeps running; on platforms without a console window of its own this "
+     "is a no-op."},
+    {"show", ambient, "show(): void",
+     "Restores a console window hidden by `hide()`. When there is nothing to "
+     "restore, this is a no-op."},
 };
 
 }  // namespace
 
 std::optional<Type> Analyzer::consoleMember(const std::string& prop) {
-    // The user-facing typo example: the documented members type as ambient
-    // (permissive signatures, like the other std families' surface members),
-    // and anything else keeps the CP3305 closed-shape report with the
-    // implemented set as candidates.
-    for (const char* name : kConsoleImplemented) {
-        if (prop == name) return ambient();
-    }
-    return std::nullopt;
+    return lookupMember(kConsoleRows, prop);
 }
 
-std::vector<std::string> consoleMemberNames() {
-    std::vector<std::string> names;
-    for (const char* name : kConsoleImplemented) names.push_back(name);
-    return names;
+std::vector<std::string> consoleMemberNames() { return memberNames(kConsoleRows); }
+
+StdMemberDoc consoleMemberDoc(const std::string& prop) {
+    return memberDoc(kConsoleRows, prop);
 }
 
 }  // namespace cp3

@@ -1,0 +1,13 @@
+{
+  "id": "cp3-icons",
+  "label": "cp3",
+  "extends": "vscode-seti",
+  "iconDefinitions": {
+    "cp3-logo": {
+      "iconPath": "../images/cp3-logo.svg"
+    }
+  },
+  "fileExtensions": {
+    "cp3": "cp3-logo"
+  }
+}

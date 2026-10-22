@@ -1,5 +1,5 @@
 // =============================================================================
-// src/std/fs/sema.cpp - `std/fs` surface typing.
+// src/std/fs/sema.cpp - `std/fs` surface typing and documentation.
 //
 // OWNERSHIP: the std/fs family (src/std/fs/**). One per-module check unit; the
 // rest of sema never needs to change for this module (std_check.cpp carries the
@@ -20,8 +20,10 @@
 //   stream - readFileStream(path, chunkSize?): ReadStream
 //            writeFileStream(path): WriteStream
 //
-// fs is a CLOSED family (std_check.cpp isClosedStdNamespace): a member outside
-// the table is CP3305 with these names as candidates instead of a CP3002 skip.
+// The same table drives member typing, the CP3305 candidate list and the
+// editor documentation, so the three can never drift apart. fs is a CLOSED
+// family (std_check.cpp isClosedStdNamespace): a member outside the table is
+// CP3305 with these names as candidates instead of a CP3002 skip.
 //
 // The three receiver objects (FileStats / ReadStream / WriteStream) are named
 // permissive markers, exactly like std/network's documented objects: the shape
@@ -51,9 +53,9 @@ namespace cp3 {
 namespace {
 
 // The receiver markers (shared with src/std/fs/codegen.cpp).
-const char* const kFileStats = "$fs:FileStats";
-const char* const kReadStream = "$fs:ReadStream";
-const char* const kWriteStream = "$fs:WriteStream";
+const char* kFileStats = "$fs:FileStats";
+const char* kReadStream = "$fs:ReadStream";
+const char* kWriteStream = "$fs:WriteStream";
 
 // -----------------------------------------------------------------------------
 // Receiver objects
@@ -93,26 +95,75 @@ Type mkdirParams(Type result) {
 }
 
 const MemberRow kFsRows[] = {
-    {"readFileSync", [] { return readFileParams(Type::string()); }},
-    {"writeFileSync", [] { return writeParams(Type::voidType()); }},
-    {"appendFileSync", [] { return writeParams(Type::voidType()); }},
-    {"existsSync", [] { return Type::function({Type::string()}, Type::boolean()); }},
-    {"mkdirSync", [] { return mkdirParams(Type::voidType()); }},
-    {"readdirSync", [] { return Type::function({Type::string()}, Type::array(Type::string())); }},
-    {"statSync", [] { return Type::function({Type::string()}, fsStatsObject()); }},
-    {"unlinkSync", [] { return Type::function({Type::string()}, Type::voidType()); }},
-    {"readFile", [] { return readFileParams(promiseString()); }},
-    {"writeFile", [] { return writeParams(promiseVoid()); }},
-    {"appendFile", [] { return writeParams(promiseVoid()); }},
-    {"mkdir", [] { return mkdirParams(promiseVoid()); }},
-    {"readdir", [] { return Type::function({Type::string()}, promiseNames()); }},
-    {"stat", [] { return Type::function({Type::string()}, promiseStats()); }},
-    {"unlink", [] { return Type::function({Type::string()}, promiseVoid()); }},
+    {"readFileSync", [] { return readFileParams(Type::string()); },
+     "readFileSync(path: string, encoding?: string): string",
+     "Reads the whole file at `path` and returns its contents. Throws a "
+     "catchable error when the file cannot be read."},
+    {"writeFileSync", [] { return writeParams(Type::voidType()); },
+     "writeFileSync(path: string, data: string): void",
+     "Writes `data` to the file at `path`, replacing it. Throws a catchable "
+     "error when the file cannot be written."},
+    {"appendFileSync", [] { return writeParams(Type::voidType()); },
+     "appendFileSync(path: string, data: string): void",
+     "Appends `data` to the file at `path`."},
+    {"existsSync", [] { return Type::function({Type::string()}, Type::boolean()); },
+     "existsSync(path: string): boolean",
+     "True when a file or a directory exists at `path`."},
+    {"mkdirSync", [] { return mkdirParams(Type::voidType()); },
+     "mkdirSync(path: string, recursive?: boolean): void",
+     "Creates the directory at `path`; with `recursive`, the missing parent "
+     "directories are created too."},
+    {"readdirSync", [] { return Type::function({Type::string()}, Type::array(Type::string())); },
+     "readdirSync(path: string): string[]",
+     "Returns the names of the entries of the directory at `path`."},
+    {"statSync", [] { return Type::function({Type::string()}, fsStatsObject()); },
+     "statSync(path: string): FileStats",
+     "Returns the `FileStats` of the file at `path` (its size, its kind and "
+     "its modification time)."},
+    {"unlinkSync", [] { return Type::function({Type::string()}, Type::voidType()); },
+     "unlinkSync(path: string): void",
+     "Removes the file at `path`."},
+    {"readFile", [] { return readFileParams(promiseString()); },
+     "readFile(path: string, encoding?: string): Promise<string>",
+     "Reads the whole file at `path` and resolves with its contents. The "
+     "promise rejects when the file cannot be read."},
+    {"writeFile", [] { return writeParams(promiseVoid()); },
+     "writeFile(path: string, data: string): Promise<void>",
+     "Writes `data` to the file at `path`, replacing it."},
+    {"appendFile", [] { return writeParams(promiseVoid()); },
+     "appendFile(path: string, data: string): Promise<void>",
+     "Appends `data` to the file at `path`."},
+    {"mkdir", [] { return mkdirParams(promiseVoid()); },
+     "mkdir(path: string, recursive?: boolean): Promise<void>",
+     "Creates the directory at `path`; with `recursive`, the missing parent "
+     "directories are created too."},
+    {"readdir", [] { return Type::function({Type::string()}, promiseNames()); },
+     "readdir(path: string): Promise<string[]>",
+     "Resolves with the names of the entries of the directory at `path`."},
+    {"stat", [] { return Type::function({Type::string()}, promiseStats()); },
+     "stat(path: string): Promise<FileStats>",
+     "Resolves with the `FileStats` of the file at `path`."},
+    {"unlink", [] { return Type::function({Type::string()}, promiseVoid()); },
+     "unlink(path: string): Promise<void>",
+     "Removes the file at `path`."},
     {"readFileStream",
      [] { return withOptionalTail(Type::function({Type::string(), Type::number()},
-                                                 fsReadStreamObject())); }},
+                                                 fsReadStreamObject())); },
+     "readFileStream(path: string, chunkSize?: number): ReadStream",
+     "Opens the file at `path` for streaming reads; with `chunkSize`, that is "
+     "the size of the chunks the `data` event delivers."},
     {"writeFileStream",
-     [] { return Type::function({Type::string()}, fsWriteStreamObject()); }},
+     [] { return Type::function({Type::string()}, fsWriteStreamObject()); },
+     "writeFileStream(path: string): WriteStream",
+     "Opens the file at `path` for streaming writes."},
+};
+
+// The documented fields of a `FileStats` value.
+const DocRow kFsStatsRows[] = {
+    {"size", "size: number", "The size of the file in bytes."},
+    {"isFile", "isFile: boolean", "True when the entry is a regular file."},
+    {"isDirectory", "isDirectory: boolean", "True when the entry is a directory."},
+    {"modifiedAt", "modifiedAt: Date", "The time the file was last modified."},
 };
 
 }  // namespace
@@ -140,5 +191,17 @@ std::optional<Type> Analyzer::fsReceiverMember(const Type& recv,
 }
 
 std::vector<std::string> fsMemberNames() { return memberNames(kFsRows); }
+
+StdMemberDoc fsMemberDoc(const std::string& prop) {
+    return memberDoc(kFsRows, prop);
+}
+
+StdMemberDoc fsStatsMemberDoc(const std::string& prop) {
+    return memberDoc(kFsStatsRows, prop);
+}
+
+std::vector<std::string> fsStatsMemberNames() {
+    return docRowNames(kFsStatsRows);
+}
 
 }  // namespace cp3
