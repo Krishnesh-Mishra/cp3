@@ -76,6 +76,7 @@ inline constexpr const char* kBreakOutsideLoop  = "CP3502";
 inline constexpr const char* kContinueOutsideLoop = "CP3503";
 inline constexpr const char* kMissingReturn     = "CP3504";
 inline constexpr const char* kUnreachableCode   = "CP3505";
+inline constexpr const char* kContinueNonIterationLabel = "CP3506";
 
 // --- modules / imports --------------------------------------------------------
 inline constexpr const char* kModuleNotFound    = "CP3601";

@@ -1,0 +1,6 @@
+import console from "std/console";
+// A `map` whose result type cannot be resolved has no array to build: the
+// callback must return a value.
+const a = [1, 2, 3];
+const b = a.map((x) => { });
+console.log(b.length);

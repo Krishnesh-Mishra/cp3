@@ -1,0 +1,6 @@
+import console from "std/console";
+// A `continue` needs an iteration statement: a label on a block may only be
+// broken out of.
+block: {
+  continue block;
+}

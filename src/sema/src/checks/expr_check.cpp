@@ -406,6 +406,9 @@ Type Analyzer::inferArrowReturn(ArrowFunction& arrow,
     FuncCtx ctx;
     ctx.annotated = false;
     funcStack_.push_back(ctx);
+    // An arrow is a function of its own: a `break`/`continue` inside its body
+    // binds to its own loops, never to a loop of the enclosing function.
+    const FunctionContext outer = enterFunctionBody();
     if (arrow.body) {
         if (arrow.expressionBody) {
             ret = widen(inferExpr(*static_cast<Expr*>(arrow.body.get())));
@@ -413,6 +416,7 @@ Type Analyzer::inferArrowReturn(ArrowFunction& arrow,
             visitStmt(*static_cast<Stmt*>(arrow.body.get()));
         }
     }
+    leaveFunctionBody(outer);
     FuncCtx finalCtx = funcStack_.back();
     funcStack_.pop_back();
     popScope();

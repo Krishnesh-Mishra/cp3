@@ -1,0 +1,9 @@
+import console from "std/console";
+import { Map } from "std/collections";
+// `for...in` over a Map walks its keys, in insertion order (D44).
+const m = new Map<string, number>();
+m.set("b", 2);
+m.set("a", 1);
+for (const k in m) {
+  console.log(k);
+}

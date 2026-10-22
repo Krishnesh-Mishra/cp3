@@ -1,0 +1,7 @@
+import console from "std/console";
+import { Map } from "std/collections";
+// A `Map` has no C++ spelling as an array element, so the method call on
+// such an array is a type error.
+const m = new Map<string, number>();
+const a = [m];
+a.push(m);

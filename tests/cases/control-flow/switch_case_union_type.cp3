@@ -1,0 +1,13 @@
+import console from "std/console";
+// A union discriminant matches the case whose alternative it holds.
+const u: number | string = "a";
+switch (u) {
+  case 1:
+    console.log("number");
+    break;
+  case "a":
+    console.log("string");
+    break;
+  default:
+    console.log("none");
+}

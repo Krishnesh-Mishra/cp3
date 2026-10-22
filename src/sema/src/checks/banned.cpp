@@ -35,6 +35,16 @@ void Analyzer::checkBannedForIn(const Type& right, const SourceSpan& span) {
         report(diagcode::kForInPlainObjectBanned, span,
                "for...in over a plain object is banned (its keys are known at "
                "compile time); use Map<K, V> or access fields by name");
+        return;
+    }
+    // A class instance has a fixed field list too (spec 08: "for...in on a
+    // plain object/class instance is banned"). The collections are the
+    // exception: their key set is decided at runtime.
+    if (right.kind == TypeKind::Class && right.name != "Map" &&
+        right.name != "Set") {
+        report(diagcode::kForInPlainObjectBanned, span,
+               "for...in over a plain object is banned (its keys are known at "
+               "compile time); use Map<K, V> or access fields by name");
     }
 }
 

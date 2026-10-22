@@ -18,7 +18,9 @@
 
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -157,17 +159,135 @@ std::string Generator::emitFor(const ForStatement& f,
 // it owns the element-type gate and the lifetime-safe source handle.
 void Generator::emitForOf(const ForOfStatement& f, const std::string& jsLabel,
                           std::string& out, int indent) {
+    // `for await (...)` awaits every value it binds; it is the same loop with
+    // an await on the bound value.
+    if (f.isAwait) {
+        ArrayEmitter::forAwait(*this, f, jsLabel, out, indent);
+        return;
+    }
     ArrayEmitter::forOf(*this, f, jsLabel, out, indent);
 }
 
-void Generator::emitForIn(const ForInStatement& f, const std::string&,
+// The `for...in` binding: the key (the index, or a `Map`'s key) bound to the
+// loop variable. A destructuring target unpacks the key the same way the
+// `for...of` loop unpacks an element.
+void Generator::emitForInBinding(const ForInStatement& f,
+                                 const std::string& keyExpr,
+                                 const std::string& keyCpp, std::string& out,
+                                 int indent) {
+    const auto* vd =
+        f.left && f.left->kind == NodeKind::VariableDeclaration
+            ? static_cast<const VariableDeclaration*>(f.left.get())
+            : nullptr;
+    if (vd != nullptr) {
+        const std::string cv = (vd->kind == VarKind::Const) ? "const " : "";
+        for (const auto& declPtr : vd->declarations) {
+            const VariableDeclarator* d = declPtr.get();
+            if (d == nullptr || !d->id) continue;
+            if (d->id->kind == NodeKind::Identifier) {
+                const std::string name =
+                    mapIdent(static_cast<const Identifier&>(*d->id).name);
+                const std::optional<Type> bt = bindingType(*d);
+                const CppInfo ci = bt ? classify(*bt) : CppInfo{};
+                line(out, indent,
+                     cv + (ci.representable ? ci.cpp : keyCpp) + " " + name +
+                         " = " + keyExpr + ";");
+                declare(static_cast<const Identifier&>(*d->id).name, bt);
+            } else {
+                const std::optional<Type> bt = resolvedBindingType(*d);
+                PatternEmitter(*this).emitBindings(*d->id, keyExpr, bt, out,
+                                                   indent);
+            }
+        }
+        return;
+    }
+    if (f.left && isPatternNode(*f.left)) {
+        PatternEmitter(*this).emitBindings(*f.left, keyExpr, Type::unknown(),
+                                           out, indent);
+        return;
+    }
+    // An assignment target (`for (existing in src)`) is not a binding.
+    reportCodegenError(f, diagcode::kTypeMismatch,
+                       "type mismatch: the for...in target must be a binding");
+}
+
+// `for (const k in source)`: the keys of a `Map` and the indices of an
+// ordered collection (an array, a `Set`) - spec 06: "loop over keys/indices".
+// A plain object (or a class instance) is banned (spec 08): its field list is
+// known at compile time.
+void Generator::emitForIn(const ForInStatement& f, const std::string& jsLabel,
                           std::string& out, int indent) {
-    // `for...in` stays an open question (its index type and target set are
-    // unspecified); the marker stays in _ambiguous.
-    notImplemented(f, "for-in");
-    line(out, indent, "{");
-    line(out, indent + 1, "/* CP3002: for-in */");
+    if (intOn()) intFail();
+    const Type src = f.right ? effectiveType(*f.right) : Type::unknown();
+    const bool isMap = src.kind == TypeKind::Class && src.name == "Map";
+    const bool isSet = src.kind == TypeKind::Class && src.name == "Set";
+    const bool isArray = src.kind == TypeKind::Array;
+    if (!f.right || (!isMap && !isSet && !isArray)) {
+        reportCodegenError(f, diagcode::kTypeMismatch,
+                           "type mismatch: for...in needs an array, a Set or a "
+                           "Map");
+        line(out, indent, "{");
+        line(out, indent + 1, "/* for...in: unsupported source */");
+        line(out, indent, "}");
+        return;
+    }
+
+    const std::string breakLabel = freshLabel("forin_end_");
+    const std::string continueLabel = freshLabel("forin_next_");
+    // The source handle is bound to a named local before the loop: the
+    // expression may build a fresh array (a literal) and the loop must not
+    // rebuild it on every iteration.
+    const std::string source = freshLabel("forin_src_");
+    const std::string recv = expr(*f.right);
+    // The key: the index of an ordered collection, a `Map`'s own key type.
+    std::string keyExpr;
+    std::string keyCpp = "double";
+    std::string header;
+    if (isMap) {
+        const Type keyType =
+            src.parts.empty() ? Type::unknown() : src.parts.front();
+        const CppInfo kc = classify(keyType);
+        if (!kc.representable) {
+            reportCodegenError(f, diagcode::kTypeMismatch,
+                               "type mismatch: a Map key type has no C++ "
+                               "spelling");
+            line(out, indent, "{");
+            line(out, indent + 1, "/* for...in: unsupported Map key */");
+            line(out, indent, "}");
+            return;
+        }
+        keyCpp = kc.cpp;
+        // `m.keys()` is the runtime's insertion-ordered key array (D44).
+        const std::string keys = freshLabel("forin_keys_");
+        const std::string item = freshLabel("forin_key_");
+        needsCollections_ = true;
+        header = "for (auto " + keys + " = (" + recv + ")->keys(); " + kc.cpp +
+                 " " + item + " : *" + keys + ") {";
+        keyExpr = item;
+    } else {
+        // The indices: the array's slots, the `Set`'s entries. The counter is
+        // declared before the loop: a C++ `for` header carries one
+        // declaration list, so it cannot hold the source handle and the
+        // counter at once.
+        needsTypedArray_ = true;
+        const std::string idx = freshLabel("forin_idx_");
+        line(out, indent, "double " + idx + " = 0.0;");
+        header = "for (auto " + source + " = " + recv + "; " + idx +
+                 " < static_cast<double>(" + source + "->size()); " + idx +
+                 " += 1.0) {";
+        keyExpr = idx;
+    }
+
+    pushFlowFrame(true, breakLabel, continueLabel, jsLabel);
+    pushScope();
+    line(out, indent, header);
+    emitForInBinding(f, keyExpr, keyCpp, out, indent + 1);
+    if (f.body) emitBranch(*f.body, out, indent + 1);
+    line(out, indent + 1, continueLabel + ": ;");
     line(out, indent, "}");
+    popScope();
+    popFlowFrame();
+    line(out, indent, breakLabel + ": ;");
 }
 
 // -----------------------------------------------------------------------------
@@ -181,7 +301,89 @@ std::string switchCompare(const std::string& disc, const std::string& test) {
     return "(" + disc + " == " + test + ")";
 }
 
+// The "does it hold a value" test of an optional (`std::optional`) or of a
+// flavored `Maybe` (the three-way nullable).
+std::string optionalHasText(Shape shape, const std::string& text) {
+    return shape == Shape::Optional ? text + ".has_value()" : text + ".hasValue()";
+}
+
+// The value an optional (`std::optional`) or a flavored `Maybe` holds.
+std::string optionalValueText(Shape shape, const std::string& text) {
+    return shape == Shape::Optional ? "*" + text : text + ".value()";
+}
+
 }  // namespace
+
+// The comparison of a switch case test against the discriminant. A `switch`
+// compares with `===` (JS): two different primitive kinds never match (D15), a
+// union matches when it holds the test's alternative, and an optional matches
+// when it holds the value. A test that cannot match the discriminant is dead
+// code, but its expression is still evaluated (JS evaluates the case
+// expressions in order, until one matches).
+std::string Generator::switchCaseCompare(const std::string& disc,
+                                         const CppInfo& discInfo,
+                                         const std::string& test,
+                                         const CppInfo& testInfo) {
+    // The same representation: compare directly.
+    if (discInfo.representable && testInfo.representable &&
+        discInfo.cpp == testInfo.cpp) {
+        return switchCompare(disc, test);
+    }
+    // A primitive union on either side: the held alternative must match.
+    const bool lUnion = discInfo.shape == Shape::Union;
+    const bool rUnion = testInfo.shape == Shape::Union;
+    if (lUnion || rUnion) {
+        needsUnion_ = true;
+        const std::string uni = lUnion ? disc : test;
+        const std::string other = lUnion ? test : disc;
+        return "(::cp3::runtime::unions::strictEq(" + uni + ", " + other + "))";
+    }
+    // An optional (or a flavored `Maybe`) on either side: it matches only
+    // when it holds a value, and the value must match.
+    const bool lOpt =
+        discInfo.shape == Shape::Optional || discInfo.shape == Shape::Maybe;
+    const bool rOpt =
+        testInfo.shape == Shape::Optional || testInfo.shape == Shape::Maybe;
+    if (lOpt && rOpt) {
+        return "((" + optionalHasText(discInfo.shape, disc) + ") && (" +
+               optionalHasText(testInfo.shape, test) + ") && (" +
+               optionalValueText(discInfo.shape, disc) + " == " +
+               optionalValueText(testInfo.shape, test) + "))";
+    }
+    if (lOpt) {
+        return "((" + optionalHasText(discInfo.shape, disc) + ") && (" +
+               optionalValueText(discInfo.shape, disc) + " == " + test + "))";
+    }
+    if (rOpt) {
+        return "((" + optionalHasText(testInfo.shape, test) + ") && (" + disc +
+               " == " + optionalValueText(testInfo.shape, test) + "))";
+    }
+    // A number-backed enum member against a plain number: the underlying
+    // value compares (JS parity, the same rule the `==` lowering uses). A
+    // string-backed member never equals a number.
+    if (discInfo.shape == Shape::Enum && testInfo.cpp == "double") {
+        const auto it = enums_.find(discInfo.type.name);
+        if (it == enums_.end() || !it->second.stringBacked) {
+            return "((static_cast<double>(" + disc + ")) == " + test + ")";
+        }
+    }
+    if (testInfo.shape == Shape::Enum && discInfo.cpp == "double") {
+        const auto it = enums_.find(testInfo.type.name);
+        if (it == enums_.end() || !it->second.stringBacked) {
+            return "((" + disc + " == static_cast<double>(" + test + ")))";
+        }
+    }
+    // A native number against a plain number: compare numerically.
+    if ((discInfo.shape == Shape::Native &&
+         (testInfo.shape == Shape::Native || testInfo.shape == Shape::Number)) ||
+        (testInfo.shape == Shape::Native &&
+         (discInfo.shape == Shape::Native || discInfo.shape == Shape::Number))) {
+        return switchCompare(disc, test);
+    }
+    // Two different kinds: the test can never match, but it is still
+    // evaluated (the comma operator keeps the order JS prescribes).
+    return "(" + test + ", false)";
+}
 
 std::string Generator::emitSwitch(const SwitchStatement& s,
                                   const std::string& jsLabel, std::string& out,
@@ -236,16 +438,8 @@ std::string Generator::emitSwitch(const SwitchStatement& s,
         const SwitchCase* c = s.cases[i].get();
         if (!c || c->isDefault || !c->test) continue;
         const CppInfo testInfo = info(*c->test);
-        const bool comparable = discInfo.representable &&
-                                testInfo.representable &&
-                                discInfo.cpp == testInfo.cpp;
-        std::string cond;
-        if (comparable) {
-            cond = switchCompare(sw, expr(*c->test));
-        } else {
-            notImplemented(*c->test, "this switch case test type");
-            cond = "false";
-        }
+        const std::string cond =
+            switchCaseCompare(sw, discInfo, expr(*c->test), testInfo);
         line(out, indent + 1, "if (" + cond + ") goto " + caseLabels[i] + ";");
     }
     if (defaultIndex != static_cast<std::size_t>(-1)) {
@@ -330,8 +524,28 @@ void Generator::emitContinue(const ContinueStatement& c, std::string& out,
                 return;
             }
         }
-        notImplemented(c, "continue to this label");
-        line(out, indent, "continue;");
+        // Sema rejects both forms (an undefined label, and a label that does
+        // not denote an iteration statement), so this only runs for a program
+        // that reached codegen without the frontend diagnostic. The error is
+        // reported here too, with the same wording, and the statement lowers
+        // to a no-op: a C++ `continue` outside a loop would not compile.
+        bool found = false;
+        for (auto it = labelStack_.rbegin(); it != labelStack_.rend(); ++it) {
+            if (it->name == c.label) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            reportCodegenError(
+                c, diagcode::kContinueNonIterationLabel,
+                "continue label '" + c.label +
+                    "' does not denote an iteration statement");
+        } else {
+            reportCodegenError(c, diagcode::kUndefinedLabel,
+                               "undefined label '" + c.label + "'");
+        }
+        line(out, indent, "{ /* continue outside an iteration statement */ }");
         return;
     }
     for (auto it = flowStack_.rbegin(); it != flowStack_.rend(); ++it) {
@@ -340,8 +554,11 @@ void Generator::emitContinue(const ContinueStatement& c, std::string& out,
             return;
         }
     }
-    notImplemented(c, "continue outside a loop");
-    line(out, indent, "continue;");
+    // Sema reports this form (CP3503); the codegen repeats the diagnostic so
+    // the statement never lowers to a C++ `continue` outside a loop.
+    reportCodegenError(c, diagcode::kContinueOutsideLoop,
+                       "continue outside of a loop");
+    line(out, indent, "{ /* continue outside of a loop */ }");
 }
 
 // -----------------------------------------------------------------------------

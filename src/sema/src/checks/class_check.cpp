@@ -330,7 +330,11 @@ void Analyzer::analyzeMethodBody(MethodDeclaration& md) {
     ctx.annotated = sig.annotatedReturn;
     ctx.ret = sig.ret;
     funcStack_.push_back(ctx);
+    // A method is a function of its own: a `break`/`continue` inside it binds
+    // to its own loops, never to a loop around the class declaration.
+    const FunctionContext outer = enterFunctionBody();
     if (md.body) visitStmt(*md.body);
+    leaveFunctionBody(outer);
     funcStack_.pop_back();
     popScope();
     if (sig.annotatedReturn && !sig.ret.isVoid() && !sig.ret.isUndefined() &&
@@ -360,7 +364,9 @@ void Analyzer::analyzeAccessorBody(AccessorDeclaration& ad) {
     ctx.annotated = ad.returnType != nullptr;
     ctx.ret = ad.returnType ? resolveType(*ad.returnType) : Type::unknown();
     funcStack_.push_back(ctx);
+    const FunctionContext outer = enterFunctionBody();
     visitStmt(*ad.body);
+    leaveFunctionBody(outer);
     funcStack_.pop_back();
     popScope();
 }
@@ -384,7 +390,9 @@ void Analyzer::analyzeCtorBody(ConstructorDeclaration& cd) {
     ctx.annotated = false;
     ctx.ret = Type::voidType();
     funcStack_.push_back(ctx);
+    const FunctionContext outer = enterFunctionBody();
     if (cd.body) visitStmt(*cd.body);
+    leaveFunctionBody(outer);
     funcStack_.pop_back();
     popScope();
 }

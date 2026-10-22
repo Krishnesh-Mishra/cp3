@@ -1,13 +1,15 @@
 // =============================================================================
 // src/std/arrays/codegen_methods.cpp - the regular-array method surface
 // (docs/language-spec/09-arrays-strings.md): mutation, callback iteration,
-// searching, slicing, the in-place mutators and `for...of`.
+// searching, slicing, the in-place mutators, `for...of` and `for await`.
 //
 // detail::ArrayEmitter (generator.h) holds the static entry points; Generator
 // friends it for the private emitters it drives. The lowering calls the
 // runtime extras in cp3/array_extras.hpp with the element type from sema;
 // callback methods lower the arrow with the element type as its parameter
-// context. Out-of-scope forms report CP3002.
+// context. A callback may also be a named function (the runtime takes any
+// callable), and a type the element or the result has no C++ spelling is
+// reported as a type error instead of being lowered.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -20,6 +22,7 @@
 #include "detail/mangle.h"
 #include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -59,29 +62,48 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
                                                const std::string& recvText) {
     const std::string& prop = m.property;
     const ArrowFunction* cb = arrowArg(c, 0);
+    // A named function (or a function-typed binding) is a callback too: the
+    // runtime takes any callable, so the function's own C++ signature is
+    // used and the element type is not a parameter context.
+    const Expr* fn = nullptr;
     if (cb == nullptr) {
-        g.notImplemented(c, "a non-arrow array callback");
-        return "0.0";
-    }
-    if (prop == "map") {
-        CppInfo rc;
-        if (!arrayElementInfo(arrayElemOf(g.effectiveType(c)), rc)) {
-            g.notImplemented(c, "the array map result type");
+        fn = (c.arguments.size() > 0 && c.arguments[0]) ? c.arguments[0].get()
+                                                         : nullptr;
+        if (fn == nullptr) {
+            // No callback at all: sema reports the arity mismatch, and the
+            // diagnostic is repeated here so the call never lowers to a
+            // runtime call with a missing argument.
+            g.reportCodegenError(c, diagcode::kArityMismatch,
+                                 "arity mismatch: expected 1, got 0 arguments");
             return "0.0";
         }
+    }
+    if (prop == "map") {
+        // The result array's element type: the callback's return type.
+        const Type resultElem = arrayElemOf(g.effectiveType(c));
+        CppInfo rc;
+        if (!arrayElementInfo(resultElem, rc)) {
+            g.reportArrayElementType(resultElem, c, "the result of map()");
+            return "0.0";
+        }
+        const std::string call =
+            cb != nullptr ? g.emitArrow(*cb, {ec.cpp}) : g.expr(*fn);
         return "::cp3::runtime::arrayMap<" + rc.cpp + ">(" + recvText + ", " +
-               g.emitArrow(*cb, {ec.cpp}) + ")";
+               call + ")";
     }
     if (prop == "reduce") {
         // The accumulator parameter has the fold's result type: the initial
         // value's when given, the element's otherwise (a no-initial fold seeds
-        // from the first element, JS-style).
-        CppInfo rc;
-        if (!arrayElementInfo(g.effectiveType(c), rc)) {
-            g.notImplemented(c, "the array reduce result type");
+        // from the first element, JS-style). The accumulator is a plain value
+        // (not an array element), so any type with a C++ spelling fits.
+        const CppInfo rc = classify(g.effectiveType(c));
+        if (!rc.representable || rc.shape == Shape::Void) {
+            g.reportTypeError(c, "type mismatch: the result of reduce() has "
+                                 "no C++ spelling");
             return "0.0";
         }
-        const std::string fold = g.emitArrow(*cb, {rc.cpp, ec.cpp});
+        const std::string fold =
+            cb != nullptr ? g.emitArrow(*cb, {rc.cpp, ec.cpp}) : g.expr(*fn);
         if (c.arguments.size() > 1 && c.arguments[1]) {
             return "::cp3::runtime::arrayReduce<" + rc.cpp + ">(" + recvText +
                    ", " + fold + ", " + g.expr(*c.arguments[1]) + ")";
@@ -95,15 +117,17 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
         return "::cp3::runtime::arrayReduceNoInit<" + rc.cpp + ">(" + recvText +
                ", " + fold + ")";
     }
-    const char* fn = nullptr;
-    if (prop == "filter") fn = "arrayFilter";
-    else if (prop == "find") fn = "arrayFind";
-    else if (prop == "findIndex") fn = "arrayFindIndex";
-    else if (prop == "some") fn = "arraySome";
-    else if (prop == "every") fn = "arrayEvery";
-    if (fn == nullptr) return std::string();
-    return "::cp3::runtime::" + std::string(fn) + "<" + ec.cpp + ">(" +
-           recvText + ", " + g.emitArrow(*cb, {ec.cpp}) + ")";
+    const char* fnName = nullptr;
+    if (prop == "filter") fnName = "arrayFilter";
+    else if (prop == "find") fnName = "arrayFind";
+    else if (prop == "findIndex") fnName = "arrayFindIndex";
+    else if (prop == "some") fnName = "arraySome";
+    else if (prop == "every") fnName = "arrayEvery";
+    if (fnName == nullptr) return std::string();
+    const std::string call =
+        cb != nullptr ? g.emitArrow(*cb, {ec.cpp}) : g.expr(*fn);
+    return "::cp3::runtime::" + std::string(fnName) + "<" + ec.cpp + ">(" +
+           recvText + ", " + call + ")";
 }
 
 // The dispatch: returns "" when the member is not a regular-array method this
@@ -127,7 +151,10 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
     const Type elem = arrayElemOf(recv);
     CppInfo ec;
     if (!arrayElementInfo(elem, ec)) {
-        g.notImplemented(c, "the array method element type");
+        // The receiver's element type has no C++ spelling: the method cannot
+        // be lowered, and the diagnostic says why (the same one the array's
+        // own declaration reports).
+        g.reportArrayElementType(elem, c, "an array method");
         return "0.0";
     }
     g.needsTypedArray_ = true;
@@ -172,26 +199,32 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
         }
         return out + ")";
     }
-    // `flat()`: one level; the receiver's element must itself be an array.
-    CppInfo ic;
-    if (elem.kind != TypeKind::Array ||
-        !arrayElementInfo(arrayElemOf(elem), ic)) {
-        g.notImplemented(c, "the array flat element type");
+    // `flat()`: one level. An array of arrays flattens to the inner element
+    // type; an array whose elements are not arrays has nothing to flatten, and
+    // JS returns a copy of the receiver.
+    if (elem.kind == TypeKind::Array) {
+        CppInfo ic;
+        if (arrayElementInfo(arrayElemOf(elem), ic)) {
+            return "::cp3::runtime::arrayFlat<" + ic.cpp + ">(" + recvText + ")";
+        }
+        g.reportArrayElementType(arrayElemOf(elem), c, "a flattened array");
         return "0.0";
     }
-    return "::cp3::runtime::arrayFlat<" + ic.cpp + ">(" + recvText + ")";
+    return "::cp3::runtime::arrayFromArray<" + ec.cpp + ">(" + recvText + ")";
 }
 
 // `for (const x of a)`: over a regular array; the binding takes the element
-// type (the alternative `for await` form is out of scope and reports). The
-// source handle is bound to a named local before the range-for: iterating
-// `*(temporary Ref)` lets the backing vector die at the end of the range-init
-// full-expression (a use-after-free seen as std::bad_alloc).
-void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
-                                 const std::string& jsLabel, std::string& out,
-                                 int indent) {
-    if (g.intOn()) g.intFail();
-    if (f.isAwait) g.notImplemented(f, "for await");
+// type. The source handle is bound to a named local before the range-for:
+// iterating `*(temporary Ref)` lets the backing vector die at the end of the
+// range-init full-expression (a use-after-free seen as std::bad_alloc).
+//
+// `awaitValues` is the `for await` form: every bound value is awaited, so
+// the binding takes the AWAITED value (a promise resolves to its value, D41)
+// and the await needs a coroutine to suspend in.
+void detail::ArrayEmitter::forOfImpl(Generator& g, const ForOfStatement& f,
+                                     const std::string& jsLabel,
+                                     std::string& out, int indent,
+                                     bool awaitValues) {    if (g.intOn()) g.intFail();
     const auto* vd = f.left && f.left->kind == NodeKind::VariableDeclaration
                          ? static_cast<const VariableDeclaration*>(f.left.get())
                          : nullptr;
@@ -201,6 +234,23 @@ void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
     if (!f.right || !arrayElementInfo(elem, ec)) {
         g.notImplemented(f, "this for-of source");
         line(out, indent, "/* CP3002: unsupported for-of source */");
+        return;
+    }
+    // The awaited value: a promise resolves to its value, anything else is its
+    // own value (D41).
+    Type bound = elem;
+    if (awaitValues && isPromiseType(elem)) bound = promiseValue(elem);
+    const CppInfo bc = classify(bound);
+    if (awaitValues && !bc.representable) {
+        g.reportTypeError(f, "type mismatch: the awaited value of for await "
+                             "has no C++ spelling");
+        line(out, indent, "/* for await: unsupported element type */");
+        return;
+    }
+    // The await suspends, so it needs a coroutine (an `async function` body
+    // or the top level).
+    if (awaitValues && !g.awaitContextOk(f)) {
+        line(out, indent, "/* for await: no coroutine to suspend in */");
         return;
     }
     g.needsTypedArray_ = true;
@@ -219,6 +269,10 @@ void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
     line(out, indent,
          "for (auto " + range + " = " + recv + "; " + ec.cpp + " " + item + " : *" +
              range + ") {");
+    // The bound value: the element itself, or its awaited form.
+    const std::string valueText =
+        awaitValues ? "(co_await ::cp3::runtime::awaitValue(" + item + "))"
+                    : item;
     if (vd != nullptr) {
         const std::string cv = (vd->kind == VarKind::Const) ? "const " : "";
         for (const auto& declPtr : vd->declarations) {
@@ -228,20 +282,21 @@ void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
                 const std::string name =
                     mapIdent(static_cast<const Identifier&>(*d->id).name);
                 std::optional<Type> bt = g.bindingType(*d);
-                if (!bt) bt = elem;
+                if (!bt) bt = bound;
                 const CppInfo ci = classify(*bt);
                 line(out, indent + 1,
-                     cv + (ci.representable ? ci.cpp : ec.cpp) + " " + name + " = " +
-                         item + ";");
+                     cv + (ci.representable ? ci.cpp : bc.cpp) + " " + name +
+                         " = " + valueText + ";");
                 g.declare(static_cast<const Identifier&>(*d->id).name, bt);
             } else {
                 std::optional<Type> bt = g.resolvedBindingType(*d);
-                if (!bt) bt = elem;
-                PatternEmitter(g).emitBindings(*d->id, item, bt, out, indent + 1);
+                if (!bt) bt = bound;
+                PatternEmitter(g).emitBindings(*d->id, valueText, bt, out,
+                                               indent + 1);
             }
         }
     } else if (f.left && isPatternNode(*f.left)) {
-        PatternEmitter(g).emitBindings(*f.left, item, elem, out, indent + 1);
+        PatternEmitter(g).emitBindings(*f.left, valueText, bound, out, indent + 1);
     } else {
         g.notImplemented(f, "this for-of binding");
         line(out, indent + 1, "/* CP3002: unsupported for-of binding */");
@@ -252,6 +307,21 @@ void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
     g.popScope();
     g.popFlowFrame();
     line(out, indent, breakLabel + ": ;");
+}
+
+void detail::ArrayEmitter::forOf(Generator& g, const ForOfStatement& f,
+                                 const std::string& jsLabel, std::string& out,
+                                 int indent) {
+    forOfImpl(g, f, jsLabel, out, indent, /*awaitValues=*/false);
+}
+
+// `for await (const x of a)`: the same loop, with every bound value awaited.
+// The await needs a coroutine to suspend in, so the form is only legal inside
+// an `async function` or at the top level.
+void detail::ArrayEmitter::forAwait(Generator& g, const ForOfStatement& f,
+                                    const std::string& jsLabel, std::string& out,
+                                    int indent) {
+    forOfImpl(g, f, jsLabel, out, indent, /*awaitValues=*/true);
 }
 
 }  // namespace cp3

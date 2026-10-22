@@ -1,0 +1,10 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 7,
+    "contains": "an array cannot hold elements of type 'Map'"
+  }
+}

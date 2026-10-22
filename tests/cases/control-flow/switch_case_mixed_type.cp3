@@ -1,0 +1,14 @@
+import console from "std/console";
+// A `switch` compares with `===`: a case whose value has another type than
+// the discriminant's never matches.
+const x: number = 1;
+switch (x) {
+  case "a":
+    console.log("string");
+    break;
+  case 1:
+    console.log("number");
+    break;
+  default:
+    console.log("none");
+}

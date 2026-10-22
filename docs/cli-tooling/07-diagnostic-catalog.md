@@ -117,6 +117,7 @@ Candidates come from what is actually visible at the reference: names in scope, 
 | CP3502 | `kBreakOutsideLoop` | A `break` is not inside a loop or switch. | `break outside of a loop or switch` | Move the `break` inside a loop or switch, or remove it. |
 | CP3503 | `kContinueOutsideLoop` | A `continue` is not inside a loop. | `continue outside of a loop` | Move the `continue` inside a loop, or remove it. |
 | CP3504 | `kMissingReturn` | A function declared to return a value can finish without returning one. | `function 'f' is declared to return a value but may fall off the end of its body` | Return a value on every path, or change the return type to `void`. |
+| CP3506 | `kContinueNonIterationLabel` | A `continue` names a label that does not denote an iteration statement (a label on a block or a switch). | `continue label 'blk' does not denote an iteration statement` | Point the `continue` at a loop's label, or use `break` for a block or switch label. |
 
 ## Modules and imports (3600-3699)
 

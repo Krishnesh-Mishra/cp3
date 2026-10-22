@@ -101,13 +101,15 @@ const Expr* Generator::temporaryResolveValue(const Expr* argument) const {
 // await (spec §14)
 // -----------------------------------------------------------------------------
 
-std::string Generator::emitAwait(const AwaitExpr& a) {
-    // `await` needs a coroutine to suspend. Codegen builds one at top level
-    // (spec §14's top-level await) and for `async function` bodies; anywhere
-    // else the enclosing C++ is a plain function or lambda.
+// The coroutine requirement of an `await`: awaiting something means the
+// continuation is scheduled on the loop, so the enclosing code must be a
+// coroutine (an `async function` body, or the top level, whose `main()` the
+// compiler turns into one). Reports and returns false when the context cannot
+// suspend.
+bool Generator::awaitContextOk(const Node& site) {
     if (nestingDepth_ > 0 && !inAsyncBody_) {
-        notImplemented(a, "await outside an async function or the top level");
-        return "0.0";
+        notImplemented(site, "await outside an async function or the top level");
+        return false;
     }
     // Awaiting something means a continuation will be scheduled on the loop.
     needsEventLoop_ = true;
@@ -116,6 +118,14 @@ std::string Generator::emitAwait(const AwaitExpr& a) {
         // loop is driven at exit (cp3/async/promise.hpp's codegen contract).
         topLevelAwait_ = true;
     }
+    return true;
+}
+
+std::string Generator::emitAwait(const AwaitExpr& a) {
+    // `await` needs a coroutine to suspend. Codegen builds one at top level
+    // (spec §14's top-level await) and for `async function` bodies; anywhere
+    // else the enclosing C++ is a plain function or lambda.
+    if (!awaitContextOk(a)) return "0.0";
     // `await sleep(ms)`: the temporary promise is never observed, so lower
     // straight to the timer awaiter (no Promise<void> state or settlement
     // bookkeeping; the resume is still posted as a microtask).
