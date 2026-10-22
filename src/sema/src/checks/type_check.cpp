@@ -304,6 +304,34 @@ Type Analyzer::resolveTypeInner(TypeNode& node) {
     }
 }
 
+// The primitive a type name spells (`number`, `string`, `boolean`, `void`,
+// `undefined`, `null`, `unknown`, `never`, `object`). False when the name is
+// not one of them.
+bool Analyzer::primitiveTypeOf(const std::string& name, Type& out) {
+    if (name == "number") { out = Type::number(); return true; }
+    if (name == "string") { out = Type::string(); return true; }
+    if (name == "boolean") { out = Type::boolean(); return true; }
+    if (name == "undefined") { out = Type::undefined(); return true; }
+    if (name == "null") { out = Type::nullType(); return true; }
+    if (name == "void") { out = Type::voidType(); return true; }
+    if (name == "object") { out = ambient(); return true; }
+    if (name == "unknown" || name == "never") { out = Type::unknown(); return true; }
+    return false;
+}
+
+// The instantiated shape of a generic interface (D26): the type arguments are
+// substituted into the interface's members, so `Box<number>` is the shape
+// `{ value: number }`.
+Type Analyzer::resolveGenericInterface(const std::string& name,
+                                       const std::vector<Type>& args) {
+    const auto& generic = genericInterfaces_.at(name);
+    std::vector<Field> fields = generic.fields;
+    for (Field& f : fields) {
+        f.type = substituteTypeParams(f.type, generic.typeParams, args);
+    }
+    return makeObjectType(std::move(fields), generic.open, false, {});
+}
+
 Type Analyzer::resolveNamedType(NamedType& nt) {
     // Type arguments are resolved eagerly (both for their own diagnostics and
     // for the generic types M1 does model: `Promise<T>`, the concurrency
@@ -329,15 +357,8 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
         checkBannedAny(nt.span);
         return ambient();
     }
-    if (nt.name == "number") return Type::number();
-    if (nt.name == "string") return Type::string();
-    if (nt.name == "boolean") return Type::boolean();
-    if (nt.name == "undefined") return Type::undefined();
-    if (nt.name == "null") return Type::nullType();
-    if (nt.name == "void") return Type::voidType();
-    if (nt.name == "unknown") return Type::unknown();
-    if (nt.name == "never") return Type::unknown();
-    if (nt.name == "object") return ambient();
+    Type primitive;
+    if (primitiveTypeOf(nt.name, primitive)) return primitive;
     // `Promise<T>` is the one built-in generic (spec §14): a nominal class type
     // carrying its value type. A bare `Promise` is `Promise<unknown>`.
     if (nt.name == "Promise") {
@@ -355,6 +376,11 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
     // arguments into the aliased type (`Pair<number>` is `[number, number]`).
     if (typeAliasParams_.count(nt.name) != 0) {
         return resolveTypeAlias(nt.name, args);
+    }
+    // A generic interface (D26): the type arguments are substituted into the
+    // interface's members, so `Box<number>` is the shape `{ value: number }`.
+    if (genericInterfaces_.count(nt.name) != 0) {
+        return resolveGenericInterface(nt.name, args);
     }
     const auto it = typeNames_.find(nt.name);
     if (it != typeNames_.end()) {

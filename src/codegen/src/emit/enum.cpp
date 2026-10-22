@@ -526,6 +526,12 @@ CppInfo classifyEnum(const Type& t) {
 // of a structural record, and enum kinds the structural re-parse cannot see.
 // `collectEnums` runs before the emit walk, so `enums_` is complete here.
 std::optional<Type> Generator::typeOfNode(const TypeNode& tn) const {
+    // A generic interface (D26): the use site instantiates the interface, so
+    // the shape (and its wrapper) is registered even when sema's published
+    // type is the one that answers the annotation.
+    if (tn.kind == NodeKind::NamedType) {
+        (void)detail::instantiateGenericInterface(tn);
+    }
     std::optional<Type> mapped;
     if (const Type* published = sema_.typeOf(tn.nodeId)) {
         if (!published->isUnknown() && !published->isError()) mapped = *published;

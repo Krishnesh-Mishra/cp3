@@ -342,6 +342,10 @@ std::string Analyzer::importedName(const std::string& local) const {
 void Analyzer::registerInterface(InterfaceDeclaration& i) {
     std::vector<Field> fields;
     bool open = false;
+    // A generic interface's own type parameters are in scope while its members
+    // are resolved, so `value: T` resolves to a type parameter (D26).
+    TypeParamScope saved;
+    enterClassTypeParams(i.typeParams, saved);
     for (auto& m : i.members) {
         if (!m) continue;
         if (m->kind == NodeKind::PropertySignature) {
@@ -350,6 +354,18 @@ void Analyzer::registerInterface(InterfaceDeclaration& i) {
         } else if (m->kind == NodeKind::MethodSignature) {
             addMethodSignature(fields, open, static_cast<MethodSignature&>(*m));
         }
+    }
+    leaveClassTypeParams(saved);
+    if (!i.typeParams.empty()) {
+        // A generic interface keeps its members: every use substitutes the
+        // type arguments into them (resolveNamedType).
+        GenericInterface generic;
+        generic.fields = fields;
+        generic.open = open;
+        for (const auto& tp : i.typeParams) {
+            if (tp) generic.typeParams.push_back(tp->name);
+        }
+        genericInterfaces_[i.name] = std::move(generic);
     }
     typeNames_[i.name] = makeObjectType(std::move(fields), open, false, {});
 }
@@ -461,9 +477,6 @@ Type Analyzer::substituteTypeParams(const Type& t,
 }
 
 void Analyzer::visitInterfaceDecl(InterfaceDeclaration& i) {
-    if (!i.typeParams.empty()) {
-        notImplemented(i.span, "generic interfaces");
-    }
     if (declaredTypes_.count(i.nodeId) == 0) registerInterface(i);
 }
 

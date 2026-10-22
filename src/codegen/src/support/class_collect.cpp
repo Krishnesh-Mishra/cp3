@@ -53,7 +53,18 @@ void Generator::collectInterfaces(const Program& program) {
         }
         if (s == nullptr || s->kind != NodeKind::InterfaceDeclaration) continue;
         const auto& i = static_cast<const InterfaceDeclaration&>(*s);
-        if (!i.typeParams.empty()) continue;  // generic interface: CP3002 later
+        if (!i.typeParams.empty()) {
+            // A generic interface (D26): the declaration is registered, and
+            // every use site instantiates it (support/type_map.cpp).
+            GenericInterfaceModel generic;
+            generic.decl = &i;
+            for (const auto& tp : i.typeParams) {
+                if (tp) generic.typeParams.push_back(tp->name);
+            }
+            ModelRegistry::get().addGenericInterface(i.name,
+                                                    std::move(generic));
+            continue;
+        }
         std::vector<ObjectFieldModel> fields;
         for (const auto& mp : i.members) {
             if (!mp) continue;
@@ -118,45 +129,8 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
             continue;
         }
         if (mp->kind == NodeKind::MethodDeclaration) {
-            const auto& md = static_cast<const MethodDeclaration&>(*mp);
-            const std::string name = keyNameOf(md.key.get());
-            if (name.empty()) {
-                notImplemented(md, "computed class member names");
-                continue;
-            }
-            ClassMemberModel m;
-            m.name = name;
-            m.isStatic = md.isStatic;
-            m.isPrivate = md.access == AccessModifier::Private;
-            m.isProtected = md.access == AccessModifier::Protected;
-            m.isMethod = true;
-            m.isAbstract = md.isAbstract;
-            m.method = &md;
-            // A generic method's own type parameters (spec §16): the method
-            // lowers to a C++ member function template.
-            for (const auto& tp : md.typeParams) {
-                if (tp) m.typeParams.push_back(tp->name);
-            }
-            if (!m.typeParams.empty() && cm.local) {
-                // C++ has no member template in a local class, so a generic
-                // method of a function-local class has no lowering.
-                sink_.error(diagcode::kGenericLocalMethod, md.span,
-                            "a generic method of a function-local class is not "
-                            "supported: C++ has no member template in a local "
-                            "class");
-            }
-            std::vector<Type> params;
-            for (const auto& p : md.params) {
-                if (!p) continue;
-                params.push_back(p->type ? modelTypeFromTypeNode(*p->type)
-                                         : Type::unknown());
-            }
-            const Type ret = md.returnType ? modelTypeFromTypeNode(*md.returnType)
-                                           : Type::unknown();
-            m.type = Type::function(std::move(params), ret);
-            rewriteTypeParams(m.type, cm.typeParams);
-            rewriteTypeParams(m.type, m.typeParams);
-            cm.members.push_back(std::move(m));
+            collectClassMethodModel(
+                cm, static_cast<const MethodDeclaration&>(*mp));
             continue;
         }
         if (mp->kind == NodeKind::ConstructorDeclaration) {
@@ -173,6 +147,48 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
         }
         notImplemented(*mp, "this class member");
     }
+}
+
+// A method member: its name, modifiers, signature and (for a generic method)
+// its own type parameters - the method lowers to a C++ member function
+// template over them (spec §16).
+void Generator::collectClassMethodModel(ClassModel& cm,
+                                        const MethodDeclaration& md) {
+    const std::string name = keyNameOf(md.key.get());
+    if (name.empty()) {
+        notImplemented(md, "computed class member names");
+        return;
+    }
+    ClassMemberModel m;
+    m.name = name;
+    m.isStatic = md.isStatic;
+    m.isPrivate = md.access == AccessModifier::Private;
+    m.isProtected = md.access == AccessModifier::Protected;
+    m.isMethod = true;
+    m.isAbstract = md.isAbstract;
+    m.method = &md;
+    for (const auto& tp : md.typeParams) {
+        if (tp) m.typeParams.push_back(tp->name);
+    }
+    if (!m.typeParams.empty() && cm.local) {
+        // C++ has no member template in a local class, so a generic method of
+        // a function-local class has no lowering.
+        sink_.error(diagcode::kGenericLocalMethod, md.span,
+                    "a generic method of a function-local class is not "
+                    "supported: C++ has no member template in a local class");
+    }
+    std::vector<Type> params;
+    for (const auto& p : md.params) {
+        if (!p) continue;
+        params.push_back(p->type ? modelTypeFromTypeNode(*p->type)
+                                 : Type::unknown());
+    }
+    const Type ret = md.returnType ? modelTypeFromTypeNode(*md.returnType)
+                                   : Type::unknown();
+    m.type = Type::function(std::move(params), ret);
+    rewriteTypeParams(m.type, cm.typeParams);
+    rewriteTypeParams(m.type, m.typeParams);
+    cm.members.push_back(std::move(m));
 }
 
 // Get/set accessors (D21) lower to generated get_/set_ methods; the getter's

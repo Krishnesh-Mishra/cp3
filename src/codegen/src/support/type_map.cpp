@@ -101,6 +101,60 @@ Type promiseValue(const Type& t) {
     return t.parts.front();
 }
 
+std::optional<Type> instantiateGenericInterface(const TypeNode& tn) {
+    if (tn.kind != NodeKind::NamedType) return std::nullopt;
+    const auto& nt = static_cast<const NamedType&>(tn);
+    ModelRegistry& reg = ModelRegistry::get();
+    const GenericInterfaceModel* generic = reg.genericInterface(nt.name);
+    if (generic == nullptr || generic->decl == nullptr) return std::nullopt;
+    // The type arguments of the use site.
+    std::vector<Type> args;
+    for (const auto& ta : nt.typeArgs) {
+        if (!ta) continue;
+        args.push_back(modelTypeFromTypeNode(*ta));
+    }
+    // The interface's members, with the type arguments substituted in.
+    std::vector<ObjectFieldModel> fields;
+    for (const auto& mp : generic->decl->members) {
+        if (!mp) continue;
+        ObjectFieldModel f;
+        if (mp->kind == NodeKind::PropertySignature) {
+            const auto& ps = static_cast<const PropertySignature&>(*mp);
+            f.name = keyNameOf(ps.key.get());
+            f.optional = ps.optional;
+            if (ps.type) f.type = modelTypeFromTypeNode(*ps.type);
+        } else if (mp->kind == NodeKind::MethodSignature) {
+            const auto& ms = static_cast<const MethodSignature&>(*mp);
+            f.name = keyNameOf(ms.key.get());
+            f.optional = ms.optional;
+            std::vector<Type> params;
+            for (const auto& p : ms.params) {
+                if (!p) continue;
+                params.push_back(p->type ? modelTypeFromTypeNode(*p->type)
+                                         : Type::unknown());
+            }
+            const Type ret = ms.returnType ? modelTypeFromTypeNode(*ms.returnType)
+                                           : Type::unknown();
+            f.type = Type::function(std::move(params), ret);
+            f.isFunction = true;
+            f.isMethod = true;
+        } else {
+            continue;
+        }
+        if (f.name.empty()) continue;
+        rewriteTypeParams(f.type, generic->typeParams);
+        f.type = substituteTypeArgs(f.type, generic->typeParams, args);
+        fields.push_back(std::move(f));
+    }
+    // The shape label: the same spelling sema computes for the instantiated
+    // members, so both sides name one shape.
+    const std::string label = objectLabelOf(fields);
+    // The wrapper name is per instantiation (two instantiations of one
+    // interface are two shapes with two wrappers).
+    reg.addInterface(nt.name, label, fields, /*generic=*/true);
+    return Type(TypeKind::Object, label);
+}
+
 std::optional<Type> typeFromTypeNode(const TypeNode& tn, TypeSystem typeSystem) {
     switch (tn.kind) {
         case NodeKind::PrefixedType: {
@@ -138,6 +192,12 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn, TypeSystem typeSystem) 
                 }
                 p.parts.push_back(inner);
                 return p;
+            }
+            // A generic interface (D26): the type arguments are substituted
+            // into the interface's members, and the instantiated shape is
+            // registered as an interface model.
+            if (std::optional<Type> generic = instantiateGenericInterface(nt)) {
+                return generic;
             }
             // An interface name resolves to its structural object type
             // (spec 15); only names registered by the model pass qualify.

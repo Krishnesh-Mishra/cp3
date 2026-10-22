@@ -141,6 +141,13 @@ private:
     void declareForBinding(Node* left, const Type& elemType);
     void analyzeImport(ImportDeclaration& d);
     void registerInterface(InterfaceDeclaration& i);
+    // A generic interface's members and type parameters (D26): every use
+    // substitutes its type arguments into the members.
+    struct GenericInterface {
+        std::vector<Field> fields;
+        bool open = false;
+        std::vector<std::string> typeParams;
+    };
     // A type alias declares a compile-time name for a type (declarations.cpp).
     void declareTypeAlias(TypeAliasDeclaration& t);
     // The aliased type of `name`, with `args` substituted for the alias's own
@@ -152,6 +159,11 @@ private:
     Type substituteTypeParams(const Type& t,
                               const std::vector<std::string>& names,
                               const std::vector<Type>& args) const;
+    // The instantiated shape of a generic interface (D26).
+    Type resolveGenericInterface(const std::string& name,
+                                 const std::vector<Type>& args);
+    // The primitive a type name spells; false when the name is not one.
+    bool primitiveTypeOf(const std::string& name, Type& out);
     // Enum declaration model (enum_check.cpp).
     void registerEnum(EnumDeclaration& e);
 
@@ -473,6 +485,8 @@ private:
     // A generic type alias's own type parameter names, by alias name: a use
     // site substitutes its type arguments into the aliased type.
     std::unordered_map<std::string, std::vector<std::string>> typeAliasParams_;
+    // The generic interfaces of this unit, by name.
+    std::unordered_map<std::string, GenericInterface> genericInterfaces_;
     // The declared spelling of a named type-parameter constraint, keyed by the
     // constraint type's canonical key (registerTypeParams, scopes.cpp): lets a
     // constraint-violation diagnostic print `Shape` instead of `object`.

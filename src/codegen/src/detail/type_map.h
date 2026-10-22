@@ -196,6 +196,12 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn,
 // yield a Type value.
 Type modelTypeFromTypeNode(const TypeNode& tn);
 
+// The instantiated shape of a generic interface (D26): the type arguments of
+// the named type are substituted into the interface's members and the shape is
+// registered as an interface model (the wrapper is what makes the structural
+// typing work). nullopt when the annotation does not name a generic interface.
+std::optional<Type> instantiateGenericInterface(const TypeNode& tn);
+
 bool isNullishLiteral(const Expr& e);
 
 // The exact value of an integral number literal (`5`, `-2`), if it has one:

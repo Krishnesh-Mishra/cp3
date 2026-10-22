@@ -169,6 +169,47 @@ void rewriteTypeParams(Type& t, const std::vector<std::string>& typeParams) {
     }
 }
 
+// `template <typename T, typename U>` for a list of type parameter names
+// ("" for an empty list). A generic method's own parameters are named here.
+std::string templateHeadOf(const std::vector<std::string>& names) {
+    if (names.empty()) return "";
+    std::string out = "template <";
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        if (i != 0) out += ", ";
+        out += "typename " + mapIdent(names[i]);
+    }
+    return out + ">";
+}
+
+// `<T, U>` ("" for a non-generic class): the type arguments of a class
+// template at a use site.
+std::string templateUseOf(const ClassModel& cm) {
+    if (cm.typeParams.empty()) return "";
+    std::string out = "<";
+    for (std::size_t i = 0; i < cm.typeParams.size(); ++i) {
+        if (i != 0) out += ", ";
+        out += mapIdent(cm.typeParams[i]);
+    }
+    return out + ">";
+}
+
+Type substituteTypeArgs(const Type& t, const std::vector<std::string>& names,
+                         const std::vector<Type>& args) {
+    if (t.kind == TypeKind::TypeParam) {
+        for (std::size_t i = 0; i < names.size(); ++i) {
+            if (names[i] != t.name) continue;
+            if (i < args.size()) return args[i];
+            return t;
+        }
+        return t;
+    }
+    Type out = t;
+    for (Type& part : out.parts) {
+        part = substituteTypeArgs(part, names, args);
+    }
+    return out;
+}
+
 bool hasClassCtor(const ClassModel& cm) {
     const ClassModel* k = &cm;
     int guard = 0;
@@ -323,27 +364,44 @@ ObjectModel& ModelRegistry::ensureObject(
 
 ObjectModel& ModelRegistry::addInterface(
     const std::string& name, const std::string& label,
-    const std::vector<ObjectFieldModel>& fields) {
+    const std::vector<ObjectFieldModel>& fields, bool generic) {
     ObjectModel& om = ensureObject(label, fields);
-    om.isInterface = true;
-    om.wrapper = "cp3_iface_" + mapIdent(name);
+    // The first registration of a shape owns its wrapper and its literal
+    // struct: a later registration of the same shape (a generic interface is
+    // registered by every use site) must not rename them.
+    if (!om.isInterface) {
+        om.isInterface = true;
+        om.wrapper = "cp3_iface_" + mapIdent(name) +
+                     (generic ? "_" + std::to_string(ifaceCounter_++) : "");
+        // The interface owns this `$o{...}` label: the all-primitive
+        // value-shape path (support/value_shapes.cpp) must not claim it.
+        objectShapeExclude(om.label);
+        bool fieldsOnly = true;
+        for (const ObjectFieldModel& f : om.fields) {
+            if (f.isFunction) fieldsOnly = false;
+        }
+        if (fieldsOnly) {
+            om.literalName = "cp3_lit" + std::to_string(litCounter_++);
+        }
+    }
     ifaceLabelByName_[name] = om.label;
-    // The interface owns this `$o{...}` label: the all-primitive value-shape
-    // path (support/value_shapes.cpp) must not claim it.
-    objectShapeExclude(om.label);
-    bool fieldsOnly = true;
-    for (const ObjectFieldModel& f : om.fields) {
-        if (f.isFunction) fieldsOnly = false;
-    }
-    if (fieldsOnly) {
-        om.literalName = "cp3_lit" + std::to_string(litCounter_++);
-    }
     return om;
 }
 
 const ObjectModel* ModelRegistry::objectByLabel(const std::string& label) const {
     const auto it = objects_.find(label);
     return it == objects_.end() ? nullptr : &it->second;
+}
+
+void ModelRegistry::addGenericInterface(const std::string& name,
+                                        GenericInterfaceModel model) {
+    genericIfaces_[name] = std::move(model);
+}
+
+const GenericInterfaceModel* ModelRegistry::genericInterface(
+    const std::string& name) const {
+    const auto it = genericIfaces_.find(name);
+    return it == genericIfaces_.end() ? nullptr : &it->second;
 }
 
 std::vector<const ObjectModel*> ModelRegistry::objects() const {

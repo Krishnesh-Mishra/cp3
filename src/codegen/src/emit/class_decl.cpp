@@ -56,25 +56,7 @@ std::string templateHead(const ClassModel& cm) {
 
 // `<T, U>` ("" for a non-generic class).
 std::string templateUse(const ClassModel& cm) {
-    if (cm.typeParams.empty()) return "";
-    std::string out = "<";
-    for (std::size_t i = 0; i < cm.typeParams.size(); ++i) {
-        if (i != 0) out += ", ";
-        out += mapIdent(cm.typeParams[i]);
-    }
-    return out + ">";
-}
-
-// `template <typename T, typename U>` for a list of type parameter names
-// ("" for an empty list). A generic method's own parameters are named here.
-std::string templateHeadOf(const std::vector<std::string>& names) {
-    if (names.empty()) return "";
-    std::string out = "template <";
-    for (std::size_t i = 0; i < names.size(); ++i) {
-        if (i != 0) out += ", ";
-        out += "typename " + mapIdent(names[i]);
-    }
-    return out + ">";
+    return templateUseOf(cm);
 }
 
 // Does the class (or an ancestor) define a `toString` with a body? The
@@ -250,50 +232,7 @@ void Generator::emitClassMember(const ClassModel& cm,
         line(out, indent, memberFieldText(m) + ";");
         return;
     }
-    const MethodDeclaration& md = *m.method;
-    const std::string ret = methodReturnType(md, &cm, m.typeParams);
-    std::vector<std::string> params;
-    for (const auto& p : md.params) {
-        if (p) params.push_back(methodParamText(*p, &cm, m.typeParams));
-    }
-    const std::string name = mapIdent(m.name);
-    const std::string declText = (md.isStatic ? "static " : "") + ret + " " +
-                                 name + "(" + joinStrings(params, ", ") + ")";
-    // A generic method is a C++ member function template (spec §16). Inside
-    // the class the template head names the method's own type parameters; the
-    // out-of-line definition names the class's parameters first, then the
-    // method's.
-    const std::string memberHead = templateHeadOf(m.typeParams);
-    const std::string memberHeadLine = memberHead.empty() ? "" : memberHead + "\n";
-    // An abstract method (or a signature without a body) stays a declaration.
-    if (md.body == nullptr) {
-        if (!memberHeadLine.empty()) line(out, indent, memberHead);
-        line(out, indent, declText + ";");
-        return;
-    }
-    if (defs == nullptr) {
-        // A local class has no member template (C++): the generic method of a
-        // function-local class is reported in the model pass.
-        if (!memberHeadLine.empty()) line(out, indent, memberHead);
-        line(out, indent, declText + " {");
-        out += methodBodyText(md, cm, indent + 1, md.isStatic, m.typeParams);
-        line(out, indent, "}");
-        return;
-    }
-    if (!memberHeadLine.empty()) line(out, indent, memberHead);
-    line(out, indent, declText + ";");
-    // The definition lands inside the module namespace, so the declarator is
-    // the bare `Class::method` (STYLE: a `RET ::ns::Class::method` declarator
-    // misparses as a qualified return type when RET is a class type).
-    // The out-of-line definition of a member template carries two template
-    // headers: the class template's, then the member template's.
-    const std::string defHead =
-        (cm.typeParams.empty() ? "" : templateHeadOf(cm.typeParams) + "\n") +
-        (m.typeParams.empty() ? "" : templateHeadOf(m.typeParams) + "\n");
-    *defs += defHead + ret + " " +
-             mapIdent(cm.name) + templateUse(cm) + "::" + name + "(" +
-             joinStrings(params, ", ") + ") {\n" +
-             methodBodyText(md, cm, 1, md.isStatic, m.typeParams) + "}\n\n";
+    emitClassMethodMember(cm, m, out, indent, defs);
 }
 
 // D21: one get/set accessor becomes a generated `get_name` / `set_name`

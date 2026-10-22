@@ -144,6 +144,7 @@ private:
     void collectInterfaces(const Program& program);
     void collectBodyModels(const Stmt& s);
     void collectClassMemberModels(ClassModel& cm);
+    void collectClassMethodModel(ClassModel& cm, const MethodDeclaration& md);
     void collectClassAccessorModel(ClassModel& cm, const ClassMember& mp);
     void emitTopLevelClass(const ClassDeclaration& c);
     void emitAllClasses();
@@ -152,6 +153,8 @@ private:
                          std::string* defs);
     void emitClassMember(const ClassModel& cm, const ClassMemberModel& m,
                          std::string& out, int indent, std::string* defs);
+    void emitClassMethodMember(const ClassModel& cm, const ClassMemberModel& m,
+                                std::string& out, int indent, std::string* defs);
     void emitClassAccessorMember(const ClassModel& cm,
                                  const ClassMemberModel& m, std::string& out,
                                  int indent, std::string* defs);

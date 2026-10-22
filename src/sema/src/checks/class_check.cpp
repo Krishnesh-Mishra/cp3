@@ -83,16 +83,15 @@ void Analyzer::resolveClass(ClassDeclaration& c) {
     for (const auto& tp : c.typeParams) {
         if (tp) info.typeParamNames.push_back(tp->name);
     }
-    // A generic class's member types resolve with its parameters in scope, so
-    // `value: T` becomes TypeParam("T") in the member table.
+    // A generic class's member types resolve with its parameters in scope.
     TypeParamScope saved;
     enterClassTypeParams(c.typeParams, saved);
     collectClassMembers(c, info);
     leaveClassTypeParams(saved);
     const std::string name = info.name;
     classes_[name] = std::move(info);
-    // The class name is also a value (statics + `new`); declaring it in the
-    // resolve pass keeps functions declared above the class able to use it.
+    // The class name is also a value (statics + `new`), declared in the
+    // resolve pass so a function above the class can use it.
     typeNames_[name] = Type::named(TypeKind::Class, name);
     declareBinding(name, typeNames_[name], c.span,
                    BindingSpec{.declNodeId = c.nodeId});
@@ -148,7 +147,7 @@ void Analyzer::collectClassMethod(MethodDeclaration& md, ClassInfo& info) {
         return;
     }
     // A generic method's own type parameters are in scope while its signature
-    // is built, so `T` in an annotation resolves to a type parameter (spec §16).
+    // is built, so `T` in an annotation resolves to a type parameter.
     TypeParamScope saved;
     enterClassTypeParams(md.typeParams, saved);
     FuncSig sig = buildSig(name, md.params, md.returnType, &md.span);
@@ -205,8 +204,7 @@ void Analyzer::collectClassMember(ClassMember& m, ClassInfo& info) {
         }
         case NodeKind::AccessorDeclaration: {
             auto& ad = static_cast<AccessorDeclaration&>(m);
-            // D21: TS-style accessors. The getter's return type governs reads;
-            // the setter writes through the same type.
+            // D21: TS-style accessors; the getter's return type governs reads.
             if (ad.accessor != AccessorKind::Get) return;
             std::string name = keyName(ad.key.get());
             if (name.empty()) return;
@@ -267,8 +265,7 @@ void Analyzer::checkAbstractConformance(const ClassDeclaration& c,
 
 void Analyzer::checkClassBodies(ClassDeclaration& c) {
     if (!findClass(c.name)) return;
-    // Generic class bodies check once, with the parameters bound to TypeParam;
-    // instantiation arguments are substituted at member reads.
+    // Generic class bodies check once, with the parameters bound to TypeParam.
     TypeParamScope saved;
     enterClassTypeParams(c.typeParams, saved);
     classStack_.push_back(c.name);
@@ -313,8 +310,7 @@ void Analyzer::checkClassMemberBody(ClassMember& m) {
 
 void Analyzer::analyzeMethodBody(MethodDeclaration& md) {
     const FuncSig& sig = sigs_[md.nodeId];
-    // A generic method's type parameters are in scope in its body, so `T` names
-    // the type parameter there too.
+    // A generic method's type parameters are in scope in its body (§16).
     TypeParamScope saved;
     enterClassTypeParams(md.typeParams, saved);
     pushScope();
@@ -350,7 +346,6 @@ void Analyzer::analyzeMethodBody(MethodDeclaration& md) {
 }
 
 // The accessor body (D21): `this` plus the setter's parameter are in scope.
-// The getter's declared return type governs reads (collectClassMember).
 void Analyzer::analyzeAccessorBody(AccessorDeclaration& ad) {
     if (!ad.body) return;
     pushScope();

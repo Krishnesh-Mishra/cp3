@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: Are generic interfaces (`interface Box<T>`) part of the language? The spec documents generics on classes and functions only."
-  }
-}
