@@ -99,6 +99,9 @@ void Generator::runUnit(const Program& program, std::string& decls,
     // The unit's enums (spec 04): resolved before the emit walk (emit/enum.cpp).
     collectEnums(program);
 
+    // Array element reads that can bind a const reference (array_refs.cpp).
+    analyzeArrayRefs(program);
+
     // The worker sites (spec 13, D80): file sites arrive resolved from the CLI;
     // the inline form is synthesized into the same site model (worker.cpp).
     collectWorkerSites(program);

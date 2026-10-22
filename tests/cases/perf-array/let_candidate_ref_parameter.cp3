@@ -1,0 +1,13 @@
+import console from "std/console";
+const words: string[] = ["alpha", "bravo"];
+function bump(ref s: string): void { s = "changed"; }
+{
+  let w = words[0];
+  bump(w);
+  console.log(w);
+}
+// A `let` binding is a mutable value in the ordinary lowering, and a `ref`
+// parameter is a `std::string&`, so a `let` candidate must keep the copying
+// spelling: a `const std::string&` cannot bind to it. The oracle is the
+// ordinary cp3 result: the callee writes through the reference, so the
+// binding reads "changed".

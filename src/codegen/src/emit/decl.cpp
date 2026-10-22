@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "detail/cpp_writer.h"
+#include "detail/family.h"
 #include "detail/mangle.h"
 #include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
@@ -39,6 +40,50 @@ void Generator::collectFunctionNames(const Stmt& s) {
         const auto& ed = static_cast<const ExportDeclaration&>(s);
         if (ed.declaration) collectFunctionNames(*ed.declaration);
     }
+}
+
+// The const-reference spelling for a proven array-read binding. The proof
+// (support/array_refs.cpp) is per declarator, so only this spelling changes;
+// the binding type the emitter records stays the element type.
+//
+// The emitted text must match the ordinary `arrayAt` spelling exactly, except
+// that the element is bound by reference: the same bounds check and panic, the
+// same index operand text (an enum index keeps its `static_cast<double>`),
+// and the same element type. Every check here is a guard that fails closed to
+// the copying spelling.
+std::string Generator::arrayRefDeclText(const VariableDeclarator& d,
+                                        const std::string& name) {
+    if (arrayRefDecls_.count(d.nodeId) == 0) return std::string();
+    if (!d.init || d.init->kind != NodeKind::IndexExpr) return std::string();
+    // A declared type belongs to the ordinary lowering (it carries the
+    // not-implemented report for a type M1 cannot spell).
+    if (d.type) return std::string();
+    const auto& ix = static_cast<const IndexExpr&>(*d.init);
+    if (!ix.object || !ix.index) return std::string();
+    const Type arr = effectiveType(*ix.object);
+    CppInfo ec;
+    if (arr.kind != TypeKind::Array ||
+        !arrayElementInfo(arrayElemOf(arr), ec) || !ec.representable) {
+        return std::string();
+    }
+    if (ec.shape != Shape::Number && ec.shape != Shape::String &&
+        ec.shape != Shape::Bool && ec.shape != Shape::Enum) {
+        return std::string();
+    }
+    // The binding's own type must be the element type: a binding the
+    // ordinary lowering spells differently (an optional, a cell) keeps the
+    // copying form.
+    const CppInfo ci = bindingCpp(d);
+    if (!ci.representable || ci.cpp != ec.cpp || ci.shape != ec.shape) {
+        return std::string();
+    }
+    // A shared cell is read through `get()` and written through `set()`; a
+    // reference binding is neither.
+    if (isCell(name)) return std::string();
+    needsTypedArray_ = true;
+    return "const " + ec.cpp + "& " + name +
+           " = ::cp3::runtime::arrayAtRef<" + ec.cpp + ">(" +
+           expr(*ix.object) + ", " + indexOperandText(*ix.index) + ")";
 }
 
 void Generator::emitTopLevel(const Stmt& s, std::string& decls, std::string& defs,

@@ -1,0 +1,9 @@
+import console from "std/console";
+const words: string[] = ["alpha", "bravo"];
+function shrink(): void { words.shift(); }
+{
+  const word = words[0];
+  shrink();
+  console.log(word);
+}
+console.log(words.length);

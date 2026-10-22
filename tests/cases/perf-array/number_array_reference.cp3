@@ -1,0 +1,7 @@
+import console from "std/console";
+const nums: number[] = [10, 20, 30];
+{
+  const a = nums[0];
+  const b = nums[2];
+  console.log(a + b);
+}

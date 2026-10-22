@@ -1,0 +1,20 @@
+import console from "std/console";
+function makeAliased(): (() => number)[] {
+  const data: number[] = [1, 2, 3];
+  const alias = data;
+  let calls = 0;
+  const get = (): number => {
+    calls = calls + 1;
+    return calls * 1000 + alias[0] + data[2];
+  };
+  const bump = (): number => {
+    calls = calls + 1;
+    data[0] = data[0] + 10;
+    alias[2] = alias[2] + 100;
+    return calls * 1000 + data[0] + alias[2];
+  };
+  return [get, bump];
+}
+const b = makeAliased();
+b[1]();
+console.log(`${b[0]()} ${b[1]()}`);

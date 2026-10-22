@@ -1,0 +1,14 @@
+import console from "std/console";
+let words: string[] = ["alpha", "bravo"];
+{
+  const word = words[0];
+  for (words of [["zulu"], ["yankee"]]) {
+    console.log(word);
+  }
+  console.log(words[0]);
+}
+// A for-of over an existing binding re-points it without an assignment
+// expression, so the proof must treat it as a mutation of the array: the
+// reference spelling is rejected and the binding keeps the snapshot value
+// "alpha" (the JS oracle for `const word = words[0]`). The last line pins
+// cp3's current for-of rebinding behaviour, which is outside this change.

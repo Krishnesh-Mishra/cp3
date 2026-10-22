@@ -1,0 +1,15 @@
+import console from "std/console";
+function makeBound(bound: number): (() => number)[] {
+  let hits = 0;
+  const tick = (): number => { hits = hits + 1; return bound * 10 + hits; };
+  const read = (): number => hits;
+  return [tick, read];
+}
+const fs: ((() => number)[])[] = [makeBound(0), makeBound(1), makeBound(2), makeBound(3)];
+let total = 0;
+let i = 0;
+while (i < fs.length) {
+  total = total + fs[i][0]();
+  i = i + 1;
+}
+console.log(`${total} ${fs[2][1]()} ${fs[3][1]()}`);

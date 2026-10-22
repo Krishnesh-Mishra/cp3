@@ -33,6 +33,7 @@ set(cp3_codegen_sources
     src/support/helper_blocks.cpp
     src/support/int_mode.cpp
     src/support/int_reads.cpp
+    src/support/array_refs.cpp
     src/support/usage_includes.cpp
     src/support/program_link.cpp
     src/emit/program.cpp
@@ -48,6 +49,7 @@ set(cp3_codegen_sources
     src/emit/call_args.cpp
     src/emit/async.cpp
     src/emit/stmt.cpp
+    src/emit/push_reserve.cpp
     src/emit/control.cpp
     src/emit/patterns.cpp
     src/emit/decl.cpp

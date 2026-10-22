@@ -48,6 +48,8 @@ void Generator::popFlowFrame() {
 std::string Generator::emitWhile(const WhileStatement& w,
                                  const std::string& jsLabel, std::string& out,
                                  int indent) {
+    // A counted push loop reserves its remaining pushes once (emit/push_reserve.cpp).
+    emitPushReserveHint(w, out, indent);
     const std::string breakLabel = freshLabel("while_end_");
     const std::string continueLabel = freshLabel("while_next_");
     pushFlowFrame(true, breakLabel, continueLabel, jsLabel);

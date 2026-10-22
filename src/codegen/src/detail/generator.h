@@ -83,6 +83,7 @@ struct CallBuilder;
 struct PatternEmitter;
 struct ModuleVarEmitter;
 struct AssignEmitter;
+struct PushReserveEmitter;  // emit/push_reserve.cpp
 }  // namespace detail
 
 // One destructuring source: the C++ text of the value being unpacked, its cp3
@@ -125,6 +126,7 @@ private:
     friend struct detail::PatternEmitter;  // emit/destructure.cpp
     friend struct detail::ModuleVarEmitter;  // emit/module_var.cpp
     friend struct detail::AssignEmitter;  // emit/assignment.cpp
+    friend struct detail::PushReserveEmitter;  // emit/push_reserve.cpp
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
 
@@ -537,6 +539,12 @@ private:
     void emitDoWhile(const DoWhileStatement& dw, std::string& out, int indent);
     void emitVarDecl(const VariableDeclaration& vd, std::string& out, int indent);
     std::string declaratorText(const VariableDeclarator& d, VarKind kind);
+    // The const-reference spelling for a proven array-read binding, or "" when
+    // the declarator was not proven (support/array_refs.cpp).
+    std::string arrayRefDeclText(const VariableDeclarator& d,
+                                 const std::string& name);
+    void emitPushReserveHint(const WhileStatement& ws, std::string& out,
+                             int indent);
     void emitReturn(const ReturnStatement& r, std::string& out, int indent);
     void emitThrow(const ThrowStatement& t, std::string& out, int indent);
     void emitTry(const TryStatement& ts, std::string& out, int indent);
@@ -571,6 +579,12 @@ private:
     std::string emitEnumMember(const MemberExpr& m);
     std::string emitEnumObjectLiteral(const ObjectLiteral& ol);
     bool lowerEnumSwitch(const SwitchStatement& sw, std::string& out, int indent);
+
+    // --- array read references (support/array_refs.cpp) ----------------------
+    // Mark every declarator whose `arr[i]` read is proven safe to bind by
+    // const reference for the whole unit, or mark none when the proof cannot
+    // see the whole unit.
+    void analyzeArrayRefs(const Program& program);
 
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
     // A guarded int64 body plus its double wrapper (D64).

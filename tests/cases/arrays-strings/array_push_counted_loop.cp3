@@ -1,0 +1,21 @@
+import console from "std/console";
+const a: number[] = [];
+let i = -2;
+const limit = 4;
+while (i <= limit) {
+  a.push(i * 2);
+  i = i + 1;
+}
+let total = 0;
+let k = 0;
+while (k < a.length) {
+  total = total + a[k];
+  k = k + 1;
+}
+const b: number[] = [];
+let j = 0;
+while (j < 3.5) {
+  b.push(j);
+  j = j + 1;
+}
+console.log(`${total} ${a.length} ${b.length}`);

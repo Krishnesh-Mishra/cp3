@@ -1,0 +1,9 @@
+import console from "std/console";
+const matrix: string[][] = [["alpha"]];
+{
+  const row = matrix[0];
+  const word = row[0];
+  matrix[0][0] = "zulu";
+  console.log(word);
+  console.log(row[0]);
+}

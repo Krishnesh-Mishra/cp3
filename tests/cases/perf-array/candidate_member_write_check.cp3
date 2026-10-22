@@ -1,0 +1,11 @@
+import console from "std/console";
+const words: string[] = ["alpha", "bravo"];
+{
+  const word = words[0];
+  word.length = 0;
+  console.log(word);
+}
+// The frontend accepts the member write. Codegen does not implement an
+// assignment to a non-identifier target on this branch, so the reference
+// cannot be observed today; the proof still treats a write rooted at the
+// candidate binding as candidate-invalidating for the day string length lands.

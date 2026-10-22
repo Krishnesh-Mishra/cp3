@@ -1,0 +1,16 @@
+import console from "std/console";
+function makePair(): (() => number)[] {
+  let shared = 0;
+  const a = (): number => { shared = shared + 2; return shared; };
+  const b = (): number => { shared = shared + 1; return shared; };
+  const list: (() => number)[] = [a, b, a];
+  return list;
+}
+const xs = makePair();
+let total = 0;
+let i = 0;
+while (i < 3) {
+  total = total + xs[i]();
+  i = i + 1;
+}
+console.log(`${total} ${xs[1]()} ${xs[0]()}`);

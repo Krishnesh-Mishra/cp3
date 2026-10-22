@@ -199,6 +199,9 @@ protected:
     std::vector<std::string> thrownBindings_;          // active `catch (e)` names
     std::vector<FlowFrame> flowStack_;   // innermost breakable statement last
     std::vector<LabelFrame> labelStack_;  // active JS labels (loops + blocks)
+    // Declarators whose array index read is a proven-safe const reference
+    // (support/array_refs.cpp).
+    std::unordered_set<std::uint32_t> arrayRefDecls_;
     std::unordered_set<std::uint32_t> reported_;
 };
 

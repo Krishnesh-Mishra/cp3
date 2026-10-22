@@ -1,0 +1,10 @@
+import console from "std/console";
+const words: string[] = ["alpha", "bravo"];
+function first(): string {
+  const w = words[0];
+  return w;
+}
+console.log(first());
+// A candidate in a function frame: the array is a module-level global that
+// outlives the frame, and the binding is read only in its own frame, so the
+// reference spelling is allowed. The oracle is the element value.

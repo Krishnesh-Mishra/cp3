@@ -1,0 +1,9 @@
+import console from "std/console";
+const base: string[] = ["alpha"];
+const words = base;
+{
+  const word = words[0];
+  base[0] = "zulu";
+  console.log(word);
+  console.log(words[0]);
+}

@@ -1,0 +1,11 @@
+import console from "std/console";
+const words: string[] = ["alpha", "bravo"];
+{
+  const word = words[0];
+  words.length = 0;
+  console.log(word);
+}
+// The frontend accepts this write. Codegen does not implement an assignment
+// to a non-identifier target on this branch, so the reference cannot dangle at
+// runtime today; the whole-unit proof still treats the write as a mutation for
+// the day length assignment lands.

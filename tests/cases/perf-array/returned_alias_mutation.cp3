@@ -1,0 +1,10 @@
+import console from "std/console";
+const words: string[] = ["alpha", "bravo"];
+function get(): string[] { return words; }
+{
+  const word = words[0];
+  const alias = get();
+  alias.push("charlie");
+  console.log(word);
+}
+console.log(words.length);
