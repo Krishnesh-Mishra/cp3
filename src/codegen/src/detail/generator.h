@@ -414,6 +414,12 @@ private:
     std::string reifyObjectArg(const ObjectLiteral& lit);
     std::string emitTupleLiteral(const ArrayLiteral& lit);
     std::string emitGenericIndexRead(const IndexExpr& ix);
+    // A generic arrow (`<T,>(x: T) => x`): a binding whose value is one, the
+    // declarator that holds one, and the callee text of a call that names the
+    // arrow's type parameters explicitly.
+    bool isGenericArrowBinding(const std::string& name) const;
+    bool isGenericArrowInit(const VariableDeclarator& d) const;
+    std::string genericArrowCallee(const std::string& callee, const CallExpr& c);
 
     // --- parallel.* / worker(...) (emit/parallel.cpp, emit/worker.cpp) --------
     std::optional<Type> parallelCallType(const CallExpr& c) const;
@@ -723,6 +729,9 @@ private:
     std::string emitArrow(const ArrowFunction& a,
                           const std::vector<std::string>& contextParams,
                           bool byValue = false);
+    // A generic arrow's own template parameter list (`<typename T>`), "" for an
+    // ordinary arrow.
+    std::string arrowTemplatePrefix(const ArrowFunction& a);
     std::vector<std::string> arrowParamText(
         const ArrowFunction& a, const std::vector<std::string>& contextParams,
         const std::optional<Type>& expectedFn);

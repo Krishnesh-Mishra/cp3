@@ -226,7 +226,11 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
         const std::string ref = arrayRefDeclText(d, name);
         if (!ref.empty()) return ref;
     }
-    const std::string cv = (kind == VarKind::Const) ? "const " : "";
+    // A generic arrow binds a C++ generic lambda, whose `operator()` is not
+    // const-qualified: the binding cannot be a `const` C++ object. cp3's own
+    // const-ness is enforced by sema (a reassignment is CP3408).
+    const std::string cv =
+        (kind == VarKind::Const && !isGenericArrowInit(d)) ? "const " : "";
     // A declared type M1 cannot represent (`number | string`, an object /
     // array / class type, ...) is out of scope: report it so the unit is
     // treated as not-implemented instead of being quietly mis-typed.

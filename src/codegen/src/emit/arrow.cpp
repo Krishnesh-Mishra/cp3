@@ -15,6 +15,11 @@
 // The lambda's return type comes from the annotation, then sema, then the
 // expected function type; a `void` arrow stays deduced (which also covers a
 // block body with a bare `return;`).
+//
+// A generic arrow (`<T,>(x: T) => x`, spec §16) lowers to a C++ generic
+// lambda: its type parameters are the lambda's own template parameters, so
+// C++ deduces them at the call site (`f(1)`) or takes them explicitly
+// (`f.operator()<double>(1.0)`).
 // =============================================================================
 #include "detail/generator.h"
 
@@ -150,6 +155,28 @@ std::string Generator::arrowReturnType(const ArrowFunction& a,
     return std::string();
 }
 
+// The lambda's own template parameter list (`<typename T, typename U>`), "" for
+// an ordinary arrow. A generic arrow (spec §16) is a C++ generic lambda: its
+// type parameters are the lambda's own template parameters, so C++ deduces
+// them at the call site - exactly like the untyped-parameter path, which
+// makes the lambda generic through `auto` parameters.
+std::string Generator::arrowTemplatePrefix(const ArrowFunction& a) {
+    if (a.typeParams.empty()) return std::string();
+    std::vector<std::string> names;
+    names.reserve(a.typeParams.size());
+    for (const auto& tp : a.typeParams) {
+        if (!tp) continue;
+        names.push_back(mapIdent(tp->name));
+    }
+    if (names.empty()) return std::string();
+    std::string out = "<";
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        if (i != 0) out += ", ";
+        out += "typename " + names[i];
+    }
+    return out + ">";
+}
+
 std::string Generator::emitArrow(const ArrowFunction& a,
                                  const std::vector<std::string>& contextParams,
                                  bool byValue) {
@@ -157,9 +184,6 @@ std::string Generator::emitArrow(const ArrowFunction& a,
         // D40 admits `async () => {}`; lowering them is out of this wave.
         notImplemented(a, "async arrow function");
         return "0.0";
-    }
-    if (!a.typeParams.empty()) {
-        notImplemented(a, "generic arrow");
     }
     if (intOn()) intFail();
 
@@ -209,8 +233,11 @@ std::string Generator::emitArrow(const ArrowFunction& a,
     // copies of a Cell handle still share the binding, and the copy semantics
     // are exactly what spec 10 requires for a non-reassigned local. `mutable`
     // keeps a `count.set(...)` through a by-value cell handle well-formed.
-    std::string out = byValue ? "[=](" : "[&](";
-    out += joinStrings(params, ", ") + ")";
+    // A generic lambda's template parameter list sits between the capture
+    // list and the parameter list: `[=]<typename T>(T x) -> T { ... }`.
+    std::string out = byValue ? "[=]" : "[&]";
+    out += arrowTemplatePrefix(a);
+    out += "(" + joinStrings(params, ", ") + ")";
     if (byValue) out += " mutable";
     if (!ret.empty()) out += " -> " + ret;
     out += " {\n" + body + "}";

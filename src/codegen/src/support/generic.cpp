@@ -20,6 +20,11 @@
 // after the literal's node id, materialized into the decls section (the
 // `genericDecls_` buffer) ahead of the unit's own declarations.
 //
+// A generic arrow (`<T,>(x: T) => x`, spec §16) is the arrow-shaped member of
+// the same family: it lowers to a C++ generic lambda whose template
+// parameters are its own, so the call site either lets C++ deduce them
+// (`f(1)`) or names them explicitly (`f<number>(x)`).
+//
 // Out-of-scope forms report CP3002 (deduped per nodeId) and return a
 // compilable stub; the generator never throws and never aborts.
 // =============================================================================
@@ -186,6 +191,39 @@ Type Generator::substituteTypeParams(const Type& t, const FunctionDeclaration& f
         part = substituteTypeParams(part, fd, args);
     }
     return out;
+}
+
+// Is `name` a binding whose value is a generic arrow (`let f = <T>(x: T) =>
+// x`)? Such a value is a C++ generic lambda: the template parameters are the
+// lambda's own, so the call site names them (spec §16).
+bool Generator::isGenericArrowBinding(const std::string& name) const {
+    const auto it = captures_.arrowOf.find(name);
+    if (it == captures_.arrowOf.end()) return false;
+    return !it->second->typeParams.empty();
+}
+
+// Is this declarator's initializer a generic arrow? A generic lambda's
+// `operator()` is not const-qualified (the closure is `mutable`, so a
+// captured cell stays writable), so the C++ binding cannot be a `const`
+// object - cp3's own const-ness is enforced by sema (a reassignment is
+// CP3408).
+bool Generator::isGenericArrowInit(const VariableDeclarator& d) const {
+    if (!d.init || d.init->kind != NodeKind::ArrowFunction) return false;
+    return !static_cast<const ArrowFunction&>(*d.init).typeParams.empty();
+}
+
+// The callee text of a call through a generic arrow binding with an explicit
+// type-argument list (`f<number>(x)`): the C++ call instantiates the generic
+// lambda's template explicitly. Without a type-argument list the ordinary
+// call lets C++ deduce the template parameters.
+std::string Generator::genericArrowCallee(const std::string& callee,
+                                          const CallExpr& c) {
+    std::vector<std::string> typeArgs;
+    typeArgs.reserve(c.typeArgs.size());
+    for (const auto& ta : c.typeArgs) {
+        if (ta) typeArgs.push_back(typeArgText(*ta));
+    }
+    return callee + ".operator()<" + joinStrings(typeArgs, ", ") + ">";
 }
 
 // An object-literal argument to a generic function reified as a generated

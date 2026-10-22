@@ -101,10 +101,22 @@ static void classifyNullable(const Type& t, CppInfo& info) {
 // The Function-kind arm of `classify`: a void function over non-representable
 // parameters is the boxed Listener (D74); every other function is a
 // `std::function` built from the recursive shapes of its parts.
+//
+// A generic function type - one whose signature mentions a type parameter
+// (the arrow's own `<T>`, spec §16) - has no `std::function` spelling: a
+// template cannot be stored in a `std::function`. Such a value is a C++
+// generic lambda, whose template parameters are its own; the shape is still
+// `Function` (the value is callable), but it has no type spelling, so a
+// binding of that shape is deduced (`auto`).
 static CppInfo classifyFunctionValue(const Type& t) {
     CppInfo info;
     info.type = t;
     if (t.parts.empty()) return info;
+    for (const Type& part : t.parts) {
+        if (part.kind != TypeKind::TypeParam) continue;
+        info.shape = Shape::Function;
+        return info;
+    }
     // A void-returning function whose parameters have no value shape
     // (an event handler's `unknown` payload) is the boxed `Listener`
     // (D74): every copy shares one identity. A value-returning (or

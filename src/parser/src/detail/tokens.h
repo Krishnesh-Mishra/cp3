@@ -214,6 +214,7 @@ private:
     ExprPtr parseParenOrArrow();
     ExprPtr parseGroupedExpression();
     ExprPtr parseSingleParamArrow(bool isAsync);
+    ExprPtr parseGenericArrow();
     bool tryParseCallTypeArgs(TypeList& out);
     ExprList parseArguments();
 
