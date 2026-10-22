@@ -11,6 +11,12 @@
 #   * completion after `Math.` and `path.` offers the imported std namespace
 #     members, and after a string variable only string members (the probe
 #     analysis never offers what the compiler would reject);
+#   * completion is position-aware: an expression position offers the names in
+#     scope (the locals, the parameters, the imported names) and only the
+#     keywords that can legally appear there - no `finally`, `catch`,
+#     `abstract`, `private` or `implements`; a try block adds `catch` and
+#     `finally`, a class body adds the member modifiers, a parameter list adds
+#     `ref`, and a type position offers only the names that name a type;
 #   * completion in a broken file (stray dot, unterminated string) and inside
 #     comments is a well-formed empty answer, and the server stays alive;
 #   * definition jumps to a same-file function and across a local module
@@ -91,6 +97,76 @@ BROKEN_DOT = 'const x = 1.\n'
 BROKEN_STRING = 'const s = "abc\n'
 IMPORT_SPEC = 'import Math from "std/'
 LOCAL_SPEC = 'import x from "./'
+
+# The reported screenshot: a small file whose cursor sits in an EXPRESSION
+# position inside a function body. The completion must offer the names in
+# scope (the locals `a` and `b`, the imported `console`) and only the
+# keywords that can legally appear there.
+SCOPE = (
+    'import console from "std/console";\n'
+    '\n'
+    'function main(): void {\n'
+    '  const a = 1;\n'
+    '  const b = a + 1;\n'
+    '  console.log();\n'
+    '}\n'
+)
+
+# The same file with a `try` block: inside it `catch` and `finally` belong.
+TRY_BLOCK = (
+    'function main(): void {\n'
+    '  try {\n'
+    '    \n'
+    '  } catch (e) {\n'
+    '  }\n'
+    '}\n'
+)
+
+# The same file without a `try` block: `catch` and `finally` cannot appear.
+NO_TRY = (
+    'function main(): void {\n'
+    '  \n'
+    '}\n'
+)
+
+# A class body: the member modifiers belong there, the statement keywords do
+# not.
+CLASS_BODY = (
+    'class Counter {\n'
+    '  \n'
+    '}\n'
+)
+
+# A parameter list: only `ref` may start there.
+PARAM_LIST = (
+    'function add(a: number, b: number): number {\n'
+    '  return a + b;\n'
+    '}\n'
+)
+
+# A type position: only the names that name a type belong there.
+TYPE_POS = (
+    'class Counter {\n'
+    '  count: number = 0;\n'
+    '}\n'
+    '\n'
+    'interface Shape {\n'
+    '}\n'
+    '\n'
+    'function use(c: ): void {\n'
+    '}\n'
+)
+
+# A nested block: the inner local is closer to the cursor than the outer one.
+NESTED = (
+    'function main(): void {\n'
+    '  const outer = 1;\n'
+    '  if (true) {\n'
+    '    const inner = 2;\n'
+    '    \n'
+    '  }\n'
+    '}\n'
+)
 
 # CRLF line endings, trailing spaces, uneven indentation, extra blank lines.
 MESSY = (
@@ -480,6 +556,148 @@ def check_completion(report, session, member_uri, broken_dot_uri,
     )
 
 
+def check_context_completion(report, session, scope_uri, try_uri, notry_uri,
+                             class_uri, param_uri, type_uri, nested_uri):
+    # The reported screenshot: the cursor is in an expression position.
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": scope_uri},
+        "position": position(SCOPE, "console.log(", 12),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    illegal = ("finally", "catch", "abstract", "private", "implements",
+               "public", "protected", "static", "get", "set", "interface",
+               "enum", "as", "of", "in", "let", "const", "var", "class")
+    report.check(
+        "completion: an expression position offers no illegal keyword",
+        items is not None and not any(name in found for name in illegal),
+        found,
+    )
+    report.check(
+        "completion: an expression position offers the local declared above",
+        items is not None and "a" in found and "b" in found,
+        found,
+    )
+    report.check(
+        "completion: an expression position offers the imported name",
+        items is not None and "console" in found,
+        found,
+    )
+    report.check(
+        "completion: the local scope leads the popup",
+        items is not None and bool(found) and found[0] in ("a", "b"),
+        found,
+    )
+    details = {}
+    for item in items or []:
+        details[item.get("label")] = item.get("detail")
+    report.check("completion: a local carries the type the compiler inferred",
+                 details.get("a") == "number", details)
+    report.check("completion: the import carries its module",
+                 details.get("console") == 'imported from "std/console"',
+                 details)
+
+    # Inside a try block, `catch` and `finally` are the keywords that belong.
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": try_uri},
+        "position": position(TRY_BLOCK, "    \n", 4),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: inside a try block offers catch and finally",
+        items is not None and "catch" in found and "finally" in found,
+        found,
+    )
+    report.check(
+        "completion: inside a try block offers no class-member modifier",
+        items is not None and not any(name in found for name in
+                                      ("private", "public", "protected",
+                                       "static", "get", "set")),
+        found,
+    )
+
+    # Outside a try block they cannot appear.
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": notry_uri},
+        "position": position(NO_TRY, "  \n", 2),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: outside a try block offers no catch or finally",
+        items is not None and "catch" not in found and "finally" not in found,
+        found,
+    )
+
+    # A class body offers the member modifiers, not the statement keywords.
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": class_uri},
+        "position": position(CLASS_BODY, "  \n", 2),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: a class body offers the member modifiers",
+        items is not None and "private" in found and "static" in found,
+        found,
+    )
+    report.check(
+        "completion: a class body offers no statement keyword",
+        items is not None and not any(name in found for name in
+                                      ("let", "const", "var", "if", "while",
+                                       "return", "import")),
+        found,
+    )
+
+    # A parameter list offers only `ref`.
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": param_uri},
+        "position": position(PARAM_LIST, "add(", 4),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: a parameter list offers ref and no statement keyword",
+        items is not None and "ref" in found and not any(
+            name in found for name in ("let", "const", "if", "return", "class")),
+        found,
+    )
+
+    # A type position offers the names that name a type, and nothing else.
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": type_uri},
+        "position": position(TYPE_POS, "use(c:", 6),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: a type position offers the types",
+        items is not None and "Counter" in found and "Shape" in found,
+        found,
+    )
+    report.check(
+        "completion: a type position offers no value",
+        items is not None and not any(name in found for name in
+                                      ("count", "use", "number", "let", "const")),
+        found,
+    )
+
+    # The nearest scope leads: the inner local before the outer one.
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": nested_uri},
+        "position": position(NESTED, "    \n", 4),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: the nearest scope leads the popup",
+        items is not None and len(found) > 1 and found[0] == "inner"
+        and found[1] == "outer",
+        found,
+    )
+
+
 def check_definition(report, session, main_uri, import_uri, util_path):
     response = session.request("textDocument/definition", {
         "textDocument": {"uri": main_uri},
@@ -782,6 +1000,13 @@ def main():
                                        BROKEN_STRING),
         "spec": write_fixture(work, "intel_import_spec.cp3", IMPORT_SPEC),
         "local": write_fixture(work, "intel_local_spec.cp3", LOCAL_SPEC),
+        "scope": write_fixture(work, "intel_scope.cp3", SCOPE),
+        "try": write_fixture(work, "intel_try.cp3", TRY_BLOCK),
+        "notry": write_fixture(work, "intel_notry.cp3", NO_TRY),
+        "class": write_fixture(work, "intel_class.cp3", CLASS_BODY),
+        "param": write_fixture(work, "intel_param.cp3", PARAM_LIST),
+        "type": write_fixture(work, "intel_type.cp3", TYPE_POS),
+        "nested": write_fixture(work, "intel_nested.cp3", NESTED),
     }
     uris = {key: file_uri(path) for key, path in paths.items()}
 
@@ -799,7 +1024,10 @@ def main():
         for key, text in (("main", MAIN), ("member", MEMBER),
                           ("import", IMPORT_MAIN), ("broken_dot", BROKEN_DOT),
                           ("broken_string", BROKEN_STRING), ("spec", IMPORT_SPEC),
-                          ("local", LOCAL_SPEC)):
+                          ("local", LOCAL_SPEC), ("scope", SCOPE),
+                          ("try", TRY_BLOCK), ("notry", NO_TRY),
+                          ("class", CLASS_BODY), ("param", PARAM_LIST),
+                          ("type", TYPE_POS), ("nested", NESTED)):
             session.notify("textDocument/didOpen", {
                 "textDocument": {
                     "uri": uris[key],
@@ -818,6 +1046,9 @@ def main():
         check_completion(report, session, uris["member"], uris["broken_dot"],
                          uris["broken_string"], uris["spec"], uris["local"],
                          uris["main"])
+        check_context_completion(report, session, uris["scope"], uris["try"],
+                                 uris["notry"], uris["class"], uris["param"],
+                                 uris["type"], uris["nested"])
         check_definition(report, session, uris["main"], uris["import"],
                          paths["util"])
         check_symbols(report, session, uris["main"], uris["util"],
