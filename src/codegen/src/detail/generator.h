@@ -46,6 +46,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "cp3/analysis.hpp"
@@ -574,17 +575,38 @@ private:
 
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
     // A guarded int64 body plus its double wrapper (D64).
+    // `analyzeTopInt64` (support/top_int64.cpp) proves the two entry-body shapes
+    // that stay integral for their whole life and records them for the
+    // statement/expression emitters.
+    void analyzeTopInt64(const Program& program);
+    bool moduleUsesBeforeDecl(const Program& program) const;
+    void decideModuleScope(const Program& program);
     bool intEligible(const FunctionDeclaration& fd, const std::string& ret) const;
     std::string intBody(const FunctionDeclaration& fd, bool& kept);
     std::string intSignature(const FunctionDeclaration& fd) const;
     std::string intWrapperPrologue(const FunctionDeclaration& fd) const;
     bool intOn() const;
     void intFail();
+    // `name` resolves to a plain frame-local binding (not a module global and
+    // not a shared closure cell).
+    bool intLocal(const std::string& name) const;
     bool numberTyped(const Expr& e) const;
     std::string intNumberExpr(const Expr& e);
     std::string intLiteral(const Expr& e);
     std::string intIdentifier(const Identifier& id);
     std::string intBinary(const BinaryExpr& b);
+    // `x % k == 0` in force on the current branch path -> a proven divisor.
+    std::optional<std::pair<std::string, std::int64_t>> divisibleGuard(
+        const Expr& e);
+    // An observable effect or a `ref` argument discards the fast attempt.
+    bool intEffectful(const Expr& e) const;
+    // The guard every expression of the fast body passes.
+    void intGuardExpr(const Expr& e);
+    // The read text of an entry-body int64 binding (empty when it is none).
+    std::string int64ReadText(const std::string& name);
+    // The declaration text of an entry-body int64 binding (empty when none).
+    std::string int64DeclaratorText(const VariableDeclarator& d);
+    bool factStableBranch(const Stmt& branch) const;  // straight-line only
     std::string intProduct(const BinaryExpr& b);
     std::string intUnary(const UnaryExpr& u);
     std::string intUpdate(const UpdateExpr& u);

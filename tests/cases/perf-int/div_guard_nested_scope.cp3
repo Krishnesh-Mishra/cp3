@@ -1,0 +1,17 @@
+import console from "std/console";
+
+// Nested facts: (b, 3) only holds in the inner then-branch, (a, 4) in the
+// outer one. Oracle: f(8, 9) = 9 / 3 = 3; f(8, 4) skips the inner branch and
+// returns 8 / 2 = 4.
+function f(a: number, b: number): number {
+  if (a % 4 === 0) {
+    if (b % 3 === 0) {
+      return b / 3;
+    }
+    return a / 2;
+  }
+  return 0;
+}
+
+console.log(f(8, 9));
+console.log(f(8, 4));

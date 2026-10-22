@@ -1,0 +1,17 @@
+import console from "std/console";
+
+// The divisibility guard on a power-of-two modulus lowers the division to an
+// arithmetic shift. A negative value must shift the same way it divides:
+// -12 % 2 is -0 in JS and 0 in int64, and both compare equal to 0, so the
+// branch runs and the quotient is -6.
+// Oracle: 12 / 2 = 6, -12 / 2 = -6, 7 is odd so the fallback returns 0.
+function half(x: number): number {
+  if (x % 2 === 0) {
+    return x / 2;
+  }
+  return 0;
+}
+
+console.log(half(12));
+console.log(half(-12));
+console.log(half(7));

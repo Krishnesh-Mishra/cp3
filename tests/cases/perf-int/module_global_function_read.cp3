@@ -1,0 +1,9 @@
+import console from "std/console";
+
+// WS1.3: a declared function reads `base`, so the binding must stay at
+// namespace scope. Oracle: 10 + 5 = 15.
+let base = 10;
+function addBase(n: number): number {
+  return base + n;
+}
+console.log(addBase(5));

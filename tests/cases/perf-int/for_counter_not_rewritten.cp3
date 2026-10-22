@@ -1,0 +1,9 @@
+import console from "std/console";
+
+// A for-loop counter is not an R1 candidate (the update is in the header), so
+// the ordinary double loop runs. Oracle: i reaches 5, sum = 10.
+let sum = 0;
+for (let i = 0; i < 5; i = i + 1) {
+  sum = sum + i;
+}
+console.log(sum);

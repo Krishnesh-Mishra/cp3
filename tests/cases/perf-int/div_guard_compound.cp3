@@ -1,0 +1,13 @@
+import console from "std/console";
+
+// Compound assignment: x /= 2 is checked, then the fact is dropped.
+// Oracle: 24 % 8 == 0, 24 / 2 = 12.
+function f(x: number): number {
+  if (x % 8 === 0) {
+    x /= 2;
+    return x;
+  }
+  return 0;
+}
+
+console.log(f(24));

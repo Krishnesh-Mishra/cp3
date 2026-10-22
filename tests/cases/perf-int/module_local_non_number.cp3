@@ -1,0 +1,11 @@
+import console from "std/console";
+
+// WS1.3: the entry-only module bindings are `main` locals whatever their
+// type. A string, an array and a boolean must all keep their value.
+// Oracle: "abc" + "!" = "abc!", 1 + 2 + 3 = 6, true prints as "true".
+let s = "abc";
+let nums = [1, 2, 3];
+let flag = true;
+console.log(s + "!");
+console.log(nums[0] + nums[1] + nums[2]);
+console.log(flag);

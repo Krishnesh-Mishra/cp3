@@ -1,0 +1,14 @@
+import console from "std/console";
+
+// R2 with a zero seed: x stays +0 (never -0).
+// Oracle: x = 0, and the comparison prints zero.
+let x = 0;
+let n = 0;
+while (n < 5) {
+  x = (x * 7) % 11;
+  n = n + 1;
+}
+console.log(x);
+if (x === 0) {
+  console.log("zero");
+}

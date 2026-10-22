@@ -1,0 +1,9 @@
+import console from "std/console";
+
+// R2 must reject A * K > 2^53 and run in the double domain.
+// Oracle: (double)3 * (2^53 - 1) rounds to 27021597764222972, and
+// fmod(that, 2^53 - 1) = 9007199254740990. An unchecked int64 product would
+// give 0.
+let x = 3;
+x = (x * 9007199254740991) % 9007199254740991;
+console.log(x);

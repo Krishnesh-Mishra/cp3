@@ -18,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "cp3/analysis.hpp"
@@ -49,6 +50,38 @@ struct IntMode {
     // Set while emitting a statement's own expression: the one position where
     // an assignment's value is discarded, so a raw store is allowed.
     bool stmtExpr = false;
+    // Divisibility facts in force on the current straight-line branch path.
+    // While `valid` is true, `name % mod == 0` was tested true and `name` has
+    // not been written since, so `idiv(name, mod)` cannot hit its remainder
+    // check. A write invalidates its facts in place (it never removes them) so
+    // a branch exit can truncate by depth without shifting a live fact.
+    struct DivisibleFact {
+        std::string name;
+        std::int64_t mod = 0;
+        bool valid = true;
+    };
+    std::vector<DivisibleFact> divisible;
+};
+
+// One entry-body `number` binding proven to stay in a small integral range for
+// its whole life (support/top_int64.cpp). Keyed by source name; `alias` is the
+// fresh std::int64_t spelling the emitter uses and every read converts back
+// with static_cast<double> (exact under the proof).
+struct TopInt64Binding {
+    std::string alias;
+    std::uint32_t declNode = 0;  // the declarator this record was proven for
+    std::int64_t start = 0;
+    // R1: `while (c < N) { ...; c = c + K; }`, K > 0, N + K <= 2^53.
+    bool counter = false;
+    bool inclusive = false;      // the condition is `<=` (otherwise `<`)
+    std::int64_t bound = 0;      // N
+    std::int64_t step = 1;       // K
+    std::uint32_t loopNode = 0;       // the while statement to rewrite
+    std::uint32_t incrementNode = 0;  // its last statement (consumed by the for)
+    // R2: `x = (x * mul) % mod`, x0 in [0, mod), mul > 0, mul * mod <= 2^53.
+    std::int64_t mul = 0;
+    std::int64_t mod = 0;
+    std::uint32_t writeNode = 0;  // the one assignment
 };
 
 // One active breakable statement (loop or switch). `break` and `continue`
@@ -90,6 +123,10 @@ protected:
     CodegenOptions options_;  // worker import / worker-module mode
 
     bool consoleImported_ = false;
+    // A declared function, class, export or worker reads module bindings from
+    // namespace scope: keep them globals. When false, the entry function is the
+    // only reader and they become `main` locals (with an int64 rewrite proof).
+    bool moduleNeedsGlobals_ = false;
     bool lineMapping_ = false;     // --debug: emit `#line` into generated code
     bool consoleStderr_ = false;   // console.warn/.error used (stderr output)
     bool needsConsoleAbi_ = false; // console async/misc members -> family header
@@ -195,6 +232,13 @@ protected:
     bool programMode_ = false;
     std::unordered_set<std::string> functions_;
     std::unordered_map<std::string, const FunctionDeclaration*> functionDecls_;
+    // Entry-body int64 locals: the proven records (by source name), the
+    // statements the rewrite consumes, and node-id lookups for the loop and the
+    // recurrence assignment.
+    std::unordered_map<std::string, TopInt64Binding> topInt64Bindings_;
+    std::unordered_set<std::uint32_t> int64SkipStmts_;
+    std::unordered_map<std::uint32_t, const TopInt64Binding*> int64Loops_;
+    std::unordered_map<std::uint32_t, const TopInt64Binding*> int64Writes_;
     std::unordered_set<std::string> asyncFunctions_;   // `async function` names
     std::vector<std::string> thrownBindings_;          // active `catch (e)` names
     std::vector<FlowFrame> flowStack_;   // innermost breakable statement last

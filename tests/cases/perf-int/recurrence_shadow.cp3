@@ -1,0 +1,12 @@
+import console from "std/console";
+
+// A block local shadows the recurrence name. The module binding is not
+// rewritten through the shadow.
+// Oracle: inner 3 * 2 % 5 = 1; outer x is untouched, 5.
+let x = 5;
+{
+  let x = 3;
+  x = (x * 2) % 5;
+  console.log(x);
+}
+console.log(x);

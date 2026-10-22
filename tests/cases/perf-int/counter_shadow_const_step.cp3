@@ -1,0 +1,17 @@
+import console from "std/console";
+
+// The step K is a module const shadowed by a block local. The rewrite must
+// use the block value, or reject.
+// Oracle: c = 0, 3, 6, 9 then 12; s counts the four iterations.
+const K = 1;
+let c = 0;
+let s = 0;
+{
+  let K = 3;
+  while (c < 10) {
+    s = s + 1;
+    c = c + K;
+  }
+}
+console.log(c);
+console.log(s);

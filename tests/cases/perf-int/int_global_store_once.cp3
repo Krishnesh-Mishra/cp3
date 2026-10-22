@@ -1,0 +1,13 @@
+import console from "std/console";
+
+// A module global stays a double. The fast body must not assign int64 text to
+// it, and it must not run the store before a bail and again in the fallback.
+// Oracle: 3 / 2 = 1.5, then the global holds 5.
+let g = 0;
+
+function f(a: number): number {
+  g = 5;
+  return a / 2;
+}
+console.log(f(3));
+console.log(g);

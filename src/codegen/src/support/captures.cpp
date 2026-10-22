@@ -150,6 +150,8 @@ protected:
     bool onNode(const Node& n) override {
         switch (n.kind) {
             case NodeKind::ArrowFunction:
+            case NodeKind::FunctionDeclaration:
+            case NodeKind::ClassDeclaration:
             case NodeKind::ObjectLiteral:
             case NodeKind::ForOfStatement:
             case NodeKind::ForInStatement:

@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // src/codegen/src/support/int_mode.cpp - the int64 fast path for `number` (D64).
 //
 // cp3 `number` is a double, so an integral hot loop pays for double-domain
@@ -45,11 +45,13 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "detail/cpp_writer.h"
 #include "detail/int_reads.h"
 #include "detail/mangle.h"
+#include "detail/int_div_facts.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -77,6 +79,11 @@ void Generator::intFail() {
     if (intMode_) intMode_->failed = true;
 }
 
+bool Generator::intLocal(const std::string& name) const {
+    const auto binding = lookup(name);
+    return binding && !binding->global && !binding->cell;
+}
+
 bool Generator::numberTyped(const Expr& e) const {
     return classify(effectiveType(e)).shape == Shape::Number;
 }
@@ -98,7 +105,12 @@ CppInfo Generator::bindingCpp(const VariableDeclarator& d) const {
 }
 
 void Generator::declareBinding(const VariableDeclarator& d) {
-    if (!d.id || d.id->kind != NodeKind::Identifier) return;
+    if (!d.id || d.id->kind != NodeKind::Identifier) {
+        // A destructuring binding is not modelled in the region: the names it
+        // binds would be unknown (or stale) to the fast body.
+        if (intOn()) intFail();
+        return;
+    }
     const std::string& name = static_cast<const Identifier&>(*d.id).name;
     intNewBinding(name);
     const bool cell = isCell(name);
@@ -115,6 +127,9 @@ void Generator::intNewBinding(const std::string& name) {
     // The deferred marks are keyed by name, so a shadowing declaration would
     // make them lie about the inner binding: fail the attempt instead.
     if (intMode_ && intMode_->deferred.count(name)) intFail();
+    // A divisibility fact is about the old binding, never the new one. Drop it
+    // when the name is rebound (a block shadow or a `var` redeclaration).
+    detail::dropDivisibleFacts(intMode_.get(), name);
 }
 
 bool Generator::intDeferable(const std::string& name) const {
@@ -158,9 +173,10 @@ std::string Generator::intLiteral(const Expr& e) {
 }
 
 std::string Generator::intIdentifier(const Identifier& id) {
-    // A name with no binding of this region is a module global, `NaN`,
-    // `Infinity` or a hoisted read: all of them are doubles, never int64.
-    if (!lookup(id.name)) {
+    // A name with no plain frame-local binding is a module global, a shared
+    // closure cell, `NaN`, `Infinity` or a hoisted read: all of them are
+    // doubles (or cells), never int64.
+    if (!intLocal(id.name)) {
         intFail();
         return kNoValue;
     }
@@ -199,6 +215,7 @@ std::string Generator::intNumberExpr(const Expr& e) {
     }
 }
 
+
 std::string Generator::intBinary(const BinaryExpr& b) {
     if (!numberTyped(*b.left) || !numberTyped(*b.right)) {
         // `number op non-number`: sema rejects most of these, and the rest (an
@@ -218,6 +235,18 @@ std::string Generator::intBinary(const BinaryExpr& b) {
         case BinaryOp::Multiply:
             return intProduct(b);
         case BinaryOp::Divide:
+            // A guard `name % k == 0` in force proves the idiv remainder check
+            // dead; k > 0 and name in range make the quotient exact. A power of
+            // two is an arithmetic right shift: C++20 rounds signed `>>` toward
+            // negative infinity, which is exact here.
+            if (const auto k = detail::divisibleModulus(b, intMode_.get())) {
+                if ((*k & (*k - 1)) == 0 && *k <= (std::int64_t{1} << 62)) {
+                    int shift = 0;
+                    for (std::int64_t v = *k; v > 1; v >>= 1) ++shift;
+                    return "(" + lhs + " >> " + std::to_string(shift) + ")";
+                }
+                return "(" + lhs + " / " + rhs + ")";
+            }
             return arith("idiv(") + lhs + ", " + rhs + ")";
         case BinaryOp::Modulo:
             return arith("imod(") + lhs + ", " + rhs + ")";
@@ -229,18 +258,6 @@ std::string Generator::intBinary(const BinaryExpr& b) {
 
 // `a * b`: a compile-time factor turns the guard into a constant comparison
 // (`imulConst<K>`) and the product into a shift/lea.
-std::string Generator::intProduct(const BinaryExpr& b) {
-    const std::string lhs = expr(*b.left);
-    const std::string rhs = expr(*b.right);
-    if (auto k = integralLiteralValue(*b.left); k && *k != 0) {
-        return arith("imulConst<") + std::to_string(*k) + "LL>(" + rhs + ")";
-    }
-    if (auto k = integralLiteralValue(*b.right); k && *k != 0) {
-        return arith("imulConst<") + std::to_string(*k) + "LL>(" + lhs + ")";
-    }
-    return arith("imul(") + lhs + ", " + rhs + ")";
-}
-
 std::string Generator::intUnary(const UnaryExpr& u) {
     if (!u.operand || !numberTyped(*u.operand)) {
         intFail();
@@ -259,32 +276,21 @@ std::string Generator::intUnary(const UnaryExpr& u) {
     }
 }
 
-std::string Generator::intUpdate(const UpdateExpr& u) {
-    if (!u.operand || u.operand->kind != NodeKind::Identifier ||
-        !numberTyped(*u.operand)) {
-        intFail();
-        return kNoValue;
-    }
-    const auto& id = static_cast<const Identifier&>(*u.operand);
-    // The helpers take a reference, so the old value must be in range *before*
-    // the update, and a deferred read is a comma expression, not an lvalue.
-    if (intMode_ && intMode_->deferred.count(id.name)) {
-        intFail();
-        return kNoValue;
-    }
-    const std::string target = expr(*u.operand);
-    const bool inc = u.op == UpdateOp::Increment;
-    const char* fn = u.prefix ? (inc ? "preInc" : "preDec") : (inc ? "postInc" : "postDec");
-    return "(" + arith(fn) + "(" + target + "))";
-}
-
 std::string Generator::intAssignment(const AssignmentExpr& a) {
     if (!a.target || a.target->kind != NodeKind::Identifier || !a.value ||
         !numberTyped(*a.target) || !numberTyped(*a.value)) {
         intFail();
         return kNoValue;
     }
-    return intAssignText(a, static_cast<const Identifier&>(*a.target));
+    const auto& id = static_cast<const Identifier&>(*a.target);
+    // A local binding only: a module global or shared cell stays a double, so
+    // assigning int64 text to it would not compile, and a write to shared state
+    // before a bail would be repeated by the double body.
+    if (!intLocal(id.name)) {
+        intFail();
+        return kNoValue;
+    }
+    return intAssignText(a, id);
 }
 
 // The value of a deferred assignment: a `+`/`-` with a small integral literal,
@@ -293,44 +299,6 @@ std::string Generator::intAssignment(const AssignmentExpr& a) {
 // a deferred value, whose magnitude is inherited, or an in-range expression),
 // so an overflow needs on the order of 2^54 raw stores. Returns an empty string
 // for every other shape, and the caller then uses the checked lowering.
-std::string Generator::intAssignValue(const Expr& e) {
-    if (e.kind != NodeKind::BinaryExpr) return std::string();
-    const auto& b = static_cast<const BinaryExpr&>(e);
-    if (b.op != BinaryOp::Add && b.op != BinaryOp::Subtract) return std::string();
-    if (!b.left || !b.right) return std::string();
-    bool kOnLeft = false;
-    std::optional<std::int64_t> k;
-    if (auto l = integralLiteralValue(*b.left); l && *l > 0 && *l < 513) {
-        k = l;
-        kOnLeft = true;
-    } else if (auto r = integralLiteralValue(*b.right); r && *r > 0 && *r < 513) {
-        k = r;
-    }
-    if (!k) return std::string();
-    const std::string lit = "std::int64_t(" + std::to_string(*k) + ")";
-    const std::string lhs = kOnLeft ? lit : intRawOperand(*b.left);
-    const std::string rhs = kOnLeft ? intRawOperand(*b.right) : lit;
-    return "(" + lhs + (b.op == BinaryOp::Add ? " + " : " - ") + rhs + ")";
-}
-
-// An operand of a raw `+`/`-`. A deferred value feeds it without a read
-// re-check: the operation is exact at any magnitude and the result is stored
-// back into a deferred variable, so the value is still not observed. Every
-// other operand is lowered normally, which re-checks a deferred read.
-std::string Generator::intRawOperand(const Expr& e) {
-    if (e.kind == NodeKind::Identifier) {
-        const auto& id = static_cast<const Identifier&>(e);
-        if (intMode_ && intMode_->deferred.count(id.name)) return mapIdent(id.name);
-    }
-    return expr(e);
-}
-
-// The text of one assignment. A plain `x = v` whose value is a raw `+`/`-`
-// may drop both the operation's range check and the read re-check of a
-// deferred operand when `x` is read only by a `return` (see intDeferable):
-// that read re-checks through `arith::pass`, and the loop growing the value
-// never observes it in between. Every other form uses the checked helpers and
-// leaves `x` inside the invariant.
 std::string Generator::intAssignText(const AssignmentExpr& a, const Identifier& id) {
     const std::string bare = mapIdent(id.name);
     if (a.op == AssignOp::Assign) {
@@ -342,17 +310,21 @@ std::string Generator::intAssignText(const AssignmentExpr& a, const Identifier& 
         intMode_->stmtExpr = false;
         const std::string raw = mayDefer ? intAssignValue(*a.value) : std::string();
         if (!raw.empty()) {
+            detail::dropDivisibleFacts(intMode_.get(), id.name);
             intMode_->deferred.insert(id.name);
             return "(" + bare + " = " + raw + ")";
         }
         intMode_->deferred.erase(id.name);
-        return "(" + bare + " = " + expr(*a.value) + ")";
+        const std::string value = expr(*a.value);
+        detail::dropDivisibleFacts(intMode_.get(), id.name);
+        return "(" + bare + " = " + value + ")";
     }
     intMode_->stmtExpr = false;
     // A read-modify-write needs the old value in range before the operation.
     const std::string value = expr(*a.value);
     const std::string read = expr(*a.target);
     intMode_->deferred.erase(id.name);
+    detail::dropDivisibleFacts(intMode_.get(), id.name);
     switch (a.op) {
         case AssignOp::Add:
             return "(" + bare + " = " + arith("iadd(") + read + ", " + value + "))";
@@ -453,7 +425,7 @@ std::string Generator::intSignature(const FunctionDeclaration& fd) const {
         const auto& id = static_cast<const Identifier&>(*p->name);
         params.push_back("std::int64_t " + mapIdent(id.name));
     }
-    return "std::int64_t cp3_i64_" + mapIdent(fd.name) + "(" +
+    return "CP3_NOINLINE std::int64_t cp3_i64_" + mapIdent(fd.name) + "(" +
            joinStrings(params, ", ") + ")";
 }
 

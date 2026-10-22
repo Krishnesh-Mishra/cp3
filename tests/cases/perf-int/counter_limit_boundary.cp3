@@ -1,0 +1,12 @@
+import console from "std/console";
+
+// R1 at the exactness boundary: the final value is 2^53, still an exact
+// double. Oracle: c = 9007199254740992, n = 2.
+let c = 9007199254740990;
+let n = 0;
+while (c < 9007199254740992) {
+  n = n + 1;
+  c = c + 1;
+}
+console.log(c);
+console.log(n);
