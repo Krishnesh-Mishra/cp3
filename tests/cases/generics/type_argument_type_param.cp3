@@ -1,0 +1,4 @@
+import console from "std/console";
+function identity<T>(x: T): T { return x; }
+function applyTwice<T>(x: T): T { return identity<T>(x); }
+console.log(`${applyTwice<number>(5)}`);

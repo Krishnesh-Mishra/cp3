@@ -51,6 +51,10 @@ struct CallBuilder {
                                           const ArgTexts& texts,
                                           const std::optional<Type>& elem,
                                           std::size_t restAt);
+    // The element type of the rest parameter at this call site.
+    std::optional<Type> restElemTypeAt(
+        const CallExpr& c, const std::vector<std::optional<Type>>& ptypes,
+        std::size_t restAt) const;
     std::vector<std::string> plainArgList(const ArgTexts& texts,
                                           const ParamList* params,
                                           bool applyDefaults);
@@ -103,6 +107,43 @@ std::optional<Type> CallBuilder::restElemType(
     return std::nullopt;
 }
 
+// The element type at this call site. A generic callee whose rest element
+// type is one of its type parameters cannot be spelled by the caller: the
+// packed array then carries the type of the arguments the rest parameter
+// absorbs, and C++ deduces the callee's type parameter from that array.
+std::optional<Type> CallBuilder::restElemTypeAt(
+    const CallExpr& c, const std::vector<std::optional<Type>>& ptypes,
+    std::size_t restAt) const {
+    const std::optional<Type> elem = restElemType(ptypes, restAt);
+    if (!elem || elem->kind != TypeKind::TypeParam) return elem;
+    Type unified = Type::unknown();
+    bool any = false;
+    for (std::size_t i = restAt; i < c.arguments.size(); ++i) {
+        const Expr* arg = c.arguments[i].get();
+        if (arg == nullptr || arg->kind == NodeKind::SpreadElement) continue;
+        const Type at = g.effectiveType(*arg);
+        unified = any ? unify(unified, at) : at;
+        any = true;
+    }
+    if (!any) return elem;
+    return unified;
+}
+
+// The C++ spelling of the cp3 `undefined` value for a rest element type that
+// admits it: an optional element (`(number | undefined)[]`) is empty, an
+// `undefined` element is the undefined singleton, a three-way nullish
+// element (`T | null | undefined`) is the undefined flavor. "" when the
+// element type has no room for an undefined value.
+std::string undefinedElementText(const Type& elem) {
+    if (elem.isUndefined()) return "cp3::runtime::undefined";
+    const CppInfo ec = classify(elem);
+    if (ec.shape == Shape::Optional) return "std::nullopt";
+    if (ec.shape == Shape::Maybe) {
+        return ec.cpp + "(cp3::runtime::undefined)";
+    }
+    return std::string();
+}
+
 // Stage 1: the text of every argument, plus the explicit `undefined`s that
 // must not be passed. Each positional argument is emitted against its
 // parameter's expected type (`ptypes`).
@@ -114,8 +155,8 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
     const std::size_t paramCount = params ? params->size() : 0;
     std::size_t restAt = paramCount;
     const bool hasRest = findRestParam(params, restAt);
-    const std::optional<Type> elem =
-        hasRest ? restElemType(ptypes, restAt) : std::nullopt;
+    std::optional<Type> elem =
+        hasRest ? restElemTypeAt(c, ptypes, restAt) : std::nullopt;
 
     ArgTexts texts;
     texts.value.resize(count);
@@ -155,9 +196,16 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
             texts.drop[i] = true;
             continue;
         }
-        if (arg->kind == NodeKind::UndefinedLiteral && inRest &&
-            !(elem && elem->isUndefined())) {
-            // `undefined` is not an element of the packed vector.
+        if (arg->kind == NodeKind::UndefinedLiteral && inRest) {
+            // `undefined` is a value of the rest array when the element type
+            // admits it (`(number | undefined)[]` lowers to an optional
+            // element); otherwise the element type has no room for it.
+            const std::string undef =
+                elem ? undefinedElementText(*elem) : std::string();
+            if (!undef.empty()) {
+                texts.value[i] = undef;
+                continue;
+            }
             g.notImplemented(*arg, "undefined in a rest argument");
             texts.value[i] = "0.0";
             continue;
@@ -257,7 +305,7 @@ std::vector<std::string> CallBuilder::callArgs(
     const ArgTexts texts =
         callArgTexts(c, params, ptypes, applyDefaults, reifyObjectArgs);
     if (hasRest) {
-        return packRestArgs(c, texts, restElemType(ptypes, restAt), restAt);
+        return packRestArgs(c, texts, restElemTypeAt(c, ptypes, restAt), restAt);
     }
     return plainArgList(texts, params, applyDefaults);
 }
@@ -364,6 +412,16 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
             ptypes.push_back(decl->params[i]
                                  ? g.parameterType(*decl->params[i], *decl, i)
                                  : std::nullopt);
+        }
+        if (generic && !c.typeArgs.empty()) {
+            // The explicit type arguments fix the callee's type parameters:
+            // the call site spells the substituted types (a rest parameter
+            // packs its arguments into an array of the substituted element
+            // type, which is what C++ deduces the parameter from).
+            for (std::size_t i = 0; i < ptypes.size(); ++i) {
+                if (!ptypes[i]) continue;
+                ptypes[i] = g.substituteTypeArgs(*ptypes[i], *decl, c);
+            }
         }
     }
     const std::string callee =

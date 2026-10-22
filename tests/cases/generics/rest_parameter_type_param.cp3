@@ -1,0 +1,3 @@
+import console from "std/console";
+function countAll<T>(...items: T[]): number { return items.length; }
+console.log(`${countAll<number>(1, 2, 3)}`);

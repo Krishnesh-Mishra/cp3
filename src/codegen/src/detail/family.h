@@ -68,6 +68,9 @@ inline bool isFamilyCtorName(const std::string& name) {
 // copyable values too, so an array of them is a statically typed array like
 // any other (the spec's "no fully dynamic array" rule is about the *element
 // type* being known, not about the element being a primitive).
+//
+// A nullish element (`T | undefined`) is storable as well: it lowers to the
+// optional wrapper, which is an ordinary value.
 inline bool isArrayElementShape(Shape s) {
     return s == Shape::Number || s == Shape::String || s == Shape::Bool ||
            s == Shape::Array || s == Shape::Enum || s == Shape::Union ||

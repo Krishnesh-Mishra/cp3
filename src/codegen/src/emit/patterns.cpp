@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
@@ -86,6 +87,16 @@ bool hasField(const std::vector<std::string>& fields, const std::string& name) {
     return false;
 }
 
+// One field of a spread source: its name, how the source is read (`->` for a
+// reference, `.` for a by-value record), whether it can be absent, and whether
+// it is read through an accessor (an interface member).
+struct SpreadField {
+    std::string name;
+    std::string access;
+    bool optional;
+    bool accessor;
+};
+
 }  // namespace
 
 // The existing record spelling of a type, or false. A JSON interface record is
@@ -116,11 +127,141 @@ bool Generator::recordLayout(const Type& t, std::string& structName,
     return true;
 }
 
+// The excess-property diagnostic: a property of an object literal that the
+// target record does not have. Sema reports the same rule (CP3409) for a
+// fresh literal checked against a known target type; the codegen path is the
+// backstop for the forms sema does not check.
+void Generator::reportExcessProperty(const Node& site, const std::string& name) {
+    if (name.empty()) {
+        sink_.error(diagcode::kTypeMismatch, site.span,
+                    "type mismatch: a computed property is not part of the "
+                    "target type");
+        return;
+    }
+    sink_.error(diagcode::kExcessProperty, site.span,
+                "excess property '" + name +
+                    "' is not part of the target type");
+}
+
+// The statements that copy a spread source's fields into the target record.
+// The source's layout is a plain value shape, a structural object model (a
+// field that can be absent among them) or a registered record; every one of
+// them names the fields the spread copies and how the source is read. False
+// when the source has no layout cp3 can read.
+bool Generator::spreadCopyText(const Expr& argument,
+                                const std::vector<std::string>& targetFields,
+                                const std::string& outName,
+                                const std::string& outAccess, std::string& out) {
+    const Type sourceType = effectiveType(argument);
+    std::vector<SpreadField> sourceFields;
+    std::string sourceStruct;
+    std::vector<std::string> recordFields;
+    std::vector<ObjectField> sourceShapeFields;
+    const bool sourcePlain =
+        objectShapeOf(sourceType, sourceStruct, sourceShapeFields);
+    if (sourcePlain) {
+        for (const ObjectField& field : sourceShapeFields) {
+            sourceFields.push_back(SpreadField{field.name, "->", false, false});
+        }
+    } else {
+        const ObjectModel* om = objectModelOf(sourceType);
+        if (om != nullptr && objectModelUsed(*om)) {
+            for (const ObjectFieldModel& field : om->fields) {
+                if (field.isMethod) continue;
+                sourceFields.push_back(SpreadField{
+                    field.name, om->isInterface ? "." : "->", field.optional,
+                    om->isInterface});
+            }
+        } else if (recordLayout(sourceType, sourceStruct, recordFields)) {
+            for (const std::string& field : recordFields) {
+                sourceFields.push_back(SpreadField{field, ".", false, false});
+            }
+        } else {
+            // A value cp3 cannot spread into a record (a collection, a
+            // promise, ...).
+            sink_.error(diagcode::kTypeMismatch, argument.span,
+                        "type mismatch: cannot spread '" + describe(sourceType) +
+                            "' into an object literal");
+            return false;
+        }
+    }
+    const std::string source = freshLabel("spread_");
+    out += " { const auto& " + source + " = " + expr(argument) + ";";
+    for (const SpreadField& field : sourceFields) {
+        if (!hasField(targetFields, field.name)) continue;
+        const std::string read = source + field.access + mapIdent(field.name) +
+                                 (field.accessor ? "()" : "");
+        if (field.optional) {
+            // A field that can be absent is copied only when it holds a value
+            // (JS spread semantics).
+            out += " if (" + read + ".has_value()) " + outName + outAccess +
+                   mapIdent(field.name) + " = *" + read + ";";
+            continue;
+        }
+        out += " " + outName + outAccess + mapIdent(field.name) + " = " + read +
+               ";";
+    }
+    out += " }";
+    return true;
+}
+
+// An object literal filling a structural object model: the model owns a
+// struct the plain value shape cannot spell (an optional field, a class
+// field, ...), so the literal fills that struct field by field. A field the
+// literal does not provide keeps the model's default (an absent optional
+// field stays empty).
+std::string Generator::recordModelText(const ObjectLiteral& lit,
+                                       const ObjectModel& om) {
+    const std::string outName = freshLabel("record_");
+    std::string body = "auto " + outName + " = ::cp3::runtime::makeRef<" +
+                       om.structName + ">(" + om.structName + "{});";
+    std::vector<std::string> fields;
+    for (const ObjectFieldModel& field : om.fields) {
+        if (field.isMethod) continue;
+        fields.push_back(field.name);
+    }
+    for (const auto& propertyPtr : lit.properties) {
+        const ObjectProperty* p = propertyPtr.get();
+        if (p == nullptr) continue;
+        if (p->value && p->value->kind == NodeKind::SpreadElement) {
+            const auto& sp = static_cast<const SpreadElement&>(*p->value);
+            if (!sp.argument) continue;
+            if (!spreadCopyText(*sp.argument, fields, outName, "->", body)) {
+                return std::string();
+            }
+            continue;
+        }
+        const std::string name = propertyKeyName(*p);
+        if (name.empty() || !hasField(fields, name)) {
+            // A property the model does not have: the excess-property rule
+            // sema reports for a fresh literal against a known target type.
+            // The property is dropped; the diagnostic is the error.
+            reportExcessProperty(*p, name);
+            continue;
+        }
+        if (const Expr* value = propertyValue(*p)) {
+            body += " " + outName + "->" + mapIdent(name) + " = " +
+                    expr(*value) + ";";
+        }
+    }
+    body += " return " + outName + ";";
+    return "[&]{ " + body + " }()";
+}
+
 // An object literal for a known record type. Property order and repeated
 // spreads follow JS semantics because the value is assembled by assignment in
 // source order, and a spread source is evaluated once into a local.
 std::string Generator::recordLiteralText(const ObjectLiteral& lit,
                                          const Type& expected) {
+    // The context's expected type may name a structural object model: the
+    // model owns the struct the literal fills (the plain value shape cannot
+    // spell a field the model has).
+    if (expected_) {
+        const ObjectModel* om = objectModelOf(*expected_);
+        if (om != nullptr && !om->isInterface && objectModelUsed(*om)) {
+            return recordModelText(lit, *om);
+        }
+    }
     std::string structName;
     std::vector<std::string> fields;
     std::vector<ObjectField> shapeFields;
@@ -145,35 +286,16 @@ std::string Generator::recordLiteralText(const ObjectLiteral& lit,
         if (p->value && p->value->kind == NodeKind::SpreadElement) {
             const auto& sp = static_cast<const SpreadElement&>(*p->value);
             if (!sp.argument) return std::string();
-            std::string sourceStruct;
-            std::vector<std::string> sourceFields;
-            std::vector<ObjectField> sourceShapeFields;
-            const bool sourcePlain =
-                objectShapeOf(effectiveType(*sp.argument), sourceStruct,
-                              sourceShapeFields);
-            if (sourcePlain) {
-                for (const ObjectField& field : sourceShapeFields) {
-                    sourceFields.push_back(field.name);
-                }
-            } else if (!recordLayout(effectiveType(*sp.argument), sourceStruct,
-                                     sourceFields)) {
-                notImplemented(*p->value, "this spread property");
+            if (!spreadCopyText(*sp.argument, fields, outName, outAccess, body)) {
                 return std::string();
             }
-            const std::string source = freshLabel("spread_");
-            const std::string sourceAccess = sourcePlain ? "->" : ".";
-            body += " { const auto& " + source + " = " + expr(*sp.argument) + ";";
-            for (const std::string& field : sourceFields) {
-                if (!hasField(fields, field)) continue;
-                body += " " + outName + outAccess + mapIdent(field) + " = " +
-                        source + sourceAccess + mapIdent(field) + ";";
-            }
-            body += " }";
             continue;
         }
         const std::string name = propertyKeyName(*p);
         if (name.empty() || !hasField(fields, name)) {
-            notImplemented(*p, "this object property");
+            // A property the record does not have: the excess-property rule
+            // sema reports for a fresh literal against a known target type.
+            reportExcessProperty(*p, name);
             return std::string();
         }
         if (const Expr* value = propertyValue(*p)) {
@@ -224,6 +346,18 @@ void Generator::emitPatternParams(const FunctionDeclaration& fd, std::string& ou
 std::optional<Type> Generator::parameterType(const Parameter& p,
                                              const FunctionDeclaration& fd,
                                              std::size_t index) const {
+    // A rest parameter's type is the array of its element type. An untyped
+    // rest parameter has no element type at all (sema leaves it `unknown`),
+    // so the element type is a template parameter of the function's own
+    // template (templatePrefix), which the call site deduces from the
+    // arguments it packs.
+    const auto restType = [&](const Type& elem) -> Type {
+        if (elem.isUnknown()) {
+            return Type::array(Type::named(TypeKind::TypeParam,
+                                           untypedParamTemplate(index)));
+        }
+        return Type::array(elem);
+    };
     // A generic function's annotation names its own type parameters (`x: T`),
     // which the raw annotation cannot map (sema resolved them): prefer the
     // resolved signature (spec 16).
@@ -232,6 +366,9 @@ std::optional<Type> Generator::parameterType(const Parameter& p,
         if (it != sema_.functions.end() &&
             index < it->second.paramTypes.size()) {
             const Type t = it->second.paramTypes[index];
+            // Sema records a rest parameter's ELEMENT type; the parameter
+            // itself is the array of it (`...items: T[]` -> `T[]`).
+            if (p.isRest) return restType(t);
             if (p.optional) return Type::nullable(t);
             return t;
         }
@@ -244,9 +381,41 @@ std::optional<Type> Generator::parameterType(const Parameter& p,
     }
     auto it = sema_.functions.find(fd.nodeId);
     if (it != sema_.functions.end() && index < it->second.paramTypes.size()) {
-        return it->second.paramTypes[index];
+        const Type t = it->second.paramTypes[index];
+        if (p.isRest) return restType(t);
+        return t;
     }
     return std::nullopt;
+}
+
+// The C++ spelling of a parameter's own type: its annotation, the resolved
+// signature, or "" when it has none. An untyped parameter has no cp3 type at
+// all (sema leaves it `unknown`), so the C++ side spells it as a template
+// parameter of the function's own template instead.
+std::string Generator::parameterCppType(const Parameter& p,
+                                        const FunctionDeclaration& fd,
+                                        std::size_t index) {
+    const std::optional<Type> pt = parameterType(p, fd, index);
+    if (!pt) return std::string();
+    const CppInfo ci = classify(*pt);
+    if (ci.representable) return ci.cpp;
+    // A destructured parameter annotated with a registered record (an
+    // interface reified by the JSON record surface) uses that struct's
+    // spelling; the prologue reads its fields.
+    if (p.name && (p.name->kind == NodeKind::ArrayPattern ||
+                   p.name->kind == NodeKind::ObjectPattern)) {
+        std::string structName;
+        std::vector<std::string> fields;
+        if (recordLayout(*pt, structName, fields)) return structName;
+    }
+    return std::string();
+}
+
+// The template parameter that carries an untyped parameter's type
+// (`function f(x)` -> `template <typename cp3_T0> ... f(cp3_T0 x)`). The
+// call site deduces it, exactly like an untyped arrow parameter.
+std::string Generator::untypedParamTemplate(std::size_t index) const {
+    return "cp3_T" + std::to_string(index);
 }
 
 std::string Generator::parameterText(const Parameter& p, const FunctionDeclaration& fd,
@@ -296,25 +465,12 @@ std::string Generator::parameterText(const Parameter& p, const FunctionDeclarati
         return out;
     }
 
-    std::string type;
-    if (pt) {
-        CppInfo ci = classify(*pt);
-        if (ci.representable) {
-            type = ci.cpp;
-        } else {
-            // A destructured parameter annotated with a registered record
-            // (an interface reified by the JSON record surface) uses that
-            // struct's spelling; the prologue reads its fields.
-            std::string structName;
-            std::vector<std::string> fields;
-            if (pattern && recordLayout(*pt, structName, fields)) {
-                type = structName;
-            }
-        }
-    }
+    std::string type = parameterCppType(p, fd, index);
     if (type.empty()) {
-        notImplemented(p, "untyped parameter");
-        type = "double";
+        // An untyped parameter: its C++ spelling is a template parameter of
+        // the function's own template (templatePrefix), which the call site
+        // deduces - the same fallback an untyped arrow parameter gets.
+        type = untypedParamTemplate(index);
     }
 
     std::string out = type + (p.isRef ? "& " : " ") + name;
@@ -361,9 +517,22 @@ void Generator::unpackArrayPattern(const ArrayPattern& p, const PatternSource& s
     std::size_t index = 0;
     for (const auto& targetPtr : p.elements) {
         if (targetPtr) {
-            const std::string at = "::cp3::runtime::arrayAt(" + src.text + ", " +
-                                   std::to_string(index) + ".0)";
-            bindPatternTarget(*targetPtr, PatternSource{at, elem, src.isConst},
+            const Node* target = targetPtr.get();
+            std::string at;
+            if (target->kind == NodeKind::AssignmentPattern) {
+                // A pattern default (`[a = 1] = xs`) fills the missing element:
+                // the read must not panic on an array shorter than the
+                // pattern.
+                const auto& ap = static_cast<const AssignmentPattern&>(*target);
+                at = "::cp3::runtime::arrayAtOrDefault<" + ec.cpp + ">(" +
+                     src.text + ", " + std::to_string(index) + ".0, " +
+                     expr(*ap.right) + ")";
+                target = ap.left.get();
+            } else {
+                at = "::cp3::runtime::arrayAt(" + src.text + ", " +
+                     std::to_string(index) + ".0)";
+            }
+            bindPatternTarget(*target, PatternSource{at, elem, src.isConst},
                               out, indent);
         }
         ++index;
@@ -424,13 +593,23 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
             continue;
         }
         const Node* target = prop.value.get();
+        std::string valueText = access(name);
         if (target && target->kind == NodeKind::AssignmentPattern) {
-            // Record fields are always present in this representation, so a
-            // default has nothing to fire on; keep the binding target only.
-            target = static_cast<const AssignmentPattern&>(*target).left.get();
+            // A pattern default (`{ age: a = 18 }`) fills the missing value:
+            // a field that can be absent (an optional field) takes the
+            // default when it holds no value; a record field that is always
+            // present has nothing to fire on.
+            const auto& ap = static_cast<const AssignmentPattern&>(*target);
+            if (om != nullptr) {
+                const ObjectFieldModel* field = findObjectField(*om, name);
+                if (field != nullptr && field->optional) {
+                    valueText = src.text + "->" + mapIdent(name) + ".value_or(" +
+                                expr(*ap.right) + ")";
+                }
+            }
+            target = ap.left.get();
         }
         if (!target) continue;
-        const std::string valueText = access(name);
         bindPatternTarget(*target, PatternSource{valueText, Type::unknown(),
                                                  src.isConst},
                           out, indent);
@@ -443,12 +622,6 @@ void Generator::bindPatternTarget(const Node& target, const PatternSource& value
     const Node* bound = &target;
     if (bound->kind == NodeKind::RestElement) {
         bound = static_cast<const RestElement&>(*bound).argument.get();
-    } else if (bound->kind == NodeKind::AssignmentPattern) {
-        // A pattern default (`[a = 1]`) is out of scope: arrayPattern defaults
-        // are not specified through `arrayAt`, and object record fields are
-        // always present.
-        notImplemented(target, "this pattern default");
-        bound = static_cast<const AssignmentPattern&>(*bound).left.get();
     }
     if (!bound) return;
     if (bound->kind == NodeKind::ArrayPattern ||

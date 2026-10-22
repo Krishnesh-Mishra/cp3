@@ -58,17 +58,37 @@ std::string objectFieldName(const ObjectProperty& p) {
 
 // The `template <typename T, ...>` prefix of a generic function, "" for an
 // ordinary one (the signature lines of emit/decl.cpp are prefixed with it).
-std::string Generator::templatePrefix(const FunctionDeclaration& fd) const {
-    if (fd.typeParams.empty()) return std::string();
-    std::string out = "template <";
-    bool first = true;
+// An untyped parameter adds a template parameter of its own: its cp3 type is
+// unknown, so the C++ side carries it as a deduced template parameter (the
+// same fallback an untyped arrow parameter gets).
+std::string Generator::templatePrefix(const FunctionDeclaration& fd) {
+    std::vector<std::string> params;
     for (const auto& tp : fd.typeParams) {
         if (!tp) continue;
-        if (!first) out += ", ";
-        first = false;
-        out += "typename " + mapIdent(tp->name);
+        params.push_back(mapIdent(tp->name));
     }
-    if (first) return std::string();
+    for (std::size_t i = 0; i < fd.params.size(); ++i) {
+        if (!fd.params[i]) continue;
+        const Parameter& p = *fd.params[i];
+        if (p.isRest) {
+            // An untyped rest parameter carries its element type as a
+            // template parameter too (`...items` -> `Array<cp3_T0>`).
+            const std::optional<Type> pt = parameterType(p, fd, i);
+            if (pt && pt->kind == TypeKind::Array && !pt->parts.empty() &&
+                pt->parts.front().name == untypedParamTemplate(i)) {
+                params.push_back(untypedParamTemplate(i));
+            }
+            continue;
+        }
+        if (!parameterCppType(p, fd, i).empty()) continue;
+        params.push_back(untypedParamTemplate(i));
+    }
+    if (params.empty()) return std::string();
+    std::string out = "template <";
+    for (std::size_t i = 0; i < params.size(); ++i) {
+        if (i != 0) out += ", ";
+        out += "typename " + params[i];
+    }
     return out + "> ";
 }
 
@@ -92,8 +112,68 @@ std::string Generator::typeArgText(const TypeNode& tn) {
         const CppInfo ci = classify(*t);
         if (ci.representable) return ci.cpp;
     }
+    // A type argument that names a type parameter of the enclosing generic
+    // function (`identity<T>(x)`) has no erased spelling: the structural
+    // re-parse sees an unknown class name, but sema resolved the node to the
+    // `TypeParam` whose C++ spelling is the template parameter itself.
+    if (const Type* t = sema_.typeOf(tn.nodeId)) {
+        const CppInfo ci = classify(*t);
+        if (ci.representable) return ci.cpp;
+    }
     notImplemented(tn, "this type argument");
     return "double";
+}
+
+// The explicit type arguments of a generic call, resolved to cp3 types
+// (`identity<number>(x)` -> [number]). A type argument sema could not
+// resolve stays unknown.
+std::vector<Type> Generator::resolvedTypeArgs(const CallExpr& c) const {
+    std::vector<Type> args;
+    args.reserve(c.typeArgs.size());
+    for (const auto& ta : c.typeArgs) {
+        if (!ta) {
+            args.push_back(Type::unknown());
+            continue;
+        }
+        Type resolved = Type::unknown();
+        if (const Type* published = sema_.typeOf(ta->nodeId)) {
+            if (!published->isUnknown() && !published->isError()) {
+                resolved = *published;
+            }
+        } else if (auto mapped = typeFromTypeNode(*ta, options_.typeSystem)) {
+            resolved = *mapped;
+        }
+        args.push_back(std::move(resolved));
+    }
+    return args;
+}
+
+// A type with the callee's type parameters replaced by the explicit type
+// arguments of the call. The call site spells the substituted types: a rest
+// parameter packs its arguments into an array of the substituted element
+// type, and C++ then deduces the callee's type parameter from that array.
+Type Generator::substituteTypeArgs(const Type& t, const FunctionDeclaration& fd,
+                                   const CallExpr& c) const {
+    if (fd.typeParams.empty() || c.typeArgs.empty()) return t;
+    return substituteTypeParams(t, fd, resolvedTypeArgs(c));
+}
+
+// The same substitution over a type tree: a `TypeParam` part named like one
+// of the callee's type parameters becomes the matching type argument.
+Type Generator::substituteTypeParams(const Type& t, const FunctionDeclaration& fd,
+                                     const std::vector<Type>& args) const {
+    if (t.kind == TypeKind::TypeParam) {
+        for (std::size_t i = 0; i < fd.typeParams.size() && i < args.size(); ++i) {
+            const TypeParameter* tp = fd.typeParams[i].get();
+            if (tp != nullptr && tp->name == t.name) return args[i];
+        }
+        return t;
+    }
+    Type out = t;
+    for (Type& part : out.parts) {
+        part = substituteTypeParams(part, fd, args);
+    }
+    return out;
 }
 
 // An object-literal argument to a generic function reified as a generated
