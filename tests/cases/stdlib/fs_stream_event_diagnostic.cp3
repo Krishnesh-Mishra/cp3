@@ -1,0 +1,6 @@
+import fs from "std/fs";
+
+// A stream event outside the documented set (docs 04 §fs: "data", "end",
+// "error") is a type error at the use site, not a missing feature.
+let rs = fs.readFileStream("x.txt");
+rs.on("close", () => {});

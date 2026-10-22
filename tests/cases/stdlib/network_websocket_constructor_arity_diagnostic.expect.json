@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3403",
+    "line": 5,
+    "col": 1,
+    "contains": "new WebSocket(url) takes one argument"
+  }
+}

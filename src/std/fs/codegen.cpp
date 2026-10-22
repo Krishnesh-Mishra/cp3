@@ -39,6 +39,7 @@
 #include "detail/builtin_tables.h"
 #include "detail/cpp_writer.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -78,6 +79,45 @@ Type listenerParamType(const std::string& event) {
     if (event == "data") return Type::named(TypeKind::Class, "Buffer");
     if (event == "error") return Type::string();
     return Type::unknown();
+}
+
+/// The documented members of one stream receiver (docs 04 §fs): the
+/// `ReadStream` interface carries `on`, the `WriteStream` interface `write`,
+/// `end` and `on`. A member outside the table is a member-not-found error
+/// (CP3305) with these names as the candidate list - the fs family is closed,
+/// so a member that is not documented is a typo, not a missing feature.
+std::vector<std::string> streamMemberNames(const std::string& receiver) {
+    if (receiver == kReadStream) return {"on"};
+    if (receiver == kWriteStream) return {"write", "end", "on"};
+    return {};
+}
+
+/// The cp3 name of a stream receiver (the marker names the family uses).
+std::string streamReceiverName(const std::string& receiver) {
+    if (receiver == kReadStream) return "ReadStream";
+    if (receiver == kWriteStream) return "WriteStream";
+    return receiver;
+}
+
+/// The candidate a typo most likely meant: the documented member that shares
+/// the longest prefix with the name (the sema ranks the closed namespaces'
+/// candidates the same way).
+std::string streamMemberSuggestion(const std::string& prop,
+                                   const std::vector<std::string>& candidates) {
+    std::string best;
+    std::size_t bestLen = 0;
+    for (const std::string& candidate : candidates) {
+        std::size_t common = 0;
+        while (common < prop.size() && common < candidate.size() &&
+               prop[common] == candidate[common]) {
+            ++common;
+        }
+        if (common > bestLen) {
+            bestLen = common;
+            best = candidate;
+        }
+    }
+    return bestLen >= 2 ? best : std::string();
 }
 
 }  // namespace
@@ -127,7 +167,16 @@ std::string Generator::emitFsMemberCall(const CallExpr& c, const MemberExpr& m) 
     if (receiver == kWriteStream && m.property == "end" && c.arguments.empty()) {
         return "(" + expr(*m.object) + ").end()";
     }
-    notImplemented(c, "std/fs stream member '" + m.property + "'");
+    // A member outside the documented stream interface (docs 04 §fs): the
+    // documented members are the candidate list for a typo (CP3305), the same
+    // shape the closed std namespaces report.
+    const std::vector<std::string> candidates = streamMemberNames(receiver);
+    std::string message = "'" + streamReceiverName(receiver) + "' has no member '" +
+                          m.property + "'";
+    const std::string suggestion =
+        streamMemberSuggestion(m.property, candidates);
+    if (!suggestion.empty()) message += "; did you mean '" + suggestion + "'?";
+    reportCodegenError(c, diagcode::kMemberNotFound, message);
     return "0.0";
 }
 
@@ -166,7 +215,11 @@ std::string Generator::emitFsStreamOn(const CallExpr& c, const MemberExpr& m) {
         // parameter for callers of this unit.
         context = {classify(param).cpp};
     } else if (event != "end") {
-        notImplemented(c, "stream event '" + event + "'");
+        // A stream event outside the documented set (docs 04 §fs: "data",
+        // "end", "error"): a program error at the use site, not a missing
+        // feature.
+        reportTypeError(c, "type mismatch: stream event '" + event +
+                              "' is not one of 'data', 'end', 'error'");
         return "0.0";
     }
     const Expr& listener = *c.arguments[1];

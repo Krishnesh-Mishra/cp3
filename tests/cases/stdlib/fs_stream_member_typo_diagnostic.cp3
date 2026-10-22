@@ -1,0 +1,7 @@
+import fs from "std/fs";
+
+// The fs family is closed: a member outside the documented stream interface
+// is a member-not-found error with the documented members as the candidates
+// (a typo), not a missing feature.
+let ws = fs.writeFileStream("y.txt");
+ws.writ("data");

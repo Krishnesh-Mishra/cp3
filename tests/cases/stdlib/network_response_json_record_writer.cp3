@@ -1,0 +1,20 @@
+import console from "std/console";
+import { createServer, fetch } from "std/network";
+
+// `res.json<T>(data)` (docs 04 §network): the response's typed JSON writer.
+// The payload is a record value of the interface T, and the record's fields
+// become the members of the JSON object.
+interface User { id: number; name: string; }
+
+const app = createServer();
+app.get("/user", (req, res) => {
+  let user: User = { id: 7, name: "ada" };
+  res.json<User>(user);
+});
+app.listen(48130, () => {
+  console.log("listening");
+});
+
+let res = await fetch("http://127.0.0.1:48130/user");
+console.log(await res.text());
+app.close();

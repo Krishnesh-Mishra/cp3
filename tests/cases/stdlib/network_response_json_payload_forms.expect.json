@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "listening\n{\"answer\":42}\n{\"a\":1,\"b\":\"two\"}\n",
+  "exitCode": 0
+}

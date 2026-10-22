@@ -1,0 +1,24 @@
+import console from "std/console";
+import { createServer, fetch } from "std/network";
+
+// `res.json(payload)` (docs 04 §network) serializes the payload through the
+// json value tree: a computed key is a runtime key, and a spread element
+// contributes the source's fields.
+const app = createServer();
+app.get("/computed", (req, res) => {
+  let key = "answer";
+  res.json({ [key]: 42 });
+});
+app.get("/spread", (req, res) => {
+  let base = { a: 1 };
+  res.json({ ...base, b: "two" });
+});
+app.listen(48131, () => {
+  console.log("listening");
+});
+
+let computed = await fetch("http://127.0.0.1:48131/computed");
+console.log(await computed.text());
+let spread = await fetch("http://127.0.0.1:48131/spread");
+console.log(await spread.text());
+app.close();
