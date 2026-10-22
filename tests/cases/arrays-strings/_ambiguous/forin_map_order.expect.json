@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: `for...in` over a `Map`: iteration order is unspecified (unordered_map)"
-  }
-}

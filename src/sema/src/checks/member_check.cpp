@@ -267,9 +267,13 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
             Type::function({Type::number(), Type::number()}, Type::array(elem)));
     }
     if (prop == "flat") {
-        const Type inner =
-            elem.kind == TypeKind::Array ? elemOf(elem) : Type::unknown();
-        return Type::function({}, Type::array(inner));
+        // One level: an array of arrays flattens to the inner element type.
+        // An array whose elements are not arrays has nothing to flatten, and
+        // the result is the receiver's own type (JS).
+        if (elem.kind == TypeKind::Array) {
+            return Type::function({}, Type::array(elemOf(elem)));
+        }
+        return Type::function({}, arr);
     }
     if (prop == "unique" || prop == "shuffle") {
         return Type::function({}, arr);

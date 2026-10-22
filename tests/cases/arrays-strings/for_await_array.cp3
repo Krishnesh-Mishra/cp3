@@ -1,0 +1,9 @@
+import console from "std/console";
+// `for await` walks the values and awaits each one.
+async function main(): Promise<void> {
+  const a = [1, 2, 3];
+  for await (const x of a) {
+    console.log(x);
+  }
+}
+main();

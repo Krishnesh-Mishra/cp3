@@ -84,6 +84,8 @@ inline constexpr const char* kUnreachableCode   = "CP3505";
 inline constexpr const char* kAwaitOutsideAsync = "CP3506";
 inline constexpr const char* kMissingDestructuringInit = "CP3507";
 
+inline constexpr const char* kContinueNonIterationLabel = "CP3508";
+
 // --- modules / imports --------------------------------------------------------
 inline constexpr const char* kModuleNotFound    = "CP3601";
 inline constexpr const char* kPackageNotFound   = "CP3602";

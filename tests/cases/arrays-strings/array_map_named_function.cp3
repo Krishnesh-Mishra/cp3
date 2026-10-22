@@ -1,0 +1,7 @@
+import console from "std/console";
+// A named function is a callback too: the runtime takes any callable.
+function twice(x: number): number {
+  return x * 2;
+}
+const a = [1, 2, 3];
+console.log(a.map(twice).join(","));

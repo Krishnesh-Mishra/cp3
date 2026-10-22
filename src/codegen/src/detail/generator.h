@@ -65,8 +65,9 @@ namespace cp3 {
 class Generator;
 
 // The regular-array method surface (src/std/arrays/codegen_methods.cpp): push/
-// pop, the callback set, searching, slicing, the in-place mutators and a
-// `for...of`; a friend of Generator, defined in that unit.
+// pop, the callback set, searching, slicing, the in-place mutators, a
+// `for...of` and its `for await` form; a friend of Generator, defined in that
+// unit.
 namespace detail {
 struct ArrayEmitter {
     static std::string methodCall(Generator& g, const CallExpr& c,
@@ -85,6 +86,14 @@ struct ArrayEmitter {
     // member field or an array element).
     static std::string forOfTargetAssign(Generator& g, const Node& target,
                                          const std::string& item);
+
+    static void forAwait(Generator& g, const ForOfStatement& f,
+                         const std::string& jsLabel, std::string& out,
+                         int indent);
+    // The shared `for...of` lowering; `awaitValues` is the `for await` form.
+    static void forOfImpl(Generator& g, const ForOfStatement& f,
+                          const std::string& jsLabel, std::string& out,
+                          int indent, bool awaitValues);
 };
 struct ProgramAssembly;  // detail/program_assembly.h (emit/program.cpp)
 // The identifier a parameter binds directly, unwrapping a trailing `...rest`
@@ -704,6 +713,9 @@ private:
 
     // --- async / promises / errors (emit_async.cpp) --------------------------
     std::string emitAwait(const AwaitExpr& a);
+    // The coroutine requirement of an `await` (an `async function` body or the
+    // top level); false when the enclosing code cannot suspend.
+    bool awaitContextOk(const Node& site);
     std::string emitArrow(const ArrowFunction& a,
                           const std::vector<std::string>& contextParams,
                           bool byValue = false);
@@ -787,8 +799,17 @@ private:
                    std::string& out, int indent);
     void emitForIn(const ForInStatement& f, const std::string& jsLabel,
                    std::string& out, int indent);
+    // The `for...in` binding (the key bound to the loop variable).
+    void emitForInBinding(const ForInStatement& f, const std::string& keyExpr,
+                          const std::string& keyCpp, std::string& out,
+                          int indent);
     std::string emitSwitch(const SwitchStatement& s, const std::string& jsLabel,
                            std::string& out, int indent);
+    // The `===` comparison of a switch case test against the discriminant.
+    std::string switchCaseCompare(const std::string& disc,
+                                  const detail::CppInfo& discInfo,
+                                  const std::string& test,
+                                  const detail::CppInfo& testInfo);
     void emitLabeled(const LabeledStatement& l, std::string& out, int indent);
     void emitBreak(const BreakStatement& b, std::string& out, int indent);
     void emitContinue(const ContinueStatement& c, std::string& out, int indent);

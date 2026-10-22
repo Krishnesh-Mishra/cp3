@@ -153,6 +153,46 @@ void Analyzer::visitExecStmt(Stmt& s) {
 // Control-flow statement helpers (the declaration statements - visitDeclStmt
 // and its handlers - live in declarations.cpp).
 // =============================================================================
+
+// The control-flow context a function body starts in (see analyzer.h): the
+// body sees no loop, no switch and no label of the enclosing function, so a
+// `break`/`continue` inside it is judged against its own function only.
+Analyzer::FunctionContext Analyzer::enterFunctionBody() {
+    FunctionContext saved;
+    saved.loop = loopDepth_;
+    saved.switchCount = switchDepth_;
+    saved.labels = labels_;
+    saved.iterationLabels = iterationLabels_;
+    loopDepth_ = 0;
+    switchDepth_ = 0;
+    labels_.clear();
+    iterationLabels_.clear();
+    return saved;
+}
+
+void Analyzer::leaveFunctionBody(const FunctionContext& saved) {
+    loopDepth_ = saved.loop;
+    switchDepth_ = saved.switchCount;
+    labels_ = saved.labels;
+    iterationLabels_ = saved.iterationLabels;
+}
+
+// A statement a `continue` may target: the iteration statements (the loops).
+// A label on a block or a switch may only be broken out of.
+static bool isIterationStatement(const Stmt* s) {
+    if (s == nullptr) return false;
+    switch (s->kind) {
+        case NodeKind::WhileStatement:
+        case NodeKind::DoWhileStatement:
+        case NodeKind::ForStatement:
+        case NodeKind::ForOfStatement:
+        case NodeKind::ForInStatement:
+            return true;
+        default:
+            return false;
+    }
+}
+
 void Analyzer::visitBreak(BreakStatement& b) {
     if (b.hasLabel) {
         if (!hasLabel(b.label)) {
@@ -170,6 +210,12 @@ void Analyzer::visitContinue(ContinueStatement& c) {
         if (!hasLabel(c.label)) {
             report(diagcode::kUndefinedLabel, c.span,
                    "undefined label '" + c.label + "'");
+        } else if (!hasIterationLabel(c.label)) {
+            // JS: a `continue` needs an iteration statement; a label on a
+            // block or a switch may only be broken out of.
+            report(diagcode::kContinueNonIterationLabel, c.span,
+                   "continue label '" + c.label +
+                       "' does not denote an iteration statement");
         }
     } else if (loopDepth_ == 0) {
         report(diagcode::kContinueOutsideLoop, c.span,
@@ -179,7 +225,10 @@ void Analyzer::visitContinue(ContinueStatement& c) {
 
 void Analyzer::visitLabeled(LabeledStatement& l) {
     labels_.push_back(l.label);
+    const bool iteration = isIterationStatement(l.body.get());
+    if (iteration) iterationLabels_.push_back(l.label);
     if (l.body) visitStmt(*l.body);
+    if (iteration) iterationLabels_.pop_back();
     labels_.pop_back();
 }
 
@@ -195,6 +244,15 @@ void Analyzer::checkCondition(const Type& t, const SourceSpan& span) {
 
 bool Analyzer::hasLabel(const std::string& label) const {
     for (const std::string& l : labels_) {
+        if (l == label) return true;
+    }
+    return false;
+}
+
+// A label that names an iteration statement: the only labels a `continue` may
+// target.
+bool Analyzer::hasIterationLabel(const std::string& label) const {
+    for (const std::string& l : iterationLabels_) {
         if (l == label) return true;
     }
     return false;
@@ -331,6 +389,9 @@ void Analyzer::analyzeForOf(ForOfStatement& stmt) {
     } else if (rt.isUnknown() || isAmbientType(rt)) {
         elem = ambient();
     }
+    // `for await` binds the AWAITED value: a promise resolves to its value
+    // (D41), anything else is its own value.
+    if (stmt.isAwait && isPromiseType(elem)) elem = promiseValue(elem);
     declareForBinding(stmt.left.get(), elem);
     ++loopDepth_;
     if (stmt.body) visitStmt(*stmt.body);
@@ -342,8 +403,18 @@ void Analyzer::analyzeForIn(ForInStatement& stmt) {
     pushScope();
     Type rt = stmt.right ? inferExpr(*stmt.right) : Type::unknown();
     checkBannedForIn(rt, stmt.right ? stmt.right->span : stmt.span);
+    // The key type: the indices of an ordered collection (an array, a Set)
+    // are numbers, a `Map` iterates its own key type, and anything else has
+    // no key set the compiler knows (the codegen reports it).
     Type key = Type::string();
-    if (rt.kind == TypeKind::Array) key = Type::number();
+    if (rt.kind == TypeKind::Array) {
+        key = Type::number();
+    } else if (rt.kind == TypeKind::Class && rt.name == "Map" &&
+               !rt.parts.empty()) {
+        key = rt.parts.front();
+    } else if (rt.kind == TypeKind::Class && rt.name == "Set") {
+        key = Type::number();
+    }
     declareForBinding(stmt.left.get(), key);
     ++loopDepth_;
     if (stmt.body) visitStmt(*stmt.body);
@@ -449,7 +520,11 @@ void Analyzer::analyzeFunctionBody(FunctionDeclaration& fn) {
     // Only an async function may await inside its body.
     ctx.isAsync = sig.isAsync;
     funcStack_.push_back(ctx);
+    // The body is a function of its own: a `break`/`continue` inside it binds
+    // to its own loops, never to a loop of the enclosing function.
+    const FunctionContext outer = enterFunctionBody();
     if (fn.body) visitStmt(*fn.body);
+    leaveFunctionBody(outer);
     FuncCtx finalCtx = funcStack_.back();
     funcStack_.pop_back();
     popScope();

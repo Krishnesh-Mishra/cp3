@@ -1,0 +1,6 @@
+import console from "std/console";
+// A `reduce` whose accumulator type has no spelling cannot be folded.
+const a = [1, 2, 3];
+const seed: unknown = 0;
+const r = a.reduce((acc, x) => acc, seed);
+console.log(r);

@@ -75,7 +75,57 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
         return true;
     }
     Expr* cb = call.arguments.front().get();
-    if (!cb || cb->kind != NodeKind::ArrowFunction) return false;
+    if (!cb) return false;
+    if (cb->kind != NodeKind::ArrowFunction) {
+        // A named function (or a function-typed binding) is a callback too:
+        // the runtime takes any callable, so the function's own signature
+        // types the call - its parameters must accept the element (and the
+        // accumulator), and its return type is the result.
+        const Type fnType = inferExpr(*cb);
+        if (fnType.kind != TypeKind::Function || fnType.parts.empty()) {
+            return false;
+        }
+        const Type ret = fnType.parts.back();
+        const std::size_t paramCount = fnType.parts.size() - 1;
+        if (isReduce) {
+            Type acc = elem;
+            if (given == 2 && call.arguments[1]) {
+                acc = widen(inferExpr(*call.arguments[1]));
+            }
+            if (paramCount != 2) {
+                arity(2, 2);
+                out = withType(call, Type::unknown());
+                return true;
+            }
+            checkAssign(acc, fnType.parts[0], call.span, false);
+            checkAssign(elem, fnType.parts[1], call.span, false);
+            Type result = ret;
+            if (result.isUnknown() || result.isVoid()) result = acc;
+            out = withType(call, result);
+            return true;
+        }
+        if (paramCount != 1) {
+            arity(1, 1);
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        checkAssign(elem, fnType.parts[0], call.span, false);
+        if (prop == "map") {
+            out = withType(call, Type::array(ret));
+            return true;
+        }
+        // The predicate set: the callback must return a boolean; only the
+        // result shape differs per method.
+        if (!ret.isUnknown() && !ret.isVoid()) {
+            checkAssign(ret, Type::boolean(), call.span, false);
+        }
+        if (prop == "filter") out = withType(call, Type::array(elem));
+        else if (prop == "find") {
+            out = withType(call, Type::unionOf({elem, Type::undefined()}));
+        } else if (prop == "findIndex") out = withType(call, Type::number());
+        else out = withType(call, Type::boolean());
+        return true;
+    }
     auto& arrow = static_cast<ArrowFunction&>(*cb);
 
     // Publish the inferred signature so codegen lowers the arrow with the

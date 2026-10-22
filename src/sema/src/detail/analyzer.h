@@ -503,6 +503,20 @@ private:
     void visitExport(ExportDeclaration& e);
     void checkCondition(const Type& t, const SourceSpan& span);
     bool hasLabel(const std::string& label) const;
+    bool hasIterationLabel(const std::string& label) const;
+    // The control-flow context a function body starts in: no loop, no switch
+    // and no label of the enclosing function. A `break`/`continue` (labeled or
+    // not) cannot cross a function boundary - JS binds both to the function
+    // they appear in - so a body analyzed with the enclosing context would
+    // accept a `continue` that no loop of its own can reach.
+    struct FunctionContext {
+        int loop = 0;
+        int switchCount = 0;
+        std::vector<std::string> labels;
+        std::vector<std::string> iterationLabels;
+    };
+    FunctionContext enterFunctionBody();
+    void leaveFunctionBody(const FunctionContext& saved);
     void analyzeIf(IfStatement& stmt);
     bool detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
                                bool& negated);
@@ -563,6 +577,11 @@ private:
     // options; the map points into them.
     std::unordered_map<std::string, const NativeModule*> nativeAliases_;
     std::vector<std::string> labels_;
+    // The active labels that name an ITERATION statement (a loop): a
+    // `continue label;` may only target one of these (JS: "continue" needs an
+    // iteration statement; a label on a block or a switch may only be broken
+    // out of).
+    std::vector<std::string> iterationLabels_;
     // Parallel-checked call nodes (report once).
     std::unordered_set<std::uint32_t> parallelChecked_;
     // User classes: member tables, declaration guard, class stack, weak reads;

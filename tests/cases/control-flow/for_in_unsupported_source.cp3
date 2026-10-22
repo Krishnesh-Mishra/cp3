@@ -1,0 +1,6 @@
+import console from "std/console";
+// `for...in` needs a collection with a runtime key set: an array, a Set or a
+// Map. A string has none (use `for...of`).
+for (const k in "abc") {
+  console.log(k);
+}

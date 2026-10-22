@@ -1,0 +1,8 @@
+import console from "std/console";
+// `flat()` on an array whose elements are not arrays has nothing to flatten:
+// the result is a copy of the receiver (JS).
+const a = [1, 2, 3];
+const b = a.flat();
+console.log(b.join(","));
+b.push(4);
+console.log(a.length);
