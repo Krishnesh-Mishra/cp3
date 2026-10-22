@@ -22,7 +22,15 @@
     "onDebugResolve:cp3"
   ],
   "main": "./dist/extension.js",
+  "icon": "images/cp3-logo.png",
   "contributes": {
+    "iconThemes": [
+      {
+        "id": "cp3-icons",
+        "label": "cp3",
+        "path": "./icons/cp3-icons.json"
+      }
+    ],
     "languages": [
       {
         "id": "cp3",
@@ -140,7 +148,8 @@
     "typecheck": "tsc --noEmit",
     "smoke:resolve": "node scripts/resolve-smoke.mjs",
     "smoke:grammar": "node scripts/grammar-smoke.mjs",
-    "smoke": "npm run typecheck && npm run smoke:resolve && npm run smoke:grammar",
+    "smoke:brand": "node scripts/brand-smoke.mjs",
+    "smoke": "npm run typecheck && npm run smoke:resolve && npm run smoke:grammar && npm run smoke:brand",
     "package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1"
   },
   "dependencies": {

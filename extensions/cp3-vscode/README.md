@@ -27,6 +27,57 @@ The documentation is Markdown: the server sends it as LSP `MarkupContent`,
 which VS Code renders as formatted text (a description, a `@param` list, a
 signature).
 
+## Branding
+
+### The logo
+
+`images/cp3-logo.svg` is the cp3 mark: a C++-style "C" with the **three**
+plus signs of "C+++" (the C++ mark has two). It is hand-written vector art -
+a 128x128 `viewBox` built from a rounded badge, one annular path and six
+rectangles. There is no font (no text element at all), no embedded raster
+image and no external reference, so it renders identically everywhere and
+stays sharp at any size.
+
+The palette is two strong colors on a self-contained badge: the badge is an
+indigo-to-violet gradient (`#4F46E5` -> `#7C3AED`), the "C" is white and the
+plus signs are amber (`#FBBF24`). Because the "C" always sits on the badge
+rather than on the editor's background, the mark reads on a light *and* on a
+dark theme.
+
+At 128x128 the whole mark is visible; at 16x16 (the file icon) the "C"
+carries the identity and the plus signs read as its texture.
+
+`images/cp3-logo.png` is the 128x128 PNG the VS Code marketplace wants. It is
+a raster of exactly that SVG - regenerate it with the script that ships
+next to it:
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/render-logo.ps1
+```
+
+The script rasterizes the SVG with a locally installed Chromium browser in
+headless mode (Chrome or Edge), so the PNG and the file icon match; nothing
+is downloaded and no image generator is involved.
+
+### The file icon
+
+The extension contributes an icon theme, **cp3** (`icons/cp3-icons.json`),
+that extends the built-in `vscode-seti` theme and maps the `.cp3` extension
+to the logo. Enable it once:
+
+1. `Ctrl+Shift+P` -> **Preferences: File Icon Theme** (or **Preferences:
+   Color Theme** -> **File Icon Theme**).
+2. Pick **cp3**.
+
+Every `.cp3` file then shows the cp3 mark in the explorer and in the tab. The
+theme only adds the `.cp3` entry - every other file keeps the icon the base
+theme gives it.
+
+`npm run smoke` includes a `brand-smoke` check that verifies the manifest is
+valid JSON, that the contributed paths resolve relative to the extension
+root, and that the artwork is what it claims to be (a 128x128 vector without
+fonts, and a 128x128 PNG).
+
 ## Requirements
 
 - VS Code 1.91 or newer.
