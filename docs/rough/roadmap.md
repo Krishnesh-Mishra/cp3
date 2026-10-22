@@ -337,7 +337,7 @@ Near-parity rows:
 - string-churn: 0.18x cpp, 1.00x rust. The cpp entry is unusually slow for
   this row; rust is the meaningful reference.
 
-### What the perf lanes have landed so far
+### What the perf lanes have landed
 
 The parked perf stack is being ported lane by lane, and each port is judged
 against the safety brief rather than merged wholesale.
@@ -362,11 +362,81 @@ against the safety brief rather than merged wholesale.
 - 35/35 `perf-array` cases, 186 `arrays-strings` passed, 60
   `functions-closures` passed (8 pre-existing skips).
 
-**In flight:** the foundation/int lane (gaps 1 and 2) and the runtime lane
-(gap 1 parallel reduce, gap 2 map update, gap 5 async fanout).
+**Landed: the int64 foundation** (`ea8b1a8`, merge `05beb63`) - 89% of the
+lane's brief.
+- A **divisibility fact**: `x % k == 0` licenses an exact `x / k` - a plain
+  divide, or an arithmetic shift for a power of two. The fact is invalidated by
+  every write, dropped on rebinding, scoped to the then-branch, and refused in
+  any branch that can defer, repeat or outsource the computation.
+- **R1**: a counted loop (`while (c<N){...;c=c+K;}`) becomes an int64 counter
+  with a `for` header step, keeping every counter value and the exit value
+  exact.
+- **R2**: a bounded recurrence (`x=(x*A)%K`) becomes an int64 register, with
+  the emitted write wrapped so a nested write hands back the same value in the
+  same type the original `number` had.
+- **Module bindings** that only the entry body reads become `main` locals.
+- 47 adversarial cases with independent oracles, each in `tests/cases/perf-int/`.
+- **The lane proved a real base bug**: on `0876540`,
+  `function f(a){ console.log("hello"); return a/2; }` printed `hello` twice
+  - the fast body ran the call, bailed, and the double body ran it again. The
+  ported compiler prints it once. Verified on `master` after the merge.
+
+**Landed: the runtime port** (`686767c`, merge `1d43df2`) - 100% of the lane's
+brief, by file-by-file comparison against the three source branches.
+- **Map**: a fused `m.get(k) ?? d` plus `m.set(k, v)` keeps the unfused
+  order - receiver, key, probe, fallback **only on a miss**, value, then
+  insert and store. Receiver, key, fallback and value must be pure reads, so
+  the cached slot cannot dangle and no user code runs between probe and store.
+  `MapData` keeps the insertion-ordered key vector (D44) and puts the values
+  in a hash index, with SameValueZero equality required - plain `==` would let
+  a NaN key never be found again.
+- **Parallel**: chunking applies only to an associative shape with a pure,
+  integer-exact right-hand side (`/` only for a proved multiple). A run-time
+  guard below 2^53 plus a sequential-prefix proof means the chunked sum cannot
+  differ from the left-to-right double fold; a failed proof reruns
+  sequentially, which purity makes unobservable.
+- **Async**: every awaiter still suspends, so the caller order is preserved;
+  the sleep resume is posted rather than direct; one tagged continuation list
+  keeps per-path FIFO order and releases dropped captures.
+- The lane found and fixed two real defects in the inherited port: the fused
+  form fired on a shared-`Cell` binding (a C++ compile error) and inside the
+  int64 fast-path region. Both now fail closed.
+
+**The two perf features needed a merge-time fix.** The int64 fast path and
+the fused map update both rewrite statements, and neither knew about the
+other: the int64 path marks the statements it owns, while the fused update
+replaces the pair it consumes. Merged naively, the fused update could consume
+an int64-owned statement and drop the int64 lowering. The merge therefore
+teaches the fused path to refuse a pair that touches an int64-owned statement,
+and the block walk to skip those statements before offering them to the fused
+path. This is the kind of interaction a wholesale merge of the old branches
+would have silently broken.
+
+**Still in flight:** the editor lanes, the native-install compiler half, and
+the CP3002 implementation wave.
 
 The baseline table above is the pre-port measurement. The re-measurement after
 the remaining perf lanes land is what decides whether a gap is closed.
+
+### Reading the CP3002 gate honestly
+
+The gate scans `src`, `tests`, `docs` and `packaging`, so **prose that mentions
+the marker counts too**. Writing this section, and the wave-plan document,
+moved the gate total from 388 to 395 while the code count stayed at exactly
+**347 in `src/`** - the int64 lane added zero code markers.
+
+The numbers that matter:
+
+| Number | Value | What it is |
+|---|---:|---|
+| Gate total | 395 | every hit, including documentation prose |
+| `src/` hits | 347 | the code markers |
+| Live call sites in `src/` | 224 | the places a marker is actually raised |
+| Distinct work items | 187 | one per marker message per feature area |
+
+A wave that retires ten call sites moves the `src/` number by ten and the gate
+total by ten plus whatever the accompanying documentation says. The `src/`
+and call-site numbers are the ones to track.
 
 ## 6. The eighteen missing CP3002 feature groups
 
