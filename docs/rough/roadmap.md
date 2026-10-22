@@ -528,6 +528,10 @@ wave.
 
 ### The wave protocol
 
+**HARD RULE: no new agent is launched until a previous agent's work has been
+tested and merged by the lead. The queue advances only on a completed merge,
+never on an agent's report alone.**
+
 1. Five agents run at once, each owning one assignment from the plan - about
    ten work items, scoped to one feature area so the work is coherent.
 2. An agent implements its items, builds, runs the corpus cases its area
@@ -535,9 +539,10 @@ wave.
 3. The lead verifies the agent's commit on canonical `master` - rebuild, the
    affected corpus cases, the diagnostics gate and the CP3002 count - and
    merges it serially.
-4. The lead then launches the next agent, so five lanes are always running.
+4. **Only after that merge** does the lead launch the next agent, so five
+   lanes are always running.
 5. A lane that fails verification is sent back with the reason; it is never
-   merged on the agent's word alone.
+   merged on the agent's word alone, and it never frees a slot.
 
 Three waves clear all fourteen assignments.
 
