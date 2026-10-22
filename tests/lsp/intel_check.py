@@ -796,6 +796,9 @@ def check_context_completion(report, session, scope_uri, try_uri, notry_uri,
         items is not None and len(found) > 1 and found[0] == "inner"
         and found[1] == "outer",
         found,
+    )
+
+
 def check_documentation(report, session, uri, std_uri):
     """The documentation the editor shows: hover, completion, signature help."""
     response = session.request("textDocument/hover", {
@@ -1293,9 +1296,8 @@ def main():
                           ("local", LOCAL_SPEC), ("scope", SCOPE),
                           ("try", TRY_BLOCK), ("notry", NO_TRY),
                           ("class", CLASS_BODY), ("param", PARAM_LIST),
-                          ("type", TYPE_POS), ("nested", NESTED)):
-                          ("local", LOCAL_SPEC), ("documented", DOCUMENTED),
-                          ("std", DOC_STD)):
+                          ("type", TYPE_POS), ("nested", NESTED),
+                          ("documented", DOCUMENTED), ("std", DOC_STD)):
             session.notify("textDocument/didOpen", {
                 "textDocument": {
                     "uri": uris[key],
