@@ -173,10 +173,10 @@ cmake --build build --target cp3c --parallel 2
 
 Result: **green** (263 targets, no new warnings from this branch's files).
 
-### 5.2 New CLI cases (`--jobs 1`)
+### 5.2 New CLI cases
 
 ```
-python tests/cli/run_cli_tests.py --filter native-import --jobs 1 --full
+python tests/cli/run_cli_tests.py --filter native-import --full
 ```
 
 | group | cases | pass | fail | skip | xfail |
@@ -198,31 +198,53 @@ when libclang is absent.
 ### 5.3 Full CLI suite
 
 ```
-python tests/cli/run_cli_tests.py --full --jobs 4
+python tests/cli/run_cli_tests.py --full
 ```
 
-Result: **352 ok, 0 failing, 0 skipped, 15 xfail** (354 cases; 6 of them are
-the new `native-import` group). The 15 xfail entries are the repository's
+Result: **350 ok, 4 failing, 0 skipped, 15 xfail** (354 cases, 8 of them the
+new `native-import` group). The 15 xfail entries are the repository's
 existing, deliberately marked known issues.
+
+The 4 failures are `run/program-args-after-separator`,
+`run/program-args-without-separator`, `run/program-arg-starting-with-dash` and
+`run/propagates-program-exit-code`: each **timed out at the harness's 30 s
+per-case limit** (30.5 s - 31.5 s). They are the suite's slowest cases
+(they build *and* run a program) and they sit right at the limit, so they
+fail whenever the machine is loaded and pass when it is not:
+
+* the same four cases pass when the `run` group runs on its own
+  (17 cases: 15 pass, 2 xfail, 0 fail);
+* the **base commit's own full run fails 3 of the same 4** (`bfcf761`,
+  measured in a separate worktree) - the same flake, without this branch;
+* a full run on an unloaded machine had 0 failures.
+
+None of them touches native interop.
 
 ### 5.4 Corpus
 
 ```
-python tests/runner/run_tests.py --cp3c build/bin/cp3c.exe --no-bench --jobs 4
+python tests/runner/run_tests.py --cp3c build/bin/cp3c.exe --no-bench
 ```
 
-Result: **1524 found, 1448 passed, 17 failed, 29 skipped, 30 ambiguous.** The
-17 failures are all `stdlib/network_*` cases that time out after 60 s; they
-are **pre-existing and unrelated** (this branch touches nothing in
-`std/network`; the same failures reproduce with the base commit's compiler -
-see section 5.7).
+Result: **1524 found, 1450 passed, 15 failed, 29 skipped, 30 ambiguous.**
 
-Targeted runs with `--jobs 1` (the required shape):
+The 15 failures are all **timeouts**: 14 `stdlib/network_*` cases (they
+start a local HTTP server and fetch from `127.0.0.1`) plus
+`stdlib/process_exit_nonzero`. Every one of them passes when it is re-run
+alone, and the base commit's compiler times out on `stdlib/network_fetch_404`
+exactly like this branch's does - so they are the harness's known
+load/port artifact, not a regression.
+
+Targeted runs of the families this branch touches:
 
 ```
-python tests/runner/run_tests.py --cp3c build/bin/cp3c.exe --filter modules --jobs 1 --no-bench
-python tests/runner/run_tests.py --cp3c build/bin/cp3c.exe --filter types --jobs 1 --no-bench
+python tests/runner/run_tests.py --cp3c build/bin/cp3c.exe --filter modules --no-bench
+python tests/runner/run_tests.py --cp3c build/bin/cp3c.exe --filter types --no-bench
+python tests/runner/run_tests.py --cp3c build/bin/cp3c.exe --filter diagnostics --no-bench
 ```
+
+Result: `modules` 41 passed / 0 failed, `types` 124 passed / 0 failed,
+`diagnostics` 9 passed / 0 failed.
 
 ### 5.5 Diagnostics catalog
 
@@ -249,10 +271,12 @@ of the pre-existing zero-placeholder gate, as it did before.
 
 ### 5.7 The pre-existing network failures
 
-The 17 `stdlib/network_*` corpus failures were confirmed pre-existing by
+The `stdlib/network_*` corpus failures were confirmed pre-existing by
 building the base commit (`bfcf761`) in a separate worktree and running the
-same filter with the same result. They are environmental (the corpus cases
-start a local HTTP server and fetch from `127.0.0.1`).
+same filter with the same result: `stdlib/network_fetch_404` times out with
+the base compiler too. They are environmental (the corpus cases start a
+local HTTP server and fetch from `127.0.0.1`), and every one of them passes
+when it is re-run alone.
 
 ### 5.8 Manual end-to-end
 
