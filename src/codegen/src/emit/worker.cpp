@@ -36,6 +36,7 @@
 #include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/pattern_emitter.h"
 #include "detail/type_map.h"
 #include "detail/worker.h"
 

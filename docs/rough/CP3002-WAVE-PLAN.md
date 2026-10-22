@@ -158,9 +158,9 @@ lead verifies and merges serially, then launches the next agent.
 
 ### 13 Typed arrays and constructors - 3 item(s)
 
-- a non-arrow sort comparator - `src/std/typed-arrays/codegen_methods.cpp:151`
-- the array includes element type - `src/std/typed-arrays/codegen_methods.cpp:189`
-- this index access - `src/std/typed-arrays/codegen_methods.cpp:462`
+- a non-arrow sort comparator - `src/std/typed-arrays/codegen_methods.cpp:152`
+- the array includes element type - `src/std/typed-arrays/codegen_methods.cpp:190`
+- this index access - `src/std/typed-arrays/codegen_methods.cpp:463`
 
 ### 15 Network - 1 item(s)
 
@@ -283,9 +283,9 @@ lead verifies and merges serially, then launches the next agent.
 
 ### Assignment 7 - 10 item(s) - area(s) 13, 15, 16
 
-- [13] a non-arrow sort comparator - `src/std/typed-arrays/codegen_methods.cpp:151`
-- [13] the array includes element type - `src/std/typed-arrays/codegen_methods.cpp:189`
-- [13] this index access - `src/std/typed-arrays/codegen_methods.cpp:462`
+- [13] a non-arrow sort comparator - `src/std/typed-arrays/codegen_methods.cpp:152`
+- [13] the array includes element type - `src/std/typed-arrays/codegen_methods.cpp:190`
+- [13] this index access - `src/std/typed-arrays/codegen_methods.cpp:463`
 - [15] req.body (needs the fs ReadStream; SEAM(readstream/fs)) - `src/std/network/codegen_methods.cpp:628`
 - [16] a function listener - `src/std/fs/codegen.cpp:227`
 - [16] a literal stream event name - `src/std/fs/codegen.cpp:206`

@@ -1,0 +1,2 @@
+﻿import { env } from "std/env";
+let v = env.get("__CP3_UNSET__", 5);

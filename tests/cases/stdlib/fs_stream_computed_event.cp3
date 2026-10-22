@@ -1,0 +1,5 @@
+﻿import console from "std/console";
+import fs from "std/fs";
+let rs = fs.readFileStream("__cp3_fs_missing__.txt");
+let ev = "error";
+rs.on(ev, () => { console.log("caught"); });

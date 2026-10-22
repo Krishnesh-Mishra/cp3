@@ -1,0 +1,10 @@
+﻿{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 4,
+    "contains": "the stream event name must be a string literal"
+  }
+}

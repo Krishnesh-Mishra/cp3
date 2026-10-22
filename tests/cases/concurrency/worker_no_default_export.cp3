@@ -1,0 +1,2 @@
+﻿const w = new Worker("./worker_no_default_export_impl.cp3");
+w.terminate();

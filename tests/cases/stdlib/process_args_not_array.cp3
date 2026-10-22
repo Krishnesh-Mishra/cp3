@@ -1,0 +1,2 @@
+﻿import process from "std/process";
+function run(args) { process.exec("cmd", args); }
