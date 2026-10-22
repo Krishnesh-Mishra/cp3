@@ -111,10 +111,10 @@ bool Generator::awaitContextOk(const Node& site) {
         // `await` needs a coroutine, and only an async function (or the top
         // level) is one: sema reports it as CP3506, and the codegen repeats
         // it so a codegen-only pass stays honest.
-        reportUnsupported(a, diagcode::kAwaitOutsideAsync,
+        reportUnsupported(site, diagcode::kAwaitOutsideAsync,
                           "'await' is only allowed in an async function or at "
                           "the top level");
-        return "0.0";
+        return false;
     }
     // Awaiting something means a continuation will be scheduled on the loop.
     needsEventLoop_ = true;
