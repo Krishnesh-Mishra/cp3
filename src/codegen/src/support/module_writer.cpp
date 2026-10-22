@@ -83,6 +83,13 @@ std::string Generator::buildHeader(const std::string& decls,
         // worker unit's signature names `ThreadHandle<In, Out>`.
         out += "#include \"cp3/parallel/worker.hpp\"\n";
     }
+    if (needsArith_) {
+        // The int64 fast path's forward declaration carries CP3_NOINLINE, and
+        // it lives in this header: the macro has to be defined here, not only
+        // in the unit's own .cpp (a worker unit's header is included by the
+        // entry unit's .cpp, which does not include arith.hpp).
+        out += "#include \"cp3/core/arith.hpp\"\n";
+    }
     out += "\n";
     out += globals;  // guarded global `$o{...}` value structs
     if (!globals.empty()) out += "\n";

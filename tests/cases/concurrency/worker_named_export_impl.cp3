@@ -1,0 +1,11 @@
+function twice(n: number): number {
+  return n * 2;
+}
+
+export { twice };
+
+export default (thread: Thread<number, number>) => {
+  thread.on("message", (n) => {
+    thread.postMessage(twice(n));
+  });
+};

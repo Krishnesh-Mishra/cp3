@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3305",
+    "line": 3,
+    "col": 1,
+    "contains": "has no member 'map'"
+  }
+}

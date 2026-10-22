@@ -342,7 +342,14 @@ void Generator::emitWorkerTopLevel(const Stmt& s, std::string& decls,
                 emitWorkerTopLevel(*ed.declaration, decls, defs, prologue);
                 return;
             }
-            notImplemented(ed, "re-export in a worker module");
+            // A named export list (`export { a, b }`) and a re-export
+            // (`export { a } from "m"`, `export * from "m"`) are compile-time
+            // module surfaces: they say which names an importer of this unit
+            // may use, and the whole-program link table
+            // (support/program_link.cpp) is what answers that. The worker TU
+            // is a standalone translation unit whose public surface is its
+            // default export, so the export statement contributes no code
+            // here - the names it lists are already declared in this unit.
             return;
         }
         default:
