@@ -1,0 +1,14 @@
+import console from "std/console";
+
+// A destructuring assignment writes the bindings the pattern names: the
+// right side is evaluated once and every target takes its element.
+let [a, b] = [1, 2];
+[a, b] = [3, 4];
+console.log(`${a}`);
+console.log(`${b}`);
+
+// The assignment's own value is the right side (JS).
+let c = 0;
+const value = ([c] = [7]);
+console.log(`${c}`);
+console.log(`${value.length}`);

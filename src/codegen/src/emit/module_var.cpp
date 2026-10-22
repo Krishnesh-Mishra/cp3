@@ -114,17 +114,18 @@ void ModuleVarEmitter::run(const VariableDeclaration& vd, std::string& decls,
 // binding per name; everything stays in the `main` body.
 void ModuleVarEmitter::pattern(const VariableDeclarator& d,
                                std::string& mainBody) {
-    const std::optional<Type> srcType = g.resolvedBindingType(d);
-    std::string initText;
-    if (d.init) {
-        const std::optional<Type> savedExpected = g.expected_;
-        g.expected_ = srcType;
-        initText = g.expr(*d.init);
-        g.expected_ = savedExpected;
-    } else {
-        g.notImplemented(d, "destructuring binding without an initializer");
-        initText = "cp3::runtime::undefined";
+    if (!d.init) {
+        // No initializer: there is no source to read, so every name the
+        // pattern introduces is bound to `undefined` - the same lowering a
+        // plain `let x;` gets (the module-variable unit's `noInit`).
+        PatternEmitter(g).emitUndefinedBindings(*d.id, mainBody, 1);
+        return;
     }
+    const std::optional<Type> srcType = g.resolvedBindingType(d);
+    const std::optional<Type> savedExpected = g.expected_;
+    g.expected_ = srcType;
+    const std::string initText = g.expr(*d.init);
+    g.expected_ = savedExpected;
     const std::string tmp = "cp3_d" + std::to_string(g.uniqueCounter_++);
     line(mainBody, 1, "auto " + tmp + " = " + initText + ";");
     PatternEmitter(g).emitBindings(*d.id, tmp, srcType, mainBody, 1);

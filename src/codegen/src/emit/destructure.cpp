@@ -15,6 +15,9 @@
 // A destructured name that the capture analysis marked a cell gets the
 // `Cell<T>` storage too, so the sharing semantics hold for a pattern binding
 // exactly as for a plain declarator.
+//
+// The destructuring *assignment* (`[a, b] = expr`) has its own unit:
+// src/codegen/src/emit/destructure_assign.cpp.
 // =============================================================================
 #include "detail/generator.h"
 
@@ -213,6 +216,31 @@ void PatternEmitter::emitPatternFallback(const Node& p, std::string& out, int in
         line(out, indent,
              "auto " + mapIdent(name) + " = cp3::runtime::undefined;");
         g.declare(name, Type::unknown());
+    }
+}
+
+// A destructuring declaration with no initializer: every name the pattern
+// introduces is bound to `undefined`, the same lowering a plain `let x;`
+// gets (the module-variable unit's `noInit`). There is no source value to
+// read, so the pattern walk never runs: the names are declared and the
+// binding exists, exactly as the source asks.
+void PatternEmitter::emitUndefinedBindings(const Node& pattern, std::string& out,
+                                           int indent) {
+    std::vector<std::string> names;
+    collectNames(pattern, names);
+    for (const std::string& name : names) {
+        if (g.isCell(name)) {
+            // A captured-and-reassigned name keeps the shared-cell storage, so
+            // the enclosing frame and every closure share one binding.
+            line(out, indent,
+                 "::cp3::runtime::Cell<cp3::runtime::Undefined> " +
+                     mapIdent(name) + "(cp3::runtime::undefined);");
+            g.declare(name, Type::undefined(), true);
+            continue;
+        }
+        line(out, indent,
+             "auto " + mapIdent(name) + " = cp3::runtime::undefined;");
+        g.declare(name, Type::undefined());
     }
 }
 

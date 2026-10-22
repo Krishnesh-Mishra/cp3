@@ -50,6 +50,7 @@ set(cp3_codegen_sources
     src/emit/objects.cpp
     src/emit/closures.cpp
     src/emit/destructure.cpp
+    src/emit/destructure_assign.cpp
     src/emit/assignment.cpp
     src/emit/call.cpp
     src/emit/call_args.cpp

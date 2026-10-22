@@ -1,0 +1,12 @@
+import console from "std/console";
+
+// A destructuring declaration without an initializer binds every name the
+// pattern introduces to `undefined` - the same lowering a plain `let x;`
+// gets.
+let [a, b];
+let { x, y } = { x: 1, y: 2 };
+
+console.log(`${a}`);
+console.log(`${b}`);
+console.log(`${x}`);
+console.log(`${y}`);

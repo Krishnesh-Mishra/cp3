@@ -46,6 +46,11 @@ struct PatternEmitter {
     // `cp3_param<index>`, so the bindings are emitted at the top of the body.
     void emitParam(const Parameter& p, const FunctionDeclaration& fd,
                    std::size_t index, std::string& body);
+    // A destructuring declaration with no initializer: every name the pattern
+    // introduces is bound to `undefined` (the lowering a plain `let x;` gets).
+    // There is no source to read, so the pattern walk never runs.
+    void emitUndefinedBindings(const Node& pattern, std::string& out,
+                               int indent);
 
     void walkPattern(const Node& p, const Site& site, std::string& out,
                      int indent);

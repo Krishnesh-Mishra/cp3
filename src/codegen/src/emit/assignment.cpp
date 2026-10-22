@@ -78,13 +78,24 @@ std::optional<std::string> nullishAssignText(const CppInfo& T, const Expr& rhs,
         return "(" + target + " = " + target + ".has_value() ? " + target +
                " : decltype(" + target + ")(" + rhsText + "))";
     }
-    if (T.shape == Shape::Maybe && !nullishRhs) {
+    if (T.shape == Shape::Maybe) {
+        // A `Maybe<T>` (the three-way nullish union) keeps its flavour: the
+        // right operand builds the new flavour (`Maybe<T>(nullptr)` for
+        // `null`).
         return "(" + target + " = " + target + ".hasValue() ? " + target +
                " : decltype(" + target + ")(" + value + "))";
     }
     if (isPrimitiveShape(T.shape) || T.shape == Shape::Union) {
         // The target can never be nullish: the right operand is not evaluated
         // at all (JS).
+        return "(" + target + ")";
+    }
+    // Every other shape is never nullish either (an array, a class handle, an
+    // object, a function, a buffer, ...), so the write keeps the target's
+    // value and the right operand is not evaluated. The binary `??` operator
+    // lowers the same way (emit/expr.cpp's `emitNullish`).
+    if (!T.type.isUnknown() && !T.type.isError() && !T.type.isNullable() &&
+        !T.type.isNullish()) {
         return "(" + target + ")";
     }
     return std::nullopt;
@@ -120,19 +131,60 @@ struct AssignEmitter {
     // The one proven R2 write, in the int64 register (empty when this
     // assignment is not it).
     std::string int64WriteText(const AssignmentExpr& a);
-    std::optional<std::string> cell(AssignOp op, const std::string& target,
-                                    const std::string& current,
-                                    const std::string& value, const Expr& rhs);
+    // A compound write to a shared cell: the cell's value is read, combined
+    // and written back. Every operator has a cell form.
+    std::string cell(AssignOp op, const CppInfo& T, const std::string& target,
+                     const std::string& value, const Expr& rhs);
+    // The arithmetic/bitwise half of a cell write.
+    std::string cellValue(AssignOp op, const std::string& target,
+                          const std::string& value, const Expr& rhs);
 };
 
-std::optional<std::string> AssignEmitter::cell(AssignOp op,
-                                               const std::string& target,
-                                               const std::string& current,
-                                               const std::string& value,
-                                               const Expr& rhs) {
+// A compound write to a shared cell: the cell's own value is read, combined
+// and written back, so the enclosing frame and every closure see the new
+// value. Every operator is covered (the arithmetic ones, the modulo, the
+// power, the bitwise/shift ones, the short-circuit ones and the nullish one).
+std::string AssignEmitter::cell(AssignOp op, const CppInfo& T,
+                                const std::string& target,
+                                const std::string& value, const Expr& rhs) {
+    const std::string current = target + ".get()";
     switch (op) {
         case AssignOp::Assign:
             return "(" + target + ".set(" + value + "), " + current + ")";
+        case AssignOp::LogicalAnd:
+        case AssignOp::LogicalOr:
+            // The short circuit: the right operand is written only when the
+            // target is falsy (`&&=`) or truthy (`||=`).
+            return "(" + target + ".set(cp3_truthy(" + current + ") ? (" +
+                   value + ") : (" + current + ")), " + current + ")";
+        case AssignOp::Nullish: {
+            const bool nullishRhs = isNullishLiteral(rhs);
+            if (T.shape == Shape::Optional) {
+                const std::string rhsText = nullishRhs ? "std::nullopt" : value;
+                return "(" + target + ".set(" + current + ".has_value() ? " +
+                       current + " : " + rhsText + "), " + current + ")";
+            }
+            if (T.shape == Shape::Maybe) {
+                // A `Maybe<T>` keeps its flavour: the right operand builds the
+                // new one (`Maybe<T>(nullptr)` for `null`).
+                return "(" + target + ".set(" + current + ".hasValue() ? " +
+                       current + " : " + value + "), " + current + ")";
+            }
+            // A target that is never nullish keeps its value; the right
+            // operand is not evaluated at all (JS).
+            return current;
+        }
+        default:
+            return cellValue(op, target, value, rhs);
+    }
+}
+
+// The arithmetic and bitwise half of a cell write: the cell's value is
+// combined with the assigned one and written back.
+std::string AssignEmitter::cellValue(AssignOp op, const std::string& target,
+                                     const std::string& value, const Expr& rhs) {
+    const std::string current = target + ".get()";
+    switch (op) {
         case AssignOp::Add:
         case AssignOp::Subtract:
         case AssignOp::Multiply:
@@ -153,8 +205,20 @@ std::optional<std::string> AssignEmitter::cell(AssignOp op,
         case AssignOp::Power:
             return "(" + target + ".set(std::pow(" + current + ", " + value +
                    ")), " + current + ")";
+        case AssignOp::BitAnd:
+        case AssignOp::BitOr:
+        case AssignOp::BitXor:
+        case AssignOp::ShiftLeft:
+        case AssignOp::ShiftRight:
+        case AssignOp::UnsignedShiftRight: {
+            // The bitwise/shift writes keep the ECMAScript ToInt32 semantics
+            // of their binary forms (cp3/core/bitwise.hpp).
+            const char* helper = bitwiseHelper(op);
+            return "(" + target + ".set(::cp3::runtime::bitwise::" + helper +
+                   "(" + current + ", " + value + ")), " + current + ")";
+        }
         default:
-            return std::nullopt;
+            return "(" + target + ".set(" + value + "), " + current + ")";
     }
 }
 
@@ -178,6 +242,7 @@ std::string AssignEmitter::identifier(const AssignmentExpr& a,
     const std::string target =
         (binding && binding->global) ? g.moduleRef(id.name) : mapIdent(id.name);
     if (const std::string r2 = int64WriteText(a); !r2.empty()) return r2;
+    const CppInfo T = g.info(*a.target);
     // The assigned value is emitted against the target's type (an object
     // literal assigned to a fresh field, a lambda stored in a function slot).
     const std::optional<Type> savedExpected = g.expected_;
@@ -186,15 +251,10 @@ std::string AssignEmitter::identifier(const AssignmentExpr& a,
     g.expected_ = savedExpected;
     if (binding && binding->cell) {
         // A shared cell: `x = v` is `(x.set(v), x.get())`, so the assignment
-        // expression still evaluates to the assigned value.
-        const std::string current = target + ".get()";
-        if (auto text = cell(a.op, target, current, value, *a.value)) {
-            return *text;
-        }
-        g.notImplemented(a, "compound assignment operator");
-        return "0.0";
+        // expression still evaluates to the assigned value. Every compound
+        // operator has a cell form.
+        return cell(a.op, T, target, value, *a.value);
     }
-    const CppInfo T = g.info(*a.target);
     // A native target takes an in-range integral literal as an integer token.
     if (T.shape == Shape::Native) {
         if (const auto k = integralLiteralValue(*a.value)) value = std::to_string(*k);
@@ -267,6 +327,15 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
         // (src/std/typed-arrays/codegen_methods.cpp).
         if (a.target->kind == NodeKind::IndexExpr) {
             if (std::string w = emitFamilyIndexWrite(a); !w.empty()) return w;
+        }
+        // A destructuring assignment (`[a, b] = expr`, `{ x } = expr`): the
+        // parser reads the target as an array/object literal whose elements
+        // are the assignment targets. A target form the write does not cover
+        // falls through to the report below.
+        if (a.target->kind == NodeKind::ArrayLiteral ||
+            a.target->kind == NodeKind::ObjectLiteral) {
+            std::string text = emitDestructuringAssign(a);
+            if (!text.empty()) return text;
         }
         notImplemented(a, "assignment to a non-identifier target");
         return "0.0";

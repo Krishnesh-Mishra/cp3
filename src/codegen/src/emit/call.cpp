@@ -42,8 +42,14 @@ std::string Generator::emitParseBuiltin(const CallExpr& c,
 bool Generator::isConsoleMember(const CallExpr& c) const {
     if (c.callee->kind != NodeKind::MemberExpr) return false;
     const auto& m = static_cast<const MemberExpr&>(*c.callee);
-    return m.object && m.object->kind == NodeKind::Identifier &&
-           static_cast<const Identifier&>(*m.object).name == "console";
+    if (!m.object || m.object->kind != NodeKind::Identifier) return false;
+    const std::string& name = static_cast<const Identifier&>(*m.object).name;
+    if (name != "console") return false;
+    // A local binding named `console` shadows the imported one: the call is an
+    // ordinary member call on that value, not a console member. The import
+    // itself is not a value binding in the scope environment, so an
+    // unshadowed `console` still reaches the console family.
+    return !lookup(name).has_value();
 }
 
 // -----------------------------------------------------------------------------

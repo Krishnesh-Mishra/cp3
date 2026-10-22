@@ -500,7 +500,13 @@ std::string Generator::linkedMemberMiss(const MemberExpr& m) const {
 std::string Generator::emitCall(const CallExpr& c) {
     if (isConsoleMember(c)) {
         const auto& m = static_cast<const MemberExpr&>(*c.callee);
-        return emitConsoleCall(c, m);
+        std::string text = emitConsoleCall(c, m);
+        // A member outside the console surface is not a console call: the
+        // ordinary member call owns it (a user value that shadows the
+        // console name). Sema rejects an unknown member of the console
+        // namespace itself (CP3305, with the documented names as
+        // candidates), so this path is the shadowing one.
+        if (!text.empty()) return text;
     }
     CallBuilder calls(*this);
     if (c.callee->kind == NodeKind::Identifier) {

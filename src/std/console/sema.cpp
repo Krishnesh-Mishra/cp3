@@ -34,6 +34,16 @@ const char* const kConsoleImplemented[] = {
 }  // namespace
 
 std::optional<Type> Analyzer::consoleMember(const std::string& prop) {
+    // The listener surface (D75) has a real signature: `on(event, listener)`
+    // and `off(event, listener)` take a string event and a listener. The
+    // signature is what gives the call its arity check (CP3403) and the
+    // event's type check (CP3401); the listener itself stays permissive,
+    // because a listener may declare the value parameter or none.
+    if (prop == "on" || prop == "off") {
+        return Type::function({Type::string(),
+                               Type::function({Type::string()}, Type::voidType())},
+                              Type::voidType());
+    }
     // The user-facing typo example: the documented members type as ambient
     // (permissive signatures, like the other std families' surface members),
     // and anything else keeps the CP3305 closed-shape report with the
