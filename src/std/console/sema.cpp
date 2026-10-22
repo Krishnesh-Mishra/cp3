@@ -38,6 +38,17 @@ namespace {
 // families' surface members): the documented signature below is the precise
 // spelling, and anything else keeps the CP3305 closed-shape report with the
 // implemented set as candidates.
+// The listener surface (D75) has a real signature: `on(event, listener)` and
+// `off(event, listener)` take a string event and a listener. The signature is
+// what gives the call its arity check (CP3403) and the event's type check
+// (CP3401); the listener itself stays permissive, because a listener may
+// declare the value parameter or none.
+Type consoleListenerType() {
+    return Type::function(
+        {Type::string(), Type::function({Type::string()}, Type::voidType())},
+        Type::voidType());
+}
+
 const MemberRow kConsoleRows[] = {
     {"log", ambient, "log(...args: Printable[]): void",
      "Prints the arguments to **stdout**, separated by a space and followed by "
@@ -76,14 +87,14 @@ const MemberRow kConsoleRows[] = {
      "**Parameters**\n\n"
      "- `condition` - the condition to check.\n"
      "- `args` - the values to log when the condition is false."},
-    {"on", ambient,
+    {"on", consoleListenerType,
      "on(event: \"keypress\" | \"line\" | \"close\", "
      "listener: (value: string) => void): void",
      "Keeps listening: `\"keypress\"` delivers every key, `\"line\"` delivers "
      "each completed line without its terminator, and `\"close\"` fires once "
      "with `\"\"` when stdin reaches EOF. Listeners persist until `off` "
      "removes them."},
-    {"off", ambient,
+    {"off", consoleListenerType,
      "off(event: \"keypress\" | \"line\" | \"close\", "
      "listener: (value: string) => void): void",
      "Stops listening: the listener is removed from the event it was "

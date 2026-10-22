@@ -82,8 +82,12 @@ std::string Generator::emitConsoleCall(const CallExpr& c, const MemberExpr& m) {
         needsConsoleAbi_ = true;
         return std::string(kConsoleNs) + prop + "()";
     }
-    notImplemented(c, "console." + prop + "(...)");
-    return "0.0";
+    // A member outside the console surface is not a console call: the caller
+    // (emit/call_args.cpp) hands it to the ordinary member call, which owns
+    // a user value that shadows the console name. Sema rejects an unknown
+    // member of the console namespace itself (CP3305, with the documented
+    // names as candidates), so the console namespace never reaches here.
+    return std::string();
 }
 
 // `.log` / `.info`: the joined string goes to `println` (stdout), exactly as
@@ -147,20 +151,30 @@ std::string Generator::emitConsoleListener(const CallExpr& c,
                                            const std::string& method) {
     needsConsoleAbi_ = true;
     needsEventLoop_ = true;
-    if (c.arguments.size() < 2 || !c.arguments[0] || !c.arguments[1] ||
-        c.arguments[0]->kind != NodeKind::StringLiteral) {
-        notImplemented(c, "console." + method + "(event, listener)");
-        return "0.0";
+    if (c.arguments.size() < 2 || !c.arguments[0] || !c.arguments[1]) {
+        // The arity is checked by sema (CP3403) and the event's type by the
+        // listener signature (CP3401); a malformed argument list is a parser
+        // recovery node. Keep the emitted C++ valid either way.
+        return std::string(kConsoleNs) + method + "(\"\", [](std::string) {})";
     }
-    const std::string event =
-        static_cast<const StringLiteral&>(*c.arguments[0]).value;
-    if (!knownEvent(event)) {
-        notImplemented(*c.arguments[0],
-                       "console event name (\"keypress\"/\"line\"/\"close\")");
-        return "0.0";
+    std::string event;
+    if (c.arguments[0]->kind == NodeKind::StringLiteral) {
+        const std::string name =
+            static_cast<const StringLiteral&>(*c.arguments[0]).value;
+        if (!knownEvent(name)) {
+            notImplemented(*c.arguments[0],
+                           "console event name (\"keypress\"/\"line\"/\"close\")");
+            return "0.0";
+        }
+        event = cppStringLiteral(name);
+    } else {
+        // A computed event name: the runtime keeps the listeners of the
+        // events it knows and ignores the others, so any string expression
+        // is a valid event.
+        event = expr(*c.arguments[0]);
     }
-    return std::string(kConsoleNs) + method + "(" + cppStringLiteral(event) +
-           ", " + consoleListenerArg(*c.arguments[1]) + ")";
+    return std::string(kConsoleNs) + method + "(" + event + ", " +
+           consoleListenerArg(*c.arguments[1]) + ")";
 }
 
 // A listener argument: an arrow becomes a lambda whose declared parameter type

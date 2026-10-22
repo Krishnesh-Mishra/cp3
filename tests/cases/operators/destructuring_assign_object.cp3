@@ -1,0 +1,8 @@
+import console from "std/console";
+
+// A destructuring assignment over an object writes the named fields.
+let person = { name: "Ada", age: 36 };
+let { name, age } = person;
+({ name, age } = { name: "Grace", age: 45 });
+console.log(`${name}`);
+console.log(`${age}`);

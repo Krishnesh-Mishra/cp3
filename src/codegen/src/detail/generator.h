@@ -515,6 +515,24 @@ private:
                              std::string& out, int indent);
     void bindPatternTarget(const Node& target, const PatternSource& value,
                            std::string& out, int indent);
+    // A destructuring *assignment* (`[a, b] = expr`, `{ x } = expr`): the
+    // right side is evaluated once and every target of the pattern is
+    // written. The expression's value is the right side (JS).
+    std::string emitDestructuringAssign(const AssignmentExpr& a);
+    // One target of a destructuring assignment: an identifier is written, a
+    // nested array/object literal is unpacked in turn. `access` is the C++
+    // expression that reads the value. False when the target has a form the
+    // write does not cover.
+    bool assignDestructuringTarget(const Node& target, const std::string& access,
+                                    const Type& source, std::string& body);
+    // The object-literal half of a destructuring assignment.
+    bool assignDestructuringFields(const ObjectLiteral& lit,
+                                    const std::string& access, const Type& source,
+                                    std::string& body);
+    // The array-literal half of a destructuring assignment.
+    bool assignDestructuringElements(const ArrayLiteral& lit,
+                                     const std::string& access, const Type& source,
+                                     std::string& body);
 
     // A structural object's field write (`o.a = v`); "" when not one.
     std::string emitMemberAssign(const AssignmentExpr& a, const MemberExpr& m);
