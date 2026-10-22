@@ -21,6 +21,7 @@
 
 #include "detail/family.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 #include "cp3/native_types.hpp"
 
 namespace cp3 {
@@ -203,7 +204,10 @@ std::string Generator::typedCtorText(const std::string& cls,
 std::string Generator::arrayCtorText(const ExprList& args, const Type& elem,
                                      const Node& site) {
     if (elem.isUnknown()) {
-        notImplemented(site, "Array(...) without a known element type");
+        // A type error in cp3, exactly as the sema reports the declarator form.
+        reportCodegenError(site, diagcode::kTypeMismatch,
+                           "cannot infer the element type of Array(n); "
+                           "annotate the binding or chain .fill(...)");
         return "0.0";
     }
     CppInfo ec;
@@ -262,7 +266,9 @@ std::string Generator::arrayStaticCallText(const CallExpr& c,
             needsTypedArray_ = true;
             return "::cp3::runtime::arrayFromTyped(" + expr(src) + ")";
         }
-        notImplemented(c, "Array.from over this source");
+        // A type error, exactly as the sema reports it.
+        reportCodegenError(c, diagcode::kTypeMismatch,
+                           "type mismatch: Array.from needs an array or a typed array");
         return "0.0";
     }
     return std::string();  // not a form this unit lowers

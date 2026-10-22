@@ -48,6 +48,7 @@ set(cp3_codegen_sources
     src/emit/call.cpp
     src/emit/call_args.cpp
     src/emit/async.cpp
+    src/emit/async_promise.cpp
     src/emit/stmt.cpp
     src/emit/push_reserve.cpp
     src/emit/control.cpp

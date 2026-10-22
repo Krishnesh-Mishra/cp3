@@ -268,7 +268,7 @@ void LinkBuilder::applyDeclared(const Stmt& decl, CompilationUnit& unit,
     }
     if (const std::string* name = typeDeclarationName(decl); name != nullptr) {
         if (!name->empty()) {
-            surface.named[*name] = missName("this type-only export");
+            surface.named[*name] = missName("the imported name is a type, not a value");
         }
     }
 }
@@ -298,7 +298,7 @@ void LinkBuilder::applyReExported(const ExportDeclaration& ed,
 void LinkBuilder::applyReExportAll(const ExportDeclaration& ed,
                                    CompilationUnit& unit, UnitSurface& surface) {
     if (!ed.namespaceExport.empty()) {
-        surface.named[ed.namespaceExport] = missName("this namespace re-export");
+        surface.named[ed.namespaceExport] = missName("a namespace re-export is not supported");
     }
     CompilationUnit* target = localTarget(unit, ed.span);
     if (target == nullptr || target->id == unit.id || target->ast == nullptr) {
@@ -313,12 +313,12 @@ void LinkBuilder::applyReExportAll(const ExportDeclaration& ed,
 LinkedName LinkBuilder::reExported(CompilationUnit* target,
                                    const std::string& name) {
     if (target == nullptr || target->ast == nullptr) {
-        return missName("this re-export");
+        return missName("the re-exported name is not exported");
     }
     const UnitSurface& from = surfaceOf(target->id);
     const auto found = from.named.find(name);
     return found != from.named.end() ? found->second
-                                     : missName("this re-export");
+                                     : missName("the re-exported name is not exported");
 }
 
 LinkedName LinkBuilder::defaultBinding(CompilationUnit& unit,
@@ -336,7 +336,7 @@ LinkedName LinkBuilder::defaultBinding(CompilationUnit& unit,
                 return variableBinding(unit, *vd.declarations.front());
             }
         }
-        return missName("this default export");
+        return missName("the default export has no value cp3 can use");
     }
     if (ed.defaultExpr != nullptr && ed.defaultExpr->kind == NodeKind::Identifier) {
         const std::string& name =
@@ -344,14 +344,14 @@ LinkedName LinkBuilder::defaultBinding(CompilationUnit& unit,
         if (auto declared = declaredBinding(unit, name)) return *declared;
         if (auto imported = importedBinding(unit, name)) return *imported;
     }
-    return missName("this default export");
+    return missName("the default export has no value cp3 can use");
 }
 
 LinkedName LinkBuilder::bindingOf(CompilationUnit& unit,
                                   const std::string& name) {
     if (auto declared = declaredBinding(unit, name)) return *declared;
     if (auto imported = importedBinding(unit, name)) return *imported;
-    return missName("this export");
+    return missName("the module does not export it");
 }
 
 std::optional<LinkedName> LinkBuilder::declaredBinding(CompilationUnit& unit,
@@ -414,7 +414,7 @@ LinkedName LinkBuilder::functionBinding(const CompilationUnit& unit,
 LinkedName LinkBuilder::variableBinding(const CompilationUnit& unit,
                                         const VariableDeclarator& d) {
     if (d.id == nullptr || d.id->kind != NodeKind::Identifier) {
-        return missName("this destructured binding");
+        return missName("the exported binding is a destructuring pattern");
     }
     const auto& id = static_cast<const Identifier&>(*d.id);
     Type type = Type::unknown();
@@ -429,7 +429,7 @@ LinkedName LinkBuilder::variableBinding(const CompilationUnit& unit,
     // The unit's own emitter keeps a binding it cannot type a module-init
     // local (emit/decl.cpp emitModuleVar), so there is no namespace-scope C++
     // name for an importer to reach: a use stays a skip instead.
-    if (!classify(type).representable) return missName("this binding form");
+    if (!classify(type).representable) return missName("the exported binding has no C++ spelling");
     LinkedName out;
     out.cpp = qualified(unit.id, id.name);
     out.type = type;
@@ -457,7 +457,7 @@ void LinkBuilder::fillImports(CompilationUnit& unit,
         if (!imp.defaultBinding.empty()) {
             out[imp.defaultBinding] = surface.hasDefault
                                           ? surface.defaultExport
-                                          : missName("this default import");
+                                          : missName("the module has no default export");
         }
         for (const ImportSpecifierPtr& spec : imp.specifiers) {
             if (!spec) continue;
@@ -465,10 +465,10 @@ void LinkBuilder::fillImports(CompilationUnit& unit,
                 spec->local.empty() ? spec->imported : spec->local;
             const auto found = surface.named.find(spec->imported);
             out[local] = found != surface.named.end() ? found->second
-                                                      : missName("this import");
+                                                      : missName("the module does not export it");
         }
         if (!imp.namespaceBinding.empty()) {
-            out[imp.namespaceBinding] = missName("this namespace import");
+            out[imp.namespaceBinding] = missName("the namespace import form is not supported");
         }
     }
 }

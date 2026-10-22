@@ -11,6 +11,8 @@
 //                         -> `::cp3::runtime::<name>(...)`
 //   Promise.all/race/allSettled([...])
 //                         -> `::cp3::runtime::all|race|allSettled(vec)`
+//                         (the combinator operand lowering lives in
+//                         emit/async_promise.cpp)
 //   p.then(f)/p.catch(f)/p.finally(f)
 //                         -> `p.then(f)` / `p.catchError(f)` / `p.finally(f)`
 //
@@ -28,6 +30,7 @@
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
 #include "detail/type_map.h"
+#include "cp3/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -94,36 +97,14 @@ std::string Generator::emitPromiseStatic(const CallExpr& c, const MemberExpr& m)
     if (prop == "resolve") return emitPromiseResolve(c);
     if (prop == "reject") return emitPromiseReject(c);
     if (prop != "all" && prop != "race" && prop != "allSettled") {
-        notImplemented(c, "Promise." + prop);
+        // A Promise static outside the documented surface (spec 14: resolve,
+        // reject, all, race, allSettled) is a program error, not a feature
+        // the compiler is still missing: report the member miss.
+        reportCodegenError(c, diagcode::kMemberNotFound,
+                           "'Promise' has no member '" + prop + "'");
         return "0.0";
     }
-    if (c.arguments.size() != 1 || !c.arguments.front() ||
-        c.arguments.front()->kind != NodeKind::ArrayLiteral) {
-        notImplemented(c, "Promise." + prop + " over a non-array-literal input");
-        return "0.0";
-    }
-    const auto& array = static_cast<const ArrayLiteral&>(*c.arguments.front());
-    const Type arrayType = effectiveType(array);
-    Type elem = Type::unknown();
-    if (arrayType.kind == TypeKind::Array && !arrayType.parts.empty()) {
-        elem = arrayType.parts.front();
-    }
-    const CppInfo elemInfo = classify(elem);
-    if (!detail::isPromiseType(elem) || !elemInfo.representable) {
-        notImplemented(c, "Promise." + prop + " over non-primitive promises");
-        return "0.0";
-    }
-    std::vector<std::string> elems;
-    for (const auto& el : array.elements) {
-        if (!el) continue;
-        if (el->kind == NodeKind::SpreadElement) {
-            notImplemented(*el, "spread argument");
-            continue;
-        }
-        elems.push_back(expr(*el));
-    }
-    return "::cp3::runtime::" + prop + "(std::vector<" + elemInfo.cpp + ">{" +
-           joinStrings(elems, ", ") + "})";
+    return emitPromiseCombinator(c, prop);
 }
 
 // `Promise.resolve(v)` (DECISIONS D40, codegen contract in cp3/async/promise.hpp).
@@ -140,29 +121,35 @@ std::string Generator::emitPromiseResolve(const CallExpr& c) {
     if (arg && detail::isPromiseType(effectiveType(*arg))) {
         return expr(*arg);  // `Promise.resolve(p)` is `p` itself in JS
     }
-    // `Promise<T>` has a spelling only for the M1 value types (void included);
-    // `Promise<undefined>` (a no-argument resolve) stays not-implemented.
-    const CppInfo info = classify(effectiveType(c));
-    if (!info.representable) {
-        notImplemented(c, "Promise.resolve over a value with no C++ spelling");
+    // The promise carries the value's type, so the spelling is the runtime
+    // promise over that value type. Every value type cp3 can represent (a
+    // primitive, an array, an object shape, a class handle) is a template
+    // argument of `cp3::runtime::Promise`; `void` carries no value at all.
+    const CppInfo value = classify(detail::promiseValue(effectiveType(c)));
+    if (!value.representable) {
+        // A value no C++ spelling can carry (an `unknown` value, a tuple).
+        reportCodegenError(c, diagcode::kTypeMismatch,
+                           "type mismatch: cannot resolve a promise over a "
+                           "value with no C++ spelling");
         return "0.0";
     }
-    const std::string value = arg ? expr(*arg) : "::cp3::runtime::undefined";
-    return info.cpp + "::resolve(" + value + ")";
+    if (value.shape == Shape::Void) {
+        return "::cp3::runtime::Promise<void>::resolve()";
+    }
+    const std::string argText =
+        arg ? expr(*arg) : "::cp3::runtime::undefined";
+    return "::cp3::runtime::Promise<" + value.cpp + ">::resolve(" + argText +
+           ")";
 }
 
 // `Promise.reject(reason)` (DECISIONS D40): a rejection carries no observable
 // value, so the C++ promise is `Promise<void>` and the reason is boxed as a
-// `Thrown` (the `.catch` handler unboxes it). Sema types the call the same way.
+// `Thrown` (the `.catch` handler unboxes it). Sema types the call the same way
+// (a `Promise<void>`), so the promise never carries another value type.
 std::string Generator::emitPromiseReject(const CallExpr& c) {
     const Expr* arg = c.arguments.empty() ? nullptr : c.arguments.front().get();
     if (arg && arg->kind == NodeKind::SpreadElement) {
         notImplemented(*arg, "spread argument");
-        return "0.0";
-    }
-    const CppInfo info = classify(detail::promiseValue(effectiveType(c)));
-    if (!info.representable || info.shape != Shape::Void) {
-        notImplemented(c, "Promise.reject whose value type is not void");
         return "0.0";
     }
     const std::string reason = arg ? expr(*arg) : "::cp3::runtime::undefined";
@@ -180,7 +167,11 @@ std::string Generator::emitPromiseMemberCall(const CallExpr& c, const MemberExpr
     } else if (m.property == "finally") {
         method = "finally";
     } else {
-        notImplemented(c, "Promise member '" + m.property + "'");
+        // A Promise member outside the documented surface (spec 14: `then`,
+        // `catch`, `finally`) is a program error, not a feature the compiler
+        // is still missing: report the member miss.
+        reportCodegenError(c, diagcode::kMemberNotFound,
+                           "'Promise' has no member '" + m.property + "'");
         return "0.0";
     }
 

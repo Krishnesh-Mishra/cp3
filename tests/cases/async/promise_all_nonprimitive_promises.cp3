@@ -1,0 +1,6 @@
+import console from "std/console";
+let p1 = Promise.resolve([1, 2]);
+let p2 = Promise.resolve([3, 4]);
+let r = await Promise.all([p1, p2]);
+console.log(`${r.length}`);
+console.log(`${r[0][0] + r[1][1]}`);

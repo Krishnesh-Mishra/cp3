@@ -1,0 +1,4 @@
+import console from "std/console";
+let r = await Promise.all([1, 2, 3]);
+console.log(`${r.length}`);
+console.log(`${r[0] + r[2]}`);

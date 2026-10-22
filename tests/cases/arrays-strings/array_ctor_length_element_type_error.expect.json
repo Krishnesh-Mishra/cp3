@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 2,
+    "col": 16,
+    "contains": "cannot infer the element type"
+  }
+}

@@ -2,9 +2,10 @@
 // src/sema/src/checks/call_check.cpp - call inference and overload resolution.
 //
 // Owns `inferCall` (the call-expression dispatcher), argument arity/type
-// checking (`checkArgs`), the per-callable special cases (`Promise.resolve`,
-// `JSON.parse`/`stringify`, the timer builtins) and overload resolution
-// (spec §17). Member/index inference lives in member_check.cpp; primary
+// checking (`checkArgs`), the per-callable special cases (`JSON.parse`/
+// `stringify`, the timer builtins) and overload resolution
+// (spec §17). The Promise statics live in the sibling promise_call.cpp;
+// member/index inference lives in member_check.cpp; primary
 // expressions live in expr_check.cpp (STYLE.md §8).
 // =============================================================================
 #include "detail/analyzer.h"
@@ -193,43 +194,6 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
         return true;
     }
     return false;
-}
-
-// `Promise.resolve(v)` / `Promise.reject(v)` (DECISIONS D40): the value type of
-// the promise a call yields, so a `let p = …` initializer lowers to a real
-// `cp3::runtime::Promise<T>` instead of falling back to ambient. Codegen
-// (emit_async.cpp) derives the exact C++ spelling from this type.
-bool Analyzer::tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out) {
-    if (m.property != "resolve" && m.property != "reject") return false;
-    if (!m.object || m.object->kind != NodeKind::Identifier ||
-        static_cast<Identifier&>(*m.object).name != "Promise") {
-        return false;
-    }
-    inferArgs(call);
-    if (m.property == "reject") {
-        // A rejection carries no observable value; cp3 models it as
-        // `Promise<void>` (JS types it `Promise<never>`).
-        out = withType(call, promiseOf(Type::voidType()));
-        return true;
-    }
-    // `Promise.resolve(v)`: the promise carries `v`'s type. An existing promise
-    // passes through unchanged (JS identity); no argument resolves with
-    // `undefined`.
-    Type value = Type::undefined();
-    Expr* arg = call.arguments.empty() ? nullptr : call.arguments.front().get();
-    if (arg) {
-        if (arg->kind == NodeKind::SpreadElement) {
-            out = withType(call, promiseOf(Type::unknown()));
-            return true;
-        }
-        value = typeOfExpr(*arg);
-        if (isPromiseType(value)) {
-            out = withType(call, value);
-            return true;
-        }
-    }
-    out = withType(call, promiseOf(value));
-    return true;
 }
 
 void Analyzer::inferArgs(CallExpr& call) {

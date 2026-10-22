@@ -16,6 +16,8 @@
 #include "harness.hpp"
 
 using cp3::runtime::all;
+using cp3::runtime::Array;
+using cp3::runtime::makeArray;
 using cp3::runtime::allSettled;
 using cp3::runtime::Promise;
 using cp3::runtime::race;
@@ -33,7 +35,7 @@ void testAllFulfilledInOrder() {
         Promise<int>::resolve(3),
     };
     std::vector<int> observed;
-    all(promises).then([&observed](const std::vector<int>& values) { observed = values; });
+    all(promises).then([&observed](const Array<int>& values) { observed = *values; });
     runEventLoop();
     CP3_CHECK_EQ(observed.size(), std::size_t(3));
     CP3_CHECK_EQ(observed[0], 1);
@@ -46,7 +48,7 @@ void testAllPreservesOrderWhenResolvedOutOfOrder() {
     promises.push_back(sleep(10).then([]() { return 10; }));
     promises.push_back(sleep(1).then([]() { return 1; }));
     std::vector<int> observed;
-    all(promises).then([&observed](const std::vector<int>& values) { observed = values; });
+    all(promises).then([&observed](const Array<int>& values) { observed = *values; });
     runEventLoop();
     CP3_CHECK_EQ(observed.size(), std::size_t(2));
     CP3_CHECK_EQ(observed[0], 10);  // input order, not completion order
@@ -56,7 +58,7 @@ void testAllPreservesOrderWhenResolvedOutOfOrder() {
 void testAllEmpty() {
     std::vector<Promise<int>> promises;
     std::vector<int> observed{99};
-    all(promises).then([&observed](const std::vector<int>& values) { observed = values; });
+    all(promises).then([&observed](const Array<int>& values) { observed = *values; });
     runEventLoop();
     CP3_CHECK_EQ(observed.size(), std::size_t(0));
 }
@@ -70,9 +72,9 @@ void testAllRejectsOnFirstFailure() {
     all(promises)
         .catchError([&message](const Thrown& reason) {
             message = reason.getOrThrow<std::string>();
-            return std::vector<int>{};
+            return makeArray<int>(std::vector<int>{});
         })
-        .then([](const std::vector<int>&) {});
+        .then([](const Array<int>&) {});
     runEventLoop();
     CP3_CHECK_EQ(message, std::string("bad"));
 }
@@ -101,7 +103,7 @@ void testAllSettled() {
     };
     std::vector<Settled<int>> observed;
     allSettled(promises).then(
-        [&observed](const std::vector<Settled<int>>& results) { observed = results; });
+        [&observed](const Array<Settled<int>>& results) { observed = *results; });
     runEventLoop();
     CP3_CHECK_EQ(observed.size(), std::size_t(3));
     CP3_CHECK(observed[0].ok);

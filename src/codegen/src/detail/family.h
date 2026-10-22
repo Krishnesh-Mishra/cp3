@@ -61,18 +61,30 @@ inline bool isFamilyCtorName(const std::string& name) {
 // The element shapes `Array<E>` has a C++ spelling for (elements recurse).
 // Class instances, structural objects and interface wrappers are reference
 // handles / small wrappers (spec 15), so they are storable in cp3 arrays too.
+// A promise is a reference handle as well (cp3/async/promise.hpp), so an array
+// of promises (the operand of `Promise.all`) is storable too.
 inline bool isArrayElementShape(Shape s) {
     return s == Shape::Number || s == Shape::String || s == Shape::Bool ||
            s == Shape::Array || s == Shape::Enum || s == Shape::Union ||
            s == Shape::Native || s == Shape::Function ||
            s == Shape::ClassRef || s == Shape::Object ||
-           s == Shape::TypeParam;
+           s == Shape::Promise || s == Shape::TypeParam;
 }
 
-// The array-element spelling of `elem` (classify + shape gate).
+// The array-element spelling of `elem` (classify + shape gate). A promise
+// whose value type is not primitive still has a spelling (the runtime promise
+// is a template over the value type), so the wide promise form is used here.
 inline bool arrayElementInfo(const Type& elem, CppInfo& ec) {
     ec = classify(elem);
-    return ec.representable && isArrayElementShape(ec.shape);
+    if (ec.representable && isArrayElementShape(ec.shape)) return true;
+    if (isPromiseType(elem)) {
+        const CppInfo pc = classifyPromiseValue(elem);
+        if (pc.representable) {
+            ec = pc;
+            return true;
+        }
+    }
+    return false;
 }
 
 // The element of an `Array<E>` type (Unknown for anything else).

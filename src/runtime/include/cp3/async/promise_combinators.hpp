@@ -5,10 +5,12 @@
 // `::cp3::runtime::all|race|allSettled(...)` over a `std::vector<Promise<T>>`.
 //
 //   * `all`        - resolves with the values in input order; rejects as soon as
-//                    any promise rejects.
+//                    any promise rejects. The result is a cp3 array
+//                    (`Array<T>`), so the awaited value has the array surface
+//                    (`.length`, `[i]`, `.join(",")`).
 //   * `race`       - settles as soon as any promise settles (first wins).
 //   * `allSettled` - always resolves, with each result tagged ok/error
-//                    (`Settled<T>`).
+//                    (`Settled<T>`), again as a cp3 array.
 //
 // All three leave every input promise observed, so combining promises can never
 // itself produce an unhandled rejection.
@@ -66,11 +68,11 @@ struct Settled<void> {
 namespace detail {
 
 template <class T, std::enable_if_t<!std::is_void_v<T>, int> = 0>
-Promise<std::vector<T>> allImpl(const std::vector<Promise<T>>& promises) {
-    Promise<std::vector<T>> derived = Promise<std::vector<T>>::pending();
+Promise<Array<T>> allImpl(const std::vector<Promise<T>>& promises) {
+    Promise<Array<T>> derived = Promise<Array<T>>::pending();
     const std::size_t count = promises.size();
     if (count == 0) {
-        derived.fulfill(std::vector<T>{});
+        derived.fulfill(makeArray<T>(std::vector<T>{}));
         return derived;
     }
     auto results = std::make_shared<std::vector<T>>(count);
@@ -80,7 +82,7 @@ Promise<std::vector<T>> allImpl(const std::vector<Promise<T>>& promises) {
         addFulfilledContinuation<T>(st, [st, results, remaining, derived, i]() mutable {
             (*results)[i] = st->slot.value;
             if (--*remaining == 0) {
-                derived.fulfill(*results);
+                derived.fulfill(makeArray<T>(std::move(*results)));
             }
         });
         addRejectedContinuation<T>(st, [st, derived]() mutable {
@@ -154,11 +156,12 @@ inline Promise<void> raceVoidImpl(const std::vector<Promise<void>>& promises) {
 }
 
 template <class T, std::enable_if_t<!std::is_void_v<T>, int> = 0>
-Promise<std::vector<Settled<T>>> allSettledImpl(const std::vector<Promise<T>>& promises) {
-    Promise<std::vector<Settled<T>>> derived = Promise<std::vector<Settled<T>>>::pending();
+Promise<Array<Settled<T>>> allSettledImpl(const std::vector<Promise<T>>& promises) {
+    Promise<Array<Settled<T>>> derived =
+        Promise<Array<Settled<T>>>::pending();
     const std::size_t count = promises.size();
     if (count == 0) {
-        derived.fulfill(std::vector<Settled<T>>{});
+        derived.fulfill(makeArray<Settled<T>>(std::vector<Settled<T>>{}));
         return derived;
     }
     auto results = std::make_shared<std::vector<Settled<T>>>(count);
@@ -168,26 +171,26 @@ Promise<std::vector<Settled<T>>> allSettledImpl(const std::vector<Promise<T>>& p
         addFulfilledContinuation<T>(st, [st, results, remaining, derived, i]() mutable {
             (*results)[i] = Settled<T>::fulfilled(st->slot.value);
             if (--*remaining == 0) {
-                derived.fulfill(*results);
+                derived.fulfill(makeArray<Settled<T>>(std::move(*results)));
             }
         });
         addRejectedContinuation<T>(st, [st, results, remaining, derived, i]() mutable {
             (*results)[i] = Settled<T>::rejected(st->reason);
             if (--*remaining == 0) {
-                derived.fulfill(*results);
+                derived.fulfill(makeArray<Settled<T>>(std::move(*results)));
             }
         });
     }
     return derived;
 }
 
-inline Promise<std::vector<Settled<void>>> allSettledVoidImpl(
+inline Promise<Array<Settled<void>>> allSettledVoidImpl(
     const std::vector<Promise<void>>& promises) {
-    Promise<std::vector<Settled<void>>> derived =
-        Promise<std::vector<Settled<void>>>::pending();
+    Promise<Array<Settled<void>>> derived =
+        Promise<Array<Settled<void>>>::pending();
     const std::size_t count = promises.size();
     if (count == 0) {
-        derived.fulfill(std::vector<Settled<void>>{});
+        derived.fulfill(makeArray<Settled<void>>(std::vector<Settled<void>>{}));
         return derived;
     }
     auto results = std::make_shared<std::vector<Settled<void>>>(count);
@@ -197,13 +200,13 @@ inline Promise<std::vector<Settled<void>>> allSettledVoidImpl(
         addFulfilledContinuation<void>(st, [results, remaining, derived, i]() mutable {
             (*results)[i] = Settled<void>::fulfilled();
             if (--*remaining == 0) {
-                derived.fulfill(*results);
+                derived.fulfill(makeArray<Settled<void>>(std::move(*results)));
             }
         });
         addRejectedContinuation<void>(st, [st, results, remaining, derived, i]() mutable {
             (*results)[i] = Settled<void>::rejected(st->reason);
             if (--*remaining == 0) {
-                derived.fulfill(*results);
+                derived.fulfill(makeArray<Settled<void>>(std::move(*results)));
             }
         });
     }
@@ -212,9 +215,11 @@ inline Promise<std::vector<Settled<void>>> allSettledVoidImpl(
 
 }  // namespace detail
 
-/// `Promise.all([...])`.
+/// `Promise.all([...])`. The result is a cp3 array of the values, in input
+/// order, so the awaited value has the array surface (`.length`, `[i]`,
+/// `.join(",")`).
 template <class T, std::enable_if_t<!std::is_void_v<T>, int> = 0>
-Promise<std::vector<T>> all(const std::vector<Promise<T>>& promises) {
+Promise<Array<T>> all(const std::vector<Promise<T>>& promises) {
     return detail::allImpl<T>(promises);
 }
 inline Promise<void> all(const std::vector<Promise<void>>& promises) {
@@ -230,12 +235,12 @@ inline Promise<void> race(const std::vector<Promise<void>>& promises) {
     return detail::raceVoidImpl(promises);
 }
 
-/// `Promise.allSettled([...])`.
+/// `Promise.allSettled([...])`. The result is a cp3 array of settled records.
 template <class T, std::enable_if_t<!std::is_void_v<T>, int> = 0>
-Promise<std::vector<Settled<T>>> allSettled(const std::vector<Promise<T>>& promises) {
+Promise<Array<Settled<T>>> allSettled(const std::vector<Promise<T>>& promises) {
     return detail::allSettledImpl<T>(promises);
 }
-inline Promise<std::vector<Settled<void>>> allSettled(
+inline Promise<Array<Settled<void>>> allSettled(
     const std::vector<Promise<void>>& promises) {
     return detail::allSettledVoidImpl(promises);
 }

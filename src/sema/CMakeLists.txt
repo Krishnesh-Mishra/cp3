@@ -22,6 +22,7 @@ set(cp3_sema_sources
     src/checks/expr_check.cpp
     src/checks/member_check.cpp
     src/checks/call_check.cpp
+    src/checks/promise_call.cpp
     src/checks/generic_check.cpp
     src/checks/ops_check.cpp
     src/checks/native_types.cpp

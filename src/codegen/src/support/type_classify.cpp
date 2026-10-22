@@ -57,6 +57,27 @@ CppInfo classifyPromise(const Type& t) {
     return info;
 }
 
+// The wide `Promise<T>` spelling: the runtime promise is a template over the
+// value type, so every value type cp3 can represent (a primitive, an array,
+// an object shape, a class handle) has one. `classify` keeps the
+// primitive-only rule for the places that need a primitive value; the promise
+// combinators and the array-element gate use this form.
+CppInfo classifyPromiseValue(const Type& t) {
+    CppInfo info;
+    const Type inner = promiseValue(t);
+    if (inner.isVoid()) {
+        info.shape = Shape::Promise; info.representable = true;
+        info.cpp = "::cp3::runtime::Promise<void>";
+        return info;
+    }
+    const CppInfo ic = classify(inner);
+    if (ic.representable && ic.shape != Shape::Void) {
+        info.shape = Shape::Promise; info.representable = true;
+        info.cpp = "::cp3::runtime::Promise<" + ic.cpp + ">";
+    }
+    return info;
+}
+
 // The single-member nullable over a primitive or a class/object handle:
 // `T | null`, `T | undefined` and the `T?` shorthand all lower to
 // `std::optional<T>` (the flavor is kept in `emptyKind`). Implementation
