@@ -122,7 +122,10 @@ void Generator::emitTopLevel(const Stmt& s, std::string& decls, std::string& def
             emitTopLevelClass(static_cast<const ClassDeclaration&>(s));
             return;
         case NodeKind::TypeAliasDeclaration:
-            notImplemented(s, "top-level declaration");
+            // A type alias is a compile-time name for a type: it emits no C++
+            // of its own. Every use site carries the resolved type (sema
+            // publishes it in the node-type table), so the alias itself is
+            // erased - like an interface declaration.
             return;
         case NodeKind::EnumDeclaration:
             // Resolved and emitted as a whole by collectEnums before the emit
@@ -163,11 +166,14 @@ void Generator::emitExport(const ExportDeclaration& ed, std::string& decls,
         line(mainBody, 1, expr(*ed.defaultExpr) + ";");
         return;
     }
-    // A module-link export (`export { a }`, `export * from "m"`): the link
-    // table is the single source of truth in a whole-program build, so the
-    // declaration contributes no C++ of its own.
-    if (programMode_) return;
-    notImplemented(ed, "re-export");
+    // A module-link export (`export { a }`, `export { a } from "m"`,
+    // `export * from "m"`): the export surface belongs to the module loader
+    // (src/modules) and, in a whole-program build, to the link table
+    // (detail/program_link.h), which resolves every exported name to the
+    // qualified C++ name of the unit that owns it. The C++ side has nothing
+    // to add: the names a list exports are already declared in this unit's
+    // namespace, and a re-exported name is reached through the link table.
+    return;
 }
 
 

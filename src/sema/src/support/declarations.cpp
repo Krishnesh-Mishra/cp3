@@ -397,8 +397,67 @@ void Analyzer::visitEnumDecl(EnumDeclaration& e) {
 }
 
 void Analyzer::visitTypeAlias(TypeAliasDeclaration& t) {
-    notImplemented(t.span, "type aliases");
+    // The hoisting pass resolved the alias already (scopes.cpp); a nested
+    // alias is resolved here.
+    if (declaredTypes_.count(t.nodeId) != 0) return;
+    declareTypeAlias(t);
+}
+
+// A type alias declares a compile-time name for a type. The alias's own type
+// parameters are in scope while the aliased type is resolved, so
+// `type Pair<T> = [T, T]` resolves `T` to a type parameter; a use site
+// substitutes its type arguments into the aliased type.
+void Analyzer::declareTypeAlias(TypeAliasDeclaration& t) {
+    declaredTypes_.insert(t.nodeId);
+    std::vector<std::string> params;
+    for (const auto& tp : t.typeParams) {
+        if (tp) params.push_back(tp->name);
+    }
+    // The class scope helper binds a type-parameter list to the type-name
+    // scope; a type alias uses the same binding.
+    TypeParamScope saved;
+    enterClassTypeParams(t.typeParams, saved);
     typeNames_[t.name] = t.type ? resolveType(*t.type) : Type::unknown();
+    leaveClassTypeParams(saved);
+    if (params.empty()) {
+        typeAliasParams_.erase(t.name);
+        return;
+    }
+    typeAliasParams_[t.name] = std::move(params);
+}
+
+// The aliased type of a type alias: the alias's own type arguments are
+// substituted for its type parameters, so `Pair<number>` is `[number, number]`.
+Type Analyzer::resolveTypeAlias(const std::string& name,
+                                const std::vector<Type>& args) const {
+    const auto it = typeNames_.find(name);
+    if (it == typeNames_.end()) return Type::unknown();
+    const auto params = typeAliasParams_.find(name);
+    if (params == typeAliasParams_.end() || params->second.empty() ||
+        args.empty()) {
+        return it->second;
+    }
+    return substituteTypeParams(it->second, params->second, args);
+}
+
+// The type `t` with the type arguments `args` substituted for the type
+// parameters `names` (the parameter at the same position).
+Type Analyzer::substituteTypeParams(const Type& t,
+                                    const std::vector<std::string>& names,
+                                    const std::vector<Type>& args) const {
+    if (t.kind == TypeKind::TypeParam) {
+        for (std::size_t i = 0; i < names.size(); ++i) {
+            if (names[i] != t.name) continue;
+            if (i < args.size()) return args[i];
+            return t;
+        }
+        return t;
+    }
+    Type out = t;
+    for (Type& part : out.parts) {
+        part = substituteTypeParams(part, names, args);
+    }
+    return out;
 }
 
 void Analyzer::visitInterfaceDecl(InterfaceDeclaration& i) {

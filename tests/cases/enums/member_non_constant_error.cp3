@@ -1,0 +1,10 @@
+import console from "std/console";
+
+function compute(): number { return 7; }
+
+enum Color {
+  Red = 1,
+  Green = compute()
+}
+
+console.log(Color.Red);

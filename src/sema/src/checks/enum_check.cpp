@@ -28,30 +28,104 @@ namespace {
 // The backing kind of one member initializer.
 enum class MemberInit { Missing, Number, String, Other };
 
-// `<number>` and `-<number>` / `+<number>` are number-backed; a string literal
-// is string-backed; everything else needs the codegen-side evaluator and is
-// reported as not implemented.
-MemberInit classifyMemberInit(const Expr* init) {
-    if (!init) return MemberInit::Missing;
-    switch (init->kind) {
-        case NodeKind::StringLiteral:
-            return MemberInit::String;
+// The kind of a constant expression: a number, a string, or neither (the
+// expression is not a compile-time constant).
+enum class ConstKind { None, Number, String };
+
+// The member of `members` with this name, or nullptr. A linked member
+// initializer (`B = A`) reads the member it names.
+const EnumMemberInfo* linkedMember(const std::vector<EnumMemberInfo>& members,
+                                   const std::string& name) {
+    for (const EnumMemberInfo& m : members) {
+        if (m.name == name) return &m;
+    }
+    return nullptr;
+}
+
+// The linked member an initializer names, or nullptr: a bare name (`A`) or the
+// enum's own name with a member (`Color.A`).
+const EnumMemberInfo* linkedTarget(const Expr* e,
+                                   const std::vector<EnumMemberInfo>& members,
+                                   const std::string& enumName) {
+    if (e == nullptr) return nullptr;
+    if (e->kind == NodeKind::Identifier) {
+        return linkedMember(members, static_cast<const Identifier&>(*e).name);
+    }
+    if (e->kind != NodeKind::MemberExpr) return nullptr;
+    const auto& m = static_cast<const MemberExpr&>(*e);
+    if (!m.object || m.object->kind != NodeKind::Identifier) return nullptr;
+    if (static_cast<const Identifier&>(*m.object).name != enumName) return nullptr;
+    return linkedMember(members, m.property);
+}
+
+// The kind of a constant expression in the context of one enum declaration.
+// `members` are the members of the same enum resolved so far; a linked member
+// initializer takes the kind of the member it names.
+//
+// The accepted forms are the ones the codegen evaluator can read
+// (src/codegen/src/emit/enum.cpp keeps the two in step): a literal, a unary
+// sign / bit-not, an arithmetic operator over constants, and a link to an
+// earlier member.
+ConstKind constKind(const Expr* e, const std::vector<EnumMemberInfo>& members,
+                    const std::string& enumName) {
+    if (e == nullptr) return ConstKind::None;
+    switch (e->kind) {
         case NodeKind::NumberLiteral:
-            return MemberInit::Number;
+            return ConstKind::Number;
+        case NodeKind::StringLiteral:
+            return ConstKind::String;
         case NodeKind::UnaryExpr: {
-            const auto& u = static_cast<const UnaryExpr&>(*init);
-            if (u.op != UnaryOp::Negate && u.op != UnaryOp::Plus) {
-                return MemberInit::Other;
+            const auto& u = static_cast<const UnaryExpr&>(*e);
+            if (u.op != UnaryOp::Negate && u.op != UnaryOp::Plus &&
+                u.op != UnaryOp::BitNot) {
+                return ConstKind::None;
             }
-            const Expr* operand = u.operand.get();
-            if (operand && operand->kind == NodeKind::NumberLiteral) {
-                return MemberInit::Number;
+            return constKind(u.operand.get(), members, enumName) ==
+                           ConstKind::Number
+                       ? ConstKind::Number
+                       : ConstKind::None;
+        }
+        case NodeKind::BinaryExpr: {
+            const auto& b = static_cast<const BinaryExpr&>(*e);
+            const ConstKind left = constKind(b.left.get(), members, enumName);
+            const ConstKind right = constKind(b.right.get(), members, enumName);
+            if (b.op == BinaryOp::Add) {
+                if (left == ConstKind::Number && right == ConstKind::Number) {
+                    return ConstKind::Number;
+                }
+                if (left == ConstKind::String && right == ConstKind::String) {
+                    return ConstKind::String;
+                }
+                return ConstKind::None;
             }
-            return MemberInit::Other;
+            const bool arithmetic =
+                b.op == BinaryOp::Subtract || b.op == BinaryOp::Multiply ||
+                b.op == BinaryOp::Divide || b.op == BinaryOp::Modulo;
+            if (!arithmetic) return ConstKind::None;
+            return left == ConstKind::Number && right == ConstKind::Number
+                       ? ConstKind::Number
+                       : ConstKind::None;
         }
         default:
-            return MemberInit::Other;
+            break;
     }
+    const EnumMemberInfo* target = linkedTarget(e, members, enumName);
+    if (target == nullptr) return ConstKind::None;
+    return target->isString ? ConstKind::String : ConstKind::Number;
+}
+
+// The backing kind of one member initializer: a number, a string, nothing (the
+// member inherits the declaration's backing kind) or a non-constant value.
+MemberInit classifyMemberInit(const Expr* init,
+                               const std::vector<EnumMemberInfo>& members,
+                               const std::string& enumName) {
+    if (!init) return MemberInit::Missing;
+    switch (constKind(init, members, enumName)) {
+        case ConstKind::Number: return MemberInit::Number;
+        case ConstKind::String: return MemberInit::String;
+        case ConstKind::None: return MemberInit::Other;
+    }
+    return MemberInit::Other;
 }
 
 }  // namespace
@@ -70,7 +144,8 @@ void Analyzer::registerEnum(EnumDeclaration& e) {
         if (!m) continue;
         EnumMemberInfo mi;
         mi.name = m->name;
-        const MemberInit kind = classifyMemberInit(m->initializer.get());
+        const MemberInit kind =
+            classifyMemberInit(m->initializer.get(), info.members, e.name);
 
         switch (kind) {
             case MemberInit::String:
@@ -90,7 +165,13 @@ void Analyzer::registerEnum(EnumDeclaration& e) {
                 }
                 break;
             case MemberInit::Other:
-                notImplemented(m->span, "this enum member initializer");
+                // An enum member carries a compile-time constant: a literal, a
+                // constant expression over literals, or a link to an earlier
+                // member of the same enum.
+                report(diagcode::kTypeMismatch, m->span,
+                       "type mismatch: enum member '" + m->name +
+                           "' must be initialized with a constant number or "
+                           "string expression");
                 break;
         }
 

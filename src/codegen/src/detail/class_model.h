@@ -76,6 +76,9 @@ struct ClassMemberModel {
     const ConstructorDeclaration* ctor = nullptr;
     const AccessorDeclaration* accessor = nullptr;
     bool isGetter = false;
+    // A generic method's own type parameters (spec §16): the method lowers to
+    // a C++ member function template over them.
+    std::vector<std::string> typeParams;
 };
 
 // A non-generic class declaration lowered to a C++ struct.

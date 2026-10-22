@@ -147,10 +147,12 @@ void Analyzer::collectClassMethod(MethodDeclaration& md, ClassInfo& info) {
         notImplemented(md.span, "computed class member names");
         return;
     }
-    if (!md.typeParams.empty()) {
-        notImplemented(md.span, "generic methods");
-    }
+    // A generic method's own type parameters are in scope while its signature
+    // is built, so `T` in an annotation resolves to a type parameter (spec §16).
+    TypeParamScope saved;
+    enterClassTypeParams(md.typeParams, saved);
     FuncSig sig = buildSig(name, md.params, md.returnType, &md.span);
+    leaveClassTypeParams(saved);
     sig.declNodeId = md.nodeId;
     sigs_[md.nodeId] = sig;
     ClassMemberInfo* prev = nullptr;
@@ -311,6 +313,10 @@ void Analyzer::checkClassMemberBody(ClassMember& m) {
 
 void Analyzer::analyzeMethodBody(MethodDeclaration& md) {
     const FuncSig& sig = sigs_[md.nodeId];
+    // A generic method's type parameters are in scope in its body, so `T` names
+    // the type parameter there too.
+    TypeParamScope saved;
+    enterClassTypeParams(md.typeParams, saved);
     pushScope();
     for (std::size_t i = 0; i < md.params.size() && i < sig.params.size(); ++i) {
         Parameter* p = md.params[i].get();
@@ -340,6 +346,7 @@ void Analyzer::analyzeMethodBody(MethodDeclaration& md) {
                        "the end of its body");
         }
     }
+    leaveClassTypeParams(saved);
 }
 
 // The accessor body (D21): `this` plus the setter's parameter are in scope.

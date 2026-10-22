@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "cp3/diagnostic_codes.hpp"
 #include "detail/class_model.h"
 #include "detail/class_walk.h"
 #include "detail/type_map.h"
@@ -131,6 +132,19 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
             m.isMethod = true;
             m.isAbstract = md.isAbstract;
             m.method = &md;
+            // A generic method's own type parameters (spec §16): the method
+            // lowers to a C++ member function template.
+            for (const auto& tp : md.typeParams) {
+                if (tp) m.typeParams.push_back(tp->name);
+            }
+            if (!m.typeParams.empty() && cm.local) {
+                // C++ has no member template in a local class, so a generic
+                // method of a function-local class has no lowering.
+                sink_.error(diagcode::kGenericLocalMethod, md.span,
+                            "a generic method of a function-local class is not "
+                            "supported: C++ has no member template in a local "
+                            "class");
+            }
             std::vector<Type> params;
             for (const auto& p : md.params) {
                 if (!p) continue;
@@ -141,6 +155,7 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
                                            : Type::unknown();
             m.type = Type::function(std::move(params), ret);
             rewriteTypeParams(m.type, cm.typeParams);
+            rewriteTypeParams(m.type, m.typeParams);
             cm.members.push_back(std::move(m));
             continue;
         }

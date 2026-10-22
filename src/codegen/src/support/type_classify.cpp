@@ -38,9 +38,11 @@ bool tupleCpp(const Type& t, std::string& out) {
     return true;
 }
 
-// `Promise<T>` -> `::cp3::runtime::Promise<T>` (cp3/async/promise.hpp). Only
-// M1-representable value types (primitives and `void`) have a spelling;
-// anything else stays not-implemented. Implementation detail of `classify`.
+// `Promise<T>` -> `::cp3::runtime::Promise<T>` (cp3/async/promise.hpp). The
+// promise carries a value of type `T`, so every representable value type has
+// a spelling: a class handle, an object, a tuple, an optional, ... The one
+// exception is a promise of a promise (`Promise<Promise<T>>` has no cp3
+// meaning). Implementation detail of `classify`.
 CppInfo classifyPromise(const Type& t) {
     CppInfo info;
     const Type inner = promiseValue(t);
@@ -50,7 +52,7 @@ CppInfo classifyPromise(const Type& t) {
         return info;
     }
     const CppInfo ic = classify(inner);
-    if (ic.representable && isPrimitiveShape(ic.shape)) {
+    if (ic.representable && ic.shape != Shape::Promise) {
         info.shape = Shape::Promise; info.representable = true;
         info.cpp = "::cp3::runtime::Promise<" + ic.cpp + ">";
     }

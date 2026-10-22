@@ -65,6 +65,18 @@ std::string templateUse(const ClassModel& cm) {
     return out + ">";
 }
 
+// `template <typename T, typename U>` for a list of type parameter names
+// ("" for an empty list). A generic method's own parameters are named here.
+std::string templateHeadOf(const std::vector<std::string>& names) {
+    if (names.empty()) return "";
+    std::string out = "template <";
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        if (i != 0) out += ", ";
+        out += "typename " + mapIdent(names[i]);
+    }
+    return out + ">";
+}
+
 // Does the class (or an ancestor) define a `toString` with a body? The
 // per-class `cp3_ts` overload is emitted only when it does (an abstract
 // `toString` cannot format a value).
@@ -239,33 +251,49 @@ void Generator::emitClassMember(const ClassModel& cm,
         return;
     }
     const MethodDeclaration& md = *m.method;
-    const std::string ret = methodReturnType(md, &cm);
+    const std::string ret = methodReturnType(md, &cm, m.typeParams);
     std::vector<std::string> params;
     for (const auto& p : md.params) {
-        if (p) params.push_back(methodParamText(*p, &cm));
+        if (p) params.push_back(methodParamText(*p, &cm, m.typeParams));
     }
     const std::string name = mapIdent(m.name);
     const std::string declText = (md.isStatic ? "static " : "") + ret + " " +
                                  name + "(" + joinStrings(params, ", ") + ")";
+    // A generic method is a C++ member function template (spec §16). Inside
+    // the class the template head names the method's own type parameters; the
+    // out-of-line definition names the class's parameters first, then the
+    // method's.
+    const std::string memberHead = templateHeadOf(m.typeParams);
+    const std::string memberHeadLine = memberHead.empty() ? "" : memberHead + "\n";
     // An abstract method (or a signature without a body) stays a declaration.
     if (md.body == nullptr) {
+        if (!memberHeadLine.empty()) line(out, indent, memberHead);
         line(out, indent, declText + ";");
         return;
     }
     if (defs == nullptr) {
+        // A local class has no member template (C++): the generic method of a
+        // function-local class is reported in the model pass.
+        if (!memberHeadLine.empty()) line(out, indent, memberHead);
         line(out, indent, declText + " {");
-        out += methodBodyText(md, cm, indent + 1, md.isStatic);
+        out += methodBodyText(md, cm, indent + 1, md.isStatic, m.typeParams);
         line(out, indent, "}");
         return;
     }
+    if (!memberHeadLine.empty()) line(out, indent, memberHead);
     line(out, indent, declText + ";");
     // The definition lands inside the module namespace, so the declarator is
     // the bare `Class::method` (STYLE: a `RET ::ns::Class::method` declarator
     // misparses as a qualified return type when RET is a class type).
-    *defs += (cm.typeParams.empty() ? "" : templateHead(cm) + "\n") + ret +
-             " " + mapIdent(cm.name) + templateUse(cm) + "::" + name + "(" +
+    // The out-of-line definition of a member template carries two template
+    // headers: the class template's, then the member template's.
+    const std::string defHead =
+        (cm.typeParams.empty() ? "" : templateHeadOf(cm.typeParams) + "\n") +
+        (m.typeParams.empty() ? "" : templateHeadOf(m.typeParams) + "\n");
+    *defs += defHead + ret + " " +
+             mapIdent(cm.name) + templateUse(cm) + "::" + name + "(" +
              joinStrings(params, ", ") + ") {\n" +
-             methodBodyText(md, cm, 1, md.isStatic) + "}\n\n";
+             methodBodyText(md, cm, 1, md.isStatic, m.typeParams) + "}\n\n";
 }
 
 // D21: one get/set accessor becomes a generated `get_name` / `set_name`
@@ -335,10 +363,12 @@ std::string Generator::memberFieldText(const ClassMemberModel& m) {
 }
 
 std::string Generator::methodReturnType(const MethodDeclaration& md,
-                                        const ClassModel* cm) {
+                                        const ClassModel* cm,
+                                        const std::vector<std::string>& methodTypeParams) {
     if (md.returnType) {
         if (auto t = typeFromTypeNode(*md.returnType)) {
             if (cm != nullptr) rewriteTypeParams(*t, cm->typeParams);
+            rewriteTypeParams(*t, methodTypeParams);
             CppInfo ci = classify(*t);
             if (ci.representable) return ci.cpp;
             notImplemented(md, "this return type");
@@ -355,7 +385,8 @@ std::string Generator::methodReturnType(const MethodDeclaration& md,
 }
 
 std::string Generator::methodParamText(const Parameter& p,
-                                       const ClassModel* cm) {
+                                       const ClassModel* cm,
+                                       const std::vector<std::string>& methodTypeParams) {
     const std::string name = paramNameOf(p);
     if (p.isRest) {
         notImplemented(p, "rest parameter");
@@ -368,6 +399,7 @@ std::string Generator::methodParamText(const Parameter& p,
         if (const Type* st = sema_.typeOf(p.name->nodeId)) t = *st;
     }
     if (cm != nullptr) rewriteTypeParams(t, cm->typeParams);
+    rewriteTypeParams(t, methodTypeParams);
     if (p.optional && !t.isUnknown()) t = Type::nullable(t);
     const CppInfo ci = classify(t);
     if (!ci.representable) {
@@ -427,9 +459,10 @@ std::string Generator::accessorBodyText(const AccessorDeclaration& ad,
 
 std::string Generator::methodBodyText(const MethodDeclaration& md,
                                       const ClassModel& cm, int indent,
-                                      bool isStatic) {
+                                      bool isStatic,
+                                      const std::vector<std::string>& methodTypeParams) {
     const std::string savedReturn = currentReturn_;
-    currentReturn_ = methodReturnType(md, &cm);
+    currentReturn_ = methodReturnType(md, &cm, methodTypeParams);
     ++nestingDepth_;
     pushScope();
     classStack_.push_back(&cm);
@@ -440,6 +473,8 @@ std::string Generator::methodBodyText(const MethodDeclaration& md,
         if (!p) continue;
         if (p->name && p->name->kind == NodeKind::Identifier) {
             Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
+            rewriteTypeParams(t, cm.typeParams);
+            rewriteTypeParams(t, methodTypeParams);
             if (p->optional && !t.isUnknown()) t = Type::nullable(t);
             declare(static_cast<const Identifier&>(*p->name).name, t);
         }

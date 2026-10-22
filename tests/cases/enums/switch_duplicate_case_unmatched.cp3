@@ -1,0 +1,14 @@
+import console from "std/console";
+enum Color { Red = 1, Crimson = 1, Blue = 2 }
+let c = Color.Blue;
+switch (c) {
+  case Color.Red:
+    console.log("r");
+    break;
+  case Color.Crimson:
+    console.log("c");
+    break;
+  default:
+    console.log("?");
+    break;
+}

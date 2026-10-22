@@ -351,6 +351,11 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
         Binding b;
         if (lookup(nt.name, b) && b.isAmbient) return byteBufferType();
     }
+    // A type alias names a type: a generic alias substitutes its type
+    // arguments into the aliased type (`Pair<number>` is `[number, number]`).
+    if (typeAliasParams_.count(nt.name) != 0) {
+        return resolveTypeAlias(nt.name, args);
+    }
     const auto it = typeNames_.find(nt.name);
     if (it != typeNames_.end()) {
         Type base = it->second;

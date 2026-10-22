@@ -157,15 +157,18 @@ private:
                                  int indent, std::string* defs);
     std::string memberFieldText(const ClassMemberModel& m);
     std::string methodReturnType(const MethodDeclaration& md,
-                                 const ClassModel* cm = nullptr);
+                                 const ClassModel* cm = nullptr,
+                                 const std::vector<std::string>& methodTypeParams = {});
     std::string methodParamText(const Parameter& p,
-                                const ClassModel* cm = nullptr);
+                                const ClassModel* cm = nullptr,
+                                const std::vector<std::string>& methodTypeParams = {});
     std::string accessorReturnType(const AccessorDeclaration& ad,
                                    const ClassModel* cm = nullptr);
     std::string accessorBodyText(const AccessorDeclaration& ad,
                                  const ClassModel& cm, int indent);
     std::string methodBodyText(const MethodDeclaration& md, const ClassModel& cm,
-                               int indent, bool isStatic);
+                               int indent, bool isStatic,
+                               const std::vector<std::string>& methodTypeParams = {});
     std::string ctorBodyText(const ConstructorDeclaration& cd,
                              const ClassModel& cm, int indent);
     std::string weakPointee(const Type& fieldType);
