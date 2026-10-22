@@ -1,0 +1,4 @@
+import console from "std/console";
+class Box { v: number = 1; }
+const b = new Box();
+console.log(typeof b);

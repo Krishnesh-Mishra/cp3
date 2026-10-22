@@ -1,0 +1,4 @@
+import console from "std/console";
+const u = new Int8Array([1, 2, 3]);
+console.log(u[0]++);
+console.log(u[0]);
