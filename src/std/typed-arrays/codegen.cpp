@@ -346,6 +346,28 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
 // lowers the initializer normally.
 std::string Generator::declaratorInitText(const VariableDeclarator& d,
                                           const Type& declared) {
+    // `let t: [string, number] = ["a", 1]`: the tuple annotation fixes the
+    // element types, so brace-initialize the std::tuple directly instead of
+    // lowering the literal as an Array (spec 03).
+    if (d.init && isTupleType(declared) &&
+        d.init->kind == NodeKind::ArrayLiteral) {
+        const auto& lit = static_cast<const ArrayLiteral&>(*d.init);
+        std::string cpp;
+        if (lit.elements.size() != declared.parts.size() ||
+            !tupleCpp(declared, cpp)) {
+            return std::string();
+        }
+        needsTuple_ = true;
+        std::string out = cpp + "{";
+        for (std::size_t i = 0; i < lit.elements.size(); ++i) {
+            const Expr* element = lit.elements[i].get();
+            if (element == nullptr || element->kind == NodeKind::SpreadElement) {
+                return std::string();
+            }
+            out += (i == 0 ? "" : ", ") + expr(*element);
+        }
+        return out + "}";
+    }
     if (!d.init || declared.kind != TypeKind::Array) return std::string();
     if (const ExprList* args = arrayCtorArgs(*d.init)) {
         return arrayCtorText(*args, arrayElemOf(declared), *d.init);

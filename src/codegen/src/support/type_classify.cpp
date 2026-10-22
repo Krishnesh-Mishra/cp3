@@ -171,6 +171,23 @@ CppInfo classify(const Type& raw) {
             if (!info.representable) classifyNullishUnion(t, info);
             return info;
         case TypeKind::Object: {
+            // A tuple annotation (`$t[...]`) is a std::tuple value: unlike an
+            // object shape it has no nominal struct and no Ref handle, so it
+            // must be classified before the object-model arms.
+            if (isTupleType(t)) {
+                std::string cpp;
+                bool primitives = !t.parts.empty();
+                for (const Type& part : t.parts) {
+                    if (!isPrimitiveShape(classify(part).shape)) primitives = false;
+                }
+                if (primitives && tupleCpp(t, cpp)) {
+                    info.type = t;
+                    info.shape = Shape::Object;
+                    info.representable = true;
+                    info.cpp = std::move(cpp);
+                }
+                return info;
+            }
             // A registered interface/structural model first; the all-primitive
             // `$o{...}` value shape (support/value_shapes.cpp) otherwise.
             CppInfo model = classifyObjectModel(t);
