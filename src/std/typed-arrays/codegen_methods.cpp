@@ -53,6 +53,7 @@ bool sortComparatorMatches(const Type& fnType, const CppInfo& elem) {
     const CppInfo ret = classify(fnType.parts[2]);
     return ret.representable &&
            (ret.shape == Shape::Number || ret.shape == Shape::Native);
+}
 
 // The cp3 type label of an index receiver, for the not-indexable diagnostic:
 // the class/enum name when the type has one, the kind's stable name
