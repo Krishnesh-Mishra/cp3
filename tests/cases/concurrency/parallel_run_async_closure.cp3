@@ -1,0 +1,5 @@
+import console from "std/console";
+
+// A parallel closure runs on a pool thread with no event loop to drive it.
+let results = parallel.run(async () => 1);
+console.log(`${results[0]}`);

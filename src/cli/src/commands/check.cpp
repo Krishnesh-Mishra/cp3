@@ -42,6 +42,9 @@ bool isWorkerDiagnostic(const Diagnostic& d) {
            d.code == diagcode::kWorkerEnclosingCapture ||
            d.code == diagcode::kWorkerComputedPath ||
            d.code == diagcode::kWorkerHandleMember ||
+           d.code == diagcode::kWorkerEntryShape ||
+           d.code == diagcode::kWorkerListenerParameter ||
+           d.code == diagcode::kWorkerModuleForm ||
            d.code == diagcode::kModuleNotFound;
 }
 

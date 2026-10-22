@@ -419,6 +419,10 @@ private:
                              const Type& outType, std::string& out);
     void reportWorkerCode(const Node& node, const std::string& code,
                           const std::string& message);
+    // A message listener's destructuring parameter: the payload arrives whole
+    // and the pattern binds its fields at the top of the body.
+    void workerListenerPattern(const Parameter& p, const Type& payload,
+                               const std::string& src, std::string& body);
     // The worker side: lowers a worker unit's full module (imports, functions,
     // enums, `thread_local` module vars, and its default-export arrow as
     // `void cp3_default(ThreadHandle<In, Out>& thread)`).
@@ -426,6 +430,10 @@ private:
                             std::string& defs, std::string& prologue);
     void emitWorkerModuleVar(const VariableDeclaration& vd, std::string& defs,
                              std::string& prologue);
+    void emitWorkerUnitBody(const Program& program, std::string& decls,
+                             std::string& defs, std::string& prologue);
+    bool resolveWorkerUnitEntry(const Program& program,
+                                detail::WorkerUnitEntry& out);
     GeneratedModule runWorkerModule(const Program& program);
 
     // --- std/console lowering (src/std/console/codegen.cpp) ------------------

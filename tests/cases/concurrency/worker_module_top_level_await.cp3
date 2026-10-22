@@ -1,0 +1,8 @@
+import console from "std/console";
+
+const w = new Worker("./worker_module_top_level_await_impl.cp3");
+w.on("message", (msg) => {
+  console.log(`${msg}`);
+  w.terminate();
+});
+w.postMessage(7);

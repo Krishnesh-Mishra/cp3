@@ -1,0 +1,5 @@
+import console from "std/console";
+
+// parseFloat takes exactly one argument: the text to parse.
+let n = parseFloat("1.5", 2);
+console.log(`${n}`);

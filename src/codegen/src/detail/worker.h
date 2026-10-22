@@ -59,6 +59,38 @@ std::string channelOwnerNS(const Type& t);
 std::optional<WorkerChannel> channelOfArrow(const ArrowFunction& arrow,
                                            const SemaResult& sema);
 
+// The worker unit's entry: its (first) default-export arrow, or nullptr.
+inline const ArrowFunction* defaultExportArrow(const Program& program) {
+    for (const auto& stmtPtr : program.body) {
+        if (!stmtPtr || stmtPtr->kind != NodeKind::ExportDeclaration) continue;
+        const auto& ed = static_cast<const ExportDeclaration&>(*stmtPtr);
+        if (ed.kind != ExportKind::Default || !ed.defaultExpr) continue;
+        if (ed.defaultExpr->kind != NodeKind::ArrowFunction) return nullptr;
+        return static_cast<const ArrowFunction*>(ed.defaultExpr.get());
+    }
+    return nullptr;
+}
+
+// The parameter name of an entry arrow as written in source ("" when absent).
+// `declare` keys by the cp3 name; the C++ spelling maps it at the use site.
+inline std::string entryParamName(const ArrowFunction& arrow) {
+    if (arrow.params.size() != 1 || !arrow.params[0]) return std::string();
+    const Parameter& p = *arrow.params[0];
+    if (!p.name || p.name->kind != NodeKind::Identifier) return std::string();
+    return static_cast<const Identifier&>(*p.name).name;
+}
+
+// The worker unit's resolved entry: the default-export arrow, the channel its
+// `Thread<In, Out>` annotation declares, and the C++ spellings of the two
+// channel directions.
+struct WorkerUnitEntry {
+    const ArrowFunction* arrow = nullptr;
+    std::string threadName;
+    WorkerChannel channel;
+    std::string inCpp;
+    std::string outCpp;
+};
+
 // Which send surface a `postMessage`/`request` call lowers to: the main side's
 // `postMessage`, the main side's `request`, or the worker side's
 // `postMessage`. The void-direction wording and the runtime method differ.

@@ -1,0 +1,6 @@
+import console from "std/console";
+
+// parallel.run calls every closure with no arguments, so there is nothing
+// for a parameter to bind.
+let results = parallel.run((value) => 1);
+console.log(`${results[0]}`);

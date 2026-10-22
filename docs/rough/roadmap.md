@@ -467,7 +467,7 @@ definition account for the remaining hits.
 | 15 | Network | fetch options object, fetch(...), next() continuation args, function call, WebSocket, WebSocketServer, json<T>() arguments, res.json(payload), req.body/ReadStream | `std/network/codegen.cpp`, `std/network/codegen_methods.cpp` |
 | 16 | FS, process, env, console | stream member/event/listener, spawn argument list/listener event, env.get options/type, console.assert/import form | `std/fs/codegen.cpp`, `std/process/codegen.cpp`, `std/env/codegen.cpp`, `std/console/codegen.cpp` |
 | 17 | Async and Promise | Promise., Promise.resolve/reject typed values, async arrow, generic arrow, await outside async/top level, async function value type | `emit/async.cpp`, `emit/decl.cpp` |
-| 18 | Worker and parallel modules | worker module statements/re-export/destructuring/module variable/entry arrow/listener parameter, parallel for/reduce/run shapes and initializer types | `emit/worker.cpp`, `emit/worker_handles.cpp`, `emit/worker_scan.cpp`, `emit/parallel.cpp` |
+| 18 | Worker and parallel modules | worker module statements/re-export/destructuring/module variable/entry arrow/listener parameter, parallel for/reduce/run shapes and initializer types | `emit/worker.cpp`, `emit/worker_module.cpp`, `emit/worker_handles.cpp`, `emit/worker_listener.cpp`, `emit/worker_scan.cpp`, `emit/parallel.cpp` |
 
 The scanner gate itself is `tools/check_cp3002.py`; its 30 skipped corpus cases
 are the observable effect of these groups. The CP3002 exit code and catalog

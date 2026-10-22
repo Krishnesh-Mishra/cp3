@@ -1,0 +1,11 @@
+import console from "std/console";
+
+// A worker unit is a full module: its top-level statements run when the
+// worker thread starts, before the entry arrow.
+console.log("worker started");
+
+export default (thread: Thread<number, number>) => {
+  thread.on("message", (n) => {
+    thread.postMessage(n);
+  });
+};

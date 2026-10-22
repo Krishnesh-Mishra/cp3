@@ -36,7 +36,12 @@ std::string Generator::emitParseBuiltin(const CallExpr& c,
         return "::cp3::runtime::" + name + "(::cp3::runtime::toString(" +
                expr(*c.arguments.front()) + "))";
     }
-    notImplemented(c, name + "(...)");
+    // The documented surface is one argument (the text to parse); sema reports
+    // any other argument list as CP3403 before codegen runs. This is the
+    // defensive path for a unit lowered without a sema table.
+    reportCodegenError(c, diagcode::kArityMismatch,
+                        name + "() takes exactly one argument (the text to "
+                        "parse)");
     return "0.0";
 }
 

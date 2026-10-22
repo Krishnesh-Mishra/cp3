@@ -20,11 +20,19 @@
 // expressions and closure-local scope tracking in parallel_expr_check.cpp,
 // and the `Analyzer` entry point at the bottom of this file. Diagnostics anchor
 // at column 1 of the offending node's begin line (D54).
+//
+// The call-site hook also rejects a closure shape `parallel.*` cannot run
+// (CP3912): an `async` closure has no event loop to drive its awaits (D71,
+// M2-PLAN item 12), and a `parallel.run` closure takes no arguments, so a
+// closure that declares a parameter - or carries type parameters nothing can
+// infer - has no meaning there.
 // =============================================================================
 #include "detail/parallel_check.h"
 
 #include <string>
 #include <utility>
+
+#include "cp3/diagnostic_codes.hpp"
 
 #include "detail/analyzer.h"
 
@@ -256,9 +264,32 @@ void Analyzer::checkParallelCall(CallExpr& call) {
     if (call.nodeId != 0 && !parallelChecked_.insert(call.nodeId).second) return;
 
     const bool isFor = m.property == "for";
+    const bool isRun = m.property == "run";
     for (auto& a : call.arguments) {
         if (!a || a->kind != NodeKind::ArrowFunction) continue;
         auto& arrow = static_cast<ArrowFunction&>(*a);
+        // D71 and M2-PLAN item 12: a `parallel.*` closure runs on a pool
+        // thread that has no event loop, and `parallel.*` is synchronous by
+        // contract (spec §13 Rule 1). An `async` closure would leave its
+        // awaits with nothing to drive them, so it is a clean compile-time
+        // diagnostic - never a silently broken program.
+        if (arrow.isAsync) {
+            report(diagcode::kParallelClosureShape, arrow.span,
+                   "a parallel.* closure cannot be async: parallel.* is "
+                   "synchronous and its pool threads have no event loop, so an "
+                   "await inside the closure would never be driven");
+        } else if (isRun && !arrow.typeParams.empty()) {
+            // `parallel.run(f1, ..., fN)` calls each closure with no
+            // arguments, so a generic closure has no call site to infer its
+            // type arguments from.
+            report(diagcode::kParallelClosureShape, arrow.span,
+                   "a parallel.run() closure cannot be generic: the call site "
+                   "has no argument to infer its type parameters from");
+        } else if (isRun && !arrow.params.empty()) {
+            report(diagcode::kParallelClosureShape, arrow.span,
+                   "a parallel.run() closure takes no parameters: the call "
+                   "runs each closure with no arguments");
+        }
         std::string induction;
         if (isFor && !arrow.params.empty() && arrow.params.front()) {
             induction = parallel_detail::boundName(arrow.params.front()->name.get());
