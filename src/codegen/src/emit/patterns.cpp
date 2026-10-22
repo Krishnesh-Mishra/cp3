@@ -26,6 +26,7 @@
 #include "cp3/diagnostic_codes.hpp"
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/object_rest.h"
 #include "detail/type_map.h"
 
 namespace cp3 {
@@ -65,6 +66,12 @@ std::string patternKeyName(const Expr* key, bool computed) {
         return static_cast<const NumberLiteral&>(*key).raw;
     }
     return std::string();
+}
+
+// Sema's "not statically known" marker: the binding's own type is the one
+// the emitter inferred, not the ambient placeholder.
+bool isAmbientType(const Type& t) {
+    return t.kind == TypeKind::Object && t.name == "$ambient";
 }
 
 // The literal field name of an object-literal property ("" when computed or a
@@ -332,14 +339,26 @@ void Generator::emitPatternParams(const FunctionDeclaration& fd, std::string& ou
     for (std::size_t i = 0; i < fd.params.size(); ++i) {
         const Parameter* p = fd.params[i].get();
         if (!p || !p->name) continue;
-        if (p->name->kind != NodeKind::ArrayPattern &&
-            p->name->kind != NodeKind::ObjectPattern) {
-            continue;
+        const Node* pattern = nullptr;
+        if (p->name->kind == NodeKind::ArrayPattern ||
+            p->name->kind == NodeKind::ObjectPattern) {
+            pattern = p->name.get();
+        } else if (p->isRest && p->name->kind == NodeKind::RestElement) {
+            // A rest parameter with a destructuring target (`f(...[a, b])`):
+            // the C++ parameter is the array the rest collects, and the
+            // prologue unpacks it into the pattern.
+            const Node* target =
+                static_cast<const RestElement&>(*p->name).argument.get();
+            if (target && (target->kind == NodeKind::ArrayPattern ||
+                           target->kind == NodeKind::ObjectPattern)) {
+                pattern = target;
+            }
         }
+        if (pattern == nullptr) continue;
         const std::optional<Type> pt = parameterType(*p, fd, i);
         const std::string source = "cp3_param_" + std::to_string(i);
         const PatternSource src{source, pt.value_or(Type::unknown()), false};
-        unpackPattern(*p->name, src, out, indent);
+        unpackPattern(*pattern, src, out, indent);
     }
 }
 
@@ -423,10 +442,22 @@ std::string Generator::parameterText(const Parameter& p, const FunctionDeclarati
     const Identifier* id = parameterIdentifier(p);
     const bool pattern = p.name && (p.name->kind == NodeKind::ArrayPattern ||
                                     p.name->kind == NodeKind::ObjectPattern);
+    // A rest parameter with a destructuring target (`f(...[a, b])`): the C++
+    // parameter is the array the rest collects, and the body prologue unpacks
+    // it into the pattern.
+    const Node* restPattern = nullptr;
+    if (p.isRest && p.name && p.name->kind == NodeKind::RestElement) {
+        const Node* target =
+            static_cast<const RestElement&>(*p.name).argument.get();
+        if (target && (target->kind == NodeKind::ArrayPattern ||
+                       target->kind == NodeKind::ObjectPattern)) {
+            restPattern = target;
+        }
+    }
     std::string name;
     if (id) {
         name = mapIdent(id->name);
-    } else if (pattern) {
+    } else if (pattern || restPattern != nullptr) {
         // A destructured parameter: the C++ parameter is the generated handle
         // whose contents the body prologue unpacks.
         name = "cp3_param_" + std::to_string(index);
@@ -445,7 +476,7 @@ std::string Generator::parameterText(const Parameter& p, const FunctionDeclarati
             const CppInfo ec = classify(pt->parts.front());
             if (ec.representable) elem = ec.cpp;
         }
-        if (!id || elem.empty()) {
+        if ((!id && restPattern == nullptr) || elem.empty()) {
             notImplemented(p, "this rest parameter type");
             return "/* rest */";
         }
@@ -582,6 +613,13 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
             const ClassMemberModel* m = findClassMember(*cm, name);
             return m != nullptr && !m->isMethod && m->ctor == nullptr;
         }
+        if (plainShape) {
+            // The all-primitive value shape: its own field list.
+            for (const ObjectField& field : shapeFields) {
+                if (field.name == name) return true;
+            }
+            return false;
+        }
         return hasField(fields, name);
     };
     for (const auto& propPtr : p.properties) {
@@ -614,7 +652,31 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
                                                  src.isConst},
                           out, indent);
     }
-    if (p.rest) notImplemented(*p.rest, "...rest object pattern");
+    if (p.rest) unpackObjectRest(p, src, out, indent);
+}
+
+// The object rest (`{ a, ...rest }`): the rest binding of an object pattern.
+// The rest object is a fresh value of the source's type that holds the
+// properties the pattern does not name.
+void Generator::unpackObjectRest(const ObjectPattern& p, const PatternSource& src,
+                                 std::string& out, int indent) {
+    const std::string text = detail::objectRestText(p, src.type, src.text);
+    if (text.empty()) {
+        // A class instance, an interface wrapper or a std/json record: cp3
+        // has no way to build a rest object for them.
+        notImplemented(*p.rest, "...rest object pattern");
+        return;
+    }
+    bindPatternTarget(*p.rest, PatternSource{text, src.type, src.isConst}, out,
+                      indent);
+    // The rest binding's cp3 type is the source's own type: sema models the
+    // rest as an array of the remaining elements, which cp3 cannot spell for
+    // an object source.
+    const Node* target =
+        static_cast<const RestElement&>(*p.rest).argument.get();
+    if (target && target->kind == NodeKind::Identifier) {
+        declare(static_cast<const Identifier&>(*target).name, src.type);
+    }
 }
 
 void Generator::bindPatternTarget(const Node& target, const PatternSource& value,
@@ -639,7 +701,8 @@ void Generator::bindPatternTarget(const Node& target, const PatternSource& value
              mapIdent(id.name) + " = " + value.text + ";");
     Type declared = value.type;
     if (const Type* st = sema_.typeOf(id.nodeId); st && !st->isUnknown() &&
-                                                   !st->isError()) {
+                                                   !st->isError() &&
+                                                   !isAmbientType(*st)) {
         declared = *st;
     }
     if (intOn() && classify(declared).shape == Shape::Number) intFail();

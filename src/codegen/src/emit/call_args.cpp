@@ -18,6 +18,7 @@
 
 #include "detail/cpp_writer.h"
 #include "detail/mangle.h"
+#include "detail/spread_call.h"
 #include "detail/timers.h"
 #include "detail/type_map.h"
 #include "cp3/diagnostic_codes.hpp"
@@ -27,6 +28,20 @@ namespace cp3 {
 using namespace detail;
 
 namespace detail {
+
+// The two flags of a call lowering.
+struct CallFlags {
+    bool applyDefaults = false;    // the callee's defaults ride at the call site
+    bool reifyObjectArgs = false;  // an object-literal argument is reified
+};
+
+// The callee and its signature: the call lowering needs both.
+struct CallSite {
+    std::string callee;
+    const ParamList* params = nullptr;
+    std::vector<std::optional<Type>> ptypes;
+    CallFlags flags;
+};
 
 struct CallBuilder {
     explicit CallBuilder(Generator& generator) : g(generator) {}
@@ -39,6 +54,8 @@ struct CallBuilder {
         std::vector<std::string> value;
         std::vector<bool> drop;
         bool spreadRest = false;  // a lone `f(...xs)` passes the array itself
+        bool hasSpread = false;   // a spread the call lowering splices in
+        std::size_t spreadAt = 0; // the index of that spread argument
     };
 
     ArgTexts callArgTexts(const CallExpr& c, const ParamList* params,
@@ -58,10 +75,14 @@ struct CallBuilder {
     std::vector<std::string> plainArgList(const ArgTexts& texts,
                                           const ParamList* params,
                                           bool applyDefaults);
-    std::vector<std::string> callArgs(
-        const CallExpr& c, const ParamList* params,
-        const std::vector<std::optional<Type>>& ptypes, bool applyDefaults,
-        bool reifyObjectArgs = false);
+    // The whole call text (`callee(args)`), with a spread argument spliced in.
+    std::string callText(const CallExpr& c, const CallSite& site);
+    // The call text of a call whose argument list holds a spread.
+    std::string spreadCall(const CallExpr& c, const CallSite& site,
+                           const ArgTexts& texts);
+    // The call text of a spread into a callee whose last parameter is a rest.
+    std::string spreadRestCall(const CallExpr& c, const CallSite& site,
+                                const ArgTexts& texts);
     std::string emitFunctionCall(const CallExpr& c, const std::string& text,
                                  const Type& fnType, const ParamList* params);
     std::string emitIdentifierCall(const CallExpr& c);
@@ -177,6 +198,11 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
                 if (restAt < ptypes.size()) g.expected_ = ptypes[restAt];
                 texts.value[i] = g.expr(*spread.argument);
                 g.expected_ = saved;
+            } else if (spread.argument) {
+                // A spread the call lowering splices in (emit/spread_call.cpp).
+                texts.hasSpread = true;
+                texts.spreadAt = i;
+                texts.value[i] = g.expr(*spread.argument);
             } else {
                 g.notImplemented(*arg, "spread argument");
             }
@@ -296,18 +322,139 @@ std::vector<std::string> CallBuilder::plainArgList(const ArgTexts& texts,
     return out;
 }
 
-std::vector<std::string> CallBuilder::callArgs(
-    const CallExpr& c, const ParamList* params,
-    const std::vector<std::optional<Type>>& ptypes, bool applyDefaults,
-    bool reifyObjectArgs) {
-    std::size_t restAt = params ? params->size() : 0;
-    const bool hasRest = findRestParam(params, restAt);
-    const ArgTexts texts =
-        callArgTexts(c, params, ptypes, applyDefaults, reifyObjectArgs);
-    if (hasRest) {
-        return packRestArgs(c, texts, restElemTypeAt(c, ptypes, restAt), restAt);
+// The whole call text (`callee(args)`). A spread argument is spliced in by
+// the spread lowering (emit/spread_call.cpp); the ordinary call passes its
+// argument vector.
+std::string CallBuilder::callText(const CallExpr& c, const CallSite& site) {
+    const ArgTexts texts = callArgTexts(c, site.params, site.ptypes,
+                                        site.flags.applyDefaults,
+                                        site.flags.reifyObjectArgs);
+    if (texts.hasSpread) {
+        return spreadCall(c, site, texts);
     }
-    return plainArgList(texts, params, applyDefaults);
+    std::size_t restAt = site.params ? site.params->size() : 0;
+    const bool hasRest = findRestParam(site.params, restAt);
+    if (hasRest) {
+        return site.callee + "(" +
+               joinStrings(packRestArgs(c, texts,
+                                        restElemTypeAt(c, site.ptypes, restAt),
+                                        restAt),
+                           ", ") +
+               ")";
+    }
+    return site.callee + "(" +
+           joinStrings(plainArgList(texts, site.params, site.flags.applyDefaults),
+                       ", ") +
+           ")";
+}
+
+// The call text of a call whose argument list holds a spread (`f(...xs)`).
+// The callee's parameters decide the shape: a rest parameter packs the
+// elements into the rest array, a fixed parameter list splices them in
+// position.
+std::string CallBuilder::spreadCall(const CallExpr& c, const CallSite& site,
+                                    const ArgTexts& texts) {
+    const Expr* arg = c.arguments[texts.spreadAt].get();
+    if (arg == nullptr) return "0.0";
+    const auto& spread = static_cast<const SpreadElement&>(*arg);
+    if (spread.argument == nullptr) return "0.0";
+    const Type sourceType = g.effectiveType(*spread.argument);
+    if (sourceType.kind != TypeKind::Array || sourceType.parts.empty()) {
+        g.reportTypeError(*arg,
+                           "type mismatch: a spread argument must be an array");
+        return "0.0";
+    }
+    const CppInfo ec = classify(sourceType.parts.front());
+    if (!ec.representable || ec.shape == Shape::Void) {
+        g.reportTypeError(
+            *arg, "type mismatch: a spread argument must be an array of values");
+        return "0.0";
+    }
+    detail::SpreadCall call;
+    call.callee = site.callee;
+    call.arrayText = texts.value[texts.spreadAt];
+    call.elementType = ec.cpp;
+    std::size_t restAt = site.params ? site.params->size() : 0;
+    if (findRestParam(site.params, restAt)) {
+        return spreadRestCall(c, site, texts);
+    }
+    // The fixed arguments around the spread.
+    for (std::size_t i = 0; i < texts.spreadAt; ++i) {
+        call.before.push_back(texts.value[i]);
+    }
+    for (std::size_t i = texts.spreadAt + 1; i < texts.value.size(); ++i) {
+        call.after.push_back(texts.value[i]);
+    }
+    // The fixed parameters the spread fills.
+    const std::size_t paramCount =
+        site.params ? site.params->size() : site.ptypes.size();
+    for (std::size_t i = 0; i < paramCount; ++i) {
+        detail::SpreadParam param;
+        if (i < site.ptypes.size() && site.ptypes[i]) {
+            const CppInfo ci = classify(*site.ptypes[i]);
+            if (!ci.representable) return "0.0";
+            param.type = ci.cpp;
+        }
+        const Parameter* p = site.params ? paramAt(*site.params, i) : nullptr;
+        if (p && p->defaultValue) {
+            param.fallback = g.expr(*p->defaultValue);
+            param.required = false;
+        } else if (p && p->optional) {
+            param.fallback = "std::nullopt";
+            param.required = false;
+        }
+        call.params.push_back(param);
+    }
+    const std::string text = detail::spreadCallText(call);
+    if (text.empty()) {
+        g.reportTypeError(
+            *arg, "type mismatch: a spread argument must be an array of the "
+                  "callee's parameter type");
+        return "0.0";
+    }
+    return text;
+}
+
+// The call text of a spread into a callee whose last parameter is a rest:
+// the rest absorbs the spread and the fixed arguments around it.
+std::string CallBuilder::spreadRestCall(const CallExpr& c, const CallSite& site,
+                                        const ArgTexts& texts) {
+    const Expr* arg = c.arguments[texts.spreadAt].get();
+    if (arg == nullptr) return "0.0";
+    std::size_t restAt = 0;
+    if (!findRestParam(site.params, restAt)) return "0.0";
+    const std::optional<Type> elem = restElemTypeAt(c, site.ptypes, restAt);
+    if (!elem) {
+        g.reportTypeError(*arg,
+                           "type mismatch: a spread argument needs a rest "
+                           "parameter with a known element type");
+        return "0.0";
+    }
+    const CppInfo rc = classify(*elem);
+    if (!rc.representable) return "0.0";
+    const Type sourceType = g.effectiveType(
+        *static_cast<const SpreadElement&>(*arg).argument);
+    const CppInfo ec = classify(sourceType.parts.front());
+    detail::SpreadCall call;
+    call.callee = site.callee;
+    call.arrayText = texts.value[texts.spreadAt];
+    call.elementType = ec.cpp;
+    call.hasRest = true;
+    call.restType = rc.cpp;
+    for (std::size_t i = 0; i < texts.spreadAt; ++i) {
+        call.before.push_back(texts.value[i]);
+    }
+    for (std::size_t i = texts.spreadAt + 1; i < texts.value.size(); ++i) {
+        call.after.push_back(texts.value[i]);
+    }
+    const std::string rest = detail::spreadRestCallText(call);
+    if (rest.empty()) {
+        g.reportTypeError(*arg,
+                           "type mismatch: a spread argument must be an array "
+                           "of the rest parameter's element type");
+        return "0.0";
+    }
+    return site.callee + "(" + rest + ")";
 }
 
 // A call through a function-typed value: `text(...)` for the
@@ -327,9 +474,12 @@ std::string CallBuilder::emitFunctionCall(const CallExpr& c,
         }
         // A lambda cannot carry C++ default arguments, so a value callee's
         // defaults are passed at the call site.
-        const std::vector<std::string> args =
-            callArgs(c, params, ptypes, params != nullptr);
-        return text + "(" + joinStrings(args, ", ") + ")";
+        CallSite site;
+        site.callee = text;
+        site.params = params;
+        site.ptypes = ptypes;
+        site.flags.applyDefaults = params != nullptr;
+        return callText(c, site);
     }
     if (ci.shape == Shape::Listener) {
         g.needsEventEmitter_ = true;
@@ -426,11 +576,12 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
     }
     const std::string callee =
         generic ? g.calleeText(name, c) : g.moduleRef(name);
-    return callee + "(" +
-           joinStrings(callArgs(c, decl ? &decl->params : nullptr, ptypes,
-                                /*applyDefaults=*/false, generic),
-                       ", ") +
-           ")";
+    CallSite site;
+    site.callee = callee;
+    site.params = decl ? &decl->params : nullptr;
+    site.ptypes = ptypes;
+    site.flags.reifyObjectArgs = generic;
+    return callText(c, site);
 }
 
 std::string CallBuilder::emitMemberCall(const CallExpr& c,
@@ -542,11 +693,11 @@ std::string Generator::emitLinkedCall(const CallExpr& c,
                              ? parameterType(*ln.fn->params[i], *ln.fn, i)
                              : std::nullopt);
     }
-    return ln.cpp + "(" +
-           joinStrings(calls.callArgs(c, &ln.fn->params, ptypes,
-                                      /*applyDefaults=*/false),
-                       ", ") +
-           ")";
+    CallSite site;
+    site.callee = ln.cpp;
+    site.params = &ln.fn->params;
+    site.ptypes = ptypes;
+    return calls.callText(c, site);
 }
 
 // The link miss for a member access whose object is an imported binding with

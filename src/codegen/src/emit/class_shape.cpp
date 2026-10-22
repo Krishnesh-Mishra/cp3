@@ -161,13 +161,17 @@ std::string wrapperText(const ObjectModel& om) {
     return out;
 }
 
-// A plain object struct: fields behind a `Ref<cp3_objN>` handle.
+// A plain object struct: fields behind a `Ref<cp3_objN>` handle. The
+// `cp3ToText()` pair makes the value formattable (`console.log(obj)`), the
+// same surface the all-primitive value shape carries.
 std::string plainText(const ObjectModel& om) {
     std::string out;
     line(out, 0, "struct " + om.structName + " {");
     for (const ObjectFieldModel& f : om.fields) {
         if (!f.isFunction) line(out, 1, fieldDecl(f));
     }
+    line(out, 1, "std::string cp3ToText() const { return std::string("
+                  "\"[object Object]\"); }");
     line(out, 0, "};");
     line(out, 0, "");
     return out;

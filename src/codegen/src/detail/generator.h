@@ -471,6 +471,10 @@ private:
                             std::string& out, int indent);
     void unpackObjectPattern(const ObjectPattern& p, const PatternSource& src,
                              std::string& out, int indent);
+    // The object rest (`{ a, ...rest }`): the rest binding of an object
+    // pattern.
+    void unpackObjectRest(const ObjectPattern& p, const PatternSource& src,
+                          std::string& out, int indent);
     void bindPatternTarget(const Node& target, const PatternSource& value,
                            std::string& out, int indent);
 

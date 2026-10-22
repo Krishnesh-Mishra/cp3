@@ -185,17 +185,25 @@ bool hasClassCtor(const ClassModel& cm) {
 
 bool refValueFormattable(const Type& t) {
     if (t.kind == TypeKind::Class) {
-        const ClassModel* cm = ModelRegistry::get().classByName(t.name);
-        if (cm == nullptr) return false;
-        const ClassMemberModel* m = findClassMemberChain(*cm, "toString", nullptr);
-        // An abstract `toString` (no body) has no generated formatter: the
-        // per-class `cp3_ts` overload is emitted only for a defined one.
-        return m != nullptr && m->isMethod && m->method != nullptr &&
-               m->method->body != nullptr;
+        // Every class carries the `cp3ToText()` pair, so a class instance
+        // always formats: its own `toString` when it defines one, the JS
+        // default "[object Object]" otherwise.
+        return ModelRegistry::get().classByName(t.name) != nullptr;
     }
     if (t.kind == TypeKind::Object) {
         const ObjectModel* om = ModelRegistry::get().objectByLabel(t.name);
-        if (om == nullptr || !om->isInterface) return false;
+        if (om == nullptr) {
+            // A plain all-primitive value shape (support/value_shapes.cpp):
+            // the generated struct carries its own `cp3ToText()`, so the
+            // formatter dispatches on it.
+            std::string name;
+            std::vector<ObjectField> fields;
+            return objectShapeOf(t, name, fields);
+        }
+        // A plain object model: its struct carries the same pair.
+        if (!om->isInterface) return true;
+        // An interface wrapper is a by-value struct: it formats through the
+        // `cp3_ts` overload its own `toString` member installs.
         const ObjectFieldModel* f = findObjectField(*om, "toString");
         return f != nullptr && f->isMethod;
     }
@@ -232,9 +240,10 @@ bool valueFormattable(const Type& raw) {
         if (all.shape != Shape::Optional && all.shape != Shape::Maybe) {
             return true;
         }
-        // Only the primitive inner types have an `std::optional`/`Maybe`
-        // formatter; `std::optional<Ref<T>>` (and the array inner types) do
-        // not.
+        // The inner type's own formatter decides. Only the primitive inner
+        // types have an `std::optional`/`Maybe` formatter: the optional
+        // template cannot reach the `Ref` formatter (the helper block that
+        // owns it comes later), so an object handle stays unformattable.
         return isPrimitiveShape(classify(parts.front()).shape);
     }
     const CppInfo ci = classify(t);
@@ -242,7 +251,13 @@ bool valueFormattable(const Type& raw) {
     if (ci.shape == Shape::Array) {
         const Type elem = t.parts.empty() ? Type::unknown() : t.parts.front();
         const CppInfo ec = classify(elem);
-        if (isModelShape(ec.shape)) return false;
+        if (isModelShape(ec.shape)) {
+            // An object element renders through the pointee's `cp3ToText()`.
+            // An interface wrapper is a by-value struct, and the array
+            // formatter has no overload for it.
+            const ObjectModel* om = objectModelOf(stripNullish(elem));
+            return om == nullptr || !om->isInterface;
+        }
         if (ec.shape == Shape::Array) return valueFormattable(elem);
     }
     return true;

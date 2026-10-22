@@ -1,0 +1,4 @@
+import console from "std/console";
+function add(a: number, b: number): number { return a + b; }
+let xs = [1, 2, 3];
+console.log(add(...xs));

@@ -117,4 +117,33 @@ inline bool looseEq(const std::variant<Ts...>& v, const T& other) {
         v);
 }
 
+// `==` / `===` between two unions whose alternative sets differ (`number |
+// string` against `number | boolean`): the two held alternatives decide the
+// answer, exactly as the one-sided helpers above do.
+//
+// A strict comparison (`===`) needs the same alternative on both sides; a
+// loose one (`==`) coerces the two held values with ToNumber when they are
+// not the same alternative (ECMAScript abstract equality).
+template <class... Ts, class... Us>
+inline bool variantEq(const std::variant<Ts...>& a, const std::variant<Us...>& b,
+                       bool strict) {
+    return std::visit(
+        [&b, strict](const auto& x) -> bool {
+            return std::visit(
+                [&x, strict](const auto& y) -> bool {
+                    using X = std::decay_t<decltype(x)>;
+                    using Y = std::decay_t<decltype(y)>;
+                    if constexpr (std::is_same_v<X, Y>) {
+                        return x == y;
+                    } else if (strict) {
+                        return false;
+                    } else {
+                        return toNumber(x) == toNumber(y);
+                    }
+                },
+                b);
+        },
+        a);
+}
+
 }  // namespace cp3::runtime::unions

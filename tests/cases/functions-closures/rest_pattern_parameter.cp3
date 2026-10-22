@@ -1,0 +1,6 @@
+import console from "std/console";
+function f(...[a, b]: number[]) {
+  console.log(a);
+  console.log(b);
+}
+f(...[1, 2]);
