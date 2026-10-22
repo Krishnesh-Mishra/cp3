@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3403",
+    "line": 1,
+    "col": 1,
+    "contains": "EventEmitter's constructor takes no arguments"
+  }
+}

@@ -1,0 +1,10 @@
+import console from "std/console";
+function handler(): void {
+  console.log("fired");
+}
+let e = new EventEmitter();
+e.on("go", handler);
+e.emit("go");
+e.off("go", handler);
+e.emit("go");
+console.log("end");

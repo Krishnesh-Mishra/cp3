@@ -1,0 +1,4 @@
+import console from "std/console";
+let e = new EventEmitter();
+e.on("greet", (name: string) => { console.log(`hello ${name}`); });
+e.emit("greet", "world");

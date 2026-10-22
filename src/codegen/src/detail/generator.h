@@ -56,6 +56,7 @@
 #include "detail/class_model.h"
 #include "detail/enums.h"
 #include "detail/generator_state.h"
+#include "detail/listener.h"
 #include "detail/type_map.h"
 #include "detail/worker.h"
 
@@ -128,6 +129,7 @@ private:
     friend struct detail::ModuleVarEmitter;  // emit/module_var.cpp
     friend struct detail::AssignEmitter;  // emit/assignment.cpp
     friend struct detail::PushReserveEmitter;  // emit/push_reserve.cpp
+    friend struct detail::ListenerBuilder;  // detail/listener.h (emit/call.cpp)
     // --- diagnostics (code_generator.cpp) ------------------------------------
     void notImplemented(const Node& node, const std::string& what);
     // A hard type error at a use site: the form is known and known to be

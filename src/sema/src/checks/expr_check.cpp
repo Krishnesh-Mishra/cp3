@@ -223,7 +223,12 @@ Type Analyzer::inferNew(NewExpr& n) {
                 if (a) inferExpr(*a);
             }
             if (!n.arguments.empty()) {
-                notImplemented(n.span, "new EventEmitter(...) with arguments");
+                // The builtin has no constructor parameters (spec 14), so an
+                // argument is a program error, not a missing feature.
+                report(diagcode::kArityMismatch, n.span,
+                       "arity mismatch: EventEmitter's constructor takes no "
+                       "arguments, got " +
+                           std::to_string(n.arguments.size()));
             }
             return withType(n, Type::named(TypeKind::Class, "EventEmitter"));
         }

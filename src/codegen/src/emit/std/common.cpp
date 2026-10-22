@@ -26,8 +26,24 @@ namespace cp3 {
 
 using namespace detail;
 
-// Lowers a call's arguments plain (no formatting adapter). Reports CP3002 for
-// a spread argument, consistent with the rest of the emitter.
+namespace {
+
+// Every element of an array literal is a plain element: a spread inside the
+// literal has no static spelling (its elements are a runtime array's).
+bool plainElements(const ArrayLiteral& lit) {
+    for (const auto& elementPtr : lit.elements) {
+        const Expr* element = elementPtr.get();
+        if (!element || element->kind == NodeKind::SpreadElement) return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+// Lowers a call's arguments plain (no formatting adapter). A spread argument
+// splices the elements of an array into the argument list: the elements must
+// be known at compile time (an array literal), because a fixed-arity C++ call
+// cannot take a runtime array's elements.
 std::vector<std::string> Generator::emitPlainArgs(const CallExpr& c) {
     std::vector<std::string> args;
     args.reserve(c.arguments.size());
@@ -35,7 +51,23 @@ std::vector<std::string> Generator::emitPlainArgs(const CallExpr& c) {
         const Expr* arg = argPtr.get();
         if (!arg) continue;
         if (arg->kind == NodeKind::SpreadElement) {
-            notImplemented(*arg, "spread argument");
+            const auto& spread = static_cast<const SpreadElement&>(*arg);
+            const Expr* source = spread.argument.get();
+            const bool literal =
+                source != nullptr && source->kind == NodeKind::ArrayLiteral;
+            if (!literal) {
+                // A runtime array's elements cannot be spliced into the call.
+                notImplemented(*arg, "spread argument");
+                continue;
+            }
+            const auto& lit = static_cast<const ArrayLiteral&>(*source);
+            if (!plainElements(lit)) {
+                notImplemented(*arg, "spread argument");
+                continue;
+            }
+            for (const auto& elementPtr : lit.elements) {
+                args.push_back(expr(*elementPtr));
+            }
             continue;
         }
         args.push_back(expr(*arg));
