@@ -1,0 +1,7 @@
+import console from "std/console";
+
+export default (thread: Thread<number, void>) => {
+  thread.on("message", (data) => {
+    console.log(`got ${data}`);
+  });
+};

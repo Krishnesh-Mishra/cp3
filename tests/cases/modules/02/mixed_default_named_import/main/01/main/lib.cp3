@@ -1,0 +1,3 @@
+function def(): number { return 1; }
+export function named(): number { return 2; }
+export default def;

@@ -1,0 +1,3 @@
+export default (thread: Thread<number, number>) => {
+  thread.postMessage(5);
+};

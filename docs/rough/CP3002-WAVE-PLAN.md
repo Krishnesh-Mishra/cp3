@@ -64,16 +64,16 @@ lead verifies and merges serially, then launches the next agent.
 
 - a spread element - `src/std/typed-arrays/codegen.cpp:270`
 - spread argument - `src/codegen/src/emit/call_args.cpp:133`
-- this binding pattern - `src/codegen/src/emit/patterns.cpp:553`
-- this binding target - `src/codegen/src/emit/patterns.cpp:724`
+- this binding pattern - `src/codegen/src/emit/patterns.cpp:554`
+- this binding target - `src/codegen/src/emit/patterns.cpp:725`
 - this call - `src/codegen/src/emit/call_args.cpp:320`, `src/codegen/src/emit/call_args.cpp:525`, `src/codegen/src/emit/call_args.cpp:602`
-- this destructuring property - `src/codegen/src/emit/patterns.cpp:657`
-- this destructuring source - `src/codegen/src/emit/patterns.cpp:621`
+- this destructuring property - `src/codegen/src/emit/patterns.cpp:658`
+- this destructuring source - `src/codegen/src/emit/patterns.cpp:622`
 - this listener call - `src/codegen/src/emit/call_args.cpp:317`
 - this method call - `src/codegen/src/emit/call_args.cpp:499`
 - this object field value - `src/codegen/src/support/generic.cpp:262`
 - this rest argument - `src/codegen/src/emit/call_args.cpp:200`
-- this rest parameter type - `src/codegen/src/emit/patterns.cpp:508`
+- this rest parameter type - `src/codegen/src/emit/patterns.cpp:509`
 - this type argument - `src/codegen/src/support/generic.cpp:140`
 - undefined in a rest argument - `src/codegen/src/emit/call_args.cpp:161`
 
@@ -168,11 +168,11 @@ lead verifies and merges serially, then launches the next agent.
 
 - [1] a spread element - `src/std/typed-arrays/codegen.cpp:270`
 - [1] spread argument - `src/codegen/src/emit/call_args.cpp:133`
-- [1] this binding pattern - `src/codegen/src/emit/patterns.cpp:553`
-- [1] this binding target - `src/codegen/src/emit/patterns.cpp:724`
+- [1] this binding pattern - `src/codegen/src/emit/patterns.cpp:554`
+- [1] this binding target - `src/codegen/src/emit/patterns.cpp:725`
 - [1] this call - `src/codegen/src/emit/call_args.cpp:320`, `src/codegen/src/emit/call_args.cpp:525`, `src/codegen/src/emit/call_args.cpp:602`
-- [1] this destructuring property - `src/codegen/src/emit/patterns.cpp:657`
-- [1] this destructuring source - `src/codegen/src/emit/patterns.cpp:621`
+- [1] this destructuring property - `src/codegen/src/emit/patterns.cpp:658`
+- [1] this destructuring source - `src/codegen/src/emit/patterns.cpp:622`
 - [1] this listener call - `src/codegen/src/emit/call_args.cpp:317`
 - [1] this method call - `src/codegen/src/emit/call_args.cpp:499`
 - [1] this object field value - `src/codegen/src/support/generic.cpp:262`
@@ -180,7 +180,7 @@ lead verifies and merges serially, then launches the next agent.
 ### Assignment 2 - 10 item(s) - area(s) 1, 2
 
 - [1] this rest argument - `src/codegen/src/emit/call_args.cpp:200`
-- [1] this rest parameter type - `src/codegen/src/emit/patterns.cpp:508`
+- [1] this rest parameter type - `src/codegen/src/emit/patterns.cpp:509`
 - [1] this type argument - `src/codegen/src/support/generic.cpp:140`
 - [1] undefined in a rest argument - `src/codegen/src/emit/call_args.cpp:161`
 - [2] this accessor return type - `src/codegen/src/emit/class_decl.cpp:382`
