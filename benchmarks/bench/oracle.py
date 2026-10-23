@@ -12,8 +12,13 @@
 # =============================================================================
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
+import os
+import socket
+import sys
+import tempfile
 
 CHURN_MOD = 1000003
 FREQ_MOD = 1000000007
@@ -26,6 +31,8 @@ BUFFER_MOD = 1000003
 ENV_MOD = 1000003
 FS_MOD = 1000003
 PATH_MOD = 1000003
+DATE_MOD = 1000003
+OS_MOD = 1000003
 
 # --------------------------------------------------------------------------
 # compute-single / compute-single-int / compute-multi
@@ -429,6 +436,60 @@ def async_fanout_checksum(fanout: int = ASYNC_FANOUT, chain: int = ASYNC_CHAIN) 
     return checksum
 
 
+# --------------------------------------------------------------------------
+# date-format
+# --------------------------------------------------------------------------
+# The two fixed instants (the second one is exactly 123,456 ms after the
+# first), the per-iteration second offset and the shared character weights.
+DATE_BASE_MS = 1700000000000       # 2023-11-14T22:13:20Z
+DATE_LATER_MS = 1700000123456      # 2023-11-14T22:15:23.456Z, +123,456 ms
+DATE_ITERATIONS = 50000
+DATE_OFFSETS = 3600                # seconds in one hour
+CHAR_VALUES = {str(digit): digit for digit in range(10)}
+CHAR_VALUES.update({"-": 10, "T": 11, ":": 12})
+
+
+def date_format_checksum(iterations: int = DATE_ITERATIONS) -> int:
+    checksum = 0
+    diff_ms = DATE_LATER_MS - DATE_BASE_MS
+    for k in range(iterations):
+        instant_ms = DATE_BASE_MS + (k % DATE_OFFSETS) * 1000
+        # Whole seconds only: every instant in this workload is second-aligned.
+        moment = datetime.datetime.fromtimestamp(instant_ms // 1000,
+                                                 datetime.timezone.utc)
+        text = (f"{moment.year:04d}-{moment.month:02d}-{moment.day:02d}"
+                f"T{moment.hour:02d}:{moment.minute:02d}:{moment.second:02d}")
+        char_sum = sum(CHAR_VALUES[ch] for ch in text)
+        checksum = (checksum * 31 + char_sum + len(text) + diff_ms) % DATE_MOD
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# os-probe
+# --------------------------------------------------------------------------
+# Platform names map to 1/2/3, then reduce to a "documented platform" boolean;
+# CPU count and the home/temp/hostname strings reduce to non-empty booleans.
+# Only those booleans are folded, so the checksum is identical on any machine
+# (and every supported OS) instead of encoding this host's paths or core count.
+OS_ITERATIONS = 50000
+OS_PLATFORM_CODES = {"win32": 1, "darwin": 2, "linux": 3}
+
+
+def os_probe_checksum(iterations: int = OS_ITERATIONS) -> int:
+    checksum = 0
+    for _ in range(iterations):
+        code = OS_PLATFORM_CODES.get(sys.platform, 0)
+        platform_ok = 1 if 1 <= code <= 3 else 0
+        cpu_ok = 1 if (os.cpu_count() or 0) > 0 else 0
+        home_ok = 1 if os.path.expanduser("~") else 0
+        tmp_ok = 1 if tempfile.gettempdir() else 0
+        host_ok = 1 if socket.gethostname() else 0
+        term = (platform_ok * 16 + cpu_ok * 8 + home_ok * 4 +
+                tmp_ok * 2 + host_ok)
+        checksum = (checksum * 31 + term) % OS_MOD
+    return checksum
+
+
 def main() -> None:
     print("collatz_total(1_000_000)          =", collatz_total())
     print("hello_world_output()              =", repr(hello_world_output()))
@@ -453,6 +514,8 @@ def main() -> None:
     print("env_injection_checksum()          =", env_injection_checksum())
     print("file_roundtrip_checksum()         =", file_roundtrip_checksum())
     print("path_join_checksum()              =", path_join_checksum())
+    print("date_format_checksum()            =", date_format_checksum())
+    print("os_probe_checksum()               =", os_probe_checksum())
 
 
 if __name__ == "__main__":

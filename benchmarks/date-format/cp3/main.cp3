@@ -1,0 +1,79 @@
+import console from "std/console";
+import Date from "std/date";
+
+// date-format (cp3 entry) -- construct UTC dates from one fixed epoch
+// millisecond value, format the components manually, and fold a fixed diff.
+//
+// Same workload, same fold and same output in every runnable language entry.
+// The formatted spelling is built by hand from the UTC getters, so every
+// language emits the same 19 ASCII characters: YYYY-MM-DDTHH:MM:SS.
+//
+// std/date's landed constructor is fromISOString; the two fixed strings below
+// are the exact UTC spellings of BASE_MS (1700000000000) and LATER_MS
+// (1700000123456), and diffMs pins the 123,456 ms between them. The builder
+// uses String(...) for numbers because number.toString() currently types as a
+// number, and a string receiver is what the formatting helpers need.
+
+const ITERATIONS = 50000;
+const MOD = 1000003;
+const HOUR_SECONDS = 3600;
+
+// '0'..'9' -> 0..9, '-' -> 10, 'T' -> 11, ':' -> 12. The same weights are used
+// by every entry, so the character fold cannot drift between languages.
+function charValue(ch: string): number {
+  if (ch === "0") { return 0; }
+  if (ch === "1") { return 1; }
+  if (ch === "2") { return 2; }
+  if (ch === "3") { return 3; }
+  if (ch === "4") { return 4; }
+  if (ch === "5") { return 5; }
+  if (ch === "6") { return 6; }
+  if (ch === "7") { return 7; }
+  if (ch === "8") { return 8; }
+  if (ch === "9") { return 9; }
+  if (ch === "-") { return 10; }
+  if (ch === "T") { return 11; }
+  return 12; // ':'
+}
+
+function pad2(value: number): string {
+  if (value < 10) { return "0" + String(value); }
+  return String(value);
+}
+
+function pad4(value: number): string {
+  if (value < 10) { return "000" + String(value); }
+  if (value < 100) { return "00" + String(value); }
+  if (value < 1000) { return "0" + String(value); }
+  return String(value);
+}
+
+function checksum(iterations: number): number {
+  let base = Date.fromISOString("2023-11-14T22:13:20Z");
+  let later = Date.fromISOString("2023-11-14T22:15:23.456Z");
+  let total = 0;
+  let k = 0;
+
+  while (k < iterations) {
+    let moment = base.addSeconds(k % HOUR_SECONDS);
+    let text = pad4(moment.getFullYear()) + "-" +
+      pad2(moment.getMonth() + 1) + "-" + pad2(moment.getDate()) + "T" +
+      pad2(moment.getHours()) + ":" + pad2(moment.getMinutes()) + ":" +
+      pad2(moment.getSeconds());
+
+    let charSum = 0;
+    let i = 0;
+    while (i < text.length) {
+      charSum = charSum + charValue(text.charAt(i));
+      i = i + 1;
+    }
+
+    let diff = later.diffMs(base);
+    total = (total * 31 + charSum + text.length + diff) % MOD;
+    k = k + 1;
+  }
+
+  return total;
+}
+
+console.log(checksum(ITERATIONS));
