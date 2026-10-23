@@ -14,7 +14,8 @@
 #     started and stopped one at a time, together with the process tree each
 #     one created (cluster workers, multiprocessing workers).
 #   * compute-style tasks (compute-single, compute-single-int, compute-multi,
-#     hello-world, string-churn, sha256-churn, buffer-copy, word-frequency,
+#     hello-world, string-churn, sha256-churn, buffer-copy, typed-array-sum,
+#     math-kernel, word-frequency,
 #     object-churn, array-growth, closure-capture, interface-dispatch,
 #     generics-mono, json-roundtrip, async-fanout): build (if needed),
 #     then run R times and report the best wall time; hello-world reports the
@@ -107,6 +108,8 @@ COMPUTE_TASKS = [
     "string-churn",
     "sha256-churn",
     "buffer-copy",
+    "typed-array-sum",
+    "math-kernel",
     "word-frequency",
     "object-churn",
     "array-growth",
@@ -168,6 +171,8 @@ EXPECTED = {
     "hello-world": "Hello, world!",
     "sha256-churn": "218229",
     "buffer-copy": "688024",
+    "typed-array-sum": "135618465",
+    "math-kernel": "177047762",
     "word-frequency": "37425343",
     "object-churn": "90641269",
     "array-growth": "200000010000000",
