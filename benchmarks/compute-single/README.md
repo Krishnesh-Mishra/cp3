@@ -47,7 +47,7 @@ includes the cp3 entry, which deliberately sticks to the subset the current
 compiler implements (functions, `while`, `if`/`else`, `%`, arithmetic) and is
 exactly what the suite's cross-check column compares (`match: ref/ok`).
 
-Wall-clock timings from the labeled run in `../README.md`
+Wall-clock timings from the labeled run in `../results.md`
 (`bench/results/2026-10-18T0803-local/`, best of 2 runs each, process startup
 included):
 

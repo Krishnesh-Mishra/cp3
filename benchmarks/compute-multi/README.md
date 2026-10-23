@@ -42,7 +42,7 @@ single-threaded entry, which is the correctness check built into the suite
 ## Verification record (2026-10-18, post-P1, cp3c 0.1.0-beta.1)
 
 cpp, rust, go, js and python were built and run: all printed `131434424`.
-Wall-clock best-of-2 from the labeled run in `../README.md`
+Wall-clock best-of-2 from the labeled run in `../results.md`
 (`bench/results/2026-10-18T0803-local/`, process startup included):
 
 | language | best wall time | vs its single-thread run |

@@ -79,8 +79,9 @@ cluster; the compute tables are where the runtimes separate. The cp3 entry is
 already written against the frozen `std/network` API - when the module lands,
 its row fills itself in, unchanged.
 
-Full methodology, the fairness contract, the gate and the raw runner output:
-[`benchmarks/README.md`](benchmarks/README.md).
+Full methodology, the fairness contract and the gate:
+[`benchmarks/README.md`](benchmarks/README.md). Recorded runner output:
+[`benchmarks/results.md`](benchmarks/results.md).
 
 ## This is the language
 
@@ -192,7 +193,7 @@ python benchmarks/run_benchmark.py
 | `src/` | the compiler - `lexer`, `parser`, `sema`, `codegen`, `cli`, `runtime`, `modules`, `common` |
 | `tests/` | `cases/` (the conformance corpus) + `runner/` (the harness) |
 | `examples/` | showcase programs: `basics/`, `games/`, `servers/`, `concurrency/`, `async/` |
-| `benchmarks/` | the cross-language benchmark suite (cp3 vs C++/Rust/Go/JS/Python), with its own README and raw run results |
+| `benchmarks/` | the cross-language benchmark suite (cp3 vs C++/Rust/Go/JS/Python), with its own README and recorded results in `results.md` |
 | `tools/` | layout linter and helpers |
 
 Start reading at
@@ -202,5 +203,5 @@ the [full documentation index](docs/index.md).
 ---
 
 *Every performance number in this README is a real measurement from a labeled
-run recorded in [`benchmarks/README.md`](benchmarks/README.md) -
+run recorded in [`benchmarks/results.md`](benchmarks/results.md) -
 nothing here is estimated or extrapolated.*

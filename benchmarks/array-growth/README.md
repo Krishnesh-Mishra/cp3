@@ -22,8 +22,8 @@ outcome is the same array state.
 
 Sizes: 20,000,000 `i64`-sized elements is ~160 MB in the compiled entries and
 in JS; the Python list holds 20M boxed integer objects and peaked around
-830 MB in the labeled run. Peak RSS is reported per row in the main README
-tables, so the memory side of the story is visible next to the time.
+830 MB in the labeled run. Peak RSS is reported per row in `../results.md`,
+so the memory side of the story is visible next to the time.
 
 ## Run one by hand
 

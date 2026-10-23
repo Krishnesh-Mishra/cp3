@@ -61,7 +61,7 @@ these automatically and never touches a process it did not start.
 `js/express/` is an optional second entry with a `package.json`; it is used by
 the runner only when `js/express/node_modules/` exists, i.e. when `npm install`
 there has succeeded at least once. On this machine it did (2026-10-17:
-express 5.3.0, 65 packages, ~9 s), so the sample run in `../README.md` shows
+express 5.3.0, 65 packages, ~9 s), so the sample run in `../results.md` shows
 the **express** row; with no `node_modules` the runner falls back to the
 zero-dep row and says so in the `variant` column. `npm install` requires
 network access; the zero-dep variant never does.
@@ -76,7 +76,7 @@ HTTP GETs, and stopped by exact process id. Observed, in every case:
 * `GET /nope` -> `404` body `not found`
 * startup line `listening on http://127.0.0.1:<port>` on stdout
 
-From the labeled run in `../README.md`
+From the labeled run in `../results.md`
 (`bench/results/2026-10-18T0803-local/`, 100 warmup requests, 300 latency
 requests, 8 keep-alive connections x 3 s):
 
@@ -90,7 +90,7 @@ requests, 8 keep-alive connections x 3 s):
 
 The uniform ~half-second boot is Windows Defender scanning each freshly
 spawned process on this box, not the languages - see the methodology caveats
-in `../README.md`. On a trivial handler the load client and loopback dominate:
+in `../results.md`. On a trivial handler the load client and loopback dominate:
 all five rows land within ~1.5x of each other, and the compute tables are
 where the runtimes actually separate.
 

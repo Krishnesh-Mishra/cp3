@@ -15,7 +15,7 @@ reports the best and the median over at least 15 runs instead of a single
 number, and the raw run list is printed next to them.
 
 This is the task where a fast compiler story shows up as "as fast as a native
-binary": on the labeled run in `../README.md`, the cp3 binary's best spawn
+binary": on the labeled run in `../results.md`, the cp3 binary's best spawn
 time is within a few percent of the C++ and Rust binaries and clearly ahead of
 Node and CPython startup.
 

@@ -10,7 +10,7 @@ fold it into the running checksum:
 checksum = (checksum * 31 + first_four_digest_bytes) % 1000003
 ```
 
-One line, one integer: `785758`.
+One line, one integer: `218229`.
 
 The buffer never changes between iterations, so the measured work is the hash
 implementation itself plus the per-call boundary (digest allocation and the

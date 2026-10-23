@@ -15,16 +15,17 @@
 #     one created (cluster workers, multiprocessing workers).
 #   * compute-style tasks (compute-single, compute-single-int, compute-multi,
 #     hello-world, string-churn, sha256-churn, buffer-copy, typed-array-sum,
-#     math-kernel, word-frequency,
-#     object-churn, array-growth, closure-capture, interface-dispatch,
-#     generics-mono, json-roundtrip, async-fanout): build (if needed),
-#     then run R times and report the best wall time; hello-world reports the
-#     best and the median over at least 15 runs. Outputs are cross-checked
-#     across languages and against the independent oracle values (see
-#     bench/oracle.py) where one exists. json-roundtrip and async-fanout omit
-#     cpp/rust on purpose (no stdlib JSON surface / no stdlib timer-event loop),
-#     and sha256-churn omits them too (no stdlib SHA-256); the runner prints
-#     the reason per row and still gates go/js/python.
+#     math-kernel, word-frequency, object-churn, array-growth, closure-capture,
+#     interface-dispatch, generics-mono, json-roundtrip, async-fanout,
+#     env-injection, file-roundtrip, path-join, date-format, os-probe): build
+#     (if needed), then run R times and report the best wall time; hello-world
+#     reports the best and the median over at least 15 runs. Outputs are
+#     cross-checked across languages and against the independent oracle values
+#     (see bench/oracle.py) where one exists. json-roundtrip, async-fanout and
+#     sha256-churn omit cpp/rust on purpose (no stdlib JSON surface, no stdlib
+#     timer-event loop, no stdlib SHA-256); date-format and os-probe omit rust
+#     (no stdlib timezone formatter / hostname+platform probe). The runner
+#     prints the reason per row and still gates the remaining languages.
 #   * cp3 entries that need unlanded features are attempted like everything
 #     else; the compiler's own CP3xxx diagnostic is reported instead of a
 #     timing. A CP3002 row is a hard gate failure, not a pending row: the
@@ -55,6 +56,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import http.client
+import io
 import json
 import math
 import os
@@ -121,17 +123,19 @@ COMPUTE_TASKS = [
     "env-injection",
     "file-roundtrip",
     "path-join",
+    "date-format",
+    "os-probe",
 ]
 ALL_TASKS = SERVER_TASKS + COMPUTE_TASKS
 
 # Per-task language omissions. These rows compare standard-library surfaces
-# that two languages do not have: no JSON parser/serializer in C++ std or Rust
-# std without a crate, no timer/event-loop surface in either standard library,
-# and no SHA-256 in either standard library. A single dependency-free file
-# would have to vendor or hand-roll the missing stack, which compares
-# dependencies, not the language. The reason is printed per row, and these
-# languages are skipped only for these tasks; the gate still applies to
-# go/js/python.
+# that the omitted language does not have: no JSON parser/serializer, no
+# timer/event-loop surface, and no SHA-256 in C++ std or Rust std without a
+# crate; no timezone-aware calendar formatter or hostname/platform probe in
+# Rust std without libc or a crate. A single dependency-free file would have to
+# vendor or hand-roll the missing stack, which compares dependencies, not the
+# language. The reason is printed per row, and these languages are skipped
+# only for these tasks; the gate still applies to the remaining languages.
 TASK_OMIT_LANGUAGES = {
     "json-roundtrip": {
         "cpp": "no JSON in the C++ standard library; a dependency-free file would vendor a parser",
@@ -144,6 +148,12 @@ TASK_OMIT_LANGUAGES = {
     "sha256-churn": {
         "cpp": "no SHA-256 in the C++ standard library; vendoring a hash implementation compares dependencies",
         "rust": "no SHA-256 in Rust std without a crate; adding sha2 compares dependencies",
+    },
+    "date-format": {
+        "rust": "no timezone-aware date formatting in Rust std without a crate; adding chrono compares dependencies",
+    },
+    "os-probe": {
+        "rust": "no hostname/platform probe in Rust std without libc or a crate; hand-rolling it compares bindings",
     },
 }
 
@@ -182,8 +192,10 @@ EXPECTED = {
     "json-roundtrip": "664346",
     "async-fanout": "99898",
     "env-injection": "133644",
-    "file-roundtrip": "907755",
-    "path-join": "773463",
+    "file-roundtrip": "698140",
+    "path-join": "425577",
+    "date-format": "796897",
+    "os-probe": "208981",
 }
 CHURN_EXPECTED = {
     CHURN_DEFAULT_ITERATIONS: "852167",
@@ -1685,21 +1697,66 @@ def cp3c_provenance() -> list[str]:
 # main
 # --------------------------------------------------------------------------
 class Tee:
-    """Writes everywhere the runner prints: console plus the results file.
+    """Writes everywhere the runner prints: console plus any capture sinks.
 
-    The console keeps colour; the results file is always plain text."""
+    The console keeps colour; every secondary sink is plain text."""
 
-    def __init__(self, primary, secondary):
+    def __init__(self, primary, *secondaries):
         self.primary = primary
-        self.secondary = secondary
+        self.secondaries = secondaries
 
     def write(self, text: str):
         self.primary.write(text)
-        self.secondary.write(ANSI_RE.sub("", text))
+        clean = ANSI_RE.sub("", text)
+        for sink in self.secondaries:
+            sink.write(clean)
 
     def flush(self):
         self.primary.flush()
-        self.secondary.flush()
+        for sink in self.secondaries:
+            sink.flush()
+
+
+RESULTS_MD = BENCHMARKS / "results.md"
+LATEST_RESULTS_START = "<!-- latest-full-run:start -->"
+LATEST_RESULTS_END = "<!-- latest-full-run:end -->"
+
+
+def write_latest_results(captured: str, argv: list[str]) -> None:
+    """Replace the generated latest-run block in benchmarks/results.md.
+
+    Only a complete, default-scale full-suite run calls this. The historical
+    blocks below the generated block are never touched.
+    """
+    command = "python " + " ".join(argv)
+    stamp = datetime.now().isoformat(timespec="seconds")
+    block = (
+        f"{LATEST_RESULTS_START}\n"
+        f"_Generated by `{command}` on {stamp}._\n\n"
+        "```text\n"
+        f"{captured.strip()}\n"
+        "```\n"
+        f"{LATEST_RESULTS_END}"
+    )
+    if RESULTS_MD.exists():
+        text = RESULTS_MD.read_text(encoding="utf-8")
+    else:
+        text = (
+            "# Benchmark results\n\n"
+            "`README.md` documents the suite; this file stores the recorded\n"
+            "numbers. The latest full-suite run is rewritten automatically.\n\n"
+            "## Latest full run\n\n"
+            f"{LATEST_RESULTS_START}\n_No full-suite run recorded yet._\n{LATEST_RESULTS_END}\n"
+        )
+    pattern = re.compile(
+        re.escape(LATEST_RESULTS_START) + r".*?" + re.escape(LATEST_RESULTS_END),
+        re.DOTALL,
+    )
+    if pattern.search(text):
+        text = pattern.sub(block, text, count=1)
+    else:
+        text = text.rstrip() + "\n\n## Latest full run\n\n" + block + "\n"
+    RESULTS_MD.write_text(text, encoding="utf-8", newline="\n")
 
 
 def resolve_churn_scale(text: str) -> tuple[int, str]:
@@ -1756,6 +1813,8 @@ def main() -> int:
         wanted = list(ALL_TASKS)
 
     churn_iterations, churn_label = resolve_churn_scale(args.churn_scale)
+    full_run = not args.only.strip()
+    capture = io.StringIO() if full_run and churn_label == "default" else None
 
     original_stdout = sys.stdout
     ui_setup(original_stdout)
@@ -1774,8 +1833,11 @@ def main() -> int:
         ]
         (results_dir / "meta.txt").write_text("\n".join(meta) + "\n", encoding="utf-8")
         results_log = open(results_dir / "run.txt", "w", encoding="utf-8", newline="")
-        sys.stdout = Tee(original_stdout, results_log)
+        sys.stdout = Tee(original_stdout, results_log, *([capture] if capture else []))
+    elif capture is not None:
+        sys.stdout = Tee(original_stdout, capture)
 
+    completed = False
     try:
         probes = [
             ("g++", ["g++", "--version"]), ("rustc", ["rustc", "--version"]),
@@ -1865,11 +1927,18 @@ def main() -> int:
                 print_compute_table(task, rows, header, expected=expected)
 
         print_gate_and_summary()
+        completed = True
     finally:
         live_clear()
-        if results_log is not None:
+        if results_log is not None or capture is not None:
             sys.stdout = original_stdout
+        if results_log is not None:
             results_log.close()
+        if capture is not None and completed:
+            try:
+                write_latest_results(capture.getvalue(), sys.argv)
+            except Exception as exc:  # a results-file write must not fail the run
+                print(f"[runner] results.md not updated: {exc}", file=original_stdout)
 
     if GATE_BLOCKERS:
         return 1
