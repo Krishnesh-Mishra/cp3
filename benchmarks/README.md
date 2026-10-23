@@ -78,6 +78,8 @@ created (cluster or multiprocessing workers); no unrelated process is touched.
 | `compute-multi` | the same total split across all cores | `131434424` | pending `parallel.*` |
 | `hello-world` | spawn -> exit wall time, best and median of 15+ runs | `Hello, world!` | runs |
 | `string-churn` | 8 case/slice rounds per iteration over a 4 KiB source | `852167` (50k) / `254546` (300k) | runs |
+| `typed-array-sum` | 1M `Float64Array` + `Uint8Array` fill, 32 sum rounds, byte pass | `135618465` | runs |
+| `math-kernel` | 5M sqrt/floor/abs/pow/clamp points, integer-quantized fold | `177047762` | runs |
 | `word-frequency` | 3M LCG picks into a 64-word hash map, folded counts | `37425343` | pending arrays (literals, indexing, push) |
 | `object-churn` | 5M small objects, half die in scope, half escape | `90641269` | pending classes |
 | `array-growth` | 20M pushes while summing, then pop half | `200000010000000` | pending arrays |
@@ -93,6 +95,13 @@ Every value above is re-derived independently by `bench/oracle.py`, which
 re-implements every workload again in plain Python; the runner cross-checks
 all languages against each other and against those oracle values (the `match`
 column plus `!!` warning lines for any disagreement).
+
+`typed-array-sum` and `math-kernel` are integer-exact workloads: every
+floating-point result is quantized before it enters the fold. The cp3
+typed-array entry keeps the built-in `Float64Array`/`Uint8Array` storage and
+fill, and reads the same buffers through `DataView`; a runtime-index
+typed-array element read is typed `number | null | undefined` and does not
+codegen arithmetic yet.
 
 Two rows deliberately omit cpp and rust. `json-roundtrip` needs a standard
 JSON parser/serializer (C++ `std` has none; Rust `std` has none without a

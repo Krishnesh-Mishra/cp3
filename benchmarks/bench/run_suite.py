@@ -14,9 +14,9 @@
 #     started and stopped one at a time, together with the process tree each
 #     one created (cluster workers, multiprocessing workers).
 #   * compute-style tasks (compute-single, compute-single-int, compute-multi,
-#     hello-world, string-churn, word-frequency, object-churn, array-growth,
-#     closure-capture, interface-dispatch, generics-mono, json-roundtrip,
-#     async-fanout): build (if needed),
+#     hello-world, string-churn, typed-array-sum, math-kernel, word-frequency,
+#     object-churn, array-growth, closure-capture, interface-dispatch,
+#     generics-mono, json-roundtrip, async-fanout): build (if needed),
 #     then run R times and report the best wall time; hello-world reports the
 #     best and the median over at least 15 runs. Outputs are cross-checked
 #     across languages and against the independent oracle values (see
@@ -104,6 +104,8 @@ COMPUTE_TASKS = [
     "compute-multi",
     "hello-world",
     "string-churn",
+    "typed-array-sum",
+    "math-kernel",
     "word-frequency",
     "object-churn",
     "array-growth",
@@ -149,6 +151,8 @@ EXPECTED = {
     "compute-single-int": "131434424",
     "compute-multi": "131434424",
     "hello-world": "Hello, world!",
+    "typed-array-sum": "135618465",
+    "math-kernel": "177047762",
     "word-frequency": "37425343",
     "object-churn": "90641269",
     "array-growth": "200000010000000",

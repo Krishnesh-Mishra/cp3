@@ -12,7 +12,9 @@
 # =============================================================================
 from __future__ import annotations
 
+from array import array
 import json
+import math
 
 CHURN_MOD = 1000003
 FREQ_MOD = 1000000007
@@ -63,6 +65,59 @@ def churn_checksum(iterations: int) -> int:
             s = s.lower() + s[0:8]
             s = s[2:]
         checksum = (checksum * 31 + s.find("c") + len(s)) % CHURN_MOD
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# typed-array-sum
+# --------------------------------------------------------------------------
+TA_SIZE = 1000000
+TA_ROUNDS = 32
+TA_MOD = 1000000007
+
+
+def typed_array_sum_checksum(size: int = TA_SIZE, rounds: int = TA_ROUNDS) -> int:
+    values = array("d", [0.0]) * size
+    data = bytearray(size)
+    for i in range(size):
+        values[i] = (i % 97) * 0.5 + (i % 13) * 0.25
+        data[i] = (i * 31 + 7) % 256
+
+    total = 0.0
+    for _ in range(rounds):
+        acc = 0.0
+        for i in range(size):
+            acc += values[i]
+        total += acc
+
+    scaled = math.trunc(total * 4.0)
+    checksum = (scaled + sum(data)) % TA_MOD
+    checksum = (checksum * 31 + size + rounds) % TA_MOD
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# math-kernel
+# --------------------------------------------------------------------------
+MK_COUNT = 5000000
+MK_MOD = 1000000007
+
+
+def math_kernel_checksum(count: int = MK_COUNT) -> int:
+    checksum = 0
+    sqrt_total = 0.0
+    for i in range(1, count + 1):
+        x = i * 0.000001
+        s = math.sqrt(i)
+        sqrt_total += s
+        f = math.floor(x + 0.5)
+        a = abs(x - 2.5)
+        p = math.trunc(math.pow(i, 2))
+        c = min(max(x * 1000.0, 0.0), 1000.0)
+        mixed = s + f + a + c
+        quantum = math.trunc(mixed * 1000000.0)
+        checksum = (checksum * 31 + quantum + p) % MK_MOD
+    checksum = (checksum * 31 + math.trunc(sqrt_total * 1000.0)) % MK_MOD
     return checksum
 
 
@@ -307,6 +362,8 @@ def main() -> None:
     print("hello_world_output()              =", repr(hello_world_output()))
     print("churn_checksum(50000)             =", churn_checksum(50000))
     print("churn_checksum(300000)            =", churn_checksum(300000))
+    print("typed_array_sum_checksum()        =", typed_array_sum_checksum())
+    print("math_kernel_checksum()            =", math_kernel_checksum())
     print("word_frequency_checksum()         =", word_frequency_checksum())
     print("object_churn_checksum()           =", object_churn_checksum())
     print("array_growth_sum()                =", array_growth_sum())
