@@ -23,6 +23,9 @@ JSON_MOD = 1000003
 ASYNC_MOD = 1000003
 SHA256_MOD = 1000003
 BUFFER_MOD = 1000003
+ENV_MOD = 1000003
+FS_MOD = 1000003
+PATH_MOD = 1000003
 
 # --------------------------------------------------------------------------
 # compute-single / compute-single-int / compute-multi
@@ -339,6 +342,76 @@ def json_stringify_only_checksum(iterations: int = JSON_ITERATIONS) -> int:
 
 
 # --------------------------------------------------------------------------
+# env-injection
+# --------------------------------------------------------------------------
+ENV_ITERATIONS = 500000
+ENV_VAR = "CP3_BENCH_ENV"
+ENV_VALUE = "cp3-benchmark-value"
+
+
+def env_injection_checksum(iterations: int = ENV_ITERATIONS,
+                           value: str = ENV_VALUE) -> int:
+    data = value.encode("utf-8")
+    checksum = 0
+    for _ in range(iterations):
+        checksum = (checksum * 31 + len(data)) % ENV_MOD
+        checksum = (checksum * 31 + sum(data)) % ENV_MOD
+        checksum = (checksum * 31 + data[0]) % ENV_MOD
+        checksum = (checksum * 31 + data[-1]) % ENV_MOD
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# file-roundtrip
+# --------------------------------------------------------------------------
+FS_ITERATIONS = 200
+FS_BYTES = 4096
+FS_SEED = b"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+
+def file_roundtrip_checksum(iterations: int = FS_ITERATIONS,
+                            size: int = FS_BYTES) -> int:
+    data = (FS_SEED * (size // len(FS_SEED) + 1))[:size]
+    checksum = 0
+    for _ in range(iterations):
+        checksum = (checksum * 31 + len(data)) % FS_MOD
+        checksum = (checksum * 31 + sum(data)) % FS_MOD
+        checksum = (checksum * 31 + data[0]) % FS_MOD
+        checksum = (checksum * 31 + data[-1]) % FS_MOD
+        checksum = (checksum * 31 + len(data)) % FS_MOD      # stat size
+        checksum = (checksum * 31 + 1) % FS_MOD              # isFile
+        checksum = (checksum * 31 + 0) % FS_MOD              # isDirectory
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# path-join
+# --------------------------------------------------------------------------
+PATH_ITERATIONS = 170000
+PATH_PARTS = ["var", "log", "cp3", "service", "events-2026-10-23.log"]
+
+
+def path_join_checksum(iterations: int = PATH_ITERATIONS) -> int:
+    # The reference spelling is POSIX-style: the fixed parts contain no
+    # separators, so join/normalize differ only in that one separator char,
+    # which this fold never reads.
+    joined = "/".join(PATH_PARTS)
+    normalized = joined
+    base = PATH_PARTS[-1]
+    ext = "." + base.rsplit(".", 1)[1] if "." in base else ""
+    checksum = 0
+    for _ in range(iterations):
+        checksum = (checksum * 31 + len(joined)) % PATH_MOD
+        checksum = (checksum * 31 + len(normalized)) % PATH_MOD
+        checksum = (checksum * 31 + len(base)) % PATH_MOD
+        checksum = (checksum * 31 + len(ext)) % PATH_MOD
+        checksum = (checksum * 31 + ord(joined[0])) % PATH_MOD
+        checksum = (checksum * 31 + ord(base[0])) % PATH_MOD
+        checksum = (checksum * 31 + ord(ext[0])) % PATH_MOD
+    return checksum
+
+
+# --------------------------------------------------------------------------
 # async-fanout
 # --------------------------------------------------------------------------
 # Phase 1: 10,000 timers release 0..9,999, joined at once -> their sum.
@@ -377,6 +450,9 @@ def main() -> None:
     print("json_parse_only_checksum()        =", json_parse_only_checksum())
     print("json_stringify_only_checksum()    =", json_stringify_only_checksum())
     print("async_fanout_checksum()           =", async_fanout_checksum())
+    print("env_injection_checksum()          =", env_injection_checksum())
+    print("file_roundtrip_checksum()         =", file_roundtrip_checksum())
+    print("path_join_checksum()              =", path_join_checksum())
 
 
 if __name__ == "__main__":

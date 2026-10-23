@@ -115,6 +115,9 @@ COMPUTE_TASKS = [
     "generics-mono",
     "json-roundtrip",
     "async-fanout",
+    "env-injection",
+    "file-roundtrip",
+    "path-join",
 ]
 ALL_TASKS = SERVER_TASKS + COMPUTE_TASKS
 
@@ -148,6 +151,12 @@ CHURN_DEFAULT_ITERATIONS = 50000
 CHURN_STRESS_ITERATIONS = 300000
 CHURN_SCALE_PRESETS = {"default": CHURN_DEFAULT_ITERATIONS, "stress": CHURN_STRESS_ITERATIONS}
 
+# env-injection: the runner injects this one variable into every child process
+# for that task only (merged over os.environ). The checksum folds the value's
+# bytes, so a different value produces a different output.
+ENV_INJECTION_VARIABLE = "CP3_BENCH_ENV"
+ENV_INJECTION_VALUE = "cp3-benchmark-value"
+
 # Expected outputs. Fixed-value tasks are embedded here; string-churn values
 # depend on the chosen scale. All values were computed independently by
 # benchmarks/bench/oracle.py, which re-implements every workload in plain
@@ -167,6 +176,9 @@ EXPECTED = {
     "generics-mono": "998986007 998986007",
     "json-roundtrip": "664346",
     "async-fanout": "99898",
+    "env-injection": "133644",
+    "file-roundtrip": "907755",
+    "path-join": "773463",
 }
 CHURN_EXPECTED = {
     CHURN_DEFAULT_ITERATIONS: "852167",
@@ -239,16 +251,19 @@ def run_command(argv: list[str], cwd: Path | None = None, timeout: float = 300.0
         return subprocess.CompletedProcess(argv, -1, out or "", err)
 
 
-def run_measured(argv: list[str], cwd: Path | None = None, timeout: float = 900.0):
+def run_measured(argv: list[str], cwd: Path | None = None, timeout: float = 900.0,
+                 env: dict[str, str] | None = None):
     """run_command plus wall time plus peak-RSS sampling of the child process.
 
     Returns (CompletedProcess, wall_ms, peak_bytes_or_None). The peak is the
     kernel-maintained PeakWorkingSetSize sampled from Python; on other
     platforms, or when the process exits before a sample lands, it is None and
-    every report prints '-' honestly."""
+    every report prints '-' honestly. `env` is the complete child environment
+    (callers merge over os.environ); None means inherit."""
     start = time.perf_counter()
     process = subprocess.Popen(
-        argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        env=env
     )
     sampler = RssSampler(process.pid)
     sampler.start()
@@ -816,7 +831,11 @@ def run_compute_trial(language: str, task: str, reps: int, cp3c: Path,
         argv = compute_run_argv(language, task, extra)
 
     for _ in range(reps):
-        result, wall_ms, peak = run_measured(argv, timeout=900)
+        child_env = None
+        if task == "env-injection":
+            child_env = os.environ.copy()
+            child_env[ENV_INJECTION_VARIABLE] = ENV_INJECTION_VALUE
+        result, wall_ms, peak = run_measured(argv, timeout=900, env=child_env)
         if result.returncode != 0:
             row["note"] = f"run failed: {first_diagnostic(result.stderr or result.stdout)}"
             return row
