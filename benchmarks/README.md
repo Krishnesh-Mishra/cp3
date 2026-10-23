@@ -312,7 +312,8 @@ historical labeled runs are kept there verbatim.
 ## CP3002 status
 
 The 2026-10-19 snapshot listed eight benchmark rows that stopped at CP3002
-markers before producing a number. Every one now runs and has a timing in
+markers before producing a number; `health-server` was already serving the
+contract but had no timing. All nine now run and have a timing in
 [`results.md`](results.md):
 
 | row | feature that cleared it |
