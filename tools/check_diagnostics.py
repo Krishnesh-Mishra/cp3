@@ -55,7 +55,7 @@ from dataclasses import dataclass
 # -----------------------------------------------------------------------------
 # Layout
 # -----------------------------------------------------------------------------
-HEADER_REL = "src/common/include/cp3/diagnostic_codes.hpp"
+HEADER_REL = "src/common/include/cp3/diag/diagnostic_codes.hpp"
 CATALOG_DIR_REL = "docs/cli-tooling"
 CATALOG_SUFFIX = "-diagnostic-catalog.md"
 SOURCE_EXTENSIONS = (".cpp", ".hpp", ".h")
