@@ -293,28 +293,43 @@ class Outcome:
 
 
 def discover_cases(cases_dir: Path, filter_substr: Optional[str]) -> tuple[list[Case], list[str]]:
-    """Returns (cases, discovery_warnings). Never raises."""
+    """Returns (cases, discovery_warnings). Never raises.
+
+    A case is a folder that holds `main.cp3` (the program) and `output.json`
+    (its expectation). The folder's name is the case's name; the folder chain
+    above it is the case's category.
+    """
     cases: list[Case] = []
     warnings: list[str] = []
     if not cases_dir.exists():
         warnings.append(f"cases directory not found: {cases_dir}")
         return cases, warnings
 
+    # Two layouts are understood while the corpus migrates:
+    #   <case>/main.cp3 + <case>/output.json            (the fixed-name layout)
+    #   <name>.cp3 + <name>.expect.json                 (the flat layout)
+    discovered: list[tuple[Path, str, Path]] = []
+    for expect_path in sorted(cases_dir.rglob("output.json")):
+        discovered.append((expect_path, expect_path.parent.name,
+                           expect_path.parent / "main.cp3"))
     for expect_path in sorted(cases_dir.rglob("*.expect.json")):
+        stem = expect_path.name[: -len(".expect.json")]
+        discovered.append((expect_path, stem, expect_path.parent / (stem + ".cp3")))
+    discovered.sort(key=lambda item: item[0].as_posix())
+
+    for expect_path, stem, cp3_path in discovered:
         rel = expect_path.relative_to(cases_dir)
         rel_str = str(rel).replace("\\", "/")
         if filter_substr and filter_substr not in rel_str:
             continue
 
-        stem = expect_path.name[: -len(".expect.json")]
-        cp3_path = expect_path.parent / (stem + ".cp3")
         category = str(rel.parent).replace("\\", "/")
         if category == ".":
             category = ""
 
         spec: dict = {}
         try:
-            spec = json.loads(expect_path.read_text(encoding="utf-8"))
+            spec = json.loads(expect_path.read_text(encoding="utf-8-sig"))
             if not isinstance(spec, dict):
                 warnings.append(f"{rel_str}: expected a JSON object")
                 spec = {}

@@ -488,10 +488,11 @@ std::string Generator::parameterText(const Parameter& p, const FunctionDeclarati
     if (id) {
         name = mapIdent(id->name);
     } else {
-        // The parser binds a parameter to an identifier, a binding pattern or
-        // a rest element, and the rest form returns above - so this is the
-        // defensive spelling for a name shape the parser cannot produce.
-        name = "cp3_param";
+        // A destructured parameter (a binding pattern, or a rest parameter
+        // with one): the C++ parameter is the generated handle whose contents
+        // the body prologue unpacks, spelled per index (emitPatternParams
+        // reads the same name).
+        name = "cp3_param_" + std::to_string(index);
     }
 
     const std::optional<Type> pt = parameterType(p, fd, index);

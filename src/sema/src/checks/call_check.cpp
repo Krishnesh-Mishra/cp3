@@ -268,6 +268,33 @@ const FuncSig* Analyzer::classMemberSig(const MemberExpr& m) {
 void Analyzer::checkSpreadArg(const FuncSig& sig, Expr* a, std::size_t index) {
     auto& sp = static_cast<SpreadElement&>(*a);
     if (!sp.argument) return;
+    // A spread of an array literal fills the parameters positionally: each
+    // element is checked against the parameter it lands on (the same shape the
+    // codegen expands). A computed array carries a single element type, which
+    // must satisfy every parameter the spread reaches.
+    if (sp.argument->kind == NodeKind::ArrayLiteral) {
+        // Infer the literal itself first: the codegen reads its recorded
+        // element type to spell the array.
+        inferExpr(*sp.argument);
+        const auto& literal = static_cast<const ArrayLiteral&>(*sp.argument);
+        for (std::size_t k = 0; k < literal.elements.size(); ++k) {
+            Expr* element = literal.elements[k].get();
+            if (element == nullptr ||
+                element->kind == NodeKind::SpreadElement) {
+                continue;
+            }
+            const Type et = inferExpr(*element);
+            if (sig.rest && !sig.params.empty()) {
+                checkAssign(et, sig.params.back(), element->span, false);
+                continue;
+            }
+            const std::size_t j = index + k;
+            if (j < sig.params.size() && sig.params[j].kind != TypeKind::Array) {
+                checkAssign(et, sig.params[j], element->span, false);
+            }
+        }
+        return;
+    }
     const Type at = inferExpr(*sp.argument);
     const Type elem = at.kind == TypeKind::Array && !at.parts.empty()
                           ? at.parts.front()

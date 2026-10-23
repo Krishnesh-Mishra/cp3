@@ -2,7 +2,7 @@
   "mode": "check",
   "exitCode": 1,
   "error": {
-    "code": "CP3707",
+    "code": "CP3708",
     "contains": "computed class member name"
   }
 }

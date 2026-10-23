@@ -3,7 +3,7 @@
   "stdout": "",
   "exitCode": 1,
   "error": {
-    "code": "CP3401",
+    "code": "CP3912",
     "line": 3,
     "col": 1,
     "contains": "closure cannot be async"

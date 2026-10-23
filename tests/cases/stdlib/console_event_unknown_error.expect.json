@@ -2,7 +2,7 @@
   "mode": "run",
   "exitCode": 1,
   "error": {
-    "code": "CP3417",
+    "code": "CP3419",
     "contains": "console event"
   }
 }

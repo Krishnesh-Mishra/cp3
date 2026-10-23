@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3419",
+    "line": 11,
+    "col": 17,
+    "contains": "unknown console event"
+  }
+}

@@ -3,7 +3,7 @@
   "stdout": "",
   "exitCode": 1,
   "error": {
-    "code": "CP3506",
+    "code": "CP3508",
     "line": 5,
     "contains": "does not denote an iteration statement"
   }
