@@ -12,6 +12,7 @@
 # =============================================================================
 from __future__ import annotations
 
+import hashlib
 import json
 
 CHURN_MOD = 1000003
@@ -20,6 +21,8 @@ OBJ_MOD = 1000000007
 MONO_MOD = 1000000007
 JSON_MOD = 1000003
 ASYNC_MOD = 1000003
+SHA256_MOD = 1000003
+BUFFER_MOD = 1000003
 
 # --------------------------------------------------------------------------
 # compute-single / compute-single-int / compute-multi
@@ -63,6 +66,57 @@ def churn_checksum(iterations: int) -> int:
             s = s.lower() + s[0:8]
             s = s[2:]
         checksum = (checksum * 31 + s.find("c") + len(s)) % CHURN_MOD
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# sha256-churn
+# --------------------------------------------------------------------------
+# One fixed 1 KiB buffer, hashed ITERATIONS times. The checksum folds the
+# first four digest bytes as one big-endian 32-bit integer, which is what the
+# cp3 hex-first-eight-digits parse, Go's binary.BigEndian.Uint32, JS's
+# parseInt of the first eight hex digits and Python's int.from_bytes all read.
+SHA256_ITERATIONS = 60000
+SHA256_BUFFER_SIZE = 1024
+SHA256_SEED = b"0123456789abcdef"
+
+
+def sha256_churn_checksum(iterations: int = SHA256_ITERATIONS,
+                          buffer_size: int = SHA256_BUFFER_SIZE) -> int:
+    data = (SHA256_SEED * (buffer_size // len(SHA256_SEED)))[:buffer_size]
+    checksum = 0
+    for _ in range(iterations):
+        digest = hashlib.sha256(data).digest()
+        first_four_bytes = int.from_bytes(digest[:4], "big")
+        checksum = (checksum * 31 + first_four_bytes) % SHA256_MOD
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# buffer-copy
+# --------------------------------------------------------------------------
+# A 64 KiB buffer filled with the repeated 64-byte seed is reshaped
+# ITERATIONS times: rotate left by a changing offset, overwrite the new first
+# byte with a cycling marker, then fold the first WINDOW bytes (each marker
+# position + 1, so "absent" folds as 0 and the value is never negative).
+BUFFER_ITERATIONS = 5000
+BUFFER_SIZE = 65536
+BUFFER_WINDOW = 96
+BUFFER_SEED = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!?"
+
+
+def buffer_copy_checksum(iterations: int = BUFFER_ITERATIONS,
+                         size: int = BUFFER_SIZE,
+                         window: int = BUFFER_WINDOW) -> int:
+    buf = bytearray(BUFFER_SEED * (size // len(BUFFER_SEED)))
+    checksum = 0
+    for k in range(iterations):
+        offset = (k * 4093 + 17) % size
+        marker = BUFFER_SEED[k % len(BUFFER_SEED)]
+        buf = bytearray((marker,)) + buf[offset + 1:] + buf[:offset]
+        first_a = buf.find(b"a", 0, window) + 1
+        first_7 = buf.find(b"7", 0, window) + 1
+        checksum = (checksum * 131 + len(buf) + first_a + first_7) % BUFFER_MOD
     return checksum
 
 
@@ -307,6 +361,8 @@ def main() -> None:
     print("hello_world_output()              =", repr(hello_world_output()))
     print("churn_checksum(50000)             =", churn_checksum(50000))
     print("churn_checksum(300000)            =", churn_checksum(300000))
+    print("sha256_churn_checksum()           =", sha256_churn_checksum())
+    print("buffer_copy_checksum()            =", buffer_copy_checksum())
     print("word_frequency_checksum()         =", word_frequency_checksum())
     print("object_churn_checksum()           =", object_churn_checksum())
     print("array_growth_sum()                =", array_growth_sum())

@@ -14,15 +14,16 @@
 #     started and stopped one at a time, together with the process tree each
 #     one created (cluster workers, multiprocessing workers).
 #   * compute-style tasks (compute-single, compute-single-int, compute-multi,
-#     hello-world, string-churn, word-frequency, object-churn, array-growth,
-#     closure-capture, interface-dispatch, generics-mono, json-roundtrip,
-#     async-fanout): build (if needed),
+#     hello-world, string-churn, sha256-churn, buffer-copy, word-frequency,
+#     object-churn, array-growth, closure-capture, interface-dispatch,
+#     generics-mono, json-roundtrip, async-fanout): build (if needed),
 #     then run R times and report the best wall time; hello-world reports the
 #     best and the median over at least 15 runs. Outputs are cross-checked
 #     across languages and against the independent oracle values (see
 #     bench/oracle.py) where one exists. json-roundtrip and async-fanout omit
-#     cpp/rust on purpose (no stdlib JSON surface / no stdlib timer-event loop);
-#     the runner prints the reason per row and still gates go/js/python.
+#     cpp/rust on purpose (no stdlib JSON surface / no stdlib timer-event loop),
+#     and sha256-churn omits them too (no stdlib SHA-256); the runner prints
+#     the reason per row and still gates go/js/python.
 #   * cp3 entries that need unlanded features are attempted like everything
 #     else; the compiler's own CP3xxx diagnostic is reported instead of a
 #     timing. A CP3002 row is a hard gate failure, not a pending row: the
@@ -104,6 +105,8 @@ COMPUTE_TASKS = [
     "compute-multi",
     "hello-world",
     "string-churn",
+    "sha256-churn",
+    "buffer-copy",
     "word-frequency",
     "object-churn",
     "array-growth",
@@ -117,11 +120,12 @@ ALL_TASKS = SERVER_TASKS + COMPUTE_TASKS
 
 # Per-task language omissions. These rows compare standard-library surfaces
 # that two languages do not have: no JSON parser/serializer in C++ std or Rust
-# std without a crate, and no timer/event-loop surface in either standard
-# library. A single dependency-free file would have to vendor or hand-roll the
-# missing stack, which compares dependencies, not the language. The reason is
-# printed per row, and these languages are skipped only for these tasks; the
-# gate still applies to go/js/python.
+# std without a crate, no timer/event-loop surface in either standard library,
+# and no SHA-256 in either standard library. A single dependency-free file
+# would have to vendor or hand-roll the missing stack, which compares
+# dependencies, not the language. The reason is printed per row, and these
+# languages are skipped only for these tasks; the gate still applies to
+# go/js/python.
 TASK_OMIT_LANGUAGES = {
     "json-roundtrip": {
         "cpp": "no JSON in the C++ standard library; a dependency-free file would vendor a parser",
@@ -130,6 +134,10 @@ TASK_OMIT_LANGUAGES = {
     "async-fanout": {
         "cpp": "no timers or event loop in the C++ standard library; a file would hand-roll both",
         "rust": "no timers or executor in Rust std; adding tokio/async-std compares dependencies",
+    },
+    "sha256-churn": {
+        "cpp": "no SHA-256 in the C++ standard library; vendoring a hash implementation compares dependencies",
+        "rust": "no SHA-256 in Rust std without a crate; adding sha2 compares dependencies",
     },
 }
 
@@ -149,6 +157,8 @@ EXPECTED = {
     "compute-single-int": "131434424",
     "compute-multi": "131434424",
     "hello-world": "Hello, world!",
+    "sha256-churn": "218229",
+    "buffer-copy": "688024",
     "word-frequency": "37425343",
     "object-churn": "90641269",
     "array-growth": "200000010000000",

@@ -1,0 +1,46 @@
+import console from "std/console";
+import { Buffer } from "std/buffer";
+
+// buffer-copy (cp3 entry) -- build a 64 KiB byte-pattern buffer, then reshape
+// it ITERATIONS times: rotate it by a changing offset (two owning Buffer
+// slices), reassemble it through Buffer.from with the first byte overwritten by
+// a cycling marker, and fold a 96-byte window into a checksum.
+//
+// The other five entries run the same reshape with their own buffer types
+// (std::vector<uint8_t>, Vec<u8>, []byte, Node Buffer, bytearray). cp3's
+// std/buffer Buffer is an immutable byte sequence with value semantics and no
+// byte-write API, so the one-byte mutation is expressed while reassembling the
+// new buffer (marker + slice from offset+1 + slice before offset), which is the
+// landed surface from docs/standard-library/04 section buffer.
+//
+// Every intermediate buffer is exactly SIZE bytes, and every entry folds the
+// same two marker positions, so all six languages must print the same number.
+
+const SIZE = 65536;
+const ITERATIONS = 5000;
+const WINDOW = 96;
+const SEED = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!?";
+
+function bufferCopyChecksum(iterations: number): number {
+  let buf = Buffer.from(SEED.repeat(SIZE / SEED.length));
+  let checksum = 0;
+  let k = 0;
+  while (k < iterations) {
+    const offset = (k * 4093 + 17) % SIZE;
+    const marker = SEED.charAt(k % SEED.length);
+
+    // Rotate left by offset and overwrite the new first byte with marker.
+    const head = buf.slice(offset + 1);
+    const tail = buf.slice(0, offset);
+    buf = Buffer.from(marker + head.toString() + tail.toString());
+
+    const window = buf.slice(0, WINDOW).toString();
+    const firstA = window.indexOf("a") + 1;
+    const first7 = window.indexOf("7") + 1;
+    checksum = (checksum * 131 + buf.length + firstA + first7) % 1000003;
+    k = k + 1;
+  }
+  return checksum;
+}
+
+console.log(bufferCopyChecksum(ITERATIONS));
