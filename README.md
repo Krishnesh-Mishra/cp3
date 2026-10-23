@@ -37,9 +37,9 @@ by side in **cp3, C++, Rust, Go, JavaScript and Python**; a stdlib-only runner
 builds, starts, measures and stops everything, prints per-task `cp3/cpp` and
 `cp3/rust` ratios plus measured peak memory and stripped binary size, and
 gates on a tiered tripwire: BIG WARN over 1.20x C++/Rust or any loss to
-Go/Node/Python. One real run (2026-10-18, Intel Core
-i7-12700H, Windows 11; g++ 16.1.0, rustc 1.95.0, go 1.26.4, node v24.15.0,
-python 3.14.5, cp3c 0.1.0-beta.1):
+Go/Node/Python. One real run (2026-10-23, Intel64 Family 6 Model 154
+Stepping 3, 20 logical CPUs, Windows 11 10.0.26200; g++ 16.1.0, rustc
+1.95.0, go 1.26.4, node v24.15.0, python 3.14.5, cp3c 0.1.0-beta.1):
 
 **One integer workload** - total Collatz steps for `1..1,000,000` (answer
 `131434424`, byte-identical in every language), single-threaded, best of two
@@ -47,37 +47,39 @@ runs:
 
 | Rust | C++ | Go | JS (Node) | **cp3** | Python |
 |---:|---:|---:|---:|---:|---:|
-| 0.13 s | 0.15 s | 0.19 s | 1.08 s | **0.16 s** | 9.62 s |
+| 0.19 s | 0.21 s | 0.28 s | 1.54 s | **0.22 s** | 27.50 s |
 
 The cp3 row runs today, no asterisk: it prints the same integer and lands
-just behind the native pack (suite ratios: 1.08x C++, 1.25x Rust), 6.7×
-faster than Node's JIT-assisted 1.08 s and ≈59× faster than CPython. The
-remaining 8% to C++ and 25% to Rust is codegen maturity - closing it is
+just behind the native pack (suite ratios: 1.06x C++, 1.19x Rust), 6.9×
+faster than Node's JIT-assisted 1.54 s and ≈123× faster than CPython. The
+remaining 6% to C++ and 19% to Rust is codegen maturity - closing it is
 roadmap work on the generated C++, not a language redesign, and it is exactly
 what the suite's gate now flags row by row.
 
 Where cp3 stands on everything that runs today (same run): **hello-world
-5.9 ms best (suite ratios: 0.89x C++, 0.99x Rust)**, process start to exit;
-**string-churn 1.10x C++**, eight case/slice rounds over a 4 KiB buffer per
-iteration. Entries whose features have not landed yet are attempted every run
-and reported with the compiler's own diagnostic instead of a number.
+8.8 ms best / 13.5 ms median (0.75x C++, 0.86x Rust)**, process start to
+exit; **string-churn 0.17x C++** (5.9× faster) and 1.03x Rust, eight
+case/slice rounds over a 4 KiB buffer per iteration. Every benchmark row now
+has a cp3 timing; the gate flags performance, not missing features.
 
-Same total split across all cores: Rust 19 ms · C++ 23 ms · Go 30 ms ·
-Node 261 ms · Python 1.34 s - the cp3 entry joins that table when
-`parallel.*` lands.
+Same total split across all cores: cp3 31 ms, Rust 44 ms, C++ 53 ms, Go
+64 ms, Node 311 ms, Python 1.58 s. cp3 is 0.59x C++, 0.70x Rust and 0.48x
+Go on this row - the parallel entry is now part of the table.
 
-**The Express comparison.** The same health server, five runtimes measured at
+**The Express comparison.** The same health server, six runtimes measured at
 8 keep-alive clients for 3 s (sources side-by-side in
 [`health-server/`](benchmarks/health-server/)):
 
 | Rust | C++ | Python | Go | Express | **cp3** |
 |---:|---:|---:|---:|---:|---:|
-| 12,828 req/s | 11,525 req/s | 11,978 req/s | 8,424 req/s | 10,746 req/s | *pending `std/network`* |
+| 16,814 req/s | 16,526 req/s | 10,300 req/s | 15,677 req/s | 10,480 req/s | **17,354 req/s** |
 
 On a trivial handler the load client and loopback dominate, so those rows
-cluster; the compute tables are where the runtimes separate. The cp3 entry is
-already written against the frozen `std/network` API - when the module lands,
-its row fills itself in, unchanged.
+cluster; the compute tables are where the runtimes separate. cp3 is slightly
+ahead of C++ and Rust here, within run noise. With one worker per logical CPU
+the same server reaches **103,372 req/s** for cp3, versus Rust 79,275, C++
+77,998, Python 72,248, Go 67,656 and Express cluster 58,091: 1.33× C++,
+1.30× Rust, 1.53× Go, 1.78× Node and 1.43× Python.
 
 Full methodology, the fairness contract and the gate:
 [`benchmarks/README.md`](benchmarks/README.md). Recorded runner output:
@@ -163,11 +165,13 @@ spec-conformance corpus (1,200+ case pairs in
 
 - **Landed:** the full pipeline (lexer → parser → sema → codegen → CLI), the
   diagnostic model, error handling, `async`/`await` + timers + the event
-  loop, `std/console`, and builtin methods - `Math`, strings, `path`, `os`,
-  `JSON.stringify`, `process`, `String(x)`.
-- **In flight / next:** a performance wave (`%`/`number` lowering - see the
-  benchmark section), then classes, arrays, `std/network` (servers) and
-  `parallel.*`.
+  loop, `std/console`, builtin methods, classes, arrays, `std/network`
+  (HTTP servers and WebSocket), `parallel.*`, and the standard-library
+  families exercised by the benchmark suite: string, math, path, os, env, fs,
+  process, JSON, crypto, buffer, typed arrays, collections and date.
+- **In flight / next:** the CP3002 marker wave (the remaining
+  `not implemented` sites tracked by `tools/check_cp3002.py`), then the
+  performance wave (`%`/`number` lowering - see the benchmark section).
 
 ## Build and run it
 

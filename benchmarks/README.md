@@ -75,20 +75,20 @@ created (cluster or multiprocessing workers); no unrelated process is touched.
 | task | what it measures | output (match oracle) | cp3 today |
 | --- | --- | --- | --- |
 | `compute-single` | total Collatz steps for 1..1,000,000, single thread | `131434424` | runs |
-| `compute-single-int` | the same total in native integer types (D65 tier) | `131434424` | pending native types |
-| `compute-multi` | the same total split across all cores | `131434424` | pending `parallel.*` |
+| `compute-single-int` | the same total in native integer types (D65 tier) | `131434424` | runs |
+| `compute-multi` | the same total split across all cores | `131434424` | runs |
 | `hello-world` | spawn -> exit wall time, best and median of 15+ runs | `Hello, world!` | runs |
 | `string-churn` | 8 case/slice rounds per iteration over a 4 KiB source | `852167` (50k) / `254546` (300k) | runs |
 | `sha256-churn` | SHA-256 over one fixed 1 KiB buffer, 60,000 times | `218229` | runs (cp3/go/js/python; cpp/rust omitted) |
 | `buffer-copy` | 64 KiB byte-pattern buffer rotated, sliced and rebuilt 5,000 times | `688024` | runs |
 | `typed-array-sum` | 1M `Float64Array` + `Uint8Array` fill, 32 sum rounds, byte pass | `135618465` | runs |
 | `math-kernel` | 5M sqrt/floor/abs/pow/clamp points, integer-quantized fold | `177047762` | runs |
-| `word-frequency` | 3M LCG picks into a 64-word hash map, folded counts | `37425343` | pending arrays (literals, indexing, push) |
-| `object-churn` | 5M small objects, half die in scope, half escape | `90641269` | pending classes |
-| `array-growth` | 20M pushes while summing, then pop half | `200000010000000` | pending arrays |
-| `closure-capture` | map/filter/reduce over 10M + 1000 escaping closures | `16666688333331 998521500000` | pending closures |
-| `interface-dispatch` | 2M shapes through `area()`, plus a direct-call control loop | `37999986 66000000` | pending classes/interfaces + arrays |
-| `generics-mono` | generic `Box<T>` loop vs a hand-written concrete copy | `998986007 998986007` | pending generic classes + generic functions |
+| `word-frequency` | 3M LCG picks into a 64-word hash map, folded counts | `37425343` | runs |
+| `object-churn` | 5M small objects, half die in scope, half escape | `90641269` | runs |
+| `array-growth` | 20M pushes while summing, then pop half | `200000010000000` | runs |
+| `closure-capture` | map/filter/reduce over 10M + 1000 escaping closures | `16666688333331 998521500000` | runs |
+| `interface-dispatch` | 2M shapes through `area()`, plus a direct-call control loop | `37999986 66000000` | runs |
+| `generics-mono` | generic `Box<T>` loop vs a hand-written concrete copy | `998986007 998986007` | runs |
 | `json-roundtrip` | 20,000 parse + stringify round trips of one 310-byte record | `664346` | runs (cp3/go/js/python; cpp/rust omitted) |
 | `async-fanout` | 10,000 zero-delay timers joined at once, then 10,000 chained awaits | `99898` | runs (cp3/go/js/python; cpp/rust omitted) |
 | `env-injection` | 500,000 fresh reads of one runner-injected environment variable | `133644` | runs |
@@ -96,7 +96,7 @@ created (cluster or multiprocessing workers); no unrelated process is touched.
 | `path-join` | join/normalize/basename/extname one fixed segment list, 170,000 times | `425577` | runs |
 | `date-format` | format 50,000 UTC instants by hand from fixed epoch milliseconds | `796897` | runs (cp3/go/js/python; rust omitted) |
 | `os-probe` | query platform/CPU/home/temp/hostname 50,000 times, fold booleans | `208981` | runs (cp3/cpp/go/js/python; rust omitted) |
-| `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404`, single core | wire contract (below) | runs (contract verified; timing joins the next suite run) |
+| `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404`, single core | wire contract (below) | runs (contract verified; timing recorded) |
 | `health-server-multi` | the same contract with one worker per logical CPU in every language | wire contract (below) | runs (`createServer({ threads: os.cpus() })`) |
 
 Every value above is re-derived independently by `bench/oracle.py`, which
@@ -124,8 +124,7 @@ the remaining languages; each task README states the exact rationale.
 ## Standard-library coverage
 
 Each landed stdlib family has one benchmark that exercises its hot surface.
-Rows marked *pending* are already written against the final API and join the
-timing table when their cp3 feature lands.
+Every row below now has a cp3 timing in [`results.md`](results.md).
 
 | std module | benchmark | coverage note |
 | --- | --- | --- |
@@ -143,8 +142,8 @@ timing table when their cp3 feature lands.
 | `std/os` | `os-probe` | Platform, CPU count, home, temp and hostname; rust omitted. |
 | `std/json` | `json-roundtrip` | Parse + stringify a fixed record; cpp/rust omitted. |
 | `std/network` | `health-server`, `health-server-multi` | HTTP wire contract, single-core and multicore. |
-| `std/collections` | `word-frequency` | 3M LCG picks into a 64-word hash map; cp3 pending arrays. |
-| `std/arrays` | `array-growth` | 20M pushes/pops; cp3 pending arrays. |
+| `std/collections` | `word-frequency` | 3M LCG picks into a 64-word hash map. |
+| `std/arrays` | `array-growth` | 20M pushes/pops. |
 | timers / event loop | `async-fanout` | Zero-delay timers and chained awaits; cpp/rust omitted. |
 
 The health-server contract: every language listens on `127.0.0.1` only and
@@ -310,34 +309,26 @@ The recorded benchmark tables live in [`results.md`](results.md). A complete
 default-scale full-suite run rewrites its latest block automatically; the
 historical labeled runs are kept there verbatim.
 
-## CP3002 blockers, precisely
+## CP3002 status
 
-Snapshot 2026-10-19 (`build\bin\cp3c.exe`; one `cp3c build main.cp3` per entry
-from a scratch copy; the quoted text is the compiler's own first diagnostic).
-This is the removal checklist, not a list of accepted pending rows:
+The 2026-10-19 snapshot listed eight benchmark rows that stopped at CP3002
+markers before producing a number. Every one now runs and has a timing in
+[`results.md`](results.md):
 
-- `compute-single-int`: `main.cp3:25:10: error: CP3002: not implemented yet: this returned value` (the native-type tier, D65)
-- `compute-multi`: `main.cp3:34:15: error: CP3002: not implemented yet: parallel.*`
-- `word-frequency`: `main.cp3:28:3: error: CP3002: not implemented yet: this method call` (the array surface: literals, indexing, push)
-- `object-churn`: `main.cp3:17:1: error: CP3002: not implemented yet: classes`
-- `array-growth`: `main.cp3:19:3: error: CP3002: not implemented yet: this method call`
-- `closure-capture`: `main.cp3:23:3: error: CP3002: not implemented yet: this method call`
-- `interface-dispatch`: `main.cp3:20:1: error: CP3002: not implemented yet: classes` (syntax re-checked against the spec: `function` members)
-- `generics-mono`: `main.cp3:23:1: error: CP3002: not implemented yet: generic functions` (also `classes` for `Box<T>`)
+| row | feature that cleared it |
+| --- | --- |
+| `compute-single-int` | the native integer tier (D65) |
+| `compute-multi` | `parallel.*` |
+| `word-frequency`, `array-growth` | arrays and collections |
+| `object-churn`, `interface-dispatch` | classes and interfaces |
+| `closure-capture` | closures |
+| `generics-mono` | generic functions and classes |
+| `health-server` | `std/network` |
 
-`health-server` left this list on 2026-10-19: it builds against the landed
-`std/network` and serves the wire contract on its argv port (smoke-verified:
-`/healthz` -> 200 `ok`, `/` -> 200 `health-server ok`, `/nope` -> 404
-`not found`). Its timed row joins the next suite run on a quiet machine.
-`compute-single/cp3`, `hello-world/cp3` and `string-churn/cp3` keep their real
-timings.
-
-Every blocker line maps to a live wave: arrays (word-frequency, array-growth),
-classes/interfaces (object-churn, interface-dispatch), closures
-(closure-capture), generics (generics-mono), `parallel.*` (compute-multi) and
-the native-type tier (compute-single-int). A CP3002 row is a hard failure: the
-gate prints `CP3002 BLOCKER <task>` and exits 1. The row joins the timing table
-when the feature lands, without any change to the entry or the runner.
+The benchmark gate no longer prints `CP3002 BLOCKER` for any row; a complete
+default-scale run reports only performance warnings. Remaining CP3002 markers
+in the compiler are tracked by `python tools/check_cp3002.py` and belong to the
+next implementation wave - they are not hidden benchmark rows.
 
 ## Refresh policy
 

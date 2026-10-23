@@ -283,7 +283,13 @@ existed before the `.cp3pak` lane - `package/publish-out-file`, a
 | toolchain | 35/35 |
 | build / check / clean / dev / editor / fmt / global / hooks / init / install / run / shim | all pass |
 
-### Baseline benchmark
+### Historical baseline benchmark (2026-10-19)
+
+The current ledger is the 2026-10-23 full-suite run in
+`benchmarks/results.md`: every row has a cp3 timing, including
+`compute-multi` (31 ms; 0.59x cpp / 0.70x rust), `health-server`
+(17,354 req/s) and `health-server-multi` (103,372 req/s). The table below is
+the pre-perf baseline that motivated the five gaps.
 
 Compiler `6f1fa2c`, compute rows, best of 2 runs, references rebuilt locally.
 Ratios are cp3 time divided by the reference time. Lower is better. cpp and
@@ -309,13 +315,20 @@ Geomean over the 11 cpp/rust rows: 2.08x cpp, 2.71x rust.
 
 `json-roundtrip` and `async-fanout` have no dependency-free cpp/rust
 counterpart in the suite; Go is the primary reference for those rows.
-`health-server` and `health-server-multi` were not measured in this pass; the
-earlier diagnosis found server ratios client-bound and not trustworthy.
+The 2026-10-23 full-suite run measured both server rows: cp3 17,354 req/s
+single-core and 103,372 req/s multicore. The client-bound caveat still applies
+to the single-core cluster; the multicore row separates cleanly.
 
 The fast rows are hello-world, string-churn, compute-single-int, and
 compute-single (the last is only a small WARN, not one of the five major gaps).
 
 ## 5. The five performance gaps
+
+Status 2026-10-23: all five gap rows now run. `compute-multi` and
+`word-frequency` improved sharply; the current full-suite gate still flags
+object/interface dispatch, closures/generics, and several of the new stdlib
+rows. The descriptions below are the original work map, not the current
+ledger; use `benchmarks/results.md` for the gate.
 
 These are the five measured gap groups. They are not the same as the five old
 perf branches; the old branches cover parts of gaps 1, 2, 4, and 5, but not the
@@ -798,6 +811,11 @@ Done:
 - Build, diagnostics, CP3002 scan, full corpus pass with 0 failures.
 - Baseline benchmark table for the runnable compute rows.
 - Benchmark reporting WIP consolidated.
+- Nine stdlib benchmarks integrated into the one suite; full run:
+  1873 found, 1813 passed, 0 failed, 33 skipped, 27 ambiguous; 24 benchmark
+  rows, no output mismatches.
+- Server benchmark measured: cp3 17,354 req/s single-core and 103,372 req/s
+  multicore; baseline re-measured in the 2026-10-23 full-suite run.
 - Ten-lane ownership plan drafted at
   `build/scratch/rounds/TEN-LANE-PLAN.md`.
 - Parked-worktree cleanup: 20 non-perf worktrees classified, 2 bounded
@@ -818,17 +836,17 @@ In flight:
 
 Not done, by instruction:
 
-- No 10-lane launch.
-- No server benchmark measurement.
+- No 10-lane launch yet (the benchmark consolidation is complete; the wave is
+  next).
 - The consumer no-recompile link path for the `.cp3pak` cache, blocked on the
   frontend not resolving package imports to C++ yet.
-- No re-measurement of the benchmark baseline after the perf lanes land.
 
 Authorized and queued:
 
-- The CP3002 implementation wave (section 6b): 138 work items, 14
-  assignments, 3 waves of 5 parallel agents, with a verify-and-merge gate
-  after every lane.
+- The 10-lane implementation wave: five CP3002 lanes (C1-C5) and five
+  performance lanes (P1-P5), one integration branch, with a verify-and-merge
+  gate after every lane. The lane ownership map is
+  `build/scratch/rounds/TEN-LANE-PLAN.md`.
 
 Known open, recorded in §6a:
 

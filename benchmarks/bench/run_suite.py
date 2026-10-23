@@ -1753,7 +1753,7 @@ def write_latest_results(captured: str, argv: list[str]) -> None:
         re.DOTALL,
     )
     if pattern.search(text):
-        text = pattern.sub(block, text, count=1)
+        text = pattern.sub(lambda _match: block, text, count=1)
     else:
         text = text.rstrip() + "\n\n## Latest full run\n\n" + block + "\n"
     RESULTS_MD.write_text(text, encoding="utf-8", newline="\n")
