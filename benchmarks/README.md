@@ -78,6 +78,8 @@ created (cluster or multiprocessing workers); no unrelated process is touched.
 | `compute-multi` | the same total split across all cores | `131434424` | pending `parallel.*` |
 | `hello-world` | spawn -> exit wall time, best and median of 15+ runs | `Hello, world!` | runs |
 | `string-churn` | 8 case/slice rounds per iteration over a 4 KiB source | `852167` (50k) / `254546` (300k) | runs |
+| `sha256-churn` | SHA-256 over one fixed 1 KiB buffer, 60,000 times | `218229` | runs (cp3/go/js/python; cpp/rust omitted) |
+| `buffer-copy` | 64 KiB byte-pattern buffer rotated, sliced and rebuilt 5,000 times | `688024` | runs |
 | `word-frequency` | 3M LCG picks into a 64-word hash map, folded counts | `37425343` | pending arrays (literals, indexing, push) |
 | `object-churn` | 5M small objects, half die in scope, half escape | `90641269` | pending classes |
 | `array-growth` | 20M pushes while summing, then pop half | `200000010000000` | pending arrays |
@@ -94,14 +96,14 @@ re-implements every workload again in plain Python; the runner cross-checks
 all languages against each other and against those oracle values (the `match`
 column plus `!!` warning lines for any disagreement).
 
-Two rows deliberately omit cpp and rust. `json-roundtrip` needs a standard
+Three rows deliberately omit cpp and rust. `json-roundtrip` needs a standard
 JSON parser/serializer (C++ `std` has none; Rust `std` has none without a
-crate), and `async-fanout` needs a standard timer/event-loop surface (neither
-`std` has one). A single dependency-free file would have to vendor or
-hand-roll the missing stack, which compares dependencies, not the language.
-The runner prints the omission reason per row (`TASK_OMIT_LANGUAGES` in
-`bench/run_suite.py`) and still gates cp3 against go/js/python; each task
-README states the exact rationale.
+crate), `async-fanout` needs a standard timer/event-loop surface, and
+`sha256-churn` needs a standard SHA-256 (neither `std` has one). A single
+dependency-free file would have to vendor or hand-roll the missing stack,
+which compares dependencies, not the language. The runner prints the omission
+reason per row (`TASK_OMIT_LANGUAGES` in `bench/run_suite.py`) and still gates
+cp3 against go/js/python; each task README states the exact rationale.
 
 The health-server contract: every language listens on `127.0.0.1` only and
 answers `GET /healthz` with `200` text/plain `ok`, `GET /` with `200`
@@ -213,11 +215,11 @@ labeled refresh will show the blocker and tier format.
   argv surface.
 - Workload sizes live in the sources as constants and are stated in each
   task README; the runner never scales a workload behind a language's back.
-- Two rows omit cpp/rust by design (`json-roundtrip`, `async-fanout`): a row
-  compares standard-library surfaces that every entrant actually has, and
-  neither language's `std` has JSON or a timer/event loop. Omission is
-  declared per task in `TASK_OMIT_LANGUAGES` and printed; the gate still
-  applies to go/js/python.
+- Three rows omit cpp/rust by design (`json-roundtrip`, `async-fanout`,
+  `sha256-churn`): a row compares standard-library surfaces that every entrant
+  actually has, and neither language's `std` has JSON, a timer/event loop, or
+  SHA-256. Omission is declared per task in `TASK_OMIT_LANGUAGES` and printed;
+  the gate still applies to go/js/python.
 
 ## Honest methodology caveats
 
