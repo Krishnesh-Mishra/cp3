@@ -13,13 +13,13 @@
 // caller keeps reporting CP3002; for the closed Date surface sema has already
 // rejected it as CP3305, so that path is defensive only.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <string>
 
-#include "detail/builtin_tables.h"
-#include "detail/cpp_writer.h"
-#include "detail/type_map.h"
+#include "detail/int/builtin_tables.h"
+#include "detail/generator/cpp_writer.h"
+#include "detail/generator/type_map.h"
 
 namespace cp3 {
 

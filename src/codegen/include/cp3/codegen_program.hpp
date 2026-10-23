@@ -20,10 +20,10 @@
 #include <string>
 #include <vector>
 
-#include "cp3/analysis.hpp"
+#include "cp3/core/analysis.hpp"
 #include "cp3/codegen.hpp"
-#include "cp3/diagnostic.hpp"
-#include "cp3/module.hpp"
+#include "cp3/diag/diagnostic.hpp"
+#include "cp3/meta/module.hpp"
 
 namespace cp3 {
 

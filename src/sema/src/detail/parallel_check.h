@@ -21,8 +21,8 @@
 #include <utility>
 #include <vector>
 
-#include "cp3/ast.hpp"
-#include "cp3/diagnostic.hpp"
+#include "cp3/core/ast.hpp"
+#include "cp3/diag/diagnostic.hpp"
 
 namespace cp3 {
 namespace parallel_detail {

@@ -12,7 +12,7 @@
 
 #include <initializer_list>
 
-#include "cp3/version.hpp"
+#include "cp3/meta/version.hpp"
 
 #include "detail/lsp_text.hpp"
 

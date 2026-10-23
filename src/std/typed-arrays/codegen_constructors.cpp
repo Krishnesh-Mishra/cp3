@@ -12,16 +12,16 @@
 // Every form the corpus does not pin reports CP3002 through `notImplemented`
 // and returns a compilable stub.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "detail/family.h"
-#include "detail/type_map.h"
-#include "cp3/native_types.hpp"
+#include "detail/generator/family.h"
+#include "detail/generator/type_map.h"
+#include "cp3/host/native_types.hpp"
 
 namespace cp3 {
 

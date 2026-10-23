@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-#include "cp3/diagnostic_codes.hpp"
+#include "cp3/diag/diagnostic_codes.hpp"
 
 #include "detail/framing.hpp"
 #include "detail/lsp_intel.hpp"

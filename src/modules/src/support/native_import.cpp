@@ -20,8 +20,8 @@
 #include <utility>
 #include <vector>
 
-#include "cp3/diagnostic_codes.hpp"
-#include "cp3/native_bindings.hpp"
+#include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/native_bindings.hpp"
 
 #include "detail/file_paths.h"
 

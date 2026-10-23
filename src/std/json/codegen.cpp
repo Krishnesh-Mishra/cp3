@@ -24,17 +24,17 @@
 // Everything else (untyped `parse`, `undefined`, optional/complex fields,
 // cross-module shapes) stays CP3002.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "detail/class_model.h"
-#include "detail/cpp_writer.h"
-#include "detail/mangle.h"
-#include "detail/type_map.h"
+#include "detail/class/class_model.h"
+#include "detail/generator/cpp_writer.h"
+#include "detail/generator/mangle.h"
+#include "detail/generator/type_map.h"
 
 namespace cp3 {
 

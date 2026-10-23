@@ -9,7 +9,7 @@
 // =============================================================================
 #pragma once
 
-#include "detail/native_packages.hpp"
+#include "detail/native/native_packages.hpp"
 
 namespace cp3::cli::detail {
 

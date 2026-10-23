@@ -18,8 +18,8 @@
 #include <system_error>
 #include <utility>
 
-#include "cp3/ast.hpp"
-#include "cp3/diagnostic_codes.hpp"
+#include "cp3/core/ast.hpp"
+#include "cp3/diag/diagnostic_codes.hpp"
 
 #include "detail/file_paths.h"
 #include "detail/specifier.h"

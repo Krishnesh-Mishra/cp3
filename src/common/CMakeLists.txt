@@ -12,21 +12,21 @@
 # =============================================================================
 
 set(cp3_common_sources
-    src/source.cpp
-    src/diagnostic.cpp
-    src/token.cpp
-    src/ast.cpp
-    src/module.cpp
-    src/types.cpp
-    src/native_types.cpp
-    src/native_bindings.cpp
-    src/native_bindings_read.cpp
+    src/core/source.cpp
+    src/core/diagnostic.cpp
+    src/core/token.cpp
+    src/core/ast.cpp
+    src/support/module.cpp
+    src/core/types.cpp
+    src/native/native_types.cpp
+    src/native/native_bindings.cpp
+    src/native/native_bindings_read.cpp
     src/detail/native_json.cpp
     src/detail/native_fields.cpp
-    src/checksum.cpp
-    src/options.cpp
-    src/suggest.cpp
-    src/version.cpp
+    src/support/checksum.cpp
+    src/support/options.cpp
+    src/support/suggest.cpp
+    src/support/version.cpp
 )
 
 add_library(cp3_common STATIC ${cp3_common_sources})

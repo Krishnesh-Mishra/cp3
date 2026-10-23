@@ -11,18 +11,18 @@
 // callable), and a type the element or the result has no C++ spelling is
 // reported as a type error instead of being lowered.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <cstddef>
 #include <string>
 #include <vector>
 
-#include "detail/cpp_writer.h"
-#include "detail/family.h"
-#include "detail/mangle.h"
-#include "detail/pattern_emitter.h"
-#include "detail/type_map.h"
-#include "cp3/diagnostic_codes.hpp"
+#include "detail/generator/cpp_writer.h"
+#include "detail/generator/family.h"
+#include "detail/generator/mangle.h"
+#include "detail/expr/pattern_emitter.h"
+#include "detail/generator/type_map.h"
+#include "cp3/diag/diagnostic_codes.hpp"
 
 namespace cp3 {
 

@@ -13,9 +13,9 @@
 #include <string>
 #include <utility>
 
-#include "cp3/diagnostic_codes.hpp"
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "cp3/sema.hpp"
-#include "cp3/suggest.hpp"
+#include "cp3/diag/suggest.hpp"
 
 namespace cp3 {
 

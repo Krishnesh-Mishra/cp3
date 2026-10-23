@@ -16,30 +16,30 @@ set(cp3_sema_sources
     src/support/scopes.cpp
     src/support/declarations.cpp
     src/support/docs.cpp
-    src/checks/type_check.cpp
-    src/checks/assignability.cpp
-    src/checks/class_check.cpp
-    src/checks/class_docs.cpp
-    src/checks/class_conform_check.cpp
-    src/checks/expr_check.cpp
-    src/checks/member_check.cpp
-    src/checks/call_check.cpp
-    src/checks/promise_call.cpp
-    src/checks/generic_check.cpp
-    src/checks/ops_check.cpp
-    src/checks/native_types.cpp
-    src/checks/native_check.cpp
-    src/checks/stmt_check.cpp
-    src/checks/flow_check.cpp
-    src/checks/regex_check.cpp
+    src/checks/type/type_check.cpp
+    src/checks/expr/assignability.cpp
+    src/checks/class/class_check.cpp
+    src/checks/class/class_docs.cpp
+    src/checks/class/class_conform_check.cpp
+    src/checks/expr/expr_check.cpp
+    src/checks/expr/member_check.cpp
+    src/checks/call/call_check.cpp
+    src/checks/call/promise_call.cpp
+    src/checks/call/generic_check.cpp
+    src/checks/expr/ops_check.cpp
+    src/checks/type/native_types.cpp
+    src/checks/type/native_check.cpp
+    src/checks/stmt/stmt_check.cpp
+    src/checks/expr/flow_check.cpp
+    src/checks/type/regex_check.cpp
     src/support/symbols.cpp
-    src/checks/banned.cpp
-    src/checks/parallel_check.cpp
-    src/checks/parallel_expr_check.cpp
-    src/checks/std_check.cpp
-    src/checks/enum_check.cpp
+    src/checks/type/banned.cpp
+    src/checks/stmt/parallel_check.cpp
+    src/checks/stmt/parallel_expr_check.cpp
+    src/checks/type/std_check.cpp
+    src/checks/type/enum_check.cpp
     ../std/crypto/sema.cpp
-    ../std/network/sema.cpp
+    ../std/network/codegen/sema.cpp
     ../std/fs/sema.cpp
     ../std/typed-arrays/sema.cpp
     ../std/typed-arrays/sema_methods.cpp

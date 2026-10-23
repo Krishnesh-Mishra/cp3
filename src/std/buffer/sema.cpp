@@ -33,7 +33,7 @@
 
 #include <string>
 
-#include "cp3/diagnostic_codes.hpp"
+#include "cp3/diag/diagnostic_codes.hpp"
 
 namespace cp3 {
 

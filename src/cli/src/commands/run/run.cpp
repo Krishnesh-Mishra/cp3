@@ -1,0 +1,316 @@
+// =============================================================================
+// src/cli/src/commands/run.cpp - `cp3c build` / `cp3c run`.
+//
+// OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdBuildOrRun.
+//
+// Loads the module graph (prelude injection, import resolution), runs sema on
+// the entry unit, threads the resulting SemaResult into codegen, then hands the
+// generated module to the toolchain driver. `execute` selects `run` semantics.
+// =============================================================================
+#include <cstdint>
+#include <cstdio>
+#include <memory>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "cp3/core/analysis.hpp"
+#include "cp3/codegen.hpp"
+#include "cp3/codegen_program.hpp"
+#include "cp3/diag/diagnostic.hpp"
+#include "cp3/meta/module.hpp"
+#include "cp3/core/source.hpp"
+
+#include "detail/cache/cache.hpp"
+#include "detail/core/commands.hpp"
+#include "detail/core/diagnostics.hpp"
+#include "detail/pkg/package_json.hpp"
+#include "detail/toolchain/pipeline.hpp"
+#include "detail/core/util.hpp"
+#include "detail/core/worker_module.hpp"
+
+namespace cp3::cli {
+
+namespace {
+
+// Everything the frontend + codegen steps need beyond the source itself.
+struct BuildContext {
+    CliOptions* opt = nullptr;
+    const RenderOptions* render = nullptr;
+    const std::string* moduleName = nullptr;  // e.g. "src/index"
+    bool execute = false;                     // `cp3c run` was requested
+};
+
+// The load+sema half of the pipeline. exitCode is kExitSuccess when `graph`
+// carries an analyzed entry unit to hand to codegen. `program` selects the
+// whole-program codegen path (a resolved local import exists); in that mode
+// every emittable unit is checked and its SemaResult kept in `unitSemas` -
+// each unit's parser restarts nodeIds (D6), so the tables are per unit and
+// cannot be merged. `worker` is the resolved canonical worker import of spec
+// 13, if any; the worker unit lowers through its own TU, not this program.
+struct FrontendResult {
+    std::unique_ptr<ModuleGraph> graph;
+    SemaResult sema;
+    std::unordered_map<std::uint32_t, SemaResult> unitSemas;
+    bool program = false;
+    int exitCode = kExitSuccess;
+};
+
+// Any resolved local import ("./x.cp3") routes the build through the
+// whole-program codegen path; std/package/native imports do not.
+bool hasLocalModules(const ModuleGraph& graph) {
+    for (const ModuleDependency& dep : graph.dependencies()) {
+        if (dep.resolution == ModuleResolution::Local &&
+            dep.imported != UINT32_MAX) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Checks every loaded local unit other than the entry and the worker unit
+// (preludes contribute their items through their importers and are never
+// analyzed standalone). Diagnostics share the caller's sink so one broken
+// module fails the build before codegen.
+void analyzeLocalUnits(ModuleGraph& graph, CompilationUnit* entry,
+                       std::unordered_map<std::uint32_t, SemaResult>& out,
+                       DiagnosticSink& sink, const CompileOptions& compile) {
+    for (CompilationUnit* unit : graph.units()) {
+        if (unit == nullptr || unit == entry ||
+            unit->isPrelude || !unit->ast) {
+            continue;
+        }
+        analyzeProgram(*unit->ast, out[unit->id], sink, compile);
+    }
+}
+
+FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
+                          const BuildContext& ctx) {
+    FrontendResult result;
+    CollectingDiagnosticSink feSink;
+    result.graph = loadModuleGraph(sm, file, feSink);
+    // The native bindings the program imports: sema type-checks the calls
+    // against them, codegen lowers them.
+    ctx.opt->compile.nativeBindings = result.graph->nativeBindings();
+    CompilationUnit* entry = result.graph->entry();
+    if (entry != nullptr && entry->ast) {
+        analyzeProgram(*entry->ast, result.sema, feSink, ctx.opt->compile);
+        result.program = hasLocalModules(*result.graph);
+        if (result.program) {
+            analyzeLocalUnits(*result.graph, entry, result.unitSemas,
+                              feSink, ctx.opt->compile);
+        }
+    }
+    renderDiagnostics(feSink.diagnostics(), *ctx.render, stderr);
+    if (feSink.hasErrors()) {
+        result.exitCode = onlyNotImplemented(feSink.diagnostics())
+                              ? notImplemented(ctx.execute ? "run" : "build")
+                              : kExitCompileError;
+    } else if (entry == nullptr || !entry->ast) {
+        // The loader always yields a parsed entry unit; guard anyway so a
+        // future loader change can never turn into a crash here.
+        result.exitCode = notImplemented(ctx.execute ? "run" : "build");
+    }
+    return result;
+}
+
+// Shared tail of both codegen paths: render the codegen diagnostics, turn them
+// into an exit code, and keep the not-implemented marker when nothing was
+// generated.
+int codegenOutcome(CollectingDiagnosticSink& cgSink, const GeneratedModule& mod,
+                   const BuildContext& ctx) {
+    renderDiagnostics(cgSink.diagnostics(), *ctx.render, stderr);
+    if (cgSink.hasErrors()) {
+        return onlyNotImplemented(cgSink.diagnostics())
+                   ? notImplemented(ctx.execute ? "run" : "build")
+                   : kExitCompileError;
+    }
+    if (mod.source.empty() && mod.header.empty()) {
+        return notImplemented(ctx.execute ? "run" : "build");
+    }
+    return kExitSuccess;
+}
+
+// The codegen half for a single-unit graph.
+int codegenEntry(const CompilationUnit& entry, const SemaResult& sema,
+                 const BuildContext& ctx, const CodegenOptions& options,
+                 GeneratedModule& mod) {
+    CollectingDiagnosticSink cgSink;
+    // --debug carries `#line` mapping so DWARF and gdb point at the .cp3 file.
+    const bool lineDirectives =
+        ctx.opt->compile.profile == BuildProfile::Debug;
+    mod = generateModule(
+        {*entry.ast, sema, *ctx.moduleName, cgSink, lineDirectives, options});
+    return codegenOutcome(cgSink, mod, ctx);
+}
+
+// Assembles the whole-program unit list: every loaded unit with a parsed AST,
+// the entry carrying `frontend.sema` and every other unit its own table from
+// the frontend pass. Prelude units (their items arrive through importers) and
+// units without a checked table are skipped.
+std::vector<CheckedModuleUnit> checkedUnits(const FrontendResult& frontend) {
+    std::vector<CheckedModuleUnit> units;
+    for (CompilationUnit* unit : frontend.graph->units()) {
+        if (unit == nullptr || !unit->ast || unit->isPrelude) continue;
+        const SemaResult* sema = nullptr;
+        if (unit->isEntry) {
+            sema = &frontend.sema;
+        } else {
+            const auto it = frontend.unitSemas.find(unit->id);
+            if (it == frontend.unitSemas.end()) continue;
+            sema = &it->second;
+        }
+        units.push_back(CheckedModuleUnit{unit, sema});
+    }
+    return units;
+}
+
+// The codegen half for a local-module graph.
+int codegenProgram(const FrontendResult& frontend, const BuildContext& ctx,
+                   const CodegenOptions& options, GeneratedModule& mod) {
+    CollectingDiagnosticSink cgSink;
+    const bool lineDirectives =
+        ctx.opt->compile.profile == BuildProfile::Debug;
+    mod = generateProgramModule({*frontend.graph, checkedUnits(frontend),
+                                 *ctx.moduleName, cgSink, lineDirectives,
+                                 options});
+    return codegenOutcome(cgSink, mod, ctx);
+}
+
+// The units and context of one worker-file resolution (`prepareWorkers`): the
+// entry AST to scan, the folder its literals resolve against, and the sink the
+// generated modules feed into.
+struct WorkerInputs {
+    const CompilationUnit& entry;
+    fs::path folder;
+    const std::string& moduleName;
+    SourceManager& sm;
+    const BuildContext& ctx;
+};
+
+// The worker-file half of codegen (D80, spec 13): resolves every
+// `new Worker("<path>")` site that starts a real file unit, lowers each worker
+// unit in its own graph, and returns the entry's codegen options plus the extra
+// TUs the toolchain must compile. Worker-unit diagnostics are rendered here -
+// they are the user's compile errors too: a CP3002-only failure is a skip.
+int prepareWorkers(const WorkerInputs& in, CodegenOptions& options,
+                   std::vector<detail::BuildRequest::ExtraModule>& extras,
+                   std::vector<GeneratedModule>& modules) {
+    const std::vector<WorkerPathSite> sites = collectWorkerPathSites(*in.entry.ast);
+    if (sites.empty()) return kExitSuccess;
+    const bool lineDirectives =
+        in.ctx.opt->compile.profile == BuildProfile::Debug;
+    ResolvedWorkers workers = resolveWorkerUnits(sites, in.folder,
+                                                 in.moduleName, in.sm,
+                                                 lineDirectives,
+                                                 in.ctx.opt->compile);
+    renderDiagnostics(workers.diagnostics, *in.ctx.render, stderr);
+    if (workers.failed) {
+        return onlyNotImplemented(workers.diagnostics)
+                   ? notImplemented(in.ctx.execute ? "run" : "build")
+                   : kExitCompileError;
+    }
+    options.workers = std::move(workers.sites);
+    modules = std::move(workers.modules);
+    for (std::size_t i = 0; i < modules.size(); ++i) {
+        extras.push_back(detail::BuildRequest::ExtraModule{
+            workers.moduleNames[i], &modules[i], workers.sourceKeys[i]});
+    }
+    return kExitSuccess;
+}
+
+int runOnPackageError(const std::string& entry) {
+    // CLI-README 5.1: a package build produces a .cp3pak - there is nothing
+    // to run, so `run` is a usage error for a package project.
+    std::fprintf(stderr,
+                 "cp3c: '%s' is a 'type: package' project; packages have "
+                 "no runnable output\n",
+                 entry.c_str());
+    std::fprintf(stderr,
+                 "cp3c: use 'cp3c build' to produce the .cp3pak, or "
+                 "'cp3c exec <pkg>' to run a package tool\n");
+    return kExitUsageError;
+}
+
+}  // namespace
+
+int cmdBuildOrRun(const CliOptions& opt, bool execute) {
+    SourceManager sm;
+    SourceFile* file = nullptr;
+    std::string err;
+    if (!loadEntrySource(opt.file, sm, file, err)) {
+        std::fprintf(stderr, "cp3c: %s\n", err.c_str());
+        return kExitUsageError;
+    }
+
+    const fs::path entryPath(opt.file);
+    const fs::path projectRoot = findProjectRoot(entryPath);
+    const std::string moduleName = moduleNameFor(entryPath, projectRoot);
+    const bool packageProject = isPackageProject(projectRoot);
+    if (packageProject && execute) return runOnPackageError(opt.file);
+
+    // The project's type-system vocabulary (spec 03) joins the CLI options.
+    CliOptions effective = opt;
+    applyProjectTypeSettings(projectRoot, effective.compile);
+
+    const RenderOptions ro = makeRenderOptions(effective, file->path);
+    const BuildContext ctx{&effective, &ro, &moduleName, execute};
+
+    FrontendResult frontend = runFrontend(sm, *file, ctx);
+    if (frontend.exitCode != kExitSuccess) return frontend.exitCode;
+    CompilationUnit* entry = frontend.graph->entry();
+
+    CodegenOptions options;
+    options.importedEnums = importedEnumsFor(*frontend.graph, *entry);
+    options.typeSystem = effective.compile.typeSystem;
+    options.nativeBindings = effective.compile.nativeBindings;
+    std::vector<GeneratedModule> workerModules;
+    std::vector<detail::BuildRequest::ExtraModule> extras;
+    const int workerExit = prepareWorkers(
+        WorkerInputs{*entry, fs::path(file->path).parent_path(), moduleName, sm,
+                     ctx},
+        options, extras, workerModules);
+    if (workerExit != kExitSuccess) return workerExit;
+
+    GeneratedModule mod;
+    const int cgExit = frontend.program
+                           ? codegenProgram(frontend, ctx, options, mod)
+                           : codegenEntry(*entry, frontend.sema, ctx, options,
+                                          mod);
+    if (cgExit != kExitSuccess) return cgExit;
+
+    if (effective.verbose && effective.compile.maxMemoryMb != 0) {
+        std::fprintf(stderr, "cp3c: --max-memory cap: %llu MB (codegen phase)\n",
+                     static_cast<unsigned long long>(
+                         effective.compile.maxMemoryMb));
+    }
+
+    if (packageProject) {
+        detail::PackInput input;
+        input.opt = &effective;
+        input.entryPath = &entryPath;
+        input.moduleName = &moduleName;
+        input.module = &mod;
+        input.source = file;
+        input.program = entry->ast.get();
+        input.execute = execute;
+        return detail::packProject(input);
+    }
+
+    // Every resolved "std/..." specifier in the whole graph (any unit, not just
+    // the entry) selects that module's native backend for this build (D68).
+    const std::vector<std::string> importedStdModules =
+        cp3::cli::importedStdModules(*frontend.graph);
+    detail::BuildRequest request;
+    request.opt = &effective;
+    request.entry = &entryPath;
+    request.moduleName = &moduleName;
+    request.module = &mod;
+    request.importedStdModules = &importedStdModules;
+    request.extraModules = &extras;
+    request.execute = execute;
+    return detail::buildWithToolchain(request);
+}
+
+}  // namespace cp3::cli

@@ -10,15 +10,15 @@
 // compilable stub; the generator never throws, and the dedup drives the CLI's
 // exit-3 "skipped" behavior.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <string>
 
 #include "cp3/codegen.hpp"
-#include "cp3/diagnostic_codes.hpp"
-#include "detail/cpp_writer.h"
-#include "detail/helper_blocks.h"
-#include "detail/mangle.h"
+#include "cp3/diag/diagnostic_codes.hpp"
+#include "detail/generator/cpp_writer.h"
+#include "detail/generator/helper_blocks.h"
+#include "detail/generator/mangle.h"
 
 namespace cp3 {
 

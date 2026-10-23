@@ -51,7 +51,7 @@ Skips and expected failures do not make the run fail.
 
 ## Case manifest
 
-Cases live in `tests/cli/cases/*.json`. A file may contain one case, a list of
+Cases live in `tests/cli/cases/**/*.json`. A file may contain one case, a list of
 cases, or an object with `group` and `cases`. Case identity is
 `group/name`; duplicate identities are rejected. The discovery order is stable:
 files sorted by path, then manifest order.
@@ -280,7 +280,7 @@ predicate is not met. Full mode adds the compile and link cases.
 
 ## Adding a case
 
-1. Pick the group manifest, for example `tests/cli/cases/fmt.json`.
+1. Pick the group manifest, for example `tests/cli/cases/build/fmt.json`.
 2. Add one object to its `cases` array. Use a unique `name`; behavior names may
    repeat across groups.
 3. Point `setup.fixtures` at an existing fixture or add a new directory under

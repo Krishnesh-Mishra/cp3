@@ -425,7 +425,7 @@ class Suite:
                 for cid, (name, _c) in PHASE_A_SPEC.items():
                     self.add(cid, name, "FAIL", "referee did not start")
                 return
-            self.run_and_assert("fetch_referee.cp3", PHASE_A_SPEC, "fetch_referee")
+            self.run_and_assert("client/fetch_referee.cp3", PHASE_A_SPEC, "fetch_referee")
             # the referee's own log is the independent half of the check
             missing = []
             log = referee.state.snapshot()
@@ -464,24 +464,24 @@ class Suite:
     def phase_b(self) -> None:
         self.phase = "B"
         self.emit("[phase B] cp3 createServer (48204) -> cp3 fetch client")
-        self.run_and_assert("server_own.cp3", PHASE_B_SPEC, "server_own")
+        self.run_and_assert("server/server_own.cp3", PHASE_B_SPEC, "server_own")
         self.pending_fixture("B15", "middleware next() continues the chain",
-                             "server_next_chain.cp3", [("PB1", ["200", "x12"])])
+                             "server/server_next_chain.cp3", [("PB1", ["200", "x12"])])
         self.pending_fixture("B16", "async handler + req.text() body echo",
-                             "server_pending_async.cp3", [("PB2", ["200", "got:payload"])])
+                             "server/server_pending_async.cp3", [("PB2", ["200", "got:payload"])])
         self.pending_fixture("B17", "req.params / req.query / req.headers",
-                             "server_req_fields.cp3",
+                             "server/server_req_fields.cp3",
                              [("PB3", ["200", "7", "1", "en", "on"])])
         self.pending_fixture("B18", "app.delete route registration",
-                             "server_delete_route.cp3",
+                             "server/server_delete_route.cp3",
                              [("PB4", ["200", "deleted"]),
                               ("PB4b", ["404", "not found"])])
         self.pending_fixture("B19", "res.json<T>(payload) object codecs",
-                             "server_pending_json_object.cp3",
+                             "server/server_pending_json_object.cp3",
                              [("PB5p", ["7", "alice"])])
         self.pending_fixture(
             "B20", "req.path === literal without annotation (finding F3)",
-            "server_pending_path_eq.cp3",
+            "server/server_pending_path_eq.cp3",
             expected=[("PB6", ["418", "teapot"])],
             buggy=[("PB6", ["404", "not found"])],
             buggy_detail="req.* compared to a literal without a `: string` "
@@ -489,7 +489,7 @@ class Suite:
                          "std::string(\"/teapot\"), false)) which is always "
                          "false; observed 404|not found instead of 418|teapot")
         self.pending_fixture("B21", "res.json(payload, status?) + reified client read",
-                             "server_json_object.cp3",
+                             "server/server_json_object.cp3",
                              [("PB5a", ["200", "7", "alice",
                                         "application/json; charset=utf-8"]),
                               ("PB5b", ["201", "9", "bob"])])
@@ -503,7 +503,7 @@ class Suite:
             for cid, name, _check in PHASE_C_SEQUENCE:
                 self.add(cid, name, "FAIL", "python ws server did not start")
             return
-        proc = self.run_cp3("ws_client_python.cp3", self.budget(), "ws_client_python")
+        proc = self.run_cp3("client/ws_client_python.cp3", self.budget(), "ws_client_python")
         got = parse_fixture_lines(proc.stdout or "") if proc else []
         self.assert_sequence(PHASE_C_SEQUENCE, got, "ws_client_python")
         server.wait(timeout=5)
@@ -523,7 +523,7 @@ class Suite:
     def phase_d(self) -> None:
         self.phase = "D"
         self.emit("[phase D] cp3 WebSocketServer (48206) -> python RFC6455 client")
-        proc = self.start_server("ws_server_own.cp3", "ws_server_own")
+        proc = self.start_server("client/ws_server_own.cp3", "ws_server_own")
         if proc is None or not wait_port(PORT_WS_CP3, 20):
             for cid, name, _check in PHASE_D_SEQUENCE:
                 self.add(cid, name, "FAIL", "cp3 ws server never became ready")
@@ -552,7 +552,7 @@ class Suite:
     def phase_s(self) -> None:
         self.phase = "S"
         self.emit("[phase S] python security probes -> cp3 server (48207)")
-        proc = self.start_server("server_probe_target.cp3", "server_probe_target")
+        proc = self.start_server("server/server_probe_target.cp3", "server_probe_target")
         if proc is None or not wait_port(PORT_PROBE, 20):
             self.add("S0", "probe target server ready", "FAIL", "never accepted connections")
             if proc is not None:
@@ -602,7 +602,7 @@ class Suite:
         (scratch / "health_server.cp3").write_text(
             source.replace("const PORT = 8080;", f"const PORT = {smoke_port};", 1),
             encoding="utf-8")
-        checker = (FIXTURES / "smoke_health_contract.cp3").read_text(encoding="utf-8")
+        checker = (FIXTURES / "client" / "smoke_health_contract.cp3").read_text(encoding="utf-8")
         (scratch / "smoke_check.cp3").write_text(
             checker.replace("const PORT = 48209;", f"const PORT = {smoke_port};", 1),
             encoding="utf-8")

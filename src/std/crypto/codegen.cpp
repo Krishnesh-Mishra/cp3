@@ -13,11 +13,11 @@
 // its bytes (see emitCryptoCall). `needsCrypto_` makes buildSource add the
 // include.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <string>
 
-#include "detail/cpp_writer.h"
+#include "detail/generator/cpp_writer.h"
 
 namespace cp3 {
 

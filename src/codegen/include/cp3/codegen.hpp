@@ -19,11 +19,11 @@
 #include <string>
 #include <vector>
 
-#include "cp3/analysis.hpp"
-#include "cp3/ast.hpp"
-#include "cp3/diagnostic.hpp"
-#include "cp3/native_bindings.hpp"
-#include "cp3/options.hpp"
+#include "cp3/core/analysis.hpp"
+#include "cp3/core/ast.hpp"
+#include "cp3/diag/diagnostic.hpp"
+#include "cp3/host/native_bindings.hpp"
+#include "cp3/host/options.hpp"
 
 namespace cp3 {
 

@@ -9,9 +9,9 @@
 
 #include <utility>
 
-#include "cp3/ast.hpp"
-#include "cp3/diagnostic.hpp"
-#include "cp3/token.hpp"
+#include "cp3/core/ast.hpp"
+#include "cp3/diag/diagnostic.hpp"
+#include "cp3/core/token.hpp"
 
 namespace cp3 {
 

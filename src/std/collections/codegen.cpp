@@ -15,16 +15,16 @@
 // error (CP3401), and a `forEach` callback that does not fit the collection's
 // parameter list is one too.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <cstddef>
 #include <functional>
 #include <string>
 #include <vector>
 
-#include "detail/cpp_writer.h"
-#include "detail/type_map.h"
-#include "cp3/diagnostic_codes.hpp"
+#include "detail/generator/cpp_writer.h"
+#include "detail/generator/type_map.h"
+#include "cp3/diag/diagnostic_codes.hpp"
 
 namespace cp3 {
 

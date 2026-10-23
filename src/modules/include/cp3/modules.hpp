@@ -24,9 +24,9 @@
 
 #include <memory>
 
-#include "cp3/diagnostic.hpp"
-#include "cp3/module.hpp"
-#include "cp3/source.hpp"
+#include "cp3/diag/diagnostic.hpp"
+#include "cp3/meta/module.hpp"
+#include "cp3/core/source.hpp"
 
 namespace cp3 {
 

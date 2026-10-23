@@ -16,12 +16,12 @@
 // (`env.get<T>(key, default: v)`) stays the recorded open question
 // (tests/cases/stdlib/_ambiguous/env_get_named_arg_syntax.cp3).
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <string>
 
-#include "cp3/diagnostic_codes.hpp"
-#include "detail/type_map.h"
+#include "cp3/diag/diagnostic_codes.hpp"
+#include "detail/generator/type_map.h"
 
 namespace cp3 {
 

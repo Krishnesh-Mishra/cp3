@@ -11,7 +11,7 @@
 
 #include <string_view>
 
-#include "cp3/token.hpp"
+#include "cp3/core/token.hpp"
 
 namespace cp3 {
 

@@ -6,13 +6,13 @@
 // array element set `["a", "b"].includes(x)`, which lowers to an equality
 // chain (the only array form representable before wave 3).
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <string>
 #include <vector>
 
-#include "detail/cpp_writer.h"
-#include "detail/type_map.h"
+#include "detail/generator/cpp_writer.h"
+#include "detail/generator/type_map.h"
 
 namespace cp3 {
 

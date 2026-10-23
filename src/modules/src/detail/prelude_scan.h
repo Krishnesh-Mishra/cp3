@@ -19,7 +19,7 @@
 #include <string_view>
 #include <vector>
 
-#include "cp3/module.hpp"
+#include "cp3/meta/module.hpp"
 
 namespace cp3::modules {
 

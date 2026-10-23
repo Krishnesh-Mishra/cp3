@@ -23,7 +23,7 @@
 #include <vector>
 
 #include "cp3/std_surface.hpp"
-#include "cp3/types.hpp"
+#include "cp3/core/types.hpp"
 
 namespace cp3 {
 

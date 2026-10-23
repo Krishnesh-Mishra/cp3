@@ -55,7 +55,7 @@ Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite targe
 - `security_probes.py` - phase S probes; each asserts survival of the server
   and a correct response afterwards, plus the per-probe invariant (for example,
   a CRLF-injected header must never appear in a response).
-- `fixtures/*.cp3` - the cp3 side: fetch client (A), server owner (B), WebSocket
+- `fixtures/{client,server}/*.cp3` - the cp3 side: fetch client (A), server owner (B), WebSocket
   client (C), WebSocketServer (D), probe target (S), smoke contract checker.
   Each fixture prints machine-checkable `ID|field|...` lines and exits 0/1.
 
@@ -196,10 +196,10 @@ scheduled surface lands, the check flips to `PASS` without edits.
   `req.path === "/teapot"` lowers to
   `cp3_truthy(((req).path, std::string("/teapot"), false))`, which is always
   false, so the middleware never answers and the 404 fallback is served.
-  Repro: `tests/network/fixtures/server_pending_path_eq.cp3`; generated line in
+  Repro: `tests/network/fixtures/server/server_pending_path_eq.cp3`; generated line in
   the fixture's `.cp3/build/server_pending_path_eq.cpp`. Adding
   `let path: string = req.path;` before the comparison lowers it correctly
-  (that is what `server_own.cp3` does for B13).
+  (that is what `server/server_own.cp3` does for B13).
 - F1 (top-level await rejection with a live listener): an unhandled
   `await res.json<number>()` mismatch against an object payload makes the
   process print `cp3: error: unhandled promise rejection: std/network: JSON

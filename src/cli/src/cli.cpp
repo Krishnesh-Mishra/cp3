@@ -20,14 +20,14 @@
 #include <system_error>
 #include <vector>
 
-#include "cp3/version.hpp"
+#include "cp3/meta/version.hpp"
 
-#include "detail/arguments.hpp"
-#include "detail/commands.hpp"
-#include "detail/editor_plugin.hpp"
-#include "detail/scripts.hpp"
-#include "detail/toolchain.hpp"
-#include "detail/util.hpp"
+#include "detail/core/arguments.hpp"
+#include "detail/core/commands.hpp"
+#include "detail/editor/editor_plugin.hpp"
+#include "detail/archive/scripts.hpp"
+#include "detail/toolchain/toolchain.hpp"
+#include "detail/core/util.hpp"
 
 namespace cp3 {
 namespace {

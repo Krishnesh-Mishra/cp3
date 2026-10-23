@@ -8,7 +8,7 @@
 // and pax-extension headers, resolves GNU long names ('L' headers), and
 // refuses unsafe paths so extraction can never escape the package directory.
 // =============================================================================
-#include "detail/tar.hpp"
+#include "detail/archive/tar.hpp"
 
 #include <cstdint>
 #include <cstring>

@@ -31,13 +31,13 @@ set(cp3_runtime_sources
     ../std/crypto/runtime.cpp
     ../std/process/child.cpp
     ../std/process/runtime.cpp
-    ../std/network/runtime.cpp
-    ../std/network/runtime_fetch.cpp
-    ../std/network/runtime_fetch_io.cpp
-    ../std/network/runtime_server.cpp
-    ../std/network/runtime_ws.cpp
-    ../std/network/runtime_ws_client.cpp
-    ../std/network/runtime_ws_frames.cpp
+    ../std/network/runtime/runtime.cpp
+    ../std/network/runtime/runtime_fetch.cpp
+    ../std/network/runtime/runtime_fetch_io.cpp
+    ../std/network/server/runtime_server.cpp
+    ../std/network/ws/runtime_ws.cpp
+    ../std/network/ws/runtime_ws_client.cpp
+    ../std/network/ws/runtime_ws_frames.cpp
 )
 
 add_library(cp3_runtime STATIC ${cp3_runtime_sources})

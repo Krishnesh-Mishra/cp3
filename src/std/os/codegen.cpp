@@ -4,13 +4,13 @@
 // All listed `os` members are zero-argument; each lowers 1:1 onto
 // cp3::runtime::os.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <string>
 #include <vector>
 
-#include "detail/builtin_tables.h"
-#include "detail/cpp_writer.h"
+#include "detail/int/builtin_tables.h"
+#include "detail/generator/cpp_writer.h"
 
 namespace cp3 {
 

@@ -1,0 +1,3 @@
+import { aValue } from "./a.cp3";
+export const bValue = 2;
+export function getA(): number { return aValue; }

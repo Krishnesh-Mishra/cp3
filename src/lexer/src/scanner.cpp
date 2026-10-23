@@ -18,7 +18,7 @@
 #include <string_view>
 #include <utility>
 
-#include "cp3/diagnostic_codes.hpp"
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/keywords.h"
 
 namespace cp3 {

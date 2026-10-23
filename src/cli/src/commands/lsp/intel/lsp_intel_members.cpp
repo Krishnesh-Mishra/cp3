@@ -1,0 +1,262 @@
+// =============================================================================
+// src/cli/src/commands/lsp_intel_members.cpp - member-access completion.
+//
+// OWNERSHIP: cli module (src/cli/**). Completes the memberCandidates
+// declaration in detail/lsp_intel_complete.hpp.
+//
+// The candidate surface is the documented receiver universe plus the shape
+// fields this document declares (object literal keys, class/interface
+// members, `: Interface` types). The list is then validated by ONE probe
+// analysis: the document is re-analyzed with the member access replaced by an
+// array literal reading every candidate, and only candidates the compiler
+// gives a real (non-placeholder, non-control) type survive. Nothing the
+// compiler would reject is offered.
+// =============================================================================
+#include "detail/lsp/lsp_intel_complete.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "cp3/core/ast.hpp"
+#include "cp3/lsp.hpp"
+#include "cp3/std_surface.hpp"
+#include "cp3/core/types.hpp"
+
+#include "detail/lsp/lsp_intel_docs.hpp"
+
+namespace cp3::cli {
+namespace {
+
+
+// -----------------------------------------------------------------------------
+// Member candidates
+// -----------------------------------------------------------------------------
+
+// The documented member surfaces of the language's built-in receivers, unioned
+// (the probe below removes whatever the receiver at hand does not have).
+// Order is the docs order (string, array, collections, date, buffers,
+// events/promises, fs, process); duplicates are removed on use.
+const char* const kMemberUniverse[] = {
+    "length", "charAt", "at", "charCodeAt", "startsWith", "endsWith",
+    "includes", "repeat", "padStart", "padEnd", "toUpperCase", "toLowerCase",
+    "trim", "trimStart", "trimEnd", "indexOf", "lastIndexOf", "slice",
+    "substring", "replace", "replaceAll", "push", "unshift", "pop", "shift",
+    "join", "sort", "fill", "reverse", "copyWithin", "subarray", "set", "get",
+    "has", "delete", "clear", "keys", "values", "entries", "forEach", "add",
+    "size", "toISOString", "toString", "getFullYear", "getMonth", "getDate",
+    "getHours", "getMinutes", "getSeconds", "addDays", "addHours",
+    "addMinutes", "addSeconds", "isBefore", "isAfter", "diffMs", "byteLength",
+    "byteOffset", "BYTES_PER_ELEMENT", "buffer", "on", "once", "off", "emit",
+    "then", "catch", "catchError", "finally", "isFile", "isDirectory",
+    "modifiedAt", "stdout", "stderr", "stdin", "exitCode", "write", "kill",
+};
+
+void appendUnique(std::vector<std::string>& names, const std::string& name) {
+    if (name.empty()) return;
+    for (const std::string& existing : names) {
+        if (existing == name) return;
+    }
+    names.push_back(name);
+}
+
+void appendObjectKeys(std::vector<std::string>& names, const ObjectLiteral& literal) {
+    for (const ObjectPropertyPtr& property : literal.properties) {
+        if (property == nullptr) continue;
+        appendUnique(names, keyName(property->key.get()));
+    }
+}
+
+void appendClassMemberKeys(std::vector<std::string>& names,
+                           const ClassDeclaration& declaration) {
+    for (const ClassMemberPtr& member : declaration.members) {
+        if (member == nullptr) continue;
+        if (member->kind == NodeKind::PropertyDeclaration) {
+            appendUnique(names,
+                         keyName(static_cast<const PropertyDeclaration&>(*member).key.get()));
+        } else if (member->kind == NodeKind::MethodDeclaration) {
+            appendUnique(names,
+                         keyName(static_cast<const MethodDeclaration&>(*member).key.get()));
+        } else if (member->kind == NodeKind::AccessorDeclaration) {
+            appendUnique(names,
+                         keyName(static_cast<const AccessorDeclaration&>(*member).key.get()));
+        }
+    }
+}
+
+void appendInterfaceMemberKeys(std::vector<std::string>& names,
+                               const InterfaceDeclaration& declaration) {
+    for (const SignatureMemberPtr& member : declaration.members) {
+        if (member == nullptr) continue;
+        if (member->kind == NodeKind::PropertySignature) {
+            appendUnique(names,
+                         keyName(static_cast<const PropertySignature&>(*member).key.get()));
+        } else if (member->kind == NodeKind::MethodSignature) {
+            appendUnique(names,
+                         keyName(static_cast<const MethodSignature&>(*member).key.get()));
+        }
+    }
+}
+
+// Members of the interface `typeName` declared in this file (`const s: Shape`).
+void appendTypeShapeKeys(const Program& program, const SourceFile& file,
+                         const std::string& typeName,
+                         std::vector<std::string>& names) {
+    if (typeName.empty()) return;
+    for (const StmtPtr& statement : program.body) {
+        if (statement == nullptr || !statement->span.valid() ||
+            statement->span.file != &file) {
+            continue;
+        }
+        if (statement->kind != NodeKind::InterfaceDeclaration) continue;
+        const auto& declaration = static_cast<const InterfaceDeclaration&>(*statement);
+        if (declaration.name == typeName) appendInterfaceMemberKeys(names, declaration);
+    }
+}
+
+// Shape fields the receiver's own declaration carries: object literal keys and
+// `: Interface` members for variables, plus class/interface members when the
+// receiver names the type itself.
+void appendShapeFields(const AnalyzedDocument& document,
+                       const std::string& receiver,
+                       std::vector<std::string>& names) {
+    if (receiver.empty() || lastIdentifier(receiver) != receiver) return;
+    const Program& program = *document.entry->ast;
+    for (const StmtPtr& statement : program.body) {
+        if (statement == nullptr || !statement->span.valid() ||
+            statement->span.file != document.file) {
+            continue;
+        }
+        if (statement->kind == NodeKind::ClassDeclaration) {
+            const auto& declaration = static_cast<const ClassDeclaration&>(*statement);
+            if (declaration.name == receiver) appendClassMemberKeys(names, declaration);
+        } else if (statement->kind == NodeKind::InterfaceDeclaration) {
+            const auto& declaration = static_cast<const InterfaceDeclaration&>(*statement);
+            if (declaration.name == receiver) appendInterfaceMemberKeys(names, declaration);
+        } else if (statement->kind == NodeKind::VariableDeclaration) {
+            const auto& declaration = static_cast<const VariableDeclaration&>(*statement);
+            for (const VariableDeclaratorPtr& declarator : declaration.declarations) {
+                if (declarator == nullptr || declarator->id == nullptr) continue;
+                if (declarator->id->kind != NodeKind::Identifier) continue;
+                if (static_cast<const Identifier&>(*declarator->id).name != receiver) {
+                    continue;
+                }
+                if (declarator->init != nullptr &&
+                    declarator->init->kind == NodeKind::ObjectLiteral) {
+                    appendObjectKeys(
+                        names, static_cast<const ObjectLiteral&>(*declarator->init));
+                }
+                if (declarator->type != nullptr &&
+                    declarator->type->kind == NodeKind::NamedType) {
+                    appendTypeShapeKeys(
+                        program, *document.file,
+                        static_cast<const NamedType&>(*declarator->type).name, names);
+                }
+            }
+        }
+    }
+}
+
+std::vector<std::string> candidateNames(const AnalyzedDocument& document,
+                                        const std::string& receiver) {
+    const std::string last = lastIdentifier(receiver);
+    if (!last.empty()) {
+        // A closed std namespace has an exact table: no need to union.
+        std::vector<std::string> stdNames = stdNamespaceMemberNames(last);
+        if (!stdNames.empty()) return stdNames;
+    }
+    std::vector<std::string> names;
+    for (const char* name : kMemberUniverse) appendUnique(names, name);
+    appendShapeFields(document, receiver, names);
+    return names;
+}
+
+constexpr const char* kProbeAbsent = "__cp3_lsp_probe_absent";
+
+std::string probeArrayText(const std::string& receiver,
+                           const std::vector<std::string>& names) {
+    std::string out = "[";
+    for (const std::string& name : names) {
+        out += receiver;
+        out += '.';
+        out += name;
+        out += ", ";
+    }
+    out += receiver;
+    out += '.';
+    out += kProbeAbsent;
+    out += ']';
+    return out;
+}
+
+const ArrayLiteral* arrayStartingAt(const Program& program,
+                                    std::uint32_t offset) {
+    const ArrayLiteral* found = nullptr;
+    forEachNode(program, [&](const Node& node) {
+        if (found != nullptr || node.kind != NodeKind::ArrayLiteral) return;
+        if (node.span.begin.offset != offset) return;
+        found = static_cast<const ArrayLiteral*>(&node);
+    });
+    return found;
+}
+}  // namespace
+
+// One probe analysis keeps the candidates the compiler can actually resolve.
+std::vector<lsp::CompletionCandidate> memberCandidates(
+    const AnalyzedDocument& document, const std::string& text,
+    const CompletionContext& context, std::uint32_t offset) {
+    std::vector<lsp::CompletionCandidate> candidates;
+    if (context.receiverBegin >= context.dot) return candidates;
+    const std::string receiver =
+        text.substr(context.receiverBegin, context.dot - context.receiverBegin);
+    const std::vector<std::string> names = candidateNames(document, receiver);
+    if (names.empty()) return candidates;
+    std::string probe = text;
+    probe.replace(context.receiverBegin, offset - context.receiverBegin,
+                  probeArrayText(receiver, names));
+    auto probed = analyzeDocument(document.file->path, probe);
+    if (!analysisReady(*probed)) return candidates;
+    const ArrayLiteral* array =
+        arrayStartingAt(*probed->entry->ast, context.receiverBegin);
+    if (array == nullptr || array->elements.size() != names.size() + 1) {
+        return candidates;
+    }
+    const Type* control = probed->sema.typeOf(array->elements.back()->nodeId);
+    // The receiver's type (an array, a string, a user class) and the std
+    // namespace the receiver names: both decide what a candidate's
+    // documentation is.
+    const std::string namespaceName =
+        stdNamespaceMemberNames(lastIdentifier(receiver)).empty()
+            ? std::string()
+            : lastIdentifier(receiver);
+    const Type* receiverType = nullptr;
+    if (!array->elements.empty() && array->elements.front() != nullptr &&
+        array->elements.front()->kind == NodeKind::MemberExpr) {
+        const auto& member = static_cast<const MemberExpr&>(*array->elements.front());
+        if (member.object != nullptr) {
+            receiverType = probed->sema.typeOf(member.object->nodeId);
+        }
+    }
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        const ExprPtr& element = array->elements[i];
+        if (element == nullptr) continue;
+        const Type* type = probed->sema.typeOf(element->nodeId);
+        if (type == nullptr || type->isError() || type->isUnknown()) continue;
+        if (control != nullptr && *type == *control) continue;
+        lsp::CompletionCandidate candidate;
+        candidate.label = names[i];
+        candidate.kind = type->kind == TypeKind::Function ? 3 : 5;
+        // An ambient surface has no printable type of its own: the
+        // documented signature (in the documentation) is what the editor
+        // shows instead of the internal placeholder label.
+        candidate.detail = isPlaceholderType(*type) ? "" : describe(*type);
+        candidate.documentation =
+            completionMemberDoc(namespaceName, receiverType, names[i]);
+        candidates.push_back(std::move(candidate));
+    }
+    return candidates;
+}
+
+
+}  // namespace cp3::cli

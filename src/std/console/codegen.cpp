@@ -25,16 +25,16 @@
 // (cp3/std/console.hpp): the parts are rendered and joined with one space,
 // exactly like the variadic form.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <cstddef>
 #include <string>
 #include <vector>
 
-#include "cp3/diagnostic_codes.hpp"
-#include "detail/class_model.h"
-#include "detail/cpp_writer.h"
-#include "detail/type_map.h"
+#include "cp3/diag/diagnostic_codes.hpp"
+#include "detail/class/class_model.h"
+#include "detail/generator/cpp_writer.h"
+#include "detail/generator/type_map.h"
 
 namespace cp3 {
 

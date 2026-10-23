@@ -15,7 +15,7 @@
 
 #include <string>
 
-#include "cp3/native_bindings.hpp"
+#include "cp3/host/native_bindings.hpp"
 #include "detail/native_json.hpp"
 
 namespace cp3::detail {

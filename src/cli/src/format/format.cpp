@@ -14,7 +14,7 @@
 // imprecision: braces inside regular-expression literals or inside a template
 // interpolation that spans lines can throw off the indentation depth.
 // =============================================================================
-#include "detail/format.hpp"
+#include "detail/editor/format.hpp"
 
 #include <cstddef>
 #include <string>

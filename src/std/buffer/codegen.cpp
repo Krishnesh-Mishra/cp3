@@ -17,14 +17,14 @@
 // The C++ type spelling is `::cp3::runtime::buffer::Buffer`; `needsBuffer_`
 // makes buildSource add the include (and the cp3_ts/cp3_truthy overloads).
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <string>
 #include <vector>
 
-#include "detail/builtin_tables.h"
-#include "detail/cpp_writer.h"
-#include "detail/type_map.h"
+#include "detail/int/builtin_tables.h"
+#include "detail/generator/cpp_writer.h"
+#include "detail/generator/type_map.h"
 
 namespace cp3 {
 

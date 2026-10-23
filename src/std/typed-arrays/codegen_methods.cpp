@@ -9,15 +9,15 @@
 // the indexed reads / writes. The constructors and statics live in the sibling
 // codegen.cpp.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <cstddef>
 #include <string>
 
-#include "detail/family.h"
-#include "detail/parallel.h"
-#include "detail/type_map.h"
-#include "cp3/diagnostic_codes.hpp"
+#include "detail/generator/family.h"
+#include "detail/parallel/parallel.h"
+#include "detail/generator/type_map.h"
+#include "cp3/diag/diagnostic_codes.hpp"
 
 namespace cp3 {
 

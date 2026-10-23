@@ -17,8 +17,8 @@
 #include <string_view>
 #include <vector>
 
-#include "detail/deflate.hpp"
-#include "detail/deflate_tables.hpp"
+#include "detail/archive/deflate.hpp"
+#include "detail/archive/deflate_tables.hpp"
 
 namespace cp3::cli {
 

@@ -14,13 +14,13 @@
 // (the caller falls through to notImplemented), so unsupported std surface
 // stays a graceful skip.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <string>
 #include <vector>
 
-#include "detail/builtin_tables.h"
-#include "detail/type_map.h"
+#include "detail/int/builtin_tables.h"
+#include "detail/generator/type_map.h"
 
 namespace cp3 {
 

@@ -14,8 +14,8 @@
 #include <string>
 #include <vector>
 
-#include "cp3/analysis.hpp"
-#include "cp3/source.hpp"
+#include "cp3/core/analysis.hpp"
+#include "cp3/core/source.hpp"
 
 namespace cp3 {
 

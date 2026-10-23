@@ -30,17 +30,17 @@
 // Buffer seam is closed - chunks are the nominal `Buffer` and every chunk
 // member lowers through src/std/buffer/codegen.cpp.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <cstddef>
 #include <string>
 #include <vector>
 
-#include "cp3/diagnostic_codes.hpp"
-#include "detail/builtin_tables.h"
-#include "detail/cpp_writer.h"
-#include "detail/type_map.h"
-#include "cp3/diagnostic_codes.hpp"
+#include "cp3/diag/diagnostic_codes.hpp"
+#include "detail/int/builtin_tables.h"
+#include "detail/generator/cpp_writer.h"
+#include "detail/generator/type_map.h"
+#include "cp3/diag/diagnostic_codes.hpp"
 
 namespace cp3 {
 

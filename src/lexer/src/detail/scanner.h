@@ -25,9 +25,9 @@
 #include <string_view>
 #include <vector>
 
-#include "cp3/diagnostic.hpp"
-#include "cp3/source.hpp"
-#include "cp3/token.hpp"
+#include "cp3/diag/diagnostic.hpp"
+#include "cp3/core/source.hpp"
+#include "cp3/core/token.hpp"
 
 namespace cp3 {
 

@@ -14,7 +14,7 @@
 #include <system_error>
 #include <utility>
 
-#include "cp3/diagnostic_codes.hpp"
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "cp3/modules.hpp"
 
 #include "detail/file_paths.h"

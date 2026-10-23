@@ -7,12 +7,12 @@
 // the same contents twice produces byte-identical archives. Readers accept
 // every header flag the format defines, including concatenated members.
 // =============================================================================
-#include "detail/gzip.hpp"
+#include "detail/archive/gzip.hpp"
 
 #include <cstdint>
 
-#include "detail/checksum.hpp"
-#include "detail/deflate.hpp"
+#include "detail/cache/checksum.hpp"
+#include "detail/archive/deflate.hpp"
 
 namespace cp3::cli {
 

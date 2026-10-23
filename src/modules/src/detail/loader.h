@@ -21,10 +21,10 @@
 #include <unordered_set>
 #include <vector>
 
-#include "cp3/diagnostic.hpp"
-#include "cp3/module.hpp"
-#include "cp3/source.hpp"
-#include "cp3/token.hpp"
+#include "cp3/diag/diagnostic.hpp"
+#include "cp3/meta/module.hpp"
+#include "cp3/core/source.hpp"
+#include "cp3/core/token.hpp"
 
 #include "detail/export_surface.h"
 #include "detail/prelude_scan.h"

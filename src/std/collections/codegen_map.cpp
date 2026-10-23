@@ -8,15 +8,15 @@
 // the emitted form live here; the `Map`/`Set` surface itself is in
 // src/std/collections/codegen.cpp.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <cstddef>
 #include <functional>
 #include <string>
 
-#include "detail/cpp_writer.h"
-#include "detail/mangle.h"
-#include "detail/type_map.h"
+#include "detail/generator/cpp_writer.h"
+#include "detail/generator/mangle.h"
+#include "detail/generator/type_map.h"
 
 namespace cp3 {
 

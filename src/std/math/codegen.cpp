@@ -6,13 +6,13 @@
 // in emitMathMember below; the namespace dispatch stays in
 // emit/std/common.cpp's emitBuiltinMember.
 // =============================================================================
-#include "detail/generator.h"
+#include "detail/generator/generator.h"
 
 #include <string>
 #include <vector>
 
-#include "detail/builtin_tables.h"
-#include "detail/cpp_writer.h"
+#include "detail/int/builtin_tables.h"
+#include "detail/generator/cpp_writer.h"
 
 namespace cp3 {
 
