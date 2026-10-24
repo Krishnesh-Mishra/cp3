@@ -11,8 +11,9 @@
 //     the target file, through the module graph's resolved dependency edge;
 //   * a std/package/native import -> no location (empty), never a wrong one.
 // Member (property/method) definitions and namespace imports deliberately
-// answer nothing: classes and enums are not yet implemented in sema
-// (`notImplemented`), so there is no resolved member table to trust.
+// answer nothing: SemaResult publishes value bindings and function signatures,
+// but not the resolved class/interface member declarations, so there is no
+// member table to point a definition at.
 // =============================================================================
 #include "detail/lsp/lsp_intel.hpp"
 

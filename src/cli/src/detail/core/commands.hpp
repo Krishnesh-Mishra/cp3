@@ -75,7 +75,8 @@ std::string defaultEntryFile();
 // True when every error/fatal diagnostic is the dedicated not-implemented code
 // (CP3002). Such a failure is reported with the exit-3 + marker convention so
 // tooling (and tests/runner/run_tests.py) can tell "unimplemented feature" from
-// a genuine compile error while stages come online (ARCHITECTURE §4, §12).
+// a genuine compile error wherever a stage still has a pending form
+// (ARCHITECTURE §4, §12).
 bool onlyNotImplemented(const std::vector<Diagnostic>& diagnostics);
 
 // Builds the render options for a command (TTY/--verbose -> pretty + color).

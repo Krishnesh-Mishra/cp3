@@ -325,6 +325,35 @@
     },
     {
       "group": "build",
+      "name": "frontend-error-is-not-not-implemented",
+      "description": "a frontend failure is a compile error, never the exit-3 marker",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "bad-type"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3401",
+            "type mismatch"
+          ],
+          "not_contains": [
+            "not implemented"
+          ]
+        },
+        "files_absent": [
+          ".cp3/out/index.exe"
+        ]
+      }
+    },
+    {
+      "group": "build",
       "name": "missing-file",
       "description": "missing file",
       "argv": [
