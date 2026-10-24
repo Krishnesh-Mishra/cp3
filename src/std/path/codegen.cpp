@@ -33,8 +33,8 @@ std::string Generator::emitPathCall(const CallExpr& c, const MemberExpr& m) {
            joinStrings(emitPlainArgs(c), ", ") + ")";
 }
 
-// The `path.sep` property read. Returns "" when `m` is not it, so the caller
-// keeps the CP3002 fallthrough.
+// The `path.sep` property read. Returns "" when `m` is not it (defensive: the
+// closed path surface is rejected in sema as CP3305 first).
 std::string Generator::emitPathMember(const MemberExpr& m) {
     if (!isNsMember(&m, "path", "sep")) return std::string();
     needsPath_ = true;

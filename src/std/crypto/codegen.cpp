@@ -7,11 +7,11 @@
 //
 // Every documented member (docs/standard-library/04 section crypto) lowers 1:1
 // onto the runtime surface in cp3/std/crypto.hpp (namespace
-// cp3::runtime::crypto); a member outside the table returns "" so the caller
-// keeps reporting CP3002. String arguments and results are `std::string` per
-// the rest of the std surface; a `Buffer` argument to sha256/sha512 lowers to
-// its bytes (see emitCryptoCall). `needsCrypto_` makes buildSource add the
-// include.
+// cp3::runtime::crypto); a member outside the table returns "" (defensive: the
+// closed crypto surface is rejected in sema as CP3305 first). String arguments
+// and results are `std::string` per the rest of the std surface; a `Buffer`
+// argument to sha256/sha512 lowers to its bytes (see emitCryptoCall).
+// `needsCrypto_` makes buildSource add the include.
 // =============================================================================
 #include "detail/generator/generator.h"
 

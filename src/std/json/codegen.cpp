@@ -218,16 +218,13 @@ void Generator::collectJsonShapes(const Program& program) {
 }
 
 void Generator::emitJsonInterface(const InterfaceDeclaration& i) {
-    // A registered shape is erased until a `JSON.parse<T>` names it (usage-based
-    // reification): the declaration itself emits nothing.
-    if (!i.name.empty() && jsonShapeStructs_.count(i.name) != 0) return;
-    // An interface claimed by the spec 15 model pass is emitted as its wrapper
-    // struct (emit/class_shape.cpp), so the declaration itself emits nothing.
-    if (!i.name.empty() &&
-        ModelRegistry::get().interfaceByName(i.name) != nullptr) {
-        return;
-    }
-    notImplemented(i, "top-level declaration");
+    // An interface declaration is type-only and always emits nothing here: a
+    // plain record shape is registered by collectJsonShapes and materialized on
+    // the first `JSON.parse<T>` use (jsonRecordParse), a spec 15 interface is
+    // emitted as its wrapper struct (emit/class_shape.cpp), and a generic
+    // interface is reified per instantiation (support/type_map.cpp). An unused
+    // interface has no C++ spelling at all, exactly like a type alias.
+    (void)i;
 }
 
 std::string Generator::emitJsonMember(const MemberExpr& m) {
