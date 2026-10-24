@@ -25,12 +25,25 @@ class Value {
 public:
     enum class Kind { Null, Bool, Number, String, Array, Object };
 
+    // Completed after Value. std::vector supports an incomplete element type;
+    // std::pair<std::string, Value> does not, and Clang rejects instantiating
+    // it while Value is still incomplete.
+    struct Field;
+
     Kind kind = Kind::Null;
     bool boolean = false;
     double number = 0.0;
     std::string text;
     std::vector<Value> items;                              // Array
-    std::vector<std::pair<std::string, Value>> fields;     // Object
+    std::vector<Field> fields;                             // Object
+};
+
+struct Value::Field {
+    std::string key;
+    Value value;
+
+    Field(std::string fieldKey, Value fieldValue)
+        : key(std::move(fieldKey)), value(std::move(fieldValue)) {}
 };
 
 inline Value nullValue() { return Value{}; }
@@ -65,7 +78,7 @@ inline Value arrayValue(std::vector<Value> items) {
     return out;
 }
 
-using Fields = std::vector<std::pair<std::string, Value>>;
+using Fields = std::vector<Value::Field>;
 
 inline Value objectValue(Fields fields) {
     Value out;
