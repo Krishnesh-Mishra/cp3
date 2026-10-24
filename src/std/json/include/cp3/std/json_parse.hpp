@@ -305,7 +305,7 @@ Array<T> parseArray(const std::string& text) {
 // =============================================================================
 inline const Value& requireField(const Fields& fields, const char* name) {
     for (const auto& entry : fields) {
-        if (entry.first == name) return entry.second;
+        if (entry.key == name) return entry.value;
     }
     throw ParseError(std::string("missing field '") + name + "'");
 }

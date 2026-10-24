@@ -130,10 +130,10 @@ inline void writeObject(const Value& v, std::string& out, int indent, int depth)
     for (std::size_t i = 0; i < v.fields.size(); ++i) {
         if (i != 0) out.push_back(',');
         writePad(out, indent, depth + 1);
-        out += stringify(v.fields[i].first);
+        out += stringify(v.fields[i].key);
         out.push_back(':');
         if (indent >= 0) out.push_back(' ');
-        writeValue(v.fields[i].second, out, indent, depth + 1);
+        writeValue(v.fields[i].value, out, indent, depth + 1);
     }
     writePad(out, indent, depth);
     out.push_back('}');
