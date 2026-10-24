@@ -15,9 +15,9 @@
 //
 // Both the namespace object (`Date.now`) and a Date VALUE (`d.getFullYear()`)
 // are CLOSED: a member outside the tables is CP3305 with the implemented names
-// as candidates instead of a CP3002 skip. The tables drive member typing, the
-// candidate lists and the editor documentation at once, so the three can never
-// drift apart.
+// as candidates, never an untyped fallthrough. The tables drive member typing,
+// the candidate lists and the editor documentation at once, so the three can
+// never drift apart.
 //
 // A Date is immutable: every "change" operation returns a NEW Date and leaves
 // the receiver untouched (deliberately unlike JS's mutable Date).

@@ -1,0 +1,20 @@
+import console from "std/console";
+
+// A generic interface with no instantiation is a type-only declaration: it
+// must erase without a codegen fallback (the old JSON top-level declaration
+// path).
+interface Unused<T> {
+    value: T;
+}
+
+// A used generic interface still reifies its wrapper per instantiation.
+interface Box<T> {
+    value: T;
+}
+
+class NumBox {
+    value: number = 7;
+}
+
+let b: Box<number> = new NumBox();
+console.log(b.value);

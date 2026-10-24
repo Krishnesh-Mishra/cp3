@@ -20,7 +20,7 @@
 // The same table drives member typing, the CP3305 candidate list and the
 // editor documentation, so the three can never drift apart. The family is
 // CLOSED (std_check.cpp isClosedStdNamespace): a member outside the table is
-// CP3305 with these names as candidates instead of a CP3002 skip.
+// CP3305 with these names as candidates, never an untyped fallthrough.
 //
 // The descriptions are the documented ones
 // (docs/standard-library/04-imported-std-modules.md, crypto section):
