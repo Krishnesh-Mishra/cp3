@@ -88,7 +88,6 @@ private:
     void reportSuggestive(const char* code, const SourceSpan& span,
                           std::string message,
                           std::vector<std::string> suggestions);
-    void notImplemented(const SourceSpan& span, const std::string& what);
     // CP3301 for an unresolved name, with suggestions.
     void reportUndefinedName(const SourceSpan& span, const std::string& name);
     // CP3305 for a miss on a known receiver.

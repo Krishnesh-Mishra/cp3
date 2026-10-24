@@ -58,7 +58,7 @@ void Analyzer::rejectNativeUnion(const Type& result, const SourceSpan& span) {
     // (`r_'u32' | undefined` -> std::optional, `T?` -> Maybe). A non-nullish
     // variant with a native alternative has no stable alternative ordering and
     // no numeric coercion, so refuse it here with a real diagnostic rather
-    // than letting the declared type fall through to a CP3002 later.
+    // than letting the declared type reach codegen without a sound lowering.
     if (!result.isUnion()) return;
     std::size_t nonNullish = 0;
     bool hasNative = false;
