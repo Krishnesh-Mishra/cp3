@@ -49,10 +49,6 @@ void Analyzer::reportSuggestive(const char* code, const SourceSpan& span,
     sink_.report(std::move(d));
 }
 
-void Analyzer::notImplemented(const SourceSpan& span, const std::string& what) {
-    report(diagcode::kNotImplemented, span, "not implemented yet: " + what);
-}
-
 void Analyzer::reportUndefinedName(const SourceSpan& span,
                                    const std::string& name) {
     std::string message = "cannot find name '" + name + "'";

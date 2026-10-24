@@ -8,9 +8,9 @@
 // trusts what was lexed.
 //
 // The surface is CLOSED like Date: a member outside the table is CP3305 with
-// the implemented names as candidates instead of a CP3002 skip. The table
-// drives member typing and the candidate list at once, so the two can never
-// drift apart.
+// the implemented names as candidates instead of the permissive ambient
+// fallthrough. The table drives member typing and the candidate list at once,
+// so the two can never drift apart.
 //
 // The documented surface (D48, mirrored by cp3/core/regex.hpp):
 //   test(subject: string): boolean;

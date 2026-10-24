@@ -1,0 +1,4 @@
+// The RegExp surface is closed like Date: an unknown member is CP3305 with
+// the implemented names as candidates, not an open ambient fallthrough.
+let re = /abc/g;
+let text = re.definitelyNotAMember;

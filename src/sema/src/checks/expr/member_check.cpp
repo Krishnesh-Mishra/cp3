@@ -46,8 +46,8 @@ Type Analyzer::inferMember(MemberExpr& m) {
                 return withType(m, *t);
             }
             // Closed std families: an unknown member is a real error here,
-            // not a codegen CP3002 skip. Open families (process, network,
-            // fs, ...) keep the permissive ambient fallthrough.
+            // not a codegen skip. Open families (network, and any family with
+            // no table) keep the permissive ambient fallthrough.
             if (isClosedStdNamespace(id.name)) {
                 reportMemberMiss("'" + id.name + "'", m.property, m.span,
                                  stdNamespaceMemberNames(id.name));
