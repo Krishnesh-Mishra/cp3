@@ -104,9 +104,10 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
     }
     renderDiagnostics(feSink.diagnostics(), *ctx.render, stderr);
     if (feSink.hasErrors()) {
-        result.exitCode = onlyNotImplemented(feSink.diagnostics())
-                              ? notImplemented(ctx.execute ? "run" : "build")
-                              : kExitCompileError;
+        // Lexer, parser, module loader and sema no longer raise the dedicated
+        // not-implemented diagnostic code: every frontend error is a real
+        // compile error. Only codegen/worker diagnostics can still be deferred.
+        result.exitCode = kExitCompileError;
     } else if (entry == nullptr || !entry->ast) {
         // The loader always yields a parsed entry unit; guard anyway so a
         // future loader change can never turn into a crash here.

@@ -8,8 +8,9 @@
 //   0  success
 //   1  compile error (diagnostics were printed)
 //   2  usage error (bad flag/command; usage was printed to stderr)
-//   3  not implemented - this build is still a scaffold (a marker line
-//      containing kNotImplementedMarker is printed to stderr)
+//   3  not implemented - the input uses a recognized construct or command that
+//      this build does not lower yet (a marker line containing
+//      kNotImplementedMarker is printed to stderr)
 // =============================================================================
 #pragma once
 
@@ -21,7 +22,7 @@ inline constexpr int kExitUsageError = 2;
 inline constexpr int kExitNotImplemented = 3;
 
 // Printed to stderr together with kExitNotImplemented so tooling (and the test
-// harness) can tell "the scaffold ran" apart from a genuine failure.
+// harness) can tell an unimplemented construct apart from a genuine failure.
 inline constexpr const char* kNotImplementedMarker = "not implemented";
 
 // Entry point for the `cp3c` executable. Never throws; returns an exit code.

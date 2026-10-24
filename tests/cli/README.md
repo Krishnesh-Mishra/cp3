@@ -254,25 +254,27 @@ programs that log their argv and honor `FAKE_EDITOR_EXIT`.
 
 ## Groups and counts
 
-The suite currently discovers 332 cases:
+The suite currently discovers 355 cases:
 
 | Group | Cases |
 | --- | ---: |
 | `global` | 33 |
 | `init` | 34 |
 | `check` | 18 |
-| `build` | 33 |
+| `build` | 34 |
 | `run` | 17 |
 | `fmt` | 12 |
 | `dev` | 8 |
-| `clean` | 10 |
+| `clean` | 12 |
 | `install` | 34 |
+| `native-import` | 8 |
+| `native-install` | 10 |
 | `package` | 17 |
 | `recompile` | 5 |
 | `exec` | 6 |
 | `hooks` | 13 |
 | `shim` | 24 |
-| `toolchain` | 33 |
+| `toolchain` | 35 |
 | `editor` | 35 |
 
 Fast mode runs everything except `slow` cases and cases whose `requires`
