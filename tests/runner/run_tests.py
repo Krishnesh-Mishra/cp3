@@ -21,10 +21,17 @@
 # Usage:
 #   python tests/runner/run_tests.py [--cp3c PATH] [--cases DIR]
 #                                    [--filter SUBSTR] [--json] [--verbose]
-#                                    [--strict-ambiguous]
+#                                    [--toolchain ID[,ID...]] [--strict-ambiguous]
 #                                    [--write-registry [PATH]]
 #                                    [--no-bench] [--bench-args "ARGS"]
 #                                    [--jobs N]
+#
+# --toolchain runs the corpus once per selected C++ toolchain, sequentially:
+# `--toolchain gcc`, `--toolchain gcc,clang`, or `--toolchain all` (gcc,
+# clang, msvc). Each cp3c invocation gets the matching `--toolchain ID`, so a
+# generated-code problem cannot hide behind the globally selected compiler.
+# A requested toolchain that cp3c reports as missing is an error unless
+# --allow-missing-toolchains is passed.
 #
 # --jobs N runs the corpus pass with up to N cp3c subprocesses in flight at
 # once (stdlib only, ThreadPoolExecutor plus a small dispatcher). The default
@@ -69,6 +76,13 @@ from typing import Optional
 # --- Exit codes shared with src/cli/include/cp3/cli.hpp ----------------------
 STUB_EXIT_CODE = 3
 STUB_MARKER = "not implemented"
+
+# --- Toolchain matrix --------------------------------------------------------
+# `all` is deliberately the three native toolchains cp3c can target on this
+# platform. `apple-clang` is accepted as an explicit id but is not part of
+# `all` on Windows.
+ALL_TOOLCHAINS = ("gcc", "clang", "msvc")
+KNOWN_TOOLCHAINS = frozenset((*ALL_TOOLCHAINS, "apple-clang"))
 
 # --- Open-question markers ---------------------------------------------------
 # Any path with this directory segment is a marker, not an assertion.
@@ -367,7 +381,58 @@ def _resolve_compiler(path_arg: Optional[str]) -> Optional[Path]:
     return candidates[0] if candidates else None
 
 
-def evaluate(case: Case, compiler: Path, timeout: float) -> Outcome:
+def parse_toolchains(raw: Optional[list[str]]) -> list[str]:
+    """Expand repeated/comma-separated --toolchain values, preserving order."""
+    if not raw:
+        return []
+    selected: list[str] = []
+    for item in raw:
+        for token in item.split(","):
+            name = token.strip().lower()
+            if not name:
+                continue
+            candidates = ALL_TOOLCHAINS if name == "all" else (name,)
+            for candidate in candidates:
+                if candidate not in KNOWN_TOOLCHAINS:
+                    known = ", ".join((*ALL_TOOLCHAINS, "apple-clang"))
+                    raise ValueError(
+                        f"unknown toolchain '{candidate}' (known: {known}; use 'all')"
+                    )
+                if candidate not in selected:
+                    selected.append(candidate)
+    if not selected:
+        raise ValueError("--toolchain needs at least one id (gcc, clang, msvc, or all)")
+    return selected
+
+
+def toolchain_status(compiler: Path, toolchain: str) -> tuple[bool, str]:
+    """Ask cp3c whether a named toolchain is ready.
+
+    Returns (ready, detail). If the query itself cannot run, return True and
+    let the normal corpus path report cp3c's own error; this preflight is a
+    guard against silently running the corpus against a missing compiler, not
+    a second source of truth.
+    """
+    try:
+        proc = subprocess.run(
+            [str(compiler), "toolchain", "list"],
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return True, f"could not query cp3c toolchain list ({exc})"
+    if proc.returncode != 0:
+        return True, f"cp3c toolchain list exited {proc.returncode}"
+    text = _decode(proc.stdout) + "\n" + _decode(proc.stderr)
+    for line in text.splitlines():
+        match = re.match(r"^\s*([A-Za-z0-9_.-]+)\s+.*?\b(ready|missing)\b", line)
+        if match and match.group(1).lower() == toolchain:
+            return match.group(2) == "ready", line.strip()
+    return True, f"toolchain '{toolchain}' was not listed by cp3c"
+
+
+def evaluate(case: Case, compiler: Path, timeout: float,
+             toolchain: Optional[str] = None) -> Outcome:
     mode = case.spec.get("mode", "check")
     if mode not in ("run", "check"):
         mode = "check"
@@ -376,6 +441,8 @@ def evaluate(case: Case, compiler: Path, timeout: float) -> Outcome:
         return Outcome(case, "failed", f"missing source file: {case.cp3_path}")
 
     cmd = [str(compiler), mode, str(case.cp3_path)]
+    if toolchain:
+        cmd += ["--toolchain", toolchain]
     try:
         proc = subprocess.run(
             cmd,
@@ -529,6 +596,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     parser.add_argument("--filter", dest="filter_substr", default=None,
                         help="only run cases whose relative path contains SUBSTR")
+    parser.add_argument("--toolchain", dest="toolchains", action="append",
+                        default=None, metavar="ID[,ID...]",
+                        help="run the corpus once per C++ toolchain, sequentially; "
+                             "repeatable or comma-separated. IDs: gcc, clang, msvc, "
+                             "apple-clang, or 'all' (gcc,clang,msvc). Every cp3c "
+                             "invocation gets --toolchain ID. Default: use cp3c's "
+                             "configured toolchain.")
+    parser.add_argument("--allow-missing-toolchains", action="store_true",
+                        help="with --toolchain, skip a requested toolchain cp3c "
+                             "reports as missing instead of failing the run")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="print every case, not just failures")
@@ -585,16 +662,50 @@ def main(argv: Optional[list[str]] = None) -> int:
     compiler_missing = compiler is None or not compiler.is_file()
     missing_reason = "cp3c executable not found"
 
-    def run_as_ordinary_serial(selected: list[Case]) -> list[Outcome]:
+    try:
+        requested_toolchains = parse_toolchains(args.toolchains)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    if requested_toolchains:
+        if compiler_missing:
+            print("error: --toolchain requires a working cp3c executable",
+                  file=sys.stderr)
+            return 2
+        available_toolchains: list[str] = []
+        for toolchain in requested_toolchains:
+            ready, detail = toolchain_status(compiler, toolchain)
+            if not ready:
+                if args.allow_missing_toolchains:
+                    print(f"warning: skipping toolchain '{toolchain}': {detail}",
+                          file=sys.stderr)
+                    continue
+                print(f"error: requested toolchain '{toolchain}' is not ready: "
+                      f"{detail}", file=sys.stderr)
+                print("hint: pass --allow-missing-toolchains to skip unavailable "
+                      "toolchains, or select only the IDs you can run.",
+                      file=sys.stderr)
+                return 2
+            available_toolchains.append(toolchain)
+        if not available_toolchains:
+            print("error: no requested toolchains are available", file=sys.stderr)
+            return 2
+        selected_toolchains: list[Optional[str]] = list(available_toolchains)
+    else:
+        selected_toolchains = [None]
+
+    def run_as_ordinary_serial(selected: list[Case],
+                               toolchain: Optional[str] = None) -> list[Outcome]:
         sink: list[Outcome] = []
         for case in selected:
             if compiler_missing:
                 sink.append(Outcome(case, "skipped", missing_reason))
             else:
-                sink.append(evaluate(case, compiler, args.timeout))
+                sink.append(evaluate(case, compiler, args.timeout, toolchain))
         return sink
 
-    def run_as_ordinary_parallel(selected: list[Case]) -> list[Outcome]:
+    def run_as_ordinary_parallel(selected: list[Case],
+                                 toolchain: Optional[str] = None) -> list[Outcome]:
         # Bounded pool, one cp3c subprocess per case - the same command, cwd
         # and timeout the sequential path uses. Cases are parallelised across
         # build roots: cp3c writes shared intermediates (runtime objects,
@@ -611,7 +722,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if compiler_missing:
             return [Outcome(case, "skipped", missing_reason) for case in selected]
         if args.jobs <= 1 or count <= 1:
-            return run_as_ordinary_serial(selected)
+            return run_as_ordinary_serial(selected, toolchain)
         timeout = args.timeout
         # Only `run` cases involve the toolchain and the shared `<root>/.cp3/`
         # build directory; `check` cases are frontend-only (pure reads) and
@@ -646,7 +757,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 pending.pop(scan)
                 if root is not None:
                     busy_roots.add(root)
-                future = pool.submit(evaluate, selected[index], compiler, timeout)
+                future = pool.submit(evaluate, selected[index], compiler, timeout, toolchain)
                 inflight[future] = index
 
         with ThreadPoolExecutor(max_workers=min(args.jobs, count)) as pool:
@@ -662,86 +773,163 @@ def main(argv: Optional[list[str]] = None) -> int:
                 start_more(pool)
         return [collected[i] for i in range(count)]
 
-    def run_as_ordinary(selected: list[Case]) -> list[Outcome]:
+    def run_as_ordinary(selected: list[Case],
+                        toolchain: Optional[str] = None) -> list[Outcome]:
         if args.jobs > 1:
-            return run_as_ordinary_parallel(selected)
-        return run_as_ordinary_serial(selected)
+            return run_as_ordinary_parallel(selected, toolchain)
+        return run_as_ordinary_serial(selected, toolchain)
 
-    if args.strict_ambiguous:
-        # Opt-in: markers run like any other case (they may pass, fail, or skip).
-        outcomes = run_as_ordinary(cases)
-    else:
+    def evaluate_suite(toolchain: Optional[str]) -> list[Outcome]:
+        if args.strict_ambiguous:
+            # Opt-in: markers run like any other case (pass, fail, or skip).
+            return run_as_ordinary(cases, toolchain)
         # Default: markers are discovered and reported, never asserted against.
         outcomes = [Outcome(c, "ambiguous", c.question) for c in cases if c.ambiguous]
-        outcomes += run_as_ordinary([c for c in cases if not c.ambiguous])
+        outcomes += run_as_ordinary([c for c in cases if not c.ambiguous], toolchain)
+        return outcomes
 
-    passed = sum(1 for o in outcomes if o.status == "passed")
-    failed = sum(1 for o in outcomes if o.status == "failed")
-    skipped = sum(1 for o in outcomes if o.status == "skipped")
-    ambiguous = sum(1 for o in outcomes if o.status == "ambiguous")
+    def counts(outcomes: list[Outcome]) -> dict[str, int]:
+        return {
+            "passed": sum(1 for o in outcomes if o.status == "passed"),
+            "failed": sum(1 for o in outcomes if o.status == "failed"),
+            "skipped": sum(1 for o in outcomes if o.status == "skipped"),
+            "ambiguous": sum(1 for o in outcomes if o.status == "ambiguous"),
+        }
+
+    def result_payload(outcomes: list[Outcome]) -> list[dict]:
+        return [
+            {
+                "case": o.case.display,
+                "status": o.status,
+                "detail": o.detail,
+                **({"question": o.case.question} if o.status == "ambiguous" else {}),
+            }
+            for o in outcomes
+        ]
+
+    runs: list[tuple[Optional[str], list[Outcome]]] = []
+    for toolchain in selected_toolchains:
+        if len(selected_toolchains) > 1 and not args.json:
+            print(f"== running toolchain: {toolchain} ==", flush=True)
+        runs.append((toolchain, evaluate_suite(toolchain)))
 
     if args.json:
-        payload = {
-            "compiler": str(compiler) if compiler else None,
-            "casesDir": str(cases_dir),
-            "strictAmbiguous": args.strict_ambiguous,
-            "found": len(cases),
-            "passed": passed,
-            "failed": failed,
-            "skipped": skipped,
-            "ambiguous": ambiguous,
-            "runnable": passed + failed > 0,
-            "warnings": warnings,
-            "results": [
-                {
-                    "case": o.case.display,
-                    "status": o.status,
-                    "detail": o.detail,
-                    **({"question": o.case.question} if o.status == "ambiguous" else {}),
-                }
-                for o in outcomes
-            ],
-        }
+        if len(runs) == 1:
+            toolchain, outcomes = runs[0]
+            summary_counts = counts(outcomes)
+            payload = {
+                "compiler": str(compiler) if compiler else None,
+                "casesDir": str(cases_dir),
+                "strictAmbiguous": args.strict_ambiguous,
+                "found": len(cases),
+                **summary_counts,
+                "runnable": summary_counts["passed"] + summary_counts["failed"] > 0,
+                "warnings": warnings,
+                "results": result_payload(outcomes),
+            }
+            if toolchain is not None:
+                payload["toolchain"] = toolchain
+        else:
+            run_payloads = []
+            total_failed = 0
+            for toolchain, outcomes in runs:
+                summary_counts = counts(outcomes)
+                total_failed += summary_counts["failed"]
+                run_payloads.append({
+                    "toolchain": toolchain,
+                    "found": len(cases),
+                    **summary_counts,
+                    "results": result_payload(outcomes),
+                })
+            payload = {
+                "compiler": str(compiler) if compiler else None,
+                "casesDir": str(cases_dir),
+                "strictAmbiguous": args.strict_ambiguous,
+                "toolchains": selected_toolchains,
+                "found": len(cases),
+                "failed": total_failed,
+                "runnable": any(
+                    run["passed"] + run["failed"] > 0 for run in run_payloads
+                ),
+                "warnings": warnings,
+                "runs": run_payloads,
+            }
         json.dump(payload, sys.stdout, indent=2)
         sys.stdout.write("\n")
         if not args.no_bench:
             print("note: bench pass skipped with --json (JSON output stays parseable)",
                   file=sys.stderr)
-        return 0 if failed == 0 else 1
+        return 0 if payload["failed"] == 0 else 1
 
     print("cp3 test harness")
     print(f"  compiler : {compiler if compiler else '(not found)'}")
     print(f"  cases dir: {cases_dir}")
     print(f"  found    : {len(cases)} case(s)")
+    if len(runs) > 1:
+        print(f"  toolchains: {', '.join(str(tc) for tc in selected_toolchains)} "
+              f"(sequential)")
+    elif runs[0][0] is not None:
+        print(f"  toolchain: {runs[0][0]}")
     for warning in warnings:
         print(f"  warning  : {warning}")
     print()
 
-    for outcome in outcomes:
-        c = outcome.case.display
-        if outcome.status == "passed":
-            if args.verbose:
-                print(f"  ok   {c}")
-        elif outcome.status == "failed":
-            print(f"  FAIL {c}: {outcome.detail}")
-        elif outcome.status == "ambiguous":
-            # Always reported: this is the lead's worklist of open questions.
-            print(f"  amb  {c}: {outcome.detail}")
-        else:  # skipped
-            if args.verbose or (passed + failed == 0):
-                print(f"  skip {c} ({outcome.detail})")
+    total_passed = 0
+    total_failed = 0
+    total_skipped = 0
+    ambiguous_per_run = 0
+    for run_index, (toolchain, outcomes) in enumerate(runs):
+        summary_counts = counts(outcomes)
+        total_passed += summary_counts["passed"]
+        total_failed += summary_counts["failed"]
+        total_skipped += summary_counts["skipped"]
+        ambiguous_per_run = summary_counts["ambiguous"]
+        if len(runs) > 1:
+            print(f"== toolchain: {toolchain} ==")
+        for outcome in outcomes:
+            if outcome.status == "ambiguous" and run_index > 0:
+                # The marker list is identical for every toolchain; print it once.
+                continue
+            c = outcome.case.display
+            if outcome.status == "passed":
+                if args.verbose:
+                    print(f"  ok   {c}")
+            elif outcome.status == "failed":
+                print(f"  FAIL {c}: {outcome.detail}")
+            elif outcome.status == "ambiguous":
+                # Always reported: this is the lead's worklist of open questions.
+                print(f"  amb  {c}: {outcome.detail}")
+            else:  # skipped
+                if args.verbose or (
+                    summary_counts["passed"] + summary_counts["failed"] == 0
+                ):
+                    print(f"  skip {c} ({outcome.detail})")
 
-    print()
-    summary = (f"{len(cases)} found, {passed} passed, {failed} failed, "
-               f"{skipped} skipped, {ambiguous} ambiguous")
-    if passed + failed == 0:
-        print(f"{summary}; nothing runnable yet, treating as success while cp3c "
-              f"is a scaffold.")
-    else:
-        print(f"{summary}.")
+        print()
+        summary = (
+            f"{len(cases)} found, {summary_counts['passed']} passed, "
+            f"{summary_counts['failed']} failed, {summary_counts['skipped']} skipped, "
+            f"{summary_counts['ambiguous']} ambiguous"
+        )
+        if summary_counts["passed"] + summary_counts["failed"] == 0:
+            print(f"{summary}; nothing runnable yet, treating as success while cp3c "
+                  f"is a scaffold.")
+        else:
+            print(f"{summary}.")
+        if len(runs) > 1:
+            print()
 
-    exit_code = 0 if failed == 0 else 1
+    if len(runs) > 1:
+        print(f"== all toolchains ==")
+        print(f"{len(cases)} cases x {len(runs)} toolchains: {total_passed} passed, "
+              f"{total_failed} failed, {total_skipped} skipped, "
+              f"{ambiguous_per_run} ambiguous per run.")
+
+    exit_code = 0 if total_failed == 0 else 1
     if not args.no_bench:
+        if len(runs) > 1:
+            print("note: bench pass uses cp3c's configured toolchain, not the "
+                  "test matrix.", file=sys.stderr)
         bench_exit = run_benchmarks(args.bench_args)
         exit_code = max(exit_code, bench_exit)
     return exit_code
