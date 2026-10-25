@@ -221,6 +221,46 @@
     },
     {
       "group": "build",
+      "name": "show-runtime-snapshot",
+      "description": "show-runtime copies runtime headers and selected TUs",
+      "argv": [
+        "build",
+        "src/index.cp3",
+        "--show-runtime"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/index.exe": {
+            "exists": true
+          },
+          ".cp3/build/core/cp3-runtime/core/runtime.hpp": {
+            "exists": true
+          },
+          ".cp3/build/core/cp3-runtime/core/runtime.cpp": {
+            "exists": true
+          },
+          ".cp3/build/core/cp3-runtime/core/error.hpp": {
+            "exists": true
+          },
+          ".cp3/build/core/cp3-runtime/typed_array.hpp": {
+            "exists": true
+          },
+          ".cp3/build/core/cp3-runtime/README.txt": {
+            "exists": true
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
       "name": "max-memory-megabytes",
       "description": "max memory megabytes",
       "argv": [

@@ -58,6 +58,10 @@ bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease
         return true;
     }
     if (t == "--verbose" || t == "-v") { opt.verbose = true; return true; }
+    if (t == "--show-runtime" || t == "--show") {
+        opt.showRuntime = true;
+        return true;
+    }
     if (t == "--all") { opt.all = true; return true; }
     if (t == "--yes" || t == "-y") { opt.yes = true; return true; }
     if (t == "--once") { opt.once = true; return true; }

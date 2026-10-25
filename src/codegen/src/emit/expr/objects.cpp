@@ -17,6 +17,7 @@
 // =============================================================================
 #include "detail/generator/generator.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -95,7 +96,10 @@ std::string Generator::objectLiteralForType(const ObjectLiteral& lit,
                 continue;
             }
         }
+        const std::optional<Type> savedExpected = expected_;
+        expected_ = field.type;
         values.push_back(expr(*value));
+        expected_ = savedExpected;
     }
     std::string out = "::cp3::runtime::makeRef<" + structName + ">(" +
                       structName + "{";
@@ -134,7 +138,10 @@ std::string Generator::emitObject(const Expr& e) {
                 }
             }
             if (!value) return std::string();  // missing / odd property
+            const std::optional<Type> savedExpected = expected_;
+            expected_ = f.type;
             init.push_back(expr(*value));
+            expected_ = savedExpected;
         }
         return "::cp3::runtime::makeRef<" + structName + ">(" + structName +
                "{" + joinStrings(init, ", ") + "})";

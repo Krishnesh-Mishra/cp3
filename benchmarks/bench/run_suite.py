@@ -574,7 +574,11 @@ def server_run_argv(language: str, task: str, port: int) -> tuple[list[str], str
 
 def try_cp3_build(entry: Path) -> tuple[bool, str]:
     """Build a cp3 entry. Returns (ok, diagnostic-or-exe-path)."""
-    result = run_command([str(CP3C), "build", "main.cp3"], cwd=entry)
+    # Keep the generated C++ and the runtime it calls inspectable for every
+    # benchmark build: .cp3/build/core/cp3-runtime/ is a snapshot only, so it
+    # does not change the measured executable.
+    result = run_command([str(CP3C), "build", "main.cp3", "--show-runtime"],
+                         cwd=entry)
     if result.returncode != 0:
         return False, first_diagnostic(result.stderr or result.stdout)
     candidates = sorted(

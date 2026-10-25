@@ -11,6 +11,7 @@
 #include "detail/generator/generator.h"
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -180,7 +181,14 @@ std::string Generator::objectInitText(const ObjectModel& om,
             args.push_back("std::nullopt");
             continue;
         }
+        // The field's declared type is the context for an arrow value: an
+        // interface's `(s: string) => void` field must become a
+        // `std::function`, not the erased `Listener` its untyped parameter
+        // would otherwise infer.
+        const std::optional<Type> savedExpected = expected_;
+        expected_ = f.type;
         args.push_back(expr(*value));
+        expected_ = savedExpected;
     }
     const std::string& structName =
         om.literalName.empty() ? om.structName : om.literalName;
@@ -243,7 +251,10 @@ std::string Generator::classLiteralInit(const ClassModel& cm,
             out += " " + field + " = std::nullopt;";
             continue;
         }
+        const std::optional<Type> savedExpected = expected_;
+        expected_ = m.type;
         out += " " + field + " = " + expr(*value) + ";";
+        expected_ = savedExpected;
     }
     out += " return cp3_v; }())";
     return out;

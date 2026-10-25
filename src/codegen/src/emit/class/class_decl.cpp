@@ -326,8 +326,13 @@ std::string Generator::methodReturnType(const MethodDeclaration& md,
             rewriteTypeParams(*t, methodTypeParams);
             CppInfo ci = classify(*t);
             if (ci.representable) return ci.cpp;
-            notImplemented(md, "this return type");
-            return "void";
+            if (!t->isUnknown()) {
+                notImplemented(md, "this return type");
+                return "void";
+            }
+            // An explicit `unknown` return type has no C++ spelling, but the
+            // body can deduce it. A method with no returned value stays void.
+            return (md.body && firstReturnedExpr(*md.body)) ? "auto" : "void";
         }
     }
     if (md.body) {
@@ -379,8 +384,14 @@ std::string Generator::accessorReturnType(const AccessorDeclaration& ad,
             if (cm != nullptr) rewriteTypeParams(*t, cm->typeParams);
             CppInfo ci = classify(*t);
             if (ci.representable) return ci.cpp;
-            notImplemented(ad, "this accessor return type");
-            return "void";
+            if (!t->isUnknown()) {
+                notImplemented(ad, "this accessor return type");
+                return "void";
+            }
+            // An explicit `unknown` return type has no C++ spelling, but the
+            // getter body can deduce it. A getter with no returned value stays
+            // void.
+            return (ad.body && firstReturnedExpr(*ad.body)) ? "auto" : "void";
         }
     }
     if (ad.body) {

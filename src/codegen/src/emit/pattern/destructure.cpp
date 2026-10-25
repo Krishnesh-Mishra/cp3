@@ -160,11 +160,11 @@ void PatternEmitter::walkArrayPattern(const ArrayPattern& ap, const Site& site,
             const Type atType = tuple ? site.type->parts[index] : elem;
             std::string access;
             if (tuple) {
-                needsTuple_ = true;
+                g.needsTuple_ = true;
                 access = "std::get<" + std::to_string(index) + ">(" +
                          site.access + ")";
             } else {
-                needsTypedArray_ = true;
+                g.needsTypedArray_ = true;
                 access = "::cp3::runtime::arrayAt(" + site.access + ", " +
                          std::to_string(index) + ".0)";
                 if (el->kind == NodeKind::AssignmentPattern) {

@@ -40,6 +40,20 @@ src/
 
 `.cp3/build/` is a real, persistent intermediate directory, not a scratch temp folder - a build only regenerates the `.cpp`/`.hpp` pair for `.cp3` files that actually changed since the last build, rather than wiping and regenerating the whole tree every time.
 
+## Inspecting generated C++ and the runtime it calls
+
+`cp3 build --show-runtime` (or `cp3 run --show-runtime`) leaves the generated module pair in `.cp3/build/` and copies the runtime headers plus the core runtime translation units selected for that program into `.cp3/build/core/cp3-runtime/`:
+
+```
+.cp3/build/core/cp3-runtime/
+  core/runtime.hpp      <- src/runtime/include/cp3/core/runtime.hpp
+  core/runtime.cpp      <- src/runtime/src/core/runtime.cpp
+  async/eventloop.cpp   <- src/runtime/src/async/eventloop.cpp
+  typed_array.hpp       <- src/std/typed-arrays/include/cp3/typed_array.hpp
+```
+
+The snapshot is for reading and optimization work: it shows the exact runtime a generated program calls without making the user open the compiler's source tree. It is not a second build input - the normal build still compiles the shipped headers and sources. `--show` is an alias; `cp3 clean` removes the snapshot with the rest of `.cp3/build/`.
+
 ## The compile/link model: one object file per source file, stitched at the link step
 
 Because each `.cp3` file becomes its own `.cpp`/`.hpp` pair (above), it also compiles to its **own object file** (`.o`/`.obj`) in `.cp3/build/`. A build is therefore two distinct phases:

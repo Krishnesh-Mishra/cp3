@@ -36,6 +36,7 @@
 #include "detail/native/native_packages.hpp"
 #include "detail/toolchain/toolchain.hpp"
 #include "detail/toolchain/toolchain_select.hpp"
+#include "detail/core/runtime_snapshot.hpp"
 #include "detail/core/util.hpp"
 
 namespace cp3::cli::detail {
@@ -451,6 +452,18 @@ int buildWithToolchain(const BuildRequest& request) {
     }
 
     selectRuntimeSources(opt, layout, programText);
+
+    // --show-runtime: leave the generated C++ and the exact runtime support it
+    // calls in .cp3/build for inspection. The normal compile/link path below
+    // still uses the shipped headers and sources.
+    if (opt.showRuntime) {
+        const fs::path snapshot = copyRuntimeSnapshot(layout, opt.verbose);
+        if (snapshot.empty()) return kExitCompileError;
+        std::fprintf(stderr, "cp3c: generated C++: %s\n",
+                     cppPath.string().c_str());
+        std::fprintf(stderr, "cp3c: runtime snapshot: %s\n",
+                     snapshot.string().c_str());
+    }
 
     const std::string headerFingerprint =
         headerFingerprintOf(layout.includeDirs);

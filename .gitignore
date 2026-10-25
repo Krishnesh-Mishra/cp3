@@ -1,5 +1,6 @@
 # ---- cp3 tooling / generated output ----
-build/
+# Root build tree only: `src/**/build/` contains tracked source files.
+/build/
 .cp3/
 *.cp3pak
 

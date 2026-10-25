@@ -238,9 +238,11 @@ recorded, and the next full refresh will show the blocker and tier format.
   sources are near-identical by construction, and the shared output oracle
   makes equality mechanical.
 - Pinned release configurations: `g++ -std=c++20 -O2`; `rustc -O`; `go build`
-  (defaults); Node and Python run their scripts directly; `cp3c build`
-  (default profile, no release/LTO flags) and the compiled binary is what
-  runs. No debug builds anywhere, for any language.
+  (defaults); Node and Python run their scripts directly; `cp3c build
+  --show-runtime` (default profile, no release/LTO flags) and the compiled
+  binary is what runs. `--show-runtime` only writes the generated C++ plus a
+  runtime snapshot under `.cp3/build/core/cp3-runtime/`; it does not change
+  the measured executable. No debug builds anywhere, for any language.
 - Case-conversion fairness note (`string-churn`): C++ uses explicit ASCII
   fast-path loops and Go uses byte-level `toUpperASCII`/`toLowerASCII`
   helpers, because locale-aware `std::toupper` / `strings.ToUpper` would
