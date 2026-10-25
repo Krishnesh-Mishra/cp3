@@ -25,6 +25,7 @@
 #include "HttpResponse.h"
 
 #include "cp3/async/eventloop.hpp"
+#include "cp3/async/promise.hpp"
 
 namespace cp3::runtime::network::detail {
 
@@ -35,7 +36,7 @@ struct ServerImpl {
     struct Route {
         std::string method;   // "*" = app.use (any method)
         std::string pattern;  // "*" = any path; else literal, `:name` segments
-        std::function<void(HttpRequest&, HttpResponse&, Next&)> handler;
+        std::function<Promise<void>(HttpRequest&, HttpResponse&, Next&)> handler;
     };
 
     uWS::App* app = nullptr;  // loop 0 (the listener on Windows)
@@ -74,6 +75,30 @@ struct ResponseImpl {
     std::vector<std::pair<std::string, std::string>> headers;
     std::string body;
 };
+
+/// One request's route-chain cursor and async-handler bookkeeping.
+struct RequestContext {
+    ServerImpl* server = nullptr;
+    HttpRequest request;
+    HttpResponse response;
+    std::size_t index = 0;
+    std::size_t pending = 0;  // async handlers whose promise has not settled
+    bool done = false;        // answered, 404, 500 or aborted
+};
+
+/// One request in flight. The uWS callbacks own it until the body is complete;
+/// pending handler continuations keep it alive after that, so an async handler
+/// can outlive the native callback that started it.
+struct PendingRequest {
+    std::shared_ptr<ServerImpl> server;
+    RequestContext context;
+    std::string body;
+    bool aborted = false;
+};
+
+/// Runs the route chain once the request body is complete
+/// (runtime_server_dispatch.cpp).
+void dispatch(const std::shared_ptr<PendingRequest>& pending);
 
 /// Registers the single wildcard route on one loop's App. `serveRequest` is
 /// loop-local: the connection and everything it dispatches stay on the thread

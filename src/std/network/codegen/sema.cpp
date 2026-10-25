@@ -87,8 +87,7 @@ Type eventListener() { return callbackOf(2); }
 // The documented field rows per receiver (docs 04 §network). The marker shapes
 // stay open, so the rows never gate a member (file header); the
 // `networkObjectMember` hook hands a documented read its row type. SEAM
-// comments mark the still-blocked swap points (the fs ReadStream body, the
-// headers ambiguity).
+// comments mark the still-blocked swap point (the fs ReadStream body).
 // -----------------------------------------------------------------------------
 std::vector<Field> fetchResponseFields() {
     return {
@@ -119,7 +118,8 @@ std::vector<Field> httpRequestFields() {
         Field{"query", stringMap(), false},
         Field{"headers", stringMap(), false},
         // SEAM(readstream/fs): `body: ReadStream`; the runtime buffers the
-        // body before the chain runs, so nothing stream-shaped exists yet.
+        // body before the chain runs, and the landed fs ReadStream is
+        // file-backed, so nothing stream-shaped exists yet.
         Field{"body", ambient(), false},
         Field{"text", Type::function({}, promiseOf(Type::string())), false},
         Field{"json", Type::function({}, promiseOf(ambient())), false},
@@ -131,9 +131,10 @@ std::vector<Field> httpResponseFields() {
         // `status` / `header` chain; the terminal writers return nothing.
         Field{"status", Type::function(permissiveParams(1), ambient()), false},
         Field{"header", Type::function(permissiveParams(2), ambient()), false},
-        // SEAM(json): an object/array payload needs json's serializer; the
-        // runtime overloads take a scalar today (cp3/std/network.hpp).
         Field{"text", withOptionalTail(callbackOf(2)), false},
+        // `res.json(payload)`: a scalar spells directly, an object/array
+        // literal lowers to the json dynamic value tree (codegen_methods.cpp),
+        // and a reified interface goes through the record tables.
         Field{"json", withOptionalTail(callbackOf(2)), false},
         Field{"send", withOptionalTail(callbackOf(1)), false},
         Field{"write", callbackOf(1), false},

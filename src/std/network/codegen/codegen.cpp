@@ -31,8 +31,9 @@
 // construction/entry lowering.
 //
 // SEAMS (blocked on an in-flight or unlanded family; each is marked where it
-// fires): req.body -> the fs ReadStream (fs) and async handlers (the async
-// codegen still reports CP3002 for `async () =>`).
+// fires): req.body -> the fs ReadStream (fs) and a streaming request pipeline.
+// Async HTTP handlers are lowered here as coroutine lambdas
+// (codegen_methods.cpp) and awaited by the server dispatcher.
 //
 // The fetch-headers ambiguity is closed (D77): RequestInit.headers is the
 // documented `Map<string, string>`, so an object literal in that position is a
@@ -256,9 +257,9 @@ std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::strin
 }
 
 /// The fallback for a bare call to a name that is not a function declared in
-/// this unit: the `std/network` named imports are lowered first, everything else
-/// keeps reporting CP3002 (an intrinsic outside this surface, console.* handled
-/// earlier, must be treated as out of scope rather than reaching an undeclared
+/// this unit: the `std/network` named imports are lowered first, and everything
+/// else is a value that is not callable (an intrinsic outside this surface,
+/// console.* handled earlier, must be a program error rather than an undeclared
 /// C++ name). The seam lives here so emitCall itself stays inside the
 /// function-length budget.
 std::string Generator::emitUnresolvedCall(const CallExpr& c, const std::string& name) {

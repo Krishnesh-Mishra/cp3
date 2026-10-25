@@ -1,0 +1,21 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// An async route handler: `req.text()` resolves from the buffered body and the
+// dispatcher waits for the handler's promise before it decides the response.
+const app = createServer();
+app.post("/echo", async (req, res) => {
+  const body = await req.text();
+  res.text("echo:" + body);
+});
+app.listen(48230, () => {
+  console.log("listening");
+});
+
+const res = await fetch("http://127.0.0.1:48230/echo", {
+  method: "POST",
+  body: "payload",
+});
+console.log(`${res.status}`);
+console.log(await res.text());
+app.close();

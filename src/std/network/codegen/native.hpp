@@ -37,6 +37,7 @@ inline const NativePackage kNetworkNativePackage{
      "src/std/network/runtime/runtime_fetch.cpp",
      "src/std/network/runtime/runtime_fetch_io.cpp",
      "src/std/network/server/runtime_server.cpp",
+     "src/std/network/server/runtime_server_dispatch.cpp",
      "src/std/network/server/runtime_server_scaled.cpp",
      "src/std/network/ws/runtime_ws.cpp",
      "src/std/network/ws/runtime_ws_client.cpp",
@@ -46,11 +47,12 @@ inline const NativePackage kNetworkNativePackage{
      "-ldbghelp", "-lsynchronization"},
     // Parallel to runtimeSources. A program that imports std/network only for
     // fetch should not link the HTTP server or WebSocket runtime, and a
-    // WebSocket program should not link the server. runtime_server.cpp keeps
-    // the scaled server TU with it because HttpServer::listen/close reference
-    // the scaled entry points and both units are selected by the same marker.
-    {"", "fetch(", "fetch(", "HttpServer(", "HttpServer(", "WebSocket",
-     "WebSocket", "WebSocket"},
+    // WebSocket program should not link the server. The dispatch TU and the
+    // scaled server TU are selected by the same HttpServer marker as
+    // runtime_server.cpp: listen/close reference the scaled entry points, and
+    // the request glue references the dispatcher.
+    {"", "fetch(", "fetch(", "HttpServer(", "HttpServer(", "HttpServer(",
+     "WebSocket", "WebSocket", "WebSocket"},
 };
 
 }  // namespace cp3::cli::detail

@@ -118,8 +118,8 @@ Type contextType(const std::string& cpp) {
 /// (`res.json<T>()`, docs 04 §network). `json<T>` is the only generic member;
 /// a primitive T spells directly, and a named/interface T is routed through
 /// the json record tables before this function runs (networkJsonRecord).
-/// Anything else (a compound type, a non-registered named type) keeps the
-/// CP3002 skip.
+/// Anything else (a compound type, a non-registered named type) is a type
+/// error at the use site.
 bool networkTypeArgsText(const TypeList& typeArgs, std::string& out) {
     if (typeArgs.empty()) return true;
     std::vector<std::string> spellings;
@@ -232,9 +232,9 @@ std::string Generator::networkArg(const Type& receiver, const std::string& prope
     const auto& arrow = static_cast<const ArrowFunction&>(arg);
     // Type the lambda's parameter names for the body emission only: sema keeps
     // callback parameters permissive, so without this a member call inside the
-    // handler (`res.text(...)`, `ws.send(...)`) would not reach the network
-    // tables and would report CP3002. The temporary scope keeps the names out of
-    // the enclosing scope.
+    // handler (`res.text(...)`, `ws.send(...)`) would fall through to the
+    // generic call path. The temporary scope keeps the names out of the
+    // enclosing scope.
     pushScope();
     for (std::size_t i = 0; i < arrow.params.size() && i < context.size(); ++i) {
         const Parameter* p = arrow.params[i].get();
@@ -243,7 +243,31 @@ std::string Generator::networkArg(const Type& receiver, const std::string& prope
         if (type.isUnknown()) continue;
         declare(static_cast<const Identifier&>(*p->name).name, type);
     }
-    std::string text = emitArrow(arrow, context);
+    std::string text;
+    if (arrow.isAsync && receiver.name == kHttpServer) {
+        // An `async` HTTP handler is a coroutine lambda. The runtime waits for
+        // its promise before it continues the chain or answers 404, so
+        // `await req.text()` inside the handler is safe. WebSocket event
+        // callbacks are not in this path: their runtime callbacks do not await.
+        if (intOn()) intFail();
+        std::optional<Type> expectedFn;
+        if (expected_ && expected_->kind == TypeKind::Function) {
+            expectedFn = *expected_;
+        }
+        ++nestingDepth_;
+        pushScope();
+        const std::vector<std::string> params =
+            arrowParamText(arrow, context, expectedFn);
+        std::string signature;
+        const std::string body =
+            arrowBodyText(arrow, true, expectedFn, signature);
+        popScope();
+        --nestingDepth_;
+        text = "[&](" + joinStrings(params, ", ") + ") -> " + signature +
+               " {\n" + body + "}";
+    } else {
+        text = emitArrow(arrow, context);
+    }
     popScope();
     return text;
 }
@@ -621,8 +645,10 @@ std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
         return "(" + expr(*m.object) + ")." + m.property;
     }
     // `req.body` is the one documented read whose runtime member still does not
-    // exist: the body is buffered, and the documented `ReadStream` shape is the
-    // fs family's (SEAM(readstream/fs)). Keep the CP3002 skip instead of
+    // exist: the body is buffered before dispatch, and the documented
+    // `ReadStream` shape is the fs family's file-backed stream
+    // (SEAM(readstream/fs)). A correct `body` needs an fs-owned stream over a
+    // buffer plus a streaming request pipeline; keep the skip instead of
     // emitting a raw C++ read that would die in g++.
     if (name == kHttpRequest && m.property == "body") {
         notImplemented(m, "req.body (needs the fs ReadStream; SEAM(readstream/fs))");
