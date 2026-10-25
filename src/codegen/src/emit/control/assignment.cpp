@@ -327,6 +327,24 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
         // (src/std/typed-arrays/codegen_methods.cpp).
         if (a.target->kind == NodeKind::IndexExpr) {
             if (std::string w = emitFamilyIndexWrite(a); !w.empty()) return w;
+            // A tuple slot (`t[0] = 2`): std::get<i> is the lvalue.
+            const auto& ix = static_cast<const IndexExpr&>(*a.target);
+            if (a.op == AssignOp::Assign && a.value && ix.object && ix.index) {
+                const Type tuple = effectiveType(*ix.object);
+                if (isTupleType(tuple)) {
+                    const auto index = integralLiteralValue(*ix.index);
+                    if (index && *index >= 0 &&
+                        static_cast<std::size_t>(*index) < tuple.parts.size()) {
+                        const CppInfo ec = classify(tuple.parts[*index]);
+                        if (ec.representable) {
+                            needsTuple_ = true;
+                            return "(std::get<" + std::to_string(*index) + ">(" +
+                                   expr(*ix.object) + ") = " + expr(*a.value) +
+                                   ")";
+                        }
+                    }
+                }
+            }
         }
         // A destructuring assignment (`[a, b] = expr`, `{ x } = expr`): the
         // parser reads the target as an array/object literal whose elements

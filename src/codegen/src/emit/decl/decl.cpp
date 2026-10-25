@@ -389,9 +389,14 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
         if (ci.representable) return ci.cpp;
         if (!value->isUnknown()) {
             notImplemented(fd, "this return type");
+            return "void";
         }
-        return "void";
     }
+    // An unannotated function whose only return value has an unknown type
+    // (`function f(x) { return x; }`, an untyped parameter) has no cp3 type to
+    // spell, but C++ can deduce it. A function with no returned value stays
+    // `void`.
+    if (fd.body && firstReturnedExpr(*fd.body)) return "auto";
     return "void";
 }
 

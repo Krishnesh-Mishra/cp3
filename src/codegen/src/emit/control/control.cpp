@@ -496,16 +496,23 @@ void Generator::emitBreak(const BreakStatement& b, std::string& out,
                 return;
             }
         }
-        notImplemented(b, "break to this label");
-        line(out, indent, "break;");
+        // Sema rejects an undefined label (CP3306); the codegen repeats the
+        // diagnostic so the statement never lowers to a C++ `break` outside a
+        // loop.
+        reportCodegenError(b, diagcode::kUndefinedLabel,
+                           "undefined label '" + b.label + "'");
+        line(out, indent, "{ /* break to an undefined label */ }");
         return;
     }
     if (!flowStack_.empty()) {
         line(out, indent, "goto " + flowStack_.back().breakLabel + ";");
         return;
     }
-    notImplemented(b, "break outside a loop or switch");
-    line(out, indent, "break;");
+    // Sema rejects this form (CP3502); the codegen repeats the diagnostic so
+    // the statement never lowers to a C++ `break` outside a loop.
+    reportCodegenError(b, diagcode::kBreakOutsideLoop,
+                       "break outside of a loop or switch");
+    line(out, indent, "{ /* break outside a loop or switch */ }");
 }
 
 void Generator::emitContinue(const ContinueStatement& c, std::string& out,

@@ -142,26 +142,56 @@ void PatternEmitter::walkAssignmentPattern(const AssignmentPattern& ap,
 
 void PatternEmitter::walkArrayPattern(const ArrayPattern& ap, const Site& site,
                                       std::string& out, int indent) {
-    std::optional<Type> elem;
-    if (site.type && site.type->kind == TypeKind::Array && !site.type->parts.empty()) {
-        elem = site.type->parts.front();
-    }
-    if (!elem) {
+    // The source is an array (read by index) or a tuple (read by position),
+    // exactly as the local declaration lowering reads it (pattern_array.cpp).
+    const bool tuple = site.type && isTupleType(*site.type);
+    const bool array = !tuple && site.type && site.type->kind == TypeKind::Array &&
+                       !site.type->parts.empty();
+    const bool tupleFits =
+        tuple && ap.rest == nullptr && ap.elements.size() <= site.type->parts.size();
+    if (!array && !tupleFits) {
         emitPatternFallback(ap, out, indent);
         return;
     }
+    const Type elem = tuple ? Type::unknown() : site.type->parts.front();
     std::size_t index = 0;
     for (const auto& el : ap.elements) {
         if (el) {
-            const std::string access =
-                "((*(" + site.access + "))[" + std::to_string(index) + "])";
-            walkPattern(*el, Site{access, elem}, out, indent);
+            const Type atType = tuple ? site.type->parts[index] : elem;
+            std::string access;
+            if (tuple) {
+                needsTuple_ = true;
+                access = "std::get<" + std::to_string(index) + ">(" +
+                         site.access + ")";
+            } else {
+                needsTypedArray_ = true;
+                access = "::cp3::runtime::arrayAt(" + site.access + ", " +
+                         std::to_string(index) + ".0)";
+                if (el->kind == NodeKind::AssignmentPattern) {
+                    // `[a = 1]`: the default fills a missing element.
+                    const auto& fallback =
+                        static_cast<const AssignmentPattern&>(*el);
+                    if (!fallback.left || !fallback.right) {
+                        emitPatternFallback(*el, out, indent);
+                        ++index;
+                        continue;
+                    }
+                    access = "::cp3::runtime::arrayAtOr(" + site.access + ", " +
+                             std::to_string(index) + ".0, " +
+                             g.expr(*fallback.right) + ")";
+                    walkPattern(*fallback.left, Site{access, atType}, out,
+                                indent);
+                    ++index;
+                    continue;
+                }
+            }
+            walkPattern(*el, Site{access, atType}, out, indent);
         }
         ++index;
     }
     if (ap.rest) {
         const auto& re = static_cast<const RestElement&>(*ap.rest);
-        const CppInfo ec = classify(*elem);
+        const CppInfo ec = classify(elem);
         if (!re.argument || !ec.representable || ec.shape == Shape::Void) {
             emitPatternFallback(*ap.rest, out, indent);
             return;
@@ -170,7 +200,7 @@ void PatternEmitter::walkArrayPattern(const ArrayPattern& ap, const Site& site,
             "::cp3::runtime::makeArray<" + ec.cpp + ">(std::vector<" + ec.cpp +
             ">((*(" + site.access + ")).begin() + " + std::to_string(index) +
             ", (*(" + site.access + ")).end()))";
-        walkPattern(*re.argument, Site{restText, Type::array(*elem)}, out,
+        walkPattern(*re.argument, Site{restText, Type::array(elem)}, out,
                     indent);
     }
 }
@@ -178,30 +208,73 @@ void PatternEmitter::walkArrayPattern(const ArrayPattern& ap, const Site& site,
 void PatternEmitter::walkObjectPattern(const ObjectPattern& op, const Site& site,
                                        std::string& out, int indent) {
     std::string structName;
-    std::vector<ObjectField> fields;
-    if (!site.type || !objectShapeOf(*site.type, structName, fields)) {
+    std::vector<std::string> recordFields;
+    // The class / interface / plain-object models own the value spelling when
+    // they materialized (spec 15): an interface is a by-value wrapper with
+    // accessor methods, a class or plain object is a `Ref<T>` handle. The
+    // std/json record keeps `.field`.
+    const Type base =
+        site.type ? stripNullish(*site.type) : Type::unknown();
+    const ObjectModel* om = site.type ? objectModelOf(base) : nullptr;
+    if (om != nullptr && !objectModelUsed(*om)) om = nullptr;
+    const ClassModel* cm = site.type ? classModelOf(base) : nullptr;
+    std::vector<ObjectField> shapeFields;
+    const bool plainShape =
+        site.type && objectShapeOf(base, structName, shapeFields);
+    const bool record =
+        !om && !cm && !plainShape && site.type &&
+        g.recordLayout(*site.type, structName, recordFields);
+    if (!om && !cm && !plainShape && !record) {
         emitPatternFallback(op, out, indent);
         return;
     }
+    const auto fieldType = [&](const std::string& name) -> std::optional<Type> {
+        if (om != nullptr) {
+            const ObjectFieldModel* f = findObjectField(*om, name);
+            if (f == nullptr) return std::nullopt;
+            return f->optional ? Type::nullable(f->type) : f->type;
+        }
+        if (cm != nullptr) {
+            const ClassMemberModel* m = findClassMember(*cm, name);
+            if (m == nullptr || m->isMethod || m->ctor != nullptr) {
+                return std::nullopt;
+            }
+            return m->type;
+        }
+        if (plainShape) {
+            for (const ObjectField& f : shapeFields) {
+                if (f.name == name) return f.type;
+            }
+            return std::nullopt;
+        }
+        for (const std::string& f : recordFields) {
+            if (f == name) return Type::unknown();
+        }
+        return std::nullopt;
+    };
+    const auto access = [&](const std::string& name) -> std::string {
+        if (om != nullptr) {
+            return om->isInterface
+                       ? "((" + site.access + ")." + mapIdent(name) + "())"
+                       : "((" + site.access + ")->" + mapIdent(name) + ")";
+        }
+        if (cm != nullptr || plainShape) {
+            return "((" + site.access + ")->" + mapIdent(name) + ")";
+        }
+        return "((" + site.access + ")." + mapIdent(name) + ")";
+    };
     for (const auto& prop : op.properties) {
         if (!prop || prop->computed || !prop->value) {
             emitPatternFallback(op, out, indent);
             return;
         }
         const std::string name = keyText(prop->key.get());
-        const ObjectField* field = nullptr;
-        for (const ObjectField& candidate : fields) {
-            if (candidate.name == name) {
-                field = &candidate;
-                break;
-            }
-        }
-        if (name.empty() || !field) {
+        const std::optional<Type> ft = fieldType(name);
+        if (!ft) {
             emitPatternFallback(op, out, indent);
             return;
         }
-        const std::string access = "((" + site.access + ")->" + mapIdent(name) + ")";
-        walkPattern(*prop->value, Site{access, std::nullopt}, out, indent);
+        walkPattern(*prop->value, Site{access(name), ft}, out, indent);
     }
     if (op.rest) {
         // The rest object: a fresh shape holding the source's fields except
@@ -227,23 +300,28 @@ void PatternEmitter::walkObjectPattern(const ObjectPattern& op, const Site& site
 }
 
 void PatternEmitter::emitPatternFallback(const Node& p, std::string& out, int indent) {
-    // A pattern the shape machinery cannot read stays CP3002; its names are
+    // A pattern the shape machinery cannot read is reported; its names are
     // still declared so later references keep compiling.
     g.notImplemented(p, "this destructuring pattern");
     std::vector<std::string> names;
     collectNames(p, names);
+    const std::string tl = globalsThreadLocal ? "thread_local " : "";
     for (const std::string& name : names) {
         if (globals != nullptr) {
             // A module-scope global: the declaration lives in `globals`, and
             // the binding site only assigns it.
-            line(*globals, 0, "thread_local cp3::runtime::Undefined " +
+            line(*globals, 0, tl + "cp3::runtime::Undefined " +
                                   mapIdent(name) + "{};");
-            line(out, indent, mapIdent(name) + " = cp3::runtime::undefined;");
+            const std::string target =
+                globalsAreModuleScope ? g.moduleRef(name) : mapIdent(name);
+            line(out, indent, target + " = cp3::runtime::undefined;");
+            g.declare(name, Type::unknown(), /*cell=*/false,
+                      globalsAreModuleScope);
         } else {
             line(out, indent,
                  "auto " + mapIdent(name) + " = cp3::runtime::undefined;");
+            g.declare(name, Type::unknown());
         }
-        g.declare(name, Type::unknown());
     }
 }
 
@@ -256,7 +334,20 @@ void PatternEmitter::emitUndefinedBindings(const Node& pattern, std::string& out
                                            int indent) {
     std::vector<std::string> names;
     collectNames(pattern, names);
+    const std::string tl = globalsThreadLocal ? "thread_local " : "";
     for (const std::string& name : names) {
+        if (globals != nullptr) {
+            // A module-scope global: the declaration lives in `globals`, and
+            // the binding site only assigns it.
+            line(*globals, 0, tl + "cp3::runtime::Undefined " +
+                                  mapIdent(name) + "{};");
+            const std::string target =
+                globalsAreModuleScope ? g.moduleRef(name) : mapIdent(name);
+            line(out, indent, target + " = cp3::runtime::undefined;");
+            g.declare(name, Type::undefined(), /*cell=*/false,
+                      globalsAreModuleScope);
+            continue;
+        }
         if (g.isCell(name)) {
             // A captured-and-reassigned name keeps the shared-cell storage, so
             // the enclosing frame and every closure share one binding.
@@ -279,6 +370,7 @@ void PatternEmitter::emitUndefinedBindings(const Node& pattern, std::string& out
 void PatternEmitter::bindPatternName(const Identifier& id, const Site& site,
                                      std::string& out, int indent) {
     std::optional<Type> bt = site.type;
+    if (bt && (bt->isUnknown() || bt->isError())) bt.reset();
     if (const Type* st = g.sema_.typeOf(id.nodeId);
         st && !st->isUnknown() && !st->isError()) {
         const bool accessOptional =
@@ -307,10 +399,12 @@ void PatternEmitter::bindPatternName(const Identifier& id, const Site& site,
         // A module-scope global: the declaration lives in `globals`, and the
         // binding site only assigns it (the name outlives the frame that
         // created it).
-        line(*globals, 0, "thread_local " + spelling + " " + mapIdent(id.name) +
-                              "{};");
-        line(out, indent, mapIdent(id.name) + " = " + site.access + ";");
-        g.declare(id.name, bt);
+        const std::string tl = globalsThreadLocal ? "thread_local " : "";
+        line(*globals, 0, tl + spelling + " " + mapIdent(id.name) + "{};");
+        const std::string target =
+            globalsAreModuleScope ? g.moduleRef(id.name) : mapIdent(id.name);
+        line(out, indent, target + " = " + site.access + ";");
+        g.declare(id.name, bt, /*cell=*/false, globalsAreModuleScope);
         return;
     }
     line(out, indent, spelling + " " + mapIdent(id.name) + " = " + site.access +

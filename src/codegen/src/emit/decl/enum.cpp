@@ -244,7 +244,8 @@ std::string Generator::emitEnumMember(const MemberExpr& m) {
 // `std::tuple` (the sema label keeps the field order); a read of a field is
 // `std::get<i>(...)`. The gate is deliberately narrow: all keys are identifiers
 // or string literals, no computed/method/spread property, every field type is
-// representable, and no duplicate names. Anything else keeps the old CP3002.
+// representable, and no duplicate names. Anything else falls back to the
+// ordinary object-literal lowering.
 std::string Generator::emitEnumObjectLiteral(const ObjectLiteral& ol) {
     std::vector<std::string> names;
     std::vector<const Expr*> values;
@@ -314,7 +315,7 @@ std::string enumCaseLabel(const EnumCppInfo& info, const EnumCppMember* member,
 }  // namespace
 
 // A switch statement: the same-enum lowering when it applies, otherwise the
-// generic CP3002 statement stub (the path `stmt`'s fallback uses).
+// generic switch lowering (control.cpp).
 // Lowers `sw` when its discriminant and every case test are one enum; returns
 // false (emitting nothing) for any other switch shape.
 bool Generator::lowerEnumSwitch(const SwitchStatement& sw, std::string& out,
@@ -327,7 +328,7 @@ bool Generator::lowerEnumSwitch(const SwitchStatement& sw, std::string& out,
     const EnumCppInfo& info = found->second;
 
     // Every case test must be a known member of the same enum; any other shape
-    // keeps the generic CP3002 path.
+    // keeps the generic switch lowering.
     std::vector<const EnumCppMember*> tests(sw.cases.size(), nullptr);
     for (std::size_t i = 0; i < sw.cases.size(); ++i) {
         const SwitchCase* c = sw.cases[i].get();

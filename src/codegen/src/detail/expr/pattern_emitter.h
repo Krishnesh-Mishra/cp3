@@ -36,6 +36,13 @@ struct PatternEmitter {
     // `thread_local` state needs this: the worker entry body returns before
     // the worker's message handlers run, so a local binding would dangle.
     std::string* globals = nullptr;
+    // A module-scope destructuring binding: the declarations are the unit's
+    // namespace-scope globals, so references qualify through `moduleRef`.
+    // Worker state keeps the unqualified worker-local form.
+    bool globalsAreModuleScope = false;
+    // Module globals are `thread_local` only in a scaled server; worker state
+    // is always per-thread.
+    bool globalsThreadLocal = true;
 
     // One destructuring site: the C++ value text and its cp3 type.
     struct Site {
@@ -66,7 +73,8 @@ struct PatternEmitter {
                           std::string& out, int indent);
     void walkObjectPattern(const ObjectPattern& op, const Site& site,
                            std::string& out, int indent);
-    // A pattern the shape machinery cannot read: CP3002, but declare every name.
+    // A pattern the shape machinery cannot read: report it and declare every
+    // name so later references keep compiling.
     void emitPatternFallback(const Node& p, std::string& out, int indent);
     // One bound name: the binding line plus the scope entry (`Cell` if shared).
     void bindPatternName(const Identifier& id, const Site& site,
