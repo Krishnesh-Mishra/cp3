@@ -1,0 +1,6 @@
+import console from "std/console";
+
+// parallel.run calls every closure with no arguments, so a parameter has
+// nothing to bind: the call is a program error, not a skipped unit.
+let results = parallel.run((value: number) => value);
+console.log(`${results[0]}`);

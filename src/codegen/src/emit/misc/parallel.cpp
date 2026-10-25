@@ -27,7 +27,7 @@
 // outside that surface is a program error, not a feature the compiler is still
 // missing, so it is reported as one - a member miss (CP3305), an arity
 // mismatch (CP3403) or a type mismatch (CP3401) - instead of skipping the
-// program with the CP3002 marker.
+// program.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -327,7 +327,26 @@ std::string Generator::emitParallelRun(const CallExpr& c) {
         }
         const auto& body = static_cast<const ArrowFunction&>(*arg);
         if (!parallelClosureShape(body, 0)) {
-            notImplemented(c, "this parallel.run closure shape");
+            // The shapes sema rejects as CP3912 (checks/parallel_check.cpp):
+            // mirror the same program errors so a codegen-only pass reports
+            // them instead of skipping the unit.
+            if (body.isAsync) {
+                reportCodegenError(
+                    c, diagcode::kParallelClosureShape,
+                    "a parallel.* closure cannot be async: parallel.* is "
+                    "synchronous and its pool threads have no event loop, so an "
+                    "await inside the closure would never be driven");
+            } else if (!body.typeParams.empty()) {
+                reportCodegenError(
+                    c, diagcode::kParallelClosureShape,
+                    "a parallel.run() closure cannot be generic: the call site "
+                    "has no argument to infer its type parameters from");
+            } else {
+                reportCodegenError(
+                    c, diagcode::kParallelClosureShape,
+                    "a parallel.run() closure takes no parameters: the call "
+                    "runs each closure with no arguments");
+            }
             return "0.0";
         }
         closures.push_back(emitParallelClosure(body, {}, {}));

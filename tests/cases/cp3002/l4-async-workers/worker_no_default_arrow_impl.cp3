@@ -1,0 +1,3 @@
+// A worker module's entry is its default-export arrow. A default-export
+// function is not an arrow, so its channel cannot be read from an annotation.
+export default function entry(): void {}

@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// An async arrow may destructure its parameter: the prologue unpacks inside
+// the coroutine, and the body can await afterwards.
+let sum = async ([a, b]: number[]): Promise<number> => {
+  await sleep(0);
+  return a + b;
+};
+
+console.log(`${await sum([3, 4])}`);

@@ -12,9 +12,18 @@
 // site packs the trailing arguments into it, exactly as a declared function's
 // rest parameter does (emit/patterns.cpp's parameterText).
 //
+// A destructuring parameter (`({ a, b }) => ...`) keeps the source value as the
+// C++ parameter (the generated `cp3_param<i>`); the body prologue unpacks it
+// (emit/closures.cpp's arrowBodyText).
+//
 // The lambda's return type comes from the annotation, then sema, then the
 // expected function type; a `void` arrow stays deduced (which also covers a
 // block body with a bare `return;`).
+//
+// An `async` arrow (DECISIONS D40) is a C++20 coroutine lambda: its signature
+// is the runtime's `Promise<T>`, its body yields with `co_return`, and it
+// captures by value - the coroutine frame outlives the call that started it,
+// so a reference capture could dangle (emit/closures.cpp's arrowBodyText).
 //
 // A generic arrow (`<T,>(x: T) => x`, spec §16) lowers to a C++ generic
 // lambda: its type parameters are the lambda's own template parameters, so
@@ -46,6 +55,9 @@ using namespace detail;
 // on `expected_`), then the call context (a timer callback or a promise
 // handler). An untyped parameter becomes a C++20 generic-lambda parameter,
 // which keeps the emitted lambda valid without knowing the cp3 type.
+//
+// A destructuring parameter binds through its pattern (the body prologue
+// unpacks `cp3_param<i>`), so it has no single C++ name here.
 std::vector<std::string> Generator::arrowParamText(
     const ArrowFunction& a, const std::vector<std::string>& contextParams,
     const std::optional<Type>& expectedFn) {
@@ -62,8 +74,6 @@ std::vector<std::string> Generator::arrowParamText(
         const bool named = id != nullptr;
         if (named) {
             name = mapIdent(id->name);
-        } else if (p->name) {
-            notImplemented(*p->name, "destructuring parameter");
         }
         std::optional<Type> type;
         if (p->type) {
@@ -180,11 +190,12 @@ std::string Generator::arrowTemplatePrefix(const ArrowFunction& a) {
 std::string Generator::emitArrow(const ArrowFunction& a,
                                  const std::vector<std::string>& contextParams,
                                  bool byValue) {
-    if (a.isAsync) {
-        // D40 admits `async () => {}`; lowering them is out of this wave.
-        notImplemented(a, "async arrow function");
-        return "0.0";
-    }
+    // An async arrow (D40) is a C++20 coroutine: its signature is the
+    // runtime's `Promise<T>` and its body yields the value type with
+    // `co_return` (arrowBodyText). A program that creates one can schedule
+    // continuations, so the loop must be driven before the process exits.
+    const bool isAsync = a.isAsync;
+    if (isAsync) needsEventLoop_ = true;
     if (intOn()) intFail();
 
     // The context's expected function type (a binding annotation, a call
@@ -197,34 +208,11 @@ std::string Generator::emitArrow(const ArrowFunction& a,
     pushScope();
     const std::vector<std::string> params =
         arrowParamText(a, contextParams, expectedFn);
-    const std::string ret = arrowReturnType(a, expectedFn);
-    const std::optional<Type> retCp = arrowReturnCpType(a, expectedFn);
-
-    // A lambda body returns from the LAMBDA, and a lambda is never a
-    // coroutine: swap in the arrow's own context for the enclosing one.
-    const std::string savedReturn = currentReturn_;
-    const std::optional<Type> savedReturnType = currentReturnType_;
-    const std::optional<Type> savedExpected = expected_;
-    const std::uint32_t savedFrame = currentFrameId_;
-    const bool savedInAsync = inAsyncBody_;
-    currentReturn_ = ret.empty() ? "void" : ret;
-    currentReturnType_ = retCp;
-    currentFrameId_ = a.nodeId;
-    inAsyncBody_ = false;
-    expected_ = retCp;
-
-    std::string body;
-    if (a.body && a.expressionBody) {
-        body = "return " + expr(*static_cast<const Expr*>(a.body.get())) + ";";
-    } else if (a.body) {
-        stmt(*static_cast<const Stmt*>(a.body.get()), body, 1);
-    }
-
-    expected_ = savedExpected;
-    inAsyncBody_ = savedInAsync;
-    currentFrameId_ = savedFrame;
-    currentReturnType_ = savedReturnType;
-    currentReturn_ = savedReturn;
+    // The body text and the lambda's C++ signature (an async arrow's is its
+    // Promise type). arrowBodyText also emits the destructuring-parameter
+    // prologue and switches the body into the arrow's own return context.
+    std::string ret;
+    const std::string body = arrowBodyText(a, isAsync, expectedFn, ret);
     popScope();
     --nestingDepth_;
 
@@ -233,12 +221,15 @@ std::string Generator::emitArrow(const ArrowFunction& a,
     // copies of a Cell handle still share the binding, and the copy semantics
     // are exactly what spec 10 requires for a non-reassigned local. `mutable`
     // keeps a `count.set(...)` through a by-value cell handle well-formed.
+    // An async arrow always captures by value: its coroutine frame outlives
+    // the call that started it, so a reference capture could dangle.
     // A generic lambda's template parameter list sits between the capture
     // list and the parameter list: `[=]<typename T>(T x) -> T { ... }`.
-    std::string out = byValue ? "[=]" : "[&]";
+    const bool captureByValue = byValue || isAsync;
+    std::string out = captureByValue ? "[=]" : "[&]";
     out += arrowTemplatePrefix(a);
     out += "(" + joinStrings(params, ", ") + ")";
-    if (byValue) out += " mutable";
+    if (captureByValue) out += " mutable";
     if (!ret.empty()) out += " -> " + ret;
     out += " {\n" + body + "}";
     return out;

@@ -1,0 +1,16 @@
+// A worker unit's export surface is inert: it is loaded by path and only its
+// default export is consumed. A named export list and a re-export add no C++
+// of their own (emit/worker/worker_module.cpp).
+export * from "./worker_reexport_helper.cp3";
+
+function twice(n: number): number {
+  return n * 2;
+}
+
+export { twice };
+
+export default (thread: Thread<number, number>) => {
+  thread.on("message", (n) => {
+    thread.postMessage(twice(n));
+  });
+};
