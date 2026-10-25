@@ -794,7 +794,7 @@
       "slow": true,
       "xfail": {
         "id": "paths-with-spaces-break-build",
-        "reason": "the compiler splits unquoted intermediate paths, so a project directory containing a space fails in g++"
+        "reason": "the compiler splits unquoted intermediate paths, so a project directory containing a space fails"
       },
       "requires": "compiler",
       "expect": {
@@ -826,7 +826,7 @@
       "slow": true,
       "xfail": {
         "id": "non-ascii-paths-break-build",
-        "reason": "the compiler passes non-ASCII intermediate paths through a narrow-string command line, so g++ cannot find the generated source"
+        "reason": "the compiler passes non-ASCII intermediate paths through a narrow-string command line, so it cannot find the generated source"
       },
       "requires": "compiler",
       "expect": {

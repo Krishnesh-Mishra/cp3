@@ -3,7 +3,7 @@
 //
 // Not part of the CMake build (tests are compiled directly). Compile with:
 //
-//   g++ -std=c++20 -I src/common/include -I src/parser/include
+//   clang++ -std=c++20 -I src/common/include -I src/parser/include
 //       src/parser/tests/driver.cpp
 //       src/parser/tests/programs.cpp
 //       src/parser/tests/test_scanner.cpp

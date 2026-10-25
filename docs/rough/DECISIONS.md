@@ -81,12 +81,15 @@ Implemented in the cp3 runtime with standard C++ (`<iostream>`/`<sstream>`) and
 the D9 formatter. **No `fmt` dependency in M1.** `fmt` may replace it later behind
 the same runtime surface.
 
-## D12 - Toolchain detection order.
+## D12 - Toolchain detection order. *(superseded 2026-10-25)*
 Use the documented per-platform order first (Windows: MSVC `cl` → Clang
 `clang++`; POSIX: `clang++` → `g++`), then a **last-resort fallback** to `g++`
 then `clang++` if none of the preferred are found. This makes end-to-end `run`
 work in the current environment (MinGW g++). The chosen toolchain is reported
 under `--verbose`. *(revisitable.)*
+
+**Superseded by "Beta one target toolchain is Clang-only" below.** Beta one has
+one target compiler family; there is no GCC or MSVC fallback.
 
 ## D13 - Object-property shorthand.
 `{ a }` sets `ObjectProperty::value` to an `Identifier("a")`, **not** `nullptr`.
@@ -1238,6 +1241,49 @@ previously reported `not usable`; `cp3c run benchmarks/hello-world/cp3/main.cp3
 --toolchain clang` prints `Hello, world!`; the GCC path is unchanged. Two CLI
 regression cases (`clang-is-usable-when-installed`, `clang-builds-and-runs`)
 skip cleanly where no Clang is installed.
+
+> Historical note: the "GCC path is unchanged" sentence describes the state
+> before the 2026-10-25 Clang-only decision below. GCC is no longer a target
+> compiler; the target mechanics in this entry still apply to Clang.
+
+## Beta one target toolchain is Clang-only (2026-10-25, lead)
+
+The earlier implementation had roughly **50% of a multi-compiler-chain design**
+built: per-platform family preference, GCC/MSVC/Clang selection state, fallback
+retry through another family, a compiler matrix in the test runner, and matching
+CLI/package-manager docs. That work was replaced by a single target chain rather
+than hidden behind a default.
+
+Ruling:
+
+- **Beta one compiles cp3 programs with Clang only.** The target is Clang 16 or
+  newer. GCC and MSVC are not target compiler choices; a non-Clang driver is
+  rejected with an explicit error.
+- **Windows targets MinGW-w64 GNU** (`x86_64-w64-windows-gnu`). cp3c locates a
+  MinGW-w64 sysroot through `CP3_MINGW_ROOT`, PATH, or standard WinLibs/MSYS2
+  locations. It never invokes another compiler. `--gcc-toolchain=<prefix>` stays
+  only as a Clang flag for locating that sysroot, never as a compiler selection.
+- **Auto-detect the newest usable Clang**, with explicit `clang@<version>`,
+  `clang++-<major>`, or a full path as overrides. A missing Clang prompts to
+  install Clang/LLVM; build and cache paths call the same guard, so a missing
+  compiler does not surface later as an opaque failure.
+- **The host compiler for building cp3c is not constrained.** cp3c itself may be
+  built by any C++ compiler; the Clang-only rule is about compiling cp3
+  programs. Host-compiler guards such as `_MSC_VER` remain only for that reason.
+- **Remove the other chains from the current product surface**: user-facing
+  output, internal compiler-selection branches, tests, and current docs. Old
+  commits and historical decision entries stay unchanged except for a
+  supersession note.
+- **The test runner is Clang-only.** It runs the corpus once against the Clang
+  cp3c resolves; there is no `--toolchain` matrix and no
+  `--allow-missing-toolchains`.
+
+Evidence: `cp3c toolchain list` reports one Clang candidate (23.1.4 on this
+machine); `cp3c toolchain use gcc --global` exits 2 with "not a usable Clang
+compiler"; `cp3c toolchain use clang@23 --global` saves the exact policy; and
+`cp3c run examples/basics/hello-world/main.cp3` prints `Hello, world!` through
+`--target=x86_64-w64-windows-gnu`. The CLI regression suite covers a non-Clang
+path rejection in addition to the Clang build/run cases.
 
 ## Spread arguments: two language rules (2026-10-22, lead)
 

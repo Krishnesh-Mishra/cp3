@@ -91,8 +91,8 @@
 #include <cstdint>
 
 // The int64 fast body is deliberately not inlined into its double wrapper:
-// GCC otherwise duplicates the whole checked loop into the wrapper and bloats
-// the hot function to save one call.
+// the compiler otherwise duplicates the whole checked loop into the wrapper and
+// bloats the hot function to save one call.
 #if defined(_MSC_VER)
 #define CP3_NOINLINE __declspec(noinline)
 #elif defined(__GNUC__) || defined(__clang__)

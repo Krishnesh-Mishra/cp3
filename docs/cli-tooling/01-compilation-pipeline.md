@@ -9,7 +9,7 @@ C+++ compiler/transpiler
    ↓
 .cp3/build/ (generated C++, mirroring project structure)
    ↓
-platform-appropriate C++ toolchain (Clang / GCC / MSVC)
+Clang targeting the platform's native ABI (MinGW-w64 GNU on Windows)
    ↓
 native executable (.exe / binary)
 ```
@@ -18,7 +18,7 @@ An LLVM backend (skipping the C++ intermediate) is a possible future step, not a
 
 ## Generated code targets C++20, minimum - not negotiable, not C++23
 
-Async/await ([README.md §14](../language-spec/14-async.md)) compiles to real C++20 coroutines (`co_await`/`co_return`), so every toolchain in the fallback order below must support that, and the generated code itself never uses anything newer. C++20 is picked deliberately over C++23 even though a couple of newer conveniences exist - the goal is the smallest standard that makes coroutines work, not the newest available one; moving the floor forward later (if a real feature needs it) is cheap, walking it back after shipping isn't. Toolchain detection (below) needs to check for a compiler version with real C++20 coroutine support specifically, not just "any C++ compiler" - a compiler that's merely C++17-current isn't sufficient even if it otherwise runs. Exact minimum compiler versions (Clang/GCC/MSVC) should be pinned during implementation against whichever versions actually pass a coroutine smoke test, rather than assumed from memory here.
+Async/await ([README.md §14](../language-spec/14-async.md)) compiles to real C++20 coroutines (`co_await`/`co_return`), and the generated code never uses anything newer. C++20 is picked deliberately over C++23 even though a couple of newer conveniences exist - the goal is the smallest standard that makes coroutines work, not the newest available one; moving the floor forward later (if a real feature needs it) is cheap, walking it back after shipping isn't. Toolchain detection (below) checks for a Clang version with real C++20 coroutine support specifically, not just "any C++ compiler". Beta one supports **Clang 16 or newer**; every candidate is validated by compiling, linking and running a C++20 probe.
 
 ## One `.cpp`/`.hpp` pair per source file - never one giant `main.cpp`
 
@@ -55,9 +55,9 @@ This split is what makes the incremental build real: a one-file edit recompiles 
 
 cp3 has two build strategies, trading build speed against how much the optimizer can see:
 
-- **`cp3 build` / `cp3 run` - incremental (the default).** Reuses the object files already in `.cp3/build/`: only `.cp3` files that changed are regenerated and recompiled, then everything is linked. Each translation unit is compiled with the toolchain's standard optimized setting (`-O2` on Clang/GCC, `/O2` on MSVC), but because each file is compiled *separately*, the optimizer only ever sees that one file. Fast rebuilds; not the most optimized binary.
-- **`cp3 build --release` - whole-program (from scratch).** Ignores the incremental cache and compiles **every** translation unit afresh, then links with **Link-Time Optimization** (`-flto` on Clang/GCC; `/GL` + `/LTCG` on MSVC). With the whole program in view the optimizer can inline across files and drop code nothing reaches. This is the ship-the-product build - slower to produce, fastest to run.
-- **`cp3 build --debug` / `cp3 run --debug` - unoptimized plus debug symbols** (`-O0`/`/Od` and `-g`/`/Zi`), incremental like the default. For step-through debugging and the fastest possible rebuilds while iterating; not a shipping profile.
+- **`cp3 build` / `cp3 run` - incremental (the default).** Reuses the object files already in `.cp3/build/`: only `.cp3` files that changed are regenerated and recompiled, then everything is linked. Each translation unit is compiled with `-O2`, but because each file is compiled *separately*, the optimizer only ever sees that one file. Fast rebuilds; not the most optimized binary.
+- **`cp3 build --release` - whole-program (from scratch).** Ignores the incremental cache and compiles **every** translation unit afresh, then links with **Link-Time Optimization** (`-flto`). With the whole program in view the optimizer can inline across files and drop code nothing reaches. This is the ship-the-product build - slower to produce, fastest to run.
+- **`cp3 build --debug` / `cp3 run --debug` - unoptimized plus debug symbols** (`-O0 -g`), incremental like the default. For step-through debugging and the fastest possible rebuilds while iterating; not a shipping profile.
 
 **Why the default is the fast one, not the whole-program one:** development is dominated by edit-rebuild-run cycles, where *rebuild time* is what you feel, so the default reuses cached object files and pays the compiler only for what changed. Shipping happens once, where *runtime* is what matters, so `--release` spends the extra build time compiling everything together for maximum optimization. The incremental build already optimizes each file; what `--release` adds is *cross-file* context (LTO), not merely a higher `-O` level.
 
@@ -65,20 +65,19 @@ cp3 has two build strategies, trading build speed against how much the optimizer
 
 ## No CMake - cp3 drives the C++ compiler directly
 
-cp3 never generates, invokes, or requires **CMake** (or any other build-system config). It calls the platform's C++ **compiler driver** directly (`cl.exe`, `clang++`, `g++`) with the flags it needs, for the two phases above. This is what keeps the project's founding promise true - you never learn a build system, never write a `CMakeLists.txt`, and never open a header file to build a cp3 project. The only build configuration that exists at all is the small `"build"` block in `package.json` ([§5.1](05-package-format-authoring-cp3pak.md)).
+cp3 never generates, invokes, or requires **CMake** (or any other build-system config). It calls Clang's **compiler driver** directly (`clang++`) with the flags it needs, for the two phases above. This is what keeps the project's founding promise true - you never learn a build system, never write a `CMakeLists.txt`, and never open a header file to build a cp3 project. The only build configuration that exists at all is the small `"build"` block in `package.json` ([§5.1](05-package-format-authoring-cp3pak.md)).
 
-## Toolchain selection: automatic order and explicit versioned choices
+## Toolchain selection: Clang only in beta one
 
-Without a saved choice, toolchain preference is a **fixed order per platform**:
+Beta one compiles cp3 programs with **Clang**. There is no compiler-family
+preference list and no GCC or MSVC fallback: a non-Clang driver is rejected with
+an explicit error instead of being tried silently.
 
-- **Windows** - MSVC → Clang → GCC
-- **macOS** - Apple Clang → Clang → GCC
-- **Linux** - Clang → GCC
-
-The first usable driver in that order is the automatic choice. It is not a
-benchmark and it does not depend on the compiler version. An explicit project or
-user choice is resolved before automatic detection, and version policies decide
-whether that choice tracks the newest installed compiler or pins an exact one.
+Without a saved choice, cp3c auto-detects the **newest usable Clang** (16 or
+newer). An explicit project or user choice is resolved before auto-detection,
+and version policies decide whether that choice tracks the newest installed
+Clang or pins an exact one. A full path to `clang++` is also accepted as an
+explicit choice.
 
 ### A driver is usable only if it can actually build
 
@@ -94,97 +93,91 @@ That check is what makes the next part necessary.
 A driver can be installed and still be unable to build, because a compiler
 targets a platform, and the target decides which C++ standard library exists.
 
-The common case is a stock **Windows LLVM install with no MSVC**: the driver
-defaults to the MSVC target (`x86_64-pc-windows-msvc`), and since MSVC is not
-installed there is no standard library for that target at all - a plain
-`#include <cstdio>` fails and the family is reported as `not usable`. The very
-same driver works against a MinGW GCC installation once it targets the GNU
-triple (`x86_64-w64-windows-gnu`).
+The common case is a stock **Windows LLVM install**, whose driver defaults to
+the MSVC target (`x86_64-pc-windows-msvc`). Windows cp3 programs target
+**MinGW-w64 GNU** instead (`x86_64-w64-windows-gnu`), so cp3c locates a
+MinGW-w64 sysroot and points Clang at it. No GCC driver is invoked - the
+sysroot supplies the GNU C++ standard library and import libraries.
 
 So cp3c handles it, automatically:
 
 - The driver's own default target is asked for (`clang++ -print-target-triple`).
-- On Windows, an MSVC triple is rewritten to the matching GNU triple for the
-  same architecture - the architecture is never guessed, it comes from the
-  driver.
+- On Windows, the target is set to the matching GNU triple for the same
+  architecture - the architecture is never guessed, it comes from the driver.
+- The MinGW-w64 sysroot is found through `CP3_MINGW_ROOT`, PATH, or standard
+  WinLibs/MSYS2 locations. If no sysroot is present, the install is reported as
+  `not usable` with an actionable reason.
 - The candidate target is then **verified** by compiling, linking and running
   the probe program. A target that does not work is not used.
-- The verified flags are used by the probe **and** by every real build, so a
-  family that reports `ready` is a family that builds. The target is part of
-  the build-cache identity: the same driver under a different target produces
-  different objects.
+- The verified flags are used by the probe **and** by every real build, so an
+  install that reports `ready` builds. The target is part of the build-cache
+  identity: the same driver under a different target produces different
+  objects.
 - Nothing here forces cross-compilation. Only the current machine's own
   architecture and its own installed toolchain are ever considered.
 
 The user never passes `--target` or `--gcc-toolchain`, and never edits include
-paths. A Clang install next to a MinGW GCC install is simply `ready`:
+paths. A stock Windows LLVM install next to MinGW-w64 is simply `ready`:
 
 ```
 $ cp3 toolchain list
-C++ toolchains
-  gcc         GCC           ready      C:\...\g++.exe (16.1.0)
-  clang       Clang         ready      C:\Program Files\LLVM\bin\clang++.exe (23.1.4)
-  msvc        MSVC cl       missing    not installed
+Clang toolchains
+  clang       Clang 23.1.4  ready   C:\Program Files\LLVM\bin\clang++.exe
 ```
 
 One link detail follows from the same choice: MinGW's `libstdc++` keeps its
-thread support in `libwinpthread`, and the GCC driver names that library
-itself while the Clang driver does not. For a fully static Windows link under
-the GNU target, cp3c names it explicitly, so the Clang-built binary is static
-in exactly the same way the GCC-built one is.
+thread support in `libwinpthread`, and Clang does not name that library itself.
+For a fully static Windows link under the GNU target, cp3c names it explicitly,
+so the Clang-built binary is self-contained.
 
 ## Build progress: numbered steps, not a percentage bar
 
-Progress is shown as real pipeline stages (`Step 1 of 7`, `Step 2 of 7`, etc.) - e.g. parsing, type-checking, cp3→C++ codegen, invoking the toolchain. If a toolchain step fails and the build falls through to the next one in the fallback order, the total step count **grows to reflect the retry** (e.g. `Step 6 of 8`, then `Step 7 of 9` if it falls through again) - so the user visibly sees "this pipeline attempt failed, now trying the next one," rather than the build silently restarting with no feedback.
-
-If **every** available toolchain in the fallback order fails, the final report shows the failures from **all of them together** (see [§2](02-error-diagnostics-source-mapping.md)) - more diagnostic signal than picking just one arbitrarily, especially useful when different toolchains fail for different reasons.
+Progress is shown as real pipeline stages (`Step 1 of 7`, `Step 2 of 7`, etc.) - e.g. parsing, type-checking, cp3→C++ codegen, invoking Clang. There is one target toolchain, so a compile or link failure is reported once with the Clang diagnostics rather than retried against another compiler. The final report maps those diagnostics back to cp3 source (see [§2](02-error-diagnostics-source-mapping.md)).
 
 **Spinner rule across the whole CLI, not just builds:** any command expected to take longer than ~0.5 seconds (`cp3 build` on a cold cache, `cp3 native-install` parsing headers, downloading a toolchain) shows a progress spinner or step indicator; anything faster (`cp3 check` on a small project, `cp3 fmt`) shows nothing and simply completes, since a spinner on a near-instant command just flashes for a single frame and reads as glitchy rather than informative.
 
 ## Toolchain detection, and offering to install one
 
-`cp3 init`, `cp3 build`, and `cp3 run` all check for an available C++ toolchain before doing anything that would need one:
+`cp3 init`, `cp3 build`, and `cp3 run` all check for an available Clang before doing anything that would need one:
 
-- **Found** - proceed normally, using the fixed per-platform order above.
-- **Not found** - tell the user plainly (no C++ toolchain detected), and offer to install one directly:
+- **Found** - proceed normally with the saved choice or the newest usable Clang.
+- **Not found** - tell the user plainly (no usable Clang detected) and offer to install one directly:
 
 ```
 $ cp3 build
-No C++ compiler found on this system.
+No usable Clang compiler found on this system.
 Would you like to install Clang/LLVM now? [Y/n]
 ```
 
-Accepting downloads and installs Clang/LLVM for the current platform and proceeds with the build - the person never has to leave `cp3` or go hunt down a C++ toolchain themselves just to get started.
+Accepting downloads and installs Clang/LLVM for the current platform and proceeds with the build - the person never has to leave `cp3` or go hunt down a compiler themselves just to get started. Declining stops the command with the install hint instead of failing later with an opaque compiler error.
 
-## Choosing a toolchain and version explicitly
+## Choosing a Clang version explicitly
 
-`cp3 toolchain` opens a two-level menu: pick a compiler family, then a version
-and policy. The family menu reports the current effective compiler and every
-installed family:
+`cp3 toolchain` opens a version menu for the one supported compiler family. The
+header reports the current effective Clang and its policy:
 
 ```
 $ cp3 toolchain
-current: GCC 16.1.0 (C:\...\g++.exe) from auto-detect (D12)
-versions: policy latest, recorded 16.1.0, effective 16.1.0
-Select a C++ compiler family:
-   1. gcc         GCC           ready      C:\...\g++.exe (16.1.0)
-   2. clang       Clang         not usable clang++: test compile failed
-   3. msvc        MSVC cl       missing    not installed
+current: Clang 23.1.4 (C:\Program Files\LLVM\bin\clang++.exe) from auto-detect
+versions: policy latest, recorded 23.1.4, effective 23.1.4
+Select a Clang version:
+   1. Latest installed (23.1.4) - recommended
+   2. 23.1.4 (installed)  C:\Program Files\LLVM\bin\clang++.exe  ready
+   3. 22.1.8 (available)  installs with the system package manager
+   Cancel
 choice:
 ```
 
-- Rows are GCC, Clang and MSVC on Windows; Apple Clang, Clang and GCC on macOS; GCC and Clang on Linux.
-- `ready` means the driver was found and a tiny C++20 program compiled, linked and ran. A driver that exists but cannot link is reported as `not usable` with the reason instead of being silently accepted.
-- Selecting a missing family still opens its version list, so a compiler can be installed from the same flow. With no installed version the first row is `Install latest (<version>)`; choosing it asks `Install <name> <version>? Yes / No`, prints the platform package-manager command and runs it only after that confirmation.
-- The list shows every installed version with its path and usability. An exact pin can therefore choose an older installed toolset instead of replacing the newest one.
-- Package-manager versions that are not installed follow, five per page. `Show more (+N)` reveals the next page. `Back` returns to the family menu and `Cancel` leaves the wizard.
+- `ready` means the driver was found and a tiny C++20 program compiled, linked and ran. A driver that exists but cannot build is reported as `not usable` with the reason instead of being silently accepted.
+- With no installed Clang the first row is `Install latest (<version>)`; choosing it asks `Install Clang <version>? Yes / No`, prints the platform package-manager command and runs it only after that confirmation. Installation is always delegated to the system package manager, never an in-cp3c download.
+- The list shows every installed version with its path and usability. An exact pin can therefore choose an older installed Clang instead of replacing the newest one.
+- Package-manager versions that are not installed follow, five per page. `Show more (+N)` reveals the next page. `Cancel` leaves the wizard.
 - The newest installed version is selected by default as `Latest installed (<version>) - recommended`. That records the version but keeps the `latest` policy, so a future system update is picked up automatically.
-- MSVC toolsets are discovered through `vswhere` and `VC\Tools\MSVC\<toolset>`. `More versions (Visual Studio Installer)` opens Visual Studio Installer; it never starts an in-cp3c download. MSVC toolsets coexist, so an exact MSVC pin is reliable.
-- Windows GCC and Clang installers usually replace the installed version in place. The wizard warns before installing an older version than the one already present.
+- Clang installers usually replace the installed version in place. The wizard warns before installing an older version than the one already present.
 - Arrow keys move, Enter selects, `q` or Esc cancels. Piped stdin uses numbered prompts for every menu, including the project/global scope question, so `echo 1 | cp3 toolchain` still works without a terminal.
 
-After a usable family and version are selected, the scope question appears when
-a project is present:
+After a usable Clang version is selected, the scope question appears when a
+project is present:
 
 ```
 Where should this toolchain apply?
@@ -199,81 +192,81 @@ Where should this toolchain apply?
 The package manifest form is:
 
 ```json
-"toolchain": { "id": "gcc", "version": "16.1.0", "policy": "latest" }
+"toolchain": { "id": "clang", "version": "23.1.4", "policy": "latest" }
 ```
 
-- `latest` is the default. It uses the newest installed version of the family and treats `version` as a record of what was selected, not as a pin. The recorded version is not rewritten on every build.
-- `exact` is opt-in. Use it for CI, releases, benchmarks and prebuilt native libraries where a compiler update must not change the build. A missing exact version falls back to the newest installed version of the same family with a warning, unless `--strict-toolchain` is present.
-- The legacy string `"toolchain": "gcc"` and the version-less object `{ "id": "gcc" }` both mean `latest`.
-- An object with a version but no policy keeps the older exact behavior: `{ "id": "gcc", "version": "16.1.0" }`.
-- A missing family warns and falls through to automatic detection. It never silently switches to a different saved family. Under `--strict-toolchain` a missing exact pin or saved family is an error.
-- `cp3 toolchain use gcc@16.1.0` saves an exact pin. `cp3 toolchain use gcc` saves `latest`. If the exact version is not installed, `use` warns and saves the newest installed version of the same family as `latest`; `--strict-toolchain` makes it an error instead. A missing family is always an error because there is nothing installed to save. The same `id@version` form is accepted by `--toolchain` and `CP3_TOOLCHAIN`; a plain `id` forces latest for that run.
+- `id` must be `clang` (or `apple-clang` on macOS). A GCC or MSVC pin is rejected with an explicit Clang-only error.
+- `latest` is the default. It uses the newest installed Clang and treats `version` as a record of what was selected, not as a pin. The recorded version is not rewritten on every build.
+- `exact` is opt-in. Use it for CI, releases, benchmarks and prebuilt native libraries where a compiler update must not change the build. A missing exact version falls back to the newest installed Clang with a warning, unless `--strict-toolchain` is present.
+- The legacy string `"toolchain": "clang"` and the version-less object `{ "id": "clang" }` both mean `latest`.
+- An object with a version but no policy keeps the older exact behavior: `{ "id": "clang", "version": "23.1.4" }`.
+- A missing Clang warns and falls through to automatic detection. Under `--strict-toolchain` a missing exact pin is an error.
+- `cp3 toolchain use clang@23.1.4` saves an exact pin. `cp3 toolchain use clang` saves `latest`. If the exact version is not installed, `use` warns and saves the newest installed Clang as `latest`; `--strict-toolchain` makes it an error instead. The same `id@version` form is accepted by `--toolchain` and `CP3_TOOLCHAIN`; a plain `clang` forces latest for that run. A full path to `clang++` is also accepted.
 
 The global config is plain text, one key per line:
 
 ```
-id=gcc
-version=16.1.0
+id=clang
+version=23.1.4
 policy=latest
-program=C:\Users\you\...\g++.exe
+program=C:\Program Files\LLVM\bin\clang++.exe
 saved=2026-10-20
 ```
 
 Resolution order for every command that needs a compiler:
 
-1. `--toolchain <id[@version]|path>` on the command line.
+1. `--toolchain <clang[@version]|path>` on the command line.
 2. `CP3_TOOLCHAIN` environment variable.
 3. `"toolchain"` in the project's `package.json`.
 4. The global config.
-5. Automatic detection (the fixed per-platform order above).
+5. Automatic detection (newest usable Clang).
 
 `--verbose` names the source that won and prints the policy, recorded version and
 effective version. `cp3 toolchain list` shows the same values plus every
 installed version, its path and the project or global scope. A project choice
 applies from any subdirectory of that project and does not leak into another
-project or a bare file outside one. A saved compiler or exact version that has
-since disappeared is reported once and the next source or newest same-family
-version is used, so a stale choice does not break normal builds.
+project or a bare file outside one. A saved exact version that has since
+disappeared is reported once and the newest installed Clang is used, so a stale
+choice does not break normal builds.
 
-The build cache keys the effective compiler identity: family, exact parsed
+The build cache keys the effective compiler identity: Clang, exact parsed
 version, driver path and the target flags the driver needed. A system compiler
-update therefore invalidates objects
-and the link stamp under `latest`, while an unchanged compiler keeps the cache
-warm. No compiler is copied into a cp3 project or cache; discovery reads system
-locations and installation is delegated to winget, Visual Studio Installer,
-apt/dnf/pacman or Homebrew.
+update therefore invalidates objects and the link stamp under `latest`, while an
+unchanged compiler keeps the cache warm. No compiler is copied into a cp3
+project or cache; discovery reads system locations and installation is delegated
+to winget, apt/dnf/pacman or Homebrew.
 
 Scripts and tests use the non-interactive forms:
 
 ```
-cp3 toolchain list                            # families, versions, paths, scopes, effective choice
+cp3 toolchain list                            # versions, paths, scopes, effective choice
 cp3 toolchain list --json                     # candidates, installed, scopes and current source
 cp3 toolchain detect                          # automatic detection plus the current choice
-cp3 toolchain use gcc@16.1.0 --project        # write an exact pin to package.json
-cp3 toolchain use gcc --global                # write latest to the user config
+cp3 toolchain use clang@23.1.4 --project      # write an exact pin to package.json
+cp3 toolchain use clang --global              # write latest to the user config
 cp3 toolchain clear --project                 # remove only the project field
 cp3 toolchain clear                           # remove both saved scopes
 cp3 toolchain --yes                           # accept the current or first usable defaults
 ```
 
-`cp3 toolchain use` accepts a standard id, `id@version` or a full path. With both
-scopes possible, scripts must pass `--project` or `--global`; the interactive
-command asks instead. Piped stdin falls back to numbered prompts. `--yes` answers
-the whole wizard with the current usable compiler, otherwise the first usable
-family, the newest installed version and the project scope when a package.json
-is present, otherwise global. `list --json` is the stable machine-readable
-surface; `current.source` is one of `command-line`, `environment`, `project`,
-`global` or `auto-detect`.
+`cp3 toolchain use` accepts `clang`, `clang@version` or a full path to
+`clang++`. With both scopes possible, scripts must pass `--project` or
+`--global`; the interactive command asks instead. Piped stdin falls back to
+numbered prompts. `--yes` answers the whole wizard with the current usable
+Clang, otherwise the newest installed version and the project scope when a
+package.json is present, otherwise global. `list --json` is the stable
+machine-readable surface; `current.source` is one of `command-line`,
+`environment`, `project`, `global` or `auto-detect`.
 
-When a build finds no compiler, its error points at `cp3 toolchain` rather than
-only listing the compilers it tried.
+When a build finds no usable Clang, its error points at `cp3 toolchain` and
+offers the install prompt rather than failing with an opaque compiler error.
 
 ## The CLI command surface: `run`, `check`, `dev`, `fmt`
 
 A JS/TS developer's daily loop is `node app.js`, `tsc --noEmit`, and a watch-mode restart on save - the cp3 CLI needs the equivalent shape, not a two-step "compile, then separately invoke the binary" ceremony:
 
 - **`cp3 run src/index.cp3`** - chains the full pipeline (parse → type-check → generate C++ → invoke toolchain → execute) in one command. Under the hood it's exactly `cp3 build` followed by running the result; the point is the person never has to type both.
-- **`cp3 check`** - parses and type-checks only, then stops. No C++ generation, no invoking Clang/GCC/MSVC, no linking - the same idea as `tsc --noEmit` or `cargo check`. This is fast specifically because **the cp3 frontend itself is not the slow part** - parsing and type-checking a project is comparable in cost to any other language's frontend; what actually takes real time in a full build is invoking the external C++ compiler and linking, and `check` skips both entirely. This makes it fast enough to run on every save or every keystroke for typical project sizes - not a hard, unconditional guarantee against arbitrarily large codebases, where frontend work scales with project size same as any compiler's frontend does.
+- **`cp3 check`** - parses and type-checks only, then stops. No C++ generation, no invoking Clang, no linking - the same idea as `tsc --noEmit` or `cargo check`. This is fast specifically because **the cp3 frontend itself is not the slow part** - parsing and type-checking a project is comparable in cost to any other language's frontend; what actually takes real time in a full build is invoking the external C++ compiler and linking, and `check` skips both entirely. This makes it fast enough to run on every save or every keystroke for typical project sizes - not a hard, unconditional guarantee against arbitrarily large codebases, where frontend work scales with project size same as any compiler's frontend does.
 - **`cp3 dev`** - a file watcher that triggers `check` (or a rebuild) automatically on save.
 - **`cp3 fmt`** - a zero-config, opinionated formatter (Prettier/`gofmt`/`rustfmt` role), with an optional `"format"` block in `package.json` for teams that want to override specifics like indent width or quote style. Pure tooling, touches no language semantics.
 - **`cp3 --version`** (or `cp3 version`) - trivial, but every CLI needs one; confirmed as beta-one baseline rather than an afterthought.

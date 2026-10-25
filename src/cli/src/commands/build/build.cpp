@@ -35,6 +35,7 @@
 #include "detail/native/native_build.hpp"
 #include "detail/native/native_packages.hpp"
 #include "detail/toolchain/toolchain.hpp"
+#include "detail/toolchain/toolchain_select.hpp"
 #include "detail/core/util.hpp"
 
 namespace cp3::cli::detail {
@@ -232,15 +233,14 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
 // (third_party/**, D70) contributes include roots and runtime TUs to `layout`
 // plus compile/link flags, so a program that never imports std/network pays
 // nothing for uWebSockets. Returns nullopt after reporting on a missing packed
-// path, or on an MSVC toolchain (the vendored archives are GCC/Clang builds).
+// path, or on a native backend that is incomplete.
 //
 // A source whose row gives it a marker (NativePackage::runtimeSourceMarkers) is
 // only linked when the generated program text names one of its markers, so a
 // program that imports a family for one member does not link the whole family.
 std::optional<NativeBuildFlags> applyNativePackages(
-    const CliOptions& opt, const Toolchain& tc,
-    const std::vector<std::string>& importedStdModules, BuildLayout& layout,
-    const std::string& programText) {
+    const CliOptions& opt, const std::vector<std::string>& importedStdModules,
+    BuildLayout& layout, const std::string& programText) {
     NativeBuildFlags flags;
     std::vector<const NativePackage*> natives =
         selectNativePackages(importedStdModules);
@@ -251,14 +251,6 @@ std::optional<NativeBuildFlags> applyNativePackages(
     natives.insert(natives.end(), core.begin(), core.end());
     if (natives.empty()) return flags;
 
-    if (tc.msvc) {
-        std::fprintf(stderr,
-                     "cp3c: '%s' needs its native backend, which is built for "
-                     "GCC/Clang (MinGW-w64); MSVC cannot link it in beta one\n",
-                     natives.front()->specifier);
-        std::fprintf(stderr, "      install g++ or clang++ and re-run.\n");
-        return std::nullopt;
-    }
     auto reportBroken = [](const char* spec, const char* what,
                            const fs::path& path) {
         std::fprintf(stderr,
@@ -373,8 +365,8 @@ void selectRuntimeSources(const CliOptions& opt, BuildLayout& layout,
 std::optional<NativeBuildFlags> resolveNativeFlags(
     const CliOptions& opt, const BuildRequest& request,
     const GeneratedModule& mod, BuildLayout& layout, const Toolchain*& tcOut) {
-    const Toolchain& tc = detectToolchain();
-    if (!tc.found()) {
+    const Toolchain* tc = &detectToolchain();
+    if (!tc->found()) {
         if (toolchainStrictFailed()) {
             // detectToolchain already printed the strict warning with the
             // source and the missing pin. Return without repeating it.
@@ -384,32 +376,41 @@ std::optional<NativeBuildFlags> resolveNativeFlags(
             }
             return std::nullopt;
         }
+        if (!ensureClangAvailable(true)) {
+            std::fprintf(stderr,
+                         "cp3c: no usable Clang compiler found on this system "
+                         "(looked for clang++ in PATH and standard locations)\n");
+            std::fprintf(stderr,
+                         "      run 'cp3c toolchain' to install one.\n");
+            return std::nullopt;
+        }
+        tc = &detectToolchain();
+    }
+    if (!tc->found()) {
         std::fprintf(stderr,
-                     "cp3c: no C++ toolchain found on this system "
-                     "(looked for cl, clang++, g++ on PATH)\n");
-        std::fprintf(stderr,
-                     "      run 'cp3c toolchain' to choose or install one.\n");
+                     "cp3c: no usable Clang compiler found on this system\n");
+        std::fprintf(stderr, "      run 'cp3c toolchain' to install one.\n");
         return std::nullopt;
     }
-    tcOut = &tc;
+    tcOut = tc;
     if (opt.verbose) {
         std::fprintf(stderr, "cp3c: toolchain: %s\n",
-                     describeToolchain(tc).c_str());
+                     describeToolchain(*tc).c_str());
         std::fprintf(stderr, "cp3c: toolchain source: %s\n",
                      toolchainSourceDescription().c_str());
         std::fprintf(stderr, "cp3c: toolchain versions: %s\n",
                      toolchainVersionDescription().c_str());
     }
-    return applyNativePackages(opt, tc, *request.importedStdModules, layout,
+    return applyNativePackages(opt, *request.importedStdModules, layout,
                                generatedProgramText(request, mod));
 }
 
 // The native bindings the program imports: their include roots, defines,
 // libraries and runtime DLLs join the build (detail/native_build.hpp).
 bool applyRequestNativeBindings(const BuildRequest& request, BuildLayout& layout,
-                                 NativeBuildFlags& flags, const Toolchain& tc) {
+                                 NativeBuildFlags& flags) {
     return applyNativeBindings(request.opt->compile.nativeBindings, layout,
-                                flags, tc.msvc);
+                                flags);
 }
 
 }  // namespace
@@ -445,7 +446,7 @@ int buildWithToolchain(const BuildRequest& request) {
 
     // The native bindings the program imports: their include roots, defines,
     // libraries and runtime DLLs join the build (detail/native_build.hpp).
-    if (!applyRequestNativeBindings(request, layout, *nativeFlags, tc)) {
+    if (!applyRequestNativeBindings(request, layout, *nativeFlags)) {
         return kExitCompileError;
     }
 

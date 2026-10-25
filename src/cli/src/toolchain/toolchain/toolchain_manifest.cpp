@@ -231,8 +231,11 @@ bool readChoice(const JsonValue& manifest, ToolchainChoice& out,
     if (value == nullptr) return true;
     out.present = true;
     if (value->isString()) {
-        out.id = value->string;
-        out.policy = "latest";
+        std::string parseError;
+        if (!parseToolchainSpec(value->string, out, parseError)) {
+            err = path.string() + ": " + parseError;
+            return false;
+        }
         return true;
     }
     if (!value->isObject()) {
@@ -246,13 +249,23 @@ bool readChoice(const JsonValue& manifest, ToolchainChoice& out,
         err = path.string() + ": \"toolchain.id\" must be a non-empty string";
         return false;
     }
-    out.id = *id;
+    const bool pathShaped =
+        id->find('/') != std::string::npos ||
+        id->find('\\') != std::string::npos ||
+        (id->size() > 1 && (*id)[1] == ':');
+    if (!pathShaped && !isClangId(*id)) {
+        err = path.string() +
+              ": \"toolchain.id\" must be clang, apple-clang, or a clang++ "
+              "path (beta one supports Clang only)";
+        return false;
+    }
+    out.id = pathShaped ? *id : std::string("clang");
     if (const std::string* version = value->stringField("version")) {
-        out.version = normalizeCompilerVersion(*version);
-        if (out.version.empty()) {
+        if (!validVersionSpec(*version)) {
             err = path.string() + ": invalid \"toolchain.version\"";
             return false;
         }
+        out.version = *version;
     }
     if (const std::string* policy = value->stringField("policy")) {
         out.policy = *policy;
@@ -265,8 +278,7 @@ bool readChoice(const JsonValue& manifest, ToolchainChoice& out,
               ": \"toolchain.policy\" must be \"latest\" or \"exact\"";
         return false;
     }
-    if (out.id.find('/') != std::string::npos ||
-        out.id.find('\\') != std::string::npos) {
+    if (pathShaped) {
         out.custom = true;
         out.program = out.id;
     }

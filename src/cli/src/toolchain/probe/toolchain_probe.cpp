@@ -1,20 +1,21 @@
 // =============================================================================
-// src/cli/src/toolchain/toolchain_probe.cpp - compiler candidate probing.
+// src/cli/src/toolchain/toolchain_probe.cpp - Clang candidate probing.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements the candidate half of
 // detail/toolchain_select.hpp.
 //
 // A candidate is only "usable" after a tiny C++20 source compiles, links and
-// runs in a temporary directory. That is deliberately stricter than the D12
-// build-time lookup: `cp3c toolchain list` must not call a compiler installed
-// when it cannot produce a binary, and MSVC additionally needs link.exe from
-// the same toolset because linkArgs invokes it directly.
+// runs in a temporary directory. That is deliberately stricter than simply
+// finding a driver: `cp3c toolchain list` must not call a compiler installed
+// when it cannot produce a binary. Beta one has one candidate family: Clang.
 // =============================================================================
 #include "detail/toolchain/toolchain_select.hpp"
 
 #include <chrono>
+#include <cstdlib>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -89,18 +90,18 @@ struct TempDir {
     TempDir& operator=(const TempDir&) = delete;
 };
 
-std::string versionOf(const ToolchainCandidate& candidate,
-                      const std::string& program) {
-    std::vector<std::string> args{program};
-    if (!candidate.msvc) args.push_back("--version");
-    std::string out;
-    if (runProcessCapture(args, out) < 0) return {};
-    return firstLine(out);
+bool isClangBanner(const std::string& banner) {
+    return lowerCopy(banner).find("clang") != std::string::npos;
+}
+
+int majorVersionOf(const std::string& version) {
+    const std::string normalized = normalizeCompilerVersion(version);
+    if (normalized.empty()) return -1;
+    return std::atoi(normalized.c_str());
 }
 
 // Compiles, links and runs a one-line C++20 program.
-bool validateProgram(const ToolchainCandidate& candidate,
-                     const std::string& program, std::string& reason) {
+bool validateProgram(const std::string& program, std::string& reason) {
     TempDir temp;
     if (temp.path.empty()) {
         reason = "could not create a temporary directory for the probe";
@@ -108,7 +109,6 @@ bool validateProgram(const ToolchainCandidate& candidate,
     }
     const fs::path cpp = temp.path / "cp3_toolchain_probe.cpp";
     const fs::path exe = temp.path / "cp3_toolchain_probe.exe";
-    const fs::path obj = temp.path / "cp3_toolchain_probe.obj";
     const std::string source =
         "#include <cstdio>\n"
         "int main() { std::printf(\"cp3-toolchain-probe\\n\"); return 0; }\n";
@@ -116,27 +116,16 @@ bool validateProgram(const ToolchainCandidate& candidate,
         reason = "could not write the probe source in " + temp.path.string();
         return false;
     }
-    std::vector<std::string> args;
-    args.push_back(program);
-    if (candidate.msvc) {
-        args.push_back("/nologo");
-        args.push_back("/std:c++20");
-        args.push_back("/EHsc");
-        args.push_back(cpp.string());
-        args.push_back("/Fe:" + exe.string());
-        args.push_back("/Fo:" + obj.string());
-    } else {
-        // The same target flags the real build uses, so a family that probes
-        // clean is a family that builds (detail/toolchain_target.cpp).
-        for (const std::string& flag :
-             toolchainTargetFlags(candidate.clang, candidate.msvc, program)) {
-            args.push_back(flag);
-        }
-        args.push_back("-std=c++20");
-        args.push_back(cpp.string());
-        args.push_back("-o");
-        args.push_back(exe.string());
+    std::vector<std::string> args{program};
+    // The same target flags the real build uses, so a Clang that probes clean
+    // is a Clang that builds (detail/toolchain_target.cpp).
+    for (const std::string& flag : toolchainTargetFlags(program)) {
+        args.push_back(flag);
     }
+    args.push_back("-std=c++20");
+    args.push_back(cpp.string());
+    args.push_back("-o");
+    args.push_back(exe.string());
     std::string log;
     const int buildRc = runProcessCapture(args, log);
     if (buildRc != 0) {
@@ -164,61 +153,56 @@ bool validateProgram(const ToolchainCandidate& candidate,
 }  // namespace
 
 std::vector<ToolchainCandidate> toolchainCandidates() {
-#if defined(_WIN32)
-    return {
-        {"gcc", "GCC", "g++", false, false},
-        {"clang", "Clang", "clang++", false, true},
-        {"msvc", "MSVC cl", "cl", true, false},
-    };
-#elif defined(__APPLE__)
-    return {
-        {"apple-clang", "Apple Clang", "/usr/bin/clang++", false, true},
-        {"clang", "Clang", "clang++", false, true},
-        {"gcc", "GCC", "g++", false, false},
-    };
-#else
-    return {
-        {"gcc", "GCC", "g++", false, false},
-        {"clang", "Clang", "clang++", false, true},
-    };
-#endif
+    // Beta one supports exactly one target toolchain. Windows keeps the
+    // MinGW-w64 GNU target; the candidate itself is the same Clang driver on
+    // every platform.
+    return {{"clang", "Clang", "clang++"}};
+}
+
+bool isClangId(std::string_view id) {
+    const std::string lower = lowerCopy(std::string(id));
+    return lower == "clang" || lower == "clang++" || lower == "apple-clang";
 }
 
 const ToolchainCandidate* findToolchainCandidate(const std::string& id) {
     static const std::vector<ToolchainCandidate> candidates =
         toolchainCandidates();
-    const std::string wanted = lowerCopy(id);
-    for (const ToolchainCandidate& candidate : candidates) {
-        if (candidate.id == wanted) return &candidate;
-    }
-    return nullptr;
+    if (!isClangId(id)) return nullptr;
+    return &candidates.front();
 }
 
 CandidateStatus probeToolchainProgram(const ToolchainCandidate& candidate,
                                       const std::string& program,
-                                      const std::string& linkProgram,
                                       bool validate) {
     CandidateStatus status;
     status.candidate = candidate;
     status.program = program;
-    status.linkProgram = linkProgram;
     std::error_code ec;
     if (program.empty() || !fs::is_regular_file(program, ec)) {
         status.problem = "the compiler program does not exist";
         return status;
     }
     status.found = true;
-    if (candidate.msvc && linkProgram.empty()) {
-        status.problem =
-            "cl.exe found but link.exe from the same toolset is missing; "
-            "install Build Tools with the C++ workload";
+    std::string versionOut;
+    if (runProcessCapture({program, "--version"}, versionOut) < 0) {
+        status.problem = "could not run " + program + " --version";
         return status;
     }
-    status.banner = versionOf(candidate, program);
+    status.banner = firstLine(versionOut);
+    if (!isClangBanner(status.banner)) {
+        status.problem =
+            "not a Clang compiler; beta one supports Clang only";
+        return status;
+    }
     status.version = normalizeCompilerVersion(status.banner);
     if (status.version.empty()) {
         status.problem = "could not parse a version from " +
                          (status.banner.empty() ? program : status.banner);
+        return status;
+    }
+    if (majorVersionOf(status.version) < minimumClangMajor()) {
+        status.problem = "Clang " + status.version + " is older than the minimum supported Clang " +
+                         std::to_string(minimumClangMajor());
         return status;
     }
     if (!validate) {
@@ -226,7 +210,7 @@ CandidateStatus probeToolchainProgram(const ToolchainCandidate& candidate,
         return status;
     }
     std::string reason;
-    status.usable = validateProgram(candidate, status.program, reason);
+    status.usable = validateProgram(status.program, reason);
     if (!status.usable) status.problem = reason;
     return status;
 }
@@ -242,8 +226,19 @@ CandidateStatus probeToolchainCandidate(const ToolchainCandidate& candidate,
                          " in PATH and standard system locations)";
         return status;
     }
-    return probeToolchainProgram(candidate, installs.front().program,
-                                 installs.front().linkProgram, validate);
+    if (!validate) {
+        return probeToolchainProgram(candidate, installs.front().program, false);
+    }
+    // Newest first. A newer install that cannot produce a binary must not hide
+    // an older usable one: auto-detection picks the newest *usable* Clang.
+    CandidateStatus firstProblem;
+    for (const ToolchainInstall& install : installs) {
+        CandidateStatus current =
+            probeToolchainProgram(candidate, install.program, true);
+        if (current.usable) return current;
+        if (firstProblem.problem.empty()) firstProblem = std::move(current);
+    }
+    return firstProblem;
 }
 
 }  // namespace cp3::cli

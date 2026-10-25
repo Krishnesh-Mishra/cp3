@@ -12,6 +12,8 @@
 #include <system_error>
 
 #include "detail/core/util.hpp"
+#include "detail/toolchain/toolchain.hpp"
+#include "detail/toolchain/toolchain_select.hpp"
 #include "native/sdk/sdk_internal.hpp"
 
 namespace cp3::cli::native {
@@ -351,34 +353,43 @@ bool resolveName(const std::string& name, SdkResolution& out,
 std::string deriveAbi(const std::string& target) {
     const std::string text = lower(target);
     if (text.find("mingw") != std::string::npos) return "mingw";
-    if (text.find("msvc") != std::string::npos) return "msvc";
     if (!text.empty()) return "itanium";
     return "c++";
 }
 
-std::vector<std::string> gccParseArgs() {
+std::vector<std::string> clangParseArgs() {
     std::vector<std::string> args;
-    std::string gcc;
-    if (!findExecutable("g++", gcc)) return args;
+    const Toolchain& tc = detectToolchain();
+    std::string clang = tc.found() ? tc.program : std::string();
+    if (clang.empty() && !findExecutable("clang++", clang)) return args;
     std::string triple;
     int code = -1;
-    if (runCapture({gcc, "-dumpmachine"}, triple, code) && code == 0) {
+    if (runCapture({clang, "-print-target-triple"}, triple, code) && code == 0) {
         while (!triple.empty() &&
                std::isspace(static_cast<unsigned char>(triple.back()))) {
             triple.pop_back();
         }
-        if (!triple.empty()) {
-            args.push_back("--target=" + triple);
-        }
+    }
+    if (tc.found()) {
+        args = tc.targetFlags;
+    }
+    if (args.empty() && !triple.empty()) {
+        args.push_back("--target=" + triple);
     }
 #if defined(_WIN32)
     const std::string emptyInput = "nul";
 #else
     const std::string emptyInput = "/dev/null";
 #endif
+    std::vector<std::string> command{clang};
+    for (const std::string& arg : args) command.push_back(arg);
+    command.push_back("-x");
+    command.push_back("c++");
+    command.push_back("-E");
+    command.push_back("-v");
+    command.push_back(emptyInput);
     std::string output;
-    if (!runCapture({gcc, "-x", "c++", "-E", "-v", emptyInput}, output, code) ||
-        code != 0) {
+    if (!runCapture(command, output, code) || code != 0) {
         return args;
     }
     const std::string startMarker = "#include <...> search starts here:";
@@ -446,7 +457,7 @@ bool resolveSdk(const SdkRequest& request, SdkResolution& out,
         addUnique(out.publicRoots, text);
     }
     out.defines = request.defines;
-    out.clangArgs = gccParseArgs();
+    out.clangArgs = clangParseArgs();
 
     SdkRequest libraries = request;
     if (!detectLibraries(libraries, out, error)) return false;

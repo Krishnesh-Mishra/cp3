@@ -6,10 +6,10 @@
 // Non-interactive forms for scripts:
 //   cp3c toolchain list
 //   cp3c toolchain detect
-//   cp3c toolchain use <id[@version]|path> [--project|--global]
+//   cp3c toolchain use <clang[@version]|path> [--project|--global]
 //   cp3c toolchain clear [--project|--global]
-// Bare `cp3c toolchain` opens the family -> version -> scope wizard. A piped
-// stdin gets the numbered fallback for every menu, including scope.
+// Bare `cp3c toolchain` opens the Clang version -> scope wizard. A piped stdin
+// gets the numbered fallback for every menu, including scope.
 // =============================================================================
 #include <cstdio>
 #include <string>
@@ -77,7 +77,7 @@ void printInstalledVersions() {
 
 std::string effectiveLine() {
     const Toolchain& toolchain = detectToolchain();
-    if (!toolchain.found()) return "none (no C++ compiler found)";
+    if (!toolchain.found()) return "none (no usable Clang found)";
     return describeToolchain(toolchain) + " from " + toolchainSourceDescription();
 }
 
@@ -130,17 +130,14 @@ int finishToolchainUse(ToolchainChoice choice, const Toolchain& resolved,
     // the effective version as `latest` so later builds do not keep warning
     // about a version the user cannot install through this flow.
     if (choice.policy == "exact" && !choice.version.empty() &&
-        compareCompilerVersions(choice.version, resolved.version) != 0) {
+        !versionSatisfies(resolved.version, choice.version)) {
         choice.policy = "latest";
     }
     const ToolchainCandidate* candidate = findToolchainCandidate(resolved.id);
-    ToolchainCandidate fallback{"", resolved.name, resolved.program, resolved.msvc,
-                                resolved.clang};
-    const ToolchainCandidate& family = candidate != nullptr ? *candidate : fallback;
-    std::string link;
-    if (family.msvc) findExecutable("link", link);
+    const ToolchainCandidate family =
+        candidate != nullptr ? *candidate : toolchainCandidates().front();
     const CandidateStatus status =
-        probeToolchainProgram(family, resolved.program, link, true);
+        probeToolchainProgram(family, resolved.program, true);
     if (!status.usable) {
         std::fprintf(stderr, "cp3c: %s is not usable: %s\n", value.c_str(),
                      status.problem.c_str());
@@ -164,7 +161,7 @@ int finishToolchainUse(ToolchainChoice choice, const Toolchain& resolved,
 
 int toolchainUse(const CliOptions& opt, const std::vector<std::string>& args) {
     if (args.size() != 1) {
-        std::fputs("usage: cp3c toolchain use <id[@version]|path> "
+        std::fputs("usage: cp3c toolchain use <clang[@version]|path> "
                    "[--project|--global]\n", stderr);
         return kExitUsageError;
     }
@@ -273,7 +270,7 @@ int toolchainList(const CliOptions& opt) {
     if (opt.json) {
         return toolchainListJson();
     }
-    std::printf("C++ toolchains\n");
+    std::printf("Clang toolchain\n");
     printCandidateTable(true);
     printInstalledVersions();
     const GlobalToolchainConfig config = readGlobalToolchainConfig();
@@ -323,10 +320,10 @@ int toolchainList(const CliOptions& opt) {
 
 int toolchainDetect() {
     const Toolchain automatic = probeAutoToolchain();
-    std::printf("auto-detect (D12): %s\n",
+    std::printf("auto-detect (newest Clang): %s\n",
                 automatic.found() ? describeToolchain(automatic).c_str()
                                   : "(none found)");
-    std::printf("C++ toolchains\n");
+    std::printf("Clang toolchain\n");
     printCandidateTable(true);
     printInstalledVersions();
     std::printf("current: %s\n", effectiveLine().c_str());
@@ -339,11 +336,11 @@ int toolchainDetect() {
 
 void printToolchainUsage(std::FILE* out) {
     std::fputs(
-        "usage: cp3c toolchain [list|detect|use <id[@version]|path>|clear]\n"
-        "  cp3c toolchain                 choose family, version and scope\n"
+        "usage: cp3c toolchain [list|detect|use <clang[@version]|path>|clear]\n"
+        "  cp3c toolchain                 choose a Clang version and scope\n"
         "  cp3c toolchain list            versions, paths and the effective choice\n"
         "  cp3c toolchain detect          show what auto-detection finds\n"
-        "  cp3c toolchain use <id[@version]|path>\n"
+        "  cp3c toolchain use <clang[@version]|path>\n"
         "                                 save a choice (--project|--global)\n"
         "  cp3c toolchain clear           remove saved choices "
         "(--project|--global)\n",

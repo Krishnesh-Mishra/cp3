@@ -1,10 +1,10 @@
 // =============================================================================
-// src/cli/src/toolchain/toolchain_select.cpp - effective toolchain resolution.
+// src/cli/src/toolchain/toolchain_select.cpp - effective Clang resolution.
 // OWNERSHIP: cli module. Implements detail/toolchain_select.hpp and
-// detectToolchain: --toolchain > CP3_TOOLCHAIN > project > global > D12.
-// `latest` records the saved version and uses the newest installed family
-// version; `exact` uses the recorded version and falls back with a warning or
-// fails under --strict-toolchain. A missing family uses auto-detect.
+// detectToolchain: --toolchain > CP3_TOOLCHAIN > project > global > auto.
+// `latest` records the saved version and uses the newest installed Clang;
+// `exact` uses the recorded series/version and falls back with a warning or
+// fails under --strict-toolchain. Beta one has one compiler family: Clang.
 // =============================================================================
 #include <cstdio>
 #include <cstdlib>
@@ -69,25 +69,6 @@ fs::path projectSearchStart() {
     return fs::current_path(ec);
 }
 
-bool looksLikeVersion(const std::string& text) {
-    return !text.empty() && text[0] >= '0' && text[0] <= '9';
-}
-
-const ToolchainCandidate* candidateForProgram(const std::string& program) {
-    const std::string base = lowerCopy(fs::path(program).filename().string());
-    if (base.find("clang") != std::string::npos) return findToolchainCandidate("clang");
-    if (base == "cl" || base.rfind("cl.", 0) == 0 ||
-        base.find("cl.exe") != std::string::npos) {
-        return findToolchainCandidate("msvc");
-    }
-    if (base.find("g++") != std::string::npos ||
-        base.find("gcc") != std::string::npos ||
-        base.find("mingw") != std::string::npos) {
-        return findToolchainCandidate("gcc");
-    }
-    return nullptr;
-}
-
 bool findProgram(const std::string& raw, std::string& program) {
     std::error_code ec;
     if (fs::is_regular_file(raw, ec)) {
@@ -112,9 +93,7 @@ Toolchain toolchainFromInstall(const ToolchainCandidate& candidate,
     tc.version = install.version;
     tc.recordedVersion = choice.version;
     tc.policy = policy;
-    tc.msvc = candidate.msvc;
-    tc.clang = candidate.clang;
-    tc.targetFlags = toolchainTargetFlags(tc.clang, tc.msvc, tc.program);
+    tc.targetFlags = toolchainTargetFlags(tc.program);
     return tc;
 }
 
@@ -125,22 +104,25 @@ ChoiceResolution resolveCustom(const ToolchainChoice& choice, Toolchain& out,
         err = "'" + program + "' is not an existing executable";
         return ChoiceResolution::Invalid;
     }
-    const ToolchainCandidate* candidate = candidateForProgram(program);
-    ToolchainCandidate fallback{"", "C++ compiler", "", false, false};
-    const ToolchainCandidate& family = candidate != nullptr ? *candidate : fallback;
-    std::string link;
-    if (family.msvc) findExecutable("link", link);
+    const ToolchainCandidate* candidate = findToolchainCandidate("clang");
+    if (candidate == nullptr) {
+        err = "no Clang candidate is registered";
+        return ChoiceResolution::Invalid;
+    }
     const CandidateStatus status =
-        probeToolchainProgram(family, program, link, false);
-    out.program = program;
-    out.name = family.name.empty() ? "C++ compiler" : family.name;
-    out.id = family.id;
+        probeToolchainProgram(*candidate, program, true);
+    if (!status.usable) {
+        err = "'" + program + "' is not a usable Clang compiler";
+        if (!status.problem.empty()) err += ": " + status.problem;
+        return ChoiceResolution::Invalid;
+    }
+    out.program = status.program;
+    out.name = candidate->name;
+    out.id = candidate->id;
     out.version = status.version;
     out.recordedVersion = choice.version;
     out.policy = "custom";
-    out.msvc = family.msvc;
-    out.clang = family.clang;
-    out.targetFlags = toolchainTargetFlags(out.clang, out.msvc, out.program);
+    out.targetFlags = toolchainTargetFlags(out.program);
     return ChoiceResolution::Ok;
 }
 
@@ -160,8 +142,8 @@ ChoiceResolution missingFamily(const ToolchainCandidate& candidate,
         return ChoiceResolution::StrictFailure;
     }
     warning = sourceLabel + " selects " + label +
-              ", but no installed " + label +
-              " was found; using auto-detect. Install it with cp3c toolchain.";
+              ", but no usable " + label +
+              " was found; using auto-detect. Install it with 'cp3c toolchain'.";
     if (!choice.version.empty()) {
         warning += " Requested version: " + choice.version + ".";
     }
@@ -173,19 +155,14 @@ ChoiceResolution resolveFamily(const ToolchainChoice& choice,
                                ChoiceResolutionResult& result) {
     const ToolchainCandidate* candidate = findToolchainCandidate(choice.id);
     if (candidate == nullptr) {
-        result.error = "unknown toolchain id '" + choice.id +
-                       "' (expected gcc, clang, msvc or apple-clang)";
+        result.error =
+            "unknown toolchain '" + choice.id +
+            "' (beta one supports Clang only: clang, clang@<version>, "
+            "clang++-<major>, or a clang++ path)";
         return ChoiceResolution::Invalid;
     }
     std::vector<ToolchainInstall> installs =
         discoverToolchainVersions(*candidate, false);
-    if (candidate->msvc) {
-        std::vector<ToolchainInstall> usable;
-        for (ToolchainInstall& install : installs) {
-            if (!install.linkProgram.empty()) usable.push_back(std::move(install));
-        }
-        installs = std::move(usable);
-    }
     if (installs.empty()) {
         return missingFamily(*candidate, choice, sourceLabel, strict,
                              result.warning);
@@ -200,7 +177,7 @@ ChoiceResolution resolveFamily(const ToolchainChoice& choice,
     if (exact) {
         selected = nullptr;
         for (const ToolchainInstall& install : installs) {
-            if (compareCompilerVersions(install.version, choice.version) == 0) {
+            if (versionSatisfies(install.version, choice.version)) {
                 selected = &install;
                 break;
             }
@@ -217,7 +194,7 @@ ChoiceResolution resolveFamily(const ToolchainChoice& choice,
                              choice.version +
                              ", not installed; falling back to " +
                              candidate->name + " " + selected->version + " (" +
-                             selected->program + "). Run cp3c toolchain to install " +
+                             selected->program + "). Run 'cp3c toolchain' to install " +
                              choice.version + ".";
         }
     }
@@ -366,30 +343,39 @@ bool parseToolchainSpec(const std::string& raw, ToolchainChoice& out,
         err = "no toolchain value";
         return false;
     }
-    if (const ToolchainCandidate* candidate =
-            findToolchainCandidate(lowerCopy(value))) {
-        out.id = candidate->id;
+    const std::string lower = lowerCopy(value);
+    if (isClangId(lower)) {
+        out.id = "clang";
         out.policy = "latest";
         out.present = true;
         return true;
     }
+    // `clang++-18` and `clang++-18.exe` select a Clang series. They are not
+    // paths: the versioned driver is discovered like any other install.
+    if (lower.rfind("clang++-", 0) == 0) {
+        std::string version = value.substr(std::string("clang++-").size());
+        if (version.size() > 4 &&
+            lowerCopy(version.substr(version.size() - 4)) == ".exe") {
+            version.erase(version.size() - 4);
+        }
+        if (validVersionSpec(version)) {
+            out.id = "clang";
+            out.version = version;
+            out.policy = "exact";
+            out.present = true;
+            return true;
+        }
+    }
     const std::size_t at = value.rfind('@');
     if (at != std::string::npos && at > 0) {
         const std::string id = trimCopy(value.substr(0, at));
-        if (const ToolchainCandidate* candidate =
-                findToolchainCandidate(lowerCopy(id))) {
-            const std::string rawVersion = trimCopy(value.substr(at + 1));
-            if (!looksLikeVersion(rawVersion)) {
+        if (isClangId(id)) {
+            const std::string version = trimCopy(value.substr(at + 1));
+            if (!validVersionSpec(version)) {
                 err = "invalid version in '" + value + "'";
                 return false;
             }
-            const std::string version =
-                normalizeCompilerVersion(rawVersion);
-            if (version.empty()) {
-                err = "invalid version in '" + value + "'";
-                return false;
-            }
-            out.id = candidate->id;
+            out.id = "clang";
             out.version = version;
             out.policy = "exact";
             out.present = true;
@@ -406,8 +392,8 @@ bool parseToolchainSpec(const std::string& raw, ToolchainChoice& out,
             err = "compiler path '" + value + "' does not exist";
         } else {
             err = "unknown toolchain '" + value +
-                  "' (expected gcc, clang, msvc, apple-clang, id@version, or "
-                  "an existing compiler path)";
+                  "' (beta one supports Clang only: clang, clang@<version>, "
+                  "clang++-<major>, or a clang++ path)";
         }
         return false;
     }
@@ -441,6 +427,14 @@ const Toolchain& detectToolchain() {
     return current.toolchain;
 }
 
+bool ensureClangAvailable(bool interactive) {
+    if (detectToolchain().found()) return true;
+    if (toolchainStrictFailed() || !interactive) return false;
+    if (!offerToInstallClang()) return false;
+    resetToolchainResolution();
+    return detectToolchain().found();
+}
+
 void setToolchainOverride(std::string value) {
     state().overrideValue = std::move(value);
     state().resolved = false;
@@ -457,7 +451,10 @@ void setToolchainStrict(bool strict) {
     state().resolved = false;
 }
 
-void resetToolchainResolution() { state() = SelectionState{}; }
+void resetToolchainResolution() {
+    state() = SelectionState{};
+    resetToolchainTargetFlagsCache();
+}
 
 ToolchainSource toolchainSource() noexcept { return state().source; }
 
@@ -473,7 +470,7 @@ std::string toolchainSourceDescription() {
         case ToolchainSource::Global:
             return "global config (" + current.origin + ")";
         case ToolchainSource::Auto:
-            return "auto-detect (D12)";
+            return "auto-detect (newest Clang)";
         case ToolchainSource::None:
             break;
     }

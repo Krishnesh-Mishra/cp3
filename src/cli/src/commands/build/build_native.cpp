@@ -73,8 +73,7 @@ bool copyRuntimeDlls(const std::vector<NativeBinding>& bindings,
 }  // namespace
 
 bool applyNativeBindings(const std::vector<NativeBinding>& bindings,
-                         BuildLayout& layout, NativeBuildFlags& flags,
-                         bool msvc) {
+                         BuildLayout& layout, NativeBuildFlags& flags) {
     if (bindings.empty()) return true;
     std::error_code ec;
     for (const NativeBinding& binding : bindings) {
@@ -96,10 +95,10 @@ bool applyNativeBindings(const std::vector<NativeBinding>& bindings,
             flags.compile.push_back("-D" + define);
         }
         for (const std::string& dir : binding.module.libDirs) {
-            flags.link.push_back(msvc ? "/LIBPATH:" + dir : "-L" + dir);
+            flags.link.push_back("-L" + dir);
         }
         for (const std::string& name : binding.module.linkNames) {
-            flags.link.push_back(msvc ? name + ".lib" : "-l" + name);
+            flags.link.push_back("-l" + name);
         }
     }
     return copyRuntimeDlls(bindings, layout);

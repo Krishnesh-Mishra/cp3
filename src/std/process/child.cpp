@@ -2,7 +2,7 @@
 // src/std/process/child.cpp - platform child-process primitives (see child.hpp).
 //
 // Windows: CreateProcessA with anonymous pipes; the argument vector is joined
-// with the MSVC-runtime quoting rules, so a generated `process.exec("git",
+// with the Windows C-runtime quoting rules, so a generated `process.exec("git",
 // ["status", "--porcelain"])` reaches the child exactly as passed. POSIX:
 // fork + execvp with pipe()d stdio. The POSIX branch is written but not
 // exercised on the Windows dev machine (recorded in the wave report).
@@ -33,7 +33,7 @@ namespace cp3::runtime::process::detail {
 
 namespace {
 
-/// Quote one argument for the MSVC C runtime's command-line parser: the
+/// Quote one argument for the Windows C runtime's command-line parser: the
 /// documented backslash/quote doubling rules.
 std::string quoteWinArg(const std::string& arg) {
     if (!arg.empty() && arg.find_first_of(" \t\n\v\"") == std::string::npos) {

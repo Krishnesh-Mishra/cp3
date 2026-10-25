@@ -1,18 +1,19 @@
 // =============================================================================
-// src/cli/src/detail/toolchain_select.hpp - compiler families, versions,
-// persistence, resolution and the interactive selector DECLARATIONS.
+// src/cli/src/detail/toolchain_select.hpp - Clang versions, persistence,
+// resolution and the interactive selector DECLARATIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //
-// Definitions live in src/toolchain/toolchain_probe.cpp (family probing),
+// Definitions live in src/toolchain/toolchain_probe.cpp (Clang probing),
 // toolchain_versions.cpp (version discovery and comparison), toolchain_config.cpp
 // (global config), toolchain_manifest.cpp (package.json), toolchain_select.cpp
 // (resolution), toolchain_wizard.cpp (menus), toolchain_install.cpp (system
 // installer planning) and src/commands/toolchain.cpp (the command surface).
 //
-// A candidate is a compiler family. A concrete install is one discovered
-// driver plus its parsed version. Finding a driver is not enough: validation
-// compiles, links and runs a tiny C++20 program before a choice is saved.
+// Beta one supports one compiler family: Clang. A concrete install is one
+// discovered `clang++` driver plus its parsed version. Finding a driver is not
+// enough: validation compiles, links and runs a tiny C++20 program before a
+// choice is saved.
 // =============================================================================
 #pragma once
 
@@ -25,22 +26,18 @@
 
 namespace cp3::cli {
 
-// One selectable compiler family (id is stable and goes into saved files).
+// The one selectable compiler family in beta one.
 struct ToolchainCandidate {
-    std::string id;    // gcc | clang | msvc | apple-clang
-    std::string name;  // friendly name shown in menus
-    std::string exe;   // driver searched on PATH
-    bool msvc = false;
-    bool clang = false;
+    std::string id = "clang";
+    std::string name = "Clang";
+    std::string exe = "clang++";  // driver searched on PATH
 };
 
 // One discovered system installation. `version` is the normalized compiler
-// version (or the MSVC toolset directory name); `banner` is the first line of
-// the vendor version output.
+// version; `banner` is the first line of the vendor version output.
 struct ToolchainInstall {
     ToolchainCandidate candidate;
     std::string program;
-    std::string linkProgram;  // MSVC: matching link.exe
     std::string version;
     std::string banner;
     std::string problem;
@@ -55,12 +52,11 @@ struct AvailableToolchainVersion {
     std::string packageVersion;
 };
 
-// Result of probing one family. `program`/`version` describe the newest
-// installed version; `problem` explains why an unusable family cannot be used.
+// Result of probing Clang. `program`/`version` describe the newest installed
+// version; `problem` explains why an unusable install cannot be used.
 struct CandidateStatus {
     ToolchainCandidate candidate;
     std::string program;
-    std::string linkProgram;
     std::string version;
     std::string banner;
     std::string problem;
@@ -68,29 +64,30 @@ struct CandidateStatus {
     bool usable = false;
 };
 
-// Platform menu order: Windows GCC, Clang, MSVC; macOS Apple Clang, Clang, GCC;
-// Linux GCC, Clang.
+// The Clang candidate, in the shape the command surface and tests expect.
 std::vector<ToolchainCandidate> toolchainCandidates();
 const ToolchainCandidate* findToolchainCandidate(const std::string& id);
+bool isClangId(std::string_view id);
 
 // Extra driver flags this machine needs for the driver to work at all.
 //
-// A stock Windows LLVM install defaults to the MSVC target, which has no C++
-// standard library unless MSVC is installed; the same driver works against a
-// MinGW GCC installation under the GNU target. The returned flags are the ones
-// that were verified by compiling, linking and running a probe program, so
-// the probe and the real build always agree. Empty when the driver's own
-// default target is already correct.
-std::vector<std::string> toolchainTargetFlags(bool clang, bool msvc,
-                                               const std::string& program);
+// A stock Windows LLVM install defaults to the MSVC target. Beta one targets
+// MinGW-w64 GNU (`x86_64-w64-windows-gnu` or the matching machine
+// architecture), so the driver is given the GNU triple and, when needed, the
+// MinGW-w64 sysroot prefix. The returned flags are the ones verified by
+// compiling, linking and running a probe program, so the probe and the real
+// build always agree. Empty on POSIX when the driver's default target is
+// already correct.
+std::vector<std::string> toolchainTargetFlags(const std::string& program);
+void resetToolchainTargetFlagsCache();
 
 // Parses and compares compiler versions. Missing patch components become zero.
 std::string normalizeCompilerVersion(std::string_view text);
 int compareCompilerVersions(const std::string& left, const std::string& right);
 
-// Every installed version of a family, newest first. `validate` runs the tiny
-// compile link run probe for each version; without it, entries describe what
-// was found and parsed. Never copies or installs a compiler.
+// Every installed supported Clang version, newest first. `validate` runs the
+// tiny compile-link-run probe for each version; without it, entries describe
+// what was found and parsed. Never copies or installs a compiler.
 std::vector<ToolchainInstall> discoverToolchainVersions(
     const ToolchainCandidate& candidate, bool validate);
 
@@ -99,19 +96,19 @@ std::vector<ToolchainInstall> discoverToolchainVersions(
 std::vector<AvailableToolchainVersion> availableToolchainVersions(
     const ToolchainCandidate& candidate);
 
-// Locates the newest installed version of a family and reports its status.
+// Locates the newest installed Clang and reports its status.
 CandidateStatus probeToolchainCandidate(const ToolchainCandidate& candidate,
                                         bool validate);
 
 // Probes one exact program (used after a version is chosen).
 CandidateStatus probeToolchainProgram(const ToolchainCandidate& candidate,
                                       const std::string& program,
-                                      const std::string& linkProgram,
                                       bool validate);
 
-// A saved family/version request. `policy` is latest or exact; an empty policy
-// with a version keeps the old exact behavior, and an empty version means
-// latest. `custom` means `id` (or `program`) is an explicit executable path.
+// A saved Clang/version request. `policy` is latest or exact; an empty policy
+// with a version keeps the exact behavior, and an empty version means latest.
+// `version` may be a series prefix (`18` or `18.1`) or a full version.
+// `custom` means `id` (or `program`) is an explicit clang++ executable path.
 struct ToolchainChoice {
     std::string id;
     std::string version;
@@ -121,9 +118,22 @@ struct ToolchainChoice {
     bool present = false;
 };
 
-// Parses `id`, `id@version` or an executable path. Does not probe versions.
+// Parses `clang`, `clang@version`, `clang++`, `clang++-<major>`, or an
+// executable path. Does not probe versions.
 bool parseToolchainSpec(const std::string& raw, ToolchainChoice& out,
                         std::string& err);
+
+// A version request is one or more dot-separated decimal components:
+// "18", "18.1", "18.1.8". No signs, spaces or letters.
+bool validVersionSpec(const std::string& version);
+
+// True when `installed` satisfies the requested version prefix. `requested`
+// may be "18", "18.1", or "18.1.8"; components after the requested prefix are
+// ignored. Both sides are normalized before comparison.
+bool versionSatisfies(const std::string& installed, const std::string& requested);
+
+// The minimum Clang major version beta one supports (C++20 coroutines).
+int minimumClangMajor();
 
 // Resolves a choice against installed system compilers.
 enum class ChoiceResolution {
@@ -213,11 +223,21 @@ struct InstallPlan {
 
 InstallPlan planToolchainInstall(const ToolchainCandidate& candidate,
                                  const std::string& packageVersion = {});
-// Opens the vendor's own version manager. MSVC uses the Visual Studio
-// Installer; other platforms return manual instructions. Never downloads a
-// compiler into cp3.
+// Opens the platform's own version manager. Never downloads a compiler into
+// cp3.
 InstallPlan planToolchainMoreVersions(const ToolchainCandidate& candidate);
 bool runInstallPlan(const InstallPlan& plan);
+
+// The missing-Clang prompt used by build/run and the toolchain wizard. Prints
+// the install plan, asks for confirmation, and runs the platform installer.
+// Non-interactive stdin (EOF) means No. Returns true when the installer ran
+// successfully; callers re-probe because PATH changes may need a new shell.
+bool offerToInstallClang();
+
+// Build/run/cache helper: returns true when a usable Clang is available. When
+// none is found and `interactive` is true, offers the platform installer and
+// re-probes. `--strict-toolchain` failures never prompt.
+bool ensureClangAvailable(bool interactive);
 
 // -----------------------------------------------------------------------------
 // Minimal single-select menu. A TTY uses arrow keys and Enter (q or Esc

@@ -19,14 +19,14 @@ Successful case directories are deleted after the run; failing ones and
 - On Windows, `packaging/windows/cp3.cmd` is assembled into temporary shim
   layouts once per run. The `cp3c` binary is hardlinked when possible, so the
   shim never copies the full compiler per case.
-- Full mode needs a C++ compiler on `PATH` (`g++`, `clang++`, or `cl`). Fast
-  mode does not compile.
+- Full mode needs Clang on `PATH` or in a standard LLVM location (`clang++`).
+  Fast mode does not compile.
 
 ## Running
 
 ```powershell
 python tests\cli\run_cli_tests.py --fast
-python tests\cli\run_cli_tests.py --full --jobs 4
+python tests\cli\run_cli_tests.py --full
 python tests\cli\run_cli_tests.py --filter init --list
 python tests\cli\run_cli_tests.py --filter global,init --json > cli-results.json
 ```
@@ -38,7 +38,7 @@ python tests\cli\run_cli_tests.py --filter global,init --json > cli-results.json
 | `--filter TEXT` | substring match on `group/name`; repeat or comma-separate |
 | `--list` | print selected cases, availability, and skip or slow status |
 | `--json` | write a machine-readable result document to stdout |
-| `--jobs N` | parallel workers; default 4 |
+| `--jobs N` | parallel workers; default one per logical CPU |
 | `--timeout SECONDS` | default per-case timeout; default 30 |
 | `--keep` | keep every case directory, including passing ones |
 | `--fast` | skip cases marked `slow`; this is the default |
@@ -208,7 +208,8 @@ file is present. The `archive_*` expectations read the file as a `.cp3pak`
 | --- | --- |
 | `windows` | Windows host |
 | `posix` | non-Windows host |
-| `compiler` | `g++`, `clang++`, or `cl` on `PATH` |
+| `compiler` | `clang++` on `PATH` or in a standard LLVM location |
+| `clang` | same as `compiler`; named explicitly for toolchain cases |
 | `editor` | fake editor fixtures are available (currently always true) |
 | `command:NAME` | `NAME` appears in `cp3c help`; `command:cp3` checks the shim |
 | `flag:NAME` | `NAME` appears in the `cp3c help` text |

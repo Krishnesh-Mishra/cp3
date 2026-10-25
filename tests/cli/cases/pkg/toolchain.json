@@ -58,12 +58,15 @@
         "toolchain",
         "list"
       ],
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
           "contains": [
-            "gcc",
+            "clang",
             "effective"
           ]
         }
@@ -82,12 +85,15 @@
           "toolchain-project"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
           "contains": [
-            "gcc",
+            "clang",
             "project"
           ]
         }
@@ -106,12 +112,15 @@
           "toolchain-config"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
           "contains": [
-            "gcc",
+            "clang",
             "global"
           ]
         }
@@ -133,25 +142,28 @@
           "toolchain-config"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
           "contains": [
             "project",
-            "gcc"
+            "clang"
           ]
         }
       }
     },
     {
       "group": "toolchain",
-      "name": "use-gcc-project-scope",
-      "description": "use gcc project scope",
+      "name": "use-clang-project-scope",
+      "description": "use clang project scope",
       "argv": [
         "toolchain",
         "use",
-        "gcc",
+        "clang",
         "--project"
       ],
       "setup": {
@@ -159,14 +171,17 @@
           "hello"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "files": {
           "package.json": {
             "contains": [
               "\"toolchain\": {",
-              "\"id\": \"gcc\"",
+              "\"id\": \"clang\"",
               "\"version\":",
               "\"policy\": \"latest\""
             ]
@@ -176,34 +191,40 @@
     },
     {
       "group": "toolchain",
-      "name": "use-gcc-global-scope",
-      "description": "use gcc global scope",
+      "name": "use-clang-global-scope",
+      "description": "use clang global scope",
       "argv": [
         "toolchain",
         "use",
-        "gcc",
+        "clang",
         "--global"
       ],
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "files": {
           "{config}/toolchain.conf": {
-            "contains": "id=gcc"
+            "contains": "id=clang"
           }
         }
       }
     },
     {
       "group": "toolchain",
-      "name": "use-invalid-family",
-      "description": "use invalid family",
+      "name": "use-unknown-toolchain",
+      "description": "use an unknown toolchain name",
       "argv": [
         "toolchain",
         "use",
         "not-a-compiler"
       ],
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 2,
         "stderr": {
@@ -218,23 +239,29 @@
       "argv": [
         "toolchain",
         "use",
-        "gcc@not-a-version"
+        "clang@not-a-version"
       ],
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 2
       }
     },
     {
       "group": "toolchain",
-      "name": "choose-exact-installed-version",
-      "description": "choose exact installed version",
+      "name": "use-clang-driver-name",
+      "description": "use the clang++ driver name",
       "argv": [
         "toolchain",
         "use",
-        "gcc@16.1.0"
+        "clang++"
       ],
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
@@ -249,9 +276,12 @@
       "argv": [
         "toolchain",
         "use",
-        "gcc@1.2.3"
+        "clang@1.2.3"
       ],
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stderr": {
@@ -262,7 +292,7 @@
         },
         "files": {
           "{config}/toolchain.conf": {
-            "contains": "id=gcc"
+            "contains": "id=clang"
           }
         }
       }
@@ -274,11 +304,12 @@
       "argv": [
         "toolchain",
         "use",
-        "gcc@1.2.3",
+        "clang@1.2.3",
         "--strict-toolchain"
       ],
       "requires": [
         "command:toolchain",
+        "clang",
         "flag:--strict-toolchain"
       ],
       "expect": {
@@ -293,7 +324,7 @@
         "run",
         "src/index.cp3",
         "--toolchain",
-        "gcc"
+        "clang"
       ],
       "setup": {
         "fixtures": [
@@ -304,7 +335,10 @@
         ]
       },
       "slow": true,
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
@@ -321,7 +355,7 @@
         "src/index.cp3"
       ],
       "env": {
-        "CP3_TOOLCHAIN": "gcc"
+        "CP3_TOOLCHAIN": "clang"
       },
       "setup": {
         "fixtures": [
@@ -332,7 +366,10 @@
         ]
       },
       "slow": true,
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
@@ -355,7 +392,10 @@
         ]
       },
       "slow": true,
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stderr": {
@@ -380,7 +420,10 @@
         ]
       },
       "slow": true,
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "files": {
@@ -398,12 +441,15 @@
         "toolchain"
       ],
       "stdin": "1\n1\n",
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
           "contains": [
-            "compiler",
+            "Clang",
             "selected"
           ]
         }
@@ -422,7 +468,10 @@
           "hello"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
@@ -435,7 +484,7 @@
           "package.json": {
             "contains": [
               "\"toolchain\": {",
-              "\"id\": \"gcc\""
+              "\"id\": \"clang\""
             ]
           }
         }
@@ -451,6 +500,7 @@
       ],
       "requires": [
         "command:toolchain",
+        "clang",
         "flag:--yes"
       ],
       "expect": {
@@ -475,6 +525,7 @@
       },
       "requires": [
         "command:toolchain",
+        "clang",
         "flag:--yes"
       ],
       "expect": {
@@ -489,7 +540,7 @@
           "package.json": {
             "contains": [
               "\"toolchain\": {",
-              "\"id\": \"gcc\""
+              "\"id\": \"clang\""
             ]
           }
         }
@@ -497,8 +548,8 @@
     },
     {
       "group": "toolchain",
-      "name": "no-compiler-family",
-      "description": "no compiler family",
+      "name": "no-clang-installed",
+      "description": "no Clang installed",
       "argv": [
         "toolchain",
         "list"
@@ -506,12 +557,15 @@
       "env": {
         "PATH_MODE": "minimal"
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
           "contains": [
-            "gcc",
+            "clang",
             "missing"
           ]
         }
@@ -519,8 +573,8 @@
     },
     {
       "group": "toolchain",
-      "name": "invalid-family-in-config",
-      "description": "invalid family in config",
+      "name": "invalid-toolchain-config",
+      "description": "invalid toolchain config falls back",
       "argv": [
         "toolchain",
         "list"
@@ -530,7 +584,10 @@
           "toolchain-config"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0
       }
@@ -546,6 +603,7 @@
       ],
       "requires": [
         "command:toolchain",
+        "clang",
         "flag:--json"
       ],
       "expect": {
@@ -575,7 +633,10 @@
           "toolchain-project"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "files": {
@@ -599,7 +660,10 @@
           "toolchain-config"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "files": {
@@ -617,30 +681,56 @@
         "toolchain",
         "detect"
       ],
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
           "contains": [
-            "gcc"
+            "clang"
           ]
         }
       }
     },
     {
       "group": "toolchain",
-      "name": "use-full-path",
-      "description": "use full path",
+      "name": "use-non-clang-path-rejected",
+      "description": "a non-Clang executable path is rejected",
       "argv": [
         "toolchain",
         "use",
-        "g++"
+        "{repo}/build/bin/cp3c.exe"
       ],
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "windows"
+      ],
       "expect": {
-        "exit": 0,
-        "stdout": {
-          "contains": "selected"
+        "exit": 2,
+        "stderr": {
+          "contains": "not a usable Clang compiler"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "use-non-clang-path-rejected-posix",
+      "description": "a non-Clang executable path is rejected on POSIX",
+      "argv": [
+        "toolchain",
+        "use",
+        "{repo}/build/bin/cp3c"
+      ],
+      "requires": [
+        "command:toolchain",
+        "posix"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "not a usable Clang compiler"
         }
       }
     },
@@ -651,9 +741,12 @@
       "argv": [
         "toolchain",
         "use",
-        "gcc"
+        "clang"
       ],
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
@@ -671,7 +764,7 @@
       "argv": [
         "toolchain",
         "use",
-        "gcc",
+        "clang",
         "--project"
       ],
       "setup": {
@@ -679,7 +772,10 @@
           "package.json": "{ bad json\n"
         }
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 1,
         "stderr": {
@@ -696,20 +792,23 @@
         "list"
       ],
       "env": {
-        "CP3_TOOLCHAIN": "gcc"
+        "CP3_TOOLCHAIN": "clang"
       },
       "setup": {
         "fixtures": [
           "toolchain-project"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
           "contains": [
             "environment",
-            "gcc"
+            "clang"
           ]
         }
       }
@@ -722,39 +821,45 @@
         "toolchain",
         "list",
         "--toolchain",
-        "gcc"
+        "clang"
       ],
       "env": {
-        "CP3_TOOLCHAIN": "clang"
+        "CP3_TOOLCHAIN": "clang@1.2.3"
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
           "contains": [
             "command line",
-            "gcc"
+            "clang"
           ]
         }
       }
     },
     {
       "group": "toolchain",
-      "name": "missing-saved-compiler-warns",
-      "description": "missing saved compiler warns",
+      "name": "invalid-environment-value-warns",
+      "description": "an invalid CP3_TOOLCHAIN value warns and falls back",
       "argv": [
         "toolchain",
         "list"
       ],
       "env": {
-        "CP3_TOOLCHAIN": "gcc"
+        "CP3_TOOLCHAIN": "not-a-compiler"
       },
       "setup": {
         "config_fixtures": [
           "toolchain-config"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stderr": {
@@ -775,7 +880,10 @@
           "toolchain-config"
         ]
       },
-      "requires": "command:toolchain",
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
       "expect": {
         "exit": 0,
         "stdout": {
@@ -807,6 +915,7 @@
       },
       "requires": [
         "command:toolchain",
+        "clang",
         "flag:--json"
       ],
       "expect": {
@@ -815,9 +924,9 @@
           "ok": true,
           "action": "toolchain-list",
           "current.source": "project",
-          "current.id": "gcc",
+          "current.id": "clang",
           "project.choice.present": true,
-          "project.choice.id": "gcc",
+          "project.choice.id": "clang",
           "project.choice.policy": "latest",
           "versions.policy": "latest"
         }

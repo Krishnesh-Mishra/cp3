@@ -6,7 +6,7 @@
 //
 // These queries are read-only. cp3c never downloads or extracts a compiler;
 // the wizard delegates installation to the same system package manager whose
-// version list is shown here.
+// Clang version list is shown here.
 // =============================================================================
 #include "detail/toolchain/toolchain_select.hpp"
 
@@ -142,30 +142,15 @@ std::vector<AvailableToolchainVersion> brewVersions(const char* formula) {
 
 std::vector<AvailableToolchainVersion> availableToolchainVersions(
     const ToolchainCandidate& candidate) {
+    if (candidate.id != "clang") return {};
 #if defined(_WIN32)
-    if (candidate.id == "gcc") {
-        return wingetVersions("BrechtSanders.WinLibs.POSIX.UCRT");
-    }
-    if (candidate.id == "clang") return wingetVersions("LLVM.LLVM");
-    (void)candidate;
-    return {};
+    return wingetVersions("LLVM.LLVM");
 #elif defined(__APPLE__)
-    if (candidate.id == "gcc") return brewVersions("gcc");
-    if (candidate.id == "clang") return brewVersions("llvm");
-    return {};
+    return brewVersions("llvm");
 #else
-    if (candidate.id == "gcc") {
-        std::vector<AvailableToolchainVersion> versions = aptVersions("g++");
-        if (versions.empty()) versions = dnfVersions("gcc-c++");
-        return versions;
-    }
-    if (candidate.id == "clang") {
-        std::vector<AvailableToolchainVersion> versions = aptVersions("clang");
-        if (versions.empty()) versions = dnfVersions("clang");
-        return versions;
-    }
-    (void)candidate;
-    return {};
+    std::vector<AvailableToolchainVersion> versions = aptVersions("clang");
+    if (versions.empty()) versions = dnfVersions("clang");
+    return versions;
 #endif
 }
 

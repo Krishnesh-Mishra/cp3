@@ -4,5 +4,5 @@
   "description": "project with an explicit toolchain pin",
   "type": "application",
   "main": "src/index.cp3",
-  "toolchain": "gcc"
+  "toolchain": "clang"
 }

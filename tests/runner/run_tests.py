@@ -39,9 +39,10 @@
 #
 # --jobs N runs the corpus pass with up to N cp3c subprocesses in flight at
 # once (stdlib only, ThreadPoolExecutor plus a small dispatcher). The default
-# is capped at 4 (and at one per logical CPU minus one on smaller machines):
-# the C++ compiler is the expensive child, and letting one cp3c per core run
-# at once makes unrelated compilations fail under memory/process pressure.
+# is one per logical CPU (at least one): the C++ compiler is the expensive
+# child, so a larger machine can be saturated. If memory/process pressure does
+# make a parallel compile fail or time out, the runner retries those cases
+# serially (see retry_transient_failures), so the default can use every core.
 # --jobs 1 is the unchanged sequential path and any N >= 1 is accepted. Each
 # case still runs exactly the same command
 # with the same cwd and timeout, and per-case outcomes
@@ -750,18 +751,18 @@ def main(argv: Optional[list[str]] = None) -> int:
                              "(default: tests/cases/AMBIGUITIES.md)")
     parser.add_argument("--timeout", type=float, default=60.0,
                         help="per-case timeout in seconds (default: 60)")
-    default_jobs = min(4, max(1, (os.cpu_count() or 1) - 1))
+    default_jobs = max(1, os.cpu_count() or 1)
     parser.add_argument("--jobs", type=int, default=default_jobs, metavar="N",
                         help="run up to N cases concurrently during the corpus "
-                             "pass (default: %(default)s, capped at 4 so "
-                             "parallel C++ compilations do not exhaust the "
-                             "machine; pass 1 for the strictly sequential "
-                             "runner, or any larger N). Run-mode cases that "
-                             "share a project root run one at a time (cp3c "
-                             "builds into a shared .cp3/ there); check cases "
-                             "and different roots run in parallel. Output "
-                             "order and content do not depend on N; the bench "
-                             "pass always runs sequentially.")
+                             "pass (default: %(default)s, one per logical CPU; "
+                             "pass 1 for the strictly sequential runner, or any "
+                             "other N). Run-mode cases that share a project root "
+                             "run one at a time (cp3c builds into a shared "
+                             ".cp3/ there); check cases and different roots run "
+                             "in parallel. Output order and content do not "
+                             "depend on N; the bench pass always runs "
+                             "sequentially. Transient compile/timeout failures "
+                             "are retried serially.")
     parser.add_argument("--progress", dest="progress", action="store_true",
                         default=None,
                         help="force the live one-line progress display (default: on "

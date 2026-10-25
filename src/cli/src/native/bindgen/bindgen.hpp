@@ -22,7 +22,7 @@ struct BindRequest {
     std::vector<std::string> includeDirs;  // -I roots
     std::vector<std::string> defines;      // name[=value]
     std::vector<std::string> publicRoots;  // declarations under these are bound
-    std::vector<std::string> clangArgs;    // parse-only: target, GCC include dirs
+    std::vector<std::string> clangArgs;    // parse-only: target, standard include dirs
     std::string moduleId;
     std::string source;
 };

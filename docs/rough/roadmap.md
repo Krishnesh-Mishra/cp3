@@ -23,7 +23,7 @@ baseline.
 | Diagnostics | 72/72 codes documented, 0 findings |
 | CP3002 gate | 391 marker hits (the zero-placeholder gate is pre-existing red) |
 | Full corpus | 1483 found, 1424 passed, **0 failed**, 29 skipped, 30 ambiguous |
-| Toolchains | GCC 16.1.0 and Clang 23.1.4 both `ready`; MSVC not installed |
+| Toolchains | Clang-only target: Clang 23.1.4 `ready`; MinGW-w64 sysroot found automatically |
 | Benchmark baseline | measured on compiler `6f1fa2c`; reporting commit `c6ea90c` does not change C++ |
 
 The benchmark WIP in `benchmarks/bench/run_suite.py` was consolidated into
@@ -821,8 +821,8 @@ Done:
 - Parked-worktree cleanup: 20 non-perf worktrees classified, 2 bounded
   corrections merged, 9 already-merged archives deleted, 3 real features
   deferred intact, 6 waste entries deleted after inspection.
-- The Windows Clang toolchain gap closed: a stock LLVM install beside a MinGW
-  GCC install is now `ready` and builds real programs with no user flags.
+- The Windows Clang toolchain gap closed: a stock LLVM install beside a
+  MinGW-w64 sysroot is now `ready` and builds real programs with no user flags.
 - A 0-failure corpus.
 
 In flight:
