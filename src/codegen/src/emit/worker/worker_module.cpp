@@ -58,7 +58,14 @@ bool Generator::resolveWorkerUnitEntry(const Program& program,
                                         detail::WorkerUnitEntry& out) {
     const ArrowFunction* entry = detail::defaultExportArrow(program);
     if (entry == nullptr) {
-        notImplemented(program, "a worker module without a default-export arrow");
+        // A worker unit's entry is its default-export arrow (spec 13); a unit
+        // without one is a program error, not a missing compiler feature. The
+        // CLI reports the same CP3905 at the `new Worker(...)` site.
+        reportWorkerCode(program, diagcode::kWorkerMissingAnnotation,
+                         "a worker module must default-export an arrow whose "
+                         "single parameter is `thread: Thread<In, Out>` (the "
+                         "annotation is the single source of truth for its "
+                         "channel)");
         return false;
     }
     const std::optional<WorkerChannel> channel =
@@ -150,7 +157,12 @@ void Generator::emitWorkerTopLevel(const Stmt& s, std::string& decls,
                 emitWorkerTopLevel(*ed.declaration, decls, defs, prologue);
                 return;
             }
-            notImplemented(ed, "re-export in a worker module");
+            // `export { a }`, `export { a } from "m"`, `export * from "m"`:
+            // the export surface belongs to the module loader, exactly as in
+            // an ordinary module (emit/decl.cpp's emitExport). A worker unit
+            // is loaded by path through `new Worker(...)`, and only its default
+            // export is consumed, so its named exports and re-exports add no
+            // C++ of their own.
             return;
         }
         default:

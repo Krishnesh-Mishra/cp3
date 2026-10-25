@@ -142,7 +142,7 @@ void walkArrow(const ArrowFunction& arrow, SiteScan& scan, bool workerEntry) {
 }
 
 // A `new Worker(...)` expression: an inline arrow becomes one site (or a
-// CP3905/CP3002 report), and its body is always walked for captures.
+// CP3905/CP3914 report), and its body is always walked for captures.
 void walkWorkerNew(const NewExpr& n, SiteScan& scan) {
     const Expr* arg = n.arguments.size() == 1 ? n.arguments.front().get() : nullptr;
     if (arg == nullptr || arg->kind != NodeKind::ArrowFunction) {

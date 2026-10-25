@@ -1,0 +1,13 @@
+import console from "std/console";
+
+// A reassigned binding that an async arrow captures is a shared cell: the
+// coroutine reads its current value when it runs, not a snapshot.
+async function run(): Promise<number> {
+  let base = 10;
+  let add = async (n: number): Promise<number> => base + n;
+  base = 20;
+  let value = await add(1);
+  return value;
+}
+
+console.log(`${await run()}`);

@@ -1,0 +1,6 @@
+import console from "std/console";
+
+// An async arrow with an expression body yields the value with `co_return`.
+let double = async (n: number): Promise<number> => n * 2;
+
+console.log(`${await double(21)}`);

@@ -1,0 +1,14 @@
+import console from "std/console";
+
+// An async arrow is a valid promise continuation: `then` adopts the promise
+// the handler returns, so the chain waits for the handler's own awaits.
+async function run(): Promise<void> {
+  let p = Promise.resolve(2);
+  await p.then(async (v) => {
+    await sleep(0);
+    console.log(`then ${v}`);
+  });
+}
+
+await run();
+console.log("done");

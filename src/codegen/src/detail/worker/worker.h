@@ -104,7 +104,7 @@ struct InlineWorkerSite {
 };
 
 // Walks the entry unit for the inline form, validates each arrow (annotation,
-// listener-free scope, no enclosing locals), reports CP3905/CP3909/CP3002, and
+// listener-free scope, no enclosing locals), reports CP3905/CP3909/CP3914, and
 // appends the valid sites.
 void collectInlineWorkerSites(const Program& program, const SemaResult& sema,
                               const std::unordered_set<std::string>& functions,

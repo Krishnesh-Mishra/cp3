@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3912",
+    "line": 5,
+    "col": 1,
+    "contains": "takes no parameters"
+  }
+}
