@@ -35,8 +35,11 @@
 #
 # --jobs N runs the corpus pass with up to N cp3c subprocesses in flight at
 # once (stdlib only, ThreadPoolExecutor plus a small dispatcher). The default
-# is one per logical CPU minus one; --jobs 1 is the unchanged sequential path
-# and any N >= 1 is accepted. Each case still runs exactly the same command
+# is capped at 4 (and at one per logical CPU minus one on smaller machines):
+# the C++ compiler is the expensive child, and letting one cp3c per core run
+# at once makes unrelated compilations fail under memory/process pressure.
+# --jobs 1 is the unchanged sequential path and any N >= 1 is accepted. Each
+# case still runs exactly the same command
 # with the same cwd and timeout, and per-case outcomes
 # are buffered and printed in the same order the sequential runner prints them,
 # so the per-case lines, the `_ambiguous/` listing and the summary stay
@@ -618,11 +621,12 @@ def main(argv: Optional[list[str]] = None) -> int:
                              "(default: tests/cases/AMBIGUITIES.md)")
     parser.add_argument("--timeout", type=float, default=60.0,
                         help="per-case timeout in seconds (default: 60)")
-    default_jobs = max(1, (os.cpu_count() or 1) - 1)
+    default_jobs = min(4, max(1, (os.cpu_count() or 1) - 1))
     parser.add_argument("--jobs", type=int, default=default_jobs, metavar="N",
                         help="run up to N cases concurrently during the corpus "
-                             "pass (default: %(default)s, one per logical CPU "
-                             "minus one; pass 1 for the strictly sequential "
+                             "pass (default: %(default)s, capped at 4 so "
+                             "parallel C++ compilations do not exhaust the "
+                             "machine; pass 1 for the strictly sequential "
                              "runner, or any larger N). Run-mode cases that "
                              "share a project root run one at a time (cp3c "
                              "builds into a shared .cp3/ there); check cases "
@@ -779,13 +783,46 @@ def main(argv: Optional[list[str]] = None) -> int:
             return run_as_ordinary_parallel(selected, toolchain)
         return run_as_ordinary_serial(selected, toolchain)
 
+    def retry_transient_failures(outcomes: list[Outcome],
+                                 toolchain: Optional[str]) -> list[Outcome]:
+        # A parallel run can fail a case because the C++ compiler hit memory or
+        # process pressure, not because the generated code is wrong. Rerun only
+        # those failures serially; a real compile error fails again, while a
+        # pressure failure recovers. Non-transient mismatches (wrong output or
+        # exit code) are not retried: they are deterministic.
+        transient = [
+            o for o in outcomes
+            if o.status == "failed" and
+               ("C++ compilation failed" in o.detail or "timed out" in o.detail)
+        ]
+        if not transient:
+            return outcomes
+        transient_names = {o.case.display for o in transient}
+        if not args.json:
+            print(f"  retry  : {len(transient)} transient failure(s) rerun "
+                  f"serially", file=sys.stderr, flush=True)
+        retried = run_as_ordinary_serial([o.case for o in transient], toolchain)
+        recovered = sum(1 for o in retried if o.status == "passed")
+        if not args.json:
+            print(f"  retry  : {recovered}/{len(transient)} recovered",
+                  file=sys.stderr, flush=True)
+        by_case = {o.case.display: o for o in retried}
+        return [
+            by_case.get(o.case.display, o)
+            if o.case.display in transient_names else o
+            for o in outcomes
+        ]
+
     def evaluate_suite(toolchain: Optional[str]) -> list[Outcome]:
         if args.strict_ambiguous:
             # Opt-in: markers run like any other case (pass, fail, or skip).
-            return run_as_ordinary(cases, toolchain)
+            return retry_transient_failures(
+                run_as_ordinary(cases, toolchain), toolchain)
         # Default: markers are discovered and reported, never asserted against.
         outcomes = [Outcome(c, "ambiguous", c.question) for c in cases if c.ambiguous]
-        outcomes += run_as_ordinary([c for c in cases if not c.ambiguous], toolchain)
+        outcomes += retry_transient_failures(
+            run_as_ordinary([c for c in cases if not c.ambiguous], toolchain),
+            toolchain)
         return outcomes
 
     def counts(outcomes: list[Outcome]) -> dict[str, int]:
