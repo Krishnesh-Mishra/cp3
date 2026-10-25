@@ -11,8 +11,8 @@
 //   new EventEmitter() / e.on/once/off/emit(...)  -> the builtin's lowering
 //                                (cp3/async/emitter.hpp, D74)
 //
-// A callee that is neither a user function nor a lowered intrinsic reports
-// CP3002 rather than emitting a call to an undeclared C++ name.
+// A callee with no callable lowering reports a type error rather than
+// emitting a call to an undeclared C++ name.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -28,6 +28,17 @@
 namespace cp3 {
 
 using namespace detail;
+
+namespace {
+
+// The value shapes `EventValue` can carry (cp3/async/emitter.hpp): the
+// primitive values plus the two nullish ones.
+bool eventValueShape(Shape s) {
+    return s == Shape::Number || s == Shape::String || s == Shape::Bool ||
+           s == Shape::Undefined || s == Shape::Null;
+}
+
+}  // namespace
 
 std::string Generator::emitParseBuiltin(const CallExpr& c,
                                         const std::string& name) {
@@ -129,7 +140,10 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
         if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1] ||
             c.arguments[0]->kind == NodeKind::SpreadElement ||
             c.arguments[1]->kind == NodeKind::SpreadElement) {
-            notImplemented(c, "this method call");
+            reportCodegenError(
+                c, diagcode::kArityMismatch,
+                "arity mismatch: EventEmitter." + m.property +
+                    "() takes exactly 2 arguments (event, listener)");
             return "0.0";
         }
         return recv + "->" + m.property + "(" + expr(*c.arguments[0]) + ", " +
@@ -138,15 +152,75 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
     if (m.property == "emit") {
         // `emit(event, ...values)`: the values reach the listeners as erased
         // `EventValue`s (the runtime carries a list of them, not one). A
-        // spread among the arguments has no lowering.
-        if (c.arguments.empty() || !c.arguments.front()) return "0.0";
+        // spread contributes its elements at its source position.
+        if (c.arguments.empty() || !c.arguments.front()) {
+            reportCodegenError(
+                c, diagcode::kArityMismatch,
+                "arity mismatch: EventEmitter.emit() takes an event name");
+            return "0.0";
+        }
+        bool hasSpread = false;
         for (const auto& argPtr : c.arguments) {
             const Expr* arg = argPtr.get();
-            if (!arg) continue;
-            if (arg->kind == NodeKind::SpreadElement) {
-                notImplemented(c, "this method call");
-                return "0.0";
+            if (arg && arg->kind == NodeKind::SpreadElement) hasSpread = true;
+        }
+        if (hasSpread) {
+            std::string event;
+            const Expr* head = c.arguments.front().get();
+            if (head->kind == NodeKind::SpreadElement) {
+                // `emit(...args)`: the first element names the event.
+                const auto& spread = static_cast<const SpreadElement&>(*head);
+                if (!spread.argument) {
+                    reportCodegenError(
+                        c, diagcode::kArityMismatch,
+                        "arity mismatch: EventEmitter.emit() takes an event "
+                        "name");
+                    return "0.0";
+                }
+                event = spreadFirstText(spread, "std::string");
+                if (event.empty()) {
+                    reportTypeError(
+                        *head,
+                        "type mismatch: the event name must be a string");
+                    return "0.0";
+                }
+            } else {
+                event = expr(*head);
             }
+            std::string values =
+                "std::vector<::cp3::runtime::EventValue> cp3_vals;";
+            for (std::size_t i = 1; i < c.arguments.size(); ++i) {
+                const Expr* arg = c.arguments[i].get();
+                if (!arg) continue;
+                if (arg->kind == NodeKind::SpreadElement) {
+                    const auto& spread =
+                        static_cast<const SpreadElement&>(*arg);
+                    if (!spread.argument) continue;
+                    const Type at = effectiveType(*spread.argument);
+                    const CppInfo ec =
+                        at.kind == TypeKind::Array && !at.parts.empty()
+                            ? classify(at.parts.front())
+                            : CppInfo{};
+                    if (!ec.representable || !eventValueShape(ec.shape)) {
+                        reportTypeError(
+                            *arg,
+                            "type mismatch: an emitted value must be a "
+                            "primitive value");
+                        return "0.0";
+                    }
+                    values += " { const auto& cp3_s = " +
+                              expr(*spread.argument) +
+                              "; for (const auto& cp3_e : *cp3_s) "
+                              "cp3_vals.push_back("
+                              "::cp3::runtime::EventValue(cp3_e)); }";
+                    continue;
+                }
+                values +=
+                    " cp3_vals.push_back(::cp3::runtime::EventValue(" +
+                    expr(*arg) + "));";
+            }
+            return "[&]{ " + values + " return " + recv + "->emit(" + event +
+                   ", cp3_vals); }()";
         }
         std::string text = recv + "->emit(" + expr(*c.arguments.front());
         std::vector<std::string> values;
@@ -165,7 +239,9 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
         }
         return text + ")";
     }
-    notImplemented(c, "this method call");
+    reportCodegenError(c, diagcode::kTypeMismatch,
+                       "type mismatch: EventEmitter has no method '" +
+                           m.property + "'");
     return "0.0";
 }
 

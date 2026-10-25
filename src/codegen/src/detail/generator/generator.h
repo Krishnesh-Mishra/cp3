@@ -351,7 +351,8 @@ private:
     std::string emitCall(const CallExpr& c);
     // A call to an imported binding of a whole-program build: the linked
     // qualified C++ name ("" when the name is not linked, so the caller keeps
-    // its ambient lowering); a link miss reports CP3002 at the use site.
+    // its ambient lowering); a link miss reports an unresolved-import error at
+    // the use site.
     std::string emitLinkedCall(const CallExpr& c, const std::string& name);
     // Linked-call helpers (emit/call_args.cpp): the member miss at the use
     // site, and the identifier-callee chain (imports, builtins, user
@@ -662,7 +663,8 @@ private:
     // get/has/load calls, backed by cp3/std/env.hpp (composed on process).
     std::string emitEnvCall(const CallExpr& c, const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
-    // Native std modules: one lowering unit per module; "" = keep CP3002.
+    // Native std modules: one lowering unit per module; "" = not this family
+    // (the caller's other hooks may still own the member).
     std::string emitCryptoCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkCall(const CallExpr& c, const MemberExpr& m);
     // `std/fs`: namespace table plus the `$fs:` marker receivers.
