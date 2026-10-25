@@ -310,7 +310,7 @@ std::string uniqueFusedSuffix(const std::string& texts, int& counter) {
 // store:
 //
 //   const V v = ([&](auto&& cp3_mapN) -> V {
-//       const auto& cp3_keyN = (k);            // key, evaluated once
+//       const auto cp3_keyN = (k);             // key, evaluated once
 //       auto* cp3_slotN = cp3_mapN->findRef(cp3_keyN);
 //       const V v = cp3_slotN ? *cp3_slotN : (d);  // d only on a miss
 //       const V cp3_valueN = (value);          // value before any mutation
@@ -319,6 +319,11 @@ std::string uniqueFusedSuffix(const std::string& texts, int& counter) {
 //       *cp3_slotN = cp3_valueN;
 //       return v;
 //   })(m);
+//
+// The key is materialized as a value, not a reference. A key expression such
+// as a chained `std::string("").append(...)` returns a reference to a
+// temporary; binding that result to `const auto&` would not extend the
+// temporary's lifetime, and the key would dangle before `findRef` uses it.
 //
 // The order is the unfused order: receiver, key, probe, fallback on a miss,
 // value, then the store. `m.get(k) ?? d` short-circuits, so the fallback must
@@ -397,7 +402,7 @@ bool Generator::emitFusedMapUpdate(const StmtList& body, std::size_t& index,
     emitLineDirective(*body[index], out);
     line(out, indent, cv + ci.cpp + " " + binding + " = ([&](auto&& " + mapVar +
                           ") -> " + ci.cpp + " {");
-    line(out, indent + 1, "const auto& " + keyVar + " = (" + key + ");");
+    line(out, indent + 1, "const auto " + keyVar + " = (" + key + ");");
     line(out, indent + 1, "auto* " + slotVar + " = " + mapVar + "->findRef(" +
                               keyVar + ");");
     line(out, indent + 1, cv + ci.cpp + " " + binding + " = " + slotVar +

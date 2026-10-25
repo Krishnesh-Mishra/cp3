@@ -325,6 +325,35 @@
     },
     {
       "group": "build",
+      "name": "frontend-error-is-not-not-implemented",
+      "description": "a frontend failure is a compile error, never the exit-3 marker",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "bad-type"
+        ]
+      },
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": [
+            "CP3401",
+            "type mismatch"
+          ],
+          "not_contains": [
+            "not implemented"
+          ]
+        },
+        "files_absent": [
+          ".cp3/out/index.exe"
+        ]
+      }
+    },
+    {
+      "group": "build",
       "name": "missing-file",
       "description": "missing file",
       "argv": [
@@ -765,7 +794,7 @@
       "slow": true,
       "xfail": {
         "id": "paths-with-spaces-break-build",
-        "reason": "the compiler splits unquoted intermediate paths, so a project directory containing a space fails in g++"
+        "reason": "the compiler splits unquoted intermediate paths, so a project directory containing a space fails"
       },
       "requires": "compiler",
       "expect": {
@@ -797,7 +826,7 @@
       "slow": true,
       "xfail": {
         "id": "non-ascii-paths-break-build",
-        "reason": "the compiler passes non-ASCII intermediate paths through a narrow-string command line, so g++ cannot find the generated source"
+        "reason": "the compiler passes non-ASCII intermediate paths through a narrow-string command line, so it cannot find the generated source"
       },
       "requires": "compiler",
       "expect": {

@@ -7,8 +7,8 @@
 // Planning is separate from running: planToolchainInstall only picks the exact
 // system package manager command (or the manual instructions when none exists),
 // and runInstallPlan is reached only after an explicit Yes in the selector.
-// Sudo and winget prompts stay in the terminal; no shell is involved. More
-// MSVC versions opens the Visual Studio Installer, never an in-cp3c download.
+// Sudo and winget prompts stay in the terminal; no shell is involved. Beta one
+// installs Clang/LLVM only; cp3c never downloads a compiler itself.
 // =============================================================================
 #include "detail/toolchain/toolchain_select.hpp"
 
@@ -70,91 +70,26 @@ std::vector<std::string> wingetVersionArgs(const std::string& version) {
     return {"--version", version};
 }
 
-fs::path visualStudioInstaller() {
-    const char* x86 = std::getenv("ProgramFiles(x86)");
-    const char* native = std::getenv("ProgramFiles");
-    const fs::path relative =
-        fs::path("Microsoft") / "Visual Studio" / "Installer" /
-        "vs_installer.exe";
-    std::error_code ec;
-    if (x86 != nullptr) {
-        const fs::path candidate = fs::path(x86) / relative;
-        if (fs::is_regular_file(candidate, ec)) return candidate;
-    }
-    if (native != nullptr) {
-        const fs::path candidate = fs::path(native) / relative;
-        if (fs::is_regular_file(candidate, ec)) return candidate;
-    }
-    return {};
-}
-
-InstallPlan planForWindows(const ToolchainCandidate& candidate,
-                           const std::string& version) {
-    if (candidate.id == "gcc") {
-        InstallPlan plan = wingetPlan("BrechtSanders.WinLibs.POSIX.UCRT",
-                                      wingetVersionArgs(version));
-        if (plan.runnable) return plan;
-        return manualPlan(
-            "winget is not available. Download a WinLibs UCRT build from "
-            "https://winlibs.com/ and add its bin directory to PATH.",
-            "https://winlibs.com/");
-    }
-    if (candidate.id == "clang") {
-        InstallPlan plan = wingetPlan("LLVM.LLVM", wingetVersionArgs(version));
-        if (plan.runnable) return plan;
-        return manualPlan(
-            "winget is not available. Install LLVM from "
-            "https://releases.llvm.org/ and add its bin directory to PATH.",
-            "https://releases.llvm.org/");
-    }
-    if (candidate.id == "msvc") {
-        InstallPlan plan = wingetPlan(
-            "Microsoft.VisualStudio.2022.BuildTools",
-            {"--override",
-             "--wait --quiet --add Microsoft.VisualStudio.Workload.VCTools "
-             "--includeRecommended"});
-        if (plan.runnable) {
-            plan.needsSecondConfirm = true;
-            plan.warning =
-                "Visual Studio Build Tools is a large download (several GB).";
-            return plan;
-        }
-        return manualPlan(
-            "winget is not available. Install Build Tools for Visual Studio "
-            "from https://visualstudio.microsoft.com/downloads/ with the "
-            "Desktop development with C++ workload.",
-            "https://visualstudio.microsoft.com/downloads/");
-    }
-    return manualPlan("no installer is known for this compiler.", "");
-}
-
-InstallPlan planMoreVersionsWindows(const ToolchainCandidate& candidate) {
-    if (candidate.id != "msvc") return {};
-    const fs::path installer = visualStudioInstaller();
-    if (!installer.empty()) {
-        InstallPlan plan;
-        plan.argv = {installer.string()};
-        plan.command = joined(plan.argv);
-        plan.label = "Visual Studio Installer";
-        plan.runnable = true;
-        return plan;
-    }
+InstallPlan planForWindows(const std::string& version) {
+    InstallPlan plan = wingetPlan("LLVM.LLVM", wingetVersionArgs(version));
+    if (plan.runnable) return plan;
     return manualPlan(
-        "Visual Studio Installer not found. Open the Visual Studio Installer "
-        "from the Start menu and add an MSVC v143 toolset.",
-        "https://visualstudio.microsoft.com/downloads/");
+        "winget is not available. Install LLVM from "
+        "https://releases.llvm.org/ and add its bin directory to PATH.",
+        "https://releases.llvm.org/");
+}
+
+InstallPlan planMoreVersionsWindows() {
+    return manualPlan(
+        "Use winget to install another LLVM version, for example: "
+        "winget install --id LLVM.LLVM --version <version>",
+        "https://github.com/llvm/llvm-project/releases");
 }
 
 #elif defined(__APPLE__)
 
-std::string majorVersion(const std::string& version) {
-    const std::size_t dot = version.find('.');
-    return dot == std::string::npos ? version : version.substr(0, dot);
-}
-
-InstallPlan planForApple(const ToolchainCandidate& candidate,
-                         const std::string& version) {
-    if (candidate.id == "apple-clang") {
+InstallPlan planForApple(const std::string& version) {
+    if (version.empty()) {
         std::string tool;
         if (onPath("xcode-select", tool)) {
             InstallPlan plan;
@@ -164,53 +99,35 @@ InstallPlan planForApple(const ToolchainCandidate& candidate,
             plan.runnable = true;
             return plan;
         }
-        return manualPlan(
-            "run 'xcode-select --install' from Terminal, or install Xcode "
-            "from the App Store.",
-            "https://developer.apple.com/xcode/");
     }
     std::string brew;
     if (!onPath("brew", brew)) {
         return manualPlan(
-            "Homebrew is not available. Install it from https://brew.sh/ and "
-            "run the matching 'brew install' command.",
+            "Install the Xcode command line tools with "
+            "'xcode-select --install', or install Homebrew from https://brew.sh/ "
+            "and run 'brew install llvm'.",
             "https://brew.sh/");
     }
-    std::string formula = candidate.id == "gcc" ? "gcc" : "llvm";
-    if (!version.empty() && candidate.id == "gcc") {
-        formula += "@" + majorVersion(version);
-    }
     InstallPlan plan;
-    plan.argv.push_back(brew);
-    plan.argv.push_back("install");
-    plan.argv.push_back(formula);
+    plan.argv = {brew, "install", "llvm"};
     plan.command = joined(plan.argv);
     plan.label = plan.command;
     plan.runnable = true;
     return plan;
 }
 
-InstallPlan planMoreVersionsApple(const ToolchainCandidate& candidate) {
-    (void)candidate;
+InstallPlan planMoreVersionsApple() {
     return manualPlan(
-        "Use Homebrew to install another formula version, or install a "
-        "versioned LLVM/GCC package with your package manager.",
+        "Use Homebrew to install another LLVM formula, or install a versioned "
+        "LLVM package with your package manager.",
         "https://brew.sh/");
 }
 
 #else
 
-// Package names for the three supported Linux package managers.
-struct PackageChoice {
-    std::string apt;
-    std::string dnf;
-    std::string pacman;
-};
-
-// Returns the package manager invocation, or an empty vector when none of
-// apt-get, dnf or pacman is on PATH. A found sudo prefixes every command.
-std::vector<std::string> packageManagerArgs(const PackageChoice& packages,
-                                            const std::string& version) {
+// Package names for the supported Linux package managers. Clang is the only
+// compiler cp3 installs in beta one.
+std::vector<std::string> packageManagerArgs(const std::string& version) {
     std::string sudo;
     std::vector<std::string> prefix;
     if (onPath("sudo", sudo)) prefix.push_back(sudo);
@@ -219,40 +136,33 @@ std::vector<std::string> packageManagerArgs(const PackageChoice& packages,
         prefix.push_back(tool);
         prefix.push_back("install");
         prefix.push_back("-y");
-        prefix.push_back(version.empty() ? packages.apt
-                                         : packages.apt + "=" + version);
+        prefix.push_back(version.empty() ? "clang" : "clang=" + version);
         return prefix;
     }
     if (onPath("dnf", tool)) {
         prefix.push_back(tool);
         prefix.push_back("install");
         prefix.push_back("-y");
-        prefix.push_back(version.empty() ? packages.dnf
-                                         : packages.dnf + "-" + version);
+        prefix.push_back(version.empty() ? "clang" : "clang-" + version);
         return prefix;
     }
     if (onPath("pacman", tool)) {
         prefix.push_back(tool);
         prefix.push_back("-S");
         prefix.push_back("--needed");
-        prefix.push_back(packages.pacman);
+        prefix.push_back("clang");
         return prefix;
     }
     return {};
 }
 
-InstallPlan planForLinux(const ToolchainCandidate& candidate,
-                         const std::string& version) {
-    const bool gcc = candidate.id == "gcc";
-    const PackageChoice packages{
-        gcc ? (version.empty() ? "build-essential" : "g++") : "clang",
-        gcc ? "gcc-c++" : "clang", gcc ? "gcc" : "clang"};
-    std::vector<std::string> argv = packageManagerArgs(packages, version);
+InstallPlan planForLinux(const std::string& version) {
+    std::vector<std::string> argv = packageManagerArgs(version);
     if (argv.empty()) {
         return manualPlan(
             "no supported package manager (apt-get, dnf, pacman) was found. "
-            "Install g++ or clang with your system package manager.",
-            "");
+            "Install Clang/LLVM with your system package manager.",
+            "https://releases.llvm.org/");
     }
     InstallPlan plan;
     plan.argv = std::move(argv);
@@ -262,12 +172,11 @@ InstallPlan planForLinux(const ToolchainCandidate& candidate,
     return plan;
 }
 
-InstallPlan planMoreVersionsLinux(const ToolchainCandidate& candidate) {
-    (void)candidate;
+InstallPlan planMoreVersionsLinux() {
     return manualPlan(
-        "Use your package manager to add another version repository, or "
-        "switch to the exact package version shown in the version list.",
-        "");
+        "Use your package manager to add another Clang version repository, or "
+        "install the exact package version shown in the version list.",
+        "https://releases.llvm.org/");
 }
 
 #endif
@@ -276,22 +185,28 @@ InstallPlan planMoreVersionsLinux(const ToolchainCandidate& candidate) {
 
 InstallPlan planToolchainInstall(const ToolchainCandidate& candidate,
                                  const std::string& packageVersion) {
+    if (candidate.id != "clang") {
+        return manualPlan("no installer is known for this compiler.", "");
+    }
 #if defined(_WIN32)
-    return planForWindows(candidate, packageVersion);
+    return planForWindows(packageVersion);
 #elif defined(__APPLE__)
-    return planForApple(candidate, packageVersion);
+    return planForApple(packageVersion);
 #else
-    return planForLinux(candidate, packageVersion);
+    return planForLinux(packageVersion);
 #endif
 }
 
 InstallPlan planToolchainMoreVersions(const ToolchainCandidate& candidate) {
+    if (candidate.id != "clang") {
+        return manualPlan("no version manager is known for this compiler.", "");
+    }
 #if defined(_WIN32)
-    return planMoreVersionsWindows(candidate);
+    return planMoreVersionsWindows();
 #elif defined(__APPLE__)
-    return planMoreVersionsApple(candidate);
+    return planMoreVersionsApple();
 #else
-    return planMoreVersionsLinux(candidate);
+    return planMoreVersionsLinux();
 #endif
 }
 
@@ -304,6 +219,57 @@ bool runInstallPlan(const InstallPlan& plan) {
         std::fprintf(stderr, "cp3c: installer exited with code %d\n", rc);
         return false;
     }
+    return true;
+}
+
+bool offerToInstallClang() {
+    const ToolchainCandidate* candidate = findToolchainCandidate("clang");
+    if (candidate == nullptr) return false;
+
+    const CandidateStatus status = probeToolchainCandidate(*candidate, false);
+    std::fprintf(stderr, "\ncp3c: no usable Clang compiler was found.\n");
+    std::fprintf(stderr,
+                 "cp3c: beta one requires Clang/LLVM %d or newer.\n",
+                 minimumClangMajor());
+    if (!status.problem.empty()) {
+        std::fprintf(stderr, "cp3c: %s\n", status.problem.c_str());
+    }
+#if defined(_WIN32)
+    std::fputs(
+        "cp3c: Windows builds also need a MinGW-w64 C++ runtime. cp3c looks "
+        "for one in PATH, the WinLibs/MSYS2 locations, or CP3_MINGW_ROOT. "
+        "Clang remains the only compiler driver cp3c invokes.\n",
+        stderr);
+#endif
+
+    const bool tooOld =
+        !status.version.empty() &&
+        compareCompilerVersions(
+            status.version,
+            std::to_string(minimumClangMajor()) + ".0.0") < 0;
+    if (status.found && !tooOld) {
+        // A Clang exists but cannot build. Installing another LLVM would not
+        // fix a missing target sysroot or a broken installation, so report the
+        // probe problem and let the user repair it.
+        return false;
+    }
+
+    const InstallPlan plan = planToolchainInstall(*candidate);
+    if (!plan.runnable) {
+        std::fprintf(stderr, "cp3c: %s\n", plan.label.c_str());
+        if (!plan.url.empty()) {
+            std::fprintf(stderr, "cp3c: download: %s\n", plan.url.c_str());
+        }
+        return false;
+    }
+    std::fprintf(stderr, "cp3c: install command: %s\n", plan.command.c_str());
+    if (!runYesNo("Install Clang/LLVM now?")) return false;
+    if (!runInstallPlan(plan)) return false;
+    std::fputs(
+        "cp3c: installer finished. If clang++ is not on PATH yet, open a new "
+        "terminal and run the command again.\n",
+        stderr);
+    resetToolchainTargetFlagsCache();
     return true;
 }
 

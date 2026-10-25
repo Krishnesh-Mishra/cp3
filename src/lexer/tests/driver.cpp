@@ -3,7 +3,7 @@
 //
 // Not part of the CMake build (see the lexer owner's report). Compile directly:
 //
-//   g++ -std=c++20 -I src/common/include -I src/lexer/include <sources>
+//   clang++ -std=c++20 -I src/common/include -I src/lexer/include <sources>
 //       -o <tmp>
 //   (sources: this driver, src/lexer/src/lexer.cpp, src/common/src/*.cpp)
 //

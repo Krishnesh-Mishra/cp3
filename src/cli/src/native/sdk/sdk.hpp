@@ -32,7 +32,7 @@ struct SdkResolution {
     std::vector<std::string> includeDirs;   // recorded in native.json
     std::vector<std::string> publicRoots;   // declarations under these are bound
     std::vector<std::string> headers;       // absolute public header paths
-    std::vector<std::string> clangArgs;     // parse only (target and GCC dirs)
+    std::vector<std::string> clangArgs;     // parse only (target and standard include dirs)
     std::vector<std::string> defines;
     std::vector<std::string> libDirs;
     std::vector<std::string> linkNames;
@@ -49,13 +49,13 @@ struct SdkResolution {
 bool resolveSdk(const SdkRequest& request, SdkResolution& out,
                 std::string& error);
 
-// The ABI family for a libclang target triple: "mingw", "msvc" or "itanium".
+// The ABI family for a libclang target triple: "mingw" or "itanium".
 std::string deriveAbi(const std::string& target);
 
-// The GCC target triple and system include directories, as clang arguments.
-// These are parse-only: they never enter native.json. Empty when no GCC is
+// The Clang target triple and system include directories, as clang arguments.
+// These are parse-only: they never enter native.json. Empty when no Clang is
 // available, in which case libclang parses with its builtin include paths.
-std::vector<std::string> gccParseArgs();
+std::vector<std::string> clangParseArgs();
 
 // Runs a program and captures stdout+stderr. Returns false when it cannot be
 // started; `code` receives the exit status (0 on success).

@@ -623,7 +623,7 @@ std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
     // `req.body` is the one documented read whose runtime member still does not
     // exist: the body is buffered, and the documented `ReadStream` shape is the
     // fs family's (SEAM(readstream/fs)). Keep the CP3002 skip instead of
-    // emitting a raw C++ read that would die in g++.
+    // emitting a raw C++ read that would not compile.
     if (name == kHttpRequest && m.property == "body") {
         notImplemented(m, "req.body (needs the fs ReadStream; SEAM(readstream/fs))");
         return "0.0";

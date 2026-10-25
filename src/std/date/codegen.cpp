@@ -9,9 +9,9 @@
 // (docs/standard-library/04 section Date) lower 1:1 onto cp3/std/date.hpp
 // (namespace cp3::runtime::date): an instance member passes the receiver as the
 // first argument, so `d.addDays(n)` becomes `addDays(d, n)`. `needsDate_` makes
-// buildSource add the include. A member outside the surface returns "" so the
-// caller keeps reporting CP3002; for the closed Date surface sema has already
-// rejected it as CP3305, so that path is defensive only.
+// buildSource add the include. A member outside the surface returns ""; for the
+// closed Date surface sema has already rejected it as CP3305, so that path is
+// defensive only.
 // =============================================================================
 #include "detail/generator/generator.h"
 

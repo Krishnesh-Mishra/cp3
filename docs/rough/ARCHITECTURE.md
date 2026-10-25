@@ -85,9 +85,10 @@ that is an open question for the lead (§13), not a unilateral header edit.
 
 ## 3. Building
 
-Requires CMake ≥ 3.20 and a C++20 compiler. `cp3c` itself is built with CMake;
-cp3 *projects* never are (the compiler drives `cl.exe`/`clang++`/`g++` directly,
-per [`docs/cli-tooling/01-compilation-pipeline.md`](../cli-tooling/01-compilation-pipeline.md)).
+Requires CMake ≥ 3.20 and a C++20 compiler. `cp3c` itself is built with CMake by
+any host C++ compiler; cp3 *projects* never use CMake (the compiler drives
+`clang++` directly, per
+[`docs/cli-tooling/01-compilation-pipeline.md`](../cli-tooling/01-compilation-pipeline.md)).
 
 ```bash
 cmake -B build -S .      # configure
@@ -95,7 +96,7 @@ cmake --build build      # build all targets
 ```
 
 The executable lands at `build/bin/cp3c` (`build\bin\cp3c.exe` on Windows).
-In this environment the configure step selected **Ninja + GNU 16.1.0**.
+In this environment the configure step selected **Ninja + the host C++ compiler**.
 
 **One build tree, always under `build/` (D55).** There is exactly one canonical
 tree - `cmake -S . -B build`, the directory the test harness defaults to
@@ -175,7 +176,7 @@ cmake --build build --target cp3c-tests
 
 ### 3.3 Warnings
 
-Warnings are enabled (`-Wall -Wextra`, or `/W4 /permissive-` on MSVC) but
+Warnings are enabled (`-Wall -Wextra` for the host compiler) but
 **`-Werror` is deliberately never set**, so one module author's warning cannot
 block another's build. (See §11 for the one known warning.)
 
@@ -411,9 +412,9 @@ the compiler is still a scaffold) and `1` if any case failed.
 ## 11. Known build warnings
 
 * `src/common/src/token.cpp` - `tokenKindName()` returns the string literal
-  `"??="`, which GCC reports as a trigraph (`-Wtrigraphs`). Harmless (GCC
-  ignores trigraphs by default); it is left as-is because `token.cpp` is a frozen
-  implementation. Revisit only if a toolchain is configured with `-trigraphs`.
+  `"??="`, which some compilers report as a trigraph (`-Wtrigraphs`). Harmless;
+  it is left as-is because `token.cpp` is a frozen implementation. Revisit only
+  if a compiler is configured with `-trigraphs`.
 
 ---
 
@@ -435,7 +436,7 @@ In scope:
 * **Binary operators:** arithmetic (`+ - * / % **`), comparison
   (`== != === !== < > <= >=`), logical (`&& ||`), and string concatenation.
 * **Codegen:** one `.cpp`/`.hpp` pair per `.cp3` file, targeting C++20, then
-  invoke the system C++ toolchain, link, and run.
+  invoke the system Clang toolchain, link, and run.
 
 Exit criteria: the `tests/cases/variables/` cases become runnable, and the
 harness flips from "42 skipped" to real pass/fail.
@@ -476,7 +477,7 @@ re-litigated by stage agents.
 | 9 | `number` printing format | **D9** - ECMAScript `Number::toString`, exact. |
 | 10 | Entry point / top-level execution | **D10** - top-level statements become a synthesized `int main()`. |
 | 11 | `console.log` backing | **D11** - cp3 runtime with standard C++; no `fmt` in M1. |
-| 12 | Toolchain order vs. environment | **D12** - documented per-platform order, then `g++`/`clang++` fallback. |
+| 12 | Toolchain order vs. environment | **D12** - superseded: Clang-only target, newest usable Clang, explicit version/path override. |
 | 13 | Object-property shorthand representation | **D13** - `{ a }` stores `value = Identifier("a")`; `nullptr` is recovery-only. |
 
 ### Original questions (provenance only)
@@ -563,12 +564,10 @@ re-litigated by stage agents.
     formatter) until fmt is wired in, or is fmt a hard M1 dependency?
 
 12. **Toolchain order vs. this environment.**
-    [`docs/cli-tooling/01-...`](../cli-tooling/01-compilation-pipeline.md) fixes
-    Windows preference to **MSVC → Clang**, but the only toolchain present here
-    is **MinGW g++ (GNU 16.1.0)**. Should M1 implement the documented order and
-    fail on this machine, or extend the Windows fallback chain to include
-    `g++` (so tests can actually run end-to-end in CI)? The harness can only
-    verify `run`-mode cases if a usable toolchain is found.
+    **Resolved for beta one:** the target toolchain is Clang-only. cp3c
+    auto-detects the newest usable Clang, allows an explicit version or path,
+    and on Windows targets MinGW-w64 GNU with a discovered sysroot. There is no
+    GCC or MSVC fallback ([`docs/cli-tooling/01-...`](../cli-tooling/01-compilation-pipeline.md)).
 
 13. **Object-property shorthand representation is self-contradictory.**
     `ast.hpp` documents `ObjectProperty::value` as "may be nullptr for shorthand

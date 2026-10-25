@@ -9,8 +9,8 @@
 // codegen_methods.cpp.
 //
 // `classifyFamily` (type_map.h) owns the type model; these units own the
-// emission only. Every form the corpus does not pin reports CP3002 through
-// `notImplemented` and returns a compilable stub.
+// emission only. A value this unit cannot represent is reported as a type
+// error by the emitter that owns the construct.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -266,8 +266,18 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
     for (std::size_t i = 0; i < lit.elements.size(); ++i) {
         if (i != 0) out += ", ";
         const Expr* el = lit.elements[i].get();
-        if (el == nullptr || el->kind == NodeKind::SpreadElement) {
-            notImplemented(lit, "a spread element");
+        if (el == nullptr) {
+            // D69.4: cp3 arrays are dense and have no hole state. A hole holds
+            // the element type's default value and keeps its position.
+            out += ec.cpp + "{}";
+            continue;
+        }
+        if (el->kind == NodeKind::SpreadElement) {
+            // The spread branch above owns every spread element; keep a real
+            // diagnostic here instead of a placeholder if that ever changes.
+            reportCodegenError(lit, diagcode::kTypeMismatch,
+                               "type mismatch: cannot spread this value into "
+                               "the array literal");
             continue;
         }
         // A native element takes the literal as an integer token: the braced

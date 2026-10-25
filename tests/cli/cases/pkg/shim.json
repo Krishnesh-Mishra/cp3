@@ -127,7 +127,7 @@
             "cp3 doctor",
             "install root",
             "cp3c version",
-            "C++ toolchain",
+            "toolchain",
             "shipped trees",
             "VS Code CLI"
           ]
@@ -557,7 +557,7 @@
       "slow": true,
       "xfail": {
         "id": "paths-with-spaces-break-build",
-        "reason": "a shim installed under a path containing a space passes an unquoted include root to g++, so the runtime header is not found"
+        "reason": "a shim installed under a path containing a space passes an unquoted include root, so the runtime header is not found"
       },
       "requires": [
         "windows",

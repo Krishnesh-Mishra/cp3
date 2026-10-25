@@ -26,6 +26,7 @@
 #include "detail/cache/cache.hpp"
 #include "detail/cache/checksum.hpp"
 #include "detail/toolchain/toolchain.hpp"
+#include "detail/toolchain/toolchain_select.hpp"
 #include "detail/core/util.hpp"
 
 namespace cp3::cli {
@@ -46,29 +47,25 @@ std::string renamedMainSymbol(const std::string& module) {
 // The ABI the artifact was built for: the C++ standard and the runtime the
 // compiler links against.
 std::string cacheAbi(const Toolchain& tc) {
-    std::string abi = "cxx20";
-    if (tc.msvc) {
-        abi += "-msvc";
-    } else {
+    (void)tc;
 #if defined(__APPLE__)
-        abi += "-libc++";
+    return "cxx20-libc++";
 #else
-        abi += "-libstdc++";
+    // Clang on Windows targets MinGW-w64 and uses its libstdc++.
+    return "cxx20-libstdc++";
 #endif
-    }
-    return abi;
 }
 
 }  // namespace
 
 bool buildPlatformArtifact(const CacheBuildRequest& request,
                            PlatformCacheBuild& out, std::string& err) {
-    const Toolchain& tc = detectToolchain();
-    if (!tc.found()) {
-        err = "no C++ toolchain found on this system (looked for cl, clang++, "
-              "g++ on PATH)";
+    if (!ensureClangAvailable(true)) {
+        err = "no usable Clang compiler found on this system (looked for "
+              "clang++ in PATH and standard locations); run 'cp3c toolchain'";
         return false;
     }
+    const Toolchain& tc = detectToolchain();
     std::error_code ec;
     fs::create_directories(request.workDir, ec);
     if (ec) {
@@ -91,8 +88,7 @@ bool buildPlatformArtifact(const CacheBuildRequest& request,
     CompileStep step{includes, cpp, obj, {}};
     // The package's entry point is renamed so the artifact is a library
     // object; the consumer program owns the real `main`.
-    step.extraFlags.push_back((tc.msvc ? "/Dmain=" : "-Dmain=") +
-                               renamedMainSymbol(request.module));
+    step.extraFlags.push_back("-Dmain=" + renamedMainSymbol(request.module));
     const std::vector<std::string> args =
         compileArgs(tc, BuildProfile::Incremental, step);
     if (request.verbose) {
@@ -117,12 +113,12 @@ bool buildPlatformArtifact(const CacheBuildRequest& request,
 
 bool planPlatformCache(const std::vector<CacheSourceRef>& sources,
                        PlatformCacheManifest& out, std::string& err) {
-    const Toolchain& tc = detectToolchain();
-    if (!tc.found()) {
-        err = "no C++ toolchain found on this system (looked for cl, clang++, "
-              "g++ on PATH)";
+    if (!ensureClangAvailable(true)) {
+        err = "no usable Clang compiler found on this system (looked for "
+              "clang++ in PATH and standard locations); run 'cp3c toolchain'";
         return false;
     }
+    const Toolchain& tc = detectToolchain();
     out = PlatformCacheManifest{};
     out.formatVersion = 1;
     out.platform = platformIdText(currentPlatform());

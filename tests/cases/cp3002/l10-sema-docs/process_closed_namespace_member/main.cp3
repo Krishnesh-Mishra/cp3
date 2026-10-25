@@ -1,0 +1,6 @@
+import process from "std/process";
+
+// The process family is closed: an unknown namespace member is a real
+// member-not-found error with the implemented names as candidates, not an
+// open ambient fallthrough.
+let version = process.definitelyNotAMember;

@@ -41,10 +41,12 @@ powershell ... build-installer.ps1 -BuildDir <dir> -NoVsix
 Requirements on the build machine:
 
 - Windows x64, PowerShell 5.1+.
-- A MinGW-w64 toolchain whose `g++` is on PATH: `package.ps1` copies the
-  matching `libstdc++-6.dll`, `libgcc_s_seh-1.dll` and `libwinpthread-1.dll`
-  next to `bin\cp3c.exe` so the installed compiler starts without a toolchain
-  on PATH (use `-NoRuntimeDlls` to skip).
+- A MinGW-w64 runtime directory discoverable through `CP3_MINGW_ROOT`, PATH, or
+  a standard WinLibs/MSYS2 location: `package.ps1` copies the matching
+  `libstdc++-6.dll`, `libgcc_s_seh-1.dll` and `libwinpthread-1.dll` next to
+  `bin\cp3c.exe` so the installed compiler starts without the build toolchain on
+  PATH (use `-NoRuntimeDlls` to skip). This is a target runtime, not a compiler
+  choice; no other compiler is invoked.
 - Inno Setup 6 for the installer step. Install it with:
 
 ```powershell
@@ -61,7 +63,7 @@ winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept
 | `bin\cp3c.exe` | the compiler (also the LSP server through `cp3c lsp`) |
 | `bin\cp3.cmd` | the `cp3` command: `init`, `doctor`, plus everything `cp3c` offers (including `editor-plugin`) |
 | `bin\*.dll` | MinGW runtime DLLs the compiler links against |
-| `include\` | header trees handed to the C++ toolchain: `runtime\`, `common\`, `std\<family>\` |
+| `include\` | header trees handed to Clang: `runtime\`, `common\`, `std\<family>\` |
 | `src\` | runtime translation units compiled into every cp3 program (`src\runtime\src\`, `src\std\<family>\`) |
 | `third_party\` | vendored static libraries (`libsodium`, `libuv`, `uWebSockets`) |
 | `share\vscode\` | the bundled extension, when built (`-NoVsix` stages without it) |
@@ -81,7 +83,7 @@ program.
 
 ### Why the installed compiler is relocatable
 
-`cp3c.exe` locates the trees it hands to g++/clang++ in this order
+`cp3c.exe` locates the trees it hands to Clang in this order
 (`src/cli/src/toolchain/util.cpp`):
 
 1. `CP3_ROOT` (the shim exports it as `<install>`);
@@ -133,16 +135,17 @@ it is equivalent to `/NOPATH=1 /NOVSCODE=1`.
 
 1. Run `cp3-setup-0.1.0-x64.exe` (optionally silent: `/VERYSILENT /SUPPRESSMSGBOXES`).
 2. Open a new terminal (the PATH entry is picked up by new shells).
-3. `cp3 doctor` - reports the compiler, the C++ toolchain it will use, ccache,
-   VS Code and the shipped trees.
+3. `cp3 doctor` - reports the compiler, the Clang toolchain it will use,
+   ccache, VS Code and the shipped trees.
 4. `cp3 init my-app` then `cd my-app` and `cp3 run src/main.cp3`.
 5. `cp3 editor-plugin` installs the bundled extension if the installer did
    not already do it (the wizard also reports status and exports the VSIX).
 
-Prerequisites on the user machine: a C++ toolchain on PATH (MinGW-w64 `g++` is
-the tested one; MSVC `cl` and `clang++` are detected too) and Windows 10+ with
-the UCRT. VS Code is optional: cp3 libraries and CLI work without it. LLVM is
-not bundled in this round.
+Prerequisites on the user machine: Clang 16+ (`clang++`) on PATH or in a
+standard LLVM location, plus a MinGW-w64 sysroot for the Windows GNU target, and
+Windows 10+ with the UCRT. GCC and MSVC are not target toolchains. VS Code is
+optional: cp3 libraries and CLI work without it. LLVM is not bundled in this
+round; `cp3 build` offers to install it when missing.
 
 ## cp3.cmd commands
 

@@ -21,7 +21,7 @@ namespace {
 
 // The directive wants the file name as an s-char-sequence: a quote would end
 // it and a backslash would read as an escape. The path is therefore spelled
-// with '/' separators (accepted by GCC and gdb on every platform) and embedded
+// with '/' separators (accepted by debuggers on every platform) and embedded
 // quotes are escaped.
 std::string directivePath(const std::string& raw) {
     std::string out;

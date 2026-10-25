@@ -164,11 +164,11 @@ This is a genuine, direct cp3 type error - sourced entirely from the declaration
 
 ## Toolchain handling
 
-GCC/Clang/MSVC are treated as **compiler toolchains**, not ordinary dependencies:
+Clang is the **target compiler toolchain** for beta one, not an ordinary dependency:
 
 ```
-C+++ compiler → generated C++ → Clang/GCC/MSVC → native executable
+C+++ compiler → generated C++ → Clang (MinGW-w64 GNU on Windows) → native executable
 ```
 
-Longer-term goal: bundle/manage an appropriate toolchain so users don't configure one manually.
+Longer-term goal: bundle/manage an appropriate toolchain so users don't configure one manually. Beta one detects the newest usable Clang and offers to install it when missing; GCC and MSVC are not supported target compilers.
 

@@ -57,8 +57,8 @@ struct PlatformCacheManifest {
     std::string abi;        // the C++ ABI the artifact was built for
     std::string kind;       // the artifact kind ("object")
     std::vector<PlatformCacheArtifact> artifacts;
-    std::string compiler;         // the compiler identity ("GCC 13.2.0")
-    std::string compilerId;       // the compiler family ("gcc")
+    std::string compiler;         // the compiler identity ("Clang 18.1.8")
+    std::string compilerId;       // the compiler family ("clang")
     std::string compilerVersion;  // the exact parsed version
     std::string compilerPath;     // the driver the artifact was built with
     std::string profile;          // the build profile ("incremental")

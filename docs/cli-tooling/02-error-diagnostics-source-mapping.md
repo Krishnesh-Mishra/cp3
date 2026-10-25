@@ -9,29 +9,17 @@ Raw C++ compiler errors (template instantiation walls, `std::variant`/`std::vect
 
 **Scope, and why the size of this subsystem isn't what it used to be:** an earlier draft of this doc estimated this subsystem at "tens of thousands of lines," back when it had to cover every possible mismatch at the native-interop boundary too - the realistic size of translating every C++ library's own error shapes into cp3-native ones. That's no longer the job. Native interop now has its own type-checking ([README.md §19](../language-spec/19-c-cpp-interoperability.md), via [CLI-README.md §4](04-package-manager.md)'s `cp3 native-install`) - a native-boundary mismatch is caught as an ordinary cp3 type error against the generated declaration file, with no C++ compilation step involved, so there's nothing opaque left to translate there in the first place. What this subsystem still has to cover, and the reason it can't be removed entirely: (1) a cp3-frontend bug that generates invalid C++ from otherwise-valid pure cp3 code - a real compiler bug, expected to happen during beta one, and (2) opaque errors surfacing from cp3's own generated code for ordinary language features (a `std::variant` access mismatch from a union type, a C++20 coroutine state-machine error) - neither of which has anything to do with native interop. That's a genuinely smaller, more bounded problem than the original estimate - a fixed, fairly short list of language-feature-generated error shapes to translate, plus a labeled generic fallback for anything outside that list - not "thin wrapper" territory, but not tens of thousands of lines either. Treat the original estimate as historical, not current.
 
-## Reporting across multiple toolchain fallback attempts
+## Reporting a compiler failure
 
-Since a build can fall through several toolchains before failing entirely ([§1](01-compilation-pipeline.md)), the final error report groups by whether the underlying error is the **same** or **different** across the toolchains that hit it - never a raw stack trace, always the cp3-native translated form:
-
-**Different errors per toolchain** - shown separately, each attributed to its toolchain:
+Beta one compiles with one target toolchain, Clang ([§1](01-compilation-pipeline.md)), so there is no multi-toolchain retry report to reconcile. A compile or link failure is shown once, source-mapped to the originating `.cp3` location and translated into the cp3-native form:
 
 ```
-✗ Build failed - 2 toolchains attempted
-
-  Clang
-    src/utils.cp3:14:8 - type mismatch: expected number, got string
-
-  GCC
-    src/utils.cp3:14:8 - cannot convert 'std::string' to 'double'
-```
-
-**Same underlying error across all attempted toolchains** - collapsed into one message, naming every toolchain that hit it:
-
-```
-✗ Build failed - MSVC + 3 others
+✗ Build failed - Clang
 
   src/utils.cp3:14:8 - type mismatch: expected number, got string
 ```
+
+If Clang emits a diagnostic shape the translator does not recognize, the report keeps the cp3 header and appends the raw backend output under a clearly labeled fallback instead of hiding it.
 
 **Decided for beta one:** a **clean, static, well-formatted printed report** - colored, readable, source-mapped - not a live-updating TUI. A TUI (live step progress, collapsible sections, closer to `cargo`) is real additional rendering-layer engineering on top of the diagnostics translation work, and isn't required to hit the "no raw C++ stack traces" bar. It stays on the post-beta-one roadmap as a pure UX upgrade - swapping the rendering layer later doesn't touch the diagnostics translation subsystem itself, so nothing here needs to be built twice.
 

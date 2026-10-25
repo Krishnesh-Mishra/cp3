@@ -31,11 +31,9 @@ struct NativeBuildFlags {
 // Adds every binding's include roots, defines, library directories and link
 // names to the build, and copies the recorded runtime DLLs next to the
 // executable (unless package.json's "build" section sets
-// "bundleNativeDlls" to false). `msvc` selects the MSVC spelling of the link
-// flags (/LIBPATH: and <name>.lib instead of -L and -l). Returns false after
-// reporting a problem.
+// "bundleNativeDlls" to false). Link flags use the GNU driver spelling
+// (-L and -l). Returns false after reporting a problem.
 bool applyNativeBindings(const std::vector<NativeBinding>& bindings,
-                         BuildLayout& layout, NativeBuildFlags& flags,
-                         bool msvc);
+                         BuildLayout& layout, NativeBuildFlags& flags);
 
 }  // namespace cp3::cli::detail

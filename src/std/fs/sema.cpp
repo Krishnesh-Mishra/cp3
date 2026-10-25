@@ -23,7 +23,7 @@
 // The same table drives member typing, the CP3305 candidate list and the
 // editor documentation, so the three can never drift apart. fs is a CLOSED
 // family (std_check.cpp isClosedStdNamespace): a member outside the table is
-// CP3305 with these names as candidates instead of a CP3002 skip.
+// CP3305 with these names as candidates, never an untyped fallthrough.
 //
 // The three receiver objects (FileStats / ReadStream / WriteStream) are named
 // permissive markers, exactly like std/network's documented objects: the shape

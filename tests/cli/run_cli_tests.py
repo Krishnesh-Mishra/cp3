@@ -632,7 +632,7 @@ def build_cached_cp3pak(destination: Path) -> None:
             }
         ],
         "compiler": "fixture",
-        "compilerId": "gcc",
+        "compilerId": "clang",
         "compilerVersion": "0.0.0",
         "compilerPath": "fixture",
         "profile": "incremental",
@@ -868,12 +868,10 @@ class Probe:
         self.flags = set(re.findall(r"--[a-z][a-z0-9-]*", self.help_text))
 
     def _probe_compiler(self) -> None:
-        for name in ("g++", "clang++", "cl"):
-            found = shutil.which(name)
-            if found:
-                self.compiler = found
-                break
+        # Beta one is Clang-only; there is no compiler matrix and no fallback
+        # to another driver.
         self.clang = shutil.which("clang++") or self._clang_in_standard_location()
+        self.compiler = self.clang
 
     @staticmethod
     def _clang_in_standard_location() -> Optional[str]:
@@ -904,7 +902,7 @@ class Probe:
         if predicate == "compiler":
             return (
                 self.compiler is not None,
-                "requires a C++ compiler (g++, clang++ or cl) on PATH",
+                "requires clang++ on PATH or in a standard LLVM location",
             )
         if predicate == "clang":
             return (self.clang is not None, "requires clang++ on PATH")
@@ -982,6 +980,44 @@ def make_dirs(run_root: Path, index: int, case: Case) -> CaseDirs:
     return dirs
 
 
+def find_mingw_runtime_bin() -> Optional[Path]:
+    """Locate the MinGW-w64 runtime DLLs without invoking another compiler.
+
+    cp3c itself is built by the host C++ compiler and links the MinGW runtime
+    dynamically on Windows. Reduced-PATH cases still need libstdc++-6.dll and
+    friends, but the runtime is a target sysroot, not a compiler choice.
+    """
+    candidates: list[Path] = []
+    root = os.environ.get("CP3_MINGW_ROOT")
+    if root:
+        candidates.append(Path(root) / "bin")
+    candidates.extend(
+        [
+            Path(r"C:\msys64\mingw64\bin"),
+            Path(r"C:\msys64\ucrt64\bin"),
+            Path(r"C:\msys64\clang64\bin"),
+            Path(r"C:\mingw64\bin"),
+        ]
+    )
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        packages = Path(local) / "Microsoft" / "WinGet" / "Packages"
+        if packages.is_dir():
+            for entry in packages.iterdir():
+                name = entry.name.lower()
+                if "winlibs" in name or "msys2" in name:
+                    candidates.extend(
+                        [entry / "mingw64" / "bin", entry / "ucrt64" / "bin"]
+                    )
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if entry:
+            candidates.append(Path(entry))
+    for candidate in candidates:
+        if (candidate / "libstdc++-6.dll").is_file():
+            return candidate
+    return None
+
+
 def build_environment(
     case: Case, dirs: CaseDirs, run_root: Path, comspec: str
 ) -> dict[str, str]:
@@ -1027,6 +1063,11 @@ def build_environment(
     if path_mode != "minimal":
         if base_path:
             path_entries.append(base_path)
+        # cp3c's standard LLVM search uses the (faked) ProgramFiles variable,
+        # so expose the Clang this harness probed on PATH for ordinary cases.
+        clang = shutil.which("clang++") or Probe._clang_in_standard_location()
+        if clang:
+            path_entries.append(str(Path(clang).resolve().parent))
     else:
         system_root = os.environ.get("SystemRoot", r"C:\Windows")
         path_entries.extend(
@@ -1035,9 +1076,9 @@ def build_environment(
         # The Windows cp3c build links the MinGW runtime dynamically. A
         # reduced PATH must still contain that runtime, or cp3c fails to start
         # with STATUS_DLL_NOT_FOUND before the command under test runs.
-        compiler = shutil.which("g++") or shutil.which("clang++")
-        if compiler:
-            path_entries.append(str(Path(compiler).resolve().parent))
+        runtime = find_mingw_runtime_bin()
+        if runtime is not None:
+            path_entries.append(str(runtime))
     env["PATH"] = os.pathsep.join(part for part in path_entries if part)
 
     for key, value in case.env.items():

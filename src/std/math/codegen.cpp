@@ -52,8 +52,8 @@ std::string Generator::emitMathCall(const CallExpr& c, const MemberExpr& m) {
            joinStrings(args, ", ") + ")";
 }
 
-// The two `Math` property reads. Returns "" when `m` is not one of them, so
-// the caller keeps the CP3002 fallthrough.
+// The two `Math` property reads. Returns "" when `m` is not one of them
+// (defensive: the closed Math surface is rejected in sema as CP3305 first).
 std::string Generator::emitMathMember(const MemberExpr& m) {
     if (!isNamespaceObject(m.object.get(), "Math")) return std::string();
     if (m.property == "PI") {

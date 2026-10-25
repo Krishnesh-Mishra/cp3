@@ -114,10 +114,9 @@ exit /b 1
 rem ----------------------------------------------------------------------------
 rem cp3 doctor
 rem
-rem Short status list: cp3c presence/version, C++ toolchain availability in the
-rem compiler's own detection order (MSVC cl, clang++, g++), ccache, VS Code,
-rem the shipped trees and the install root. Exit code 0 when cp3c.exe is
-rem present, 1 otherwise.
+rem Short status list: cp3c presence/version, Clang availability, ccache,
+rem VS Code, the shipped trees and the install root. Exit code 0 when cp3c.exe
+rem is present, 1 otherwise.
 rem ----------------------------------------------------------------------------
 :doctor
 set "CP3C_FOUND=no"
@@ -148,13 +147,13 @@ echo   shim         : %~f0
 if "%CP3C_FOUND%"=="yes" echo   cp3c         : %CP3C%
 if not "%CP3C_FOUND%"=="yes" echo   cp3c         : MISSING ^(%CP3C%^)
 echo   cp3c version : %CP3C_VERSION%
-echo   C++ toolchain: %TC%
+echo   toolchain    : %TC%
 echo   ccache       : %CCACHE%
 echo   VS Code CLI  : %CODE_STATUS%
 echo   bundled vsix : %VSIX_STATUS%
 echo   shipped trees: include=%TREE_INCLUDE% src=%TREE_SRC% third_party=%TREE_TP%
-echo   note         : a C++ toolchain (g++/clang++/cl) on PATH is required to
-echo                  build cp3 programs; VS Code is optional.
+echo   note         : Clang (clang++) on PATH is required to build cp3 programs;
+echo                  VS Code is optional.
 echo                  Install/open the bundled extension with: cp3 editor-plugin
 if "%CP3C_FOUND%"=="yes" exit /b 0
 exit /b 1
@@ -181,12 +180,10 @@ set "VSIX="
 for %%V in ("%CP3_ROOT%\share\vscode\cp3-vscode-*.vsix") do if not defined VSIX if exist "%%~fV" set "VSIX=%%~fV"
 exit /b 0
 
-rem TC: first toolchain in cp3c's own order (MSVC cl -> clang++ -> g++).
+rem TC: the Clang driver cp3c will use. Beta one has one target toolchain.
 :find_toolchain
-set "TC=(none found - install MSVC, Clang or GCC/g++ and put it on PATH)"
-for /f "delims=" %%C in ('where cl 2^>nul') do if "%TC%"=="(none found - install MSVC, Clang or GCC/g++ and put it on PATH)" set "TC=MSVC cl (%%C)"
-for /f "delims=" %%C in ('where clang++ 2^>nul') do if "%TC%"=="(none found - install MSVC, Clang or GCC/g++ and put it on PATH)" set "TC=Clang (%%C)"
-for /f "delims=" %%C in ('where g++ 2^>nul') do if "%TC%"=="(none found - install MSVC, Clang or GCC/g++ and put it on PATH)" set "TC=GCC (%%C)"
+set "TC=(none found - install Clang/LLVM and put clang++ on PATH)"
+for /f "delims=" %%C in ('where clang++ 2^>nul') do if "%TC%"=="(none found - install Clang/LLVM and put clang++ on PATH)" set "TC=Clang (%%C)"
 exit /b 0
 
 rem CCACHE: ccache presence (optional build accelerator).

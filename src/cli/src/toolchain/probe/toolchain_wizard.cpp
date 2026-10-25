@@ -1,12 +1,14 @@
 // =============================================================================
-// src/cli/src/toolchain/toolchain_wizard.cpp - the interactive toolchain flow.
-// OWNERSHIP: cli module. Family -> version -> scope; the version list shows the
-// newest five package-manager versions plus `Show more (+N)`. Installing always
-// delegates to the system package manager, never an in-cp3 download.
+// src/cli/src/toolchain/toolchain_wizard.cpp - the interactive Clang flow.
+// OWNERSHIP: cli module. Version -> scope; the version list shows installed
+// Clang installs, the newest package-manager versions, and `Show more (+N)`.
+// Installing always delegates to the system package manager, never an in-cp3
+// download. Beta one has one compiler family: Clang.
 // =============================================================================
 #include <algorithm>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "detail/core/commands.hpp"
@@ -18,7 +20,7 @@ namespace cp3::cli {
 namespace {
 
 enum class Scope { None, Project, Global };
-enum class VersionOutcome { Chosen, Back, Cancelled, Invalid };
+enum class VersionOutcome { Chosen, Cancelled, Invalid };
 
 struct VersionPick {
     ToolchainCandidate candidate;
@@ -31,11 +33,6 @@ struct Menu {
     std::vector<std::string> keys;
 };
 
-std::string padRight(std::string text, std::size_t width) {
-    if (text.size() < width) text.append(width - text.size(), ' ');
-    return text;
-}
-
 std::string statusText(const CandidateStatus& status) {
     if (status.usable) return "ready";
     if (status.found) return "not usable";
@@ -47,12 +44,6 @@ std::string statusDetail(const CandidateStatus& status) {
     std::string detail = status.program;
     if (!status.version.empty()) detail += " (" + status.version + ")";
     return detail;
-}
-
-std::string tableRow(const CandidateStatus& status) {
-    return "  " + padRight(status.candidate.id, 12) +
-           padRight(status.candidate.name, 14) +
-           padRight(statusText(status), 11) + statusDetail(status);
 }
 
 bool parseScope(const CliOptions& opt, Scope& scope, std::string& err) {
@@ -70,7 +61,7 @@ bool installedVersion(const std::vector<ToolchainInstall>& installs,
                       const std::string& version,
                       ToolchainInstall& out) {
     for (const ToolchainInstall& install : installs) {
-        if (compareCompilerVersions(install.version, version) == 0) {
+        if (versionSatisfies(install.version, version)) {
             out = install;
             return true;
         }
@@ -109,10 +100,6 @@ bool executePlan(const InstallPlan& plan) {
     std::printf("command: %s\n", plan.command.c_str());
     std::fflush(stdout);
     if (!plan.warning.empty()) std::printf("%s\n", plan.warning.c_str());
-    if (plan.needsSecondConfirm &&
-        !runYesNo("Download and install Build Tools now?")) {
-        return false;
-    }
     return runInstallPlan(plan);
 }
 
@@ -120,35 +107,19 @@ bool askAndInstall(const ToolchainCandidate& candidate,
                    const std::string& packageVersion,
                    const std::string& displayVersion,
                    const std::vector<ToolchainInstall>& installed) {
-    if (!installed.empty() && candidate.id != "msvc") {
-        if (!displayVersion.empty() &&
-            compareCompilerVersions(displayVersion, installed.front().version) <
-                0) {
-            std::fprintf(stderr,
-                         "cp3c: warning: %s %s is older than the installed %s; "
-                         "winget installs it in place.\n",
-                         candidate.name.c_str(), displayVersion.c_str(),
-                         installed.front().version.c_str());
-        } else if (!displayVersion.empty()) {
-            std::fprintf(stderr,
-                         "cp3c: note: installing %s %s replaces the installed "
-                         "%s in place.\n",
-                         candidate.name.c_str(), displayVersion.c_str(),
-                         installed.front().version.c_str());
-        }
+    if (!installed.empty() && !displayVersion.empty() &&
+        compareCompilerVersions(displayVersion, installed.front().version) < 0) {
+        std::fprintf(stderr,
+                     "cp3c: warning: %s %s is older than the installed %s; "
+                     "the system package manager installs it in place.\n",
+                     candidate.name.c_str(), displayVersion.c_str(),
+                     installed.front().version.c_str());
     }
     std::string question = "Install " + candidate.name;
     if (!displayVersion.empty()) question += " " + displayVersion;
     question += "?";
     if (!runYesNo(question)) return false;
     return executePlan(planToolchainInstall(candidate, packageVersion));
-}
-
-bool askMoreMsvc(const ToolchainCandidate& candidate) {
-    if (!runYesNo("Open the Visual Studio Installer to add more MSVC toolsets?")) {
-        return false;
-    }
-    return executePlan(planToolchainMoreVersions(candidate));
 }
 
 void appendInstalledRows(const std::vector<ToolchainInstall>& installed,
@@ -197,22 +168,15 @@ void buildVersionMenu(const ToolchainCandidate& candidate,
                             ") - recommended");
     } else if (!available.empty()) {
         menu.rows.push_back("Install latest (" + available.front().version + ")");
-    } else if (candidate.msvc) {
-        menu.rows.push_back("Install latest (Build Tools)");
     } else {
         menu.rows.push_back("Install latest");
     }
     menu.keys.push_back("latest");
     appendInstalledRows(installed, menu);
-    if (candidate.msvc) {
-        menu.rows.push_back("More versions (Visual Studio Installer)");
-        menu.keys.push_back("more-msvc");
-    }
     appendAvailableRows(available, installed, page, menu);
-    menu.rows.push_back("Back");
-    menu.keys.push_back("back");
     menu.rows.push_back("Cancel");
     menu.keys.push_back("cancel");
+    (void)candidate;
 }
 
 const AvailableToolchainVersion* findAvailable(
@@ -287,22 +251,14 @@ VersionOutcome chooseVersion(const ToolchainCandidate& candidate,
         Menu menu;
         buildVersionMenu(candidate, installed, available, page, menu);
         bool cancelled = false;
-        const int selected = runMenu("Select a " + candidate.name + " version:",
-                                     menu.rows, menu.keys, 0, cancelled);
+        const int selected = runMenu("Select a Clang version:", menu.rows,
+                                     menu.keys, 0, cancelled);
         if (cancelled) return VersionOutcome::Cancelled;
         if (selected < 0) return VersionOutcome::Invalid;
         const std::string& key = menu.keys[static_cast<std::size_t>(selected)];
-        if (key == "back") return VersionOutcome::Back;
         if (key == "cancel") return VersionOutcome::Cancelled;
         if (key == "more") {
             ++page;
-            continue;
-        }
-        if (key == "more-msvc") {
-            if (askMoreMsvc(candidate)) {
-                installed = discoverToolchainVersions(candidate, true);
-                page = 0;
-            }
             continue;
         }
         if (key == "latest") {
@@ -403,14 +359,6 @@ int runWizardDefaults(const std::vector<CandidateStatus>& statuses,
             break;
         }
     }
-    if (chosen == nullptr && !current.id.empty()) {
-        for (const CandidateStatus& status : statuses) {
-            if (status.usable && status.candidate.id == current.id) {
-                chosen = &status;
-                break;
-            }
-        }
-    }
     if (chosen == nullptr) {
         for (const CandidateStatus& status : statuses) {
             if (status.usable) {
@@ -419,15 +367,37 @@ int runWizardDefaults(const std::vector<CandidateStatus>& statuses,
             }
         }
     }
-    if (chosen == nullptr || chosen->version.empty()) {
-        std::fputs("cp3c: no usable C++ compiler found; run 'cp3c "
-                   "toolchain' to install one\n", stderr);
-        return kExitCompileError;
+    if (chosen == nullptr) {
+        if (!offerToInstallClang()) {
+            std::fputs("cp3c: no usable Clang found; run 'cp3c toolchain' to "
+                       "install one\n", stderr);
+            return kExitCompileError;
+        }
+        resetToolchainResolution();
+        const CandidateStatus retry =
+            probeToolchainCandidate(toolchainCandidates().front(), true);
+        if (!retry.usable) {
+            std::fprintf(stderr, "cp3c: Clang is still not usable: %s\n",
+                         retry.problem.c_str());
+            return kExitCompileError;
+        }
+        ToolchainInstall install;
+        install.candidate = retry.candidate;
+        install.program = retry.program;
+        install.version = retry.version;
+        install.banner = retry.banner;
+        install.problem = retry.problem;
+        install.usable = retry.usable;
+        VersionPick pick{retry.candidate, install, "latest"};
+        Scope scope = forced;
+        if (scope == Scope::None) {
+            scope = inProject ? Scope::Project : Scope::Global;
+        }
+        return finishWizard(pick, scope, inProject, root);
     }
     ToolchainInstall install;
     install.candidate = chosen->candidate;
     install.program = chosen->program;
-    install.linkProgram = chosen->linkProgram;
     install.version = chosen->version;
     install.banner = chosen->banner;
     install.problem = chosen->problem;
@@ -449,10 +419,8 @@ int runToolchainWizard(const CliOptions& opt) {
     }
     fs::path root;
     const bool inProject = toolchainProjectRoot(root);
-    std::vector<CandidateStatus> statuses;
-    for (const ToolchainCandidate& candidate : toolchainCandidates()) {
-        statuses.push_back(probeToolchainCandidate(candidate, true));
-    }
+    const ToolchainCandidate candidate = toolchainCandidates().front();
+    const CandidateStatus status = probeToolchainCandidate(candidate, true);
     const Toolchain& current = detectToolchain();
     std::printf("current: ");
     if (current.found()) {
@@ -460,41 +428,18 @@ int runToolchainWizard(const CliOptions& opt) {
                     toolchainSourceDescription().c_str());
         std::printf("versions: %s\n", toolchainVersionDescription().c_str());
     } else {
-        std::puts("none (no C++ compiler found)");
+        std::puts("none (no usable Clang found)");
     }
+    std::printf("Clang: %s  %s\n", statusText(status).c_str(),
+                statusDetail(status).c_str());
     if (opt.yes) {
-        return runWizardDefaults(statuses, current, forced, inProject, root);
+        return runWizardDefaults({status}, current, forced, inProject, root);
     }
-    int initial = 0;
-    for (std::size_t i = 0; i < statuses.size(); ++i) {
-        if (!current.program.empty() &&
-            statuses[i].program == current.program) {
-            initial = static_cast<int>(i);
-        } else if (!current.id.empty() &&
-                   statuses[i].candidate.id == current.id) {
-            initial = static_cast<int>(i);
-        }
-    }
-    for (;;) {
-        std::vector<std::string> rows;
-        std::vector<std::string> keys;
-        for (const CandidateStatus& status : statuses) {
-            rows.push_back(tableRow(status));
-            keys.push_back(status.candidate.id);
-        }
-        bool cancelled = false;
-        const int selected = runMenu("Select a C++ compiler family:", rows,
-                                     keys, initial, cancelled);
-        if (cancelled) return kExitSuccess;
-        if (selected < 0) return kExitUsageError;
-        const CandidateStatus& status = statuses[static_cast<std::size_t>(selected)];
-        VersionPick pick;
-        const VersionOutcome outcome = chooseVersion(status.candidate, pick);
-        if (outcome == VersionOutcome::Cancelled) return kExitSuccess;
-        if (outcome == VersionOutcome::Back) continue;
-        if (outcome == VersionOutcome::Invalid) return kExitUsageError;
-        return finishWizard(pick, forced, inProject, root);
-    }
+    VersionPick pick;
+    const VersionOutcome outcome = chooseVersion(candidate, pick);
+    if (outcome == VersionOutcome::Cancelled) return kExitSuccess;
+    if (outcome == VersionOutcome::Invalid) return kExitUsageError;
+    return finishWizard(pick, forced, inProject, root);
 }
 
 }  // namespace cp3::cli

@@ -3,7 +3,7 @@
 // rendering (cp3/core/runtime.hpp toString + cp3/std/console.hpp format*).
 //
 // Build/run by direct compile (see the runtime report):
-//   g++ -std=c++20 -I include -I tests format_test.cpp ../../build.../libcp3_runtime.a
+//   clang++ -std=c++20 -I include -I tests format_test.cpp ../../build.../libcp3_runtime.a
 // or through `-DCP3_RUNTIME_TESTS=ON` (target `format_test`).
 // =============================================================================
 #include <string>

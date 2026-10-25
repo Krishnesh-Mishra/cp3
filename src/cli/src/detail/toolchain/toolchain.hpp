@@ -6,16 +6,16 @@
 // Definitions live in src/toolchain/toolchain.cpp (STYLE.md §3/§8: headers declare,
 // `.cpp` defines).
 //
-// Selection order is DECISIONS D12:
-//   Windows: MSVC `cl` -> Clang `clang++`, then last-resort `g++` -> `clang++`.
-//   POSIX:   Clang `clang++` -> `g++`,      then last-resort `g++` -> `clang++`.
-// The first present in the order wins. The choice is probed once and cached;
-// --verbose reports it. Everything compiles as C++20.
+// Beta one is Clang-only. cp3c looks for `clang++`, validates that it can
+// compile, link and run a C++20 probe, and uses the newest supported install.
+// The choice is probed once and cached; --verbose reports it. Everything
+// compiles as C++20.
 //
-// A saved choice takes precedence over D12 (detail/toolchain_select.hpp):
+// A saved choice takes precedence over auto-detection
+// (detail/toolchain_select.hpp):
 //   --toolchain flag > CP3_TOOLCHAIN > project package.json > global config >
-//   D12 auto-detect. The first source that resolves to an existing driver wins;
-//   an unusable source is reported and the next one is tried.
+//   auto-detect. The first source that resolves to a usable Clang wins; an
+//   unusable source is reported and the next one is tried.
 //
 // cp3 projects never use CMake: cp3c invokes the compiler driver directly, for
 // the compile (one object per TU) and link phases
@@ -34,18 +34,17 @@
 namespace cp3::cli {
 
 struct Toolchain {
-    std::string program;  // full path to the driver, empty when none found
-    std::string name;     // friendly name: "MSVC cl", "Clang", "GCC"
-    std::string id;       // gcc | clang | msvc | apple-clang, empty for auto
+    std::string program;  // full path to clang++, empty when none found
+    std::string name;     // always "Clang"
+    std::string id;       // always "clang"
     std::string version;  // exact parsed effective compiler version
     std::string recordedVersion;  // version recorded in the choice, if any
     std::string policy;   // latest | exact | custom | auto
-    // Extra driver flags this machine needs (e.g. the GNU target triple for a
-    // Windows Clang without MSVC). They are part of the compiler identity:
-    // the same driver with a different target produces different objects.
+    // Extra driver flags this machine needs (the GNU target triple and, when
+    // necessary, the MinGW-w64 sysroot on Windows). They are part of the
+    // compiler identity: the same driver with a different target produces
+    // different objects.
     std::vector<std::string> targetFlags;
-    bool msvc = false;
-    bool clang = false;
 
     bool found() const noexcept { return !program.empty(); }
 };
@@ -57,14 +56,14 @@ enum class ToolchainSource {
     Environment,  // CP3_TOOLCHAIN
     Project,      // nearest package.json "toolchain"
     Global,       // user toolchain.conf
-    Auto,         // D12 auto-detect
+    Auto,         // newest supported Clang found on this machine
 };
 
 // Resolves the precedence order once and caches the result. A saved source
 // whose driver vanished is reported once and skipped.
 const Toolchain& detectToolchain();
 
-// Probes the D12 order without consulting any saved choice.
+// Probes the newest supported Clang without consulting any saved choice.
 Toolchain probeAutoToolchain();
 
 // CLI wiring: the global --toolchain value (empty clears it), the directory
@@ -87,7 +86,7 @@ std::string toolchainVersionDescription();
 // Human-readable summary for --verbose and failure messages.
 std::string describeToolchain(const Toolchain& tc);
 
-// Stable build-cache identity: family, exact parsed version and program path.
+// Stable build-cache identity: compiler, exact parsed version and program path.
 std::string toolchainCacheKey(const Toolchain& tc);
 
 // One compilation step: the TU, its object, the program's include roots and any

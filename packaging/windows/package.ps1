@@ -109,26 +109,48 @@ Copy-Item -LiteralPath $shimSource -Destination (Join-Path $stage "bin\cp3.cmd")
 
 $runtimeDlls = @("libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll")
 if (-not $NoRuntimeDlls) {
-    # Use `where` (not Get-Command) so a wrapper shim such as the dev ccache
-    # `g++.exe` can sit first on PATH while the real WinLibs `g++.exe` behind it
-    # is still reachable for the DLLs.
-    $gxxPaths = @((& where.exe g++ 2>$null) | Where-Object { $_ -and (Test-Path -LiteralPath $_) })
-    if ($gxxPaths.Count -eq 0) {
-        Fail ("no g++ on PATH, so the MinGW runtime DLLs cannot be located; " +
-              "install the MinGW-w64 toolchain or pass -NoRuntimeDlls")
+    # cp3c itself is built by the host compiler and links the MinGW runtime
+    # dynamically. Locate those DLLs directly; this is a target runtime, not a
+    # compiler choice, and no other compiler driver is invoked.
+    $runtimeDirs = @()
+    if ($env:CP3_MINGW_ROOT) { $runtimeDirs += (Join-Path $env:CP3_MINGW_ROOT "bin") }
+    $runtimeDirs += @(
+        "C:\msys64\mingw64\bin",
+        "C:\msys64\ucrt64\bin",
+        "C:\msys64\clang64\bin",
+        "C:\mingw64\bin"
+    )
+    foreach ($entry in ($env:PATH -split ";")) {
+        if ($entry) { $runtimeDirs += $entry.Trim('"') }
     }
-    foreach ($dll in $runtimeDlls) {
-        $source = $null
-        foreach ($gxxPath in $gxxPaths) {
-            if ($source) { break }
-            $printed = (& $gxxPath ("-print-file-name=" + $dll) 2>$null | Select-Object -First 1)
-            if ($printed -and $printed -ne $dll -and (Test-Path -LiteralPath $printed)) { $source = $printed }
-            if (-not $source) {
-                $candidate = Join-Path (Split-Path -Parent $gxxPath) $dll
-                if (Test-Path -LiteralPath $candidate) { $source = $candidate }
+    $localAppData = $env:LOCALAPPDATA
+    if ($localAppData) {
+        $packages = Join-Path $localAppData "Microsoft\WinGet\Packages"
+        if (Test-Path -LiteralPath $packages) {
+            foreach ($entry in (Get-ChildItem -LiteralPath $packages -Directory -ErrorAction SilentlyContinue)) {
+                if ($entry.Name -match "WinLibs|MSYS2|mingw") {
+                    $runtimeDirs += (Join-Path $entry.FullName "mingw64\bin")
+                    $runtimeDirs += (Join-Path $entry.FullName "ucrt64\bin")
+                }
             }
         }
-        if (-not $source) { Fail "cannot locate '$dll' in the g++ toolchains ($($gxxPaths -join '; ')); pass -NoRuntimeDlls to stage without them" }
+    }
+    $runtimeDir = $null
+    foreach ($dir in $runtimeDirs) {
+        if ($dir -and (Test-Path -LiteralPath (Join-Path $dir "libstdc++-6.dll"))) {
+            $runtimeDir = $dir
+            break
+        }
+    }
+    if (-not $runtimeDir) {
+        Fail ("no MinGW-w64 runtime directory found (looked for libstdc++-6.dll); " +
+              "set CP3_MINGW_ROOT or pass -NoRuntimeDlls")
+    }
+    foreach ($dll in $runtimeDlls) {
+        $source = Join-Path $runtimeDir $dll
+        if (-not (Test-Path -LiteralPath $source)) {
+            Fail "cannot locate '$dll' in the MinGW-w64 runtime '$runtimeDir'; pass -NoRuntimeDlls to stage without it"
+        }
         Copy-Item -LiteralPath $source -Destination (Join-Path $stage ("bin\" + $dll)) -Force
         Info "runtime dll: $dll <- $source"
     }
@@ -265,15 +287,16 @@ Layout
   bin\cp3.cmd      the cp3 command: run, build, check, init, doctor,
                    editor-plugin, lsp, ...
   bin\*.dll        MinGW runtime DLLs the compiler needs to start
-  include\         header trees the compiler passes to the C++ toolchain
+  include\         header trees the compiler passes to Clang
   src\             runtime units compiled into every cp3 program
   third_party\     vendored static libraries (std/network, std/crypto)
   share\vscode\    bundled VS Code extension, when built
   manifest.json    every component with its SHA-256
 
 Prerequisites
-  A C++ toolchain on PATH (g++ or clang++; MinGW-w64 is the tested Windows
-  toolchain). Run `"cp3 doctor`" to see what the compiler will use. VS Code
+  Clang 16+ (clang++) on PATH or in a standard LLVM location, plus a
+  MinGW-w64 sysroot for the Windows GNU target. GCC and MSVC are not target
+  toolchains. Run `"cp3 doctor`" to see what the compiler will use. VS Code
   is optional.
 
 Getting started

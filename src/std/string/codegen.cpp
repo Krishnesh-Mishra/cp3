@@ -4,7 +4,7 @@
 //
 // The implemented `string` method surface (cp3/std/string.hpp) plus the literal
 // array element set `["a", "b"].includes(x)`, which lowers to an equality
-// chain (the only array form representable before wave 3).
+// chain; other array forms are handled by the array family.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -20,8 +20,8 @@ using namespace detail;
 
 namespace {
 
-// The `string` method surface implemented this wave (cp3/std/string.hpp). `at` is
-// JS charAt; `split`/`charCodeAt` are not lowerable yet (wave 3 arrays).
+// The `string` method surface implemented this wave (cp3/std/string.hpp). `at`
+// is JS charAt; `charCodeAt` has no lowering yet.
 struct StringMethod {
     const char* js;  // the cp3 method name
     const char* fn;  // the runtime spelling
@@ -50,8 +50,8 @@ const char* stringRuntimeFn(const std::string& method) {
 
 std::string Generator::emitStringMethodCall(const CallExpr& c, const MemberExpr& m) {
     // Literal array element set: `["a", "b"].includes(x)` lowers to an equality
-    // chain (the only array form representable before wave 3). Any other form
-    // on an array receiver stays CP3002 - never fall through to the string
+    // chain. Any other form on an array receiver is left to the array family
+    // (src/std/arrays/codegen_methods.cpp) - never fall through to the string
     // method table.
     if (m.object && m.object->kind == NodeKind::ArrayLiteral) {
         if (m.property != "includes" || c.arguments.size() != 1) {

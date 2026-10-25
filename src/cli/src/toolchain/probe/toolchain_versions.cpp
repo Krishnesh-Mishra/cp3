@@ -1,13 +1,13 @@
 // =============================================================================
-// src/cli/src/toolchain/toolchain_versions.cpp - compiler version discovery.
+// src/cli/src/toolchain/toolchain_versions.cpp - Clang version discovery.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements the version half of
 // detail/toolchain_select.hpp.
 //
-// Discovery only reads system locations and asks the vendor driver for its
-// version. cp3c never copies, extracts or installs a compiler into a cp3
-// directory; available versions come from the platform package manager and
-// installation is delegated to it.
+// Discovery only reads system locations and asks clang++ for its version.
+// cp3c never copies, extracts or installs a compiler into a cp3 directory;
+// available versions come from the platform package manager and installation
+// is delegated to it. Beta one is Clang-only.
 // =============================================================================
 #include "detail/toolchain/toolchain_select.hpp"
 
@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include "detail/core/util.hpp"
@@ -111,11 +112,11 @@ std::vector<fs::path> wingetPackageDirs(const char* needle) {
             std::string::npos) {
             continue;
         }
+        dirs.push_back(entry.path() / "LLVM" / "bin");
+        dirs.push_back(entry.path() / "bin");
         dirs.push_back(entry.path() / "mingw64" / "bin");
         dirs.push_back(entry.path() / "ucrt64" / "bin");
         dirs.push_back(entry.path() / "clang64" / "bin");
-        dirs.push_back(entry.path() / "LLVM" / "bin");
-        dirs.push_back(entry.path() / "bin");
     }
     return dirs;
 }
@@ -123,37 +124,33 @@ std::vector<fs::path> wingetPackageDirs(const char* needle) {
 
 std::vector<fs::path> standardDirectories(const ToolchainCandidate& candidate) {
     std::vector<fs::path> dirs;
+    (void)candidate;
 #if defined(_WIN32)
     const char* programFiles = std::getenv("ProgramFiles");
     const char* programFilesX86 = std::getenv("ProgramFiles(x86)");
-    if (candidate.id == "gcc") {
-        dirs.emplace_back("C:\\mingw64\\bin");
-        dirs.emplace_back("C:\\msys64\\mingw64\\bin");
-        dirs.emplace_back("C:\\msys64\\ucrt64\\bin");
-        for (fs::path dir : wingetPackageDirs("WinLibs")) dirs.push_back(dir);
-        for (fs::path dir : wingetPackageDirs("MSYS2")) dirs.push_back(dir);
-    } else if (candidate.id == "clang") {
-        if (programFiles != nullptr) {
-            dirs.push_back(fs::path(programFiles) / "LLVM" / "bin");
-        }
-        if (programFilesX86 != nullptr) {
-            dirs.push_back(fs::path(programFilesX86) / "LLVM" / "bin");
-        }
-        for (fs::path dir : wingetPackageDirs("LLVM")) dirs.push_back(dir);
-        dirs.emplace_back("C:\\msys64\\clang64\\bin");
+    if (programFiles != nullptr) {
+        dirs.push_back(fs::path(programFiles) / "LLVM" / "bin");
     }
+    if (programFilesX86 != nullptr) {
+        dirs.push_back(fs::path(programFilesX86) / "LLVM" / "bin");
+    }
+    for (const fs::path& dir : wingetPackageDirs("LLVM")) dirs.push_back(dir);
+    for (const fs::path& dir : wingetPackageDirs("WinLibs")) dirs.push_back(dir);
+    for (const fs::path& dir : wingetPackageDirs("MSYS2")) dirs.push_back(dir);
+    dirs.emplace_back("C:\\msys64\\clang64\\bin");
+    dirs.emplace_back("C:\\msys64\\mingw64\\bin");
+    dirs.emplace_back("C:\\msys64\\ucrt64\\bin");
 #elif defined(__APPLE__)
     dirs.emplace_back("/usr/bin");
     dirs.emplace_back("/usr/local/bin");
     dirs.emplace_back("/opt/homebrew/bin");
     dirs.emplace_back("/usr/local/opt/llvm/bin");
     dirs.emplace_back("/opt/homebrew/opt/llvm/bin");
-    dirs.emplace_back("/usr/local/opt/gcc/bin");
-    dirs.emplace_back("/opt/homebrew/opt/gcc/bin");
 #else
     dirs.emplace_back("/usr/bin");
     dirs.emplace_back("/usr/local/bin");
     dirs.emplace_back("/snap/bin");
+    dirs.emplace_back("/opt/llvm/bin");
     std::error_code ec;
     const fs::path llvmRoot = "/usr/lib";
     if (fs::is_directory(llvmRoot, ec)) {
@@ -187,26 +184,14 @@ std::vector<fs::path> candidatePrograms(const ToolchainCandidate& candidate) {
     return found;
 }
 
-std::string versionBanner(const ToolchainCandidate& candidate,
-                          const std::string& program) {
-    std::vector<std::string> args{program};
-    if (!candidate.msvc) args.push_back("--version");
+std::string versionBanner(const std::string& program) {
     std::string out;
-    if (runProcessCapture(args, out) < 0) return {};
+    if (runProcessCapture({program, "--version"}, out) < 0) return {};
     return firstLine(out);
 }
 
-bool familyMatches(const ToolchainCandidate& candidate,
-                   const std::string& banner) {
-    const std::string lower = lowerCopy(banner);
-    if (candidate.id == "gcc" && lower.find("clang") != std::string::npos) {
-        return false;
-    }
-    if (candidate.id == "clang" && lower.find("gcc") != std::string::npos &&
-        lower.find("clang") == std::string::npos) {
-        return false;
-    }
-    return true;
+bool isClangBanner(const std::string& banner) {
+    return lowerCopy(banner).find("clang") != std::string::npos;
 }
 
 void sortInstalls(std::vector<ToolchainInstall>& installs) {
@@ -218,111 +203,25 @@ void sortInstalls(std::vector<ToolchainInstall>& installs) {
               });
 }
 
-#if defined(_WIN32)
-fs::path vswherePath() {
-    const char* x86 = std::getenv("ProgramFiles(x86)");
-    const char* native = std::getenv("ProgramFiles");
-    if (x86 != nullptr) {
-        const fs::path candidate =
-            fs::path(x86) / "Microsoft" / "Visual Studio" / "Installer" /
-            "vswhere.exe";
-        std::error_code ec;
-        if (fs::is_regular_file(candidate, ec)) return candidate;
-    }
-    if (native != nullptr) {
-        const fs::path candidate =
-            fs::path(native) / "Microsoft" / "Visual Studio" / "Installer" /
-            "vswhere.exe";
-        std::error_code ec;
-        if (fs::is_regular_file(candidate, ec)) return candidate;
-    }
-    return {};
-}
-
-std::vector<fs::path> visualStudioInstalls() {
-    std::vector<fs::path> installs;
-    const fs::path vswhere = vswherePath();
-    if (!vswhere.empty()) {
-        std::string out;
-        if (runProcessCapture(
-                {vswhere.string(), "-all", "-products", "*", "-requires",
-                 "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-                 "-property", "installationPath"},
-                out) >= 0) {
-            std::size_t start = 0;
-            while (start <= out.size()) {
-                const std::size_t end = out.find('\n', start);
-                const std::string line = trimCopy(out.substr(
-                    start, end == std::string::npos ? std::string::npos
-                                                    : end - start));
-                if (!line.empty()) installs.emplace_back(line);
-                if (end == std::string::npos) break;
-                start = end + 1;
-            }
+std::vector<long> numericParts(const std::string& text, std::size_t& count) {
+    std::size_t i = 0;
+    while (i < text.size() && (text[i] < '0' || text[i] > '9')) ++i;
+    std::vector<long> parts;
+    while (i < text.size()) {
+        if (text[i] < '0' || text[i] > '9') break;
+        const std::size_t start = i;
+        while (i < text.size() && text[i] >= '0' && text[i] <= '9') ++i;
+        parts.push_back(std::strtol(text.substr(start, i - start).c_str(),
+                                    nullptr, 10));
+        if (i < text.size() && text[i] == '.') {
+            ++i;
+            continue;
         }
+        break;
     }
-    return installs;
-}
-
-void addMsvcToolsets(const fs::path& install,
-                     std::vector<ToolchainInstall>& out) {
-    std::error_code ec;
-    const fs::path root = install / "VC" / "Tools" / "MSVC";
-    if (!fs::is_directory(root, ec)) return;
-    for (const fs::directory_entry& entry : fs::directory_iterator(root, ec)) {
-        if (!entry.is_directory(ec)) continue;
-        const std::string version = entry.path().filename().string();
-        const fs::path cl = entry.path() / "bin" / "Hostx64" / "x64" / "cl.exe";
-        const fs::path link =
-            entry.path() / "bin" / "Hostx64" / "x64" / "link.exe";
-        if (!fs::is_regular_file(cl, ec)) continue;
-        ToolchainInstall install;
-        install.candidate = {"msvc", "MSVC cl", "cl", true, false};
-        install.program = cl.string();
-        install.linkProgram = fs::is_regular_file(link, ec)
-                                  ? link.string()
-                                  : std::string();
-        install.version = version;
-        out.push_back(std::move(install));
-    }
-}
-#endif
-
-std::vector<ToolchainInstall> discoverMsvc() {
-    std::vector<ToolchainInstall> installs;
-#if defined(_WIN32)
-    for (const fs::path& visualStudio : visualStudioInstalls()) {
-        addMsvcToolsets(visualStudio, installs);
-    }
-    if (installs.empty()) {
-        std::string cl;
-        if (findExecutable("cl", cl)) {
-            ToolchainInstall install;
-            install.candidate = {"msvc", "MSVC cl", "cl", true, false};
-            install.program = cl;
-            std::string link;
-            if (findExecutable("link", link)) install.linkProgram = link;
-            install.banner = versionBanner(install.candidate, cl);
-            install.version = normalizeCompilerVersion(install.banner);
-            installs.push_back(std::move(install));
-        }
-    }
-    for (ToolchainInstall& install : installs) {
-        if (install.banner.empty()) {
-            install.banner =
-                versionBanner(install.candidate, install.program);
-        }
-        if (install.version.empty()) {
-            install.version = normalizeCompilerVersion(install.banner);
-        }
-        if (install.linkProgram.empty()) {
-            install.problem =
-                "link.exe from the same toolset is not present";
-        }
-    }
-    sortInstalls(installs);
-#endif
-    return installs;
+    count = parts.size();
+    while (parts.size() < 3) parts.push_back(0);
+    return parts;
 }
 
 }  // namespace
@@ -330,8 +229,7 @@ std::vector<ToolchainInstall> discoverMsvc() {
 std::string normalizeCompilerVersion(std::string_view text) {
     std::size_t i = 0;
     while (i < text.size()) {
-        while (i < text.size() &&
-               (text[i] < '0' || text[i] > '9')) {
+        while (i < text.size() && (text[i] < '0' || text[i] > '9')) {
             ++i;
         }
         const std::size_t start = i;
@@ -382,16 +280,53 @@ int compareCompilerVersions(const std::string& left, const std::string& right) {
     return 0;
 }
 
+bool validVersionSpec(const std::string& version) {
+    const std::string text = trimCopy(version);
+    if (text.empty()) return false;
+    bool haveDigit = false;
+    bool lastDot = true;
+    for (char c : text) {
+        if (c >= '0' && c <= '9') {
+            haveDigit = true;
+            lastDot = false;
+        } else if (c == '.') {
+            if (!haveDigit || lastDot) return false;
+            lastDot = true;
+        } else {
+            return false;
+        }
+    }
+    return haveDigit && !lastDot;
+}
+
+bool versionSatisfies(const std::string& installed,
+                      const std::string& requested) {
+    if (!validVersionSpec(requested)) return false;
+    std::size_t requestedCount = 0;
+    const std::vector<long> requestedParts =
+        numericParts(trimCopy(requested), requestedCount);
+    std::size_t installedCount = 0;
+    const std::vector<long> installedParts =
+        numericParts(installed, installedCount);
+    if (installedCount == 0 || requestedCount == 0) return false;
+    for (std::size_t i = 0; i < requestedCount; ++i) {
+        if (installedParts[i] != requestedParts[i]) return false;
+    }
+    return true;
+}
+
+int minimumClangMajor() { return 16; }
+
 std::vector<ToolchainInstall> discoverToolchainVersions(
     const ToolchainCandidate& candidate, bool validate) {
-    if (candidate.msvc) return discoverMsvc();
+    if (candidate.id != "clang") return {};
     std::vector<ToolchainInstall> installs;
     for (const fs::path& program : candidatePrograms(candidate)) {
         ToolchainInstall install;
         install.candidate = candidate;
         install.program = program.string();
-        install.banner = versionBanner(candidate, install.program);
-        if (install.banner.empty() || !familyMatches(candidate, install.banner)) {
+        install.banner = versionBanner(install.program);
+        if (install.banner.empty() || !isClangBanner(install.banner)) {
             continue;
         }
         install.version = normalizeCompilerVersion(install.banner);
@@ -409,8 +344,8 @@ std::vector<ToolchainInstall> discoverToolchainVersions(
     sortInstalls(installs);
     if (validate) {
         for (ToolchainInstall& install : installs) {
-            const CandidateStatus status = probeToolchainProgram(
-                candidate, install.program, install.linkProgram, true);
+            const CandidateStatus status =
+                probeToolchainProgram(candidate, install.program, true);
             install.usable = status.usable;
             install.problem = status.problem;
             install.version = status.version.empty() ? install.version

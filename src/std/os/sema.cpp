@@ -9,7 +9,7 @@
 // The same table drives member typing, the CP3305 candidate list and the
 // documentation the editor shows, so the three can never drift apart. os is a
 // CLOSED family (std_check.cpp isClosedStdNamespace): a member outside the
-// table is CP3305 with these names as candidates instead of a CP3002 skip.
+// table is CP3305 with these names as candidates, never an untyped fallthrough.
 //
 // The signatures and the descriptions are the documented ones
 // (docs/standard-library/04-imported-std-modules.md, os section): Node-style

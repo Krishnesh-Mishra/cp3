@@ -176,14 +176,14 @@ bool parseValueOption(const std::vector<std::string>& tokens, std::size_t& i,
     if (t == "--toolchain" || cp3::cli::startsWith(t, "--toolchain=")) {
         if (t == "--toolchain") {
             if (i + 1 >= tokens.size()) {
-                err = "--toolchain requires an id or path";
+                err = "--toolchain requires a Clang version or path";
                 return true;
             }
             opt.toolchain = tokens[++i];
         } else {
             opt.toolchain = t.substr(std::strlen("--toolchain="));
         }
-        if (opt.toolchain.empty()) err = "--toolchain requires an id or path";
+        if (opt.toolchain.empty()) err = "--toolchain requires a Clang version or path";
         return true;
     }
     return false;

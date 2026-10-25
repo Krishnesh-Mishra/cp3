@@ -22,8 +22,8 @@
 // chunks are std::string, the "exit" code is double).
 //
 // `args` lowers to the runtime's std::vector<std::string> (a string[] literal
-// or an Array<string> binding). Anything else reports CP3002 and emits a
-// compilable stub, the usual graceful-skip path.
+// or an Array<string> binding). Anything else is a type error (processArgs
+// reports it) with a compilable empty-vector stub, not a missing feature.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -201,8 +201,8 @@ std::string Generator::emitProcessObjectCall(const CallExpr& c,
 
 // The `process.argv` / `process.argv.length` / `process.env` property reads
 // and the ExecResult field reads (`result.stdout` / `.stderr` / `.exitCode`).
-// Returns "" when `m` is none of them, so the caller keeps its CP3002
-// fallthrough.
+// Returns "" when `m` is none of them (defensive: the closed process surface is
+// rejected in sema as CP3305 first).
 std::string Generator::emitProcessMember(const MemberExpr& m) {
     if (isNsMember(&m, "process", "argv")) {
         needsProcess_ = true;

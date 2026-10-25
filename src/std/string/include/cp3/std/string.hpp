@@ -138,7 +138,7 @@ inline char lowerByte(unsigned char c) {
 // mask shift (0x80 -> 0x20) stays inside the lane.
 //
 // Two words per iteration on purpose: the per-word mask chain is a serial
-// dependency, and g++ does not unroll this loop at -O2. Sixteen bytes per
+// dependency, and the compiler does not unroll this loop at -O2. Sixteen bytes per
 // iteration measured 1.7x the throughput of eight (16.2 vs 9.5 GB/s on the
 // string-churn data); thirty-two added nothing.
 template <bool kToUpper>
