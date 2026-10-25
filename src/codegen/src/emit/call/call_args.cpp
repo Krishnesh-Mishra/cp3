@@ -12,8 +12,10 @@
 #include "detail/generator/generator.h"
 
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "detail/expr/call_builder.h"
@@ -104,6 +106,18 @@ std::string undefinedElementText(const Type& elem) {
     return std::string();
 }
 
+namespace {
+
+// The value shapes `EventValue` can carry (cp3/async/emitter.hpp): the
+// primitive values plus the two nullish ones. A listener call erases its
+// arguments into these, so any other shape is a type error there.
+bool eventValueShape(Shape s) {
+    return s == Shape::Number || s == Shape::String || s == Shape::Bool ||
+           s == Shape::Undefined || s == Shape::Null;
+}
+
+}  // namespace
+
 // Stage 1: the text of every argument, plus the explicit `undefined`s that
 // must not be passed. Each positional argument is emitted against its
 // parameter's expected type (`ptypes`).
@@ -130,7 +144,33 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
         if (arg->kind == NodeKind::SpreadElement) {
             texts.spreadIndex = i;
             if (!spreadArg(c, params, ptypes, texts)) {
-                g.notImplemented(*arg, "spread argument");
+                // The spread has no lowering because the construct is wrong,
+                // not because codegen is missing it: say which error it is.
+                if (hasRest) {
+                    if (i < restAt) {
+                        // A spread that fills a fixed parameter of a rest
+                        // callee needs a run-time splice of two arrays.
+                        g.notImplemented(
+                            *arg,
+                            "a spread before a rest parameter's fixed "
+                            "arguments");
+                    } else {
+                        g.reportTypeError(
+                            *arg,
+                            "type mismatch: a spread argument must be an "
+                            "array of the rest parameter's element type");
+                    }
+                } else if (i + 1 != count) {
+                    g.reportCodegenError(
+                        c, diagcode::kArityMismatch,
+                        "a spread argument must be the last argument of a "
+                        "call with a fixed argument list");
+                } else {
+                    g.reportTypeError(
+                        *arg,
+                        "type mismatch: a spread argument must be an array");
+                }
+                texts.value[i] = "0.0";
             }
             continue;
         }
@@ -158,7 +198,10 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
                 texts.value[i] = undef;
                 continue;
             }
-            g.notImplemented(*arg, "undefined in a rest argument");
+            g.reportTypeError(
+                *arg,
+                "type mismatch: 'undefined' is not assignable to the rest "
+                "parameter's element type");
             texts.value[i] = "0.0";
             continue;
         }
@@ -184,6 +227,17 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
     return texts;
 }
 
+// Whether the argument list has a spread at or after `from`.
+namespace {
+bool hasSpreadArg(const CallExpr& c, std::size_t from) {
+    for (std::size_t i = from; i < c.arguments.size(); ++i) {
+        const Expr* arg = c.arguments[i].get();
+        if (arg && arg->kind == NodeKind::SpreadElement) return true;
+    }
+    return false;
+}
+}  // namespace
+
 // Stage 2a: the rest callee's argument vector.
 std::vector<std::string> CallBuilder::packRestArgs(
     const CallExpr& c, const ArgTexts& texts, const std::optional<Type>& elem,
@@ -195,13 +249,43 @@ std::vector<std::string> CallBuilder::packRestArgs(
     }
     const CppInfo ec = elem ? classify(*elem) : CppInfo{};
     std::string elemCpp;
-    if (ec.representable && ec.shape != Shape::Void) elemCpp = ec.cpp;
+    if (elem && elem->kind != TypeKind::TypeParam && ec.representable &&
+        ec.shape != Shape::Void) {
+        elemCpp = ec.cpp;
+    }
+    if (elemCpp.empty() && elem && elem->kind == TypeKind::TypeParam) {
+        // An untyped rest parameter with no argument to deduce from: the
+        // packed array is empty, so any element type is a valid witness.
+        elemCpp = "double";
+    }
     if (elemCpp.empty()) {
         g.notImplemented(c, "this rest argument");
         elemCpp = "double";
     }
     if (texts.spreadRest) {
         out.push_back(texts.value[0]);
+    } else if (count > restAt && hasSpreadArg(c, restAt)) {
+        // A rest callee absorbs the whole argument vector, so a spread joins
+        // the packed array at its source position - before, between or after
+        // fixed arguments, with no arity switch.
+        std::string body = "std::vector<" + elemCpp + "> cp3_rest;";
+        for (std::size_t i = restAt; i < count; ++i) {
+            const Expr* arg = c.arguments[i].get();
+            if (arg && arg->kind == NodeKind::SpreadElement) {
+                const std::string name =
+                    "cp3_rest_spread_" + std::to_string(i);
+                body += " { const auto& cp3_s = " + name +
+                        "; cp3_rest.insert(cp3_rest.end(), cp3_s->begin(), "
+                        "cp3_s->end()); }";
+                continue;
+            }
+            if (!texts.value[i].empty()) {
+                body += " cp3_rest.push_back(" + texts.value[i] + ");";
+            }
+        }
+        body += " return ::cp3::runtime::makeArray<" + elemCpp +
+                ">(std::move(cp3_rest));";
+        out.push_back("[&]{ " + body + " }()");
     } else if (count <= restAt) {
         // No trailing argument: the rest parameter is an empty array.
         out.push_back("::cp3::runtime::makeArray<" + elemCpp + ">()");
@@ -274,8 +358,27 @@ CallBuilder::CallArgs CallBuilder::callArgs(
     if (hasRest) {
         // The element type at THIS call site: the substituted type argument,
         // or the unified type of the arguments the rest parameter absorbs.
-        out.values = packRestArgs(c, texts, restElemTypeAt(c, ptypes, restAt),
-                                  restAt);
+        std::optional<Type> elem = restElemTypeAt(c, ptypes, restAt);
+        // An untyped rest parameter keeps its type parameter when every
+        // argument is a spread; the spread's element type is the concrete
+        // witness the packed array uses.
+        if (!elem || elem->kind == TypeKind::TypeParam) {
+            for (std::size_t i = restAt; i < c.arguments.size(); ++i) {
+                const Expr* arg = c.arguments[i].get();
+                if (!arg || arg->kind != NodeKind::SpreadElement) continue;
+                const auto& spread = static_cast<const SpreadElement&>(*arg);
+                if (!spread.argument) continue;
+                const Type at = g.effectiveType(*spread.argument);
+                if (at.kind == TypeKind::Array && !at.parts.empty()) {
+                    elem = at.parts.front();
+                    break;
+                }
+            }
+        }
+        out.values = packRestArgs(c, texts, elem, restAt);
+        // A rest-spread binds its source in the prologue, exactly like the
+        // fixed-argument spread path does.
+        out.prologue = texts.prologue;
         return out;
     }
     out.values = plainArgList(texts, params, applyDefaults);
@@ -314,10 +417,41 @@ std::string CallBuilder::emitFunctionCall(const CallExpr& c,
             return text + ".invoke(::cp3::runtime::EventValue(" +
                    g.expr(*c.arguments.front()) + "))";
         }
-        g.notImplemented(c, "this listener call");
-        return "0.0";
+        // A listener takes a list of erased values (up to kMaxListenerArgs):
+        // pass every argument, with a spread's elements spliced in. A value
+        // `EventValue` cannot carry is a type error, not a missing feature.
+        std::string body = "std::vector<::cp3::runtime::EventValue> cp3_vals;";
+        for (const auto& argPtr : c.arguments) {
+            const Expr* arg = argPtr.get();
+            if (!arg) continue;
+            if (arg->kind == NodeKind::SpreadElement) {
+                const auto& spread = static_cast<const SpreadElement&>(*arg);
+                if (!spread.argument) continue;
+                const Type at = g.effectiveType(*spread.argument);
+                const CppInfo ec =
+                    at.kind == TypeKind::Array && !at.parts.empty()
+                        ? classify(at.parts.front())
+                        : CppInfo{};
+                if (!ec.representable || !eventValueShape(ec.shape)) {
+                    g.reportTypeError(
+                        *arg,
+                        "type mismatch: a listener argument must be a "
+                        "primitive value");
+                    return "0.0";
+                }
+                body += " { const auto& cp3_s = " + g.expr(*spread.argument) +
+                        "; for (const auto& cp3_e : *cp3_s) cp3_vals.push_back("
+                        "::cp3::runtime::EventValue(cp3_e)); }";
+                continue;
+            }
+            body += " cp3_vals.push_back(::cp3::runtime::EventValue(" +
+                    g.expr(*arg) + "));";
+        }
+        return "[&]{ " + body + " return " + text +
+               ".invoke(cp3_vals.data(), cp3_vals.size()); }()";
     }
-    g.notImplemented(c, "this call");
+    g.reportCodegenError(c, diagcode::kTypeMismatch,
+                         "type mismatch: this value is not callable");
     return "0.0";
 }
 
@@ -496,7 +630,27 @@ std::string CallBuilder::emitMemberCall(const CallExpr& c,
             return "::cp3::runtime::toString(" + g.expr(*m.object) + ")";
         }
     }
-    g.notImplemented(c, "this method call");
+    // A member read whose value is a function (a class field holding a
+    // callable): call it through the value-call lowering.
+    const Type memberType = g.effectiveType(m);
+    if (memberType.kind == TypeKind::Function) {
+        const std::optional<Type> saved = g.expected_;
+        g.expected_ = memberType;
+        const std::string callee = g.expr(m);
+        g.expected_ = saved;
+        return emitFunctionCall(c, callee, memberType, nullptr);
+    }
+    // An ambient/unknown member is permissive in sema but has no C++
+    // spelling: the form stays a not-implemented skip, not a hard error.
+    const CppInfo memberInfo = g.info(m);
+    if (memberInfo.shape == Shape::Unknown ||
+        memberInfo.shape == Shape::Unsupported) {
+        g.notImplemented(c, "this method call");
+        return "0.0";
+    }
+    g.reportCodegenError(c, diagcode::kTypeMismatch,
+                         "type mismatch: '" + m.property +
+                             "' is not a method of this value");
     return "0.0";
 }
 
@@ -506,7 +660,7 @@ std::string CallBuilder::emitMemberCall(const CallExpr& c,
 // the target unit's qualified C++ name, with the callee's declared parameters
 // applied to optional/default arguments. A name that is not linked (or is a
 // function of this unit) returns "" so the caller keeps its other lowerings.
-// A link miss reports CP3002 here, at the use site.
+// A link miss reports an unresolved-import error here, at the use site.
 std::string Generator::emitLinkedCall(const CallExpr& c,
                                       const std::string& name) {
     if (functions_.count(name) != 0) return std::string();
@@ -522,7 +676,11 @@ std::string Generator::emitLinkedCall(const CallExpr& c,
         return "0.0";
     }
     if (ln.fn == nullptr) {
-        notImplemented(c, "this call");
+        // A linked name with a C++ spelling that is not a function (a
+        // re-exported value): calling it is a program error.
+        reportCodegenError(c, diagcode::kUnresolvedImport,
+                           "unresolved import: '" + name +
+                               "' is not a function");
         return "0.0";
     }
     // The explicit type-argument list of the call (`f<number>(...)` ->
@@ -558,7 +716,7 @@ std::string Generator::emitLinkedCall(const CallExpr& c,
     }
     const detail::CallBuilder::CallArgs args =
         calls.callArgs(c, &ln.fn->params, ptypes, /*applyDefaults=*/false);
-    return calls.callText(ln.cpp, args);
+    return calls.callText(callee, args);
 }
 
 // The link miss for a member access whose object is an imported binding with
@@ -599,7 +757,25 @@ std::string Generator::emitCall(const CallExpr& c) {
             return calls.emitFunctionCall(c, expr(*c.callee), fnType, nullptr);
         }
     }
-    notImplemented(c, "this call");
+    // A call through any other expression (`f()(x)`, an immediately invoked
+    // arrow, a conditional function value): the callee is a function value.
+    const Type fnType = effectiveType(*c.callee);
+    if (fnType.kind == TypeKind::Function) {
+        const std::optional<Type> saved = expected_;
+        expected_ = fnType;
+        const std::string callee = expr(*c.callee);
+        expected_ = saved;
+        return calls.emitFunctionCall(c, callee, fnType, nullptr);
+    }
+    // An ambient/unknown callable is permissive in sema but has no C++
+    // spelling: the form stays a not-implemented skip, not a hard error.
+    const CppInfo calleeInfo = classify(fnType);
+    if (calleeInfo.shape == Shape::Unknown ||
+        calleeInfo.shape == Shape::Unsupported) {
+        notImplemented(c, "this call");
+        return "0.0";
+    }
+    reportTypeError(c, "type mismatch: this value is not callable");
     return "0.0";
 }
 

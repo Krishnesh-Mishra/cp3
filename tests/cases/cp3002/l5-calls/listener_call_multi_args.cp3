@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// A listener-typed value takes the erased values its call passes it.
+function fire(cb: (a: unknown, b: unknown) => void): void {
+  cb(1, 2);
+}
+
+fire((a, b) => {
+  console.log("fired");
+});

@@ -1,0 +1,12 @@
+import console from "std/console";
+
+class Holder {
+  cb: (x: number) => number;
+
+  constructor(cb: (x: number) => number) {
+    this.cb = cb;
+  }
+}
+
+let h = new Holder((x: number) => x + 1);
+console.log(`${h.cb(4)}`);

@@ -8,6 +8,11 @@
 // the call is emitted inside a lambda, so the spread's elements are read from
 // that one value.
 //
+// A rest callee packs the whole argument vector, so a spread after its fixed
+// parameters joins the packed array at its source position (`f(1, ...xs)`,
+// `f(...xs, 5)`); only a spread that also fills a fixed parameter still has no
+// lowering.
+//
 // A parameter the call may leave out (a default or an optional one) takes its
 // default when the spread carries no element for it - JS gives `undefined`
 // there, and the default fires. A required parameter reads its element out of
@@ -19,6 +24,7 @@
 #include "detail/expr/call_builder.h"
 
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -43,8 +49,9 @@ std::string CallBuilder::callText(const std::string& callee,
 }
 
 // The argument text of a spread argument: a rest-only callee takes the array
-// itself, a fixed-argument callee takes the spread's elements. False when the
-// call has no lowering for the spread.
+// itself, a rest callee splices the spread's elements into its packed array,
+// and a fixed-argument callee takes the spread's elements. False when the call
+// has no lowering for the spread.
 bool CallBuilder::spreadArg(const CallExpr& c, const ParamList* params,
                             const std::vector<std::optional<Type>>& ptypes,
                             ArgTexts& texts) {
@@ -65,9 +72,72 @@ bool CallBuilder::spreadArg(const CallExpr& c, const ParamList* params,
         g.expected_ = saved;
         return true;
     }
+    if (hasRest) {
+        // A rest callee absorbs the whole argument vector: a spread after the
+        // fixed parameters joins the packed array at its source position,
+        // before or between the rest elements, with no arity switch. A spread
+        // that also fills a fixed parameter (one before the rest parameter)
+        // would have to splice two arrays at run time.
+        if (index < restAt) return false;
+        const Type at = g.effectiveType(*spread.argument);
+        if (at.kind != TypeKind::Array || at.parts.empty()) return false;
+        const CppInfo ec = classify(at.parts.front());
+        if (!ec.representable || ec.shape == Shape::Void) return false;
+        // The element type the packed array uses: the rest parameter's
+        // substituted type, the unified argument type, or - for an untyped
+        // rest with only spreads - the unified spread element type.
+        std::optional<Type> elem = restElemTypeAt(c, ptypes, restAt);
+        if (!elem || elem->kind == TypeKind::TypeParam) {
+            Type unified = Type::unknown();
+            bool any = false;
+            for (std::size_t i = restAt; i < c.arguments.size(); ++i) {
+                const Expr* other = c.arguments[i].get();
+                if (!other || other->kind != NodeKind::SpreadElement) continue;
+                const auto& otherSpread =
+                    static_cast<const SpreadElement&>(*other);
+                if (!otherSpread.argument) continue;
+                const Type otherAt = g.effectiveType(*otherSpread.argument);
+                if (otherAt.kind != TypeKind::Array || otherAt.parts.empty()) {
+                    continue;
+                }
+                unified = any ? unify(unified, otherAt.parts.front())
+                              : otherAt.parts.front();
+                any = true;
+            }
+            if (any) elem = unified;
+        }
+        if (!elem) return false;
+        const CppInfo want = classify(*elem);
+        if (!want.representable || want.shape == Shape::Void) return false;
+        // The packed vector's element type takes the spread's elements (a
+        // `number[]` spread into a `(number | undefined)[]` rest parameter
+        // converts to the optional element).
+        if (want.cpp != ec.cpp && !isAssignable(at.parts.front(), *elem)) {
+            return false;
+        }
+        const std::string name = "cp3_rest_spread_" + std::to_string(index);
+        const std::optional<Type> saved = g.expected_;
+        g.expected_ = at;
+        const std::string source = g.expr(*spread.argument);
+        g.expected_ = saved;
+        texts.prologue += "const auto& " + name + " = " + source + "; ";
+        texts.value[index] = std::string();
+        return true;
+    }
     // A trailing spread into a fixed-argument callee.
-    if (hasRest || index + 1 != c.arguments.size()) return false;
-    if (!spreadArgs(c, params, ptypes, texts)) return false;
+    if (index + 1 != c.arguments.size()) return false;
+    if (params != nullptr) {
+        if (!spreadArgs(c, params, ptypes, texts)) return false;
+    } else {
+        // A value callee (`f(...xs)` through a `std::function`) has no
+        // parameter list: its function type is the parameter list.
+        ParamList synthetic;
+        synthetic.reserve(ptypes.size());
+        for (std::size_t i = 0; i < ptypes.size(); ++i) {
+            synthetic.push_back(std::make_unique<Parameter>(c.span));
+        }
+        if (!spreadArgs(c, &synthetic, ptypes, texts)) return false;
+    }
     texts.value[index] = std::string();
     return true;
 }

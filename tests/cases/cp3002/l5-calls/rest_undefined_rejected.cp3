@@ -1,0 +1,7 @@
+import console from "std/console";
+
+function sum(...nums: number[]): number {
+  return nums.length;
+}
+
+console.log(`${sum(1, undefined)}`);
