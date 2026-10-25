@@ -23,7 +23,7 @@
 #
 # Usage:
 #   python tests/cli/run_cli_tests.py --fast
-#   python tests/cli/run_cli_tests.py --full --jobs 2 --keep
+#   python tests/cli/run_cli_tests.py --full --keep
 #   python tests/cli/run_cli_tests.py --filter init --list
 #   python tests/cli/run_cli_tests.py --filter global,init --json > out.json
 #
@@ -1550,7 +1550,8 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--filter", action="append", default=[], help="substring filter, repeatable or comma-separated")
     parser.add_argument("--list", action="store_true", help="list selected cases and exit")
     parser.add_argument("--json", action="store_true", help="machine-readable output on stdout")
-    parser.add_argument("--jobs", type=int, default=4, help="parallel case workers (default 4)")
+    parser.add_argument("--jobs", type=int, default=max(1, os.cpu_count() or 1),
+                        help="parallel case workers (default: one per logical CPU)")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, help="default per-case timeout in seconds")
     parser.add_argument("--keep", action="store_true", help="keep every temp case directory")
     mode = parser.add_mutually_exclusive_group()
