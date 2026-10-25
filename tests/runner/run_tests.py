@@ -21,22 +21,29 @@
 # Usage:
 #   python tests/runner/run_tests.py [--cp3c PATH] [--cases DIR]
 #                                    [--filter SUBSTR] [--json] [--verbose]
-#                                    [--toolchain ID[,ID...]] [--strict-ambiguous]
+#                                    [--strict-ambiguous]
 #                                    [--write-registry [PATH]]
 #                                    [--no-bench] [--bench-args "ARGS"]
-#                                    [--jobs N]
+#                                    [--jobs N] [--progress | --no-progress]
 #
-# --toolchain runs the corpus once per selected C++ toolchain, sequentially:
-# `--toolchain gcc`, `--toolchain gcc,clang`, or `--toolchain all` (gcc,
-# clang, msvc). Each cp3c invocation gets the matching `--toolchain ID`, so a
-# generated-code problem cannot hide behind the globally selected compiler.
-# A requested toolchain that cp3c reports as missing is an error unless
-# --allow-missing-toolchains is passed.
+# Beta one is Clang-only. The corpus runs once against the Clang that cp3c
+# resolves (the saved choice, or auto-detected newest usable install); there is
+# no compiler matrix.
+#
+# Interactive runs show a live one-line status (completed/total, pass/fail/skip
+# counts, elapsed time, estimated time left and ETA). It is redrawn about once
+# per second and the previous text is overwritten, so the terminal does not
+# fill with status lines. The display is on automatically when stdout is a
+# terminal; --progress forces it, --no-progress disables it, and --json always
+# disables it so the JSON stays parseable.
 #
 # --jobs N runs the corpus pass with up to N cp3c subprocesses in flight at
 # once (stdlib only, ThreadPoolExecutor plus a small dispatcher). The default
-# is one per logical CPU minus one; --jobs 1 is the unchanged sequential path
-# and any N >= 1 is accepted. Each case still runs exactly the same command
+# is capped at 4 (and at one per logical CPU minus one on smaller machines):
+# the C++ compiler is the expensive child, and letting one cp3c per core run
+# at once makes unrelated compilations fail under memory/process pressure.
+# --jobs 1 is the unchanged sequential path and any N >= 1 is accepted. Each
+# case still runs exactly the same command
 # with the same cwd and timeout, and per-case outcomes
 # are buffered and printed in the same order the sequential runner prints them,
 # so the per-case lines, the `_ambiguous/` listing and the summary stay
@@ -66,8 +73,11 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import threading
+import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,13 +86,6 @@ from typing import Optional
 # --- Exit codes shared with src/cli/include/cp3/cli.hpp ----------------------
 STUB_EXIT_CODE = 3
 STUB_MARKER = "not implemented"
-
-# --- Toolchain matrix --------------------------------------------------------
-# `all` is deliberately the three native toolchains cp3c can target on this
-# platform. `apple-clang` is accepted as an explicit id but is not part of
-# `all` on Windows.
-ALL_TOOLCHAINS = ("gcc", "clang", "msvc")
-KNOWN_TOOLCHAINS = frozenset((*ALL_TOOLCHAINS, "apple-clang"))
 
 # --- Open-question markers ---------------------------------------------------
 # Any path with this directory segment is a marker, not an assertion.
@@ -306,6 +309,198 @@ class Outcome:
     detail: str = ""
 
 
+def _format_duration(seconds: float) -> str:
+    """Compact human-readable duration for the live status line."""
+    total = max(0, int(seconds + 0.5))
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    if minutes:
+        return f"{minutes}m {secs:02d}s"
+    return f"{secs}s"
+
+
+class LiveProgress:
+    """One-line live status for an interactive corpus run.
+
+    The reporter owns the bottom line of the terminal. It redraws about once a
+    second, using `\\r` and padding over the previous text rather than ANSI
+    escape codes, so it also works in the classic Windows console. The display
+    is disabled when stdout is not a terminal (or when --json is used), which
+    keeps redirected output and machine-readable output clean. `--progress`
+    forces it on for a non-terminal stream.
+    """
+
+    def __init__(
+        self,
+        stream=None,
+        interval: float = 1.0,
+        enabled: Optional[bool] = None,
+    ) -> None:
+        self._stream = stream or sys.stdout
+        self._enabled = (
+            self._stream.isatty() if enabled is None else bool(enabled)
+        )
+        self._interval = interval
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._active = False
+        self._started = 0.0
+        self._label = ""
+        self._total = 0
+        self._completed = 0
+        self._passed = 0
+        self._failed = 0
+        self._skipped = 0
+        self._inflight = 0
+        self._current = ""
+        self._last_len = 0
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    def begin(self, label: str, total: int) -> None:
+        """Start (or restart) the reporter for one phase."""
+        if not self._enabled or total <= 0:
+            return
+        old = self._thread
+        if old is not None and old.is_alive():
+            self._stop.set()
+            old.join(timeout=2.0)
+        with self._lock:
+            self._label = label
+            self._total = total
+            self._completed = 0
+            self._passed = 0
+            self._failed = 0
+            self._skipped = 0
+            self._inflight = 0
+            self._current = ""
+            self._last_len = 0
+            self._started = time.monotonic()
+            self._stop.clear()
+            self._active = True
+        self._thread = threading.Thread(
+            target=self._run, name="cp3-test-progress", daemon=True
+        )
+        self._thread.start()
+
+    def advance(self, status: str) -> None:
+        """Record one finished case."""
+        if not self._enabled:
+            return
+        with self._lock:
+            self._completed += 1
+            if status == "passed":
+                self._passed += 1
+            elif status == "failed":
+                self._failed += 1
+            elif status == "skipped":
+                self._skipped += 1
+
+    def set_inflight(self, count: int, current: str = "") -> None:
+        """Publish how many cases are running (and, serially, which one)."""
+        if not self._enabled:
+            return
+        with self._lock:
+            self._inflight = max(0, count)
+            self._current = current
+
+    def message(self, text: str) -> None:
+        """Print a normal line without losing the live status."""
+        if not self._enabled:
+            print(text, file=sys.stderr, flush=True)
+            return
+        with self._lock:
+            self._clear_line_locked()
+            self._stream.write(text + "\n")
+            self._stream.flush()
+            if self._active:
+                self._render_locked()
+
+    def finish(self) -> None:
+        """Stop redrawing, leave the final status line in place, then newline."""
+        if not self._enabled:
+            return
+        with self._lock:
+            if not self._active:
+                return
+            self._active = False
+        self._stop.set()
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=2.0)
+        with self._lock:
+            self._render_locked()
+            self._stream.write("\n")
+            self._stream.flush()
+            self._last_len = 0
+        self._thread = None
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            with self._lock:
+                if self._active:
+                    self._render_locked()
+            self._stop.wait(self._interval)
+
+    @staticmethod
+    def _terminal_width() -> int:
+        try:
+            columns = shutil.get_terminal_size((120, 24)).columns
+        except OSError:  # pragma: no cover - defensive
+            columns = 120
+        # Leave the final column alone: writing it can scroll the console.
+        return max(20, columns - 1)
+
+    def _clear_line_locked(self) -> None:
+        if self._last_len <= 0:
+            return
+        count = min(self._last_len, self._terminal_width())
+        self._stream.write("\r" + " " * count + "\r")
+        self._stream.flush()
+        self._last_len = 0
+
+    def _status_text_locked(self) -> str:
+        elapsed = max(0.0, time.monotonic() - self._started)
+        total = self._total
+        done = min(self._completed, total)
+        percent = (100.0 * done / total) if total else 100.0
+        parts = [
+            f"{self._label} {done}/{total} ({percent:.1f}%)",
+            f"pass {self._passed} fail {self._failed} skip {self._skipped}",
+            f"elapsed {_format_duration(elapsed)}",
+        ]
+        if done >= total:
+            parts.append("left 0s")
+        elif done > 0 and elapsed > 0:
+            rate = done / elapsed
+            remaining = (total - done) / rate
+            parts.append(f"left ~{_format_duration(remaining)}")
+            eta = time.strftime("%H:%M:%S", time.localtime(time.time() + remaining))
+            parts.append(f"eta {eta}")
+        else:
+            parts.append("left --")
+        if self._inflight:
+            parts.append(f"{self._inflight} running")
+        if self._current:
+            parts.append(f"now {self._current}")
+        return " | ".join(parts)
+
+    def _render_locked(self) -> None:
+        text = self._status_text_locked()
+        width = self._terminal_width()
+        if len(text) > width:
+            text = text[: max(0, width - 3)] + "..."
+        clear = min(max(self._last_len, len(text)), width)
+        self._stream.write("\r" + text + " " * (clear - len(text)))
+        self._stream.flush()
+        self._last_len = len(text)
+
+
 def discover_cases(cases_dir: Path, filter_substr: Optional[str]) -> tuple[list[Case], list[str]]:
     """Returns (cases, discovery_warnings). Never raises.
 
@@ -381,58 +576,7 @@ def _resolve_compiler(path_arg: Optional[str]) -> Optional[Path]:
     return candidates[0] if candidates else None
 
 
-def parse_toolchains(raw: Optional[list[str]]) -> list[str]:
-    """Expand repeated/comma-separated --toolchain values, preserving order."""
-    if not raw:
-        return []
-    selected: list[str] = []
-    for item in raw:
-        for token in item.split(","):
-            name = token.strip().lower()
-            if not name:
-                continue
-            candidates = ALL_TOOLCHAINS if name == "all" else (name,)
-            for candidate in candidates:
-                if candidate not in KNOWN_TOOLCHAINS:
-                    known = ", ".join((*ALL_TOOLCHAINS, "apple-clang"))
-                    raise ValueError(
-                        f"unknown toolchain '{candidate}' (known: {known}; use 'all')"
-                    )
-                if candidate not in selected:
-                    selected.append(candidate)
-    if not selected:
-        raise ValueError("--toolchain needs at least one id (gcc, clang, msvc, or all)")
-    return selected
-
-
-def toolchain_status(compiler: Path, toolchain: str) -> tuple[bool, str]:
-    """Ask cp3c whether a named toolchain is ready.
-
-    Returns (ready, detail). If the query itself cannot run, return True and
-    let the normal corpus path report cp3c's own error; this preflight is a
-    guard against silently running the corpus against a missing compiler, not
-    a second source of truth.
-    """
-    try:
-        proc = subprocess.run(
-            [str(compiler), "toolchain", "list"],
-            capture_output=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return True, f"could not query cp3c toolchain list ({exc})"
-    if proc.returncode != 0:
-        return True, f"cp3c toolchain list exited {proc.returncode}"
-    text = _decode(proc.stdout) + "\n" + _decode(proc.stderr)
-    for line in text.splitlines():
-        match = re.match(r"^\s*([A-Za-z0-9_.-]+)\s+.*?\b(ready|missing)\b", line)
-        if match and match.group(1).lower() == toolchain:
-            return match.group(2) == "ready", line.strip()
-    return True, f"toolchain '{toolchain}' was not listed by cp3c"
-
-
-def evaluate(case: Case, compiler: Path, timeout: float,
-             toolchain: Optional[str] = None) -> Outcome:
+def evaluate(case: Case, compiler: Path, timeout: float) -> Outcome:
     mode = case.spec.get("mode", "check")
     if mode not in ("run", "check"):
         mode = "check"
@@ -441,8 +585,6 @@ def evaluate(case: Case, compiler: Path, timeout: float,
         return Outcome(case, "failed", f"missing source file: {case.cp3_path}")
 
     cmd = [str(compiler), mode, str(case.cp3_path)]
-    if toolchain:
-        cmd += ["--toolchain", toolchain]
     try:
         proc = subprocess.run(
             cmd,
@@ -596,16 +738,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     parser.add_argument("--filter", dest="filter_substr", default=None,
                         help="only run cases whose relative path contains SUBSTR")
-    parser.add_argument("--toolchain", dest="toolchains", action="append",
-                        default=None, metavar="ID[,ID...]",
-                        help="run the corpus once per C++ toolchain, sequentially; "
-                             "repeatable or comma-separated. IDs: gcc, clang, msvc, "
-                             "apple-clang, or 'all' (gcc,clang,msvc). Every cp3c "
-                             "invocation gets --toolchain ID. Default: use cp3c's "
-                             "configured toolchain.")
-    parser.add_argument("--allow-missing-toolchains", action="store_true",
-                        help="with --toolchain, skip a requested toolchain cp3c "
-                             "reports as missing instead of failing the run")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="print every case, not just failures")
@@ -618,17 +750,24 @@ def main(argv: Optional[list[str]] = None) -> int:
                              "(default: tests/cases/AMBIGUITIES.md)")
     parser.add_argument("--timeout", type=float, default=60.0,
                         help="per-case timeout in seconds (default: 60)")
-    default_jobs = max(1, (os.cpu_count() or 1) - 1)
+    default_jobs = min(4, max(1, (os.cpu_count() or 1) - 1))
     parser.add_argument("--jobs", type=int, default=default_jobs, metavar="N",
                         help="run up to N cases concurrently during the corpus "
-                             "pass (default: %(default)s, one per logical CPU "
-                             "minus one; pass 1 for the strictly sequential "
+                             "pass (default: %(default)s, capped at 4 so "
+                             "parallel C++ compilations do not exhaust the "
+                             "machine; pass 1 for the strictly sequential "
                              "runner, or any larger N). Run-mode cases that "
                              "share a project root run one at a time (cp3c "
                              "builds into a shared .cp3/ there); check cases "
                              "and different roots run in parallel. Output "
                              "order and content do not depend on N; the bench "
                              "pass always runs sequentially.")
+    parser.add_argument("--progress", dest="progress", action="store_true",
+                        default=None,
+                        help="force the live one-line progress display (default: on "
+                             "when stdout is a terminal, off otherwise)")
+    parser.add_argument("--no-progress", dest="progress", action="store_false",
+                        help="disable the live progress display")
     parser.add_argument("--bench", action="store_true",
                         help="run the benchmark suite after the corpus pass (now the "
                              "default; kept as an explicit, redundant request)")
@@ -661,51 +800,34 @@ def main(argv: Optional[list[str]] = None) -> int:
     compiler = _resolve_compiler(args.cp3c)
     compiler_missing = compiler is None or not compiler.is_file()
     missing_reason = "cp3c executable not found"
+    ordinary_cases = (
+        cases if args.strict_ambiguous else [c for c in cases if not c.ambiguous]
+    )
+    ambiguous_cases = [] if args.strict_ambiguous else [c for c in cases if c.ambiguous]
+    progress = LiveProgress(enabled=False if args.json else args.progress)
 
-    try:
-        requested_toolchains = parse_toolchains(args.toolchains)
-    except ValueError as exc:
-        parser.error(str(exc))
-
-    if requested_toolchains:
-        if compiler_missing:
-            print("error: --toolchain requires a working cp3c executable",
-                  file=sys.stderr)
-            return 2
-        available_toolchains: list[str] = []
-        for toolchain in requested_toolchains:
-            ready, detail = toolchain_status(compiler, toolchain)
-            if not ready:
-                if args.allow_missing_toolchains:
-                    print(f"warning: skipping toolchain '{toolchain}': {detail}",
-                          file=sys.stderr)
-                    continue
-                print(f"error: requested toolchain '{toolchain}' is not ready: "
-                      f"{detail}", file=sys.stderr)
-                print("hint: pass --allow-missing-toolchains to skip unavailable "
-                      "toolchains, or select only the IDs you can run.",
-                      file=sys.stderr)
-                return 2
-            available_toolchains.append(toolchain)
-        if not available_toolchains:
-            print("error: no requested toolchains are available", file=sys.stderr)
-            return 2
-        selected_toolchains: list[Optional[str]] = list(available_toolchains)
-    else:
-        selected_toolchains = [None]
-
-    def run_as_ordinary_serial(selected: list[Case],
-                               toolchain: Optional[str] = None) -> list[Outcome]:
+    def run_as_ordinary_serial(
+        selected: list[Case],
+        progress: Optional[LiveProgress] = None,
+    ) -> list[Outcome]:
         sink: list[Outcome] = []
         for case in selected:
+            if progress is not None:
+                progress.set_inflight(1, case.display)
             if compiler_missing:
-                sink.append(Outcome(case, "skipped", missing_reason))
+                outcome = Outcome(case, "skipped", missing_reason)
             else:
-                sink.append(evaluate(case, compiler, args.timeout, toolchain))
+                outcome = evaluate(case, compiler, args.timeout)
+            sink.append(outcome)
+            if progress is not None:
+                progress.advance(outcome.status)
+                progress.set_inflight(0)
         return sink
 
-    def run_as_ordinary_parallel(selected: list[Case],
-                                 toolchain: Optional[str] = None) -> list[Outcome]:
+    def run_as_ordinary_parallel(
+        selected: list[Case],
+        progress: Optional[LiveProgress] = None,
+    ) -> list[Outcome]:
         # Bounded pool, one cp3c subprocess per case - the same command, cwd
         # and timeout the sequential path uses. Cases are parallelised across
         # build roots: cp3c writes shared intermediates (runtime objects,
@@ -719,10 +841,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         # emitted lines are byte-identical to a sequential run no matter which
         # case finishes first.
         count = len(selected)
-        if compiler_missing:
-            return [Outcome(case, "skipped", missing_reason) for case in selected]
-        if args.jobs <= 1 or count <= 1:
-            return run_as_ordinary_serial(selected, toolchain)
+        if compiler_missing or args.jobs <= 1 or count <= 1:
+            return run_as_ordinary_serial(selected, progress)
         timeout = args.timeout
         # Only `run` cases involve the toolchain and the shared `<root>/.cp3/`
         # build directory; `check` cases are frontend-only (pure reads) and
@@ -757,11 +877,13 @@ def main(argv: Optional[list[str]] = None) -> int:
                 pending.pop(scan)
                 if root is not None:
                     busy_roots.add(root)
-                future = pool.submit(evaluate, selected[index], compiler, timeout, toolchain)
+                future = pool.submit(evaluate, selected[index], compiler, timeout)
                 inflight[future] = index
 
         with ThreadPoolExecutor(max_workers=min(args.jobs, count)) as pool:
             start_more(pool)
+            if progress is not None:
+                progress.set_inflight(len(inflight))
             while inflight:
                 done, _ = wait(list(inflight), return_when=FIRST_COMPLETED)
                 for future in done:
@@ -769,24 +891,71 @@ def main(argv: Optional[list[str]] = None) -> int:
                     root = roots[index]
                     if root is not None:
                         busy_roots.discard(root)
-                    collected[index] = future.result()
+                    outcome = future.result()
+                    collected[index] = outcome
+                    if progress is not None:
+                        progress.advance(outcome.status)
                 start_more(pool)
+                if progress is not None:
+                    progress.set_inflight(len(inflight))
         return [collected[i] for i in range(count)]
 
-    def run_as_ordinary(selected: list[Case],
-                        toolchain: Optional[str] = None) -> list[Outcome]:
-        if args.jobs > 1:
-            return run_as_ordinary_parallel(selected, toolchain)
-        return run_as_ordinary_serial(selected, toolchain)
+    def run_as_ordinary(
+        selected: list[Case],
+        progress: Optional[LiveProgress] = None,
+    ) -> list[Outcome]:
+        if compiler_missing or args.jobs <= 1 or len(selected) <= 1:
+            return run_as_ordinary_serial(selected, progress)
+        return run_as_ordinary_parallel(selected, progress)
 
-    def evaluate_suite(toolchain: Optional[str]) -> list[Outcome]:
+    def retry_transient_failures(outcomes: list[Outcome]) -> list[Outcome]:
+        # A parallel run can fail a case because the C++ compiler hit memory or
+        # process pressure, not because the generated code is wrong. Rerun only
+        # those failures serially; a real compile error fails again, while a
+        # pressure failure recovers. Non-transient mismatches (wrong output or
+        # exit code) are not retried: they are deterministic.
+        transient = [
+            o for o in outcomes
+            if o.status == "failed" and
+               ("C++ compilation failed" in o.detail or "timed out" in o.detail)
+        ]
+        if not transient:
+            return outcomes
+        transient_names = {o.case.display for o in transient}
+        if not args.json:
+            progress.message(
+                f"  retry  : {len(transient)} transient failure(s) rerun serially"
+            )
+        retry_progress = LiveProgress(enabled=progress.enabled)
+        retry_progress.begin("retry", len(transient))
+        try:
+            retried = run_as_ordinary_serial(
+                [o.case for o in transient], retry_progress
+            )
+        finally:
+            retry_progress.finish()
+        recovered = sum(1 for o in retried if o.status == "passed")
+        if not args.json:
+            progress.message(f"  retry  : {recovered}/{len(transient)} recovered")
+        by_case = {o.case.display: o for o in retried}
+        return [
+            by_case.get(o.case.display, o)
+            if o.case.display in transient_names else o
+            for o in outcomes
+        ]
+
+    def evaluate_suite() -> list[Outcome]:
+        progress.begin("corpus", len(ordinary_cases))
+        try:
+            outcomes = run_as_ordinary(ordinary_cases, progress)
+        finally:
+            progress.finish()
+        outcomes = retry_transient_failures(outcomes)
         if args.strict_ambiguous:
             # Opt-in: markers run like any other case (pass, fail, or skip).
-            return run_as_ordinary(cases, toolchain)
+            return outcomes
         # Default: markers are discovered and reported, never asserted against.
-        outcomes = [Outcome(c, "ambiguous", c.question) for c in cases if c.ambiguous]
-        outcomes += run_as_ordinary([c for c in cases if not c.ambiguous], toolchain)
-        return outcomes
+        return [Outcome(c, "ambiguous", c.question) for c in ambiguous_cases] + outcomes
 
     def counts(outcomes: list[Outcome]) -> dict[str, int]:
         return {
@@ -807,129 +976,69 @@ def main(argv: Optional[list[str]] = None) -> int:
             for o in outcomes
         ]
 
-    runs: list[tuple[Optional[str], list[Outcome]]] = []
-    for toolchain in selected_toolchains:
-        if len(selected_toolchains) > 1 and not args.json:
-            print(f"== running toolchain: {toolchain} ==", flush=True)
-        runs.append((toolchain, evaluate_suite(toolchain)))
+    if not args.json:
+        print("cp3 test harness")
+        print(f"  compiler : {compiler if compiler else '(not found)'}")
+        print(f"  cases dir: {cases_dir}")
+        print(f"  found    : {len(cases)} case(s)")
+        if ambiguous_cases:
+            print(f"  markers  : {len(ambiguous_cases)} ambiguous marker(s) "
+                  f"(reported, not asserted)")
+        for warning in warnings:
+            print(f"  warning  : {warning}")
+        print()
+
+    outcomes = evaluate_suite()
+    summary_counts = counts(outcomes)
 
     if args.json:
-        if len(runs) == 1:
-            toolchain, outcomes = runs[0]
-            summary_counts = counts(outcomes)
-            payload = {
-                "compiler": str(compiler) if compiler else None,
-                "casesDir": str(cases_dir),
-                "strictAmbiguous": args.strict_ambiguous,
-                "found": len(cases),
-                **summary_counts,
-                "runnable": summary_counts["passed"] + summary_counts["failed"] > 0,
-                "warnings": warnings,
-                "results": result_payload(outcomes),
-            }
-            if toolchain is not None:
-                payload["toolchain"] = toolchain
-        else:
-            run_payloads = []
-            total_failed = 0
-            for toolchain, outcomes in runs:
-                summary_counts = counts(outcomes)
-                total_failed += summary_counts["failed"]
-                run_payloads.append({
-                    "toolchain": toolchain,
-                    "found": len(cases),
-                    **summary_counts,
-                    "results": result_payload(outcomes),
-                })
-            payload = {
-                "compiler": str(compiler) if compiler else None,
-                "casesDir": str(cases_dir),
-                "strictAmbiguous": args.strict_ambiguous,
-                "toolchains": selected_toolchains,
-                "found": len(cases),
-                "failed": total_failed,
-                "runnable": any(
-                    run["passed"] + run["failed"] > 0 for run in run_payloads
-                ),
-                "warnings": warnings,
-                "runs": run_payloads,
-            }
+        payload = {
+            "compiler": str(compiler) if compiler else None,
+            "casesDir": str(cases_dir),
+            "strictAmbiguous": args.strict_ambiguous,
+            "found": len(cases),
+            **summary_counts,
+            "runnable": summary_counts["passed"] + summary_counts["failed"] > 0,
+            "warnings": warnings,
+            "results": result_payload(outcomes),
+        }
         json.dump(payload, sys.stdout, indent=2)
         sys.stdout.write("\n")
         if not args.no_bench:
             print("note: bench pass skipped with --json (JSON output stays parseable)",
                   file=sys.stderr)
-        return 0 if payload["failed"] == 0 else 1
+        return 0 if summary_counts["failed"] == 0 else 1
 
-    print("cp3 test harness")
-    print(f"  compiler : {compiler if compiler else '(not found)'}")
-    print(f"  cases dir: {cases_dir}")
-    print(f"  found    : {len(cases)} case(s)")
-    if len(runs) > 1:
-        print(f"  toolchains: {', '.join(str(tc) for tc in selected_toolchains)} "
-              f"(sequential)")
-    elif runs[0][0] is not None:
-        print(f"  toolchain: {runs[0][0]}")
-    for warning in warnings:
-        print(f"  warning  : {warning}")
+    for outcome in outcomes:
+        c = outcome.case.display
+        if outcome.status == "passed":
+            if args.verbose:
+                print(f"  ok   {c}")
+        elif outcome.status == "failed":
+            print(f"  FAIL {c}: {outcome.detail}")
+        elif outcome.status == "ambiguous":
+            # Always reported: this is the lead's worklist of open questions.
+            print(f"  amb  {c}: {outcome.detail}")
+        else:  # skipped
+            if args.verbose or (
+                summary_counts["passed"] + summary_counts["failed"] == 0
+            ):
+                print(f"  skip {c} ({outcome.detail})")
+
     print()
+    summary = (
+        f"{len(cases)} found, {summary_counts['passed']} passed, "
+        f"{summary_counts['failed']} failed, {summary_counts['skipped']} skipped, "
+        f"{summary_counts['ambiguous']} ambiguous"
+    )
+    if summary_counts["passed"] + summary_counts["failed"] == 0:
+        print(f"{summary}; nothing runnable yet, treating as success while cp3c "
+              f"is a scaffold.")
+    else:
+        print(f"{summary}.")
 
-    total_passed = 0
-    total_failed = 0
-    total_skipped = 0
-    ambiguous_per_run = 0
-    for run_index, (toolchain, outcomes) in enumerate(runs):
-        summary_counts = counts(outcomes)
-        total_passed += summary_counts["passed"]
-        total_failed += summary_counts["failed"]
-        total_skipped += summary_counts["skipped"]
-        ambiguous_per_run = summary_counts["ambiguous"]
-        if len(runs) > 1:
-            print(f"== toolchain: {toolchain} ==")
-        for outcome in outcomes:
-            if outcome.status == "ambiguous" and run_index > 0:
-                # The marker list is identical for every toolchain; print it once.
-                continue
-            c = outcome.case.display
-            if outcome.status == "passed":
-                if args.verbose:
-                    print(f"  ok   {c}")
-            elif outcome.status == "failed":
-                print(f"  FAIL {c}: {outcome.detail}")
-            elif outcome.status == "ambiguous":
-                # Always reported: this is the lead's worklist of open questions.
-                print(f"  amb  {c}: {outcome.detail}")
-            else:  # skipped
-                if args.verbose or (
-                    summary_counts["passed"] + summary_counts["failed"] == 0
-                ):
-                    print(f"  skip {c} ({outcome.detail})")
-
-        print()
-        summary = (
-            f"{len(cases)} found, {summary_counts['passed']} passed, "
-            f"{summary_counts['failed']} failed, {summary_counts['skipped']} skipped, "
-            f"{summary_counts['ambiguous']} ambiguous"
-        )
-        if summary_counts["passed"] + summary_counts["failed"] == 0:
-            print(f"{summary}; nothing runnable yet, treating as success while cp3c "
-                  f"is a scaffold.")
-        else:
-            print(f"{summary}.")
-        if len(runs) > 1:
-            print()
-
-    if len(runs) > 1:
-        print(f"== all toolchains ==")
-        print(f"{len(cases)} cases x {len(runs)} toolchains: {total_passed} passed, "
-              f"{total_failed} failed, {total_skipped} skipped, "
-              f"{ambiguous_per_run} ambiguous per run.")
-
-    exit_code = 0 if total_failed == 0 else 1
+    exit_code = 0 if summary_counts["failed"] == 0 else 1
     if not args.no_bench:
-        if len(runs) > 1:
-            print("note: bench pass uses cp3c's configured toolchain, not the "
-                  "test matrix.", file=sys.stderr)
         bench_exit = run_benchmarks(args.bench_args)
         exit_code = max(exit_code, bench_exit)
     return exit_code
