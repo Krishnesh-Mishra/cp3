@@ -10,7 +10,8 @@
 //
 // Two forms: an identifier binding (the global form, with a `main`-local
 // fallback when there is no namespace-scope spelling), and a destructuring
-// binding, which stays in the `main` body (its names are locals). The helper
+// binding, which declares each bound name as a namespace-scope global and
+// assigns it at the statement's position in `main`. The helper
 // (`detail::ModuleVarEmitter`) keeps the whole module-variable concern on one
 // friend object, so the Generator declaration stays within budget.
 // =============================================================================
@@ -75,7 +76,8 @@ struct ModuleVarEmitter {
 
     void run(const VariableDeclaration& vd, std::string& decls,
              std::string& mainBody);
-    void pattern(const VariableDeclarator& d, std::string& mainBody);
+    void pattern(const VariableDeclarator& d, std::string& decls,
+                 std::string& mainBody);
     void binding(const VariableDeclarator& d, VarKind kind, std::string& decls,
                  std::string& mainBody);
     void entryLocal(const VariableDeclarator& d, VarKind kind,
@@ -93,7 +95,8 @@ struct ModuleVarEmitter {
 //
 // Two forms: an identifier binding (the global form, with a `main`-local
 // fallback when there is no namespace-scope spelling), and a destructuring
-// binding, which stays in the `main` body (its names are locals).
+// binding, which declares each bound name as a namespace-scope global and
+// assigns it at the statement's position in `main`.
 void ModuleVarEmitter::run(const VariableDeclaration& vd, std::string& decls,
                            std::string& mainBody) {
     for (const auto& declPtr : vd.declarations) {
@@ -105,32 +108,60 @@ void ModuleVarEmitter::run(const VariableDeclaration& vd, std::string& decls,
             continue;
         }
         if (d->id->kind != NodeKind::Identifier) {
-            pattern(*d, mainBody);
+            pattern(*d, decls, mainBody);
             continue;
         }
         binding(*d, vd.kind, decls, mainBody);
     }
 }
 
-// A destructuring binding materializes its source, then emits one plain
-// binding per name; everything stays in the `main` body.
-void ModuleVarEmitter::pattern(const VariableDeclarator& d,
+// A destructuring binding materializes its source, then emits one binding per
+// name. When the unit has functions, classes or exports, those names must be
+// namespace-scope globals so the functions can read them (S1); the statement's
+// position in `main` still performs the initialization, in JS order.
+void ModuleVarEmitter::pattern(const VariableDeclarator& d, std::string& decls,
                                std::string& mainBody) {
+    PatternEmitter emitter(g);
+    if (g.moduleNeedsGlobals_) {
+        emitter.globals = &decls;
+        emitter.globalsAreModuleScope = true;
+        emitter.globalsThreadLocal = g.scaleMode_;
+    }
+    // The binding text is assembled separately so a scaled server can replay
+    // the same initialization on every loop thread (D79).
+    std::string bindings;
     if (!d.init) {
         // No initializer: there is no source to read, so every name the
         // pattern introduces is bound to `undefined` - the same lowering a
         // plain `let x;` gets (the module-variable unit's `noInit`).
-        PatternEmitter(g).emitUndefinedBindings(*d.id, mainBody, 1);
-        return;
+        emitter.emitUndefinedBindings(*d.id, bindings, 1);
+    } else {
+        const std::optional<Type> srcType = g.resolvedBindingType(d);
+        const std::optional<Type> savedExpected = g.expected_;
+        g.expected_ = srcType;
+        const std::string initText = g.expr(*d.init);
+        g.expected_ = savedExpected;
+        const std::string tmp = "cp3_d" + std::to_string(g.uniqueCounter_++);
+        line(bindings, 1, "auto " + tmp + " = " + initText + ";");
+        emitter.emitBindings(*d.id, tmp, srcType, bindings, 1);
     }
-    const std::optional<Type> srcType = g.resolvedBindingType(d);
-    const std::optional<Type> savedExpected = g.expected_;
-    g.expected_ = srcType;
-    const std::string initText = g.expr(*d.init);
-    g.expected_ = savedExpected;
-    const std::string tmp = "cp3_d" + std::to_string(g.uniqueCounter_++);
-    line(mainBody, 1, "auto " + tmp + " = " + initText + ";");
-    PatternEmitter(g).emitBindings(*d.id, tmp, srcType, mainBody, 1);
+    mainBody += bindings;
+    if (!g.scaleMode_) return;
+    // Replay every initialization line on each child loop thread. The source
+    // temporary is declared in this text too, so the assignments keep the
+    // value they were lowered against.
+    std::size_t start = 0;
+    while (start < bindings.size()) {
+        const std::size_t end = bindings.find('\n', start);
+        std::string text = bindings.substr(
+            start, end == std::string::npos ? std::string::npos : end - start);
+        const std::size_t first = text.find_first_not_of(" \t");
+        if (first != std::string::npos) {
+            g.moduleInitLines_.push_back(text.substr(first));
+        }
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
 }
 
 // One identifier binding: the namespace-scope global (with the `main`-body

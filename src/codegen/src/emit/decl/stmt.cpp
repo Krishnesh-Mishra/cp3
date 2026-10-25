@@ -3,8 +3,9 @@
 //
 // Statements, blocks and control flow: variable declarations (including the
 // M1 type spelling / nullish folding), if/while/do/for, return (with the
-// void-vs-valued signature check), break/continue. Out-of-scope statements
-// report CP3002 and emit a compilable stub.
+// void-vs-valued signature check), break/continue, and nested function
+// declarations (lowered to local closures). Every statement kind the parser
+// produces has a lowering; an unknown kind is an internal error.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -13,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/mangle.h"
 #include "detail/expr/pattern_emitter.h"
@@ -23,20 +25,138 @@ namespace cp3 {
 
 using namespace detail;
 
+namespace {
+
+// A function declared inside a block lowers to a local closure: C++ has no
+// nested function definitions. A fully typed signature uses a `std::function`
+// variable so the closure can be hoisted (and call itself); a generic or
+// deduced-return signature keeps a plain generic lambda.
+struct LocalFunction {
+    const FunctionDeclaration* fd = nullptr;
+    bool viaStdFunction = false;
+    std::string ret;
+    std::string name;
+    std::vector<std::string> paramTypes;
+    Type retType;
+};
+
+}  // namespace
+
 void Generator::stmt(const Stmt& s, std::string& out, int indent) {
     // One source-mapping directive per statement (--debug only).
     emitLineDirective(s, out);
     // Loops, switch, labels and break/continue carry generated labels and flow
     // frames; their lowering unit runs before the ordinary arm table.
     if (emitControlDispatch(s, out, indent)) return;
+
+    // A function declaration inside a block is a local closure. Prepare it
+    // once so its return-type diagnostic is reported once, then emit the
+    // declaration (a std::function slot when the signature is fully typed) and
+    // the definition (the lambda).
+    const auto prepareLocalFunction =
+        [this](const FunctionDeclaration& fd) -> LocalFunction {
+        if (intOn()) intFail();
+        LocalFunction fn;
+        fn.fd = &fd;
+        fn.name = mapIdent(fd.name);
+        fn.ret = functionReturnType(fd);
+        fn.retType = returnValueType(fd).value_or(Type::unknown());
+        bool generic = false;
+        for (std::size_t i = 0; i < fd.params.size(); ++i) {
+            const Parameter* p = fd.params[i].get();
+            if (p == nullptr) continue;
+            std::string type = parameterCppType(*p, fd, i);
+            if (type.empty()) {
+                generic = true;
+                break;
+            }
+            if (p->isRef) type += "&";
+            fn.paramTypes.push_back(std::move(type));
+        }
+        fn.viaStdFunction = !generic && fn.ret != "auto";
+        return fn;
+    };
+    const auto declareLocalFunction = [this](const LocalFunction& fn,
+                                             std::string& out, int indent) {
+        std::vector<Type> params;
+        params.reserve(fn.fd->params.size());
+        for (std::size_t i = 0; i < fn.fd->params.size(); ++i) {
+            const Parameter* p = fn.fd->params[i].get();
+            params.push_back(p ? parameterType(*p, *fn.fd, i)
+                                     .value_or(Type::unknown())
+                               : Type::unknown());
+        }
+        declare(fn.fd->name, Type::function(std::move(params), fn.retType));
+        if (!fn.viaStdFunction) return;
+        line(out, indent,
+             "std::function<" + fn.ret + "(" +
+                 joinStrings(fn.paramTypes, ", ") + ")> " + fn.name + ";");
+    };
+    const auto defineLocalFunction = [this](const LocalFunction& fn,
+                                            std::string& out, int indent) {
+        std::vector<std::string> params;
+        params.reserve(fn.fd->params.size());
+        for (std::size_t i = 0; i < fn.fd->params.size(); ++i) {
+            const Parameter* p = fn.fd->params[i].get();
+            if (p == nullptr) continue;
+            if (parameterCppType(*p, *fn.fd, i).empty()) {
+                // A generic lambda parameter: `auto` deduces the same type
+                // the function template would have named.
+                const Identifier* id = parameterIdentifier(*p);
+                const std::string name =
+                    id ? mapIdent(id->name)
+                       : "cp3_param_" + std::to_string(i);
+                params.push_back("auto " + name);
+            } else {
+                params.push_back(parameterText(*p, *fn.fd, i, true));
+            }
+        }
+        std::string head =
+            fn.viaStdFunction
+                ? fn.name + " = [&](" + joinStrings(params, ", ") + ")"
+                : "auto " + fn.name + " = [&](" +
+                      joinStrings(params, ", ") + ")";
+        if (fn.ret != "auto") head += " -> " + fn.ret;
+        emitLineDirective(*fn.fd, out);
+        line(out, indent, head + " {");
+        const std::string body = plainBody(*fn.fd, fn.ret);
+        out += indentText(body, std::string(
+                                    static_cast<std::size_t>(indent) * 4, ' '));
+        line(out, indent, "};");
+    };
+
     switch (s.kind) {
         case NodeKind::BlockStatement: {
             pushScope();
             line(out, indent, "{");
             const auto& block = static_cast<const BlockStatement&>(s);
+            // Function declarations are hoisted within their block (sema
+            // hoists them before checking the body). A typed closure gets its
+            // std::function slot first, so sibling closures and earlier
+            // statements can call it; the lambda itself is assigned at the
+            // declaration point, where the locals it captures are in scope.
+            std::vector<LocalFunction> localFunctions;
+            for (const auto& child : block.body) {
+                if (child && child->kind == NodeKind::FunctionDeclaration) {
+                    localFunctions.push_back(prepareLocalFunction(
+                        static_cast<const FunctionDeclaration&>(*child)));
+                }
+            }
+            for (const LocalFunction& fn : localFunctions) {
+                declareLocalFunction(fn, out, indent + 1);
+            }
             for (std::size_t i = 0; i < block.body.size(); ++i) {
                 const Stmt* child = block.body[i].get();
                 if (!child) continue;
+                if (child->kind == NodeKind::FunctionDeclaration) {
+                    for (const LocalFunction& fn : localFunctions) {
+                        if (fn.fd == child) {
+                            defineLocalFunction(fn, out, indent + 1);
+                            break;
+                        }
+                    }
+                    continue;
+                }
                 // The int64 fast path owns the statements it rewrote; it
                 // marks them so the ordinary walker skips them.
                 if (int64SkipStmts_.count(child->nodeId) != 0) continue;
@@ -91,9 +211,22 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
             // namespace scope, so the statement itself emits nothing.
             emitLocalEnum(s);
             return;
+        case NodeKind::FunctionDeclaration: {
+            // A nested function outside a block (an `if` branch without
+            // braces): no hoisting scope exists, so emit the closure here.
+            const auto& fd = static_cast<const FunctionDeclaration&>(s);
+            const LocalFunction fn = prepareLocalFunction(fd);
+            declareLocalFunction(fn, out, indent);
+            defineLocalFunction(fn, out, indent);
+            return;
+        }
         default:
-            notImplemented(s, "this statement");
-            line(out, indent, "/* CP3002: unsupported statement */");
+            // Every statement kind the parser produces has a lowering above;
+            // reaching this arm is an internal invariant violation, not an
+            // unimplemented language feature.
+            reportCodegenError(s, diagcode::kInternalError,
+                               "internal error: unsupported statement kind");
+            line(out, indent, "/* unsupported statement */");
             return;
     }
 }
@@ -325,10 +458,15 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
                 : expr(*r.argument);
         if (currentReturn_ == "void") {
             // The enclosing signature is `void` either because the cp3
-            // return type is out of M1 scope or the function is genuinely
-            // void. Either way a value is being returned, so flag it and
-            // keep the emitted C++ valid.
-            notImplemented(r, "returning a value from a void/unrepresentable signature");
+            // return type has no C++ spelling (already reported where the
+            // signature was emitted) or because the function is genuinely
+            // void. Only the latter is a type error here; keep the emitted
+            // C++ valid in both cases.
+            if (!currentReturnType_ || currentReturnType_->isVoid() ||
+                currentReturnType_->isUnknown()) {
+                reportTypeError(
+                    r, "type mismatch: a void function cannot return a value");
+            }
             line(out, indent, "(void)(" + value + ");");
             line(out, indent, keyword + ";");
             return;

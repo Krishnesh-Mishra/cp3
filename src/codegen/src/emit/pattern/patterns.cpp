@@ -650,6 +650,28 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
         }
         return optionalShapeField(shapeFields, name);
     };
+    // The field's own cp3 type: a nested pattern reads the field with the
+    // same model/class/shape access the outer pattern uses.
+    const auto fieldType = [&](const std::string& name) -> Type {
+        if (om != nullptr) {
+            const ObjectFieldModel* f = findObjectField(*om, name);
+            if (f == nullptr) return Type::unknown();
+            return f->optional ? Type::nullable(f->type) : f->type;
+        }
+        if (cm != nullptr) {
+            const ClassMemberModel* m = findClassMember(*cm, name);
+            if (m == nullptr || m->isMethod || m->ctor != nullptr) {
+                return Type::unknown();
+            }
+            return m->type;
+        }
+        if (plainShape) {
+            for (const ObjectField& f : shapeFields) {
+                if (f.name == name) return f.type;
+            }
+        }
+        return Type::unknown();
+    };
     for (const auto& propPtr : p.properties) {
         if (!propPtr) continue;
         const ObjectPatternProperty& prop = *propPtr;
@@ -675,9 +697,15 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
             target = fallback->left.get();
         }
         if (!target) continue;
-        bindPatternTarget(*target, PatternSource{valueText, Type::unknown(),
-                                                 src.isConst},
-                          out, indent);
+        Type valueType = fieldType(name);
+        if (fallback != nullptr && optional(name) && valueType.isNullable()) {
+            // The default already filled the empty case, so the binding sees
+            // the field's value type.
+            valueType = stripNullish(valueType);
+        }
+        bindPatternTarget(*target,
+                          PatternSource{valueText, valueType, src.isConst}, out,
+                          indent);
     }
     if (p.rest) {
         // The rest object: a fresh shape holding the source's fields except
