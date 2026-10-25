@@ -1,0 +1,25 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// A rejection from an async handler is one 500 for that request; the server
+// keeps serving and the rejection is observed (no unhandled-rejection exit).
+const app = createServer();
+app.get("/boom", async (req, res) => {
+  await Promise.resolve(0);
+  throw "async boom";
+});
+app.get("/ok", (req, res) => {
+  res.text("still ok");
+});
+app.listen(48233, () => {
+  console.log("listening");
+});
+
+const boom = await fetch("http://127.0.0.1:48233/boom");
+console.log(`${boom.status}`);
+console.log(await boom.text());
+
+const ok = await fetch("http://127.0.0.1:48233/ok");
+console.log(`${ok.status}`);
+console.log(await ok.text());
+app.close();

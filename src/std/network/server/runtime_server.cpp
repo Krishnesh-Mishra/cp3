@@ -8,12 +8,13 @@
 // (`any("/*")`) and the routing itself lives here: routes and middleware run in
 // registration order (Express semantics), a handler stops the chain by
 // answering, `next()` continues it, and a chain that ends without an answer
-// replies 404. Request bodies are fully buffered before the chain runs, so
-// every handler can answer synchronously, and one handler that throws (a
-// `Thrown` or any native exception) turns into a 500 for that request only -
-// the server keeps serving. `listen`/`close` hold/release the runtime loop's
-// external count, so a listening server keeps the program alive and a closed
-// one lets it exit.
+// replies 404. Request bodies are fully buffered before the chain runs. A
+// handler may return a promise (an `async` handler): the dispatcher keeps the
+// request alive and waits for it before it continues the chain or answers the
+// 404. One handler that throws (a `Thrown` or any native exception) turns into
+// a 500 for that request only - the server keeps serving. `listen`/`close`
+// hold/release the runtime loop's external count, so a listening server keeps
+// the program alive and a closed one lets it exit.
 // =============================================================================
 #include "cp3/std/network.hpp"
 
@@ -70,32 +71,6 @@ std::string reasonPhrase(double code) {
         case 503: return "Service Unavailable";
         default: return "Status";
     }
-}
-
-/// `*` and `/*` match any path; `:name` segments swallow one path segment and
-/// record the captured value under `name` (used by the `req.params` Map).
-bool pathMatches(const std::string& pattern, const std::string& path,
-                 std::vector<std::pair<std::string, std::string>>* params) {
-    if (pattern == "*" || pattern == "/*") return true;
-    std::size_t pi = 0;
-    std::size_t si = 0;
-    while (pi < pattern.size() && si < path.size()) {
-        if (pattern[pi] == ':') {
-            const std::size_t nameStart = ++pi;
-            while (pi < pattern.size() && pattern[pi] != '/') ++pi;
-            const std::size_t valueStart = si;
-            while (si < path.size() && path[si] != '/') ++si;
-            if (params != nullptr) {
-                params->emplace_back(pattern.substr(nameStart, pi - nameStart),
-                                     path.substr(valueStart, si - valueStart));
-            }
-            continue;
-        }
-        if (pattern[pi] != path[si]) return false;
-        ++pi;
-        ++si;
-    }
-    return pi == pattern.size() && si == path.size();
 }
 
 /// Percent-decoding for one query component (`%xx`, and `+` as space), the
@@ -298,67 +273,14 @@ void HttpResponse::end() {
 }
 
 // =============================================================================
-// Routing and dispatch
+// The uWS glue: one wildcard route feeds every request into the dispatcher
+// (runtime_server_dispatch.cpp)
 // =============================================================================
 namespace {
 
 using ServerImpl = detail::ServerImpl;
-
-/// One request in flight: the chain walks `routes` in registration order.
-struct RequestContext {
-    ServerImpl* server = nullptr;
-    HttpRequest request;
-    HttpResponse response;
-    std::size_t index = 0;
-};
-
-void runChain(RequestContext& ctx) {
-    while (!ctx.response.sent() && ctx.index < ctx.server->routes.size()) {
-        const ServerImpl::Route& route = ctx.server->routes[ctx.index++];
-        if (route.method != "*" && route.method != ctx.request.method) continue;
-        std::vector<std::pair<std::string, std::string>> captures;
-        if (!pathMatches(route.pattern, ctx.request.path, &captures)) continue;
-        // The matched route's `:name` parameters as one fresh Map per match, so
-        // a chain that runs through several routes never sees stale captures.
-        StringMap params = collections::makeMap<std::string, std::string>();
-        for (auto& [name, value] : captures) params->set(name, value);
-        ctx.request.setParams(std::move(params));
-        Next next([&ctx] { runChain(ctx); });
-        route.handler(ctx.request, ctx.response, next);
-    }
-}
-
-void dispatch(RequestContext& ctx) {
-    try {
-        runChain(ctx);
-        if (!ctx.response.sent()) {
-            ctx.response.status(404).text("not found");
-        }
-    } catch (...) {
-        // One handler threw: 500 for THIS request, the server keeps serving.
-        if (!ctx.response.sent()) {
-            ctx.response.status(500).text("internal server error");
-        }
-    }
-}
-
-void addRoute(const std::shared_ptr<ServerImpl>& impl, const char* method,
-              const std::string& path, const HttpServer::RouteHandler& handler) {
-    if (!impl || !handler) return;
-    ServerImpl::Route route;
-    route.method = method;
-    route.pattern = path;
-    route.handler = [handler](HttpRequest& req, HttpResponse& res, Next&) { handler(req, res); };
-    impl->routes.push_back(std::move(route));
-}
-
-// --- the uWS glue: one wildcard route feeds every request in here ------------
-struct PendingRequest {
-    std::shared_ptr<ServerImpl> server;
-    RequestContext context;
-    std::string body;
-    bool aborted = false;
-};
+using detail::PendingRequest;
+using detail::dispatch;
 
 void onRequestData(const std::shared_ptr<PendingRequest>& pending, std::string_view chunk,
                    bool isLast) {
@@ -366,7 +288,7 @@ void onRequestData(const std::shared_ptr<PendingRequest>& pending, std::string_v
     pending->body.append(chunk.data(), chunk.size());
     if (!isLast) return;
     pending->context.request.setBody(std::move(pending->body));
-    dispatch(pending->context);
+    dispatch(pending);
 }
 
 void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
@@ -381,7 +303,13 @@ void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
     pending->context.request.setQuery(parseQuery(std::string(req->getQuery())));
     pending->context.request.setHeaders(requestHeaders(req));
     pending->context.response.bindNative(res);
-    res->onAborted([pending] { pending->aborted = true; });
+    res->onAborted([pending] {
+        // The native response is gone: drop the pointer so a handler that
+        // resumes later cannot write through it, and stop the chain.
+        pending->aborted = true;
+        pending->context.done = true;
+        pending->context.response.bindNative(nullptr);
+    });
     res->onData([pending](std::string_view chunk, bool isLast) {
         onRequestData(pending, chunk, isLast);
     });
@@ -410,44 +338,22 @@ HttpServer::HttpServer() : impl_(std::make_shared<detail::ServerImpl>()) {
     }
 }
 
-void HttpServer::get(const std::string& path, RouteHandler handler) const {
-    addRoute(impl_, "GET", path, handler);
+void HttpServer::addRouteImpl(const char* method, const std::string& path,
+                              detail::RouteFn handler) const {
+    if (!impl_ || !handler) return;
+    detail::ServerImpl::Route route;
+    route.method = method;
+    route.pattern = path;
+    route.handler = std::move(handler);
+    impl_->routes.push_back(std::move(route));
 }
 
-void HttpServer::post(const std::string& path, RouteHandler handler) const {
-    addRoute(impl_, "POST", path, handler);
-}
-
-void HttpServer::put(const std::string& path, RouteHandler handler) const {
-    addRoute(impl_, "PUT", path, handler);
-}
-
-void HttpServer::del(const std::string& path, RouteHandler handler) const {
-    addRoute(impl_, "DELETE", path, handler);
-}
-
-void HttpServer::patch(const std::string& path, RouteHandler handler) const {
-    addRoute(impl_, "PATCH", path, handler);
-}
-
-void HttpServer::head(const std::string& path, RouteHandler handler) const {
-    addRoute(impl_, "HEAD", path, handler);
-}
-
-void HttpServer::options(const std::string& path, RouteHandler handler) const {
-    addRoute(impl_, "OPTIONS", path, handler);
-}
-
-void HttpServer::any(const std::string& path, RouteHandler handler) const {
-    addRoute(impl_, "*", path, handler);
-}
-
-void HttpServer::use(Middleware middleware) const {
-    if (!impl_ || !middleware) return;
+void HttpServer::addMiddlewareImpl(detail::RouteFn handler) const {
+    if (!impl_ || !handler) return;
     detail::ServerImpl::Route route;
     route.method = "*";
     route.pattern = "*";
-    route.handler = std::move(middleware);
+    route.handler = std::move(handler);
     impl_->routes.push_back(std::move(route));
 }
 

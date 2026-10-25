@@ -28,10 +28,10 @@
 //   * A live fetch, a listening server and an open socket each retain the
 //     runtime loop, so the program cannot exit while that work is pending -
 //     the §14 "pending work" rule, unchanged.
-//   * Handlers run synchronously on the runtime thread; an `async` handler
-//     arrow is not representable yet (CP3002; SEAM(async) in
-//     src/std/network/codegen.cpp), so `req.text()` / `req.json<T>()` exist
-//     for surface completeness but cannot be awaited by a handler today.
+//   * Handlers run on the runtime thread. A handler may be `async`: codegen
+//     lowers the arrow to a coroutine lambda (src/std/network/codegen_methods.cpp)
+//     and the dispatcher waits for its promise before it continues the chain
+//     or answers 404, so `await req.text()` / `await req.json<T>()` are safe.
 // =============================================================================
 #pragma once
 
@@ -185,9 +185,11 @@ public:
     ///   headers: Map<string, string>
     ///
     /// SEAM(readstream/fs): `body: ReadStream` is the raw request as a stream
-    /// (the same interface as fs.readFileStream). Until the fs family lands,
-    /// the body is buffered before the chain runs and `text()`/`json<T>()` read
-    /// that buffer; exposing `body` is the buffered bytes behind a ReadStream.
+    /// (the same interface as fs.readFileStream). The server still buffers the
+    /// body before the chain runs and `text()`/`json<T>()` read that buffer;
+    /// exposing `body` needs an fs-owned ReadStream over a buffer (the landed
+    /// fs ReadStream is file-backed) plus a streaming request pipeline, so the
+    /// read stays a codegen skip (src/std/network/codegen_methods.cpp).
     std::string method;
     std::string path;
     StringMap params;
@@ -247,7 +249,8 @@ public:
     void text(const std::string& data, double status = 0.0);
     /// `res.json(data, status?)`: a scalar payload uses the dedicated
     /// overloads; an array/object literal lowers to the json dynamic value
-    /// tree (`jsonValueText`, src/std/network/codegen.cpp) and answers here.
+    /// tree (`networkJsonValueText`, src/std/network/codegen_methods.cpp) and
+    /// answers here.
     void json(double data, double status = 0.0);
     void json(const std::string& data, double status = 0.0);
     void json(bool data, double status = 0.0);
@@ -284,9 +287,59 @@ private:
     std::function<void()> cont_;
 };
 
+namespace detail {
+
+/// The uniform internal handler: a route or middleware call that may settle
+/// asynchronously. A synchronous callable is wrapped in an already-fulfilled
+/// `Promise<void>`, so the dispatcher waits on both forms the same way.
+using RouteFn = std::function<Promise<void>(HttpRequest&, HttpResponse&, Next&)>;
+
+/// Invoke one user handler and turn its result into `Promise<void>`.
+template <class F, class... Args>
+Promise<void> callAsPromise(F& fn, Args&... args) {
+    using Result = std::remove_cvref_t<std::invoke_result_t<F&, Args&...>>;
+    if constexpr (std::is_void_v<Result>) {
+        fn(args...);
+        return Promise<void>::resolve();
+    } else if constexpr (::cp3::runtime::detail::is_promise_v<Result>) {
+        if constexpr (std::is_void_v<typename Result::value_type>) {
+            return fn(args...);
+        } else {
+            // A `Promise<T>` handler is outside the documented
+            // `void | Promise<void>` shape; waiting for it is the JS reading.
+            return fn(args...).then([](auto&&) {});
+        }
+    } else {
+        (void)fn(args...);
+        return Promise<void>::resolve();
+    }
+}
+
+/// A route handler `(req, res)` as the dispatcher's uniform callable.
+template <class F>
+RouteFn makeRoute(F fn) {
+    return [fn = std::move(fn)](HttpRequest& req, HttpResponse& res,
+                                Next&) mutable -> Promise<void> {
+        return callAsPromise(fn, req, res);
+    };
+}
+
+/// A middleware `(req, res, next)` as the dispatcher's uniform callable.
+template <class F>
+RouteFn makeMiddleware(F fn) {
+    return [fn = std::move(fn)](HttpRequest& req, HttpResponse& res,
+                                Next& next) mutable -> Promise<void> {
+        return callAsPromise(fn, req, res, next);
+    };
+}
+
+}  // namespace detail
+
 /// `createServer()`. Routes and middleware run in registration order (Express
 /// semantics): a handler stops the chain by responding, `next()` continues it,
-/// and a chain that ends without a response answers 404.
+/// and a chain that ends without a response answers 404. A handler may be
+/// `async`; the dispatcher waits for its promise before it continues the chain
+/// or decides the 404.
 class HttpServer {
 public:
     using RouteHandler = std::function<void(HttpRequest&, HttpResponse&)>;
@@ -300,26 +353,58 @@ public:
     /// NaN) throws a `Thrown`. The no-argument construction path is unchanged.
     explicit HttpServer(double threads);
 
-    void get(const std::string& path, RouteHandler handler) const;
-    void post(const std::string& path, RouteHandler handler) const;
-    void put(const std::string& path, RouteHandler handler) const;
+    /// Route registration accepts a sync handler (`void`) or an async one
+    /// (`Promise<void>`); `detail::makeRoute` makes the return uniform.
+    template <class F>
+    void get(const std::string& path, F handler) const {
+        addRouteImpl("GET", path, detail::makeRoute(std::move(handler)));
+    }
+    template <class F>
+    void post(const std::string& path, F handler) const {
+        addRouteImpl("POST", path, detail::makeRoute(std::move(handler)));
+    }
+    template <class F>
+    void put(const std::string& path, F handler) const {
+        addRouteImpl("PUT", path, detail::makeRoute(std::move(handler)));
+    }
     /// `app.delete(...)`; codegen maps the cp3 `delete` onto this `del` member
     /// (`delete` is a C++ keyword). The docs' beta-one list is the four verbs
     /// get/post/put/delete; patch/head/options/any exist because the sema table
     /// already names them and a route that lowers must have a real member.
-    void del(const std::string& path, RouteHandler handler) const;
-    void patch(const std::string& path, RouteHandler handler) const;
-    void head(const std::string& path, RouteHandler handler) const;
-    void options(const std::string& path, RouteHandler handler) const;
+    template <class F>
+    void del(const std::string& path, F handler) const {
+        addRouteImpl("DELETE", path, detail::makeRoute(std::move(handler)));
+    }
+    template <class F>
+    void patch(const std::string& path, F handler) const {
+        addRouteImpl("PATCH", path, detail::makeRoute(std::move(handler)));
+    }
+    template <class F>
+    void head(const std::string& path, F handler) const {
+        addRouteImpl("HEAD", path, detail::makeRoute(std::move(handler)));
+    }
+    template <class F>
+    void options(const std::string& path, F handler) const {
+        addRouteImpl("OPTIONS", path, detail::makeRoute(std::move(handler)));
+    }
     /// `app.any(path, handler)`: every method (the wildcard method row).
-    void any(const std::string& path, RouteHandler handler) const;
-    void use(Middleware middleware) const;
+    template <class F>
+    void any(const std::string& path, F handler) const {
+        addRouteImpl("*", path, detail::makeRoute(std::move(handler)));
+    }
+    template <class F>
+    void use(F middleware) const {
+        addMiddlewareImpl(detail::makeMiddleware(std::move(middleware)));
+    }
     /// `app.listen(port, callback?)`; the callback runs once the port is bound.
     void listen(double port, std::function<void()> callback = {}) const;
     /// `app.close()`: closes listen sockets and connections.
     void close() const;
 
 private:
+    void addRouteImpl(const char* method, const std::string& path,
+                      detail::RouteFn handler) const;
+    void addMiddlewareImpl(detail::RouteFn handler) const;
     std::shared_ptr<detail::ServerImpl> impl_;
 };
 
