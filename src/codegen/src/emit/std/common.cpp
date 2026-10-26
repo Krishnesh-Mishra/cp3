@@ -10,9 +10,9 @@
 // the `needs*` flags they record drive the include assembly in
 // code_generator.cpp's buildSource.
 //
-// A member call/property that is not part of a family's table reports CP3002
-// (the caller falls through to notImplemented), so unsupported std surface
-// stays a graceful skip.
+// A member call/property that is not part of a family's table returns "" so
+// the caller can report the exact surface error; a std construct with no
+// lowering is a real diagnostic, never a placeholder skip.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -21,6 +21,7 @@
 
 #include "detail/int/builtin_tables.h"
 #include "detail/generator/type_map.h"
+#include "cp3/diag/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -56,13 +57,20 @@ std::vector<std::string> Generator::emitPlainArgs(const CallExpr& c) {
             const bool literal =
                 source != nullptr && source->kind == NodeKind::ArrayLiteral;
             if (!literal) {
-                // A runtime array's elements cannot be spliced into the call.
-                notImplemented(*arg, "spread argument");
+                // A fixed-arity C++ call cannot take a runtime array's
+                // elements; only the array-literal form has a static splice.
+                reportUnsupported(
+                    *arg, diagcode::kTypeMismatch,
+                    "type mismatch: a spread argument of this call must be "
+                    "an array literal");
                 continue;
             }
             const auto& lit = static_cast<const ArrayLiteral&>(*source);
             if (!plainElements(lit)) {
-                notImplemented(*arg, "spread argument");
+                reportUnsupported(
+                    *arg, diagcode::kTypeMismatch,
+                    "type mismatch: a spread argument of this call must be "
+                    "an array literal without nested spreads");
                 continue;
             }
             for (const auto& elementPtr : lit.elements) {
@@ -80,6 +88,86 @@ std::vector<std::string> Generator::emitPlainArgs(const CallExpr& c) {
 // -----------------------------------------------------------------------------
 
 std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
+    // `Math.min/max(...xs)` with a runtime array. The family lowers the
+    // variadic pair through an initializer_list, which cannot be built from a
+    // runtime array's elements, so splice the values here and reduce them with
+    // the same ECMAScript semantics (NaN propagates; empty is +/-Infinity).
+    if (isNamespaceObject(m.object.get(), "Math") &&
+        (m.property == "max" || m.property == "min")) {
+        bool runtimeSpread = false;
+        for (const auto& argPtr : c.arguments) {
+            const Expr* arg = argPtr.get();
+            if (!arg || arg->kind != NodeKind::SpreadElement) continue;
+            const auto& spread = static_cast<const SpreadElement&>(*arg);
+            const Expr* source = spread.argument.get();
+            if (source == nullptr || source->kind != NodeKind::ArrayLiteral ||
+                !plainElements(static_cast<const ArrayLiteral&>(*source))) {
+                runtimeSpread = true;
+                break;
+            }
+        }
+        if (runtimeSpread) {
+            needsMath_ = true;
+            std::string body = "std::vector<double> cp3_math_args;";
+            for (const auto& argPtr : c.arguments) {
+                const Expr* arg = argPtr.get();
+                if (!arg) continue;
+                if (arg->kind == NodeKind::SpreadElement) {
+                    const auto& spread = static_cast<const SpreadElement&>(*arg);
+                    const Expr* source = spread.argument.get();
+                    if (source == nullptr) {
+                        reportCodegenError(
+                            c, diagcode::kArityMismatch,
+                            "arity mismatch: Math." + m.property +
+                                "() cannot take an empty spread");
+                        return "0.0";
+                    }
+                    const Type at = effectiveType(*source);
+                    const CppInfo ec =
+                        at.kind == TypeKind::Array && !at.parts.empty()
+                            ? classify(at.parts.front())
+                            : CppInfo{};
+                    if (at.kind != TypeKind::Array || at.parts.empty() ||
+                        !ec.representable ||
+                        (ec.shape != Shape::Number &&
+                         ec.shape != Shape::Native &&
+                         ec.shape != Shape::Bool)) {
+                        reportTypeError(
+                            *arg,
+                            "type mismatch: a spread argument of Math." +
+                                m.property +
+                                "() must be an array of numbers");
+                        return "0.0";
+                    }
+                    body += " { const auto& cp3_math_src = " + expr(*source) +
+                            "; cp3_math_args.insert(cp3_math_args.end(), "
+                            "cp3_math_src->begin(), cp3_math_src->end()); }";
+                    continue;
+                }
+                const CppInfo ac = info(*arg);
+                if (ac.representable && ac.shape != Shape::Number &&
+                    ac.shape != Shape::Native && ac.shape != Shape::Bool) {
+                    reportTypeError(
+                        *arg, "type mismatch: Math." + m.property +
+                                  "() takes number arguments");
+                    return "0.0";
+                }
+                body += " cp3_math_args.push_back(static_cast<double>(" +
+                        expr(*arg) + "));";
+            }
+            const bool isMax = m.property == "max";
+            body += std::string(" double cp3_math_result = ") +
+                    (isMax ? "-std::numeric_limits<double>::infinity()"
+                           : "std::numeric_limits<double>::infinity()") +
+                    ";";
+            body += " for (double cp3_math_value : cp3_math_args) {";
+            body += " if (std::isnan(cp3_math_value)) return cp3_math_value;";
+            body += std::string(" if (cp3_math_value ") + (isMax ? ">" : "<") +
+                    " cp3_math_result) cp3_math_result = cp3_math_value; }";
+            body += " return cp3_math_result;";
+            return "[&]{ " + body + " }()";
+        }
+    }
     if (isNamespaceObject(m.object.get(), "Math")) return emitMathCall(c, m);
     if (isNamespaceObject(m.object.get(), "path")) return emitPathCall(c, m);
     if (isNamespaceObject(m.object.get(), "os")) return emitOsCall(c, m);

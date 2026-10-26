@@ -366,12 +366,24 @@ std::string ListenerBuilder::arrow(Generator& g, const ArrowFunction& a) {
     bool typed = false;
     for (std::size_t i = 0; i < params.size(); ++i) {
         ParamValue value;
-        if (!paramValue(params[i], i, value)) return std::string();
+        if (!paramValue(params[i], i, value)) {
+            g.reportTypeError(
+                a,
+                "type mismatch: a listener parameter must be a primitive "
+                "value (number, string, boolean, null or undefined)");
+            return std::string();
+        }
         typed = typed || value.typed;
         values.push_back(value);
     }
     g.needsEventEmitter_ = true;
     const std::string lambda = g.emitArrow(a, {}, /*byValue=*/true);
+    if (lambda.empty()) {
+        g.reportTypeError(
+            a, "type mismatch: this function value cannot be used as a "
+               "listener");
+        return std::string();
+    }
     if (!typed) {
         // The lambda takes the emitted values as they are.
         return "::cp3::runtime::Listener::box(" + lambda + ")";
@@ -384,7 +396,19 @@ std::string ListenerBuilder::named(Generator& g, const Expr& e) {
     const auto it = g.functionDecls_.find(name);
     const FunctionDeclaration* decl =
         it != g.functionDecls_.end() ? it->second : nullptr;
-    if (decl == nullptr || !decl->typeParams.empty()) return std::string();
+    if (decl == nullptr) {
+        g.reportTypeError(
+            e, "type mismatch: this function cannot be used as a listener "
+               "value");
+        return std::string();
+    }
+    if (!decl->typeParams.empty()) {
+        g.reportTypeError(
+            e,
+            "type mismatch: a generic function cannot be used as a listener "
+            "value");
+        return std::string();
+    }
     if (decl->params.size() > kMaxListenerParams) {
         g.reportCodegenError(e, diagcode::kTypeMismatch,
                              "a listener takes at most 8 values");
@@ -395,11 +419,25 @@ std::string ListenerBuilder::named(Generator& g, const Expr& e) {
     bool typed = false;
     for (std::size_t i = 0; i < decl->params.size(); ++i) {
         const Parameter* p = decl->params[i].get();
-        if (!p) return std::string();
+        if (!p) {
+            g.reportTypeError(
+                e, "type mismatch: a listener parameter has no type");
+            return std::string();
+        }
         const std::optional<Type> type = g.parameterType(*p, *decl, i);
-        if (!type) return std::string();
+        if (!type) {
+            g.reportTypeError(
+                e, "type mismatch: a listener parameter has no type");
+            return std::string();
+        }
         ParamValue value;
-        if (!paramValue(*type, i, value)) return std::string();
+        if (!paramValue(*type, i, value)) {
+            g.reportTypeError(
+                e,
+                "type mismatch: a listener parameter must be a primitive "
+                "value (number, string, boolean, null or undefined)");
+            return std::string();
+        }
         typed = typed || value.typed;
         values.push_back(value);
     }
@@ -421,7 +459,13 @@ std::string ListenerBuilder::functionValue(Generator& g, const Expr& e,
     bool typed = false;
     for (std::size_t i = 0; i + 1 < fnType.parts.size(); ++i) {
         ParamValue value;
-        if (!paramValue(fnType.parts[i], i, value)) return std::string();
+        if (!paramValue(fnType.parts[i], i, value)) {
+            g.reportTypeError(
+                e,
+                "type mismatch: a listener parameter must be a primitive "
+                "value (number, string, boolean, null or undefined)");
+            return std::string();
+        }
         typed = typed || value.typed;
         values.push_back(value);
     }
@@ -438,12 +482,12 @@ std::string ListenerBuilder::functionValue(Generator& g, const Expr& e,
 }
 
 std::string ListenerBuilder::value(Generator& g, const Expr& e) {
-    // An inline arrow: the lambda is the boxed callable.
+    // An inline arrow: the lambda is the boxed callable. A failure inside the
+    // arrow lowering has already reported the precise parameter error.
     if (e.kind == NodeKind::ArrowFunction) {
         const std::string boxed =
             arrow(g, static_cast<const ArrowFunction&>(e));
         if (!boxed.empty()) return boxed;
-        g.notImplemented(e, "this function value");
         return "::cp3::runtime::Listener()";
     }
     // A named function declaration: the C++ function is the boxed callable.
@@ -451,7 +495,6 @@ std::string ListenerBuilder::value(Generator& g, const Expr& e) {
         g.functions_.count(static_cast<const Identifier&>(e).name) != 0) {
         const std::string boxed = named(g, e);
         if (!boxed.empty()) return boxed;
-        g.notImplemented(e, "a named function used as a listener value");
         return "::cp3::runtime::Listener()";
     }
     // A function-typed value that is already a box: the same identity.
@@ -464,8 +507,10 @@ std::string ListenerBuilder::value(Generator& g, const Expr& e) {
     if (ci.representable && ci.shape == Shape::Function) {
         const std::string boxed = functionValue(g, e, ci.type);
         if (!boxed.empty()) return boxed;
+        return "::cp3::runtime::Listener()";
     }
-    g.notImplemented(e, "this listener argument");
+    g.reportTypeError(
+        e, "type mismatch: this value is not callable as a listener");
     return "::cp3::runtime::Listener()";
 }
 

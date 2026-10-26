@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "cp3/host/native_bindings.hpp"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/mangle.h"
@@ -206,16 +207,26 @@ std::string Generator::emitNativeCall(const CallExpr& c, const MemberExpr& m) {
     if (found == nativeAliases_.end()) return std::string();
     const NativeFunction* fn = findNativeFunction(*found->second, m.property);
     if (fn == nullptr) return std::string();
-    // A class-typed parameter or result has no cp3 value model yet (spec 19):
-    // the binding's classes are declaration shapes, not objects.
+    // A class-typed parameter or result has no cp3 value model (spec 19): a
+    // bound class is a declaration shape, not an object with an owner or a
+    // lifetime. Refuse the call with the exact reason instead of emitting a
+    // value nobody owns.
     for (const NativeParam& param : fn->params) {
         if (isNativeClassType(param.type)) {
-            notImplemented(c, "a native class parameter");
+            reportUnsupported(
+                c, diagcode::kTypeMismatch,
+                "type mismatch: native call '" + fn->name + "' cannot take '" +
+                    param.name +
+                    "' because a native class has no cp3 value model");
             return "0.0";
         }
     }
     if (isNativeClassType(fn->returnType)) {
-        notImplemented(c, "a native class result");
+        reportUnsupported(
+            c, diagcode::kTypeMismatch,
+            "type mismatch: native call '" + fn->name +
+                "' cannot return a native class: a native class has no cp3 "
+                "value model");
         return "0.0";
     }
     // A twice-read argument that is not a plain binding is bound to a

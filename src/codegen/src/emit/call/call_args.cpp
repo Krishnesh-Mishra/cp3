@@ -143,23 +143,50 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
         }
         if (arg->kind == NodeKind::SpreadElement) {
             texts.spreadIndex = i;
+            if (hasRest && i < restAt) {
+                // A spread that reaches a rest callee's fixed parameters. The
+                // source is bound once here; callArgs() maps its elements onto
+                // the fixed parameters and the packed rest array at run time
+                // (the argument vector is the concatenation of every argument,
+                // so a later plain argument can still fill a fixed parameter
+                // when the spread is too short).
+                const auto& spread = static_cast<const SpreadElement&>(*arg);
+                const Type at = spread.argument
+                                    ? g.effectiveType(*spread.argument)
+                                    : Type::unknown();
+                const CppInfo ec =
+                    at.kind == TypeKind::Array && !at.parts.empty()
+                        ? classify(at.parts.front())
+                        : CppInfo{};
+                if (spread.argument == nullptr ||
+                    at.kind != TypeKind::Array || at.parts.empty() ||
+                    !ec.representable || ec.shape == Shape::Void) {
+                    g.reportTypeError(
+                        *arg,
+                        "type mismatch: a spread argument must be an array "
+                        "with a C++-representable element type");
+                    texts.value[i] = "0.0";
+                    continue;
+                }
+                const std::string name =
+                    "cp3_lead_spread_" + std::to_string(i);
+                const std::optional<Type> saved = g.expected_;
+                g.expected_ = at;
+                const std::string source = g.expr(*spread.argument);
+                g.expected_ = saved;
+                texts.prologue +=
+                    "const auto& " + name + " = " + source + "; ";
+                texts.value[i] = std::string();
+                continue;
+            }
             if (!spreadArg(c, params, ptypes, texts)) {
                 // The spread has no lowering because the construct is wrong,
                 // not because codegen is missing it: say which error it is.
                 if (hasRest) {
-                    if (i < restAt) {
-                        // A spread that fills a fixed parameter of a rest
-                        // callee needs a run-time splice of two arrays.
-                        g.notImplemented(
-                            *arg,
-                            "a spread before a rest parameter's fixed "
-                            "arguments");
-                    } else {
-                        g.reportTypeError(
-                            *arg,
-                            "type mismatch: a spread argument must be an "
-                            "array of the rest parameter's element type");
-                    }
+                    g.reportTypeError(
+                        *arg,
+                        "type mismatch: a spread argument must be an "
+                        "array of the rest parameter's element type");
                 } else if (i + 1 != count) {
                     g.reportCodegenError(
                         c, diagcode::kArityMismatch,
@@ -259,7 +286,10 @@ std::vector<std::string> CallBuilder::packRestArgs(
         elemCpp = "double";
     }
     if (elemCpp.empty()) {
-        g.notImplemented(c, "this rest argument");
+        g.reportTypeError(
+            c,
+            "type mismatch: this rest parameter's element type has no C++ "
+            "representation");
         elemCpp = "double";
     }
     if (texts.spreadRest) {
@@ -356,6 +386,218 @@ CallBuilder::CallArgs CallBuilder::callArgs(
         callArgTexts(c, params, ptypes, applyDefaults, reifyObjectArgs);
     CallArgs out;
     if (hasRest) {
+        // A spread that reaches a fixed parameter of a rest callee. The
+        // argument vector is the concatenation of every argument, so the
+        // fixed positions are only known at run time: map them onto the bound
+        // spread sources and the plain argument texts, then pack the rest.
+        bool leadingSpread = false;
+        for (std::size_t i = 0; i < restAt && i < c.arguments.size(); ++i) {
+            const Expr* arg = c.arguments[i].get();
+            if (arg && arg->kind == NodeKind::SpreadElement) {
+                leadingSpread = true;
+                break;
+            }
+        }
+        if (leadingSpread) {
+            out.prologue = texts.prologue;
+            // Every spread must have a binding: the leading ones were bound by
+            // callArgTexts, the others by spreadArg. A failed one has already
+            // reported; stop before referring to a missing binding.
+            for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+                const Expr* arg = c.arguments[i].get();
+                if (!arg || arg->kind != NodeKind::SpreadElement) continue;
+                const auto& spread = static_cast<const SpreadElement&>(*arg);
+                if (!spread.argument) {
+                    out.values = texts.value;
+                    return out;
+                }
+                const Type at = g.effectiveType(*spread.argument);
+                const CppInfo ec =
+                    at.kind == TypeKind::Array && !at.parts.empty()
+                        ? classify(at.parts.front())
+                        : CppInfo{};
+                if (at.kind != TypeKind::Array || at.parts.empty() ||
+                    !ec.representable || ec.shape == Shape::Void) {
+                    out.values = texts.value;
+                    return out;
+                }
+            }
+            // The element type the packed rest array carries. A generic rest
+            // parameter is unified from the spread elements and the trailing
+            // plain arguments.
+            std::optional<Type> elem = restElemTypeAt(c, ptypes, restAt);
+            if (!elem || elem->kind == TypeKind::TypeParam) {
+                Type unified = Type::unknown();
+                bool any = false;
+                for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+                    const Expr* arg = c.arguments[i].get();
+                    if (!arg) continue;
+                    if (arg->kind == NodeKind::SpreadElement) {
+                        const auto& spread =
+                            static_cast<const SpreadElement&>(*arg);
+                        if (!spread.argument) continue;
+                        const Type at = g.effectiveType(*spread.argument);
+                        if (at.kind != TypeKind::Array || at.parts.empty()) {
+                            continue;
+                        }
+                        unified = any ? unify(unified, at.parts.front())
+                                      : at.parts.front();
+                        any = true;
+                    } else if (i >= restAt) {
+                        const Type at = g.effectiveType(*arg);
+                        unified = any ? unify(unified, at) : at;
+                        any = true;
+                    }
+                }
+                if (any) elem = unified;
+            }
+            const CppInfo ec = elem ? classify(*elem) : CppInfo{};
+            std::string elemCpp;
+            if (elem && elem->kind != TypeKind::TypeParam &&
+                ec.representable && ec.shape != Shape::Void) {
+                elemCpp = ec.cpp;
+            }
+            if (elemCpp.empty() && elem &&
+                elem->kind == TypeKind::TypeParam) {
+                elemCpp = "double";
+            }
+            if (elemCpp.empty()) {
+                g.reportTypeError(
+                    c,
+                    "type mismatch: this rest parameter's element type has "
+                    "no C++ representation");
+                elemCpp = "double";
+            }
+            g.needsTypedArray_ = true;
+
+            const auto spreadName = [restAt](std::size_t i) {
+                return (i < restAt ? "cp3_lead_spread_"
+                                   : "cp3_rest_spread_") +
+                       std::to_string(i);
+            };
+            std::vector<std::string> starts(c.arguments.size());
+            std::vector<std::string> sizes(c.arguments.size());
+            std::string cursor = "0";
+            for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+                starts[i] = cursor;
+                const Expr* arg = c.arguments[i].get();
+                sizes[i] =
+                    arg && arg->kind == NodeKind::SpreadElement
+                        ? "(" + spreadName(i) + ")->size()"
+                        : "1";
+                if (i + 1 < c.arguments.size()) {
+                    cursor = cursor == "0"
+                                 ? sizes[i]
+                                 : "(" + cursor + " + " + sizes[i] + ")";
+                }
+            }
+
+            // The fixed parameters: the argument that covers the position at
+            // run time supplies it. A required parameter with no argument is
+            // the cp3 out-of-range read; an optional/defaulted one takes its
+            // default.
+            std::vector<std::string> fixed;
+            fixed.reserve(restAt);
+            std::size_t firstSpread = restAt;
+            for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+                const Expr* arg = c.arguments[i].get();
+                if (arg && arg->kind == NodeKind::SpreadElement) {
+                    firstSpread = i;
+                    break;
+                }
+            }
+            for (std::size_t j = 0; j < restAt; ++j) {
+                const Parameter* p = paramAt(*params, j);
+                const Type pt = (j < ptypes.size() && ptypes[j])
+                                    ? *ptypes[j]
+                                    : Type::unknown();
+                const CppInfo pc = classify(pt);
+                const bool optional =
+                    p != nullptr && (p->optional || p->defaultValue != nullptr);
+                const bool optionalType =
+                    pc.representable && pc.shape == Shape::Optional &&
+                    !pt.parts.empty() &&
+                    classify(pt.parts.front()).representable;
+                std::string text;
+                if (optional) {
+                    if (optionalType) {
+                        const CppInfo inner = classify(pt.parts.front());
+                        text = p->defaultValue
+                                   ? "std::optional<" + inner.cpp + ">(" +
+                                         g.expr(*p->defaultValue) + ")"
+                                   : std::string("std::nullopt");
+                    } else {
+                        text = p->defaultValue
+                                   ? g.expr(*p->defaultValue)
+                                   : std::string("0.0");
+                    }
+                } else if (firstSpread < c.arguments.size()) {
+                    // The read is out of range exactly when no argument
+                    // covers the position.
+                    text = "::cp3::runtime::arrayAt(" +
+                           spreadName(firstSpread) + ", " +
+                           std::to_string(j) + ".0)";
+                } else {
+                    text = "0.0";
+                }
+                for (std::size_t i = c.arguments.size(); i > 0; --i) {
+                    const std::size_t k = i - 1;
+                    const Expr* arg = c.arguments[k].get();
+                    std::string value;
+                    if (arg && arg->kind == NodeKind::SpreadElement) {
+                        const std::string index =
+                            starts[k] == "0"
+                                ? std::to_string(j) + ".0"
+                                : "static_cast<double>(" +
+                                      std::to_string(j) + " - (" +
+                                      starts[k] + "))";
+                        value = "::cp3::runtime::arrayAt(" +
+                                spreadName(k) + ", " + index + ")";
+                    } else {
+                        value = texts.value[k].empty() ? "0.0"
+                                                       : texts.value[k];
+                    }
+                    if (optionalType) {
+                        const CppInfo inner = classify(pt.parts.front());
+                        value = "std::optional<" + inner.cpp + ">(" + value +
+                                ")";
+                    }
+                    const std::string cond =
+                        "(" + std::to_string(j) + " >= " + starts[k] +
+                        " && " + std::to_string(j) + " < " + starts[k] +
+                        " + " + sizes[k] + ")";
+                    text = "(" + cond + " ? " + value + " : " + text + ")";
+                }
+                fixed.push_back(std::move(text));
+            }
+
+            // The rest array: every argument's overlap with the positions at
+            // or after the rest parameter, in source order.
+            std::string body = "std::vector<" + elemCpp + "> cp3_rest;";
+            for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+                const Expr* arg = c.arguments[i].get();
+                if (arg && arg->kind == NodeKind::SpreadElement) {
+                    body += " { const std::size_t cp3_from = (" + starts[i] +
+                            ") > " + std::to_string(restAt) + " ? (" +
+                            starts[i] + ") : " + std::to_string(restAt) +
+                            "; for (std::size_t cp3_k = cp3_from - (" +
+                            starts[i] + "); cp3_k < (" + sizes[i] +
+                            "); ++cp3_k) cp3_rest.push_back((*" +
+                            spreadName(i) + ")[cp3_k]); }";
+                    continue;
+                }
+                if (starts[i] == "0" && restAt > 0) continue;
+                body += " if ((" + starts[i] + ") >= " +
+                        std::to_string(restAt) + ") cp3_rest.push_back(" +
+                        (texts.value[i].empty() ? "0.0" : texts.value[i]) +
+                        ");";
+            }
+            out.values = std::move(fixed);
+            out.values.push_back(
+                "[&]{ " + body + " return ::cp3::runtime::makeArray<" +
+                elemCpp + ">(std::move(cp3_rest)); }()");
+            return out;
+        }
         // The element type at THIS call site: the substituted type argument,
         // or the unified type of the arguments the rest parameter absorbs.
         std::optional<Type> elem = restElemTypeAt(c, ptypes, restAt);
@@ -640,14 +882,9 @@ std::string CallBuilder::emitMemberCall(const CallExpr& c,
         g.expected_ = saved;
         return emitFunctionCall(c, callee, memberType, nullptr);
     }
-    // An ambient/unknown member is permissive in sema but has no C++
-    // spelling: the form stays a not-implemented skip, not a hard error.
-    const CppInfo memberInfo = g.info(m);
-    if (memberInfo.shape == Shape::Unknown ||
-        memberInfo.shape == Shape::Unsupported) {
-        g.notImplemented(c, "this method call");
-        return "0.0";
-    }
+    // An ambient/unknown member has no C++ method spelling: the call is a
+    // real type error at the use site (sema rejects a member call on
+    // `unknown`; this is the codegen-only backstop).
     g.reportCodegenError(c, diagcode::kTypeMismatch,
                          "type mismatch: '" + m.property +
                              "' is not a method of this value");
@@ -767,14 +1004,9 @@ std::string Generator::emitCall(const CallExpr& c) {
         expected_ = saved;
         return calls.emitFunctionCall(c, callee, fnType, nullptr);
     }
-    // An ambient/unknown callable is permissive in sema but has no C++
-    // spelling: the form stays a not-implemented skip, not a hard error.
-    const CppInfo calleeInfo = classify(fnType);
-    if (calleeInfo.shape == Shape::Unknown ||
-        calleeInfo.shape == Shape::Unsupported) {
-        notImplemented(c, "this call");
-        return "0.0";
-    }
+    // An ambient/unknown callee has no C++ call spelling: the call is a real
+    // type error at the use site (sema rejects a call on `unknown`; this is
+    // the codegen-only backstop).
     reportTypeError(c, "type mismatch: this value is not callable");
     return "0.0";
 }
