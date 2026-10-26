@@ -77,7 +77,7 @@ std::string literalText(const ObjectModel& om) {
     std::string out;
     line(out, 0, "struct " + om.literalName + " {");
     for (const ObjectFieldModel& f : om.fields) {
-        if (!f.isFunction) line(out, 1, fieldDecl(f));
+        if (!f.isMethod) line(out, 1, fieldDecl(f));
     }
     line(out, 0, "};");
     line(out, 0, "");
@@ -114,8 +114,11 @@ std::string wrapperText(const ObjectModel& om) {
     for (const ObjectFieldModel& f : om.fields) {
         const std::string fn = mapIdent(f.name);
         if (!f.isMethod) {
-            line(out, 1, objectFieldCpp(f) + " (*cp3_f_" + fn +
+            const std::string type = objectFieldCpp(f);
+            line(out, 1, type + " (*cp3_f_" + fn +
                              ")(const void*) = nullptr;");
+            line(out, 1, "void (*cp3_s_" + fn + ")(void*, " + type +
+                             ") = nullptr;");
             continue;
         }
         std::string sig = fnReturnCpp(f.type) + " (*cp3_m_" + fn + ")(void*";
@@ -130,6 +133,12 @@ std::string wrapperText(const ObjectModel& om) {
     line(out, 2, ": cp3_obj(obj)");
     for (const ObjectFieldModel& f : om.fields) {
         line(out, 2, ", " + wrapperThunkInit(f));
+        if (!f.isMethod) {
+            const std::string fn = mapIdent(f.name);
+            line(out, 2, ", cp3_s_" + fn + "([](void* p, " +
+                             objectFieldCpp(f) + " v) { static_cast<T*>(p)->" +
+                             fn + " = std::move(v); })");
+        }
     }
     line(out, 2, "{}");
     // A temporary handle (`new C(...)` converted to an interface) is moved
@@ -140,13 +149,22 @@ std::string wrapperText(const ObjectModel& om) {
     line(out, 2, ": cp3_obj(std::move(obj))");
     for (const ObjectFieldModel& f : om.fields) {
         line(out, 2, ", " + wrapperThunkInit(f));
+        if (!f.isMethod) {
+            const std::string fn = mapIdent(f.name);
+            line(out, 2, ", cp3_s_" + fn + "([](void* p, " +
+                             objectFieldCpp(f) + " v) { static_cast<T*>(p)->" +
+                             fn + " = std::move(v); })");
+        }
     }
     line(out, 2, "{}");
     for (const ObjectFieldModel& f : om.fields) {
         if (f.isMethod) continue;
         const std::string fn = mapIdent(f.name);
-        line(out, 1, objectFieldCpp(f) + " " + fn + "() const { return cp3_f_" +
-                         fn + "(cp3_obj.get()); }");
+        const std::string type = objectFieldCpp(f);
+        line(out, 1, type + " " + fn + "() const { return cp3_f_" + fn +
+                         "(cp3_obj.get()); }");
+        line(out, 1, "void set_" + fn + "(" + type +
+                         " v) { cp3_s_" + fn + "(cp3_obj.get(), std::move(v)); }");
     }
     if (const ObjectFieldModel* ts = findObjectField(om, "toString");
         ts != nullptr && ts->isMethod) {
@@ -168,7 +186,7 @@ std::string plainText(const ObjectModel& om) {
     std::string out;
     line(out, 0, "struct " + om.structName + " {");
     for (const ObjectFieldModel& f : om.fields) {
-        if (!f.isFunction) line(out, 1, fieldDecl(f));
+        if (!f.isMethod) line(out, 1, fieldDecl(f));
     }
     line(out, 1, "std::string cp3ToText() const { return std::string("
                   "\"[object Object]\"); }");

@@ -357,6 +357,9 @@ private:
     bool tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
     void reportUndefinedCall(CallExpr& call, Identifier& id);
     bool tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out);
+    // `Object.keys` / `.values` / `.entries` over a statically known object
+    // shape (src/std/object/sema.cpp).
+    bool tryInferObjectCall(CallExpr& call, MemberExpr& m, Type& out);
     bool tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out);
     // `env.get<T>`: explicit T, else `{ default }`, else `string`.
     bool tryInferEnvCall(CallExpr& call, MemberExpr& m, Type& out);

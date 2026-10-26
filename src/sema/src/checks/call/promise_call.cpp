@@ -27,6 +27,25 @@ bool Analyzer::tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m,
         static_cast<Identifier&>(*m.object).name != "Promise") {
         return false;
     }
+    if (m.property == "allSettled") {
+        // The runtime result is an array of settlement records. The record is
+        // carried by the `$settled` object marker; codegen spells it
+        // `cp3::runtime::Settled<T>` so the binding and the runtime result
+        // agree (the array surface then types normally).
+        inferArgs(call);
+        Type value = Type::unknown();
+        if (call.arguments.size() == 1 && call.arguments.front()) {
+            const Type operand = typeOfExpr(*call.arguments.front());
+            if (operand.kind == TypeKind::Array && !operand.parts.empty()) {
+                const Type elem = operand.parts.front();
+                value = isPromiseType(elem) ? promiseValue(elem) : elem;
+            }
+        }
+        Type settled(TypeKind::Object, "$settled");
+        settled.parts.push_back(value);
+        out = withType(call, promiseOf(Type::array(settled)));
+        return true;
+    }
     if (m.property == "all" || m.property == "race") {
         inferArgs(call);
         Type value = Type::unknown();

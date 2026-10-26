@@ -302,7 +302,15 @@ std::string Generator::memberFieldText(const ClassMemberModel& m) {
         }
         return stat + "::cp3::runtime::WeakRef<" + pointee + "> " + name + "{}";
     }
-    const CppInfo ci = classify(m.type);
+    CppInfo ci = classify(m.type);
+    // An explicit `unknown` field has no C++ spelling, but its initializer
+    // fixes the representation (`count: unknown = 5`). Infer from the value
+    // exactly as an `unknown` method return type does from its body.
+    if (!ci.representable && m.type.isUnknown() && m.hasInitializer &&
+        m.field && m.field->initializer) {
+        const CppInfo init = info(*m.field->initializer);
+        if (init.representable) ci = init;
+    }
     if (!ci.representable) {
         if (m.field) notImplemented(*m.field, "this field type");
         return stat + "double " + name + "{}";

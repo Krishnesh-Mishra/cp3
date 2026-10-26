@@ -76,6 +76,21 @@ std::string Generator::storeText(const ClassMemberModel& m,
     const bool nullish = isNullishLiteral(*a.value);
     if (m.isWeak && (a.op == AssignOp::Assign)) {
         if (nullish) return "(" + lvalue + ".reset())";
+        // A weak store accepts either a strong handle or the optional result
+        // of a weak read (`Node | undefined`). An empty optional clears the
+        // link; a present one stores its strong handle.
+        const CppInfo vci = classify(effectiveType(*a.value));
+        const std::string pointee = weakPointee(m.type);
+        if ((vci.shape == Shape::Optional || vci.shape == Shape::Maybe) &&
+            !pointee.empty()) {
+            const bool maybe = vci.shape == Shape::Maybe;
+            const std::string has = maybe ? ".hasValue()" : ".has_value()";
+            const std::string held = maybe ? "cp3_w.value()" : "(*cp3_w)";
+            return "([&]{ const auto& cp3_w = (" + value + "); return (" +
+                   lvalue + " = cp3_w" + has +
+                   " ? ::cp3::runtime::WeakRef<" + pointee + ">(" + held +
+                   ") : ::cp3::runtime::WeakRef<" + pointee + ">()); }())";
+        }
         return "(" + lvalue + " = " + value + ")";
     }
     switch (a.op) {
@@ -201,12 +216,36 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
             return std::string();
         }
     }
-    const Type rt = effectiveType(*m.object);
-    const CppInfo ri = classify(rt);
+    Type rt = effectiveType(*m.object);
+    CppInfo ri = classify(rt);
+    const Shape declaredShape = ri.shape;
+    bool unwrap = false;
+    // Sema narrows a nullish guard (`if (x === undefined) ... else`) for the
+    // branch body, but the declaration environment still spells the binding
+    // as its optional storage. When the use site's sema type is the non-null
+    // member, read through the held handle.
+    if ((ri.shape == Shape::Optional || ri.shape == Shape::Maybe) &&
+        m.object->kind == NodeKind::Identifier) {
+        if (const Type* narrowed = sema_.typeOf(m.object->nodeId);
+            narrowed && !narrowed->isUnknown() && !narrowed->isError() &&
+            !narrowed->isNullish() && !narrowed->isNullable() &&
+            !narrowed->isUnion()) {
+            const CppInfo ni = classify(*narrowed);
+            if (ni.representable) {
+                rt = *narrowed;
+                ri = ni;
+                unwrap = true;
+            }
+        }
+    }
     if (ri.shape == Shape::Optional || ri.shape == Shape::Maybe) {
         return std::string();  // a narrowed handle is needed first
     }
-    const std::string recv = expr(*m.object);
+    std::string recv = expr(*m.object);
+    if (unwrap) {
+        recv = declaredShape == Shape::Optional ? "(*(" + recv + "))"
+                                                : "(" + recv + ").value()";
+    }
     const Type base = stripNullish(rt);
     if (const ClassModel* cm = classModelOf(base)) {
         // D21: a property read through its getter.
@@ -219,7 +258,13 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
         }
         const ClassMemberModel* mem =
             findClassMemberChain(*cm, m.property, nullptr);
-        if (mem == nullptr || mem->isWeak) return std::string();
+        if (mem == nullptr) return std::string();
+        if (mem->isWeak) {
+            // A weak read is `T | undefined`: `readWeak` returns the optional
+            // strong handle (`MaybeRef<T>`), and narrowing decides the use.
+            return "::cp3::runtime::readWeak((" + recv + ")->" +
+                   mapIdent(mem->name) + ")";
+        }
         if (mem->isMethod) return detachedMethodLambda(*cm, *mem, recv);
         // D24: a static field is reachable through an instance too; it lives
         // on the class, not on the handle.
@@ -230,7 +275,7 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
         om != nullptr && ModelRegistry::get().objectUsable(om->label) &&
         objectModelUsed(*om)) {
         const ObjectFieldModel* f = findObjectField(*om, m.property);
-        if (f == nullptr || f->isFunction) return std::string();
+        if (f == nullptr || f->isMethod) return std::string();
         if (om->isInterface) return "(" + recv + ")." + mapIdent(f->name) + "()";
         return "(" + recv + ")->" + mapIdent(f->name);
     }
@@ -292,9 +337,15 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
         om != nullptr && ModelRegistry::get().objectUsable(om->label) &&
         objectModelUsed(*om)) {
         const ObjectFieldModel* f = findObjectField(*om, m.property);
-        if (f == nullptr || !f->isMethod) return std::string();
+        if (f == nullptr) return std::string();
         const std::string fn = mapIdent(f->name);
         const std::string args = joinStrings(emitPlainArgs(c), ", ");
+        if (f->isFunction && !f->isMethod && !om->isInterface) {
+            // A plain object's function-valued field: call the stored
+            // `std::function` through its member spelling.
+            return "((" + expr(*m.object) + ")->" + fn + ")(" + args + ")";
+        }
+        if (!f->isMethod) return std::string();
         const std::string rest = args.empty() ? std::string()
                                               : std::string(", ") + args;
         return "([&]{ const auto& cp3_r = (" + expr(*m.object) + "); return cp3_r." +
@@ -380,16 +431,23 @@ std::string Generator::emitModelAssign(const AssignmentExpr& a,
                           : "(" + expr(*m.object) + ")->" + mapIdent(mem->name);
         return storeText(*mem, lvalue, a, expr(*a.value));
     }
-    // A plain structural object behind `Ref<struct>`: a field store.
+    // A plain structural object behind `Ref<struct>`: a field store. An
+    // interface wrapper stores through its generated setter thunk, which
+    // updates the adapted object's field.
     const ObjectModel* om = objectModelOf(base);
-    const bool usable = om != nullptr && !om->isInterface &&
+    const bool usable = om != nullptr &&
                         ModelRegistry::get().objectUsable(om->label) &&
                         objectModelUsed(*om);
     const ObjectFieldModel* f =
         usable ? findObjectField(*om, m.property) : nullptr;
-    if (f == nullptr || f->isFunction || f->optional ||
+    if (f == nullptr || f->isMethod || f->optional ||
         (a.op == AssignOp::Assign && isNullishLiteral(*a.value))) {
         return std::string();
+    }
+    if (om->isInterface) {
+        if (a.op != AssignOp::Assign) return std::string();
+        return "(" + expr(*m.object) + ").set_" + mapIdent(f->name) + "(" +
+               expr(*a.value) + ")";
     }
     return "((" + expr(*m.object) + ")->" + mapIdent(f->name) + " = " +
            expr(*a.value) + ")";

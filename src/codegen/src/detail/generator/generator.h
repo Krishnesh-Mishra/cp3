@@ -636,6 +636,9 @@ private:
     // `Math.*`/`path.*`/`os.*`/`JSON.stringify`/`process.*`, primitive methods
     // and builtin reads; "" for an unimplemented form (the caller reports).
     std::string emitBuiltinCall(const CallExpr& c, const MemberExpr& m);
+    // `Object.keys` / `.values` / `.entries` over a static object shape
+    // (src/std/object/codegen.cpp).
+    std::string emitObjectCall(const CallExpr& c, const MemberExpr& m);
     std::string emitBuiltinMember(const MemberExpr& m);
     std::string emitMathCall(const CallExpr& c, const MemberExpr& m);
     std::string emitMathMember(const MemberExpr& m);

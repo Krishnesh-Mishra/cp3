@@ -109,6 +109,7 @@ bool Analyzer::tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
     // A native binding's own function (`dm.add(...)`): the binding's
     // parameter list is the source of truth (checks/native_check.cpp).
     if (tryInferNativeCall(call, m, out)) return true;
+    if (tryInferObjectCall(call, m, out)) return true;
     if (tryInferJsonCall(call, m, out)) return true;
     if (tryInferPromiseStaticCall(call, m, out)) return true;
     if (tryInferEnvCall(call, m, out)) return true;

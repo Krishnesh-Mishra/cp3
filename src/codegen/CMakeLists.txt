@@ -99,6 +99,7 @@ set(cp3_codegen_sources
     ../std/process/codegen.cpp
     ../std/env/codegen.cpp
     ../std/json/codegen.cpp
+    ../std/object/codegen.cpp
     ../std/string/codegen.cpp
     ../std/crypto/codegen.cpp
     ../std/network/codegen/codegen.cpp

@@ -469,10 +469,9 @@ namespace {
 
 // Every member of a lowerable shape needs a C++ spelling; a method also needs
 // a callable thunk over its whole signature. A function-typed non-method
-// member has neither (D74's Listener cannot carry a value-returning function),
-// so the closure-in-object shapes stay on the CP3002 path.
+// member is stored as `std::function<...>` (and, on an interface wrapper, gets
+// a getter/setter thunk), so it is lowerable when that spelling exists.
 bool fieldLowerable(const ObjectFieldModel& f) {
-    if (f.isFunction && !f.isMethod) return false;
     if (f.isMethod) {
         for (const Type& p : f.type.parts) {
             if (!classify(p).representable) return false;

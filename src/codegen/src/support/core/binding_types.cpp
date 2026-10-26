@@ -104,7 +104,11 @@ std::optional<Type> Generator::bindingType(const VariableDeclarator& d) const {
 // its initializer. This is what we both emit and register in the scope env.
 std::optional<Type> Generator::resolvedBindingType(const VariableDeclarator& d) const {
     if (auto declared = bindingType(d)) {
-        return declared;
+        // `unknown` has no C++ spelling; a binding initialized with a concrete
+        // value is stored as that value's representation (the declarator uses
+        // the initializer's type), so the declaration environment must agree.
+        // Without this, `typeof x` cannot see the C++ shape it is inspecting.
+        if (!declared->isUnknown() && !declared->isError()) return declared;
     }
     if (d.init) {
         const Type inferred = effectiveType(*d.init);

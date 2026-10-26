@@ -274,19 +274,22 @@ void Analyzer::analyzeIf(IfStatement& stmt) {
     }
     Binding orig;
     const bool hadOrig = narrowed && lookup(narrowName, orig);
+    const Type complement =
+        hadOrig ? withoutMember(orig.type, narrowType) : Type::unknown();
 
     pushScope();
-    if (narrowed && !negated) overrideBinding(narrowName, narrowType, stmt.span);
+    if (narrowed) {
+        overrideBinding(narrowName, negated ? complement : narrowType,
+                        stmt.span);
+    }
     if (stmt.thenBranch) visitStmt(*stmt.thenBranch);
     popScope();
 
     if (stmt.elseBranch) {
         pushScope();
-        if (narrowed && negated) {
-            overrideBinding(narrowName, narrowType, stmt.span);
-        } else if (narrowed && hadOrig) {
-            Type complement = withoutMember(orig.type, narrowType);
-            overrideBinding(narrowName, complement, stmt.span);
+        if (narrowed) {
+            overrideBinding(narrowName, negated ? narrowType : complement,
+                            stmt.span);
         }
         visitStmt(*stmt.elseBranch);
         popScope();
@@ -302,6 +305,22 @@ bool Analyzer::detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
         return false;
     }
     negated = be.op == BinaryOp::StrictNotEqual || be.op == BinaryOp::NotEqual;
+    // `x === undefined` / `x === null` narrows the same way as a `typeof`
+    // guard: the equal branch sees the nullish member, the other branch the
+    // remaining (non-nullish) shape.
+    Expr* idSide = be.left.get();
+    Expr* nullSide = be.right.get();
+    const auto nullish = [](const Expr* e) {
+        return e && (e->kind == NodeKind::NullLiteral ||
+                     e->kind == NodeKind::UndefinedLiteral);
+    };
+    if (!nullish(nullSide)) std::swap(idSide, nullSide);
+    if (idSide && idSide->kind == NodeKind::Identifier && nullish(nullSide)) {
+        name = static_cast<Identifier&>(*idSide).name;
+        type = nullSide->kind == NodeKind::NullLiteral ? Type::nullType()
+                                                       : Type::undefined();
+        return true;
+    }
     Expr* typeofSide = be.left.get();
     Expr* strSide = be.right.get();
     if (strSide && strSide->kind != NodeKind::StringLiteral) {

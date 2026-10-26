@@ -206,6 +206,19 @@ CppInfo classify(const Type& raw) {
             if (!info.representable) classifyNullishUnion(t, info);
             return info;
         case TypeKind::Object: {
+            // `Promise.allSettled`'s settlement record: the sema marker
+            // carries the fulfilled value type in `parts[0]`, and the runtime
+            // struct is `Settled<T>` (cp3/async/promise_combinators.hpp).
+            if (t.name == "$settled") {
+                if (t.parts.empty()) return info;
+                const CppInfo value = classify(t.parts.front());
+                if (!value.representable) return info;
+                info.type = t;
+                info.shape = Shape::Object;
+                info.representable = true;
+                info.cpp = "::cp3::runtime::Settled<" + value.cpp + ">";
+                return info;
+            }
             // A tuple annotation (`$t[...]`) is a std::tuple value: unlike an
             // object shape it has no nominal struct and no Ref handle, so it
             // must be classified before the object-model arms.

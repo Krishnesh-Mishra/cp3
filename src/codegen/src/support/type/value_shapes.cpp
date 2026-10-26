@@ -428,7 +428,8 @@ void classifyNullishUnion(const Type& t, CppInfo& info) {
     const CppInfo inner = classify(nonNullish.front());
     if (!inner.representable) return;
     const bool primitive = isPrimitiveShape(inner.shape);
-    const bool object = inner.shape == Shape::Object;
+    const bool object =
+        inner.shape == Shape::Object || inner.shape == Shape::ClassRef;
     if (!primitive && !object) return;
     const NullishKind kind = nullishKindOf(t);
     if (kind == NullishKind::Mixed) {

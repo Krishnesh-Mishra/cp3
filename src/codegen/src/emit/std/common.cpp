@@ -84,6 +84,10 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     if (isNamespaceObject(m.object.get(), "path")) return emitPathCall(c, m);
     if (isNamespaceObject(m.object.get(), "os")) return emitOsCall(c, m);
     if (isNamespaceObject(m.object.get(), "JSON")) return emitJsonCall(c, m);
+    if (isNamespaceObject(m.object.get(), "Object") &&
+        !hasValueBinding("Object")) {
+        return emitObjectCall(c, m);
+    }
     if (isNamespaceObject(m.object.get(), "crypto")) return emitCryptoCall(c, m);
     if (isNamespaceObject(m.object.get(), "network")) {
         return emitNetworkCall(c, m);
