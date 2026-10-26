@@ -13,9 +13,10 @@
 //   buf.toString([enc])       -> buffer::toString(buf[, enc])
 //   buf.slice(start[, end])   -> buffer::slice(buf, start[, end])
 //   buf.length                -> buffer::size(buf)
-// A form outside the table returns "" so the caller keeps reporting CP3002.
-// The C++ type spelling is `::cp3::runtime::buffer::Buffer`; `needsBuffer_`
-// makes buildSource add the include (and the cp3_ts/cp3_truthy overloads).
+// A member outside the documented table reports CP3305 at the use site; an
+// arity sema already rejected reports CP3400. The C++ type spelling is
+// `::cp3::runtime::buffer::Buffer`; `needsBuffer_` makes buildSource add the
+// include (and the cp3_ts/cp3_truthy overloads).
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -25,6 +26,7 @@
 #include "detail/int/builtin_tables.h"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/type_map.h"
+#include "cp3/diag/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -49,7 +51,14 @@ using namespace detail;
 std::string Generator::emitByteBufferStaticCall(const CallExpr& c,
                                                 const MemberExpr& m) {
     if (!isNamespaceObject(m.object.get(), "Buffer")) return std::string();
-    if (m.property != "from" && m.property != "alloc") return std::string();
+    // A local value named `Buffer` shadows the module: its members are not the
+    // std/buffer statics.
+    if (hasValueBinding("Buffer")) return std::string();
+    if (m.property != "from" && m.property != "alloc") {
+        reportCodegenError(c, diagcode::kMemberNotFound,
+                           "Buffer has no static method '" + m.property + "'");
+        return "0.0";
+    }
     needsBuffer_ = true;
     return "::cp3::runtime::buffer::" + m.property + "(" +
            joinStrings(emitPlainArgs(c), ", ") + ")";
@@ -60,10 +69,23 @@ std::string Generator::emitByteBufferStaticCall(const CallExpr& c,
 std::string Generator::emitByteBufferMethodCall(const CallExpr& c,
                                                 const MemberExpr& m) {
     if (!m.object) return std::string();
-    if (m.property != "toString" && m.property != "slice") return std::string();
     if (info(*m.object).shape != Shape::Buffer) return std::string();
+    if (m.property != "toString" && m.property != "slice") {
+        reportCodegenError(c, diagcode::kMemberNotFound,
+                           "Buffer has no method '" + m.property + "'");
+        return "0.0";
+    }
     const std::vector<std::string> args = emitPlainArgs(c);
-    if (args.size() > 2) return std::string();  // sema reported the arity
+    const std::size_t maxArgs = m.property == "toString" ? 1 : 2;
+    if (args.size() > maxArgs) {
+        // Sema reports the arity before codegen; keep the use site honest if
+        // the lowering is ever reached without it.
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "arity mismatch: Buffer." + m.property +
+                               " takes at most " + std::to_string(maxArgs) +
+                               " argument(s)");
+        return "0.0";
+    }
     needsBuffer_ = true;
     std::string call =
         "::cp3::runtime::buffer::" + m.property + "(" + expr(*m.object);
@@ -73,8 +95,19 @@ std::string Generator::emitByteBufferMethodCall(const CallExpr& c,
 
 // `buf.length`: the byte count (the runtime helper already yields a double).
 std::string Generator::emitByteBufferMember(const MemberExpr& m) {
-    if (m.property != "length" || !m.object) return std::string();
+    if (!m.object) return std::string();
     if (info(*m.object).shape != Shape::Buffer) return std::string();
+    if (m.property != "length") {
+        // The documented instance surface is `length`, `toString` and
+        // `slice`; a method read as a value stays with the ordinary function
+        // path, while any other name is a closed-surface miss.
+        if (m.property == "toString" || m.property == "slice") {
+            return std::string();
+        }
+        reportCodegenError(m, diagcode::kMemberNotFound,
+                           "Buffer has no member '" + m.property + "'");
+        return "0.0";
+    }
     needsBuffer_ = true;
     return "::cp3::runtime::buffer::size(" + expr(*m.object) + ")";
 }

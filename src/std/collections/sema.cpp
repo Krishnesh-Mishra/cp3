@@ -109,7 +109,8 @@ Type Analyzer::inferCollectionsConstruct(const std::string& name,
                                          TypeList& typeArgs) {
     if (name != "Map" && name != "Set") return Type::unknown();
     // Map carries { K, V }; Set carries { T }. Missing annotations stay
-    // unknown and become a CP3002 skip at codegen instead of a false accept.
+    // unknown; codegen reports CP3401 when the constructor has no complete
+    // type argument list to lower.
     const std::size_t want = name == "Map" ? 2 : 1;
     std::vector<Type> parts;
     parts.reserve(want);

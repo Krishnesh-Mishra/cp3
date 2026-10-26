@@ -648,10 +648,14 @@ std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
     // exist: the body is buffered before dispatch, and the documented
     // `ReadStream` shape is the fs family's file-backed stream
     // (SEAM(readstream/fs)). A correct `body` needs an fs-owned stream over a
-    // buffer plus a streaming request pipeline; keep the skip instead of
-    // emitting a raw C++ read that would not compile.
+    // buffer plus a streaming request pipeline, so report the documented
+    // alternative instead of emitting a raw C++ read that would not compile.
     if (name == kHttpRequest && m.property == "body") {
-        notImplemented(m, "req.body (needs the fs ReadStream; SEAM(readstream/fs))");
+        reportUnsupported(
+            m, diagcode::kTypeMismatch,
+            "type mismatch: 'req.body' is unavailable because the runtime "
+            "buffers the request body; use 'await req.text()' or "
+            "'await req.json<T>()' instead");
         return "0.0";
     }
     return std::string();

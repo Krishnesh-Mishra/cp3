@@ -25,8 +25,11 @@
 //     `JSON.parse<T>` (usage-based reification, STDLIB docs §04).
 //
 //   NOT covered here: untyped `JSON.parse(text)` in run mode (the result is
-//   `unknown`; codegen keeps it CP3002), `undefined` arguments, object fields
+//   `unknown`, which has no runtime representation; codegen reports a type
+//   error asking for `JSON.parse<T>`), `undefined` arguments, object fields
 //   other than primitive / primitive-array, and cross-module record shapes.
+//   `JSON.stringify` accepts a non-literal object value through its generated
+//   `$o{...}` field list; a class/interface receiver reports a type error.
 //
 // -----------------------------------------------------------------------------
 // SEMANTICS

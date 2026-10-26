@@ -7,8 +7,8 @@
 // typed views, the buffer classes and DataView live in the sibling
 // typed-arrays family (src/std/typed-arrays/).
 //
-// Every form the corpus does not pin reports CP3002 through `notImplemented`
-// and returns a compilable stub.
+// Every form lowers 1:1 onto the header-only runtime helpers; a form outside
+// this unit's table returns "" so the shared call lowering reports it.
 // =============================================================================
 #include "detail/generator/generator.h"
 

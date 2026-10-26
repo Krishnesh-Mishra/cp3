@@ -19,10 +19,13 @@
 // (makeObjectType/typeKey in src/sema/src/checks/type_check.cpp), so a later
 // `u.id` on the parsed value lowers to a plain C++ member read
 // (emitJsonMember). A shape sema labels differently (interface methods, deep
-// field types) simply stays CP3002.
+// field types) reports an unsupported-shape error at the parse site.
 //
-// Everything else (untyped `parse`, `undefined`, optional/complex fields,
-// cross-module shapes) stays CP3002.
+// A non-literal object value (`let o = { id: 1 }; JSON.stringify(o)`) lowers
+// through the generated `$o{...}` field list into the same dynamic value tree.
+// Everything without a JSON spelling (untyped `parse`, class/interface
+// receivers, optional/complex fields, cross-module shapes) reports a real
+// compile error instead of a skip.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -35,6 +38,7 @@
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
+#include "cp3/diag/diagnostic_codes.hpp"
 
 namespace cp3 {
 
@@ -182,6 +186,79 @@ std::string builderText(const std::string& name,
     return out;
 }
 
+// The dynamic JSON value expression for `text`, whose static type is `t`.
+// `depth` uniquifies the temporaries of nested array loops. Returns false when
+// the type has no spelling in the value tree (a class/interface handle, an
+// `undefined`-flavored optional, a function, ...).
+bool jsonValueForType(const Type& t, const std::string& text, std::string& out,
+                      int depth) {
+    const CppInfo ci = classify(t);
+    switch (ci.shape) {
+        case Shape::Number:
+        case Shape::String:
+        case Shape::Bool:
+            out = "::cp3::runtime::json::value(" + text + ")";
+            return true;
+        case Shape::Null:
+            out = "::cp3::runtime::json::nullValue()";
+            return true;
+        case Shape::Object: {
+            std::string structName;
+            std::vector<ObjectField> fields;
+            if (!objectShapeOf(t, structName, fields)) return false;
+            std::vector<std::string> members;
+            members.reserve(fields.size());
+            for (const ObjectField& field : fields) {
+                std::string value;
+                if (!jsonValueForType(
+                        field.type, "(" + text + ")->" + mapIdent(field.name),
+                        value, depth)) {
+                    return false;
+                }
+                members.push_back("{" + cppStringLiteral(field.name) + ", " +
+                                  value + "}");
+            }
+            out = "::cp3::runtime::json::objectValue({" +
+                  joinStrings(members, ", ") + "})";
+            return true;
+        }
+        case Shape::Array: {
+            if (t.kind != TypeKind::Array || t.parts.empty()) return false;
+            const Type elem = t.parts.front();
+            const CppInfo ec = classify(elem);
+            // A primitive (or nested primitive) array already has a direct
+            // `value(Array<E>)` conversion.
+            if (ec.shape == Shape::Number || ec.shape == Shape::String ||
+                ec.shape == Shape::Bool || ec.shape == Shape::Array) {
+                out = "::cp3::runtime::json::value(" + text + ")";
+                return true;
+            }
+            const std::string suffix = std::to_string(depth);
+            const std::string item = "cp3_e" + suffix;
+            const std::string items = "cp3_items" + suffix;
+            std::string converted;
+            if (!jsonValueForType(elem, item, converted, depth + 1)) {
+                return false;
+            }
+            out = "([&]{ std::vector<::cp3::runtime::json::Value> " + items +
+                  "; if (" + text + ") { " + items + ".reserve((" + text +
+                  ")->size()); for (const auto& " + item + " : *(" + text +
+                  ")) " + items + ".push_back(" + converted + "); } return "
+                  "::cp3::runtime::json::arrayValue(std::move(" + items +
+                  ")); }())";
+            return true;
+        }
+        case Shape::Union:
+            // A primitive value union (`number | string | boolean`) is a
+            // std::variant; each alternative has a `value` overload.
+            out = "std::visit([](const auto& cp3_u) { return "
+                  "::cp3::runtime::json::value(cp3_u); }, " + text + ")";
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace
 
 // -----------------------------------------------------------------------------
@@ -253,8 +330,43 @@ std::string Generator::emitJsonMember(const MemberExpr& m) {
 
 std::string Generator::emitJsonCall(const CallExpr& c, const MemberExpr& m) {
     if (m.optional) return std::string();
-    if (m.property == "stringify") return emitJsonStringify(c);
-    if (m.property == "parse") return emitJsonParse(c);
+    if (m.property == "stringify") {
+        if (std::string out = emitJsonStringify(c); !out.empty()) return out;
+        if (c.arguments.empty() || !c.arguments.front() ||
+            c.arguments.front()->kind == NodeKind::SpreadElement) {
+            reportCodegenError(
+                c, diagcode::kArityMismatch,
+                "arity mismatch: JSON.stringify expects a value argument");
+        } else {
+            reportUnsupported(
+                c, diagcode::kTypeMismatch,
+                "type mismatch: JSON.stringify cannot serialize this value; "
+                "only primitives, arrays, and object values with statically "
+                "known fields are supported");
+        }
+        return "0.0";
+    }
+    if (m.property == "parse") {
+        if (std::string out = emitJsonParse(c); !out.empty()) return out;
+        if (c.arguments.size() != 1 || !c.arguments.front() ||
+            c.arguments.front()->kind == NodeKind::SpreadElement) {
+            reportCodegenError(
+                c, diagcode::kArityMismatch,
+                "arity mismatch: JSON.parse expects one string argument");
+        } else if (c.typeArgs.empty() || !c.typeArgs.front()) {
+            reportUnsupported(
+                c, diagcode::kTypeMismatch,
+                "type mismatch: untyped JSON.parse has no runtime "
+                "representation; use JSON.parse<T>");
+        } else {
+            reportUnsupported(
+                c, diagcode::kTypeMismatch,
+                "type mismatch: JSON.parse<T> does not support this type "
+                "argument; only primitives, primitive arrays, and plain "
+                "interface records are supported");
+        }
+        return "0.0";
+    }
     return std::string();
 }
 
@@ -262,29 +374,49 @@ std::string Generator::emitJsonStringify(const CallExpr& c) {
     if (c.arguments.empty() || !c.arguments.front()) return std::string();
     const Expr* arg = c.arguments.front().get();
     if (arg->kind == NodeKind::SpreadElement) return std::string();
-    // A composite literal serializes through the dynamic value tree; the
-    // optional indent argument applies to that form (`stringify(Value, int)`).
+    // The optional indent argument applies to every form that lowers through
+    // the dynamic value tree (`stringify(Value, int)`).
+    std::string indent;
+    if (c.arguments.size() >= 2) {
+        const Expr* indentArg = c.arguments[1].get();
+        if (!indentArg || indentArg->kind == NodeKind::SpreadElement) {
+            return std::string();
+        }
+        indent = ", static_cast<int>(" + expr(*indentArg) + ")";
+    }
+    // A composite literal serializes through the dynamic value tree.
     if (arg->kind == NodeKind::ArrayLiteral || arg->kind == NodeKind::ObjectLiteral) {
         const std::string built = jsonValueText(*arg);
         if (built.empty()) return std::string();
-        std::string indent;
-        if (c.arguments.size() >= 2) {
-            const Expr* indentArg = c.arguments[1].get();
-            if (!indentArg || indentArg->kind == NodeKind::SpreadElement) {
-                return std::string();
-            }
-            indent = ", static_cast<int>(" + expr(*indentArg) + ")";
-        }
         needsJson_ = true;
         return "::cp3::runtime::json::stringify(" + built + indent + ")";
     }
+    const Type argType = effectiveType(*arg);
     const Shape shape = info(*arg).shape;
-    if (shape != Shape::Number && shape != Shape::String && shape != Shape::Bool &&
-        shape != Shape::Null && shape != Shape::Array) {
-        return std::string();
+    if (shape == Shape::Number || shape == Shape::String ||
+        shape == Shape::Bool || shape == Shape::Null) {
+        needsJson_ = true;
+        return "::cp3::runtime::json::stringify(" + expr(*arg) + ")";
     }
-    needsJson_ = true;
-    return "::cp3::runtime::json::stringify(" + expr(*arg) + ")";
+    // A primitive (or nested primitive) array keeps the direct Array<E>
+    // overload; every other array goes through the value tree.
+    if (shape == Shape::Array && argType.kind == TypeKind::Array &&
+        !argType.parts.empty()) {
+        const CppInfo elem = classify(argType.parts.front());
+        if (elem.shape == Shape::Number || elem.shape == Shape::String ||
+            elem.shape == Shape::Bool || elem.shape == Shape::Array) {
+            needsJson_ = true;
+            return "::cp3::runtime::json::stringify(" + expr(*arg) + ")";
+        }
+    }
+    std::string value;
+    if (jsonValueForType(argType, "cp3_json_v", value, 0)) {
+        needsJson_ = true;
+        return "([&]{ const auto& cp3_json_v = (" + expr(*arg) +
+               "); return ::cp3::runtime::json::stringify(" + value + indent +
+               "); }())";
+    }
+    return std::string();
 }
 
 std::string Generator::jsonValueText(const Expr& e) {

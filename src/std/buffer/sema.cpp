@@ -105,8 +105,9 @@ Type Analyzer::byteBufferMember(const Type& recv, const std::string& prop) {
         return withOptionalTail(
             Type::function({Type::number(), Type::number()}, recv));
     }
-    // A member outside the documented surface stays ambient: a future fs /
-    // network addition reports CP3002 at codegen instead of a hard error.
+    // A member outside the documented surface stays ambient here (the member
+    // probe has no span to report against); codegen reports CP3305 at the use
+    // site, so an unknown Buffer member is not lowered as an ambient value.
     return ambient();
 }
 

@@ -138,7 +138,7 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
 }
 
 // The dispatch: returns "" when the member is not a regular-array method this
-// unit lowers (the caller keeps its own CP3002 path).
+// unit lowers (the caller keeps its own lowering path).
 std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
                                              const MemberExpr& m) {
     if (!m.object) return std::string();
