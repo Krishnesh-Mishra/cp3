@@ -7,9 +7,9 @@ dual verification: every wire-level claim is checked from both ends, with python
 the independent half in phases B and D.
 
 Docs oracle: `docs/standard-library/04-imported-std-modules.md`, section
-`network`, "Included in beta one" only. Checks that need a surface that is
-scheduled but not landed are still written docs-faithfully and reported as
-`PENDING SURFACE` with the exact compiler message; they are never weakened.
+`network`, "Included in beta one" only. Checks that depend on a known runtime
+gap are still written docs-faithfully and reported as `PENDING SURFACE` with the
+observed evidence; they are never weakened.
 
 ## Running
 
@@ -32,10 +32,9 @@ The corpus cases for this wave (self-contained run cases, ports 48105-48114):
 
 Exit codes: `0` only when every executed check passes; `1` when any check
 failed or is `PENDING SURFACE`; `2` for usage errors (missing cp3c, unknown
-phase, `--smoke-port 8080`). `--skip-pending` marks the whole phase B new-surface
-fixture family (B15-B21) `SKIPPED` instead of running it, which is the green run
-on a fork without the scheduled surface (exit 0; nothing is counted as a
-failure).
+phase, `--smoke-port 8080`). `--skip-pending` marks the known runtime-gap check
+(B20, finding F3) `SKIPPED` instead of running it; nothing is counted as a
+failure.
 `--json` prints one machine-readable document instead of the human output.
 Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite target
 ~90 s (cold fixture compilation dominates; warm runs are ~30 s).
@@ -100,11 +99,11 @@ Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite targe
 | middleware answering stops the chain | B13 | `418|teapot` |
 | server alive after the whole run | B14 | `200|hello` |
 | middleware `next()` continues the chain | B15 | `PB1|200|x12` |
-| async handler + `req.text()` body echo | B16 | pending surface (`async arrow function`) |
+| async handler + `req.text()` body echo | B16 | `PB2|200|got:payload` |
 | `req.params` / `req.query` / `req.headers` Maps | B17 | `PB3|200|7|1|en|on` |
 | `app.delete(route, handler)` | B18 | `PB4|200|deleted` + `PB4b|404|not found` |
-| `res.json<T>(payload, status?)` typed payload | B19 | pending surface (`json<T>() takes no arguments`) |
-| unannotated `req.path === literal` | B20 | pending surface, runtime gap (finding F3) |
+| `res.json<T>(payload, status?)` typed payload | B19 | `PB5p|7|alice` |
+| unannotated `req.path === literal` | B20 | PENDING SURFACE: runtime gap (finding F3) |
 | `res.json(payload, status?)` + reified client read | B21 | `PB5a|200|7|alice|application/json; charset=utf-8` + `PB5b|201|9|bob` |
 
 ### WebSocket client - phase C (python RFC6455 server on 48205)
@@ -157,7 +156,7 @@ Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite targe
 | `network_suite_json_scalar` | 48109 | `res.json` scalar wire bytes read back as text |
 | `network_suite_post_put_routes` | 48110 | POST/PUT routes, wrong-method fallback |
 | `network_suite_middleware_auth` | 48111 | auth-stop middleware + Map header in |
-| `network_suite_request_bodies` | 48112 | `req.text()` echo (PENDING: async arrow -> runner skip) |
+| `network_suite_request_bodies` | 48112 | `req.text()` echo through an async handler |
 | `network_suite_params_query_headers` | 48113 | params/query/headers Maps in one request |
 | `network_suite_json_typed_roundtrip` | 48114 | interface read via `json<User>`, untyped `res.json` writes |
 

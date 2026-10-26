@@ -158,7 +158,7 @@ From the core-semantics growth pass:
     in the language? (parser rejects today)
 12. `iife` - parenthesized immediately-invoked function forms.
 13. `nested_function_declaration` - nested declarations: sema accepts, codegen
-    CP3002 today.
+    reported the retired placeholder diagnostic at this snapshot.
 14. `empty_statement` - bare `;;;` legality/execution.
 15. `narrowing_by_null_check` - does `x !== null` narrow `number | null`?
 16. `console_log_multiarg` - variadic `console.log('a', 'b')` formatting
@@ -235,7 +235,8 @@ limitations documented, not corpus-asserted). Durable facts:
 
 - Runtime TUs linked by the CLI driver: `runtime.cpp`, `error.cpp`,
   `eventloop.cpp`, `promise.cpp`, `console.cpp` (MinGW g++ 16, `-std=c++20`,
-  no extra libs); `parallel.cpp`/`worker.cpp` deliberately excluded (CP3002).
+  no extra libs); `parallel.cpp`/`worker.cpp` deliberately excluded (their
+  constructs were not yet built at that snapshot).
   Wave 1 must extend this `kRequired` list when it adds runtime TUs.
 - Codegen always appends a trailing `co_return` to coroutine bodies (a body
   with no `co_return` silently swallows a `throw`).
@@ -271,7 +272,7 @@ Committed `4556017` (src/cli only; `src/cli/src/util.cpp` untouched). Scope:
 
 - D61 artifact layout verified end to end (`build` -> `.cp3/build/`
   intermediates, exe at `.cp3/out/<entry>.exe`, `clean` / `clean --all`
-  semantics, exit codes 0/1/2/3, diagnostic machine line byte-stable).
+  semantics, exit codes 0/1/2, diagnostic machine line byte-stable).
 - `init` spec parity: `src/index.cp3`, full package.json (dev/build/start/check
   scripts + build block), package flavor with a spec-shaped export entry +
   README, `--yes` non-interactive, `--type application|package` flag added for
@@ -286,12 +287,14 @@ Committed `4556017` (src/cli only; `src/cli/src/util.cpp` untouched). Scope:
   install with a `CP3_SCRIPT_GUARD` re-entry guard; four scenarios smoke-tested.
 - Gates: `--filter cli` 27 found / 4 passed / 0 failed / 23 ambiguous; lint
   0 errors. Report: `build/scratch/cli/WAVE-C1-REPORT.md`.
-- Deferred with named errors (exit 3, per-dep failure): GitHub repo installs,
+- Deferred with named errors (the retired placeholder exit status at the time,
+  per-dep failure): GitHub repo installs,
   registry-style specs, `build.excludeSource`, `build.cacheBinary` (warning
   only); `exec` stays a stub until `bin` resolution lands.
 - Blocker outside the lane: the spec-shaped package scaffold
-  (`export default { add }`) hits codegen's missing `ObjectLiteral` (CP3002)
-  until the classes/object-literal waves land; the pack pipeline itself is
+  (`export default { add }`) hit codegen's missing `ObjectLiteral` (the retired
+  placeholder diagnostic) until the classes/object-literal waves landed; the
+  pack pipeline itself is
   proven with `export default add;` (lead reproduced both).
 
 ## B1 landing record (2026-10-18)
@@ -406,7 +409,7 @@ specifiers (`ModuleDependency`, any unit), so a program that imports neither
 module compiles the same 5 runtime TUs and links no third-party archive.
 `compileArgs`/`linkArgs` moved onto `CompileStep`/`LinkStep` and the build
 entry point onto `BuildRequest` (layout-lint budgets: 0 errors). Extension
-stubs that compile today and keep the previous CP3002 behavior landed for
+stubs that compile today and keep the previous not-yet-built behavior landed for
 both modules: runtime TU + header per module (runtime CMake source entries +
 third_party include roots added), sema `std_check` dispatch into
 `checks/std_crypto.cpp` / `std_network.cpp`, codegen `emit/std/crypto.cpp` /
@@ -432,8 +435,8 @@ silently-wrong plaintext; AES deliberately not gated on
 `std::string` stand-in: the docs type it `Buffer` and beta one has no nominal
 Buffer type yet (the pinned `.length` case is exactly the byte count; feeding
 the value back into sha256/sha512 works). Sema types the surface and codegen
-lowers onto `::cp3::runtime::crypto` (`needsCrypto_`), unknown members stay
-CP3002. 18 new focused cases (15 run, 3 check) plus the 7 pinned run-mode
+lowers onto `::cp3::runtime::crypto` (`needsCrypto_`), unknown members took the
+retired placeholder path at that snapshot. 18 new focused cases (15 run, 3 check) plus the 7 pinned run-mode
 cases flipped. Lead verification: canonical rebuild exit 0, lint 207 files
 0 errors 52 warnings, spec surface re-checked against docs 04, cold focused
 `--filter crypto` 25/25 passed 0 failed, no dashes, no shared-file edits.
@@ -515,12 +518,12 @@ the exact import statement for a bare std binding), CP3305 (member miss on the
 closed families Math / path / os / crypto / console / JSON; open families keep
 the pinned permissive shape), CP3601/CP3604 (import hints: the usable named
 imports, or the default-import form for a default-only module), and the
-CP3002 texts now read "not implemented yet: <what>" (the skip marker is
+not-yet-built texts read "not implemented yet: <what>" (the skip path was
 unchanged). `Math` and `JSON` leave `kGlobals` because
 docs/standard-library/04 requires the explicit import; a bare use is CP3301
 with the statement. Console is surface-aware: log/info/warn/error are
-implemented and suggested; assert/clear/input/readKey keep their CP3002 skip
-and stay out of the candidate list. `docs/cli-tooling/07-diagnostic-catalog.md`
+implemented and suggested; assert/clear/input/readKey keep their not-yet-built
+skip and stay out of the candidate list. `docs/cli-tooling/07-diagnostic-catalog.md`
 documents all 65 live codes plus 19 reserved; `tools/check_diagnostics.py`
 cross-checks the header, the catalog and `src/**` (0 findings). 8 new pins in
 `tests/cases/diagnostics/` (7 pass, 1 skip marker);

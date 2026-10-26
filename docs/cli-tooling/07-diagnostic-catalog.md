@@ -35,9 +35,11 @@ error[CP3305]: 'console' has no member 'logh'; did you mean 'log'?
 
 Exit codes:
 
-* `0` - no diagnostics.
-* `1` - at least one error.
-* `3` - every error is `CP3002` ("not implemented in this build yet"). The CLI prints a marker line containing `not implemented`, and `tests/runner/run_tests.py` reports the case as **skipped**, never failed, so scaffolding cases do not pollute the failure count.
+* `0` - no diagnostics; the command completed successfully.
+* `1` - at least one error diagnostic, or the compiled program exited with a failure status.
+* `2` - the command line or environment was unusable: an unknown command or option, a missing input, or no usable toolchain. No program was compiled.
+
+Every recognized-but-invalid construct now produces a real error diagnostic with a stable code and exit status `1`. There is no separate "not built yet" exit status.
 
 ## "Did you mean...?" suggestions
 
@@ -51,12 +53,6 @@ Name-resolution failures never dead-end when a close match exists in scope:
 * **An import-form mistake gets the working form**: importing a named binding from a default-only module (or the reverse) reports the correct spellings; a misspelled export gets ranked candidates plus `named exports: 'a', 'b', or 'c'`.
 
 Candidates come from what is actually visible at the reference: names in scope, the implemented member list of a standard namespace (Math, path, os, crypto, console, JSON) or of a typed receiver's shape, and the export surface of the module being imported. Where a family's shape is still open (currently `network`), member misses stay permissive instead of guessing.
-
-## Internal (3001-3009)
-
-| Code | Name | Meaning | Example message | Fix |
-| ---- | ---- | ------- | --------------- | --- |
-| CP3002 | `kNotImplemented` | A recognized construct whose implementation has not landed in this build reached the compiler: codegen for an out-of-scope AST form, sema for a pending language part, or the CLI for a whole command. It is a "not built yet" signal, not a bug in the program. | `not implemented yet: this statement` | Rewrite with a supported equivalent if you must ship now; otherwise treat the build as pending - a program whose only errors are CP3002 exits 3 and the test runner counts it as skipped. |
 
 ## Lexical (3100-3199)
 

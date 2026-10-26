@@ -18,9 +18,9 @@
 #                         This mode does not time anything.
 #
 # Docs oracle: docs/standard-library/04-imported-std-modules.md section
-# `network`, "Included in beta one" only. Checks that need a surface listed as
-# scheduled in the landing record are still written docs-faithfully and are
-# reported as PENDING SURFACE with the exact compiler message, never weakened.
+# `network`, "Included in beta one" only. Checks that depend on a known runtime
+# gap are still written docs-faithfully and reported as PENDING SURFACE with the
+# observed evidence, never weakened.
 #
 # Usage:
 #   python tests/network/run_network_suite.py --cp3c <path> [--only A,B,S]
@@ -68,10 +68,10 @@ PORT_PROBE = 48207       # phase S cp3 probe target
 PORT_SMOKE = 48209       # --smoke-bench-server
 NEW_SURFACE_PORTS = {          # phase B new-surface fixture ports; each binds only
     48216: "server_next_chain",       # when its fixture gets that far
-    48217: "server_pending_async",
+    48217: "server_async_handler",
     48218: "server_req_fields",
     48219: "server_delete_route",
-    48220: "server_pending_path_eq / server_pending_json_object (never both run)",
+    48220: "server_pending_path_eq / server_json_typed_payload (never both run)",
     48221: "server_json_object",
 }
 
@@ -377,42 +377,35 @@ class Suite:
             self.emit(f"  {fixture} exit={proc.returncode}: "
                       f"{extract_error(proc.stderr or proc.stdout or '')}")
 
-    def pending_fixture(self, cid: str, name: str, fixture: str,
-                        expected: list[tuple[str, list[str]]] | None = None,
-                        buggy: list[tuple[str, list[str]]] | None = None,
-                        buggy_detail: str = "") -> None:
+    def runtime_gap_fixture(self, cid: str, name: str, fixture: str,
+                            expected: list[tuple[str, list[str]]],
+                            buggy: list[tuple[str, list[str]]],
+                            buggy_detail: str) -> None:
+        """Run a fixture whose expected behavior is blocked by a known runtime
+        gap (no compiler diagnostic). The gap is reported as PENDING SURFACE
+        with the observed evidence; the check flips to PASS when it is fixed."""
         if self.skip_pending:
-            self.add(cid, name, "SKIPPED", "skipped by --skip-pending (pending surface)")
+            self.add(cid, name, "SKIPPED", "skipped by --skip-pending (known runtime gap)")
             return
         proc = self.run_cp3(fixture, self.budget(), cid)
         if proc is None:
             self.add(cid, name, "FAIL", f"{fixture} timed out")
             return
         combined = (proc.stderr or "") + "\n" + (proc.stdout or "")
-        if proc.returncode == 0:
-            if expected is None:
-                self.add(cid, name, "PASS", "surface landed: fixture compiled and ran")
-                return
-            got = parse_fixture_lines(proc.stdout or "")
-            if buggy is not None and got == [(i, f) for i, f in buggy]:
-                self.add(cid, name, "PENDING SURFACE",
-                         f"runtime gap (no compiler message): {buggy_detail}")
-                return
-            wanted = [(i, f) for i, f in expected]
-            if got == wanted:
-                self.add(cid, name, "PASS", "surface landed: expected lines observed")
-            else:
-                self.add(cid, name, "FAIL",
-                         f"compiled but output differs; observed {got!r}")
-            return
-        if "CP3002" in combined and "not implemented" in combined:
-            self.add(cid, name, "PENDING SURFACE",
-                     f"exact compiler message: {extract_error(combined)}")
-        elif "C++ compilation failed" in combined:
-            self.add(cid, name, "PENDING SURFACE",
-                     f"codegen/C++ compile error (finding): {extract_error(combined)}")
-        else:
+        if proc.returncode != 0:
             self.add(cid, name, "FAIL", f"unexpected failure: {extract_error(combined)}")
+            return
+        got = parse_fixture_lines(proc.stdout or "")
+        if got == [(i, f) for i, f in buggy]:
+            self.add(cid, name, "PENDING SURFACE",
+                     f"runtime gap (no compiler message): {buggy_detail}")
+            return
+        wanted = [(i, f) for i, f in expected]
+        if got == wanted:
+            self.add(cid, name, "PASS", "expected lines observed")
+        else:
+            self.add(cid, name, "FAIL",
+                     f"compiled but output differs; observed {got!r}")
 
     # ---------------------------------------------------------------- phases
     def phase_a(self) -> None:
@@ -465,21 +458,30 @@ class Suite:
         self.phase = "B"
         self.emit("[phase B] cp3 createServer (48204) -> cp3 fetch client")
         self.run_and_assert("server/server_own.cp3", PHASE_B_SPEC, "server_own")
-        self.pending_fixture("B15", "middleware next() continues the chain",
-                             "server/server_next_chain.cp3", [("PB1", ["200", "x12"])])
-        self.pending_fixture("B16", "async handler + req.text() body echo",
-                             "server/server_pending_async.cp3", [("PB2", ["200", "got:payload"])])
-        self.pending_fixture("B17", "req.params / req.query / req.headers",
-                             "server/server_req_fields.cp3",
-                             [("PB3", ["200", "7", "1", "en", "on"])])
-        self.pending_fixture("B18", "app.delete route registration",
-                             "server/server_delete_route.cp3",
-                             [("PB4", ["200", "deleted"]),
-                              ("PB4b", ["404", "not found"])])
-        self.pending_fixture("B19", "res.json<T>(payload) object codecs",
-                             "server/server_pending_json_object.cp3",
-                             [("PB5p", ["7", "alice"])])
-        self.pending_fixture(
+        self.run_and_assert(
+            "server/server_next_chain.cp3",
+            {"PB1": ("middleware next() continues the chain", exact("200", "x12"))},
+            "server_next_chain")
+        self.run_and_assert(
+            "server/server_async_handler.cp3",
+            {"PB2": ("async handler + req.text() body echo", exact("200", "got:payload"))},
+            "server_async_handler")
+        self.run_and_assert(
+            "server/server_req_fields.cp3",
+            {"PB3": ("req.params / req.query / req.headers",
+                     exact("200", "7", "1", "en", "on"))},
+            "server_req_fields")
+        self.run_and_assert(
+            "server/server_delete_route.cp3",
+            {"PB4": ("app.delete route registration", exact("200", "deleted")),
+             "PB4b": ("app.delete wrong method falls through",
+                      exact("404", "not found"))},
+            "server_delete_route")
+        self.run_and_assert(
+            "server/server_json_typed_payload.cp3",
+            {"PB5p": ("res.json<T>(payload) object codecs", exact("7", "alice"))},
+            "server_json_typed_payload")
+        self.runtime_gap_fixture(
             "B20", "req.path === literal without annotation (finding F3)",
             "server/server_pending_path_eq.cp3",
             expected=[("PB6", ["418", "teapot"])],
@@ -488,11 +490,14 @@ class Suite:
                          "annotation lowers to cp3_truthy(((req).path, "
                          "std::string(\"/teapot\"), false)) which is always "
                          "false; observed 404|not found instead of 418|teapot")
-        self.pending_fixture("B21", "res.json(payload, status?) + reified client read",
-                             "server/server_json_object.cp3",
-                             [("PB5a", ["200", "7", "alice",
-                                        "application/json; charset=utf-8"]),
-                              ("PB5b", ["201", "9", "bob"])])
+        self.run_and_assert(
+            "server/server_json_object.cp3",
+            {"PB5a": ("res.json(payload, status?) + reified client read",
+                      exact("200", "7", "alice",
+                            "application/json; charset=utf-8")),
+             "PB5b": ("res.json(payload, status?) carries status",
+                      exact("201", "9", "bob"))},
+            "server_json_object")
 
     def phase_c(self) -> None:
         self.phase = "C"
@@ -689,7 +694,7 @@ class Suite:
                 self.emit(f"WARN suite elapsed {elapsed:.1f}s exceeds the "
                           f"~{TARGET_SECONDS:.0f}s target (cold fixture compile can dominate)")
             if pending:
-                self.emit("note: PENDING SURFACE checks are the landing-record gaps "
+                self.emit("note: PENDING SURFACE checks are known runtime gaps "
                           "(see tests/network/README.md); they are not weakened passes.")
         if self.results is not None:
             (self.results / "checks.json").write_text(
@@ -720,8 +725,7 @@ def main(argv=None) -> int:
     parser.add_argument("--results", default="",
                         help="directory for raw logs, checks.json and run.txt")
     parser.add_argument("--skip-pending", action="store_true",
-                        help="skip the PENDING SURFACE checks (green run on a fork "
-                             "without the scheduled std/network surface)")
+                        help="skip the known runtime-gap checks (B20)")
     parser.add_argument("--smoke-bench-server", action="store_true",
                         help="run only the benchmarks/health-server/cp3 smoke")
     parser.add_argument("--smoke-port", type=int, default=PORT_SMOKE,

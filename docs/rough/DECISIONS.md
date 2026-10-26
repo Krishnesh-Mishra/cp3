@@ -318,7 +318,7 @@ literals, and `+ - * / % ** == != === !== < > <= >= && ||` compiles to a C++20
 program that the system toolchain builds and runs, printing the exact expected
 `stdout`. The `tests/cases/variables/` corpus (42 cases) flips from "skipped" to
 real pass/fail. Anything in the AST beyond that must produce a clean
-"not implemented" diagnostic (`CP3002`), never a crash.
+"not built yet" diagnostic (the retired placeholder), never a crash.
 
 ---
 
@@ -415,9 +415,9 @@ real pass/fail. Anything in the AST beyond that must produce a clean
   5. **Caught rejection observation**: awaiting a rejected promise and catching
      the rejection marks it observed - a caught `await` never triggers the D43
      unhandled-rejection exit (JS-observable; mechanism may change).
-  6. **`async` arrows** (D40) remain `CP3002` until the arrows-as-values
-     cluster (wave 12) lands; only `async function` declarations are
-     implemented today.
+  6. **`async` arrows** (D40) remained on the retired placeholder diagnostic
+     until the arrows-as-values cluster (wave 12) landed; at the time only
+     `async function` declarations were implemented.
   7. **`Promise.all/race/allSettled`** take array-literal operands only (array
      forms land with wave 3). `Promise.resolve/reject` (D40) are wired in
      wave 1.
@@ -808,7 +808,7 @@ imported-std-modules fetch example that showed a plain object literal was the
 doc side of the disagreement and is rewritten to build a `Map` (fetch
 example in `docs/standard-library/04-imported-std-modules.md`). A plain object
 literal in that position is off the documented surface; it currently stops at
-a CP3002 codegen placeholder ("fetch headers as an object literal"), a
+the retired codegen placeholder ("fetch headers as an object literal"), a
 typed-shape error candidate for the audit phase. Pinned by
 `tests/cases/stdlib/network_headers_map_field.cp3` (promoted out of
 `_ambiguous` with this ruling).
@@ -844,8 +844,8 @@ pinned by `tests/cases/stdlib/parseint_invalid.cp3` and
   check case `tests/cases/stdlib/buffer_ascii_encoding.cp3` (CP3401 at 3:1,
   `encoding "ascii" is not supported`).
 - `arrays-strings/_ambiguous/forin_map_order` stays a marker: `for (let k in
-  m)` over a Map hits `CP3002: not implemented yet: this statement`; the pin
-  waits for the `for...in` lowering gap (tracked in AUDIT-FOLLOWUPS.md).
+  m)` over a Map hit the retired placeholder diagnostic for this statement; the
+  pin waits for the `for...in` lowering gap (tracked in AUDIT-FOLLOWUPS.md).
 
 ## Audit promotions, second batch (2026-10-19, lead)
 
@@ -1049,13 +1049,14 @@ silent or already ruling, so the standing JS-parity goal (D78) applies.
 
 Seven markers promoted out of `_ambiguous` (registry 51 to 44). Keepers:
 `forin_map_order` (D44: `Map` iteration order is a collections bug) and
-`str_index_type` (string index reads: check typed it `number`, run was
-CP3002; the byte-read lowering is in the follow-up fix below).
+`str_index_type` (string index reads: check typed it `number`, run stopped at
+the retired placeholder diagnostic; the byte-read lowering is in the follow-up
+fix below).
 
 ## Index-access fix: string byte reads + enum index operands (2026-10-19, lead)
 
-The arrays-strings wave left two index-access gaps that leaked CP3002 or a raw
-C++ error; both are fixed here and pinned.
+The arrays-strings wave left two index-access gaps that leaked the retired
+placeholder diagnostic or a raw C++ error; both are fixed here and pinned.
 
 - `str[i]` (docs 09: "returns a raw byte") lowers to
   `::cp3::runtime::strings::byteAt`: the UTF-8 byte at a byte position as a
@@ -1177,8 +1178,8 @@ and canonical probes on the landed concurrency surface.
   homogeneous array carried by the `$parallelRun` marker; closures lower as
   `[&]` capture lambdas behind the sema capture-safety walk; worker objects
   mark through exactly one un-reassigned single-declared binding; a worker
-  argument that cannot be proven copyable stays CP3002 (a skip, never a wrong
-  deep copy).
+  argument that cannot be proven copyable stays a not-yet-built skip (never a
+  wrong deep copy).
 - `parallel_capture_diagnostic_text`: pinned to the existing wording; a
   captured reassignment is CP3902 at 2:1.
 - `parallel_import_required`: bare `parallel.reduce(1..3, 0, (s, i) => s + i)`
@@ -1190,8 +1191,8 @@ and canonical probes on the landed concurrency surface.
   error, not a first-closure pick. Codegen resolves every closure's result and
   reports CP3904 (`kParallelRunMixedResultTypes`, catalog row) at the
   `parallel.run` call (`2:9` in the case), exit 1 in run mode, no C++
-  invocation. A closure whose result cannot be resolved still skips the check
-  (that path stays CP3002 until codegen can type it).
+  invocation. A closure whose result cannot be resolved still takes the
+  not-yet-built skip (that path stays open until codegen can type it).
 - Held: `worker_call_shape` and `worker_crash_takes_process_down` stay
   ambiguous; D80 owns that surface. The handle wave promotes against its
   ruling (canonical `new Worker(path)` shape; a thrown handler error becomes a
@@ -1287,8 +1288,8 @@ path rejection in addition to the Clang build/run cases.
 
 ## Spread arguments: two language rules (2026-10-22, lead)
 
-The CP3002 spread lane raised two questions that are language decisions, not
-implementation details. Ruling:
+The spread lane of the placeholder-retirement wave raised two questions that
+are language decisions, not implementation details. Ruling:
 
 - **A spread into a fixed-argument signature must be the last argument**
   (`f(a, ...xs)` is fine; `f(...xs, 1)` is **CP3403**). A spread fills the
@@ -1315,8 +1316,8 @@ checked the same way a function call is.
 
 ## Four spec rulings from the spec owner (2026-10-22)
 
-The CP3002 wave hit four points where the implementation cannot proceed
-without a spec decision. The spec owner ruled:
+The placeholder-retirement wave hit four points where the implementation could
+not proceed without a spec decision. The spec owner ruled:
 
 1. **Non-primitive unions are supported, as a runtime variant.**
    `number | string | null` lowers to a real variant value, not to a skip.

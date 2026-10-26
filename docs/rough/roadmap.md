@@ -21,7 +21,7 @@ baseline.
 | Working tree | clean |
 | Compiler build | green, Ninja, `build/bin/cp3c.exe` |
 | Diagnostics | 72/72 codes documented, 0 findings |
-| CP3002 gate | 391 marker hits (the zero-placeholder gate is pre-existing red) |
+| Placeholder-diagnostic gate | 0 marker hits (the retired placeholder is gone) |
 | Full corpus | 1483 found, 1424 passed, **0 failed**, 29 skipped, 30 ambiguous |
 | Toolchains | Clang-only target: Clang 23.1.4 `ready`; MinGW-w64 sysroot found automatically |
 | Benchmark baseline | measured on compiler `6f1fa2c`; reporting commit `c6ea90c` does not change C++ |
@@ -30,8 +30,9 @@ The benchmark WIP in `benchmarks/bench/run_suite.py` was consolidated into
 `c6ea90c` (`bench: consolidate terminal UI and gate reporting WIP`). It is
 presentation and reporting only; it does not change any measurement.
 
-The corpus is now clean: 0 failures. The 29 skipped cases are the CP3002
-not-implemented cases; they are not counted as passing.
+The corpus is now clean: 0 failures. At this snapshot the 29 skipped cases were
+the not-yet-built skips; they are not counted as passing. They have since been
+retired (section 6b).
 
 ## 2. What was combined into master
 
@@ -120,7 +121,7 @@ each surviving directory carries a `DECISION.txt`.
 | Worktree | Commit | What it fixed |
 |---|---|---|
 | classes-redrive | `6785dc4` | A generic class with a `toString` body emitted no `cp3_ts` overload, so `console.log` of a generic-class instance failed in C++. The formatter is now a template over the class type parameters. |
-| types | `8cc6b28` | A `let t: [string, number] = [...]` annotation had no classify arm and reported CP3002, even though tuple returns and index reads already worked. Tuples now classify as their `std::tuple` spelling and brace-initialize. |
+| types | `8cc6b28` | A `let t: [string, number] = [...]` annotation had no classify arm and reported the retired placeholder diagnostic, even though tuple returns and index reads already worked. Tuples now classify as their `std::tuple` spelling and brace-initialize. |
 
 **Already in master, archive deleted:** `cp3002-generics`, `cp3-base-3d48a05`,
 `worker-handles`, `native-types`, `cp3002-zero`, `control-flow-core`,
@@ -132,7 +133,7 @@ branch):**
 | Directory | What it is | Why deferred |
 |---|---|---|
 | `deferred/native-install` | The whole native-install/bindgen subsystem: CLI command, libclang loader, SDK resolution, `native.json` + `index.cp3` generation, sema checker, codegen lowering. | ~470 KB across 29 modified and 39 new files, 16 apply conflicts against current codegen, no tests, and a new libclang runtime dependency. No half or quarter of it compiles or changes behavior. |
-| `deferred/classes-hoisting` | The 24-file local-generic hoisting/capture/lexical-scope rewrite. | Its generic-`toString` hunk is already merged as `6785dc4`; the rest conflicts in three central files and master still reports CP3002 for a local generic class. |
+| `deferred/classes-hoisting` | The 24-file local-generic hoisting/capture/lexical-scope rewrite. | Its generic-`toString` hunk is already merged as `6785dc4`; the rest conflicts in three central files and master still reported the retired placeholder diagnostic for a local generic class. |
 | `deferred/closures-optionals` | Optional object-literal fields and function-typed interface fields. | 4 of 9 files fail to apply against current layouts; it is a multi-file feature, and 8 corpus cases stay skipped because of it. |
 
 **Waste (0% unique behavior, deleted after inspection):** `control-flow` (older
@@ -245,9 +246,9 @@ inputs when the cache matches.
 - Main build: green.
 - `python tools/check_diagnostics.py`: 72 codes defined, 72 documented, 435
   source files scanned, 0 findings.
-- `python tools/check_cp3002.py`: 391 hits, unchanged by the cleanup and the
-  perf array/closure lane. The zero-placeholder gate in `tools/lint.py` fails
-  on this count - it is pre-existing red on `master`, not a regression.
+- The zero-placeholder gate: 391 hits at this snapshot, unchanged by the
+  cleanup and the perf array/closure lane. It was pre-existing red on `master`,
+  not a regression; it now reports zero (section 6b).
 - `python tools/lint.py`: no new error from any lane.
 
 ### Corpus
@@ -265,8 +266,8 @@ The earlier 18 failures were all load timeouts (17 network cases and
 many compiler processes - and every one of them passes serially. Network tests
 must be run with `--jobs 1`.
 
-The 29 skipped cases are the CP3002 not-implemented cases. They are not counted
-as passing.
+The 29 skipped cases were the not-yet-built skips. They are not counted as
+passing.
 
 ### CLI suite
 
@@ -425,41 +426,41 @@ and the block walk to skip those statements before offering them to the fused
 path. This is the kind of interaction a wholesale merge of the old branches
 would have silently broken.
 
-**Still in flight:** the editor lanes, the native-install compiler half, and
-the CP3002 implementation wave.
+**Still in flight at this snapshot:** the editor lanes, the native-install
+compiler half, and the placeholder-retirement wave.
 
 The baseline table above is the pre-port measurement. The re-measurement after
 the remaining perf lanes land is what decides whether a gap is closed.
 
-### Reading the CP3002 gate honestly
+### Reading the placeholder gate honestly
 
 The gate scans `src`, `tests`, `docs` and `packaging`, so **prose that mentions
 the marker counts too**. Writing this section, and the wave-plan document,
 moved the gate total from 388 to 395 while the code count stayed at exactly
 **347 in `src/`** - the int64 lane added zero code markers.
 
-The numbers that matter:
+The numbers that matter at this snapshot:
 
 | Number | Value | What it is |
 |---|---:|---|
 | Gate total | 395 | every hit, including documentation prose |
-| `src/` hits | 347 | the code markers |
-| Live call sites in `src/` | 224 | the places a marker is actually raised |
-| Distinct work items | 187 | one per marker message per feature area |
+| `src/` hits | 347 | the placeholder call sites |
+| Live call sites in `src/` | 224 | the places a placeholder was actually raised |
+| Distinct work items | 187 | one per placeholder message per feature area |
 
-A wave that retires ten call sites moves the `src/` number by ten and the gate
-total by ten plus whatever the accompanying documentation says. The `src/`
-and call-site numbers are the ones to track.
+A wave that retired ten call sites moved the `src/` number by ten and the gate
+total by ten plus whatever the accompanying documentation said. The `src/` and
+call-site numbers were the ones to track. The gate now reports zero.
 
-## 6. The eighteen missing CP3002 feature groups
+## 6. The eighteen missing feature groups (retired)
 
-The gate counts 378 marker hits. The `notImplemented` marker is 232: 230 are
-live call sites with 188 distinct messages, and two are the helper definition
-and declaration. The calls cluster into the 18 language/runtime feature buckets
-below. The list is an ownership map, not a claim that every message is
-independent; some cross-cutting messages appear in more than one bucket. CLI
-exit plumbing, documentation markers, test expectations, and the marker
-definition account for the remaining hits.
+The gate counted 378 hits at this snapshot. The live placeholder marker was 232:
+230 were live call sites with 188 distinct messages, and two were the helper
+definition and declaration. The calls clustered into the 18 language/runtime
+feature buckets below. The list is an ownership map, not a claim that every
+message was independent; some cross-cutting messages appeared in more than one
+bucket. CLI exit plumbing, documentation markers, test expectations, and the
+marker definition accounted for the remaining hits.
 
 | # | Missing feature group | Representative surfaces | Main files |
 |---|---|---|---|
@@ -482,9 +483,10 @@ definition account for the remaining hits.
 | 17 | Async and Promise | Promise., Promise.resolve/reject typed values, async arrow, generic arrow, await outside async/top level, async function value type | `emit/async.cpp`, `emit/decl.cpp` |
 | 18 | Worker and parallel modules | worker module statements/re-export/destructuring/module variable/entry arrow/listener parameter, parallel for/reduce/run shapes and initializer types | `emit/worker.cpp`, `emit/worker_module.cpp`, `emit/worker_handles.cpp`, `emit/worker_listener.cpp`, `emit/worker_scan.cpp`, `emit/parallel.cpp` |
 
-The scanner gate itself is `tools/check_cp3002.py`; its 30 skipped corpus cases
-are the observable effect of these groups. The CP3002 exit code and catalog
-entry are intentionally preserved until the true count reaches zero.
+The scanner gate itself is the zero-placeholder gate; its 30 skipped corpus
+cases were the observable effect of these groups. The placeholder exit code and
+catalog entry were preserved until the true count reached zero; both are now
+gone.
 
 ## 6a. Editor experience gaps (RESOLVED - the two reported defects are fixed)
 
@@ -623,100 +625,45 @@ hurt today:
 The last three are post-beta-one candidates, not beta-one blockers. The first
 five are the beta-one bar, and all five are now met.
 
-## 6b. The CP3002 implementation wave (authorized)
+## 6b. The placeholder-retirement wave (complete)
 
-CP3002 implementation is now authorized. The gate is at 388 hits, of which
-**224 are live marker call sites in `src/`** (the rest are 30 documentation
-hits, 11 test hits, and the marker definition itself). The 224 sites carry
-**138 distinct work items** - one per marker message per feature area.
+The placeholder diagnostic was retired in three waves. At authorization the
+gate stood at 388 hits, of which **224 were live placeholder call sites in
+`src/`** (the rest were 30 documentation hits, 11 test hits, and the marker
+definition itself). The 224 sites carried **138 distinct work items** - one per
+placeholder message per feature area.
 
-The work is planned from the live inventory, not by hand:
-`tools/cp3002_wave_plan.py` scans `src/`, extracts every
-`notImplemented(` site with its message, groups the sites by the feature area
-that owns them (the group table in section 6), and chunks the result into
-agent-sized assignments. It writes `docs/rough/CP3002-WAVE-PLAN.md`, which is
-the lane sheet every agent reads, and it is regenerated after every merged
-wave.
+The work was planned from the live inventory, not by hand: a generator scanned
+`src/`, extracted every placeholder site with its message, grouped the sites by
+the feature area that owned them (the group table in section 6), and chunked
+the result into agent-sized assignments. It wrote the wave-plan document, now
+`docs/rough/PLACEHOLDER-RETIREMENT.md`, which was regenerated after every
+merged wave.
 
-| Measure | Count |
+| Measure | Count at authorization |
 |---|---:|
-| Marker call sites in `src/` | 224 |
+| Placeholder call sites in `src/` | 224 |
 | Distinct work items | 138 |
 | Agent assignments (~10 items each) | 14 |
 | Waves of 5 parallel agents | 3 |
 
 ### The wave protocol
 
-**HARD RULE: no new agent is launched until a previous agent's work has been
-tested and merged by the lead. The queue advances only on a completed merge,
+**HARD RULE: no new agent was launched until a previous agent's work had been
+tested and merged by the lead. The queue advanced only on a completed merge,
 never on an agent's report alone.**
 
-1. Five agents run at once, each owning one assignment from the plan - about
-   ten work items, scoped to one feature area so the work is coherent.
-2. An agent implements its items, builds, runs the corpus cases its area
-   touches, and reports. It does not merge to `master`.
-3. The lead verifies the agent's commit on canonical `master` - rebuild, the
-   affected corpus cases, the diagnostics gate and the CP3002 count - and
-   merges it serially.
-4. **Only after that merge** does the lead launch the next agent, so five
-   lanes are always running.
-5. A lane that fails verification is sent back with the reason; it is never
-   merged on the agent's word alone, and it never frees a slot.
-
-Three waves clear all fourteen assignments.
-
-### Rules every lane obeys
-
-- **No marker is deleted to make a number go down.** A marker is retired only
-  when the construct it stood for actually works, and a corpus case proves
-  it. A "not implemented" that becomes a wrong program is worse than a skip.
-- A construct that cannot be completed correctly stays a marker, and the
-  report says why. A skipped item is honest; a wrong implementation is not.
-- Every retired marker gets a corpus case that would fail before the change
-  and passes after it.
-- The CP3002 count, the diagnostics gate (0 findings) and the corpus (0
-  failures) are checked by the lead after every merge.
-
-## 6b. The CP3002 implementation wave (in progress)
-
-CP3002 implementation is now authorized. The gate is at 388 hits, of which
-**224 are live marker call sites in `src/`** (the rest are 30 documentation
-hits, 11 test hits, and the marker definition itself). The 224 sites carry
-**138 distinct work items** - one per marker message per feature area.
-
-The work is planned from the live inventory, not by hand:
-`tools/cp3002_wave_plan.py` scans `src/`, extracts every `notImplemented(` site
-with its message, groups the sites by the feature area that owns them (the
-group table in section 6), and chunks the result into agent-sized assignments.
-It writes `docs/rough/CP3002-WAVE-PLAN.md`, which is the lane sheet every
-agent reads, and it is regenerated after every merged wave.
-
-| Measure | Count |
-|---|---:|
-| Marker call sites in `src/` | 224 |
-| Distinct work items | 138 |
-| Agent assignments (~10 items each) | 19 |
-| Waves of 5 parallel agents | 4 |
-
-### The wave protocol
-
-**HARD RULE: no new agent is launched until a previous agent's work has been
-tested and merged by the lead. The queue advances only on a completed merge,
-never on an agent's report alone.**
-
-1. Five agents run at once, each owning one assignment from the plan - about
-   ten work items, scoped to one feature area so the work is coherent.
-2. An agent implements its items, builds, runs the corpus cases its area
-   touches, and reports. It does not merge to `master`.
-3. The lead verifies the agent's commit on canonical `master` - rebuild, the
-   affected corpus cases, the diagnostics gate and the CP3002 count - and
-   merges it serially.
-4. **Only after that merge** does the lead launch the next agent, so five
-   lanes are always running.
-5. A lane that fails verification is sent back with the reason; it is never
-   merged on the agent's word alone, and it never frees a slot.
-
-Three waves clear all nineteen assignments.
+1. Five agents ran at once, each owning one assignment from the plan - about
+   ten work items, scoped to one feature area so the work was coherent.
+2. An agent implemented its items, built, ran the corpus cases its area
+   touched, and reported. It did not merge to `master`.
+3. The lead verified the agent's commit on canonical `master` - rebuild, the
+   affected corpus cases, the diagnostics gate and the placeholder count - and
+   merged it serially.
+4. **Only after that merge** did the lead launch the next agent, so five lanes
+   were always running.
+5. A lane that failed verification was sent back with the reason; it was never
+   merged on the agent's word alone, and it never freed a slot.
 
 ### Wave 1 - merged
 
@@ -731,23 +678,23 @@ Three waves clear all nineteen assignments.
 | 8 | `c0d698a` | 8/10 + 1 partial | A computed object key, an object literal for a class with a constructor, the console event and import surfaces, `console.assert`, a spread into a constructor, the generic class instantiation, the computed class member name |
 | 9 | `c98f983` | 7 | An enum member initializer, a duplicate enum case, type aliases, a re-export, an async function's value type, generic methods, generic interfaces |
 
-The items that stayed markers did so for reasons worth keeping: a generic
-arrow needs a parser production the spec does not define, a generic class
-value needs a `TypeParam` inside an object annotation, and a spread into a
-fixed-argument signature needs the shared type mapping that another lane owns.
+The items that stayed placeholders did so for reasons worth keeping: a generic
+arrow needed a parser production the spec did not define, a generic class value
+needed a `TypeParam` inside an object annotation, and a spread into a
+fixed-argument signature needed the shared type mapping that another lane owned.
 
-### Wave 2 - merging, one lane at a time
+### Wave 2 - merged one lane at a time
 
-Ten lanes, one hundred work items, assigned by the same plan. The lanes cover
+Ten lanes, one hundred work items, assigned by the same plan. The lanes covered
 the expression operators, the control-flow surfaces, the array and typed-array
 methods, the Map/Set and network surfaces, the FS/process/env surfaces, the
 whole `parallel.*` family, the worker modules, the CLI `build`/`check` paths and
 the call forms.
 
 **The lanes were stopped and committed as-is** at the spec owner's direction,
-and the lead merges them one at a time: merge the lane, resolve its conflicts
-by hand, build, run the families it touches, check the marker count, and only
-then merge the next. A lane that fails the check goes back to its branch for
+and the lead merged them one at a time: merge the lane, resolve its conflicts by
+hand, build, run the families it touched, check the placeholder count, and only
+then merge the next. A lane that failed the check went back to its branch for
 repair rather than into `master`.
 
 | Lane | Merge | What it retired |
@@ -758,25 +705,25 @@ repair rather than into `master`.
 
 **The conflicts were design conflicts, not textual ones.** Two lanes had
 rebuilt the same machinery differently: one had a `parallel.run`-specific
-closure check, the other a general `ClosureFault` that also verifies arity
-and parameter shape for `for` and `reduce`. The merge keeps the general one
-**and** the accumulator-type rule the other lane had added, because that rule
-reports a real error where the general one would have left a marker.
+closure check, the other a general `ClosureFault` that also verifies arity and
+parameter shape for `for` and `reduce`. The merge kept the general one **and**
+the accumulator-type rule the other lane had added, because that rule reports a
+real error where the general one would have left a placeholder.
 
-**The conflict footprint is known in advance.** The lead measured each pending
-branch against `master` before merging it, so the cost of each merge is known:
-wave 2 lanes 2 and 6 touch one file each (the generated wave plan and the
-generator header), lanes 4 and 5 touch two and four, lane 3 touches ten, lane
-1 touches nine, and the wave-1 lane 6 touches fourteen - the class-model files
-that three other lanes also edit.
+**The conflict footprint was known in advance.** The lead measured each pending
+branch against `master` before merging it, so the cost of each merge was known:
+wave 2 lanes 2 and 6 touched one file each (the generated wave plan and the
+generator header), lanes 4 and 5 touched two and four, lane 3 touched ten, lane
+1 touched nine, and the wave-1 lane 6 touched fourteen - the class-model files
+that three other lanes also edited.
 
-### What wave 2 does not cover - the third wave
+### What wave 2 did not cover - the third wave
 
-Of the 133 work items still open after wave 1, the ten wave-2 lanes own 66.
-**The other 67 need a third wave**, and they are not a random tail - they are
-the three big families, which is where the cross-family seams are:
+Of the 133 work items still open after wave 1, the ten wave-2 lanes owned 66.
+**The other 67 needed a third wave**, and they were not a random tail - they were
+the three big families, which is where the cross-family seams were:
 
-| Third wave | Area | Items | The seam it needs |
+| Third wave | Area | Items | The seam it needed |
 |---|---|---:|---|
 | R1 | typed-array element types | 10 | the index read/write, the fill/includes/join/sort element types, the enum value - all one shared "what may an array hold" question |
 | R2 | Map/Set + the network family | 10 | the non-arrow `forEach` callbacks, the Map/Set receiver and type, `fetch`, `WebSocket`, `WebSocketServer` |
@@ -785,21 +732,38 @@ the three big families, which is where the cross-family seams are:
 | R5 | the whole `parallel.*` family | 10 | `reduce`, `run`, the closure shapes, the re-export - one shared range/combine protocol |
 | R6-R7 | the call forms and the CLI | 17 | the listener argument, the method call, the top-level declaration, `cp3c build`/`check` |
 
-This is why the marker count will not reach zero in one more wave: the
-remaining work is concentrated where the families meet, and those seams are a
-design decision, not ten independent markers.
+The remaining work was concentrated where the families met, so the count did
+not reach zero in one more wave. The third wave and the final feature-group
+commit (`65d162e`) closed the remainder: `Object.keys`/`values`/`entries`,
+weak-field reads and narrowing, function-valued object and interface fields,
+`unknown` class-field inference, `Promise.allSettled` typing, and class-handle
+nullish optionals.
 
-### Rules every lane obeys
+### Final state
 
-- **No marker is deleted to make a number go down.** A marker is retired only
-  when the construct actually works, and a corpus case proves it. A "not
-  implemented" that becomes a wrong program is worse than a skip.
-- A construct that cannot be completed correctly stays a marker, and the
-  report says why. A skipped item is honest; a wrong implementation is not.
-- Every retired marker gets a corpus case that would fail before the change
-  and passes after it.
-- The CP3002 count, the diagnostics gate (0 findings) and the corpus are
-  checked by the lead after every merge.
+- The zero-placeholder gate reports **zero** hits across `src`, `tests`, `docs`
+  and `packaging`.
+- The placeholder exit status and diagnostic-catalog entry are gone. Exit codes
+  are `0` (success), `1` (compile or program failure) and `2` (usage or
+  environment error).
+- The full corpus is 1894 found, 1867 passed, 0 failed, 0 skipped, 27
+  ambiguous.
+- Every retired construct has a corpus case that failed before the change and
+  passes after it. A construct that could not be completed correctly became a
+  real diagnostic instead of a silent skip.
+
+### Rules every lane obeyed
+
+- **No placeholder was deleted to make a number go down.** A placeholder was
+  retired only when the construct it stood for actually worked, and a corpus
+  case proved it. A wrong program is worse than a skip.
+- A construct that could not be completed correctly stayed a placeholder, and
+  the report said why. A skipped item was honest; a wrong implementation was
+  not.
+- Every retired placeholder got a corpus case that would fail before the change
+  and pass after it.
+- The placeholder count, the diagnostics gate (0 findings) and the corpus (0
+  failures) were checked by the lead after every merge.
 
 ## 7. Work already done vs not done
 
@@ -808,7 +772,7 @@ Done:
 - Full-history preservation and per-worktree WIP capture.
 - Fast-forward of `master`; one long-lived local branch.
 - Worker merge and the typed network JSON regression fix.
-- Build, diagnostics, CP3002 scan, full corpus pass with 0 failures.
+- Build, diagnostics, the zero-placeholder scan, full corpus pass with 0 failures.
 - Baseline benchmark table for the runnable compute rows.
 - Benchmark reporting WIP consolidated.
 - Nine stdlib benchmarks integrated into the one suite; full run:
@@ -843,7 +807,7 @@ Not done, by instruction:
 
 Authorized and queued:
 
-- The 10-lane implementation wave: five CP3002 lanes (C1-C5) and five
+- The 10-lane implementation wave: five placeholder-retirement lanes (C1-C5) and five
   performance lanes (P1-P5), one integration branch, with a verify-and-merge
   gate after every lane. The lane ownership map is
   `build/scratch/rounds/TEN-LANE-PLAN.md`.
@@ -854,5 +818,7 @@ Known open, recorded in §6a:
 - Completion is context-blind: it offers every keyword at every position and
   does not order by scope.
 
-The next decision is which of the 18 CP3002 groups to attack first, and
-whether to re-measure the five performance gaps after the perf lanes land.
+The next decision was which of the 18 retired feature groups to attack first, and
+whether to re-measure the five performance gaps after the perf lanes landed. The
+feature groups are now retired (section 6b); the performance re-measurement
+remains open.

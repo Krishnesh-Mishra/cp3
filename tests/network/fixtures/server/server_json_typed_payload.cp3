@@ -1,0 +1,29 @@
+// =============================================================================
+// tests/network/fixtures/server_json_typed_payload.cp3 - phase B typed JSON
+// payload.
+//
+// docs 04 §network declares `json<T>(data: T, status?: number): void` for
+// HttpResponse, i.e. an explicit type argument WITH a payload. The response
+// writer serializes the record's fields and the client reads the object back
+// through the reified interface T. The fixture prints `PB5p|7|alice`. Port
+// 48220 is shared with server_pending_path_eq.cp3; the suite runs fixtures
+// sequentially.
+// =============================================================================
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+interface User {
+  id: number;
+  name: string;
+}
+
+const app = createServer();
+app.get("/user", (req, res) => {
+  res.json<User>({ id: 7, name: "alice" });
+});
+app.listen(48220, () => {});
+
+const res = await fetch("http://127.0.0.1:48220/user");
+const user = await res.json<User>();
+console.log(`PB5p|${user.id}|${user.name}`);
+app.close();

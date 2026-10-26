@@ -2,13 +2,9 @@ import console from "std/console";
 import { fetch, createServer } from "std/network";
 
 // Request bodies: `await req.text()` buffers the POST body and the handler
-// echoes it back (docs: HttpRequest.text() -> Promise<string>).
-//
-// PENDING SURFACE: the await needs an async handler, and the async arrow
-// lowering is still a codegen seam (`CP3002: not implemented yet: async arrow
-// function`); the runtime buffers the body before dispatch, but no handler
-// form can await it yet. This case is the landing gate for that surface: it
-// stays docs-faithful, not weakened.
+// echoes it back (docs: HttpRequest.text() -> Promise<string>). Async route
+// handlers are supported: the runtime buffers the body before dispatch and the
+// handler awaits it. This case is the regression gate for that surface.
 const app = createServer();
 
 app.post("/echo", async (req, res) => {

@@ -120,10 +120,10 @@ ancestor with a `package.json`), together with its sibling `index.cp3`.
 
 | # | Missing | Why / where it would go |
 | --- | --- | --- |
-| 1 | **Native class values.** A bound class is a declaration shape only: no construction, no destruction, no ownership. A class-typed parameter or result is refused by codegen (CP3002, "a native class parameter"). | spec 19 - see section 4 |
+| 1 | **Native class values.** A bound class is a declaration shape only: no construction, no destruction, no ownership. A class-typed parameter or result is refused by codegen with a real compile error ("a native class parameter"). | spec 19 - see section 4 |
 | 2 | **Owned pointers, returned pointers, `void*`, device pointers.** The binder rejects every one of them by name. | spec 19 - see section 4 |
 | 3 | **No `unsafe` escape hatch.** A native API that cannot be wrapped safely cannot be reached at all in beta one. | [§12](../language-spec/12-pointers-references.md) (post-beta-one) |
-| 4 | **A native function is not a first-class value.** `let f = dm.add;` type-checks but does not lower (CP3002). | codegen: a native call needs its binding's parameter list |
+| 4 | **A native function is not a first-class value.** `let f = dm.add;` type-checks but does not lower (a real compile error at the use site). | codegen: a native call needs its binding's parameter list |
 | 5 | **A bound class is not a cp3 type name.** `dm.Point` is the class's *name*; there is no `Point` annotation in the user's scope. | the class has no value model (row 1) |
 | 6 | **No multi-header / transitive-header policy.** Every header under the include root is bound; a declaration from a *system* header is skipped silently. | the command half (`bindgen.cpp`, `inBoundHeader`) |
 | 7 | **No C-only (`.c`) headers.** The parser always uses `-x c++`. | the command half (`bindgen.cpp`) |
@@ -151,9 +151,9 @@ extend the binder; the rejections are permanent for beta one.** The reasoning:
 **Object lifetimes.** A bound class is a *declaration shape only*. Beta one has
 no cp3 value model for a C++ object: no construction, no destructor hook, no
 ownership transfer, no finalizer. A class-typed parameter or result therefore
-has no sound lowering, and codegen refuses it (CP3002) instead of emitting a
-value whose lifetime nobody owns. A native **enum** is a value and is fully
-supported.
+has no sound lowering, and codegen refuses it with a real compile error instead
+of emitting a value whose lifetime nobody owns. A native **enum** is a value and
+is fully supported.
 
 **What this means for the table below.** Item 14 asks for a decision, and the
 decision is: *the safe subset is supported, everything else is rejected by
