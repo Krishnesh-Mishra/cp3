@@ -104,31 +104,34 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
     }
     renderDiagnostics(feSink.diagnostics(), *ctx.render, stderr);
     if (feSink.hasErrors()) {
-        // Lexer, parser, module loader and sema no longer raise the dedicated
-        // not-implemented diagnostic code: every frontend error is a real
-        // compile error. Only codegen/worker diagnostics can still be deferred.
+        // Every frontend error is a real compile error.
         result.exitCode = kExitCompileError;
     } else if (entry == nullptr || !entry->ast) {
-        // The loader always yields a parsed entry unit; guard anyway so a
-        // future loader change can never turn into a crash here.
-        result.exitCode = notImplemented(ctx.execute ? "run" : "build");
+        // Unreachable invariant: the loader always yields a parsed entry unit.
+        // Report a real error rather than continuing into codegen with no AST.
+        std::fprintf(stderr,
+                     "cp3c: internal error: the module loader produced no "
+                     "entry unit\n");
+        result.exitCode = kExitCompileError;
     }
     return result;
 }
 
-// Shared tail of both codegen paths: render the codegen diagnostics, turn them
-// into an exit code, and keep the not-implemented marker when nothing was
-// generated.
+// Shared tail of both codegen paths: render the codegen diagnostics and turn
+// them into an exit code.
 int codegenOutcome(CollectingDiagnosticSink& cgSink, const GeneratedModule& mod,
                    const BuildContext& ctx) {
     renderDiagnostics(cgSink.diagnostics(), *ctx.render, stderr);
     if (cgSink.hasErrors()) {
-        return onlyNotImplemented(cgSink.diagnostics())
-                   ? notImplemented(ctx.execute ? "run" : "build")
-                   : kExitCompileError;
+        return kExitCompileError;
     }
     if (mod.source.empty() && mod.header.empty()) {
-        return notImplemented(ctx.execute ? "run" : "build");
+        // Unreachable invariant: codegen either emits a module or reports an
+        // error. Never hand an empty module to the toolchain silently.
+        std::fprintf(stderr,
+                     "cp3c: internal error: code generation produced no "
+                     "output\n");
+        return kExitCompileError;
     }
     return kExitSuccess;
 }
@@ -194,7 +197,7 @@ struct WorkerInputs {
 // `new Worker("<path>")` site that starts a real file unit, lowers each worker
 // unit in its own graph, and returns the entry's codegen options plus the extra
 // TUs the toolchain must compile. Worker-unit diagnostics are rendered here -
-// they are the user's compile errors too: a CP3002-only failure is a skip.
+// they are the user's compile errors too.
 int prepareWorkers(const WorkerInputs& in, CodegenOptions& options,
                    std::vector<detail::BuildRequest::ExtraModule>& extras,
                    std::vector<GeneratedModule>& modules) {
@@ -208,9 +211,7 @@ int prepareWorkers(const WorkerInputs& in, CodegenOptions& options,
                                                  in.ctx.opt->compile);
     renderDiagnostics(workers.diagnostics, *in.ctx.render, stderr);
     if (workers.failed) {
-        return onlyNotImplemented(workers.diagnostics)
-                   ? notImplemented(in.ctx.execute ? "run" : "build")
-                   : kExitCompileError;
+        return kExitCompileError;
     }
     options.workers = std::move(workers.sites);
     modules = std::move(workers.modules);
@@ -248,7 +249,9 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     const fs::path entryPath(opt.file);
     const fs::path projectRoot = findProjectRoot(entryPath);
     const std::string moduleName = moduleNameFor(entryPath, projectRoot);
-    const bool packageProject = isPackageProject(projectRoot);
+    // `exec` builds one of a package's `bin` programs: the manifest is a
+    // package, but this entry is a runnable application, not pack input.
+    const bool packageProject = isPackageProject(projectRoot) && !opt.execTool;
     if (packageProject && execute) return runOnPackageError(opt.file);
 
     // The project's type-system vocabulary (spec 03) joins the CLI options.

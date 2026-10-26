@@ -3,8 +3,8 @@
   "cases": [
     {
       "group": "exec",
-      "name": "current-build-reports-not-implemented",
-      "description": "current build reports not implemented",
+      "name": "unknown-package-is-usage-error",
+      "description": "an uninstalled tool is a usage error",
       "argv": [
         "exec",
         "hello-tool"
@@ -15,19 +15,19 @@
         ]
       },
       "expect": {
-        "exit": 3,
+        "exit": 2,
         "stderr": {
           "contains": [
-            "'exec' needs package 'bin' resolution",
-            "not implemented"
+            "no installed package provides a 'bin' command named 'hello-tool'",
+            "cp3c install"
           ]
         }
       }
     },
     {
       "group": "exec",
-      "name": "current-build-ignores-args",
-      "description": "current build ignores args",
+      "name": "unknown-package-reports-before-args",
+      "description": "an uninstalled tool is rejected even when args follow",
       "argv": [
         "exec",
         "hello-tool",
@@ -40,45 +40,50 @@
         ]
       },
       "expect": {
-        "exit": 3,
+        "exit": 2,
         "stderr": {
-          "contains": "'exec' needs package 'bin' resolution"
+          "contains": "no installed package provides a 'bin' command named 'hello-tool'"
         }
       }
     },
     {
       "group": "exec",
-      "name": "current-build-unknown-package",
-      "description": "current build unknown package",
+      "name": "unknown-tool-in-installed-project",
+      "description": "an unknown tool in a project with no installed package is a usage error",
       "argv": [
         "exec",
         "missing-tool"
       ],
+      "setup": {
+        "files": {
+          "package.json": "{\n  \"name\": \"app\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\"\n}\n"
+        }
+      },
       "expect": {
-        "exit": 3,
+        "exit": 2,
         "stderr": {
-          "contains": "'exec' needs package 'bin' resolution"
+          "contains": "no installed package provides a 'bin' command named 'missing-tool'"
         }
       }
     },
     {
       "group": "exec",
       "name": "runs-declared-tool",
-      "description": "runs declared tool",
+      "description": "runs a tool declared by an installed package",
       "argv": [
         "exec",
         "hello-tool"
       ],
       "setup": {
         "fixtures": [
-          "exec-package"
+          "exec-package",
+          {
+            "name": "exec-package",
+            "to": ".cp3/packages/hello-tool"
+          }
         ]
       },
       "slow": true,
-      "xfail": {
-        "id": "exec-not-implemented",
-        "reason": "cp3c exec is a named not-implemented path in this build"
-      },
       "requires": "compiler",
       "expect": {
         "exit": 0,
@@ -90,23 +95,20 @@
     {
       "group": "exec",
       "name": "propagates-tool-exit-code",
-      "description": "propagates tool exit code",
+      "description": "propagates the tool's exit code",
       "argv": [
         "exec",
         "exit-tool"
       ],
       "setup": {
         "files": {
-          "package.json": "{\n  \"name\": \"exit-tool-pkg\",\n  \"version\": \"1.0.0\",\n  \"type\": \"package\",\n  \"main\": \"src/index.cp3\",\n  \"bin\": {\n    \"exit-tool\": \"src/tool.cp3\"\n  }\n}\n",
-          "src/index.cp3": "export default 1;\n",
-          "src/tool.cp3": "import process from \"std/process\";\nprocess.exit(7);\n"
+          "package.json": "{\n  \"name\": \"app\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\"\n}\n",
+          ".cp3/packages/exit-tool-pkg/package.json": "{\n  \"name\": \"exit-tool-pkg\",\n  \"version\": \"1.0.0\",\n  \"type\": \"package\",\n  \"main\": \"src/index.cp3\",\n  \"bin\": {\n    \"exit-tool\": \"src/tool.cp3\"\n  }\n}\n",
+          ".cp3/packages/exit-tool-pkg/src/index.cp3": "export default 1;\n",
+          ".cp3/packages/exit-tool-pkg/src/tool.cp3": "import process from \"std/process\";\nprocess.exit(7);\n"
         }
       },
       "slow": true,
-      "xfail": {
-        "id": "exec-not-implemented",
-        "reason": "cp3c exec is a named not-implemented path in this build"
-      },
       "requires": "compiler",
       "expect": {
         "exit": 7
@@ -115,28 +117,31 @@
     {
       "group": "exec",
       "name": "forwards-program-arguments",
-      "description": "forwards program arguments",
+      "description": "forwards arguments after the tool name",
       "argv": [
         "exec",
-        "hello-tool",
+        "args-tool",
         "--",
-        "alpha"
+        "alpha",
+        "beta"
       ],
       "setup": {
-        "fixtures": [
-          "exec-package"
-        ]
+        "files": {
+          "package.json": "{\n  \"name\": \"app\",\n  \"version\": \"1.0.0\",\n  \"type\": \"application\"\n}\n",
+          ".cp3/packages/args-tool/package.json": "{\n  \"name\": \"args-tool\",\n  \"version\": \"1.0.0\",\n  \"type\": \"package\",\n  \"main\": \"src/index.cp3\",\n  \"bin\": {\n    \"args-tool\": \"src/tool.cp3\"\n  }\n}\n",
+          ".cp3/packages/args-tool/src/index.cp3": "export default 1;\n",
+          ".cp3/packages/args-tool/src/tool.cp3": "import console from \"std/console\";\nimport process from \"std/process\";\n\nlet args = process.argv;\nfor (let i = 0; i < args.length; i++) {\n  console.log(args[i]);\n}\n"
+        }
       },
       "slow": true,
-      "xfail": {
-        "id": "exec-not-implemented",
-        "reason": "cp3c exec is a named not-implemented path in this build"
-      },
       "requires": "compiler",
       "expect": {
         "exit": 0,
         "stdout": {
-          "contains": "alpha"
+          "contains": [
+            "alpha",
+            "beta"
+          ]
         }
       }
     }

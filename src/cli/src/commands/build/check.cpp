@@ -79,7 +79,6 @@ int cmdCheck(const CliOptions& opt) {
     const RenderOptions ro = makeRenderOptions(effective, file->path);
     renderDiagnostics(sink.diagnostics(), ro, stderr);
     if (sink.hasErrors()) {
-        if (onlyNotImplemented(sink.diagnostics())) return notImplemented("check");
         return kExitCompileError;
     }
     if (entry == nullptr || !entry->ast) return kExitSuccess;
@@ -96,33 +95,25 @@ int cmdCheck(const CliOptions& opt) {
     // same way build/run does. Their diagnostics are compile errors.
     const std::vector<WorkerPathSite> sites = collectWorkerPathSites(*entry->ast);
     std::vector<Diagnostic> workerDiagnostics;
-    bool workerNotImplemented = false;
     if (!sites.empty()) {
         ResolvedWorkers workers =
             resolveWorkerUnits(sites, entryPath.parent_path(), moduleName, sm,
                                false, effective.compile);
         workerDiagnostics = std::move(workers.diagnostics);
         options.workers = std::move(workers.sites);
-        workerNotImplemented = onlyNotImplemented(workerDiagnostics);
         renderDiagnostics(workerDiagnostics, ro, stderr);
-        if (!workerDiagnostics.empty()) {
-            bool failed = false;
-            for (const Diagnostic& d : workerDiagnostics) {
-                if (d.severity == Severity::Error || d.severity == Severity::Fatal) {
-                    failed = true;
-                }
-            }
-            if (failed) {
-                return workerNotImplemented ? notImplemented("check")
-                                            : kExitCompileError;
+        for (const Diagnostic& d : workerDiagnostics) {
+            if (d.severity == Severity::Error ||
+                d.severity == Severity::Fatal) {
+                return kExitCompileError;
             }
         }
     }
 
     // Inline worker form and the main-side send surface. Run the entry's
     // codegen without writing output, and surface only the worker diagnostics:
-    // check mode is not a build, so an unrelated CP3002 stays a check success
-    // exactly as before this pass.
+    // check mode is not a build, so codegen diagnostics unrelated to workers
+    // are not part of `check`.
     CollectingDiagnosticSink cgSink;
     (void)generateModule(
         {*entry->ast, sema, moduleName, cgSink, false, options});
@@ -133,8 +124,7 @@ int cmdCheck(const CliOptions& opt) {
     renderDiagnostics(surface, ro, stderr);
     for (const Diagnostic& d : surface) {
         if (d.severity == Severity::Error || d.severity == Severity::Fatal) {
-            return onlyNotImplemented(surface) ? notImplemented("check")
-                                               : kExitCompileError;
+            return kExitCompileError;
         }
     }
     return kExitSuccess;

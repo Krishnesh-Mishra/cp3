@@ -365,8 +365,8 @@
     },
     {
       "group": "build",
-      "name": "frontend-error-is-not-not-implemented",
-      "description": "a frontend failure is a compile error, never the exit-3 marker",
+      "name": "frontend-error-is-compile-error",
+      "description": "a frontend failure is a compile error",
       "argv": [
         "build",
         "src/index.cp3"
@@ -382,9 +382,6 @@
           "contains": [
             "CP3401",
             "type mismatch"
-          ],
-          "not_contains": [
-            "not implemented"
           ]
         },
         "files_absent": [
@@ -542,8 +539,8 @@
     },
     {
       "group": "build",
-      "name": "package-object-default-not-implemented",
-      "description": "package object default not implemented",
+      "name": "package-object-default-packs",
+      "description": "package object default packs",
       "argv": [
         "build",
         "src/index.cp3"
@@ -553,14 +550,19 @@
           "bad-package"
         ]
       },
+      "slow": true,
       "expect": {
-        "exit": 3,
+        "exit": 0,
         "stderr": {
           "contains": [
-            "CP3002",
-            "object literal",
-            "not implemented"
+            "packed",
+            "bad-package 1.0.0"
           ]
+        },
+        "files": {
+          ".cp3/out/bad-package.cp3pak": {
+            "exists": true
+          }
         }
       }
     },
@@ -797,16 +799,9 @@
         }
       },
       "slow": true,
-      "xfail": {
-        "id": "init-package-object-export",
-        "reason": "cp3c init --type package emits export default { add }, which codegen rejects with CP3002"
-      },
       "requires": "compiler",
       "expect": {
         "exit": 0,
-        "stderr": {
-          "not_contains": "CP3002"
-        },
         "files": {
           ".cp3/out/pkg.cp3pak": {
             "exists": true

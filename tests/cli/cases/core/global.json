@@ -571,21 +571,18 @@
     },
     {
       "group": "global",
-      "name": "not-implemented-exit-code",
-      "description": "not implemented exit code",
+      "name": "exec-usage-error-exit-code",
+      "description": "exec without a tool name is a usage error",
       "argv": [
-        "exec",
-        "hello-tool"
+        "exec"
       ],
-      "setup": {
-        "fixtures": [
-          "exec-package"
-        ]
-      },
       "expect": {
-        "exit": 3,
+        "exit": 2,
         "stderr": {
-          "contains": "'exec' needs package 'bin' resolution"
+          "contains": [
+            "exec needs a package tool name",
+            "usage: cp3c exec <tool> [args...]"
+          ]
         }
       }
     },

@@ -7,8 +7,8 @@
 // §3/§8: headers declare, `.cpp` defines).
 //
 // Every entry point returns the documented exit code:
-//   0 success | 1 compile error | 2 usage error | 3 not implemented
-// (`run` additionally propagates the built program's own exit code.)
+//   0 success | 1 compile error | 2 usage error
+// (`run` and `exec` additionally propagate the launched program's exit code.)
 // =============================================================================
 #pragma once
 
@@ -60,25 +60,19 @@ struct CliOptions {
     bool strictToolchain = false;         // --strict-toolchain
     bool projectScope = false;            // toolchain --project
     bool globalScope = false;             // toolchain --global
+    // Internal: `exec` builds a package's declared tool. The package manifest
+    // says `"type": "package"`, but the tool itself is a runnable program, so
+    // build/run must treat it as an application rather than pack it.
+    bool execTool = false;
 };
 
 // -----------------------------------------------------------------------------
 // Shared command helpers.
 // -----------------------------------------------------------------------------
 
-// Reports `<command>` as unimplemented (exit 3 + marker) on stderr.
-int notImplemented(const std::string& command);
-
 // Resolves the default entry file for `build` with no explicit file argument:
 // package.json "main", then the conventional entry names.
 std::string defaultEntryFile();
-
-// True when every error/fatal diagnostic is the dedicated not-implemented code
-// (CP3002). Such a failure is reported with the exit-3 + marker convention so
-// tooling (and tests/runner/run_tests.py) can tell "unimplemented feature" from
-// a genuine compile error wherever a stage still has a pending form
-// (ARCHITECTURE §4, §12).
-bool onlyNotImplemented(const std::vector<Diagnostic>& diagnostics);
 
 // Builds the render options for a command (TTY/--verbose -> pretty + color).
 RenderOptions makeRenderOptions(const CliOptions& opt, std::string fallbackPath);

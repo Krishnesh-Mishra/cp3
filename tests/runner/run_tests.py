@@ -6,9 +6,8 @@
 # <name>.cp3, runs cp3c, and compares the result against the frozen schema
 # documented in tests/cases/README.md.
 #
-# Designed to be safe while cp3c is still a scaffold: a compile command that
-# exits with code 3 and prints the "not implemented" marker is reported as
-# SKIPPED, never a crash. When nothing is runnable the harness exits 0.
+# A supported program exits 0, a real compile error exits 1, and a usage error
+# exits 2. A case that exits any other way is a normal failure.
 #
 # Cases living under a `_ambiguous/` directory are *open-question markers*, not
 # assertions (see docs/rough/DECISIONS.md, "Harness policy for `_ambiguous/` cases"). They
@@ -83,10 +82,6 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-
-# --- Exit codes shared with src/cli/include/cp3/cli.hpp ----------------------
-STUB_EXIT_CODE = 3
-STUB_MARKER = "not implemented"
 
 # --- Open-question markers ---------------------------------------------------
 # Any path with this directory segment is a marker, not an assertion.
@@ -605,10 +600,6 @@ def evaluate(case: Case, compiler: Path, timeout: float) -> Outcome:
     combined = stdout + "\n" + stderr
     exit_code = proc.returncode
 
-    # --- scaffold detection ---------------------------------------------------
-    if exit_code == STUB_EXIT_CODE and STUB_MARKER in combined.lower():
-        return Outcome(case, "skipped", "compiler is a scaffold build")
-
     expected_error = case.spec.get("error")
     expected_stdout = _normalize_newlines(str(case.spec.get("stdout", "")))
     expected_exit = case.spec.get("exitCode", 0)
@@ -1033,8 +1024,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         f"{summary_counts['ambiguous']} ambiguous"
     )
     if summary_counts["passed"] + summary_counts["failed"] == 0:
-        print(f"{summary}; nothing runnable yet, treating as success while cp3c "
-              f"is a scaffold.")
+        print(f"{summary}; no cases were runnable.")
     else:
         print(f"{summary}.")
 
