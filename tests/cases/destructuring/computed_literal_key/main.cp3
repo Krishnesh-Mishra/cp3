@@ -1,0 +1,12 @@
+import console from "std/console";
+
+let o = { x: 1, y: 2 };
+let { ["x"]: a } = o;
+console.log(`${a}`);
+
+function local(): void {
+  let { ["y"]: b } = o;
+  console.log(`${b}`);
+}
+
+local();

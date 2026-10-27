@@ -11,9 +11,9 @@
 //     (collectJsonShapes), materialized on first use exactly like a
 //     `JSON.parse<T>` use.
 //
-// An object pattern whose source is neither (for example an interface with an
-// optional field, which the value-shape gate does not represent) reports
-// CP3002; that representation is the pending object-model decision.
+// An object pattern whose source has no layout cp3 can read (a primitive, an
+// unknown value, ...) is a type error at the pattern: there is no value to
+// unpack.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -25,6 +25,7 @@
 
 #include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/generator/cpp_writer.h"
+#include "detail/generator/family.h"
 #include "detail/generator/mangle.h"
 #include "detail/class/object_rest.h"
 #include "detail/generator/type_map.h"
@@ -52,18 +53,19 @@ const Identifier* parameterIdentifier(const Parameter& p) {
 
 namespace {
 
-// The literal field name of a binding-pattern key ("" for a computed key or a
-// key kind the record surfaces do not name).
+// The literal field name of a binding-pattern key. A string or number literal
+// is a name even when the source spelled it as a computed key (`{ ["x"]: v }`);
+// an identifier is a name only in the shorthand form.
 std::string patternKeyName(const Expr* key, bool computed) {
-    if (computed || key == nullptr) return std::string();
-    if (key->kind == NodeKind::Identifier) {
-        return static_cast<const Identifier&>(*key).name;
-    }
+    if (key == nullptr) return std::string();
     if (key->kind == NodeKind::StringLiteral) {
         return static_cast<const StringLiteral&>(*key).value;
     }
     if (key->kind == NodeKind::NumberLiteral) {
         return static_cast<const NumberLiteral&>(*key).raw;
+    }
+    if (!computed && key->kind == NodeKind::Identifier) {
+        return static_cast<const Identifier&>(*key).name;
     }
     return std::string();
 }
@@ -72,6 +74,25 @@ std::string patternKeyName(const Expr* key, bool computed) {
 // the emitter inferred, not the ambient placeholder.
 bool isAmbientType(const Type& t) {
     return t.kind == TypeKind::Object && t.name == "$ambient";
+}
+
+// Sema types a tuple rest binding as `unknown[]` (the tail slot types live on
+// the source tuple, not on the binding). The site type is the precise array the
+// walkers build from the tail.
+bool isPlaceholderArray(const Type& t) {
+    return t.kind == TypeKind::Array &&
+           (t.parts.empty() || t.parts.front().isUnknown());
+}
+
+// A value that may be null/undefined cannot be destructured: there is no
+// object/array to read.
+bool hasNullishMember(const Type& t) {
+    if (t.isNullable() || t.isNullish()) return true;
+    if (!t.isUnion()) return false;
+    for (const Type& part : t.parts) {
+        if (part.isNullable() || part.isNullish()) return true;
+    }
+    return false;
 }
 
 // The literal field name of an object-literal property ("" when computed or a
@@ -374,8 +395,11 @@ void Generator::emitPatternParams(const FunctionDeclaration& fd, std::string& ou
             // prologue unpacks it into the pattern.
             const Node* target =
                 static_cast<const RestElement&>(*p->name).argument.get();
-            if (target && (target->kind == NodeKind::ArrayPattern ||
-                           target->kind == NodeKind::ObjectPattern)) {
+            // An object pattern cannot be the target of a rest parameter
+            // (the rest value is an array); parameterText reports it, so the
+            // prologue has nothing to unpack.
+            if (target && target->kind == NodeKind::ObjectPattern) continue;
+            if (target && target->kind == NodeKind::ArrayPattern) {
                 pattern = target;
             }
         }
@@ -500,20 +524,39 @@ std::string Generator::parameterText(const Parameter& p, const FunctionDeclarati
         // `...rest: T[]`: the C++ parameter is one array (calls pack their
         // trailing arguments, emit/call.cpp). The default covers a call that
         // passes no rest arguments at all.
-        std::string elem;
-        if (pt && pt->kind == TypeKind::Array && !pt->parts.empty()) {
-            const CppInfo ec = classify(pt->parts.front());
-            if (ec.representable) elem = ec.cpp;
+        if (!id && restPattern == nullptr) {
+            reportUnsupported(p, diagcode::kTypeMismatch,
+                              "type mismatch: a rest parameter must bind a "
+                              "name or an array pattern");
+            return "/* rest */";
         }
-        if ((!id && restPattern == nullptr) || elem.empty()) {
-            notImplemented(p, "this rest parameter type");
+        if (restPattern != nullptr &&
+            restPattern->kind == NodeKind::ObjectPattern) {
+            reportUnsupported(p, diagcode::kTypeMismatch,
+                              "type mismatch: a rest parameter collects an "
+                              "array; an object pattern cannot be its target");
+            return "/* rest */";
+        }
+        if (!pt || pt->kind != TypeKind::Array || pt->parts.empty()) {
+            reportUnsupported(p, diagcode::kTypeMismatch,
+                              "type mismatch: a rest parameter must have an "
+                              "array type");
+            return "/* rest */";
+        }
+        const Type elemType = pt->parts.front();
+        CppInfo ec;
+        if (!arrayElementInfo(elemType, ec)) {
+            reportUnsupported(p, diagcode::kTypeMismatch,
+                              "type mismatch: rest parameter element type '" +
+                                  describe(elemType) +
+                                  "' has no C++ representation");
             return "/* rest */";
         }
         needsTypedArray_ = true;
-        std::string out = "::cp3::runtime::Array<" + elem + "> " + name;
+        std::string out = "::cp3::runtime::Array<" + ec.cpp + "> " + name;
         if (includeDefault) {
-            out += " = ::cp3::runtime::makeArray<" + elem + ">(std::vector<" +
-                   elem + ">{})";
+            out += " = ::cp3::runtime::makeArray<" + ec.cpp +
+                   ">(std::vector<" + ec.cpp + ">{})";
         }
         return out;
     }
@@ -551,7 +594,11 @@ void Generator::unpackPattern(const Node& pattern, const PatternSource& src,
                             indent);
         return;
     }
-    notImplemented(pattern, "this binding pattern");
+    // The callers only route array and object patterns here; any other AST
+    // shape is a broken invariant, not a source-language form.
+    reportUnsupported(pattern, diagcode::kInternalError,
+                      "internal error: the binding-pattern lowering received a "
+                      "non-pattern node");
 }
 
 // The runtime value of a rest object binding: a fresh object shape that holds
@@ -585,17 +632,50 @@ std::string Generator::restObjectText(const ObjectPattern& p,
     if (!objectShapeOf(restType, structName, restFields)) {
         return std::string();
     }
-    // The rest reads the source's own fields, so the source must be the
-    // shape the Omit was taken from.
+    // The rest reads the source's own fields, so the source must have a
+    // layout cp3 can read. The source families are the same ones object
+    // patterns consume: a plain value shape (`->`), a structural object model
+    // (an accessor for an interface, `->` for a plain object), or a JSON
+    // record (`.`). A class has no static field shape (its members are
+    // nominal), so it stays unsupported.
+    const Type base = stripNullish(sourceType);
+    std::vector<SpreadField> sourceFields;
     std::string sourceStruct;
-    std::vector<ObjectField> sourceFields;
-    if (!objectShapeOf(sourceType, sourceStruct, sourceFields)) {
-        return std::string();
+    std::vector<ObjectField> sourceShapeFields;
+    if (objectShapeOf(base, sourceStruct, sourceShapeFields)) {
+        for (const ObjectField& field : sourceShapeFields) {
+            sourceFields.push_back(SpreadField{field.name, "->", false, false});
+        }
+    } else if (const ObjectModel* om = objectModelOf(base);
+               om != nullptr && objectModelUsed(*om)) {
+        for (const ObjectFieldModel& field : om->fields) {
+            if (field.isMethod) continue;
+            sourceFields.push_back(SpreadField{
+                field.name, om->isInterface ? "." : "->", field.optional,
+                om->isInterface});
+        }
+    } else {
+        std::vector<std::string> recordFields;
+        if (!recordLayout(base, sourceStruct, recordFields)) {
+            return std::string();
+        }
+        for (const std::string& field : recordFields) {
+            sourceFields.push_back(SpreadField{field, ".", false, false});
+        }
     }
     std::vector<std::string> values;
     for (const ObjectField& field : restFields) {
-        if (!hasShapeField(sourceFields, field.name)) return std::string();
-        values.push_back("((" + source + ")->" + mapIdent(field.name) + ")");
+        const SpreadField* found = nullptr;
+        for (const SpreadField& candidate : sourceFields) {
+            if (candidate.name == field.name) {
+                found = &candidate;
+                break;
+            }
+        }
+        if (found == nullptr || found->optional) return std::string();
+        std::string read = source + found->access + mapIdent(field.name);
+        if (found->accessor) read += "()";
+        values.push_back("(" + read + ")");
     }
     return "::cp3::runtime::makeRef<" + structName + ">(" + structName + "{" +
            joinStrings(values, ", ") + "})";
@@ -610,16 +690,32 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
     // they materialized (spec 15): an interface is a by-value wrapper with
     // accessor methods, a class or plain object is a `Ref<T>` handle. The
     // std/json record keeps `.field`.
+    if (hasNullishMember(src.type)) {
+        reportUnsupported(p, diagcode::kTypeMismatch,
+                          "type mismatch: cannot destructure a possibly null "
+                          "or undefined value");
+        return;
+    }
     const Type base = stripNullish(src.type);
     const ObjectModel* om = objectModelOf(base);
     const ClassModel* cm = classModelOf(base);
-    bool modelUsed = om != nullptr && objectModelUsed(*om);
-    if (om != nullptr && !modelUsed) om = nullptr;
+    if (om != nullptr && !objectModelUsed(*om)) om = nullptr;
     std::vector<ObjectField> shapeFields;
     const bool plainShape = objectShapeOf(base, structName, shapeFields);
-    if (cm == nullptr && om == nullptr && !plainShape &&
-        !recordLayout(src.type, structName, fields)) {
-        notImplemented(p, "this destructuring source");
+    const bool record =
+        om == nullptr && cm == nullptr && !plainShape &&
+        recordLayout(src.type, structName, fields);
+    if (cm == nullptr && om == nullptr && !plainShape && !record) {
+        if (src.type.isUnknown() || isAmbientType(src.type)) {
+            reportUnsupported(p, diagcode::kTypeMismatch,
+                              "type mismatch: cannot destructure a value of "
+                              "unknown type; annotate the source");
+        } else {
+            reportUnsupported(p, diagcode::kTypeMismatch,
+                              "type mismatch: cannot destructure a value of "
+                              "type '" +
+                                  describe(src.type) + "'");
+        }
         return;
     }
     const auto access = [&](const std::string& name) -> std::string {
@@ -676,8 +772,20 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
         if (!propPtr) continue;
         const ObjectPatternProperty& prop = *propPtr;
         const std::string name = patternKeyName(prop.key.get(), prop.computed);
-        if (name.empty() || !known(name)) {
-            notImplemented(prop, "this destructuring property");
+        if (name.empty()) {
+            reportUnsupported(
+                prop, diagcode::kTypeMismatch,
+                prop.computed
+                    ? "type mismatch: a computed destructuring key must be a "
+                      "string or number literal"
+                    : "type mismatch: this destructuring property has no name");
+            continue;
+        }
+        if (!known(name)) {
+            reportUnsupported(prop, diagcode::kMemberNotFound,
+                              "property '" + name +
+                                  "' does not exist on type '" + describe(base) +
+                                  "'");
             continue;
         }
         const Node* target = prop.value.get();
@@ -712,18 +820,19 @@ void Generator::unpackObjectPattern(const ObjectPattern& p,
         // the ones the pattern named (the TypeScript Omit).
         const auto& re = static_cast<const RestElement&>(*p.rest);
         if (!re.argument || re.argument->kind != NodeKind::Identifier) {
-            reportTypeError(*p.rest,
-                            "type mismatch: a rest object pattern must bind a "
-                            "name");
+            reportUnsupported(*p.rest, diagcode::kTypeMismatch,
+                              "type mismatch: a rest object pattern must bind "
+                              "a name");
             return;
         }
         Type restType;
         const std::string value =
             restObjectText(p, src.text, src.type, restType);
         if (value.empty()) {
-            reportTypeError(*p.rest,
-                            "type mismatch: a rest object pattern needs a "
-                            "source with known properties");
+            reportUnsupported(
+                *p.rest, diagcode::kTypeMismatch,
+                "type mismatch: a rest object pattern needs a source with a "
+                "static value shape");
             return;
         }
         bindPatternTarget(*p.rest, PatternSource{value, restType, src.isConst},
@@ -750,7 +859,11 @@ void Generator::bindPatternTarget(const Node& target, const PatternSource& value
         return;
     }
     if (bound->kind != NodeKind::Identifier) {
-        notImplemented(target, "this binding target");
+        // Parser binding targets are identifiers, array patterns or object
+        // patterns; anything else is a broken invariant.
+        reportUnsupported(target, diagcode::kInternalError,
+                          "internal error: a binding target must be a name or "
+                          "a nested pattern");
         return;
     }
     const auto& id = static_cast<const Identifier&>(*bound);
@@ -758,9 +871,15 @@ void Generator::bindPatternTarget(const Node& target, const PatternSource& value
          (value.isConst ? std::string("const auto ") : std::string("auto ")) +
              mapIdent(id.name) + " = " + value.text + ";");
     Type declared = value.type;
-    if (const Type* st = sema_.typeOf(id.nodeId); st && !st->isUnknown() &&
-                                                   !st->isError() &&
-                                                   !isAmbientType(*st)) {
+    // A tuple rest binding is typed `unknown[]` by sema (the tail types live
+    // on the source tuple); the walker passes the precise tail array as the
+    // site type, so it wins over that placeholder.
+    const bool sitePrecise =
+        !value.type.isUnknown() && !value.type.isError() &&
+        !isPlaceholderArray(value.type);
+    if (const Type* st = sema_.typeOf(id.nodeId);
+        st && !st->isUnknown() && !st->isError() && !isAmbientType(*st) &&
+        !(isPlaceholderArray(*st) && sitePrecise)) {
         declared = *st;
     }
     if (intOn() && classify(declared).shape == Shape::Number) intFail();

@@ -1,0 +1,23 @@
+import console from "std/console";
+
+interface Person {
+  name: string;
+  age?: number;
+}
+
+function show(person: Person): void {
+  let { age, ...rest } = person;
+  console.log(`${rest.name}`);
+}
+
+function showParam({ age, ...rest }: Person): void {
+  console.log(`${rest.name}`);
+}
+
+let person: Person = { name: "Ada", age: 36 };
+show(person);
+showParam(person);
+
+let shaped: { name: string, age?: number } = { name: "Bob", age: 20 };
+let { age, ...rest } = shaped;
+console.log(`${rest.name}`);

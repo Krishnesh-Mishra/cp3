@@ -26,8 +26,10 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/generator/cpp_writer.h"
 #include "detail/expr/pattern_emitter.h"
+#include "detail/generator/family.h"
 #include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
 
@@ -75,19 +77,48 @@ void collectNames(const Node& n, std::vector<std::string>& out) {
 }
 
 // The member name of a pattern property key (`{ name: n }`, `{ "x": y }`), or
-// "" for a key form the shape machinery cannot read.
-std::string keyText(const Expr* key) {
+// "" for a key form the shape machinery cannot read. A string or number
+// literal is a name even when the source spelled it as a computed key
+// (`{ ["x"]: y }`).
+std::string keyText(const Expr* key, bool computed) {
     if (!key) return std::string();
-    if (key->kind == NodeKind::Identifier) {
-        return static_cast<const Identifier&>(*key).name;
-    }
     if (key->kind == NodeKind::StringLiteral) {
         return static_cast<const StringLiteral&>(*key).value;
     }
     if (key->kind == NodeKind::NumberLiteral) {
         return static_cast<const NumberLiteral&>(*key).raw;
     }
+    if (!computed && key->kind == NodeKind::Identifier) {
+        return static_cast<const Identifier&>(*key).name;
+    }
     return std::string();
+}
+
+// Sema types a tuple rest binding as `unknown[]`; the site type is the precise
+// array the walker builds from the tuple tail.
+bool isPlaceholderArray(const Type& t) {
+    return t.kind == TypeKind::Array &&
+           (t.parts.empty() || t.parts.front().isUnknown());
+}
+
+// A value that may be null/undefined cannot be destructured.
+bool hasNullishMember(const Type& t) {
+    if (t.isNullable() || t.isNullish()) return true;
+    if (!t.isUnion()) return false;
+    for (const Type& part : t.parts) {
+        if (part.isNullable() || part.isNullish()) return true;
+    }
+    return false;
+}
+
+// Sema's placeholder for a value with no inferred type (an unannotated
+// parameter).
+bool isAmbientType(const Type& t) {
+    return t.kind == TypeKind::Object && t.name == "$ambient";
+}
+
+bool isUnknownSource(const Type& t) {
+    return t.isUnknown() || isAmbientType(t);
 }
 
 }  // namespace
@@ -147,10 +178,24 @@ void PatternEmitter::walkArrayPattern(const ArrayPattern& ap, const Site& site,
     const bool tuple = site.type && isTupleType(*site.type);
     const bool array = !tuple && site.type && site.type->kind == TypeKind::Array &&
                        !site.type->parts.empty();
-    const bool tupleFits =
-        tuple && ap.rest == nullptr && ap.elements.size() <= site.type->parts.size();
-    if (!array && !tupleFits) {
-        emitPatternFallback(ap, out, indent);
+    if (!array && !tuple) {
+        const Type source = site.type.value_or(Type::unknown());
+        if (isUnknownSource(source)) {
+            g.reportUnsupported(ap, diagcode::kTypeMismatch,
+                                "type mismatch: cannot destructure a value of "
+                                "unknown type; annotate the source");
+        } else {
+            g.reportUnsupported(ap, diagcode::kTypeMismatch,
+                                "type mismatch: an array pattern needs an array "
+                                "or tuple source, got '" +
+                                    describe(source) + "'");
+        }
+        return;
+    }
+    if (tuple && ap.elements.size() > site.type->parts.size()) {
+        g.reportUnsupported(ap, diagcode::kTypeMismatch,
+                            "type mismatch: the array pattern has more elements "
+                            "than the tuple source");
         return;
     }
     const Type elem = tuple ? Type::unknown() : site.type->parts.front();
@@ -172,7 +217,10 @@ void PatternEmitter::walkArrayPattern(const ArrayPattern& ap, const Site& site,
                     const auto& fallback =
                         static_cast<const AssignmentPattern&>(*el);
                     if (!fallback.left || !fallback.right) {
-                        emitPatternFallback(*el, out, indent);
+                        g.reportUnsupported(
+                            *el, diagcode::kInternalError,
+                            "internal error: an array-pattern default needs "
+                            "both a target and a value");
                         ++index;
                         continue;
                     }
@@ -191,41 +239,99 @@ void PatternEmitter::walkArrayPattern(const ArrayPattern& ap, const Site& site,
     }
     if (ap.rest) {
         const auto& re = static_cast<const RestElement&>(*ap.rest);
-        const CppInfo ec = classify(elem);
-        if (!re.argument || !ec.representable || ec.shape == Shape::Void) {
-            emitPatternFallback(*ap.rest, out, indent);
+        if (!re.argument) {
+            g.reportUnsupported(*ap.rest, diagcode::kTypeMismatch,
+                                "type mismatch: an array rest pattern must bind "
+                                "a name or pattern");
             return;
         }
-        const std::string restText =
-            "::cp3::runtime::makeArray<" + ec.cpp + ">(std::vector<" + ec.cpp +
-            ">((*(" + site.access + ")).begin() + " + std::to_string(index) +
-            ", (*(" + site.access + ")).end()))";
-        walkPattern(*re.argument, Site{restText, Type::array(elem)}, out,
+        Type restElem = array ? elem : Type::undefined();
+        if (tuple) {
+            // The tail of a tuple is the rest array: unify the remaining slot
+            // types. An empty tail is an empty array: `number | undefined` is
+            // the storable spelling whose out-of-range read is `undefined`.
+            bool any = false;
+            for (std::size_t i = index; i < site.type->parts.size(); ++i) {
+                restElem =
+                    any ? unify(restElem, site.type->parts[i])
+                        : site.type->parts[i];
+                any = true;
+            }
+            if (!any) {
+                restElem = Type::unionOf({Type::number(), Type::undefined()});
+            }
+        }
+        CppInfo ec;
+        if (!arrayElementInfo(restElem, ec)) {
+            g.reportUnsupported(*ap.rest, diagcode::kTypeMismatch,
+                                "type mismatch: array rest element type '" +
+                                    describe(restElem) +
+                                    "' has no C++ representation");
+            return;
+        }
+        std::string restText;
+        if (tuple) {
+            g.needsTuple_ = true;
+            g.needsTypedArray_ = true;
+            std::vector<std::string> values;
+            for (std::size_t i = index; i < site.type->parts.size(); ++i) {
+                values.push_back("std::get<" + std::to_string(i) + ">(" +
+                                 site.access + ")");
+            }
+            restText = "::cp3::runtime::makeArray<" + ec.cpp + ">(std::vector<" +
+                       ec.cpp + ">{" + joinStrings(values, ", ") + "})";
+        } else {
+            g.needsTypedArray_ = true;
+            restText =
+                "::cp3::runtime::makeArray<" + ec.cpp + ">(std::vector<" +
+                ec.cpp + ">((*(" + site.access + ")).begin() + " +
+                std::to_string(index) + ", (*(" + site.access + ")).end()))";
+        }
+        walkPattern(*re.argument, Site{restText, Type::array(restElem)}, out,
                     indent);
     }
 }
 
 void PatternEmitter::walkObjectPattern(const ObjectPattern& op, const Site& site,
                                        std::string& out, int indent) {
+    if (!site.type) {
+        g.reportUnsupported(op, diagcode::kTypeMismatch,
+                            "type mismatch: cannot destructure a value of "
+                            "unknown type; annotate the source");
+        return;
+    }
+    if (hasNullishMember(*site.type)) {
+        g.reportUnsupported(op, diagcode::kTypeMismatch,
+                            "type mismatch: cannot destructure a possibly null "
+                            "or undefined value");
+        return;
+    }
     std::string structName;
     std::vector<std::string> recordFields;
     // The class / interface / plain-object models own the value spelling when
     // they materialized (spec 15): an interface is a by-value wrapper with
     // accessor methods, a class or plain object is a `Ref<T>` handle. The
     // std/json record keeps `.field`.
-    const Type base =
-        site.type ? stripNullish(*site.type) : Type::unknown();
-    const ObjectModel* om = site.type ? objectModelOf(base) : nullptr;
+    const Type base = stripNullish(*site.type);
+    const ObjectModel* om = objectModelOf(base);
     if (om != nullptr && !objectModelUsed(*om)) om = nullptr;
-    const ClassModel* cm = site.type ? classModelOf(base) : nullptr;
+    const ClassModel* cm = classModelOf(base);
     std::vector<ObjectField> shapeFields;
-    const bool plainShape =
-        site.type && objectShapeOf(base, structName, shapeFields);
+    const bool plainShape = objectShapeOf(base, structName, shapeFields);
     const bool record =
-        !om && !cm && !plainShape && site.type &&
+        !om && !cm && !plainShape &&
         g.recordLayout(*site.type, structName, recordFields);
     if (!om && !cm && !plainShape && !record) {
-        emitPatternFallback(op, out, indent);
+        if (isUnknownSource(*site.type)) {
+            g.reportUnsupported(op, diagcode::kTypeMismatch,
+                                "type mismatch: cannot destructure a value of "
+                                "unknown type; annotate the source");
+        } else {
+            g.reportUnsupported(op, diagcode::kTypeMismatch,
+                                "type mismatch: cannot destructure a value of "
+                                "type '" +
+                                    describe(*site.type) + "'");
+        }
         return;
     }
     const auto fieldType = [&](const std::string& name) -> std::optional<Type> {
@@ -264,15 +370,30 @@ void PatternEmitter::walkObjectPattern(const ObjectPattern& op, const Site& site
         return "((" + site.access + ")." + mapIdent(name) + ")";
     };
     for (const auto& prop : op.properties) {
-        if (!prop || prop->computed || !prop->value) {
-            emitPatternFallback(op, out, indent);
-            return;
+        if (!prop) continue;
+        if (!prop->value) {
+            g.reportUnsupported(*prop, diagcode::kTypeMismatch,
+                                "type mismatch: this destructuring property has "
+                                "no binding target");
+            continue;
         }
-        const std::string name = keyText(prop->key.get());
+        const std::string name = keyText(prop->key.get(), prop->computed);
+        if (name.empty()) {
+            g.reportUnsupported(
+                *prop, diagcode::kTypeMismatch,
+                prop->computed
+                    ? "type mismatch: a computed destructuring key must be a "
+                      "string or number literal"
+                    : "type mismatch: this destructuring property has no name");
+            continue;
+        }
         const std::optional<Type> ft = fieldType(name);
         if (!ft) {
-            emitPatternFallback(op, out, indent);
-            return;
+            g.reportUnsupported(*prop, diagcode::kMemberNotFound,
+                                "property '" + name +
+                                    "' does not exist on type '" +
+                                    describe(base) + "'");
+            continue;
         }
         walkPattern(*prop->value, Site{access(name), ft}, out, indent);
     }
@@ -281,18 +402,19 @@ void PatternEmitter::walkObjectPattern(const ObjectPattern& op, const Site& site
         // the ones the pattern named (the TypeScript Omit).
         const auto& re = static_cast<const RestElement&>(*op.rest);
         if (!re.argument || re.argument->kind != NodeKind::Identifier) {
-            g.reportTypeError(*op.rest,
-                              "type mismatch: a rest object pattern must bind "
-                              "a name");
+            g.reportUnsupported(*op.rest, diagcode::kTypeMismatch,
+                                "type mismatch: a rest object pattern must bind "
+                                "a name");
             return;
         }
         Type restType;
         const std::string value =
             g.restObjectText(op, site.access, *site.type, restType);
         if (value.empty()) {
-            g.reportTypeError(*op.rest,
-                              "type mismatch: a rest object pattern needs a "
-                              "source with known properties");
+            g.reportUnsupported(
+                *op.rest, diagcode::kTypeMismatch,
+                "type mismatch: a rest object pattern needs a source with a "
+                "static value shape");
             return;
         }
         walkPattern(*re.argument, Site{value, restType}, out, indent);
@@ -300,9 +422,11 @@ void PatternEmitter::walkObjectPattern(const ObjectPattern& op, const Site& site
 }
 
 void PatternEmitter::emitPatternFallback(const Node& p, std::string& out, int indent) {
-    // A pattern the shape machinery cannot read is reported; its names are
-    // still declared so later references keep compiling.
-    g.notImplemented(p, "this destructuring pattern");
+    // The pattern walker handles every binding-pattern AST shape; this is the
+    // broken-invariant arm. The names are still declared so later references
+    // keep compiling.
+    g.reportUnsupported(p, diagcode::kInternalError,
+                        "internal error: this binding pattern has no lowering");
     std::vector<std::string> names;
     collectNames(p, names);
     const std::string tl = globalsThreadLocal ? "thread_local " : "";
@@ -376,11 +500,22 @@ void PatternEmitter::bindPatternName(const Identifier& id, const Site& site,
         const bool accessOptional =
             site.type && (site.type->isNullable() || site.type->isNullish());
         const bool semaOptional = st->isNullable() || st->isNullish();
-        if (!bt || !accessOptional || semaOptional) bt = *st;
+        const bool sitePrecise =
+            bt && !isPlaceholderArray(*bt) && !bt->isUnknown() &&
+            !bt->isError();
+        // A tuple rest binding is typed `unknown[]` by sema; the walker passes
+        // the precise tail array as the site type, so it wins.
+        if (!(isPlaceholderArray(*st) && sitePrecise) &&
+            (!bt || !accessOptional || semaOptional)) {
+            bt = *st;
+        }
     }
     const CppInfo ci = bt ? classify(*bt) : CppInfo{};
-    if (bt && !ci.representable) {
-        g.notImplemented(id, "this destructured binding");
+    if (bt && (!ci.representable || ci.shape == Shape::Void)) {
+        g.reportUnsupported(id, diagcode::kTypeMismatch,
+                            "type mismatch: destructured binding '" + id.name +
+                                "' has type '" + describe(*bt) +
+                                "' with no C++ representation");
         line(out, indent,
              "auto " + mapIdent(id.name) + " = cp3::runtime::undefined;");
         g.declare(id.name, Type::unknown());

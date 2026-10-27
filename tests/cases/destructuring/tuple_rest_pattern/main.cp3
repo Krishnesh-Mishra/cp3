@@ -1,0 +1,17 @@
+import console from "std/console";
+
+let t: [number, string, boolean] = [1, "a", true];
+let [first, ...rest] = t;
+console.log(`${first} ${rest.length} ${rest[0]} ${rest[1]}`);
+
+function local(): void {
+  let u: [number, number, number] = [1, 2, 3];
+  let [a, ...tail] = u;
+  console.log(`${a} ${tail.length} ${tail[1]}`);
+
+  let v: [number] = [7];
+  let [only, ...none] = v;
+  console.log(`${only} ${none.length}`);
+}
+
+local();
