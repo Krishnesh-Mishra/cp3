@@ -111,15 +111,9 @@ python tests/runner/run_tests.py [--cp3c <path>] [--cases <dir>] \
 | `--verbose` / `-v` | Print a line for every case, not just failures. |
 | `--timeout <sec>` | Per-case timeout (default 60). |
 
-Exit codes: **0** when no case failed (all passed, or all skipped because the
-compiler is still a scaffold), **1** if any case failed.
-
-### Scaffold safety
-
-While `cp3c` is still a scaffold, the compile commands exit with code `3` and
-print the marker `not implemented`. The harness reports such cases as
-`skipped (compiler is a scaffold build)` and exits `0` when nothing is runnable
-yet - it never crashes on a stub, and it never reports a stub as a failure.
+Exit codes: **0** when no case failed (all passed), **1** if any case failed.
+A missing or unrunnable `cp3c` is reported as skipped; a compiler diagnostic is
+a real failure.
 
 ## Adding a case
 

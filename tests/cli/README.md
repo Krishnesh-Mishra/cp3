@@ -229,8 +229,8 @@ and included with `--full`.
 
 ```json
 "xfail": {
-  "id": "init-package-object-export",
-  "reason": "cp3c init --type package emits an object export that codegen rejects"
+  "id": "example-known-defect",
+  "reason": "one-line description of the known product defect"
 }
 ```
 

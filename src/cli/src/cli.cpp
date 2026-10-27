@@ -9,7 +9,7 @@
 // (DECISIONS D2).
 //
 // Exit codes (also relied on by tests/runner/run_tests.py):
-//   0 success | 1 compile error | 2 usage error | 3 not implemented
+//   0 success | 1 compile error | 2 usage error
 // `run` additionally propagates the built program's own exit code.
 // =============================================================================
 #include "cp3/cli.hpp"
@@ -93,7 +93,7 @@ void printUsage(std::FILE* out) {
         "      --extensions-dir <dir>, --out <path>  (editor-plugin) overrides\n"
         "\n"
         "Exit codes:\n"
-        "  0 success   1 compile error   2 usage error   3 not implemented\n",
+        "  0 success   1 compile error   2 usage error\n",
         out);
 }
 

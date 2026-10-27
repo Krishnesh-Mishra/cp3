@@ -1,7 +1,7 @@
 {
   "name": "bad-package",
   "version": "1.0.0",
-  "description": "package entry uses an object default, which this build rejects",
+  "description": "package fixture used by the pack/install CLI tests",
   "type": "package",
   "main": "src/index.cp3",
   "typeSystem": "typescript",
