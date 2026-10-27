@@ -10,11 +10,12 @@
 // unit's generator, where an imported name is looked up before anything else.
 //
 // Only `ModuleResolution::Local` imports are linked: std/package/native/cpp
-// specifiers keep their current lowering (a lowered intrinsic, or CP3002 at the
-// use site). A local form this milestone cannot lower to a C++ name (a
-// namespace import, a namespace re-export, an anonymous default export, a
-// type-only export) gets an empty `cpp` plus a `miss` reason: the name itself
-// stays quiet until it is actually used, then reports CP3002 at the use site.
+// specifiers keep their current lowering (a lowered intrinsic, or a use-site
+// error when no lowering exists). A local form this milestone cannot lower to
+// a C++ name (a namespace import, a namespace re-export, an anonymous default
+// export, a type-only export) gets an empty `cpp` plus a `miss` reason: the
+// name itself stays quiet until it is actually used, then reports an
+// unresolved-import error at the use site.
 // =============================================================================
 #pragma once
 

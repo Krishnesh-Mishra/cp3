@@ -1,0 +1,5 @@
+// An object-literal argument reifies each field; a void-valued field has no C++
+// value type, so the generic call is a type error.
+function identity<T>(x: T): T { return x; }
+function noop(): void {}
+identity({ x: noop() });

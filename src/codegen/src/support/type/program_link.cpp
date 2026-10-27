@@ -9,13 +9,14 @@
 // yields the partial surface built so far, matching ES-module reality), and
 // every local import of every unit, resolved against the surface of the unit
 // it points to. `std`/package/native/cpp specifiers are not linked: they keep
-// their existing lowering (a lowered intrinsic, or CP3002 at the use site).
+// their existing lowering (a lowered intrinsic, or a use-site error when no
+// lowering exists).
 //
 // A form this milestone cannot spell in C++ (a namespace import, a namespace
 // re-export, an anonymous default export, a type-only export, a binding
 // without a namespace-scope C++ name) is recorded with an empty `cpp` plus a
 // `miss` reason, so the name stays quiet until it is actually used - then the
-// use site reports CP3002, exactly like any other not-implemented lowering.
+// use site reports an unresolved-import error.
 // =============================================================================
 #include "detail/generator/program_link.h"
 
@@ -86,7 +87,8 @@ const VariableDeclarator* declaratorNamed(const VariableDeclaration& vd,
 }
 
 // The cp3 type of a literal initializer (the conservative subset a linked
-// module binding needs); anything richer keeps the use a CP3002 skip.
+// module binding needs); anything richer leaves the use unresolved and reports
+// an error at the use site.
 Type literalInitType(const Expr& e) {
     switch (e.kind) {
         case NodeKind::NumberLiteral: return Type::number();
@@ -428,7 +430,8 @@ LinkedName LinkBuilder::variableBinding(const CompilationUnit& unit,
     }
     // The unit's own emitter keeps a binding it cannot type a module-init
     // local (emit/decl.cpp emitModuleVar), so there is no namespace-scope C++
-    // name for an importer to reach: a use stays a skip instead.
+    // name for an importer to reach: a use reports an unresolved-import error
+    // instead.
     if (!classify(type).representable) return missName("the exported binding has no C++ spelling");
     LinkedName out;
     out.cpp = qualified(unit.id, id.name);

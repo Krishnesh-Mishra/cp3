@@ -51,9 +51,9 @@ struct ObjectModel {
     bool isInterface = false;
     // Every member has a C++ spelling and a callable thunk form: a member
     // without one keeps the whole shape out of M1 (`classify` treats it as
-    // unknown), so the unit reports CP3002 instead of emitting a struct that
-    // cannot compile. Computed on demand (nested shapes recurse, and a shape
-    // can be registered after its user).
+    // unknown), so the unit reports an unsupported-shape diagnostic instead of
+    // emitting a struct that cannot compile. Computed on demand (nested shapes
+    // recurse, and a shape can be registered after its user).
     bool usable = false;
     bool usabilityKnown = false;
     std::vector<ObjectFieldModel> fields;
@@ -271,7 +271,7 @@ std::string objectFieldCpp(const ObjectFieldModel& f);
 // the array templates cover arrays of formattable elements; a class instance or
 // interface wrapper formats only when the type exposes a `toString` (the
 // per-class overload), and a structural object never does. A `false` result
-// keeps the unit on the CP3002 path instead of failing C++ overload
+// rejects the unit with a codegen diagnostic instead of failing C++ overload
 // resolution (used by `Generator::tsCall`).
 bool valueFormattable(const Type& t);
 

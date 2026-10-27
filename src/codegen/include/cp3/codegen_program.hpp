@@ -50,8 +50,8 @@ struct GenerateProgramInput {
 };
 
 // Lowers a local-module program to one C++20 translation unit. Out-of-scope
-// forms report CP3002 exactly like the single-unit path (never throw, never
-// abort).
+// forms report a codegen diagnostic exactly like the single-unit path (never
+// throw, never abort).
 GeneratedModule generateProgram(const GenerateProgramInput& input);
 
 }  // namespace cp3

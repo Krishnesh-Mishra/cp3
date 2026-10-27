@@ -25,8 +25,8 @@
 // parameters are its own, so the call site either lets C++ deduce them
 // (`f(1)`) or names them explicitly (`f<number>(x)`).
 //
-// Out-of-scope forms report CP3002 (deduped per nodeId) and return a
-// compilable stub; the generator never throws and never aborts.
+// Unsupported forms report a codegen diagnostic (deduped per nodeId) and
+// return a compilable stub; the generator never throws and never aborts.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -123,7 +123,8 @@ std::string Generator::calleeText(const std::string& name, const CallExpr& c) {
 }
 
 // The C++ spelling of an explicit call-site type argument: `identity<number>`
-// -> `identity<double>`. Types with no spelling here stay CP3002.
+// -> `identity<double>`. A type with no spelling here is an invalid type
+// argument and reports a diagnostic.
 std::string Generator::typeArgText(const TypeNode& tn) {
     if (auto t = typeFromTypeNode(tn)) {
         const CppInfo ci = classify(*t);
@@ -137,7 +138,10 @@ std::string Generator::typeArgText(const TypeNode& tn) {
         const CppInfo ci = classify(*t);
         if (ci.representable) return ci.cpp;
     }
-    notImplemented(tn, "this type argument");
+    reportUnsupported(
+        tn, diagcode::kInvalidTypeArgument,
+        "invalid type argument: this type has no C++ spelling; a generic type "
+        "argument must be a concrete value type");
     return "double";
 }
 
@@ -259,7 +263,10 @@ std::string Generator::reifyObjectArg(const ObjectLiteral& lit) {
             if (vi.representable && vi.shape != Shape::Void) {
                 type = vi.cpp;
             } else {
-                notImplemented(*p->value, "this object field value");
+                reportUnsupported(
+                    *p->value, diagcode::kTypeMismatch,
+                    "type mismatch: object field '" + key +
+                        "' has no C++ value type");
                 type = "double";
             }
             value = expr(*p->value);

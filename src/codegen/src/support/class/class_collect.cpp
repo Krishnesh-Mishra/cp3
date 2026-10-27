@@ -155,7 +155,10 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
             collectClassAccessorModel(cm, *mp);
             continue;
         }
-        notImplemented(*mp, "this class member");
+        // The parser only creates Property, Method, Constructor and Accessor
+        // members; reaching here means the AST violates that invariant.
+        reportUnsupported(*mp, diagcode::kInternalError,
+                          "internal error: unhandled class member kind");
     }
 }
 

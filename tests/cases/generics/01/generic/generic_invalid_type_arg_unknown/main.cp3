@@ -1,0 +1,4 @@
+import console from "std/console";
+// A type argument must be a concrete value type: `unknown` has no C++ spelling.
+function identity<T>(x: T): T { return x; }
+console.log(`${identity<unknown>(5)}`);
