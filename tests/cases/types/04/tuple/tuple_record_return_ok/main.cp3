@@ -1,0 +1,4 @@
+import console from "std/console";
+function pair(): [number, { x: number }] { return [2, { x: 5 }]; }
+let t = pair();
+console.log(`${t[0] + t[1].x}`);

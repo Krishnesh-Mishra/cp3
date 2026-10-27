@@ -20,6 +20,7 @@
 #include <optional>
 #include <string>
 
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/mangle.h"
 #include "detail/expr/pattern_emitter.h"
@@ -63,6 +64,20 @@ bool isStaticInitExpr(const Expr& e) {
         default:
             return false;
     }
+}
+
+// A declared tuple's C++ spelling: `classify` spells only all-primitive
+// tuples, while a tuple holding record/class handles is still a `std::tuple`
+// of those handles.
+std::optional<CppInfo> tupleDeclaredInfo(const Type& t) {
+    std::string cpp;
+    if (!isTupleType(t) || !tupleCpp(t, cpp)) return std::nullopt;
+    CppInfo info;
+    info.shape = Shape::Object;
+    info.representable = true;
+    info.cpp = cpp;
+    info.type = t;
+    return info;
 }
 
 }  // namespace
@@ -182,6 +197,11 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
     }
     const std::optional<Type> declared = g.resolvedBindingType(d);
     CppInfo ci = declared ? classify(*declared) : CppInfo{};
+    if (d.type) {
+        if (auto dt = g.typeOfNode(*d.type)) {
+            if (auto tuple = tupleDeclaredInfo(*dt)) ci = *tuple;
+        }
+    }
     if (d.init && !ci.representable) {
         const CppInfo fromInit = g.info(*d.init);
         if (fromInit.representable) ci = fromInit;
@@ -286,17 +306,19 @@ void ModuleVarEmitter::noInit(const detail::CppInfo& ci,
     }
 }
 
-// A declared type M1 cannot represent (`number | string`, an object / array /
-// class type, ...) keeps the unit "not implemented" instead of being quietly
-// mis-typed (same contract as local declarations).
+// A declared type without a C++ spelling is a hard error: silently deducing a
+// narrower initializer type would not enforce the annotation. A tuple with
+// record/class-handle elements is spellable even though `classify` keeps its
+// all-primitive gate for ordinary tuple values.
 void ModuleVarEmitter::reportType(const VariableDeclarator& d) {
     if (!d.type) return;
     auto dt = g.typeOfNode(*d.type);
     if (!dt || classify(*dt).representable || dt->isUnknown() || dt->isError() ||
-        isChannelHandleType(*dt)) {
+        isChannelHandleType(*dt) || tupleDeclaredInfo(*dt)) {
         return;
     }
-    g.notImplemented(d, "this declared type");
+    g.reportUnsupported(d, diagcode::kTypeMismatch,
+                        "type mismatch: this declared type has no C++ spelling");
 }
 
 }  // namespace detail

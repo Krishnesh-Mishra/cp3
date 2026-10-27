@@ -7,7 +7,7 @@
 // only) and the definition body. Parameter spelling and return-type resolution
 // live in emit/patterns.cpp and this unit; `async function` bodies lower to C++20
 // coroutines whose promise type is the runtime's `Promise<T>` (spec §14).
-// Out-of-scope declarations report CP3002.
+// A form with no C++ spelling is a hard type error, never a skipped program.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -26,6 +26,20 @@
 namespace cp3 {
 
 using namespace detail;
+
+namespace {
+
+// A tuple's C++ spelling when every element has one. `classify` spells only
+// all-primitive tuples; a tuple holding a record or class handle is still a
+// value `std::tuple` can carry, so the declaration/signature sites use this
+// wider form directly.
+std::optional<std::string> tupleSpelling(const Type& t) {
+    std::string cpp;
+    if (!isTupleType(t) || !tupleCpp(t, cpp)) return std::nullopt;
+    return cpp;
+}
+
+}  // namespace
 
 // Records every function declared in this unit (including `export function`)
 // and every local binding introduced by an import, so a builtin call/await
@@ -257,8 +271,9 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
 }
 
 // The ordinary lowering of a function body: cp3 `number` stays a double. This
-// is the definition of record (the CP3002 reports happen here, once, whether or
-// not an int64 fast path was kept) and the fallback the wrapper re-runs.
+// is the definition of record (the signature/type reports happen here, once,
+// whether or not an int64 fast path was kept) and the fallback the wrapper
+// re-runs.
 std::string Generator::plainBody(const FunctionDeclaration& fd, const std::string& ret) {
     const std::string savedReturn = currentReturn_;
     const std::optional<Type> savedReturnType = currentReturnType_;
@@ -267,9 +282,13 @@ std::string Generator::plainBody(const FunctionDeclaration& fd, const std::strin
         // (`co_return expr`), not the C++ signature's `Promise<T>` spelling.
         const Type value = asyncValueType(fd);
         const CppInfo ci = classify(value);
-        currentReturn_ = (ci.representable && ci.shape != Shape::Void)
-                             ? ci.cpp
-                             : "void";
+        if (const auto tuple = tupleSpelling(value)) {
+            currentReturn_ = *tuple;
+        } else {
+            currentReturn_ = (ci.representable && ci.shape != Shape::Void)
+                                 ? ci.cpp
+                                 : "void";
+        }
         currentReturnType_ = value;
     } else {
         currentReturn_ = ret;
@@ -360,27 +379,45 @@ std::optional<Type> Generator::returnValueType(const FunctionDeclaration& fd) co
 std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
     if (fd.isAsync) {
         // An `async function` never returns its annotated value type directly:
-        // the C++ signature is the coroutine's promise type (spec §14).
-        const CppInfo ci = classify(detail::promiseOf(asyncValueType(fd)));
+        // the C++ signature is the coroutine's promise type (spec §14). A tuple
+        // value is spellable even when an element is a record or class handle.
+        const Type value = asyncValueType(fd);
+        if (const auto tuple = tupleSpelling(value)) {
+            return "::cp3::runtime::Promise<" + *tuple + ">";
+        }
+        const CppInfo ci = classify(detail::promiseOf(value));
         if (ci.representable) return ci.cpp;
-        notImplemented(fd, "this async function's value type");
+        reportUnsupported(fd, diagcode::kTypeMismatch,
+                          "type mismatch: this async function's value type has "
+                          "no C++ spelling");
         return "void";
+    }
+    // A tuple return type has a `std::tuple` spelling regardless of whether its
+    // elements are primitive, so resolve it before the general value-type
+    // fallback (which may otherwise pick a narrower returned expression type).
+    if (fd.returnType) {
+        if (auto t = typeOfNode(*fd.returnType)) {
+            if (const auto tuple = tupleSpelling(*t)) return *tuple;
+            if (isTupleType(*t)) {
+                reportUnsupported(fd, diagcode::kTypeMismatch,
+                                  "type mismatch: this return type has no C++ "
+                                  "spelling");
+                return "void";
+            }
+        }
+    }
+    auto signature = sema_.functions.find(fd.nodeId);
+    if (signature != sema_.functions.end()) {
+        if (const auto tuple = tupleSpelling(signature->second.returnType)) {
+            return *tuple;
+        }
     }
     // A generic function's annotation names its own type parameters (`T`, `T[]`,
     // `[A, B]`); the resolved signature is the only place those are known
     // (spec §16).
     if (!fd.typeParams.empty()) {
-        auto it = sema_.functions.find(fd.nodeId);
-        if (it != sema_.functions.end()) {
-            // A tuple return type (`function pair<A, B>(): [A, B]`) has no
-            // `classify` arm outside the generic signature sites (to keep the
-            // plain tuple-annotation status unchanged); spell it directly.
-            std::string tuple;
-            if (isTupleType(it->second.returnType) &&
-                tupleCpp(it->second.returnType, tuple)) {
-                return tuple;
-            }
-            const CppInfo ci = classify(it->second.returnType);
+        if (signature != sema_.functions.end()) {
+            const CppInfo ci = classify(signature->second.returnType);
             if (ci.representable) return ci.cpp;
         }
     }
@@ -388,7 +425,9 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
         const CppInfo ci = classify(*value);
         if (ci.representable) return ci.cpp;
         if (!value->isUnknown()) {
-            notImplemented(fd, "this return type");
+            reportUnsupported(fd, diagcode::kTypeMismatch,
+                              "type mismatch: this return type has no C++ "
+                              "spelling");
             return "void";
         }
     }
@@ -407,13 +446,25 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
 Type Generator::asyncValueType(const FunctionDeclaration& fd) const {
     if (fd.returnType) {
         if (auto t = typeOfNode(*fd.returnType)) {
-            if (detail::isPromiseType(*t)) return detail::promiseValue(*t);
-            return *t;
+            const Type value = detail::isPromiseType(*t)
+                                   ? detail::promiseValue(*t)
+                                   : *t;
+            if (!value.isUnknown() && !value.isError()) return value;
         }
     }
     auto it = sema_.functions.find(fd.nodeId);
     if (it != sema_.functions.end() && detail::isPromiseType(it->second.returnType)) {
-        return detail::promiseValue(it->second.returnType);
+        const Type value = detail::promiseValue(it->second.returnType);
+        if (!value.isUnknown() && !value.isError()) return value;
+    }
+    // An `unknown` annotation has no C++ spelling, but the first returned
+    // expression still fixes the promise's carried value (the same concrete
+    // deduction an unannotated synchronous function gets).
+    if (fd.body) {
+        if (const Expr* returned = firstReturnedExpr(*fd.body)) {
+            const Type t = effectiveType(*returned);
+            if (!t.isUnknown() && !t.isError()) return t;
+        }
     }
     return Type::unknown();
 }

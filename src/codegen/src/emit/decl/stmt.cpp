@@ -40,6 +40,20 @@ struct LocalFunction {
     Type retType;
 };
 
+// A declared tuple's C++ spelling. `classify` keeps the all-primitive gate for
+// ordinary tuple values, but a declaration whose elements are records or class
+// handles is still a `std::tuple` of those handles.
+std::optional<CppInfo> tupleDeclaredInfo(const Type& t) {
+    std::string cpp;
+    if (!isTupleType(t) || !tupleCpp(t, cpp)) return std::nullopt;
+    CppInfo info;
+    info.shape = Shape::Object;
+    info.representable = true;
+    info.cpp = cpp;
+    info.type = t;
+    return info;
+}
+
 }  // namespace
 
 void Generator::stmt(const Stmt& s, std::string& out, int indent) {
@@ -364,18 +378,23 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
     // const-ness is enforced by sema (a reassignment is CP3408).
     const std::string cv =
         (kind == VarKind::Const && !isGenericArrowInit(d)) ? "const " : "";
-    // A declared type M1 cannot represent (`number | string`, an object /
-    // array / class type, ...) is out of scope: report it so the unit is
-    // treated as not-implemented instead of being quietly mis-typed.
+    // A declared tuple has a concrete `std::tuple` spelling even when an
+    // element is a record/class handle. Any other declared type without a C++
+    // spelling is a hard error: silently deducing a narrower initializer type
+    // would not enforce the annotation.
+    std::optional<CppInfo> tupleCi;
     if (d.type) {
         if (auto dt = typeOfNode(*d.type)) {
-            if (!classify(*dt).representable && !dt->isUnknown() &&
+            tupleCi = tupleDeclaredInfo(*dt);
+            if (!tupleCi && !classify(*dt).representable && !dt->isUnknown() &&
                 !dt->isError() && !isChannelHandleType(*dt)) {
-                notImplemented(d, "this declared type");
+                reportUnsupported(d, diagcode::kTypeMismatch,
+                                  "type mismatch: this declared type has no "
+                                  "C++ spelling");
             }
         }
     }
-    const CppInfo ci = bindingCpp(d);
+    const CppInfo ci = tupleCi ? *tupleCi : bindingCpp(d);
     // A worker handle (D80) is a movable, owning runtime value: `const auto`
     // would make its members unusable (`postMessage` is non-const), so the
     // binding form drops the cp3 `const` and lets C++ deduce the handle type.
@@ -450,8 +469,8 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
         // A `number` function's fast body returns std::int64_t, so the
         // returned value must be a region value.
         if (intOn() && !numberTyped(*r.argument)) intFail();
-        // Always lower the returned expression so its own out-of-scope
-        // parts report CP3002 instead of being silently dropped.
+        // Always lower the returned expression so its own unsupported parts
+        // report their own diagnostics instead of being silently dropped.
         const std::string value =
             currentReturnTuple_ && r.argument->kind == NodeKind::ArrayLiteral
                 ? emitTupleLiteral(static_cast<const ArrayLiteral&>(*r.argument))

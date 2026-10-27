@@ -1,0 +1,4 @@
+import console from "std/console";
+const t: [number, { x: number }] = [2, { x: 5 }];
+function total(): number { return t[0] + t[1].x; }
+console.log(`${total()}`);
