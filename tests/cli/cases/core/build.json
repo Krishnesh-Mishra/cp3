@@ -795,7 +795,8 @@
       "setup": {
         "files": {
           "package.json": "{\n  \"name\": \"pkg\",\n  \"version\": \"1.0.0\",\n  \"description\": \"a C+++ project\",\n  \"type\": \"package\",\n  \"main\": \"src/index.cp3\",\n  \"typeSystem\": \"typescript\",\n  \"scripts\": {\n    \"dev\": \"cp3c dev src/index.cp3\",\n    \"build\": \"cp3c build src/index.cp3\",\n    \"start\": \"cp3c run src/index.cp3\",\n    \"check\": \"cp3c check src/index.cp3\"\n  },\n  \"build\": {\n    \"files\": [\"README.md\"]\n  }\n}\n",
-          "src/index.cp3": "// pkg - package entry; every key below is a named export.\nfunction add(a: number, b: number): number {\n  return a + b;\n}\n\nexport default { add };\n"
+          "src/index.cp3": "// pkg - package entry; every key below is a named export.\nfunction add(a: number, b: number): number {\n  return a + b;\n}\n\nexport default { add };\n",
+          "README.md": "# pkg\n\na C+++ project\n"
         }
       },
       "slow": true,
