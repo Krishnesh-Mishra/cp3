@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/class/class_model.h"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/mangle.h"
@@ -29,6 +30,25 @@ namespace cp3 {
 using namespace detail;
 
 namespace {
+
+// Sema's permissive "not statically known" marker (see
+// support/type/type_resolve.cpp): an untyped parameter carries `$ambient`, not
+// `unknown`, but on the C++ side both mean "let the call site deduce it".
+bool isAmbientType(const Type& t) {
+    return t.kind == TypeKind::Object && t.name == "$ambient";
+}
+
+Type untypedAsUnknown(Type t) {
+    if (isAmbientType(t)) return Type::unknown();
+    for (Type& part : t.parts) part = untypedAsUnknown(part);
+    // `x?: <untyped>` becomes `nullable(unknown)`: it is still an untyped
+    // parameter, not an optional of a representable type.
+    if (t.kind == TypeKind::Nullable && t.parts.size() == 1 &&
+        t.parts.front().isUnknown()) {
+        return Type::unknown();
+    }
+    return t;
+}
 
 // The length of a class's base chain: the emission order key (a base must be
 // complete before its derived struct).
@@ -135,8 +155,18 @@ void Generator::emitLocalClass(const ClassDeclaration& c, std::string& out,
         return;
     }
     const ClassModel* cm = ModelRegistry::get().classByName(c.name);
-    if (cm == nullptr || !cm->local) {
-        notImplemented(c, "this class declaration");
+    if (cm == nullptr) {
+        // `collectModels` registers every class declaration the emit walk can
+        // reach; a missing model means the collection and emit walks disagree.
+        reportCodegenError(
+            c, diagcode::kInternalError,
+            "internal error: no class model for the local class '" + c.name +
+                "'");
+        return;
+    }
+    if (!cm->local) {
+        // A namespace-scope class is emitted by `emitAllClasses`; reaching it
+        // through the statement path must not emit a second struct.
         return;
     }
     if (cm->namespaceScope) {
@@ -294,25 +324,45 @@ void Generator::emitClassAccessorMember(const ClassModel& cm,
 std::string Generator::memberFieldText(const ClassMemberModel& m) {
     const std::string name = mapIdent(m.name);
     const std::string stat = m.isStatic ? "static inline " : "";
+    // The model type comes from the structural annotation re-parse, which
+    // cannot see type aliases or enum kinds. When it has no spelling, sema's
+    // resolved type for the annotation is the authoritative one.
+    Type fieldType = untypedAsUnknown(m.type);
+    if (m.field && m.field->type && !classify(fieldType).representable) {
+        if (auto resolved = typeOfNode(*m.field->type)) {
+            fieldType = untypedAsUnknown(*resolved);
+        }
+    }
     if (m.isWeak) {
-        const std::string pointee = weakPointee(m.type);
+        const std::string pointee = weakPointee(fieldType);
         if (pointee.empty()) {
-            if (m.field) notImplemented(*m.field, "this weak field type");
+            if (m.field) {
+                reportUnsupported(
+                    *m.field, diagcode::kTypeMismatch,
+                    "type mismatch: weak field '" + m.name +
+                        "' must have a class reference type");
+            }
             return stat + "double " + name + "{}";
         }
         return stat + "::cp3::runtime::WeakRef<" + pointee + "> " + name + "{}";
     }
-    CppInfo ci = classify(m.type);
+    CppInfo ci = classify(fieldType);
     // An explicit `unknown` field has no C++ spelling, but its initializer
     // fixes the representation (`count: unknown = 5`). Infer from the value
     // exactly as an `unknown` method return type does from its body.
-    if (!ci.representable && m.type.isUnknown() && m.hasInitializer &&
-        m.field && m.field->initializer) {
+    const bool annotated = m.field != nullptr && m.field->type != nullptr;
+    if (!ci.representable && m.hasInitializer && m.field &&
+        m.field->initializer && (!annotated || fieldType.isUnknown())) {
         const CppInfo init = info(*m.field->initializer);
-        if (init.representable) ci = init;
+        if (init.representable && init.shape != Shape::Void) ci = init;
     }
     if (!ci.representable) {
-        if (m.field) notImplemented(*m.field, "this field type");
+        if (m.field) {
+            reportUnsupported(
+                *m.field, diagcode::kTypeMismatch,
+                "type mismatch: field '" + m.name +
+                    "' has a type with no C++ representation");
+        }
         return stat + "double " + name + "{}";
     }
     if (m.hasInitializer && m.field && m.field->initializer) {
@@ -329,24 +379,38 @@ std::string Generator::methodReturnType(const MethodDeclaration& md,
                                         const ClassModel* cm,
                                         const std::vector<std::string>& methodTypeParams) {
     if (md.returnType) {
-        if (auto t = typeFromTypeNode(*md.returnType)) {
+        // Sema's resolved type carries aliases, enum kinds and generic
+        // arguments the structural re-parse cannot see (D1).
+        if (auto t = typeOfNode(*md.returnType)) {
+            *t = untypedAsUnknown(*t);
             if (cm != nullptr) rewriteTypeParams(*t, cm->typeParams);
             rewriteTypeParams(*t, methodTypeParams);
             CppInfo ci = classify(*t);
             if (ci.representable) return ci.cpp;
+            const bool returnsValue =
+                md.body && firstReturnedExpr(*md.body) != nullptr;
             if (!t->isUnknown()) {
-                notImplemented(md, "this return type");
-                return "void";
+                reportUnsupported(
+                    md, diagcode::kTypeMismatch,
+                    "type mismatch: the return type of method '" +
+                        keyNameOf(md.key.get()) +
+                        "' has no C++ representation");
             }
             // An explicit `unknown` return type has no C++ spelling, but the
             // body can deduce it. A method with no returned value stays void.
-            return (md.body && firstReturnedExpr(*md.body)) ? "auto" : "void";
+            // An unrepresentable annotation already reported above still gets
+            // a valid placeholder so the return sites do not cascade.
+            return returnsValue ? "auto" : "void";
         }
     }
     if (md.body) {
         if (const Expr* returned = firstReturnedExpr(*md.body)) {
             const CppInfo ci = info(*returned);
             if (ci.representable && ci.shape != Shape::Void) return ci.cpp;
+            // An inferred return whose value has no type spelling is deduced
+            // by C++ from the returned expression, like an unannotated
+            // function's return (emit/decl.cpp).
+            if (!ci.representable) return "auto";
         }
     }
     return "void";
@@ -358,54 +422,104 @@ std::string Generator::methodParamText(const Parameter& p,
     const std::string name = paramNameOf(p);
     if (p.isRest) {
         // `...nums: number[]`: the C++ parameter is one array; the call site
-        // packs the trailing arguments into it (emit/class_params.cpp).
-        Type t = p.type ? modelTypeFromTypeNode(*p.type) : Type::unknown();
+        // packs the trailing arguments into it (modelCallArgs below, and the
+        // constructor path in class_expr.cpp).
+        Type t = Type::unknown();
+        if (p.type) {
+            if (auto resolved = typeOfNode(*p.type)) t = *resolved;
+        } else if (p.name) {
+            if (const Type* st = sema_.typeOf(p.name->nodeId)) t = *st;
+        }
+        t = untypedAsUnknown(t);
         if (cm != nullptr) rewriteTypeParams(t, cm->typeParams);
+        rewriteTypeParams(t, methodTypeParams);
         Type elem = Type::unknown();
         if (t.kind == TypeKind::Array && !t.parts.empty()) elem = t.parts.front();
         const CppInfo ec = classify(elem);
         if (!ec.representable || ec.shape == Shape::Void) {
-            notImplemented(p, "this rest parameter type");
-            return "std::vector<double> " + name;
+            // One C++ parameter can only collect a homogeneous array, so an
+            // untyped / unknown-element rest parameter has no lowering: the
+            // call site could pass values of unrelated types.
+            reportUnsupported(
+                p, diagcode::kTypeMismatch,
+                "type mismatch: rest parameter '..." + name +
+                    "' must have an array type whose element type has a C++ "
+                    "representation");
+            return "::cp3::runtime::Array<double> " + name;
         }
         return "::cp3::runtime::Array<" + ec.cpp + "> " + name;
     }
-    Type t = p.type ? modelTypeFromTypeNode(*p.type) : Type::unknown();
-    if (!p.type && p.name) {
+    Type t = Type::unknown();
+    const bool annotated = p.type != nullptr;
+    if (annotated) {
+        if (auto resolved = typeOfNode(*p.type)) {
+            t = *resolved;
+        } else {
+            reportUnsupported(
+                p, diagcode::kTypeMismatch,
+                "type mismatch: parameter '" + name +
+                    "' has a type with no C++ representation");
+            return "double " + name;
+        }
+    } else if (p.name) {
         if (const Type* st = sema_.typeOf(p.name->nodeId)) t = *st;
     }
+    t = untypedAsUnknown(t);
     if (cm != nullptr) rewriteTypeParams(t, cm->typeParams);
     rewriteTypeParams(t, methodTypeParams);
     if (p.optional && !t.isUnknown()) t = Type::nullable(t);
     const CppInfo ci = classify(t);
-    if (!ci.representable) {
-        notImplemented(p, "untyped parameter");
-        return "double " + name;
+    if (ci.representable && ci.shape != Shape::Void) return ci.cpp + " " + name;
+    if (t.isUnknown() || t.isError()) {
+        if (p.optional) {
+            // An optional parameter needs a concrete storage type for the
+            // omitted argument; an untyped one has none.
+            reportUnsupported(
+                p, diagcode::kTypeMismatch,
+                "type mismatch: optional parameter '" + name +
+                    "' has no C++ type");
+            return "double " + name;
+        }
+        // An untyped parameter is a C++20 abbreviated function template
+        // parameter: the call site deduces its type (the same fallback an
+        // untyped arrow parameter gets).
+        return "auto " + name;
     }
-    return ci.cpp + " " + name;
+    reportUnsupported(
+        p, diagcode::kTypeMismatch,
+        "type mismatch: parameter '" + name +
+            "' has a type with no C++ representation");
+    return "double " + name;
 }
 
 std::string Generator::accessorReturnType(const AccessorDeclaration& ad,
                                           const ClassModel* cm) {
     if (ad.returnType) {
-        if (auto t = typeFromTypeNode(*ad.returnType)) {
+        if (auto t = typeOfNode(*ad.returnType)) {
+            *t = untypedAsUnknown(*t);
             if (cm != nullptr) rewriteTypeParams(*t, cm->typeParams);
             CppInfo ci = classify(*t);
             if (ci.representable) return ci.cpp;
+            const bool returnsValue =
+                ad.body && firstReturnedExpr(*ad.body) != nullptr;
             if (!t->isUnknown()) {
-                notImplemented(ad, "this accessor return type");
-                return "void";
+                reportUnsupported(
+                    ad, diagcode::kTypeMismatch,
+                    "type mismatch: the accessor return type has no C++ "
+                    "representation");
             }
             // An explicit `unknown` return type has no C++ spelling, but the
             // getter body can deduce it. A getter with no returned value stays
-            // void.
-            return (ad.body && firstReturnedExpr(*ad.body)) ? "auto" : "void";
+            // void. An unrepresentable annotation already reported above still
+            // gets a valid placeholder so the return sites do not cascade.
+            return returnsValue ? "auto" : "void";
         }
     }
     if (ad.body) {
         if (const Expr* returned = firstReturnedExpr(*ad.body)) {
             const CppInfo ci = info(*returned);
             if (ci.representable && ci.shape != Shape::Void) return ci.cpp;
+            if (!ci.representable) return "auto";
         }
     }
     return "void";
@@ -425,7 +539,14 @@ std::string Generator::accessorBodyText(const AccessorDeclaration& ad,
     for (const auto& p : ad.params) {
         if (!p) continue;
         if (p->name && p->name->kind == NodeKind::Identifier) {
-            Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
+            Type t = Type::unknown();
+            if (p->type) {
+                if (auto resolved = typeOfNode(*p->type)) t = *resolved;
+            } else if (const Type* st = sema_.typeOf(p->name->nodeId)) {
+                t = *st;
+            }
+            t = untypedAsUnknown(t);
+            rewriteTypeParams(t, cm.typeParams);
             if (p->optional && !t.isUnknown()) t = Type::nullable(t);
             declare(static_cast<const Identifier&>(*p->name).name, t);
         }
@@ -455,11 +576,27 @@ std::string Generator::methodBodyText(const MethodDeclaration& md,
         // A rest parameter binds its name through the `...` wrapper.
         const Identifier* id = parameterIdentifier(*p);
         if (id == nullptr) continue;
-        Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
+        Type t = Type::unknown();
+        if (p->type) {
+            if (auto resolved = typeOfNode(*p->type)) t = *resolved;
+        } else if (const Type* st = sema_.typeOf(id->nodeId)) {
+            t = *st;
+        }
+        t = untypedAsUnknown(t);
         // A method of a generic class, or a generic method, names its own
         // type parameters in the signature.
         rewriteTypeParams(t, cm.typeParams);
         rewriteTypeParams(t, methodTypeParams);
+        if (p->isRest) {
+            // The signature already reported an untyped / unknown-element
+            // rest parameter; bind its placeholder array so the body's
+            // `length`/index reads do not cascade.
+            const bool usable =
+                t.kind == TypeKind::Array && !t.parts.empty() &&
+                classify(t.parts.front()).representable &&
+                classify(t.parts.front()).shape != Shape::Void;
+            if (!usable) t = Type::array(Type::number());
+        }
         if (p->optional && !t.isUnknown()) t = Type::nullable(t);
         declare(id->name, t);
     }
@@ -484,7 +621,21 @@ std::string Generator::ctorBodyText(const ConstructorDeclaration& cd,
         if (!p) continue;
         const Identifier* id = parameterIdentifier(*p);
         if (id == nullptr) continue;
-        Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
+        Type t = Type::unknown();
+        if (p->type) {
+            if (auto resolved = typeOfNode(*p->type)) t = *resolved;
+        } else if (const Type* st = sema_.typeOf(id->nodeId)) {
+            t = *st;
+        }
+        t = untypedAsUnknown(t);
+        rewriteTypeParams(t, cm.typeParams);
+        if (p->isRest) {
+            const bool usable =
+                t.kind == TypeKind::Array && !t.parts.empty() &&
+                classify(t.parts.front()).representable &&
+                classify(t.parts.front()).shape != Shape::Void;
+            if (!usable) t = Type::array(Type::number());
+        }
         declare(id->name, t);
     }
     std::string body;
@@ -518,7 +669,13 @@ void Generator::declareMemberParams(const ParamList& params) {
         if (!p) continue;
         const Identifier* id = parameterIdentifier(*p);
         if (id == nullptr) continue;
-        Type t = p->type ? modelTypeFromTypeNode(*p->type) : Type::unknown();
+        Type t = Type::unknown();
+        if (p->type) {
+            if (auto resolved = typeOfNode(*p->type)) t = *resolved;
+        } else if (const Type* st = sema_.typeOf(id->nodeId)) {
+            t = *st;
+        }
+        t = untypedAsUnknown(t);
         if (p->optional && !p->isRest && !t.isUnknown()) t = Type::nullable(t);
         declare(id->name, t);
     }
@@ -540,16 +697,29 @@ std::string Generator::modelCallArgs(const CallExpr& c,
     }
     const std::vector<std::string> args = emitPlainArgs(c);
     if (!hasRest) return joinStrings(args, ", ");
-    // The element type of the rest parameter (`E` of its `E[]`).
+    // The element type of the rest parameter (`E` of its `E[]`). Sema's
+    // resolved annotation sees aliases; the model type carries the class and
+    // method type parameters already rewritten to `TypeParam`.
     std::string elem = "double";
     if (md != nullptr && restAt < md->params.size()) {
         const Parameter* rp = md->params[restAt].get();
+        Type t = Type::unknown();
         if (rp && rp->type) {
-            const Type t = modelTypeFromTypeNode(*rp->type);
-            if (t.kind == TypeKind::Array && !t.parts.empty()) {
-                const CppInfo ec = classify(t.parts.front());
-                if (ec.representable) elem = ec.cpp;
-            }
+            if (auto resolved = typeOfNode(*rp->type)) t = *resolved;
+        }
+        t = untypedAsUnknown(t);
+        const Type model =
+            restAt < m.type.parts.size() ? m.type.parts[restAt] : Type::unknown();
+        const bool mappedArray =
+            t.kind == TypeKind::Array && !t.parts.empty() &&
+            classify(t.parts.front()).representable;
+        if (!mappedArray && model.kind == TypeKind::Array &&
+            !model.parts.empty()) {
+            t = model;
+        }
+        if (t.kind == TypeKind::Array && !t.parts.empty()) {
+            const CppInfo ec = classify(t.parts.front());
+            if (ec.representable && ec.shape != Shape::Void) elem = ec.cpp;
         }
     }
     needsTypedArray_ = true;

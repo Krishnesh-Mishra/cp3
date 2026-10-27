@@ -1,0 +1,36 @@
+import console from "std/console";
+
+type Name = string;
+type Count = number;
+enum Color { Red, Green }
+
+class Thing {
+  name: Name;
+  color: Color;
+  count: Count = 0;
+
+  constructor(name: Name, color: Color) {
+    this.name = name;
+    this.color = color;
+  }
+
+  function getName(): Name { return this.name; }
+  function getColor(): Color { return this.color; }
+  function paint(c: Color): void { this.color = c; }
+  function add(n: Count): Count {
+    this.count = this.count + n;
+    return this.count;
+  }
+
+  get label(): Name { return this.name; }
+  set label(v: Name) { this.name = v; }
+}
+
+let t = new Thing("hi", Color.Red);
+console.log(t.getName());
+console.log(`${t.color}`);
+t.paint(Color.Green);
+console.log(`${t.getColor()}`);
+console.log(`${t.add(2)}`);
+t.label = "yo";
+console.log(t.label);

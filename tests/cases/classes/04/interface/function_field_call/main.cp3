@@ -1,0 +1,21 @@
+import console from "std/console";
+
+interface Calc {
+  op: (x: number) => number;
+  function describe(): string;
+}
+
+class Doubler implements Calc {
+  op: (x: number) => number = (x) => x * 2;
+  function describe(): string { return "doubler"; }
+}
+
+let c: Calc = new Doubler();
+console.log(`${c.op(4)}`);
+let f = c.op;
+console.log(`${f(5)}`);
+let d = c.describe;
+console.log(d());
+
+let plain = new Doubler();
+console.log(`${plain.op(3)}`);

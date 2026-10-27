@@ -1,0 +1,8 @@
+import console from "std/console";
+
+class Summer {
+  function sum(...nums) { return nums.length; }
+}
+
+let s = new Summer();
+console.log(`${s.sum(1, 2, 3)}`);

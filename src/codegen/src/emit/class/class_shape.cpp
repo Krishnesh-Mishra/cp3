@@ -11,8 +11,9 @@
 //     class handle, which is what makes structural typing work in generated
 //     C++;
 //   * a plain object gets a field struct behind `Ref<cp3_objN>`.
-// A shape whose members have no C++ spelling is not emitted (and `classify`
-// reports it as not representable, keeping the unit on the CP3002 path).
+// A shape whose members have no C++ spelling is not emitted; `classify`
+// reports it as not representable, and the use site reports a real diagnostic
+// instead of lowering the value.
 // =============================================================================
 #include "detail/class/class_model.h"
 

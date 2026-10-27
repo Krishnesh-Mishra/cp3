@@ -1,0 +1,19 @@
+import console from "std/console";
+
+class Echo {
+  function echo(x) { return x; }
+  function ignore(x) { }
+}
+
+class Box {
+  v: number = 0;
+  constructor(x) { this.v = 1; }
+}
+
+let e = new Echo();
+console.log(e.echo("hi"));
+console.log(e.echo(7));
+e.ignore(true);
+
+let b = new Box(9);
+console.log(`${b.v}`);

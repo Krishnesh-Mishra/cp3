@@ -5,7 +5,8 @@
 // The expression side of the object surface, hooked from the generic emitters
 // (emit/expr.cpp, emit/call.cpp, emit/stmt.cpp, emit/decl.cpp). Each entry point
 // recognizes one model form and returns its C++ spelling; "" means "not a model
-// form", so the caller keeps its own path (usually the CP3002 report). The
+// form", so the caller keeps its own path (usually its unsupported-form
+// diagnostic). The
 // structs these expressions name are emitted by emit/class_decl.cpp (classes)
 // and emit/class_shape.cpp (object / interface shapes).
 // =============================================================================
@@ -64,6 +65,46 @@ std::string instanceSpelling(const ClassModel& cm,
     return out + ">";
 }
 
+// A detached interface method value (`let f = shape.area`): binds the wrapper
+// and calls the generated `cp3_m_<name>` thunk with its adapted object.
+std::string detachedInterfaceMethodLambda(const ObjectFieldModel& f,
+                                          const std::string& recv) {
+    std::string ret = "void";
+    if (!f.type.parts.empty()) {
+        const CppInfo rc = classify(f.type.parts.back());
+        if (rc.representable) ret = rc.cpp;
+    }
+    std::vector<std::string> params;
+    std::vector<std::string> names;
+    for (std::size_t i = 0; i + 1 < f.type.parts.size(); ++i) {
+        const CppInfo pc = classify(f.type.parts[i]);
+        const std::string pname = "cp3_a" + std::to_string(i);
+        params.push_back((pc.representable ? pc.cpp : std::string("auto")) +
+                         " " + pname);
+        names.push_back(pname);
+    }
+    const std::string rest =
+        names.empty() ? std::string() : ", " + joinStrings(names, ", ");
+    return "([cp3_r = (" + recv + ")](" + joinStrings(params, ", ") +
+           ") -> " + ret + " { return cp3_r.cp3_m_" + mapIdent(f.name) +
+           "(cp3_r.cp3_obj.get()" + rest + "); })";
+}
+
+// Pack the trailing call arguments into one array for a rest parameter.
+std::vector<std::string> packRestArgs(const std::vector<std::string>& args,
+                                      std::size_t restAt,
+                                      const std::string& elem) {
+    std::vector<std::string> out;
+    for (std::size_t i = 0; i < restAt && i < args.size(); ++i) {
+        out.push_back(args[i]);
+    }
+    std::vector<std::string> tail;
+    for (std::size_t i = restAt; i < args.size(); ++i) tail.push_back(args[i]);
+    out.push_back("::cp3::runtime::makeArray<" + elem + ">(std::vector<" +
+                  elem + ">{" + joinStrings(tail, ", ") + "})");
+    return out;
+}
+
 }  // namespace
 
 // One store of `value` into the lvalue (an instance or static field). A weak
@@ -73,6 +114,13 @@ std::string Generator::storeText(const ClassMemberModel& m,
                                  const std::string& lvalue,
                                  const AssignmentExpr& a,
                                  const std::string& value) {
+    // The model type comes from the structural annotation re-parse, which
+    // cannot see aliases; fall back to sema's resolved annotation type when the
+    // model type has no spelling (a weak field alias needs the pointee).
+    Type memberType = m.type;
+    if (m.field && m.field->type && !classify(memberType).representable) {
+        if (auto resolved = typeOfNode(*m.field->type)) memberType = *resolved;
+    }
     const bool nullish = isNullishLiteral(*a.value);
     if (m.isWeak && (a.op == AssignOp::Assign)) {
         if (nullish) return "(" + lvalue + ".reset())";
@@ -80,7 +128,7 @@ std::string Generator::storeText(const ClassMemberModel& m,
         // of a weak read (`Node | undefined`). An empty optional clears the
         // link; a present one stores its strong handle.
         const CppInfo vci = classify(effectiveType(*a.value));
-        const std::string pointee = weakPointee(m.type);
+        const std::string pointee = weakPointee(memberType);
         if ((vci.shape == Shape::Optional || vci.shape == Shape::Maybe) &&
             !pointee.empty()) {
             const bool maybe = vci.shape == Shape::Maybe;
@@ -95,7 +143,7 @@ std::string Generator::storeText(const ClassMemberModel& m,
     }
     switch (a.op) {
         case AssignOp::Assign: {
-            const CppInfo ci = classify(m.type);
+            const CppInfo ci = classify(memberType);
             if (nullish && (ci.shape == Shape::Optional ||
                             ci.shape == Shape::Maybe)) {
                 return "(" + lvalue + " = std::nullopt)";
@@ -164,18 +212,46 @@ std::string Generator::emitModelNew(const NewExpr& n) {
         texts.push_back(expr(*arg));
     }
     // A constructor with a rest parameter takes the trailing arguments as
-    // one array (spec 15).
+    // one array (spec 15). Resolve the annotation through sema so an alias of
+    // an array type packs the same way a spelled-out `E[]` does.
     if (const ClassMemberModel* ctor = findClassMember(*cm, "constructor");
         ctor != nullptr && ctor->ctor != nullptr) {
-        texts = classRestArgs(texts, &ctor->ctor->params);
+        const ParamList& params = ctor->ctor->params;
+        std::size_t restAt = params.size();
+        for (std::size_t i = 0; i < params.size(); ++i) {
+            const Parameter* p = params[i].get();
+            if (p && p->isRest) {
+                restAt = i;
+                break;
+            }
+        }
+        if (restAt < params.size()) {
+            const Parameter* rp = params[restAt].get();
+            Type t = Type::unknown();
+            if (rp && rp->type) {
+                if (auto resolved = typeOfNode(*rp->type)) t = *resolved;
+            } else if (rp && rp->name) {
+                if (const Type* st = sema_.typeOf(rp->name->nodeId)) t = *st;
+            }
+            rewriteTypeParams(t, cm->typeParams);
+            Type elem = Type::unknown();
+            if (t.kind == TypeKind::Array && !t.parts.empty()) {
+                elem = t.parts.front();
+            }
+            const CppInfo ec = classify(elem);
+            texts = packRestArgs(
+                texts, restAt,
+                ec.representable && ec.shape != Shape::Void ? ec.cpp : "double");
+        }
     }
     return "::cp3::runtime::makeRef<" + self + ">(" +
            joinStrings(texts, ", ") + ")";
 }
 
 // A member read: `C.staticField`, `(recv)->field` on a class handle, an
-// interface field accessor call, or a detached class method. Weak-reference
-// reads stay "" (the caller reports CP3002: narrowing is required first).
+// interface field accessor call, or a detached class/interface method.
+// Weak-reference reads stay "" (the caller reports that narrowing is required
+// first).
 std::string Generator::emitModelMember(const MemberExpr& m) {
     if (m.object == nullptr) return std::string();
     // D22: `super.field` reads the base subobject.
@@ -275,8 +351,12 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
         om != nullptr && ModelRegistry::get().objectUsable(om->label) &&
         objectModelUsed(*om)) {
         const ObjectFieldModel* f = findObjectField(*om, m.property);
-        if (f == nullptr || f->isMethod) return std::string();
-        if (om->isInterface) return "(" + recv + ")." + mapIdent(f->name) + "()";
+        if (f == nullptr) return std::string();
+        if (om->isInterface) {
+            if (f->isMethod) return detachedInterfaceMethodLambda(*f, recv);
+            return "(" + recv + ")." + mapIdent(f->name) + "()";
+        }
+        if (f->isMethod) return std::string();
         return "(" + recv + ")->" + mapIdent(f->name);
     }
     return std::string();
@@ -327,8 +407,22 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
     if (const ClassModel* cm = classModelOf(base)) {
         const ClassMemberModel* mem =
             findClassMemberChain(*cm, m.property, nullptr);
-        if (mem == nullptr || !mem->isMethod || mem->isStatic) {
-            return std::string();
+        if (mem == nullptr || mem->isStatic) return std::string();
+        if (!mem->isMethod) {
+            // A class function-valued field is stored as a `std::function`:
+            // call the stored value directly.
+            Type memberType = mem->type;
+            if (mem->field && mem->field->type &&
+                !classify(memberType).representable) {
+                if (auto resolved = typeOfNode(*mem->field->type)) {
+                    memberType = *resolved;
+                }
+            }
+            if (classify(memberType).shape != Shape::Function) {
+                return std::string();
+            }
+            return "((" + expr(*m.object) + ")->" + mapIdent(mem->name) +
+                   ")(" + joinStrings(emitPlainArgs(c), ", ") + ")";
         }
         return "(" + expr(*m.object) + ")->" + mapIdent(mem->name) + "(" +
                modelCallArgs(c, *mem) + ")";
@@ -340,9 +434,14 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
         if (f == nullptr) return std::string();
         const std::string fn = mapIdent(f->name);
         const std::string args = joinStrings(emitPlainArgs(c), ", ");
-        if (f->isFunction && !f->isMethod && !om->isInterface) {
-            // A plain object's function-valued field: call the stored
-            // `std::function` through its member spelling.
+        if (f->isFunction && !f->isMethod) {
+            // A function-valued field: call the stored `std::function`
+            // directly. On an interface wrapper the value lives behind the
+            // generated accessor, so the call goes through `name()`.
+            if (om->isInterface) {
+                return "((" + expr(*m.object) + ")." + fn + "())(" + args +
+                       ")";
+            }
             return "((" + expr(*m.object) + ")->" + fn + ")(" + args + ")";
         }
         if (!f->isMethod) return std::string();
