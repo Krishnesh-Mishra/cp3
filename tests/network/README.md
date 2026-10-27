@@ -134,7 +134,7 @@ Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite targe
 
 | probe | check | assertion |
 | --- | --- | --- |
-| malformed JSON body | S1 | survives, still serves (JSON parse is behind pending async handlers) |
+| malformed JSON body | S1 | survives, still serves (the echo route does not parse JSON bodies) |
 | oversized 1 MiB body | S2 | survives, echoes length |
 | short Content-Length then close | S3 | connection closed, server survives |
 | negative Content-Length | S4 | observed `400` (docs silent), server survives |
@@ -177,20 +177,18 @@ Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite targe
 The rest of 48201-48299 is reserved but unused. The suite never binds 8080
 (benchmarks) and never 48101-48104 (the pre-existing stdlib/network cases).
 48220 is shared by `server_pending_path_eq.cp3` and
-`server_pending_json_object.cp3`; they never run at the same time (the latter is
-a compile-time pending surface, and fixture runs are sequential).
+`server_json_typed_payload.cp3`; fixture runs are sequential, so the port is
+never bound twice at once.
 
 ## Pending surface and open findings
 
 `PENDING SURFACE` means the check is written to the docs and the observed
-behavior is recorded with the exact compiler or runtime evidence. When the
-scheduled surface lands, the check flips to `PASS` without edits.
+behavior is recorded with the runtime evidence. When the underlying gap is
+fixed, the check flips to `PASS` without edits.
 
-- B16 async handlers + `req.text()`: `CP3002: not implemented yet: async arrow
-  function`. Corpus case `network_suite_request_bodies` depends on the same
-  surface and therefore shows as a scaffold skip in the runner.
-- B19 `res.json<User>(payload)`: `CP3002: not implemented yet: std/network
-  json<T>() takes no arguments`. The untyped payload form is covered by B21.
+- B16 async handlers + `req.text()` and B19 `res.json<User>(payload)` now run
+  as ordinary checks: the async-arrow and typed-JSON-payload lowerings are
+  implemented. The untyped payload form is still covered by B21.
 - B20 finding F3 (silent miscompile, no diagnostic): an unannotated
   `req.path === "/teapot"` lowers to
   `cp3_truthy(((req).path, std::string("/teapot"), false))`, which is always
@@ -210,9 +208,9 @@ scheduled surface lands, the check flips to `PASS` without edits.
   is registered as `std::string` for body lowering regardless of the user's
   annotation. `(data: Buffer)` is honored in the generated C++ signature and
   does receive binary frames, but Buffer-only members inside the body
-  (`data.toString("hex")`) hit `CP3002: not implemented yet: this method call`.
-  The suite works around it with the unannotated slot plus `Buffer.from(msg)`
-  (still byte-exact, C2c/D2c).
+  (`data.toString("hex")`) were refused by the retired placeholder diagnostic
+  at the time this check was written. The suite works around it with the
+  unannotated slot plus `Buffer.from(msg)` (still byte-exact, C2c/D2c).
 
 ## Deliberately not covered (docs "Explicitly out of scope for beta one")
 
@@ -222,8 +220,8 @@ Nested/sub-routers, regex path matching, HTTPS/TLS (the suite asserts the clear
 
 - `wss://` WebSocket client URLs (TLS off; same D70 rule as `https://`).
 - `req.body` ReadStream consumption (server-side upload streaming): the
-  documented consumer surface needs the pending async handlers; S2 covers the
-  1 MiB-body survival half only.
+  documented consumer surface needs the request-body stream, which is not
+  lowered yet; S2 covers the 1 MiB-body survival half only.
 - Auto-following redirects: docs are silent; A10 records the observed
   non-following behavior instead of asserting one.
 - Status codes where docs are silent (S4, S5, S10, D7): recorded observations,
