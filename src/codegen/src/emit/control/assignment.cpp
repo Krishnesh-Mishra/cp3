@@ -18,6 +18,7 @@
 #include <optional>
 #include <string>
 
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
 
@@ -301,7 +302,7 @@ std::string AssignEmitter::identifier(const AssignmentExpr& a,
         default:
             break;
     }
-    g.notImplemented(a, "compound assignment operator");
+    g.reportTypeError(a, "this compound assignment operator has no C++ lowering");
     return "0.0";
 }
 
@@ -318,7 +319,9 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
         if (std::string w = emitMemberAssign(a, member); !w.empty()) {
             return w;
         }
-        notImplemented(a, "assignment to a non-identifier target");
+        reportCodegenError(
+            a, diagcode::kInvalidAssignmentTarget,
+            "invalid assignment target: this target has no C++ write form");
         return "0.0";
     }
     if (a.target->kind != NodeKind::Identifier) {
@@ -355,7 +358,9 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
             std::string text = emitDestructuringAssign(a);
             if (!text.empty()) return text;
         }
-        notImplemented(a, "assignment to a non-identifier target");
+        reportCodegenError(
+            a, diagcode::kInvalidAssignmentTarget,
+            "invalid assignment target: this target has no C++ write form");
         return "0.0";
     }
     return detail::AssignEmitter(*this).identifier(

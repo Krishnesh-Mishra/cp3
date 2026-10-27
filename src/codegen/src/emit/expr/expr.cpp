@@ -4,8 +4,9 @@
 // The expression emitter: literals, identifiers, templates, the `tsCall`/
 // `cond` value-vs-condition adapters, and the operator forms. Logical
 // operators use JS truthiness (`cp3_truthy` lambdas); `??` uses a real
-// nullish (not truthiness) test. Out-of-scope nodes report CP3002 and emit a
-// compilable stub (never throw, never abort). Calls (including `console.*`)
+// nullish (not truthiness) test. A node with no C++ spelling reports a codegen
+// diagnostic and emits a compilable stub (never throw, never abort). Calls
+// (including `console.*`)
 // live in emit_call.cpp; the async / promise / timer surface in emit_async.cpp.
 // =============================================================================
 #include "detail/generator/generator.h"
@@ -250,7 +251,7 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
     // builtin property reads (`Math.PI`, `path.sep`, `process.argv`,
     // `s.length`) and a std/json record field, then a member read of an object
     // value shape (`o.a`, `o?.a`); a receiver that may be null is a program
-    // error, every other unowned read stays a not-implemented form.
+    // error, and every other unowned read is a type error at the use site.
     std::string value = emitModelMember(m);
     if (value.empty()) value = emitBuiltinMember(m);
     if (value.empty()) value = emitObject(m);
@@ -264,15 +265,15 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
     }
     // A receiver that may be null needs `?.`: reading it unguarded is a
     // program error in a statically typed language. A receiver whose value
-    // shape has no spelling (a weak field read, a value the type map cannot
-    // spell) stays a not-implemented form.
+    // shape has no spelling is a type error at the use site.
     const CppInfo recv = m.object ? info(*m.object) : CppInfo{};
     if (recv.shape == Shape::Optional || recv.shape == Shape::Maybe) {
         reportTypeError(m, "the receiver of '" + m.property +
                              "' may be null; use '?.' to read it safely");
         return "0.0";
     }
-    notImplemented(m, "this property access");
+    reportTypeError(m, "property access '" + m.property +
+                           "' has no C++ representation");
     return "0.0";
 }
 
@@ -292,7 +293,7 @@ std::string Generator::emitArrowValue(const Expr& e, const ArrowFunction& a) {
         return emitListenerValue(e);
     }
     if (fnType) return emitArrow(a, {}, /*byValue=*/true);
-    notImplemented(e, "this function value");
+    reportTypeError(e, "this function value has no callable type");
     return "0.0";
 }
 
@@ -330,7 +331,7 @@ std::string Generator::emitIdentifier(const Identifier& id) {
         // A class name is a type, not a value: using one as a value (other
         // than as the receiver of a static member) has no C++ spelling.
         if (ModelRegistry::get().classByName(id.name) != nullptr) {
-            notImplemented(id, "a class used as a value");
+            reportTypeError(id, "a class is a type, not a value");
             return "0.0";
         }
         // A module-scope function used as a value (a named function passed as
@@ -358,23 +359,25 @@ std::string Generator::tsCall(const Expr& e) {
     const CppInfo ci = info(e);
     // A class instance or interface wrapper formats only when it exposes a
     // `toString` (the generated overload); a structural object never does, and
-    // an array of those has no formatter either. Staying on the CP3002 path
-    // here keeps the generated C++ compilable instead of failing overload
-    // resolution.
+    // an array of those has no formatter either. Reporting the use site keeps
+    // the generated C++ compilable instead of failing overload resolution.
     if (!valueFormattable(ci.type)) {
-        notImplemented(e, "formatting this value");
+        reportTypeError(e, "this value cannot be formatted");
         return "std::string(\"undefined\")";
     }
     noteFamilyUse(e);
     // An enum value formats by its backing kind (spec 04): the underlying
     // number for a number-backed enum, the member's string for a string-backed
     // one (the per-enum toString helper). An enum whose declaration did not
-    // surface in this unit keeps the unit a skip instead of emitting a call
-    // with no formatter overload.
+    // surface in this unit is an internal collection error, not a silent
+    // formatter call.
     if (ci.shape == Shape::Enum) {
         const auto found = enums_.find(ci.type.name);
         if (found == enums_.end()) {
-            notImplemented(e, "this enum value");
+            reportCodegenError(
+                e, diagcode::kInternalError,
+                "internal error: enum '" + ci.type.name +
+                    "' was not collected for formatting");
             return "0.0";
         }
         const std::string value = expr(e);
@@ -608,7 +611,7 @@ std::string Generator::emitLogical(const LogicalExpr& l) {
             !mixed.empty()) {
             return mixed;
         }
-        notImplemented(l, "logical operator with mixed operand types");
+        reportTypeError(l, "logical operator operands have no common C++ type");
         return "0.0";
     }
     const std::string lhs = expr(*l.left);
@@ -666,7 +669,7 @@ std::string Generator::emitUnary(const UnaryExpr& u) {
         case UnaryOp::Typeof:
             return emitTypeof(u);
         default:
-            notImplemented(u, "this unary operator");
+            reportTypeError(u, "this unary operator has no C++ lowering");
             return "0.0";
     }
 }
@@ -874,7 +877,7 @@ std::string Generator::emitConditional(const ConditionalExpr& c) {
     if (const std::string mixed = detail::mixedConditional(m); !mixed.empty()) {
         return mixed;
     }
-    notImplemented(c, "ternary with non-uniform branch types");
+    reportTypeError(c, "ternary branches have no common C++ type");
     return "0.0";
 }
 }  // namespace cp3

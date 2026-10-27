@@ -12,8 +12,8 @@
 //
 // Everything else (a computed/method key, a missing or extra field, a plain
 // read through a possibly-null receiver) returns "" so the caller keeps its
-// other paths and the unit reports CP3002 (or stays with the family lowering
-// that already claimed the shape, like a std/json record).
+// other paths, or stays with the family lowering that already claimed the
+// shape (like a std/json record).
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -179,7 +179,8 @@ std::string Generator::emitObject(const Expr& e) {
 }
 
 // A field write of a `$o{...}` value shape: `(<object>)->field = value`. Only
-// the forms with a plain C++ spelling are lowered; anything else keeps CP3002.
+// the forms with a plain C++ spelling are lowered; the caller reports any
+// other target as a type error.
 std::string Generator::emitMemberAssign(const AssignmentExpr& a,
                                         const MemberExpr& m) {
     if (!m.object || !a.value) return std::string();
@@ -230,7 +231,7 @@ std::string Generator::emitMemberAssign(const AssignmentExpr& a,
 // The object-literal expression form: a `$o{...}` value shape lowers to the
 // generated value struct (emitObject above); a checked record literal is
 // assembled field by field (recordLiteralText); a literal with an enum-typed
-// field lowers to a std::tuple (emit/enum.cpp); anything else stays CP3002.
+// field lowers to a std::tuple (emit/enum.cpp); anything else is a type error.
 std::string Generator::emitObjectLiteral(const Expr& e) {
     if (std::string object = emitObject(e); !object.empty()) {
         return object;
@@ -248,7 +249,7 @@ std::string Generator::emitObjectLiteral(const Expr& e) {
         !literal.empty()) {
         return literal;
     }
-    notImplemented(e, "this object literal");
+    reportTypeError(e, "this object literal has no C++ representation");
     return "0.0";
 }
 

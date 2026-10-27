@@ -10,9 +10,9 @@
 // expression and yields one of "number" | "string" | "boolean" | "undefined" |
 // "object" | "function". A reference-like value (an object shape, an array, a
 // typed view, a class instance, a Map/Set, a promise) is "object"; a callable
-// is "function"; an enum answers by its backing kind (D19). Only a value whose
-// type is not statically known (an unknown value, a type parameter) reports
-// CP3002 and answers "undefined".
+// is "function"; an enum answers by its backing kind (D19). A value whose type
+// is not statically known (an unknown value, a type parameter) reports a type
+// error at the use site instead of silently answering "undefined".
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -83,7 +83,7 @@ std::string Generator::emitTypeofOption(const UnaryExpr& u, const CppInfo& ci) {
     } else {
         const std::string answer = found ? typeofShape(innerInfo) : std::string();
         if (answer.empty()) {
-            notImplemented(u, "typeof of a non-primitive value");
+            reportTypeError(u, "typeof of this value has no static answer");
             return "std::string(\"undefined\")";
         }
         held = "std::string(\"" + answer + "\")";
@@ -134,7 +134,7 @@ std::string Generator::emitTypeof(const UnaryExpr& u) {
         default: {
             const std::string answer = typeofShape(ci);
             if (!answer.empty()) return "std::string(\"" + answer + "\")";
-            notImplemented(u, "typeof of a non-primitive value");
+            reportTypeError(u, "typeof of this value has no static answer");
             return "std::string(\"undefined\")";
         }
     }

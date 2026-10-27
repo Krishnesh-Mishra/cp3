@@ -8,9 +8,9 @@
 // add the include; the usage-based scan in code_generator.cpp covers a Regex
 // spelling that only appears in a declaration (a parameter or export).
 //
-// A member outside the documented surface returns "" so the caller keeps
-// reporting CP3002; sema has already rejected it as CP3305 for the closed
-// RegExp surface, so that path is defensive only.
+// A member outside the documented surface returns "" so the caller reports a
+// use-site error; sema has already rejected it as CP3305 for the closed RegExp
+// surface, so that path is defensive only.
 // =============================================================================
 #include "detail/generator/generator.h"
 
