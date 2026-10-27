@@ -1,0 +1,7 @@
+import console from "std/console";
+// The family constructors lower with or without `new`; both buffers take the
+// byte length as their only argument.
+let b = ArrayBuffer(8);
+let s = SharedArrayBuffer(4);
+console.log(b.byteLength);
+console.log(s.byteLength);

@@ -28,7 +28,7 @@ namespace {
 // The element-type gate's diagnostic. An array whose element type has no C++
 // spelling cannot be lowered - cp3 has no dynamic array (docs 09) - so the
 // site reports the type error the array declaration sites report (CP3401),
-// not a "not implemented" skip: the program is ill-typed, and the fix is to
+// not a missing-feature skip: the program is ill-typed, and the fix is to
 // name the element type.
 std::string elementTypeMessage(const Type& elem, const std::string& what) {
     if (elem.isUnknown()) {
@@ -149,7 +149,12 @@ std::string Generator::arraySortCallText(const CallExpr& c, const MemberExpr& m,
     }
     const Expr* arg = c.arguments.front().get();
     if (arg == nullptr) {
-        notImplemented(c, "a non-arrow sort comparator");
+        // Call arguments are never holes (the parser rejects `a.sort(,)`), so
+        // a missing comparator is a compiler invariant; report it instead of
+        // emitting a call with no comparator.
+        reportUnsupported(c, diagcode::kTypeMismatch,
+                          "type mismatch: the sort comparator must be a "
+                          "function");
         return "0.0";
     }
     if (arg->kind == NodeKind::ArrowFunction) {
@@ -173,27 +178,43 @@ std::string Generator::arraySortCallText(const CallExpr& c, const MemberExpr& m,
            expr(*arg) + ")";
 }
 
-// `arr.includes(value)` (docs/language-spec/09-arrays-strings.md): the
-// SameValueZero search over the elements (the runtime helper; only the
-// one-argument form is lowered, the two-argument form stays CP3002).
+// `arr.includes(value, from?)` (docs/language-spec/09-arrays-strings.md): the
+// SameValueZero search over the elements. The regular-array emitter owns this
+// method (including the optional fromIndex); this family hook keeps the
+// element-type gate for a receiver that emitter did not lower.
 std::string Generator::arrayIncludesCallText(const CallExpr& c,
                                              const MemberExpr& m,
                                              const Type& recv) {
     if (m.property != "includes" || recv.kind != TypeKind::Array) {
         return std::string();
     }
-    if (c.arguments.size() != 1 || !c.arguments.front()) {
-        return std::string();
+    if (c.arguments.empty() || c.arguments.size() > 2) {
+        reportUnsupported(c, diagcode::kArityMismatch,
+                          "arity mismatch: includes() expects 1 or 2 arguments, "
+                          "got " +
+                              std::to_string(c.arguments.size()));
+        return "0.0";
+    }
+    if (!c.arguments.front()) {
+        reportUnsupported(c, diagcode::kTypeMismatch,
+                          "type mismatch: includes() needs a value to search "
+                          "for");
+        return "0.0";
     }
     CppInfo ec;
     if (!arrayElementInfo(arrayElemOf(recv), ec)) {
-        notImplemented(c, "the array includes element type");
+        reportTypeError(c, elementTypeMessage(arrayElemOf(recv), "an includes"));
         return "0.0";
     }
     needsTypedArray_ = true;
-    return "::cp3::runtime::arrayIncludes<" + ec.cpp + ">(" +
-           familyReceiverText(*m.object, arrayElemOf(recv), c) + ", " +
-           expr(*c.arguments.front()) + ")";
+    std::string out = "::cp3::runtime::arrayIncludes<" + ec.cpp + ">(" +
+                      familyReceiverText(*m.object, arrayElemOf(recv), c) +
+                      ", " + expr(*c.arguments.front());
+    if (c.arguments.size() > 1) {
+        out += ", ";
+        out += c.arguments[1] ? expr(*c.arguments[1]) : "0.0";
+    }
+    return out + ")";
 }
 
 // The typed-view method table; `set` dispatches on the source kind.
@@ -456,11 +477,16 @@ std::string Generator::emitIndexExpr(const IndexExpr& ix) {
     if (!value.empty()) return value;
     Type recv = ix.object ? effectiveType(*ix.object) : Type::unknown();
     if (recv.isLiteral()) recv = recv.literalBaseType();
-    if (recv.isUnknown() || recv.isError()) {
-        // The receiver's type is not resolved (an ambient value sema left
-        // open): the read may still be an array read, so the unit keeps the
-        // skip instead of claiming the value has no index operation.
-        notImplemented(ix, "this index access");
+    if (recv.isError()) {
+        // Sema already reported the ill-typed receiver; a second diagnostic
+        // for the same expression would only duplicate it.
+        return "0.0";
+    }
+    if (recv.isUnknown()) {
+        // Sema reports this form with CP3414 (an unknown receiver has no
+        // index operation), so the codegen fallback carries the same code.
+        reportUnsupported(ix, diagcode::kUnknownType,
+                          "cannot index into type 'unknown'");
         return "0.0";
     }
     // The receiver carries no index operation at all (a class instance, a

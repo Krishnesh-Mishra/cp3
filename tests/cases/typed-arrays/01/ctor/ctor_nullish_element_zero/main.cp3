@@ -1,0 +1,4 @@
+import console from "std/console";
+// JS coerces a nullish element (and a hole) to 0 in a typed array.
+let a = new Int8Array([1, undefined, 3]);
+console.log(a.join(","));

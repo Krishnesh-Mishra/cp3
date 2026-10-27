@@ -1,0 +1,10 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 2,
+    "contains": "a typed-array element must be a number"
+  }
+}

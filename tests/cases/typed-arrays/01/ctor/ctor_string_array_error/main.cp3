@@ -1,0 +1,4 @@
+import console from "std/console";
+let xs: string[] = ["1", "2"];
+let a = new Int8Array(xs);
+console.log(a.length);

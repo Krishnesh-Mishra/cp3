@@ -1,0 +1,10 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 5,
+    "contains": "only a class or a typed-array family constructor can be constructed"
+  }
+}

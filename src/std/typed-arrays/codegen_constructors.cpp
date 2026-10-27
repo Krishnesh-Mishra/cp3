@@ -9,8 +9,10 @@
 // `Array(...)` element list, `Array.of` / `Array.from`, the array literal and
 // the declarator forms) lives in the sibling unit (codegen.cpp).
 //
-// Every form the corpus does not pin reports CP3002 through `notImplemented`
-// and returns a compilable stub.
+// A form the family grammar rejects (a wrong arity, or an argument the type
+// checker refuses) reports the matching compile error. A `new` of a value that
+// is not a class or a family constructor reports a type error instead of
+// lowering a stub.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -21,6 +23,7 @@
 
 #include "detail/generator/family.h"
 #include "detail/generator/type_map.h"
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "cp3/host/native_types.hpp"
 
 namespace cp3 {
@@ -55,17 +58,25 @@ std::string Generator::emitCallOrFamily(const CallExpr& c) {
     return emitCall(c);
 }
 
-// `new Array(2)` / `new DataView(buf)`. A `new` of anything else keeps the
-// ordinary not-implemented form.
+// `new Array(2)` / `new DataView(buf)`. A user-declared value or function of
+// the same spelling wins over the ambient family name (sema resolves the
+// family constructor only for an ambient binding). A `new` of anything else
+// is not a constructible cp3 value: functions, namespaces and ambient values
+// have no `new` lowering.
 std::string Generator::emitFamilyNew(const NewExpr& n) {
     if (n.callee && n.callee->kind == NodeKind::Identifier) {
         const std::string name = static_cast<const Identifier&>(*n.callee).name;
-        if (isFamilyCtorName(name)) {
+        if (functions_.find(name) == functions_.end() && !lookup(name) &&
+            isFamilyCtorName(name)) {
             return emitFamilyCtorText(name, n.arguments,
                                       arrayElemOf(effectiveType(n)), n);
         }
     }
-    notImplemented(n, "this new expression");
+    const Type calleeType = n.callee ? effectiveType(*n.callee) : Type::unknown();
+    reportUnsupported(n, diagcode::kTypeMismatch,
+                      "type mismatch: only a class or a typed-array family "
+                      "constructor can be constructed with 'new' (got '" +
+                          describe(calleeType) + "')");
     return "0.0";
 }
 
@@ -75,8 +86,16 @@ std::string Generator::emitFamilyCtorText(const std::string& cls,
                                           const Node& site) {
     if (cls == "Array") return arrayCtorText(args, resultElem, site);
     if (cls == "ArrayBuffer" || cls == "SharedArrayBuffer") {
-        if (args.size() != 1 || !args.front()) {
-            notImplemented(site, "the buffer length constructor");
+        if (args.size() != 1) {
+            reportUnsupported(site, diagcode::kArityMismatch,
+                              "arity mismatch: expected 1, got " +
+                                  std::to_string(args.size()) + " arguments");
+            return "0.0";
+        }
+        if (!args.front()) {
+            reportUnsupported(site, diagcode::kTypeMismatch,
+                              "type mismatch: the buffer length constructor "
+                              "needs a byte-length argument");
             return "0.0";
         }
         needsTypedArray_ = true;
@@ -86,7 +105,15 @@ std::string Generator::emitFamilyCtorText(const std::string& cls,
     }
     if (cls == "DataView") {
         if (args.empty() || args.size() > 3) {
-            notImplemented(site, "the DataView constructor");
+            reportUnsupported(site, diagcode::kArityMismatch,
+                              "arity mismatch: expected 1 to 3, got " +
+                                  std::to_string(args.size()) + " arguments");
+            return "0.0";
+        }
+        if (!args.front()) {
+            reportUnsupported(site, diagcode::kTypeMismatch,
+                              "type mismatch: a DataView needs an ArrayBuffer "
+                              "as its first argument");
             return "0.0";
         }
         needsTypedArray_ = true;
@@ -106,13 +133,30 @@ std::string Generator::typedCtorText(const std::string& cls,
                                      const ExprList& args, const Node& site) {
     const char* tag = familyTag(cls);
     if (tag == nullptr) {
-        notImplemented(site, "the family constructor");
+        // `emitFamilyCtorText` routes `Array`, the two buffers and `DataView`
+        // before this point, so only a typed-view name reaches here; a missing
+        // tag is a compiler invariant, not a program error.
+        reportUnsupported(site, diagcode::kInternalError,
+                          "the typed-array constructor has no tag for '" + cls +
+                              "'");
         return "0.0";
     }
     const std::string t = "::cp3::runtime::" + std::string(tag);
     needsTypedArray_ = true;
     if (args.empty()) return "::cp3::runtime::makeTypedArray<" + t + ">(0.0)";
-    if (args.size() > 1 && args.size() <= 3) {
+    if (args.size() > 3) {
+        reportUnsupported(site, diagcode::kArityMismatch,
+                          "arity mismatch: expected 1 to 3, got " +
+                              std::to_string(args.size()) + " arguments");
+        return "0.0";
+    }
+    if (args.size() > 1) {
+        if (!args.front()) {
+            reportUnsupported(site, diagcode::kTypeMismatch,
+                              "type mismatch: a typed-array view needs an "
+                              "ArrayBuffer as its first argument");
+            return "0.0";
+        }
         std::string out = "::cp3::runtime::makeTypedArrayView<" + t + ">(";
         for (std::size_t i = 0; i < args.size(); ++i) {
             if (i != 0) out += ", ";
@@ -120,8 +164,10 @@ std::string Generator::typedCtorText(const std::string& cls,
         }
         return out + ")";
     }
-    if (args.size() != 1 || !args.front()) {
-        notImplemented(site, "the typed-array constructor");
+    if (!args.front()) {
+        reportUnsupported(site, diagcode::kTypeMismatch,
+                          "type mismatch: the typed-array constructor needs an "
+                          "argument");
         return "0.0";
     }
     const Expr& arg = *args.front();
@@ -133,9 +179,22 @@ std::string Generator::typedCtorText(const std::string& cls,
         case Shape::Unknown:
             return "::cp3::runtime::makeTypedArray<" + t + ">(" + expr(arg) +
                    ")";
-        case Shape::Array:
+        case Shape::Array: {
+            // The runtime copies a `Array<double>`; another element type has
+            // no coercion (typed-array constructors reject scalar coercions
+            // too), so it is a type error rather than a raw C++ mismatch.
+            const Type elem = arrayElemOf(info(arg).type);
+            CppInfo ec;
+            if (!arrayElementInfo(elem, ec) || ec.cpp != "double") {
+                reportUnsupported(arg, diagcode::kTypeMismatch,
+                                  "type mismatch: cannot construct '" + cls +
+                                      "' from an array of '" + describe(elem) +
+                                      "' (typed-array elements are numbers)");
+                return "0.0";
+            }
             return "::cp3::runtime::makeTypedArrayFromArray<" + t + ">(" +
                    expr(arg) + ")";
+        }
         case Shape::TypedArray:
             return "::cp3::runtime::makeTypedArrayFrom<" + t + ">(" + expr(arg) +
                    ")";
@@ -145,18 +204,37 @@ std::string Generator::typedCtorText(const std::string& cls,
         default:
             break;
     }
-    notImplemented(site, "the typed-array constructor argument");
+    reportUnsupported(arg, diagcode::kTypeMismatch,
+                      "type mismatch: cannot construct '" + cls + "' from '" +
+                          describe(info(arg).type) +
+                          "' (expected a length, an array, a typed array or an "
+                          "ArrayBuffer)");
     return "0.0";
 }
 
 // `new Int8Array([1, 2])` / `new Int8Array([...a, 1])`: the element list
 // becomes the view's values. A hole (`[1, , 2]`) is `undefined` in JS, and a
-// typed array coerces it to 0.
+// typed array coerces it to 0. An explicit nullish element does the same; any
+// other element type is a type error (a raw C++ mismatch would otherwise leak
+// out of the generated program).
 std::string Generator::typedCtorLiteralText(const std::string& t,
                                             const ArrayLiteral& lit) {
     bool hasSpread = false;
     for (const auto& el : lit.elements) {
         if (el && el->kind == NodeKind::SpreadElement) hasSpread = true;
+    }
+    for (const auto& el : lit.elements) {
+        if (!el || el->kind == NodeKind::SpreadElement) continue;
+        const CppInfo ei = info(*el);
+        if (ei.shape == Shape::Number) continue;
+        if (!hasSpread &&
+            (ei.shape == Shape::Undefined || ei.shape == Shape::Null)) {
+            continue;
+        }
+        reportTypeError(*el, "type mismatch: a typed-array element must be a "
+                             "number (got '" +
+                                 describe(ei.type) + "')");
+        return "0.0";
     }
     if (hasSpread) {
         // The spread's elements join the list, so the values are collected at
@@ -171,6 +249,11 @@ std::string Generator::typedCtorLiteralText(const std::string& t,
         if (i != 0) out += ", ";
         const Expr* el = lit.elements[i].get();
         if (el == nullptr) {
+            out += "0.0";
+            continue;
+        }
+        const CppInfo ei = info(*el);
+        if (ei.shape == Shape::Undefined || ei.shape == Shape::Null) {
             out += "0.0";
             continue;
         }
