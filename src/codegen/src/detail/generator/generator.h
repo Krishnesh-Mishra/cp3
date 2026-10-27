@@ -121,7 +121,7 @@ using detail::ObjectModel;
 
 // The codegen implementation. One instance per `CodeGenerator::generate` call;
 // it owns the declaration-type environment, the set of functions declared in the
-// unit, and the unsupported-feature dedup set (the state block inherited from
+// unit, and the diagnostic dedup set (the state block inherited from
 // `GeneratorState`, detail/generator_state.h).
 class Generator : private GeneratorState {
 public:
@@ -149,22 +149,18 @@ private:
     friend struct detail::PushReserveEmitter;  // emit/push_reserve.cpp
     friend struct detail::ListenerBuilder;  // detail/listener.h (emit/call.cpp)
     // --- diagnostics (code_generator.cpp) ------------------------------------
-    void notImplemented(const Node& node, const std::string& what);
     // A hard type error at a use site: the form is known and known to be
     // wrong (an element type with no spelling, an element type that cannot
-    // be inferred), so the diagnostic says why instead of skipping the
-    // program. The central unsupported-feature helper covers the forms that
-    // are *unknown*.
+    // be inferred), so the diagnostic says why.
     void reportTypeError(const Node& node, const std::string& message);
-    // A codegen-stage diagnostic with its own code (not the central
-    // unsupported-feature helper): the construct is a program error, not a
-    // missing feature (a member outside a documented surface, a value no C++
-    // spelling can carry).
+    // A codegen-stage diagnostic with its own code: the construct is a program
+    // error (a member outside a documented surface, a value no C++ spelling can
+    // carry).
     void reportCodegenError(const Node& node, const std::string& code,
                              const std::string& message);
-    // A real compile error (not the central unsupported-feature helper): the
-    // construct has no lowering at all, so the program must not compile.
-    // Same dedup and int-path bail as the central unsupported-feature helper.
+    // A real compile error: the construct has no lowering at all, so the
+    // program must not compile. Same dedup and int-path bail as the other
+    // codegen diagnostics.
     void reportUnsupported(const Node& node, const char* code,
                            const std::string& message);
 
@@ -245,7 +241,7 @@ private:
     std::string plainBody(const FunctionDeclaration& fd, const std::string& ret);
     void emitModuleVar(const VariableDeclaration& vd, std::string& decls,
                        std::string& mainBody);
-    // A module-variable type M1 cannot represent stays "not implemented".
+    // A module-variable type with no C++ spelling reports a type error.
     void reportModuleVarType(const VariableDeclarator& d);
     void emitModuleVarNoInit(const detail::CppInfo& ci, const std::string& name,
                              const std::string& cv, std::string& decls);

@@ -16,7 +16,7 @@
 //   3700-3799  classes/interfaces (sema)
 //   3800-3899  banned JS patterns (sema)   -- see language-spec 08 / 23
 //   3900-3999  concurrency    (sema)
-//   3001-3009  internal / not-yet-implemented
+//   3001-3009  internal
 // =============================================================================
 #pragma once
 
@@ -24,7 +24,6 @@ namespace cp3::diagcode {
 
 // --- internal -----------------------------------------------------------------
 inline constexpr const char* kInternalError     = "CP3001";
-inline constexpr const char* kNotImplemented    = "CP3002";
 
 // --- lexical (lexer) ----------------------------------------------------------
 inline constexpr const char* kInvalidCharacter  = "CP3101";

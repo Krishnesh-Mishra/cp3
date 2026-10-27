@@ -6,9 +6,9 @@
 // `Generator` constructor/diagnostic helpers, and the top-level emit walk
 // (`Generator::run`). The generated module assembly (the .hpp/.cpp writer and
 // the synthesized helper block + `main()`) lives in support/module_writer.cpp.
-// Out-of-scope AST nodes report the central unsupported-feature diagnostic
-// (deduped per nodeId) and emit a compilable stub; the generator never throws,
-// and the dedup drives the CLI's exit-3 "skipped" behavior.
+// A construct with no lowering reports a stage diagnostic and emits a
+// compilable stub; the generator never throws. Repeated diagnostics for the
+// same nodeId are deduplicated.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -38,35 +38,18 @@ Generator::Generator(DiagnosticSink& sink, const SemaResult& sema,
                      const CodegenOptions& options)
     : GeneratorState(sink, sema, moduleName, lineDirectives, options) {}
 
-void Generator::notImplemented(const Node& node, const std::string& what) {
-    // Inside an int64 fast-path attempt nothing is reported and nothing is
-    // deduped: any diagnostic makes the attempt unusable, and the ordinary pass
-    // (which always runs) reports it once, in place.
-    if (intMode_) intMode_->failed = true;
-    if (suppressDiagnostics_) return;
-    if (node.nodeId != 0) {
-        if (!reported_.insert(node.nodeId).second) {
-            return;
-        }
-    }
-    sink_.error(diagcode::kNotImplemented, node.span,
-                "not implemented yet: " + what);
-}
-
 // A hard type error at a use site. The int64 fast-path attempt is discarded
-// on any diagnostic and the ordinary pass reports in place - the same rule
-// as the central unsupported-feature helper.
+// on any diagnostic and the ordinary pass reports in place.
 void Generator::reportTypeError(const Node& node, const std::string& message) {
     if (intMode_) intMode_->failed = true;
     if (suppressDiagnostics_) return;
     sink_.error(diagcode::kTypeMismatch, node.span, message);
 }
 
-// A codegen-stage diagnostic with its own code (not the central
-// unsupported-feature helper): the construct the program used is a program
-// error (a member outside a documented surface, a value no C++ spelling can
-// carry), so it gets its own code and the ordinary compile-error exit, not a
-// skipped program.
+// A codegen-stage diagnostic with its own code: the construct the program used
+// is a program error (a member outside a documented surface, a value no C++
+// spelling can carry), so it gets its own code and the ordinary compile-error
+// exit.
 void Generator::reportCodegenError(const Node& node, const std::string& code,
                                     const std::string& message) {
     if (intMode_) intMode_->failed = true;
@@ -79,9 +62,9 @@ void Generator::reportCodegenError(const Node& node, const std::string& code,
     sink_.error(code, node.span, message);
 }
 
-// A real compile error (not the central unsupported-feature helper): the
-// construct has no lowering, so the program must not compile (the CLI stops
-// before the C++ step). Inside an int64 fast-path attempt nothing is reported.
+// A real compile error: the construct has no lowering, so the program must not
+// compile (the CLI stops before the C++ step). Inside an int64 fast-path
+// attempt nothing is reported.
 void Generator::reportUnsupported(const Node& node, const char* code,
                                    const std::string& message) {
     if (intMode_) intMode_->failed = true;

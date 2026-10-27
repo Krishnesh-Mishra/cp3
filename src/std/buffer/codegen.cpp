@@ -14,7 +14,7 @@
 //   buf.slice(start[, end])   -> buffer::slice(buf, start[, end])
 //   buf.length                -> buffer::size(buf)
 // A member outside the documented table reports CP3305 at the use site; an
-// arity sema already rejected reports CP3400. The C++ type spelling is
+// arity sema already rejected reports CP3403. The C++ type spelling is
 // `::cp3::runtime::buffer::Buffer`; `needsBuffer_` makes buildSource add the
 // include (and the cp3_ts/cp3_truthy overloads).
 // =============================================================================
