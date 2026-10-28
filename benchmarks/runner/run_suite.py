@@ -15,14 +15,16 @@
 #     sessions, req/s at fixed concurrency for a few seconds. The multicore
 #     row is driven by several client OS processes. Server processes are
 #     started and stopped one at a time, together with the process tree each
-#     one created (cluster workers, multiprocessing workers).
+#     one created (cluster workers, multiprocessing workers). Each language is
+#     measured over R independent server runs (default 5): boot and throughput
+#     use trial medians, while latency percentiles use all pooled samples.
 #   * compute-style tasks (compute-single, compute-single-int, compute-multi,
 #     hello-world, string-churn, sha256-churn, buffer-copy, typed-array-sum,
 #     math-kernel, word-frequency, object-churn, array-growth, closure-capture,
 #     interface-dispatch, generics-mono, json-roundtrip, async-fanout,
 #     env-injection, file-roundtrip, path-join, date-format, os-probe): build
-#     (if needed), then run R times and report the best wall time; hello-world
-#     reports the best and the median over at least 15 runs. Outputs are
+#     (if needed), then run R times and report the median wall time, with best,
+#     p95 and run-to-run variability alongside it. Outputs are
 #     cross-checked across languages and against the independent oracle values
 #     (see runner/oracle.py) where one exists. json-roundtrip, async-fanout and
 #     sha256-churn omit cpp/rust on purpose (no stdlib JSON surface, no stdlib
@@ -67,6 +69,7 @@ import platform
 import re
 import shutil
 import signal
+import statistics
 import subprocess
 import sys
 import textwrap
@@ -277,6 +280,26 @@ def percentile(values: list[float], p: float) -> float:
     ordered = sorted(values)
     index = round((p / 100.0) * (len(ordered) - 1))
     return ordered[max(0, min(len(ordered) - 1, index))]
+
+
+def median(values: list[float]) -> float | None:
+    """Conventional median; unlike a best-of measurement this resists outliers."""
+    return statistics.median(values) if values else None
+
+
+def cv_percent(values: list[float]) -> float | None:
+    """Sample coefficient of variation, as a percentage of the mean."""
+    if len(values) < 2:
+        return None
+    average = statistics.fmean(values)
+    if average == 0:
+        return None
+    return statistics.stdev(values) / abs(average) * 100.0
+
+
+def cv_cell(values: list[float]) -> str:
+    value = cv_percent(values)
+    return f"{value:.1f}" if value is not None else "-"
 
 
 def first_diagnostic(text: str) -> str:
@@ -859,7 +882,7 @@ def run_server_trial(language: str, task: str, latency_count: int, warmup: int,
     row: dict = {"language": language, "variant": "", "build_ms": None,
                  "boot_ms": None, "p50": None, "p95": None, "rps": None,
                  "requests": 0, "errors": 0, "peak_rss_mb": None,
-                 "binary_kb": None, "note": ""}
+                 "binary_kb": None, "note": "", "latencies": []}
     port = SERVER_PORTS[task][language]
 
     # --- build step -------------------------------------------------------
@@ -919,7 +942,8 @@ def run_server_trial(language: str, task: str, latency_count: int, warmup: int,
                 except (OSError, http.client.HTTPException):
                     errors += 1
             session.close()
-            row["p50"] = percentile(latencies, 50)
+            row["latencies"] = latencies
+            row["p50"] = median(latencies)
             row["p95"] = percentile(latencies, 95)
 
             if task.endswith("-multi"):
@@ -946,6 +970,63 @@ def run_server_trial(language: str, task: str, latency_count: int, warmup: int,
                 row["peak_rss_mb"] = sampler.peak / 1048576.0
             # Only ever the process tree this script started.
             kill_process_tree(process)
+    return row
+
+
+def run_server_repeated(language: str, task: str, reps: int, latency_count: int,
+                        warmup: int, seconds: float, concurrency: int, cp3c: Path,
+                        clients: int = 4, single_clients: int = 2) -> dict:
+    """Run independent server processes and combine their measured trials.
+
+    Boot and throughput use medians across trials. Latency percentiles are
+    calculated over the pooled latency requests from every successful trial,
+    which uses all samples instead of averaging percentiles. A failed attempt
+    remains visible in the attempt/error counts rather than disappearing.
+    """
+    trials: list[dict] = []
+    non_retryable = ("not runnable", "build failed", "Java server deps missing",
+                     "Fastify not installed")
+    for _ in range(reps):
+        trial = run_server_trial(
+            language, task, latency_count, warmup, seconds, concurrency, cp3c,
+            clients=clients, single_clients=single_clients)
+        trials.append(trial)
+        if trial["boot_ms"] is None and trial["note"].startswith(non_retryable):
+            break
+
+    # Preserve the last diagnostic when nothing ran; otherwise use the first
+    # successful trial as the template for static fields such as the variant.
+    good = [trial for trial in trials
+            if trial["boot_ms"] is not None and trial["rps"] is not None]
+    row = dict(good[0] if good else trials[-1])
+    row["attempts"] = len(trials)
+    row["successful_runs"] = len(good)
+    row["runs_boot_ms"] = [trial["boot_ms"] for trial in good]
+    row["runs_rps"] = [trial["rps"] for trial in good]
+    row["requests"] = sum(trial["requests"] for trial in trials)
+    row["errors"] = sum(trial["errors"] for trial in trials)
+    row["latencies"] = [value for trial in good for value in trial["latencies"]]
+
+    if good:
+        row["boot_ms"] = median(row["runs_boot_ms"])
+        row["rps"] = median(row["runs_rps"])
+        row["p50"] = median(row["latencies"])
+        row["p95"] = percentile(row["latencies"], 95)
+        rss_values = [trial["peak_rss_mb"] for trial in good
+                      if trial["peak_rss_mb"] is not None]
+        row["peak_rss_mb"] = median(rss_values)
+        build_values = [trial["build_ms"] for trial in trials
+                        if trial["build_ms"] is not None]
+        row["build_ms"] = median(build_values)
+        detail = next((trial["note"] for trial in reversed(good)
+                       if "warmup " in trial["note"]), "")
+        prefix = detail.split(", warmup ", 1)[0] if ", warmup " in detail else ""
+        run_detail = "warmup " + detail.split(", warmup ", 1)[1] if ", warmup " in detail else detail
+        row["note"] = (f"{prefix}, " if prefix else "") + run_detail
+        if len(good) != len(trials):
+            failure = next((trial["note"] for trial in trials
+                            if trial["boot_ms"] is None), "trial failed")
+            row["note"] += f"; {len(trials) - len(good)} failed attempt(s): {failure}"
     return row
 
 
@@ -1069,11 +1150,11 @@ def run_compute_trial(language: str, task: str, reps: int, cp3c: Path,
 # --------------------------------------------------------------------------
 # gate + ratio bookkeeping (no printing here)
 # --------------------------------------------------------------------------
-def best_ms_of(rows: list[dict], language: str) -> float | None:
+def median_ms_of(rows: list[dict], language: str) -> float | None:
     row = next((r for r in rows if r["language"] == language), None)
     if row is None or not row["runs_ms"]:
         return None
-    return min(row["runs_ms"])
+    return median(row["runs_ms"])
 
 
 def gate_row(task: str, cp3_value: float | None,
@@ -1084,7 +1165,7 @@ def gate_row(task: str, cp3_value: float | None,
     Ratios are time ratios, lower is better for cp3. BIG WARN when cp3 is over
     1.20x cpp/rust or slower than any of go/js/python at all; WARN when cp3 is
     over 1.10x cpp/rust but under the big tier. Compute rows whose reference
-    best is under NOISE_FLOOR_MS are noted "noise-scale, ratio not gated"
+    median is under NOISE_FLOOR_MS are noted "noise-scale, ratio not gated"
     instead of tiered, so spawn jitter cannot flap the gate."""
     if cp3_value is None:
         return
@@ -1180,6 +1261,7 @@ class _Ui:
     wrap = 120           # wrap width for prose lines
     out = None           # the real terminal stream (never the results tee)
     live_dirty = False   # a live line is currently on screen
+    show_runs = False    # print every raw repetition when --show-runs is used
 
 
 UI = _Ui()
@@ -1345,7 +1427,6 @@ def render_table(columns: list[Col], rows: list, indent: int = 2, gap: int = 2) 
     def join(parts: list[str]) -> str:
         return lead + joiner.join(parts)
 
-    print(lead + paint(g("h") * span, "dim"))
     header_parts = []
     for col in cols:
         text = shorten(col.header, widths[col.key])
@@ -1379,18 +1460,21 @@ def render_table(columns: list[Col], rows: list, indent: int = 2, gap: int = 2) 
             else:
                 parts.append(body if index == len(cols) - 1 else body + pad)
         print(join(parts).rstrip())
-    print(lead + paint(g("h") * span, "dim"))
     for label, header, full in truncated:
         print(f"{lead}  {paint(g('arrow'), 'dim')} {paint(label, 'dim')} "
               f"{paint(header + ':', 'dim')} {paint(full, 'dim')}")
 
 
 def banner(title: str, subtitle: str = "") -> None:
+    """One-line section heading; long explanations belong in --help, not here."""
     print()
-    print(f"  {paint(g('title'), 'cyan')} {paint(title, 'bold', 'white')}")
+    prefix = f"  {g('title')} {title}"
     if subtitle:
-        for line in textwrap.wrap(subtitle, width=max(40, UI.wrap - 4)):
-            print("    " + paint(line, "dim"))
+        room = max(20, UI.wrap - len(prefix) - 3)
+        print(f"  {paint(g('title'), 'cyan')} {paint(title, 'bold', 'white')}"
+              f"  {paint(shorten(subtitle, room), 'dim')}")
+    else:
+        print(f"  {paint(g('title'), 'cyan')} {paint(title, 'bold', 'white')}")
 
 
 def note_line(tag: str, tag_styles: tuple, text: str, text_styles: tuple = ("dim",),
@@ -1536,15 +1620,16 @@ def print_row_notes(rows: list[dict]) -> None:
         style = "red" if hard else "yellow"
         glyph = g("bad") if hard else g("warn")
         note_line(f"{glyph} {language}", (style, "bold"), text, (style,))
-    for text, languages in details.items():
-        scope = "" if len(languages) == len(rows) else ", ".join(languages) + ": "
-        note_line(g("info"), ("dim",), scope + text.replace(", ", g("sep")))
+    if UI.show_runs:
+        for text, languages in details.items():
+            scope = "" if len(languages) == len(rows) else ", ".join(languages) + ": "
+            note_line(g("info"), ("dim",), scope + text.replace(", ", g("sep")))
 
 
-def announce_run(task: str, language: str, index: int, total: int) -> None:
-    """Progress before each trial: an in-place live line on a terminal."""
+def announce_run(task: str, language: str, index: int, total: int, reps: int) -> None:
+    """One compact progress entry per language, not one per repetition."""
     if not UI.live:
-        print(f"  {g('run')} {task}: {language} ...", flush=True)
+        print(f"  {g('run')} {task}: {language} x{reps} ...", flush=True)
         return
     current = CURRENT_LANGUAGES.index(language)
     parts = []
@@ -1557,7 +1642,7 @@ def announce_run(task: str, language: str, index: int, total: int) -> None:
         else:
             parts.append(paint(g("pend"), "dim") + " " + paint(name, "dim"))
     live_status(f"  {paint(g('run'), 'cyan')} {paint(f'{index}/{total}', 'dim')}  "
-                f"{paint(task, 'bold')}   " + "  ".join(parts))
+                f"{paint(task, 'bold')} {paint(f'x{reps}', 'dim')}  " + "  ".join(parts))
 
 
 def announce_skip(language: str) -> None:
@@ -1574,29 +1659,29 @@ def announce_omit(task: str, language: str, reason: str) -> None:
 # --------------------------------------------------------------------------
 # reporting
 # --------------------------------------------------------------------------
-def print_header(cpu_text: str, probes: list) -> None:
+def print_header(cpu_text: str, probes: list, reps: int) -> None:
+    """Compact run manifest: environment and toolchains without a page of prose."""
     stamp = datetime.now().isoformat(timespec="seconds")
-    print()
-    box([("benchmarks" + g("sep") + "comparison suite", ("bold", "white")),
-         (stamp, ("dim",))])
-    print()
-    for key, value in (("machine", f"{cpu_text}{g('sep')}{os.cpu_count()} logical CPUs"),
-                       ("os", platform.platform()),
-                       ("runner", f"python {platform.python_version()} ({sys.executable})")):
-        print(f"  {paint(key.ljust(9), 'dim')} {value}")
-    print()
-    print("  " + paint("toolchains", "bold"))
+    print(f"\n  {paint('BENCHMARK SUITE', 'bold', 'white')}  "
+          f"{paint(stamp + g('sep') + f'{reps} runs/test', 'dim')}")
+    print(f"  {paint('machine', 'dim')}  {shorten(cpu_text, 45)}"
+          f"{g('sep')}{os.cpu_count()} logical CPUs")
+    print(f"  {paint('os', 'dim')}      {shorten(platform.platform(), 70)}"
+          f"{g('sep')}Python {platform.python_version()}")
+
+    entries = []
     for name, argv in probes:
         version = probe_version(argv)
         good = version not in ("missing", "error")
         mark = paint(g("ok"), "green") if good else paint(g("bad"), "red", "bold")
-        text = paint(version, "dim") if good else paint(version, "red")
-        print(f"   {mark} {paint(name.ljust(7), LANG_STYLE.get(name, 'white'))} {text}")
-    print()
-    for line in textwrap.wrap("every number below is a wall-clock measurement from this run; "
-                              "load phases use persistent keep-alive connections "
-                              "(one per client)", width=max(40, UI.wrap - 4)):
-        print("  " + paint(line, "dim"))
+        text = shorten(version, 28)
+        text = paint(text, "dim") if good else paint(text, "red")
+        entries.append(f"{mark}{paint(name, LANG_STYLE.get(name, 'white'))} {text}")
+    per_line = max(1, min(3, (UI.width - 4) // 42))
+    for start in range(0, len(entries), per_line):
+        print("  " + paint(" | ", "dim").join(entries[start:start + per_line]))
+    print(f"  {paint('method', 'dim')}  median headline; best/p95/CV retained; "
+          f"HTTP uses keep-alive")
 
 
 def print_time_wait_warning(waiting: int) -> None:
@@ -1610,28 +1695,23 @@ def print_time_wait_warning(waiting: int) -> None:
 
 def print_server_table(task: str, rows: list[dict]) -> None:
     live_clear()
-    banner(task)
+    banner(task, "median boot/req/s; pooled latency p50/p95; CV = run-to-run variation %")
     cp3_row = next((r for r in rows if r["language"] == "cp3"), None)
     cp3_rps = cp3_row["rps"] if cp3_row and cp3_row["rps"] else None
     cpp_row = next((r for r in rows if r["language"] == "cpp"), None)
     rust_row = next((r for r in rows if r["language"] == "rust"), None)
     cpp_rps = cpp_row["rps"] if cpp_row and cpp_row["rps"] else None
     rust_rps = rust_row["rps"] if rust_row and rust_row["rps"] else None
-    # throughput -> time ratio: cp3/cpp = cpp_rps / cp3_rps
+    # Throughput -> time ratio: cp3/cpp = cpp_rps / cp3_rps.
     cpp_ratio = cpp_rps / cp3_rps if (cpp_rps and cp3_rps) else None
     rust_ratio = rust_rps / cp3_rps if (rust_rps and cp3_rps) else None
     SUMMARY_ROWS.append({"task": task, "cpp": cpp_ratio, "rust": rust_ratio})
-    go_rps = next((r["rps"] for r in rows if r["language"] == "go" and r["rps"]), None)
-    js_rps = next((r["rps"] for r in rows if r["language"] == "js" and r["rps"]), None)
-    python_rps = next((r["rps"] for r in rows
-                       if r["language"] == "python" and r["rps"]), None)
-    java_rps = next((r["rps"] for r in rows if r["language"] == "java" and r["rps"]), None)
-    gate_row(task, cp3_rps,
-             {"cpp": cpp_rps, "rust": rust_rps, "go": go_rps, "js": js_rps,
-              "python": python_rps, "java": java_rps}, unit="rps")
+    references = {name: next((r["rps"] for r in rows
+                              if r["language"] == name and r["rps"]), None)
+                  for name in GATE_REFERENCES}
+    gate_row(task, cp3_rps, references, unit="rps")
 
     ran = {r["language"]: r["boot_ms"] is not None for r in rows}
-    top_rps = max((r["rps"] for r in rows if ran[r["language"]] and r["rps"]), default=None)
     best_boot = best_langs({r["language"]: r["boot_ms"] for r in rows})
     best_p50 = best_langs({r["language"]: r["p50"] for r in rows})
     best_p95 = best_langs({r["language"]: r["p95"] for r in rows})
@@ -1640,42 +1720,42 @@ def print_server_table(task: str, rows: list[dict]) -> None:
     best_rss = best_langs({r["language"]: r["peak_rss_mb"] for r in rows})
     best_bin = best_langs({r["language"]: r["binary_kb"] for r in rows})
 
-    columns = [
-        Col("lang", "lang", "l"),
-        Col("variant", "variant", "l", flex=True, min_width=14),
-        Col("build", "build"),
-        Col("boot", "boot ms"),
-        Col("p50", "p50 ms"),
-        Col("p95", "p95 ms"),
-        Col("rps", "req/s"),
-        Col("cpp", "cp3/cpp"),
-        Col("rust", "cp3/rust"),
-        Col("rss", "rss MiB"),
-        Col("bin", "bin KiB"),
-        Col("bar", "speed", "l", optional=True),
+    columns = [Col("lang", "lang", "l")]
+    if UI.show_runs:
+        columns += [Col("variant", "variant", "l", flex=True, min_width=14),
+                    Col("build", "build", optional=True)]
+    columns += [
+        Col("ok", "ok/run"), Col("boot", "boot ms"), Col("p50", "p50 ms"),
+        Col("p95", "p95 ms"), Col("rps", "req/s"), Col("cv", "RPS CV%"),
+        Col("errors", "errors"), Col("cpp", "cp3/cpp"), Col("rust", "cp3/rust"),
+        Col("rss", "RSS MiB", optional=True), Col("bin", "bin KiB", optional=True),
     ]
     table_rows: list = []
     for row in rows:
         language = row["language"]
         cached, _ = split_note(row["note"])
         is_cp3 = language == "cp3"
+        attempts = row.get("attempts", 1 if ran[language] else 0)
+        successful = row.get("successful_runs", 1 if ran[language] else 0)
         cells = {
             "lang": lang_cell(language),
             "variant": cell(row["variant"] or "-", "dim"),
             "build": build_cell(row, cached),
+            "ok": cell(f"{successful}/{attempts}", "green" if successful == attempts else "yellow"),
+            "errors": value_cell(str(row["errors"])),
             "rss": value_cell(rss_cell(row), language in best_rss),
             "bin": value_cell(binary_cell(row), language in best_bin),
         }
+        if row["errors"]:
+            cells["errors"] = cell(str(row["errors"]), "yellow", "bold")
         if ran[language]:
             cells["boot"] = value_cell(f"{row['boot_ms']:.1f}", language in best_boot)
             cells["p50"] = value_cell(f"{row['p50']:.2f}", language in best_p50)
             cells["p95"] = value_cell(f"{row['p95']:.2f}", language in best_p95)
-            cells["rps"] = value_cell(f"{row['rps']:.1f}", language in best_rps)
-            if top_rps:
-                plain, rendered = bar(row["rps"] / top_rps, 10, LANG_STYLE[language])
-                cells["bar"] = cell(plain, rendered=rendered)
+            cells["rps"] = value_cell(f"{row['rps']:,.0f}", language in best_rps)
+            cells["cv"] = cell(cv_cell(row.get("runs_rps", [])), "dim")
         else:
-            for key in ("boot", "p50", "p95"):
+            for key in ("boot", "p50", "p95", "cv"):
                 cells[key] = cell("-", "dim")
             cells["rps"] = cell("no run", "red", "bold")
         if is_cp3:
@@ -1684,52 +1764,51 @@ def print_server_table(task: str, rows: list[dict]) -> None:
         else:
             cells["cpp"] = cell("-", "dim")
             cells["rust"] = cell("-", "dim")
-        if is_cp3 and table_rows:
-            table_rows.append(None)
         table_rows.append({"label": language, "cells": cells,
                            "styles": ("bold",) if is_cp3 else ()})
     render_table(columns, table_rows)
     print_row_notes(rows)
-    for row in rows:
-        if ran[row["language"]] and row["errors"]:
-            note_line(f"{g('warn')} {row['language']}", ("yellow", "bold"),
-                      f"{row['errors']} request(s) failed during measurement", ("yellow",))
+    if UI.show_runs:
+        for row in rows:
+            if ran[row["language"]]:
+                boots = "/".join(f"{value:.1f}" for value in row.get("runs_boot_ms", []))
+                throughputs = "/".join(f"{value:.0f}" for value in row.get("runs_rps", []))
+                note_line(g("info"), ("dim",),
+                          f"{row['language']} boot: {boots} ms{g('sep')}req/s: {throughputs}")
 
 
 def _print_compute_like(task: str, rows: list[dict], header_text: str,
                         expected: str | None, with_median: bool) -> None:
     live_clear()
-    banner(task, header_text)
-    cp3_best = best_ms_of(rows, "cp3")
+    banner(task, header_text + " | median/best/p95 ms; CV = variation %")
+    reference_values = {name: median_ms_of(rows, name) for name in GATE_REFERENCES}
     cpp_ratio, rust_ratio = register_ratios(
-        task, cp3_best, best_ms_of(rows, "cpp"), best_ms_of(rows, "rust"),
-        best_ms_of(rows, "go"), best_ms_of(rows, "js"), best_ms_of(rows, "python"),
-        best_ms_of(rows, "java"))
+        task, median_ms_of(rows, "cp3"), reference_values["cpp"],
+        reference_values["rust"], reference_values["go"], reference_values["js"],
+        reference_values["python"], reference_values["java"])
 
+    medians = {r["language"]: median(r["runs_ms"]) for r in rows}
     bests = {r["language"]: (min(r["runs_ms"]) if r["runs_ms"] else None) for r in rows}
-    medians = {r["language"]: (percentile(r["runs_ms"], 50) if r["runs_ms"] else None)
-               for r in rows}
-    fastest = min((v for v in bests.values() if v), default=None)
-    best_best = best_langs(bests)
+    p95s = {r["language"]: (percentile(r["runs_ms"], 95) if r["runs_ms"] else None)
+            for r in rows}
     best_median = best_langs(medians)
+    best_best = best_langs(bests)
+    best_p95 = best_langs(p95s)
     best_rss = best_langs({r["language"]: r["peak_rss_mb"] for r in rows})
     best_bin = best_langs({r["language"]: r["binary_kb"] for r in rows})
 
-    columns = [Col("lang", "lang", "l"), Col("build", "build"), Col("best", "best ms")]
-    if with_median:
-        columns.append(Col("median", "median ms"))
+    def ms(value: float) -> str:
+        return f"{value:.2f}" if value < 100 else f"{value:.1f}"
+
+    columns = [Col("lang", "lang", "l")]
+    if UI.show_runs:
+        columns.append(Col("build", "build", optional=True))
     columns += [
-        Col("runs", "runs ms", "l", flex=True, min_width=10),
-        Col("output", "output", "l", flex=True, min_width=16),
-        Col("match", "match", "l"),
-        Col("cpp", "cp3/cpp"),
-        Col("rust", "cp3/rust"),
-        Col("rss", "rss MiB"),
-        Col("bin", "bin KiB"),
-        Col("bar", "speed", "l", optional=True),
+        Col("median", "median ms"), Col("best", "best ms"), Col("p95", "p95 ms"),
+        Col("cv", "CV%"), Col("cpp", "cp3/cpp"), Col("rust", "cp3/rust"),
+        Col("rss", "RSS MiB", optional=True), Col("bin", "bin KiB", optional=True),
     ]
 
-    reference = None
     table_rows: list = []
     for row in rows:
         language = row["language"]
@@ -1742,60 +1821,45 @@ def _print_compute_like(task: str, rows: list[dict], header_text: str,
             "bin": value_cell(binary_cell(row), language in best_bin),
         }
         if row["runs_ms"]:
-            best = bests[language]
-            digits = ".1f" if with_median else ".0f"
-            cells["best"] = value_cell(format(best, digits), language in best_best)
-            if with_median:
-                cells["median"] = value_cell(format(medians[language], ".1f"),
-                                             language in best_median)
-            cells["runs"] = cell("/".join(f"{ms:.0f}" for ms in row["runs_ms"]), "dim")
-            if reference is None:
-                reference = row["output"]
-                match = "ref"
-            elif row["output"] == reference:
-                match = "ok"
-            else:
-                match = "MISMATCH"
-            if match == "ref":
-                cells["match"] = cell("ref", "dim")
-            elif match == "ok":
-                cells["match"] = cell(f"{g('ok')} ok", "green")
-            else:
-                cells["match"] = cell(f"{g('bad')} MISMATCH", "red", "bold")
-            cells["output"] = cell(row["output"] or "", "dim" if match != "MISMATCH" else "red")
-            if fastest:
-                plain, rendered = bar(fastest / best, 10, LANG_STYLE[language])
-                cells["bar"] = cell(plain, rendered=rendered)
+            cells["median"] = value_cell(ms(medians[language]), language in best_median)
+            cells["best"] = value_cell(ms(bests[language]), language in best_best)
+            cells["p95"] = value_cell(ms(p95s[language]), language in best_p95)
+            cells["cv"] = cell(cv_cell(row["runs_ms"]), "dim")
         else:
-            cells["best"] = cell("-", "dim")
-            if with_median:
-                cells["median"] = cell("-", "dim")
-            cells["runs"] = cell("-", "dim")
-            cells["output"] = cell("-", "dim")
-            cells["match"] = cell(f"{g('bad')} no run", "red", "bold")
+            for key in ("median", "best", "p95", "cv"):
+                cells[key] = cell("-", "dim")
         if is_cp3:
             cells["cpp"] = cell(ratio_cell(cpp_ratio), *ratio_style(cpp_ratio))
             cells["rust"] = cell(ratio_cell(rust_ratio), *ratio_style(rust_ratio))
         else:
             cells["cpp"] = cell("-", "dim")
             cells["rust"] = cell("-", "dim")
-        if is_cp3 and table_rows:
-            table_rows.append(None)
         table_rows.append({"label": language, "cells": cells,
                            "styles": ("bold",) if is_cp3 else ()})
     render_table(columns, table_rows)
     print_row_notes(rows)
 
-    outputs = {row["output"] for row in rows if row["output"] is not None}
-    if len(outputs) > 1:
-        note_line(g("bad"), ("red", "bold"),
-                  f"outputs differ across languages: {sorted(outputs)}", ("red",))
-    if expected is not None:
-        for row in rows:
-            if row["runs_ms"] and row["output"] != expected:
-                note_line(g("bad"), ("red", "bold"),
-                          f"{task}: {row['language']} output {row['output']!r} "
-                          f"does not match the oracle {expected!r}", ("red",))
+    completed = [row for row in rows if row["runs_ms"]]
+    outputs = {row["output"] for row in completed}
+    mismatches = [row for row in completed
+                  if (expected is not None and row["output"] != expected)
+                  or (expected is None and len(outputs) > 1
+                      and row["output"] != completed[0]["output"])]
+    if mismatches:
+        for row in mismatches:
+            note_line(g("bad"), ("red", "bold"),
+                      f"{row['language']} output {row['output']!r}; expected "
+                      f"{expected if expected is not None else completed[0]['output']!r}",
+                      ("red",))
+    elif completed:
+        target = f"oracle {expected!r}" if expected is not None else "across languages"
+        note_line(g("ok"), ("green",),
+                  f"output verified: {len(completed)}/{len(completed)} match {target}",
+                  ("dim",))
+    if UI.show_runs:
+        for row in completed:
+            raw = "/".join(ms(value) for value in row["runs_ms"])
+            note_line(g("info"), ("dim",), f"{row['language']} runs: {raw} ms")
 
 
 def print_compute_table(task: str, rows: list[dict], header_text: str,
@@ -1814,13 +1878,12 @@ def print_gate_and_summary() -> None:
            "ratios are cp3 time divided by the reference time; lower is better "
            "(the tick marks 1.00x = parity)")
     axis = ("0" + " " * 9 + "1x").ljust(19) + "2x+"
-    columns = [
-        Col("task", "task", "l"),
-        Col("cpp", "cp3/cpp"),
-        Col("cppbar", axis, "l", optional=True),
-        Col("rust", "cp3/rust"),
-        Col("rustbar", axis, "l", optional=True),
-    ]
+    columns = [Col("task", "task", "l"), Col("cpp", "cp3/cpp")]
+    if UI.show_runs:
+        columns.append(Col("cppbar", axis, "l", optional=True))
+    columns.append(Col("rust", "cp3/rust"))
+    if UI.show_runs:
+        columns.append(Col("rustbar", axis, "l", optional=True))
 
     def ratio_cells(prefix: str, ratio: float | None, text: str | None = None) -> dict:
         style = ratio_style(ratio)
@@ -1847,11 +1910,6 @@ def print_gate_and_summary() -> None:
         table_rows.append(None)
     table_rows.append({"label": "geomean", "cells": cells, "styles": ("bold",)})
     render_table(columns, table_rows)
-    cpp_text = f"{cpp_geo:.2f}x (n={len(cpp_values)})" if cpp_geo is not None else "n/a"
-    rust_text = f"{rust_geo:.2f}x (n={len(rust_values)})" if rust_geo is not None else "n/a"
-    note_line(g("info"), ("dim",),
-              f"geomean over runnable rows: cp3/cpp {cpp_text}{g('sep')}cp3/rust {rust_text}")
-
     banner("performance gate", GATE_TARGET)
     print("  " + paint(g("h") * max(10, min(UI.wrap, 110) - 2), "dim"))
     for blocker in GATE_BLOCKERS:
@@ -1986,6 +2044,16 @@ def resolve_churn_scale(text: str) -> tuple[int, str]:
         f"[runner] --churn-scale expects default, stress or a positive integer, got {text!r}")
 
 
+def positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("expected a positive integer") from exc
+    if value < 1:
+        raise argparse.ArgumentTypeError("expected a positive integer")
+    return value
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="benchmarks comparison suite (single entry point: benchmarks/runner/run_benchmark.py)")
@@ -1998,9 +2066,12 @@ def main() -> int:
                         help="client OS processes for the single-core server row (default 2)")
     parser.add_argument("--latency", type=int, default=300, help="latency phase request count")
     parser.add_argument("--warmup", type=int, default=100, help="warmup requests before measuring")
-    parser.add_argument("--reps", type=int, default=2, help="compute runs; best is reported")
-    parser.add_argument("--hello-reps", type=int, default=15,
-                        help="hello-world runs; best and median are reported (default 15)")
+    parser.add_argument("--reps", type=positive_int, default=5,
+                        help="independent measured runs per test/language (default: 5)")
+    parser.add_argument("--hello-reps", type=positive_int, default=None,
+                        help="optional hello-world override; otherwise uses --reps")
+    parser.add_argument("--show-runs", action="store_true",
+                        help="also show raw repetitions, variants and build details")
     parser.add_argument("--churn-scale", default="default",
                         help="string-churn scale: default, stress or a positive integer")
     parser.add_argument("--cp3c", default=str(ROOT / "build" / "bin" / f"cp3c{EXE}"),
@@ -2032,6 +2103,7 @@ def main() -> int:
 
     original_stdout = sys.stdout
     ui_setup(original_stdout)
+    UI.show_runs = args.show_runs
     results_log = None
     if args.results:
         results_dir = Path(args.results)
@@ -2043,6 +2115,7 @@ def main() -> int:
             f"runner: python {platform.python_version()} ({sys.executable})",
             f"machine: {platform.platform()}",
             f"string-churn scale: {churn_label} ({churn_iterations} iterations)",
+            f"repetitions: {args.reps} (hello-world: {args.hello_reps or args.reps})",
             *cp3c_provenance(),
         ]
         (results_dir / "meta.txt").write_text("\n".join(meta) + "\n", encoding="utf-8")
@@ -2061,7 +2134,7 @@ def main() -> int:
             ("java", ["java", "-version"]), ("javac", ["javac", "-version"]),
             ("cmake", ["cmake", "--version"]), ("cp3c", [str(cp3c), "version"]),
         ]
-        print_header(platform.processor() or platform.machine(), probes)
+        print_header(platform.processor() or platform.machine(), probes, args.reps)
         waiting = time_wait_count()
         if waiting is not None and waiting > 4000:
             print_time_wait_warning(waiting)
@@ -2095,11 +2168,11 @@ def main() -> int:
                 if not present(language, server=True):
                     announce_skip(language)
                     continue
-                announce_run(task, language, task_index, task_total)
-                rows.append(run_server_trial(language, task, args.latency, args.warmup,
-                                             args.seconds, args.concurrency, cp3c,
-                                             clients=args.clients,
-                                             single_clients=args.single_clients))
+                announce_run(task, language, task_index, task_total, args.reps)
+                rows.append(run_server_repeated(
+                    language, task, args.reps, args.latency, args.warmup,
+                    args.seconds, args.concurrency, cp3c,
+                    clients=args.clients, single_clients=args.single_clients))
             print_server_table(task, rows)
 
         for task in COMPUTE_TASKS:
@@ -2110,11 +2183,11 @@ def main() -> int:
             extra: tuple[str, ...] = ()
             cp3_entry = None
             expected = EXPECTED.get(task)
-            reps = max(1, args.reps)
+            reps = args.reps
             if task == "hello-world":
-                reps = max(1, args.hello_reps)
-                header = (f"expected = {EXPECTED[task]} | spawn -> exit wall time, "
-                          f"best and median of {reps} runs")
+                reps = args.hello_reps or args.reps
+                header = (f"expected = {EXPECTED[task]} | spawn -> exit wall time; "
+                          f"{reps} runs")
             elif task == "string-churn":
                 extra = (str(churn_iterations),)
                 if churn_iterations != CHURN_DEFAULT_ITERATIONS:
@@ -2144,7 +2217,7 @@ def main() -> int:
                 if not present(language):
                     announce_skip(language)
                     continue
-                announce_run(task, language, task_index, task_total)
+                announce_run(task, language, task_index, task_total, reps)
                 rows.append(run_compute_trial(language, task, reps, cp3c,
                                               extra=extra, cp3_entry=cp3_entry))
             if task == "hello-world":
