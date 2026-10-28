@@ -1,0 +1,41 @@
+import console from "std/console";
+import Math from "std/math";
+
+// math-kernel (cp3 entry) -- evaluate sqrt, floor, abs, pow and clamp over
+// 5,000,000 points, quantize each result to an integer and fold one checksum.
+//
+// Same workload and same output in every language entry. sqrt is correctly
+// rounded, pow uses an integer exponent, and every term is quantized to an
+// integer before folding, so the checksum is exact across libms.
+//
+// Source: benchmarks/cases/math-kernel/cp3/src/index.cp3
+//
+// Native f64 for the floating intermediates and i64 for the loop counter.
+// Every Math.* helper is declared to return `number`, and cp3 has no explicit
+// number -> i64 cast, so the quantized terms and the checksum stay `number`;
+// MOD must stay `number` as well because `%` rejects a `number`/native mix
+// (CP3406). All quantized terms are integers far below 2^53, so the fold is
+// exact.
+
+const COUNT: i64 = 5000000;
+const MOD = 1000000007;
+
+let checksum: number = 0;
+let sqrtTotal: f64 = 0.0;
+let i: i64 = 1;
+while (i <= COUNT) {
+  let x: f64 = i * 0.000001;
+  let s: f64 = Math.sqrt(i);
+  sqrtTotal = sqrtTotal + s;
+  let f: f64 = Math.floor(x + 0.5);
+  let a: f64 = Math.abs(x - 2.5);
+  let p: number = Math.trunc(Math.pow(i, 2));
+  let c: f64 = Math.clamp(x * 1000.0, 0.0, 1000.0);
+  let mixed: f64 = s + f + a + c;
+  let quantum: number = Math.trunc(mixed * 1000000.0);
+  checksum = (checksum * 31 + quantum + p) % MOD;
+  i = i + 1;
+}
+let sqrtScaled: number = Math.trunc(sqrtTotal * 1000.0);
+checksum = (checksum * 31 + sqrtScaled) % MOD;
+console.log(`${checksum}`);

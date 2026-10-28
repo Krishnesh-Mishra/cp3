@@ -1,0 +1,30 @@
+import console from "std/console";
+
+// array-growth (cp3 entry) -- push 20,000,000 numbers into a growing array
+// while summing them, pop half of them back off, then print the sum. Same
+// workload and same output as the C++, Rust, Go, JavaScript and Python entries
+// (expected value in the task README).
+//
+// Source: benchmarks/cases/array-growth/cp3/src/index.cp3
+//
+// Native i64 elements and counters: the pushed values, the running sum and the
+// pop count are all integers, and the total (2.0000001e14) fits in 64 bits.
+
+const PUSHES: i64 = 20000000;
+
+const values: i64[] = [];
+let total: i64 = 0;
+let i: i64 = 1;
+while (i <= PUSHES) {
+  values.push(i);
+  total = total + i;
+  i = i + 1;
+}
+
+let k: i64 = 0;
+while (k < PUSHES / 2) {
+  values.pop();
+  k = k + 1;
+}
+
+console.log(total);

@@ -1,0 +1,53 @@
+import console from "std/console";
+
+// closure-capture (cp3 entry) -- two closure shapes back to back over a
+// 10,000,000-element source:
+//   A: map / filter / reduce with arrow functions that capture offset and cap
+//   B: 1000 closures, each capturing its own key, stored in an array and
+//      invoked after the creating scope has ended (escaping closures)
+// Prints both sums on one line. Same workload and same output as the C++,
+// Rust, Go, JavaScript and Python entries (expected line in the task README).
+//
+// Source: benchmarks/cases/closure-capture/cp3/src/index.cp3
+//
+// Native i64 for the element type, the captured constants, the closure
+// parameter/return and every sum. The `reduce` seed is an i64 binding rather
+// than a bare `0` so the accumulator stays i64 instead of widening to number.
+
+const SOURCE: i64 = 10000000;
+const OFFSET: i64 = 7;
+const CAP: i64 = 3;
+const ZERO: i64 = 0;
+
+const numbers: i64[] = [];
+let i: i64 = 0;
+while (i < SOURCE) {
+  numbers.push(i);
+  i = i + 1;
+}
+
+const totalMapReduce: i64 = numbers
+  .map((x) => x + OFFSET)
+  .filter((x) => x % CAP === 0)
+  .reduce((acc, x) => acc + x, ZERO);
+
+const closures: ((x: i64) => i64)[] = [];
+let key: i64 = 0;
+while (key < 1000) {
+  const bound: i64 = key;
+  closures.push((x) => x * bound + OFFSET);
+  key = key + 1;
+}
+
+let totalEscaping: i64 = 0;
+let index: i64 = 0;
+while (index < closures.length) {
+  let call: i64 = 0;
+  while (call < 3000) {
+    totalEscaping = totalEscaping + closures[index](index);
+    call = call + 1;
+  }
+  index = index + 1;
+}
+
+console.log(totalMapReduce, totalEscaping);

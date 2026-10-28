@@ -44,18 +44,20 @@
 
 #include "cp3/core/analysis.hpp"
 #include "cp3/core/ast.hpp"
+#include "cp3/host/options.hpp"
 
 namespace cp3 {
 namespace detail {
 
 // True when `e` is pure and integer exact, reading only the names in
 // `integerNames`. `functions` maps a declared function name to its declaration
-// and `sema` supplies resolved parameter/return types. Division is accepted
-// only when the numerator is a proved multiple of the divisor.
+// and `sema` supplies resolved parameter/return types. `typeSystem` resolves a
+// plain native annotation (`i64`) that sema did not publish. Division is
+// accepted only when the numerator is a proved multiple of the divisor.
 bool parallelPureIntegerExpr(
     const Expr& e, const std::unordered_set<std::string>& integerNames,
     const std::unordered_map<std::string, const FunctionDeclaration*>& functions,
-    const SemaResult& sema);
+    const SemaResult& sema, TypeSystem typeSystem);
 
 }  // namespace detail
 }  // namespace cp3

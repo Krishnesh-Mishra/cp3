@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "detail/generator/type_map.h"
+#include "cp3/host/native_types.hpp"
 
 namespace cp3 {
 namespace detail {
@@ -42,12 +43,27 @@ bool isPositiveDivisor(const Expr& e, std::int64_t& out) {
 
 bool isNumberType(const Type& t) {
     if (t.isNumber()) return true;
-    return t.isLiteral() && t.literalBaseType().isNumber();
+    if (t.isLiteral() && t.literalBaseType().isNumber()) return true;
+    // Native Rust/C++ integer types are exact integers too. The chunked
+    // runtime still guards the double accumulator at 2^53; accepting these
+    // annotations lets a pure native-integer helper (for example a Collatz
+    // step count) participate in the same proof.
+    return isNativeInteger(t);
 }
 
-bool annotationIsNumber(const TypePtr& type) {
+// Resolve one annotation the way the rest of codegen does: sema's published
+// type wins, and the structural fallback uses the project's vocabulary so a
+// plain `i64` in a rust project is a native integer rather than an unknown
+// TypeScript name.
+bool annotationIsNumber(const TypePtr& type, const SemaResult& sema,
+                        TypeSystem typeSystem) {
     if (!type) return true;  // no annotation: the proof uses the initializer
-    const std::optional<Type> t = typeFromTypeNode(*type);
+    if (const Type* published = sema.typeOf(type->nodeId)) {
+        if (!published->isUnknown() && !published->isError()) {
+            return isNumberType(*published);
+        }
+    }
+    const std::optional<Type> t = typeFromTypeNode(*type, typeSystem);
     return t && isNumberType(*t);
 }
 
@@ -119,8 +135,8 @@ public:
     Classifier(
         const std::unordered_map<std::string, const FunctionDeclaration*>&
             functions,
-        const SemaResult& sema)
-        : functions_(functions), sema_(sema) {}
+        const SemaResult& sema, TypeSystem typeSystem)
+        : functions_(functions), sema_(sema), typeSystem_(typeSystem) {}
 
     bool expression(const Expr& e, const std::unordered_set<std::string>& names,
                     const DivFacts& facts) {
@@ -262,7 +278,9 @@ private:
         } else if (fd.returnType == nullptr) {
             return false;
         }
-        if (!annotationIsNumber(fd.returnType)) return false;
+        if (!annotationIsNumber(fd.returnType, sema_, typeSystem_)) {
+            return false;
+        }
 
         Context ctx;
         for (std::size_t i = 0; i < fd.params.size(); ++i) {
@@ -276,7 +294,8 @@ private:
             }
             // Explicit non-number annotations reject even if sema resolved a
             // numeric signature: codegen passes doubles, so do not erase them.
-            if (p->type != nullptr && !annotationIsNumber(p->type)) {
+            if (p->type != nullptr &&
+                !annotationIsNumber(p->type, sema_, typeSystem_)) {
                 return false;
             }
             bool typed = p->type != nullptr;
@@ -366,7 +385,7 @@ private:
                 !d->init) {
                 return false;
             }
-            if (!annotationIsNumber(d->type)) return false;
+            if (!annotationIsNumber(d->type, sema_, typeSystem_)) return false;
             if (!expression(*d->init, ctx.locals, ctx.facts)) return false;
             const std::string& name =
                 static_cast<const Identifier&>(*d->id).name;
@@ -482,6 +501,7 @@ private:
     const std::unordered_map<std::string, const FunctionDeclaration*>&
         functions_;
     const SemaResult& sema_;
+    TypeSystem typeSystem_;
     std::unordered_map<std::string, Verdict> states_;
 };
 
@@ -490,8 +510,8 @@ private:
 bool parallelPureIntegerExpr(
     const Expr& e, const std::unordered_set<std::string>& integerNames,
     const std::unordered_map<std::string, const FunctionDeclaration*>& functions,
-    const SemaResult& sema) {
-    Classifier classifier(functions, sema);
+    const SemaResult& sema, TypeSystem typeSystem) {
+    Classifier classifier(functions, sema, typeSystem);
     return classifier.expression(e, integerNames, {});
 }
 

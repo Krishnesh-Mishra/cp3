@@ -20,8 +20,8 @@ The suite (phases A, B, C, D, S; default cp3c `build/bin/cp3c.exe`):
            [--json] [--results DIR] [--skip-pending]
 
 The benchmark pre-flight smoke (compiles, boots and contract-checks
-`benchmarks/health-server/cp3`; never times anything; never binds 8080 - the
-bench port constant is substituted into a scratch copy):
+`benchmarks/cases/health-server/cp3`; never times anything; never binds 8080 -
+the smoke passes its port to the bench entry through argv):
 
     python tests/network/run_network_suite.py --cp3c <cp3c> --smoke-bench-server
            [--smoke-port 48209] [--scratch DIR]

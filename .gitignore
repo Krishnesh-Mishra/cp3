@@ -8,6 +8,12 @@
 node_modules/
 docs/local-docs-viewer/node_modules/
 
+# ---- benchmark framework dependencies / build trees ----
+benchmarks/.cache/
+benchmarks/**/target/
+benchmarks/**/build/
+benchmarks/**/node_modules/
+
 # ---- native build artifacts ----
 *.o
 *.obj
@@ -38,6 +44,7 @@ compile_commands.json
 .vs/
 .vscode/
 .idea/
+.opencode/
 *.user
 *.suo
 .DS_Store
@@ -49,6 +56,9 @@ __pycache__/
 
 # ---- test scratch ----
 /tests/**/.tmp/
+
+# ---- per-case compiler builds from running tests ----
+tests/cases/**/.cp3/
 
 # ---- vendored static libraries (D70: pinned builds shipped with cp3c) ----
 # Must stay after the *.a / *.lib rules above (last match wins).

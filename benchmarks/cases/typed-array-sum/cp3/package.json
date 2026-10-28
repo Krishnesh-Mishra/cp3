@@ -1,0 +1,18 @@
+{
+  "name": "typed-array-sum",
+  "version": "1.0.0",
+  "description": "cp3 typed-array fill and sum benchmark entry",
+  "type": "application",
+  "main": "src/index.cp3",
+  "typeSystem": "rust",
+  "scripts": {
+    "dev": "cp3c dev src/index.cp3",
+    "build": "cp3c build src/index.cp3",
+    "start": "cp3c run src/index.cp3",
+    "check": "cp3c check src/index.cp3"
+  },
+  "build": {
+    "bundleNativeDlls": true
+  }
+}
+

@@ -1,10 +1,10 @@
 // =============================================================================
 // tests/network/fixtures/smoke_health_contract.cp3 - the cp3 fetch checker of
-// `--smoke-bench-server` (benchmarks/health-server contract, cp3 entry).
+// `--smoke-bench-server` (benchmarks/cases/health-server contract, cp3 entry).
 //
 // The suite writes a scratch copy of this file with PORT substituted for the
 // chosen smoke port (the beta-one std spec has no process-argv surface), then
-// runs it against the same-port scratch copy of benchmarks/health-server/cp3.
+// runs it against the same-port scratch copy of benchmarks/cases/health-server/cp3.
 // Expected stdout is exact and asserted by run_network_suite.py.
 // =============================================================================
 import console from "std/console";

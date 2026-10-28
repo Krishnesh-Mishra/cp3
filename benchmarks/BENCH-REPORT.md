@@ -10,9 +10,9 @@ lives, and what is deliberately left for later tiers.
 
 ## 1. What landed
 
-- **Single entry point.** `benchmarks/run_benchmark.py` runs the whole suite
+- **Single entry point.** `benchmarks/runner/run_benchmark.py` runs the whole suite
   with one command. It is a thin forwarding wrapper: every argument goes
-  straight to the engine `bench/run_suite.py`, which remains the only
+  straight to the engine `runner/run_suite.py`, which remains the only
   implementation. Documented flags: `--only`, `--reps`, `--cp3c`, `--strict`,
   plus `--hello-reps`, `--churn-scale`, `--results` and the server load
   controls.
@@ -31,7 +31,7 @@ lives, and what is deliberately left for later tiers.
 - **Raw results, committed.** `--results DIR` tees the verbatim output to
   `DIR/run.txt` with `DIR/meta.txt` beside it (machine, argv, scale, and
   the cp3c SHA-256 since the post-P1 refresh).
-  Both labeled runs are committed under `bench/results/`.
+  Both labeled runs are committed under `runner/results/`.
 - **Six Tier-1 tasks, authored in full** for all five runnable languages plus
   spec-written cp3 pending entries: `compute-single-int`, `object-churn`,
   `array-growth`, `closure-capture`, `interface-dispatch`, `generics-mono`.
@@ -41,11 +41,11 @@ lives, and what is deliberately left for later tiers.
   list printed), `string-churn` (default and stress scales; cp3 scale is a
   source constant with only that constant substituted for non-default scales),
   `word-frequency` (hash-map shaped workload).
-- **Independent oracle.** `bench/oracle.py` re-implements every workload in
+- **Independent oracle.** `runner/oracle.py` re-implements every workload in
   plain Python. It is the source of every embedded expected value and is run
   by hand, never during timed measurement.
 - **Harness integration.** `tests/runner/run_tests.py --bench` runs the
-  conformance corpus first, then invokes `benchmarks/run_benchmark.py`,
+  conformance corpus first, then invokes `benchmarks/runner/run_benchmark.py`,
   streams its output, and re-prints the gate WARN lines at the end. It is
   off by default: without `--bench` the harness behaves exactly as before.
   `--bench-args "..."` forwards extra arguments for cheap targeted reruns.
@@ -76,7 +76,7 @@ lives, and what is deliberately left for later tiers.
 - **cp3 has no argv surface** (verified against the beta-one compiler: no
   argv indexing, no stdin, no env). `string-churn` therefore pins its scale
   as a source constant and the runner substitutes only that constant into a
-  generated copy under `bench/.build/` for any non-default scale.
+  generated copy under `.cache/build/` for any non-default scale.
 - **Character hygiene (D66.4).** Em/en dashes were swept from `benchmarks/**`
   and everything written in this wave is dash-free.
 - **Engine scope.** The engine's measurement core (server trials, compute
@@ -86,11 +86,11 @@ lives, and what is deliberately left for later tiers.
 
 ## 3. Labeled runs and gate outcome
 
-Main run: `bench/results/2026-10-18T0705-local/` (`run.txt` + `meta.txt`),
-twelve tasks, `--reps 2`, `--hello-reps 15`, `bench/.build/` cleared
+Main run: `runner/results/2026-10-18T0705-local/` (`run.txt` + `meta.txt`),
+twelve tasks, `--reps 2`, `--hello-reps 15`, `.cache/build/` cleared
 immediately before (all native builds fresh).
 
-Stress run: `bench/results/2026-10-18T0712-local-stress/` (`run.txt` +
+Stress run: `runner/results/2026-10-18T0712-local-stress/` (`run.txt` +
 `meta.txt`), `--only string-churn --churn-scale stress --reps 2`, fresh
 builds.
 
@@ -201,13 +201,13 @@ tasks (`worker-fanout`, the health-server JSON extension).
 
 ```bash
 # full labeled run (fresh builds)
-python benchmarks/run_benchmark.py --reps 2 --hello-reps 15 --results benchmarks/bench/results/<timestamp>
+python benchmarks/runner/run_benchmark.py --reps 2 --hello-reps 15 --results benchmarks/runner/results/<timestamp>
 
 # stress churn
-python benchmarks/run_benchmark.py --only string-churn --churn-scale stress --reps 2 --results benchmarks/bench/results/<timestamp>-stress
+python benchmarks/runner/run_benchmark.py --only string-churn --churn-scale stress --reps 2 --results benchmarks/runner/results/<timestamp>-stress
 
 # correctness oracle for every expected value
-python benchmarks/bench/oracle.py
+python benchmarks/runner/oracle.py
 
 # harness-integrated run (corpus, then suite, gate warnings re-printed)
 python tests/runner/run_tests.py --bench
@@ -221,11 +221,16 @@ with a dated header, never hand-edit a number. See the tail of
 
 - Peak RSS sampling is Windows-only by design (no `psutil` dependency); other
   platforms honestly report `-`.
-- The gate WARNs today on `compute-single` (7.59x cpp / 8.60x rust) and
-  `string-churn` (7.38x rust in the default run, 10.90x rust at stress
-  scale). Those lines are the performance wave's checklist; a wave that lands
-  perf work should make them shorter or quieter, and `--strict` exists so a
-  future wave can gate on them directly.
+- The tiered gate fires today as routine, non-blocking flags on many native
+  tiers (e.g. compute rows over ~1.20x cpp/rust, and noise-floor rows like
+  hello-world below 10 ms); the footer is "gate: N BIG WARN(s), M WARN(s);
+  rerun with --strict to fail on warnings". `--strict` exists so a future wave
+  can gate on them directly.
+- `async-fanout` was omitted from earlier recorded runs because cp3 had no
+  `Promise.all` over a non-array-literal (CP3002). The cp3 entry now lands:
+  `10,000` zero-delay timers joined at once plus `10,000` chained awaits
+  produce the expected `99898`, and the cp3 row runs at `39 ms` in the latest
+  full suite.
 - Number noise on this machine is real (antivirus scans, first-run JIT
   behavior); every table prints all runs so the noise is visible rather than
   averaged away.
@@ -238,7 +243,7 @@ as recorded.
 The lead superseded the single 1.2x tripwire with a tiered gate and made the
 benchmark suite part of every test harness run. What changed:
 
-- **Tiered gate (`bench/run_suite.py`).** Every runnable task row is gated
+- **Tiered gate (`runner/run_suite.py`).** Every runnable task row is gated
   against all five references as a time ratio (lower is better for cp3):
   - **BIG WARN** when cp3 is over 1.20x cpp or rust, or slower than any of
     go/js/python at all (ratio over 1.00), one line per reference. Lines read
@@ -258,8 +263,8 @@ benchmark suite part of every test harness run. What changed:
   the gate one-liner in the root `README.md`, and this addendum describe the
   tiered policy. The labeled tables earlier in this report are unchanged.
 - The two committed labeled runs
-  (`benchmarks/bench/results/2026-10-18T0705-local` and
-  `benchmarks/bench/results/2026-10-18T0712-local-stress`) are untouched and
+  (`benchmarks/runner/results/2026-10-18T0705-local` and
+  `benchmarks/runner/results/2026-10-18T0712-local-stress`) are untouched and
   remain the labeled record; they show the older single-tripwire format. The
   next labeled refresh, after the performance wave lands and cp3c is rebuilt,
   will show the tier format.
@@ -270,7 +275,7 @@ Evidence below is verbatim output from the current `build/bin/cp3c.exe`
 ### 10.1 Tier lines fire as designed
 
 ```
-$ python benchmarks/run_benchmark.py --only compute-single --reps 2
+$ python benchmarks/runner/run_benchmark.py --only compute-single --reps 2
 benchmarks bench suite -- 2026-10-18T07:34:21
 machine: Intel64 Family 6 Model 154 Stepping 3, GenuineIntel | 20 logical CPUs | Windows-11-10.0.26200-SP0
 runner:  python 3.14.5 (C:\Program Files\Python314\python.exe)
@@ -320,7 +325,7 @@ BIG WARN lines fire; python (0.12x) stays silent. Those four lines are the
 performance wave's checklist.
 
 A follow-up strict run of the same task exited 1 as designed:
-`python benchmarks/run_benchmark.py --only compute-single --reps 1 --strict`
+`python benchmarks/runner/run_benchmark.py --only compute-single --reps 1 --strict`
 printed three BIG WARN lines (js landed at or above cp3's time in that single
 run) and `EXITCODE=1`.
 
@@ -360,7 +365,7 @@ cp3 test harness
 27 found, 4 passed, 0 failed, 0 skipped, 23 ambiguous.
 
 == benchmarks ==
-  command: C:\Program Files\Python314\python.exe C:\Users\Krishnesh\dev\cp3\benchmarks\run_benchmark.py --only hello-world --hello-reps 3
+  command: C:\Program Files\Python314\python.exe C:\Users\Krishnesh\dev\cp3\benchmarks\runner\run_benchmark.py --only hello-world --hello-reps 3
 
 benchmarks bench suite -- 2026-10-18T07:35:12
 machine: Intel64 Family 6 Model 154 Stepping 3, GenuineIntel | 20 logical CPUs | Windows-11-10.0.26200-SP0
@@ -453,11 +458,11 @@ follows.
 
 P1 (the `%` lowering without libm plus the guarded int64 `number` fast path)
 landed, the canonical compiler was rebuilt from it, and the full labeled
-suite was rerun against that binary (`bench/.build/` cleared immediately
+suite was rerun against that binary (`.cache/build/` cleared immediately
 before; no `--strict`; exit 0). Raw output:
-`benchmarks/bench/results/2026-10-18T0803-local/run.txt` with `meta.txt`
+`benchmarks/runner/results/2026-10-18T0803-local/run.txt` with `meta.txt`
 beside it, plus the stress run at
-`benchmarks/bench/results/2026-10-18T0808-local-stress/`. Compiler:
+`benchmarks/runner/results/2026-10-18T0808-local-stress/`. Compiler:
 `build/bin/cp3c.exe`, SHA-256
 `C051967809915DAE897618FC9F5CC0D5C4516329E991DC3C190DE9CC37257432`, mtime
 2026-10-18 07:53:27, verified identical before and after both runs. The cp3c

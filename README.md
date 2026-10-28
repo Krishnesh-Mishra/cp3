@@ -33,11 +33,12 @@ their TS shape; what changes is that the output is a native binary.
 ## Measured, not estimated
 
 [`benchmarks/`](benchmarks/README.md) implements the same small programs side
-by side in **cp3, C++, Rust, Go, JavaScript and Python**; a stdlib-only runner
-builds, starts, measures and stops everything, prints per-task `cp3/cpp` and
-`cp3/rust` ratios plus measured peak memory and stripped binary size, and
-gates on a tiered tripwire: BIG WARN over 1.20x C++/Rust or any loss to
-Go/Node/Python. One real run (2026-10-23, Intel64 Family 6 Model 154
+by side in **cp3, C++, Rust, Go, JavaScript, Python and Java**; a stdlib-only
+runner builds, starts, measures and stops everything, prints per-task
+`cp3/cpp` and `cp3/rust` ratios plus measured peak memory and stripped binary
+size, and gates on a tiered tripwire: BIG WARN over 1.20x C++/Rust or any loss
+to Go/Node/Python/Java. HTTP rows use Gin, Axum, Drogon, Express, Fastify,
+FastAPI/Uvicorn and Undertow. One real run (2026-10-23, Intel64 Family 6 Model 154
 Stepping 3, 20 logical CPUs, Windows 11 10.0.26200; g++ 16.1.0, rustc
 1.95.0, go 1.26.4, node v24.15.0, python 3.14.5, cp3c 0.1.0-beta.1):
 
@@ -68,7 +69,7 @@ Go on this row - the parallel entry is now part of the table.
 
 **The Express comparison.** The same health server, six runtimes measured at
 8 keep-alive clients for 3 s (sources side-by-side in
-[`health-server/`](benchmarks/health-server/)):
+[`health-server/`](benchmarks/cases/health-server/)):
 
 | Rust | C++ | Python | Go | Express | **cp3** |
 |---:|---:|---:|---:|---:|---:|
@@ -127,15 +128,15 @@ function collatzSteps(start: number): number {
 ```
 
 Same function, other languages:
-[C++](benchmarks/compute-single/cpp/main.cpp) ·
-[Rust](benchmarks/compute-single/rust/main.rs) ·
-[Go](benchmarks/compute-single/go/main.go) ·
-[JavaScript](benchmarks/compute-single/js/main.mjs) ·
-[Python](benchmarks/compute-single/python/main.py).
+[C++](benchmarks/cases/compute-single/cpp/main.cpp) ·
+[Rust](benchmarks/cases/compute-single/rust/main.rs) ·
+[Go](benchmarks/cases/compute-single/go/main.go) ·
+[JavaScript](benchmarks/cases/compute-single/js/main.mjs) ·
+[Python](benchmarks/cases/compute-single/python/main.py).
 
 And the Express-vs-cp3 shape, in code
-([JS](benchmarks/health-server/js/express/server.mjs) vs
-[cp3](benchmarks/health-server/cp3/main.cp3)):
+([JS](benchmarks/cases/health-server/js/express/server.mjs) vs
+[cp3](benchmarks/cases/health-server/cp3/src/index.cp3)):
 
 ```js
 // Express (JavaScript)
@@ -185,7 +186,7 @@ build/bin/cp3c run examples/basics/hello-world/main.cp3   # cp3c.exe on Windows
 Run the whole cross-language suite yourself (Python 3 only, no packages):
 
 ```bash
-python benchmarks/run_benchmark.py
+python benchmarks/runner/run_benchmark.py
 ```
 
 ## Repository map
@@ -197,7 +198,7 @@ python benchmarks/run_benchmark.py
 | `src/` | the compiler - `lexer`, `parser`, `sema`, `codegen`, `cli`, `runtime`, `modules`, `common` |
 | `tests/` | `cases/` (the conformance corpus) + `runner/` (the harness) |
 | `examples/` | showcase programs: `basics/`, `games/`, `servers/`, `concurrency/`, `async/` |
-| `benchmarks/` | the cross-language benchmark suite (cp3 vs C++/Rust/Go/JS/Python), with its own README and recorded results in `results.md` |
+| `benchmarks/` | the cross-language benchmark suite (cp3 vs C++/Rust/Go/JS/Python/Java), with its own README and recorded results in `results.md` |
 | `tools/` | layout linter and helpers |
 
 Start reading at

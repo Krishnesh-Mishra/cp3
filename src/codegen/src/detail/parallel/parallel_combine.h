@@ -20,6 +20,7 @@
 
 #include "cp3/core/analysis.hpp"
 #include "cp3/core/ast.hpp"
+#include "cp3/host/options.hpp"
 
 namespace cp3 {
 namespace detail {
@@ -39,7 +40,7 @@ struct ParallelCombine {
 std::optional<ParallelCombine> parallelReduceCombine(
     const ArrowFunction& body, const Expr& init,
     const std::unordered_map<std::string, const FunctionDeclaration*>& functions,
-    const SemaResult& sema);
+    const SemaResult& sema, TypeSystem typeSystem);
 
 }  // namespace detail
 }  // namespace cp3

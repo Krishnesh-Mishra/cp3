@@ -10,11 +10,11 @@
 #   D  cp3 `WebSocketServer`, python RFC6455 WebSocket client
 #   S  security probes against a cp3 server (survival, no-injection, no-hang)
 #
-#   --smoke-bench-server  the pre-bench smoke of benchmarks/health-server/cp3:
-#                         compiles a scratch copy (port substituted; the bench
-#                         entry pins 8080 which the suite must not bind), boots
-#                         it, fires the frozen contract with a cp3 fetch checker
-#                         (no python in the request path), shuts it down.
+#   --smoke-bench-server  the pre-bench smoke of benchmarks/cases/health-server/cp3:
+#                         compiles a scratch copy (the port is passed via argv,
+#                         so the suite never binds 8080), boots it, fires the
+#                         frozen contract with a cp3 fetch checker (no python in
+#                         the request path), shuts it down.
 #                         This mode does not time anything.
 #
 # Docs oracle: docs/standard-library/04-imported-std-modules.md section
@@ -51,7 +51,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 FIXTURES = HERE / "fixtures"
 EXE = ".exe" if os.name == "nt" else ""
-SMOKE_HEALTH_SOURCE = ROOT / "benchmarks" / "health-server" / "cp3" / "main.cp3"
+SMOKE_HEALTH_SOURCE = (ROOT / "benchmarks" / "cases" / "health-server"
+                       / "cp3" / "src" / "index.cp3")
 
 sys.path.insert(0, str(HERE))
 import http_referee  # noqa: E402
@@ -587,7 +588,7 @@ class Suite:
     # ---------------------------------------------------------------- smoke
     def run_smoke(self, smoke_port: int, scratch: Path) -> None:
         self.phase = "SM"
-        self.emit("[smoke] benchmarks/health-server/cp3 contract via cp3 fetch "
+        self.emit("[smoke] benchmarks/cases/health-server/cp3 contract via cp3 fetch "
                   "(no python in the request path)")
         scratch.mkdir(parents=True, exist_ok=True)
         if not SMOKE_HEALTH_SOURCE.is_file():
@@ -595,14 +596,9 @@ class Suite:
                      f"missing {SMOKE_HEALTH_SOURCE}")
             return
         source = SMOKE_HEALTH_SOURCE.read_text(encoding="utf-8")
-        if "const PORT = 8080;" not in source:
-            self.add("SM0", "health-server port constant located", "FAIL",
-                     "cannot find `const PORT = 8080;` in the bench entry")
-            return
-        # Port substitution into a scratch copy: the suite must never bind 8080.
-        (scratch / "health_server.cp3").write_text(
-            source.replace("const PORT = 8080;", f"const PORT = {smoke_port};", 1),
-            encoding="utf-8")
+        # The bench entry reads its port from argv[1], so the suite can point a
+        # scratch copy at smoke_port without rewriting the source.
+        (scratch / "health_server.cp3").write_text(source, encoding="utf-8")
         checker = (FIXTURES / "client" / "smoke_health_contract.cp3").read_text(encoding="utf-8")
         (scratch / "smoke_check.cp3").write_text(
             checker.replace("const PORT = 48209;", f"const PORT = {smoke_port};", 1),
@@ -625,9 +621,8 @@ class Suite:
                      "build succeeded but no executable was found under .cp3/")
             return
         self.add("SMB1", "health-server cp3 builds", "PASS",
-                 f"port {smoke_port} substituted into a scratch copy "
-                 f"(bench entry pins 8080)")
-        server = subprocess.Popen([str(candidates[0])], cwd=str(scratch),
+                 f"port {smoke_port} passed via argv to a scratch copy")
+        server = subprocess.Popen([str(candidates[0]), str(smoke_port)], cwd=str(scratch),
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                   encoding="utf-8", errors="replace")
         try:
@@ -723,7 +718,7 @@ def main(argv=None) -> int:
     parser.add_argument("--skip-pending", action="store_true",
                         help="skip the known runtime-gap checks (B20)")
     parser.add_argument("--smoke-bench-server", action="store_true",
-                        help="run only the benchmarks/health-server/cp3 smoke")
+                        help="run only the benchmarks/cases/health-server/cp3 smoke")
     parser.add_argument("--smoke-port", type=int, default=PORT_SMOKE,
                         help=f"port for the smoke (default {PORT_SMOKE}; never 8080)")
     parser.add_argument("--scratch", default="",

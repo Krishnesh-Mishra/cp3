@@ -26,7 +26,7 @@ baseline.
 | Toolchains | Clang-only target: Clang 23.1.4 `ready`; MinGW-w64 sysroot found automatically |
 | Benchmark baseline | measured on compiler `6f1fa2c`; reporting commit `c6ea90c` does not change C++ |
 
-The benchmark WIP in `benchmarks/bench/run_suite.py` was consolidated into
+The benchmark WIP in `benchmarks/runner/run_suite.py` was consolidated into
 `c6ea90c` (`bench: consolidate terminal UI and gate reporting WIP`). It is
 presentation and reporting only; it does not change any measurement.
 

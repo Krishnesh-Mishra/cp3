@@ -474,7 +474,7 @@ real pass/fail. Anything in the AST beyond that must produce a clean
   2026-10-17):
   1. The cross-language benchmark suite lives at **`benchmarks/` in the repo
      root** (moved out of `examples/`; the one deliberate exception to the
-     root-hygiene rule), single entry point `benchmarks/run_benchmark.py`, and
+     root-hygiene rule), single entry point `benchmarks/runner/run_benchmark.py`, and
      wired into the harness: `tests/runner/run_tests.py --bench` runs the
      corpus and then the suite.
   2. **Performance gate:** every runnable row prints cp3/cpp and cp3/rust
@@ -1239,7 +1239,7 @@ Ruling:
   paths. A Clang install beside a MinGW GCC install is simply `ready`.
 
 Evidence: `cp3c toolchain list` reports `clang ... ready` on the machine that
-previously reported `not usable`; `cp3c run benchmarks/hello-world/cp3/main.cp3
+previously reported `not usable`; `cp3c run benchmarks/cases/hello-world/cp3/src/index.cp3
 --toolchain clang` prints `Hello, world!`; the GCC path is unchanged. Two CLI
 regression cases (`clang-is-usable-when-installed`, `clang-builds-and-runs`)
 skip cleanly where no Clang is installed.

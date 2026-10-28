@@ -1,0 +1,9 @@
+{
+  "name": "cp3-benchmark-health-server-fastify",
+  "private": true,
+  "type": "module",
+  "description": "Fastify variant of the benchmarks health-server.",
+  "dependencies": {
+    "fastify": "^5.0.0"
+  }
+}

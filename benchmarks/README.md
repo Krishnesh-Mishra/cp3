@@ -1,12 +1,18 @@
-# cp3 benchmarks - one suite, six languages
+# cp3 benchmarks - one suite, seven languages
 
 Cross-language comparison suite (decision D60, refreshed under D66): the same
 small tasks implemented side by side in **cp3, C++, Rust, Go, JavaScript
-(Node) and Python**, in near-identical readable sources, plus a
+(Node), Python and Java**, in near-identical readable sources, plus a
 dependency-free runner that builds, starts, measures and stops everything on
 this machine and prints comparison tables with per-row `cp3/cpp` and
 `cp3/rust` ratios, measured peak memory, stripped binary size, and a
 performance gate.
+
+Compute rows use each language's native standard library. The two HTTP rows
+use the framework each ecosystem recommends for a production service: Gin
+(Go), Axum (Rust), Drogon (C++), Express and Fastify (JS), FastAPI/Uvicorn
+(Python), Undertow (Java), and cp3's `std/network`. The dependency-free
+implementations remain as fallbacks, and the runner prints which variant ran.
 
 Everything is measured, nothing is estimated. Every number in every table
 came from a real process the runner started and stopped itself. Toolchains
@@ -20,22 +26,39 @@ default-scale full-suite run rewrites the latest block there automatically; a
 single-task run (`--only ...`) never touches it. The repository's root
 `README.md` links to the same recorded results.
 
+## Layout
+
+```text
+benchmarks/
+  cases/       # one self-contained project per task, all languages side by side
+  runner/      # suite engine, wrapper, oracle, load generator, setup scripts
+  .cache/      # gitignored build outputs, framework deps, Python bytecode
+  README.md
+  results.md
+```
+
+`cases/<task>/` is the only place benchmark sources live. The runner and its
+Python tooling live in `runner/`; run everything from the repo root with
+`python benchmarks/runner/run_benchmark.py`. Generated binaries, framework
+dependencies and Python bytecode go under `.cache/`, which is gitignored, so
+the committed benchmark tree stays source-only.
+
 ## How to run
 
 Single entry point (Python 3 only, stdlib, no packages):
 
 ```bash
-python benchmarks/run_benchmark.py                  # everything, defaults
-python benchmarks/run_benchmark.py --only hello-world,string-churn
-python benchmarks/run_benchmark.py --reps 3         # compute reps (best reported)
-python benchmarks/run_benchmark.py --churn-scale stress
-python benchmarks/run_benchmark.py --cp3c build/bin/cp3c.exe
-python benchmarks/run_benchmark.py --strict         # exit 1 on any performance WARN or BIG WARN (CP3002 always fails)
-python benchmarks/run_benchmark.py --results DIR    # tee raw output to DIR
+python benchmarks/runner/run_benchmark.py                  # everything, defaults
+python benchmarks/runner/run_benchmark.py --only hello-world,string-churn
+python benchmarks/runner/run_benchmark.py --reps 3         # compute reps (best reported)
+python benchmarks/runner/run_benchmark.py --churn-scale stress
+python benchmarks/runner/run_benchmark.py --cp3c build/bin/cp3c.exe
+python benchmarks/runner/run_benchmark.py --strict         # exit 1 on any performance WARN or BIG WARN (CP3002 always fails)
+python benchmarks/runner/run_benchmark.py --results DIR    # tee raw output to DIR
 ```
 
 `run_benchmark.py` is a thin wrapper: it forwards every argument to the engine
-`bench/run_suite.py`, which is the only implementation. From `benchmarks/bench`
+`runner/run_suite.py`, which is the only implementation. From `benchmarks/runner`
 in PowerShell, `.\run.ps1 --only word-frequency` does the same.
 
 | flag | meaning |
@@ -52,7 +75,7 @@ in PowerShell, `.\run.ps1 --only word-frequency` does the same.
 | `--single-clients N` | client OS processes for `health-server` (default 2, the quiet-probe shape); each owns `--concurrency` `http.client` sessions |
 
 The test harness runs the suite for you automatically (D67): after the
-conformance corpus pass it invokes `benchmarks/run_benchmark.py`, streams its
+conformance corpus pass it invokes `benchmarks/runner/run_benchmark.py`, streams its
 output, and re-prints the performance-gate `WARN` and `BIG WARN` lines at the
 end.
 
@@ -96,10 +119,10 @@ created (cluster or multiprocessing workers); no unrelated process is touched.
 | `path-join` | join/normalize/basename/extname one fixed segment list, 170,000 times | `425577` | runs |
 | `date-format` | format 50,000 UTC instants by hand from fixed epoch milliseconds | `796897` | runs (cp3/go/js/python; rust omitted) |
 | `os-probe` | query platform/CPU/home/temp/hostname 50,000 times, fold booleans | `208981` | runs (cp3/cpp/go/js/python; rust omitted) |
-| `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404`, single core | wire contract (below) | runs (contract verified; timing recorded) |
+| `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404`, single core | wire contract (below) | runs (Gin/Axum/Drogon/Express/Fastify/FastAPI/Undertow) |
 | `health-server-multi` | the same contract with one worker per logical CPU in every language | wire contract (below) | runs (`createServer({ threads: os.cpus() })`) |
 
-Every value above is re-derived independently by `bench/oracle.py`, which
+Every value above is re-derived independently by `runner/oracle.py`, which
 re-implements every workload again in plain Python; the runner cross-checks
 all languages against each other and against those oracle values (the `match`
 column plus `!!` warning lines for any disagreement).
@@ -118,7 +141,7 @@ and `os-probe` omit rust: Rust `std` has no timezone-aware calendar formatter
 and no hostname/platform probe without `libc` or a crate. A single
 dependency-free file would have to vendor or hand-roll the missing stack,
 which compares dependencies, not the language. The runner prints the omission
-reason per row (`TASK_OMIT_LANGUAGES` in `bench/run_suite.py`) and still gates
+reason per row (`TASK_OMIT_LANGUAGES` in `runner/run_suite.py`) and still gates
 the remaining languages; each task README states the exact rationale.
 
 ## Standard-library coverage
@@ -149,17 +172,18 @@ Every row below now has a cp3 timing in [`results.md`](results.md).
 The health-server contract: every language listens on `127.0.0.1` only and
 answers `GET /healthz` with `200` text/plain `ok`, `GET /` with `200`
 text/plain `health-server ok`, and anything else with `404` text/plain
-`not found`. The port comes from `argv[1]` (the suite assigns 18080-18085 per
-language to the single-core row and 18090-18095 to the multicore row, default
+`not found`. The port comes from `argv[1]` (the suite assigns 18080-18087 per
+language to the single-core row and 18090-18097 to the multicore row, default
 8080); the cp3 entry reads `process.argv` like every other entry.
 
 `health-server-multi` is the multicore sibling: cp3 uses
 `createServer({ threads: os.cpus() })` (one event loop and one uWS app per
-logical CPU), cpp and rust run one accept/handler worker per core on a shared
-listener, go uses `net/http` with `GOMAXPROCS`, js uses `node:cluster`, and
-python passes one listening socket to `multiprocessing` workers. The runner
-drives this row from `--clients` separate client OS processes (default 4),
-each with `--concurrency` raw keep-alive connections.
+logical CPU), cpp uses Drogon with one event loop per hardware thread, rust
+uses Axum on Tokio's multi-threaded runtime, go uses Gin with `GOMAXPROCS`,
+js uses `node:cluster` with Express and Fastify workers, python runs FastAPI
+under Uvicorn with one process per CPU, and java runs Undertow with one I/O
+thread per CPU. The runner drives this row from `--clients` separate client OS
+processes (default 4), each with `--concurrency` raw keep-alive connections.
 
 Each task folder has its own README with the exact workload definition, the
 expected output, and the per-language build/run commands. Recorded tables live
@@ -171,7 +195,7 @@ Compute tables:
 
 | column | meaning |
 | --- | --- |
-| `build_ms` | fresh compile (`g++ -O2`, `rustc -O`, `go build`, `cp3c build`); `-` = no build step, or the binary was already up to date |
+| `build_ms` | fresh compile (`g++ -O2`, `cargo build --release`/`rustc -O`, `go build`, `javac`, `cp3c build`); `-` = no build step, or the binary was already up to date |
 | `best_ms` | best wall-clock run of the `--reps` runs (hello-world: best and median of 15+) |
 | `all_runs_ms` | each run, in order, so the noise is visible |
 | `output` | stdout, stripped |
@@ -197,13 +221,13 @@ geomean footer over every runnable pair.
 
 ## The performance gate
 
-Every runnable task row is gated against all five references (D67). Ratios
+Every runnable task row is gated against all six references (D67). Ratios
 are time ratios, lower is better for cp3:
 
 | tier | when it fires | lines |
 | --- | --- | --- |
 | CP3002 blocker | any cp3 row fails to build with CP3002 | one per row, starting `CP3002 BLOCKER`; always exits 1 |
-| BIG WARN | cp3 is over 1.20x cpp or rust, or slower than go/js/python at all (a native compiler should not lose to a scripted runtime) | one per reference, starting `BIG WARN (fix this):` |
+| BIG WARN | cp3 is over 1.20x cpp or rust, or slower than go/js/python/java at all (a native compiler should not lose to a scripted runtime) | one per reference, starting `BIG WARN (fix this):` |
 | WARN | cp3 is over 1.05x cpp or rust (the D64 5% band; tightened from 1.10x by the 2026-10-19 directive) | one per reference, starting `WARN ` |
 | WARN multi-core | a multi-core row (`compute-multi`, `health-server-multi`) is not FASTER than cpp (ratio above 1.00) | one dedicated line per row, starting `WARN multi-core` or `BIG WARN (fix this) multi-core` |
 
@@ -237,25 +261,31 @@ recorded, and the next full refresh will show the blocker and tier format.
   does the same work. No per-language hand-tuning beyond idiomatic style; the
   sources are near-identical by construction, and the shared output oracle
   makes equality mechanical.
-- Pinned release configurations: `g++ -std=c++20 -O2`; `rustc -O`; `go build`
-  (defaults); Node and Python run their scripts directly; `cp3c build
-  --show-runtime` (default profile, no release/LTO flags) and the compiled
-  binary is what runs. `--show-runtime` only writes the generated C++ plus a
-  runtime snapshot under `.cp3/build/core/cp3-runtime/`; it does not change
-  the measured executable. No debug builds anywhere, for any language.
+- Pinned release configurations: `g++ -std=c++20 -O2` for the dependency-free
+  C++ fallback and CMake `Release` (MSVC) for Drogon; `cargo build --release`
+  for Axum, `rustc -O` for the `std::net` fallback; `go build` (defaults);
+  `javac`/`java` (default JVM settings, no `-Xmx`); Node and Python run their
+  scripts directly; `cp3c build --show-runtime` (default profile, no
+  release/LTO flags) and the compiled binary is what runs. `--show-runtime`
+  only writes the generated C++ plus a runtime snapshot under
+  `.cp3/build/core/cp3-runtime/`; it does not change the measured executable.
+  No debug builds anywhere, for any language.
+- HTTP rows use the installed frameworks listed in
+  `cases/health-server/README.md`; the runner falls back to the dependency-free
+  entry only when a dependency is missing and prints the chosen variant.
 - Case-conversion fairness note (`string-churn`): C++ uses explicit ASCII
   fast-path loops and Go uses byte-level `toUpperASCII`/`toLowerASCII`
   helpers, because locale-aware `std::toupper` / `strings.ToUpper` would
-  compare Unicode tables, not language speed. JS, Python and cp3 use their
-  built-in `toUpperCase`/`toLowerCase`, which special-case ASCII and are the
-  idiomatic choice in those runtimes. Both compiled entries carry an inline
-  `Fairness note` comment saying the same thing.
-- cp3 has no argv/stdin/env surface in the beta-one spec, so `string-churn`'s
-  scale is a source constant (`ITERATIONS`). For any scale other than the
-  committed default the runner substitutes **only** that one constant into a
-  generated copy under `bench/.build/` and builds the copy; the committed
-  source is never rewritten. The machinery can be deleted when cp3 gains an
-  argv surface.
+  compare Unicode tables, not language speed. JS, Python, Java
+  (`toUpperCase(Locale.ROOT)`) and cp3 use their built-in
+  `toUpperCase`/`toLowerCase`, which special-case ASCII and are the idiomatic
+  choice in those runtimes. The compiled entries carry an inline `Fairness
+  note` comment saying the same thing.
+- `string-churn`'s scale is a compile-time constant (`ITERATIONS`) in the cp3
+  entry, while the other entries accept it as `argv[1]`. For any scale other
+  than the committed default the runner substitutes **only** that one constant
+  into a generated cp3 copy under `.cache/build/` and builds the copy; the
+  committed source is never rewritten.
 - Workload sizes live in the sources as constants and are stated in each
   task README; the runner never scales a workload behind a language's back.
 - Five rows omit a language by design: `json-roundtrip`, `async-fanout` and
@@ -269,8 +299,9 @@ recorded, and the next full refresh will show the blocker and tier format.
 ## Honest methodology caveats
 
 * **One machine, loopback only, no TLS, empty request bodies.** These numbers
-  compare implementation shapes on Windows 11 with MinGW g++; they are not a
-  review of the languages in the abstract.
+  compare implementation shapes on Windows 11 with MinGW g++ for the
+  dependency-free C++ fallback and MSVC for Drogon; they are not a review of
+  the languages in the abstract.
 * **Persistent keep-alive connections, not fresh connections per request.**
   Real load generators (wrk, ab, hey) do the same by default. This is also
   self-defense: an earlier fresh-connection version of this suite drove
@@ -287,6 +318,10 @@ recorded, and the next full refresh will show the blocker and tier format.
 * **Python GIL.** `compute-multi` uses worker *processes*; `compute-single` is
   pure CPython bytecode, no JIT. Being far behind the compiled languages there
   is the honest result, not an implementation trick.
+* **JVM startup and warmup.** Java compute rows include JVM startup in
+  `best_ms` (each rep is a fresh process) and run with default JVM settings.
+  Server rows get the same 100-request warmup as every other language, so the
+  recorded throughput reflects a warm JIT; `boot_ms` includes JVM startup.
 * **Process startup is included everywhere.** `boot_ms` includes process
   spawn plus the first request; compute wall time includes process start.
   Fresh process starts on this box can run through Windows Defender's
@@ -313,40 +348,25 @@ historical labeled runs are kept there verbatim.
 
 ## CP3002 status
 
-The 2026-10-19 snapshot listed eight benchmark rows that stopped at CP3002
-markers before producing a number; `health-server` was already serving the
-contract but had no timing. All nine now run and have a timing in
-[`results.md`](results.md):
-
-| row | feature that cleared it |
-| --- | --- |
-| `compute-single-int` | the native integer tier (D65) |
-| `compute-multi` | `parallel.*` |
-| `word-frequency`, `array-growth` | arrays and collections |
-| `object-churn`, `interface-dispatch` | classes and interfaces |
-| `closure-capture` | closures |
-| `generics-mono` | generic functions and classes |
-| `health-server` | `std/network` |
-
-The benchmark gate no longer prints `CP3002 BLOCKER` for any row; a complete
-default-scale run reports only performance warnings. Remaining CP3002 markers
-in the compiler are tracked by `python tools/check_cp3002.py` and belong to the
-next implementation wave - they are not hidden benchmark rows.
+CP3002 placeholders are fully retired. `python tools/check_cp3002.py` reports
+zero markers, and every benchmark row now builds and produces a number; the
+gate never prints `CP3002 BLOCKER`. A complete default-scale run reports only
+performance warnings, if any.
 
 ## Refresh policy
 
 * **Numbers are refreshed by rerunning the suite, never hand-edited.** A
-  complete default-scale run (`python benchmarks/run_benchmark.py`) rewrites
+  complete default-scale run (`python benchmarks/runner/run_benchmark.py`) rewrites
   the generated latest block in `results.md` automatically. A single-task run
   (`--only ...`) and a `--churn-scale stress` run never touch that block.
 * After any performance wave (any change under `src/**` that could move
-  codegen), clear `bench/.build/` and run the full suite once. The generated
+  codegen), clear `.cache/build/` and run the full suite once. The generated
   block records the command, timestamp, machine, toolchains and raw tables.
 * The historical labeled runs in `results.md` are kept as recorded. If a
   stress-preset block is needed, run `--churn-scale stress` separately and add
   it under the historical section by hand.
-* Raw results can additionally be kept under `bench/results/<timestamp>/`
-  with `--results DIR`; `bench/.build/` is machine state and is gitignored.
+* Raw results can additionally be kept under `runner/results/<timestamp>/`
+  with `--results DIR`; `.cache/build/` is machine state and is gitignored.
 * The root `README.md` links to `results.md` for the recorded numbers. Update
   its short headline prose only when the headline result changes.
 * The collaboration rule for the gate: a wave that lands performance work

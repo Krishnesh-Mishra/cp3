@@ -1,0 +1,13 @@
+[package]
+name = "health-server-rust"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "health-server-rust"
+path = "main.rs"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }

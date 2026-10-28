@@ -1,0 +1,67 @@
+import console from "std/console";
+import fs from "std/fs";
+import os from "std/os";
+import path from "std/path";
+
+// file-roundtrip (cp3 entry) -- write, read and stat one fixed 4 KiB file N
+// times in the OS temp directory, then remove it.
+//
+// Same workload and same output as the C++, Rust, Go, JavaScript and Python
+// entries. The checksum folds the bytes read (length, byte sum, first and last
+// byte) and the stat result (size, isFile, isDirectory), so a language that
+// wrote a different file or mis-stated the metadata would print a different
+// number.
+//
+// Source: benchmarks/cases/file-roundtrip/cp3/src/index.cp3
+//
+// Native i64 for the loop counters and FILE_BYTES. The byte sum and checksum
+// stay `number`: `read.length`, `read[i]` and `stats.size` are declared
+// `number`, and cp3 has no explicit number -> i64 cast. MOD stays `number` to
+// match the fold.
+
+const ITERATIONS: i64 = 200;
+const FILE_BYTES: i64 = 4096;
+const MOD = 1000003;
+
+function payload(): string {
+  const seed = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  let data = "";
+  while (data.length < FILE_BYTES) {
+    data = data + seed;
+  }
+  return data;
+}
+
+function roundtripChecksum(iterations: i64): number {
+  const data = payload();
+  const file = path.join(os.tmpdir(), "cp3-bench-file-roundtrip.txt");
+
+  let checksum: number = 0;
+  let i: i64 = 0;
+  while (i < iterations) {
+    fs.writeFileSync(file, data);
+    const read = fs.readFileSync(file);
+    const stats = fs.statSync(file);
+
+    let bytes: number = 0;
+    let j: i64 = 0;
+    while (j < read.length) {
+      bytes = bytes + read[j];
+      j = j + 1;
+    }
+
+    checksum = (checksum * 31 + read.length) % MOD;
+    checksum = (checksum * 31 + bytes) % MOD;
+    checksum = (checksum * 31 + read[0]) % MOD;
+    checksum = (checksum * 31 + read[read.length - 1]) % MOD;
+    checksum = (checksum * 31 + stats.size) % MOD;
+    checksum = (checksum * 31 + (stats.isFile ? 1 : 0)) % MOD;
+    checksum = (checksum * 31 + (stats.isDirectory ? 1 : 0)) % MOD;
+    i = i + 1;
+  }
+
+  fs.unlinkSync(file);
+  return checksum;
+}
+
+console.log(roundtripChecksum(ITERATIONS));

@@ -298,7 +298,8 @@ std::string Generator::emitParallelReduce(const CallExpr& c) {
         body, {initInfo.type, Type::number()}, {initInfo.cpp, "double"});
     std::string out = "::cp3::runtime::parallelReduce";
     if (auto combine = parallelReduceCombine(body, *c.arguments[1],
-                                             functionDecls_, sema_)) {
+                                             functionDecls_, sema_,
+                                             options_.typeSystem)) {
         out += std::string("<::cp3::runtime::ParallelCombineKind::") +
                combine->kind + ">";
         out += "(" + begin + ", " + end + ", " + init + ", " + closure + ", " +

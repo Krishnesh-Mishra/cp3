@@ -54,11 +54,11 @@
 # flight together (that would race on those files); check-mode cases are
 # frontend-only and never occupy a root, and different roots are fully
 # independent. The bench pass stays sequential
-# (`benchmarks/run_benchmark.py` is a pinned measurement suite), so --jobs only
+# (`benchmarks/runner/run_benchmark.py` is a pinned measurement suite), so --jobs only
 # affects the corpus pass.
 #
 # After the corpus pass the cross-language benchmark suite
-# (benchmarks/run_benchmark.py) runs automatically (D67), streams its output,
+# (benchmarks/runner/run_benchmark.py) runs automatically (D67), streams its output,
 # and re-prints the performance-gate WARN / BIG WARN lines at the end.
 # --no-bench skips the bench pass; --bench is still accepted as an explicit
 # (now redundant) request; --json skips the bench pass with a note.
@@ -667,7 +667,7 @@ def project_root_of(case: Case) -> Path:
 
 
 def run_benchmarks(extra_args: str) -> int:
-    """Run benchmarks/run_benchmark.py, stream its output, re-print gate lines.
+    """Run benchmarks/runner/run_benchmark.py, stream its output, re-print gate lines.
 
     The benchmark suite is a separate, long-running measurement pass: it builds
     and runs every language entry, so it runs by default after the corpus pass
@@ -677,7 +677,7 @@ def run_benchmarks(extra_args: str) -> int:
     extra_args is split shell-style; it is empty unless --bench-args was given.
     Returns the bench exit code (0 for a clean run, 1 for a gate/error failure).
     """
-    script = REPO_ROOT / "benchmarks" / "run_benchmark.py"
+    script = REPO_ROOT / "benchmarks" / "runner" / "run_benchmark.py"
     argv = [sys.executable, str(script)] + shlex.split(extra_args)
     print()
     print("== benchmarks ==")
@@ -767,7 +767,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="skip the benchmark suite pass (it runs by default "
                              "after the corpus pass)")
     parser.add_argument("--bench-args", dest="bench_args", default="", metavar="ARGS",
-                        help="extra arguments forwarded to benchmarks/run_benchmark.py "
+                        help="extra arguments forwarded to benchmarks/runner/run_benchmark.py "
                              "when the bench pass runs (e.g. --only hello-world)")
     args = parser.parse_args(argv)
 

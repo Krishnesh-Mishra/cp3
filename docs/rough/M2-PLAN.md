@@ -302,8 +302,8 @@ Committed `4556017` (src/cli only; `src/cli/src/util.cpp` untouched). Scope:
 Committed `f23e728` (104 files): suite moved to the repo root `benchmarks/`
 (D66.1) and overhauled per D66.2/D66.3. Scope:
 
-- Single entry point `benchmarks/run_benchmark.py` forwarding to the engine
-  `bench/run_suite.py` (`--only/--reps/--cp3c/--strict/--results`, plus
+- Single entry point `benchmarks/runner/run_benchmark.py` forwarding to the engine
+  `runner/run_suite.py` (`--only/--reps/--cp3c/--strict/--results`, plus
   `--hello-reps`, `--churn-scale`).
 - Columns: per-row cp3/cpp + cp3/rust time ratios, `peak_rss_mb` (Windows
   `PeakWorkingSetSize`, honest `-` elsewhere), stripped `binary_kb`; summary
@@ -315,10 +315,10 @@ Committed `f23e728` (104 files): suite moved to the repo root `benchmarks/`
   pending rows show the compiler's own CP3xxx diagnostic verbatim, filling in
   when the waves land. hello-world (best + median of 15+), string-churn
   (default + stress), word-frequency finished; independent oracle
-  `bench/oracle.py` derives every embedded expected value.
+  `runner/oracle.py` derives every embedded expected value.
 - Harness: `tests/runner/run_tests.py --bench` / `--bench-args` (additive, off
   by default; `--json` skips with a note). Lead-smoked end to end.
-- Labeled runs committed: `bench/results/2026-10-18T0705-local` (12 tasks,
+- Labeled runs committed: `runner/results/2026-10-18T0705-local` (12 tasks,
   every runnable row oracle-matched; hello 0.73x cpp / 1.00x rust,
   string-churn 1.07x cpp, compute-single 7.59x / 8.60x pre-perf-wave; 3
   designed WARNs; geomean 1.80x cpp / 3.99x rust) and

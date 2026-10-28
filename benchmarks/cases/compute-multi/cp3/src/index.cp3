@@ -1,0 +1,35 @@
+import console from "std/console";
+
+// compute-multi (cp3 entry) -- the compute-single workload split across all
+// cores via parallel.reduce (spec 13).
+//
+// parallel.reduce gives every worker its own private accumulator and merges
+// the partials safely at the end, which is exactly the capture-safety rule
+// for combining results: nothing is shared mutably, so nothing needs
+// synchronizing. The range 1..1000001 is end-exclusive, i.e. 1..1,000,000
+// (the same reading parallel-sum in examples/ uses).
+//
+// Prints the same single integer as every other entry (single or multi), so
+// the outputs cross-check each other.
+//
+// Source: benchmarks/cases/compute-multi/cp3/src/index.cp3
+//
+// Native i64 arithmetic: every intermediate fits in 64 bits and `/2` is exact
+// in the Collatz branch where n is even.
+
+function collatzSteps(start: i64): i64 {
+  let n: i64 = start;
+  let steps: i64 = 0;
+  while (n !== 1) {
+    if (n % 2 === 0) {
+      n = n / 2;
+    } else {
+      n = 3 * n + 1;
+    }
+    steps = steps + 1;
+  }
+  return steps;
+}
+
+const total: i64 = parallel.reduce(1..1000001, 0, (sum, i) => sum + collatzSteps(i));
+console.log(total);

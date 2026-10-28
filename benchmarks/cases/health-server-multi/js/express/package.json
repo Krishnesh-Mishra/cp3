@@ -1,0 +1,9 @@
+{
+  "name": "cp3-benchmark-health-server-multi-express",
+  "private": true,
+  "type": "module",
+  "description": "Express variant of the multicore benchmarks health-server, one cluster worker per CPU.",
+  "dependencies": {
+    "express": "^5.0.0"
+  }
+}

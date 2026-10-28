@@ -1,0 +1,35 @@
+import console from "std/console";
+
+// compute-single-int (cp3 entry) -- total Collatz steps for every start value
+// in 1..1,000,000, printed as one integer. Same workload and output as the
+// C++, Rust, Go, JavaScript and Python entries.
+//
+// Source: benchmarks/cases/compute-single-int/cp3/src/index.cp3
+//
+// This is the native-integer tier: `i64` is a real Rust i64 in native type
+// systems, not a 64-bit double, so the arithmetic stays integral end to end.
+// Every intermediate fits in 64 bits and `/2` is exact (n is even in that
+// branch), so i64 is safe throughout.
+
+function collatzSteps(start: i64): i64 {
+  let n: i64 = start;
+  let steps: i64 = 0;
+  while (n !== 1) {
+    if (n % 2 === 0) {
+      n = n / 2;
+    } else {
+      n = 3 * n + 1;
+    }
+    steps = steps + 1;
+  }
+  return steps;
+}
+
+let total: i64 = 0;
+let start: i64 = 1;
+while (start <= 1000000) {
+  total = total + collatzSteps(start);
+  start = start + 1;
+}
+
+console.log(total);

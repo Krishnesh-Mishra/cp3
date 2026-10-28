@@ -1,0 +1,61 @@
+import console from "std/console";
+
+// generics-mono (cp3 entry) -- the same 2,000,000-iteration sum run twice:
+// once through a generic wrapper type plus a generic function, once through a
+// hand-written concrete type. Prints both sums on one line. Same workload and
+// same output as the C++, Rust, Go, JavaScript and Python entries (expected
+// line in the task README).
+//
+// Source: benchmarks/cases/generics-mono/cp3/src/index.cp3
+//
+// Native i64 for the concrete NumberBox payload, its getter, the loop counters
+// and the concrete total. The generic path stays `number`: a generic class
+// instantiated with a native type argument has no C++ spelling (CP3418), so
+// `Box<i64>` / `sumBox<i64>` are rejected. MOD stays `number` because the
+// generic fold is `number` and `%` rejects a number/native mix (CP3406).
+
+class Box<T> {
+  value: T;
+
+  function get(): T {
+    return this.value;
+  }
+}
+
+function sumBox<T>(box: Box<T>): T {
+  return box.get();
+}
+
+class NumberBox {
+  value: i64;
+
+  constructor(value: i64) {
+    this.value = value;
+  }
+
+  function get(): i64 {
+    return this.value;
+  }
+}
+
+const ITERATIONS: i64 = 2000000;
+const MOD = 1000000007;
+
+let totalGeneric: number = 0;
+let i: i64 = 0;
+while (i < ITERATIONS) {
+  const box = new Box<number>();
+  box.value = i;
+  totalGeneric = (totalGeneric + sumBox<number>(box)) % MOD;
+  i = i + 1;
+}
+
+let totalConcrete: number = 0;
+i = 0;
+while (i < ITERATIONS) {
+  const box = new NumberBox(i);
+  totalConcrete = (totalConcrete + box.get()) % MOD;
+  i = i + 1;
+}
+
+console.log(totalGeneric, totalConcrete);

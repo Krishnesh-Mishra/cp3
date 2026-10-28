@@ -25,6 +25,7 @@
 
 #include "detail/parallel/parallel_safety.h"
 #include "detail/generator/type_map.h"
+#include "cp3/host/native_types.hpp"
 
 namespace cp3 {
 namespace detail {
@@ -89,28 +90,43 @@ bool mentionsName(const Expr& e, const std::string& name) {
 // A reduce parameter must be a plain number parameter. An explicit
 // non-number annotation rejects even if sema left the call unchecked: the
 // runtime hands the closure a double accumulator and a double index.
-bool numberAnnotation(const TypePtr& type) {
+// Sema's published type wins; the structural fallback resolves the project's
+// plain vocabulary (`i64` in a rust project).
+bool numberAnnotation(const TypePtr& type, const SemaResult& sema,
+                      TypeSystem typeSystem) {
     if (!type) return true;
-    const std::optional<Type> t = typeFromTypeNode(*type);
+    if (const Type* published = sema.typeOf(type->nodeId)) {
+        if (!published->isUnknown() && !published->isError()) {
+            return published->isNumber() ||
+                   (published->isLiteral() &&
+                    published->literalBaseType().isNumber()) ||
+                   isNativeInteger(*published);
+        }
+    }
+    const std::optional<Type> t = typeFromTypeNode(*type, typeSystem);
     return t && (t->isNumber() ||
-                 (t->isLiteral() && t->literalBaseType().isNumber()));
+                 (t->isLiteral() && t->literalBaseType().isNumber()) ||
+                 isNativeInteger(*t));
 }
 
-bool paramAnnotationIsNumber(const Parameter& p) {
-    return numberAnnotation(p.type);
+bool paramAnnotationIsNumber(const Parameter& p, const SemaResult& sema,
+                             TypeSystem typeSystem) {
+    return numberAnnotation(p.type, sema, typeSystem);
 }
 
 // The two plain parameter names of a reduce body; false for anything else
 // (rest/ref/optional/default/missing or non-number annotations), which keeps
 // the shape out of the combine gate.
 bool reduceParamNames(const ArrowFunction& body, std::string& accParam,
-                      std::string& indexParam) {
+                      std::string& indexParam, const SemaResult& sema,
+                      TypeSystem typeSystem) {
     if (body.params.size() != 2 || !body.params[0] || !body.params[1]) {
         return false;
     }
     for (const auto& param : body.params) {
         if (param->isRest || param->isRef || param->optional ||
-            param->defaultValue || !paramAnnotationIsNumber(*param)) {
+            param->defaultValue ||
+            !paramAnnotationIsNumber(*param, sema, typeSystem)) {
             return false;
         }
     }
@@ -178,12 +194,16 @@ std::optional<ParallelCombine> conditionalCombine(const ConditionalExpr& c,
 std::optional<ParallelCombine> parallelReduceCombine(
     const ArrowFunction& body, const Expr& init,
     const std::unordered_map<std::string, const FunctionDeclaration*>& functions,
-    const SemaResult& sema) {
+    const SemaResult& sema, TypeSystem typeSystem) {
     if (body.isAsync || !body.typeParams.empty()) return std::nullopt;
     std::string accParam;
     std::string indexParam;
-    if (!reduceParamNames(body, accParam, indexParam)) return std::nullopt;
-    if (!numberAnnotation(body.returnType)) return std::nullopt;
+    if (!reduceParamNames(body, accParam, indexParam, sema, typeSystem)) {
+        return std::nullopt;
+    }
+    if (!numberAnnotation(body.returnType, sema, typeSystem)) {
+        return std::nullopt;
+    }
     if (!body.expressionBody || !body.body) return std::nullopt;
     const Expr* value = dynamic_cast<const Expr*>(body.body.get());
     if (value == nullptr) return std::nullopt;
@@ -200,7 +220,8 @@ std::optional<ParallelCombine> parallelReduceCombine(
         if (!b.left || !b.right) return std::nullopt;
         if (!isNamed(b.left.get(), accParam)) return std::nullopt;
         if (mentionsName(*b.right, accParam)) return std::nullopt;
-        if (!parallelPureIntegerExpr(*b.right, indexOnly, functions, sema)) {
+        if (!parallelPureIntegerExpr(*b.right, indexOnly, functions, sema,
+                                     typeSystem)) {
             return std::nullopt;
         }
         if (b.op == BinaryOp::Add && *identity == 0) {
@@ -215,13 +236,16 @@ std::optional<ParallelCombine> parallelReduceCombine(
         const auto& c = static_cast<const ConditionalExpr&>(*value);
         const std::unordered_set<std::string> both{accParam, indexParam};
         if (!c.condition ||
-            !parallelPureIntegerExpr(*c.condition, both, functions, sema)) {
+            !parallelPureIntegerExpr(*c.condition, both, functions, sema,
+                                     typeSystem)) {
             return std::nullopt;
         }
         if (!c.whenTrue ||
-            !parallelPureIntegerExpr(*c.whenTrue, both, functions, sema) ||
+            !parallelPureIntegerExpr(*c.whenTrue, both, functions, sema,
+                                     typeSystem) ||
             !c.whenFalse ||
-            !parallelPureIntegerExpr(*c.whenFalse, both, functions, sema)) {
+            !parallelPureIntegerExpr(*c.whenFalse, both, functions, sema,
+                                     typeSystem)) {
             return std::nullopt;
         }
         // max/min are associative and idempotent, so any integral literal

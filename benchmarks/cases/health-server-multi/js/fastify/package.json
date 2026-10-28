@@ -1,0 +1,9 @@
+{
+  "name": "cp3-benchmark-health-server-multi-fastify",
+  "private": true,
+  "type": "module",
+  "description": "Fastify variant of the multicore benchmarks health-server, one cluster worker per CPU.",
+  "dependencies": {
+    "fastify": "^5.0.0"
+  }
+}
