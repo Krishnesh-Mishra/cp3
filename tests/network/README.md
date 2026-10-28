@@ -7,9 +7,10 @@ dual verification: every wire-level claim is checked from both ends, with python
 the independent half in phases B and D.
 
 Docs oracle: `docs/standard-library/04-imported-std-modules.md`, section
-`network`, "Included in beta one" only. Checks that depend on a known runtime
-gap are still written docs-faithfully and reported as `PENDING SURFACE` with the
-observed evidence; they are never weakened.
+`network`, "Included in beta one" only. Checks are written docs-faithfully; a
+check that depends on a known runtime gap is reported as `PENDING SURFACE` with
+the observed evidence and is never weakened. The suite currently has no
+pending-surface checks.
 
 ## Running
 
@@ -32,9 +33,8 @@ The corpus cases for this wave (self-contained run cases, ports 48105-48114):
 
 Exit codes: `0` only when every executed check passes; `1` when any check
 failed or is `PENDING SURFACE`; `2` for usage errors (missing cp3c, unknown
-phase, `--smoke-port 8080`). `--skip-pending` marks the known runtime-gap check
-(B20, finding F3) `SKIPPED` instead of running it; nothing is counted as a
-failure.
+phase, `--smoke-port 8080`). `--skip-pending` marks any known runtime-gap check
+`SKIPPED` instead of running it; nothing is counted as a failure.
 `--json` prints one machine-readable document instead of the human output.
 Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite target
 ~90 s (cold fixture compilation dominates; warm runs are ~30 s).
@@ -103,7 +103,7 @@ Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite targe
 | `req.params` / `req.query` / `req.headers` Maps | B17 | `PB3|200|7|1|en|on` |
 | `app.delete(route, handler)` | B18 | `PB4|200|deleted` + `PB4b|404|not found` |
 | `res.json<T>(payload, status?)` typed payload | B19 | `PB5p|7|alice` |
-| unannotated `req.path === literal` | B20 | PENDING SURFACE: runtime gap (finding F3) |
+| unannotated `req.path === literal` | B20 | `PB6|418|teapot` |
 | `res.json(payload, status?)` + reified client read | B21 | `PB5a|200|7|alice|application/json; charset=utf-8` + `PB5b|201|9|bob` |
 
 ### WebSocket client - phase C (python RFC6455 server on 48205)
@@ -176,9 +176,8 @@ Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite targe
 
 The rest of 48201-48299 is reserved but unused. The suite never binds 8080
 (benchmarks) and never 48101-48104 (the pre-existing stdlib/network cases).
-48220 is shared by `server_pending_path_eq.cp3` and
-`server_json_typed_payload.cp3`; fixture runs are sequential, so the port is
-never bound twice at once.
+48220 is shared by `server_path_eq.cp3` and `server_json_typed_payload.cp3`;
+fixture runs are sequential, so the port is never bound twice at once.
 
 ## Pending surface and open findings
 
@@ -189,14 +188,12 @@ fixed, the check flips to `PASS` without edits.
 - B16 async handlers + `req.text()` and B19 `res.json<User>(payload)` now run
   as ordinary checks: the async-arrow and typed-JSON-payload lowerings are
   implemented. The untyped payload form is still covered by B21.
-- B20 finding F3 (silent miscompile, no diagnostic): an unannotated
-  `req.path === "/teapot"` lowers to
-  `cp3_truthy(((req).path, std::string("/teapot"), false))`, which is always
-  false, so the middleware never answers and the 404 fallback is served.
-  Repro: `tests/network/fixtures/server/server_pending_path_eq.cp3`; generated line in
-  the fixture's `.cp3/build/server_pending_path_eq.cpp`. Adding
-  `let path: string = req.path;` before the comparison lowers it correctly
-  (that is what `server/server_own.cp3` does for B13).
+- B20 finding F3 is fixed: an unannotated `req.path === "/teapot"` used to
+  lower to the constant-false comma expression
+  `cp3_truthy(((req).path, std::string("/teapot"), false))`. Codegen now
+  resolves the documented `req.method` / `req.path` fields to `string`, so
+  `tests/network/fixtures/server/server_path_eq.cp3` answers 418 and the check
+  runs as an ordinary regression.
 - F1 (top-level await rejection with a live listener): an unhandled
   `await res.json<number>()` mismatch against an object payload makes the
   process print `cp3: error: unhandled promise rejection: std/network: JSON

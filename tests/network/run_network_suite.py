@@ -71,7 +71,7 @@ NEW_SURFACE_PORTS = {          # phase B new-surface fixture ports; each binds o
     48217: "server_async_handler",
     48218: "server_req_fields",
     48219: "server_delete_route",
-    48220: "server_pending_path_eq / server_json_typed_payload (never both run)",
+    48220: "server_path_eq / server_json_typed_payload (never both run)",
     48221: "server_json_object",
 }
 
@@ -481,15 +481,11 @@ class Suite:
             "server/server_json_typed_payload.cp3",
             {"PB5p": ("res.json<T>(payload) object codecs", exact("7", "alice"))},
             "server_json_typed_payload")
-        self.runtime_gap_fixture(
-            "B20", "req.path === literal without annotation (finding F3)",
-            "server/server_pending_path_eq.cp3",
-            expected=[("PB6", ["418", "teapot"])],
-            buggy=[("PB6", ["404", "not found"])],
-            buggy_detail="req.* compared to a literal without a `: string` "
-                         "annotation lowers to cp3_truthy(((req).path, "
-                         "std::string(\"/teapot\"), false)) which is always "
-                         "false; observed 404|not found instead of 418|teapot")
+        self.run_and_assert(
+            "server/server_path_eq.cp3",
+            {"PB6": ("req.path === literal without annotation",
+                     exact("418", "teapot"))},
+            "server_path_eq")
         self.run_and_assert(
             "server/server_json_object.cp3",
             {"PB5a": ("res.json(payload, status?) + reified client read",

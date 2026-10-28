@@ -811,7 +811,7 @@ std::optional<Candidate> findCandidate(const BlockStatement& block,
         return std::nullopt;
     }
     // A declared type is left to the ordinary lowering: it carries the
-    // not-implemented report for a type M1 cannot spell, and a wider
+    // type-error report for a type with no C++ spelling, and a wider
     // annotation (`string | undefined`) is a different C++ type than the
     // element. The reference spelling is only used for an inferred binding.
     if (d->type) return std::nullopt;

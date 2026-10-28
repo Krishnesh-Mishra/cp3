@@ -169,9 +169,9 @@ spec-conformance corpus (1,200+ case pairs in
   (HTTP servers and WebSocket), `parallel.*`, and the standard-library
   families exercised by the benchmark suite: string, math, path, os, env, fs,
   process, JSON, crypto, buffer, typed arrays, collections and date.
-- **In flight / next:** the CP3002 marker wave (the remaining
-  `not implemented` sites tracked by `tools/check_cp3002.py`), then the
-  performance wave (`%`/`number` lowering - see the benchmark section).
+- **In flight / next:** the performance wave (`%`/`number` lowering - see the
+  benchmark section). The placeholder diagnostic wave is retired: unsupported
+  constructs now report a specific `CP3xxx` diagnostic instead of a skip.
 
 ## Build and run it
 

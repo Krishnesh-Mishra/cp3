@@ -5,7 +5,7 @@ import { fetch, createServer } from "std/network";
 // literals with res.json(payload) and res.json(payload, status?), and the
 // client parses them back with `await res.json<User>()` through the reified
 // interface tables. (The docs' `res.json<User>(payload)` typed-payload form is
-// tracked as PENDING SURFACE in the suite, not weakened here.)
+// covered by the network suite as PB5p.)
 interface User {
   id: number;
   name: string;

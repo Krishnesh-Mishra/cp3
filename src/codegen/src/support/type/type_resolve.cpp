@@ -25,7 +25,7 @@ using namespace detail;
 // -----------------------------------------------------------------------------
 
 Type Generator::effectiveType(const Expr& e) const {
-    if (const auto t = networkMapFieldType(e)) return *t;
+    if (const auto t = networkFieldType(e)) return *t;
     if (e.kind == NodeKind::CallExpr) {
         if (auto t = parallelCallType(static_cast<const CallExpr&>(e))) return *t;
         // The worker handle's calls (D80): `w.request(v)` is a `Promise<Out>`;

@@ -518,12 +518,12 @@ the exact import statement for a bare std binding), CP3305 (member miss on the
 closed families Math / path / os / crypto / console / JSON; open families keep
 the pinned permissive shape), CP3601/CP3604 (import hints: the usable named
 imports, or the default-import form for a default-only module), and the
-not-yet-built texts read "not implemented yet: <what>" (the skip path was
-unchanged). `Math` and `JSON` leave `kGlobals` because
-docs/standard-library/04 requires the explicit import; a bare use is CP3301
-with the statement. Console is surface-aware: log/info/warn/error are
-implemented and suggested; assert/clear/input/readKey keep their not-yet-built
-skip and stay out of the candidate list. `docs/cli-tooling/07-diagnostic-catalog.md`
+not-yet-built texts used to read "not implemented yet: <what>"; that
+placeholder path has since been retired. `Math` and `JSON` leave `kGlobals`
+because docs/standard-library/04 requires the explicit import; a bare use is
+CP3301 with the statement. Console is surface-aware: log/info/warn/error are
+implemented and suggested; assert/clear/input/readKey stay out of the candidate
+list with their explicit unsupported diagnostics. `docs/cli-tooling/07-diagnostic-catalog.md`
 documents all 65 live codes plus 19 reserved; `tools/check_diagnostics.py`
 cross-checks the header, the catalog and `src/**` (0 findings). 8 new pins in
 `tests/cases/diagnostics/` (7 pass, 1 skip marker);

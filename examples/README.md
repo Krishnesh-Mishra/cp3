@@ -34,17 +34,9 @@ they print and exit cleanly:
 * `async/timers-demo` -> the countdown demo: timers fire in deadline order,
   and the event loop drains pending work before exiting
 
-The rest are written against the frozen spec but wait on compiler or
-std-lib features that are still landing, so `cp3c run` reports `CP3002: not
-implemented yet` today:
-
-* `games/*` need **builtin method calls** (`Math.random`, string methods),
-  **`console.input`**, and `parseInt` - the member/method wave plus the
-  grammar tail.
-* `servers/*` need **`std/network`** plus method calls, interfaces and async
-  middleware/handlers.
-* `concurrency/parallel-sum` parses, but its **`parallel.*` calls, array
-  literals and indexing** are not implemented in codegen yet.
+The examples are written against the frozen spec and run with the beta
+toolchain. If a program uses a construct that is still unsupported, `cp3c run`
+reports the specific `CP3xxx` diagnostic instead of a placeholder skip.
 
 The `games/*` programs read stdin. Play them interactively, or redirect an
 empty input; on EOF they print their goodbye line and exit.

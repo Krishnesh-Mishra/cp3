@@ -144,13 +144,14 @@ std::string networkMemberName(const Type& receiver, const std::string& property)
 
 }  // namespace
 
-/// The documented Map-shaped field read behind an expression (`res.headers`,
-/// `req.params`, `req.query`, `req.headers`), as `Map<string, string>`
-/// (docs 04 §network), or nullopt. The `get(k)` result of such a field is
-/// `string | undefined` (std/collections Map), so a `??`/`=== undefined` on
-/// it classifies as the optional shape even when the receiver is a handler
-/// parameter that sema only sees as ambient.
-std::optional<Type> Generator::networkMapFieldType(const Expr& e) const {
+/// The documented field read behind an expression (`res.headers`,
+/// `req.params`, `req.query`, `req.headers`, `req.method`, `req.path`,
+/// `res.ok`, `res.status`, `res.statusText`), with the Map fields as
+/// `Map<string, string>` (docs 04 §network), or nullopt. The `get(k)` result
+/// of such a field is `string | undefined` (std/collections Map), so a
+/// `??`/`=== undefined` on it classifies as the optional shape even when the
+/// receiver is a handler parameter that sema only sees as ambient.
+std::optional<Type> Generator::networkFieldType(const Expr& e) const {
     // A recorded hint wins; it is how the Map type reaches `effectiveType`
     // for handler parameters that sema only sees as ambient.
     if (const auto it = exprTypeHints_.find(e.nodeId); it != exprTypeHints_.end()) {
@@ -160,7 +161,7 @@ std::optional<Type> Generator::networkMapFieldType(const Expr& e) const {
         const auto& c = static_cast<const CallExpr&>(e);
         if (!c.callee || c.callee->kind != NodeKind::MemberExpr) return std::nullopt;
         const auto& m = static_cast<const MemberExpr&>(*c.callee);
-        if (m.property == "get" && m.object && networkMapFieldType(*m.object)) {
+        if (m.property == "get" && m.object && networkFieldType(*m.object)) {
             return Type::unionOf({Type::string(), Type::undefined()});
         }
         return std::nullopt;
@@ -169,14 +170,23 @@ std::optional<Type> Generator::networkMapFieldType(const Expr& e) const {
     const auto& m = static_cast<const MemberExpr&>(e);
     if (!m.object) return std::nullopt;
     const std::string& recv = effectiveType(*m.object).name;
-    bool field = false;
     if (recv == kFetchResponse) {
-        field = m.property == "headers";
-    } else if (recv == kHttpRequest) {
-        field = m.property == "params" || m.property == "query" || m.property == "headers";
+        if (m.property == "headers") return stringMapType();
+        if (m.property == "ok") return Type::boolean();
+        if (m.property == "status") return Type::number();
+        if (m.property == "statusText") return Type::string();
+        return std::nullopt;
     }
-    if (!field) return std::nullopt;
-    return stringMapType();
+    if (recv == kHttpRequest) {
+        if (m.property == "params" || m.property == "query" ||
+            m.property == "headers") {
+            return stringMapType();
+        }
+        if (m.property == "method" || m.property == "path") {
+            return Type::string();
+        }
+    }
+    return std::nullopt;
 }
 
 /// A Map-shaped field's member call (`req.headers.get(k)`,
@@ -186,7 +196,7 @@ std::optional<Type> Generator::networkMapFieldType(const Expr& e) const {
 /// never carries the Map type to `effectiveType`.
 std::string Generator::emitNetworkMapFieldCall(const CallExpr& c, const MemberExpr& m) {
     if (!m.object) return std::string();
-    const std::optional<Type> type = networkMapFieldType(*m.object);
+    const std::optional<Type> type = networkFieldType(*m.object);
     if (!type) return std::string();
     exprTypeHints_[m.object->nodeId] = *type;
     return emitCollectionsMemberCall(c, m);
@@ -196,7 +206,7 @@ std::string Generator::emitNetworkMapFieldCall(const CallExpr& c, const MemberEx
 /// the call form above.
 std::string Generator::emitNetworkMapFieldMember(const MemberExpr& m) {
     if (!m.object) return std::string();
-    const std::optional<Type> type = networkMapFieldType(*m.object);
+    const std::optional<Type> type = networkFieldType(*m.object);
     if (!type) return std::string();
     exprTypeHints_[m.object->nodeId] = *type;
     return emitCollectionsMember(m);

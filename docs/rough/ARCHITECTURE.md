@@ -250,12 +250,10 @@ Options:
 | `0` | success |
 | `1` | compile error (diagnostics were printed) |
 | `2` | usage error (bad flag/command; usage printed to stderr) |
-| `3` | **not implemented** - this is the scaffold build; a marker line containing `not implemented` is printed to stderr |
 
-The `3` + marker convention is what lets `tests/runner/run_tests.py` tell "the
-scaffold ran" apart from a genuine failure, so real test cases are *skipped*
-rather than failed while a stage is still a stub. Keep this contract when the
-compile commands come online.
+There is no separate "not built yet" exit code: a construct the compiler cannot
+lower is a compile error with a specific `CP3xxx` diagnostic, so tests never
+mistake a stub for a skipped case.
 
 ---
 
@@ -445,7 +443,7 @@ Out of scope for M1 (explicitly deferred): classes/interfaces/generics, async
 and `await`, the memory model and `weak`, preludes and module resolution beyond
 `std/console`, `parallel.*` / `worker`, native interop, and the full diagnostics
 translation subsystem. The compiler must not choke on them - it should report a
-"not implemented yet" diagnostic rather than crash.
+clear diagnostic rather than crash.
 
 ---
 

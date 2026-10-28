@@ -18,9 +18,8 @@ const app = createServer();
 
 // Middleware without next(): answering stops the chain; answering nothing
 // lets the chain continue to the routes (current lowered semantics).
-// The `: string` annotation is required because of finding F3: an unannotated
-// req.path compared with `===` lowers to a comma expression that is silently
-// false (tracked as its own PENDING SURFACE check, B20).
+// The `: string` annotation is optional; the unannotated `req.path ===`
+// comparison is covered by the B20 regression fixture.
 app.use((req, res, next) => {
   let path: string = req.path;
   if (path === "/teapot") {

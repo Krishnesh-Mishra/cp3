@@ -84,7 +84,7 @@ std::string Generator::arrayRefDeclText(const VariableDeclarator& d,
     if (arrayRefDecls_.count(d.nodeId) == 0) return std::string();
     if (!d.init || d.init->kind != NodeKind::IndexExpr) return std::string();
     // A declared type belongs to the ordinary lowering (it carries the
-    // not-implemented report for a type M1 cannot spell).
+    // type-error report for a type with no C++ spelling).
     if (d.type) return std::string();
     const auto& ix = static_cast<const IndexExpr&>(*d.init);
     if (!ix.object || !ix.index) return std::string();

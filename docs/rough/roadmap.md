@@ -138,13 +138,13 @@ branch):**
 
 **Waste (0% unique behavior, deleted after inspection):** `control-flow` (older
 copies of the control/object emitters; every hunk conflicts),
-`cp3002-cli` (removes the deliberate exit-3 not-implemented scaffold and adds
-unused fields), `modules-redrive` (header-only declarations with no
-definitions and no emitter use), `functions-closures` (a superseded 31-file
-closure/codegen rewrite with no tests), `w2-classes` (the pre-redrive class
-implementation; its only unique test edit replaced a `CP3xxxx` placeholder that
-master intentionally keeps), `cp3` (a trailing space and a removed final
-newline in one benchmark file).
+`cp3002-cli` (an older branch that removed the scaffold marker and added unused
+fields; the marker is now retired on master), `modules-redrive` (header-only
+declarations with no definitions and no emitter use), `functions-closures` (a
+superseded 31-file closure/codegen rewrite with no tests), `w2-classes` (the
+pre-redrive class implementation; its only unique test edit replaced a
+`CP3xxxx` placeholder that master intentionally keeps), `cp3` (a trailing space
+and a removed final newline in one benchmark file).
 
 The rule that decided each one: **0% useful -> deleted; a real feature that
 cannot be split -> deferred intact; a bounded usable delta -> ported and

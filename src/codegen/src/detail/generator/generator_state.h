@@ -223,8 +223,8 @@ protected:
     // The class whose method/constructor body is currently emitting; `super`
     // lowers against its base (spec 15, D22).
     std::vector<const detail::ClassModel*> classStack_;
-    // Codegen type hints for the Map-shaped std/network fields; the open
-    // marker hides their type in sema, so networkMapFieldType checks these.
+    // Codegen type hints for the std/network field reads; the open marker
+    // hides their type in sema, so networkFieldType checks these.
     std::unordered_map<std::uint32_t, Type> exprTypeHints_;
     // Whole-program imports (emit/program.cpp): local spelling -> linked name.
     std::unordered_map<std::string, detail::LinkedName> linkedNames_;

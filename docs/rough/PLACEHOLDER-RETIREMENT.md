@@ -36,10 +36,10 @@ Promise, and worker/parallel modules.
   `packaging`.
 - `python tools/check_diagnostics.py`: every header code is documented and every
   `src/**` reference is defined.
-- Full corpus: 1894 found, 1867 passed, 0 failed, 0 skipped, 27 ambiguous.
-- `tests/network` phase B: the async-handler and typed-JSON fixtures now run as
-  ordinary checks; the only remaining `PENDING SURFACE` check is the recorded
-  `req.path` comparison runtime gap (finding F3).
+- Full corpus: 1923 found, 1896 passed, 0 failed, 0 skipped, 27 ambiguous.
+- `tests/network` phase B: the async-handler, typed-JSON and unannotated
+  `req.path` comparison fixtures all run as ordinary checks; no
+  `PENDING SURFACE` checks remain.
 
 ## Notes for future work
 

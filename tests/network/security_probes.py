@@ -115,8 +115,8 @@ def probe_malformed_json(port: int) -> dict:
     return {"observed": f"status={response['status']} body={response['body']!r}",
             "alive": ok,
             "pass": response["status"] == 200 and response["body"] == b"echo-ok" and ok,
-            "detail": f"{note}; req.json<T>() needs an async handler "
-                      f"(pending surface), so this probe exercises survival only"}
+            "detail": f"{note}; req.json<T>() is not exercised here, so this "
+                      f"probe checks survival only"}
 
 
 def probe_oversized_body(port: int, size: int = 1 << 20) -> dict:

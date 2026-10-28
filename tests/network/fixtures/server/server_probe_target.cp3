@@ -13,10 +13,9 @@ import { createServer } from "std/network";
 const app = createServer();
 
 // /private is answered by middleware that inspects req.path but never calls
-// next() (next() lowering is a pending surface; middlewares that answer stop
-// the chain under the current lowering, so the /private route itself must
-// never run). The `: string` annotation is required because of finding F3
-// (unannotated req.path === literal is silently false).
+// next(); an answering middleware stops the chain, so the /private route
+// itself must never run. The `: string` annotation is optional (the
+// unannotated comparison is covered by the B20 regression fixture).
 app.use((req, res, next) => {
   let path: string = req.path;
   if (path === "/private") {

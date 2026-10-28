@@ -881,7 +881,8 @@ cases), the packaging acceptance scripts (install/TESTMODE/path handling,
 doctor, init), the intel formatting checks (`cp3 fmt` byte parity), and the C1
 lane's pack/install round trip. Post-beta-one CLI features (GitHub repo
 installs, registry-style specs, `build.cacheBinary`/`excludeSource`) stay
-explicitly deferred with named exit-3 errors per the M2 plan, not scaffold.
+explicitly deferred with named diagnostics per the M2 plan, not a scaffold
+exit.
 
 ## The `.cp3pak` binary cache (2026-10-22, cache-binary lane)
 
@@ -1178,8 +1179,8 @@ and canonical probes on the landed concurrency surface.
   homogeneous array carried by the `$parallelRun` marker; closures lower as
   `[&]` capture lambdas behind the sema capture-safety walk; worker objects
   mark through exactly one un-reassigned single-declared binding; a worker
-  argument that cannot be proven copyable stays a not-yet-built skip (never a
-  wrong deep copy).
+  argument that cannot be proven copyable reports a copyability type error
+  (never a wrong deep copy).
 - `parallel_capture_diagnostic_text`: pinned to the existing wording; a
   captured reassignment is CP3902 at 2:1.
 - `parallel_import_required`: bare `parallel.reduce(1..3, 0, (s, i) => s + i)`
@@ -1191,8 +1192,8 @@ and canonical probes on the landed concurrency surface.
   error, not a first-closure pick. Codegen resolves every closure's result and
   reports CP3904 (`kParallelRunMixedResultTypes`, catalog row) at the
   `parallel.run` call (`2:9` in the case), exit 1 in run mode, no C++
-  invocation. A closure whose result cannot be resolved still takes the
-  not-yet-built skip (that path stays open until codegen can type it).
+  invocation. A closure whose result cannot be resolved reports a type error
+  until codegen can type it.
 - Held: `worker_call_shape` and `worker_crash_takes_process_down` stay
   ambiguous; D80 owns that surface. The handle wave promotes against its
   ruling (canonical `new Worker(path)` shape; a thrown handler error becomes a

@@ -520,7 +520,7 @@ private:
     std::string emitFamilyMember(const MemberExpr& m);
     std::string emitFamilyIndexRead(const IndexExpr& ix);
     std::string indexOperandText(const Expr& index);  // enum member -> number
-    // The `IndexExpr` dispatch: the family read, else a not-implemented report.
+    // The `IndexExpr` dispatch: the family read, else a type-error report.
     std::string emitIndexExpr(const IndexExpr& ix);
     std::string emitFamilyIndexWrite(const AssignmentExpr& a);
     // The element write of a family index target (`a[i] = v`), with the
@@ -687,8 +687,9 @@ private:
     // `std/network` receivers are recognised by the sema marker names
     // ("$network:*"): named imports, `new` forms, member calls/reads.
     bool isNetworkObject(const Expr* e) const;
-    // Network Map-shaped field reads, re-derived from the hints below.
-    std::optional<Type> networkMapFieldType(const Expr& e) const;
+    // Network field reads (Map-shaped or scalar), re-derived from the hints
+    // below when sema only sees an ambient handler parameter.
+    std::optional<Type> networkFieldType(const Expr& e) const;
     std::string emitNetworkMapFieldCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNetworkMapFieldMember(const MemberExpr& m);
     std::string emitNetworkIdentifier(const CallExpr& c, const std::string& name);

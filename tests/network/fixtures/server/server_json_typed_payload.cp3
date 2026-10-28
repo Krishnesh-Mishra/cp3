@@ -6,7 +6,7 @@
 // HttpResponse, i.e. an explicit type argument WITH a payload. The response
 // writer serializes the record's fields and the client reads the object back
 // through the reified interface T. The fixture prints `PB5p|7|alice`. Port
-// 48220 is shared with server_pending_path_eq.cp3; the suite runs fixtures
+// 48220 is shared with server_path_eq.cp3; the suite runs fixtures
 // sequentially.
 // =============================================================================
 import console from "std/console";
