@@ -106,17 +106,34 @@ struct LinkStep {
     std::vector<std::string> extraFlags;
 };
 
+// Per-build optimization switches layered on top of the profile. The release
+// profile turns these on by default; the CLI flags in commands.hpp can turn
+// each one off. They are also passed to the link step because LTO performs
+// code generation there and needs the same -O/march/math settings.
+struct BuildOptimizations {
+    std::string optLevel;   // empty: profile default (release O3, incremental O2)
+    bool lto = false;
+    bool nativeIsa = false;
+    bool unrollLoops = false;
+    bool noMathErrno = false;
+    bool noPlt = false;
+    std::string pgoProfile;   // -fprofile-instr-use=<file>
+    std::string pgoGenerate;  // -fprofile-instr-generate=<template>
+};
+
 // Command line for compiling one generated/real C++ translation unit to an
 // object file. The working directory is irrelevant (all paths are explicit).
 // `step.extraFlags` is appended verbatim (register-level defines such as
 // UWS_NO_ZLIB must apply to every TU of an std/network program).
-std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
-                                     const CompileStep& step);
+std::vector<std::string> compileArgs(
+    const Toolchain& tc, BuildProfile profile, const CompileStep& step,
+    const BuildOptimizations& optimizations = {});
 
 // Command line for linking every object into the final executable.
 // `step.extraFlags` is appended after the objects, so `-l` resolution order
 // stays correct.
-std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
-                                  const LinkStep& step);
+std::vector<std::string> linkArgs(
+    const Toolchain& tc, BuildProfile profile, const LinkStep& step,
+    const BuildOptimizations& optimizations = {});
 
 }  // namespace cp3::cli

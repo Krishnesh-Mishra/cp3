@@ -46,7 +46,7 @@ bool parseMaxMemory(const std::string& value, std::uint64_t& outMb) {
 
 // Simple boolean flags shared by every command. Returns true when `t` matched.
 bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease,
-               bool& sawDebug) {
+               bool& sawDebug, bool& sawIncremental) {
     if (t == "--release") {
         sawRelease = true;
         opt.compile.profile = cp3::BuildProfile::Release;
@@ -57,6 +57,17 @@ bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease
         opt.compile.profile = cp3::BuildProfile::Debug;
         return true;
     }
+    if (t == "--incremental") {
+        sawIncremental = true;
+        opt.compile.profile = cp3::BuildProfile::Incremental;
+        return true;
+    }
+    if (t == "--no-lto") { opt.noLto = true; return true; }
+    if (t == "--no-native") { opt.noNativeIsa = true; return true; }
+    if (t == "--no-unroll") { opt.noUnrollLoops = true; return true; }
+    if (t == "--strict-fp") { opt.strictFp = true; return true; }
+    if (t == "--no-pgo") { opt.noPgo = true; return true; }
+    if (t == "--pgo-generate") { opt.pgoGenerate = true; return true; }
     if (t == "--verbose" || t == "-v") { opt.verbose = true; return true; }
     if (t == "--show-runtime" || t == "--show") {
         opt.showRuntime = true;
@@ -177,6 +188,46 @@ bool parseValueOption(const std::vector<std::string>& tokens, std::size_t& i,
     } else if (parsePackageValueOption(tokens, i, opt, err)) {
         return true;
     }
+    if (t == "--opt-level" || cp3::cli::startsWith(t, "--opt-level=")) {
+        std::string value;
+        if (t == "--opt-level") {
+            if (i + 1 >= tokens.size()) {
+                err = "--opt-level requires a value (0-3, s or z)";
+                return true;
+            }
+            value = tokens[++i];
+        } else {
+            value = t.substr(std::strlen("--opt-level="));
+        }
+        if (value != "0" && value != "1" && value != "2" && value != "3" &&
+            value != "s" && value != "z") {
+            err = "invalid --opt-level '" + value + "' (expected 0-3, s or z)";
+            return true;
+        }
+        opt.optLevel = value;
+        return true;
+    }
+    if (t == "--pgo" || cp3::cli::startsWith(t, "--pgo=")) {
+        if (t == "--pgo") {
+            if (i + 1 >= tokens.size()) {
+                err = "--pgo requires a profile file";
+                return true;
+            }
+            opt.pgoProfile = tokens[++i];
+        } else {
+            opt.pgoProfile = t.substr(std::strlen("--pgo="));
+        }
+        if (opt.pgoProfile.empty()) err = "--pgo requires a profile file";
+        return true;
+    }
+    if (cp3::cli::startsWith(t, "--pgo-generate=")) {
+        opt.pgoGenerate = true;
+        opt.pgoGenerateDir = t.substr(std::strlen("--pgo-generate="));
+        if (opt.pgoGenerateDir.empty()) {
+            err = "--pgo-generate requires a directory";
+        }
+        return true;
+    }
     if (t == "--toolchain" || cp3::cli::startsWith(t, "--toolchain=")) {
         if (t == "--toolchain") {
             if (i + 1 >= tokens.size()) {
@@ -200,6 +251,7 @@ std::string parseOptions(const std::string& command,
                          CliOptions& opt) {
     bool sawRelease = false;
     bool sawDebug = false;
+    bool sawIncremental = false;
     bool afterSeparator = false;
 
     for (std::size_t i = 0; i < tokens.size(); ++i) {
@@ -213,7 +265,7 @@ std::string parseOptions(const std::string& command,
             afterSeparator = true;
             continue;
         }
-        if (matchFlag(t, opt, sawRelease, sawDebug)) continue;
+        if (matchFlag(t, opt, sawRelease, sawDebug, sawIncremental)) continue;
 
         std::string err;
         if (parseValueOption(tokens, i, opt, command, err)) {
@@ -226,8 +278,21 @@ std::string parseOptions(const std::string& command,
         opt.positionals.push_back(t);
     }
 
-    if (sawRelease && sawDebug) {
-        return "--release and --debug are mutually exclusive";
+    if (static_cast<int>(sawRelease) + static_cast<int>(sawDebug) +
+            static_cast<int>(sawIncremental) >
+        1) {
+        return "--release, --debug and --incremental are mutually exclusive";
+    }
+    // `cp3 build` ships the optimized profile by default. `run`/`exec` keep
+    // the fast incremental profile; `dev` only runs the frontend.
+    if (command == "build" && !sawRelease && !sawDebug && !sawIncremental) {
+        opt.compile.profile = cp3::BuildProfile::Release;
+    }
+    if (opt.pgoGenerate && !opt.pgoProfile.empty()) {
+        return "--pgo and --pgo-generate are mutually exclusive";
+    }
+    if (opt.pgoGenerate && opt.compile.profile != cp3::BuildProfile::Release) {
+        return "--pgo-generate requires the release profile (use --release)";
     }
     if (opt.projectScope && opt.globalScope) {
         return "--project and --global are mutually exclusive";

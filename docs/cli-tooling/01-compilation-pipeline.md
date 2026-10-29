@@ -61,21 +61,26 @@ Because each `.cp3` file becomes its own `.cpp`/`.hpp` pair (above), it also com
 1. **Compile** - every *changed* `.cp3` file is regenerated to C++ and compiled to its object file. Unchanged files reuse the object file already sitting in `.cp3/build/`; they are not recompiled.
 2. **Link** - the toolchain's linker stitches *all* the project's object files, plus every library cp3 statically bundles (libuv, fmt, Abseil, uWebSockets, PCRE2, …), into the single executable (see **Static linking by default**, below).
 
-This split is what makes the incremental build real: a one-file edit recompiles **one** object file and relinks, rather than recompiling the world. `cp3 run src/index.cp3` is exactly `cp3 build` followed by executing the result - and if nothing changed since the last build, both the compile and the link are skipped and the existing binary runs immediately.
+This split is what makes the incremental build real: a one-file edit recompiles **one** object file and relinks, rather than recompiling the world. `cp3 run src/index.cp3` is the build-and-execute path for the daily loop: it uses the incremental profile, then runs the result. If nothing changed since the last incremental build, both the compile and the link are skipped and the existing binary runs immediately. `cp3 build` is the shipping path and produces the optimized binary described below.
 
 **Fast relinking.** Linking is the one step that has to touch every object file, so it is where a slow linker is felt on *every* incremental rebuild. Where a fast linker is available (`lld`, `mold`, Apple's `ld64`), cp3 prefers it for the link step; if none is present, the toolchain's own linker is used.
 
-## Build profiles: incremental by default, `--release` for whole-program optimization
+## Build profiles: optimized `build`, fast `run`
 
-cp3 has two build strategies, trading build speed against how much the optimizer can see:
+cp3 separates the two jobs:
 
-- **`cp3 build` / `cp3 run` - incremental (the default).** Reuses the object files already in `.cp3/build/`: only `.cp3` files that changed are regenerated and recompiled, then everything is linked. Each translation unit is compiled with `-O2`, but because each file is compiled *separately*, the optimizer only ever sees that one file. Fast rebuilds; not the most optimized binary.
-- **`cp3 build --release` - whole-program (from scratch).** Ignores the incremental cache and compiles **every** translation unit afresh, then links with **Link-Time Optimization** (`-flto`). With the whole program in view the optimizer can inline across files and drop code nothing reaches. This is the ship-the-product build - slower to produce, fastest to run.
-- **`cp3 build --debug` / `cp3 run --debug` - unoptimized plus debug symbols** (`-O0 -g`), incremental like the default. For step-through debugging and the fastest possible rebuilds while iterating; not a shipping profile.
+- **`cp3 build` - optimized (the default).** Compiles the whole program from scratch and links with **Link-Time Optimization** (`-flto`). Each translation unit is compiled with `-O3`, native ISA selection (`-march=native` on x86-64, `-mcpu=native` on ARM64), `-funroll-loops`, and `-fno-math-errno`; the link step repeats the same optimization settings because LTO code generation happens there. If `.cp3/pgo/default.profdata` exists, it is used automatically (`-fprofile-instr-use`). This is the ship-the-product build.
+- **`cp3 build --incremental` - fast cached build.** Reuses the object files already in `.cp3/build/`: only `.cp3` files that changed are regenerated and recompiled, then everything is linked. Each translation unit is compiled with `-O2`, without LTO or PGO. This is the profile to use while iterating on a build you do not intend to ship.
+- **`cp3 run` / `cp3 exec` - incremental by default.** Build-and-execute for the daily loop: the same cached `-O2` path as `--incremental`, then run the result. `cp3 run --release` opts into the optimized build.
+- **`cp3 build --debug` / `cp3 run --debug` - unoptimized plus debug symbols** (`-O0 -g`), incremental. For step-through debugging and the fastest possible rebuilds while iterating; not a shipping profile.
 
-**Why the default is the fast one, not the whole-program one:** development is dominated by edit-rebuild-run cycles, where *rebuild time* is what you feel, so the default reuses cached object files and pays the compiler only for what changed. Shipping happens once, where *runtime* is what matters, so `--release` spends the extra build time compiling everything together for maximum optimization. The incremental build already optimizes each file; what `--release` adds is *cross-file* context (LTO), not merely a higher `-O` level.
+Every release optimization is individually overridable: `--no-lto`, `--no-native`, `--no-unroll`, `--strict-fp` (keep math errno), and `--opt-level <0-3|s|z>`. `--pgo <file>` uses an explicit Clang profile; `--no-pgo` disables the project-local autodetection; `--pgo-generate[=<dir>]` builds an instrumented binary. PGO generation needs Clang's profile runtime for the target; if the installed Clang lacks the MinGW runtime, cp3 reports that and points at `--pgo <file>` instead.
 
-> This supersedes an earlier "defer LTO to Phase 3" position: LTO is part of beta one, scoped to `--release`. The fast incremental default deliberately does **not** enable it, so the daily loop stays fast ([§6](06-open-tooling-questions.md)).
+**Why `build` is the optimized profile and `run` is the fast one:** shipping happens once, where *runtime* is what matters, so `cp3 build` spends the extra build time on whole-program optimization. Development is dominated by edit-rebuild-run cycles, where *rebuild time* is what you feel, so `cp3 run`/`--incremental` reuse cached objects and pay the compiler only for what changed.
+
+**What is deliberately not enabled:** `-ffast-math`/`-Ofast` change IEEE-754 results (NaN, infinities, signed zero, reassociation), so they are incompatible with cp3's number semantics. `-fprefetch-loop-arrays` is not supported by current Clang. `-fno-plt` is ELF/Linux-only. `-fomit-frame-pointer` is already implied by `-O3` on x86-64. BOLT is Linux/ELF-only and is not part of the Windows build.
+
+> LTO is part of the optimized profile; the incremental profile deliberately does **not** enable it, so the daily loop stays fast ([§6](06-open-tooling-questions.md)).
 
 ## No CMake - cp3 drives the C++ compiler directly
 

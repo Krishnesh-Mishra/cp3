@@ -19,21 +19,37 @@ namespace cp3::cli {
 
 namespace {
 
-std::vector<std::string> profileCompileFlags(BuildProfile profile) {
+std::vector<std::string> optimizationFlags(
+    BuildProfile profile, const BuildOptimizations& optimizations) {
     std::vector<std::string> flags;
-    switch (profile) {
-        case BuildProfile::Debug:
-            flags.push_back("-O0");
-            flags.push_back("-g");
-            break;
-        case BuildProfile::Release:
-            flags.push_back("-O2");
-            flags.push_back("-flto");
-            break;
-        case BuildProfile::Incremental:
-        default:
-            flags.push_back("-O2");
-            break;
+    if (profile == BuildProfile::Debug) {
+        flags.push_back("-O0");
+        flags.push_back("-g");
+        return flags;
+    }
+    const std::string level =
+        optimizations.optLevel.empty()
+            ? (profile == BuildProfile::Release ? "3" : "2")
+            : optimizations.optLevel;
+    flags.push_back("-O" + level);
+    if (optimizations.lto) flags.push_back("-flto");
+    if (optimizations.nativeIsa) {
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || \
+    defined(_M_IX86)
+        flags.push_back("-march=native");
+#elif defined(__aarch64__) || defined(_M_ARM64)
+        flags.push_back("-mcpu=native");
+#endif
+    }
+    if (optimizations.unrollLoops) flags.push_back("-funroll-loops");
+    if (optimizations.noMathErrno) flags.push_back("-fno-math-errno");
+    if (optimizations.noPlt) flags.push_back("-fno-plt");
+    if (!optimizations.pgoProfile.empty()) {
+        flags.push_back("-fprofile-instr-use=" + optimizations.pgoProfile);
+    }
+    if (!optimizations.pgoGenerate.empty()) {
+        flags.push_back("-fprofile-instr-generate=" +
+                        optimizations.pgoGenerate);
     }
     return flags;
 }
@@ -93,7 +109,8 @@ std::string toolchainCacheKey(const Toolchain& tc) {
 }
 
 std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
-                                     const CompileStep& step) {
+                                     const CompileStep& step,
+                                     const BuildOptimizations& optimizations) {
     std::vector<std::string> args;
     args.push_back(tc.program);
     for (const std::string& flag : tc.targetFlags) args.push_back(flag);
@@ -108,8 +125,8 @@ std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
     for (const fs::path& inc : step.includes) {
         args.push_back("-I" + inc.string());
     }
-    for (std::string& f : profileCompileFlags(profile)) {
-        args.push_back(std::move(f));
+    for (const std::string& f : optimizationFlags(profile, optimizations)) {
+        args.push_back(f);
     }
     // Native-backend flags last: register-level defines (e.g. UWS_NO_ZLIB)
     // apply to every TU of a program that imports the module.
@@ -118,14 +135,19 @@ std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
 }
 
 std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
-                                  const LinkStep& step) {
+                                  const LinkStep& step,
+                                  const BuildOptimizations& optimizations) {
     std::vector<std::string> args;
     args.push_back(tc.program);
     for (const std::string& flag : tc.targetFlags) args.push_back(flag);
     args.push_back("-o");
     args.push_back(step.exe.string());
     for (const fs::path& obj : step.objects) args.push_back(obj.string());
-    if (profile == BuildProfile::Release) args.push_back("-flto");
+    // LTO code generation happens at link time, so the same optimization
+    // settings must be visible here, not only in the compile steps.
+    for (const std::string& f : optimizationFlags(profile, optimizations)) {
+        args.push_back(f);
+    }
 #if defined(_WIN32)
     // Startup (startup perf wave): every dynamically linked C++ runtime DLL
     // is one more image the loader maps and one more DllMain that runs before

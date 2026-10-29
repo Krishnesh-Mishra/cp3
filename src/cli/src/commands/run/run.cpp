@@ -12,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 #include <vector>
 
@@ -257,6 +258,37 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     // The project's type-system vocabulary (spec 03) joins the CLI options.
     CliOptions effective = opt;
     applyProjectTypeSettings(projectRoot, effective.compile);
+
+    // Release builds use a project-local PGO profile when one exists. An
+    // explicit --pgo path wins; --no-pgo disables only this autodetection.
+    if (effective.compile.profile == BuildProfile::Release &&
+        !effective.noPgo && effective.pgoProfile.empty() &&
+        !effective.pgoGenerate) {
+        std::error_code pgoEc;
+        const fs::path candidate =
+            projectRoot / ".cp3" / "pgo" / "default.profdata";
+        if (fs::is_regular_file(candidate, pgoEc)) {
+            effective.pgoProfile = candidate.string();
+        }
+    }
+    if (!effective.pgoProfile.empty()) {
+        std::error_code pgoEc;
+        fs::path profilePath(effective.pgoProfile);
+        if (profilePath.is_relative()) {
+            const fs::path absolute = fs::absolute(profilePath, pgoEc);
+            if (!pgoEc) profilePath = absolute;
+        }
+        if (!fs::is_regular_file(profilePath, pgoEc)) {
+            std::fprintf(stderr, "cp3c: PGO profile not found: %s\n",
+                         profilePath.string().c_str());
+            return kExitUsageError;
+        }
+        effective.pgoProfile = profilePath.string();
+    }
+    if (effective.pgoGenerate && effective.pgoGenerateDir.empty()) {
+        effective.pgoGenerateDir =
+            (projectRoot / ".cp3" / "pgo" / "raw").string();
+    }
 
     const RenderOptions ro = makeRenderOptions(effective, file->path);
     const BuildContext ctx{&effective, &ro, &moduleName, execute};

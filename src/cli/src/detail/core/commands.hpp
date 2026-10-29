@@ -60,6 +60,19 @@ struct CliOptions {
     bool strictToolchain = false;         // --strict-toolchain
     bool projectScope = false;            // toolchain --project
     bool globalScope = false;             // toolchain --global
+    // Release-build overrides (detail/toolchain/toolchain.hpp). `cp3 build`
+    // selects the release profile by default; these flags let a caller opt out
+    // of individual optimizations without falling back to the incremental
+    // profile. `run`/`dev` keep the fast incremental defaults.
+    bool noLto = false;                   // --no-lto
+    bool noNativeIsa = false;             // --no-native
+    bool noUnrollLoops = false;           // --no-unroll
+    bool strictFp = false;                // --strict-fp (keep math errno)
+    bool noPgo = false;                   // --no-pgo (disable profile autodetect)
+    bool pgoGenerate = false;             // --pgo-generate[=<dir>]
+    std::string pgoProfile;               // --pgo <file.profdata>
+    std::string pgoGenerateDir;           // --pgo-generate=<dir>
+    std::string optLevel;                 // --opt-level <0-3|s|z>
     // Internal: `exec` builds a package's declared tool. The package manifest
     // says `"type": "package"`, but the tool itself is a runnable program, so
     // build/run must treat it as an application rather than pack it.

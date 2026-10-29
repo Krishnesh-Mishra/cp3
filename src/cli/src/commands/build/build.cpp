@@ -49,6 +49,7 @@ struct BuildState {
     const Toolchain& tc;
     const BuildLayout& layout;
     const std::string& profile;
+    const BuildOptimizations& optimizations;
     const NativeBuildFlags& nativeFlags;
     const std::string& headerFingerprint;  // of the current include roots
     const std::string& compilerKey;        // family, exact version, driver path
@@ -57,6 +58,89 @@ struct BuildState {
     std::vector<fs::path>& objects;
     bool anyCompiled = false;
 };
+
+// The release profile's default switches. `--no-*` turns one off without
+// leaving the release profile; `--opt-level` overrides the -O level.
+BuildOptimizations buildOptimizationsFor(const CliOptions& opt) {
+    BuildOptimizations out;
+    if (opt.compile.profile == BuildProfile::Debug) return out;
+    out.optLevel = opt.optLevel;
+    if (opt.compile.profile == BuildProfile::Release) {
+        out.lto = !opt.noLto;
+        out.nativeIsa = !opt.noNativeIsa;
+        out.unrollLoops = !opt.noUnrollLoops;
+        out.noMathErrno = !opt.strictFp;
+#if defined(__linux__)
+        // ELF-only: Windows/COFF has no PLT. This only removes an indirect
+        // jump; it cannot change program results.
+        out.noPlt = true;
+#endif
+    }
+    out.pgoProfile = opt.pgoProfile;
+    if (opt.pgoGenerate && !opt.pgoGenerateDir.empty()) {
+        out.pgoGenerate =
+            (fs::path(opt.pgoGenerateDir) / "default_%m_%p.profraw").string();
+    }
+    return out;
+}
+
+// A profile file's identity for the object cache. The path alone is not
+// enough: retraining replaces the contents in place.
+std::string pgoCacheKey(const std::string& profilePath) {
+    if (profilePath.empty()) return {};
+    std::error_code ec;
+    const auto size = fs::file_size(profilePath, ec);
+    const auto stamp = fs::last_write_time(profilePath, ec);
+    std::string key = profilePath;
+    if (!ec) {
+        key += "|" + std::to_string(size) + "|" +
+               std::to_string(stamp.time_since_epoch().count());
+    }
+    return key;
+}
+
+#if defined(_WIN32)
+// Clang's MinGW target needs compiler-rt's profile runtime to link an
+// instrumented binary. Some LLVM installs ship only the MSVC runtime; detect
+// that before spending time compiling every TU, and point at the supported
+// alternative (an existing profile with --pgo).
+bool hasMinGwProfileRuntime(const Toolchain& tc) {
+    std::string triple;
+    for (const std::string& flag : tc.targetFlags) {
+        if (flag.rfind("--target=", 0) == 0) triple = flag.substr(9);
+    }
+    if (triple.find("windows-gnu") == std::string::npos) return true;
+    std::string major = tc.version;
+    const std::size_t dot = major.find('.');
+    if (dot != std::string::npos) major = major.substr(0, dot);
+    const fs::path binDir = fs::path(tc.program).parent_path();
+    const fs::path runtime = binDir.parent_path() / "lib" / "clang" / major /
+                             "lib" / triple / "libclang_rt.profile.a";
+    std::error_code ec;
+    return fs::is_regular_file(runtime, ec);
+}
+#endif
+
+// The cache key for a compilation: profile plus every flag that can change
+// the object code. Changing a switch retires the old objects instead of
+// silently reusing a binary built under different optimization settings.
+std::string buildProfileKey(const CliOptions& opt,
+                            const BuildOptimizations& optimizations) {
+    std::string key = profileNameOf(opt.compile.profile);
+    key += "|O" + (optimizations.optLevel.empty() ? "default"
+                                                   : optimizations.optLevel);
+    key += optimizations.lto ? "|lto" : "|nolto";
+    key += optimizations.nativeIsa ? "|native" : "|nonative";
+    key += optimizations.unrollLoops ? "|unroll" : "|nounroll";
+    key += optimizations.noMathErrno ? "|no-math-errno" : "|math-errno";
+    if (!optimizations.pgoProfile.empty()) {
+        key += "|pgo:" + pgoCacheKey(optimizations.pgoProfile);
+    }
+    if (!optimizations.pgoGenerate.empty()) {
+        key += "|pgo-gen:" + optimizations.pgoGenerate;
+    }
+    return key;
+}
 
 CacheEntry* findEntry(std::vector<CacheEntry>& manifest, const std::string& obj) {
     for (CacheEntry& e : manifest) {
@@ -94,7 +178,7 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
 
     const CompileStep step{st.layout.includeDirs, cpp, obj, st.nativeFlags.compile};
     const std::vector<std::string> args =
-        compileArgs(st.tc, st.opt.compile.profile, step);
+        compileArgs(st.tc, st.opt.compile.profile, step, st.optimizations);
     if (st.opt.verbose) {
         std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
     }
@@ -205,7 +289,7 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
         st.layout.buildDir / (exePath.filename().string() + ".link-stamp");
     const LinkStep step{st.objects, exePath, st.nativeFlags.link};
     const std::vector<std::string> args =
-        linkArgs(st.tc, st.opt.compile.profile, step);
+        linkArgs(st.tc, st.opt.compile.profile, step, st.optimizations);
     const std::string stamp = linkStampOf(st, args);
     std::string previous;
     const bool stampMatches = fs::exists(exePath, ec) &&
@@ -431,6 +515,18 @@ int buildWithToolchain(const BuildRequest& request) {
     fs::create_directories(layout.buildDir, ec);
     fs::create_directories(layout.outDir, ec);  // D61: final artifact lives here
 
+    const BuildOptimizations optimizations = buildOptimizationsFor(opt);
+    if (opt.pgoGenerate && !opt.pgoGenerateDir.empty()) {
+        std::error_code pgoEc;
+        fs::create_directories(opt.pgoGenerateDir, pgoEc);
+        if (pgoEc) {
+            std::fprintf(stderr,
+                         "cp3c: cannot create PGO output directory '%s'\n",
+                         opt.pgoGenerateDir.c_str());
+            return kExitCompileError;
+        }
+    }
+
     const fs::path cppPath = layout.buildDir / fs::path(moduleName + ".cpp");
     const fs::path hppPath = layout.buildDir / fs::path(moduleName + ".hpp");
     const fs::path objPath = layout.buildDir / fs::path(moduleName + ".o");
@@ -444,6 +540,18 @@ int buildWithToolchain(const BuildRequest& request) {
         resolveNativeFlags(opt, request, mod, layout, tcPtr);
     if (!nativeFlags.has_value()) return kExitCompileError;
     const Toolchain& tc = *tcPtr;
+
+#if defined(_WIN32)
+    if (opt.pgoGenerate && !hasMinGwProfileRuntime(tc)) {
+        std::fprintf(stderr,
+                     "cp3c: PGO instrumentation is unavailable: this Clang "
+                     "install has no MinGW profile runtime "
+                     "(libclang_rt.profile.a).\n"
+                     "cp3c: use --pgo <file> with an existing profile, or "
+                     "install compiler-rt for the MinGW target.\n");
+        return kExitCompileError;
+    }
+#endif
 
     // The native bindings the program imports: their include roots, defines,
     // libraries and runtime DLLs join the build (detail/native_build.hpp).
@@ -465,17 +573,26 @@ int buildWithToolchain(const BuildRequest& request) {
                      snapshot.string().c_str());
     }
 
+    if (opt.verbose && !optimizations.pgoProfile.empty()) {
+        std::fprintf(stderr, "cp3c: PGO profile: %s\n",
+                     optimizations.pgoProfile.c_str());
+    }
+    if (opt.verbose && !optimizations.pgoGenerate.empty()) {
+        std::fprintf(stderr, "cp3c: PGO instrumentation: %s\n",
+                     optimizations.pgoGenerate.c_str());
+    }
+
     const std::string headerFingerprint =
         headerFingerprintOf(layout.includeDirs);
     std::vector<CacheEntry> manifest = loadManifest(layout.manifestPath);
-    const std::string profile = profileNameOf(opt.compile.profile);
+    const std::string profile = buildProfileKey(opt, optimizations);
     const std::string compilerKey = toolchainCacheKey(tc);
     const bool force = (opt.compile.profile == BuildProfile::Release);
 
     std::vector<fs::path> objects;
-    BuildState state{opt,          tc,        layout,       profile,
-                     *nativeFlags, headerFingerprint, compilerKey, force,
-                     manifest,     objects};
+    BuildState state{opt,          tc,           layout,       profile,
+                     optimizations, *nativeFlags, headerFingerprint,
+                     compilerKey,  force,        manifest,     objects};
 
     if (!compileExtras(state, request)) {
         return kExitCompileError;
