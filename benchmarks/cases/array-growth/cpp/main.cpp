@@ -1,7 +1,7 @@
 // array-growth (cpp entry) -- push 20,000,000 numbers into a growing array
 // while summing them, pop half of them back off, then print the sum.
 //
-// Build:  g++ -std=c++20 -O2 -o array-growth.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o array-growth.exe main.cpp
 // Run:    array-growth.exe
 //
 // Same workload and same output in every language entry (expected value in the

@@ -5,7 +5,7 @@
 //      invoked after the creating scope has ended (escaping closures)
 // Prints both sums on one line.
 //
-// Build:  g++ -std=c++20 -O2 -o closure-capture.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o closure-capture.exe main.cpp
 // Run:    closure-capture.exe
 //
 // Same workload and same output in every language entry (expected line in the

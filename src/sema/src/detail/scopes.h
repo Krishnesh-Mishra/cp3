@@ -13,6 +13,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -127,6 +128,16 @@ struct Binding {
     // candidate signature is collected here (size >= 2). Call resolution walks
     // this set and reports CP3416 when none is viable (member_check.cpp).
     std::vector<FuncSig> overloads;
+    // A `const` binding whose initializer is exactly a number literal (or a
+    // negated one), or a reference to another const number binding: its value
+    // is a compile-time constant. Used by the typed-array index proof to
+    // resolve a loop bound such as `const SIZE = 1_000_000`.
+    std::optional<double> constNumber = std::nullopt;
+    // A typed-array binding's statically known element count. Only set for a
+    // `const` binding whose initializer is a typed-array construction with a
+    // known length; a `const` binding can never be rebound, so its length is
+    // stable. Set in declarations.cpp after declareDeclarator returns.
+    std::optional<double> typedLength = std::nullopt;
 };
 
 // The declaration-shape flags for `Analyzer::declareBinding`, bundled so the

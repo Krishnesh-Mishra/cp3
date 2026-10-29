@@ -2,7 +2,7 @@
 // it ITERATIONS times: rotate it by a changing offset, overwrite the new first
 // byte with a cycling marker, and fold a 96-byte window into a checksum.
 //
-// Build:  g++ -std=c++20 -O2 -o buffer-copy.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o buffer-copy.exe main.cpp
 // Run:    buffer-copy.exe
 //
 // The other five entries run the same reshape with their own buffer types

@@ -25,7 +25,7 @@ capture-safety rules require of the cp3 entry.
 From each language's folder (build commands as in compute-single):
 
 ```bash
-g++ -std=c++20 -O2 -o compute-multi.exe main.cpp && ./compute-multi.exe      # cpp
+g++ -std=c++20 -O3 -o compute-multi.exe main.cpp && ./compute-multi.exe      # cpp
 rustc -O main.rs -o compute-multi.exe && ./compute-multi.exe                # rust
 go build -o compute-multi.exe main.go && ./compute-multi.exe                # go
 node main.mjs                                                               # js

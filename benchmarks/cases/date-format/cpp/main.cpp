@@ -1,7 +1,7 @@
 // date-format (cpp entry) -- construct UTC dates from one fixed epoch
 // millisecond value, format the components manually, and fold a fixed diff.
 //
-// Build:  g++ -std=c++20 -O2 -o date-format.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o date-format.exe main.cpp
 // Run:    date-format.exe
 //
 // Same workload, same fold and same output in every runnable language entry.

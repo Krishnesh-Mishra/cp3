@@ -2,8 +2,8 @@
 // libraries beyond the platform sockets API (Winsock2 on Windows, BSD sockets
 // elsewhere).
 //
-// Build:  g++ -std=c++20 -O2 -o health-server.exe main.cpp -lws2_32   (Windows)
-//         g++ -std=c++20 -O2 -o health-server main.cpp                (POSIX)
+// Build:  g++ -std=c++20 -O3 -o health-server.exe main.cpp -lws2_32   (Windows)
+//         g++ -std=c++20 -O3 -o health-server main.cpp                (POSIX)
 // Run:    health-server.exe [port]        (default 8080)
 //
 // Contract, identical in every language entry:

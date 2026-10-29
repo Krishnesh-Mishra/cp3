@@ -1,0 +1,9 @@
+import console from "std/console";
+
+const SIZE: number = 4;
+const values = new Float64Array(SIZE);
+let read = () => values[SIZE];
+for (let i: r_'i64' = 0; i < SIZE; i++) {
+  read = () => values[i];
+}
+console.log(read() === undefined);

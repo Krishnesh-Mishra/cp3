@@ -155,6 +155,19 @@ void Analyzer::declareDeclarator(VariableDeclarator& d, VarKind kind) {
             it->second.sig = as->second;
         }
     }
+
+    // Record constant-number and typed-array-length facts for simple `const`
+    // bindings. A `const` binding can never be rebound, so its recorded values
+    // stay sound for the typed-array index proof (typed-array length and loop
+    // bounds are compile-time constants here).
+    if (isConst && d.id && d.id->kind == NodeKind::Identifier && d.init) {
+        const std::string name = static_cast<Identifier&>(*d.id).name;
+        auto it = scopes_.back().find(name);
+        if (it != scopes_.back().end()) {
+            if (auto v = constantNumber(*d.init)) it->second.constNumber = *v;
+            if (auto len = knownTypedLength(*d.init)) it->second.typedLength = *len;
+        }
+    }
 }
 
 bool Analyzer::isMixedArray(const Type& t) const {

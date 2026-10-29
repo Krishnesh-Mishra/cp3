@@ -1,8 +1,8 @@
 // health-server-multi (cpp entry) -- minimal hand-rolled HTTP/1.1 over sockets,
 // with one accept/handler worker per hardware thread.
 //
-// Build:  g++ -std=c++20 -O2 -o health-server-multi.exe main.cpp -lws2_32   (Windows)
-//         g++ -std=c++20 -O2 -o health-server-multi main.cpp                (POSIX)
+// Build:  g++ -std=c++20 -O3 -o health-server-multi.exe main.cpp -lws2_32   (Windows)
+//         g++ -std=c++20 -O3 -o health-server-multi main.cpp                (POSIX)
 // Run:    health-server-multi.exe [port]        (default 8080)
 //
 // Contract, identical in every language entry:

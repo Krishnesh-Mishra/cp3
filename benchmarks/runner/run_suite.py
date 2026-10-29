@@ -41,8 +41,9 @@
 # sampled from Python; "-" when the process exits before a sample lands) and
 # the size (KiB) of the built executable after stripping a copy where the
 # toolchain strip applies ("-" for Node/Python and for rows that never built).
-# Compute tables and the final summary carry cp3/cpp and cp3/rust time ratios
-# (lower is better) plus a geomean footer over the runnable rows.
+# Every server and compute row carries a direct "vs cp3" comparison: how many
+# times slower (or faster) that language is than cp3. Tables are sorted by the
+# primary performance metric, fastest first; incomplete rows stay at the bottom.
 #
 # Performance gate (D67): every runnable row is gated against all five
 # references as a time ratio (lower is better for cp3). BIG WARN: cp3 over
@@ -268,7 +269,6 @@ GATE_TARGET = ("D64 target: cp3 within about 5% of cpp/rust (WARN over 1.05x); "
 GATE_WARNINGS: list[str] = []   # tier lines (BIG WARN / WARN), printed at the end
 GATE_NOTES: list[str] = []      # noise-scale notes, printed with the gate block
 GATE_BLOCKERS: list[str] = []   # CP3002 rows that cannot be measured at all
-SUMMARY_ROWS: list[dict] = []   # one {"task", "cpp", "rust"} ratio row per task
 
 
 # --------------------------------------------------------------------------
@@ -401,12 +401,6 @@ def probe_version(argv: list[str]) -> str:
         return "error"
     text = (result.stdout or result.stderr).strip().splitlines()
     return text[0] if text else "?"
-
-
-def geomean(values: list[float]) -> float | None:
-    if not values:
-        return None
-    return math.exp(sum(math.log(value) for value in values) / len(values))
 
 
 # --------------------------------------------------------------------------
@@ -1038,12 +1032,15 @@ def compute_build_spec(language: str, task: str) -> tuple[list[str], Path, Path]
     base = CASES / task
     if language == "cpp":
         output = BUILD / f"{task}-cpp{EXE}"
-        return (["g++", "-std=c++20", "-O2", "-o", str(output), str(base / "cpp" / "main.cpp")],
+        return (["g++", "-std=c++20", "-O3", "-o", str(output), str(base / "cpp" / "main.cpp")],
                 output, base / "cpp" / "main.cpp")
     if language == "rust":
         output = BUILD / f"{task}-rust{EXE}"
-        return (["rustc", "-O", "-o", str(output), str(base / "rust" / "main.rs")],
-                output, base / "rust" / "main.rs")
+        return (
+        ["rustc", "-C", "opt-level=3", "-o", str(output), str(base / "rust" / "main.rs")],
+        output,
+        base / "rust" / "main.rs",)
+
     if language == "go":
         output = BUILD / f"{task}-go{EXE}"
         return (["go", "build", "-o", str(output), str(base / "go" / "main.go")],
@@ -1208,27 +1205,33 @@ def gate_row(task: str, cp3_value: float | None,
                 f"BIG WARN (fix this): {task}: {subject}, tripwire {GATE_SCRIPT:.2f}x")
 
 
-def register_ratios(task: str, cp3_value: float | None, cpp_value: float | None,
-                    rust_value: float | None, go_value: float | None = None,
-                    js_value: float | None = None,
-                    python_value: float | None = None,
-                    java_value: float | None = None):
-    """Fill the summary table and the tiered gate for one compute row.
-
-    Visible summary columns stay cp3/cpp and cp3/rust; the gate additionally
-    checks go/js/python/java (D67). Values are times (ms); the ratio is cp3 /
-    reference, lower is better."""
-    cpp_ratio = cp3_value / cpp_value if (cp3_value and cpp_value) else None
-    rust_ratio = cp3_value / rust_value if (cp3_value and rust_value) else None
-    SUMMARY_ROWS.append({"task": task, "cpp": cpp_ratio, "rust": rust_ratio})
+def register_gate(task: str, cp3_value: float | None, cpp_value: float | None,
+                  rust_value: float | None, go_value: float | None = None,
+                  js_value: float | None = None,
+                  python_value: float | None = None,
+                  java_value: float | None = None) -> None:
+    """Fill the tiered performance gate for one compute row (D67)."""
     gate_row(task, cp3_value, {"cpp": cpp_value, "rust": rust_value,
                                "go": go_value, "js": js_value,
                                "python": python_value, "java": java_value}, unit="ms")
-    return cpp_ratio, rust_ratio
 
 
-def ratio_cell(ratio: float | None) -> str:
-    return f"{ratio:.2f}x" if ratio is not None else "-"
+def cp3_comparison(value: float | None, cp3_value: float | None,
+                   higher_is_better: bool = False) -> str:
+    """Describe a row's speed relative to cp3 in unambiguous words.
+
+    For elapsed time, row / cp3 > 1 means the row is slower. For throughput,
+    cp3 / row > 1 means the row is slower. Values below parity are inverted so
+    the displayed multiplier is always at least 1x and labelled "faster".
+    """
+    if value is None or cp3_value is None or value <= 0 or cp3_value <= 0:
+        return "-"
+    ratio = cp3_value / value if higher_is_better else value / cp3_value
+    if math.isclose(ratio, 1.0, rel_tol=0.0, abs_tol=0.0005):
+        return "1.00x"
+    if ratio > 1.0:
+        return f"{ratio:.2f}x slower"
+    return f"{1.0 / ratio:.2f}x faster"
 
 
 def rss_cell(row: dict) -> str:
@@ -1518,50 +1521,6 @@ def bar(fraction: float | None, width: int, style: str) -> tuple[str, str]:
     return filled + empty, paint(filled, style) + paint(empty, "dim")
 
 
-def ratio_bar(ratio: float | None, style: tuple, half: int = 10) -> tuple[str, str]:
-    """Ratio gauge: 0x .. 1.00x (centre tick) .. 2x+; (plain, rendered)."""
-    width = half * 2 + 2
-    if ratio is None:
-        return " " * width, " " * width
-    eighths = int(round(min(ratio, 2.0) * half * 8))
-    if ratio > 0:
-        eighths = max(1, eighths)
-    plain: list[str] = []
-    rendered: list[str] = []
-    for index in range(half * 2):
-        if index == half:
-            plain.append(g("mark"))
-            rendered.append(paint(g("mark"), "dim"))
-        level = max(0, min(8, eighths - index * 8))
-        if UI.unicode and 0 < level < 8:
-            char = g("partial")[level - 1]
-            rendered.append(paint(char, *style))
-        elif level >= (8 if UI.unicode else 4):
-            char = g("fill")
-            rendered.append(paint(char, *style))
-        else:
-            char = g("track")
-            rendered.append(paint(char, "dim"))
-        plain.append(char)
-    if ratio > 2.0:
-        plain.append(g("over"))
-        rendered.append(paint(g("over"), *style))
-    else:
-        plain.append(" ")
-        rendered.append(" ")
-    return "".join(plain) + " ", "".join(rendered) + " "
-
-
-def ratio_style(ratio: float | None) -> tuple:
-    if ratio is None:
-        return ("dim",)
-    if ratio <= GATE_WARN_NATIVE:
-        return ("green",)
-    if ratio <= GATE_BIG_NATIVE:
-        return ("yellow",)
-    return ("red", "bold")
-
-
 def best_langs(values: dict, higher: bool = False) -> set:
     """Languages holding the best value of a column (needs 2+ values)."""
     present = {key: value for key, value in values.items() if value is not None}
@@ -1698,14 +1657,6 @@ def print_server_table(task: str, rows: list[dict]) -> None:
     banner(task, "median boot/req/s; pooled latency p50/p95; CV = run-to-run variation %")
     cp3_row = next((r for r in rows if r["language"] == "cp3"), None)
     cp3_rps = cp3_row["rps"] if cp3_row and cp3_row["rps"] else None
-    cpp_row = next((r for r in rows if r["language"] == "cpp"), None)
-    rust_row = next((r for r in rows if r["language"] == "rust"), None)
-    cpp_rps = cpp_row["rps"] if cpp_row and cpp_row["rps"] else None
-    rust_rps = rust_row["rps"] if rust_row and rust_row["rps"] else None
-    # Throughput -> time ratio: cp3/cpp = cpp_rps / cp3_rps.
-    cpp_ratio = cpp_rps / cp3_rps if (cpp_rps and cp3_rps) else None
-    rust_ratio = rust_rps / cp3_rps if (rust_rps and cp3_rps) else None
-    SUMMARY_ROWS.append({"task": task, "cpp": cpp_ratio, "rust": rust_ratio})
     references = {name: next((r["rps"] for r in rows
                               if r["language"] == name and r["rps"]), None)
                   for name in GATE_REFERENCES}
@@ -1727,11 +1678,13 @@ def print_server_table(task: str, rows: list[dict]) -> None:
     columns += [
         Col("ok", "ok/run"), Col("boot", "boot ms"), Col("p50", "p50 ms"),
         Col("p95", "p95 ms"), Col("rps", "req/s"), Col("cv", "RPS CV%"),
-        Col("errors", "errors"), Col("cpp", "cp3/cpp"), Col("rust", "cp3/rust"),
+        Col("errors", "errors"), Col("vs_cp3", "vs cp3"),
         Col("rss", "RSS MiB", optional=True), Col("bin", "bin KiB", optional=True),
     ]
+    # Higher throughput is faster. Failed/incomplete rows always sort last.
+    display_rows = sorted(rows, key=lambda r: (not bool(r["rps"]), -(r["rps"] or 0.0)))
     table_rows: list = []
-    for row in rows:
+    for row in display_rows:
         language = row["language"]
         cached, _ = split_note(row["note"])
         is_cp3 = language == "cp3"
@@ -1758,18 +1711,15 @@ def print_server_table(task: str, rows: list[dict]) -> None:
             for key in ("boot", "p50", "p95", "cv"):
                 cells[key] = cell("-", "dim")
             cells["rps"] = cell("no run", "red", "bold")
-        if is_cp3:
-            cells["cpp"] = cell(ratio_cell(cpp_ratio), *ratio_style(cpp_ratio))
-            cells["rust"] = cell(ratio_cell(rust_ratio), *ratio_style(rust_ratio))
-        else:
-            cells["cpp"] = cell("-", "dim")
-            cells["rust"] = cell("-", "dim")
+        comparison = cp3_comparison(row["rps"] if ran[language] else None,
+                                    cp3_rps, higher_is_better=True)
+        cells["vs_cp3"] = cell("baseline" if is_cp3 and comparison != "-" else comparison)
         table_rows.append({"label": language, "cells": cells,
                            "styles": ("bold",) if is_cp3 else ()})
     render_table(columns, table_rows)
     print_row_notes(rows)
     if UI.show_runs:
-        for row in rows:
+        for row in display_rows:
             if ran[row["language"]]:
                 boots = "/".join(f"{value:.1f}" for value in row.get("runs_boot_ms", []))
                 throughputs = "/".join(f"{value:.0f}" for value in row.get("runs_rps", []))
@@ -1782,12 +1732,13 @@ def _print_compute_like(task: str, rows: list[dict], header_text: str,
     live_clear()
     banner(task, header_text + " | median/best/p95 ms; CV = variation %")
     reference_values = {name: median_ms_of(rows, name) for name in GATE_REFERENCES}
-    cpp_ratio, rust_ratio = register_ratios(
-        task, median_ms_of(rows, "cp3"), reference_values["cpp"],
-        reference_values["rust"], reference_values["go"], reference_values["js"],
-        reference_values["python"], reference_values["java"])
+    cp3_median = median_ms_of(rows, "cp3")
+    register_gate(task, cp3_median, reference_values["cpp"],
+                  reference_values["rust"], reference_values["go"], reference_values["js"],
+                  reference_values["python"], reference_values["java"])
 
-    medians = {r["language"]: median(r["runs_ms"]) for r in rows}
+    medians = {r["language"]: (median(r["runs_ms"]) if r["runs_ms"] else None)
+               for r in rows}
     bests = {r["language"]: (min(r["runs_ms"]) if r["runs_ms"] else None) for r in rows}
     p95s = {r["language"]: (percentile(r["runs_ms"], 95) if r["runs_ms"] else None)
             for r in rows}
@@ -1805,12 +1756,15 @@ def _print_compute_like(task: str, rows: list[dict], header_text: str,
         columns.append(Col("build", "build", optional=True))
     columns += [
         Col("median", "median ms"), Col("best", "best ms"), Col("p95", "p95 ms"),
-        Col("cv", "CV%"), Col("cpp", "cp3/cpp"), Col("rust", "cp3/rust"),
+        Col("cv", "CV%"), Col("vs_cp3", "vs cp3"),
         Col("rss", "RSS MiB", optional=True), Col("bin", "bin KiB", optional=True),
     ]
 
+    # Lower elapsed time is faster. Failed/incomplete rows always sort last.
+    display_rows = sorted(rows, key=lambda r: (not bool(r["runs_ms"]),
+                                               medians[r["language"]] or math.inf))
     table_rows: list = []
-    for row in rows:
+    for row in display_rows:
         language = row["language"]
         cached, _ = split_note(row["note"])
         is_cp3 = language == "cp3"
@@ -1828,12 +1782,8 @@ def _print_compute_like(task: str, rows: list[dict], header_text: str,
         else:
             for key in ("median", "best", "p95", "cv"):
                 cells[key] = cell("-", "dim")
-        if is_cp3:
-            cells["cpp"] = cell(ratio_cell(cpp_ratio), *ratio_style(cpp_ratio))
-            cells["rust"] = cell(ratio_cell(rust_ratio), *ratio_style(rust_ratio))
-        else:
-            cells["cpp"] = cell("-", "dim")
-            cells["rust"] = cell("-", "dim")
+        comparison = cp3_comparison(medians[language], cp3_median)
+        cells["vs_cp3"] = cell("baseline" if is_cp3 and comparison != "-" else comparison)
         table_rows.append({"label": language, "cells": cells,
                            "styles": ("bold",) if is_cp3 else ()})
     render_table(columns, table_rows)
@@ -1872,44 +1822,8 @@ def print_hello_table(task: str, rows: list[dict], header_text: str,
     _print_compute_like(task, rows, header_text, expected, with_median=True)
 
 
-def print_gate_and_summary() -> None:
+def print_gate() -> None:
     live_clear()
-    banner("summary: cp3 vs native",
-           "ratios are cp3 time divided by the reference time; lower is better "
-           "(the tick marks 1.00x = parity)")
-    axis = ("0" + " " * 9 + "1x").ljust(19) + "2x+"
-    columns = [Col("task", "task", "l"), Col("cpp", "cp3/cpp")]
-    if UI.show_runs:
-        columns.append(Col("cppbar", axis, "l", optional=True))
-    columns.append(Col("rust", "cp3/rust"))
-    if UI.show_runs:
-        columns.append(Col("rustbar", axis, "l", optional=True))
-
-    def ratio_cells(prefix: str, ratio: float | None, text: str | None = None) -> dict:
-        style = ratio_style(ratio)
-        plain, rendered = ratio_bar(ratio, style)
-        return {
-            prefix: cell(text if text is not None else ratio_cell(ratio), *style),
-            prefix + "bar": cell(plain, rendered=rendered),
-        }
-
-    table_rows: list = []
-    for row in SUMMARY_ROWS:
-        cells = {"task": cell(row["task"])}
-        cells.update(ratio_cells("cpp", row["cpp"]))
-        cells.update(ratio_cells("rust", row["rust"]))
-        table_rows.append({"label": row["task"], "cells": cells, "styles": ()})
-    cpp_values = [row["cpp"] for row in SUMMARY_ROWS if row["cpp"] is not None]
-    rust_values = [row["rust"] for row in SUMMARY_ROWS if row["rust"] is not None]
-    cpp_geo = geomean(cpp_values)
-    rust_geo = geomean(rust_values)
-    cells = {"task": cell("geomean")}
-    cells.update(ratio_cells("cpp", cpp_geo, f"{cpp_geo:.2f}x" if cpp_geo is not None else "n/a"))
-    cells.update(ratio_cells("rust", rust_geo, f"{rust_geo:.2f}x" if rust_geo is not None else "n/a"))
-    if table_rows:
-        table_rows.append(None)
-    table_rows.append({"label": "geomean", "cells": cells, "styles": ("bold",)})
-    render_table(columns, table_rows)
     banner("performance gate", GATE_TARGET)
     print("  " + paint(g("h") * max(10, min(UI.wrap, 110) - 2), "dim"))
     for blocker in GATE_BLOCKERS:
@@ -2058,7 +1972,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="benchmarks comparison suite (single entry point: benchmarks/runner/run_benchmark.py)")
     parser.add_argument("--only", default="", help="comma list of: " + ",".join(ALL_TASKS))
-    parser.add_argument("--seconds", type=float, default=3.0, help="throughput phase seconds per server")
+    parser.add_argument("--seconds", type=float, default=30.0, help="throughput phase seconds per server")
     parser.add_argument("--concurrency", type=int, default=8, help="throughput phase connections")
     parser.add_argument("--clients", type=int, default=4,
                         help="client OS processes for the multicore server row (default 4)")
@@ -2066,8 +1980,8 @@ def main() -> int:
                         help="client OS processes for the single-core server row (default 2)")
     parser.add_argument("--latency", type=int, default=300, help="latency phase request count")
     parser.add_argument("--warmup", type=int, default=100, help="warmup requests before measuring")
-    parser.add_argument("--reps", type=positive_int, default=5,
-                        help="independent measured runs per test/language (default: 5)")
+    parser.add_argument("--reps", type=positive_int, default=3,
+                        help="independent measured runs per test/language (default: 3)")
     parser.add_argument("--hello-reps", type=positive_int, default=None,
                         help="optional hello-world override; otherwise uses --reps")
     parser.add_argument("--show-runs", action="store_true",
@@ -2225,7 +2139,7 @@ def main() -> int:
             else:
                 print_compute_table(task, rows, header, expected=expected)
 
-        print_gate_and_summary()
+        print_gate()
         completed = True
     finally:
         live_clear()

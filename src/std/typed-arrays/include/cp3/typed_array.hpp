@@ -319,6 +319,13 @@ double typedArrayAtChecked(const TypedArray<Tag>& a, double index) {
     return Tag::read(a->load(static_cast<std::size_t>(index)));
 }
 
+// Generated only for accesses whose index and fixed view length were proved
+// in range by sema. Keep the checked entry points above for all other reads.
+template <class Tag>
+double typedArrayAtUnchecked(const TypedArray<Tag>& a, double index) noexcept {
+    return Tag::read(a->load(static_cast<std::size_t>(index)));
+}
+
 // A write outside the view is ignored (JS), like a fractional or negative one.
 template <class Tag>
 void typedArrayWriteAt(const TypedArray<Tag>& a, double index, double value) {

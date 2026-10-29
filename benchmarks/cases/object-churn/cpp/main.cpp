@@ -2,7 +2,7 @@
 // loop: each iteration's temporary dies in scope, and every second object
 // escapes into a vector. One checksum at the end.
 //
-// Build:  g++ -std=c++20 -O2 -o object-churn.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o object-churn.exe main.cpp
 // Run:    object-churn.exe
 //
 // Same workload and same output in every language entry (expected value in the

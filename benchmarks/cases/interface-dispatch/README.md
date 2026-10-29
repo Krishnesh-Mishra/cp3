@@ -47,7 +47,7 @@ From each language's folder:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o interface-dispatch.exe main.cpp
+g++ -std=c++20 -O3 -o interface-dispatch.exe main.cpp
 ./interface-dispatch.exe
 
 # rust

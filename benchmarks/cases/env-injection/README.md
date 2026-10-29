@@ -39,7 +39,7 @@ From each language's folder, set the variable first:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o env-injection.exe main.cpp
+g++ -std=c++20 -O3 -o env-injection.exe main.cpp
 CP3_BENCH_ENV=cp3-benchmark-value ./env-injection.exe
 
 # rust

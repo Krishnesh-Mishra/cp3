@@ -2,7 +2,7 @@
 // sum the floats for 32 rounds, then fold the float and byte totals into one
 // integer checksum.
 //
-// Build:  g++ -std=c++20 -O2 -o typed-array-sum.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o typed-array-sum.exe main.cpp
 // Run:    typed-array-sum.exe
 //
 // Same workload and same output in every language entry. The float pattern is

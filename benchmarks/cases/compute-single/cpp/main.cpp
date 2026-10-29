@@ -1,7 +1,7 @@
 // compute-single (cpp entry) -- total Collatz steps for every start value in
 // 1..1,000,000, printed as one integer.
 //
-// Build:  g++ -std=c++20 -O2 -o compute-single.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o compute-single.exe main.cpp
 // Run:    compute-single.exe
 //
 // Same workload and same output in every language entry.

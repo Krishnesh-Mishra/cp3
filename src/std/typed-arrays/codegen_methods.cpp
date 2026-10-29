@@ -447,7 +447,7 @@ std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
             return "::cp3::runtime::typedArrayAt<" + t + ">(" + recv + ", " +
                    idxText + ")";
         }
-        return "::cp3::runtime::typedArrayAtChecked<" + t + ">(" + recv + ", " +
+        return "::cp3::runtime::typedArrayAtUnchecked<" + t + ">(" + recv + ", " +
                idxText + ")";
     }
     if (ot.kind == TypeKind::Array) {

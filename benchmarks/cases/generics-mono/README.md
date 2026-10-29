@@ -45,7 +45,7 @@ From each language's folder:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o generics-mono.exe main.cpp
+g++ -std=c++20 -O3 -o generics-mono.exe main.cpp
 ./generics-mono.exe
 
 # rust

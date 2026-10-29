@@ -1,0 +1,15 @@
+import console from "std/console";
+
+const SIZE: number = 4;
+const LAST: number = 3;
+const values = new Float64Array(SIZE);
+values.fill(2);
+
+let total: number = 0;
+for (let i: r_'i64' = 0; i <= LAST; i++) {
+  total = total + values[i];
+}
+for (let j: r_'i64' = 0; SIZE > j; j++) {
+  total = total + values[j];
+}
+console.log(total);

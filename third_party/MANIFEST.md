@@ -194,7 +194,7 @@ translation unit, build/scratch/vend/build/uWebSockets/libuWebSockets.cpp
 build/scratch/vend/scripts/uwebsockets_lib_build.sh.
 
 ```
-g++ -std=c++20 -O2 -DUWS_NO_ZLIB -IC:/Users/Krishnesh/dev/cp3/third_party/uWebSockets/include -IC:/Users/Krishnesh/dev/cp3/third_party/libuv/include -c libuWebSockets.cpp -o libuWebSockets.o
+g++ -std=c++20 -O3 -DUWS_NO_ZLIB -IC:/Users/Krishnesh/dev/cp3/third_party/uWebSockets/include -IC:/Users/Krishnesh/dev/cp3/third_party/libuv/include -c libuWebSockets.cpp -o libuWebSockets.o
 ar rcs libuWebSockets.a libuWebSockets.o
 cp -f libuWebSockets.a C:/Users/Krishnesh/dev/cp3/third_party/uWebSockets/lib/libuWebSockets.a
 ```

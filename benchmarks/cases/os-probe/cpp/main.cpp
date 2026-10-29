@@ -1,7 +1,7 @@
 // os-probe (cpp entry) -- query platform, CPU count, home, temp and hostname
 // in a tight loop, folding only machine-independent booleans.
 //
-// Build:  g++ -std=c++20 -O2 -o os-probe.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o os-probe.exe main.cpp
 // Run:    os-probe.exe
 //
 // Same workload, same fold and same output in every language entry. The

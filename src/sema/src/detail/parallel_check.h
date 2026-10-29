@@ -96,6 +96,12 @@ public:
 
     // Scans an arrow closure (params + body).
     void scan(ArrowFunction& arrow);
+    // Scans a loop body for a write to `name` (an assignment/update target, a
+    // mutating method on it, or passing it to a call, which could be a `ref`
+    // parameter). Strict mode also rejects a declaration that shadows `name`.
+    // Used by the typed-array in-range proof; findings are discarded, so only
+    // the boolean answer matters.
+    static bool writesName(Stmt& body, const std::string& name);
     // Returns and clears the collected findings.
     std::vector<Finding> take() { return std::move(findings_); }
 
@@ -144,6 +150,10 @@ private:
 
     std::string induction_;
     Resolves resolves_;
+    // Strict mode (typed-array index proof): also flag a declaration that
+    // shadows the captured name and any captured name passed to a call
+    // (a `ref` parameter could mutate it).
+    bool strict_ = false;
     std::vector<std::unordered_set<std::string>> locals_;
     std::vector<Finding> findings_;
 };

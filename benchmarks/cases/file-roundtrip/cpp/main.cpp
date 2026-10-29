@@ -1,7 +1,7 @@
 // file-roundtrip (cpp entry) -- write, read and stat one fixed 4 KiB file N
 // times in the OS temp directory, then remove it.
 //
-// Build:  g++ -std=c++20 -O2 -o file-roundtrip.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o file-roundtrip.exe main.cpp
 // Run:    file-roundtrip.exe
 //
 // Same workload and same output as the cp3, Rust, Go, JavaScript and Python

@@ -37,7 +37,7 @@ From each language's folder:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o word-frequency.exe main.cpp
+g++ -std=c++20 -O3 -o word-frequency.exe main.cpp
 ./word-frequency.exe
 
 # rust

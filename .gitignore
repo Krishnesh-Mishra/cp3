@@ -64,3 +64,4 @@ tests/cases/**/.cp3/
 # Must stay after the *.a / *.lib rules above (last match wins).
 !third_party/**/*.a
 !third_party/**/*.lib
+benchmarks/cases/health-server/cp3/merged.txt

@@ -434,6 +434,19 @@ private:
     Type bufferMember(const Type& recv, const std::string& prop);
     Type dataViewMember(const std::string& prop);
     Type typedIndexRead(IndexExpr& ix);
+    // Typed-array proof machinery (src/std/typed-arrays/sema_index.cpp): the
+    // constant-value and length helpers, the in-range proof for an index, and
+    // the for-loop induction analysis that feeds it.
+    std::optional<double> constantNumber(const Expr& e) const;
+    std::optional<double> knownTypedLength(const Expr& e) const;
+    bool typedIndexProvedInRange(const IndexExpr& ix) const;
+    // Pattern recognized by analyzeFor: `for (let i: i64 = 0; i < N; ...)`
+    // whose body does not write `i`. Returns {name, exclusive upper bound}.
+    struct IndexRangeFact {
+        std::string induction;
+        double upper = 0.0;
+    };
+    std::optional<IndexRangeFact> forLoopRange(ForStatement& stmt);
     // True for the `Array(n)` length form (family owns its element type).
     bool checkArrayCtorDeclarator(const VariableDeclarator& d, bool hasAnn,
                                   const Type& annType, const Type& initType);
@@ -608,6 +621,10 @@ private:
         bool isAsync = false;
     };
     std::vector<FuncCtx> funcStack_;
+    // Induction facts from for-loops recognized by forLoopRange: the loop
+    // variable's name and an exclusive upper bound on it, pushed while the
+    // body is checked so typedIndexRead can prove the index in range.
+    std::vector<IndexRangeFact> indexRanges_;
     int loopDepth_ = 0;
     int switchDepth_ = 0;
 };

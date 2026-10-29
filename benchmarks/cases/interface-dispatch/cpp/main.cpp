@@ -3,7 +3,7 @@
 // base pointer, then repeat the hot loop as direct calls on a concrete type
 // and print both sums on one line.
 //
-// Build:  g++ -std=c++20 -O2 -o interface-dispatch.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o interface-dispatch.exe main.cpp
 // Run:    interface-dispatch.exe
 //
 // Same workload and same output in every language entry (expected line in the

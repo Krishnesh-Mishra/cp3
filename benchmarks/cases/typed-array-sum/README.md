@@ -54,7 +54,7 @@ From each language's folder:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o typed-array-sum.exe main.cpp
+g++ -std=c++20 -O3 -o typed-array-sum.exe main.cpp
 ./typed-array-sum.exe
 
 # rust

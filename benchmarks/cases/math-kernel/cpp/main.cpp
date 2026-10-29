@@ -1,7 +1,7 @@
 // math-kernel (cpp entry) -- evaluate sqrt, floor, abs, pow and clamp over
 // 5,000,000 points, quantize each result to an integer and fold one checksum.
 //
-// Build:  g++ -std=c++20 -O2 -o math-kernel.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o math-kernel.exe main.cpp
 // Run:    math-kernel.exe
 //
 // Same workload and same output in every language entry. sqrt is correctly

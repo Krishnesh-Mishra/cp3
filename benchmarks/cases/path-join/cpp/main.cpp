@@ -1,7 +1,7 @@
 // path-join (cpp entry) -- join, normalize, basename and extname one fixed
 // path-segment list N times and fold stable string lengths and characters.
 //
-// Build:  g++ -std=c++20 -O2 -o path-join.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o path-join.exe main.cpp
 // Run:    path-join.exe
 //
 // Same workload and same output as the cp3, Rust, Go, JavaScript and Python

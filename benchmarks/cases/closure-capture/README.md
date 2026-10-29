@@ -52,7 +52,7 @@ From each language's folder:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o closure-capture.exe main.cpp
+g++ -std=c++20 -O3 -o closure-capture.exe main.cpp
 ./closure-capture.exe
 
 # rust

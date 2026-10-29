@@ -39,6 +39,16 @@
 namespace cp3 {
 namespace parallel_detail {
 
+bool ClosureScanner::writesName(Stmt& body, const std::string& name) {
+    ClosureScanner scanner(name,
+                           [name](const std::string& n) { return n == name; });
+    scanner.strict_ = true;
+    scanner.pushScope();
+    scanner.scanStmt(body);
+    scanner.popScope();
+    return !scanner.findings_.empty();
+}
+
 // =============================================================================
 // Closure entry + statement walk
 // =============================================================================
@@ -73,7 +83,27 @@ void ClosureScanner::scanStmt(Stmt& s) {
             return;
         case NodeKind::FunctionDeclaration: {
             auto& fn = static_cast<FunctionDeclaration&>(s);
+            // A nested function can escape the loop and observe a later value
+            // of the induction variable. Do not use this loop's range proof
+            // inside any nested function body.
+            if (strict_) {
+                addCaptured(induction_, s.span);
+            }
             scanFunctionBody(fn.body.get(), fn.params);
+            return;
+        }
+        case NodeKind::ClassDeclaration: {
+            const auto& decl = static_cast<ClassDeclaration&>(s);
+            if (strict_ && decl.name == induction_) {
+                addCaptured(induction_, s.span);
+            }
+            return;
+        }
+        case NodeKind::EnumDeclaration: {
+            const auto& decl = static_cast<EnumDeclaration&>(s);
+            if (strict_ && decl.name == induction_) {
+                addCaptured(induction_, s.span);
+            }
             return;
         }
         case NodeKind::ReturnStatement:
@@ -197,6 +227,7 @@ void ClosureScanner::scanForEach(Node* left, Expr* right, Stmt* body) {
 // =============================================================================
 // Declarations, switch, try, function bodies
 // =============================================================================
+
 void ClosureScanner::scanVarDecl(VariableDeclaration& vd) {
     for (auto& d : vd.declarations) {
         if (!d) continue;

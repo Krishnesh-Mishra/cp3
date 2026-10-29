@@ -1,0 +1,13 @@
+import console from "std/console";
+
+function moveOut(ref index: r_'i64'): void {
+  index = index + 4;
+}
+
+const SIZE: number = 4;
+const values = new Float64Array(SIZE);
+for (let i: r_'i64' = 0; i < SIZE; i++) {
+  moveOut(i);
+  const value: number | undefined = values[i];
+  console.log(value === undefined);
+}

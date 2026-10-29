@@ -383,9 +383,14 @@ void Analyzer::analyzeFor(ForStatement& stmt) {
         checkCondition(typeOfExpr(*stmt.condition), stmt.condition->span);
     }
     if (stmt.update) inferExpr(*stmt.update);
+    // The for-loop range: if the header matches the recognized pattern,
+    // remember the bound for `typedIndexRead` while the body is checked.
+    std::optional<Analyzer::IndexRangeFact> range = forLoopRange(stmt);
+    if (range) indexRanges_.push_back(*range);
     ++loopDepth_;
     if (stmt.body) visitStmt(*stmt.body);
     --loopDepth_;
+    if (range) indexRanges_.pop_back();
     popScope();
 }
 

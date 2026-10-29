@@ -2,7 +2,7 @@
 // in 1..1,000,000, printed as one integer. Same workload and output as every
 // other entry; this is the native-integer tier (D65): long long throughout.
 //
-// Build:  g++ -std=c++20 -O2 -o compute-single-int.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o compute-single-int.exe main.cpp
 // Run:    compute-single-int.exe
 
 #include <iostream>

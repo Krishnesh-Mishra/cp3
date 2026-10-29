@@ -1,7 +1,7 @@
 // env-injection (cpp entry) -- read one injected environment variable N times
 // and fold its bytes into a checksum.
 //
-// Build:  g++ -std=c++20 -O2 -o env-injection.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o env-injection.exe main.cpp
 // Run:    env-injection.exe        (CP3_BENCH_ENV must be set)
 //
 // The suite runner injects CP3_BENCH_ENV into every child process for this

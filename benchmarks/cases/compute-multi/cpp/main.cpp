@@ -2,7 +2,7 @@
 // std::thread::hardware_concurrency() workers, each summing a contiguous
 // chunk of 1..1,000,000; the partials are combined on the main thread.
 //
-// Build:  g++ -std=c++20 -O2 -o compute-multi.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o compute-multi.exe main.cpp
 // Run:    compute-multi.exe
 //
 // Prints the same single integer as every other entry (single or multi), so

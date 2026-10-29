@@ -49,9 +49,12 @@ void ClosureScanner::declareName(const std::string& name) {
 void ClosureScanner::declarePattern(Node* node) {
     if (!node) return;
     switch (node->kind) {
-        case NodeKind::Identifier:
-            declareName(static_cast<Identifier&>(*node).name);
+        case NodeKind::Identifier: {
+            const std::string& name = static_cast<Identifier&>(*node).name;
+            if (strict_ && name == induction_) addCaptured(name, node->span);
+            declareName(name);
             return;
+        }
         case NodeKind::AssignmentPattern:
             declarePattern(static_cast<AssignmentPattern&>(*node).left.get());
             return;
@@ -140,6 +143,9 @@ void ClosureScanner::scanExpr(Expr& e) {
             // A nested closure belongs to this body: its writes to captured
             // state are writes performed by the same worker, so it is scanned
             // under this scanner's induction variable.
+            // For typed-array range proofs, however, its execution may happen
+            // after the loop; reject the proof for the enclosing loop body.
+            if (strict_) addCaptured(induction_, e.span);
             scan(static_cast<ArrowFunction&>(e));
             return;
         default:
@@ -301,6 +307,13 @@ void ClosureScanner::scanCall(CallExpr& c) {
         // A nested parallel.* closure is checked by its own call site with its
         // own induction variable; do not rescan it under this one.
         if (isParallelCall && a->kind == NodeKind::ArrowFunction) continue;
+        // Strict mode (typed-array index proof): passing the captured name to a
+        // call could be a `ref` write, so reject it. A plain identifier is the
+        // only way to bind by reference here.
+        if (strict_ && a->kind == NodeKind::Identifier &&
+            isCaptured(static_cast<Identifier&>(*a).name)) {
+            addCaptured(static_cast<Identifier&>(*a).name, a->span);
+        }
         scanExpr(*a);
     }
 }

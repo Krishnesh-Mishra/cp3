@@ -3,10 +3,11 @@
 //
 // Owns the family model for `Array` extras plus the 11 typed classes, the two
 // buffer classes and DataView: the constructor grammar (`inferFamilyConstruct`
-// and its per-class helpers), the shared value helpers (`knownTypedLength`),
-// the indexed-read refinement, and the declarator checks for `Array(n)`. The
-// `Array.of` / `Array.from` statics, the `inferCall` hooks and the member
-// tables live in the sibling sema_methods.cpp.
+// and its per-class helpers), the indexed-read dispatch, and the declarator
+// checks for `Array(n)`. The shared value helpers (`constantNumber`,
+// `knownTypedLength`) and the in-range index proof live in the sibling
+// `sema_index.cpp`. The `Array.of` / `Array.from` statics, the `inferCall`
+// hooks and the member tables live in `sema_methods.cpp`.
 //
 // Family types are nominal `TypeKind::Class` values with no extra metadata;
 // codegen owns the C++ mapping (cp3/typed_array.hpp). The member checks here
@@ -371,12 +372,7 @@ Type Analyzer::inferTypedViewConstruct(const std::string& cls,
 // Indexed reads + declarator checks
 // =============================================================================
 Type Analyzer::typedIndexRead(IndexExpr& ix) {
-    double idx = 0.0;
-    if (ix.index && ix.object && literalIndexValue(*ix.index, idx)) {
-        if (auto len = knownTypedLength(*ix.object); len && idx < *len) {
-            return Type::number();
-        }
-    }
+    if (typedIndexProvedInRange(ix)) return Type::number();
     return Type::nullable(Type::number());
 }
 

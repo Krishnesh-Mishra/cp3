@@ -1,7 +1,7 @@
 // string-churn (cpp entry) -- build a 4 KiB string, then repeatedly rebuild
 // strings from it: uppercase, slice, lowercase + re-concatenate, re-slice.
 //
-// Build:  g++ -std=c++20 -O2 -o string-churn.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o string-churn.exe main.cpp
 // Run:    string-churn.exe [iterations]        (default 50000)
 //
 // Same workload and same output in every language entry. Every round allocates

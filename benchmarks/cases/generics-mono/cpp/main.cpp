@@ -2,7 +2,7 @@
 // through a generic template type plus a generic template function, once
 // through a hand-written concrete type. Prints both sums on one line.
 //
-// Build:  g++ -std=c++20 -O2 -o generics-mono.exe main.cpp
+// Build:  g++ -std=c++20 -O3 -o generics-mono.exe main.cpp
 // Run:    generics-mono.exe
 //
 // Same workload and same output in every language entry (expected line in the

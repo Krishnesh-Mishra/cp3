@@ -35,7 +35,7 @@ From each language's folder:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o compute-single-int.exe main.cpp
+g++ -std=c++20 -O3 -o compute-single-int.exe main.cpp
 ./compute-single-int.exe
 
 # rust

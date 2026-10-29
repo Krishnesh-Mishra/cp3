@@ -56,7 +56,7 @@ From each language's folder:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o math-kernel.exe main.cpp
+g++ -std=c++20 -O3 -o math-kernel.exe main.cpp
 ./math-kernel.exe
 
 # rust

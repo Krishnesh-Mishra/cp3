@@ -78,7 +78,7 @@ From each language's folder:
 
 ```bash
 # cpp (iterations optional, default 50000)
-g++ -std=c++20 -O2 -o string-churn.exe main.cpp
+g++ -std=c++20 -O3 -o string-churn.exe main.cpp
 ./string-churn.exe 50000
 
 # rust

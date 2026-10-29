@@ -34,7 +34,7 @@ From each language's folder:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o hello-world.exe main.cpp
+g++ -std=c++20 -O3 -o hello-world.exe main.cpp
 ./hello-world.exe
 
 # rust

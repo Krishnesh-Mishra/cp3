@@ -261,7 +261,7 @@ recorded, and the next full refresh will show the blocker and tier format.
   does the same work. No per-language hand-tuning beyond idiomatic style; the
   sources are near-identical by construction, and the shared output oracle
   makes equality mechanical.
-- Pinned release configurations: `g++ -std=c++20 -O2` for the dependency-free
+- Pinned release configurations: `g++ -std=c++20 -O3` for the dependency-free
   C++ fallback and CMake `Release` (MSVC) for Drogon; `cargo build --release`
   for Axum, `rustc -O` for the `std::net` fallback; `go build` (defaults);
   `javac`/`java` (default JVM settings, no `-Xmx`); Node and Python run their

@@ -32,7 +32,7 @@ From each language's folder:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o object-churn.exe main.cpp
+g++ -std=c++20 -O3 -o object-churn.exe main.cpp
 ./object-churn.exe
 
 # rust

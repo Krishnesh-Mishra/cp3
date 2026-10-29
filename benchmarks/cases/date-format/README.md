@@ -41,7 +41,7 @@ From each language's folder:
 
 ```bash
 # cpp
-g++ -std=c++20 -O2 -o date-format.exe main.cpp
+g++ -std=c++20 -O3 -o date-format.exe main.cpp
 ./date-format.exe
 
 # go
