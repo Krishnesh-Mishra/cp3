@@ -25,9 +25,9 @@
 //     `::cp3::runtime::buffer::from`.
 //   * `randomUUID` is the RFC 4122 version 4 form: 36 lowercase chars.
 //   * `sha256`/`sha512` take `string | Buffer` in the cp3 surface; a Buffer
-//     argument lowers to its bytes (`::cp3::runtime::buffer::bytes`) and this
-//     C++ surface stays `const std::string&`. The result is lowercase hex over
-//     the byte input.
+//     argument lowers to its byte view (`::cp3::runtime::buffer::view`) and
+//     this C++ surface takes a non-owning `std::string_view`. The result is
+//     lowercase hex over the byte input.
 //   * AES-256-GCM envelope: one base64 string of nonce (12 bytes) ||
 //     ciphertext || tag (16 bytes), so the value is opaque to callers. The
 //     `key` string is stretched to 32 bytes with BLAKE2b-256 before use (the
@@ -44,6 +44,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 namespace cp3::runtime::crypto {
 
@@ -58,10 +59,10 @@ std::string randomUuid();
 std::string randomBytes(double length);
 
 /// `crypto.sha256(data)`: the lowercase hex SHA-256 digest (64 characters).
-std::string sha256(const std::string& data);
+std::string sha256(std::string_view data);
 
 /// `crypto.sha512(data)`: the lowercase hex SHA-512 digest (128 characters).
-std::string sha512(const std::string& data);
+std::string sha512(std::string_view data);
 
 /// `crypto.AES256(key, data)`: AES-256-GCM encryption. Returns the base64
 /// envelope (`nonce || ciphertext || tag`) that `aes256Decrypt` accepts.

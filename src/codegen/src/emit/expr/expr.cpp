@@ -435,6 +435,32 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
         case BinaryOp::Add:
             if (L.shape == Shape::String || R.shape == Shape::String) {
                 // D8: only string + string is legal; sema rejects the rest.
+                // Flatten a chain into one preallocated builder so `a + b + c`
+                // does not allocate and copy a temporary for every `+`.
+                std::vector<const Expr*> parts;
+                auto collect = [&](auto&& self, const Expr& part) -> void {
+                    if (part.kind == NodeKind::BinaryExpr) {
+                        const auto& sub = static_cast<const BinaryExpr&>(part);
+                        if (sub.op == BinaryOp::Add && sub.left && sub.right &&
+                            info(*sub.left).shape == Shape::String &&
+                            info(*sub.right).shape == Shape::String) {
+                            self(self, *sub.left);
+                            self(self, *sub.right);
+                            return;
+                        }
+                    }
+                    parts.push_back(&part);
+                };
+                collect(collect, b);
+                if (parts.size() >= 3) {
+                    needsString_ = true;
+                    std::string call = "::cp3::runtime::strings::concat(";
+                    for (std::size_t i = 0; i < parts.size(); ++i) {
+                        if (i != 0) call += ", ";
+                        call += expr(*parts[i]);
+                    }
+                    return call + ")";
+                }
                 return "(std::string(" + lhs + ") + " + rhs + ")";
             }
             return "(" + lhs + " + " + rhs + ")";

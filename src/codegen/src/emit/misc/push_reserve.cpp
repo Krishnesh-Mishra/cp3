@@ -11,14 +11,17 @@
 // once instead of growing geometrically. Capacity is not an observable cp3
 // value: the hint cannot change sizes, element values, aliasing or lifetimes,
 // and `arrayReservePush` ignores a failed reservation. The pattern is matched
-// structurally and conservatively: a plain counter compared with `<` or `<=`, a
-// block of exactly one `push` statement and one unit increment of that counter.
-// If anything else is in the body (a break, a second push, a nested call) the
-// hint is skipped, because then the count would no longer describe the pushes.
+// structurally and conservatively: a plain counter compared with `<` or `<=`,
+// exactly one top-level `push` and one unit increment of that counter, plus
+// only statements that cannot change the counter, the bound or the array (a
+// running accumulator is the common case). A conditional, break, continue,
+// second push or nested loop skips the hint, because then the count would no
+// longer describe the pushes.
 // =============================================================================
 #include "detail/generator/generator.h"
 
 #include <string>
+#include <vector>
 
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/type_map.h"
@@ -77,26 +80,110 @@ bool isIncrementStatement(const Stmt& s, const std::string& counter) {
     return es.expression && isUnitIncrement(*es.expression, counter);
 }
 
-// The exact two-statement body of a counted push loop, in either order.
+// A value expression with no calls, allocations, member/index access or
+// nested assignment. These are the only extra statements allowed in a counted
+// push body: they cannot change the counter, the bound, or the array binding.
+bool isSimpleValue(const Expr& e) {
+    switch (e.kind) {
+        case NodeKind::NumberLiteral:
+        case NodeKind::StringLiteral:
+        case NodeKind::BoolLiteral:
+        case NodeKind::NullLiteral:
+        case NodeKind::UndefinedLiteral:
+        case NodeKind::Identifier:
+        case NodeKind::ThisExpr:
+            return true;
+        case NodeKind::BinaryExpr: {
+            const auto& b = static_cast<const BinaryExpr&>(e);
+            return b.left && b.right && isSimpleValue(*b.left) &&
+                   isSimpleValue(*b.right);
+        }
+        case NodeKind::LogicalExpr: {
+            const auto& l = static_cast<const LogicalExpr&>(e);
+            return l.left && l.right && isSimpleValue(*l.left) &&
+                   isSimpleValue(*l.right);
+        }
+        case NodeKind::UnaryExpr: {
+            const auto& u = static_cast<const UnaryExpr&>(e);
+            return u.operand && isSimpleValue(*u.operand);
+        }
+        case NodeKind::ConditionalExpr: {
+            const auto& c = static_cast<const ConditionalExpr&>(e);
+            return c.condition && c.whenTrue && c.whenFalse &&
+                   isSimpleValue(*c.condition) && isSimpleValue(*c.whenTrue) &&
+                   isSimpleValue(*c.whenFalse);
+        }
+        default:
+            return false;
+    }
+}
+
+// An extra statement may update an unrelated accumulator (`total = total + i`)
+// but never the loop counter, the bound, or the array being pushed.
+bool isAllowedExtraStatement(const Expr& e, const std::string& counter,
+                             const std::string& array,
+                             const std::string& bound) {
+    if (e.kind == NodeKind::AssignmentExpr) {
+        const auto& a = static_cast<const AssignmentExpr&>(e);
+        const Identifier* target = asIdentifier(a.target.get());
+        if (!target) return false;
+        if (target->name == counter || target->name == array ||
+            (!bound.empty() && target->name == bound)) {
+            return false;
+        }
+        return a.value && isSimpleValue(*a.value);
+    }
+    if (e.kind == NodeKind::UpdateExpr) {
+        const auto& u = static_cast<const UpdateExpr&>(e);
+        const Identifier* target = asIdentifier(u.operand.get());
+        if (!target) return false;
+        return target->name != counter && target->name != array &&
+               (bound.empty() || target->name != bound);
+    }
+    return isSimpleValue(e);
+}
+
+// The counted push body: exactly one top-level push of the array and one unit
+// increment of the counter, plus statements that cannot affect either. The
+// extra statements are what the original two-statement matcher missed (for
+// example array-growth's running `total` update).
 bool matchBody(const WhileStatement& ws, const std::string& counter,
-               const Identifier*& array) {
+               const std::string& bound, const Identifier*& array) {
     if (!ws.body || ws.body->kind != NodeKind::BlockStatement) return false;
     const auto& block = static_cast<const BlockStatement&>(*ws.body);
-    if (block.body.size() != 2 || !block.body[0] || !block.body[1]) return false;
-    const Stmt& first = *block.body[0];
-    const Stmt& second = *block.body[1];
     const Identifier* pushed = nullptr;
-    if (isPushStatement(first, pushed)) {
-        if (!isIncrementStatement(second, counter)) return false;
-        array = pushed;
-        return true;
+    bool sawPush = false;
+    bool sawIncrement = false;
+    std::vector<const Expr*> extras;
+    for (const auto& stmt : block.body) {
+        if (!stmt) return false;
+        if (stmt->kind == NodeKind::EmptyStatement) continue;
+        if (stmt->kind != NodeKind::ExpressionStatement) return false;
+        const auto& es = static_cast<const ExpressionStatement&>(*stmt);
+        if (!es.expression) return false;
+        const Identifier* receiver = nullptr;
+        if (isPushStatement(*stmt, receiver)) {
+            if (sawPush) return false;
+            sawPush = true;
+            pushed = receiver;
+            continue;
+        }
+        if (isIncrementStatement(*stmt, counter)) {
+            if (sawIncrement) return false;
+            sawIncrement = true;
+            continue;
+        }
+        extras.push_back(es.expression.get());
     }
-    if (isPushStatement(second, pushed)) {
-        if (!isIncrementStatement(first, counter)) return false;
-        array = pushed;
-        return true;
+    if (!sawPush || !sawIncrement || !pushed) return false;
+    for (const Expr* extra : extras) {
+        if (!extra ||
+            !isAllowedExtraStatement(*extra, counter, pushed->name, bound)) {
+            return false;
+        }
     }
-    return false;
+    array = pushed;
+    return true;
 }
 
 }  // namespace
@@ -115,14 +202,14 @@ struct PushReserveEmitter {
 
     bool run(const WhileStatement& ws, CountedPush& found);
     bool condition(const WhileStatement& ws, const std::string& counter,
-                   std::string& count);
+                   std::string& count, std::string& bound);
 };
 
 // The condition `counter < bound` (or `<=`) with an identifier or numeric
 // literal bound; other conditions have no simple remaining count.
 bool PushReserveEmitter::condition(const WhileStatement& ws,
                                    const std::string& counter,
-                                   std::string& count) {
+                                   std::string& count, std::string& bound) {
     if (!ws.condition || ws.condition->kind != NodeKind::BinaryExpr) return false;
     const auto& b = static_cast<const BinaryExpr&>(*ws.condition);
     if (b.op != BinaryOp::LessThan && b.op != BinaryOp::LessThanEqual) {
@@ -134,17 +221,18 @@ bool PushReserveEmitter::condition(const WhileStatement& ws,
         b.right->kind != NodeKind::NumberLiteral) {
         return false;
     }
-    const std::string bound = g.expr(*b.right);
+    bound.clear();
+    if (b.right->kind == NodeKind::Identifier) {
+        bound = static_cast<const Identifier&>(*b.right).name;
+    }
+    const std::string boundText = g.expr(*b.right);
     const std::string current = g.expr(*b.left);
-    count = "(" + bound + " - " + current +
+    count = "(" + boundText + " - " + current +
             (b.op == BinaryOp::LessThanEqual ? " + 1.0" : "") + ")";
     return true;
 }
 
 bool PushReserveEmitter::run(const WhileStatement& ws, CountedPush& found) {
-    // The int64 fast body is a speculative lowering; a capacity hint there adds
-    // no value and could move a bail point, so leave those bodies alone.
-    if (g.intOn()) return false;
     if (!ws.condition || ws.condition->kind != NodeKind::BinaryExpr) return false;
     const auto& b = static_cast<const BinaryExpr&>(*ws.condition);
     if (b.op != BinaryOp::LessThan && b.op != BinaryOp::LessThanEqual) {
@@ -152,15 +240,20 @@ bool PushReserveEmitter::run(const WhileStatement& ws, CountedPush& found) {
     }
     const Identifier* counter = asIdentifier(b.left.get());
     if (!counter) return false;
+    std::string count;
+    std::string bound;
+    if (!condition(ws, counter->name, count, bound)) return false;
     const Identifier* array = nullptr;
-    if (!matchBody(ws, counter->name, array) || !array) return false;
+    if (!matchBody(ws, counter->name, bound, array) || !array) return false;
     if (array->name == counter->name) return false;
     const auto recv = g.lookup(array->name);
     if (!recv || recv->cell || classify(recv->type).shape != Shape::Array) {
         return false;
     }
     if (!g.lookup(counter->name)) return false;
-    if (!condition(ws, counter->name, found.count)) return false;
+    // Capacity is not observable from cp3, so the hint is safe in the int64
+    // fast body too: it only reserves, and a failed reservation is ignored.
+    found.count = count;
     found.array = g.expr(*array);
     return true;
 }

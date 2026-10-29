@@ -46,7 +46,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
+#include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "cp3/core/error.hpp"
@@ -195,16 +198,37 @@ inline std::size_t sliceEnd(double end, double len) {
 
 // The nominal `Buffer` byte sequence. Immutable: the factory functions below
 // are the only writers, and codegen never spells the constructor itself.
+//
+// A Buffer is a shared immutable owner plus an [offset, length) view. `from`
+// owns one string and `slice` views the same owner, so the documented value
+// semantics (immutability, byte equality, `toString` copying) are unchanged
+// while a slice no longer copies its bytes.
 class Buffer {
 public:
     Buffer() = default;
-    explicit Buffer(std::string bytes) : bytes_(std::move(bytes)) {}
+    explicit Buffer(std::string bytes)
+        : owner_(std::make_shared<const std::string>(std::move(bytes))),
+          length_(owner_->size()) {}
 
-    const std::string& bytes() const { return bytes_; }
-    double size() const { return static_cast<double>(bytes_.size()); }
+    std::string_view view() const noexcept {
+        if (!owner_ || length_ == 0) return std::string_view();
+        return std::string_view(owner_->data() + offset_, length_);
+    }
+
+    // A copy of the bytes. Kept for callers that need an owning std::string;
+    // the crypto boundary uses `view` and never materializes one.
+    std::string bytes() const { return std::string(view()); }
+    double size() const { return static_cast<double>(length_); }
 
 private:
-    std::string bytes_;
+    friend Buffer slice(const Buffer&, double, double);
+    Buffer(std::shared_ptr<const std::string> owner, std::size_t offset,
+           std::size_t length)
+        : owner_(std::move(owner)), offset_(offset), length_(length) {}
+
+    std::shared_ptr<const std::string> owner_;
+    std::size_t offset_ = 0;
+    std::size_t length_ = 0;
 };
 
 /// `Buffer.alloc(size)`: a zero-filled buffer of `size` bytes.
@@ -218,9 +242,14 @@ inline Buffer alloc(double size) {
 /// `Buffer.from(input)`: the UTF-8 bytes of `input` (the default encoding).
 inline Buffer from(const std::string& input) { return Buffer(input); }
 
+/// The rvalue overload moves the bytes into the shared owner. A temporary
+/// string from a fused concatenation therefore reaches the Buffer without an
+/// extra copy.
+inline Buffer from(std::string&& input) { return Buffer(std::move(input)); }
+
 /// `Buffer.from(input, encoding)`: decode `input` from `utf8`/`base64`/`hex`.
 inline Buffer from(const std::string& input, const std::string& encoding) {
-    if (encoding == "utf8") return Buffer(input);
+    if (encoding == "utf8") return from(input);
     if (encoding == "base64") return Buffer(detail::base64Decode(input));
     if (encoding == "hex") return Buffer(detail::hexDecode(input));
     detail::fail("Buffer.from: unsupported encoding \"" + encoding +
@@ -239,34 +268,74 @@ inline std::string toString(const Buffer& value, const std::string& encoding) {
                  "\" (only \"utf8\", \"base64\" and \"hex\")");
 }
 
-/// `buf.slice(start, end)`: the bytes in [start, end) (JS semantics, a copy).
-inline Buffer slice(const Buffer& value, double start, double end) {
-    const std::string& data = value.bytes();
-    const double len = static_cast<double>(data.size());
-    const std::size_t from = detail::sliceBegin(start, len);
-    const std::size_t to = detail::sliceEnd(end, len);
-    if (to <= from) return Buffer(std::string());
-    return Buffer(data.substr(from, to - from));
+namespace detail {
+
+inline std::size_t concatSize(const Buffer& value) {
+    return value.view().size();
+}
+inline std::size_t concatSize(const std::string& value) { return value.size(); }
+inline std::size_t concatSize(const char* value) {
+    return value ? std::strlen(value) : 0;
 }
 
-/// `buf.slice(start)`: the bytes from `start` to the end (a copy).
+inline void concatAppend(std::string& out, const Buffer& value) {
+    const std::string_view bytes = value.view();
+    if (!bytes.empty()) out.append(bytes.data(), bytes.size());
+}
+inline void concatAppend(std::string& out, const std::string& value) {
+    out += value;
+}
+inline void concatAppend(std::string& out, const char* value) {
+    if (value) out += value;
+}
+
+}  // namespace detail
+
+/// Build one Buffer from string/Buffer parts without a `toString` round trip.
+/// `Buffer.from(a + b.toString() + c.toString())` lowers here; the result is
+/// byte-identical to concatenating the strings and calling `from`.
+template <class... Parts>
+Buffer fromConcat(const Parts&... parts) {
+    std::string out;
+    out.reserve((detail::concatSize(parts) + ... + 0));
+    (detail::concatAppend(out, parts), ...);
+    return Buffer(std::move(out));
+}
+
+/// `buf.slice(start, end)`: the bytes in [start, end) (JS semantics). The
+/// result is an immutable view of the same owner, not an observable alias:
+/// there is no write surface, and `toString` still copies.
+inline Buffer slice(const Buffer& value, double start, double end) {
+    const double len = value.size();
+    const std::size_t from = detail::sliceBegin(start, len);
+    const std::size_t to = detail::sliceEnd(end, len);
+    if (to <= from) return Buffer();
+    return Buffer(value.owner_, value.offset_ + from, to - from);
+}
+
+/// `buf.slice(start)`: the bytes from `start` to the end.
 inline Buffer slice(const Buffer& value, double start) {
-    return slice(value, start, static_cast<double>(value.bytes().size()));
+    return slice(value, start, value.size());
 }
 
 /// `buf.length`: the byte count (codegen casts this to the cp3 `number`).
 inline double size(const Buffer& value) { return value.size(); }
 
-/// The raw bytes, for the std families that consume a Buffer (crypto digests).
-inline const std::string& bytes(const Buffer& value) { return value.bytes(); }
+/// The bytes as a non-owning view, for std families that consume a Buffer
+/// without needing an owning copy (crypto digests).
+inline std::string_view view(const Buffer& value) { return value.view(); }
+
+/// The bytes as an owning copy, for callers that need a `std::string`.
+inline std::string bytes(const Buffer& value) { return value.bytes(); }
 
 /// `console.log(buf)`: Node's `<Buffer 68 65 6c 6c 6f>` rendering.
 inline std::string inspect(const Buffer& value) {
     static const char kDigits[] = "0123456789abcdef";
+    const std::string_view data = value.view();
     std::string out = "<Buffer ";
-    for (std::size_t i = 0; i < value.bytes().size(); ++i) {
+    for (std::size_t i = 0; i < data.size(); ++i) {
         if (i != 0) out += " ";
-        const unsigned char b = static_cast<unsigned char>(value.bytes()[i]);
+        const unsigned char b = static_cast<unsigned char>(data[i]);
         out.push_back(kDigits[b >> 4]);
         out.push_back(kDigits[b & 0x0f]);
     }
@@ -276,7 +345,7 @@ inline std::string inspect(const Buffer& value) {
 
 /// Byte-content equality (the value semantics of an immutable byte sequence).
 inline bool operator==(const Buffer& a, const Buffer& b) {
-    return a.bytes() == b.bytes();
+    return a.view() == b.view();
 }
 
 inline bool operator!=(const Buffer& a, const Buffer& b) { return !(a == b); }

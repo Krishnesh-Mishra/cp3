@@ -126,7 +126,7 @@ std::string randomBytes(double length) {
     return out;
 }
 
-std::string sha256(const std::string& data) {
+std::string sha256(std::string_view data) {
     ensureInit();
     unsigned char digest[crypto_hash_sha256_BYTES];
     crypto_hash_sha256(digest,
@@ -135,7 +135,7 @@ std::string sha256(const std::string& data) {
     return toHex(digest, sizeof(digest));
 }
 
-std::string sha512(const std::string& data) {
+std::string sha512(std::string_view data) {
     ensureInit();
     unsigned char digest[crypto_hash_sha512_BYTES];
     crypto_hash_sha512(digest,

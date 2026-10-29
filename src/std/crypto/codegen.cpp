@@ -10,7 +10,7 @@
 // cp3::runtime::crypto); a member outside the table returns "" (defensive: the
 // closed crypto surface is rejected in sema as CP3305 first). String arguments
 // and results are `std::string` per the rest of the std surface; a `Buffer`
-// argument to sha256/sha512 lowers to its bytes (see emitCryptoCall).
+// argument to sha256/sha512 lowers to its byte view (see emitCryptoCall).
 // `needsCrypto_` makes buildSource add the include.
 // =============================================================================
 #include "detail/generator/generator.h"
@@ -29,7 +29,7 @@ namespace {
 // `randomBytes` returns the nominal Buffer: the runtime hands back the raw
 // bytes as `std::string` and the call is wrapped with
 // `::cp3::runtime::buffer::from`; a `Buffer` argument to sha256/sha512 lowers
-// to its bytes (the runtime digest surface takes `std::string`).
+// to its byte view (the runtime digest surface takes `std::string_view`).
 struct CryptoFn {
     const char* js;
     const char* fn;
@@ -62,8 +62,8 @@ std::string Generator::emitCryptoCall(const CallExpr& c, const MemberExpr& m) {
                joinStrings(emitPlainArgs(c), ", ") + "))";
     }
     // `sha256(s: string | Buffer)` / `sha512(...)`: a Buffer argument lowers to
-    // its raw bytes, the `const std::string&` the runtime digest surface takes
-    // (cp3/std/buffer.hpp). A string argument lowers unchanged.
+    // its non-owning byte view, the `std::string_view` the runtime digest
+    // surface takes (cp3/std/buffer.hpp). A string argument lowers unchanged.
     if ((m.property == "sha256" || m.property == "sha512") &&
         c.arguments.size() == 1) {
         const Expr* arg = c.arguments.front().get();
@@ -71,7 +71,7 @@ std::string Generator::emitCryptoCall(const CallExpr& c, const MemberExpr& m) {
             info(*arg).shape == Shape::Buffer) {
             needsBuffer_ = true;
             return "::cp3::runtime::crypto::" + std::string(fn) +
-                   "(::cp3::runtime::buffer::bytes(" + expr(*arg) + "))";
+                   "(::cp3::runtime::buffer::view(" + expr(*arg) + "))";
         }
     }
     return "::cp3::runtime::crypto::" + std::string(fn) + "(" +

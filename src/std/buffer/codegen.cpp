@@ -60,6 +60,67 @@ std::string Generator::emitByteBufferStaticCall(const CallExpr& c,
         return "0.0";
     }
     needsBuffer_ = true;
+    // `Buffer.from(a + b.toString() + c.toString())`: build the byte sequence
+    // directly from the parts. The Buffer operands are appended as views, so
+    // the 64 KiB copies the toString round trip would make disappear.
+    if (m.property == "from" && c.arguments.size() == 1 &&
+        c.arguments.front() &&
+        c.arguments.front()->kind != NodeKind::SpreadElement &&
+        info(*c.arguments.front()).shape == Shape::String) {
+        std::vector<const Expr*> parts;
+        auto collect = [&](auto&& self, const Expr& e) -> void {
+            if (e.kind == NodeKind::BinaryExpr) {
+                const auto& b = static_cast<const BinaryExpr&>(e);
+                if (b.op == BinaryOp::Add && b.left && b.right &&
+                    info(*b.left).shape == Shape::String &&
+                    info(*b.right).shape == Shape::String) {
+                    self(self, *b.left);
+                    self(self, *b.right);
+                    return;
+                }
+            }
+            parts.push_back(&e);
+        };
+        collect(collect, *c.arguments.front());
+        if (parts.size() >= 2) {
+            // `buf.toString()` with the default (or literal "utf8") encoding
+            // is exactly the buffer's bytes; append those bytes directly. Any
+            // other encoding stays on the normal toString path.
+            auto bufferReceiver = [&](const Expr& e) -> const Expr* {
+                if (e.kind != NodeKind::CallExpr) return nullptr;
+                const auto& call = static_cast<const CallExpr&>(e);
+                if (!call.callee ||
+                    call.callee->kind != NodeKind::MemberExpr) {
+                    return nullptr;
+                }
+                const auto& member =
+                    static_cast<const MemberExpr&>(*call.callee);
+                if (member.property != "toString" || !member.object) {
+                    return nullptr;
+                }
+                if (info(*member.object).shape != Shape::Buffer) return nullptr;
+                if (call.arguments.empty()) return member.object.get();
+                if (call.arguments.size() != 1 || !call.arguments.front()) {
+                    return nullptr;
+                }
+                const Expr& arg = *call.arguments.front();
+                if (arg.kind != NodeKind::StringLiteral) return nullptr;
+                return static_cast<const StringLiteral&>(arg).value == "utf8"
+                           ? member.object.get()
+                           : nullptr;
+            };
+            std::string call = "::cp3::runtime::buffer::fromConcat(";
+            for (std::size_t i = 0; i < parts.size(); ++i) {
+                if (i != 0) call += ", ";
+                if (const Expr* buffer = bufferReceiver(*parts[i])) {
+                    call += expr(*buffer);
+                } else {
+                    call += expr(*parts[i]);
+                }
+            }
+            return call + ")";
+        }
+    }
     return "::cp3::runtime::buffer::" + m.property + "(" +
            joinStrings(emitPlainArgs(c), ", ") + ")";
 }

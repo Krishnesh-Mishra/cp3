@@ -42,6 +42,7 @@
 #include <cstring>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace cp3::runtime::strings {
@@ -192,7 +193,37 @@ inline std::string caseMapResult(const std::string& s) {
     return out;
 }
 
+// --- fused concatenation -----------------------------------------------------
+//
+// `a + b + c` lowers here instead of nesting `std::string` temporaries: one
+// result buffer is reserved from the known part sizes, then every part is
+// appended in order. The parts are the string operands the type checker already
+// accepted, so the bytes are identical to the left-associative `+` chain.
+inline std::size_t concatSize(const std::string& s) { return s.size(); }
+inline std::size_t concatSize(std::string_view s) { return s.size(); }
+inline std::size_t concatSize(const char* s) {
+    return s ? std::strlen(s) : 0;
+}
+inline std::size_t concatSize(char) { return 1; }
+
+inline void concatAppend(std::string& out, const std::string& s) { out += s; }
+inline void concatAppend(std::string& out, std::string_view s) {
+    if (!s.empty()) out.append(s.data(), s.size());
+}
+inline void concatAppend(std::string& out, const char* s) {
+    if (s) out += s;
+}
+inline void concatAppend(std::string& out, char c) { out.push_back(c); }
+
 }  // namespace detail
+
+template <class... Parts>
+std::string concat(const Parts&... parts) {
+    std::string out;
+    out.reserve((detail::concatSize(parts) + ... + 0));
+    (detail::concatAppend(out, parts), ...);
+    return out;
+}
 
 // --- indexing ----------------------------------------------------------------
 
