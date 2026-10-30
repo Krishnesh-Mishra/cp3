@@ -149,6 +149,11 @@ std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
         args.push_back(f);
     }
 #if defined(_WIN32)
+    if (usesMingwTarget(tc)) {
+        std::error_code ec;
+        const fs::path lld = fs::path(tc.program).parent_path() / "ld.lld.exe";
+        if (fs::is_regular_file(lld, ec)) args.push_back("-fuse-ld=lld");
+    }
     // Startup (startup perf wave): every dynamically linked C++ runtime DLL
     // is one more image the loader maps and one more DllMain that runs before
     // main. On Windows there is no dlopen/NSS contract to keep, so a fully

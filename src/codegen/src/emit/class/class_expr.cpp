@@ -318,6 +318,16 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
         return std::string();  // a narrowed handle is needed first
     }
     std::string recv = expr(*m.object);
+    bool nonOwningReceiver = false;
+    if (m.object->kind == NodeKind::Identifier) {
+        const auto& id = static_cast<const Identifier&>(*m.object);
+        const auto resolved = sema_.resolvedBindings.find(id.nodeId);
+        nonOwningReceiver = resolved != sema_.resolvedBindings.end() &&
+            nonOwningParamDecls_.count(resolved->second) != 0;
+    } else if (m.object->kind == NodeKind::IndexExpr) {
+        nonOwningReceiver = isStackValueArray(*m.object);
+    }
+    const std::string instanceOp = nonOwningReceiver ? "." : "->";
     if (unwrap) {
         recv = declaredShape == Shape::Optional ? "(*(" + recv + "))"
                                                 : "(" + recv + ").value()";
@@ -329,7 +339,7 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
                 findClassAccessor(*cm, m.property, true);
             get != nullptr) {
             const std::string target =
-                get->isStatic ? cm->cpp + "::" : "(" + recv + ")->";
+                get->isStatic ? cm->cpp + "::" : "(" + recv + ")" + instanceOp;
             return target + "get_" + mapIdent(get->name) + "()";
         }
         const ClassMemberModel* mem =
@@ -338,14 +348,14 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
         if (mem->isWeak) {
             // A weak read is `T | undefined`: `readWeak` returns the optional
             // strong handle (`MaybeRef<T>`), and narrowing decides the use.
-            return "::cp3::runtime::readWeak((" + recv + ")->" +
+            return "::cp3::runtime::readWeak((" + recv + ")" + instanceOp +
                    mapIdent(mem->name) + ")";
         }
         if (mem->isMethod) return detachedMethodLambda(*cm, *mem, recv);
         // D24: a static field is reachable through an instance too; it lives
         // on the class, not on the handle.
         if (mem->isStatic) return cm->cpp + "::" + mapIdent(mem->name);
-        return "(" + recv + ")->" + mapIdent(mem->name);
+        return "(" + recv + ")" + instanceOp + mapIdent(mem->name);
     }
     if (const ObjectModel* om = objectModelOf(base);
         om != nullptr && ModelRegistry::get().objectUsable(om->label) &&
@@ -405,6 +415,16 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
     }
     const Type base = stripNullish(rt);
     if (const ClassModel* cm = classModelOf(base)) {
+        bool nonOwningReceiver = false;
+        if (m.object->kind == NodeKind::Identifier) {
+            const auto& id = static_cast<const Identifier&>(*m.object);
+            const auto resolved = sema_.resolvedBindings.find(id.nodeId);
+            nonOwningReceiver = resolved != sema_.resolvedBindings.end() &&
+                nonOwningParamDecls_.count(resolved->second) != 0;
+        } else if (m.object->kind == NodeKind::IndexExpr) {
+            nonOwningReceiver = isStackValueArray(*m.object);
+        }
+        const std::string instanceOp = nonOwningReceiver ? "." : "->";
         const ClassMemberModel* mem =
             findClassMemberChain(*cm, m.property, nullptr);
         if (mem == nullptr || mem->isStatic) return std::string();
@@ -421,10 +441,10 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
             if (classify(memberType).shape != Shape::Function) {
                 return std::string();
             }
-            return "((" + expr(*m.object) + ")->" + mapIdent(mem->name) +
+            return "((" + expr(*m.object) + ")" + instanceOp + mapIdent(mem->name) +
                    ")(" + joinStrings(emitPlainArgs(c), ", ") + ")";
         }
-        return "(" + expr(*m.object) + ")->" + mapIdent(mem->name) + "(" +
+        return "(" + expr(*m.object) + ")" + instanceOp + mapIdent(mem->name) + "(" +
                modelCallArgs(c, *mem) + ")";
     }
     if (const ObjectModel* om = objectModelOf(base);

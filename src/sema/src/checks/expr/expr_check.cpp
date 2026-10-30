@@ -125,6 +125,9 @@ Type Analyzer::inferIdentifier(Identifier& id) {
         reportUndefinedName(id.span, id.name);
         return withType(id, Type::error());
     }
+    if (id.nodeId != 0 && b.declNodeId != 0) {
+        out_.resolvedBindings[id.nodeId] = b.declNodeId;
+    }
     return withType(id, b.type);
 }
 

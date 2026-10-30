@@ -11,7 +11,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <bit>
 #include <optional>
+#include <type_traits>
 
 #include "cp3/array_buffer.hpp"
 
@@ -24,11 +26,15 @@ namespace cp3::runtime {
 class DataView {
 public:
     DataView(Ref<ArrayBuffer> buf, std::size_t off, std::size_t len)
-        : buffer(std::move(buf)), byteOffset(off), byteLength(len) {}
+        : buffer(std::move(buf)), byteOffset(off), byteLength(len),
+          rawData(off == 0 ? buffer->data() : buffer->data() + off) {}
 
     Ref<ArrayBuffer> buffer;
     std::size_t byteOffset = 0;
     std::size_t byteLength = 0;
+    // ArrayBuffer's storage cannot resize. Keep its byte base alongside the
+    // owning Ref so repeated DataView reads avoid following buffer->data().
+    std::uint8_t* const rawData;
 };
 
 inline Ref<DataView> makeDataView(const Ref<ArrayBuffer>& buffer) {
@@ -61,7 +67,25 @@ inline std::uint8_t* dvBytes(const Ref<DataView>& dv, double offset,
     if (t + static_cast<double>(width) > static_cast<double>(dv->byteLength)) {
         typedArrayPanic("DataView access is outside the view");
     }
-    return dv->buffer->data() + dv->byteOffset + static_cast<std::size_t>(t);
+    return dv->rawData + static_cast<std::size_t>(t);
+}
+
+// Native integer offsets need no JS number conversion (truncation, NaN and
+// infinity checks). Keep the view bounds check, but do it without converting
+// the induction variable to double. This overload is especially useful for
+// generated counted loops over a DataView.
+template <class Integer,
+          std::enable_if_t<std::is_integral_v<Integer>, int> = 0>
+inline std::uint8_t* dvBytes(const Ref<DataView>& dv, Integer offset,
+                             std::size_t width) {
+    if constexpr (std::is_signed_v<Integer>) {
+        if (offset < 0) typedArrayPanic("DataView offset out of range");
+    }
+    const std::uintmax_t start = static_cast<std::uintmax_t>(offset);
+    if (start > dv->byteLength || width > dv->byteLength - start) {
+        typedArrayPanic("DataView access is outside the view");
+    }
+    return dv->rawData + static_cast<std::size_t>(start);
 }
 
 inline std::uint64_t dvLoad(const std::uint8_t* p, std::size_t width,
@@ -83,6 +107,12 @@ inline void dvStore(std::uint8_t* p, std::size_t width, std::uint64_t value,
 }
 
 inline double dvGetUint8(const Ref<DataView>& dv, double offset) {
+    return static_cast<double>(dvLoad(dvBytes(dv, offset, 1), 1, false));
+}
+
+template <class Integer,
+          std::enable_if_t<std::is_integral_v<Integer>, int> = 0>
+inline double dvGetUint8(const Ref<DataView>& dv, Integer offset) {
     return static_cast<double>(dvLoad(dvBytes(dv, offset, 1), 1, false));
 }
 
@@ -125,6 +155,17 @@ inline double dvGetFloat32(const Ref<DataView>& dv, double offset,
 inline double dvGetFloat64(const Ref<DataView>& dv, double offset,
                            bool littleEndian = false) {
     const std::uint64_t bits = dvLoad(dvBytes(dv, offset, 8), 8, littleEndian);
+    double d = 0.0;
+    std::memcpy(&d, &bits, sizeof(d));
+    return d;
+}
+
+template <class Integer,
+          std::enable_if_t<std::is_integral_v<Integer>, int> = 0>
+inline double dvGetFloat64(const Ref<DataView>& dv, Integer offset,
+                           bool littleEndian = false) {
+    const std::uint64_t bits =
+        dvLoad(dvBytes(dv, offset, 8), 8, littleEndian);
     double d = 0.0;
     std::memcpy(&d, &bits, sizeof(d));
     return d;

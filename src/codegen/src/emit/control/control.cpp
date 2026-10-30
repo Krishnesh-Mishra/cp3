@@ -50,6 +50,42 @@ void Generator::popFlowFrame() {
 std::string Generator::emitWhile(const WhileStatement& w,
                                  const std::string& jsLabel, std::string& out,
                                  int indent) {
+    const auto fast = fastDataViewLoops_.find(w.nodeId);
+    const bool fastLoop = fast != fastDataViewLoops_.end();
+    std::string fastRawName;
+    std::string fastReceiverText;
+    std::optional<std::string> previousRaw;
+    if (fastLoop) {
+        fastRawName = "cp3_fast_bytes_" + std::to_string(w.nodeId);
+        fastReceiverText = mapIdent(fast->second.receiver);
+        const auto binding = lookup(fast->second.receiver);
+        if (binding && binding->global) {
+            fastReceiverText = moduleRef(fast->second.receiver);
+        }
+        const auto previous = activeFastDataViews_.find(fast->second.receiver);
+        if (previous != activeFastDataViews_.end()) previousRaw = previous->second;
+        line(out, indent, "{");
+        ++indent;
+        if (fast->second.exactFloatReduction) {
+            line(out, indent, "#if defined(__clang__)");
+            line(out, indent, "#pragma clang fp reassociate(on)");
+            line(out, indent, "#endif");
+        }
+        line(out, indent, "const std::uint8_t* const " + fastRawName + " = " +
+                             fastReceiverText + "->rawData;");
+        line(out, indent, "if (static_cast<double>(" + expr(*fast->second.bound) +
+                             ") > static_cast<double>(" + fastReceiverText +
+                             "->byteLength / " + std::to_string(fast->second.width) +
+                             ")) ::cp3::runtime::typedArrayPanic(\"DataView access is outside the view\");");
+        activeFastDataViews_[fast->second.receiver] = fastRawName;
+    }
+    const auto finishFastLoop = [&]() {
+        if (!fastLoop) return;
+        if (previousRaw) activeFastDataViews_[fast->second.receiver] = *previousRaw;
+        else activeFastDataViews_.erase(fast->second.receiver);
+        --indent;
+        line(out, indent, "}");
+    };
     // A counted push loop reserves its remaining pushes once (emit/push_reserve.cpp).
     emitPushReserveHint(w, out, indent);
     const std::string breakLabel = freshLabel("while_end_");
@@ -74,9 +110,15 @@ std::string Generator::emitWhile(const WhileStatement& w,
         line(out, indent, "}");
         popFlowFrame();
         line(out, indent, breakLabel + ": ;");
+        finishFastLoop();
         return continueLabel;
     }
     const std::string condition = w.condition ? cond(*w.condition) : "false";
+    if (fastLoop && fast->second.exactFloatReduction) {
+        line(out, indent, "#if defined(__clang__)");
+        line(out, indent, "#pragma clang loop vectorize(enable)");
+        line(out, indent, "#endif");
+    }
     line(out, indent, "while (" + condition + ") {");
     if (w.body) {
         // The body is one scope deeper than the continue label: a `goto` to
@@ -90,6 +132,7 @@ std::string Generator::emitWhile(const WhileStatement& w,
     line(out, indent, "}");
     popFlowFrame();
     line(out, indent, breakLabel + ": ;");
+    finishFastLoop();
     return continueLabel;
 }
 

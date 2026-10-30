@@ -125,6 +125,15 @@ const E& arrayAt(const Array<E>& a, double index) {
     return (*a)[static_cast<std::size_t>(index)];
 }
 
+// The non-owning form used only for a compiler-proven local vector. Keeping
+// the same bounds check preserves array semantics while avoiding a shared_ptr
+// handle and control block for the vector object itself.
+template <class E>
+const E& arrayAt(const std::vector<E>* a, double index) {
+    if (!indexInRange(index, a->size())) typedArrayPanic("Array index out of range");
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
 // The element at `index`, or `fallback` when the array is shorter. A binding
 // pattern's default (`[a = 1]`) reads the element or the default, so a short
 // array fills the missing slot instead of running off its end.
@@ -143,6 +152,12 @@ E arrayAtOr(const Array<E>& a, double index, F fallback) {
 // or captured.
 template <class E>
 const E& arrayAtRef(const Array<E>& a, double index) {
+    if (!indexInRange(index, a->size())) typedArrayPanic("Array index out of range");
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
+template <class E>
+const E& arrayAtRef(const std::vector<E>* a, double index) {
     if (!indexInRange(index, a->size())) typedArrayPanic("Array index out of range");
     return (*a)[static_cast<std::size_t>(index)];
 }
@@ -198,6 +213,18 @@ double arrayPush(const Array<E>& a, E&& value) {
     return static_cast<double>(a->size());
 }
 
+template <class E>
+double arrayPush(std::vector<E>* a, const E& value) {
+    a->push_back(value);
+    return static_cast<double>(a->size());
+}
+
+template <class E>
+double arrayPush(std::vector<E>* a, E&& value) {
+    a->push_back(std::move(value));
+    return static_cast<double>(a->size());
+}
+
 // A capacity hint for a counted push loop (codegen: emit/push_reserve.cpp).
 // Capacity is not an observable cp3 value, so this can never change a program's
 // result: it only reserves room for the pushes the loop is about to perform.
@@ -223,10 +250,36 @@ void arrayReservePush(const Array<E>& a, double count) {
     }
 }
 
+template <class E>
+void arrayReservePush(std::vector<E>* a, double count) {
+    if (!(count > 0.0) || !std::isfinite(count)) return;
+    constexpr double kCapBytes = 268435456.0;
+    const double cap = kCapBytes / static_cast<double>(sizeof(E));
+    const std::size_t current = a->size();
+    if (static_cast<double>(current) >= cap) return;
+    if (count > cap - static_cast<double>(current)) return;
+    const std::size_t add = static_cast<std::size_t>(count);
+    if (add == 0) return;
+    const std::size_t total = current + add;
+    if (total <= a->capacity()) return;
+    try {
+        a->reserve(total);
+    } catch (...) {
+    }
+}
+
 // `a.pop()`: removes and returns the last element; an empty array yields
 // `undefined` (an empty optional), matching JS.
 template <class E>
 std::optional<E> arrayPop(const Array<E>& a) {
+    if (a->empty()) return std::nullopt;
+    E value = a->back();
+    a->pop_back();
+    return value;
+}
+
+template <class E>
+std::optional<E> arrayPop(std::vector<E>* a) {
     if (a->empty()) return std::nullopt;
     E value = a->back();
     a->pop_back();

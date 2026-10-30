@@ -174,6 +174,34 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
                    : std::string();
     };
     if (prop == "push" || prop == "unshift") {
+        if (prop == "push" && g.isStackValueArray(*m.object) &&
+            c.arguments.size() == 1 && c.arguments.front() &&
+            c.arguments.front()->kind == NodeKind::NewExpr) {
+            CppInfo valueInfo = g.info(*c.arguments.front());
+            std::string valueType = valueInfo.cpp;
+            constexpr const char* refPrefix = "::cp3::runtime::Ref<";
+            const std::size_t prefixSize =
+                std::char_traits<char>::length(refPrefix);
+            if (valueInfo.shape == Shape::ClassRef && valueInfo.representable &&
+                valueType.rfind(refPrefix, 0) == 0 &&
+                valueType.size() > prefixSize && valueType.back() == '>') {
+                valueType = valueType.substr(
+                    prefixSize, valueType.size() - prefixSize - 1);
+                const std::string refText = g.expr(*c.arguments.front());
+                const std::string exactFactory =
+                    "::cp3::runtime::makeRef<" + valueType + ">(";
+                if (refText.rfind(exactFactory, 0) == 0 &&
+                    refText.size() > exactFactory.size() && refText.back() == ')') {
+                    const std::string valueText =
+                        valueType + "(" +
+                        refText.substr(exactFactory.size(),
+                                       refText.size() - exactFactory.size() - 1) +
+                        ")";
+                    return "::cp3::runtime::arrayPush<" + valueType + ">(" +
+                           recvText + ", " + valueText + ")";
+                }
+            }
+        }
         const char* fn = prop == "push" ? "arrayPush" : "arrayUnshift";
         return "::cp3::runtime::" + std::string(fn) + "<" + ec.cpp + ">(" +
                recvText + ", " + arg(0) + ")";

@@ -473,7 +473,22 @@ std::string Generator::parameterCppType(const Parameter& p,
     const std::optional<Type> pt = parameterType(p, fd, index);
     if (!pt) return std::string();
     const CppInfo ci = classify(*pt);
-    if (ci.representable) return ci.cpp;
+    if (ci.representable) {
+        if (nonOwningParamDecls_.count(p.nodeId) != 0 &&
+            ci.shape == Shape::ClassRef && ci.cpp.rfind("::cp3::runtime::Ref<", 0) == 0) {
+            const std::size_t begin = std::string("::cp3::runtime::Ref<").size();
+            int depth = 1;
+            std::size_t end = begin;
+            for (; end < ci.cpp.size() && depth != 0; ++end) {
+                if (ci.cpp[end] == '<') ++depth;
+                else if (ci.cpp[end] == '>') --depth;
+            }
+            if (depth == 0 && end == ci.cpp.size()) {
+                return ci.cpp.substr(begin, end - begin - 1) + "&";
+            }
+        }
+        return ci.cpp;
+    }
     // A destructured parameter annotated with a registered record (an
     // interface reified by the JSON record surface) uses that struct's
     // spelling; the prologue reads its fields.

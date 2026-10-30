@@ -27,7 +27,7 @@ namespace cp3::runtime {
 
 // The family's spec-violation path. The corpus pins it as exit 1 (tests assert
 // the exit code; stderr text stays spec prose).
-[[noreturn]] inline void typedArrayPanic(const char* message) {
+[[noreturn]] inline void typedArrayPanic(const char* message) noexcept {
     std::fprintf(stderr, "cp3: RangeError: %s\n", message);
     std::fflush(stderr);
     std::exit(1);

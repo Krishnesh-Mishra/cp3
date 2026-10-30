@@ -101,7 +101,7 @@ public:
     // parameter). Strict mode also rejects a declaration that shadows `name`.
     // Used by the typed-array in-range proof; findings are discarded, so only
     // the boolean answer matters.
-    static bool writesName(Stmt& body, const std::string& name);
+    bool writesName(Stmt& body, const std::string& name);
     // Returns and clears the collected findings.
     std::vector<Finding> take() { return std::move(findings_); }
 

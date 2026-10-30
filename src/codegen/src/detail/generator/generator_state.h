@@ -18,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 #include <utility>
 #include <vector>
 
@@ -254,6 +255,31 @@ protected:
     // Declarators whose array index read is a proven-safe const reference
     // (support/array_refs.cpp).
     std::unordered_set<std::uint32_t> arrayRefDecls_;
+    // Local class allocations proven not to escape their declaration frame.
+    // Those sites lower to an automatic object plus a raw local pointer.
+    std::unordered_set<std::uint32_t> stackAllocDecls_;
+    // Arrays whose class elements are provably observed only through scalar
+    // fields can store values instead of owning Ref<T> handles.
+    std::unordered_set<std::uint32_t> stackValueArrayDecls_;
+    // Function parameters proven to be used only through read-only field
+    // getters. These can be lowered as non-owning C++ references.
+    std::unordered_set<std::uint32_t> nonOwningParamDecls_;
+    struct FastDataViewRead {
+        std::uint32_t loopNode = 0;
+        std::string receiver;
+        const Expr* offset = nullptr;
+        std::size_t width = 0;
+        bool float64 = false;
+    };
+    struct FastDataViewLoop {
+        std::string receiver;
+        const Expr* bound = nullptr;
+        std::size_t width = 0;
+        bool exactFloatReduction = false;
+    };
+    std::unordered_map<std::uint32_t, FastDataViewRead> fastDataViewReads_;
+    std::unordered_map<std::uint32_t, FastDataViewLoop> fastDataViewLoops_;
+    std::unordered_map<std::string, std::string> activeFastDataViews_;
     std::unordered_set<std::uint32_t> reported_;
 };
 

@@ -83,27 +83,7 @@ void ClosureScanner::scanStmt(Stmt& s) {
             return;
         case NodeKind::FunctionDeclaration: {
             auto& fn = static_cast<FunctionDeclaration&>(s);
-            // A nested function can escape the loop and observe a later value
-            // of the induction variable. Do not use this loop's range proof
-            // inside any nested function body.
-            if (strict_) {
-                addCaptured(induction_, s.span);
-            }
             scanFunctionBody(fn.body.get(), fn.params);
-            return;
-        }
-        case NodeKind::ClassDeclaration: {
-            const auto& decl = static_cast<ClassDeclaration&>(s);
-            if (strict_ && decl.name == induction_) {
-                addCaptured(induction_, s.span);
-            }
-            return;
-        }
-        case NodeKind::EnumDeclaration: {
-            const auto& decl = static_cast<EnumDeclaration&>(s);
-            if (strict_ && decl.name == induction_) {
-                addCaptured(induction_, s.span);
-            }
             return;
         }
         case NodeKind::ReturnStatement:
@@ -228,9 +208,43 @@ void ClosureScanner::scanForEach(Node* left, Expr* right, Stmt* body) {
 // Declarations, switch, try, function bodies
 // =============================================================================
 
+// Does this binding pattern ever bind a name? Mirrors `declarePattern`.
+bool patternBindsName(Node* node, const std::string& name) {
+    if (!node) return false;
+    switch (node->kind) {
+        case NodeKind::Identifier:
+            return name == static_cast<Identifier&>(*node).name;
+        case NodeKind::AssignmentPattern:
+            return patternBindsName(
+                static_cast<AssignmentPattern&>(*node).left.get(), name);
+        case NodeKind::RestElement:
+            return patternBindsName(
+                static_cast<RestElement&>(*node).argument.get(), name);
+        case NodeKind::ArrayPattern: {
+            auto& ap = static_cast<ArrayPattern&>(*node);
+            for (auto& el : ap.elements)
+                if (patternBindsName(el.get(), name)) return true;
+            if (ap.rest && patternBindsName(ap.rest.get(), name)) return true;
+            return false;
+        }
+        case NodeKind::ObjectPattern: {
+            auto& op = static_cast<ObjectPattern&>(*node);
+            for (auto& prop : op.properties)
+                if (patternBindsName(prop->value.get(), name)) return true;
+            if (op.rest && patternBindsName(op.rest.get(), name)) return true;
+            return false;
+        }
+        default:
+            return false;
+    }
+}
+
 void ClosureScanner::scanVarDecl(VariableDeclaration& vd) {
     for (auto& d : vd.declarations) {
         if (!d) continue;
+        if (strict_ && patternBindsName(d->id.get(), induction_)) {
+            addCaptured(induction_, d->span);
+        }
         scanMaybeExpr(d->init.get());
         declarePattern(d->id.get());
     }

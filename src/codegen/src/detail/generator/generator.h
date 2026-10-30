@@ -519,6 +519,7 @@ private:
     std::string emitFamilyMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitFamilyMember(const MemberExpr& m);
     std::string emitFamilyIndexRead(const IndexExpr& ix);
+    bool isStackValueArray(const Expr& expression) const;
     std::string indexOperandText(const Expr& index);  // enum member -> number
     // The `IndexExpr` dispatch: the family read, else a type-error report.
     std::string emitIndexExpr(const IndexExpr& ix);
@@ -871,6 +872,8 @@ private:
     // const reference for the whole unit, or mark none when the proof cannot
     // see the whole unit.
     void analyzeArrayRefs(const Program& program);
+    void analyzeEscapeAllocations(const Program& program);
+    void analyzeDataViewLoops(const Program& program);
 
     // --- int64 fast path + `%` lowering (int_mode.cpp) ------------------------
     // A guarded int64 body plus its double wrapper (D64).

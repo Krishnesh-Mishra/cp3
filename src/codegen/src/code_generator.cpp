@@ -175,6 +175,8 @@ void Generator::runUnit(const Program& program, std::string& decls,
     detail::ModelRegistry::get().reset();
     detail::ModelRegistry::get().setNamespace(namesp_);
     collectModels(program);
+    analyzeEscapeAllocations(program);
+    analyzeDataViewLoops(program);
 
     for (const auto& stmtPtr : program.body) {
         if (stmtPtr) {

@@ -208,8 +208,13 @@ bool compilesWith(const std::string& program,
     ProbePaths paths = makeProbePaths();
     if (paths.dir.empty()) return false;
     const std::string source =
+        "#include <cmath>\n"
+        "#include <cstdint>\n"
         "#include <cstdio>\n"
-        "int main() { std::printf(\"ok\\n\"); return 0; }\n";
+        "#include <vector>\n"
+        "int main() { std::vector<double> v{4.0}; "
+        "std::printf(\"%d\\n\", static_cast<int>(std::sqrt(v[0]))); "
+        "return 0; }\n";
     if (!writeTextFile(paths.cpp, source, nullptr)) return false;
     std::vector<std::string> args{program};
     for (const std::string& flag : targetFlags) args.push_back(flag);
@@ -282,6 +287,13 @@ std::vector<std::string> toolchainTargetFlags(const std::string& program) {
             flags = explicitFlags;
             break;
         }
+    }
+    // A Windows LLVM installation may report successful header probes through
+    // its host SDK while the real CP3 translation unit still needs the GNU
+    // target's standard-library search paths. CP3's Windows runtime is MinGW,
+    // so retain the known GNU target even when optional sysroot probing failed.
+    if (flags.empty() && !gnu.empty()) {
+        flags.push_back("--target=" + gnu);
     }
     cache[program] = flags;
     return flags;

@@ -262,6 +262,21 @@ std::string Generator::typedMethodCallText(const CallExpr& c,
 // The DataView `get*`/`set*` surface; the runtime keeps the big-endian
 // default (only an explicit `true` flips it).
 std::string Generator::dataViewCallText(const CallExpr& c, const MemberExpr& m) {
+    const auto fastRead = fastDataViewReads_.find(c.nodeId);
+    if (fastRead != fastDataViewReads_.end()) {
+        const auto active = activeFastDataViews_.find(fastRead->second.receiver);
+        if (active != activeFastDataViews_.end() &&
+            m.property == (fastRead->second.float64 ? "getFloat64" : "getUint8") &&
+            fastRead->second.offset) {
+            const std::string address = active->second +
+                " + static_cast<std::size_t>(" + expr(*fastRead->second.offset) + ")";
+            if (!fastRead->second.float64) {
+                return "*reinterpret_cast<const std::uint8_t*>(" + address + ")";
+            }
+            return "([&]() { double cp3_fast_value; std::memcpy(&cp3_fast_value, " +
+                   address + ", sizeof(cp3_fast_value)); return cp3_fast_value; }())";
+        }
+    }
     static const char* const kWidths[] = {"Uint8", "Int8",  "Uint16", "Int16",
                                           "Uint32", "Int32", "Float32",
                                           "Float64"};
@@ -447,7 +462,7 @@ std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
             return "::cp3::runtime::typedArrayAt<" + t + ">(" + recv + ", " +
                    idxText + ")";
         }
-        return "::cp3::runtime::typedArrayAtUnchecked<" + t + ">(" + recv + ", " +
+        return "::cp3::runtime::typedArrayAtChecked<" + t + ">(" + recv + ", " +
                idxText + ")";
     }
     if (ot.kind == TypeKind::Array) {
@@ -458,7 +473,18 @@ std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
             return "0.0";
         }
         needsTypedArray_ = true;
-        return "::cp3::runtime::arrayAt<" + ec.cpp + ">(" + expr(*ix.object) +
+        std::string elementCpp = ec.cpp;
+        if (isStackValueArray(*ix.object)) {
+            constexpr const char* refPrefix = "::cp3::runtime::Ref<";
+            const std::size_t prefixSize =
+                std::char_traits<char>::length(refPrefix);
+            if (elementCpp.rfind(refPrefix, 0) == 0 &&
+                elementCpp.size() > prefixSize && elementCpp.back() == '>') {
+                elementCpp = elementCpp.substr(
+                    prefixSize, elementCpp.size() - prefixSize - 1);
+            }
+        }
+        return "::cp3::runtime::arrayAt<" + elementCpp + ">(" + expr(*ix.object) +
                ", " + idxText + ")";
     }
     if (ot.kind == TypeKind::String) {

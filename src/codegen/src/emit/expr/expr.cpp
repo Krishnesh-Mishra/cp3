@@ -405,6 +405,11 @@ std::string Generator::cond(const Expr& e) {
         const auto& u = static_cast<const UnaryExpr&>(e);
         if (u.op == UnaryOp::Not) return "(! " + cond(*u.operand) + ")";
     }
+    // A statically boolean CP3 condition already has JS truthiness semantics.
+    // Keeping comparisons as native C++ bools avoids wrapping counted-loop
+    // tests in cp3_truthy(), which can hide their induction pattern from the
+    // C++ optimizer and block loop transformations.
+    if (effectiveType(e).isBoolean()) return expr(e);
     return "cp3_truthy(" + expr(e) + ")";
 }
 

@@ -321,6 +321,82 @@ void Generator::emitVarDecl(const VariableDeclaration& vd, std::string& out, int
 // unit (the source temporary plus one binding per name).
 void Generator::emitDeclaratorStmt(const VariableDeclarator& d, VarKind kind,
                                    std::string& out, int indent) {
+    if (stackAllocDecls_.count(d.nodeId) != 0 && d.init && d.id &&
+        d.id->kind == NodeKind::Identifier) {
+        const std::string name =
+            mapIdent(static_cast<const Identifier&>(*d.id).name);
+        const std::string local = freshLabel("stack_object_");
+        if (d.init->kind == NodeKind::ArrayLiteral) {
+            const Type* bindingType = sema_.typeOf(d.nodeId);
+            Type array = bindingType ? *bindingType : effectiveType(*d.init);
+            if (array.kind == TypeKind::Array && !array.parts.empty()) {
+                const CppInfo element = classify(array.parts.front());
+                const auto& literal = static_cast<const ArrayLiteral&>(*d.init);
+                if (element.representable && literal.elements.empty()) {
+                    std::string elementCpp = element.cpp;
+                    if (stackValueArrayDecls_.count(d.nodeId) != 0) {
+                        constexpr const char* refPrefix =
+                            "::cp3::runtime::Ref<";
+                        const std::size_t prefixSize =
+                            std::char_traits<char>::length(refPrefix);
+                        if (elementCpp.rfind(refPrefix, 0) == 0 &&
+                            elementCpp.size() > prefixSize &&
+                            elementCpp.back() == '>') {
+                            elementCpp = elementCpp.substr(
+                                prefixSize, elementCpp.size() - prefixSize - 1);
+                        }
+                    }
+                    line(out, indent, "std::vector<" + elementCpp + "> " +
+                                          local + "{};");
+                    line(out, indent, "auto* const " + name + " = &" + local + ";");
+                    declareBinding(d);
+                    return;
+                }
+            }
+        } else if (d.init->kind == NodeKind::NewExpr) {
+            const auto& n = static_cast<const NewExpr&>(*d.init);
+            const Type objectType = effectiveType(n);
+            const CppInfo objectInfo = classify(objectType);
+            const ClassModel* model =
+                n.callee && n.callee->kind == NodeKind::Identifier
+                    ? detail::ModelRegistry::get().classByName(
+                          static_cast<const Identifier&>(*n.callee).name)
+                    : nullptr;
+            if (model && objectInfo.representable &&
+                objectInfo.shape == Shape::ClassRef) {
+                std::string init = emitModelNew(n);
+                std::string concreteClass = objectInfo.cpp;
+                constexpr const char* refPrefix = "::cp3::runtime::Ref<";
+                const std::size_t refPrefixSize =
+                    std::char_traits<char>::length(refPrefix);
+                if (concreteClass.rfind(refPrefix, 0) == 0 &&
+                    concreteClass.size() > refPrefixSize &&
+                    concreteClass.back() == '>') {
+                    concreteClass = concreteClass.substr(
+                        refPrefixSize, concreteClass.size() - refPrefixSize - 1);
+                }
+                const std::string factory =
+                    "::cp3::runtime::makeRef<" + concreteClass + ">(";
+                if (init.rfind(factory, 0) == 0 &&
+                    init.size() > factory.size() && init.back() == ')') {
+                    init = concreteClass + "(" +
+                           init.substr(factory.size(),
+                                       init.size() - factory.size() - 1) +
+                           ")";
+                    // `const box` prevents rebinding the handle, not mutation
+                    // through the object reference. Keep the stack object
+                    // mutable because emitted member methods are not const.
+                    line(out, indent, concreteClass + " " + local + " = " +
+                                          init + ";");
+                    line(out, indent,
+                         "auto* const " + name + " = &" + local + ";");
+                    declareBinding(d);
+                    return;
+                }
+                // A special constructor lowering keeps the owning fallback.
+            }
+        }
+    }
     if (emitDestructureDecl(d, kind, out, indent)) return;
     const std::string text = declaratorText(d, kind);
     if (!text.empty()) line(out, indent, text + ";");

@@ -206,6 +206,23 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
         const CppInfo fromInit = g.info(*d.init);
         if (fromInit.representable) ci = fromInit;
     }
+    std::string valueArrayElement;
+    if (g.stackValueArrayDecls_.count(d.nodeId) != 0 &&
+        declared && declared->kind == TypeKind::Array &&
+        !declared->parts.empty()) {
+        CppInfo element = classify(declared->parts.front());
+        constexpr const char* refPrefix = "::cp3::runtime::Ref<";
+        const std::size_t prefixSize = std::char_traits<char>::length(refPrefix);
+        if (element.shape == Shape::ClassRef && element.representable &&
+            element.cpp.rfind(refPrefix, 0) == 0 &&
+            element.cpp.size() > prefixSize && element.cpp.back() == '>') {
+            valueArrayElement = element.cpp.substr(
+                prefixSize, element.cpp.size() - prefixSize - 1);
+            ci.cpp = "::cp3::runtime::Array<" + valueArrayElement + ">";
+            ci.shape = Shape::Array;
+            ci.representable = true;
+        }
+    }
     if (!ci.representable) {
         // No namespace-scope spelling (e.g. an arrow binding, or a
         // top-level `await` initializer that needs the coroutine context):
@@ -240,6 +257,11 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
         if (initText.empty()) initText = g.declaratorInitText(d, ci.type);
         if (initText.empty()) initText = g.expr(*d.init);
         g.expected_ = savedExpected;
+    }
+    if (!valueArrayElement.empty() && d.init->kind == NodeKind::ArrayLiteral &&
+        static_cast<const ArrayLiteral&>(*d.init).elements.empty()) {
+        initText = "::cp3::runtime::makeArray<" + valueArrayElement +
+                   ">(std::vector<" + valueArrayElement + ">{})";
     }
     if (ci.shape == Shape::Optional && isNullishLiteral(*d.init)) {
         initText = "std::nullopt";
@@ -290,8 +312,12 @@ void ModuleVarEmitter::entryLocal(const VariableDeclarator& d, VarKind kind,
     const std::string& rawName =
         static_cast<const Identifier&>(*d.id).name;
     g.emitLineDirective(d, mainBody);
-    line(mainBody, 1, g.declaratorText(d, kind) + ";");
-    g.declare(rawName, g.resolvedBindingType(d));
+    if (g.stackAllocDecls_.count(d.nodeId) != 0) {
+        g.emitDeclaratorStmt(d, kind, mainBody, 1);
+    } else {
+        line(mainBody, 1, g.declaratorText(d, kind) + ";");
+        g.declare(rawName, g.resolvedBindingType(d));
+    }
 }
 
 void ModuleVarEmitter::noInit(const detail::CppInfo& ci,

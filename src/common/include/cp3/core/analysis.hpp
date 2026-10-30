@@ -84,6 +84,9 @@ struct FunctionInfo {
 // Everything sema learned about one Program, keyed by nodeId (D6).
 struct SemaResult {
     std::unordered_map<std::uint32_t, Type> nodeTypes;
+    // Resolved declaration node for each identifier use. Consumers such as
+    // escape analysis must distinguish shadowed names with the same spelling.
+    std::unordered_map<std::uint32_t, std::uint32_t> resolvedBindings;
     std::unordered_map<std::uint32_t, SymbolInfo> symbols;
     std::unordered_map<std::uint32_t, FunctionInfo> functions;
 
@@ -113,6 +116,7 @@ struct SemaResult {
     // reused across units.
     void clear() {
         nodeTypes.clear();
+        resolvedBindings.clear();
         symbols.clear();
         functions.clear();
         docs.clear();

@@ -36,6 +36,7 @@ set(cp3_codegen_sources
     src/support/int/int_mode_body.cpp
     src/support/int/int_reads.cpp
     src/support/core/array_refs.cpp
+    src/support/core/escape_analysis.cpp
     src/support/int/top_int64.cpp
     src/support/int/top_int64_scan_expr.cpp
     src/support/int/top_int64_scan_stmt.cpp

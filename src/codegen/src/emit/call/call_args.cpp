@@ -11,6 +11,7 @@
 // =============================================================================
 #include "detail/generator/generator.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -249,6 +250,21 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
         if (applyDefaults || i + 1 < count || hasRest) {
             texts.value[i] = (p && p->defaultValue) ? g.expr(*p->defaultValue)
                                                     : "std::nullopt";
+        }
+    }
+    // A proven non-owning parameter takes a C++ reference rather than Ref<T>.
+    // Dereferencing works for both an owning Ref<T> argument and a stack
+    // allocation already lowered to T*.
+    if (params != nullptr) {
+        const std::size_t n = std::min(count, params->size());
+        for (std::size_t i = 0; i < n; ++i) {
+            const Parameter* parameter = (*params)[i].get();
+            if (parameter == nullptr ||
+                g.nonOwningParamDecls_.count(parameter->nodeId) == 0 ||
+                texts.drop[i] || texts.value[i].empty()) continue;
+            const Expr* arg = c.arguments[i].get();
+            if (arg == nullptr || arg->kind == NodeKind::SpreadElement) continue;
+            texts.value[i] = "(*(" + texts.value[i] + "))";
         }
     }
     return texts;

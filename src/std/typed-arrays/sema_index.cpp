@@ -9,8 +9,8 @@
 //   * `typedIndexProvedInRange` proves an index is in range: either a
 //     literal index smaller than the known length, or the induction variable
 //     of a recognized for-loop whose bound does not exceed the array's known
-//     length. These reads lower to the unchecked accessor only after this
-//     proof; all unproven reads retain their undefined-aware checked path.
+//     length. In both cases the read type is `number` and codegen emits
+//     `typedArrayAtChecked` with a runtime check as a safety net.
 //   * `forLoopRange` recognizes the pattern `for (let i: i64 = 0; i < N; i =
 //     i + 1)` (and `<=`, `+= 1`, `i++`) whose body never writes `i`; it
 //     returns the induction variable and an exclusive upper bound.
@@ -21,9 +21,9 @@
 // Soundness, precisely: only the induction variable of a recognized loop is
 // proven in range, only when the array binding is `const` so its length can
 // never change, and only when the loop body does not write the index nor pass
-// it to a call (a `ref` parameter could mutate it). The body scanner rejects
-// shadowing declarations as well as writes, so the identifier still denotes
-// the induction variable at every refined access.
+// it to a call (a `ref` parameter could mutate it). The runtime bounds check
+// in `typedArrayAtChecked` is never removed, so an unsound proof panics at
+// runtime instead of reading out of bounds.
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -38,6 +38,45 @@
 namespace cp3 {
 
 namespace {
+
+bool literalLengthValue(const Expr& e, double& out) {
+    if (e.kind == NodeKind::NumberLiteral) {
+        out = static_cast<const NumberLiteral&>(e).value;
+        return true;
+    }
+    if (e.kind == NodeKind::UnaryExpr) {
+        const auto& u = static_cast<const UnaryExpr&>(e);
+        if (u.op == UnaryOp::Negate && u.operand &&
+            u.operand->kind == NodeKind::NumberLiteral) {
+            out = -static_cast<const NumberLiteral&>(*u.operand).value;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool literalIndexValue(const Expr& e, double& out) {
+    if (e.kind != NodeKind::NumberLiteral) return false;
+    out = static_cast<const NumberLiteral&>(e).value;
+    return out >= 0.0 && std::isfinite(out) && std::trunc(out) == out;
+}
+
+const Expr* constantConditionBound(const Expr* condition,
+                                   const std::string& induction) {
+    if (!condition || condition->kind != NodeKind::BinaryExpr) return nullptr;
+    const auto& binary = static_cast<const BinaryExpr&>(*condition);
+    if (!binary.left || !binary.right) return nullptr;
+    const bool left = binary.left->kind == NodeKind::Identifier &&
+        static_cast<const Identifier&>(*binary.left).name == induction;
+    const bool right = binary.right->kind == NodeKind::Identifier &&
+        static_cast<const Identifier&>(*binary.right).name == induction;
+    const bool forward = left && (binary.op == BinaryOp::LessThan ||
+                                  binary.op == BinaryOp::LessThanEqual);
+    const bool reverse = right && (binary.op == BinaryOp::GreaterThan ||
+                                   binary.op == BinaryOp::GreaterThanEqual);
+    if (!forward && !reverse) return nullptr;
+    return forward ? binary.right.get() : binary.left.get();
+}
 
 // True when the update advances `name` by exactly one.
 bool isIncrementByOne(const Expr& update, const std::string& name) {
@@ -77,41 +116,10 @@ bool isIncrementByOne(const Expr& update, const std::string& name) {
            (isOne(be.left.get()) && isName(be.right.get()));
 }
 
-bool literalIndexValue(const Expr& e, double& out) {
-    if (e.kind != NodeKind::NumberLiteral) return false;
-    out = static_cast<const NumberLiteral&>(e).value;
-    return out >= 0.0 && std::isfinite(out) && std::trunc(out) == out;
-}
-
-const Expr* constantConditionBound(const Expr* condition,
-                                   const std::string& induction) {
-    if (!condition || condition->kind != NodeKind::BinaryExpr) {
-        return nullptr;
-    }
-    const auto& binary = static_cast<const BinaryExpr&>(*condition);
-    if (!binary.left || !binary.right) return nullptr;
-    const bool leftIsIndex = binary.left->kind == NodeKind::Identifier &&
-        static_cast<const Identifier&>(*binary.left).name == induction;
-    const bool rightIsIndex = binary.right->kind == NodeKind::Identifier &&
-        static_cast<const Identifier&>(*binary.right).name == induction;
-    // `i < N` / `i <= N`, and their equivalent `N > i` / `N >= i` forms.
-    const bool forward = leftIsIndex &&
-        (binary.op == BinaryOp::LessThan ||
-         binary.op == BinaryOp::LessThanEqual);
-    const bool reverse = rightIsIndex &&
-        (binary.op == BinaryOp::GreaterThan ||
-         binary.op == BinaryOp::GreaterThanEqual);
-    if (!forward && !reverse) return nullptr;
-    return forward ? binary.right.get() : binary.left.get();
-}
-
 // The exclusive upper bound the induction variable cannot reach, derived from
 // the recognized loop condition.
 double upperBoundFromCondition(BinaryOp op, double bound) {
-    if (op == BinaryOp::LessThanEqual ||
-        op == BinaryOp::GreaterThanEqual) {
-        return std::floor(bound) + 1.0;
-    }
+    if (op == BinaryOp::LessThanEqual) return std::floor(bound) + 1.0;
     // `< bound`: for an integer loop variable starting at 0 and advancing by
     // 1, the last reachable value is floor(bound); the first *stop* value is
     // ceil(bound), which is a safe exclusive ceiling.
@@ -177,8 +185,9 @@ std::optional<double> Analyzer::knownTypedLength(const Expr& e) const {
         }
         if (args->size() == 1 && args->front()) {
             const Expr& a0 = *args->front();
-            if (auto lit = constantNumber(a0)) {
-                return *lit >= 0.0 ? std::optional<double>(std::trunc(*lit))
+            double lit = 0.0;
+            if (literalLengthValue(a0, lit)) {
+                return lit >= 0.0 ? std::optional<double>(std::trunc(lit))
                                   : std::nullopt;
             }
             if (a0.kind == NodeKind::ArrayLiteral) {
@@ -187,10 +196,10 @@ std::optional<double> Analyzer::knownTypedLength(const Expr& e) const {
             }
             return knownTypedLength(a0);  // a copy keeps the source's count
         }
-        if (args->size() == 3 && args->back()) {
-            if (auto lit = constantNumber(*args->back()); lit && *lit >= 0.0) {
-                return std::trunc(*lit);
-            }
+        if (args->size() == 3 && args->back() &&
+            args->back()->kind == NodeKind::NumberLiteral) {
+            double lit = static_cast<const NumberLiteral&>(*args->back()).value;
+            if (lit >= 0.0) return std::trunc(lit);
         }
         return std::nullopt;
     }
@@ -267,7 +276,7 @@ std::optional<Analyzer::IndexRangeFact> Analyzer::forLoopRange(
     // Condition must be `i < N` or `i <= N` with a constant bound.
     const Expr* boundExpr = constantConditionBound(stmt.condition.get(), name);
     if (!boundExpr) return std::nullopt;
-    const std::optional<double> bound = constantNumber(*boundExpr);
+    const auto bound = constantNumber(*boundExpr);
     if (!bound) return std::nullopt;
     // Non-finite bounds make the proof useless.
     if (!std::isfinite(*bound)) return std::nullopt;
@@ -281,7 +290,9 @@ std::optional<Analyzer::IndexRangeFact> Analyzer::forLoopRange(
     // call (a `ref` parameter could mutate it); it also must not declare a
     // binding with the same name.
     if (!stmt.body) return std::nullopt;
-    if (parallel_detail::ClosureScanner::writesName(*stmt.body, name)) {
+    parallel_detail::ClosureScanner bodyScanner(
+        name, [](const std::string&) { return true; });
+    if (bodyScanner.writesName(*stmt.body, name)) {
         return std::nullopt;
     }
     return IndexRangeFact{name, upper};
