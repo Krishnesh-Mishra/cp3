@@ -398,11 +398,16 @@ bool Generator::emitFusedMapUpdate(const StmtList& body, std::size_t& index,
     const std::string keyVar = "cp3_key" + suffix;
     const std::string slotVar = "cp3_slot" + suffix;
     const std::string valueVar = "cp3_value" + suffix;
+    // An identifier already names a live lvalue for the whole expression.
+    // Hold it by reference so string keys avoid a per-iteration copy; keep the
+    // owning value form for computed keys, which may be temporary results.
+    const std::string keyDecl =
+        shape.key->kind == NodeKind::Identifier ? "const auto& " : "const auto ";
     const std::string cv = shape.decl->kind == VarKind::Const ? "const " : "";
     emitLineDirective(*body[index], out);
     line(out, indent, cv + ci.cpp + " " + binding + " = ([&](auto&& " + mapVar +
                           ") -> " + ci.cpp + " {");
-    line(out, indent + 1, "const auto " + keyVar + " = (" + key + ");");
+    line(out, indent + 1, keyDecl + keyVar + " = (" + key + ");");
     line(out, indent + 1, "auto* " + slotVar + " = " + mapVar + "->findRef(" +
                               keyVar + ");");
     line(out, indent + 1, cv + ci.cpp + " " + binding + " = " + slotVar +

@@ -18,6 +18,7 @@
 #include <optional>
 #include <random>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -114,6 +115,20 @@ bool sameValueZero(const E& a, const E& b) {
     return a == b;
 }
 
+template <class I>
+inline bool integerIndexInRange(I index, std::size_t length) {
+    static_assert(std::is_integral_v<I>);
+    if constexpr (std::is_same_v<std::remove_cv_t<I>, bool>) {
+        return static_cast<std::size_t>(index) < length;
+    } else {
+        if constexpr (std::is_signed_v<I>) {
+            if (index < 0) return false;
+        }
+        using Unsigned = std::make_unsigned_t<I>;
+        return static_cast<Unsigned>(index) < length;
+    }
+}
+
 // A bounds-checked read/write (the corpus only indexes in range; anything else
 // panics instead of reading out of bounds). The read returns a reference:
 // generated uses copy only where cp3 semantics copy (a binding, argument or
@@ -122,6 +137,12 @@ bool sameValueZero(const E& a, const E& b) {
 template <class E>
 const E& arrayAt(const Array<E>& a, double index) {
     if (!indexInRange(index, a->size())) typedArrayPanic("Array index out of range");
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
+template <class E, class I, std::enable_if_t<std::is_integral_v<I>, int> = 0>
+const E& arrayAt(const Array<E>& a, I index) {
+    if (!integerIndexInRange(index, a->size())) typedArrayPanic("Array index out of range");
     return (*a)[static_cast<std::size_t>(index)];
 }
 
@@ -134,12 +155,25 @@ const E& arrayAt(const std::vector<E>* a, double index) {
     return (*a)[static_cast<std::size_t>(index)];
 }
 
+template <class E, class I, std::enable_if_t<std::is_integral_v<I>, int> = 0>
+const E& arrayAt(const std::vector<E>* a, I index) {
+    if (!integerIndexInRange(index, a->size())) typedArrayPanic("Array index out of range");
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
 // The element at `index`, or `fallback` when the array is shorter. A binding
 // pattern's default (`[a = 1]`) reads the element or the default, so a short
 // array fills the missing slot instead of running off its end.
 template <class E, class F>
 E arrayAtOr(const Array<E>& a, double index, F fallback) {
     if (!indexInRange(index, a->size())) return static_cast<E>(fallback);
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
+template <class E, class I, class F,
+          std::enable_if_t<std::is_integral_v<I>, int> = 0>
+E arrayAtOr(const Array<E>& a, I index, F fallback) {
+    if (!integerIndexInRange(index, a->size())) return static_cast<E>(fallback);
     return (*a)[static_cast<std::size_t>(index)];
 }
 
@@ -156,9 +190,21 @@ const E& arrayAtRef(const Array<E>& a, double index) {
     return (*a)[static_cast<std::size_t>(index)];
 }
 
+template <class E, class I, std::enable_if_t<std::is_integral_v<I>, int> = 0>
+const E& arrayAtRef(const Array<E>& a, I index) {
+    if (!integerIndexInRange(index, a->size())) typedArrayPanic("Array index out of range");
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
 template <class E>
 const E& arrayAtRef(const std::vector<E>* a, double index) {
     if (!indexInRange(index, a->size())) typedArrayPanic("Array index out of range");
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
+template <class E, class I, std::enable_if_t<std::is_integral_v<I>, int> = 0>
+const E& arrayAtRef(const std::vector<E>* a, I index) {
+    if (!integerIndexInRange(index, a->size())) typedArrayPanic("Array index out of range");
     return (*a)[static_cast<std::size_t>(index)];
 }
 
@@ -172,9 +218,21 @@ E arrayAtOrDefault(const Array<E>& a, double index, E fallback) {
     return (*a)[static_cast<std::size_t>(index)];
 }
 
+template <class E, class I, std::enable_if_t<std::is_integral_v<I>, int> = 0>
+E arrayAtOrDefault(const Array<E>& a, I index, E fallback) {
+    if (!integerIndexInRange(index, a->size())) return fallback;
+    return (*a)[static_cast<std::size_t>(index)];
+}
+
 template <class E>
 void arrayWriteAt(const Array<E>& a, double index, const E& value) {
     if (!indexInRange(index, a->size())) typedArrayPanic("Array index out of range");
+    (*a)[static_cast<std::size_t>(index)] = value;
+}
+
+template <class E, class I, std::enable_if_t<std::is_integral_v<I>, int> = 0>
+void arrayWriteAt(const Array<E>& a, I index, const E& value) {
+    if (!integerIndexInRange(index, a->size())) typedArrayPanic("Array index out of range");
     (*a)[static_cast<std::size_t>(index)] = value;
 }
 
