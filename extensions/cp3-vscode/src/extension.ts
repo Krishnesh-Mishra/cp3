@@ -41,6 +41,7 @@ import {
 } from "vscode-languageclient/node";
 
 import { resolveCompilerPath } from "./compilerPath";
+import { registerEditorFeatures } from "./editorFeatures";
 
 const LANGUAGE_ID = "cp3";
 const CLIENT_ID = "cp3";
@@ -103,7 +104,8 @@ function missingCompilerMessage(setting: string): string {
     return (
         `cp3: language server not found. "${COMPILER_PATH_SETTING}" is "${setting}", ` +
         `which does not resolve to a cp3c executable (a bare name is searched on PATH, ` +
-        `also trying cp3c.exe on Windows). Point it at cp3c.exe or install the cp3 toolchain.`
+        `also trying cp3c.exe on Windows, then a nearby source checkout's build/bin). ` +
+        `Point it at cp3c.exe or install the cp3 toolchain.`
     );
 }
 
@@ -188,7 +190,7 @@ function taskCompilerCommand(): string {
     // An unresolved bare name is still handed to the process unchanged: the
     // task terminal then shows the usual "not recognized" error instead of the
     // task silently disappearing from the list.
-    return resolveCompilerPath(setting) ?? setting;
+    return resolveCompilerPath(setting, workspaceCwd()) ?? setting;
 }
 
 // Builds the contributed tasks and re-resolves tasks saved in tasks.json, so
@@ -265,7 +267,7 @@ export async function startClient(forced = false): Promise<void> {
     const setting = vscode.workspace
         .getConfiguration()
         .get<string>(COMPILER_PATH_SETTING, DEFAULT_COMPILER_PATH);
-    const command = resolveCompilerPath(setting);
+    const command = resolveCompilerPath(setting, workspaceCwd());
     if (command === undefined) {
         notifyOnce(
             `missing:${setting}`,
@@ -389,7 +391,10 @@ class Cp3DebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
         const setting = vscode.workspace
             .getConfiguration()
             .get<string>(COMPILER_PATH_SETTING, DEFAULT_COMPILER_PATH);
-        const command = resolveCompilerPath(setting);
+        const command = resolveCompilerPath(
+            setting,
+            session.workspaceFolder?.uri.fsPath ?? workspaceCwd()
+        );
         if (command === undefined) {
             throw new Error(missingCompilerMessage(setting));
         }
@@ -401,6 +406,7 @@ class Cp3DebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     context.subscriptions.push(output());
+    registerEditorFeatures(context);
     context.subscriptions.push(
         vscode.commands.registerCommand(RESTART_COMMAND, () => startClient(true))
     );

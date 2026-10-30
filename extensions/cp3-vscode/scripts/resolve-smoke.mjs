@@ -82,6 +82,29 @@ try {
         process.env.PATH = join(work, "empty");
         check("missing binary yields undefined", resolveCompilerPath("cp3c"), undefined);
         check("empty setting yields undefined", resolveCompilerPath("   "), undefined);
+
+        const checkout = join(work, "checkout");
+        const checkoutBin = join(checkout, "build", "bin");
+        const checkoutCli = join(checkout, "src", "cli");
+        const nestedWorkspace = join(checkout, "examples", "servers", "healthz");
+        mkdirSync(checkoutBin, { recursive: true });
+        mkdirSync(checkoutCli, { recursive: true });
+        mkdirSync(nestedWorkspace, { recursive: true });
+        writeFileSync(join(checkout, "CMakeLists.txt"), "");
+        writeFileSync(join(checkoutCli, "CMakeLists.txt"), "");
+        const localName = process.platform === "win32" ? "cp3c.exe" : "cp3c";
+        const localCompiler = join(checkoutBin, localName);
+        writeFileSync(localCompiler, "");
+        check(
+            "default cp3c finds a nearby source-checkout build",
+            resolveCompilerPath("cp3c", nestedWorkspace),
+            localCompiler
+        );
+        check(
+            "an explicit missing compiler path does not use checkout fallback",
+            resolveCompilerPath(join(checkout, "missing-cp3c"), nestedWorkspace),
+            undefined
+        );
         check(
             "nonexistent absolute path yields undefined",
             resolveCompilerPath(join(binExe, "nope")),

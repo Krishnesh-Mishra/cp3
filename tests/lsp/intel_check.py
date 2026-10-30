@@ -4,7 +4,7 @@
 #
 # Drives a real `cp3c lsp` process over stdio (no ports, no third-party
 # packages) and checks the contract the intel round promised:
-#   * initialize advertises completion (triggers "." and '"'), hover,
+#   * initialize advertises completion (triggers ".", '"', and ":"), hover,
 #     definition, documentSymbol, workspaceSymbol, signatureHelp (triggers "("
 #     and ",") and documentFormatting, while textDocumentSync stays full (1);
 #   * hover reports the inferred type of `const s = "x"` as `string`;
@@ -81,8 +81,9 @@ IMPORT_MAIN = (
     'const joined = combine("a", "b");\n'
 )
 
-# The three probe lines are deliberately unfinished: completion is requested
-# right after the dot. The rest of the file still parses with recovery.
+# The probe lines are deliberately unfinished: completion is requested right
+# after the dot. These are namespace/value checks; contextual server callbacks
+# below use isolated files so one incomplete expression cannot corrupt another.
 MEMBER = (
     'import Math from "std/math";\n'
     'import path from "std/path";\n'
@@ -91,6 +92,36 @@ MEMBER = (
     'const probeMath = Math.\n'
     'const probePath = path.\n'
     'const probeText = text.\n'
+)
+
+OBJECT_MEMBER = "const Obj = { name: 'Rahul' };\nObj.\n"
+OBJECT_PARTIAL_MEMBER = "const Obj = { name: 'Rahul' };\nObj.na\n"
+OBJECT_SHADOW = "const Object = { name: 'Rahul' };\nconst label = Object.name;\n"
+RESERVED_IDENTIFIER = "const const = 1;\n"
+ASSIGNMENT_DIAGNOSTICS = (
+    'const Obj = { name: "Rahul" };\n'
+    'Obj.name = "Asha";\n'
+    'Obj.name = 123;\n'
+    'Obj = { name: "Other" };\n'
+)
+NETWORK_SERVER_MEMBER = (
+    'import { createServer } from "std/network";\n'
+    'const app = createServer();\n'
+    'app.\n'
+)
+NETWORK_REQUEST_MEMBER = (
+    'import { createServer } from "std/network";\n'
+    'const app = createServer();\n'
+    'app.post("/request", (req, res) => {\n'
+    '  req.\n'
+    '});\n'
+)
+NETWORK_RESPONSE_MEMBER = (
+    'import { createServer } from "std/network";\n'
+    'const app = createServer();\n'
+    'app.get("/response", (req, res) => {\n'
+    '  res.\n'
+    '});\n'
 )
 
 BROKEN_DOT = 'const x = 1.\n'
@@ -126,6 +157,12 @@ TRY_BLOCK = (
 NO_TRY = (
     'function main(): void {\n'
     '  \n'
+    '}\n'
+)
+
+PARTIAL_STATEMENT = (
+    'function main(): void {\n'
+    '  re\n'
     '}\n'
 )
 
@@ -421,6 +458,14 @@ def labels(items):
     return [item.get("label", "") for item in items or []]
 
 
+def diagnostics_for(session, uri):
+    matches = [notification.get("params", {}).get("diagnostics", [])
+               for notification in session.notifications
+               if notification.get("method") == "textDocument/publishDiagnostics"
+               and notification.get("params", {}).get("uri") == uri]
+    return matches[-1] if matches else None
+
+
 def completion_items(response):
     result = response.get("result")
     if not isinstance(result, dict):
@@ -495,9 +540,9 @@ def check_capabilities(report, response):
     report.check("initialize: full text sync", caps.get("textDocumentSync") == 1)
     completion = caps.get("completionProvider")
     report.check(
-        "initialize: completion triggers . and \"",
+        "initialize: completion triggers ., \" and :",
         isinstance(completion, dict)
-        and completion.get("triggerCharacters") == [".", '"'],
+        and completion.get("triggerCharacters") == [".", '"', ":"],
         completion,
     )
     signature = caps.get("signatureHelpProvider")
@@ -550,8 +595,53 @@ def check_hover(report, session, uri):
                  response.get("result"))
 
 
-def check_completion(report, session, member_uri, broken_dot_uri,
-                     broken_string_uri, spec_uri, local_uri, main_uri):
+def check_language_diagnostics(report, session, shadow_uri, reserved_uri,
+                               assignment_uri):
+    shadow = diagnostics_for(session, shadow_uri)
+    report.check(
+        "diagnostics: shadowing the JS built-in Object is valid",
+        shadow is not None and not any(item.get("severity") == 1 for item in shadow),
+        shadow,
+    )
+    reserved = diagnostics_for(session, reserved_uri)
+    report.check(
+        "diagnostics: a reserved keyword cannot be a binding name",
+        reserved is not None and any(
+            item.get("severity") == 1 and "syntax error" in item.get("message", "")
+            for item in reserved
+        ),
+        reserved,
+    )
+    assignments = diagnostics_for(session, assignment_uri)
+    assignment_codes = {
+        str(item.get("code", "")) for item in (assignments or [])
+        if item.get("severity") == 1
+    }
+    report.check(
+        "diagnostics: incompatible object-property assignment is underlined",
+        "CP3401" in assignment_codes,
+        assignments,
+    )
+    report.check(
+        "diagnostics: const rebinding is underlined",
+        "CP3408" in assignment_codes,
+        assignments,
+    )
+    report.check(
+        "diagnostics: assigning one string property value to another is valid",
+        assignments is not None and not any(
+            item.get("severity") == 1 and
+            item.get("range", {}).get("start", {}).get("line") == 1
+            for item in assignments
+        ),
+        assignments,
+    )
+
+
+def check_completion(report, session, member_uri, object_uri,
+                     object_partial_uri, server_uri, request_uri, response_uri,
+                     broken_dot_uri, broken_string_uri, spec_uri, local_uri,
+                     main_uri):
     response = session.request("textDocument/completion", {
         "textDocument": {"uri": member_uri},
         "position": position(MEMBER, "const probeMath = Math.", 23),
@@ -602,6 +692,87 @@ def check_completion(report, session, member_uri, broken_dot_uri,
         "completion: string receiver filters array members",
         items is not None and "push" not in found and "abs" not in found,
         found,
+    )
+
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": object_uri},
+        "position": position(OBJECT_MEMBER, "Obj.\n", 4),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: object literal receiver offers its declared properties",
+        items is not None and "name" in found and "toUpperCase" not in found,
+        found,
+    )
+
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": object_partial_uri},
+        "position": position(OBJECT_PARTIAL_MEMBER, "Obj.na\n", 6),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: object property completion works during partial identifier typing",
+        items is not None and "name" in found,
+        found,
+    )
+
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": server_uri},
+        "position": position(NETWORK_SERVER_MEMBER, "app.\n", 4),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: typed network server offers every supported HTTP route method",
+        items is not None and all(name in found for name in
+                                  ("get", "post", "put", "delete", "patch",
+                                   "head", "options", "any", "use", "listen",
+                                   "close")),
+        found,
+    )
+
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": request_uri},
+        "position": position(NETWORK_REQUEST_MEMBER, "  req.\n", 6),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: HTTP request callback has a typed request surface",
+        items is not None and all(name in found for name in
+                                  ("method", "path", "params", "query",
+                                   "headers", "text", "json")),
+        found,
+    )
+    request_text = next((item for item in items or []
+                         if item.get("label") == "text"), {})
+    report.check(
+        "completion: HTTP request method explains its behavior",
+        "buffered request body as text" in item_documentation(request_text),
+        request_text,
+    )
+
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": response_uri},
+        "position": position(NETWORK_RESPONSE_MEMBER, "  res.\n", 6),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: HTTP response callback has a typed response surface",
+        items is not None and all(name in found for name in
+                                  ("status", "header", "text", "json", "send",
+                                   "write", "end")),
+        found,
+    )
+    response_write = next((item for item in items or []
+                           if item.get("label") == "write"), {})
+    report.check(
+        "completion: HTTP response write documents accepted byte/text chunks",
+        "raw Buffer bytes" in item_documentation(response_write),
+        response_write,
     )
 
     response = session.request("textDocument/completion", {
@@ -658,7 +829,8 @@ def check_completion(report, session, member_uri, broken_dot_uri,
 
 
 def check_context_completion(report, session, scope_uri, try_uri, notry_uri,
-                             class_uri, param_uri, type_uri, nested_uri):
+                             class_uri, param_uri, type_uri, nested_uri,
+                             partial_uri):
     # The reported screenshot: the cursor is in an expression position.
     response = session.request("textDocument/completion", {
         "textDocument": {"uri": scope_uri},
@@ -731,6 +903,18 @@ def check_context_completion(report, session, scope_uri, try_uri, notry_uri,
         found,
     )
 
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": partial_uri},
+        "position": position(PARTIAL_STATEMENT, "re\n", 2),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: a partial statement keeps return and const suggestions",
+        items is not None and "return" in found and "const" in found,
+        found,
+    )
+
     # A class body offers the member modifiers, not the statement keywords.
     response = session.request("textDocument/completion", {
         "textDocument": {"uri": class_uri},
@@ -773,15 +957,23 @@ def check_context_completion(report, session, scope_uri, try_uri, notry_uri,
     items = completion_items(response)
     found = labels(items)
     report.check(
-        "completion: a type position offers the types",
-        items is not None and "Counter" in found and "Shape" in found,
+        "completion: a type position offers declarations and primitive types",
+        items is not None and all(name in found for name in
+                                  ("Counter", "Shape", "number", "string",
+                                   "boolean", "void", "unknown")),
         found,
     )
     report.check(
-        "completion: a type position offers no value",
+        "completion: a type position offers no value or statement keyword",
         items is not None and not any(name in found for name in
-                                      ("count", "use", "number", "let", "const")),
+                                      ("count", "use", "let", "const")),
         found,
+    )
+    number_item = next((item for item in items or []
+                        if item.get("label") == "number"), {})
+    report.check(
+        "completion: built-in type explains itself",
+        "numeric type" in item_documentation(number_item), number_item,
     )
 
     # The nearest scope leads: the inner local before the outer one.
@@ -1260,6 +1452,21 @@ def main():
     paths = {
         "main": write_fixture(work, "intel_main.cp3", MAIN),
         "member": write_fixture(work, "intel_member.cp3", MEMBER),
+        "object_member": write_fixture(work, "intel_object_member.cp3", OBJECT_MEMBER),
+        "object_partial": write_fixture(work, "intel_object_partial.cp3",
+                                         OBJECT_PARTIAL_MEMBER),
+        "object_shadow": write_fixture(work, "intel_object_shadow.cp3",
+                                        OBJECT_SHADOW),
+        "reserved_identifier": write_fixture(work, "intel_reserved_identifier.cp3",
+                                              RESERVED_IDENTIFIER),
+        "assignment_diagnostics": write_fixture(
+            work, "intel_assignment_diagnostics.cp3", ASSIGNMENT_DIAGNOSTICS),
+        "network_server": write_fixture(work, "intel_network_server.cp3",
+                                         NETWORK_SERVER_MEMBER),
+        "network_request": write_fixture(work, "intel_network_request.cp3",
+                                          NETWORK_REQUEST_MEMBER),
+        "network_response": write_fixture(work, "intel_network_response.cp3",
+                                           NETWORK_RESPONSE_MEMBER),
         "util": write_fixture(work, "intel_util.cp3", UTIL),
         "import": write_fixture(work, "intel_import.cp3", IMPORT_MAIN),
         "broken_dot": write_fixture(work, "intel_broken_dot.cp3", BROKEN_DOT),
@@ -1270,6 +1477,7 @@ def main():
         "scope": write_fixture(work, "intel_scope.cp3", SCOPE),
         "try": write_fixture(work, "intel_try.cp3", TRY_BLOCK),
         "notry": write_fixture(work, "intel_notry.cp3", NO_TRY),
+        "partial": write_fixture(work, "intel_partial.cp3", PARTIAL_STATEMENT),
         "class": write_fixture(work, "intel_class.cp3", CLASS_BODY),
         "param": write_fixture(work, "intel_param.cp3", PARAM_LIST),
         "type": write_fixture(work, "intel_type.cp3", TYPE_POS),
@@ -1291,10 +1499,19 @@ def main():
         check_capabilities(report, init)
 
         for key, text in (("main", MAIN), ("member", MEMBER),
+                          ("object_member", OBJECT_MEMBER),
+                          ("object_partial", OBJECT_PARTIAL_MEMBER),
+                          ("object_shadow", OBJECT_SHADOW),
+                          ("reserved_identifier", RESERVED_IDENTIFIER),
+                          ("assignment_diagnostics", ASSIGNMENT_DIAGNOSTICS),
+                          ("network_server", NETWORK_SERVER_MEMBER),
+                          ("network_request", NETWORK_REQUEST_MEMBER),
+                          ("network_response", NETWORK_RESPONSE_MEMBER),
                           ("import", IMPORT_MAIN), ("broken_dot", BROKEN_DOT),
                           ("broken_string", BROKEN_STRING), ("spec", IMPORT_SPEC),
                           ("local", LOCAL_SPEC), ("scope", SCOPE),
                           ("try", TRY_BLOCK), ("notry", NO_TRY),
+                          ("partial", PARTIAL_STATEMENT),
                           ("class", CLASS_BODY), ("param", PARAM_LIST),
                           ("type", TYPE_POS), ("nested", NESTED),
                           ("documented", DOCUMENTED), ("std", DOC_STD)):
@@ -1313,12 +1530,18 @@ def main():
         })
 
         check_hover(report, session, uris["main"])
-        check_completion(report, session, uris["member"], uris["broken_dot"],
+        check_language_diagnostics(report, session, uris["object_shadow"],
+                                   uris["reserved_identifier"],
+                                   uris["assignment_diagnostics"])
+        check_completion(report, session, uris["member"],
+                         uris["object_member"], uris["object_partial"],
+                         uris["network_server"], uris["network_request"],
+                         uris["network_response"], uris["broken_dot"],
                          uris["broken_string"], uris["spec"], uris["local"],
                          uris["main"])
         check_context_completion(report, session, uris["scope"], uris["try"],
                                  uris["notry"], uris["class"], uris["param"],
-                                 uris["type"], uris["nested"])
+                                 uris["type"], uris["nested"], uris["partial"])
         check_definition(report, session, uris["main"], uris["import"],
                          paths["util"])
         check_symbols(report, session, uris["main"], uris["util"],

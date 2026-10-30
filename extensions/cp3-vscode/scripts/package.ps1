@@ -64,7 +64,18 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "vsce package failed with exit code $LASTEXITCODE" }
 
     $item = Get-Item $vsix
-    $hash = (Get-FileHash $vsix -Algorithm SHA256).Hash.ToLowerInvariant()
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($vsix)
+        try {
+            $hashBytes = $sha256.ComputeHash($stream)
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $sha256.Dispose()
+    }
+    $hash = [System.BitConverter]::ToString($hashBytes).Replace('-', '').ToLowerInvariant()
     Write-Output "vsix:   $($item.FullName)"
     Write-Output "size:   $($item.Length) bytes"
     Write-Output "sha256: $hash"

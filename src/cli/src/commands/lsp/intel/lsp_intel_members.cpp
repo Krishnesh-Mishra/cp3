@@ -122,6 +122,7 @@ void appendShapeFields(const AnalyzedDocument& document,
                        const std::string& receiver,
                        std::vector<std::string>& names) {
     if (receiver.empty() || lastIdentifier(receiver) != receiver) return;
+    if (document.entry == nullptr || document.entry->ast == nullptr) return;
     const Program& program = *document.entry->ast;
     for (const StmtPtr& statement : program.body) {
         if (statement == nullptr || !statement->span.valid() ||
@@ -159,7 +160,8 @@ void appendShapeFields(const AnalyzedDocument& document,
 }
 
 std::vector<std::string> candidateNames(const AnalyzedDocument& document,
-                                        const std::string& receiver) {
+                                        const std::string& receiver,
+                                        std::uint32_t dot) {
     const std::string last = lastIdentifier(receiver);
     if (!last.empty()) {
         // A closed std namespace has an exact table: no need to union.
@@ -167,9 +169,53 @@ std::vector<std::string> candidateNames(const AnalyzedDocument& document,
         if (!stdNames.empty()) return stdNames;
     }
     std::vector<std::string> names;
+    const Type* receiverType = receiverTypeEndingAt(document, dot);
+    if (receiverType != nullptr && receiverType->kind == TypeKind::Object) {
+        for (const std::string& name :
+             networkObjectMemberNames(receiverType->name)) {
+            appendUnique(names, name);
+        }
+    } else if (receiverType == nullptr) {
+        // A parser recovery node may leave no exact receiver span. Offer the
+        // server API names as probe candidates; the analysis below keeps only
+        // members the compiler can resolve on this actual receiver.
+        for (const std::string& name :
+             networkObjectMemberNames("$network:HttpServer")) {
+            appendUnique(names, name);
+        }
+    }
+    if (receiverType != nullptr && receiverType->kind == TypeKind::Class) {
+        for (const std::string& name :
+             stdInstanceMemberNames(receiverType->name)) {
+            appendUnique(names, name);
+        }
+        appendShapeFields(document, receiverType->name, names);
+    }
     for (const char* name : kMemberUniverse) appendUnique(names, name);
     appendShapeFields(document, receiver, names);
     return names;
+}
+
+std::vector<lsp::CompletionCandidate> sourceShapeCandidates(
+    const AnalyzedDocument& document, const std::string& receiver,
+    const std::string& namespaceName, const Type* receiverType) {
+    std::vector<std::string> names;
+    appendShapeFields(document, receiver, names);
+    // A nominal class receiver's members are declared directly on its class
+    // and do not require the synthetic probe either.
+    if (receiverType != nullptr && receiverType->kind == TypeKind::Class) {
+        appendShapeFields(document, receiverType->name, names);
+    }
+    std::vector<lsp::CompletionCandidate> result;
+    for (const std::string& name : names) {
+        lsp::CompletionCandidate candidate;
+        candidate.label = name;
+        candidate.kind = 5;
+        candidate.documentation = completionMemberDoc(
+            document, namespaceName, receiverType, name);
+        result.push_back(std::move(candidate));
+    }
+    return result;
 }
 
 constexpr const char* kProbeAbsent = "__cp3_lsp_probe_absent";
@@ -210,26 +256,32 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
     if (context.receiverBegin >= context.dot) return candidates;
     const std::string receiver =
         text.substr(context.receiverBegin, context.dot - context.receiverBegin);
-    const std::vector<std::string> names = candidateNames(document, receiver);
+    const std::vector<std::string> names =
+        candidateNames(document, receiver, context.dot);
     if (names.empty()) return candidates;
     std::string probe = text;
     probe.replace(context.receiverBegin, offset - context.receiverBegin,
                   probeArrayText(receiver, names));
     auto probed = analyzeDocument(document.file->path, probe);
-    if (!analysisReady(*probed)) return candidates;
+    const std::string namespaceName =
+        stdNamespaceMemberNames(lastIdentifier(receiver)).empty()
+            ? std::string()
+            : lastIdentifier(receiver);
+    const Type* sourceReceiverType = receiverTypeEndingAt(document, context.dot);
+    if (!analysisReady(*probed)) {
+        return sourceShapeCandidates(document, receiver, namespaceName,
+                                     sourceReceiverType);
+    }
     const ArrayLiteral* array =
         arrayStartingAt(*probed->entry->ast, context.receiverBegin);
     if (array == nullptr || array->elements.size() != names.size() + 1) {
-        return candidates;
+        return sourceShapeCandidates(document, receiver, namespaceName,
+                                     sourceReceiverType);
     }
     const Type* control = probed->sema.typeOf(array->elements.back()->nodeId);
     // The receiver's type (an array, a string, a user class) and the std
     // namespace the receiver names: both decide what a candidate's
     // documentation is.
-    const std::string namespaceName =
-        stdNamespaceMemberNames(lastIdentifier(receiver)).empty()
-            ? std::string()
-            : lastIdentifier(receiver);
     const Type* receiverType = nullptr;
     if (!array->elements.empty() && array->elements.front() != nullptr &&
         array->elements.front()->kind == NodeKind::MemberExpr) {
@@ -252,8 +304,25 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
         // shows instead of the internal placeholder label.
         candidate.detail = isPlaceholderType(*type) ? "" : describe(*type);
         candidate.documentation =
-            completionMemberDoc(namespaceName, receiverType, names[i]);
+            completionMemberDoc(document, namespaceName, receiverType,
+                                names[i]);
         candidates.push_back(std::move(candidate));
+    }
+    // Keep source-declared fields visible if the parser recovered the rest of
+    // the document but the synthetic probe could not type one candidate. The
+    // shape is read from the original object/class/interface declaration, so
+    // these are real members rather than guesses from the global universe.
+    for (lsp::CompletionCandidate& candidate :
+         sourceShapeCandidates(document, receiver, namespaceName,
+                               sourceReceiverType)) {
+        bool present = false;
+        for (const lsp::CompletionCandidate& existing : candidates) {
+            if (existing.label == candidate.label) {
+                present = true;
+                break;
+            }
+        }
+        if (!present) candidates.push_back(std::move(candidate));
     }
     return candidates;
 }

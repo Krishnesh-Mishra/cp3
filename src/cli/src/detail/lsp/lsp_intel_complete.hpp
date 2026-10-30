@@ -85,6 +85,13 @@ std::vector<lsp::CompletionCandidate> scopeCandidates(
 // The keywords that may legally appear at `position`, in popup order.
 std::vector<std::string> legalKeywords(CompletionPosition position);
 
+// Grammar-only candidates used while a document is incomplete or cannot yet
+// be semantically analyzed. These keep keyword/type completion alive during
+// normal incremental editing; they intentionally make no claims about names
+// whose types depend on semantic analysis.
+std::vector<lsp::CompletionCandidate> incompleteCandidates(
+    CompletionPosition position);
+
 // Code candidates: the names in scope, the names the module declares, the
 // legal keywords and a few snippets.
 std::vector<lsp::CompletionCandidate> generalCandidates(

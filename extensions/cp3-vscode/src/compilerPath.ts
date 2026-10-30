@@ -34,9 +34,14 @@ function isFile(candidate: string): boolean {
  * `undefined` when nothing matches:
  * - an absolute or path-qualified value is checked directly (plus `.exe` on
  *   Windows, so `cp3c` typed by hand next to an installed `cp3c.exe` works);
- * - a bare name is searched on `PATH` in order.
+ * - a bare name is searched on `PATH` in order;
+ * - if the default `cp3c` is not on `PATH`, a nearby CP3 source checkout's
+ *   `build/bin/cp3c[.exe]` is used when present.
  */
-export function resolveCompilerPath(setting: string): string | undefined {
+export function resolveCompilerPath(
+    setting: string,
+    workspaceFolder?: string
+): string | undefined {
     const wanted = setting.trim();
     if (wanted.length === 0) {
         return undefined;
@@ -60,6 +65,44 @@ export function resolveCompilerPath(setting: string): string | undefined {
                 return path.resolve(candidate);
             }
         }
+    }
+    return resolveCheckoutCompiler(wanted, workspaceFolder);
+}
+
+/**
+ * A source checkout's local CMake build is a useful fallback when users open
+ * CP3 from source but have not added its build/bin directory to PATH. Search
+ * ancestors only after the normal PATH lookup failed, and require both the
+ * project root and CLI CMake files before trusting a local build.
+ */
+function resolveCheckoutCompiler(
+    wanted: string,
+    workspaceFolder?: string
+): string | undefined {
+    if (!workspaceFolder || !["cp3c", "cp3c.exe"].includes(wanted.toLowerCase())) {
+        return undefined;
+    }
+    let directory = path.resolve(workspaceFolder);
+    for (let depth = 0; depth < 32; depth += 1) {
+        const isCheckout =
+            isFile(path.join(directory, "CMakeLists.txt")) &&
+            isFile(path.join(directory, "src", "cli", "CMakeLists.txt"));
+        if (isCheckout) {
+            const names = process.platform === "win32"
+                ? ["cp3c.exe", "cp3c"]
+                : ["cp3c"];
+            for (const name of names) {
+                const candidate = path.join(directory, "build", "bin", name);
+                if (isFile(candidate)) {
+                    return path.resolve(candidate);
+                }
+            }
+        }
+        const parent = path.dirname(directory);
+        if (parent === directory) {
+            break;
+        }
+        directory = parent;
     }
     return undefined;
 }

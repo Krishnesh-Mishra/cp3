@@ -15,9 +15,15 @@ statically typed, JS/TS-shaped language that compiles through C++:
   see [the language spec](../../docs/language-spec/24-doc-comments.md)) or the
   standard library's own description of a member such as `console.log` or
   `Math.abs`;
-- **completion with documentation**: every candidate in the completion popup
-  carries the same description, so the popup explains what a member does
-  before it is inserted;
+- **completion with documentation**: documented declarations and standard
+  library members show their Markdown descriptions beside the candidate;
+- context-aware member completion for object literals, interfaces, classes,
+  standard-library values and typed `std/network` callbacks;
+- workspace auto-import completion for exported CP3 declarations, including
+  named re-exports and unsaved open files. The nearest matching project module
+  is ranked first and accepting a result adds its import;
+- a curated set of CP3 snippets for declarations, classes, control flow,
+  imports, collections, promises, documentation and HTTP handlers;
 - **signature help with documentation**: the active call shows what the
   callee does and what each parameter is for;
 - go-to-definition, document symbols and formatting, all answered by the
@@ -82,20 +88,27 @@ fonts, and a 128x128 PNG).
 
 - VS Code 1.91 or newer.
 - The cp3 toolchain, meaning a `cp3c` (or `cp3c.exe`) binary that understands
-  `lsp --stdio`. If it is not on `PATH`, set `cp3.compilerPath` to its full
-  path.
+  `lsp --stdio`. The extension searches `PATH` first; when opening a CP3
+  source checkout, it can also find that checkout's `build/bin/cp3c`. For any
+  other install location, set `cp3.compilerPath` to the full path.
 
 ## Settings
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `cp3.compilerPath` | `cp3c` | Path to the cp3 compiler. A bare name is searched on `PATH` (on Windows `cp3c.exe` is tried too); an absolute path is used as-is. |
+| `cp3.compilerPath` | `cp3c` | Path to the cp3 compiler. A bare name is searched on `PATH` (on Windows `cp3c.exe` is tried too), then in parent folders for a CP3 source checkout's `build/bin/cp3c`; an explicit path is used as-is. |
+| `cp3.suggestWorkspaceExports` | `true` | Offer exported symbols from CP3 files in the workspace and add the corresponding import when accepted. |
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `cp3: Restart Language Server` | Stops the running server and starts it again from the current `cp3.compilerPath`. |
+| `CP3: Organize Imports` | Sorts a contiguous group of regular imports. Side-effect and multiline imports are left untouched. |
+
+The editor context menu also exposes **Format Document** for CP3 files. It
+uses the formatter provided by `cp3c lsp`; the same command is available from
+the Command Palette.
 
 ## Installing
 

@@ -346,7 +346,11 @@ Type Analyzer::inferArrow(ArrowFunction& arrow) {
 
     std::vector<Type> params;
     std::vector<bool> optional;
-    buildArrowParamTypes(arrow, params, optional);
+    const auto contextual = contextualArrowTypes_.find(arrow.nodeId);
+    const Type* contextualType = contextual == contextualArrowTypes_.end()
+                                     ? nullptr
+                                     : &contextual->second;
+    buildArrowParamTypes(arrow, params, optional, contextualType);
     // A rest parameter (`...rest: T[]`) is ONE array in the arrow's type, but
     // the call signature takes the trailing arguments one by one: its
     // parameter is the element type and the signature is variadic - the shape
@@ -397,8 +401,10 @@ Type Analyzer::inferArrow(ArrowFunction& arrow) {
 
 void Analyzer::buildArrowParamTypes(ArrowFunction& arrow,
                                     std::vector<Type>& params,
-                                    std::vector<bool>& optional) {
-    for (auto& p : arrow.params) {
+                                    std::vector<bool>& optional,
+                                    const Type* contextualType) {
+    for (std::size_t i = 0; i < arrow.params.size(); ++i) {
+        auto& p = arrow.params[i];
         if (!p) {
             params.push_back(Type::unknown());
             optional.push_back(false);
@@ -407,6 +413,11 @@ void Analyzer::buildArrowParamTypes(ArrowFunction& arrow,
         Type pt = ambient();
         if (p->type) {
             pt = resolveType(*p->type);
+        } else if (contextualType != nullptr &&
+                   contextualType->kind == TypeKind::Function &&
+                   i + 1 < contextualType->parts.size()) {
+            // Function types store parameters followed by the return type.
+            pt = contextualType->parts[i];
         } else if (p->defaultValue) {
             pt = widen(inferExpr(*p->defaultValue));
         }

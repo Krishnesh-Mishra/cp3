@@ -50,6 +50,42 @@
     "comments": {
       "patterns": [
         {
+          "name": "comment.block.documentation.cp3",
+          "begin": "/\\*\\*",
+          "beginCaptures": {
+            "0": {"name": "punctuation.definition.comment.begin.cp3"}
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {"name": "punctuation.definition.comment.end.cp3"}
+          },
+          "patterns": [
+            {
+              "match": "(@param)(\\s+)(\\{[^}]+\\})(\\s+)([A-Za-z_$][A-Za-z0-9_$]*)",
+              "captures": {
+                "1": {"name": "storage.type.class.jsdoc.cp3"},
+                "3": {"name": "entity.name.type.jsdoc.cp3"},
+                "5": {"name": "variable.parameter.jsdoc.cp3"}
+              }
+            },
+            {
+              "match": "(@param)(\\s+)([A-Za-z_$][A-Za-z0-9_$]*)",
+              "captures": {
+                "1": {"name": "storage.type.class.jsdoc.cp3"},
+                "3": {"name": "variable.parameter.jsdoc.cp3"}
+              }
+            },
+            {
+              "name": "storage.type.class.jsdoc.cp3",
+              "match": "@(param|arg|argument|returns?|throws?|deprecated|example|see|type|template|module|since|author|remarks|deprecated)\\b"
+            },
+            {
+              "name": "entity.name.type.jsdoc.cp3",
+              "match": "\\{[A-Za-z_$][A-Za-z0-9_$.,<> |\\[\\]?]*\\}"
+            }
+          ]
+        },
+        {
           "name": "comment.block.cp3",
           "begin": "/\\*",
           "beginCaptures": {

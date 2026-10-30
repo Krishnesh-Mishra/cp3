@@ -63,6 +63,12 @@ function tokenizeDocument(lines) {
 const SAMPLE = [
     "// line comment",
     "/* block comment */",
+    "/**",
+    " * Adds two values.",
+    " * @param {number} left First value.",
+    " * @returns {number} Sum of the values.",
+    " */",
+    "function documented(left: number): number { return left; }",
     "import console from \"std/console\";",
     "",
     "interface Logger {",
@@ -114,6 +120,9 @@ const SAMPLE = [
 const EXPECTATIONS = [
     [" line comment", "comment.line.double-slash.cp3"],
     ["/*", "comment.block.cp3"],
+    ["@param", "storage.type.class.jsdoc.cp3"],
+    ["{number}", "entity.name.type.jsdoc.cp3"],
+    ["left", "variable.parameter.jsdoc.cp3"],
     ["import", "keyword.control.import.cp3"],
     ["std/console", "string.quoted.double.cp3"],
     ["interface", "storage.type.interface.cp3"],

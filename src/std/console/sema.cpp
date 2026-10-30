@@ -57,16 +57,24 @@ const MemberRow kConsoleRows[] = {
      "- `args` - the values to print. A user class may implement "
      "`toString(): string` to control its own printed form; without one, a "
      "default representation is generated for the classes that are actually "
-     "printed."},
+     "printed.\n\n"
+     "**Example**\n\n"
+     "```cp3\n"
+     "console.log(\"listening on\", port);\n"
+     "```\n\n"
+     "Use `console.error` or `console.warn` when the message belongs on "
+     "stderr rather than normal output."},
     {"info", ambient, "info(...args: Printable[]): void",
      "Prints the arguments to **stdout**, separated by a space and followed by "
-     "a newline - the informational counterpart of `log`."},
+     "a newline - the informational counterpart of `log`.\n\n"
+     "**Example**\n\n```cp3\nconsole.info(\"cache refreshed\");\n```"},
     {"warn", ambient, "warn(...args: Printable[]): void",
      "Prints the arguments to **stderr**, separated by a space and followed by "
-     "a newline."},
+     "a newline.\n\n**Example**\n\n```cp3\nconsole.warn(\"using fallback configuration\");\n```"},
     {"error", ambient, "error(...args: Printable[]): void",
      "Prints the arguments to **stderr**, separated by a space and followed by "
-     "a newline - the error counterpart of `warn`."},
+     "a newline - the error counterpart of `warn`.\n\n"
+     "**Example**\n\n```cp3\nconsole.error(\"request failed\", error);\n```"},
     {"input", ambient, "input(prompt?: string): Promise<string>",
      "Reads one line from stdin and resolves with it; on EOF it resolves with "
      "an empty string instead of rejecting.\n\n"

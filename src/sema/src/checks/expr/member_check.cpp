@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/std_surface.hpp"
 
 namespace cp3 {
 
@@ -149,9 +150,16 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
     switch (ot.kind) {
         case TypeKind::Object: {
             if (isAmbientType(ot)) return ambient();
-            // Documented std/network fields carry their declared type; the
-            // marker stays open, so unknown members fall through to ambient.
-            if (auto t = networkObjectMember(ot, prop)) return *t;
+            // Network marker members and their diagnostics share one field
+            // table. An unknown member on a known network value must not
+            // silently become ambient (`server.custom` is a typo).
+            const std::vector<std::string> networkNames =
+                networkObjectMemberNames(ot.name);
+            if (!networkNames.empty()) {
+                if (auto t = networkObjectMember(ot, prop)) return *t;
+                reportMemberMiss("network value", prop, span, networkNames);
+                return Type::unknown();
+            }
             // std/fs receiver fields (`stat.size`, `stat.modifiedAt`, ...):
             // src/std/fs/sema.cpp; a miss keeps the ambient fallthrough.
             if (auto fs = fsReceiverMember(ot, prop)) return *fs;

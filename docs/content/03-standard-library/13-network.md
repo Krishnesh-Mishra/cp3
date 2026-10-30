@@ -45,7 +45,7 @@ Wait for the `"open"` event before sending application messages. `"message"` rec
 
 ## HTTP server with `createServer`
 
-`createServer()` constructs an HTTP server with route registration and middleware support. The options object currently supports `threads`, an integer of at least one. Each route handler can be synchronous or return `Promise<void>`. Routes and middleware execute in registration order. Calling `next()` from middleware continues the chain; a chain that completes without sending a response returns 404.
+`createServer()` constructs an HTTP server with route registration and middleware support. The options object currently supports `threads`, an integer of at least one. Each route handler can be synchronous or return `Promise<void>`. Routes and middleware execute in registration order. Calling `next()` from middleware continues the chain; it returns `Promise<void>`, so async middleware may use `await next()`. A chain that completes without sending a response returns 404.
 
 ```ts
 const server = createServer();

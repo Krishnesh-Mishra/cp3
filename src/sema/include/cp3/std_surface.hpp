@@ -36,8 +36,8 @@ struct StdMemberDoc {
 
 // True for the std namespaces with a closed member table (Math / path / os /
 // crypto / console / JSON / Date / fs / process / env): an unknown member is
-// CP3305. False for the permissive ones (network), which keep the ambient
-// fallthrough and therefore have no candidate list to surface.
+// CP3305. The `network` namespace remains open for its top-level namespace
+// operations, while its typed values have a closed surface below.
 bool isClosedStdNamespace(const std::string& ns);
 
 // The implemented member names of the closed namespace `ns`, in table order;
@@ -71,5 +71,13 @@ StdMemberDoc stdStringMemberDoc(const std::string& member);
 
 // The member names of the string method surface.
 std::vector<std::string> stdStringMemberNames();
+
+// The member names exposed by a typed std/network value (HTTP server, request,
+// response, fetch response, or WebSocket handle). The compiler and editor use
+// this same table so completion cannot drift from accepted member access.
+std::vector<std::string> networkObjectMemberNames(
+    const std::string& objectTypeName);
+StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
+                                   const std::string& member);
 
 }  // namespace cp3

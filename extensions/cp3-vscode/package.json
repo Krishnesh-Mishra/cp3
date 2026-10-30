@@ -44,6 +44,12 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "snippets": [
+      {
+        "language": "cp3",
+        "path": "./snippets/cp3.json"
+      }
+    ],
     "grammars": [
       {
         "language": "cp3",
@@ -55,6 +61,10 @@
       {
         "command": "cp3.restartServer",
         "title": "cp3: Restart Language Server"
+      },
+      {
+        "command": "cp3.organizeImports",
+        "title": "CP3: Organize Imports"
       }
     ],
     "taskDefinitions": [
@@ -99,9 +109,34 @@
         "cp3.compilerPath": {
           "type": "string",
           "default": "cp3c",
-          "markdownDescription": "Path to the cp3 compiler executable used as the language server and the debug adapter. A bare name (the default, `cp3c`) is resolved on PATH, also trying `cp3c.exe` on Windows; an absolute path is used as-is. The extension runs `<path> lsp --stdio` and `<path> dap --stdio`."
+          "markdownDescription": "Path to the cp3 compiler executable used as the language server and debug adapter. A bare name (the default, `cp3c`) is resolved on PATH, also trying `cp3c.exe` on Windows. If it is not on PATH, the extension searches parent folders for a CP3 source checkout and uses its `build/bin/cp3c` executable when present. An explicit path is used as-is. The extension runs `<path> lsp --stdio` and `<path> dap --stdio`."
+        },
+        "cp3.suggestWorkspaceExports": {
+          "type": "boolean",
+          "default": true,
+          "description": "Suggest exported declarations from CP3 files in the workspace and add the matching import when accepted."
         }
       }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "editor.action.formatDocument",
+          "when": "editorLangId == cp3",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "cp3.organizeImports",
+          "when": "editorLangId == cp3",
+          "group": "1_modification@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "cp3.organizeImports",
+          "when": "editorLangId == cp3"
+        }
+      ]
     },
     "debuggers": [
       {

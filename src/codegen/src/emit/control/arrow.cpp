@@ -87,6 +87,14 @@ std::vector<std::string> Generator::arrowParamText(
             i + 1 < expectedFn->parts.size()) {
             type = expectedFn->parts[i];
         }
+        // `app.use`'s third parameter is represented as a callable in sema so
+        // `next()` type-checks, but its native ABI is the network continuation
+        // object, not the general-purpose `runtime::Listener`. The callback
+        // context is authoritative for this compiler-owned parameter.
+        if (!p->type && i < contextParams.size() &&
+            contextParams[i] == "::cp3::runtime::network::Next") {
+            type = Type::named(TypeKind::Object, "$network:Next");
+        }
         if (p->isRest) checkRestParam(*p, i + 1 == a.params.size(), type);
         // An untyped parameter whose sema type is still `unknown` (or sema's
         // open `$ambient` object placeholder) takes the spelling the context

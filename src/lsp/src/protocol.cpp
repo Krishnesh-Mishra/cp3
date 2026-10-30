@@ -41,7 +41,7 @@ Json triggerCharactersJson(std::initializer_list<const char*> characters) {
 
 Json completionProviderJson() {
     Json provider = jsonObject();
-    provider.set("triggerCharacters", triggerCharactersJson({".", "\""}));
+    provider.set("triggerCharacters", triggerCharactersJson({".", "\"", ":"}));
     provider.set("resolveProvider", jsonBool(false));
     return provider;
 }
@@ -78,7 +78,7 @@ Json initializeResult() {
     capabilities.set("textDocumentSync", jsonInt(1));  // full sync
     // Intel round (M2-LSP-INTEL): the query providers, advertised together
     // with the diagnostics surface. Trigger characters mirror the brief:
-    // '.' and '"' for completion, '(' and ',' for signature help.
+    // '.', '"' and ':' for completion, '(' and ',' for signature help.
     capabilities.set("completionProvider", completionProviderJson());
     capabilities.set("hoverProvider", jsonBool(true));
     capabilities.set("definitionProvider", jsonBool(true));

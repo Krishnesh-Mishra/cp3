@@ -279,8 +279,11 @@ public:
     Next() = default;
     /// Internal: the server binds the continuation.
     explicit Next(std::function<void()> continuation) : cont_(std::move(continuation)) {}
-    void operator()() {
+    /// Starts the remaining middleware/route chain and returns a settled
+    /// promise so an async middleware may write `await next()`.
+    Promise<void> operator()() {
         if (cont_) cont_();
+        return Promise<void>::resolve();
     }
 
 private:
@@ -343,7 +346,7 @@ RouteFn makeMiddleware(F fn) {
 class HttpServer {
 public:
     using RouteHandler = std::function<void(HttpRequest&, HttpResponse&)>;
-    using Middleware = std::function<void(HttpRequest&, HttpResponse&, Next)>;
+    using Middleware = std::function<Promise<void>(HttpRequest&, HttpResponse&, Next)>;
 
     HttpServer();
     /// D79: `createServer({ threads: n })`. An integer n >= 1 starts n event

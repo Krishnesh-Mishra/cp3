@@ -8,14 +8,11 @@
 //     their call and construct sites are typed here (call_check.cpp and
 //     expr_check.cpp hook `tryInferNetworkCall` / `inferNetworkConstruct`).
 //
-// The marker objects are OPEN on purpose (round-2 network report, decision
-// 10): they carry a `$network:` name and no shape table, so a member outside
-// the documented set stays ambient instead of reporting, exactly like the rest
-// of the not-yet-typed std surface. The Field rows below are the documented
-// member set (docs 04 §network); since the finish phase they also TYPE the
-// documented reads: `networkObjectMember` (member_check.cpp hook) returns the
-// row type for one of them while an undocumented member still falls through
-// to ambient. The Map-shaped rows name the landed `Map<string, string>`
+// Marker objects carry a `$network:` name and one closed field table. The
+// Field rows below are the supported member set (docs 04 §network); the
+// member checker and editor completion consume those same rows, so a typo is
+// diagnosed and completion stays in sync. The Map-shaped rows name the landed
+// `Map<string, string>`
 // (std/collections) and `arrayBuffer` promises the landed `Buffer`.
 // Marker names are shared with codegen (src/std/network/codegen.cpp), which
 // uses them to decide which receivers it lowers.
@@ -55,6 +52,7 @@ const char* const kFetchResponse = "$network:FetchResponse";
 const char* const kHttpRequest = "$network:HttpRequest";
 const char* const kHttpResponse = "$network:HttpResponse";
 const char* const kHttpServer = "$network:HttpServer";
+const char* const kHttpNext = "$network:Next";
 const char* const kWebSocket = "$network:WebSocket";
 const char* const kWebSocketServer = "$network:WebSocketServer";
 
@@ -70,9 +68,9 @@ Type stringMap() {
 /// The nominal std/buffer `Buffer` (src/std/buffer/sema.cpp).
 Type bufferType() { return byteBufferType(); }
 
-/// `(p0, p1, ...) => void` with permissive parameters: the documented handler
-/// shapes share one callback grammar, and the parameters are typed contextually
-/// by codegen (the runtime lambda's declared parameter types).
+/// `(p0, p1, ...) => void` with permissive parameters, used for callback
+/// surfaces that do not yet have a declared parameter model (such as generic
+/// WebSocket event listeners). HTTP handlers use their explicit marker types.
 std::vector<Type> permissiveParams(std::size_t arity) {
     return std::vector<Type>(arity, ambient());
 }
@@ -81,13 +79,30 @@ Type callbackOf(std::size_t arity) {
     return Type::function(permissiveParams(arity), Type::voidType());
 }
 
+Type networkValue(const char* name) { return Type(TypeKind::Object, name); }
+
+Type httpRouteHandler() {
+    return Type::function({networkValue(kHttpRequest), networkValue(kHttpResponse)},
+                          Type::voidType());
+}
+
+Type httpMiddleware() {
+    Type next = Type::function({}, promiseOf(Type::voidType()));
+    // Keep this callable-shaped for CP3's call checker, while codegen uses the
+    // network callback context to lower the parameter as runtime::network::Next.
+    next.name = kHttpNext;
+    return Type::function({networkValue(kHttpRequest), networkValue(kHttpResponse),
+                           next},
+                          Type::voidType());
+}
+
 Type eventListener() { return callbackOf(2); }
 
 // -----------------------------------------------------------------------------
-// The documented field rows per receiver (docs 04 §network). The marker shapes
-// stay open, so the rows never gate a member (file header); the
-// `networkObjectMember` hook hands a documented read its row type. SEAM
-// comments mark the still-blocked swap point (the fs ReadStream body).
+// The documented field rows per receiver (docs 04 §network). These rows are
+// the source of truth for typing, completion and diagnostics; `networkObjectMember`
+// hands each accepted read its row type. SEAM comments mark the still-blocked
+// swap point (the fs ReadStream body).
 // -----------------------------------------------------------------------------
 std::vector<Field> fetchResponseFields() {
     return {
@@ -129,22 +144,33 @@ std::vector<Field> httpRequestFields() {
 std::vector<Field> httpResponseFields() {
     return {
         // `status` / `header` chain; the terminal writers return nothing.
-        Field{"status", Type::function(permissiveParams(1), ambient()), false},
-        Field{"header", Type::function(permissiveParams(2), ambient()), false},
-        Field{"text", withOptionalTail(callbackOf(2)), false},
+        Field{"status",
+              Type::function({Type::number()}, networkValue(kHttpResponse)), false},
+        Field{"header",
+              Type::function({Type::string(), Type::string()},
+                             networkValue(kHttpResponse)), false},
+        Field{"text",
+              withOptionalTail(Type::function({Type::string(), Type::number()},
+                                              Type::voidType())), false},
         // `res.json(payload)`: a scalar spells directly, an object/array
         // literal lowers to the json dynamic value tree (codegen_methods.cpp),
         // and a reified interface goes through the record tables.
-        Field{"json", withOptionalTail(callbackOf(2)), false},
-        Field{"send", withOptionalTail(callbackOf(1)), false},
-        Field{"write", callbackOf(1), false},
+        Field{"json",
+              withOptionalTail(Type::function({Type::unknown(), Type::number()},
+                                              Type::voidType())), false},
+        Field{"send",
+              withOptionalTail(Type::function({Type::number()}, Type::voidType())),
+              false},
+        Field{"write",
+              Type::function({Type::unionOf({Type::string(), bufferType()})},
+                             Type::voidType()), false},
         Field{"end", Type::function({}, Type::voidType()), false},
     };
 }
 
 std::vector<Field> httpServerFields() {
     std::vector<Field> fields;
-    const Type route = callbackOf(2);
+    const Type route = httpRouteHandler();
     // The documented four verbs plus the Express-style extras the runtime grew
     // so this table stays truthful; codegen maps the cp3 `delete` onto the
     // runtime `del` member (`delete` is a C++ keyword).
@@ -153,7 +179,8 @@ std::vector<Field> httpServerFields() {
         fields.push_back(Field{verb, Type::function({Type::string(), route}, Type::voidType()),
                                false});
     }
-    fields.push_back(Field{"use", Type::function({callbackOf(3)}, Type::voidType()), false});
+    fields.push_back(Field{"use", Type::function({httpMiddleware()}, Type::voidType()),
+                           false});
     fields.push_back(
         Field{"listen",
               withOptionalTail(
@@ -204,12 +231,9 @@ std::vector<Field> networkFieldsFor(const std::string& name) {
 Type Analyzer::networkObjectType(const std::string& name) {
     std::vector<Field> fields = networkFieldsFor(name);
     if (fields.empty()) return Type::unknown();
-    // The open flag drops the shape: what sema keeps is the marker name (see
-    // the file header). `networkObjectMember` below is what makes a documented
-    // read carry its declared type anyway.
-    Type object = makeObjectType(std::move(fields), true, false, {});
-    object.name = name;
-    return object;
+    // Keep the nominal network marker; member_check uses the same field table
+    // to resolve known members and report CP3305 for unknown ones.
+    return Type(TypeKind::Object, name);
 }
 
 std::optional<Type> Analyzer::networkObjectMember(const Type& recv,
@@ -220,6 +244,68 @@ std::optional<Type> Analyzer::networkObjectMember(const Type& recv,
         if (field.name == prop) return field.type;
     }
     return std::nullopt;
+}
+
+std::vector<std::string> networkObjectMemberNames(
+    const std::string& objectTypeName) {
+    std::vector<std::string> names;
+    for (const Field& field : networkFieldsFor(objectTypeName)) {
+        names.push_back(field.name);
+    }
+    return names;
+}
+
+StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
+                                   const std::string& member) {
+    const std::string type = objectTypeName.rfind("$network:", 0) == 0
+                                 ? objectTypeName.substr(9)
+                                 : objectTypeName;
+    if (type == "HttpServer") {
+        if (member == "get" || member == "post" || member == "put" ||
+            member == "delete" || member == "patch" || member == "head" ||
+            member == "options" || member == "any") {
+            return {member + "(path: string, handler: (req: HttpRequest, res: HttpResponse) => void): void",
+                    "Registers a handler for matching requests that use this HTTP method. The handler receives a typed request and response. Route handlers may also be `async` and return `Promise<void>`.\n\n"
+                    "**Example**\n\n```cp3\napp." + member + "(\"/items\", (req, res) => {\n  res.json({ items: [] });\n});\n```"};
+        }
+        if (member == "use") return {"use(handler: (req: HttpRequest, res: HttpResponse, next: () => Promise<void>) => void): void",
+            "Registers middleware in order. Call `next()` (or `await next()` in an async handler) to continue to the next matching route or middleware. A response can be sent without calling `next()` to finish the request.\n\n"
+            "**Example**\n\n```cp3\napp.use(async (req, res, next) => {\n  console.log(req.method, req.path);\n  await next();\n});\n```"};
+        if (member == "listen") return {"listen(port: number, callback?: () => void): void",
+            "Starts accepting HTTP requests on `port`. The optional callback runs once the listener is ready.\n\n**Example**\n\n```cp3\napp.listen(3000, () => console.log(\"ready\"));\n```"};
+        if (member == "close") return {"close(): void", "Stops accepting new connections and closes the server."};
+    }
+    if (type == "HttpRequest") {
+        if (member == "method") return {"method: string", "The request method, such as `GET` or `POST`."};
+        if (member == "path") return {"path: string", "The URL path without its query string."};
+        if (member == "params") return {"params: Map<string, string>", "Route parameters captured from a route pattern such as `/users/:id`."};
+        if (member == "query") return {"query: Map<string, string>", "URL query parameters parsed from the request."};
+        if (member == "headers") return {"headers: Map<string, string>", "Request headers. Header names are looked up case-insensitively by the runtime."};
+        if (member == "body") return {"body: unknown", "The buffered request body. Prefer `text()` or `json<T>()` to decode it."};
+        if (member == "text") return {"text(): Promise<string>", "Returns the buffered request body as text."};
+        if (member == "json") return {"json<T>(): Promise<T>", "Parses the buffered request body as JSON and types the result as `T`. The annotation describes the expected shape; validate untrusted input before relying on it."};
+    }
+    if (type == "HttpResponse") {
+        if (member == "status") return {"status(code: number): HttpResponse", "Sets the status for the response and returns the response so calls can be chained."};
+        if (member == "header") return {"header(name: string, value: string): HttpResponse", "Sets a response header and returns the response so calls can be chained."};
+        if (member == "text") return {"text(data: string, status?: number): void", "Sends a text response. This is a terminal write: once a response has been sent, later terminal writes are ignored."};
+        if (member == "json") return {"json(data: unknown, status?: number): void", "Serializes a value as JSON and sends it as the response. A second argument may set the status."};
+        if (member == "send") return {"send(status?: number): void", "Sends the response data previously buffered with `write`, or an empty response."};
+        if (member == "write") return {"write(chunk: string | Buffer): void", "Appends a string or raw Buffer bytes to a chunked response. Finish the response with `end()`."};
+        if (member == "end") return {"end(): void", "Finishes a chunked response started with `write()`."};
+    }
+    if (type == "FetchResponse") {
+        if (member == "ok") return {"ok: boolean", "Whether the response status is in the successful 200–299 range."};
+        if (member == "status") return {"status: number", "The HTTP status code returned by the server."};
+        if (member == "statusText") return {"statusText: string", "The response's reason phrase, when provided."};
+        if (member == "headers") return {"headers: Map<string, string>", "The response headers."};
+        if (member == "text") return {"text(): Promise<string>", "Reads the response body as text."};
+        if (member == "json") return {"json<T>(): Promise<T>", "Parses the response body as JSON and types the result as `T`."};
+        if (member == "arrayBuffer") return {"arrayBuffer(): Promise<Buffer>", "Reads the response body as raw bytes in a Buffer."};
+    }
+    if (type == "WebSocket" && member == "send") return {"send(data: string | Buffer): void", "Sends UTF-8 text or raw Buffer bytes to the connected WebSocket peer."};
+    if (type == "WebSocketServer" && member == "close") return {"close(): void", "Closes the WebSocket listener and its connections."};
+    return {};
 }
 
 std::optional<Type> Analyzer::networkMember(const std::string& prop) {

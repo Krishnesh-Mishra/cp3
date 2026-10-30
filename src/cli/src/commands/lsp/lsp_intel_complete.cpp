@@ -178,7 +178,7 @@ std::vector<lsp::CompletionCandidate> completeAt(const std::string& path,
                                                  std::uint32_t line,
                                                  std::uint32_t column) {
     auto document = analyzeDocument(path, text);
-    if (!analysisReady(*document)) return {};
+    if (document->file == nullptr) return {};
     const std::uint32_t offset = offsetOf(*document->file, line, column);
     // One lexical pass for the cursor context (kept alive for the token views).
     SourceManager lexerSources;
@@ -189,15 +189,22 @@ std::vector<lsp::CompletionCandidate> completeAt(const std::string& path,
     const std::vector<Token> tokens = lexer.lex().tokens();
     CompletionContext context = detectContext(tokens, text, offset);
     if (context.blocked) return {};
+    // The token under the cursor is usually the unfinished identifier being
+    // typed (`re`, `con`, `num`). Classify the grammar position immediately
+    // before that prefix so statement keywords and type names remain offered.
+    const std::uint32_t grammarOffset = context.wordBegin;
+    context.position = classifyPosition(*document, tokens, text, grammarOffset);
     if (context.importSpecifier) {
         return importSpecifierCandidates(text, context, offset);
     }
     if (context.member) {
         return memberCandidates(*document, text, context, offset);
     }
+    if (!analysisReady(*document)) {
+        return incompleteCandidates(context.position);
+    }
     // The syntactic position decides which keywords may be offered and which
     // names are in scope (lsp_intel_scope.cpp).
-    context.position = classifyPosition(*document, tokens, text, offset);
     return generalCandidates(*document, context, offset);
 }
 

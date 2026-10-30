@@ -1,0 +1,126 @@
+{
+  "CP3 function": {
+    "prefix": "fn",
+    "body": [
+      "function ${1:name}(${2}): ${3:void} {",
+      "  ${0}",
+      "}"
+    ],
+    "description": "Declare a typed CP3 function"
+  },
+  "CP3 documented function": {
+    "prefix": "docfn",
+    "body": [
+      "/**",
+      " * ${1:Describe what this function does.}",
+      " * @param ${2:name} ${3:Describe this parameter.}",
+      " * @returns ${4:Describe the returned value.}",
+      " */",
+      "function ${5:name}(${2}: ${6:string}): ${7:void} {",
+      "  ${0}",
+      "}"
+    ],
+    "description": "Declare a function with CP3/TypeScript-style documentation"
+  },
+  "CP3 arrow function": {
+    "prefix": "arrow",
+    "body": ["(${1}) => {", "  ${0}", "}"],
+    "description": "Create an arrow function"
+  },
+  "CP3 async function": {
+    "prefix": "asyncfn",
+    "body": [
+      "async function ${1:name}(${2}): Promise<${3:void}> {",
+      "  ${0}",
+      "}"
+    ],
+    "description": "Declare an asynchronous function"
+  },
+  "CP3 class": {
+    "prefix": "class",
+    "body": ["class ${1:Name} {", "  constructor(${2}) {", "    ${0}", "  }", "}"],
+    "description": "Declare a class with a constructor"
+  },
+  "CP3 interface": {
+    "prefix": "interface",
+    "body": ["interface ${1:Name} {", "  ${0}", "}"],
+    "description": "Declare an interface"
+  },
+  "CP3 try/catch": {
+    "prefix": "trycatch",
+    "body": ["try {", "  ${1}", "} catch (${2:error}) {", "  ${0}", "}"],
+    "description": "Handle an error with try/catch"
+  },
+  "CP3 for-of loop": {
+    "prefix": "forof",
+    "body": ["for (const ${1:item} of ${2:items}) {", "  ${0}", "}"],
+    "description": "Iterate over an iterable value"
+  },
+  "CP3 HTTP health server": {
+    "prefix": "httphealth",
+    "body": [
+      "import { createServer } from \"std/network\";",
+      "import console from \"std/console\";",
+      "",
+      "const app = createServer();",
+      "app.get(\"/healthz\", (req, res) => {",
+      "  res.text(\"ok\");",
+      "});",
+      "app.listen(${1:3000}, () => console.log(\"listening\"));"
+    ],
+    "description": "Create a small HTTP health server"
+  },
+  "CP3 constant": {"prefix":"const","body":"const ${1:name}: ${2:string} = ${3:value};$0","description":"Declare a typed constant"},
+  "CP3 mutable binding": {"prefix":"let","body":"let ${1:name}: ${2:number} = ${3:0};$0","description":"Declare a typed mutable binding"},
+  "CP3 exported function": {"prefix":"exportfn","body":["export function ${1:name}(${2}): ${3:void} {","  ${0}","}"],"description":"Export a function from this module"},
+  "CP3 async arrow": {"prefix":"asyncarrow","body":["async (${1}) => {","  ${0}","}"],"description":"Create an asynchronous arrow function"},
+  "CP3 getter": {"prefix":"get","body":["get ${1:value}(): ${2:string} {","  return this.${3:_value};","}"],"description":"Declare a class getter"},
+  "CP3 setter": {"prefix":"set","body":["set ${1:value}(value: ${2:string}) {","  this.${3:_value} = value;","}"],"description":"Declare a class setter"},
+  "CP3 class method": {"prefix":"method","body":["${1:public} ${2:name}(${3}): ${4:void} {","  ${0}","}"],"description":"Add a typed class method"},
+  "CP3 constructor": {"prefix":"ctor","body":["constructor(${1}) {","  ${0}","}"],"description":"Add a class constructor"},
+  "CP3 class field": {"prefix":"field","body":"${1:private} ${2:name}: ${3:string} = ${4:\"\"};$0","description":"Add a typed class field"},
+  "CP3 generic function": {"prefix":"genericfn","body":["function ${1:identity}<T>(${2:value}: T): T {","  return ${2};","}"],"description":"Declare a generic function"},
+  "CP3 type alias": {"prefix":"typealias","body":"type ${1:Name} = ${2:string | number};$0","description":"Declare a type alias"},
+  "CP3 union type": {"prefix":"union","body":"type ${1:Result} = ${2:Success} | ${3:Failure};$0","description":"Declare a union type alias"},
+  "CP3 interface field": {"prefix":"ifield","body":"${1:name}: ${2:string};$0","description":"Add a field to an interface"},
+  "CP3 enum": {"prefix":"enum","body":["enum ${1:Status} {","  ${2:Ready},","  ${3:Running},","  ${4:Done}","}","$0"],"description":"Declare an enum"},
+  "CP3 if/else": {"prefix":"ifelse","body":["if (${1:condition}) {","  ${2}","} else {","  ${0}","}"],"description":"Create an if/else statement"},
+  "CP3 else if": {"prefix":"elseif","body":["else if (${1:condition}) {","  ${0}","}"],"description":"Add an else-if branch"},
+  "CP3 for loop": {"prefix":"for","body":["for (let ${1:i} = 0; ${1} < ${2:length}; ${1}++) {","  ${0}","}"],"description":"Create an indexed for loop"},
+  "CP3 while loop": {"prefix":"while","body":["while (${1:condition}) {","  ${0}","}"],"description":"Create a while loop"},
+  "CP3 do while loop": {"prefix":"dowhile","body":["do {","  ${1}","} while (${0:condition});"],"description":"Create a do/while loop"},
+  "CP3 for-in loop": {"prefix":"forin","body":["for (const ${1:key} in ${2:object}) {","  ${0}","}"],"description":"Iterate object keys"},
+  "CP3 switch": {"prefix":"switch","body":["switch (${1:value}) {","  case ${2:choice}: {","    ${3}","    break;","  }","  default: {","    ${0}","  }","}"],"description":"Create a switch statement"},
+  "CP3 try/catch/finally": {"prefix":"tryfinally","body":["try {","  ${1}","} catch (${2:error}) {","  ${3}","} finally {","  ${0}","}"],"description":"Handle an error and always run cleanup"},
+  "CP3 throw error": {"prefix":"throw","body":"throw new Error(${1:\"message\"});$0","description":"Throw an Error"},
+  "CP3 assertion": {"prefix":"assert","body":"if (!(${1:condition})) throw new Error(${2:\"invariant failed\"});$0","description":"Enforce an invariant"},
+  "CP3 console log": {"prefix":"clog","body":"console.log(${1:value});$0","description":"Write a value to standard output"},
+  "CP3 console error": {"prefix":"cerror","body":"console.error(${1:error});$0","description":"Write an error to standard error"},
+  "CP3 console input": {"prefix":"cinput","body":"const ${1:line} = await console.input(${2:\"Name: \"});$0","description":"Read a line from standard input"},
+  "CP3 import default": {"prefix":"importdefault","body":"import ${1:name} from \"${2:std/console}\";$0","description":"Import a module default"},
+  "CP3 import named": {"prefix":"importnamed","body":"import { ${1:name} } from \"${2:std/network}\";$0","description":"Import named exports"},
+  "CP3 import namespace": {"prefix":"importns","body":"import * as ${1:module} from \"${2:./module.cp3}\";$0","description":"Import a module namespace"},
+  "CP3 export default": {"prefix":"exportdefault","body":"export default ${1:value};$0","description":"Export a default value"},
+  "CP3 export list": {"prefix":"exportlist","body":"export { ${1:name} };$0","description":"Re-export a local declaration"},
+  "CP3 array map": {"prefix":"map","body":"${1:items}.map((${2:item}) => ${0:item});","description":"Transform each array element"},
+  "CP3 array filter": {"prefix":"filter","body":"${1:items}.filter((${2:item}) => ${0:true});","description":"Keep matching array elements"},
+  "CP3 array reduce": {"prefix":"reduce","body":"${1:items}.reduce((${2:sum}, ${3:item}) => ${4:sum + item}, ${5:0});$0","description":"Reduce an array to one value"},
+  "CP3 array find": {"prefix":"find","body":"${1:items}.find((${2:item}) => ${0:item.id === id});","description":"Find the first matching element"},
+  "CP3 promise then": {"prefix":"then","body":["${1:promise}.then((${2:value}) => {","  ${0}","});"],"description":"Handle a fulfilled promise"},
+  "CP3 async main": {"prefix":"asyncmain","body":["async function main(): Promise<void> {","  ${0}","}","","main().catch((error) => console.error(error));"],"description":"Create an async entry point"},
+  "CP3 timeout": {"prefix":"timeout","body":"await new Promise<void>((resolve) => setTimeout(() => resolve(), ${1:1000}));$0","description":"Wait for a timeout"},
+  "CP3 JSON parse": {"prefix":"jsonparse","body":"const ${1:value} = JSON.parse<${2:MyType}>(${3:text});$0","description":"Parse JSON into a declared type"},
+  "CP3 JSON stringify": {"prefix":"jsonstringify","body":"const ${1:text} = JSON.stringify(${2:value}, ${3:2});$0","description":"Serialize a value as JSON"},
+  "CP3 typed array": {"prefix":"typedarray","body":"const ${1:values} = new Float64Array(${2:length});$0","description":"Create a typed numeric array"},
+  "CP3 DataView": {"prefix":"dataview","body":["const ${1:view} = new DataView(${2:buffer});","const ${3:value} = ${1}.getUint32(${4:offset}, true);$0"],"description":"Read a value from an ArrayBuffer"},
+  "CP3 HTTP GET": {"prefix":"httpget","body":["app.get(\"${1:/path}\", (req, res) => {","  res.json({ ${2:ok}: true });","});$0"],"description":"Register a GET route"},
+  "CP3 HTTP POST": {"prefix":"httppost","body":["app.post(\"${1:/items}\", async (req, res) => {","  const ${2:payload} = await req.json<${3:Payload}>();","  res.status(201).json(${2});","});$0"],"description":"Register a typed JSON POST route"},
+  "CP3 HTTP middleware": {"prefix":"middleware","body":["app.use(async (req, res, next) => {","  ${1:console.log(req.method, req.path);}","  await next();","});$0"],"description":"Register HTTP middleware"},
+  "CP3 HTTP listen": {"prefix":"listen","body":["app.listen(${1:3000}, () => {","  console.log(\"listening\");","});$0"],"description":"Start listening for HTTP requests"},
+  "CP3 WebSocket handler": {"prefix":"wson","body":["socket.on(\"${1:message}\", (${2:data}) => {","  ${0}","});"],"description":"Register a WebSocket event handler"},
+  "CP3 Promise all": {"prefix":"promiseall","body":"const [${1:first}, ${2:second}] = await Promise.all([${3:firstPromise}, ${4:secondPromise}]);$0","description":"Wait for multiple promises"},
+  "CP3 map type": {"prefix":"maptype","body":"Map<${1:string}, ${2:number}>$0","description":"Insert a typed Map type"},
+  "CP3 Set type": {"prefix":"settype","body":"Set<${1:string}>$0","description":"Insert a typed Set type"},
+  "CP3 doc comment": {"prefix":"doc","body":["/**"," * ${1:Description.}"," * @param ${2:value} ${3:What this parameter represents.}"," * @returns ${4:What this function returns.}"," */","$0"],"description":"Write a CP3 documentation comment"},
+  "CP3 file header": {"prefix":"filedoc","body":["/**"," * ${1:Describe this module.}"," *"," * @module ${2:module-name}"," */","$0"],"description":"Document a module"}
+}

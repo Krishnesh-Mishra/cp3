@@ -158,6 +158,7 @@ bool opensParameterList(const std::vector<Token>& tokens, std::size_t index) {
 struct OpenBracket {
     TokenKind kind = TokenKind::LParen;
     bool parameterList = false;
+    std::size_t tokenIndex = 0;
 };
 
 // The brackets that are open at the cursor, outermost first.
@@ -170,13 +171,13 @@ std::vector<OpenBracket> openBrackets(const std::vector<Token>& tokens,
         if (token.span.end.offset > offset) break;
         switch (token.kind) {
             case TokenKind::LParen:
-                stack.push_back({TokenKind::LParen, opensParameterList(tokens, i)});
+                stack.push_back({TokenKind::LParen, opensParameterList(tokens, i), i});
                 break;
             case TokenKind::LBracket:
-                stack.push_back({TokenKind::LBracket, false});
+                stack.push_back({TokenKind::LBracket, false, i});
                 break;
             case TokenKind::LBrace:
-                stack.push_back({TokenKind::LBrace, false});
+                stack.push_back({TokenKind::LBrace, false, i});
                 break;
             case TokenKind::RParen:
             case TokenKind::RBracket:
@@ -240,6 +241,41 @@ CompletionPosition tokenPosition(const std::vector<Token>& tokens,
                                   std::uint32_t offset,
                                   const std::vector<OpenBracket>& brackets) {
     if (!brackets.empty() && brackets.back().parameterList) {
+        // While the AST is unavailable (a common state as a declaration is
+        // being typed), distinguish `name: Type` from the parameter name slot
+        // using the current comma-delimited parameter tokens.
+        const std::size_t open = brackets.back().tokenIndex;
+        int nested = 0;
+        bool sawColon = false;
+        for (std::size_t i = open + 1; i < tokens.size(); ++i) {
+            const Token& token = tokens[i];
+            if (token.kind == TokenKind::EndOfFile ||
+                token.span.begin.offset >= offset) break;
+            switch (token.kind) {
+                case TokenKind::LParen:
+                case TokenKind::LBracket:
+                case TokenKind::LBrace:
+                    ++nested;
+                    break;
+                case TokenKind::RParen:
+                case TokenKind::RBracket:
+                case TokenKind::RBrace:
+                    if (nested > 0) --nested;
+                    break;
+                case TokenKind::Comma:
+                    if (nested == 0) sawColon = false;
+                    break;
+                case TokenKind::Colon:
+                    if (nested == 0) sawColon = true;
+                    break;
+                case TokenKind::Assign:
+                    if (nested == 0 && sawColon) sawColon = false;
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (sawColon) return CompletionPosition::TypePosition;
         return CompletionPosition::ParameterList;
     }
     const Token* prev = previousToken(tokens, offset);
@@ -370,6 +406,10 @@ CompletionPosition classifyPosition(const AnalyzedDocument& document,
     const std::vector<OpenBracket> brackets = openBrackets(tokens, offset);
     const CompletionPosition position =
         tokenPosition(tokens, text, offset, brackets);
+    // Parse/analyze can fail transiently while the user is halfway through a
+    // declaration. Token context remains useful and keeps syntax completion
+    // available even when no recoverable AST exists yet.
+    if (!analysisReady(document)) return position;
     const std::vector<const Node*> chain = enclosingChain(document, offset);
     if (insideClassBody(chain, offset)) return CompletionPosition::ClassBody;
     if (innermostOf(chain, NodeKind::TryStatement) != nullptr) {

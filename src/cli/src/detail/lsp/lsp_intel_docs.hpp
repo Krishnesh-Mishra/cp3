@@ -80,7 +80,8 @@ std::string docCommentFor(const AnalyzedDocument& document,
 // documentation (`namespaceName` empty when the receiver is not a std
 // namespace), the array / string method documentation, or an empty string
 // when the surface has none.
-std::string completionMemberDoc(const std::string& namespaceName,
+std::string completionMemberDoc(const AnalyzedDocument& document,
+                                const std::string& namespaceName,
                                 const Type* receiverType,
                                 const std::string& member);
 

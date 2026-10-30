@@ -384,13 +384,21 @@ void Analyzer::checkArgs(const FuncSig& sig, CallExpr& call) {
             checkSpreadArg(sig, a, i);
             continue;
         }
-        Type at = inferExpr(*a);
         Type pt = Type::unknown();
         if (sig.rest && sig.params.size() > 0 && i >= sig.params.size()) {
             pt = sig.params.back();
         } else if (i < sig.params.size()) {
             pt = sig.params[i];
         }
+        // An arrow passed to a function-typed parameter can use the expected
+        // signature while its body is checked. This keeps inferred parameter
+        // bindings precise inside the arrow (`app.post(..., (req, res) => ...)`).
+        const bool contextualArrow = a->kind == NodeKind::ArrowFunction &&
+                                     pt.kind == TypeKind::Function &&
+                                     a->nodeId != 0;
+        if (contextualArrow) contextualArrowTypes_[a->nodeId] = pt;
+        Type at = inferExpr(*a);
+        if (contextualArrow) contextualArrowTypes_.erase(a->nodeId);
         // An explicit `undefined` for an optional/default parameter is the same
         // as omitting the argument (TS accepts it; the default applies), so it
         // is not an assignability error.

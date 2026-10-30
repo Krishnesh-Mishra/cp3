@@ -1,50 +1,102 @@
 # CP3
 
-### Familiar syntax. Static checks. Native executables.
+### Familiar syntax. Static checks. Native executables. Multicore servers.
 
-CP3 is a statically typed language with a JavaScript and TypeScript shaped syntax. It compiles `.cp3` programs to C++ and then to native executables, with an automatic reference-managed runtime and a growing standard library.
+CP3 is a statically typed language with TypeScript-shaped syntax. It compiles your `.cp3` program ahead of time to a native executable, while managing object lifetimes for you.
 
-> **Project status: beta.** CP3 is actively developed. The language, compiler, and standard library are still evolving; check the documented support and benchmark conditions before choosing it for a production workload.
+[Get started](#quick-start) · [Why CP3](#why-cp3) · [Benchmarks](#http-server-benchmarks) · [Examples](examples/README.md) · [Language guide](docs/content/00-welcome/00-welcome.md)
 
-[Get started](#quick-start) · [Why CP3](#why-cp3) · [Performance](#performance-snapshot) · [Examples](examples/README.md) · [Full guide](docs/content/00-welcome/00-welcome.md)
+> **Project status: beta.** CP3 and its standard library are under active development. The benchmark results below are a dated snapshot from one machine; see the [benchmark results and methodology](benchmarks/README.md) for the full data and measurement details.
 
 ---
 
 ## Why CP3?
 
-CP3 aims to make native compilation approachable to developers who already know JavaScript or TypeScript. You write CP3 source; the compiler handles type checking, C++ generation, native compilation, and linking.
+CP3 aims to combine a familiar application-code style with static checks and native compilation.
 
-| You want… | CP3 provides… |
+| If you want… | CP3 gives you… |
 | --- | --- |
-| A syntax that feels familiar | `const`, `let`, typed functions, classes, interfaces, modules, and async syntax. |
-| Errors before you run the program | Static analysis and type checking as part of `cp3 check` and builds. |
-| A native executable | Ahead-of-time compilation through a configured C++ toolchain; no JavaScript VM is required to run the built program. |
-| Managed object lifetimes without `delete` in application code | Runtime-managed references. CP3 does not use a tracing garbage collector; its normal reference model is reference counted. |
-| A small, documented platform API | CP3-owned `std/*` modules, plus explicit native SDK tooling. Node and npm APIs are not implicitly available. |
+| A familiar way to write programs | `const`, `let`, typed functions, classes, interfaces, modules, and async code. |
+| Type errors before running the program | Static analysis through `cp3 check`, `cp3 build`, and `cp3 run`. |
+| A native program | Ahead-of-time compilation to a native executable; no JavaScript VM is needed to run the built program. |
+| Managed object lifetimes | Reference-counted references and compiler lifetime analysis, without a tracing garbage collector or manual `delete` in application code. |
+| Multicore HTTP serving | Set the `threads` option on `createServer`; CP3 starts the event loops for you. |
+| Explicit types | CP3 checks declared and inferred types instead of offering a catch-all `any` type. |
 
-CP3 keeps the source experience high-level while compiling ahead of time. It does **not** promise that every program matches hand-written C++ or Rust, that every allocation is stack allocated, or that native compilation automatically vectorizes every loop. Performance depends on the workload and generated code.
+### The memory model, in plain words
 
-### Memory model, plainly
+You should be able to focus on what your program does, not on remembering which object needs a matching `delete`. So in CP3, you can write the kind of code you already know:
 
-CP3 manages reference lifetimes automatically. Most ordinary reference-shaped values use shared ownership; copies share the same object. The runtime uses reference counting rather than tracing collection, so strong reference cycles need weak links or another explicit ownership design. The compiler has narrow local-storage and non-atomic-reference optimizations, but they apply only when its current analysis proves a safe case.
+```ts
+const person = { name: "Rahul" };
+let scores: number[] = [1, 2, 3];
+scores.push(4);
+```
 
-This is not Rust's ownership and borrowing system, and it is not a tracing-GC runtime like Go's. Each model has different tradeoffs; start with the [runtime guide](docs/content/02-runtime/00-overview.md) for CP3's current behavior.
+You do not have to manually allocate and free ordinary objects. CP3 keeps an object alive while strong references point to it, then releases it when the last one goes away. That is reference counting: automatic lifetime management without a tracing garbage collector.
 
-## A small CP3 server
+The compiler also looks at how long each object is actually needed. When it can prove that a temporary stays local, it can avoid some of the usual heap and reference-counting work. When a value needs to live longer, CP3 keeps it in managed storage. If the compiler cannot prove a shorter lifetime is safe, it keeps the managed path; it does not promise that every object is stack allocated.
 
-This is the health endpoint from [`examples/servers/healthz`](examples/servers/healthz/main.cp3):
+Arrays are growable and use contiguous native storage. You can keep using `push`; the runtime takes care of reserving more room as the array grows. Types are checked before the program runs, so CP3 does not need a catch-all `any` type to make this style convenient.
+
+One small detail is worth knowing: as in other reference-counted systems, a cycle of strong references can keep objects alive. Use weak references when objects need to refer back to each other without extending each other's lifetime.
+
+You get to describe your program and its data. CP3 takes care of the routine lifetime work, and applies faster local-storage choices only when it can prove they are safe.
+
+## HTTP server benchmarks
+
+The same small health-server contract was measured in single-worker and all-core configurations: `GET /healthz` returns `ok`, `GET /` returns `health-server ok`, and other paths return `404 not found`.
+
+| Language / server | Single-worker req/s | All-core req/s |
+| --- | ---: | ---: |
+| **CP3** (`std/network`) | **15,719** | **81,815** |
+| C++ | 14,858 | 81,344 |
+| Rust (Axum) | 14,016 | 73,709 |
+| Go (Gin) | 14,066 | 65,450 |
+| Java (Undertow) | 14,863 | 70,038 |
+| JavaScript (Express) | 13,980 | 58,165 |
+| JavaScript (Fastify) | 15,054 | 70,671 |
+| Python (FastAPI) | 1,816 | 12,474 |
+
+These are the recorded results for [`health-server`](benchmarks/results.md#health-server) and [`health-server-multi`](benchmarks/results.md#health-server-multi), captured on one Windows 11 x64 machine on October 30, 2026. Each language has one server trial in that capture, so treat the figures as a useful snapshot rather than a stable ranking. The harness checks the HTTP responses and records the selected framework and machine details in the [benchmark report](benchmarks/results.md).
+
+### One line enables all-core server workers
+
+The normal server uses one event loop:
+
+```ts
+const app = createServer();
+```
+
+To start one event loop per logical CPU, import `os` and change that line to:
+
+```ts
+const app = createServer({ threads: os.cpus() });
+```
+
+The server creates and manages its worker event loops; you do not need to write thread creation, request dispatch, or a worker pool. Each loop has its own server instance and module-level state, so do not use this option to assume mutable globals are shared between workers. `os.cpus()` reports logical CPUs; choose an explicit thread count when the machine's available CPU quota is smaller.
+
+### A small server
+
+This is a complete `std/network` health server. Use `createServer()` for the single-worker form, or the all-core line above for the multicore form.
 
 ```ts
 import { createServer } from "std/network";
+import console from "std/console";
+import os from "std/os";
 
-const app = createServer();
+const app = createServer({ threads: os.cpus() });
 
 app.get("/healthz", (req, res) => {
   res.text("ok");
 });
 
 app.get("/", (req, res) => {
-  res.json({ service: "cp3-app", status: "ok" });
+  res.json({ service: "cp3-health", status: "ok" });
+});
+
+app.use((req, res, next) => {
+  res.status(404).text("not found");
 });
 
 app.listen(3000, () => {
@@ -52,87 +104,69 @@ app.listen(3000, () => {
 });
 ```
 
-The full [echo API example](examples/servers/echo-api/main.cp3) adds middleware, route parameters, typed JSON request bodies, and response handling. The network module's exact surface and error behavior are documented in the [standard-library guide](docs/content/03-standard-library/13-network.md).
+The complete network API, including middleware, request data, response helpers, and server lifecycle, is in the [network guide](docs/content/03-standard-library/13-network.md). The [echo API example](examples/servers/echo-api/main.cp3) shows request-body handling.
 
 ## Quick start
 
-### Build CP3 from source
+With the CP3 CLI and a supported native application toolchain installed:
 
-Requirements: CMake, a C++20-capable compiler, and Python 3 for the repository's test and benchmark runners.
+1. Create an application:
 
-```sh
-cmake -S . -B build
-cmake --build build
-```
+   ```sh
+   cp3 init health-server --yes
+   cd health-server
+   ```
 
-The compiler executable is `build/bin/cp3c` (`build/bin/cp3c.exe` on Windows). Building CP3 applications also requires a supported native application toolchain; see [Native toolchains](docs/content/04-compiler-cli/05-native-toolchains.md).
+2. Replace `src/index.cp3` with the server example above.
 
-### Create and run a project
+3. Build and start the app:
 
-With the `cp3` launcher on your `PATH`:
+   ```sh
+   cp3 run src/index.cp3
+   ```
 
-```sh
-cp3 init hello-app --yes
-cd hello-app
-cp3 check src/index.cp3
-cp3 run src/index.cp3
-```
-
-Or invoke the compiler built from this checkout:
+For an optimized release executable, use:
 
 ```sh
-build/bin/cp3c.exe init hello-app --yes
-build/bin/cp3c.exe run hello-app/src/index.cp3
+cp3 build src/index.cp3 --release
 ```
 
-`cp3 check` validates source without compiling the generated C++. `cp3 run` builds as needed and launches the resulting executable. See [Create your first project](docs/content/00-welcome/04-first-project.md) for project layout, manifest settings, and build profiles.
+The `cp3` commands build your application. You do **not** need to build the CP3 compiler from source to use the language. CMake instructions belong to compiler development; see the [compiler and CLI guide](docs/content/04-compiler-cli/00-overview.md) if you want to work on CP3 itself.
 
-## Performance snapshot
-
-The benchmark suite implements the same named tasks in CP3, C++, Rust, Go, JavaScript, Java, and Python where a task is supported. It checks output against an oracle and records runtime, variation, memory, and executable size. These are results from one Windows 11 x64 machine and toolchain set, not universal language rankings.
-
-| Workload | CP3 result | Comparison in the recorded run | Measurement note |
-| --- | ---: | --- | --- |
-| `compute-single` | 151.8 ms | Rust 224.9 ms; C++ 251.4 ms | 7 repetitions; CP3 CV 27.1%; output verified. |
-| `string-churn` | 394.8 ms | Rust 427.0 ms; C++ 2744.2 ms | 7 repetitions; CP3 CV 12.3%; output verified. This is one specific string workload. |
-| `health-server` | 15,719 requests/s | C++ 14,858; Go 14,066; Rust 14,016 | One captured run; useful as a snapshot, not a stable ranking. |
-
-The full results also show workloads where CP3 is slower, including JSON parsing, binary trees, UTF-8 processing, and some allocation or library tasks. Several results have high run-to-run variation. Read the [benchmark results and methodology](benchmarks/README.md) before drawing conclusions; the [performance guide](docs/content/00-welcome/02-performance.md) explains the numbers and their limits.
-
-Run a focused benchmark from the repository root:
+Check that the server is responding:
 
 ```sh
-python benchmarks/runner/run_benchmark.py --only compute-single --reps 7
+curl http://localhost:3000/healthz
 ```
 
-Benchmark source files live in `benchmarks/cases/`. The runner verifies their output and reports the compiler/toolchain conditions with the measurements.
+It returns `ok`.
+
+## More benchmarks
+
+The full suite compares CP3 with C++, Rust, Go, JavaScript, Java, and Python on compute, collections, strings, buffers, and server workloads. Some tasks favor CP3, while others expose areas still being improved. Every benchmark has a defined workload and expected output; read the [full results](benchmarks/results.md) and [measurement methodology](benchmarks/README.md) before drawing broader conclusions.
+
+Run a focused benchmark from a CP3 source checkout:
+
+```sh
+python benchmarks/runner/run_benchmark.py --only health-server health-server-multi --reps 7
+```
 
 ## Explore CP3
 
-- [JS/TS developer guide](docs/content/00-welcome/03-javascript-typescript-developers.md) — a migration-oriented overview of familiar syntax and differences.
-- [Language guide](docs/content/01-language/00-overview.md) — declarations, types, functions, classes, generics, modules, and errors.
-- [Standard library](docs/content/03-standard-library/00-overview.md) — console, process, filesystem, network, collections, buffers, and more.
-- [Runtime model](docs/content/02-runtime/00-overview.md) — values, references, closures, arrays, concurrency, and memory lifetime.
-- [Compiler and CLI](docs/content/04-compiler-cli/00-overview.md) — build workflow, diagnostics, code generation, and verification.
-- [Examples](examples/README.md) — small programs, interactive demos, async tasks, and servers.
-- [Benchmark suite](benchmarks/README.md) — workloads, runners, and measurement details.
+- [JS/TS developer guide](docs/content/00-welcome/03-javascript-typescript-developers.md) — familiar syntax and differences.
+- [Language guide](docs/content/01-language/00-overview.md) — declarations, types, functions, classes, modules, and errors.
+- [Runtime model](docs/content/02-runtime/00-overview.md) — references, arrays, closures, concurrency, and lifetimes.
+- [Standard library](docs/content/03-standard-library/00-overview.md) — console, process, filesystem, network, collections, and buffers.
+- [Compiler and CLI](docs/content/04-compiler-cli/00-overview.md) — project builds, diagnostics, code generation, and verification.
+- [Examples](examples/README.md) — runnable programs, concurrency examples, and servers.
+- [Benchmarks](benchmarks/README.md) — tasks, runners, methodology, and results.
 
-The complete guide is also bundled into the compiler. Run `cp3 docs` to start the local viewer, or `cp3 docs --port 0` to let the operating system choose an available port.
-
-## Repository layout
-
-| Path | Contents |
-| --- | --- |
-| `src/` | Compiler front end, semantic analysis, code generation, CLI, runtime, and standard modules |
-| `tests/` | Language, runtime, and CLI conformance tests |
-| `examples/` | Runnable language, concurrency, async, and server examples |
-| `docs/content/` | Chapter-organized Markdown guide embedded in the compiler |
-| `benchmarks/` | Cross-language workloads, runner, and recorded results |
+The complete guide is also bundled with the compiler. Run `cp3 docs` to start the local documentation viewer.
 
 ## Contributing
 
-Compiler changes should include focused positive and negative test cases when language behavior changes. Performance changes should preserve benchmark source and expected output, then report repeated results and the generated-code evidence for the claimed optimization. See [Tests and verification](docs/content/04-compiler-cli/08-tests-and-verification.md) and [Generated C++ inspection](docs/content/04-compiler-cli/10-generated-cpp-inspection.md).
+Language and compiler changes should include focused positive and negative tests. Performance changes should preserve benchmark sources and expected output, and include repeated measurements plus generated-code evidence for claimed optimizations. See [tests and verification](docs/content/04-compiler-cli/08-tests-and-verification.md) and [generated C++ inspection](docs/content/04-compiler-cli/10-generated-cpp-inspection.md).
 
 ---
 
-CP3 is an open-source language project under active development. Feedback, small reproducers, and carefully measured performance reports are welcome.
+CP3 is an open-source language project under active development. Reports with a small reproducer and measured results are especially useful.

@@ -280,7 +280,8 @@ private:
     Expr* dynamicExpr(Node& n);
     Type inferArrow(ArrowFunction& arrow);
     void buildArrowParamTypes(ArrowFunction& arrow, std::vector<Type>& params,
-                              std::vector<bool>& optional);
+                              std::vector<bool>& optional,
+                              const Type* contextualType = nullptr);
     void declareArrowParams(ArrowFunction& arrow, const std::vector<Type>& params);
     Type inferArrowReturn(ArrowFunction& arrow, const std::vector<Type>& params);
     // --- member / index / call expressions (member_check.cpp) ----------------
@@ -587,6 +588,11 @@ private:
     std::unordered_set<std::uint32_t> declaredFns_;
     std::unordered_set<std::uint32_t> declaredTypes_;
     std::unordered_map<std::uint32_t, FuncSig> arrowSigs_;
+    // Expected function types supplied by a call/assignment context while an
+    // arrow is first inferred. This gives unannotated callback parameters the
+    // same useful types in the body that TypeScript-style contextual typing
+    // provides (e.g. HTTP `req` and `res`).
+    std::unordered_map<std::uint32_t, Type> contextualArrowTypes_;
     // Named std imports bound under another spelling (local -> exported name):
     // `import { Map as M } from "std/collections"` records M -> Map so the
     // construct tables keyed on the canonical name still match.

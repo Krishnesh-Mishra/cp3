@@ -203,7 +203,8 @@ std::string docCommentFor(const AnalyzedDocument& document,
     return renderDocComment(found->second);
 }
 
-std::string completionMemberDoc(const std::string& namespaceName,
+std::string completionMemberDoc(const AnalyzedDocument& document,
+                                const std::string& namespaceName,
                                 const Type* receiverType,
                                 const std::string& member) {
     if (!namespaceName.empty()) {
@@ -213,7 +214,28 @@ std::string completionMemberDoc(const std::string& namespaceName,
         }
         return missingDocText(namespaceName + "." + member);
     }
+    if (receiverType != nullptr && receiverType->kind == TypeKind::Object &&
+        contains(networkObjectMemberNames(receiverType->name), member)) {
+        const StdMemberDoc doc = networkObjectMemberDoc(receiverType->name, member);
+        if (!doc.empty()) return renderStdDoc(doc.signature, doc.body);
+        return missingDocText(receiverType->name + "." + member);
+    }
     if (receiverType == nullptr) return "";
+    if (receiverType->kind == TypeKind::Class) {
+        const StdMemberDoc doc =
+            stdInstanceMemberDoc(receiverType->name, member);
+        if (!doc.empty()) {
+            return renderStdDoc(receiverType->name + "." + doc.signature,
+                                doc.body);
+        }
+        if (const DocComment* memberDoc =
+                classMemberDocAt(document, receiverType->name, member)) {
+            return renderDocComment(*memberDoc);
+        }
+        if (contains(stdInstanceMemberNames(receiverType->name), member)) {
+            return missingDocText(receiverType->name + "." + member);
+        }
+    }
     if (receiverType->kind == TypeKind::Array) {
         const StdMemberDoc doc = stdArrayMemberDoc(member);
         if (!doc.empty()) return renderStdDoc(doc.signature, doc.body);
@@ -296,6 +318,10 @@ DocAnswer stdMemberDocAt(const AnalyzedDocument& document,
             doc = stdInstanceMemberDoc(type->name, member.property);
             label = type->name + "." + member.property;
             known = stdInstanceMemberNames(type->name);
+        } else if (type->kind == TypeKind::Object) {
+            doc = networkObjectMemberDoc(type->name, member.property);
+            label = type->name + "." + member.property;
+            known = networkObjectMemberNames(type->name);
         } else if (type->kind == TypeKind::Array) {
             doc = stdArrayMemberDoc(member.property);
             label = "array." + member.property;
