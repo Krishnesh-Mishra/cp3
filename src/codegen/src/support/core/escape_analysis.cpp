@@ -211,6 +211,52 @@ private:
     int frame_ = 0;
 };
 
+// Borrowing a Ref-backed parameter is safe for the duration of a call only
+// when the function cannot invalidate its owner through side effects. The
+// initial summary accepts self-recursive, read-only traversals: they may call
+// themselves, but cannot write state, allocate/capture closures, or call an
+// unknown function that could replace the last owning handle.
+class BorrowBodyScan final : public detail::StructuralWalk {
+public:
+    explicit BorrowBodyScan(std::string functionName)
+        : functionName_(std::move(functionName)) {}
+
+    bool safe = true;
+
+protected:
+    bool onNode(const Node& node) override {
+        if (!safe) return false;
+        switch (node.kind) {
+            case NodeKind::AssignmentExpr:
+            case NodeKind::UpdateExpr:
+            case NodeKind::NewExpr:
+            case NodeKind::AwaitExpr:
+            case NodeKind::ArrowFunction:
+            case NodeKind::FunctionDeclaration:
+                safe = false;
+                break;
+            case NodeKind::UnaryExpr:
+                if (static_cast<const UnaryExpr&>(node).op == UnaryOp::Delete) {
+                    safe = false;
+                }
+                break;
+            case NodeKind::CallExpr: {
+                const auto& call = static_cast<const CallExpr&>(node);
+                safe = call.callee && call.callee->kind == NodeKind::Identifier &&
+                    static_cast<const Identifier&>(*call.callee).name ==
+                        functionName_;
+                break;
+            }
+            default:
+                break;
+        }
+        return false;
+    }
+
+private:
+    std::string functionName_;
+};
+
 bool scalarFieldType(const Type& type) {
     switch (type.kind) {
         case TypeKind::Number:
@@ -383,13 +429,19 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
         return false;
     };
 
-    // Summarize simple read-only parameters. A parameter is eligible only
-    // when every resolved use is the receiver of a getter whose body is a
-    // single return of a field; bare uses, writes, returns and unknown calls
-    // keep the owning Ref<T> ABI.
+    // Summarize borrowed class parameters. A parameter can use a C++ reference
+    // when its handle itself never escapes: every use is either a verified
+    // scalar getter receiver or a direct read of a data field, with no field
+    // writes, method dispatch, captures, or unknown calls. This covers
+    // recursive read-only traversals such as `check(node.children[i])`: the
+    // Ref held by the parent array keeps the child alive for the full call
+    // expression, while the callee avoids copying an atomic shared_ptr on
+    // entry. Anything not fully accounted for keeps the owning Ref<T> ABI.
     for (const StmtPtr& statement : program.body) {
         if (!statement || statement->kind != NodeKind::FunctionDeclaration) continue;
         const auto& function = static_cast<const FunctionDeclaration&>(*statement);
+        BorrowBodyScan borrowBody(function.name);
+        if (function.body) borrowBody.walk(*function.body);
         for (const ParameterPtr& parameter : function.params) {
             if (!parameter || !parameter->name ||
                 parameter->name->kind != NodeKind::Identifier) continue;
@@ -400,8 +452,9 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
             const auto reads = scan.uses.find(binding);
             const auto members = scan.memberUses.find(binding);
             const auto methods = scan.methodUses.find(binding);
-            if (reads == scan.uses.end() || members == scan.memberUses.end() ||
-                methods == scan.methodUses.end()) continue;
+            if (reads == scan.uses.end() || members == scan.memberUses.end()) {
+                continue;
+            }
             const detail::ClassModel* model =
                 detail::ModelRegistry::get().classByName(symbol->second.type.name);
             if (!model) continue;
@@ -409,19 +462,44 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
             for (const ObjectUse& use : members->second) {
                 if (!use.member) continue;
                 bool getter = false;
-                for (const MethodUse& method : methods->second) {
-                    if (method.member == use.member && method.call &&
-                        safeGetter(*model, use.member->property)) {
-                        getter = true;
-                        break;
+                if (methods != scan.methodUses.end()) {
+                    for (const MethodUse& method : methods->second) {
+                        if (method.member == use.member && method.call &&
+                            safeGetter(*model, use.member->property)) {
+                            getter = true;
+                            break;
+                        }
                     }
                 }
-                if (getter) allowed.insert(use.identifier);
+                const Type* memberType = sema_.typeOf(use.member->nodeId);
+                const bool fieldRead =
+                    borrowBody.safe &&
+                    !use.member->optional &&
+                    dataField(*model, use.member->property) != nullptr &&
+                    memberType != nullptr &&
+                    memberType->kind != TypeKind::Function;
+                if (getter || fieldRead) allowed.insert(use.identifier);
             }
             if (allowed.empty()) continue;
             bool safe = true;
+            // A direct write changes the object through the parameter. A
+            // method call can retain `this` or return an alias, so both stay
+            // on the owning path unless a future summary proves them safe.
+            if (scan.memberWrites.count(binding) != 0 ||
+                (methods != scan.methodUses.end() &&
+                 std::any_of(methods->second.begin(), methods->second.end(),
+                             [&](const MethodUse& method) {
+                                 return !method.member || !method.call ||
+                                        !safeGetter(*model,
+                                                    method.member->property);
+                             }))) {
+                safe = false;
+            }
             for (const auto& read : reads->second) {
-                if (allowed.count(read.first) == 0) { safe = false; break; }
+                if (read.second != 1 || allowed.count(read.first) == 0) {
+                    safe = false;
+                    break;
+                }
             }
             if (safe) nonOwningParamDecls_.insert(parameter->nodeId);
         }
