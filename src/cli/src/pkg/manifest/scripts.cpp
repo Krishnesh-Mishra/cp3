@@ -56,6 +56,23 @@ int normalizeStatus(int status) {
 #endif
 }
 
+int runShellCommand(const fs::path& root, const std::string& command) {
+    std::error_code ec;
+    const fs::path previous = fs::current_path(ec);
+    if (ec) return -2;
+
+    fs::current_path(root, ec);
+    if (ec) return -2;
+
+    setGuard();
+    const int status = std::system(command.c_str());
+    clearGuard();
+
+    std::error_code restoreError;
+    fs::current_path(previous, restoreError);
+    return normalizeStatus(status);
+}
+
 }  // namespace
 
 bool hookableCommand(const std::string& command) {
@@ -69,27 +86,59 @@ bool hooksSuppressed() {
     return guard != nullptr && guard[0] != '\0';
 }
 
-int runScriptHook(const std::string& name) {
+PackageScript findPackageScript(const std::string& name) {
+    PackageScript result;
+    result.name = name;
     std::error_code ec;
     const fs::path cwd = fs::current_path(ec);
-    fs::path root;
-    if (!findPackageRoot(cwd, root)) return -1;
+    if (ec) {
+        result.error = "cannot determine the current directory: " + ec.message();
+        return result;
+    }
+    if (!findPackageRoot(cwd, result.root)) return result;
 
     JsonValue manifest;
-    std::string err;
-    if (!loadPackageJson(root, manifest, err)) return -1;
+    if (!loadPackageJson(result.root, manifest, result.error)) return result;
+
     const JsonValue* scripts = manifest.find("scripts");
-    if (scripts == nullptr || !scripts->isObject()) return -1;
-    const std::string* command = scripts->stringField(name);
-    if (command == nullptr || command->empty()) return -1;
+    if (scripts == nullptr) return result;
+    if (!scripts->isObject()) {
+        result.error = (result.root / "package.json").string() +
+                       ": 'scripts' must be an object";
+        return result;
+    }
+
+    for (const auto& entry : scripts->object) {
+        if (entry.first != name) continue;
+        if (!entry.second.isString() || entry.second.string.empty()) {
+            result.error = (result.root / "package.json").string() +
+                           ": 'scripts." + name +
+                           "' must be a non-empty command string";
+            return result;
+        }
+        result.command = entry.second.string;
+        result.found = true;
+        return result;
+    }
+    return result;
+}
+
+int runPackageScript(const PackageScript& script) {
+    if (!script.found || script.command.empty()) return -1;
+    std::fprintf(stderr, "cp3c: running script '%s': %s\n",
+                 script.name.c_str(), script.command.c_str());
+    std::fflush(stderr);
+    return runShellCommand(script.root, script.command);
+}
+
+int runScriptHook(const std::string& name) {
+    const PackageScript script = findPackageScript(name);
+    if (!script.error.empty() || !script.found) return -1;
 
     std::fprintf(stderr, "cp3c: running script '%s': %s\n", name.c_str(),
-                 command->c_str());
+                 script.command.c_str());
     std::fflush(stderr);
-    setGuard();
-    const int status = std::system(command->c_str());
-    clearGuard();
-    return normalizeStatus(status);
+    return runShellCommand(script.root, script.command);
 }
 
 }  // namespace cp3::cli

@@ -11,7 +11,7 @@
 // scripts and non-TTY use.
 //
 // `package.json` parity with CLI-README §5.1: name, version, description,
-// type, main, typeSystem, the standard dev/build/start/check `scripts` block
+// type, main, typeSystem, the standard develop/compile/start/verify `scripts` block
 // (CLI-README line 124) and a `build` block (`bundleNativeDlls` for
 // applications, `files` for packages).
 // =============================================================================
@@ -42,15 +42,16 @@ std::string jsonEscape(const std::string& s) {
     return out;
 }
 
-// The standard scripts block, pointed at the project entry (CLI-README §1,
-// line 124: `cp3 init` generates dev/build/start/check out of the box).
+// The standard scripts block, pointed at the project entry. Names avoid
+// collisions with cp3c's built-in `dev`, `build`, and `check` commands, so
+// each generated script can be invoked directly as `cp3c <script>`.
 std::string scriptsBlock(const std::string& entry) {
     std::string out;
     out += "  \"scripts\": {\n";
-    out += "    \"dev\": \"cp3c dev " + entry + "\",\n";
-    out += "    \"build\": \"cp3c build " + entry + "\",\n";
+    out += "    \"develop\": \"cp3c dev " + entry + "\",\n";
+    out += "    \"compile\": \"cp3c build " + entry + "\",\n";
     out += "    \"start\": \"cp3c run " + entry + "\",\n";
-    out += "    \"check\": \"cp3c check " + entry + "\"\n";
+    out += "    \"verify\": \"cp3c check " + entry + "\"\n";
     out += "  },\n";
     return out;
 }

@@ -38,12 +38,13 @@ void printUsage(std::FILE* out) {
         "\n"
         "Usage:\n"
         "  cp3c <command> [options] [--] [args]\n"
+        "  cp3c <script>          Run a named package.json script\n"
         "\n"
         "Commands:\n"
         "  run <file.cp3>     Build then execute a program\n"
         "  build [file.cp3]   Transpile + link, or pack (\"type\": \"package\")\n"
         "  check <file.cp3>   Frontend only: parse + type-check (no C++ generation)\n"
-        "  dev [file.cp3]     Watch mode: re-check on save (--once for a single pass)\n"
+        "  dev [file.cp3]     Watch, build and restart on save (--once for one run)\n"
         "  fmt <file.cp3>     Zero-config formatter\n"
         "  clean              Remove .cp3/build and .cp3/out; keeps .cp3/native\n"
         "                     (--all also clears .cp3/packages and .cp3/native)\n"
@@ -99,7 +100,7 @@ void printUsage(std::FILE* out) {
         "      --list            (link) list linked packages\n"
         "      --out <dir|file>  (publish) copy the .cp3pak to this directory/file\n"
         "      --name <name>     (link) record the link under a different name\n"
-        "      --once            (dev) run one watch pass and exit\n"
+        "      --once            (dev) build/run once, then exit\n"
         "      --json, --interactive, --dry-run, --force  (editor-plugin) output/prompts\n"
         "      --editor <id|path>, --vsix <path>  (editor-plugin) target and package\n"
         "      --extensions-dir <dir>, --out <path>  (editor-plugin) overrides\n"
@@ -110,6 +111,27 @@ void printUsage(std::FILE* out) {
 }
 
 bool startsWithDash(std::string_view s) { return !s.empty() && s[0] == '-'; }
+
+bool isBuiltinCommand(const std::string& command) {
+    return command == "run" || command == "build" || command == "check" ||
+           command == "dev" || command == "fmt" || command == "clean" ||
+           command == "init" || command == "exec" || command == "install" ||
+           command == "publish" || command == "link" || command == "unlink" ||
+           command == "recompile" || command == "editor-plugin" ||
+           command == "editor-plugins" || command == "lsp" || command == "dap" ||
+           command == "toolchain" || command == "native-install" ||
+           command == "docs";
+}
+
+bool isReservedCommandWord(const std::string& command) {
+    // Preserve the long-standing npm-style aliases in existing projects and
+    // benchmark fixtures. New `cp3 init` manifests use distinct names, while
+    // other built-in words cannot be shadowed by package scripts.
+    const bool legacyScriptAlias = command == "dev" || command == "build" ||
+                                   command == "check";
+    return (isBuiltinCommand(command) && !legacyScriptAlias) ||
+           command == "help" || command == "version";
+}
 
 std::vector<std::string> collectArgs(int argc, char** argv) {
     std::vector<std::string> args;
@@ -128,13 +150,7 @@ bool resolveCommand(const std::string& first, std::string& command,
         filePreseeded = true;
         return true;
     }
-    if (first == "run" || first == "build" || first == "check" ||
-        first == "dev" || first == "fmt" || first == "clean" ||
-        first == "init" || first == "exec" || first == "install" ||
-        first == "publish" || first == "link" || first == "unlink" ||
-        first == "recompile" || first == "editor-plugin" ||
-        first == "editor-plugins" || first == "lsp" || first == "dap" ||
-        first == "toolchain" || first == "native-install" || first == "docs") {
+    if (isBuiltinCommand(first)) {
         command = first;
         return true;
     }
@@ -348,6 +364,26 @@ int runCli(int argc, char** argv) {
 
     const std::string first = args[0];
 
+    // Non-command package scripts are callable directly (`cp3c start`).
+    // Built-in command words stay reserved. Nested cp3c calls made by a
+    // package script skip lookup so `cp3c start` can invoke `cp3c run` safely.
+    cp3::cli::PackageScript packageScript;
+    if (!startsWithDash(first) && !cp3::cli::hooksSuppressed()) {
+        packageScript = cp3::cli::findPackageScript(first);
+        if (!packageScript.error.empty()) {
+            std::fprintf(stderr, "cp3c: %s\n", packageScript.error.c_str());
+            return kExitUsageError;
+        }
+        if (packageScript.found && isReservedCommandWord(first)) {
+            std::fprintf(stderr,
+                         "cp3c: package.json script '%s' conflicts with the "
+                         "reserved cp3c command '%s'; rename the script in "
+                         "package.json\n",
+                         first.c_str(), first.c_str());
+            return kExitUsageError;
+        }
+    }
+
     if (first == "-v" || first == "--version" || first == "version") {
         std::fputs(versionString().c_str(), stdout);
         std::fputc('\n', stdout);
@@ -363,6 +399,18 @@ int runCli(int argc, char** argv) {
     std::string command;
     bool filePreseeded = false;
     if (!resolveCommand(first, command, filePreseeded)) {
+        if (packageScript.found) {
+            if (args.size() > 1) {
+                std::fprintf(stderr,
+                             "cp3c: package script '%s' does not accept "
+                             "extra command-line arguments\n",
+                             first.c_str());
+                return kExitUsageError;
+            }
+            const int rc = cp3::cli::runPackageScript(packageScript);
+            if (rc == -2 || rc > 0) return reportHookFailure(first, rc);
+            return rc;
+        }
         std::fprintf(stderr, "cp3c: unknown %s '%s'\n",
                      startsWithDash(first) ? "option" : "command", first.c_str());
         printUsage(stderr);

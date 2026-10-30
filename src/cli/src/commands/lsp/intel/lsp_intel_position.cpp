@@ -431,4 +431,28 @@ CompletionPosition classifyPosition(const AnalyzedDocument& document,
     return position;
 }
 
+bool awaitAllowedAt(const AnalyzedDocument& document, std::uint32_t offset) {
+    if (!analysisReady(document)) return false;
+    const std::vector<const Node*> chain = enclosingChain(document, offset);
+    // Function boundaries shadow the surrounding context: a synchronous
+    // callback nested inside an async function still cannot use `await`.
+    for (std::size_t i = chain.size(); i-- > 0;) {
+        const Node* node = chain[i];
+        switch (node->kind) {
+            case NodeKind::ArrowFunction:
+                return static_cast<const ArrowFunction&>(*node).isAsync;
+            case NodeKind::FunctionDeclaration:
+                return static_cast<const FunctionDeclaration&>(*node).isAsync;
+            case NodeKind::MethodDeclaration:
+                return static_cast<const MethodDeclaration&>(*node).isAsync;
+            case NodeKind::ConstructorDeclaration:
+            case NodeKind::AccessorDeclaration:
+                return false;
+            default:
+                break;
+        }
+    }
+    return true;  // top-level await is supported by CP3.
+}
+
 }  // namespace cp3::cli

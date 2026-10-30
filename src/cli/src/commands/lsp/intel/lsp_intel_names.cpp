@@ -19,6 +19,7 @@
 #include "detail/lsp/lsp_intel_complete.hpp"
 #include "detail/lsp/lsp_intel_docs.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -303,6 +304,29 @@ void appendImportedCandidates(const AnalyzedDocument& document,
     }
 }
 
+const SymbolInfo* completionSymbol(const AnalyzedDocument& document,
+                                  const std::string& name,
+                                  std::uint32_t offset) {
+    if (const SymbolInfo* visible = nearestSymbolAt(
+            document.sema, name, *document.file, offset)) {
+        return visible;
+    }
+    // A top-level declaration later in the file is still a useful completion
+    // candidate, even though its declaration starts after the cursor.
+    const SymbolInfo* later = nullptr;
+    for (const auto& entry : document.sema.symbols) {
+        const SymbolInfo& symbol = entry.second;
+        if (symbol.name != name || !symbol.span.valid() ||
+            symbol.span.file != document.file) {
+            continue;
+        }
+        if (later == nullptr || symbol.span.begin.offset < later->span.begin.offset) {
+            later = &symbol;
+        }
+    }
+    return later;
+}
+
 // The keywords a statement may start with.
 const char* const kStatementKeywords[] = {
     "let", "const", "var", "function", "class", "interface", "enum", "type",
@@ -328,9 +352,26 @@ bool namesAType(int kind) {
     return kind == 7 || kind == 8 || kind == 13 || kind == 22;
 }
 
+bool keywordMatchesExpectedType(const std::string& keyword,
+                                const Type& expected,
+                                bool awaitAllowed) {
+    if (keyword == "await") return awaitAllowed;
+    if (keyword == "true" || keyword == "false") {
+        return isAssignable(Type::boolean(), expected);
+    }
+    if (keyword == "null") return isAssignable(Type::nullType(), expected);
+    if (keyword == "undefined") return isAssignable(Type::undefined(), expected);
+    if (keyword == "typeof") return isAssignable(Type::string(), expected);
+    // These forms produce an object or a function; neither is a primitive
+    // argument value. Keep them available at untyped expression positions.
+    if (keyword == "new" || keyword == "this" || keyword == "async") return false;
+    return true;
+}
+
 }  // namespace
 
-std::vector<std::string> legalKeywords(CompletionPosition position) {
+std::vector<std::string> legalKeywords(CompletionPosition position,
+                                      bool awaitAllowed) {
     std::vector<std::string> out;
     switch (position) {
         case CompletionPosition::StatementStart:
@@ -344,7 +385,10 @@ std::vector<std::string> legalKeywords(CompletionPosition position) {
             out.push_back("default");
             break;
         case CompletionPosition::ExpressionStart:
-            for (const char* word : kExpressionKeywords) out.push_back(word);
+            for (const char* word : kExpressionKeywords) {
+                if (!awaitAllowed && std::string(word) == "await") continue;
+                out.push_back(word);
+            }
             return out;
         case CompletionPosition::ClassBody:
             for (const char* word : kClassBodyKeywords) out.push_back(word);
@@ -368,10 +412,10 @@ std::vector<std::string> legalKeywords(CompletionPosition position) {
 }
 
 std::vector<lsp::CompletionCandidate> incompleteCandidates(
-    CompletionPosition position) {
+    CompletionPosition position, bool awaitAllowed) {
     std::vector<lsp::CompletionCandidate> candidates;
     if (position == CompletionPosition::TypePosition) appendPrimitiveTypes(candidates);
-    for (const std::string& keyword : legalKeywords(position)) {
+    for (const std::string& keyword : legalKeywords(position, awaitAllowed)) {
         appendNamed(candidates, keyword, 14, "keyword",
                     keywordDocumentation(keyword));
     }
@@ -424,6 +468,29 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
     if (!typesOnly) appendImportedCandidates(document, candidates);
     // 3. The module-level declarations.
     appendDeclarationCandidates(document, candidates, typesOnly);
+    // If the active argument has a resolved primitive parameter type, omit
+    // names that the checker would reject there. Keep unknowns visible while
+    // a declaration is still being typed; no speculative type is invented.
+    if (!typesOnly && context.expectedType != nullptr &&
+        (context.expectedType->kind == TypeKind::Number ||
+         context.expectedType->kind == TypeKind::String ||
+         context.expectedType->kind == TypeKind::Boolean ||
+         context.expectedType->kind == TypeKind::Native ||
+         context.expectedType->kind == TypeKind::Literal)) {
+        const Type& expected = *context.expectedType;
+        candidates.erase(
+            std::remove_if(candidates.begin(), candidates.end(),
+                           [&](const lsp::CompletionCandidate& candidate) {
+                               const SymbolInfo* symbol = completionSymbol(
+                                   document, candidate.label, offset);
+                               if (symbol == nullptr || symbol->type.isUnknown() ||
+                                   symbol->type.isError()) {
+                                   return false;
+                               }
+                               return !isAssignable(symbol->type, expected);
+                           }),
+            candidates.end());
+    }
     // 4. The snippets: a statement may start here.
     if (position == CompletionPosition::StatementStart) {
         appendSnippet(candidates, "import", "import ${1:name} from \"${2:./module.cp3}\";",
@@ -436,7 +503,18 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
                       "declare an interface");
     }
     // 5. The keywords that may legally appear here, last.
-    for (const std::string& keyword : legalKeywords(position)) {
+    for (const std::string& keyword :
+         legalKeywords(position, context.awaitAllowed)) {
+        if (context.expectedType != nullptr &&
+            (context.expectedType->kind == TypeKind::Number ||
+             context.expectedType->kind == TypeKind::String ||
+             context.expectedType->kind == TypeKind::Boolean ||
+             context.expectedType->kind == TypeKind::Native ||
+             context.expectedType->kind == TypeKind::Literal) &&
+            !keywordMatchesExpectedType(keyword, *context.expectedType,
+                                        context.awaitAllowed)) {
+            continue;
+        }
         appendNamed(candidates, keyword, 14, "keyword",
                     keywordDocumentation(keyword));
     }

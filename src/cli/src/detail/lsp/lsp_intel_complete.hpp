@@ -45,7 +45,9 @@ struct CompletionContext {
     bool member = false;           // `receiver.|`
     bool importSpecifier = false;  // inside an `import ... from "|"` string
     bool blocked = false;          // inside a comment / non-import string
+    bool awaitAllowed = false;     // top level or the nearest function is async
     CompletionPosition position = CompletionPosition::Unknown;
+    const Type* expectedType = nullptr;  // known active call-argument type
     std::uint32_t wordBegin = 0;   // start of the partial word
     std::uint32_t dot = 0;         // member: offset of the '.'
     std::uint32_t receiverBegin = 0;
@@ -74,6 +76,9 @@ CompletionPosition classifyPosition(const AnalyzedDocument& document,
                                     const std::string& text,
                                     std::uint32_t offset);
 
+// Whether CP3 permits `await` at this cursor (top-level or async function).
+bool awaitAllowedAt(const AnalyzedDocument& document, std::uint32_t offset);
+
 // The names in scope at the cursor, most local first: the parameters of the
 // enclosing function, the locals of the enclosing blocks and the bindings of
 // the enclosing loop or catch clause. In a type position only the names that
@@ -83,14 +88,15 @@ std::vector<lsp::CompletionCandidate> scopeCandidates(
     std::uint32_t offset);
 
 // The keywords that may legally appear at `position`, in popup order.
-std::vector<std::string> legalKeywords(CompletionPosition position);
+std::vector<std::string> legalKeywords(CompletionPosition position,
+                                      bool awaitAllowed);
 
 // Grammar-only candidates used while a document is incomplete or cannot yet
 // be semantically analyzed. These keep keyword/type completion alive during
 // normal incremental editing; they intentionally make no claims about names
 // whose types depend on semantic analysis.
 std::vector<lsp::CompletionCandidate> incompleteCandidates(
-    CompletionPosition position);
+    CompletionPosition position, bool awaitAllowed);
 
 // Code candidates: the names in scope, the names the module declares, the
 // legal keywords and a few snippets.

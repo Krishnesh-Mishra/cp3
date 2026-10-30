@@ -1,0 +1,17 @@
+{
+  "name": "hello-world",
+  "version": "1.0.0",
+  "description": "a C+++ project",
+  "type": "application",
+  "main": "src/index.cp3",
+  "typeSystem": "typescript",
+  "scripts": {
+    "develop": "..\\..\\..\\build\\bin\\cp3c.exe dev src/index.cp3",
+    "compile": "..\\..\\..\\build\\bin\\cp3c.exe build src/index.cp3",
+    "start": "..\\..\\..\\build\\bin\\cp3c.exe run src/index.cp3",
+    "verify": "..\\..\\..\\build\\bin\\cp3c.exe check src/index.cp3"
+  },
+  "build": {
+    "bundleNativeDlls": true
+  }
+}

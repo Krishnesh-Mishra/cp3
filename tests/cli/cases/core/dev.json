@@ -15,12 +15,13 @@
           "hello"
         ]
       },
+      "slow": true,
       "expect": {
         "exit": 0,
         "stderr": {
           "contains": [
             "watching src/index.cp3",
-            "check ok (exit 0)"
+            "build ok (exit 0)"
           ]
         }
       }
@@ -38,12 +39,13 @@
           "hello"
         ]
       },
+      "slow": true,
       "expect": {
         "exit": 0,
         "stderr": {
           "contains": [
             "watching",
-            "check ok (exit 0)"
+            "build ok (exit 0)"
           ]
         }
       }
@@ -67,7 +69,7 @@
         "stderr": {
           "contains": [
             "CP3201",
-            "check reported problems (exit 1)"
+            "build reported problems (exit 1)"
           ]
         }
       }
@@ -91,7 +93,7 @@
         "stderr": {
           "contains": [
             "CP3401",
-            "check reported problems (exit 1)"
+            "build reported problems (exit 1)"
           ]
         }
       }
@@ -145,17 +147,18 @@
           }
         ]
       },
+      "slow": true,
       "expect": {
         "exit": 0,
         "stderr": {
-          "contains": "check ok (exit 0)"
+          "contains": "build ok (exit 0)"
         }
       }
     },
     {
       "group": "dev",
-      "name": "verbose-check-output",
-      "description": "verbose check output",
+      "name": "verbose-build-output",
+      "description": "verbose build output",
       "argv": [
         "dev",
         "--once",
@@ -167,10 +170,11 @@
           "hello"
         ]
       },
+      "slow": true,
       "expect": {
         "exit": 0,
         "stderr": {
-          "contains": "check ok (exit 0)"
+          "contains": "build ok (exit 0)"
         }
       }
     }

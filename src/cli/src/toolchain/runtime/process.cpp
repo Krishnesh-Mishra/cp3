@@ -22,8 +22,11 @@
 #  endif
 #  include <io.h>
 #  include <process.h>
+#  include <windows.h>
 #else
 #  include <cerrno>
+#  include <csignal>
+#  include <sys/types.h>
 #  include <sys/wait.h>
 #  include <unistd.h>
 #endif
@@ -69,6 +72,151 @@ int runProcess(const std::vector<std::string>& args) {
     }
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     return -1;
+#endif
+}
+
+#if defined(_WIN32)
+namespace {
+
+// Quote one argv value according to the Windows command-line rules used by
+// CommandLineToArgvW / the Microsoft C runtime. CreateProcess receives one
+// command string even though the caller supplied a structured argv vector.
+std::string quoteWindowsArgument(const std::string& value) {
+    if (!value.empty() && value.find_first_of(" \t\n\v\"") == std::string::npos) {
+        return value;
+    }
+    std::string out(1, '"');
+    std::size_t slashes = 0;
+    for (const char ch : value) {
+        if (ch == '\\') {
+            ++slashes;
+            continue;
+        }
+        if (ch == '"') {
+            out.append(slashes * 2 + 1, '\\');
+            out.push_back('"');
+            slashes = 0;
+            continue;
+        }
+        out.append(slashes, '\\');
+        slashes = 0;
+        out.push_back(ch);
+    }
+    out.append(slashes * 2, '\\');
+    out.push_back('"');
+    return out;
+}
+
+void closeChildHandle(ChildProcess& child) noexcept {
+    if (child.native == -1) return;
+    CloseHandle(reinterpret_cast<HANDLE>(child.native));
+    child.native = -1;
+}
+
+}  // namespace
+#endif
+
+bool startChildProcess(const std::vector<std::string>& args,
+                       ChildProcess& child) {
+    if (args.empty() || child.native != -1) return false;
+#if defined(_WIN32)
+    std::string commandLine;
+    for (const std::string& arg : args) {
+        if (!commandLine.empty()) commandLine.push_back(' ');
+        commandLine += quoteWindowsArgument(arg);
+    }
+    STARTUPINFOA startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    // A separate process group lets `dev` request a clean shutdown without
+    // sending Ctrl+C to the watcher itself. Stdout/stderr remain inherited.
+    if (!CreateProcessA(args.front().c_str(), commandLine.data(), nullptr,
+                        nullptr, TRUE, CREATE_NEW_PROCESS_GROUP, nullptr,
+                        nullptr, &startup, &process)) {
+        return false;
+    }
+    CloseHandle(process.hThread);
+    child.native = reinterpret_cast<std::intptr_t>(process.hProcess);
+    return true;
+#else
+    const pid_t pid = fork();
+    if (pid < 0) return false;
+    if (pid == 0) {
+        std::vector<char*> argv;
+        argv.reserve(args.size() + 1);
+        for (const std::string& arg : args) {
+            argv.push_back(const_cast<char*>(arg.c_str()));
+        }
+        argv.push_back(nullptr);
+        execvp(argv[0], argv.data());
+        _exit(127);
+    }
+    child.native = static_cast<std::intptr_t>(pid);
+    return true;
+#endif
+}
+
+ChildProcessState pollChildProcess(ChildProcess& child, int& exitCode) {
+    if (child.native == -1) return ChildProcessState::Failed;
+#if defined(_WIN32)
+    const HANDLE handle = reinterpret_cast<HANDLE>(child.native);
+    const DWORD state = WaitForSingleObject(handle, 0);
+    if (state == WAIT_TIMEOUT) return ChildProcessState::Running;
+    if (state != WAIT_OBJECT_0) {
+        closeChildHandle(child);
+        return ChildProcessState::Failed;
+    }
+    DWORD code = 1;
+    const bool gotCode = GetExitCodeProcess(handle, &code) != 0;
+    closeChildHandle(child);
+    if (!gotCode) return ChildProcessState::Failed;
+    exitCode = static_cast<int>(code);
+    return ChildProcessState::Exited;
+#else
+    const pid_t pid = static_cast<pid_t>(child.native);
+    int status = 0;
+    const pid_t result = waitpid(pid, &status, WNOHANG);
+    if (result == 0) return ChildProcessState::Running;
+    child.native = -1;
+    if (result < 0) return ChildProcessState::Failed;
+    if (WIFEXITED(status)) {
+        exitCode = WEXITSTATUS(status);
+        return ChildProcessState::Exited;
+    }
+    if (WIFSIGNALED(status)) {
+        exitCode = 128 + WTERMSIG(status);
+        return ChildProcessState::Exited;
+    }
+    return ChildProcessState::Failed;
+#endif
+}
+
+void stopChildProcess(ChildProcess& child) noexcept {
+    if (child.native == -1) return;
+#if defined(_WIN32)
+    const HANDLE handle = reinterpret_cast<HANDLE>(child.native);
+    DWORD processId = GetProcessId(handle);
+    if (processId != 0) (void)GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, processId);
+    if (WaitForSingleObject(handle, 1500) == WAIT_TIMEOUT) {
+        (void)TerminateProcess(handle, 1);
+        (void)WaitForSingleObject(handle, INFINITE);
+    }
+    closeChildHandle(child);
+#else
+    const pid_t pid = static_cast<pid_t>(child.native);
+    (void)kill(pid, SIGTERM);
+    int status = 0;
+    for (int attempt = 0; attempt < 15; ++attempt) {
+        const pid_t result = waitpid(pid, &status, WNOHANG);
+        if (result == pid || (result < 0 && errno == ECHILD)) {
+            child.native = -1;
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    (void)kill(pid, SIGKILL);
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+    child.native = -1;
 #endif
 }
 

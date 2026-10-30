@@ -90,6 +90,11 @@ std::string defaultEntryFile();
 // Builds the render options for a command (TTY/--verbose -> pretty + color).
 RenderOptions makeRenderOptions(const CliOptions& opt, std::string fallbackPath);
 
+// Short phase updates for an interactive `cp3c run`. Kept on stderr so the
+// program's stdout remains byte-for-byte its own output; non-TTY and verbose
+// invocations already have their own output policy.
+void reportRunProgress(bool execute, bool verbose, const char* phase);
+
 // Loads the entry file into a SourceManager (which must outlive the tokens,
 // since token lexemes are views into SourceFile::text). Returns false with a
 // message in `err` when the file cannot be read.

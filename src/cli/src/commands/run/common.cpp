@@ -23,6 +23,12 @@ RenderOptions makeRenderOptions(const CliOptions& opt, std::string fallbackPath)
     return ro;
 }
 
+void reportRunProgress(bool execute, bool verbose, const char* phase) {
+    if (!execute || verbose || !isTty(stderr)) return;
+    std::fprintf(stderr, "cp3c: %s\n", phase);
+    std::fflush(stderr);
+}
+
 bool loadEntrySource(const std::string& path, SourceManager& sm, SourceFile*& out,
                      std::string& err) {
     if (path.empty()) {

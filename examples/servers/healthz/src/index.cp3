@@ -1,58 +1,22 @@
 import { createServer } from "std/network";
 import console from "std/console";
+import os from "std/os";
 
-// healthz -- a minimal HTTP liveness service.
-//
-// This is the program an orchestrator pokes when it asks "is it up?":
-//
-//   GET /healthz -> 200, body "ok"
-//   GET /        -> 200, a JSON service card
-//
-// Run it:     cp3c run main.cp3
-// Check it:   curl http://localhost:3000/healthz     # -> ok
-//
-// API shape: STDLIB-README "network" (createServer / .use / .get / .text /
-// .json / .status / .listen). The process follows spec 14: it stays alive
-// while the event loop has work, and an HTTP server never runs out of work,
-// so it serves until you stop it (Ctrl+C).
-
-const PORT = 3000;
-const app = createServer();
-
-const Obj = {
-  name:'Rahul'
-} 
-
-
-
-// Middleware runs before route handlers; next() continues the chain.
-app.use(async (req, res, next) => {
-  console.log(`${req.method} ${req.path}`);
-  await next();
-});
-
-
-app.get("/", (req, res) => {
-  res.json({ service: "cp3c-example-healthz", status: "ok" });
-});
-
-/** @param {number} a */
-/** @param {number} b */
-
-const add = (a:r_'i32' , b:number)=>{
-  return a+b
-}
+const app = createServer({ threads: os.cpus() - 1 });
 
 app.get("/healthz", (req, res) => {
-  res.text("ok");
-});
- 
-// Anything that reached this last middleware matched no route above.
-app.use((req, res, next) => {
-  res.status(404).json({ error: "not found", path: req.path });
+  res.text("ok", 200);
 });
 
-app.listen(PORT, () => {
-  console.log(`healthz listening on http://localhost:${PORT}`);
-  console.log(`try: curl http://localhost:${PORT}/healthz`);
+app.get("/", (req, res) => {
+  res.json({ service: "cp3-health", status: "ok" });
 });
+   
+app.use((req, res, next) => {
+  res.status(404).text("not found");
+}); 
+
+app.listen(3000, () => {
+  console.log("listening on http://localhost:3000");
+});
+

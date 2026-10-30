@@ -299,6 +299,41 @@ int countArguments(const std::string& text, std::uint32_t open,
 
 }  // namespace
 
+const Type* expectedArgumentTypeAt(const AnalyzedDocument& document,
+                                   std::uint32_t cursor) {
+    if (!analysisReady(document)) return nullptr;
+    const CallExpr* best = nullptr;
+    forEachNode(*document.entry->ast, [&](const Node& node) {
+        if (node.kind != NodeKind::CallExpr || !node.span.valid() ||
+            node.span.file != document.file || cursor < node.span.begin.offset ||
+            cursor > node.span.end.offset) {
+            return;
+        }
+        const auto& call = static_cast<const CallExpr&>(node);
+        if (call.callee == nullptr || !call.callee->span.valid() ||
+            cursor < call.callee->span.end.offset) {
+            return;
+        }
+        if (best == nullptr || call.span.length() < best->span.length()) {
+            best = &call;
+        }
+    });
+    if (best == nullptr || best->callee == nullptr) return nullptr;
+    const std::uint32_t open = openParenAfter(
+        document.file->text, best->callee->span.end.offset, cursor);
+    if (open == kNoOffset) return nullptr;
+    const int argument = countArguments(document.file->text, open, cursor);
+    if (argument < 0) return nullptr;
+    const Type* callee = document.sema.typeOf(best->callee->nodeId);
+    if (callee == nullptr || callee->kind != TypeKind::Function ||
+        static_cast<std::size_t>(argument) + 1 >= callee->parts.size()) {
+        return nullptr;
+    }
+    const Type* expected = &callee->parts[static_cast<std::size_t>(argument)];
+    if (expected->isUnknown() || expected->isError()) return nullptr;
+    return expected;
+}
+
 std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,
                                         const std::string& text,
                                         std::uint32_t line,

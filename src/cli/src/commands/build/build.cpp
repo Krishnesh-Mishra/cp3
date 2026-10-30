@@ -57,6 +57,8 @@ struct BuildState {
     std::vector<CacheEntry>& manifest;
     std::vector<fs::path>& objects;
     bool anyCompiled = false;
+    bool showProgress = false;
+    bool compileProgressShown = false;
 };
 
 // The release profile's default switches. `--no-*` turns one off without
@@ -179,6 +181,10 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
     const CompileStep step{st.layout.includeDirs, cpp, obj, st.nativeFlags.compile};
     const std::vector<std::string> args =
         compileArgs(st.tc, st.opt.compile.profile, step, st.optimizations);
+    if (st.showProgress && !st.compileProgressShown) {
+        reportRunProgress(true, false, "compiling native C++ sources...");
+        st.compileProgressShown = true;
+    }
     if (st.opt.verbose) {
         std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
     }
@@ -301,6 +307,9 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
                          exePath.string().c_str());
         }
         return true;
+    }
+    if (st.showProgress) {
+        reportRunProgress(true, false, "linking native executable...");
     }
     if (st.opt.verbose) {
         std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
@@ -593,6 +602,7 @@ int buildWithToolchain(const BuildRequest& request) {
     BuildState state{opt,          tc,           layout,       profile,
                      optimizations, *nativeFlags, headerFingerprint,
                      compilerKey,  force,        manifest,     objects};
+    state.showProgress = request.execute && !opt.verbose && isTty(stderr);
 
     if (!compileExtras(state, request)) {
         return kExitCompileError;
@@ -612,6 +622,7 @@ int buildWithToolchain(const BuildRequest& request) {
         return kExitSuccess;
     }
 
+    reportRunProgress(true, opt.verbose, "starting program...");
     std::vector<std::string> runArgs;
     runArgs.push_back(layout.exePath.string());
     for (const std::string& a : opt.programArgs) runArgs.push_back(a);

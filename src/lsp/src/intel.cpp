@@ -64,10 +64,16 @@ Json markdownDoc(const std::string& value) {
     return doc;
 }
 
-Json completionItemJson(const CompletionCandidate& candidate) {
+Json completionItemJson(const CompletionCandidate& candidate,
+                        std::size_t priority) {
     Json item = jsonObject();
     item.set("label", jsonString(candidate.label));
     item.set("kind", jsonInt(candidate.kind));
+    // Preserve the compiler's ranking: locals first, then imports and module
+    // names, then keywords. Without sortText VS Code alphabetizes the list.
+    std::string sortText = std::to_string(priority);
+    if (sortText.size() < 8) sortText.insert(0, 8 - sortText.size(), '0');
+    item.set("sortText", jsonString(sortText));
     if (!candidate.detail.empty()) {
         item.set("detail", jsonString(candidate.detail));
     }
@@ -151,9 +157,10 @@ Json completionResult(const DocumentView& document, std::uint32_t line,
         } catch (...) {
             candidates.clear();
         }
-        for (const CompletionCandidate& candidate : candidates) {
+        for (std::size_t i = 0; i < candidates.size(); ++i) {
+            const CompletionCandidate& candidate = candidates[i];
             if (items.items.size() >= kMaxCompletionItems) break;
-            items.push(completionItemJson(candidate));
+            items.push(completionItemJson(candidate, i));
         }
     }
     Json result = jsonObject();

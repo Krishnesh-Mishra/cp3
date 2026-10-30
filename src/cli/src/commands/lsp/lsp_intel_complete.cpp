@@ -194,6 +194,8 @@ std::vector<lsp::CompletionCandidate> completeAt(const std::string& path,
     // before that prefix so statement keywords and type names remain offered.
     const std::uint32_t grammarOffset = context.wordBegin;
     context.position = classifyPosition(*document, tokens, text, grammarOffset);
+    context.awaitAllowed = awaitAllowedAt(*document, offset);
+    context.expectedType = expectedArgumentTypeAt(*document, offset);
     if (context.importSpecifier) {
         return importSpecifierCandidates(text, context, offset);
     }
@@ -201,7 +203,7 @@ std::vector<lsp::CompletionCandidate> completeAt(const std::string& path,
         return memberCandidates(*document, text, context, offset);
     }
     if (!analysisReady(*document)) {
-        return incompleteCandidates(context.position);
+        return incompleteCandidates(context.position, context.awaitAllowed);
     }
     // The syntactic position decides which keywords may be offered and which
     // names are in scope (lsp_intel_scope.cpp).

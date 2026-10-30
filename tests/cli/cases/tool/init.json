@@ -298,10 +298,10 @@
         "files": {
           "app/package.json": {
             "json_paths": {
-              "scripts.dev": "cp3c dev src/index.cp3",
-              "scripts.build": "cp3c build src/index.cp3",
+              "scripts.develop": "cp3c dev src/index.cp3",
+              "scripts.compile": "cp3c build src/index.cp3",
               "scripts.start": "cp3c run src/index.cp3",
-              "scripts.check": "cp3c check src/index.cp3",
+              "scripts.verify": "cp3c check src/index.cp3",
               "build.bundleNativeDlls": true
             }
           }

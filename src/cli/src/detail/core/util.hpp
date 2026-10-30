@@ -54,6 +54,20 @@ bool findExecutable(const std::string& name, std::string& found);
 // involved, so arguments with spaces need no quoting.
 int runProcess(const std::vector<std::string>& args);
 
+// A child process that the development watcher can keep alive while it waits
+// for source edits. The native handle is private to process.cpp; callers must
+// only use the helpers below and stop a live child before discarding it.
+struct ChildProcess {
+    std::intptr_t native = -1;
+};
+
+enum class ChildProcessState { Running, Exited, Failed };
+
+bool startChildProcess(const std::vector<std::string>& args,
+                       ChildProcess& child);
+ChildProcessState pollChildProcess(ChildProcess& child, int& exitCode);
+void stopChildProcess(ChildProcess& child) noexcept;
+
 // Runs `args` with stdout and stderr captured into `out`. Returns the exit
 // code, or -1 when the process could not be launched. No shell is involved.
 int runProcessCapture(const std::vector<std::string>& args, std::string& out);

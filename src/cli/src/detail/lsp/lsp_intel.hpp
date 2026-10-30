@@ -97,6 +97,11 @@ std::vector<lsp::CompletionCandidate> completeAt(const std::string& path,
                                                  std::uint32_t line,
                                                  std::uint32_t column);
 
+// A precise parameter type when the cursor is inside a typed call argument.
+// Null means that the call/parameter type cannot be resolved confidently.
+const Type* expectedArgumentTypeAt(const AnalyzedDocument& document,
+                                   std::uint32_t offset);
+
 // Hover (lsp_intel_query.cpp): the inferred type at the cursor, or null when
 // the compiler has nothing to say there.
 std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,

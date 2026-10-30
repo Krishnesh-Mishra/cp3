@@ -293,10 +293,14 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     const RenderOptions ro = makeRenderOptions(effective, file->path);
     const BuildContext ctx{&effective, &ro, &moduleName, execute};
 
+    reportRunProgress(execute, effective.verbose,
+                      "checking source and imports...");
     FrontendResult frontend = runFrontend(sm, *file, ctx);
     if (frontend.exitCode != kExitSuccess) return frontend.exitCode;
     CompilationUnit* entry = frontend.graph->entry();
 
+    reportRunProgress(execute, effective.verbose,
+                      "generating native code...");
     CodegenOptions options;
     options.importedEnums = importedEnumsFor(*frontend.graph, *entry);
     options.typeSystem = effective.compile.typeSystem;
@@ -346,6 +350,8 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     request.importedStdModules = &importedStdModules;
     request.extraModules = &extras;
     request.execute = execute;
+    reportRunProgress(execute, effective.verbose,
+                      "preparing native build...");
     return detail::buildWithToolchain(request);
 }
 
