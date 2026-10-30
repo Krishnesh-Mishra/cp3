@@ -244,7 +244,8 @@ std::string Generator::emitModelNew(const NewExpr& n) {
                 ec.representable && ec.shape != Shape::Void ? ec.cpp : "double");
         }
     }
-    return "::cp3::runtime::makeRef<" + self + ">(" +
+    return std::string("::cp3::runtime::") +
+           (cm->localRef ? "makeLocalRef<" : "makeRef<") + self + ">(" +
            joinStrings(texts, ", ") + ")";
 }
 

@@ -257,6 +257,64 @@ private:
     std::string functionName_;
 };
 
+// Shared handles are required when the translation unit can transfer values
+// to another thread or through a weak/interface ABI. Keep this as a unit-wide
+// gate: one uncertain concurrency feature disables LocalRef lowering for the
+// unit, leaving ordinary atomic Ref<T> as the fallback.
+class LocalRefSafetyScan final : public detail::StructuralWalk {
+public:
+    bool safe = true;
+
+protected:
+    bool onNode(const Node& node) override {
+        if (node.kind == NodeKind::WeakExpr ||
+            node.kind == NodeKind::InterfaceDeclaration) {
+            safe = false;
+        } else if (node.kind == NodeKind::ImportDeclaration) {
+            const auto& import = static_cast<const ImportDeclaration&>(node);
+            if (import.source.find("parallel") != std::string::npos ||
+                import.source.find("worker") != std::string::npos ||
+                import.source.find("thread") != std::string::npos) {
+                safe = false;
+            }
+        } else if (node.kind == NodeKind::ExportDeclaration) {
+            // Exported values may be held by code outside this translation
+            // unit. Keep the atomic ABI whenever that boundary exists.
+            safe = false;
+        } else if (node.kind == NodeKind::CallExpr) {
+            const auto& call = static_cast<const CallExpr&>(node);
+            if (call.callee && call.callee->kind == NodeKind::Identifier) {
+                const auto& name = static_cast<const Identifier&>(*call.callee).name;
+                if (name == "worker" || name == "spawnWorker") safe = false;
+            }
+            if (call.callee && call.callee->kind == NodeKind::MemberExpr) {
+                const auto& member = static_cast<const MemberExpr&>(*call.callee);
+                if (member.object && member.object->kind == NodeKind::Identifier &&
+                    static_cast<const Identifier&>(*member.object).name ==
+                        "parallel") {
+                    safe = false;
+                }
+            }
+        } else if (node.kind == NodeKind::NewExpr) {
+            const auto& allocation = static_cast<const NewExpr&>(node);
+            if (allocation.callee &&
+                allocation.callee->kind == NodeKind::Identifier) {
+                const auto& name =
+                    static_cast<const Identifier&>(*allocation.callee).name;
+                if (name == "Worker" || name == "Thread") safe = false;
+            }
+        }
+        return false;
+    }
+
+    void readIdentifier(const Identifier& id) override {
+        if (id.name == "parallel" || id.name == "worker" ||
+            id.name == "Worker" || id.name == "Thread") {
+            safe = false;
+        }
+    }
+};
+
 bool scalarFieldType(const Type& type) {
     switch (type.kind) {
         case TypeKind::Number:
@@ -396,6 +454,37 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
     stackAliasDecls_.clear();
     stackValueArrayDecls_.clear();
     nonOwningParamDecls_.clear();
+    LocalRefSafetyScan localRefScan;
+    for (const StmtPtr& statement : program.body) {
+        if (statement) localRefScan.walk(*statement);
+    }
+    for (detail::ClassModel* model : detail::ModelRegistry::get().allClasses()) {
+        if (model) model->localRef = false;
+    }
+    const auto models = detail::ModelRegistry::get().allClasses();
+    const bool hasAnyWeakField = std::any_of(
+        models.begin(), models.end(), [](const detail::ClassModel* model) {
+            return model && std::any_of(
+                                model->members.begin(), model->members.end(),
+                                [](const detail::ClassMemberModel& member) {
+                                    return member.isWeak;
+                                });
+        });
+    const bool hasInheritance = std::any_of(
+        models.begin(), models.end(), [](const detail::ClassModel* model) {
+            return model && !model->baseName.empty();
+        });
+    if (localRefScan.safe && options_.workers.empty() && !hasAnyWeakField &&
+        !hasInheritance) {
+        for (detail::ClassModel* model : models) {
+            if (!model || model->local || !model->decl || model->decl->isExported ||
+                !model->baseName.empty() || !model->typeParams.empty() ||
+                !model->decl->implementsTypes.empty()) {
+                continue;
+            }
+            model->localRef = true;
+        }
+    }
     std::unordered_set<std::uint32_t> exportedBindings;
     for (const StmtPtr& statement : program.body) {
         if (!statement || statement->kind != NodeKind::ExportDeclaration) continue;
@@ -605,6 +694,7 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
         if (safe) safeAliases.insert(alias.binding);
     }
 
+    std::unordered_set<std::string> valueArrayElementClasses;
     for (const auto& entry : scan.candidates) {
         const std::string& name = entry.first;
         const AllocationCandidate& candidate = entry.second;
@@ -750,6 +840,7 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
                     }
                     if (valueSafe) {
                         stackValueArrayDecls_.insert(candidate.declaration->nodeId);
+                        valueArrayElementClasses.insert(elementType.name);
                     }
                 }
             }
@@ -871,6 +962,14 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
             if (pointerBindings.insert(alias.binding).second) changed = true;
             stackAliasDecls_.insert(alias.declaration->nodeId);
             stackAllocDecls_.insert(alias.declaration->nodeId);
+        }
+    }
+    // The value-array pass removes class handles entirely and stores the
+    // pointee structs directly. Keep its C++ element type consistent with
+    // index and push lowering by leaving those classes on the Ref ABI.
+    for (detail::ClassModel* model : models) {
+        if (model && valueArrayElementClasses.count(model->name) != 0) {
+            model->localRef = false;
         }
     }
 }

@@ -344,11 +344,19 @@ void Generator::emitDeclaratorStmt(const VariableDeclarator& d, VarKind kind,
                 if (element.representable && literal.elements.empty()) {
                     std::string elementCpp = element.cpp;
                     if (stackValueArrayDecls_.count(d.nodeId) != 0) {
-                        constexpr const char* refPrefix =
-                            "::cp3::runtime::Ref<";
-                        const std::size_t prefixSize =
-                            std::char_traits<char>::length(refPrefix);
-                        if (elementCpp.rfind(refPrefix, 0) == 0 &&
+                        constexpr const char* refPrefixes[] = {
+                            "::cp3::runtime::Ref<",
+                            "::cp3::runtime::LocalRef<"};
+                        std::size_t prefixSize = 0;
+                        for (const char* prefix : refPrefixes) {
+                            const std::size_t size =
+                                std::char_traits<char>::length(prefix);
+                            if (elementCpp.rfind(prefix, 0) == 0) {
+                                prefixSize = size;
+                                break;
+                            }
+                        }
+                        if (prefixSize != 0 &&
                             elementCpp.size() > prefixSize &&
                             elementCpp.back() == '>') {
                             elementCpp = elementCpp.substr(
@@ -375,17 +383,28 @@ void Generator::emitDeclaratorStmt(const VariableDeclarator& d, VarKind kind,
                 objectInfo.shape == Shape::ClassRef) {
                 std::string init = emitModelNew(n);
                 std::string concreteClass = objectInfo.cpp;
-                constexpr const char* refPrefix = "::cp3::runtime::Ref<";
-                const std::size_t refPrefixSize =
-                    std::char_traits<char>::length(refPrefix);
-                if (concreteClass.rfind(refPrefix, 0) == 0 &&
+                constexpr const char* refPrefixes[] = {
+                    "::cp3::runtime::Ref<",
+                    "::cp3::runtime::LocalRef<"};
+                std::size_t refPrefixSize = 0;
+                for (const char* prefix : refPrefixes) {
+                    const std::size_t size =
+                        std::char_traits<char>::length(prefix);
+                    if (concreteClass.rfind(prefix, 0) == 0) {
+                        refPrefixSize = size;
+                        break;
+                    }
+                }
+                if (refPrefixSize != 0 &&
                     concreteClass.size() > refPrefixSize &&
                     concreteClass.back() == '>') {
                     concreteClass = concreteClass.substr(
                         refPrefixSize, concreteClass.size() - refPrefixSize - 1);
                 }
                 const std::string factory =
-                    "::cp3::runtime::makeRef<" + concreteClass + ">(";
+                    std::string("::cp3::runtime::") +
+                    (model->localRef ? "makeLocalRef<" : "makeRef<") +
+                    concreteClass + ">(";
                 if (init.rfind(factory, 0) == 0 &&
                     init.size() > factory.size() && init.back() == ')') {
                     init = concreteClass + "(" +

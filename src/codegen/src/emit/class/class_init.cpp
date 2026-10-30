@@ -127,12 +127,14 @@ std::string Generator::newSpreadText(const ClassModel& cm,
     const std::size_t fill = ptypes.size() > fixed ? ptypes.size() - fixed : 0;
     const std::size_t needed = required > fixed ? required - fixed : 0;
     // The dispatch: the constructor takes the elements the array holds.
-    std::string out = "([&]() -> ::cp3::runtime::Ref<" + self + "> { "
+    const std::string handle = cm.localRef ? "LocalRef" : "Ref";
+    const std::string factory = cm.localRef ? "makeLocalRef" : "makeRef";
+    std::string out = "([&]() -> ::cp3::runtime::" + handle + "<" + self + "> { "
                       "const auto& cp3_a = " + expr(*spread.argument) +
                       "; const std::size_t cp3_n = cp3_a->size();";
     for (std::size_t n = needed; n <= fill; ++n) {
         out += " if (cp3_n == " + std::to_string(n) + ") return "
-               "::cp3::runtime::makeRef<" + self + ">(";
+               "::cp3::runtime::" + factory + "<" + self + ">(";
         bool first = true;
         for (std::size_t i = 0; i < fixed; ++i) {
             const Expr* arg = arguments[i].get();
@@ -232,7 +234,8 @@ std::string Generator::classLiteralInit(const ClassModel& cm,
         return std::string();
     }
     std::string args;
-    std::string out = "([&]{ auto cp3_v = ::cp3::runtime::makeRef<" + cm.cpp +
+    const std::string factory = cm.localRef ? "makeLocalRef" : "makeRef";
+    std::string out = "([&]{ auto cp3_v = ::cp3::runtime::" + factory + "<" + cm.cpp +
                       ">(" + args + ");";
     for (const ClassMemberModel& m : cm.members) {
         if (m.ctor != nullptr || m.isMethod) continue;

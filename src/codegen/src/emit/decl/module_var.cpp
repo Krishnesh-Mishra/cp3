@@ -211,10 +211,18 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
         declared && declared->kind == TypeKind::Array &&
         !declared->parts.empty()) {
         CppInfo element = classify(declared->parts.front());
-        constexpr const char* refPrefix = "::cp3::runtime::Ref<";
-        const std::size_t prefixSize = std::char_traits<char>::length(refPrefix);
+        constexpr const char* refPrefixes[] = {
+            "::cp3::runtime::Ref<", "::cp3::runtime::LocalRef<"};
+        std::size_t prefixSize = 0;
+        for (const char* prefix : refPrefixes) {
+            const std::size_t size = std::char_traits<char>::length(prefix);
+            if (element.cpp.rfind(prefix, 0) == 0) {
+                prefixSize = size;
+                break;
+            }
+        }
         if (element.shape == Shape::ClassRef && element.representable &&
-            element.cpp.rfind(refPrefix, 0) == 0 &&
+            prefixSize != 0 &&
             element.cpp.size() > prefixSize && element.cpp.back() == '>') {
             valueArrayElement = element.cpp.substr(
                 prefixSize, element.cpp.size() - prefixSize - 1);

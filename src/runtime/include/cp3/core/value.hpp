@@ -150,6 +150,123 @@ Ref<T> makeRef(Args&&... args) {
                                    std::forward<Args>(args)...);
 }
 
+// A reference-counted handle for a compiler-proven thread-confined class.
+// It preserves aliasing and destruction semantics while using a plain count;
+// the compiler emits it only when no worker/parallel boundary, weak reference,
+// inheritance, interface conversion, or exported ABI can expose the handle to
+// another thread. Unproven classes continue to use atomic Ref<T>.
+template <class T>
+class LocalRef {
+    struct Control {
+        std::size_t owners = 1;
+        T value;
+
+        template <class... Args>
+        explicit Control(Args&&... args)
+            : value(std::forward<Args>(args)...) {}
+    };
+
+    Control* control_ = nullptr;
+
+    explicit LocalRef(Control* control) noexcept : control_(control) {}
+
+    void retain() noexcept {
+        if (control_) ++control_->owners;
+    }
+
+    void release() noexcept {
+        Control* old = control_;
+        control_ = nullptr;
+        if (old && --old->owners == 0) {
+            old->~Control();
+            RefPoolAllocator<Control>{}.deallocate(old, 1);
+        }
+    }
+
+    template <class U, class... Args>
+    friend LocalRef<U> makeLocalRef(Args&&... args);
+
+public:
+    using element_type = T;
+
+    LocalRef() noexcept = default;
+    LocalRef(std::nullptr_t) noexcept {}
+
+    LocalRef(const LocalRef& other) noexcept : control_(other.control_) {
+        retain();
+    }
+    LocalRef(LocalRef&& other) noexcept
+        : control_(std::exchange(other.control_, nullptr)) {}
+
+    ~LocalRef() { release(); }
+
+    LocalRef& operator=(const LocalRef& other) noexcept {
+        if (this == &other) return *this;
+        Control* next = other.control_;
+        if (next) ++next->owners;
+        release();
+        control_ = next;
+        return *this;
+    }
+    LocalRef& operator=(LocalRef&& other) noexcept {
+        if (this == &other) return *this;
+        release();
+        control_ = std::exchange(other.control_, nullptr);
+        return *this;
+    }
+    LocalRef& operator=(std::nullptr_t) noexcept {
+        reset();
+        return *this;
+    }
+
+    T* get() noexcept { return control_ ? &control_->value : nullptr; }
+    T* get() const noexcept {
+        return control_ ? &control_->value : nullptr;
+    }
+    T& operator*() noexcept { return control_->value; }
+    T& operator*() const noexcept { return control_->value; }
+    T* operator->() noexcept { return get(); }
+    T* operator->() const noexcept { return get(); }
+    explicit operator bool() const noexcept { return control_ != nullptr; }
+    std::size_t use_count() const noexcept {
+        return control_ ? control_->owners : 0;
+    }
+    void reset() noexcept { release(); }
+
+    friend bool operator==(const LocalRef& a, const LocalRef& b) noexcept {
+        return a.get() == b.get();
+    }
+    friend bool operator!=(const LocalRef& a, const LocalRef& b) noexcept {
+        return !(a == b);
+    }
+    friend bool operator==(const LocalRef& a, std::nullptr_t) noexcept {
+        return !a;
+    }
+    friend bool operator==(std::nullptr_t, const LocalRef& a) noexcept {
+        return !a;
+    }
+    friend bool operator!=(const LocalRef& a, std::nullptr_t) noexcept {
+        return static_cast<bool>(a);
+    }
+    friend bool operator!=(std::nullptr_t, const LocalRef& a) noexcept {
+        return static_cast<bool>(a);
+    }
+};
+
+template <class T, class... Args>
+LocalRef<T> makeLocalRef(Args&&... args) {
+    using Control = typename LocalRef<T>::Control;
+    RefPoolAllocator<Control> allocator;
+    Control* storage = allocator.allocate(1);
+    try {
+        ::new (static_cast<void*>(storage)) Control(std::forward<Args>(args)...);
+    } catch (...) {
+        allocator.deallocate(storage, 1);
+        throw;
+    }
+    return LocalRef<T>(storage);
+}
+
 // A cp3 array `T[]`. Arrays are reference types (spec §10), so the handle is
 // shared exactly like an object handle.
 template <class E>
@@ -329,6 +446,14 @@ struct Cloner<std::shared_ptr<T>> {
     }
 };
 
+template <class T>
+struct Cloner<LocalRef<T>> {
+    static LocalRef<T> clone(const LocalRef<T>& value) {
+        if (!value) return nullptr;
+        return makeLocalRef<T>(cp3::runtime::clone(*value));
+    }
+};
+
 // Array: element-wise deep copy.
 template <class E, class A>
 struct Cloner<std::vector<E, A>> {
@@ -388,6 +513,10 @@ inline constexpr bool isNullish(bool) noexcept { return false; }
 // A reference handle is never cp3-nullish (cp3 `null` is its own value type).
 template <class T>
 inline constexpr bool isNullish(const Ref<T>&) noexcept {
+    return false;
+}
+template <class T>
+inline constexpr bool isNullish(const LocalRef<T>&) noexcept {
     return false;
 }
 

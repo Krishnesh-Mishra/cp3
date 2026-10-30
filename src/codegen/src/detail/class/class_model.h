@@ -105,6 +105,11 @@ struct ClassModel {
     // twice: once after the statement walk and once after the body walk,
     // which reaches classes no statement walk sees).
     bool membersCollected = false;
+    // Set by escape analysis only when the whole compilation unit proves the
+    // class never crosses a thread boundary and has no ABI-sensitive weak,
+    // inheritance, interface, or export use. Such handles may use the local
+    // non-atomic runtime representation.
+    bool localRef = false;
     // The type parameters were already recorded (the class may be reached by
     // more than one walk, and the parameters must be listed once).
     bool typeParamsRecorded = false;

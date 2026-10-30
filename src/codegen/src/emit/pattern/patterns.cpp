@@ -474,9 +474,13 @@ std::string Generator::parameterCppType(const Parameter& p,
     if (!pt) return std::string();
     const CppInfo ci = classify(*pt);
     if (ci.representable) {
+        const std::string refPrefix =
+            ci.cpp.rfind("::cp3::runtime::LocalRef<", 0) == 0
+                ? "::cp3::runtime::LocalRef<"
+                : "::cp3::runtime::Ref<";
         if (nonOwningParamDecls_.count(p.nodeId) != 0 &&
-            ci.shape == Shape::ClassRef && ci.cpp.rfind("::cp3::runtime::Ref<", 0) == 0) {
-            const std::size_t begin = std::string("::cp3::runtime::Ref<").size();
+            ci.shape == Shape::ClassRef && ci.cpp.rfind(refPrefix, 0) == 0) {
+            const std::size_t begin = refPrefix.size();
             int depth = 1;
             std::size_t end = begin;
             for (; end < ci.cpp.size() && depth != 0; ++end) {

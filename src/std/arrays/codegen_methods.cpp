@@ -322,17 +322,27 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
             c.arguments.front()->kind == NodeKind::NewExpr) {
             CppInfo valueInfo = g.info(*c.arguments.front());
             std::string valueType = valueInfo.cpp;
-            constexpr const char* refPrefix = "::cp3::runtime::Ref<";
-            const std::size_t prefixSize =
-                std::char_traits<char>::length(refPrefix);
+            constexpr const char* refPrefixes[] = {
+                "::cp3::runtime::Ref<", "::cp3::runtime::LocalRef<"};
+            std::size_t prefixSize = 0;
+            std::string factoryName;
+            for (std::size_t i = 0; i < 2; ++i) {
+                const std::size_t size =
+                    std::char_traits<char>::length(refPrefixes[i]);
+                if (valueType.rfind(refPrefixes[i], 0) == 0) {
+                    prefixSize = size;
+                    factoryName = i == 0 ? "makeRef" : "makeLocalRef";
+                    break;
+                }
+            }
             if (valueInfo.shape == Shape::ClassRef && valueInfo.representable &&
-                valueType.rfind(refPrefix, 0) == 0 &&
+                prefixSize != 0 &&
                 valueType.size() > prefixSize && valueType.back() == '>') {
                 valueType = valueType.substr(
                     prefixSize, valueType.size() - prefixSize - 1);
                 const std::string refText = g.expr(*c.arguments.front());
                 const std::string exactFactory =
-                    "::cp3::runtime::makeRef<" + valueType + ">(";
+                    "::cp3::runtime::" + factoryName + "<" + valueType + ">(";
                 if (refText.rfind(exactFactory, 0) == 0 &&
                     refText.size() > exactFactory.size() && refText.back() == ')') {
                     const std::string valueText =

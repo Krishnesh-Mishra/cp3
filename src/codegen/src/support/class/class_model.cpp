@@ -172,7 +172,8 @@ const ObjectModel* objectModelOf(const Type& t) {
 }
 
 std::string classRefCpp(const ClassModel& cm) {
-    return "::cp3::runtime::Ref<" + cm.cpp + ">";
+    return std::string("::cp3::runtime::") +
+           (cm.localRef ? "LocalRef<" : "Ref<") + cm.cpp + ">";
 }
 
 void rewriteTypeParams(Type& t, const std::vector<std::string>& typeParams) {
