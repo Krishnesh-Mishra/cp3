@@ -295,6 +295,8 @@ GATE_TARGET = ("D64 target: cp3 within about 5% of cpp/rust (WARN over 1.05x); "
 
 GATE_WARNINGS: list[str] = []   # tier lines (BIG WARN / WARN), printed at the end
 GATE_NOTES: list[str] = []      # noise-scale notes, printed with the gate block
+LOAD_PROCS: list = []   # live load-client processes, killed on Ctrl+C
+TASK_SECTIONS: dict = {}   # task -> (stamp, text) for results.md
 GATE_BLOCKERS: list[str] = []   # CP3002 rows that cannot be measured at all
 
 
@@ -871,6 +873,7 @@ def run_multi_client_load(port: int, seconds: float, concurrency: int,
              "--start-at", f"{start_at:.6f}", "--path", path,
              "--client", client],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+    LOAD_PROCS[:] = procs
     ok = err = 0
     failures: list[str] = []
     deadline = start_at + seconds + 60.0
@@ -1972,6 +1975,49 @@ def write_latest_results(captured: str, argv: list[str]) -> None:
     RESULTS_MD.write_text(text, encoding="utf-8", newline="\n")
 
 
+LATEST_TASKS_START = "<!-- latest-by-test:start -->"
+LATEST_TASKS_END = "<!-- latest-by-test:end -->"
+
+
+def record_task(task: str, printer) -> None:
+    """Run a table printer and keep its plain text for the per-test section of results.md."""
+    buffer = io.StringIO()
+    previous = sys.stdout
+    sys.stdout = Tee(previous, buffer)
+    try:
+        printer()
+    finally:
+        sys.stdout = previous
+    gate = [line for line in GATE_BLOCKERS + GATE_WARNINGS + GATE_NOTES if f" {task}: " in line]
+    text = buffer.getvalue().strip("\n")
+    if gate:
+        text += "\n\n" + "\n".join("gate: " + line for line in gate)
+    TASK_SECTIONS[task] = (datetime.now().isoformat(timespec="seconds"), text)
+
+
+def write_task_sections(sections: dict, argv: list[str]) -> None:
+    """Rewrite only the per-test sections of results.md that this run measured."""
+    display = list(argv)
+    if display:
+        display[0] = "benchmarks/runner/run_benchmark.py"
+    command = "python " + " ".join(display)
+    text = RESULTS_MD.read_text(encoding="utf-8") if RESULTS_MD.exists() else "# Benchmark results\n"
+    block_re = re.compile(r"<!-- test:([a-z0-9-]+):start -->.*?<!-- test:\1:end -->", re.DOTALL)
+    region_re = re.compile(re.escape(LATEST_TASKS_START) + r"(.*?)" + re.escape(LATEST_TASKS_END), re.DOTALL)
+    match = region_re.search(text)
+    blocks = {m.group(1): m.group(0) for m in block_re.finditer(match.group(1))} if match else {}
+    for task, (stamp, body) in sections.items():
+        blocks[task] = (f"<!-- test:{task}:start -->\n### {task}\n_Updated {stamp} by `{command}`._\n\n```text\n{body}\n```\n<!-- test:{task}:end -->")
+    ordered = [blocks[name] for name in ALL_TASKS if name in blocks]
+    ordered += [block for name, block in blocks.items() if name not in ALL_TASKS]
+    region = LATEST_TASKS_START + "\n" + "\n\n".join(ordered) + "\n" + LATEST_TASKS_END
+    if match:
+        text = text[:match.start()] + region + text[match.end():]
+    else:
+        text = text.rstrip() + "\n\n## Latest results by test\n\n" + region + "\n"
+    RESULTS_MD.write_text(text, encoding="utf-8", newline="\n")
+
+
 def resolve_churn_scale(text: str) -> tuple[int, str]:
     if text in CHURN_SCALE_PRESETS:
         return CHURN_SCALE_PRESETS[text], text
@@ -1999,6 +2045,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="benchmarks comparison suite (single entry point: benchmarks/runner/run_benchmark.py)")
     parser.add_argument("--only", default="", help="comma list of: " + ",".join(ALL_TASKS))
+    parser.add_argument("--except", dest="skip", default="", help="comma list of tests to skip (same names as --only)")
     parser.add_argument("--seconds", type=float, default=10.0, help="throughput phase seconds per server")
     parser.add_argument("--concurrency", type=int, default=8, help="throughput phase connections")
     parser.add_argument("--clients", type=int, default=4,
@@ -2038,8 +2085,18 @@ def main() -> int:
     else:
         wanted = list(ALL_TASKS)
 
+    skipped = [part.strip() for part in args.skip.split(",") if part.strip()]
+    bad_skip = [name for name in skipped if name not in ALL_TASKS]
+    if bad_skip:
+        print(f"[runner] unknown --except task(s): {', '.join(bad_skip)}")
+        print(f"[runner] known tasks: {', '.join(ALL_TASKS)}")
+        return 2
+    wanted = [name for name in wanted if name not in skipped]
+    if not wanted:
+        print("[runner] nothing left to run after --except")
+        return 2
     churn_iterations, churn_label = resolve_churn_scale(args.churn_scale)
-    full_run = not args.only.strip()
+    full_run = not args.only.strip() and not args.skip.strip()
     capture = io.StringIO() if full_run and churn_label == "default" else None
 
     original_stdout = sys.stdout
@@ -2114,7 +2171,7 @@ def main() -> int:
                     language, task, args.reps, args.latency, args.warmup,
                     args.seconds, args.concurrency, cp3c,
                     clients=args.clients, single_clients=args.single_clients))
-            print_server_table(task, rows)
+            record_task(task, lambda: print_server_table(task, rows))
 
         for task in COMPUTE_TASKS:
             if task not in wanted:
@@ -2186,9 +2243,9 @@ def main() -> int:
                 rows.append(run_compute_trial(language, task, reps, cp3c,
                                               extra=extra, cp3_entry=cp3_entry))
             if task == "hello-world":
-                print_hello_table(task, rows, header, expected=expected)
+                record_task(task, lambda: print_hello_table(task, rows, header, expected=expected))
             else:
-                print_compute_table(task, rows, header, expected=expected)
+                record_task(task, lambda: print_compute_table(task, rows, header, expected=expected))
 
         print_gate()
         completed = True
@@ -2198,6 +2255,11 @@ def main() -> int:
             sys.stdout = original_stdout
         if results_log is not None:
             results_log.close()
+        if TASK_SECTIONS:
+            try:
+                write_task_sections(TASK_SECTIONS, sys.argv)
+            except Exception as exc:
+                print(f"[runner] results.md sections not updated: {exc}", file=original_stdout)
         if capture is not None and completed:
             try:
                 write_latest_results(capture.getvalue(), sys.argv)
@@ -2212,4 +2274,14 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        for proc in LOAD_PROCS:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+        live_clear()
+        print("\n  interrupted (Ctrl+C): servers and load clients stopped; finished tests were saved to results.md")
+        sys.exit(130)

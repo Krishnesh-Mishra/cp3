@@ -40,7 +40,15 @@ PYCACHE = BENCHMARKS / ".cache" / "pycache"
 def main() -> int:
     env = os.environ.copy()
     env.setdefault("PYTHONPYCACHEPREFIX", str(PYCACHE))
-    return subprocess.call([sys.executable, str(ENGINE), *sys.argv[1:]], env=env)
+    proc = subprocess.Popen([sys.executable, str(ENGINE), *sys.argv[1:]], env=env)
+    try:
+        return proc.wait()
+    except KeyboardInterrupt:
+        try:
+            return proc.wait(timeout=60)
+        except (KeyboardInterrupt, subprocess.TimeoutExpired):
+            proc.kill()
+            return 130
 
 
 if __name__ == "__main__":

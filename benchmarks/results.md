@@ -604,3 +604,26 @@ gate: 2 BIG WARN(s), 0 WARN(s); rerun with --strict to fail on warnings
 
 Rust stays well under two seconds at this scale because its string handling
 is simply that fast; that is the result, not a measurement problem.
+
+## Latest results by test
+
+<!-- latest-by-test:start -->
+<!-- test:compute-single:start -->
+### compute-single
+_Updated 2026-10-30T11:28:21 by `python benchmarks/runner/run_benchmark.py --except health-server,health-server-multi --reps 7`._
+
+```text
+  ◆ compute-single  expected = 131434424 (total Collatz steps for 1..1,000,000) | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms   p95 ms   CV%         vs cp3  RSS MiB  bin KiB
+  ──────────────────────────────────────────────────────────────────────────
+  rust        183.4    181.8    452.2  45.7   1.01x faster      3.6      122
+  cp3         184.8    180.5    314.6  27.5       baseline      4.1      434
+  cpp         204.9    201.6    293.8  15.6   1.11x slower      4.1       19
+  go          277.8    273.0    643.2  42.1   1.50x slower      5.7     1750
+  java        295.4    276.3    388.7  14.9   1.60x slower     39.0        1
+  js         1535.1   1529.0   1577.3   1.1   8.31x slower     38.3        -
+  python     9294.0   9222.4  11420.4   8.4  50.29x slower     11.0        -
+    ✓  output verified: 7/7 match oracle '131434424'
+```
+<!-- test:compute-single:end -->
+<!-- latest-by-test:end -->
