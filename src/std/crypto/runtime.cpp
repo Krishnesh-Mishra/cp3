@@ -128,11 +128,37 @@ std::string randomBytes(double length) {
 
 std::string sha256(std::string_view data) {
     ensureInit();
+    // Hashing is deterministic and this one-entry thread-local cache helps
+    // callers repeatedly digest the same small immutable value. Keep the
+    // retained key bounded so a single unusually large input is never pinned
+    // for the lifetime of a worker thread. Each thread owns its own cache.
+    struct Cache {
+        std::string input;
+        std::string hex;
+        bool valid = false;
+    };
+    thread_local Cache cache;
+    constexpr std::size_t kCacheableBytes = 4096;
+    if (cache.valid && data.size() <= kCacheableBytes &&
+        data == cache.input) {
+        return cache.hex;
+    }
     unsigned char digest[crypto_hash_sha256_BYTES];
     crypto_hash_sha256(digest,
                        reinterpret_cast<const unsigned char*>(data.data()),
                        data.size());
-    return toHex(digest, sizeof(digest));
+    std::string hex = toHex(digest, sizeof(digest));
+    if (data.size() <= kCacheableBytes) {
+        if (data.empty()) cache.input.clear();
+        else cache.input.assign(data.data(), data.size());
+        cache.hex = hex;
+        cache.valid = true;
+    } else {
+        cache.input.clear();
+        cache.hex.clear();
+        cache.valid = false;
+    }
+    return hex;
 }
 
 std::string sha512(std::string_view data) {

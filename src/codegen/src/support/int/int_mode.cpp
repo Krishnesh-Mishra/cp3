@@ -41,6 +41,7 @@
 // =============================================================================
 #include "detail/generator/generator.h"
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -147,10 +148,26 @@ bool Generator::intDeferable(const std::string& name) const {
 std::string Generator::modCall(const std::string& lhs, const Expr& rhs,
                                const std::string& rhsText) {
     needsArith_ = true;
-    // `x % <integral literal>` compiles to an integer remainder instead of a
-    // libm call. The divisor 0 keeps the `std::fmod` path below (JS NaN).
-    if (auto k = integralLiteralValue(rhs); k && *k != 0) {
-        return arith("modConst<") + std::to_string(*k) + "LL>(" + lhs + ")";
+    // A literal or resolved immutable numeric constant compiles to a constant
+    // divisor remainder. `modConst` retains the exact double fallback for
+    // fractional operands and signed zero, so ordinary number semantics stay
+    // intact while integral hot loops avoid a dynamic divisor check.
+    std::optional<std::int64_t> divisor = integralLiteralValue(rhs);
+    if (!divisor && rhs.kind == NodeKind::Identifier) {
+        const auto binding = sema_.resolvedBindings.find(rhs.nodeId);
+        if (binding != sema_.resolvedBindings.end()) {
+            const auto value = numericConstBindings_.find(binding->second);
+            if (value != numericConstBindings_.end() &&
+                std::isfinite(value->second) &&
+                std::floor(value->second) == value->second &&
+                value->second >= -9007199254740991.0 &&
+                value->second <= 9007199254740991.0) {
+                divisor = static_cast<std::int64_t>(value->second);
+            }
+        }
+    }
+    if (divisor && *divisor != 0) {
+        return arith("modConst<") + std::to_string(*divisor) + "LL>(" + lhs + ")";
     }
     return arith("mod(") + lhs + ", " + rhsText + ")";
 }

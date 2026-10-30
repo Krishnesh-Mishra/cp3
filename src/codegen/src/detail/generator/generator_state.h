@@ -248,6 +248,9 @@ protected:
     std::unordered_set<std::uint32_t> int64SkipStmts_;
     std::unordered_map<std::uint32_t, const TopInt64Binding*> int64Loops_;
     std::unordered_map<std::uint32_t, const TopInt64Binding*> int64Writes_;
+    // Compile-time numeric module consts, keyed by sema's declaration binding.
+    // Used by value-preserving lowering such as constant-divisor remainder.
+    std::unordered_map<std::uint32_t, double> numericConstBindings_;
     std::unordered_set<std::string> asyncFunctions_;   // `async function` names
     std::vector<std::string> thrownBindings_;          // active `catch (e)` names
     std::vector<FlowFrame> flowStack_;   // innermost breakable statement last
@@ -258,6 +261,9 @@ protected:
     // Local class allocations proven not to escape their declaration frame.
     // Those sites lower to an automatic object plus a raw local pointer.
     std::unordered_set<std::uint32_t> stackAllocDecls_;
+    // Same-frame aliases of stack objects proven not to escape. The alias is
+    // a borrowed raw pointer, so copying it cannot touch a reference count.
+    std::unordered_set<std::uint32_t> stackAliasDecls_;
     // Arrays whose class elements are provably observed only through scalar
     // fields can store values instead of owning Ref<T> handles.
     std::unordered_set<std::uint32_t> stackValueArrayDecls_;

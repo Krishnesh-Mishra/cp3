@@ -70,10 +70,20 @@ struct AllocationCandidate {
     int frame = 0;
 };
 
+struct AliasCandidate {
+    const VariableDeclarator* declaration = nullptr;
+    std::uint32_t binding = 0;
+    std::uint32_t sourceBinding = 0;
+    std::uint32_t sourceUse = 0;
+    int frame = 0;
+};
+
 class EscapeScan final : public detail::StructuralWalk {
 public:
     explicit EscapeScan(const SemaResult& sema) : sema_(sema) {}
     std::unordered_map<std::string, AllocationCandidate> candidates;
+    std::vector<AliasCandidate> aliases;
+    std::unordered_set<std::uint32_t> writtenBindings;
     std::unordered_map<std::string, std::vector<std::pair<std::uint32_t, int>>> uses;
     std::unordered_map<std::string, std::vector<ObjectUse>> memberUses;
     std::unordered_map<std::string, std::vector<IndexUse>> indexUses;
@@ -136,6 +146,13 @@ protected:
         uses[key(id)].push_back({id.nodeId, frame_});
     }
 
+    void writeIdentifier(const Identifier& id) override {
+        const auto binding = sema_.resolvedBindings.find(id.nodeId);
+        if (binding != sema_.resolvedBindings.end()) {
+            writtenBindings.insert(binding->second);
+        }
+    }
+
     void boundDeclarator(const VariableDeclarator& declaration) override {
         if (!declaration.id || declaration.id->kind != NodeKind::Identifier ||
             !declaration.init) {
@@ -150,6 +167,17 @@ protected:
                    static_cast<const ArrayLiteral&>(*declaration.init)
                        .elements.empty()) {
             candidates[binding] = {&declaration, nullptr, true, frame_};
+        } else if (declaration.init->kind == NodeKind::Identifier) {
+            const auto& source = static_cast<const Identifier&>(*declaration.init);
+            const auto sourceBinding = sema_.resolvedBindings.find(source.nodeId);
+            if (sourceBinding != sema_.resolvedBindings.end()) {
+                // Allocation candidates and use maps are keyed by the
+                // declarator node ID, which is also the sema binding ID.
+                // Declaration identifiers are not guaranteed to have their
+                // own resolvedBindings entry (only reference expressions do).
+                aliases.push_back({&declaration, declaration.nodeId,
+                                   sourceBinding->second, source.nodeId, frame_});
+            }
         }
     }
 
@@ -319,6 +347,7 @@ bool safeGetter(const detail::ClassModel& model, const std::string& name) {
 
 void Generator::analyzeEscapeAllocations(const Program& program) {
     stackAllocDecls_.clear();
+    stackAliasDecls_.clear();
     stackValueArrayDecls_.clear();
     nonOwningParamDecls_.clear();
     std::unordered_set<std::uint32_t> exportedBindings;
@@ -396,6 +425,106 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
             }
             if (safe) nonOwningParamDecls_.insert(parameter->nodeId);
         }
+    }
+
+    // A local alias of a stack candidate can also be represented as a raw
+    // pointer, but only when every alias use is a scalar field read/write, a
+    // verified getter, or a call to a parameter already lowered by reference.
+    std::unordered_set<std::uint32_t> safeAliases;
+    for (const AliasCandidate& alias : scan.aliases) {
+        if (!alias.declaration ||
+            exportedBindings.count(alias.declaration->nodeId) != 0 ||
+            scan.writtenBindings.count(alias.binding) != 0) continue;
+        const Type* aliasType = sema_.typeOf(alias.declaration->nodeId);
+        const Type* sourceType = sema_.typeOf(alias.sourceUse);
+        if (!aliasType || !sourceType || aliasType->kind != TypeKind::Class ||
+            sourceType->kind != TypeKind::Class ||
+            detail::classify(*aliasType).shape != detail::Shape::ClassRef ||
+            detail::classify(*sourceType).shape != detail::Shape::ClassRef ||
+            detail::classify(*aliasType).cpp != detail::classify(*sourceType).cpp) {
+            continue;
+        }
+        const detail::ClassModel* model =
+            detail::ModelRegistry::get().classByName(aliasType->name);
+        if (!model) continue;
+        const std::string key = std::to_string(alias.binding);
+        const auto reads = scan.uses.find(key);
+        if (reads == scan.uses.end() || reads->second.empty()) continue;
+        std::unordered_set<std::uint32_t> allowed;
+        bool safe = true;
+        const auto members = scan.memberUses.find(key);
+        const auto methods = scan.methodUses.find(key);
+        if (members != scan.memberUses.end()) {
+            for (const ObjectUse& use : members->second) {
+                if (!use.member || use.frame != alias.frame || use.member->optional) {
+                    safe = false;
+                    break;
+                }
+                const Type* memberType = sema_.typeOf(use.member->nodeId);
+                const bool fieldRead =
+                    dataField(*model, use.member->property) != nullptr &&
+                    memberType && scalarFieldType(*memberType);
+                bool getter = false;
+                if (methods != scan.methodUses.end()) {
+                    for (const MethodUse& method : methods->second) {
+                        if (method.member == use.member && method.call &&
+                            method.frame == alias.frame &&
+                            safeGetter(*model, use.member->property)) {
+                            const Type* result = sema_.typeOf(method.call->nodeId);
+                            getter = result && scalarFieldType(*result);
+                            break;
+                        }
+                    }
+                }
+                if (!fieldRead && !getter) {
+                    safe = false;
+                    break;
+                }
+                allowed.insert(use.identifier);
+            }
+        }
+        const auto writes = scan.memberWrites.find(key);
+        if (safe && writes != scan.memberWrites.end()) {
+            for (const MemberWrite& write : writes->second) {
+                const Type* type = write.member
+                    ? sema_.typeOf(write.member->nodeId) : nullptr;
+                if (!write.member || write.frame != alias.frame ||
+                    write.member->optional || !type ||
+                    !scalarFieldType(*type) ||
+                    !dataField(*model, write.member->property)) {
+                    safe = false;
+                    break;
+                }
+            }
+        }
+        const auto calls = scan.callArgUses.find(key);
+        if (safe && calls != scan.callArgUses.end()) {
+            for (const CallArgUse& call : calls->second) {
+                if (call.frame != alias.frame || !nonOwningArgument(call)) {
+                    safe = false;
+                    break;
+                }
+                allowed.insert(call.identifier);
+            }
+        }
+        if (safe && methods != scan.methodUses.end()) {
+            for (const MethodUse& method : methods->second) {
+                if (!method.member || !method.call || method.frame != alias.frame ||
+                    !safeGetter(*model, method.member->property)) {
+                    safe = false;
+                    break;
+                }
+            }
+        }
+        if (safe) {
+            for (const auto& read : reads->second) {
+                if (read.second != alias.frame || !allowed.count(read.first)) {
+                    safe = false;
+                    break;
+                }
+            }
+        }
+        if (safe) safeAliases.insert(alias.binding);
     }
 
     for (const auto& entry : scan.candidates) {
@@ -586,6 +715,14 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
         const auto memberUses = scan.memberUses.find(name);
         const auto methodUses = scan.methodUses.find(name);
         std::unordered_set<std::uint32_t> allowed;
+        std::unordered_set<std::uint32_t> aliasSourceUses;
+        for (const AliasCandidate& alias : scan.aliases) {
+            if (alias.sourceBinding == candidate.declaration->nodeId &&
+                alias.frame == candidate.frame &&
+                safeAliases.count(alias.binding) != 0) {
+                aliasSourceUses.insert(alias.sourceUse);
+            }
+        }
         bool safe = true;
         if (memberUses != scan.memberUses.end()) for (const ObjectUse& use : memberUses->second) {
             if (use.member == nullptr || use.frame != candidate.frame ||
@@ -615,7 +752,8 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
             allowed.insert(use.identifier);
         }
         if (!safe) continue;
-        if (allowed.empty() && scan.callArgUses.count(name) == 0) continue;
+        if (allowed.empty() && scan.callArgUses.count(name) == 0 &&
+            aliasSourceUses.empty()) continue;
         for (const auto& use : uses->second) {
             bool safeCall = false;
             const auto callArgs = scan.callArgUses.find(name);
@@ -626,13 +764,35 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
                 }
             }
             if (use.second != candidate.frame ||
-                (allowed.count(use.first) == 0 && !safeCall)) {
+                (allowed.count(use.first) == 0 && !safeCall &&
+                 aliasSourceUses.count(use.first) == 0)) {
                 safe = false;
                 break;
             }
         }
         if (safe) {
             stackAllocDecls_.insert(candidate.declaration->nodeId);
+        }
+    }
+
+    std::unordered_set<std::uint32_t> pointerBindings;
+    for (const auto& entry : scan.candidates) {
+        const AllocationCandidate& candidate = entry.second;
+        if (candidate.declaration &&
+            stackAllocDecls_.count(candidate.declaration->nodeId) != 0) {
+            pointerBindings.insert(candidate.declaration->nodeId);
+        }
+    }
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (const AliasCandidate& alias : scan.aliases) {
+            if (!alias.declaration || safeAliases.count(alias.binding) == 0 ||
+                pointerBindings.count(alias.sourceBinding) == 0 ||
+                exportedBindings.count(alias.declaration->nodeId) != 0) continue;
+            if (pointerBindings.insert(alias.binding).second) changed = true;
+            stackAliasDecls_.insert(alias.declaration->nodeId);
+            stackAllocDecls_.insert(alias.declaration->nodeId);
         }
     }
 }

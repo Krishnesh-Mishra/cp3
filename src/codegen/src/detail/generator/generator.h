@@ -881,6 +881,7 @@ private:
     // that stay integral for their whole life and records them for the
     // statement/expression emitters.
     void analyzeTopInt64(const Program& program);
+    void collectNumericConstants(const Program& program);
     bool moduleUsesBeforeDecl(const Program& program) const;
     void decideModuleScope(const Program& program);
     bool intEligible(const FunctionDeclaration& fd, const std::string& ret) const;

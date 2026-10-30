@@ -12,7 +12,11 @@
 // =============================================================================
 #include "detail/generator/generator.h"
 
+#include <cmath>
+#include <cstdint>
+#include <optional>
 #include <string>
+#include <unordered_map>
 
 #include "cp3/codegen.hpp"
 #include "cp3/diag/diagnostic_codes.hpp"
@@ -126,6 +130,7 @@ void Generator::decideModuleScope(const Program& program) {
 void Generator::runUnit(const Program& program, std::string& decls,
                         std::string& defs, std::string& mainBody,
                         std::string& globals) {
+    collectNumericConstants(program);
     for (const auto& stmtPtr : program.body) {
         if (!stmtPtr) continue;
         collectDeclaredNames(*stmtPtr);
@@ -232,6 +237,86 @@ void Generator::runUnit(const Program& program, std::string& decls,
     // The family include (D69) follows the emitted spellings
     // (support/usage_includes.cpp).
     applyUsageIncludes(decls + defs + globals + mainBody);
+}
+
+namespace {
+
+std::optional<double> evalNumericConstant(
+    const Expr& expression,
+    const std::unordered_map<std::string, double>& values) {
+    switch (expression.kind) {
+        case NodeKind::NumberLiteral:
+            return static_cast<const NumberLiteral&>(expression).value;
+        case NodeKind::Identifier: {
+            const std::string& name =
+                static_cast<const Identifier&>(expression).name;
+            const auto found = values.find(name);
+            return found == values.end() ? std::nullopt
+                                         : std::optional<double>(found->second);
+        }
+        case NodeKind::UnaryExpr: {
+            const auto& unary = static_cast<const UnaryExpr&>(expression);
+            if (!unary.operand || (unary.op != UnaryOp::Negate &&
+                                   unary.op != UnaryOp::Plus)) {
+                return std::nullopt;
+            }
+            const auto operand = evalNumericConstant(*unary.operand, values);
+            if (!operand) return std::nullopt;
+            const double result = unary.op == UnaryOp::Negate ? -*operand
+                                                              : *operand;
+            return std::isfinite(result) ? std::optional<double>(result)
+                                         : std::nullopt;
+        }
+        case NodeKind::BinaryExpr: {
+            const auto& binary = static_cast<const BinaryExpr&>(expression);
+            if (!binary.left || !binary.right) return std::nullopt;
+            const auto left = evalNumericConstant(*binary.left, values);
+            const auto right = evalNumericConstant(*binary.right, values);
+            if (!left || !right) return std::nullopt;
+            double result = 0.0;
+            switch (binary.op) {
+                case BinaryOp::Add: result = *left + *right; break;
+                case BinaryOp::Subtract: result = *left - *right; break;
+                case BinaryOp::Multiply: result = *left * *right; break;
+                case BinaryOp::Divide:
+                    if (*right == 0.0) return std::nullopt;
+                    result = *left / *right;
+                    break;
+                default: return std::nullopt;
+            }
+            return std::isfinite(result) ? std::optional<double>(result)
+                                         : std::nullopt;
+        }
+        default:
+            return std::nullopt;
+    }
+}
+
+}  // namespace
+
+void Generator::collectNumericConstants(const Program& program) {
+    numericConstBindings_.clear();
+    std::unordered_map<std::string, double> values;
+    for (const StmtPtr& statement : program.body) {
+        if (!statement || statement->kind != NodeKind::VariableDeclaration) {
+            continue;
+        }
+        const auto& declaration =
+            static_cast<const VariableDeclaration&>(*statement);
+        if (declaration.kind != VarKind::Const) continue;
+        for (const VariableDeclaratorPtr& item : declaration.declarations) {
+            if (!item || !item->id || item->id->kind != NodeKind::Identifier ||
+                !item->init) {
+                continue;
+            }
+            const auto value = evalNumericConstant(*item->init, values);
+            if (!value) continue;
+            const std::string& name =
+                static_cast<const Identifier&>(*item->id).name;
+            values[name] = *value;
+            numericConstBindings_[item->nodeId] = *value;
+        }
+    }
 }
 
 

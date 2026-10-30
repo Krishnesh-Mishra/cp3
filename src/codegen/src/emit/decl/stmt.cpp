@@ -321,6 +321,15 @@ void Generator::emitVarDecl(const VariableDeclaration& vd, std::string& out, int
 // unit (the source temporary plus one binding per name).
 void Generator::emitDeclaratorStmt(const VariableDeclarator& d, VarKind kind,
                                    std::string& out, int indent) {
+    if (stackAliasDecls_.count(d.nodeId) != 0 && d.init &&
+        d.init->kind == NodeKind::Identifier && d.id &&
+        d.id->kind == NodeKind::Identifier) {
+        const std::string name =
+            mapIdent(static_cast<const Identifier&>(*d.id).name);
+        line(out, indent, "auto* const " + name + " = " + expr(*d.init) + ";");
+        declareBinding(d);
+        return;
+    }
     if (stackAllocDecls_.count(d.nodeId) != 0 && d.init && d.id &&
         d.id->kind == NodeKind::Identifier) {
         const std::string name =

@@ -23,6 +23,7 @@
 #include "detail/expr/pattern_emitter.h"
 #include "detail/generator/type_map.h"
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/native_types.hpp"
 
 namespace cp3 {
 
@@ -50,6 +51,124 @@ bool isOneOf(const std::string& prop, const char* const* names,
 template <std::size_t N>
 bool isOneOf(const std::string& prop, const char* const (&names)[N]) {
     return isOneOf(prop, names, N);
+}
+
+bool numericValueType(const Type& type) {
+    return type.kind == TypeKind::Number || isNativeType(type);
+}
+
+bool pureNumericExpr(const SemaResult& sema,
+                     const std::unordered_map<std::uint32_t, double>& constants,
+                     const Expr& expr,
+                     const std::unordered_set<std::uint32_t>& parameters) {
+    switch (expr.kind) {
+        case NodeKind::NumberLiteral:
+            return true;
+        case NodeKind::Identifier: {
+            const auto binding = sema.resolvedBindings.find(expr.nodeId);
+            if (binding == sema.resolvedBindings.end()) return false;
+            return parameters.contains(binding->second) ||
+                   constants.contains(binding->second);
+        }
+        case NodeKind::UnaryExpr: {
+            const auto& unary = static_cast<const UnaryExpr&>(expr);
+            return (unary.op == UnaryOp::Negate || unary.op == UnaryOp::Plus) &&
+                   unary.operand &&
+                   pureNumericExpr(sema, constants, *unary.operand, parameters);
+        }
+        case NodeKind::BinaryExpr: {
+            const auto& binary = static_cast<const BinaryExpr&>(expr);
+            switch (binary.op) {
+                case BinaryOp::Add: case BinaryOp::Subtract:
+                case BinaryOp::Multiply: case BinaryOp::Divide:
+                case BinaryOp::Modulo: case BinaryOp::Equal:
+                case BinaryOp::NotEqual: case BinaryOp::StrictEqual:
+                case BinaryOp::StrictNotEqual: case BinaryOp::LessThan:
+                case BinaryOp::GreaterThan: case BinaryOp::LessThanEqual:
+                case BinaryOp::GreaterThanEqual: case BinaryOp::BitAnd:
+                case BinaryOp::BitOr: case BinaryOp::BitXor:
+                case BinaryOp::ShiftLeft: case BinaryOp::ShiftRight:
+                case BinaryOp::UnsignedShiftRight:
+                    return binary.left && binary.right &&
+                           pureNumericExpr(sema, constants, *binary.left, parameters) &&
+                           pureNumericExpr(sema, constants, *binary.right, parameters);
+                default:
+                    return false;
+            }
+        }
+        default:
+            return false;
+    }
+}
+
+bool pureArrow(const SemaResult& sema,
+               const std::unordered_map<std::uint32_t, double>& constants,
+               const ArrowFunction& arrow,
+               std::size_t arity) {
+    if (arrow.isAsync || !arrow.expressionBody || !arrow.body ||
+        arrow.body->kind == NodeKind::BlockStatement ||
+        arrow.params.size() != arity) return false;
+    std::unordered_set<std::uint32_t> parameters;
+    for (const auto& param : arrow.params) {
+        if (!param || param->isRest || param->optional || param->defaultValue ||
+            !param->name || param->name->kind != NodeKind::Identifier)
+            return false;
+        parameters.insert(param->nodeId);
+    }
+    return pureNumericExpr(sema, constants,
+                           static_cast<const Expr&>(*arrow.body), parameters);
+}
+
+bool pureMapFilterReduce(const SemaResult& sema,
+                         const std::unordered_map<std::uint32_t, double>& constants,
+                         const CallExpr& reduce,
+                         const MemberExpr& reduceMember,
+                         const CallExpr*& filter, const MemberExpr*& filterMember,
+                         const CallExpr*& map, const MemberExpr*& mapMember,
+                         const ArrowFunction*& mapFn,
+                         const ArrowFunction*& filterFn,
+                         const ArrowFunction*& reduceFn) {
+    if (reduceMember.property != "reduce" || reduce.arguments.size() != 2 ||
+        !reduce.arguments[1]) return false;
+    const Expr* filterExpr = reduceMember.object.get();
+    if (!filterExpr || filterExpr->kind != NodeKind::CallExpr) return false;
+    filter = static_cast<const CallExpr*>(filterExpr);
+    if (!filter->callee || filter->callee->kind != NodeKind::MemberExpr)
+        return false;
+    filterMember = static_cast<const MemberExpr*>(filter->callee.get());
+    if (filterMember->property != "filter" || !filterMember->object) return false;
+    const Expr* mapExpr = filterMember->object.get();
+    if (!mapExpr || mapExpr->kind != NodeKind::CallExpr) return false;
+    map = static_cast<const CallExpr*>(mapExpr);
+    if (!map->callee || map->callee->kind != NodeKind::MemberExpr)
+        return false;
+    mapMember = static_cast<const MemberExpr*>(map->callee.get());
+    if (mapMember->property != "map" || !mapMember->object ||
+        map->arguments.size() != 1 || filter->arguments.size() != 1)
+        return false;
+    mapFn = arrowArg(*map, 0);
+    filterFn = arrowArg(*filter, 0);
+    reduceFn = arrowArg(reduce, 0);
+    if (!mapFn || !filterFn || !reduceFn ||
+        !pureArrow(sema, constants, *mapFn, 1) ||
+        !pureArrow(sema, constants, *filterFn, 1) ||
+        !pureArrow(sema, constants, *reduceFn, 2))
+        return false;
+    const Type* sourceType = sema.typeOf(mapMember->object->nodeId);
+    const Type* mappedType = sema.typeOf(map->nodeId);
+    const Type* accumulatorType = sema.typeOf(reduce.nodeId);
+    const Type* initialType = sema.typeOf(reduce.arguments[1]->nodeId);
+    if (!sourceType || !mappedType || !accumulatorType || !initialType)
+        return false;
+    const Type& source = *sourceType;
+    const Type& mapped = *mappedType;
+    const Type& accumulator = *accumulatorType;
+    const Type& initial = *initialType;
+    return source.kind == TypeKind::Array && mapped.kind == TypeKind::Array &&
+           !source.parts.empty() && !mapped.parts.empty() &&
+           numericValueType(source.parts.front()) &&
+           numericValueType(mapped.parts.front()) &&
+           numericValueType(accumulator) && numericValueType(initial);
 }
 
 }  // namespace
@@ -149,6 +268,30 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
         "push", "pop", "unshift", "shift", "unique", "shuffle",
         "indexOf", "includes", "binarySearch", "slice", "flat"};
     const std::string& prop = m.property;
+    if (prop == "reduce") {
+        const CallExpr* filter = nullptr;
+        const MemberExpr* filterMember = nullptr;
+        const CallExpr* map = nullptr;
+        const MemberExpr* mapMember = nullptr;
+        const ArrowFunction* mapFn = nullptr;
+        const ArrowFunction* filterFn = nullptr;
+        const ArrowFunction* reduceFn = nullptr;
+        if (pureMapFilterReduce(g.sema_, g.numericConstBindings_, c, m,
+                                filter, filterMember, map,
+                                mapMember, mapFn, filterFn, reduceFn)) {
+            const Type sourceElem = arrayElemOf(g.effectiveType(*mapMember->object));
+            const CppInfo sourceInfo = classify(sourceElem);
+            const CppInfo mapInfo = classify(arrayElemOf(g.effectiveType(*map)));
+            const CppInfo accInfo = classify(g.effectiveType(c));
+            const std::string source = g.familyReceiverText(
+                *mapMember->object, sourceElem, c);
+            return "::cp3::runtime::arrayMapFilterReduce<" + accInfo.cpp + ">(" +
+                   source + ", " + g.emitArrow(*mapFn, {sourceInfo.cpp}) +
+                   ", " + g.emitArrow(*filterFn, {mapInfo.cpp}) + ", " +
+                   g.emitArrow(*reduceFn, {accInfo.cpp, mapInfo.cpp}) + ", " +
+                   g.expr(*c.arguments[1]) + ")";
+        }
+    }
     const bool callback = isOneOf(prop, kCallbacks);
     if (!callback && !isOneOf(prop, kSimple)) {
         return std::string();

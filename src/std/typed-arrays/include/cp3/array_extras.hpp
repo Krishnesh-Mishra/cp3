@@ -329,6 +329,20 @@ R arrayReduce(const Array<E>& a, F fn, const R& initial) {
     return acc;
 }
 
+// A fused eager map/filter/reduce pipeline. The compiler selects this only
+// when each callback is proven pure, so interleaving the callbacks preserves
+// observable behavior while avoiding both full-sized intermediate arrays.
+template <class R, class E, class M, class P, class F>
+R arrayMapFilterReduce(const Array<E>& a, M map, P pred, F reduce,
+                       const R& initial) {
+    R acc = initial;
+    for (std::size_t i = 0; i < a->size(); ++i) {
+        auto mapped = map((*a)[i]);
+        if (pred(mapped)) acc = reduce(acc, mapped);
+    }
+    return acc;
+}
+
 // `a.reduce(fn)` with no initial value (JS): the accumulator starts as the
 // first element and an empty array is an error (JS throws; cp3 panics like the
 // other runtime preconditions). The docs leave the no-initial form open
