@@ -553,6 +553,28 @@ std::string Generator::familyIndexWriteText(const IndexExpr& ix,
         const char* tag = familyTag(ot.name);
         if (tag == nullptr) return std::string();
         needsTypedArray_ = true;
+        const auto* receiver = ix.object->kind == NodeKind::Identifier
+            ? &static_cast<const Identifier&>(*ix.object) : nullptr;
+        const auto binding = receiver
+            ? sema_.resolvedBindings.find(receiver->nodeId)
+            : sema_.resolvedBindings.end();
+        const auto fast = fastTypedArrayWriteSites_.find(ix.nodeId);
+        if (receiver && binding != sema_.resolvedBindings.end() &&
+            fast != fastTypedArrayWriteSites_.end() &&
+            fast->second.receiverBinding == binding->second) {
+            const auto active = activeFastTypedArrays_.find(binding->second);
+            if (active != activeFastTypedArrays_.end() &&
+                fast->second.width != 0 && fast->second.index) {
+                const std::string stored = "::cp3::runtime::" +
+                    fast->second.tag + "::write(static_cast<double>(" + value + "))";
+                const std::string offset = "static_cast<std::size_t>(" +
+                    expr(*fast->second.index) + ") * " +
+                    std::to_string(fast->second.width);
+                return "([&]() { const auto cp3_fast_stored = " + stored +
+                       "; std::memcpy(" + active->second + " + (" + offset +
+                       "), &cp3_fast_stored, sizeof(cp3_fast_stored)); }())";
+            }
+        }
         return "::cp3::runtime::typedArrayWriteAt<::cp3::runtime::" +
                std::string(tag) + ">(" + expr(*ix.object) + ", " + idxText +
                ", " + value + ")";

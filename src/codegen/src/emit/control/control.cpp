@@ -52,9 +52,19 @@ std::string Generator::emitWhile(const WhileStatement& w,
                                  int indent) {
     const auto fast = fastDataViewLoops_.find(w.nodeId);
     const bool fastLoop = fast != fastDataViewLoops_.end();
+    const auto fastWrites = fastTypedArrayLoops_.find(w.nodeId);
+    const bool fastWriteLoop = fastWrites != fastTypedArrayLoops_.end() &&
+                               !fastWrites->second.writes.empty();
+    const bool fastScope = fastLoop || fastWriteLoop;
     std::string fastRawName;
     std::string fastReceiverText;
     std::optional<std::string> previousRaw;
+    std::vector<std::pair<std::uint32_t, std::optional<std::string>>>
+        previousTypedPointers;
+    if (fastScope) {
+        line(out, indent, "{");
+        ++indent;
+    }
     if (fastLoop) {
         fastRawName = "cp3_fast_bytes_" + std::to_string(w.nodeId);
         fastReceiverText = mapIdent(fast->second.receiver);
@@ -64,9 +74,7 @@ std::string Generator::emitWhile(const WhileStatement& w,
         }
         const auto previous = activeFastDataViews_.find(fast->second.receiver);
         if (previous != activeFastDataViews_.end()) previousRaw = previous->second;
-        line(out, indent, "{");
-        ++indent;
-        if (fast->second.exactFloatReduction) {
+        if (fast->second.exactReduction) {
             line(out, indent, "#if defined(__clang__)");
             line(out, indent, "#pragma clang fp reassociate(on)");
             line(out, indent, "#endif");
@@ -79,10 +87,41 @@ std::string Generator::emitWhile(const WhileStatement& w,
                              ")) ::cp3::runtime::typedArrayPanic(\"DataView access is outside the view\");");
         activeFastDataViews_[fast->second.receiver] = fastRawName;
     }
+    if (fastWriteLoop) {
+        std::unordered_set<std::uint32_t> checked;
+        std::size_t ordinal = 0;
+        for (const FastTypedArrayWrite& write : fastWrites->second.writes) {
+            std::string receiverText = mapIdent(write.receiver);
+            const auto binding = lookup(write.receiver);
+            if (binding && binding->global) receiverText = moduleRef(write.receiver);
+            std::optional<std::string> previous;
+            const auto active = activeFastTypedArrays_.find(write.receiverBinding);
+            if (active != activeFastTypedArrays_.end()) previous = active->second;
+            previousTypedPointers.push_back({write.receiverBinding, previous});
+            const std::string rawName = "cp3_fast_typed_bytes_" +
+                std::to_string(w.nodeId) + "_" + std::to_string(ordinal++);
+            line(out, indent, "std::uint8_t* const " + rawName + " = " +
+                 receiverText + "->buffer->data() + " + receiverText +
+                 "->byteOffset;");
+            if (checked.insert(write.receiverBinding).second) {
+                line(out, indent, "if (static_cast<double>(" +
+                     expr(*fastWrites->second.bound) + ") > static_cast<double>(" +
+                     receiverText + "->length)) ::cp3::runtime::typedArrayPanic(\"TypedArray access is outside the view\");");
+            }
+            activeFastTypedArrays_[write.receiverBinding] = rawName;
+        }
+    }
     const auto finishFastLoop = [&]() {
-        if (!fastLoop) return;
-        if (previousRaw) activeFastDataViews_[fast->second.receiver] = *previousRaw;
-        else activeFastDataViews_.erase(fast->second.receiver);
+        if (!fastScope) return;
+        if (fastLoop) {
+            if (previousRaw) activeFastDataViews_[fast->second.receiver] = *previousRaw;
+            else activeFastDataViews_.erase(fast->second.receiver);
+        }
+        for (auto it = previousTypedPointers.rbegin();
+             it != previousTypedPointers.rend(); ++it) {
+            if (it->second) activeFastTypedArrays_[it->first] = *it->second;
+            else activeFastTypedArrays_.erase(it->first);
+        }
         --indent;
         line(out, indent, "}");
     };
@@ -114,7 +153,7 @@ std::string Generator::emitWhile(const WhileStatement& w,
         return continueLabel;
     }
     const std::string condition = w.condition ? cond(*w.condition) : "false";
-    if (fastLoop && fast->second.exactFloatReduction) {
+    if (fastLoop && fast->second.exactReduction) {
         line(out, indent, "#if defined(__clang__)");
         line(out, indent, "#pragma clang loop vectorize(enable)");
         line(out, indent, "#endif");

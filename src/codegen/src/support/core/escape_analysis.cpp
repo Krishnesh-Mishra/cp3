@@ -20,6 +20,7 @@
 
 #include "detail/class/class_model.h"
 #include "detail/class/structural_walk.h"
+#include "detail/generator/family.h"
 #include "detail/generator/type_map.h"
 
 namespace cp3 {
@@ -731,6 +732,57 @@ bool exactAtRange(const ExactRange& range) {
            9007199254740992.0L;
 }
 
+bool sideEffectFreeValue(const Expr& expression) {
+    switch (expression.kind) {
+        case NodeKind::NumberLiteral:
+        case NodeKind::StringLiteral:
+        case NodeKind::BoolLiteral:
+        case NodeKind::NullLiteral:
+        case NodeKind::UndefinedLiteral:
+        case NodeKind::Identifier:
+        case NodeKind::ThisExpr:
+            return true;
+        case NodeKind::MemberExpr: {
+            const auto& member = static_cast<const MemberExpr&>(expression);
+            return !member.optional && member.object &&
+                   sideEffectFreeValue(*member.object);
+        }
+        case NodeKind::IndexExpr: {
+            const auto& index = static_cast<const IndexExpr&>(expression);
+            return index.object && index.index &&
+                   sideEffectFreeValue(*index.object) &&
+                   sideEffectFreeValue(*index.index);
+        }
+        case NodeKind::UnaryExpr: {
+            const auto& unary = static_cast<const UnaryExpr&>(expression);
+            return unary.op != UnaryOp::Delete && unary.operand &&
+                   sideEffectFreeValue(*unary.operand);
+        }
+        case NodeKind::BinaryExpr: {
+            const auto& binary = static_cast<const BinaryExpr&>(expression);
+            return binary.left && binary.right &&
+                   sideEffectFreeValue(*binary.left) &&
+                   sideEffectFreeValue(*binary.right);
+        }
+        case NodeKind::LogicalExpr: {
+            const auto& logical = static_cast<const LogicalExpr&>(expression);
+            return logical.left && logical.right &&
+                   sideEffectFreeValue(*logical.left) &&
+                   sideEffectFreeValue(*logical.right);
+        }
+        case NodeKind::ConditionalExpr: {
+            const auto& conditional = static_cast<const ConditionalExpr&>(expression);
+            return conditional.condition && conditional.whenTrue &&
+                   conditional.whenFalse &&
+                   sideEffectFreeValue(*conditional.condition) &&
+                   sideEffectFreeValue(*conditional.whenTrue) &&
+                   sideEffectFreeValue(*conditional.whenFalse);
+        }
+        default:
+            return false;
+    }
+}
+
 std::optional<ExactRange> exactExpressionRange(
     const Expr& expression, const std::string& induction,
     long double inductionMaximum,
@@ -1032,13 +1084,18 @@ std::optional<ExactRange> proveExactArrayFill(
             return std::nullopt;
         }
         const auto& assignment = static_cast<const AssignmentExpr&>(*statement.expression);
-        if (!assignment.target || assignment.target->kind != NodeKind::IndexExpr) continue;
+        if (assignment.op != AssignOp::Assign || !assignment.value ||
+            !sideEffectFreeValue(*assignment.value) || !assignment.target ||
+            assignment.target->kind != NodeKind::IndexExpr) return std::nullopt;
         const auto& target = static_cast<const IndexExpr&>(*assignment.target);
+        const Identifier* targetArray = identifier(target.object.get());
+        const Type* targetType = targetArray ? sema.typeOf(targetArray->nodeId) : nullptr;
+        const detail::CppInfo targetInfo = targetType
+            ? detail::classify(*targetType) : detail::CppInfo{};
+        if (!targetArray || targetInfo.shape != detail::Shape::TypedArray ||
+            !isName(target.index.get(), indexName)) return std::nullopt;
         if (!isName(target.object.get(), arrayName)) continue;
-        if (fill || assignment.op != AssignOp::Assign ||
-            !isName(target.index.get(), indexName) || !assignment.value) {
-            return std::nullopt;
-        }
+        if (fill) return std::nullopt;
         fill = &assignment;
     }
     if (!fill) return std::nullopt;
@@ -1139,6 +1196,9 @@ bool proveDataViewLoop(const WhileStatement& loop, const std::string& index,
 void Generator::analyzeDataViewLoops(const Program& program) {
     fastDataViewReads_.clear();
     fastDataViewLoops_.clear();
+    fastTypedArrayLoops_.clear();
+    fastTypedArrayWriteSites_.clear();
+    activeFastTypedArrays_.clear();
     activeFastDataViews_.clear();
     std::unordered_set<std::uint32_t> fixedDataViews;
     std::unordered_set<std::uint32_t> exportedBindings;
@@ -1259,7 +1319,9 @@ void Generator::analyzeDataViewLoops(const Program& program) {
                         arrayDecl->init->kind != NodeKind::NewExpr) continue;
                     const auto& allocation = static_cast<const NewExpr&>(*arrayDecl->init);
                     const Identifier* constructor = identifier(allocation.callee.get());
-                    if (!constructor || constructor->name != "Float64Array" ||
+                    const detail::FamilyClass* family = constructor
+                        ? detail::familyClass(constructor->name) : nullptr;
+                    if (!family || family->tag[0] == '\0' ||
                         allocation.arguments.size() != 1 ||
                         !identifier(allocation.arguments.front().get())) continue;
                     const std::string& lengthName = static_cast<const Identifier&>(
@@ -1269,17 +1331,32 @@ void Generator::analyzeDataViewLoops(const Program& program) {
                     const Identifier* arrayName = arrayDecl->id
                         ? identifier(arrayDecl->id.get()) : nullptr;
                     if (!arrayName) continue;
+                    const IndexExpr* fillTarget = nullptr;
                     const auto exact = proveExactArrayFill(
                         loop, arrayName->name, index->name, zero, numbers, sema_,
-                        arrayWrites, arrayUses, sourceBinding);
-                    if (!exact || exact->minimum < 0.0L) continue;
+                        arrayWrites, arrayUses, sourceBinding, &fillTarget);
+                    if (!exact || !fillTarget) continue;
                     const double rangeLength = length->second;
                     const auto* condition = static_cast<const BinaryExpr*>(
                         loop.condition.get());
                     const Identifier* loopBound = identifier(condition->right.get());
                     if (!loopBound || !numbers.count(loopBound->name) ||
                         numbers.at(loopBound->name) != rangeLength) continue;
-                    exactArrayContents[sourceBinding] = *exact;
+                    FastTypedArrayWrite write{
+                        sourceBinding, arrayName->name, fillTarget->index.get(),
+                        static_cast<std::size_t>(family->bytes), family->tag};
+                    FastTypedArrayLoop& fastLoop = fastTypedArrayLoops_[loop.nodeId];
+                    fastLoop.bound = condition->right.get();
+                    fastLoop.writes.push_back(write);
+                    fastTypedArrayWriteSites_[fillTarget->nodeId] = write;
+                    const bool exactStoredValues =
+                        constructor->name == "Float64Array" ||
+                        (constructor->name == "Uint8Array" &&
+                         exact->fractionalBits == 0 &&
+                         exact->minimum >= 0.0L && exact->maximum <= 255.0L);
+                    if (exactStoredValues) {
+                        exactArrayContents[sourceBinding] = *exact;
+                    }
                 }
                 ProvenLoop proof;
                 if (proveDataViewLoop(loop, index->name, zero, numbers, sema_, proof)) {
@@ -1299,34 +1376,42 @@ void Generator::analyzeDataViewLoops(const Program& program) {
                             viewCalls->second.size() == 1 &&
                             viewCalls->second.front() == proof.read;
                         if (isolatedRead) {
-                            bool exactFloatReduction = false;
-                            if (proof.float64) {
-                                const auto sourceBinding =
-                                    dataViewSources.find(viewBinding->second);
-                                if (sourceBinding != dataViewSources.end()) {
-                                    const auto values = exactArrayContents.find(
-                                        sourceBinding->second);
-                                    const auto boundName = identifier(proof.bound);
-                                    if (values != exactArrayContents.end() &&
-                                        boundName && numbers.count(boundName->name)) {
-                                        const long double count =
-                                            numbers.at(boundName->name);
-                                        const long double maxValue = std::max(
-                                            std::fabs(values->second.minimum),
-                                            std::fabs(values->second.maximum));
-                                        const long double units = std::ldexp(
-                                            count * maxValue,
-                                            static_cast<int>(values->second.fractionalBits));
-                                        exactFloatReduction =
-                                            values->second.minimum >= 0.0L &&
-                                            std::isfinite(static_cast<double>(units)) &&
-                                            units <= 9007199254740992.0L;
-                                    }
+                            bool exactReduction = false;
+                            const auto sourceBinding =
+                                dataViewSources.find(viewBinding->second);
+                            if (sourceBinding != dataViewSources.end()) {
+                                const VariableDeclarator* sourceDecl =
+                                    findDeclarator(program, sourceBinding->second);
+                                const auto* allocation = sourceDecl && sourceDecl->init &&
+                                    sourceDecl->init->kind == NodeKind::NewExpr
+                                    ? static_cast<const NewExpr*>(sourceDecl->init.get())
+                                    : nullptr;
+                                const Identifier* sourceType = allocation
+                                    ? identifier(allocation->callee.get()) : nullptr;
+                                const bool matchingType = sourceType &&
+                                    ((proof.float64 && sourceType->name == "Float64Array") ||
+                                     (!proof.float64 && sourceType->name == "Uint8Array"));
+                                const auto values = exactArrayContents.find(
+                                    sourceBinding->second);
+                                const auto boundName = identifier(proof.bound);
+                                if (matchingType && values != exactArrayContents.end() &&
+                                    boundName && numbers.count(boundName->name)) {
+                                    const long double count =
+                                        numbers.at(boundName->name);
+                                    const long double maxValue = std::max(
+                                        std::fabs(values->second.minimum),
+                                        std::fabs(values->second.maximum));
+                                    const long double units = std::ldexp(
+                                        count * maxValue,
+                                        static_cast<int>(values->second.fractionalBits));
+                                    exactReduction =
+                                        std::isfinite(static_cast<double>(units)) &&
+                                        units <= 9007199254740992.0L;
                                 }
                             }
                             fastDataViewLoops_[loop.nodeId] = {
                                 proof.receiver, proof.bound, proof.width,
-                                exactFloatReduction};
+                                exactReduction};
                             fastDataViewReads_[proof.read->nodeId] = {
                                 loop.nodeId, proof.receiver, proof.offset,
                                 proof.width, proof.float64};

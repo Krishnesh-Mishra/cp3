@@ -275,10 +275,25 @@ protected:
         std::string receiver;
         const Expr* bound = nullptr;
         std::size_t width = 0;
-        bool exactFloatReduction = false;
+        bool exactReduction = false;
+    };
+    struct FastTypedArrayWrite {
+        std::uint32_t receiverBinding = 0;
+        std::string receiver;
+        const Expr* index = nullptr;
+        std::size_t width = 0;
+        std::string tag;
+    };
+    struct FastTypedArrayLoop {
+        const Expr* bound = nullptr;
+        std::vector<FastTypedArrayWrite> writes;
     };
     std::unordered_map<std::uint32_t, FastDataViewRead> fastDataViewReads_;
     std::unordered_map<std::uint32_t, FastDataViewLoop> fastDataViewLoops_;
+    std::unordered_map<std::uint32_t, FastTypedArrayLoop> fastTypedArrayLoops_;
+    std::unordered_map<std::uint32_t, FastTypedArrayWrite>
+        fastTypedArrayWriteSites_;
+    std::unordered_map<std::uint32_t, std::string> activeFastTypedArrays_;
     std::unordered_map<std::string, std::string> activeFastDataViews_;
     std::unordered_set<std::uint32_t> reported_;
 };
