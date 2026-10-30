@@ -1,6 +1,0 @@
-invoked: 2026-10-18T07:12:11
-argv: ['C:\\Users\\Krishnesh\\dev\\cp3\\benchmarks\\bench\\run_suite.py', '--only', 'string-churn', '--churn-scale', 'stress', '--reps', '2', '--results', 'benchmarks\\bench\\results\\2026-10-18T0712-local-stress']
-cwd: C:\Users\Krishnesh\dev\cp3
-runner: python 3.14.5 (C:\Program Files\Python314\python.exe)
-machine: Windows-11-10.0.26200-SP0
-string-churn scale: stress (300000 iterations)

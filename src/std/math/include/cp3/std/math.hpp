@@ -50,7 +50,13 @@ inline double random() {
 
 inline double sqrt(double x) { return std::sqrt(x); }
 inline double cbrt(double x) { return std::cbrt(x); }
-inline double pow(double base, double exponent) { return std::pow(base, exponent); }
+inline double pow(double base, double exponent) {
+    // Squaring is exactly the same IEEE-754 operation as the integral power
+    // case and avoids dispatching to the general-purpose libm pow routine in
+    // tight numeric loops.
+    if (exponent == 2.0) return base * base;
+    return std::pow(base, exponent);
+}
 inline double abs(double x) { return std::fabs(x); }
 inline double floor(double x) { return std::floor(x); }
 inline double ceil(double x) { return std::ceil(x); }
@@ -88,6 +94,24 @@ inline double max(std::initializer_list<double> values) {
 
 namespace detail {
 
+inline double max2(double a, double b) {
+    if (std::isnan(a)) return a;
+    if (std::isnan(b)) return b;
+    if (a == 0.0 && b == 0.0) {
+        return std::signbit(a) && std::signbit(b) ? -0.0 : 0.0;
+    }
+    return a > b ? a : b;
+}
+
+inline double min2(double a, double b) {
+    if (std::isnan(a)) return a;
+    if (std::isnan(b)) return b;
+    if (a == 0.0 && b == 0.0) {
+        return std::signbit(a) || std::signbit(b) ? -0.0 : 0.0;
+    }
+    return a < b ? a : b;
+}
+
 // A finite `double` truncated toward zero as a 64-bit integer; values outside
 // the int64 range (or non-finite ones) are rejected.
 inline bool toInt64(double x, std::int64_t& out) {
@@ -118,7 +142,7 @@ inline double lcm(double a, double b) {
 
 // JS-equivalent to min(max(x, low), high): NaN propagates from any argument.
 inline double clamp(double x, double low, double high) {
-    return min({max({x, low}), high});
+    return detail::min2(detail::max2(x, low), high);
 }
 
 inline double lerp(double start, double end, double t) {

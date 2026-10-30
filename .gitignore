@@ -44,7 +44,6 @@ compile_commands.json
 .vs/
 .vscode/
 .idea/
-.opencode/
 *.user
 *.suo
 .DS_Store

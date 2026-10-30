@@ -96,6 +96,11 @@ struct KeyEqual {
 // dependent load on every update (measured: 25% on word-frequency).
 template <class K, class V>
 class MapData {
+    struct ValueEntry {
+        V value;
+        std::size_t orderIndex;
+    };
+
 public:
     // A `Map` starts at 541 buckets (libstdc++'s prime just above 512, ~4 KB).
     // On word-frequency (64 keys, 3M updates) the bucket count, not the load
@@ -107,19 +112,25 @@ public:
     MapData() { values_.rehash(512); }
 
     void set(const K& key, const V& value) {
-        const auto it = values_.find(key);
-        if (it != values_.end()) {
-            it->second = value;
+        const std::size_t orderIndex = order_.size();
+        const auto [it, inserted] =
+            values_.try_emplace(key, ValueEntry{value, orderIndex});
+        if (!inserted) {
+            it->second.value = value;
             return;
         }
-        values_.emplace(key, value);
-        order_.push_back(key);
+        try {
+            order_.emplace_back(key);
+        } catch (...) {
+            values_.erase(it);
+            throw;
+        }
     }
 
     std::optional<V> get(const K& key) const {
         const auto it = values_.find(key);
         if (it == values_.end()) return std::nullopt;
-        return it->second;
+        return it->second.value;
     }
 
     bool has(const K& key) const { return values_.find(key) != values_.end(); }
@@ -131,63 +142,102 @@ public:
     V* findRef(const K& key) {
         const auto it = values_.find(key);
         if (it == values_.end()) return nullptr;
-        return &it->second;
+        return &it->second.value;
     }
 
     // The stored value for `key`, inserting `fallback` first when the key is
     // absent. The fused update probes with `findRef` and reaches this only on a
     // miss, so the returned reference is the slot to store in place.
     V& getOrInsert(const K& key, const V& fallback) {
-        const auto [it, inserted] = values_.try_emplace(key, fallback);
-        if (inserted) order_.push_back(key);
-        return it->second;
+        const std::size_t orderIndex = order_.size();
+        const auto [it, inserted] =
+            values_.try_emplace(key, ValueEntry{fallback, orderIndex});
+        if (!inserted) return it->second.value;
+        try {
+            order_.emplace_back(key);
+            return it->second.value;
+        } catch (...) {
+            values_.erase(it);
+            throw;
+        }
     }
 
     // The cp3 surface calls this `delete`; `remove` avoids the keyword clash.
     bool remove(const K& key) {
-        if (values_.erase(key) == 0) return false;
-        for (auto it = order_.begin(); it != order_.end(); ++it) {
-            if (sameKey(*it, key)) {
-                order_.erase(it);
-                break;
-            }
-        }
+        const auto it = values_.find(key);
+        if (it == values_.end()) return false;
+        order_[it->second.orderIndex].reset();
+        values_.erase(it);
+        ++tombstones_;
+        compactOrderIfNeeded();
         return true;
     }
 
     void clear() {
         values_.clear();
         order_.clear();
+        tombstones_ = 0;
     }
 
     // `size` is a property; codegen widens the count to a cp3 number.
-    double size() const { return static_cast<double>(order_.size()); }
+    double size() const { return static_cast<double>(values_.size()); }
 
-    Array<K> keys() const { return makeArray<K>(order_); }
+    Array<K> keys() const {
+        std::vector<K> keys;
+        keys.reserve(values_.size());
+        for (const auto& key : order_) {
+            if (key) keys.push_back(*key);
+        }
+        return makeArray<K>(std::move(keys));
+    }
 
     Array<V> values() const {
         std::vector<V> values;
-        values.reserve(order_.size());
-        for (const K& key : order_) values.push_back(values_.at(key));
+        values.reserve(values_.size());
+        for (const auto& key : order_) {
+            if (key) values.push_back(values_.at(*key).value);
+        }
         return makeArray<V>(std::move(values));
     }
 
     Array<std::pair<K, V>> entries() const {
         std::vector<std::pair<K, V>> entries;
-        entries.reserve(order_.size());
-        for (const K& key : order_) entries.emplace_back(key, values_.at(key));
+        entries.reserve(values_.size());
+        for (const auto& key : order_) {
+            if (key) entries.emplace_back(*key, values_.at(*key).value);
+        }
         return makeArray<std::pair<K, V>>(std::move(entries));
     }
 
     // JS order: (value, key) per entry; codegen matches the callback types.
     template <class F>
     void forEach(F fn) const {
-        for (const K& key : order_) fn(values_.at(key), key);
+        for (const auto& key : order_) {
+            if (key) fn(values_.at(*key).value, *key);
+        }
     }
 
 private:
-    std::vector<K> order_;
-    std::unordered_map<K, V, KeyHash<K>, KeyEqual<K>> values_;
+    void compactOrderIfNeeded() {
+        // Rebuild only after tombstones outnumber live entries, so the linear
+        // compaction cost is amortized over the deletions that triggered it.
+        if (tombstones_ <= values_.size() || order_.size() <= 64) return;
+        std::vector<std::optional<K>> compact;
+        compact.reserve(values_.size());
+        for (const auto& key : order_) {
+            if (!key) continue;
+            auto it = values_.find(*key);
+            if (it == values_.end()) continue;
+            it->second.orderIndex = compact.size();
+            compact.emplace_back(*key);
+        }
+        order_.swap(compact);
+        tombstones_ = 0;
+    }
+
+    std::vector<std::optional<K>> order_;
+    std::unordered_map<K, ValueEntry, KeyHash<K>, KeyEqual<K>> values_;
+    std::size_t tombstones_ = 0;
 };
 
 template <class K, class V>

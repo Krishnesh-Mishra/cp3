@@ -2054,7 +2054,7 @@ def main() -> int:
                         help="client OS processes for the single-core server row (default 2)")
     parser.add_argument("--latency", type=int, default=300, help="latency phase request count")
     parser.add_argument("--warmup", type=int, default=100, help="warmup requests before measuring")
-    parser.add_argument("--reps", type=positive_int, default=3,
+    parser.add_argument("--reps", type=positive_int, default=15,
                         help="independent measured runs per test/language (default: 3)")
     parser.add_argument("--hello-reps", type=positive_int, default=None,
                         help="optional hello-world override; otherwise uses --reps")
@@ -2166,9 +2166,9 @@ def main() -> int:
                 if not present(language, server=True):
                     announce_skip(language)
                     continue
-                announce_run(task, language, task_index, task_total, args.reps)
+                announce_run(task, language, task_index, task_total, 1)
                 rows.append(run_server_repeated(
-                    language, task, args.reps, args.latency, args.warmup,
+                    language, task, 1 , args.latency, args.warmup,
                     args.seconds, args.concurrency, cp3c,
                     clients=args.clients, single_clients=args.single_clients))
             record_task(task, lambda: print_server_table(task, rows))

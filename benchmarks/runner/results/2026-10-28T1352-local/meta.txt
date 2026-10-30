@@ -1,9 +1,0 @@
-invoked: 2026-10-28T13:51:56
-argv: ['benchmarks/runner/run_suite.py', '--results', 'benchmarks/runner/results/2026-10-28T1352-local']
-cwd: C:\Users\Krishnesh\dev\cp3
-runner: python 3.14.5 (C:\Program Files\Python314\python.exe)
-machine: Windows-11-10.0.26200-SP0
-string-churn scale: default (50000 iterations)
-cp3c: C:\Users\Krishnesh\dev\cp3\build\bin\cp3c.exe
-cp3c sha256: 55BDDA2A8CCFDD38D67DDF87C8B9C3C6D08A8E0CB1DD41D81DFC07EBB967B786
-cp3c mtime: 2026-10-28T13:09:29

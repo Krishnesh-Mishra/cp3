@@ -110,6 +110,37 @@ inline std::int64_t floorDiv(std::int64_t a, std::int64_t b) {
     return (a % b != 0 && (a < 0) != (b < 0)) ? q - 1 : q;
 }
 
+// Date components are requested separately by the API. Cache the most recent
+// timestamp so formatting one Date with all six getters decomposes it once.
+struct Components {
+    int year;
+    int month;
+    int day;
+    int hour;
+    int minute;
+    int second;
+};
+
+inline const Components& componentsFor(std::int64_t ms) {
+    static thread_local bool valid = false;
+    static thread_local std::int64_t cachedMs = 0;
+    static thread_local Components cached{};
+    if (!valid || cachedMs != ms) {
+        const std::int64_t days = floorDiv(ms, kDayMs);
+        const Civil civil = civilFromDays(days);
+        std::int64_t rem = ms - days * kDayMs;
+        cached = Components{civil.year, civil.month, civil.day,
+                            static_cast<int>(rem / kHourMs), 0, 0};
+        rem %= kHourMs;
+        cached.minute = static_cast<int>(rem / kMinuteMs);
+        rem %= kMinuteMs;
+        cached.second = static_cast<int>(rem / kSecondMs);
+        cachedMs = ms;
+        valid = true;
+    }
+    return cached;
+}
+
 // `n` zero-padded decimal digits of a non-negative value.
 inline std::string padded(std::int64_t v, std::size_t width) {
     std::string s = std::to_string(v);
@@ -273,33 +304,27 @@ inline std::string cp3_ts(const Date& d) {
 
 // The UTC getters; `getMonth` is 0-indexed, matching JS (docs 04).
 inline double getFullYear(const Date& d) {
-    return detail::civilFromDays(detail::floorDiv(d.ms, detail::kDayMs)).year;
+    return detail::componentsFor(d.ms).year;
 }
 
 inline double getMonth(const Date& d) {
-    return detail::civilFromDays(detail::floorDiv(d.ms, detail::kDayMs)).month - 1;
+    return detail::componentsFor(d.ms).month - 1;
 }
 
 inline double getDate(const Date& d) {
-    return detail::civilFromDays(detail::floorDiv(d.ms, detail::kDayMs)).day;
+    return detail::componentsFor(d.ms).day;
 }
 
 inline double getHours(const Date& d) {
-    const std::int64_t rem = d.ms - detail::floorDiv(d.ms, detail::kDayMs) *
-                                       detail::kDayMs;
-    return static_cast<double>(rem / detail::kHourMs);
+    return detail::componentsFor(d.ms).hour;
 }
 
 inline double getMinutes(const Date& d) {
-    const std::int64_t rem = d.ms - detail::floorDiv(d.ms, detail::kDayMs) *
-                                       detail::kDayMs;
-    return static_cast<double>((rem % detail::kHourMs) / detail::kMinuteMs);
+    return detail::componentsFor(d.ms).minute;
 }
 
 inline double getSeconds(const Date& d) {
-    const std::int64_t rem = d.ms - detail::floorDiv(d.ms, detail::kDayMs) *
-                                       detail::kDayMs;
-    return static_cast<double>((rem % detail::kMinuteMs) / detail::kSecondMs);
+    return detail::componentsFor(d.ms).second;
 }
 
 namespace detail {
