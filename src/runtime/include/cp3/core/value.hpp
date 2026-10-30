@@ -22,7 +22,9 @@
 
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <memory>
+#include <new>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -33,6 +35,102 @@
 #include "cp3/core/runtime.hpp"
 
 namespace cp3::runtime {
+
+// Reuse shared_ptr control-block storage after the last owner releases it.
+// `allocate_shared` still performs the standard atomic reference counting and
+// destroys the object at the right time; only the underlying block allocation
+// is pooled. Each allocator specialization has a small thread-local free list,
+// so the common allocate/destroy cycle does not contend on a global lock. A
+// block freed on another thread is cached by that thread and remains reusable
+// because the free lists are keyed by the exact allocator specialization.
+template <class T>
+class RefPoolAllocator {
+    struct FreeNode { FreeNode* next; };
+    static constexpr std::size_t kMaxCachedBlocks = 32;
+
+    struct Cache {
+        FreeNode* head = nullptr;
+        std::size_t size = 0;
+
+        ~Cache() {
+            while (head) {
+                FreeNode* node = head;
+                head = head->next;
+                release(node);
+            }
+        }
+    };
+
+    static constexpr bool poolable =
+        sizeof(T) >= sizeof(FreeNode) && alignof(T) >= alignof(FreeNode);
+
+    static Cache& cache() {
+        thread_local Cache value;
+        return value;
+    }
+
+    static void* acquire(std::size_t size) {
+        if constexpr (alignof(T) > __STDCPP_DEFAULT_NEW_ALIGNMENT__) {
+            return ::operator new(size, std::align_val_t{alignof(T)});
+        } else {
+            return ::operator new(size);
+        }
+    }
+
+    static void release(void* ptr) noexcept {
+        if constexpr (alignof(T) > __STDCPP_DEFAULT_NEW_ALIGNMENT__) {
+            ::operator delete(ptr, std::align_val_t{alignof(T)});
+        } else {
+            ::operator delete(ptr);
+        }
+    }
+
+public:
+    using value_type = T;
+
+    RefPoolAllocator() noexcept = default;
+    template <class U>
+    RefPoolAllocator(const RefPoolAllocator<U>&) noexcept {}
+
+    [[nodiscard]] T* allocate(std::size_t count) {
+        if (count == 1) {
+            if constexpr (poolable) {
+                Cache& local = cache();
+                if (local.head) {
+                    FreeNode* node = local.head;
+                    local.head = node->next;
+                    --local.size;
+                    return reinterpret_cast<T*>(node);
+                }
+            }
+        }
+        if (count > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
+            throw std::bad_array_new_length();
+        }
+        return static_cast<T*>(acquire(count * sizeof(T)));
+    }
+
+    void deallocate(T* ptr, std::size_t count) noexcept {
+        if (!ptr) return;
+        if (count == 1) {
+            if constexpr (poolable) {
+                Cache& local = cache();
+                if (local.size < kMaxCachedBlocks) {
+                    auto* node = ::new (static_cast<void*>(ptr)) FreeNode{local.head};
+                    local.head = node;
+                    ++local.size;
+                    return;
+                }
+            }
+        }
+        release(ptr);
+    }
+
+    template <class U>
+    bool operator==(const RefPoolAllocator<U>&) const noexcept { return true; }
+    template <class U>
+    bool operator!=(const RefPoolAllocator<U>&) const noexcept { return false; }
+};
 
 // =============================================================================
 // 1. Reference handles
@@ -48,7 +146,8 @@ using Ref = std::shared_ptr<T>;
 // `makeRef<Obj>(args...)` for `{ ... }` / class instantiation.
 template <class T, class... Args>
 Ref<T> makeRef(Args&&... args) {
-    return std::make_shared<T>(std::forward<Args>(args)...);
+    return std::allocate_shared<T>(RefPoolAllocator<T>{},
+                                   std::forward<Args>(args)...);
 }
 
 // A cp3 array `T[]`. Arrays are reference types (spec §10), so the handle is
@@ -157,9 +256,9 @@ template <class T>
 class Cell {
 public:
     // A cell always holds a value (spec has no uninitialized bindings).
-    Cell() : ptr_(std::make_shared<T>()) {}
-    explicit Cell(const T& initial) : ptr_(std::make_shared<T>(initial)) {}
-    explicit Cell(T&& initial) : ptr_(std::make_shared<T>(std::move(initial))) {}
+    Cell() : ptr_(makeRef<T>()) {}
+    explicit Cell(const T& initial) : ptr_(makeRef<T>(initial)) {}
+    explicit Cell(T&& initial) : ptr_(makeRef<T>(std::move(initial))) {}
 
     T& get() noexcept { return *ptr_; }
     const T& get() const noexcept { return *ptr_; }
@@ -226,7 +325,7 @@ struct Cloner<std::shared_ptr<T>> {
             return nullptr;
         }
         using Pointee = std::remove_cv_t<T>;
-        return std::make_shared<Pointee>(cp3::runtime::clone(*value));
+        return makeRef<Pointee>(cp3::runtime::clone(*value));
     }
 };
 
