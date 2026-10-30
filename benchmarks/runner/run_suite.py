@@ -1999,7 +1999,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="benchmarks comparison suite (single entry point: benchmarks/runner/run_benchmark.py)")
     parser.add_argument("--only", default="", help="comma list of: " + ",".join(ALL_TASKS))
-    parser.add_argument("--seconds", type=float, default=30.0, help="throughput phase seconds per server")
+    parser.add_argument("--seconds", type=float, default=10.0, help="throughput phase seconds per server")
     parser.add_argument("--concurrency", type=int, default=8, help="throughput phase connections")
     parser.add_argument("--clients", type=int, default=4,
                         help="client OS processes for the multicore server row (default 4)")
