@@ -24,10 +24,10 @@ The hint does not pre-size the array’s logical length; it reserves vector capa
 
 - No universal arena allocates every short-lived object.
 - No global object pool batches all destruction.
-- No custom non-atomic `Ref<T>` is selected for thread-confined code.
+- A conservative compiler gate can select non-atomic `LocalRef<T>` for some class types; this is a compilation-unit decision, not a per-object escape proof.
 - No reserve size is guessed from a benchmark name or source path.
 
-The fallback remains the ordinary shared reference and vector behavior.
+The fallback remains the ordinary atomic shared reference and vector behavior. `LocalRef` still allocates a control block, though the runtime pool may reuse its storage; neither fact makes it a stack allocation.
 
 ## Diagnose object churn
 

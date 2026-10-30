@@ -24,7 +24,7 @@ Record compiler versions, build profile, CPU, OS, median, best, p95, and coeffic
 
 For CP3 applications, use `--show-runtime` (`--show` is an alias) to copy generated C++ and the runtime headers/translation units used by the build into the project build tree. Inspect the files corresponding to the benchmark's source module, not unrelated generated support code.
 
-For allocation work, search the hot function for `makeRef`, `std::make_shared`, vector growth, and helper calls. For numeric loops, inspect loop control, memory accesses, bounds helpers, and calls. Match generated source filenames and line numbers to backend optimization reports.
+For allocation work, search the hot function for `makeRef`, `makeLocalRef`, `Ref`/`LocalRef` handle copies, vector growth, and helper calls. `makeRef` uses `std::allocate_shared` with CP3's pool allocator. For numeric loops, inspect loop control, memory accesses, bounds helpers, and calls. Match generated source filenames and line numbers to backend optimization reports.
 
 ## Proving vectorization
 

@@ -4,28 +4,43 @@ chapter: Welcome
 ---
 # Welcome to CP3
 
-CP3 is a statically typed language with a JavaScript and TypeScript shaped surface. It compiles source files into C++ and then asks a native toolchain to produce the executable you run.
+CP3 is a statically typed language with a JavaScript and TypeScript shaped surface. It compiles `.cp3` source into C++, then uses a native toolchain to produce the executable you run.
 
-The project is for developers who like the fast feedback and familiar syntax of JS/TS, but want a compiled native program and explicit compile-time checks. CP3 is its own language. It does not run Node, browsers, or arbitrary npm packages behind the scenes.
+The language is designed for developers who value familiar syntax and compiler feedback, and want to deploy a native program. CP3 is its own language: it does not run Node or a browser, and arbitrary npm packages are not available unless an explicit supported integration is provided.
 
-## Start with the guide that fits you
+## Choose a starting point
 
-- **New to CP3, experienced with JS/TS:** read [For JavaScript and TypeScript developers](#00-welcome/03-javascript-typescript-developers).
-- **Want to understand why the project exists:** read [Why CP3](#00-welcome/01-why-cp3).
-- **Want benchmark context:** read [Performance, measured carefully](#00-welcome/02-performance).
-- **Ready to create a project:** read [Create and run your first project](#00-welcome/04-first-project).
-- **Want exact language rules:** start at [Chapter 1 · Bindings and declarations](#01-language/01-variables-and-bindings/01-bindings).
+| If you want to… | Start here |
+| --- | --- |
+| Learn CP3 with JS/TS experience | [For JavaScript and TypeScript developers](#00-welcome/03-javascript-typescript-developers) |
+| Understand the project's design | [Why CP3 exists](#00-welcome/01-why-cp3) |
+| Create and run a program | [Create your first project](#00-welcome/04-first-project) |
+| Learn how performance claims are measured | [Performance, measured carefully](#00-welcome/02-performance) |
+| Find exact declaration and type rules | [Chapter 1 · The language](#01-language/00-overview) |
+| Understand memory and ownership | [Chapter 2 · Runtime model](#02-runtime/00-overview) |
+| Check a built-in module's API | [Chapter 3 · Standard library](#03-standard-library/00-overview) |
+| Build the compiler or debug generated C++ | [Chapter 4 · Compiler and tools](#04-compiler-cli/00-overview) |
 
-## What CP3 does
+## What happens when you build
 
-The compiler reads `.cp3` source, resolves modules, parses and checks types, generates C++, and compiles that output. The CLI owns the build directory, cache, toolchain selection, and diagnostics. A project does not need to contain generated C++ to use the normal `cp3 run` workflow.
+The front end loads source files and imports, tokenizes and parses them, and checks names and types. The code generator lowers accepted source into C++. The CLI invokes the selected native compiler and linker, then places outputs in the project build directories. `cp3 check` stops after front-end analysis; `cp3 build` compiles and links; `cp3 run` also launches the executable.
 
-Reference values are managed by the CP3 runtime. The language does not expose C++ pointers or require manual `delete`. That convenience does not mean CP3 uses a tracing garbage collector: the runtime’s ownership and lifetime rules are explained in [Values and references](#02-runtime/01-value-model) and [Escape analysis in the current compiler](#02-runtime/02-escape-analysis).
+The ordinary project workflow does not require you to edit generated C++. Generated files are useful when debugging a compiler issue or understanding a performance result. The [compilation pipeline](#04-compiler-cli/02-compilation-pipeline) explains each stage and its failure modes.
 
-## Read the language guide in order
+## What values and memory mean here
 
-Chapter 1 starts with variable bindings, types, mutability, and scope. Later pages cover functions, control flow, objects, classes, interfaces, generics, modules, and errors. Chapters 2 and 3 describe runtime behavior and the standard library. Chapter 4 describes compiler and CLI workflows.
+Primitive values such as numbers and booleans use value representations. Arrays, class instances, closures, and other reference-shaped values may use runtime-managed references. CP3 does not ask application code to call C++ `delete`, but the representation still has lifetime and performance costs.
 
-Examples and API listings are intended to match the compiler and runtime in this checkout. Where the implementation has a deliberate limit, the page says so instead of implying full JavaScript or Node compatibility.
+The runtime uses reference ownership for general references; it does not use a tracing garbage collector. Reference counting releases acyclic objects when their last strong owner goes away, but strong cycles require attention. The compiler also has narrow escape-analysis and local-lowering optimizations; do not assume all local objects become stack values. See [The value model](#02-runtime/01-value-model), [Escape analysis](#02-runtime/02-escape-analysis), and [Reference cycles](#02-runtime/09-reference-cycles-and-weak-links).
 
+## How to use this guide
 
+Chapter 1 presents language rules in a useful learning order: bindings, types, mutability and scope, then functions, control flow, values, classes, generics, modules, and errors. Chapter 2 explains runtime representation and lifetime. Chapter 3 describes CP3's supported standard modules. Chapter 4 covers the compiler and its tools.
+
+Pages use links to connect related concepts. A code example is intended to illustrate one behavior; it is not a promise that every JavaScript syntax form or library member is supported. When the guide calls out an implementation limit, use the referenced tests and compiler diagnostics to determine the exact boundary in the current checkout.
+
+## This guide is version-specific
+
+The guide is built into the compiler from Markdown under `docs/content`. Its API descriptions are maintained alongside the compiler and runtime. If your installed compiler differs from this source checkout, use that compiler's `--help`, diagnostics, and test results as the final authority for available flags and behavior.
+
+For performance, treat benchmark data as a dated observation rather than a language-wide ranking. The same program can change speed with the backend compiler, target architecture, release flags, host load, and measurement method. Read [Performance, measured carefully](#00-welcome/02-performance) before drawing conclusions from one median.

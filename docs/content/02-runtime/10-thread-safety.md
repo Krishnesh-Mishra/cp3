@@ -50,9 +50,11 @@ A worker message crosses a protocol boundary. Use the payload types accepted by 
 
 A message-oriented design makes ownership clearer: the sender transfers a value, the receiver handles that value, and any reply is another explicit message or promise result.
 
-## Why CP3 does not currently use `LocalRef`
+## Conservative `LocalRef` selection
 
-The compiler does not generally prove that all references are confined to one thread and then replace `std::shared_ptr` with a non-atomic local reference count. A future proof would need to account for worker messages, parallel closures, global state, escaped closures, callbacks, and foreign code. Until such a transformation exists and is verified, ordinary references retain the shared runtime representation.
+The runtime provides `LocalRef<T>` with a non-atomic owner count, and code generation selects it for a restricted set of class types when a conservative compilation-unit scan finds no worker/parallel boundary, weak-reference use, interface declaration, exported value, or inheritance. This is a coarse gate, not a precise proof for each reference or a whole-program guarantee. When eligibility is uncertain, generated classes retain atomic `Ref<T>`.
+
+`LocalRef` protects lifetime bookkeeping only. It does not make payload access thread-safe, and it is not a raw pointer or stack allocation. Its control block remains allocated (with storage served by the runtime's bounded thread-local pool). See [Reference ownership](#02-runtime/03-reference-ownership) for representation and limitations.
 
 ## A review checklist for concurrency changes
 

@@ -405,9 +405,11 @@ concurrency APIs and synchronization rules documented by CP3.
 
 ## Reference ownership
 Ordinary reference-shaped values use the CP3 runtime's `Ref<T>` model. In the current runtime, `Ref<T>` aliases `std::shared_ptr<T>`. The standard
-`makeRef<T>` path calls `std::make_shared<T>`. Copies and drops therefore use shared ownership bookkeeping. CP3 does not have a general tracing
-garbage collector. Strongly connected reference cycles can keep objects alive; use weak references where the language and runtime support them.
-`const` is not a lifetime annotation and does not promise stack storage.
+`makeRef<T>` constructs ordinary objects through `std::allocate_shared` and CP3's bounded thread-local free-list allocator. Copies and drops use
+atomic shared ownership bookkeeping. A restricted class set can use `LocalRef<T>` with a non-atomic count when the compiler's conservative
+compilation-unit gate permits it; this still uses an allocated control block. CP3 does not have a general tracing garbage collector. Strongly
+connected reference cycles can keep objects alive; use weak references where the language and runtime support them. `const` is not a lifetime
+annotation and does not promise stack storage.
 
 ## Escape analysis
 The code generator contains a conservative, local escape-analysis optimization. It recognizes a restricted set of simple class constructions and uses.
@@ -416,9 +418,9 @@ not a guarantee for every allocation inside a loop. Unknown calls, aliases, esca
 disable the transformation. Use the runtime and optimization chapters for exact current eligibility.
 
 ## Non-atomic references and arenas
-The current compiler does not generally replace thread-confined `shared_ptr` values with a custom non-atomic `LocalRef`. The runtime does not route
-every small object through a general thread-local bump arena. Do not describe those optimizations as completed or assume they explain a benchmark
-result.
+The runtime pool reuses some released allocation blocks; it is not a bump arena and does not bulk-free objects. The separate escape-analysis pass
+can lower only narrowly supported local objects and arrays to stack/value storage. Inspect generated C++ before attributing a benchmark result to
+any of these representations.
 
 ## SIMD and native optimization
 CP3 emits C++, then a native compiler optimizes that generated program. Native compilation does not imply vectorization. Helper calls, bounds checks,

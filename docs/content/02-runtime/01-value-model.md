@@ -14,7 +14,7 @@ The general `number` type is a 64-bit floating-point value. CP3 also supports ex
 
 ## Reference-shaped data
 
-Arrays, class instances, and several runtime values have shared-reference behavior. The runtime defines:
+Arrays, class instances, and several runtime values have reference behavior. The ordinary reference handle is `Ref<T>` backed by `std::shared_ptr<T>`:
 
 ```cpp
 template<class T> using Ref = std::shared_ptr<T>;
@@ -25,11 +25,14 @@ and the normal object maker is:
 ```cpp
 template<class T, class... Args>
 Ref<T> makeRef(Args&&... args) {
-    return std::make_shared<T>(std::forward<Args>(args)...);
+    return std::allocate_shared<T>(RefPoolAllocator<T>{},
+                                   std::forward<Args>(args)...);
 }
 ```
 
-Generated code usually copies the handle when another name receives the same reference. The object itself remains shared. This is how two aliases can observe mutations to one array or instance.
+The custom allocator keeps a bounded thread-local free list for allocation blocks so a later object of the same allocator specialization can reuse storage. `std::shared_ptr` still owns the handle, so its control-block reference count remains atomic. Pool reuse is not a bump arena and does not remove the shared ownership semantics.
+
+Generated code usually copies the handle when another name receives the same reference. The object itself remains shared. This is how two aliases can observe mutations to one array or instance. For some eligible user classes, the code generator can choose `LocalRef<T>` instead: it preserves reference sharing with a non-atomic count under a conservative compilation-unit safety gate. It is still an allocated control block, not a raw pointer or stack object. See [Reference ownership](#02-runtime/03-reference-ownership) and [Escape analysis](#02-runtime/02-escape-analysis).
 
 ## Arrays
 

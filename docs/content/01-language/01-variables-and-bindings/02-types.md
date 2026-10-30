@@ -363,7 +363,7 @@ A value declared as a union may be used more precisely after a supported conditi
 
 Some types have direct scalar representations; others use runtime-managed objects or tagged/nullish wrappers. The compiler and runtime jointly implement these representations. Source code should rely on language semantics rather than `std::shared_ptr`, generated struct layouts, or C++ aliases, except when deliberately working at a native interop boundary.
 
-CP3 does not have a tracing garbage collector. Ordinary references currently use reference-counted runtime values. That implementation fact does not change the source-level type rules, and it does not guarantee that every object is stack-allocated or that reference updates are non-atomic. See [Reference ownership](#02-runtime/03-reference-ownership) and [No tracing GC](#02-runtime/08-no-tracing-gc).
+CP3 does not have a tracing garbage collector. Reference-shaped runtime values use reference counting: ordinary `Ref<T>` handles have atomic counts, while a conservative compiler gate can select non-atomic `LocalRef<T>` for some class types. Neither representation changes source-level type rules or guarantees stack allocation. See [Reference ownership](#02-runtime/03-reference-ownership) and [No tracing GC](#02-runtime/08-no-tracing-gc).
 
 ## How to resolve common type errors
 

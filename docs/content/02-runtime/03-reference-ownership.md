@@ -1,31 +1,45 @@
 ---
 title: Reference counts, cycles, and threads
-chapter: Chapter 2 · Runtime and memory
+chapter: Chapter 2 · Runtime model
 ---
 # Reference counts, cycles, and threads
 
-CP3’s ordinary strong reference is `std::shared_ptr`. Copies share an object and update its reference count. This is convenient for aliasing but has a real cost on allocation-heavy paths.
+CP3 values can have reference semantics: copying a handle shares the object instead of cloning the full object graph. Most reference handles use `Ref<T>`, backed by `std::shared_ptr<T>`. Some eligible user classes use `LocalRef<T>` with a non-atomic count under a conservative compiler gate.
 
-## What a `Ref<T>` copy means
+## What copying a reference means
 
 ```ts
 const first = new RecordValue();
 const second = first;
 ```
 
-The assignment copies a handle. It does not copy the object graph. Both names refer to the same instance, so mutation through one alias may be visible through the other.
+The assignment copies a handle. It does not copy the object. Both names refer to the same instance, so a mutation through one alias can be observed through the other.
 
-In the C++ runtime representation, copying a `std::shared_ptr` increments a shared reference count and destroying a handle decrements it. Standard library implementations use atomic operations for the shared control block. The payload fields are not made atomic by the shared pointer.
+When the last strong handle is released, the runtime destroys the object. A value can remain alive after one local binding goes out of scope if an array, field, closure, or caller still retains another strong handle.
 
-## There is no general non-atomic ref path today
+## The ordinary `Ref<T>` path
 
-The compiler does not currently replace an ordinary `Ref<T>` with a custom local, non-atomic reference count. Escape analysis can avoid ownership entirely for a restricted local object or value-array pattern; otherwise the generated code uses the shared representation. These are different optimizations.
+The runtime defines `Ref<T>` as `std::shared_ptr<T>`. Its control block uses atomic reference-count operations so strong handles can be copied and released safely across supported thread boundaries. Those atomics protect ownership bookkeeping; they do not protect the object's fields.
 
-Do not describe a CP3 program as having “non-atomic local refs” unless the generated code and runtime show that representation. In this checkout, `Ref<T>` remains `std::shared_ptr<T>`.
+`makeRef<T>` constructs the object using `std::allocate_shared` and CP3's `RefPoolAllocator`. The allocator maintains a bounded thread-local free list per allocator specialization. It can reuse released storage on a later allocation; it does not eliminate initial allocation, use a bulk bump arena, or change the atomic shared-reference count.
+
+## Non-atomic `LocalRef<T>` path
+
+The compiler can choose `LocalRef<T>` for a restricted set of non-exported, non-generic classes when a conservative compilation-unit scan finds no worker/parallel boundary, weak-reference use, interface declarations, exported values, or inheritance. Interface implementations and other unsupported class forms keep `Ref<T>`.
+
+`LocalRef<T>` is a runtime-managed shared handle with a plain integer owner count. It preserves aliasing and last-owner destruction. It is **not** a raw pointer, and it does not by itself place the object on the stack. Its control-block storage is also served through the runtime pool allocator.
+
+The safety scan is unit-wide rather than a precise per-reference proof. One disqualifying feature can keep all classes in that unit on the atomic `Ref<T>` path. Do not infer which representation a class uses from syntax alone. Inspect generated C++ from the exact compiler build for `LocalRef`/`makeLocalRef` or `Ref`/`makeRef`.
+
+## Stack storage is a separate optimization
+
+Escape analysis can also replace a few tightly constrained class objects or local object arrays with direct local storage. That optimization can avoid a reference handle and allocation for the candidate it proves. It is separate from `LocalRef`, which still has an allocated control block and shared alias behavior.
+
+The escape-analysis proof is narrow: class shape, fields, constructor, aliases, and uses must all be recognized. An object that escapes or uses unsupported members remains on the reference path. Read [Escape analysis](#02-runtime/02-escape-analysis) for positive and negative proof conditions.
 
 ## Strong cycles
 
-Reference counting alone cannot reclaim a cycle whose members keep one another strongly referenced:
+Reference counting does not reclaim an unreachable cycle when every object in it is held alive by another strong edge:
 
 ```text
 parent ─strong→ child
@@ -33,57 +47,38 @@ parent ─strong→ child
    └────strong────┘
 ```
 
-When an object graph needs a back-reference, use a weak reference when the language and field type permit it. A weak link does not own the target; attempting to read an expired weak link yields the absent value described by the runtime.
+Use a weak reference for a non-owning back-link when the relationship permits it. Reading an expired weak link yields the absent value rather than a live object. See [Weak links and reference cycles](#02-runtime/09-reference-cycles-and-weak-links).
 
-## Threads and workers
+## Atomic count does not mean synchronized object
 
-An atomic reference count protects the count update, not concurrent access to every field in the object. Sharing a `Ref<T>` across threads does not make simultaneous field mutation safe. CP3’s worker and parallel checks constrain which captures and writes are accepted, but native interop can still require careful synchronization.
+An atomic count lets the runtime maintain ownership across independent handles. It does not serialize method calls, protect fields, or make compound operations atomic. Two threads that mutate the same payload still need a synchronization protocol supported by the API.
 
-## Allocation costs
+`LocalRef<T>` uses a non-atomic count and is only selected when the compiler's conservative scan permits thread-confined representation. It must not cross a worker or parallel boundary. Native code and foreign integrations can add sharing the CP3 compiler cannot see, so keep their ownership contracts explicit.
 
-The normal `makeRef<T>` path uses `std::make_shared`, which typically allocates the object and control block together. The allocation, initialization, reference-count traffic, and eventual destruction all contribute to churn. The standard allocator is not currently replaced by a CP3 thread-local arena for general escaping allocations.
+## Allocation and churn costs
 
-For hot code, first determine whether the object can be represented as a primitive or reused value. If it cannot, measure the actual allocator and ownership costs before adding a new runtime representation.
+Object-heavy workloads can pay for construction, allocation, control-block management, handle copies, container growth, and destruction. These are separate costs:
 
-## Follow the owning handle
+- `LocalRef` removes atomic count operations for eligible class handles, but still allocates and retains shared ownership semantics.
+- The thread-local free list can reuse some allocation blocks, but it does not mean all objects allocate without touching the allocator.
+- Stack lowering can remove allocation for a narrowly proven candidate, but it does not optimize arbitrary graphs.
+- Array `reserve` can avoid vector capacity growth, but it does not remove each element's own reference representation.
 
-For every reference-shaped value, ask which strong binding keeps it alive. A local variable may own the value; an array or class field may retain another handle; a returned value may extend ownership into the caller. Dropping one local name does not destroy an object while another strong path remains.
+Measure the generated path before deciding which cost dominates. `makeRef`, `makeLocalRef`, local object values, and vector growth mean different things in the generated C++.
 
-```ts
-const first = new RecordValue();
-const second = first;
-// Both names keep the same instance alive.
-```
+## Choosing ownership relationships
 
-This is handle sharing, not a deep copy. If `RecordValue` contains mutable fields, a write through either alias changes the same instance. Copying the handle does not recursively clone its object graph.
+For each reference-shaped field, decide whether it owns its target. Strong fields are appropriate for owned children and values that must remain alive. Weak fields are useful for observer links, parent pointers, and caches where the target may disappear.
 
-## Construction, copying, and destruction costs
-
-The normal runtime allocation helper calls `std::make_shared<T>`. This generally combines allocation of the class object and its control block into one allocation, then initializes the object. Each additional strong handle participates in shared-count bookkeeping; dropping the final strong handle destroys the payload and releases the control block.
-
-In a tight loop, separate the cost categories before optimizing: object allocation, constructor work, handle copies, vector growth, field access, and destruction. Escape analysis can remove the shared ownership path only for its supported local shapes. Array reservation only changes container capacity. They solve different costs.
-
-## Why the count is atomic
-
-The standard shared-pointer control block supports reference-count updates by independent threads. Those atomic operations are for control-block lifetime. The program's fields are not guarded by the reference count, and concurrent reads/writes still need a valid synchronization rule.
-
-An atomic reference count is not equivalent to a mutex around the object, and it does not serialize method calls. If two threads mutate one class instance, protect that state with a supported protocol or redesign around messages/reductions.
-
-## Weak references and cycle structure
-
-A strong cycle is a graph in which every remaining object is kept alive by another strong edge. A weak edge avoids contributing to the target's strong count. Reading a weak class field yields an optional live handle or `undefined`; test for the missing case before using the result.
-
-Weak fields are intended for non-owning links such as parent pointers. They are not suitable for a field that must keep its target available. Read [Weak links and reference cycles](#02-runtime/09-reference-cycles-and-weak-links) for exact syntax and tested behavior.
-
-## Current optimization boundaries
-
-The compiler can represent a small set of non-escaping class values directly in local storage. That can avoid creating a shared pointer altogether. It is not a replacement `LocalRef`; objects that need shared lifetime retain `Ref<T>`. There is no general thread-local arena for escaping objects in this runtime.
-
-When investigating performance, inspect the specific generated function. Search for `makeRef`/`std::make_shared`, count relevant handle-producing expressions, and confirm whether the candidate was transformed. Do not infer a fast reference path from the presence of escape-analysis code in the compiler.
+Avoid using weak references just to reduce reference-count traffic. A weak read can be absent and needs handling. Likewise, copying a strong handle is not a deep copy; use the explicit clone or structured-copy operation when independent object state is required.
 
 ## Where to inspect
 
-`Ref<T>`, `WeakRef<T>`, and `makeRef<T>` are defined in `src/runtime/include/cp3/core/value.hpp`. The local-object analysis is in `src/codegen/src/support/core/escape_analysis.cpp`. Semantic worker/parallel rules live in `src/sema`; the runtime count itself does not establish that a payload transfer is legal.
+- `Ref<T>`, `LocalRef<T>`, `RefPoolAllocator`, and allocation helpers: `src/runtime/include/cp3/core/value.hpp`.
+- Class-representation and local escape decisions: `src/codegen/src/support/core/escape_analysis.cpp`.
+- Generated class handle type: class-model and class codegen files under `src/codegen/src`.
+
+For a performance claim, preserve generated C++ from the measured build and verify the candidate allocation site. A benchmark median cannot tell whether `LocalRef` or stack lowering fired.
 
 ## Related pages
 

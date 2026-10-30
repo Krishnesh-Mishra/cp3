@@ -22,11 +22,11 @@ The compiler includes analysis scaffolding that recognizes a limited fixed-size 
 
 To claim vectorization, inspect the generated benchmark C++ and verify a backend report tied to that source loop. A report about `shared_ptr` or another standard-library header is unrelated to the numeric loop. See [Typed arrays, buffers, and DataView](#03-standard-library/16-typed-arrays).
 
-## No general LocalRef or arena allocator
+## Non-atomic `LocalRef` and pooled allocation
 
-CP3's general `Ref<T>` representation uses `std::shared_ptr<T>` and `makeRef` uses `std::make_shared`. The current compiler does not generally replace all proven thread-confined references with a non-atomic `LocalRef`, and the runtime does not provide a general thread-local bump arena for ordinary class allocations.
+The runtime defines `LocalRef<T>` with a non-atomic owner count. Code generation selects it for eligible non-exported, non-generic classes only when a conservative compilation-unit scan finds no workers/parallel calls, weak references, interface declarations, exported values, or inheritance. This is a coarse unit-wide gate, not a per-reference proof. If the scan is unsafe or uncertain, classes keep atomic `Ref<T>`.
 
-Some objects can avoid this representation through narrow local lowering, but ordinary heap references still use the shared reference representation. See [Reference ownership](#02-runtime/03-reference-ownership).
+`makeRef` uses `std::allocate_shared` with a bounded thread-local free-list allocator. `makeLocalRef` uses the same allocator for its control block. The pool can reuse released storage; it is not a bump arena and does not bulk-free all short-lived objects. `LocalRef` removes atomic count operations for selected handles but still allocates and retains shared aliasing semantics. It is not stack allocation. See [Reference ownership](#02-runtime/03-reference-ownership).
 
 ## Measure claims against generated output
 
@@ -45,8 +45,8 @@ CP3 front-end and codegen passes can expose simpler C++ to Clang, remove support
 | Parallel reduction analysis | Supported pure reduction shapes | Reduction facts and fallback for effectful/unsupported bodies |
 | Typed-array range facts | Narrow loop/index patterns | Whether the relevant checked read actually consumes the fact |
 | DataView fast-read facts | Analysis records limited candidates | Facts are not currently consumed by per-read lowering |
-| Local non-atomic references | Not generally implemented | Ordinary `Ref<T>` remains `std::shared_ptr<T>` outside local elimination |
-| General thread-local arena | Not generally implemented | Escaping allocations still use ordinary runtime allocation |
+| Local non-atomic references | Eligible non-exported, non-generic classes when the translation-unit scan passes | Generated class handle and factory use `LocalRef` / `makeLocalRef`; unsafe units retain `Ref` |
+| Thread-local allocation reuse | Bounded per-specialization free lists for eligible object/control-block blocks | Storage can be reused; no general bump arena or bulk lifetime reclamation |
 
 An optimization's existence in a source file does not mean every syntactically similar loop triggers it. Check each proof condition and emitted use.
 
@@ -62,7 +62,7 @@ A report of “missed” vectorization should be tied to an actual missed-reason
 
 ## Establishing allocation removal
 
-For object churn, inspect whether eligible objects use local storage instead of `makeRef`/`std::make_shared`, and whether the kept array still contains shared handles. For array growth, inspect reserve placement and element movement. A reserve hint cannot remove per-object allocation; stack lowering cannot eliminate a vector reallocation unless the array proof also applies.
+For object churn, distinguish stack-lowered candidates from `LocalRef` objects and ordinary `Ref` objects. Inspect whether eligible handles use `makeLocalRef`, whether the pool can reuse allocation blocks, and whether the kept array still contains reference handles. For array growth, inspect reserve placement and element movement. A reserve hint cannot remove per-object allocation; stack lowering cannot eliminate a vector reallocation unless the array proof also applies.
 
 ## Build profile matters
 

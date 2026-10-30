@@ -47,6 +47,7 @@ Imports are resolved by the compiler's standard module registry. Unknown module 
 | [Arrays](#03-standard-library/14-arrays) | Built-in array operations |
 | [Strings](#03-standard-library/15-strings) | Built-in UTF-8 string operations |
 | [Typed arrays](#03-standard-library/16-typed-arrays) | Fixed-width numeric arrays, buffers, and DataView |
+| [Regular expressions](#03-standard-library/17-regular-expressions) | Core regex literals, flags, match results, and string splitting |
 
 ## Error and asynchronous behavior
 

@@ -4,64 +4,136 @@ chapter: Chapter 1 · The language
 ---
 # Mutability and immutability
 
-Mutability has two different questions: may this **name** be rebound, and may the **value it refers to** be changed? `const` and `let` answer the first question. The value’s own API and type rules answer the second.
+When reading a CP3 program, separate two questions:
 
-## Rebinding a name
+1. May this **binding** be assigned a different value?
+2. May the **value** currently referenced by the binding be changed?
 
-```ts
-const title = "Draft";
-// title = "Final"; // rejected: const binding cannot be reassigned
+`const` and `let` control reassignment of the binding. The type and operations of the value control what can be mutated through it. A `const` reference does not make an array, object, or class instance deeply immutable.
 
-let state = "Draft";
-state = "Final"; // allowed: same inferred type
-```
+## Binding mutability: `const` and `let`
 
-The compiler tracks reassignment and enforces the declared or inferred type. A mutable binding is not dynamically typed; `let state: string` still cannot be assigned a number.
-
-## Changing a referenced value
-
-An array is a reference-shaped value. A constant binding can still refer to a mutable array:
+Use `const` when the name should stay bound to its initialized value:
 
 ```ts
-const queue: number[] = [];
-queue.push(4); // changes the array object
+const serviceName: string = "indexer";
+const retryLimit = 4;
 ```
 
-The binding `queue` remains attached to the same array. Reassigning the name is a separate operation and is not permitted for a `const` binding.
-
-The same distinction applies to class instances and collection objects. Whether an operation changes the referenced value is defined by that type’s methods and runtime behavior.
-
-## Primitive values and reference values
-
-Primitive values such as numbers, booleans, and strings behave as values when copied. Reference values can share the same underlying object. Assigning a reference usually copies a handle; it does not deep-copy every field. The runtime’s representation is described in [Values and references](#02-runtime/01-value-model).
+This is rejected because it assigns a new value to the binding:
 
 ```ts
-let first = [1, 2];
-const second = first;
-second.push(3);
-// first and second still refer to the same array value
+const retries = 0;
+retries = 1; // compile-time error
 ```
 
-Do not infer deep immutability from a `const` declaration. CP3 currently does not treat `const` as a recursive immutable type qualifier.
+Use `let` when the binding itself must receive a new value:
 
-## Captures and mutable bindings
+```ts
+let retries = 0;
+retries = retries + 1;
+```
 
-A closure can observe a binding from its enclosing scope. If the captured binding is reassigned, the generated program must preserve the shared-variable behavior expected by CP3. The compiler uses a shared cell for captured and reassigned bindings in the implementation paths that require it; captured values that are never reassigned can remain ordinary captures.
+The reassigned value must still satisfy the binding's declared or inferred type. `let title = "draft"` does not make `title` dynamically typed; assigning a number is a type error.
 
-This distinction costs runtime work only for the captured, reassignable case. A local immutable number captured by a closure does not automatically become a shared mutable cell. See [Closures and captured variables](#02-runtime/04-closures).
+## A constant reference can refer to mutable data
 
-## Mutability across threads
+This is valid because the array handle remains the same while the array's contents change:
 
-`let` is not a thread-safety annotation. A mutable value shared with a worker or parallel body must satisfy the concurrency checker’s capture and mutation rules. CP3 rejects unsupported shared writes; it does not make ordinary fields atomic merely because they are captured.
+```ts
+const readings: number[] = [10, 20];
+readings.push(30);
+readings[0] = 11;
+```
 
-Use immutable inputs, explicit result values, or the documented parallel reduction patterns when crossing concurrency boundaries. See [Concurrency and workers](#02-runtime/07-async-and-concurrency).
+The following is a different operation and is rejected because it rebinds the name:
 
-## Design guidance
+```ts
+const readings: number[] = [10, 20];
+// readings = [30, 40]; // const binding cannot be reassigned
+```
 
-1. Prefer `const` when a name should remain bound to its initial value.
-2. Use `let` for a name that is intentionally rebound.
-3. Treat mutable arrays and objects as shared state when aliases exist.
-4. Avoid strong-reference cycles unless the lifetime is deliberately managed.
-5. Do not assume a closure capture or reference is thread-safe.
+The same distinction applies to class references and object values. A constant name prevents replacing its reference; it does not freeze every field or method reachable through the value.
 
-These are source-level clarity rules. They do not promise that the compiler can stack-allocate every object or eliminate every reference count. Optimization eligibility is narrower and documented separately.
+## Mutability is not deep immutability
+
+CP3's `const` is not a recursive freeze operation. Given a reference to a mutable value, code may call a mutating method or assign to a writable member if the type and access rules permit it. For example, these actions have different targets:
+
+```ts
+const config = { retries: 2 };
+config.retries = 3;       // changes a member of the referenced object
+// config = { retries: 4 }; // rebinds the constant name
+```
+
+Whether a particular object member can be assigned also depends on the object's structural type, class declaration, access modifiers, and whether the property itself is declared writable. `const` alone does not answer that question.
+
+## Captures preserve the same rule
+
+A closure that captures a binding can read it later. Capturing a `const` does not permit reassignment through the closure:
+
+```ts
+const threshold = 12;
+const isLarge = (value: number): boolean => value > threshold;
+```
+
+A closure capturing a mutable `let` observes the binding's current value according to the capture semantics implemented by CP3. The compiler may need a shared capture cell for mutable captures, which can affect allocation and lifetime. See [Functions and closures](#01-language/02-functions/01-functions-and-closures) and [Closure storage and lifetime](#02-runtime/04-closures).
+
+```ts
+let total = 0;
+const add = (value: number): void => {
+  total = total + value;
+};
+add(5);
+```
+
+Use a clear owner for mutable state. Capturing a name does not make the state thread-safe; the [thread-safety guide](#02-runtime/10-thread-safety) explains the limits of shared state across worker or parallel execution.
+
+## Fields and array elements
+
+There are three separate assignment cases:
+
+| Source operation | What changes | Controlled by |
+| --- | --- | --- |
+| `name = other` | The binding's value/reference | `const` versus `let`/`var` |
+| `record.count = 4` | A field on the referenced object | The field's declared type and access rules |
+| `items[index] = value` | An element in the referenced array | The element type and array/index semantics |
+
+The array example below mutates an element without rebinding the `const` handle:
+
+```ts
+const scores: number[] = [7, 8];
+scores[1] = 9;
+```
+
+Typed-array elements add numeric conversion rules and out-of-range behavior. Do not transfer ordinary-array assumptions to typed arrays; see [Typed arrays and DataView](#03-standard-library/16-typed-arrays).
+
+## Choosing a declaration
+
+| Need | Declaration |
+| --- | --- |
+| The name is initialized once and never replaced | `const` |
+| The name is reassigned later | `let` |
+| Existing code relies on legacy function-scoped hoisting | `var` |
+| A referenced array or object changes, but its handle does not | Usually `const` |
+| A value may be absent and later set | An explicit optional/union type and `let` |
+
+Prefer the narrowest binding mutability that matches the code. It helps both the analyzer and reviewers see which operations are intended.
+
+## Common misconceptions
+
+- **“`const` means immutable object.”** It means the binding cannot be reassigned.
+- **“`let` makes a value dynamically typed.”** The value is still checked against the inferred or annotated type.
+- **“A captured value is copied.”** Capture behavior depends on the value shape and mutability; inspect the closure rules.
+- **“A `const` array cannot change.”** Methods such as `push` mutate the array contents without replacing the handle.
+- **“Immutability automatically makes sharing thread-safe.”** It does not establish ownership, synchronization, or safe access to mutable children.
+
+## What the tests pin
+
+The variable cases cover rejected reassignment of constants, permitted array and object-member mutation through a constant handle, reassignment of `let`, type mismatch on reassignment, and captured constant assignment. These checks live under `tests/cases/variables`; use them to distinguish binding rules from deeper object mutability.
+
+## Related pages
+
+- [Bindings and declarations](#01-language/01-variables-and-bindings/01-bindings)
+- [Types and inference](#01-language/01-variables-and-bindings/02-types)
+- [Scope and initialization](#01-language/01-variables-and-bindings/04-scope-and-initialization)
+- [Escape analysis](#02-runtime/02-escape-analysis)

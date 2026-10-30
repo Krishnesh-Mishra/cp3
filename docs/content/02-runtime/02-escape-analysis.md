@@ -35,13 +35,21 @@ This is close to scalar replacement for the fields used by the loop, but it shou
 
 The analysis fails closed. Unknown method calls, exported bindings, field aliases, weak members, unsafe constructors, cross-frame uses, or unsupported mutations prevent the rewrite. The fallback is the existing checked/shared path, preserving lifetime and alias semantics.
 
-## What is not implemented
+## Thread-confined `LocalRef` lowering
 
-The current pass is not a whole-program ownership system. It does not prove arbitrary closure and array graphs local, does not use a thread-local bump arena for escaping objects, and does not change all `std::shared_ptr` references into raw pointers. It has no general custom non-atomic `LocalRef` fallback.
+The compiler also has a conservative class-representation choice for a compilation unit. When the unit contains no detected worker/parallel boundary, weak references, interface declarations, exported values, or inherited classes, eligible non-exported, non-generic classes that do not implement interfaces can use `LocalRef<T>` instead of `Ref<T>`.
+
+`LocalRef<T>` keeps shared aliasing and lifetime behavior, but its owner count is a plain integer because code generation only selects it under the unit-level thread-confinement gate. It is **not** a raw pointer and does not put the object itself on the stack. `makeLocalRef` still creates a control block; its storage can be reused through the runtime's bounded thread-local pool.
+
+This gate is deliberately coarse: one disqualifying feature in the compilation unit disables the `LocalRef` choice for its classes. It is not a per-object escape proof and does not mean the compiler has established thread confinement for every arbitrary alias in a whole program. Exported classes, generic classes, interface implementations, inheritance, weak links, worker/parallel use, and units with worker configuration keep the ordinary shared-reference path.
+
+## What remains outside the current analysis
+
+The pass is not a whole-program ownership system. It does not prove arbitrary closure and object graphs local, does not convert all eligible objects to stack values, and does not replace all `std::shared_ptr` values with `LocalRef`. The runtime's thread-local free-list allocator reuses some allocation blocks; it is not a general bump arena that bulk-frees arbitrary escaping objects. Unknown calls and unsupported aliases keep the safe representation.
 
 ## How to verify a claim
 
-Inspect the generated C++ for the specific source case. Confirm that it contains a local object or value array instead of `makeRef`/`std::make_shared`, and check that all observable reads and writes still use the intended value. Then run the relevant correctness cases and benchmark with enough repetitions to report variation.
+Inspect the generated C++ for the specific source case. A stack-lowered object should appear as a local value; a class covered by the thread-confinement gate should use `LocalRef`/`makeLocalRef`; ordinary references use `Ref`/`makeRef`. Check that observable reads, writes, aliasing, and destruction still match CP3 semantics. Then consult the corresponding correctness cases and benchmark with enough repetitions to report variation.
 
 The pass implementation lives in `src/codegen/src/support/core/escape_analysis.cpp`; the runtime ownership alias is in `src/runtime/include/cp3/core/value.hpp`.
 
@@ -93,7 +101,7 @@ See [Reference counts, cycles, and threads](#02-runtime/03-reference-ownership) 
 
 ## How to prove it fired
 
-Use `--show-runtime` on a small representative program and inspect the generated module function. An optimized object should appear as a local value or direct value-array element, without the expected `makeRef`/`std::make_shared` at that candidate site. Compare against a nearby case with one escape or unsupported field; it should retain the ordinary shared path.
+Use `--show-runtime` on a small representative program and inspect the generated module function. A stack-optimized object should appear as a local value or direct value-array element. A non-stack class object may instead use `makeLocalRef` if the compilation-unit safety gate permits it. Compare against a unit with a worker/parallel boundary, weak field, interface, export, or inheritance; it should keep the atomic `Ref` path. For an individual escape-analysis candidate, add one unsupported escape or field and confirm that its ordinary lifetime is preserved.
 
 Then run the relevant correctness family and benchmark only after the code change is complete. Verify output first. Report the specific source form that transformed, the C++ evidence, and the measurement distribution; the existence of this pass alone is not a benchmark result.
 

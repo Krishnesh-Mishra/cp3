@@ -4,54 +4,125 @@ chapter: Chapter 3 · Standard library
 ---
 # Strings
 
-Strings are built-in immutable text values. CP3 stores text as UTF-8. A string's `length` is its encoded byte length, not necessarily the number of user-perceived characters.
+`string` is a built-in immutable text type. CP3 stores its contents as UTF-8 bytes. That representation matters: `.length` reports bytes, while `charAt` and string `for...of` walk UTF-8 code points. Neither measure counts user-perceived grapheme clusters.
 
 ```ts
-const greeting: string = "नमस्ते";
-console.log(greeting.length); // UTF-8 bytes
+const greeting = "hé😀";
+console.log(greeting.length); // UTF-8 byte count
+console.log(greeting.charAt(1)); // one complete code point
 ```
 
-Do not use `length` as a grapheme count for international text. A visible character can contain multiple Unicode code points, and each code point may occupy multiple UTF-8 bytes.
+The emoji occupies multiple bytes but one code point. A displayed symbol can also consist of multiple code points, such as a base character followed by combining marks. CP3's code-point operations do not perform grapheme segmentation or Unicode normalization.
 
-## Reading characters and bytes
+## Byte length and indexing
 
-- `charAt(index)` returns the character at the supported position.
-- `at(index)` supports the indexed access form provided by the runtime.
-- `charCodeAt(index)` returns the byte value at the UTF-8 offset.
+`text.length` is the UTF-8 storage size in bytes. `text[index]` is byte-oriented and returns a numeric byte value; it is not the same operation as `text.charAt(index)`.
 
-The byte-oriented `charCodeAt` result is not a Unicode scalar value for multibyte text. Use the operation appropriate to the representation you need.
+`charAt(index)` and `at(index)` return a whole UTF-8 code point as a string. The index is a code-point position. An out-of-range `charAt` returns an empty string. For a negative or non-finite index, follow the current runtime implementation and tests rather than assuming full ECMAScript `String.prototype.at` behavior; CP3's `at` is currently lowered to the same operation as `charAt`.
 
-## Searching and matching
+The method table in semantic analysis also declares `charCodeAt`, but the current string code generator/runtime does not provide its lowering. There is no positive conformance case for it in the arrays-and-strings corpus. Treat this member as an implementation gap and check the installed compiler before using it.
 
-`includes`, `startsWith`, and `endsWith` test for text. `indexOf` and `lastIndexOf` return a position or `-1`. These operations search string contents; they do not parse a language grammar or normalize Unicode.
+## Iterating text
 
-## Extracting and replacing
+String `for...of` visits complete UTF-8 code points in order:
 
-- `slice(start, end?)` extracts a range.
-- `substring(start, end?)` extracts a range using substring-style index handling.
-- `replace(search, replacement)` replaces the first matching occurrence.
-- `replaceAll(search, replacement)` replaces all matching occurrences.
-- `split(separator)` returns an array of pieces.
+```ts
+const word = "A😀B";
+for (const character of word) {
+  console.log(character);
+}
+```
 
-Use `split` with care on large strings because it creates an array of all parts. A separator is literal according to the supported string API; do not expect JavaScript regular-expression behavior unless the type signature explicitly accepts a regex.
+This is different from indexing the string by byte offset. It is also not grapheme-aware: a combining mark is a separate code point even if a terminal or font renders it together with the preceding character.
 
-## Whitespace and case
+Use byte operations for protocol formats that are defined in bytes. Use code-point iteration for text operations that need to avoid splitting a well-formed UTF-8 sequence. Validate inputs at system boundaries if malformed byte sequences can enter through native or binary APIs.
 
-`trim`, `trimStart`, and `trimEnd` remove surrounding whitespace. `toUpperCase` and `toLowerCase` return converted strings. Case conversion can depend on Unicode rules and should not be used as a security-sensitive identifier normalization strategy.
+## Searching
+
+| Method | Meaning |
+| --- | --- |
+| `includes(search)` | True if the byte sequence occurs in the string. |
+| `startsWith(search)` | True if the string begins with the supplied text. |
+| `endsWith(search)` | True if it ends with the supplied text. |
+| `indexOf(search, fromIndex?)` | Returns a byte position for the first match or `-1`. |
+| `lastIndexOf(search, fromIndex?)` | Returns a byte position for the last match or `-1`. |
+
+Search results are positions in the UTF-8 string storage. For ASCII, byte positions, code-point positions, and character positions often coincide; for multibyte text they can differ. Do not use a search result as a code-point index without converting it.
+
+These functions perform substring search. They do not tokenize source code, interpret locale-specific collation, normalize Unicode, or automatically treat a plain search string as a regular expression.
+
+## Extracting substrings
+
+`slice(start?, end?)` and `substring(start?, end?)` select ranges using byte-oriented positions. `slice` supports negative positions relative to the end; `substring` clamps negative positions to zero and swaps the endpoints when the start exceeds the end.
+
+```ts
+const value = "abcdef";
+console.log(value.slice(1, 4));      // bcd
+console.log(value.substring(4, 1)); // bcd
+```
+
+On multibyte strings, a byte boundary can fall inside an encoded code point. These APIs use the runtime's byte-range semantics; they do not promise to adjust every boundary to a Unicode character boundary. Use `charAt` or code-point iteration when processing text by code point.
+
+## Replacing and splitting
+
+`replace(search, replacement)` replaces the first matching occurrence. `replaceAll(search, replacement)` replaces all occurrences. Both return new strings and leave the source value unchanged.
+
+`split(separator)` accepts a string separator or a `RegExp` according to the checker and code generator. A string separator is matched literally. A regular expression uses CP3's regular-expression runtime. Splitting constructs an array containing the pieces, so account for its memory cost on large inputs; see [Regular expressions](#03-standard-library/17-regular-expressions) for captures, state, and Unicode differences.
+
+```ts
+const fields = "one,two,three".split(",");
+const words = "red   blue".split(/\s+/);
+```
+
+An empty or non-matching separator follows the runtime implementation and test corpus; do not assume every corner case matches a browser engine. See [Regular expressions](#03-standard-library/00-overview) only if the module guide lists it in the current build; regex values are also covered by the language tests.
+
+## Trimming and case conversion
+
+`trim`, `trimStart`, and `trimEnd` return a copy with surrounding ASCII whitespace removed. The current implementation recognizes space, tab, line feed, vertical tab, form feed, and carriage return. It does not use a complete Unicode whitespace property table.
+
+`toUpperCase` and `toLowerCase` perform ASCII case mapping. Bytes outside ASCII, including the bytes that encode UTF-8 non-ASCII code points, pass through unchanged. These functions are convenient for ASCII protocol tokens; they are not full locale-aware Unicode case folding and should not be used alone for security-sensitive identifier normalization.
 
 ## Padding and repetition
 
-`repeat(count)` repeats the string. `padStart(targetLength, fill?)` and `padEnd(targetLength, fill?)` add fill text to reach a target length according to the runtime's string length measure. Avoid very large counts or target sizes from untrusted input.
+`repeat(count)` returns repeated text. The current runtime truncates the count and clamps negative values to zero; it does not currently match JavaScript's `RangeError` behavior for every invalid count. Avoid untrusted counts that could request huge allocations.
 
-## Immutability
-
-String methods that appear to modify text return new strings; they do not mutate the original value:
+`padStart(targetLength, fill?)` and `padEnd(targetLength, fill?)` add fill text when the current string is shorter than the target. The default fill is a space. The implementation's length unit is the stored string length, so UTF-8 byte length affects the result; a multi-byte fill string can also add more than one byte per repetition.
 
 ```ts
-const name = "  CP3  ";
-const clean = name.trim();
+const id = "5".padStart(3, "0"); // "005"
+const label = "cp3".padEnd(6, ".");
 ```
 
-## Method inventory
+If the requested target is already met, the original contents are returned unchanged. Validate target sizes when input comes from an untrusted source.
 
-`length`, `charAt`, `at`, `charCodeAt`, `startsWith`, `endsWith`, `includes`, `repeat`, `padStart`, `padEnd`, `toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd`, `indexOf`, `lastIndexOf`, `slice`, `substring`, `replace`, `replaceAll`, and `split` make up the documented string surface. Some names resemble JavaScript methods but use CP3's byte-based string representation and signatures.
+## Concatenation and cost
+
+The `+` operator combines strings. The compiler has a lowering for common concatenation chains that can reserve the result size and append the parts into one result buffer. That is an implementation optimization, not a promise that all concatenations allocate once.
+
+Transformations such as `replaceAll`, `slice`, `split`, case conversion, padding, and repetition create result storage. When processing a large text stream, avoid retaining every intermediate result if a direct scan or streaming API is available.
+
+## Immutability and sharing
+
+Strings behave as immutable values at the language level. A method returns a new string instead of modifying the original:
+
+```ts
+const raw = "  CP3  ";
+const cleaned = raw.trim();
+console.log(raw);     // still has surrounding spaces
+console.log(cleaned); // trimmed result
+```
+
+Assigning a string to another binding does not create mutable shared text. Reassigning a `let` name changes that binding; it does not alter another string value already held elsewhere.
+
+## Method surface
+
+The documented checker surface includes `length`, `charAt`, `at`, `charCodeAt`, `startsWith`, `endsWith`, `includes`, `repeat`, `padStart`, `padEnd`, `toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd`, `indexOf`, `lastIndexOf`, `slice`, `substring`, `replace`, `replaceAll`, and `split`. Current code-generation support should be checked for less-tested members such as `charCodeAt`; a signature alone does not prove a working runtime implementation.
+
+The method names intentionally resemble JavaScript, but the byte and code-point distinctions above are CP3's current behavior. For exact support, inspect `src/std/string` and the `tests/cases/arrays-strings` family in the same checkout as your compiler.
+
+## Related pages
+
+- [Arrays](#03-standard-library/14-arrays)
+- [Byte buffers](#03-standard-library/11-buffer)
+- [Typed arrays and DataView](#03-standard-library/16-typed-arrays)
+- [Functions and closures](#01-language/02-functions/01-functions-and-closures)
