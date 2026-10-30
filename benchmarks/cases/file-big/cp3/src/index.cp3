@@ -1,0 +1,51 @@
+import console from "std/console";
+import fs from "std/fs";
+import os from "std/os";
+import path from "std/path";
+
+// file-big (cp3 entry) -- write an 8 MiB deterministic payload (the 64-byte
+// seed repeated 131,072 times) to the OS temp directory, read it back, and
+// fold length, byte sum, first byte and last byte for 8 iterations. One line,
+// one integer: 779913. Same workload and same output as the C++, Rust, Go,
+// JavaScript, Python and Java entries.
+//
+// The payload is built once before the loop; the timed section is the write,
+// the read and the byte fold. cp3 strings are UTF-8 byte strings, so
+// read.length is the byte count and read[i] is one byte as a `number`.
+//
+// Source: benchmarks/cases/file-big/cp3/src/index.cp3
+//
+// Native i64 for SIZE, ITERATIONS and the byte cursor. The byte sum and the
+// checksum stay `number`: read.length and read[i] are declared `number`, and
+// cp3 has no explicit number -> i64 cast. MOD stays `number` to match.
+
+const SIZE: i64 = 8388608;
+const ITERATIONS: i64 = 8;
+const MOD = 1000003;
+
+const SEED = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const DATA = SEED.repeat(SIZE / 64);
+const FILE = path.join(os.tmpdir(), "cp3-bench-file-big-cp3.bin");
+
+let checksum: number = 0;
+let iter: i64 = 0;
+while (iter < ITERATIONS) {
+  fs.writeFileSync(FILE, DATA);
+  const read = fs.readFileSync(FILE);
+
+  let bytes: number = 0;
+  let i: i64 = 0;
+  while (i < read.length) {
+    bytes = bytes + read[i];
+    i = i + 1;
+  }
+
+  checksum = (checksum * 31 + read.length) % MOD;
+  checksum = (checksum * 31 + bytes) % MOD;
+  checksum = (checksum * 31 + read[0]) % MOD;
+  checksum = (checksum * 31 + read[read.length - 1]) % MOD;
+  iter = iter + 1;
+}
+
+fs.unlinkSync(FILE);
+console.log(checksum);

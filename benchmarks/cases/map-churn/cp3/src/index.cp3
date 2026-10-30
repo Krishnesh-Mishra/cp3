@@ -1,0 +1,66 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// map-churn (cp3 entry) -- initialize 100,000 integer keys, then two rounds
+// of delete every 10th key, reinsert the deleted keys with a new value, update
+// every 7th key in place, and fold every key in ascending key order. One line,
+// one integer: 942471769. Same workload and same output as the C++, Rust, Go,
+// JavaScript, Python and Java entries.
+//
+// The Map is cp3's insertion-ordered hash map; deleting a key has to remove it
+// from both the hash index and the order vector, which is the churn this row
+// measures. The fold walks ascending keys, so no iteration order can leak into
+// the output.
+//
+// Source: benchmarks/cases/map-churn/cp3/src/index.cp3
+//
+// Native i64 end to end: keys, values, round counter and checksum are all
+// integers. `?? ZERO` is an i64 binding because `?? 0` with a bare literal
+// widens to `number`, which cannot be assigned back to i64.
+
+const KEYS: i64 = 100000;
+const ROUNDS: i64 = 2;
+const MOD: i64 = 1000000007;
+const ZERO: i64 = 0;
+
+const m = new Map<i64, i64>();
+
+let i: i64 = 0;
+while (i < KEYS) {
+  m.set(i, i * 3 + 1);
+  i = i + 1;
+}
+
+let checksum: i64 = 0;
+let r: i64 = 0;
+while (r < ROUNDS) {
+  i = 0;
+  while (i < KEYS) {
+    m.delete(i);
+    i = i + 10;
+  }
+
+  i = 0;
+  while (i < KEYS) {
+    m.set(i, i * 5 + r + 2);
+    i = i + 10;
+  }
+
+  i = 0;
+  while (i < KEYS) {
+    const current: i64 = m.get(i) ?? ZERO;
+    m.set(i, current + 1);
+    i = i + 7;
+  }
+
+  i = 0;
+  while (i < KEYS) {
+    const v: i64 = m.get(i) ?? ZERO;
+    checksum = (checksum * 31 + v) % MOD;
+    i = i + 1;
+  }
+
+  r = r + 1;
+}
+
+console.log(checksum);

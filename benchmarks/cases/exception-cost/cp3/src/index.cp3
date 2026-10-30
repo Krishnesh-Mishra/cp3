@@ -1,0 +1,57 @@
+import console from "std/console";
+
+// exception-cost (cp3 entry) -- 1,000,000 predicate calls through a
+// throw/catch path and the same 1,000,000 calls through a -1 sentinel return,
+// folding both into checksums printed on one line: 446742259 446742259. Same
+// workload and same output as the C++, JavaScript, Python and Java entries.
+//
+// Both loops call the predicate on every iteration and take the error branch
+// on the same i % 3 === 0 schedule, so the row isolates the error mechanism.
+//
+// Source: benchmarks/cases/exception-cost/cp3/src/index.cp3
+//
+// Native i64 for the iteration counters, the predicate values and both
+// checksums. `checksum * 31 + v` peaks near 3.1e10, well inside 64 bits.
+
+const ITERATIONS: i64 = 1000000;
+const MOD: i64 = 1000000007;
+
+function mayThrow(i: i64): i64 {
+  if (i % 3 === 0) {
+    throw "boom";
+  }
+  return i;
+}
+
+function mayReturn(i: i64): i64 {
+  if (i % 3 === 0) {
+    return -1;
+  }
+  return i;
+}
+
+let thrown: i64 = 0;
+let i: i64 = 0;
+while (i < ITERATIONS) {
+  try {
+    const v: i64 = mayThrow(i);
+    thrown = (thrown * 31 + v) % MOD;
+  } catch (e) {
+    thrown = (thrown * 31 + 1) % MOD;
+  }
+  i = i + 1;
+}
+
+let returned: i64 = 0;
+i = 0;
+while (i < ITERATIONS) {
+  const v: i64 = mayReturn(i);
+  if (v < 0) {
+    returned = (returned * 31 + 1) % MOD;
+  } else {
+    returned = (returned * 31 + v) % MOD;
+  }
+  i = i + 1;
+}
+
+console.log(thrown, returned);

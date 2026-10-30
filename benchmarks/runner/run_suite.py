@@ -175,6 +175,14 @@ COMPUTE_TASKS = [
     "path-join",
     "date-format",
     "os-probe",
+    "binary-trees",
+    "map-churn",
+    "utf8-text",
+    "regex-scan",
+    "json-parse-large",
+    "deep-recursion",
+    "exception-cost",
+    "file-big",
 ]
 ALL_TASKS = SERVER_TASKS + COMPUTE_TASKS
 
@@ -204,6 +212,17 @@ TASK_OMIT_LANGUAGES = {
     },
     "os-probe": {
         "rust": "no hostname/platform probe in Rust std without libc or a crate; hand-rolling it compares bindings",
+    },
+    "regex-scan": {
+        "rust": "no regex engine in Rust std; adding the regex crate compares dependencies",
+    },
+    "json-parse-large": {
+        "cpp": "no JSON in the C++ standard library; a dependency-free file would vendor a parser",
+        "rust": "no JSON in Rust std without a crate; adding serde_json compares dependencies",
+    },
+    "exception-cost": {
+        "rust": "no exceptions in Rust; Result is the returned-value path, not throw/catch",
+        "go": "no exceptions in Go; error values are the returned-value path, not throw/catch",
     },
 }
 
@@ -246,6 +265,14 @@ EXPECTED = {
     "path-join": "425577",
     "date-format": "796897",
     "os-probe": "208981",
+    "binary-trees": "1348958",
+    "map-churn": "942471769",
+    "utf8-text": "78156718",
+    "regex-scan": "735703090",
+    "json-parse-large": "613781",
+    "deep-recursion": "292249866",
+    "exception-cost": "446742259 446742259",
+    "file-big": "779913",
 }
 CHURN_EXPECTED = {
     CHURN_DEFAULT_ITERATIONS: "852167",
@@ -2120,6 +2147,30 @@ def main() -> int:
             elif task == "async-fanout":
                 header = (f"expected = {EXPECTED[task]} | 10,000-timer fan-out joined "
                           f"at once, then 10,000 chained awaits")
+            elif task == "binary-trees":
+                header = (f"expected = {EXPECTED[task]} | full binary trees to depth 13, "
+                          f"recursive build and check")
+            elif task == "map-churn":
+                header = (f"expected = {EXPECTED[task]} | 100,000-key hash map, "
+                          f"delete/reinsert/update churn")
+            elif task == "utf8-text":
+                header = (f"expected = {EXPECTED[task]} | 417,792-byte UTF-8 text, "
+                          f"32 manual decode rounds")
+            elif task == "regex-scan":
+                header = (f"expected = {EXPECTED[task]} | 240,000-byte text, "
+                          f"global [0-9]+ scan, 8 rounds")
+            elif task == "json-parse-large":
+                header = (f"expected = {EXPECTED[task]} | 204,472-byte JSON record, "
+                          f"20 parse rounds")
+            elif task == "deep-recursion":
+                header = (f"expected = {EXPECTED[task]} | 5,000-deep recursion, "
+                          f"200 rounds")
+            elif task == "exception-cost":
+                header = (f"expected = {EXPECTED[task]} | 1,000,000 throw/catch vs "
+                          f"sentinel-return iterations")
+            elif task == "file-big":
+                header = (f"expected = {EXPECTED[task]} | 8 MiB file, "
+                          f"8 write/read rounds")
             else:
                 header = f"expected = {EXPECTED[task]}"
             rows = []

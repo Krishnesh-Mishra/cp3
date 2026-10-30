@@ -119,6 +119,14 @@ created (cluster or multiprocessing workers); no unrelated process is touched.
 | `path-join` | join/normalize/basename/extname one fixed segment list, 170,000 times | `425577` | runs |
 | `date-format` | format 50,000 UTC instants by hand from fixed epoch milliseconds | `796897` | runs (cp3/go/js/python; rust omitted) |
 | `os-probe` | query platform/CPU/home/temp/hostname 50,000 times, fold booleans | `208981` | runs (cp3/cpp/go/js/python; rust omitted) |
+| `binary-trees` | full binary trees to depth 13, recursive build and check | `1348958` | runs |
+| `map-churn` | 100,000-key hash map delete/reinsert/update churn | `942471769` | runs |
+| `utf8-text` | 417,792-byte UTF-8 text, 32 manual decode rounds | `78156718` | runs |
+| `regex-scan` | 240,000-byte text, global `[0-9]+` scan, 8 rounds | `735703090` | runs (cp3/cpp/go/js/python/java; rust omitted) |
+| `json-parse-large` | 204,472-byte JSON record parsed 20 times | `613781` | runs (cp3/go/js/python/java; cpp/rust omitted) |
+| `deep-recursion` | recurse to depth 5,000 for 200 rounds | `292249866` | runs |
+| `exception-cost` | 1M throw/catch vs sentinel-return iterations | `446742259 446742259` | runs (cp3/cpp/js/python/java; rust/go omitted) |
+| `file-big` | 8 MiB temp-file write/read, 8 rounds | `779913` | runs |
 | `health-server` | `GET /healthz` -> `ok`, `GET /` -> `health-server ok`, else `404`, single core | wire contract (below) | runs (Gin/Axum/Drogon/Express/Fastify/FastAPI/Undertow) |
 | `health-server-multi` | the same contract with one worker per logical CPU in every language | wire contract (below) | runs (`createServer({ threads: os.cpus() })`) |
 
@@ -134,15 +142,19 @@ fill, and reads the same buffers through `DataView`; a runtime-index
 typed-array element read is typed `number | null | undefined` and does not
 codegen arithmetic yet.
 
-Five rows deliberately omit a language. `json-roundtrip`, `async-fanout` and
+Eight rows deliberately omit a language. `json-roundtrip`, `async-fanout` and
 `sha256-churn` omit cpp and rust: C++ `std` and Rust `std` have no JSON
 parser/serializer, no timer/event-loop surface, and no SHA-256. `date-format`
 and `os-probe` omit rust: Rust `std` has no timezone-aware calendar formatter
-and no hostname/platform probe without `libc` or a crate. A single
-dependency-free file would have to vendor or hand-roll the missing stack,
-which compares dependencies, not the language. The runner prints the omission
-reason per row (`TASK_OMIT_LANGUAGES` in `runner/run_suite.py`) and still gates
-the remaining languages; each task README states the exact rationale.
+and no hostname/platform probe without `libc` or a crate. `regex-scan` omits
+rust: Rust `std` has no regular-expression engine. `json-parse-large` omits cpp
+and rust: neither standard library has a JSON parser. `exception-cost` omits
+rust and go: neither has exceptions, and `Result`/error values are the
+returned-value path, not throw/catch. A single dependency-free file would have
+to vendor or hand-roll the missing stack, which compares dependencies, not the
+language. The runner prints the omission reason per row (`TASK_OMIT_LANGUAGES`
+in `runner/run_suite.py`) and still gates the remaining languages; each task
+README states the exact rationale.
 
 ## Standard-library coverage
 
@@ -153,21 +165,22 @@ Every row below now has a cp3 timing in [`results.md`](results.md).
 | --- | --- | --- |
 | `std/console` | `hello-world` | No separate console row. `hello-world` already writes one line through `console.log`; a tight console loop would measure pipe/terminal throughput, not language work. |
 | `std/process` | `hello-world` | Process spawn-to-exit, including runtime startup. |
-| `std/string` | `string-churn` | Case conversion, slicing and concatenation over a 4 KiB source. |
+| `std/string` | `string-churn`, `utf8-text` | Case conversion, slicing and concatenation over a 4 KiB source; manual UTF-8 byte decode over 417,792 bytes. |
 | `std/crypto` | `sha256-churn` | SHA-256 over a fixed 1 KiB buffer; cpp/rust omitted (no std hash). |
 | `std/buffer` | `buffer-copy` | Allocate, rotate, slice and rebuild a 64 KiB byte buffer. |
 | `std/typed-arrays` | `typed-array-sum` | `Float64Array`/`Uint8Array` fill, element reads and reduction. |
 | `std/math` | `math-kernel` | sqrt/floor/abs/pow/clamp with an integer-quantized fold. |
 | `std/env` | `env-injection` | Fresh lookup of one runner-injected variable. |
-| `std/fs` | `file-roundtrip` | Write, read and stat one temp file. |
+| `std/fs` | `file-roundtrip`, `file-big` | Write, read and stat one 4 KiB temp file; write/read an 8 MiB payload. |
 | `std/path` | `path-join` | Join, normalize, basename and extname. |
 | `std/date` | `date-format` | UTC component formatting and `diffMs`; rust omitted. |
 | `std/os` | `os-probe` | Platform, CPU count, home, temp and hostname; rust omitted. |
-| `std/json` | `json-roundtrip` | Parse + stringify a fixed record; cpp/rust omitted. |
+| `std/json` | `json-roundtrip`, `json-parse-large` | Parse + stringify a fixed record; parse a 204,472-byte record. cpp/rust omitted. |
 | `std/network` | `health-server`, `health-server-multi` | HTTP wire contract, single-core and multicore. |
-| `std/collections` | `word-frequency` | 3M LCG picks into a 64-word hash map. |
+| `std/collections` | `word-frequency`, `map-churn` | 3M LCG picks into a 64-word hash map; 100,000-key delete/reinsert churn. |
 | `std/arrays` | `array-growth` | 20M pushes/pops. |
 | timers / event loop | `async-fanout` | Zero-delay timers and chained awaits; cpp/rust omitted. |
+| regex engine | `regex-scan` | Global `[0-9]+` scan over 240,000 bytes; rust omitted. |
 
 The health-server contract: every language listens on `127.0.0.1` only and
 answers `GET /healthz` with `200` text/plain `ok`, `GET /` with `200`

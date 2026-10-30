@@ -1,0 +1,67 @@
+import console from "std/console";
+
+// binary-trees (cp3 entry) -- build and check the classic full binary trees:
+// the stretch tree at depth 14, one long-lived tree at depth 13, then the
+// depth 4/6/8/10/12 batches. One line, one integer: 1348958. Same workload
+// and same output as the C++, Rust, Go, JavaScript, Python and Java entries.
+//
+// A leaf is a Node whose shared EMPTY children array is empty; an internal
+// node always has exactly two children. cp3 does not narrow `Node | null`
+// fields and has no `!` assertion, so the children-array shape is the
+// supported recursive-tree form.
+//
+// Source: benchmarks/cases/binary-trees/cp3/src/index.cp3
+//
+// Native i64 for the depths, iteration counts, checks and total. Every
+// intermediate fits in 64 bits.
+
+const MAX_DEPTH: i64 = 13;
+const MIN_DEPTH: i64 = 4;
+
+class Node {
+  children: Node[];
+
+  constructor(children: Node[]) {
+    this.children = children;
+  }
+}
+
+const EMPTY: Node[] = [];
+
+function make(depth: i64): Node {
+  if (depth === 0) {
+    return new Node(EMPTY);
+  }
+  const kids: Node[] = [make(depth - 1), make(depth - 1)];
+  return new Node(kids);
+}
+
+function check(node: Node): i64 {
+  if (node.children.length === 0) {
+    return 1;
+  }
+  return 1 + check(node.children[0]) + check(node.children[1]);
+}
+
+const stretchDepth: i64 = MAX_DEPTH + 1;
+let total: i64 = check(make(stretchDepth));
+
+const longLived = make(MAX_DEPTH);
+const longLivedCheck: i64 = check(longLived);
+
+let depth: i64 = MIN_DEPTH;
+while (depth <= MAX_DEPTH) {
+  const iterations: i64 = 1 << (MAX_DEPTH - depth + MIN_DEPTH);
+  let checkSum: i64 = 0;
+  let k: i64 = 0;
+  while (k < iterations) {
+    checkSum = checkSum + check(make(depth));
+    k = k + 1;
+  }
+  total = total + checkSum;
+  depth = depth + 2;
+}
+
+total = total + longLivedCheck;
+
+console.log(total);

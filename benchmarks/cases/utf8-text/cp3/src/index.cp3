@@ -1,0 +1,79 @@
+import console from "std/console";
+
+// utf8-text (cp3 entry) -- decode one 417,792-byte multilingual UTF-8 text
+// (the 102-byte source unit repeated 4,096 times) 32 times with the manual
+// byte decoder, then fold every round into one checksum. One line, one
+// integer: 78156718. Same workload and same output as the C++, Rust, Go,
+// JavaScript, Python and Java entries.
+//
+// A cp3 string is a UTF-8 byte string, so TEXT.length is the byte count and
+// TEXT[i] is one byte as a `number`; no Buffer conversion is needed. The
+// decoder reads the 1/2/3/4-byte widths by hand, as the task requires.
+//
+// Source: benchmarks/cases/utf8-text/cp3/src/index.cp3
+//
+// Native i64 for the byte cursor and the sequence width. The decoded code
+// point and every accumulator stay `number`: they come out of byte arithmetic
+// (TEXT[i] is number), and cp3 has no explicit number -> i64 cast. Every
+// intermediate stays far below 2^53.
+
+const REPEATS: i64 = 4096;
+const ROUNDS: i64 = 32;
+const MOD = 1000000007;
+
+const UNIT = "ASCII-0123456789|日本語テキスト|emoji-😀🚀|café naïve résumé|Ω≈ç√∫˜µ≤≥÷|";
+const TEXT = UNIT.repeat(REPEATS);
+
+let checksum: number = 0;
+let round: i64 = 0;
+while (round < ROUNDS) {
+  let i: i64 = 0;
+  let codepoints: number = 0;
+  let asciiCount: number = 0;
+  let twoByte: number = 0;
+  let threeByte: number = 0;
+  let fourByte: number = 0;
+  let codepointSum: number = 0;
+  let codepointHash: number = 0;
+
+  while (i < TEXT.length) {
+    const b0: number = TEXT[i];
+    let cp: number = 0;
+    let width: i64 = 1;
+
+    if (b0 < 0x80) {
+      cp = b0;
+      width = 1;
+      asciiCount = asciiCount + 1;
+    } else if ((b0 & 0xE0) === 0xC0) {
+      cp = ((b0 & 0x1F) << 6) | (TEXT[i + 1] & 0x3F);
+      width = 2;
+      twoByte = twoByte + 1;
+    } else if ((b0 & 0xF0) === 0xE0) {
+      cp = ((b0 & 0x0F) << 12) | ((TEXT[i + 1] & 0x3F) << 6) | (TEXT[i + 2] & 0x3F);
+      width = 3;
+      threeByte = threeByte + 1;
+    } else {
+      cp = ((b0 & 0x07) << 18) | ((TEXT[i + 1] & 0x3F) << 12) | ((TEXT[i + 2] & 0x3F) << 6) | (TEXT[i + 3] & 0x3F);
+      width = 4;
+      fourByte = fourByte + 1;
+    }
+
+    codepointSum = (codepointSum + cp) % MOD;
+    codepointHash = (codepointHash * 131 + cp) % MOD;
+    codepoints = codepoints + 1;
+    i = i + width;
+  }
+
+  checksum = (checksum * 31
+    + codepoints
+    + asciiCount * 3
+    + twoByte * 5
+    + threeByte * 7
+    + fourByte * 11
+    + codepointSum
+    + codepointHash) % MOD;
+  round = round + 1;
+}
+
+console.log(checksum);

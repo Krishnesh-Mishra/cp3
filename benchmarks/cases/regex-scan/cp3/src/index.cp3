@@ -1,0 +1,45 @@
+import console from "std/console";
+
+// regex-scan (cp3 entry) -- run the global pattern /[0-9]+/g over a
+// 240,000-byte generated text eight times, count the matches, sum their
+// numeric values and fold each round into one checksum. One line, one
+// integer: 735703090. Same workload and same output as the C++, Go,
+// JavaScript, Python and Java entries.
+//
+// The matches are recomputed every round on purpose; the repeated whole-text
+// scan is the workload, not a one-shot match. parseInt parses each matched
+// ASCII digit run as a base-10 integer.
+//
+// Source: benchmarks/cases/regex-scan/cp3/src/index.cp3
+//
+// Native i64 for the round counter and the match cursor. The match count, the
+// value sum and the checksum stay `number`: parseInt returns number and the
+// scan yields a `string[]`, so an i64 fold would need a cast cp3 does not
+// have. Every intermediate stays far below 2^53.
+
+const REPEATS: i64 = 5000;
+const ROUNDS: i64 = 8;
+const MOD = 1000000007;
+
+const UNIT = "alpha 123 beta 45 gamma 6789 delta 0 epsilon 42\n";
+const TEXT = UNIT.repeat(REPEATS);
+
+let checksum: number = 0;
+let round: i64 = 0;
+while (round < ROUNDS) {
+  const matches = /[0-9]+/g.match(TEXT);
+
+  let count: number = 0;
+  let sum: number = 0;
+  let i: i64 = 0;
+  while (i < matches.length) {
+    count = count + 1;
+    sum = sum + parseInt(matches[i]);
+    i = i + 1;
+  }
+
+  checksum = (checksum * 31 + count + sum) % MOD;
+  round = round + 1;
+}
+
+console.log(checksum);

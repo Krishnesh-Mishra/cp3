@@ -1,0 +1,35 @@
+import console from "std/console";
+
+// deep-recursion (cp3 entry) -- recurse to depth 5,000 for 200 rounds,
+// returning the triangular sum each time, and fold it into one checksum.
+// One line, one integer: 292249866. Same workload and same output as the
+// C++, Rust, Go, JavaScript, Python and Java entries.
+//
+// The addition happens after the recursive call, so no tail-call
+// optimization can turn this into a loop, and every round starts a fresh
+// sumTo(DEPTH) call. No memoization and no precomputed triangular number.
+//
+// Source: benchmarks/cases/deep-recursion/cp3/src/index.cp3
+//
+// Native i64 for the depth, the round counter, the recursive return value and
+// the checksum. Every intermediate fits in 64 bits.
+
+const DEPTH: i64 = 5000;
+const ROUNDS: i64 = 200;
+const MOD: i64 = 1000000007;
+
+function sumTo(n: i64): i64 {
+  if (n === 0) {
+    return 0;
+  }
+  return n + sumTo(n - 1);
+}
+
+let checksum: i64 = 0;
+let round: i64 = 0;
+while (round < ROUNDS) {
+  checksum = (checksum * 31 + sumTo(DEPTH)) % MOD;
+  round = round + 1;
+}
+
+console.log(checksum);

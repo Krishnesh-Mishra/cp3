@@ -1,0 +1,86 @@
+import console from "std/console";
+import JSON from "std/json";
+import Math from "std/math";
+
+// json-parse-large (cp3 entry) -- build one 204,472-byte JSON record with
+// 50,000 numbers and 1,000 tags, parse it 20 times with JSON.parse<Payload>,
+// and fold the parsed fields into one checksum. One line, one integer:
+// 613781. Same workload and same output as the Go, JavaScript, Python and
+// Java entries.
+//
+// The number and tag arrays are built as string arrays and joined with
+// commas, so the construction path does not pay repeated string
+// concatenation. The text is built once; the parse loop is the workload.
+//
+// Source: benchmarks/cases/json-parse-large/cp3/src/index.cp3
+//
+// Native i64 for the construction counters only. The Payload fields are
+// `number`/`string`/`boolean` (JSON.parse<T> accepts primitives and primitive
+// arrays), so field, checksum and MOD stay `number`; every value is well below
+// 2^53.
+
+const NUMBERS = 50000;
+const TAGS = 1000;
+const ITERATIONS: i64 = 20;
+const MOD = 1000003;
+
+interface Payload {
+  id: number;
+  name: string;
+  active: boolean;
+  score: number;
+  numbers: number[];
+  tags: string[];
+}
+
+const numberParts: string[] = [];
+let n: number = 0;
+while (n < NUMBERS) {
+  numberParts.push(String((n * 17 + 3) % 1000));
+  n = n + 1;
+}
+const numbersText = numberParts.join(",");
+
+const tagParts: string[] = [];
+let t: number = 0;
+while (t < TAGS) {
+  tagParts.push('"tag-' + String(t) + '"');
+  t = t + 1;
+}
+const tagsText = tagParts.join(",");
+
+const TEXT = '{"id":48271,"name":"Ada Lovelace","active":true,"score":93.5,"numbers":['
+  + numbersText
+  + '],"tags":['
+  + tagsText
+  + ']}';
+
+let checksum: number = 0;
+let iter: i64 = 0;
+while (iter < ITERATIONS) {
+  const p = JSON.parse<Payload>(TEXT);
+
+  let field: number = p.id + p.name.length;
+  if (p.active) {
+    field = field + 1;
+  }
+  field = field + Math.trunc(p.score * 10);
+  field = field + p.numbers.length + p.tags.length;
+
+  let j: i64 = 0;
+  while (j < p.numbers.length) {
+    field = field + p.numbers[j];
+    j = j + 1;
+  }
+
+  j = 0;
+  while (j < p.tags.length) {
+    field = field + p.tags[j].length;
+    j = j + 1;
+  }
+
+  checksum = (checksum * 31 + field + TEXT.length) % MOD;
+  iter = iter + 1;
+}
+
+console.log(checksum);

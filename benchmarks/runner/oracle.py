@@ -18,6 +18,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -129,6 +130,226 @@ def typed_array_sum_checksum(size: int = TA_SIZE, rounds: int = TA_ROUNDS) -> in
     scaled = math.trunc(total * 4.0)
     checksum = (scaled + sum(data)) % TA_MOD
     checksum = (checksum * 31 + size + rounds) % TA_MOD
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# binary-trees
+# --------------------------------------------------------------------------
+# A full binary tree of depth d has 2^(d+1) - 1 nodes, and checkTree counts
+# exactly those nodes (1 for a leaf, 1 + left + right for an internal node).
+# This re-derives the value from the closed form rather than allocating.
+BT_MAX_DEPTH = 13
+BT_MIN_DEPTH = 4
+
+
+def binary_trees_checksum(max_depth: int = BT_MAX_DEPTH,
+                          min_depth: int = BT_MIN_DEPTH) -> int:
+    def nodes(depth: int) -> int:
+        return (1 << (depth + 1)) - 1
+
+    total = nodes(max_depth + 1)          # stretch tree
+    for depth in range(min_depth, max_depth + 1, 2):
+        iterations = 1 << (max_depth - depth + min_depth)
+        total += iterations * nodes(depth)
+    total += nodes(max_depth)             # long-lived tree
+    return total
+
+
+# --------------------------------------------------------------------------
+# map-churn
+# --------------------------------------------------------------------------
+MAP_KEYS = 100000
+MAP_ROUNDS = 2
+MAP_MOD = 1000000007
+
+
+def map_churn_checksum(keys: int = MAP_KEYS, rounds: int = MAP_ROUNDS,
+                       mod: int = MAP_MOD) -> int:
+    table = {i: i * 3 + 1 for i in range(keys)}
+    checksum = 0
+    for r in range(rounds):
+        for i in range(0, keys, 10):
+            del table[i]
+        for i in range(0, keys, 10):
+            table[i] = i * 5 + r + 2
+        for i in range(0, keys, 7):
+            table[i] = table[i] + 1
+        for i in range(keys):
+            checksum = (checksum * 31 + table[i]) % mod
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# utf8-text
+# --------------------------------------------------------------------------
+UTF8_UNIT = "ASCII-0123456789|日本語テキスト|emoji-😀🚀|café naïve résumé|Ω≈ç√∫˜µ≤≥÷|"
+UTF8_REPEATS = 4096
+UTF8_ROUNDS = 32
+UTF8_MOD = 1000000007
+
+
+def utf8_text_checksum(unit: str = UTF8_UNIT, repeats: int = UTF8_REPEATS,
+                       rounds: int = UTF8_ROUNDS, mod: int = UTF8_MOD) -> int:
+    data = (unit * repeats).encode("utf-8")
+    checksum = 0
+    for _ in range(rounds):
+        i = 0
+        codepoints = ascii_count = two = three = four = 0
+        codepoint_sum = 0
+        codepoint_hash = 0
+        while i < len(data):
+            b0 = data[i]
+            if b0 < 0x80:
+                cp = b0
+                width = 1
+                ascii_count += 1
+            elif (b0 & 0xE0) == 0xC0:
+                cp = ((b0 & 0x1F) << 6) | (data[i + 1] & 0x3F)
+                width = 2
+                two += 1
+            elif (b0 & 0xF0) == 0xE0:
+                cp = (((b0 & 0x0F) << 12) |
+                      ((data[i + 1] & 0x3F) << 6) |
+                      (data[i + 2] & 0x3F))
+                width = 3
+                three += 1
+            else:
+                cp = (((b0 & 0x07) << 18) |
+                      ((data[i + 1] & 0x3F) << 12) |
+                      ((data[i + 2] & 0x3F) << 6) |
+                      (data[i + 3] & 0x3F))
+                width = 4
+                four += 1
+            codepoint_sum = (codepoint_sum + cp) % mod
+            codepoint_hash = (codepoint_hash * 131 + cp) % mod
+            codepoints += 1
+            i += width
+        checksum = (checksum * 31 + codepoints + ascii_count * 3 +
+                    two * 5 + three * 7 + four * 11 +
+                    codepoint_sum + codepoint_hash) % mod
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# regex-scan
+# --------------------------------------------------------------------------
+REGEX_UNIT = "alpha 123 beta 45 gamma 6789 delta 0 epsilon 42\n"
+REGEX_REPEATS = 5000
+REGEX_ROUNDS = 8
+REGEX_MOD = 1000000007
+
+
+def regex_scan_checksum(unit: str = REGEX_UNIT, repeats: int = REGEX_REPEATS,
+                        rounds: int = REGEX_ROUNDS, mod: int = REGEX_MOD) -> int:
+    text = unit * repeats
+    matches = re.findall(r"[0-9]+", text)
+    count = len(matches)
+    total = sum(int(match) for match in matches)
+    checksum = 0
+    for _ in range(rounds):
+        checksum = (checksum * 31 + count + total) % mod
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# json-parse-large
+# --------------------------------------------------------------------------
+JSON_LARGE_NUMBERS = 50000
+JSON_LARGE_TAGS = 1000
+JSON_LARGE_ITERATIONS = 20
+JSON_LARGE_MOD = 1000003
+
+
+def json_parse_large_checksum(numbers: int = JSON_LARGE_NUMBERS,
+                              tag_count: int = JSON_LARGE_TAGS,
+                              iterations: int = JSON_LARGE_ITERATIONS,
+                              mod: int = JSON_LARGE_MOD) -> int:
+    nums = [(i * 17 + 3) % 1000 for i in range(numbers)]
+    tags = [f"tag-{i}" for i in range(tag_count)]
+    text = (
+        '{"id":48271,"name":"Ada Lovelace","active":true,"score":93.5,'
+        '"numbers":[' + ",".join(str(n) for n in nums) + '],'
+        '"tags":[' + ",".join('"' + tag + '"' for tag in tags) + "]}"
+    )
+    parsed = json.loads(text)
+    field = (
+        parsed["id"]
+        + len(parsed["name"])
+        + (1 if parsed["active"] else 0)
+        + int(parsed["score"] * 10)
+        + len(parsed["numbers"])
+        + len(parsed["tags"])
+        + sum(parsed["numbers"])
+        + sum(len(tag) for tag in parsed["tags"])
+    )
+    checksum = 0
+    for _ in range(iterations):
+        checksum = (checksum * 31 + field + len(text)) % mod
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# deep-recursion
+# --------------------------------------------------------------------------
+# sumTo(depth) is the triangular number depth*(depth+1)/2. The language
+# entries perform the recursive calls; this re-derives the value in closed form
+# and checks the fold and the depth constant.
+DEEP_DEPTH = 5000
+DEEP_ROUNDS = 200
+DEEP_MOD = 1000000007
+
+
+def deep_recursion_checksum(depth: int = DEEP_DEPTH, rounds: int = DEEP_ROUNDS,
+                            mod: int = DEEP_MOD) -> int:
+    value = depth * (depth + 1) // 2
+    checksum = 0
+    for _ in range(rounds):
+        checksum = (checksum * 31 + value) % mod
+    return checksum
+
+
+# --------------------------------------------------------------------------
+# exception-cost
+# --------------------------------------------------------------------------
+EXC_ITERATIONS = 1000000
+EXC_MOD = 1000000007
+
+
+def exception_cost_checksums(iterations: int = EXC_ITERATIONS,
+                             mod: int = EXC_MOD) -> tuple[int, int]:
+    thrown = 0
+    returned = 0
+    for i in range(iterations):
+        if i % 3 == 0:
+            thrown = (thrown * 31 + 1) % mod
+            returned = (returned * 31 + 1) % mod
+        else:
+            thrown = (thrown * 31 + i) % mod
+            returned = (returned * 31 + i) % mod
+    return thrown, returned
+
+
+# --------------------------------------------------------------------------
+# file-big
+# --------------------------------------------------------------------------
+FILE_BIG_SIZE = 8388608
+FILE_BIG_ITERATIONS = 8
+FILE_BIG_MOD = 1000003
+FILE_BIG_SEED = b"0123456789abcdef" * 4
+
+
+def file_big_checksum(size: int = FILE_BIG_SIZE,
+                      iterations: int = FILE_BIG_ITERATIONS,
+                      mod: int = FILE_BIG_MOD) -> int:
+    data = FILE_BIG_SEED * (size // len(FILE_BIG_SEED))
+    total = sum(data)
+    checksum = 0
+    for _ in range(iterations):
+        checksum = (checksum * 31 + len(data)) % mod
+        checksum = (checksum * 31 + total) % mod
+        checksum = (checksum * 31 + data[0]) % mod
+        checksum = (checksum * 31 + data[-1]) % mod
     return checksum
 
 
@@ -553,6 +774,14 @@ def main() -> None:
     print("sha256_churn_checksum()           =", sha256_churn_checksum())
     print("buffer_copy_checksum()            =", buffer_copy_checksum())
     print("typed_array_sum_checksum()        =", typed_array_sum_checksum())
+    print("binary_trees_checksum()           =", binary_trees_checksum())
+    print("map_churn_checksum()              =", map_churn_checksum())
+    print("utf8_text_checksum()              =", utf8_text_checksum())
+    print("regex_scan_checksum()             =", regex_scan_checksum())
+    print("json_parse_large_checksum()       =", json_parse_large_checksum())
+    print("deep_recursion_checksum()         =", deep_recursion_checksum())
+    print("exception_cost_checksums()        =", exception_cost_checksums())
+    print("file_big_checksum()               =", file_big_checksum())
     print("math_kernel_checksum()            =", math_kernel_checksum())
     print("word_frequency_checksum()         =", word_frequency_checksum())
     print("object_churn_checksum()           =", object_churn_checksum())
