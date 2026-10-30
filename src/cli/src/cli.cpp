@@ -58,6 +58,7 @@ void printUsage(std::FILE* out) {
         "  exec <pkg> [args]  Run a package's bundled tool\n"
         "  lsp [--stdio]      Language server on stdio (for editor integrations)\n"
         "  dap [--stdio]      Debug adapter on stdio (for editor debugging)\n"
+        "  docs [--port n]    Serve the documentation bundled in this compiler\n"
         "  native-install <sdk> [options]  Bind a native SDK (libclang required)\n"
         "  version            Print the compiler version\n"
         "  help               Print this help\n"
@@ -133,7 +134,7 @@ bool resolveCommand(const std::string& first, std::string& command,
         first == "publish" || first == "link" || first == "unlink" ||
         first == "recompile" || first == "editor-plugin" ||
         first == "editor-plugins" || first == "lsp" || first == "dap" ||
-        first == "toolchain" || first == "native-install") {
+        first == "toolchain" || first == "native-install" || first == "docs") {
         command = first;
         return true;
     }
@@ -327,6 +328,9 @@ int runSelfOwnedCommand(const std::string& command,
     }
     if (command == "native-install") {
         return cp3::cli::cmdNativeInstall(args);
+    }
+    if (command == "docs") {
+        return cp3::cli::cmdDocs(args);
     }
     return -1;
 }

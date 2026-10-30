@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>CP3 Documentation</title>
+  <style>
+    :root{font-family:Inter,"Segoe UI",Arial,sans-serif;font-synthesis:none;text-rendering:optimizeLegibility;--bg:#fbfaf8;--panel:#f3f1ed;--ink:#252a2f;--muted:#69727b;--soft:#8a939b;--accent:#356986;--accent-soft:#e7f0f3;--code:#f0efec;--selection:#dce8ec;--measure:760px;--left:292px;--right:220px;color:var(--ink);background:var(--bg)}
+    html[data-theme=dark]{--bg:#171a1d;--panel:#202428;--ink:#e5e8ea;--muted:#adb6bd;--soft:#87929a;--accent:#83b6d2;--accent-soft:#24343d;--code:#22272b;--selection:#33454f;color-scheme:dark}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);transition:background .22s ease,color .22s ease}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}button,input{font:inherit}button{color:inherit}
+    .layout{display:grid;grid-template-columns:var(--left) minmax(420px,1fr) var(--right);min-height:100vh}.side{position:sticky;top:0;height:100vh;overflow:auto;padding:27px 22px 28px 27px;background:var(--panel);scrollbar-width:thin;scrollbar-color:var(--soft) transparent}.brand{display:flex;align-items:center;gap:11px;color:var(--ink);font-weight:650;font-size:15px;letter-spacing:-.02em}.logo{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;background:var(--accent);color:white;font-size:12px;font-weight:750;letter-spacing:-.05em}.tagline{margin:5px 0 24px 41px;color:var(--muted);font-size:11px}
+    .search-wrap{position:relative;margin:0 0 24px}.search{width:100%;height:39px;border:0;border-radius:8px;background:var(--bg);color:var(--ink);padding:0 12px;outline:none;transition:background .18s ease,transform .18s ease}.search::placeholder{color:var(--soft)}.search:focus-visible{background:var(--selection);transform:translateY(-1px)}button:focus-visible,a:focus-visible{outline:none;background:var(--selection);color:var(--ink)}
+    .tree{display:flex;flex-direction:column;gap:6px}.chapter{margin-top:8px}.chapter-head{display:flex;align-items:center;gap:4px}.chapter-toggle{width:25px;height:27px;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;transition:background .18s ease,transform .18s ease}.chapter-toggle:hover{background:var(--selection)}.chapter-toggle .arrow{display:inline-block;transition:transform .22s ease}.chapter-toggle[aria-expanded=true] .arrow{transform:rotate(90deg)}.chapter-link{flex:1;border-radius:6px;padding:7px 8px;color:var(--ink);font-size:12px;font-weight:650;line-height:1.35;transition:color .15s ease,background .15s ease,transform .15s ease}.chapter-link:hover,.page-link:hover{background:var(--selection);text-decoration:none;transform:translateX(2px)}.chapter-pages{display:grid;grid-template-rows:1fr;opacity:1;transition:grid-template-rows .2s ease,opacity .2s ease}.chapter-pages.collapsed{grid-template-rows:0fr;opacity:0}.chapter-pages-inner{overflow:hidden;margin-left:28px;display:flex;flex-direction:column;gap:1px}.page-link{border-radius:5px;padding:6px 8px;color:var(--muted);font-size:12px;line-height:1.4;transition:color .15s ease,background .15s ease,transform .15s ease}.page-link.active{background:var(--accent-soft);color:var(--accent);font-weight:600}.nav-caption{margin:27px 8px 9px;color:var(--soft);font-size:10px;text-transform:uppercase;letter-spacing:.11em;font-weight:700}.side-note{margin:30px 8px 0;color:var(--soft);font-size:11px;line-height:1.65}
+    .center{min-width:0}.topbar{height:62px;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:0 clamp(24px,5vw,76px);position:sticky;top:0;z-index:3;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(14px)}.crumb{font-size:12px;color:var(--muted)}.tools{display:flex;align-items:center;gap:12px}.theme-toggle{display:flex;align-items:center;gap:8px;border:0;border-radius:7px;padding:8px 10px;background:transparent;color:var(--muted);font-size:12px;cursor:pointer;transition:background .18s ease,transform .18s ease}.theme-toggle:hover{background:var(--panel);transform:translateY(-1px)}.theme-icon{font-size:15px}.content{max-width:calc(var(--measure) + 2 * clamp(24px,5vw,76px));padding:44px clamp(24px,5vw,76px) 100px;margin:0 auto;animation:enter .28s ease both}.content.search-results{animation:none}@keyframes enter{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+    article{max-width:var(--measure)}.eyebrow{margin-bottom:14px;color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.1em;font-weight:700}.content h1{font-size:clamp(31px,4vw,43px);line-height:1.12;letter-spacing:-.045em;font-weight:650;margin:0 0 17px;max-width:750px}.lead{font-size:18px;line-height:1.7;color:var(--muted);margin:0 0 30px;max-width:740px}.content h2{font-size:25px;line-height:1.25;letter-spacing:-.03em;margin:52px 0 15px;font-weight:640;scroll-margin-top:90px}.content h3{font-size:18px;line-height:1.35;margin:32px 0 10px;font-weight:640;scroll-margin-top:90px}.content h4{font-size:15px;margin:25px 0 8px;scroll-margin-top:90px}.content p,.content li{font-size:15px;line-height:1.82;color:var(--muted)}.content p{margin:13px 0}.content li{padding:2px 0}.content ul,.content ol{padding-left:24px}.content strong{color:var(--ink);font-weight:650}.content code{font: .88em "Cascadia Code",Consolas,monospace;background:var(--code);padding:3px 5px;border-radius:4px;color:var(--ink)}.content pre{margin:18px 0 26px;padding:18px 20px;border-radius:9px;background:var(--code);overflow:auto;color:var(--ink);font:13px/1.72 "Cascadia Code",Consolas,monospace}.content pre code{padding:0;background:none;font:inherit}.quote{margin:22px 0;padding:14px 18px;border-radius:0 8px 8px 0;background:var(--panel);color:var(--muted)}.quote p{margin:4px 0}.content table{width:100%;border-collapse:collapse;margin:18px 0 28px;font-size:13px}.content th,.content td{text-align:left;vertical-align:top;padding:11px 12px;color:var(--muted);line-height:1.65}.content th{color:var(--ink);font-weight:650;background:var(--panel)}.content tr:nth-child(even) td{background:color-mix(in srgb,var(--panel) 50%,var(--bg))}.content hr{border:0;height:1px;background:var(--panel);margin:38px 0}.content img{max-width:100%;border-radius:8px}.page-empty{color:var(--muted);padding:28px 0}.bottom-nav{display:flex;justify-content:space-between;gap:22px;margin-top:62px;padding-top:18px;background:linear-gradient(var(--panel),var(--panel)) top/100% 1px no-repeat}.bottom-nav a{max-width:48%;font-size:13px;line-height:1.5}.bottom-nav small{display:block;color:var(--soft);font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+    .right{position:sticky;top:0;height:100vh;padding:91px 20px 28px 4px;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--soft) transparent}.right-title{font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--soft);margin:0 0 13px 9px}.outline{max-height:calc(100vh - 135px);overflow:auto;display:flex;flex-direction:column;gap:3px;scrollbar-width:thin;scrollbar-color:var(--soft) transparent}.outline a{padding:6px 9px;border-radius:5px;color:var(--muted);font-size:11px;line-height:1.4}.outline a.level-3{padding-left:20px}.outline a.current{color:var(--accent);background:var(--accent-soft)}.outline a:hover{color:var(--ink);text-decoration:none;background:var(--panel)}.search-page{display:none}.search-page.show{display:block}.result{padding:14px 0;background:linear-gradient(var(--panel),var(--panel)) bottom/100% 1px no-repeat;cursor:pointer}.result h2{font-size:18px;margin:0 0 5px}.result p{font-size:13px;margin:0}.footer{margin-top:70px;padding-top:14px;color:var(--soft);font-size:11px;background:linear-gradient(var(--panel),var(--panel)) top/100% 1px no-repeat}
+    @media(max-width:1150px){:root{--right:180px;--left:270px}.right{padding-right:12px}.content{padding-left:40px;padding-right:40px}.topbar{padding-left:40px;padding-right:40px}}
+    @media(max-width:880px){.layout{grid-template-columns:260px minmax(0,1fr)}.right{display:none}.side{padding-left:18px;padding-right:16px}.content{padding-left:clamp(22px,5vw,48px);padding-right:clamp(22px,5vw,48px)}.topbar{padding:0 clamp(22px,5vw,48px)}}
+    @media(max-width:620px){.layout{display:block}.side{position:relative;height:auto;max-height:none;padding:16px 18px 13px}.tagline,.side-note,.nav-caption{display:none}.brand{margin-bottom:13px}.search-wrap{margin-bottom:9px}.tree{max-height:250px;overflow:auto;display:grid;grid-template-columns:1fr 1fr;gap:3px 8px}.chapter{margin-top:2px}.chapter-pages-inner{margin-left:17px}.page-link{font-size:11px}.topbar{height:51px;padding:0 20px}.content{padding:31px 22px 70px}.lead{font-size:16px}.theme-label{display:none}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side">
+    <a class="brand" href="#"><span class="logo">CP3</span><span>CP3 Documentation</span></a>
+    <p class="tagline">Language guide and standard library</p>
+    <div class="search-wrap"><input class="search" id="search" type="search" placeholder="Search documentation" aria-label="Search documentation"></div>
+    <nav class="tree" id="tree" aria-label="Documentation chapters"><p class="page-empty">Loading the guide…</p></nav>
+    <p class="side-note">This guide is bundled into the compiler and served locally.</p>
+  </aside>
+  <main class="center">
+    <header class="topbar"><span class="crumb" id="crumb">Welcome</span><div class="tools"><button class="theme-toggle" id="theme" type="button" aria-label="Toggle dark mode"><span class="theme-icon" id="theme-icon">◐</span><span class="theme-label" id="theme-label">Dark mode</span></button></div></header>
+    <div class="content" id="content"><article><p class="page-empty">Loading documentation…</p></article></div>
+  </main>
+  <aside class="right" aria-label="Page contents"><p class="right-title">On this page</p><nav class="outline" id="outline"></nav></aside>
+</div>
+<script>
+(() => {
+  const root = document.documentElement;
+  const content = document.getElementById('content');
+  const tree = document.getElementById('tree');
+  const outline = document.getElementById('outline');
+  const search = document.getElementById('search');
+  const crumb = document.getElementById('crumb');
+  const docsBySlug = new Map();
+  let entries = [];
+  let activeSlug = '';
+
+  const savedTheme = localStorage.getItem('cp3-docs-theme');
+  if (savedTheme) root.dataset.theme = savedTheme;
+  else if (window.matchMedia('(prefers-color-scheme: dark)').matches) root.dataset.theme = 'dark';
+  function updateThemeButton() {
+    const dark = root.dataset.theme === 'dark';
+    document.getElementById('theme-label').textContent = dark ? 'Light mode' : 'Dark mode';
+    document.getElementById('theme-icon').textContent = dark ? '☼' : '◐';
+    document.getElementById('theme').setAttribute('aria-pressed', String(dark));
+  }
+  updateThemeButton();
+  document.getElementById('theme').addEventListener('click', () => {
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('cp3-docs-theme', root.dataset.theme);
+    updateThemeButton();
+  });
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+  function inline(text) {
+    let out = escapeHtml(text);
+    out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
+    out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    out = out.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^ )]+|#[^ )]+)\)/g, '<a href="$2">$1</a>');
+    return out;
+  }
+  function slugify(text) {
+    return text.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  }
+  function renderMarkdown(markdown) {
+    const lines = markdown.replace(/\r/g,'').split('\n');
+    let html = '', paragraph = [], list = '', code = '', codeLang = null, table = [];
+    const flushParagraph = () => { if (paragraph.length) { html += '<p>' + inline(paragraph.join(' ')) + '</p>'; paragraph = []; } };
+    const flushList = () => { if (list) { html += '</' + list + '>'; list = ''; } };
+    const flushTable = () => {
+      if (!table.length) return;
+      const rows = table.filter(row => !/^\s*\|?\s*:?-{3,}/.test(row));
+      html += '<table>' + rows.map((row,index) => '<tr>' + row.trim().replace(/^\||\|$/g,'').split('|').map(cell => '<' + (index===0?'th':'td') + '>' + inline(cell.trim()) + '</' + (index===0?'th':'td') + '>').join('') + '</tr>').join('') + '</table>';
+      table = [];
+    };
+    for (const line of lines) {
+      if (codeLang !== null) {
+        if (codeLang !== false) {
+          if (/^```/.test(line)) { html += '<pre><code>' + escapeHtml(code.replace(/\n$/,'')) + '</code></pre>'; code=''; codeLang=null; }
+          else code += line + '\n';
+          continue;
+        }
+      }
+      if (/^```/.test(line)) { flushParagraph(); flushList(); flushTable(); codeLang=line.slice(3).trim() || ''; continue; }
+      if (/^\s*\|/.test(line)) { flushParagraph(); flushList(); table.push(line); continue; }
+      if (table.length && !line.trim()) { flushTable(); continue; }
+      if (!line.trim()) { flushParagraph(); flushList(); continue; }
+      const heading = /^(#{1,4})\s+(.+)$/.exec(line);
+      if (heading) { flushParagraph(); flushList(); flushTable(); const level=heading[1].length; const label=heading[2].replace(/\s+#+$/,''); const id=slugify(label); html += `<h${level} id="${id}">${inline(label)}</h${level}>`; continue; }
+      if (/^\s*>/.test(line)) { flushParagraph(); flushList(); flushTable(); html += '<blockquote class="quote"><p>' + inline(line.replace(/^\s*>\s?/,'')) + '</p></blockquote>'; continue; }
+      const unordered = /^\s*[-*+]\s+(.+)$/.exec(line);
+      const ordered = /^\s*\d+[.)]\s+(.+)$/.exec(line);
+      if (unordered || ordered) { flushParagraph(); flushTable(); const kind=unordered?'ul':'ol'; if (list && list!==kind) flushList(); if (!list) {list=kind;html += '<'+list+'>';} html += '<li>'+inline((unordered||ordered)[1])+'</li>'; continue; }
+      if (/^\s*---+\s*$/.test(line)) { flushParagraph(); flushList(); flushTable(); html += '<hr>'; continue; }
+      flushList(); flushTable(); paragraph.push(line.trim());
+    }
+    if (codeLang !== null) html += '<pre><code>' + escapeHtml(code.replace(/\n$/,'')) + '</code></pre>';
+    flushParagraph(); flushList(); flushTable();
+    return html;
+  }
+
+  function renderTree(filter='') {
+    const q = filter.trim().toLowerCase();
+    const visible = entries.filter(entry => !q || (entry.title+' '+entry.chapter+' '+entry.markdown).toLowerCase().includes(q));
+    const groups = new Map();
+    for (const entry of visible) { if (!groups.has(entry.chapter)) groups.set(entry.chapter,[]); groups.get(entry.chapter).push(entry); }
+    tree.innerHTML = '';
+    for (const [chapter,pages] of groups) {
+      const section=document.createElement('section'); section.className='chapter';
+      const head=document.createElement('div'); head.className='chapter-head';
+      const key='cp3-docs-open-'+chapter;
+      const open=q.length>0 || localStorage.getItem(key)!=='false';
+      const toggle=document.createElement('button'); toggle.className='chapter-toggle'; toggle.type='button'; toggle.setAttribute('aria-label','Expand or collapse '+chapter); toggle.setAttribute('aria-expanded',String(open)); toggle.innerHTML='<span class="arrow">›</span>';
+      const chapterLink=document.createElement('a'); chapterLink.className='chapter-link'; chapterLink.href='#'+pages[0].slug; chapterLink.textContent=chapter;
+      const list=document.createElement('div'); list.className='chapter-pages'+(open?'':' collapsed'); list.innerHTML='<div class="chapter-pages-inner"></div>';
+      for (const page of pages) { const a=document.createElement('a'); a.href='#'+page.slug; a.className='page-link'+(page.slug===activeSlug?' active':''); a.dataset.slug=page.slug; a.textContent=page.title; list.firstChild.appendChild(a); }
+      toggle.addEventListener('click',()=>{const next=toggle.getAttribute('aria-expanded')!=='true';toggle.setAttribute('aria-expanded',String(next));list.classList.toggle('collapsed',!next);localStorage.setItem(key,String(next));});
+      head.append(toggle,chapterLink); section.append(head,list); tree.appendChild(section);
+    }
+    if (!groups.size) tree.innerHTML='<p class="page-empty">No matching pages.</p>';
+  }
+  function buildOutline(article) {
+    outline.innerHTML='';
+    const headings=[...article.querySelectorAll('h2,h3')];
+    for (const heading of headings) { const a=document.createElement('a'); a.href='#'+activeSlug+'::'+heading.id; a.className=heading.tagName==='H3'?'level-3':''; a.textContent=heading.textContent; outline.appendChild(a); }
+    if (!headings.length) outline.innerHTML='<span class="page-empty">No sections on this page.</span>';
+  }
+  function showPage(slug) {
+    const page=docsBySlug.get(slug) || entries[0];
+    if (!page) return;
+    activeSlug=page.slug; search.value='';
+    content.classList.remove('search-results');
+    content.innerHTML='<article><div class="eyebrow">'+escapeHtml(page.chapter)+'</div>'+renderMarkdown(page.markdown)+'<nav class="bottom-nav" id="bottom"></nav><div class="footer">CP3 documentation · bundled with the compiler</div></article>';
+    const article=content.querySelector('article');
+    crumb.textContent=page.title;
+    renderTree(); buildOutline(article); addBottomLinks(page);
+    document.title=page.title+' · CP3 Documentation';
+    if (location.hash.slice(1)!==page.slug) history.replaceState(null,'','#'+page.slug);
+    window.scrollTo({top:0,behavior:'smooth'});
+    content.classList.remove('entering'); void content.offsetWidth; content.classList.add('entering');
+  }
+  function addBottomLinks(page) {
+    const i=entries.findIndex(entry=>entry.slug===page.slug); const bottom=document.getElementById('bottom');
+    const prev=entries[i-1],next=entries[i+1];
+    if (prev) bottom.insertAdjacentHTML('beforeend','<a href="#'+encodeURIComponent(prev.slug)+'" data-go="'+escapeHtml(prev.slug)+'"><small>Previous</small>← '+escapeHtml(prev.title)+'</a>'); else bottom.insertAdjacentHTML('beforeend','<span></span>');
+    if (next) bottom.insertAdjacentHTML('beforeend','<a style="text-align:right" href="#'+encodeURIComponent(next.slug)+'" data-go="'+escapeHtml(next.slug)+'"><small>Next</small>'+escapeHtml(next.title)+' →</a>');
+    bottom.querySelectorAll('[data-go]').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();location.hash=link.dataset.go;}));
+  }
+  function showSearch(q) {
+    const query=q.trim().toLowerCase();
+    if (!query) { showPage(decodeURIComponent(location.hash.slice(1)) || entries[0]?.slug); return; }
+    const matches=entries.filter(page=>(page.title+' '+page.chapter+' '+page.markdown).toLowerCase().includes(query));
+    content.classList.add('search-results'); outline.innerHTML=''; crumb.textContent='Search results'; renderTree(query);
+    content.innerHTML='<article><div class="eyebrow">Documentation search</div><h1>Search results</h1><p class="lead">'+matches.length+' page'+(matches.length===1?'':'s')+' match “'+escapeHtml(q)+'”.</p><div id="results"></div></article>';
+    const results=content.querySelector('#results');
+    for (const page of matches) { const row=document.createElement('section'); row.className='result'; row.innerHTML='<h2>'+escapeHtml(page.title)+'</h2><p>'+escapeHtml(page.chapter)+' · '+escapeHtml(page.markdown.replace(/[#*`\[\]()>-]/g,' ').replace(/\s+/g,' ').slice(0,210))+'…</p>'; row.addEventListener('click',()=>{location.hash=page.slug;}); results.appendChild(row); }
+  }
+  async function load() {
+    try { const response=await fetch('/api/docs'); if (!response.ok) throw new Error('Could not load docs'); entries=await response.json(); }
+    catch (_) { content.innerHTML='<article><h1>Documentation unavailable</h1><p>Start the local viewer with <code>cp3 docs</code> so the bundled guide can be loaded.</p></article>'; tree.innerHTML=''; return; }
+    for (const entry of entries) docsBySlug.set(entry.slug,entry);
+    renderTree();
+    const slug=decodeURIComponent(location.hash.slice(1)); showPage(slug || entries[0]?.slug);
+  }
+  tree.addEventListener('click',event=>{const link=event.target.closest('[data-slug]');if(link){event.preventDefault();location.hash=link.dataset.slug;}});
+  search.addEventListener('input',()=>showSearch(search.value));
+  window.addEventListener('hashchange',()=>{
+    if (search.value) return;
+    const route=decodeURIComponent(location.hash.slice(1));
+    const marker=route.indexOf('::');
+    if (marker>=0) {
+      const slug=route.slice(0,marker), anchor=route.slice(marker+2);
+      showPage(slug);
+      history.replaceState(null,'','#'+slug+'::'+anchor);
+      requestAnimationFrame(()=>document.getElementById(anchor)?.scrollIntoView({behavior:'smooth',block:'start'}));
+    } else if (docsBySlug.has(route)) showPage(route);
+    else if (route) document.getElementById(route)?.scrollIntoView({behavior:'smooth',block:'start'});
+  });
+  document.addEventListener('keydown',event=>{if ((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();search.focus();}});
+  load();
+})();
+</script>
+</body>
+</html>

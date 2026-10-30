@@ -9,6 +9,7 @@
 // The pretty block is purely additive.
 // =============================================================================
 #include "detail/core/diagnostics.hpp"
+#include "detail/core/docs.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -107,6 +108,12 @@ void renderDiagnostics(const std::vector<Diagnostic>& diagnostics,
         std::fputc('\n', out);
         if (opts.pretty) {
             renderPretty(d, opts, out);
+        }
+        if (d.severity == Severity::Error || d.severity == Severity::Fatal) {
+            const std::string help = writeDiagnosticHelpPage(d);
+            if (!help.empty()) {
+                std::fprintf(out, "  help: %s\n", help.c_str());
+            }
         }
         for (const DiagnosticNote& note : d.notes) {
             Diagnostic synthetic(note.message.empty() ? d.code : d.code,

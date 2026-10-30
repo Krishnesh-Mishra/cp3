@@ -11,6 +11,7 @@
 
 set(cp3_cli_sources
     src/cli.cpp
+    src/commands/docs/docs.cpp
     src/toolchain/runtime/util.cpp
     src/toolchain/runtime/process.cpp
     src/toolchain/runtime/worker_module.cpp
@@ -104,10 +105,66 @@ set(cp3_cli_sources
     src/native/sdk/sdk_libs.cpp
 )
 
+# Compile every Markdown page plus the viewer into cp3c. This makes the docs
+# command work without a checkout or installed docs directory. The document
+# tree is deliberately source Markdown organized by chapter and subchapter.
+set(CP3_DOCS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../docs")
+set(CP3_DOCS_VIEWER "${CP3_DOCS_ROOT}/viewer/index.html")
+file(GLOB_RECURSE CP3_DOCS_MARKDOWN CONFIGURE_DEPENDS
+    "${CP3_DOCS_ROOT}/content/*.md")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CP3_DOCS_VIEWER}" ${CP3_DOCS_MARKDOWN})
+set(CP3_DOCS_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${CP3_DOCS_GENERATED_DIR}")
+set(CP3_DOCS_HEADER "${CP3_DOCS_GENERATED_DIR}/cp3_docs_data.hpp")
+set(CP3_DOCS_HEADER_TMP "${CP3_DOCS_HEADER}.tmp")
+file(WRITE "${CP3_DOCS_HEADER_TMP}"
+    "#pragma once\n#include <string_view>\nnamespace cp3::cli::docs {\n"
+    "struct Entry { std::string_view slug, title, chapter, markdown; };\n"
+    "inline constexpr Entry kEntries[] = {\n")
+foreach(CP3_DOC IN LISTS CP3_DOCS_MARKDOWN)
+    file(READ "${CP3_DOC}" CP3_DOC_TEXT)
+    string(REGEX MATCH "^---[\r\n]+title: *([^\r\n]+)[\r\n]+chapter: *([^\r\n]+)[\r\n]+---[\r\n]+"
+        CP3_FRONT_MATTER "${CP3_DOC_TEXT}")
+    if(CP3_FRONT_MATTER STREQUAL "")
+        message(FATAL_ERROR "Documentation page needs title/chapter front matter: ${CP3_DOC}")
+    endif()
+    set(CP3_DOC_TITLE "${CMAKE_MATCH_1}")
+    set(CP3_DOC_CHAPTER "${CMAKE_MATCH_2}")
+    string(REGEX REPLACE "^---[\r\n]+title: *[^\r\n]+[\r\n]+chapter: *[^\r\n]+[\r\n]+---[\r\n]+" ""
+        CP3_DOC_MARKDOWN_BODY "${CP3_DOC_TEXT}")
+    file(RELATIVE_PATH CP3_DOC_SLUG "${CP3_DOCS_ROOT}/content" "${CP3_DOC}")
+    string(REPLACE "\\" "/" CP3_DOC_SLUG "${CP3_DOC_SLUG}")
+    string(REGEX REPLACE "\\.md$" "" CP3_DOC_SLUG "${CP3_DOC_SLUG}")
+    string(SHA256 CP3_DOC_HASH "${CP3_DOC}")
+    string(SUBSTRING "${CP3_DOC_HASH}" 0 12 CP3_DOC_HASH)
+    set(CP3_DOC_DELIM "CP3D${CP3_DOC_HASH}")
+    file(APPEND "${CP3_DOCS_HEADER_TMP}"
+        "    {R\"${CP3_DOC_DELIM}(${CP3_DOC_SLUG})${CP3_DOC_DELIM}\", "
+        "R\"${CP3_DOC_DELIM}(${CP3_DOC_TITLE})${CP3_DOC_DELIM}\", "
+        "R\"${CP3_DOC_DELIM}(${CP3_DOC_CHAPTER})${CP3_DOC_DELIM}\", "
+        "R\"${CP3_DOC_DELIM}(${CP3_DOC_MARKDOWN_BODY})${CP3_DOC_DELIM}\"},\n")
+endforeach()
+file(READ "${CP3_DOCS_VIEWER}" CP3_DOCS_VIEWER_HTML)
+string(SHA256 CP3_VIEWER_HASH "${CP3_DOCS_VIEWER_HTML}")
+string(SUBSTRING "${CP3_VIEWER_HASH}" 0 12 CP3_VIEWER_HASH)
+set(CP3_VIEWER_DELIM "CP3V${CP3_VIEWER_HASH}")
+file(APPEND "${CP3_DOCS_HEADER_TMP}"
+    "};\ninline constexpr std::string_view kViewerHtml = R\"${CP3_VIEWER_DELIM}(${CP3_DOCS_VIEWER_HTML})${CP3_VIEWER_DELIM}\";\n"
+    "}  // namespace cp3::cli::docs\n")
+execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+    "${CP3_DOCS_HEADER_TMP}" "${CP3_DOCS_HEADER}"
+    RESULT_VARIABLE CP3_DOCS_COPY_RESULT)
+if(NOT CP3_DOCS_COPY_RESULT EQUAL 0)
+    message(FATAL_ERROR "Could not update the generated CP3 documentation header")
+endif()
+file(REMOVE "${CP3_DOCS_HEADER_TMP}")
+
 add_library(cp3_cli STATIC ${cp3_cli_sources})
 target_include_directories(cp3_cli PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 # Private headers resolve as `detail/...` from every unit subdirectory.
 target_include_directories(cp3_cli PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_include_directories(cp3_cli PRIVATE "${CP3_DOCS_GENERATED_DIR}")
 
 # -----------------------------------------------------------------------------
 # libclang C API headers for `native-install`.
@@ -186,3 +243,6 @@ target_include_directories(cp3_cli PRIVATE "${cp3_dap_dir}/include"
 target_link_libraries(cp3_cli PUBLIC
     cp3_common cp3_lexer cp3_parser cp3_modules cp3_sema cp3_codegen)
 cp3_set_warnings(cp3_cli)
+if(WIN32)
+    target_link_libraries(cp3_cli PRIVATE ws2_32)
+endif()
