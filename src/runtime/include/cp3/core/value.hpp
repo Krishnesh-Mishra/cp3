@@ -39,14 +39,17 @@ namespace cp3::runtime {
 // Reuse shared_ptr control-block storage after the last owner releases it.
 // `allocate_shared` still performs the standard atomic reference counting and
 // destroys the object at the right time; only the underlying block allocation
-// is pooled. Each allocator specialization has a small thread-local free list,
-// so the common allocate/destroy cycle does not contend on a global lock. A
-// block freed on another thread is cached by that thread and remains reusable
-// because the free lists are keyed by the exact allocator specialization.
+// is pooled. Each allocator specialization has a bounded thread-local free
+// list, so repeated allocation/destruction cycles can reuse storage without
+// contending on a global lock. A block freed on another thread is cached by
+// that thread and remains reusable because the free lists are keyed by the
+// exact allocator specialization.
 template <class T>
 class RefPoolAllocator {
     struct FreeNode { FreeNode* next; };
-    static constexpr std::size_t kMaxCachedBlocks = 32;
+    static constexpr std::size_t kMaxCachedBytes = 2 * 1024 * 1024;
+    static constexpr std::size_t kMaxCachedBlocks =
+        sizeof(T) >= kMaxCachedBytes ? 1 : kMaxCachedBytes / sizeof(T);
 
     struct Cache {
         FreeNode* head = nullptr;
