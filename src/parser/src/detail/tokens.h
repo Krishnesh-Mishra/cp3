@@ -260,7 +260,6 @@ private:
     // --- state ---------------------------------------------------------------
     TokenStream& ts_;
     DiagnosticSink* sink_;
-    NullDiagnosticSink nullSink_;
     const Token* anchor_ = nullptr;
     std::uint32_t pendingGT_ = 0;
     bool noIn_ = false;
@@ -275,21 +274,32 @@ private:
         ~AnchorScope() { p.anchor_ = saved; }
     };
 
-    // Trial parse: suppresses diagnostics and restores the cursor on failure.
+    // Trial parse: buffers diagnostics and restores the cursor on failure.
+    // A successful trial forwards its buffered diagnostics to the parent sink
+    // immediately. This matters when the accepted construct has a body: errors
+    // in that body must not remain hidden until the trial object is destroyed.
     struct Trial {
         ParserImpl& p;
         std::size_t cursor;
         DiagnosticSink* sink;
         std::uint32_t pendingGT;
+        CollectingDiagnosticSink diagnostics;
         bool committed = false;
         explicit Trial(ParserImpl& impl)
             : p(impl),
               cursor(impl.ts_.cursor()),
               sink(impl.sink_),
               pendingGT(impl.pendingGT_) {
-            p.sink_ = &p.nullSink_;
+            p.sink_ = &diagnostics;
         }
-        void commit() { committed = true; }
+        void commit() {
+            if (committed) return;
+            committed = true;
+            p.sink_ = sink;
+            for (const Diagnostic& diagnostic : diagnostics.diagnostics()) {
+                sink->report(diagnostic);
+            }
+        }
         ~Trial() {
             p.sink_ = sink;
             if (!committed) {

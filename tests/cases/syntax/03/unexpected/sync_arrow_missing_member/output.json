@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3201",
+    "line": 2,
+    "col": 3,
+    "contains": "expected a property name after '.'"
+  }
+}
