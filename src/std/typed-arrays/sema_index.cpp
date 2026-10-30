@@ -39,22 +39,6 @@ namespace cp3 {
 
 namespace {
 
-bool literalLengthValue(const Expr& e, double& out) {
-    if (e.kind == NodeKind::NumberLiteral) {
-        out = static_cast<const NumberLiteral&>(e).value;
-        return true;
-    }
-    if (e.kind == NodeKind::UnaryExpr) {
-        const auto& u = static_cast<const UnaryExpr&>(e);
-        if (u.op == UnaryOp::Negate && u.operand &&
-            u.operand->kind == NodeKind::NumberLiteral) {
-            out = -static_cast<const NumberLiteral&>(*u.operand).value;
-            return true;
-        }
-    }
-    return false;
-}
-
 bool literalIndexValue(const Expr& e, double& out) {
     if (e.kind != NodeKind::NumberLiteral) return false;
     out = static_cast<const NumberLiteral&>(e).value;
@@ -185,10 +169,14 @@ std::optional<double> Analyzer::knownTypedLength(const Expr& e) const {
         }
         if (args->size() == 1 && args->front()) {
             const Expr& a0 = *args->front();
-            double lit = 0.0;
-            if (literalLengthValue(a0, lit)) {
-                return lit >= 0.0 ? std::optional<double>(std::trunc(lit))
-                                  : std::nullopt;
+            // Constructor lengths may be const names, not just literals
+            // (`const SIZE = 4; new Float64Array(SIZE)`). Reuse the analyzer's
+            // constant evaluator so the loop-index proof sees the same length.
+            if (auto length = constantNumber(a0)) {
+                if (!std::isfinite(*length) || *length < 0.0) {
+                    return std::nullopt;
+                }
+                return std::trunc(*length);
             }
             if (a0.kind == NodeKind::ArrayLiteral) {
                 return static_cast<double>(
