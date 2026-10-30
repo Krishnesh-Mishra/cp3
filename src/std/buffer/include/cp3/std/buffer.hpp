@@ -47,12 +47,18 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <limits>
 #include <memory>
+#include <new>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "cp3/core/error.hpp"
+#include "cp3/core/value.hpp"
 
 namespace cp3::runtime::buffer {
 
@@ -194,6 +200,96 @@ inline std::size_t sliceEnd(double end, double len) {
     return static_cast<std::size_t>(to);
 }
 
+// Buffer payloads in copy-heavy programs are frequently destroyed at the end
+// of one iteration and replaced with another payload of the same size. Cache
+// freed byte blocks per thread so those cycles reuse their backing allocation.
+// Deallocation may happen on a different thread than allocation; each thread
+// simply adopts blocks it frees, so no block is shared between unsynchronized
+// caches.
+class ByteBlockPool {
+    struct Block {
+        void* data;
+        std::size_t size;
+    };
+    static constexpr std::size_t kMaxRetainedBytes = 2 * 1024 * 1024;
+
+    std::vector<Block> free_;
+    std::size_t retained_ = 0;
+
+public:
+    ByteBlockPool() = default;
+    ByteBlockPool(const ByteBlockPool&) = delete;
+    ByteBlockPool& operator=(const ByteBlockPool&) = delete;
+
+    ~ByteBlockPool() {
+        for (const Block& block : free_) ::operator delete(block.data);
+    }
+
+    void* allocate(std::size_t size) {
+        for (std::size_t i = free_.size(); i != 0; --i) {
+            const Block block = free_[i - 1];
+            if (block.size != size) continue;
+            free_[i - 1] = free_.back();
+            free_.pop_back();
+            retained_ -= block.size;
+            return block.data;
+        }
+        return ::operator new(size == 0 ? 1 : size);
+    }
+
+    void deallocate(void* data, std::size_t size) noexcept {
+        if (!data) return;
+        const std::size_t actualSize = size == 0 ? 1 : size;
+        if (actualSize <= kMaxRetainedBytes - retained_) {
+            try {
+                free_.push_back({data, actualSize});
+                retained_ += actualSize;
+                return;
+            } catch (...) {
+                // Allocation failure while caching must not escape a string
+                // destructor. Release the block normally instead.
+            }
+        }
+        ::operator delete(data);
+    }
+};
+
+inline ByteBlockPool& byteBlockPool() {
+    thread_local ByteBlockPool pool;
+    return pool;
+}
+
+template <class T>
+class ByteBlockAllocator {
+public:
+    using value_type = T;
+    using is_always_equal = std::true_type;
+    template <class U> struct rebind { using other = ByteBlockAllocator<U>; };
+
+    ByteBlockAllocator() noexcept = default;
+    template <class U>
+    ByteBlockAllocator(const ByteBlockAllocator<U>&) noexcept {}
+
+    [[nodiscard]] T* allocate(std::size_t count) {
+        if (count > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
+            throw std::bad_array_new_length();
+        }
+        return static_cast<T*>(byteBlockPool().allocate(count * sizeof(T)));
+    }
+
+    void deallocate(T* data, std::size_t count) noexcept {
+        byteBlockPool().deallocate(data, count * sizeof(T));
+    }
+
+    template <class U>
+    bool operator==(const ByteBlockAllocator<U>&) const noexcept { return true; }
+    template <class U>
+    bool operator!=(const ByteBlockAllocator<U>&) const noexcept { return false; }
+};
+
+using BufferString = std::basic_string<char, std::char_traits<char>,
+                                       ByteBlockAllocator<char>>;
+
 }  // namespace detail
 
 // The nominal `Buffer` byte sequence. Immutable: the factory functions below
@@ -207,7 +303,11 @@ class Buffer {
 public:
     Buffer() = default;
     explicit Buffer(std::string bytes)
-        : owner_(std::make_shared<const std::string>(std::move(bytes))),
+        : Buffer(detail::BufferString(bytes.begin(), bytes.end())) {}
+    explicit Buffer(detail::BufferString bytes)
+        : owner_(std::allocate_shared<const detail::BufferString>(
+              ::cp3::runtime::RefPoolAllocator<const detail::BufferString>{},
+              std::move(bytes))),
           length_(owner_->size()) {}
 
     std::string_view view() const noexcept {
@@ -222,11 +322,11 @@ public:
 
 private:
     friend Buffer slice(const Buffer&, double, double);
-    Buffer(std::shared_ptr<const std::string> owner, std::size_t offset,
+    Buffer(std::shared_ptr<const detail::BufferString> owner, std::size_t offset,
            std::size_t length)
         : owner_(std::move(owner)), offset_(offset), length_(length) {}
 
-    std::shared_ptr<const std::string> owner_;
+    std::shared_ptr<const detail::BufferString> owner_;
     std::size_t offset_ = 0;
     std::size_t length_ = 0;
 };
@@ -236,7 +336,7 @@ inline Buffer alloc(double size) {
     if (!(size >= 0.0) || size != std::floor(size) || size > detail::kMaxSize) {
         detail::fail("Buffer.alloc: size must be a non-negative integer");
     }
-    return Buffer(std::string(static_cast<std::size_t>(size), '\0'));
+    return Buffer(detail::BufferString(static_cast<std::size_t>(size), '\0'));
 }
 
 /// `Buffer.from(input)`: the UTF-8 bytes of `input` (the default encoding).
@@ -278,15 +378,30 @@ inline std::size_t concatSize(const char* value) {
     return value ? std::strlen(value) : 0;
 }
 
-inline void concatAppend(std::string& out, const Buffer& value) {
+inline std::size_t concatSizeChecked(std::size_t total, std::size_t part,
+                                    std::size_t maxSize) {
+    if (part > maxSize - total) {
+        throw std::length_error("Buffer concatenation is too large");
+    }
+    return total + part;
+}
+
+inline void concatCopy(BufferString& out, std::size_t& offset,
+                       const Buffer& value) {
     const std::string_view bytes = value.view();
-    if (!bytes.empty()) out.append(bytes.data(), bytes.size());
+    if (!bytes.empty()) std::memcpy(out.data() + offset, bytes.data(), bytes.size());
+    offset += bytes.size();
 }
-inline void concatAppend(std::string& out, const std::string& value) {
-    out += value;
+inline void concatCopy(BufferString& out, std::size_t& offset,
+                       const std::string& value) {
+    if (!value.empty()) std::memcpy(out.data() + offset, value.data(), value.size());
+    offset += value.size();
 }
-inline void concatAppend(std::string& out, const char* value) {
-    if (value) out += value;
+inline void concatCopy(BufferString& out, std::size_t& offset,
+                       const char* value) {
+    const std::size_t size = value ? std::strlen(value) : 0;
+    if (size != 0) std::memcpy(out.data() + offset, value, size);
+    offset += size;
 }
 
 }  // namespace detail
@@ -296,9 +411,13 @@ inline void concatAppend(std::string& out, const char* value) {
 /// byte-identical to concatenating the strings and calling `from`.
 template <class... Parts>
 Buffer fromConcat(const Parts&... parts) {
-    std::string out;
-    out.reserve((detail::concatSize(parts) + ... + 0));
-    (detail::concatAppend(out, parts), ...);
+    detail::BufferString out;
+    std::size_t size = 0;
+    ((size = detail::concatSizeChecked(size, detail::concatSize(parts),
+                                       out.max_size())), ...);
+    out.resize(size);
+    std::size_t offset = 0;
+    (detail::concatCopy(out, offset, parts), ...);
     return Buffer(std::move(out));
 }
 
