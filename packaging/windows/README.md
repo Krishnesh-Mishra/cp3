@@ -100,8 +100,11 @@ extension. The resulting MSI is self-contained.
 - **Start Menu shortcut.** `cp3 Command Prompt` opens a terminal in
   `<install>\bin`, where `cp3.cmd` is available even before Explorer refreshes
   its environment.
-- **Major upgrades.** A fixed `UpgradeCode` and deterministic component GUIDs
-  make later versions upgrade in place. `ProductVersion` is the numeric
+- **Updates and same-version reinstall.** A fixed `UpgradeCode` and
+  deterministic component GUIDs let a newer version replace an older one. A
+  rebuilt installer with the same `major.minor.patch` version also replaces
+  the installed build, rather than failing as a separate product. Downgrades
+  to a lower version remain blocked. `ProductVersion` is the numeric
   `major.minor.patch` prefix of `version.txt`; prerelease suffixes are not valid
   MSI versions.
 
@@ -127,7 +130,9 @@ msiexec /x .\cp3-0.1.0-windows-x64.msi /qn /norestart
 ```
 
 `/qb` shows a basic progress UI; double-clicking the MSI uses the
-`WixUI_Minimal` wizard. `/qn` is fully silent.
+`WixUI_InstallDir` wizard, with install-location, Install, and Cancel steps.
+When the MSI detects an older or same-version CP3 install, it replaces that
+install as part of the chosen install action. `/qn` is fully silent.
 
 ## Stage layout (`package.ps1` output)
 

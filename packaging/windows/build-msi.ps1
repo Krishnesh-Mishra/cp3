@@ -327,6 +327,9 @@ try {
     $writer.WriteAttributeString('Compressed', 'yes')
 
     $writer.WriteStartElement('MajorUpgrade', $wixNs)
+    # Permit reinstalling/replacing another build with the same MSI version.
+    # Downgrades to a lower major.minor.patch version remain blocked.
+    $writer.WriteAttributeString('AllowSameVersionUpgrades', 'yes')
     $writer.WriteAttributeString('DowngradeErrorMessage',
         'A newer version of cp3 is already installed.')
     $writer.WriteEndElement()
@@ -337,7 +340,11 @@ try {
 
     if (-not $NoUi) {
         $writer.WriteStartElement('WixUI', $uiNs)
-        $writer.WriteAttributeString('Id', 'WixUI_Minimal')
+        $writer.WriteAttributeString('Id', 'WixUI_InstallDir')
+        $writer.WriteEndElement()
+        $writer.WriteStartElement('Property', $wixNs)
+        $writer.WriteAttributeString('Id', 'WIXUI_INSTALLDIR')
+        $writer.WriteAttributeString('Value', 'INSTALLDIR')
         $writer.WriteEndElement()
     }
 
