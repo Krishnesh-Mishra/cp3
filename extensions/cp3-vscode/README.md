@@ -114,8 +114,9 @@ the Command Palette.
 
 The extension ships with the cp3 toolchain. Pick whichever fits:
 
-1. **With the cp3 installer.** `cp3-setup-0.1.0-x64.exe` installs the bundled
-   `.vsix` automatically when it finds the `code` CLI.
+1. **With the cp3 Windows MSI.** `cp3-0.1.0-windows-x64.msi` installs the
+   toolchain and stages the bundled `.vsix`; run `cp3 editor-plugin` to install
+   it into a detected editor.
 2. **From an existing cp3 install.**
    ```
    cp3 editor-plugin

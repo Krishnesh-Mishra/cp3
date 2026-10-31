@@ -1,60 +1,133 @@
 # cp3 Windows packaging
 
-Builds and ships the Windows installer for the cp3 toolchain:
+Builds a single per-user MSI installer for the cp3 toolchain:
 
-```
-build\scratch\packaging\dist\cp3-setup-0.1.0-x64.exe
+```text
+out\windows-x64\cp3-0.1.0-windows-x64.msi
 ```
 
-Everything here is per-user (no admin) and reproducible from a built tree.
+Double-click it, or install silently with `msiexec`. No administrator rights
+are required, and no zip or install script is involved.
 
-## Pipeline
-
-```
-cmake --build <build>            build\bin\cp3c.exe (any Release/Debug tree)
-  |
-  v
-package.ps1                      stages the distribution under <dist>\cp3
-  |                              and writes manifest.json (SHA-256 per file)
-  v
-build-installer.ps1              runs package.ps1, then ISCC (Inno Setup 6)
-  |
-  v
-cp3-setup-<version>-x64.exe      one self-contained, per-user installer
-```
+## One-command build
 
 From the repository root:
 
 ```powershell
-# default tree is .\build; the packaging wave uses its own tree:
-powershell -ExecutionPolicy Bypass -File packaging\windows\build-installer.ps1 `
-    -BuildDir build\scratch\packaging\build
-
-# stage only (no installer), for inspection:
-powershell -ExecutionPolicy Bypass -File packaging\windows\package.ps1 `
-    -BuildDir build\scratch\packaging\build
-
-# while the VS Code extension is not built yet:
-powershell ... build-installer.ps1 -BuildDir <dir> -NoVsix
+.\tools\build.ps1
 ```
 
-Requirements on the build machine:
+The script syncs `version.txt` into the compiler, packaging and extension
+metadata, builds `build\bin\cp3c.exe`, stages the relocatable tree under
+`out\windows-x64\cp3`, then builds the MSI and `SHA256SUMS.txt` with
+`packaging\windows\build-msi.ps1`. The old zip/Inno artifacts are removed from
+the output directory.
+
+Useful variants:
+
+```powershell
+# debug compiler, no packaging
+.\tools\build.ps1 -Config Debug -NoPackage
+
+# full clean (build\scratch\ is preserved)
+.\tools\build.ps1 -Clean
+
+# no wizard (silent/basic MSI only)
+.\tools\build.ps1 -NoMsiUi
+
+# package an existing stage directly
+packaging\windows\build-msi.ps1 -StageDir out\windows-x64\cp3
+```
+
+## Pipeline
+
+```text
+cmake --build <build>            build\bin\cp3c.exe
+  |
+  v
+package.ps1                      stages <dist>\cp3 and writes manifest.json
+  |
+  v
+build-msi.ps1                    generates WiX source + runs WiX 5
+  |
+  v
+cp3-<version>-windows-x64.msi    one self-contained, per-user installer
+```
+
+`tools\build.ps1` runs `package.ps1` and `build-msi.ps1` in that order.
+`package.ps1` can still be run alone for inspection.
+
+## Requirements on the build machine
 
 - Windows x64, PowerShell 5.1+.
+- Python 3 for `tools/update-version.ps1`.
+- CMake 3.20+, Ninja (or `mingw32-make`), MinGW-w64 GCC (`g++`).
+- .NET SDK with `dotnet` on PATH. The repository pins WiX **5.0.2** in
+  `packaging\windows\.config\dotnet-tools.json`; `build-msi.ps1` runs
+  `dotnet tool restore` automatically. No global WiX install is required. The
+  WiX extension cache lives in `packaging\windows\.wix` (ignored by git), so
+  the repository root stays clean.
 - A MinGW-w64 runtime directory discoverable through `CP3_MINGW_ROOT`, PATH, or
   a standard WinLibs/MSYS2 location: `package.ps1` copies the matching
   `libstdc++-6.dll`, `libgcc_s_seh-1.dll` and `libwinpthread-1.dll` next to
-  `bin\cp3c.exe` so the installed compiler starts without the build toolchain on
-  PATH (use `-NoRuntimeDlls` to skip). This is a target runtime, not a compiler
-  choice; no other compiler is invoked.
-- Inno Setup 6 for the installer step. Install it with:
+  `bin\cp3c.exe` (use `-NoRuntimeDlls` to skip).
+- Clang 16+ (`clang++`) for the staged hello-world smoke test. It is not
+  bundled in the package.
+
+WiX 7 is deliberately not used: it requires accepting the Open Source
+Maintenance Fee (OSMF) EULA. To use an explicit WiX 5/6 executable:
 
 ```powershell
-winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept-source-agreements
+packaging\windows\build-msi.ps1 -WixPath C:\tools\wix5\wix.exe
 ```
 
-`build-installer.ps1` finds `ISCC.exe` on PATH or under
-`%LOCALAPPDATA%\Programs\Inno Setup 6\`; `-IsccPath <path>` overrides.
+The first build needs network access to restore the local WiX tool and its UI
+extension. The resulting MSI is self-contained.
+
+## Installer behaviour
+
+- **Per-user, no UAC.** Default install root is
+  `%LOCALAPPDATA%\Programs\cp3`; `Scope="perUser"` and limited privileges mean
+  no administrator prompt. Override the directory with the public `INSTALLDIR`
+  property if needed.
+- **`cp3` works immediately.** The MSI appends `<install>\bin` to the **current
+  user's** PATH (`HKCU\Environment`) and never touches the system PATH. Open a
+  new terminal and run `cp3` or `cp3c`; no manual PATH edit is needed.
+- **Clean uninstall.** Uninstall removes the files, the Start Menu folder, the
+  `HKCU\Software\cp3` key, and exactly the PATH entry the installer added.
+- **Apps & Features entry.** Settings > Apps > Installed apps shows `cp3` with
+  its version and uninstall action.
+- **Start Menu shortcut.** `cp3 Command Prompt` opens a terminal in
+  `<install>\bin`, where `cp3.cmd` is available even before Explorer refreshes
+  its environment.
+- **Major upgrades.** A fixed `UpgradeCode` and deterministic component GUIDs
+  make later versions upgrade in place. `ProductVersion` is the numeric
+  `major.minor.patch` prefix of `version.txt`; prerelease suffixes are not valid
+  MSI versions.
+
+`CP3_ROOT` is not written to the user environment. The `cp3.cmd` shim exports
+it for each child process, and `cp3c.exe` also resolves its install root from
+its own location, so a global variable would only risk pointing at the wrong
+tree.
+
+## Silent install and uninstall
+
+```powershell
+# install for the current user, no UI
+msiexec /i .\cp3-0.1.0-windows-x64.msi /qn /norestart
+
+# install into a custom directory
+msiexec /i .\cp3-0.1.0-windows-x64.msi /qn INSTALLDIR="D:\tools\cp3"
+
+# write a verbose log
+msiexec /i .\cp3-0.1.0-windows-x64.msi /qn /l*v install.log
+
+# uninstall (the MSI path identifies the product)
+msiexec /x .\cp3-0.1.0-windows-x64.msi /qn /norestart
+```
+
+`/qb` shows a basic progress UI; double-clicking the MSI uses the
+`WixUI_Minimal` wizard. `/qn` is fully silent.
 
 ## Stage layout (`package.ps1` output)
 
@@ -65,7 +138,7 @@ winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept
 | `bin\*.dll` | MinGW runtime DLLs the compiler links against |
 | `include\` | header trees handed to Clang: `runtime\`, `common\`, `std\<family>\` |
 | `src\` | runtime translation units compiled into every cp3 program (`src\runtime\src\`, `src\std\<family>\`) |
-| `third_party\` | vendored static libraries (`libsodium`, `libuv`, `uWebSockets`) |
+| `third_party\` | vendored static libraries (`libsodium`, `libuv`, `uWebSockets`, `oneTBB`, `pcre2`) |
 | `share\vscode\` | the bundled extension, when built (`-NoVsix` stages without it) |
 | `manifest.json` | name, version, compiler version, `built_at`, `components[]` with size + SHA-256 |
 | `README.txt` | end-user quick start, written into the stage |
@@ -84,7 +157,7 @@ program.
 ### Why the installed compiler is relocatable
 
 `cp3c.exe` locates the trees it hands to Clang in this order
-(`src/cli/src/toolchain/util.cpp`):
+(`src/cli/src/toolchain/runtime/util.cpp`):
 
 1. `CP3_ROOT` (the shim exports it as `<install>`);
 2. the running executable's ancestors (an installed `bin\cp3c.exe` resolves to
@@ -96,56 +169,21 @@ installed form `include\<x>` when the checkout directory does not exist, so
 one `include\` tree serves every case while runtime sources stay under
 `src\`.
 
-## Installer behaviour (`cp3.iss`)
-
-- Per-user install, default `%LOCALAPPDATA%\Programs\cp3`, `PrivilegesRequired=lowest`
-  (no UAC prompt). `/DIR=` overrides the target.
-- Copies the stage verbatim; writes an uninstaller (`unins000.exe`) and the
-  usual Apps & Features entry (HKCU).
-- Appends `<target>\bin` to the **user** PATH (`HKCU\Environment`). The value
-  is written back as `REG_EXPAND_SZ` when it contains `%variables%` and as
-  `REG_SZ` otherwise, so the registry type never changes behind the user's
-  back; the system PATH is never touched. The append is idempotent (a second
-  install detects the existing entry) and uninstall removes exactly that
-  entry, leaving every other entry (empty ones included) byte-identical.
-- When the `code` CLI exists (PATH first, then the standard VS Code install
-  locations) and a `.vsix` was staged, runs
-  `code --install-extension <vsix> --force`. Without VS Code it leaves a log
-  line and points at `cp3 editor-plugin`.
-- Installs silently with Inno's `/SILENT` or `/VERYSILENT`
-  (`/SUPPRESSMSGBOXES` recommended); `/LOG=<file>` writes the full log.
-
-### Installer command-line flags
-
-| Flag | Effect |
-| --- | --- |
-| `/SILENT`, `/VERYSILENT` | Inno quiet modes (progress window / nothing) |
-| `/SUPPRESSMSGBOXES` | never show message boxes (combine with the above) |
-| `/DIR=<path>` | install target (default `%LOCALAPPDATA%\Programs\cp3`) |
-| `/LOG=<file>` | write the installer log |
-| `/NORESTART` | never reboot (harmless here; nothing needs a reboot) |
-| `/TESTMODE=1` | no side effects: no PATH edit, no VS Code action (files only) |
-| `/NOPATH=1` | skip only the PATH append |
-| `/NOVSCODE=1` | skip only the VS Code extension step |
-
-`/TESTMODE=1` is the flag the packaging wave uses for verification installs;
-it is equivalent to `/NOPATH=1 /NOVSCODE=1`.
-
 ## End-user story
 
-1. Run `cp3-setup-0.1.0-x64.exe` (optionally silent: `/VERYSILENT /SUPPRESSMSGBOXES`).
-2. Open a new terminal (the PATH entry is picked up by new shells).
-3. `cp3 doctor` - reports the compiler, the Clang toolchain it will use,
+1. Run `cp3-0.1.0-windows-x64.msi` (or `msiexec /i ... /qn`).
+2. Open a new terminal. `cp3` and `cp3c` are already on the user PATH.
+3. `cp3 doctor` reports the compiler, the Clang toolchain it will use,
    ccache, VS Code and the shipped trees.
-4. `cp3 init my-app` then `cd my-app` and `cp3 run src/main.cp3`.
-5. `cp3 editor-plugin` installs the bundled extension if the installer did
-   not already do it (the wizard also reports status and exports the VSIX).
+4. `cp3 init my-app`, then `cd my-app` and `cp3 run src/main.cp3`.
+5. `cp3 editor-plugin` installs the bundled extension if it was not already
+   installed.
 
 Prerequisites on the user machine: Clang 16+ (`clang++`) on PATH or in a
-standard LLVM location, plus a MinGW-w64 sysroot for the Windows GNU target, and
-Windows 10+ with the UCRT. GCC and MSVC are not target toolchains. VS Code is
-optional: cp3 libraries and CLI work without it. LLVM is not bundled in this
-round; `cp3 build` offers to install it when missing.
+standard LLVM location, plus a MinGW-w64 sysroot for the Windows GNU target,
+and Windows 10+ with the UCRT. GCC and MSVC are not target toolchains. VS Code
+is optional: cp3 libraries and CLI work without it. LLVM is not bundled;
+`cp3 build` offers to install it when missing.
 
 ## cp3.cmd commands
 
@@ -162,6 +200,27 @@ round; `cp3 build` offers to install it when missing.
 program with the staged compiler and `CP3_ROOT` pointed at the stage, and fails
 loudly if the staged tree is incomplete. Skip it with `-SkipSmoke`.
 
-After an install, `manifest.json` lists every component with its SHA-256; the
-report in `build\scratch\packaging\INSTALLER-REPORT.md` records the exact
-acceptance commands used by the packaging wave.
+`build-msi.ps1` checks that the stage contains `bin\cp3c.exe` and builds the MSI
+with WiX 5. `SHA256SUMS.txt` contains the MSI hash. The generated WiX source is
+kept at `build\scratch\packaging\msi\cp3-x64.wxs` for inspection.
+
+A full install/uninstall verification used by the packaging workstream:
+
+```powershell
+$msi = "out\windows-x64\cp3-0.1.0-windows-x64.msi"
+msiexec /i $msi /qn /norestart /l*v install.log
+cp3 --version
+cp3 doctor
+msiexec /x $msi /qn /norestart /l*v uninstall.log
+```
+
+The install log should end with `Installation success or error status: 0`, and
+the uninstall should remove the install directory, the Start Menu folder and
+the user PATH entry.
+
+## Legacy Inno/zip path
+
+`build-installer.ps1` and `cp3.iss` are kept only as an optional legacy
+fallback for machines without WiX. They are not invoked by `tools\build.ps1`
+and are not part of the default deliverable. The MSI is the supported Windows
+installer.

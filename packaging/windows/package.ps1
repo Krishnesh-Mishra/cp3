@@ -32,7 +32,8 @@ param(
     [string] $BuildDir = "build",
     # Directory that receives the stage; default <repo>\build\scratch\packaging\dist.
     [string] $OutDir,
-    # Product version; default packaging\VERSION (single source).
+    # Artifact version; default version.txt at the repository root. The
+    # compiler's --version string is synced by tools/update-version.ps1.
     [string] $Version,
     # Explicit .vsix to stage; default extensions\cp3-vscode\dist\*.vsix.
     [string] $VsixPath,
@@ -58,9 +59,9 @@ $RepoRoot = Split-Path -Parent $PackageDir
 
 # --- version ----------------------------------------------------------------
 if (-not $Version) {
-    $versionFile = Join-Path $PackageDir "VERSION"
+    $versionFile = Join-Path $RepoRoot "version.txt"
     if (-not (Test-Path -LiteralPath $versionFile)) {
-        Fail "packaging\VERSION is missing (it is the single source of the version)"
+        Fail "version.txt is missing at the repository root"
     }
     $Version = (Get-Content -LiteralPath $versionFile -Raw).Trim()
 }
@@ -275,6 +276,11 @@ if (-not $compilerVersion -or ($LASTEXITCODE -ne 0)) {
     Fail "the staged bin\cp3c.exe does not run; check the build and the runtime DLLs"
 }
 $compilerVersion = $compilerVersion.Trim()
+$expectedCompilerVersion = "cp3c " + $Version
+if ($compilerVersion -ne $expectedCompilerVersion) {
+    Fail ("the staged compiler reports '$compilerVersion' but version.txt is '$Version'. " +
+          "Run tools/update-version.ps1 and rebuild cp3c.")
+}
 Info "compiler: $compilerVersion"
 
 # --- README.txt ---------------------------------------------------------------
@@ -308,8 +314,8 @@ Getting started
   cp3 editor-plugin           install the bundled editor extension
 
 Uninstall
-  Settings > Apps > cp3, or run unins000.exe in the install directory. The
-  user PATH entry this installer added is removed again.
+  Settings > Apps > Installed apps > cp3 > Uninstall. The user PATH entry
+  this installer added is removed again.
 "@
 [System.IO.File]::WriteAllText((Join-Path $stage "README.txt"), $readme,
     (New-Object System.Text.UTF8Encoding($false)))

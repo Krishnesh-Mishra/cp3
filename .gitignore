@@ -1,6 +1,10 @@
 # ---- cp3 tooling / generated output ----
 # Root build tree only: `src/**/build/` contains tracked source files.
 /build/
+# Staged distributions written by tools/build.ps1 / tools/build.sh.
+/out/
+# WiX extension cache restored by packaging/windows/build-msi.ps1.
+/packaging/windows/.wix/
 .cp3/
 *.cp3pak
 

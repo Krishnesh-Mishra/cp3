@@ -50,9 +50,9 @@ $RepoRoot = Split-Path -Parent $PackageDir
 
 # --- version ----------------------------------------------------------------
 if (-not $Version) {
-    $versionFile = Join-Path $PackageDir "VERSION"
+    $versionFile = Join-Path $RepoRoot "version.txt"
     if (-not (Test-Path -LiteralPath $versionFile)) {
-        Fail "packaging\VERSION is missing (it is the single source of the version)"
+        Fail "version.txt is missing at the repository root"
     }
     $Version = (Get-Content -LiteralPath $versionFile -Raw).Trim()
 }
