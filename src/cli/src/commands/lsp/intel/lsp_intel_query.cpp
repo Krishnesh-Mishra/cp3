@@ -330,7 +330,10 @@ const Type* expectedArgumentTypeAt(const AnalyzedDocument& document,
         return nullptr;
     }
     const Type* expected = &callee->parts[static_cast<std::size_t>(argument)];
-    if (expected->isUnknown() || expected->isError()) return nullptr;
+    if (expected->isUnknown() || expected->isError() ||
+        (expected->kind == TypeKind::Object && expected->name == "$ambient")) {
+        return nullptr;
+    }
     return expected;
 }
 

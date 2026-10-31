@@ -362,10 +362,30 @@ bool keywordMatchesExpectedType(const std::string& keyword,
     if (keyword == "null") return isAssignable(Type::nullType(), expected);
     if (keyword == "undefined") return isAssignable(Type::undefined(), expected);
     if (keyword == "typeof") return isAssignable(Type::string(), expected);
-    // These forms produce an object or a function; neither is a primitive
-    // argument value. Keep them available at untyped expression positions.
-    if (keyword == "new" || keyword == "this" || keyword == "async") return false;
+    if (keyword == "async") {
+        return expected.kind == TypeKind::Function || expected.isUnknown() ||
+               expected.isError();
+    }
+    if (keyword == "new" || keyword == "this") {
+        // Their concrete class depends on the following identifier. Keep them
+        // for object/class contexts; hide them for known scalar arguments.
+        return expected.kind == TypeKind::Object ||
+               expected.kind == TypeKind::Class || expected.isUnion() ||
+               expected.isNullable() || expected.isUnknown() ||
+               expected.isError();
+    }
     return true;
+}
+
+bool candidateFitsExpectedType(const Type& source, const Type& expected) {
+    if (source.isUnknown() || source.isError() || expected.isUnknown() ||
+        expected.isError() || source.kind == TypeKind::TypeParam ||
+        expected.kind == TypeKind::TypeParam ||
+        (source.kind == TypeKind::Object && source.name == "$ambient") ||
+        (expected.kind == TypeKind::Object && expected.name == "$ambient")) {
+        return true;  // unknown is not evidence that a candidate is wrong.
+    }
+    return isAssignable(source, expected);
 }
 
 }  // namespace
@@ -416,6 +436,12 @@ std::vector<lsp::CompletionCandidate> incompleteCandidates(
     std::vector<lsp::CompletionCandidate> candidates;
     if (position == CompletionPosition::TypePosition) appendPrimitiveTypes(candidates);
     for (const std::string& keyword : legalKeywords(position, awaitAllowed)) {
+        // Parser recovery cannot prove control-flow placement. Keep these
+        // context-sensitive forms out of the grammar-only fallback.
+        if (keyword == "return" || keyword == "break" ||
+            keyword == "continue" || keyword == "else") {
+            continue;
+        }
         appendNamed(candidates, keyword, 14, "keyword",
                     keywordDocumentation(keyword));
     }
@@ -471,12 +497,7 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
     // If the active argument has a resolved primitive parameter type, omit
     // names that the checker would reject there. Keep unknowns visible while
     // a declaration is still being typed; no speculative type is invented.
-    if (!typesOnly && context.expectedType != nullptr &&
-        (context.expectedType->kind == TypeKind::Number ||
-         context.expectedType->kind == TypeKind::String ||
-         context.expectedType->kind == TypeKind::Boolean ||
-         context.expectedType->kind == TypeKind::Native ||
-         context.expectedType->kind == TypeKind::Literal)) {
+    if (!typesOnly && context.expectedType != nullptr) {
         const Type& expected = *context.expectedType;
         candidates.erase(
             std::remove_if(candidates.begin(), candidates.end(),
@@ -487,7 +508,8 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
                                    symbol->type.isError()) {
                                    return false;
                                }
-                               return !isAssignable(symbol->type, expected);
+                               return !candidateFitsExpectedType(symbol->type,
+                                                                 expected);
                            }),
             candidates.end());
     }
@@ -505,12 +527,8 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
     // 5. The keywords that may legally appear here, last.
     for (const std::string& keyword :
          legalKeywords(position, context.awaitAllowed)) {
+        if (!contextualKeywordAllowed(document, offset, keyword)) continue;
         if (context.expectedType != nullptr &&
-            (context.expectedType->kind == TypeKind::Number ||
-             context.expectedType->kind == TypeKind::String ||
-             context.expectedType->kind == TypeKind::Boolean ||
-             context.expectedType->kind == TypeKind::Native ||
-             context.expectedType->kind == TypeKind::Literal) &&
             !keywordMatchesExpectedType(keyword, *context.expectedType,
                                         context.awaitAllowed)) {
             continue;

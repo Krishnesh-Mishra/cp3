@@ -17,6 +17,7 @@
 #include "detail/lsp/lsp_intel_complete.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -397,6 +398,144 @@ bool inAnnotationSlot(const Node& node, std::uint32_t offset) {
     return true;
 }
 
+// Between a closing statement and its optional attachment keyword, allow
+// whitespace and a partially typed prefix only. This works during editing,
+// before the parser can build a catch/else node.
+bool attachmentPrefixAt(const std::string& text, std::uint32_t from,
+                        std::uint32_t to, const char* first,
+                        const char* second = nullptr) {
+    if (from > to || to > text.size()) return false;
+    std::string typed;
+    for (std::uint32_t at = from; at < to; ++at) {
+        const unsigned char ch = static_cast<unsigned char>(text[at]);
+        if (std::isspace(ch)) continue;
+        if (!std::isalpha(ch)) return false;
+        typed.push_back(static_cast<char>(ch));
+    }
+    const auto isPrefix = [&](const char* word) {
+        if (word == nullptr) return false;
+        const std::string target(word);
+        return typed.size() <= target.size() &&
+               target.compare(0, typed.size(), typed) == 0;
+    };
+    return isPrefix(first) || isPrefix(second);
+}
+
+bool loopNode(NodeKind kind) {
+    return kind == NodeKind::ForStatement ||
+           kind == NodeKind::ForOfStatement ||
+           kind == NodeKind::ForInStatement ||
+           kind == NodeKind::WhileStatement ||
+           kind == NodeKind::DoWhileStatement;
+}
+
+bool functionNode(NodeKind kind) {
+    return kind == NodeKind::ArrowFunction ||
+           kind == NodeKind::FunctionDeclaration ||
+           kind == NodeKind::MethodDeclaration ||
+           kind == NodeKind::ConstructorDeclaration ||
+           kind == NodeKind::AccessorDeclaration;
+}
+
+const SwitchStatement* switchBodyStatementAt(const AnalyzedDocument& document,
+                                             std::uint32_t offset) {
+    if (!analysisReady(document)) return nullptr;
+    const SwitchStatement* best = nullptr;
+    forEachNode(*document.entry->ast, [&](const Node& node) {
+        if (node.kind != NodeKind::SwitchStatement ||
+            !node.span.valid() || node.span.file != document.file) {
+            return;
+        }
+        const auto& statement = static_cast<const SwitchStatement&>(node);
+        if (statement.discriminant == nullptr ||
+            !statement.discriminant->span.valid() ||
+            offset < statement.discriminant->span.end.offset) {
+            return;
+        }
+        const std::size_t open = document.file->text.find(
+            '{', statement.discriminant->span.end.offset);
+        if (open == std::string::npos || offset <= open) return;
+        for (const SwitchCasePtr& branch : statement.cases) {
+            if (branch != nullptr && branch->span.valid() &&
+                offset >= branch->span.begin.offset &&
+                offset <= branch->span.end.offset) {
+                return;
+            }
+        }
+        if (best == nullptr || node.span.length() < best->span.length()) {
+            best = &statement;
+        }
+    });
+    return best;
+}
+
+bool switchBodyAt(const AnalyzedDocument& document, std::uint32_t offset) {
+    return switchBodyStatementAt(document, offset) != nullptr;
+}
+
+bool tryAttachmentAt(const AnalyzedDocument& document, std::uint32_t offset,
+                     const std::string& keyword) {
+    if (!analysisReady(document) ||
+        (keyword != "catch" && keyword != "finally")) {
+        return false;
+    }
+    bool found = false;
+    forEachNode(*document.entry->ast, [&](const Node& node) {
+        if (found || node.kind != NodeKind::TryStatement ||
+            !node.span.valid() || node.span.file != document.file) {
+            return;
+        }
+        const auto& statement = static_cast<const TryStatement&>(node);
+        if (statement.tryBlock == nullptr ||
+            !statement.tryBlock->span.valid()) {
+            return;
+        }
+        const std::uint32_t tryEnd = statement.tryBlock->span.end.offset;
+        if (statement.handler == nullptr && offset >= tryEnd &&
+            attachmentPrefixAt(document.file->text, tryEnd, offset,
+                               "catch",
+                               statement.finallyBlock ? nullptr : "finally")) {
+            found = keyword == "catch" ? statement.handler == nullptr
+                                        : statement.finallyBlock == nullptr;
+            return;
+        }
+        if (statement.handler != nullptr &&
+            statement.handler->span.valid() &&
+            offset >= statement.handler->span.end.offset &&
+            (statement.finallyBlock == nullptr ||
+             (statement.finallyBlock->span.valid() &&
+              offset <= statement.finallyBlock->span.begin.offset)) &&
+            attachmentPrefixAt(document.file->text,
+                               statement.handler->span.end.offset, offset,
+                               statement.finallyBlock == nullptr ? "finally"
+                                                                 : nullptr)) {
+            found = keyword == "finally" && statement.finallyBlock == nullptr;
+        }
+    });
+    return found;
+}
+
+bool elseAttachmentAt(const AnalyzedDocument& document, std::uint32_t offset) {
+    if (!analysisReady(document)) return false;
+    bool found = false;
+    forEachNode(*document.entry->ast, [&](const Node& node) {
+        if (found || node.kind != NodeKind::IfStatement ||
+            !node.span.valid() || node.span.file != document.file) {
+            return;
+        }
+        const auto& statement = static_cast<const IfStatement&>(node);
+        if (statement.elseBranch != nullptr || statement.thenBranch == nullptr ||
+            !statement.thenBranch->span.valid()) {
+            return;
+        }
+        found = offset >= statement.thenBranch->span.end.offset &&
+                attachmentPrefixAt(document.file->text,
+                                   statement.thenBranch->span.end.offset, offset,
+                                   "else");
+    });
+    return found;
+}
+
 }  // namespace
 
 CompletionPosition classifyPosition(const AnalyzedDocument& document,
@@ -412,10 +551,11 @@ CompletionPosition classifyPosition(const AnalyzedDocument& document,
     if (!analysisReady(document)) return position;
     const std::vector<const Node*> chain = enclosingChain(document, offset);
     if (insideClassBody(chain, offset)) return CompletionPosition::ClassBody;
-    if (innermostOf(chain, NodeKind::TryStatement) != nullptr) {
+    if (tryAttachmentAt(document, offset, "catch") ||
+        tryAttachmentAt(document, offset, "finally")) {
         return CompletionPosition::TryBlock;
     }
-    if (innermostOf(chain, NodeKind::SwitchStatement) != nullptr) {
+    if (switchBodyAt(document, offset)) {
         return CompletionPosition::SwitchBlock;
     }
     if (insideTypeNode(chain)) return CompletionPosition::TypePosition;
@@ -434,6 +574,9 @@ CompletionPosition classifyPosition(const AnalyzedDocument& document,
 bool awaitAllowedAt(const AnalyzedDocument& document, std::uint32_t offset) {
     if (!analysisReady(document)) return false;
     const std::vector<const Node*> chain = enclosingChain(document, offset);
+    for (const Node* node : chain) {
+        if (node->kind == NodeKind::Parameter) return false;
+    }
     // Function boundaries shadow the surrounding context: a synchronous
     // callback nested inside an async function still cannot use `await`.
     for (std::size_t i = chain.size(); i-- > 0;) {
@@ -453,6 +596,59 @@ bool awaitAllowedAt(const AnalyzedDocument& document, std::uint32_t offset) {
         }
     }
     return true;  // top-level await is supported by CP3.
+}
+
+bool contextualKeywordAllowed(const AnalyzedDocument& document,
+                              std::uint32_t offset,
+                              const std::string& keyword) {
+    if (!analysisReady(document)) return false;
+    const std::vector<const Node*> chain = enclosingChain(document, offset);
+    if (keyword == "return") {
+        for (std::size_t i = chain.size(); i-- > 0;) {
+            if (functionNode(chain[i]->kind)) return true;
+        }
+        return false;
+    }
+    if (keyword == "break" || keyword == "continue") {
+        for (std::size_t i = chain.size(); i-- > 0;) {
+            const NodeKind kind = chain[i]->kind;
+            if (functionNode(kind)) return false;
+            if (loopNode(kind)) return true;
+            if (keyword == "break" && kind == NodeKind::SwitchStatement) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (keyword == "this") {
+        for (std::size_t i = chain.size(); i-- > 0;) {
+            const NodeKind kind = chain[i]->kind;
+            if (kind == NodeKind::ArrowFunction) continue;  // lexical this
+            if (kind == NodeKind::MethodDeclaration ||
+                kind == NodeKind::ConstructorDeclaration ||
+                kind == NodeKind::AccessorDeclaration) {
+                return true;
+            }
+            if (kind == NodeKind::FunctionDeclaration) return false;
+        }
+        return false;
+    }
+    if (keyword == "else") return elseAttachmentAt(document, offset);
+    if (keyword == "catch" || keyword == "finally") {
+        return tryAttachmentAt(document, offset, keyword);
+    }
+    if (keyword == "case" || keyword == "default") {
+        const SwitchStatement* active =
+            switchBodyStatementAt(document, offset);
+        if (active == nullptr) return false;
+        if (keyword == "case") return true;
+        bool hasDefault = false;
+        for (const SwitchCasePtr& branch : active->cases) {
+            if (branch != nullptr && branch->isDefault) hasDefault = true;
+        }
+        return !hasDefault;
+    }
+    return true;
 }
 
 }  // namespace cp3::cli

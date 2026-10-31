@@ -159,17 +159,113 @@ void appendShapeFields(const AnalyzedDocument& document,
     }
 }
 
+// The receiver node can be absent or have no type while the user is midway
+// through `response.`. The binding table often still has the contextual type
+// (notably for HTTP callback parameters), so consult it before falling back to
+// a broad candidate universe.
+const Type* receiverTypeForCompletion(const AnalyzedDocument& document,
+                                      const std::string& receiver,
+                                      std::uint32_t dot) {
+    if (const Type* type = receiverTypeEndingAt(document, dot)) return type;
+    if (document.file == nullptr || receiver.empty() ||
+        lastIdentifier(receiver) != receiver) {
+        return nullptr;
+    }
+    const SymbolInfo* symbol = nearestSymbolAt(document.sema, receiver,
+                                               *document.file, dot);
+    return symbol == nullptr ? nullptr : &symbol->type;
+}
+
+bool isAmbientSurface(const Type* type) {
+    return type != nullptr && type->kind == TypeKind::Object &&
+           type->name == "$ambient";
+}
+
+// A useful fail-closed completion result when the probe analysis could not
+// finish. Only exact standard-library surfaces and source-declared fields are
+// included; the global member union below is deliberately not used here.
+std::vector<lsp::CompletionCandidate> knownReceiverCandidates(
+    const AnalyzedDocument& document, const std::string& receiver,
+    const Type* receiverType) {
+    std::vector<std::string> names;
+    std::string namespaceName;
+    const std::string root = lastIdentifier(receiver);
+    if (!root.empty() && isAmbientSurface(receiverType)) {
+        const std::vector<std::string> namespaceNames =
+            stdNamespaceMemberNames(root);
+        if (!namespaceNames.empty()) {
+            namespaceName = root;
+            for (const std::string& name : namespaceNames) {
+                appendUnique(names, name);
+            }
+        }
+    }
+    if (namespaceName.empty() && receiverType != nullptr) {
+        if (receiverType->kind == TypeKind::Object) {
+            for (const std::string& name :
+                 networkObjectMemberNames(receiverType->name)) {
+                appendUnique(names, name);
+            }
+        } else if (receiverType->kind == TypeKind::Class) {
+            for (const std::string& name :
+                 stdInstanceMemberNames(receiverType->name)) {
+                appendUnique(names, name);
+            }
+            appendShapeFields(document, receiverType->name, names);
+        } else if (receiverType->kind == TypeKind::Array) {
+            for (const std::string& name : stdArrayMemberNames()) {
+                appendUnique(names, name);
+            }
+        } else if (receiverType->kind == TypeKind::String) {
+            for (const std::string& name : stdStringMemberNames()) {
+                appendUnique(names, name);
+            }
+        }
+    }
+    appendShapeFields(document, receiver, names);
+
+    std::vector<lsp::CompletionCandidate> result;
+    for (const std::string& name : names) {
+        lsp::CompletionCandidate candidate;
+        candidate.label = name;
+        std::string signature;
+        if (!namespaceName.empty()) {
+            signature = stdNamespaceMemberDoc(namespaceName, name).signature;
+        } else if (receiverType != nullptr &&
+                   receiverType->kind == TypeKind::Object) {
+            signature = networkObjectMemberDoc(receiverType->name, name).signature;
+        } else if (receiverType != nullptr &&
+                   receiverType->kind == TypeKind::Class) {
+            signature = stdInstanceMemberDoc(receiverType->name, name).signature;
+        } else if (receiverType != nullptr &&
+                   receiverType->kind == TypeKind::Array) {
+            signature = stdArrayMemberDoc(name).signature;
+        } else if (receiverType != nullptr &&
+                   receiverType->kind == TypeKind::String) {
+            signature = stdStringMemberDoc(name).signature;
+        }
+        candidate.detail = signature;
+        candidate.kind = signature.find('(') != std::string::npos
+                             ? (namespaceName.empty() ? 2 : 3)
+                             : 5;
+        candidate.documentation = completionMemberDoc(
+            document, namespaceName, receiverType, name);
+        result.push_back(std::move(candidate));
+    }
+    return result;
+}
+
 std::vector<std::string> candidateNames(const AnalyzedDocument& document,
                                         const std::string& receiver,
                                         std::uint32_t dot) {
     const std::string last = lastIdentifier(receiver);
-    if (!last.empty()) {
+    const Type* receiverType = receiverTypeForCompletion(document, receiver, dot);
+    if (!last.empty() && isAmbientSurface(receiverType)) {
         // A closed std namespace has an exact table: no need to union.
         std::vector<std::string> stdNames = stdNamespaceMemberNames(last);
         if (!stdNames.empty()) return stdNames;
     }
     std::vector<std::string> names;
-    const Type* receiverType = receiverTypeEndingAt(document, dot);
     if (receiverType != nullptr && receiverType->kind == TypeKind::Object) {
         for (const std::string& name :
              networkObjectMemberNames(receiverType->name)) {
@@ -259,24 +355,37 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
     const std::vector<std::string> names =
         candidateNames(document, receiver, context.dot);
     if (names.empty()) return candidates;
+    const Type* sourceReceiverType =
+        receiverTypeForCompletion(document, receiver, context.dot);
     std::string probe = text;
     probe.replace(context.receiverBegin, offset - context.receiverBegin,
                   probeArrayText(receiver, names));
     auto probed = analyzeDocument(document.file->path, probe);
+    const std::string root = lastIdentifier(receiver);
     const std::string namespaceName =
-        stdNamespaceMemberNames(lastIdentifier(receiver)).empty()
-            ? std::string()
-            : lastIdentifier(receiver);
-    const Type* sourceReceiverType = receiverTypeEndingAt(document, context.dot);
+        isAmbientSurface(sourceReceiverType) &&
+                !stdNamespaceMemberNames(root).empty()
+            ? root
+            : std::string();
     if (!analysisReady(*probed)) {
-        return sourceShapeCandidates(document, receiver, namespaceName,
-                                     sourceReceiverType);
+        candidates = knownReceiverCandidates(document, receiver,
+                                             sourceReceiverType);
+        if (candidates.empty()) {
+            return sourceShapeCandidates(document, receiver, namespaceName,
+                                         sourceReceiverType);
+        }
+        return candidates;
     }
     const ArrayLiteral* array =
         arrayStartingAt(*probed->entry->ast, context.receiverBegin);
     if (array == nullptr || array->elements.size() != names.size() + 1) {
-        return sourceShapeCandidates(document, receiver, namespaceName,
-                                     sourceReceiverType);
+        candidates = knownReceiverCandidates(document, receiver,
+                                             sourceReceiverType);
+        if (candidates.empty()) {
+            return sourceShapeCandidates(document, receiver, namespaceName,
+                                         sourceReceiverType);
+        }
+        return candidates;
     }
     const Type* control = probed->sema.typeOf(array->elements.back()->nodeId);
     // The receiver's type (an array, a string, a user class) and the std
@@ -307,6 +416,11 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
             completionMemberDoc(document, namespaceName, receiverType,
                                 names[i]);
         candidates.push_back(std::move(candidate));
+    }
+    if (candidates.empty()) {
+        candidates = knownReceiverCandidates(document, receiver,
+                                             sourceReceiverType);
+        if (!candidates.empty()) return candidates;
     }
     // Keep source-declared fields visible if the parser recovered the rest of
     // the document but the synthetic probe could not type one candidate. The

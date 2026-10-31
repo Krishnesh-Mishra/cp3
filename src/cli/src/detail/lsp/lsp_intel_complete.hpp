@@ -79,6 +79,13 @@ CompletionPosition classifyPosition(const AnalyzedDocument& document,
 // Whether CP3 permits `await` at this cursor (top-level or async function).
 bool awaitAllowedAt(const AnalyzedDocument& document, std::uint32_t offset);
 
+// Whether a context-sensitive control keyword can be inserted here. This
+// keeps return/break/continue/else/catch/finally/case suggestions out of
+// positions where the parser would reject them.
+bool contextualKeywordAllowed(const AnalyzedDocument& document,
+                              std::uint32_t offset,
+                              const std::string& keyword);
+
 // The names in scope at the cursor, most local first: the parameters of the
 // enclosing function, the locals of the enclosing blocks and the bindings of
 // the enclosing loop or catch clause. In a type position only the names that
