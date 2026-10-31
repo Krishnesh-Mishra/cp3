@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <vector>
 
 #if defined(_WIN32)
