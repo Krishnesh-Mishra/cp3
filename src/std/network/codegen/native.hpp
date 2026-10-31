@@ -19,10 +19,10 @@ namespace cp3::cli::detail {
 // Verified against third_party/MANIFEST.md "Verified consumer flags":
 //   compile: -DUWS_NO_ZLIB -I third_party/uWebSockets/include
 //            -I third_party/libuv/include (uSockets headers include <uv.h>)
-//   link:    -L third_party/uWebSockets/lib -luSockets
-//            -L third_party/libuv/lib -luv plus the 6 Windows system libraries
-//            libuv genuinely needs (each discovered from a real undefined
-//            reference; see the MANIFEST for the symbol-to-library mapping).
+//   link (Windows): -L third_party/uWebSockets/lib -luSockets
+//                   -L third_party/libuv/lib -luv plus libuv's Windows system
+//                   libraries. Linux uses architecture-specific archives and
+//                   pthread/dl/rt instead.
 inline const NativePackage kNetworkNativePackage{
     "std/network",
     // The family ABI tree (D72) first; src/std/json/include serves
@@ -42,9 +42,8 @@ inline const NativePackage kNetworkNativePackage{
      "src/std/network/ws/runtime_ws.cpp",
      "src/std/network/ws/runtime_ws_client.cpp",
      "src/std/network/ws/runtime_ws_frames.cpp"},
-    {"third_party/uWebSockets/lib", "third_party/libuv/lib"},
-    {"-luSockets", "-luv", "-lws2_32", "-luserenv", "-liphlpapi", "-lole32",
-     "-ldbghelp", "-lsynchronization"},
+    {},
+    {},
     // Parallel to runtimeSources. A program that imports std/network only for
     // fetch should not link the HTTP server or WebSocket runtime, and a
     // WebSocket program should not link the server. The dispatch TU and the
@@ -53,6 +52,16 @@ inline const NativePackage kNetworkNativePackage{
     // the request glue references the dispatcher.
     {"", "fetch(", "fetch(", "HttpServer(", "HttpServer(", "HttpServer(",
      "WebSocket", "WebSocket", "WebSocket"},
+    {{"windows-x64", {"third_party/uWebSockets/lib/windows-x64",
+                       "third_party/libuv/lib/windows-x64"},
+      {"-luSockets", "-luv", "-lws2_32", "-luserenv", "-liphlpapi", "-lole32",
+       "-ldbghelp", "-lsynchronization"}},
+     {"linux-x64",
+      {"third_party/uWebSockets/lib/linux-x64", "third_party/libuv/lib/linux-x64"},
+      {"-luSockets", "-luv", "-pthread", "-ldl", "-lrt"}},
+     {"linux-arm64",
+      {"third_party/uWebSockets/lib/linux-arm64", "third_party/libuv/lib/linux-arm64"},
+      {"-luSockets", "-luv", "-pthread", "-ldl", "-lrt"}}},
 };
 
 }  // namespace cp3::cli::detail

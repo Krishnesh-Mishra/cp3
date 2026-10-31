@@ -34,8 +34,9 @@ packaging/linux/package.sh --build-dir build --out-dir out/linux-x64
 # skip the hello-world smoke test (no Clang on the build machine)
 packaging/linux/package.sh --skip-smoke
 
-# use Linux-built vendor archives
-packaging/linux/package.sh --third-party-dir /path/to/linux/third_party
+# package using the Linux-built vendor archives (build them first)
+bash third_party/build-linux.sh --arch x64
+packaging/linux/package.sh --third-party-dir third_party
 ```
 
 ## Stage layout
@@ -77,11 +78,13 @@ headers, runtime sources and vendor libraries are shipped in the tree.
 
 ## Third-party archives
 
-The checked-in `third_party/*/lib/*.a` files are the Windows MinGW (COFF)
-vendor builds. They are not linkable on Linux. `package.sh` detects them and
-prints a warning. Rebuild the vendor tree on Linux and pass
-`--third-party-dir <tree>` for a fully self-contained package; otherwise the
-compiler and the stdlib families that need no vendor archive work, while
+The checked-in `third_party/*/lib/*.a` files are Windows MinGW (COFF) vendor
+builds. Linux archives are kept within each vendor package under
+`third_party/<vendor>/lib/linux-x64/` or `linux-arm64/`. Build the matching set on Linux with
+`bash third_party/build-linux.sh --arch x64` or `--arch arm64`; arm64 cross builds need an
+`aarch64-linux-gnu` toolchain (`CC`, `CXX`, `AR`, and `RANLIB` may be set to
+custom tool paths). `package.sh` stages only the selected architecture and
+warns if any required archive is missing. Without those archives,
 `std/network` and `std/crypto` cannot link.
 
 ## Relocatability

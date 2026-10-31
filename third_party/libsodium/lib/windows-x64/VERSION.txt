@@ -1,0 +1,1 @@
+https://github.com/jedisct1/libsodium.git 1.0.22-RELEASE 77e1ce5d6dee871c49ef211222ba18ef0c486bda 2026-10-18

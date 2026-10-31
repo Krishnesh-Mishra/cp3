@@ -192,38 +192,49 @@ Info ("runtime sources: " + $runtimeFiles.Count + " files")
 
 # --- std families: the translation units their native rows name ---------------
 # The rows are the source of truth for what the build driver compiles
-# (src/std/<family>/native.hpp, DECISIONS D68/D72). Quoted repo-relative paths
-# are read from each row: paths inside an include tree are already staged under
-# include\; third_party paths pull in their whole tree; the rest are runtime
-# units copied next to their support headers.
+# (src/std/<family>/native.hpp, DECISIONS D68/D72; a family may keep its row in
+# a subdirectory, as std/network does under codegen/). Quoted repo-relative
+# paths are read from each row: paths inside an include tree are already staged
+# under include\; third_party paths pull in their whole tree; the rest are
+# runtime units copied next to their support headers.
 $thirdPartyTrees = New-Object System.Collections.Generic.SortedSet[string]
 $familySourceCount = 0
 foreach ($family in (Get-ChildItem -LiteralPath $stdDir -Directory | Sort-Object Name)) {
-    $row = Join-Path $family.FullName "native.hpp"
-    if (-not (Test-Path -LiteralPath $row)) { continue }
-    $rowText = Get-Content -LiteralPath $row -Raw
-    $refs = [regex]::Matches($rowText, '"((?:src|third_party)/[^"]+)"') |
-        ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
-    foreach ($ref in $refs) {
-        $normalized = $ref.Replace("/", "\")
-        if ($normalized -like "third_party\*") {
-            $parts = $normalized.Split("\")
-            if ($parts.Length -lt 2) { Fail "malformed third_party reference '$ref' in $row" }
-            $thirdPartyTrees.Add("third_party\" + $parts[1]) | Out-Null
-            continue
+    $rows = @(Get-ChildItem -LiteralPath $family.FullName -Recurse -File -Filter "native.hpp" |
+              Sort-Object FullName)
+    if ($rows.Count -eq 0) { continue }
+    foreach ($row in $rows) {
+        $rowText = Get-Content -LiteralPath $row.FullName -Raw
+        $refs = [regex]::Matches($rowText, '"((?:src|third_party)/[^"]+)"') |
+            ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+        foreach ($ref in $refs) {
+            $normalized = $ref.Replace("/", "\")
+            if ($normalized -like "third_party\linux-*") { continue }
+            if ($normalized -like "third_party\*") {
+                $parts = $normalized.Split("\")
+                if ($parts.Length -lt 2) { Fail "malformed third_party reference '$ref' in $($row.FullName)" }
+                $thirdPartyTrees.Add("third_party\" + $parts[1]) | Out-Null
+                continue
+            }
+            if ($normalized -like "*\include") { continue }  # staged under include\
+            $source = Join-Path $RepoRoot $normalized
+            if (-not (Test-Path -LiteralPath $source)) { Fail "native row $($row.FullName) references missing '$ref'" }
+            $dest = Join-Path $stage $normalized
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+            Copy-Item -LiteralPath $source -Destination $dest -Force
+            $familySourceCount++
         }
-        if ($normalized -like "*\include") { continue }  # staged under include\
-        $source = Join-Path $RepoRoot $normalized
-        if (-not (Test-Path -LiteralPath $source)) { Fail "native row $row references missing '$ref'" }
-        $dest = Join-Path $stage $normalized
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
-        Copy-Item -LiteralPath $source -Destination $dest -Force
-        $familySourceCount++
     }
     # Support headers of the copied units (for example pump.hpp next to
-    # runtime.cpp); native.hpp is compiler-side and never shipped.
-    foreach ($header in (Get-ChildItem -LiteralPath $family.FullName -File |
-                         Where-Object { $_.Extension -in ".hpp", ".h", ".inc" -and $_.Name -ne "native.hpp" })) {
+    # runtime.cpp, or runtime_loop.hpp under network/runtime). The include tree
+    # is already staged under include\; native.hpp is compiler-side and never
+    # shipped.
+    foreach ($header in (Get-ChildItem -LiteralPath $family.FullName -Recurse -File |
+                         Where-Object {
+                             $_.Extension -in ".hpp", ".h", ".inc" -and
+                             $_.Name -ne "native.hpp" -and
+                             $_.FullName -notlike (Join-Path $family.FullName "include\*")
+                         })) {
         $rel = $header.FullName.Substring($RepoRoot.Length + 1)
         $dest = Join-Path $stage $rel
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
@@ -234,6 +245,14 @@ if ($thirdPartyTrees.Count -eq 0) { Fail "no third_party tree referenced by any 
 foreach ($tree in $thirdPartyTrees) {
     Copy-Tree (Join-Path $RepoRoot $tree) (Join-Path $stage $tree) ("vendored tree " + $tree)
     Info "vendored: $tree"
+}
+foreach ($vendor in @("libsodium", "libuv", "uWebSockets")) {
+    $libDir = Join-Path $stage "third_party\$vendor\lib"
+    if (Test-Path -LiteralPath $libDir) {
+        Get-ChildItem -LiteralPath $libDir -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "linux-*" } |
+            Remove-Item -Recurse -Force
+    }
 }
 Info ("std runtime units: " + $familySourceCount + " files")
 

@@ -1,0 +1,1 @@
+libsodium=77e1ce5d6dee871c49ef211222ba18ef0c486bda libuv=840404ce8ba7cc0204be52389a6cfff9f2c90fb6 uWebSockets=3ffd6f44c9c3c92c96345d9f96bd01ba9c025ab5 arch=x64 built=2026-10-31T05:23:13Z

@@ -28,6 +28,14 @@
 
 namespace cp3::cli::detail {
 
+// Platform-specific native archive layout and system link dependencies.
+// `id` is the normalized target platform (for example `linux-x64`).
+struct NativePackagePlatform {
+    const char* id;
+    std::vector<std::string> libDirs;
+    std::vector<std::string> linkFlags;
+};
+
 // One std module's native backend.
 struct NativePackage {
     const char* specifier;                    // e.g. "std/crypto"
@@ -42,6 +50,10 @@ struct NativePackage {
     // string (or a missing entry) means "always, when the row is selected", so
     // every row written before this field keeps its old behaviour.
     std::vector<std::string> runtimeSourceMarkers = {};
+    // When populated, the matching target must have an explicit archive row.
+    // This prevents accidentally linking the host's COFF archives into a
+    // Linux target (or silently falling back to the wrong architecture).
+    std::vector<NativePackagePlatform> platforms = {};
 };
 
 // Every std module with a native backend, in a stable order. Rows are defined

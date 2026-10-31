@@ -1,0 +1,1 @@
+https://github.com/uNetworking/uWebSockets.git v20.80.0 3ffd6f44c9c3c92c96345d9f96bd01ba9c025ab5 2026-10-18

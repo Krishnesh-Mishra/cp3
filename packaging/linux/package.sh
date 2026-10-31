@@ -154,38 +154,51 @@ third_party_trees=""
 family_source_count=0
 for family in "$ROOT"/src/std/*; do
     [ -d "$family" ] || continue
-    row="$family/native.hpp"
-    [ -f "$row" ] || continue
+    rows=()
+    while IFS= read -r -d '' row; do
+        rows+=("$row")
+    done < <(find "$family" -type f -name native.hpp -print0 | sort -z)
+    [ "${#rows[@]}" -gt 0 ] || continue
 
-    refs=$(grep -oE '"(src|third_party)/[^"]+"' "$row" | tr -d '"' | sort -u || true)
-    for ref in $refs; do
-        case "$ref" in
-            src/*/include)
-                continue
-                ;;
-            third_party/*)
-                lib=${ref#third_party/}
-                lib=${lib%%/*}
-                third_party_trees="$third_party_trees $lib"
-                continue
-                ;;
-        esac
-        source_path="$ROOT/$ref"
-        [ -e "$source_path" ] || fail "native row $row references missing '$ref'"
-        mkdir -p "$STAGE/$(dirname "$ref")"
-        cp -R "$source_path" "$STAGE/$ref"
-        family_source_count=$((family_source_count + 1))
+    for row in "${rows[@]}"; do
+        refs=$(grep -oE '"(src|third_party)/[^"]+"' "$row" | tr -d '"' | sort -u || true)
+        for ref in $refs; do
+            case "$ref" in
+                third_party/linux-*)
+                    platform=${ref#third_party/}
+                    platform=${platform%%/*}
+                    [ "$platform" = "linux-$ARCH" ] || continue
+                    ;;
+                src/*/include)
+                    continue
+                    ;;
+                third_party/*)
+                    lib=${ref#third_party/}
+                    lib=${lib%%/*}
+                    third_party_trees="$third_party_trees $lib"
+                    continue
+                    ;;
+            esac
+            source_path="$ROOT/$ref"
+            [ -e "$source_path" ] || fail "native row $row references missing '$ref'"
+            mkdir -p "$STAGE/$(dirname "$ref")"
+            cp -R "$source_path" "$STAGE/$ref"
+            family_source_count=$((family_source_count + 1))
+        done
     done
 
-    # Support headers next to the copied units (pump.hpp, etc.). native.hpp is
+    # Support headers next to the copied units (pump.hpp, runtime_loop.hpp,
+    # etc.). The include tree is already staged under include/; native.hpp is
     # compiler-side and never shipped.
-    for header in "$family"/*.hpp "$family"/*.h "$family"/*.inc; do
-        [ -e "$header" ] || continue
-        [ "$(basename "$header")" = "native.hpp" ] && continue
+    while IFS= read -r -d '' header; do
         rel=${header#"$ROOT/"}
+        case "$rel" in
+            src/std/*/include/*) continue ;;
+        esac
+        [ "$(basename "$header")" = "native.hpp" ] && continue
         mkdir -p "$STAGE/$(dirname "$rel")"
         cp -p "$header" "$STAGE/$rel"
-    done
+    done < <(find "$family" -type f \( -name '*.hpp' -o -name '*.h' -o -name '*.inc' \) -print0 | sort -z)
 done
 info "std runtime units: $family_source_count files"
 
@@ -198,17 +211,29 @@ for lib in $(printf '%s\n' $third_party_trees | sort -u); do
     info "vendored: third_party/$lib"
 done
 
-# The checked-in archives are MinGW/COFF builds. Warn once so a Linux package
-# is never silently missing usable std/network or std/crypto archives.
-if command -v file >/dev/null 2>&1; then
-    for archive in "$THIRD_PARTY"/*/lib/*.a; do
-        [ -e "$archive" ] || continue
-        if file "$archive" | grep -qiE 'COFF|PE32|MS-DOS'; then
-            warn "'$archive' is a Windows archive (COFF), not an ELF Linux archive."
-            warn "Linux packages need third_party rebuilt for Linux; pass --third-party-dir <tree>."
-            break
-        fi
-    done
+# A Linux release must carry native archives for this exact architecture.
+# The root third_party/*.a files are Windows COFF artifacts and are retained
+# for Windows builds; Linux variants live in linux-<arch>/.
+missing_vendor=0
+for archive in \
+    "$THIRD_PARTY/libsodium/lib/linux-$ARCH/libsodium.a" \
+    "$THIRD_PARTY/libuv/lib/linux-$ARCH/libuv.a" \
+    "$THIRD_PARTY/uWebSockets/lib/linux-$ARCH/libuSockets.a"; do
+    if [ ! -f "$archive" ]; then
+        warn "missing Linux $ARCH native archive: $archive"
+        missing_vendor=1
+    fi
+done
+for vendor in libsodium libuv uWebSockets; do
+    libdir="$STAGE/third_party/$vendor/lib"
+    [ -d "$libdir" ] || continue
+    find "$libdir" -mindepth 1 -maxdepth 1 -type d \
+        ! -name "linux-$ARCH" -exec rm -rf {} +
+    find "$libdir" -mindepth 1 -maxdepth 1 -type f -name '*.a' -delete
+done
+if [ "$missing_vendor" -ne 0 ]; then
+    warn "std/crypto and std/network will not link in this package."
+    warn "Build them with: bash third_party/build-linux.sh --arch $ARCH"
 fi
 
 # --- optional VS Code extension ----------------------------------------------
@@ -323,7 +348,8 @@ chmod +x "$OUT_DIR/install.sh"
 archive="$OUT_DIR/cp3-$VERSION-linux-$ARCH.tar.gz"
 rm -f "$archive"
 tar -C "$OUT_DIR" -czf "$archive" cp3 install.sh
-sha256sum "$archive" > "$OUT_DIR/SHA256SUMS.txt"
+archive_hash=$(sha256sum "$archive" | cut -d' ' -f1)
+printf '%s  %s\n' "$archive_hash" "$(basename "$archive")" > "$OUT_DIR/SHA256SUMS.txt"
 
 total_bytes=$(du -sk "$STAGE" | awk '{print $1}')
 info "staged $(find "$STAGE" -type f | wc -l | tr -d '[:space:]') components, ${total_bytes} KB -> $STAGE"

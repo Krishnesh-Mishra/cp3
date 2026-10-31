@@ -29,8 +29,12 @@ inline const NativePackage kCryptoNativePackage{
      "third_party/libsodium/include"},
     {},
     {"src/std/crypto/runtime.cpp"},
-    {"third_party/libsodium/lib"},
+    {},
     {"-lsodium"},
+    {},
+    {{"windows-x64", {"third_party/libsodium/lib/windows-x64"}, {"-lsodium"}},
+     {"linux-x64", {"third_party/libsodium/lib/linux-x64"}, {"-lsodium"}},
+     {"linux-arm64", {"third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
 };
 
 }  // namespace cp3::cli::detail

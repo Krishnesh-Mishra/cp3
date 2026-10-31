@@ -22,6 +22,8 @@
 // add include roots, compile flags, runtime TUs and link libraries, selected by
 // the program's `std/...` imports (applyNativePackages below).
 // =============================================================================
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <optional>
 #include <string>
@@ -334,7 +336,8 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
 // program that imports a family for one member does not link the whole family.
 std::optional<NativeBuildFlags> applyNativePackages(
     const CliOptions& opt, const std::vector<std::string>& importedStdModules,
-    BuildLayout& layout, const std::string& programText) {
+    BuildLayout& layout, const std::string& programText,
+    const Toolchain& toolchain) {
     NativeBuildFlags flags;
     std::vector<const NativePackage*> natives =
         selectNativePackages(importedStdModules);
@@ -354,7 +357,76 @@ std::optional<NativeBuildFlags> applyNativePackages(
     };
     std::error_code ec;
     const fs::path repo = repositoryRoot();
+    // Native archives follow the compilation target. Prefer an explicit
+    // target triple over cp3c's host architecture for cross builds.
+    std::string triple;
+    for (const std::string& flag : toolchain.targetFlags) {
+        if (flag.rfind("--target=", 0) == 0) {
+            triple = flag.substr(9);
+            break;
+        }
+    }
+    std::transform(triple.begin(), triple.end(), triple.begin(),
+                   [](unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                   });
+    std::string targetPlatform;
+    bool targetIsLinux = false;
+    bool targetIsWindows = false;
+    if (triple.find("linux") != std::string::npos) {
+        targetIsLinux = true;
+        if (triple.find("aarch64") != std::string::npos ||
+            triple.find("arm64") != std::string::npos) {
+            targetPlatform = "linux-arm64";
+        } else if (triple.find("x86_64") != std::string::npos ||
+                   triple.find("amd64") != std::string::npos) {
+            targetPlatform = "linux-x64";
+        }
+    } else if (triple.find("windows") != std::string::npos ||
+               triple.find("mingw") != std::string::npos) {
+        targetIsWindows = true;
+        if (triple.find("aarch64") != std::string::npos ||
+            triple.find("arm64") != std::string::npos) {
+            targetPlatform = "windows-arm64";
+        } else if (triple.find("x86_64") != std::string::npos ||
+                   triple.find("amd64") != std::string::npos) {
+            targetPlatform = "windows-x64";
+        }
+    } else if (triple.empty()) {
+#if defined(__linux__)
+        targetIsLinux = true;
+#  if defined(__aarch64__)
+        targetPlatform = "linux-arm64";
+#  elif defined(__x86_64__)
+        targetPlatform = "linux-x64";
+#  endif
+#elif defined(_WIN32)
+        targetIsWindows = true;
+#  if defined(_M_ARM64)
+        targetPlatform = "windows-arm64";
+#  elif defined(_M_X64) || defined(__x86_64__)
+        targetPlatform = "windows-x64";
+#  endif
+#endif
+    }
     for (const NativePackage* pkg : natives) {
+        const NativePackagePlatform* platform = nullptr;
+        for (const NativePackagePlatform& candidate : pkg->platforms) {
+            if (targetPlatform == candidate.id) {
+                platform = &candidate;
+                break;
+            }
+        }
+        if (!pkg->platforms.empty() && (targetIsLinux || targetIsWindows) &&
+            platform == nullptr) {
+            std::fprintf(stderr,
+                         "cp3c: native backend for '%s' has no vendor archives "
+                         "for target '%s'\n",
+                         pkg->specifier,
+                         targetPlatform.empty() ? triple.c_str()
+                                                : targetPlatform.c_str());
+            return std::nullopt;
+        }
         auto resolve = [&](const std::string& rel) {
             return repo.empty() ? fs::path(rel) : repo / rel;
         };
@@ -387,7 +459,11 @@ std::optional<NativeBuildFlags> applyNativePackages(
         for (const std::string& flag : pkg->compileFlags) {
             flags.compile.push_back(flag);
         }
-        for (const std::string& rel : pkg->libDirs) {
+        const std::vector<std::string>& libDirs =
+            platform ? platform->libDirs : pkg->libDirs;
+        const std::vector<std::string>& linkFlags =
+            platform ? platform->linkFlags : pkg->linkFlags;
+        for (const std::string& rel : libDirs) {
             const fs::path dir = resolve(rel);
             if (!fs::is_directory(dir, ec)) {
                 reportBroken(pkg->specifier, "library directory", dir);
@@ -395,7 +471,7 @@ std::optional<NativeBuildFlags> applyNativePackages(
             }
             flags.link.push_back("-L" + dir.string());
         }
-        for (const std::string& flag : pkg->linkFlags) {
+        for (const std::string& flag : linkFlags) {
             flags.link.push_back(flag);
         }
         if (opt.verbose) {
@@ -496,7 +572,7 @@ std::optional<NativeBuildFlags> resolveNativeFlags(
                      toolchainVersionDescription().c_str());
     }
     return applyNativePackages(opt, *request.importedStdModules, layout,
-                               generatedProgramText(request, mod));
+                               generatedProgramText(request, mod), *tc);
 }
 
 // The native bindings the program imports: their include roots, defines,

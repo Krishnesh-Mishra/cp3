@@ -141,6 +141,24 @@ Invoke-Line ('"{0}" {1}' -f $Bash, (Join-Path $Scripts 'usockets_build.sh'))
 # ---------------------------------------------------------------------------
 Invoke-Line ('powershell.exe -NoProfile -ExecutionPolicy Bypass -File {0}' -f (Join-Path $Scripts 'vendor_copy.ps1'))
 
+# The std/crypto and std/network rows select archives by the target triple.
+# Preserve the original paths while adding the explicit Windows x64 layout;
+# oneTBB and PCRE2 retain their existing paths until their rows get per-target
+# archives as well.
+$winX64 = Join-Path $Tp 'libsodium\lib\windows-x64'
+New-Item -ItemType Directory -Force -Path $winX64 | Out-Null
+Copy-Item (Join-Path $Tp 'libsodium\lib\libsodium.a') (Join-Path $winX64 'libsodium.a') -Force
+Copy-Item (Join-Path $Tp 'libsodium\VERSION.txt') (Join-Path $winX64 'VERSION.txt') -Force
+$winX64 = Join-Path $Tp 'libuv\lib\windows-x64'
+New-Item -ItemType Directory -Force -Path $winX64 | Out-Null
+Copy-Item (Join-Path $Tp 'libuv\lib\libuv.a') (Join-Path $winX64 'libuv.a') -Force
+Copy-Item (Join-Path $Tp 'libuv\VERSION.txt') (Join-Path $winX64 'VERSION.txt') -Force
+$winX64 = Join-Path $Tp 'uWebSockets\lib\windows-x64'
+New-Item -ItemType Directory -Force -Path $winX64 | Out-Null
+Copy-Item (Join-Path $Tp 'uWebSockets\lib\libuSockets.a') (Join-Path $winX64 'libuSockets.a') -Force
+Copy-Item (Join-Path $Tp 'uWebSockets\lib\libuWebSockets.a') (Join-Path $winX64 'libuWebSockets.a') -Force
+Copy-Item (Join-Path $Tp 'uWebSockets\VERSION.txt') (Join-Path $winX64 'VERSION.txt') -Force
+
 # ---------------------------------------------------------------------------
 # 7. PCRE2 10.49 (core regex backend, DECISIONS D70; CMake + Ninja, static
 #    8-bit only, tests/grep/JIT off - see MANIFEST.md for the exact flags).
