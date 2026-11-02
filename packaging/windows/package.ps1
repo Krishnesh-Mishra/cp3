@@ -246,6 +246,14 @@ foreach ($tree in $thirdPartyTrees) {
     Copy-Tree (Join-Path $RepoRoot $tree) (Join-Path $stage $tree) ("vendored tree " + $tree)
     Info "vendored: $tree"
 }
+foreach ($relative in @(
+    'third_party\uWebSockets\include\App.h',
+    'third_party\libuv\include\uv.h'
+)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $stage $relative) -PathType Leaf)) {
+        Fail "staged native backend header is missing: '$relative'"
+    }
+}
 foreach ($vendor in @("libsodium", "libuv", "uWebSockets")) {
     $libDir = Join-Path $stage "third_party\$vendor\lib"
     if (Test-Path -LiteralPath $libDir) {

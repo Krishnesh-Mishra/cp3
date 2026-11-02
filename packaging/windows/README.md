@@ -100,13 +100,17 @@ extension. The resulting MSI is self-contained.
 - **Start Menu shortcut.** `cp3 Command Prompt` opens a terminal in
   `<install>\bin`, where `cp3.cmd` is available even before Explorer refreshes
   its environment.
-- **Updates and same-version reinstall.** A fixed `UpgradeCode` and
-  deterministic component GUIDs let a newer version replace an older one. A
-  rebuilt installer with the same `major.minor.patch` version also replaces
-  the installed build, rather than failing as a separate product. Downgrades
-  to a lower version remain blocked. `ProductVersion` is the numeric
+- **Updates and same-version reinstall.** A fixed `UpgradeCode`, a fresh
+  `ProductCode` for each MSI, and deterministic component GUIDs let Windows
+  Installer replace an older or same-version build. When an existing install
+  is found, the wizard asks **Update** or **Cancel** first. Update removes the
+  previous product and installs this package as one rollback-safe operation;
+  Cancel leaves the installed version alone. Downgrades to a lower version
+  remain blocked. `ProductVersion` is the numeric
   `major.minor.patch` prefix of `version.txt`; prerelease suffixes are not valid
   MSI versions.
+- **Real license text.** The installer’s license page is generated from the
+  repository’s `LICENSE` file (Apache License 2.0).
 
 `CP3_ROOT` is not written to the user environment. The `cp3.cmd` shim exports
 it for each child process, and `cp3c.exe` also resolves its install root from
@@ -130,9 +134,9 @@ msiexec /x .\cp3-0.1.0-windows-x64.msi /qn /norestart
 ```
 
 `/qb` shows a basic progress UI; double-clicking the MSI uses the
-`WixUI_InstallDir` wizard, with install-location, Install, and Cancel steps.
-When the MSI detects an older or same-version CP3 install, it replaces that
-install as part of the chosen install action. `/qn` is fully silent.
+`WixUI_InstallDir` wizard. If it detects an older or same-version CP3 install,
+it first shows an **Update** / **Cancel** prompt. `/qn` is fully silent and
+performs the major upgrade without showing a prompt.
 
 ## Stage layout (`package.ps1` output)
 

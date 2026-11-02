@@ -81,6 +81,14 @@ $StageDir = [System.IO.Path]::GetFullPath($StageDir).TrimEnd('\')
 if (-not (Test-Path -LiteralPath (Join-Path $StageDir 'bin\cp3c.exe'))) {
     Fail "no staged compiler at '$StageDir\bin\cp3c.exe'; run package.ps1 first"
 }
+foreach ($relative in @(
+    'third_party\uWebSockets\include\App.h',
+    'third_party\libuv\include\uv.h'
+)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $StageDir $relative) -PathType Leaf)) {
+        Fail "staged native backend header is missing: '$relative'; rebuild the distribution with package.ps1"
+    }
+}
 
 if (-not $OutDir) { $OutDir = Split-Path -Parent $StageDir }
 $OutDir = [System.IO.Path]::GetFullPath($OutDir)
@@ -91,6 +99,39 @@ New-Item -ItemType Directory -Force -Path $scratch | Out-Null
 $wxs = Join-Path $scratch ("cp3-" + $Arch + ".wxs")
 $msi = Join-Path $OutDir ("cp3-" + $Version + "-windows-" + $Arch + ".msi")
 if (Test-Path -LiteralPath $msi) { Remove-Item -LiteralPath $msi -Force }
+
+# WixUI contains placeholder license text unless this variable points to the
+# product's real license. Generate a simple RTF from the repository LICENSE so
+# the agreement shown in the installer matches the terms shipped with CP3.
+$licenseRtf = $null
+if (-not $NoUi) {
+    $licensePath = Join-Path $RepoRoot 'LICENSE'
+    if (-not (Test-Path -LiteralPath $licensePath -PathType Leaf)) {
+        Fail "the license shown in the installer is missing: '$licensePath'"
+    }
+    $licenseRtf = Join-Path $scratch 'cp3-license.rtf'
+    $escapedLines = foreach ($line in [System.IO.File]::ReadAllLines($licensePath)) {
+        $escaped = New-Object System.Text.StringBuilder
+        foreach ($character in $line.ToCharArray()) {
+            $code = [int]$character
+            if ($code -eq 92) { [void]$escaped.Append('\\') }
+            elseif ($code -eq 123) { [void]$escaped.Append('\{') }
+            elseif ($code -eq 125) { [void]$escaped.Append('\}') }
+            elseif ($code -eq 9) { [void]$escaped.Append('\tab ') }
+            elseif ($code -gt 127) {
+                if ($code -gt 32767) { $code -= 65536 }
+                [void]$escaped.Append('\u' + $code + '?')
+            } else {
+                [void]$escaped.Append($character)
+            }
+        }
+        $escaped.ToString()
+    }
+    $rtf = '{\rtf1\ansi\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}\viewkind4\uc1\pard\f0\fs18 ' +
+        ($escapedLines -join '\par' + "`r`n") + '\par}'
+    [System.IO.File]::WriteAllText($licenseRtf, $rtf,
+        (New-Object System.Text.UTF8Encoding($false)))
+}
 
 # --- stable IDs --------------------------------------------------------------
 function Get-StableId([string]$Text) {
@@ -257,6 +298,11 @@ $uiNs = 'http://wixtoolset.org/schemas/v4/wxs/ui'
 # Never change this GUID: it is what ties every cp3 MSI release together so a
 # newer version can find and replace an older one. ProductCode is per-version.
 $upgradeCode = '{D315919E-130C-50B6-8EC1-FE73F4D05C92}'
+# A same-version rebuild is also an update (for example, replacing a broken
+# v0.1.0 package). A new MSI must therefore get a new ProductCode every time;
+# the stable UpgradeCode and AllowSameVersionUpgrades make Windows Installer
+# remove the previous product and install this one as one rollback-safe action.
+$productCode = [guid]::NewGuid().ToString('B').ToUpperInvariant()
 
 function Write-FileComponent($Entry) {
     $id = Get-StableId $Entry.Rel
@@ -321,8 +367,8 @@ try {
     $writer.WriteAttributeString('Name', 'cp3')
     $writer.WriteAttributeString('Manufacturer', 'cp3')
     $writer.WriteAttributeString('Version', $numericVersion)
-    $writer.WriteAttributeString('UpgradeCode', (New-StableGuid 'upgrade-code'))
-    $writer.WriteAttributeString('ProductCode', (New-StableGuid ('product:' + $Version)))
+    $writer.WriteAttributeString('UpgradeCode', $upgradeCode)
+    $writer.WriteAttributeString('ProductCode', $productCode)
     $writer.WriteAttributeString('Scope', 'perUser')
     $writer.WriteAttributeString('Compressed', 'yes')
 
@@ -334,6 +380,83 @@ try {
         'A newer version of cp3 is already installed.')
     $writer.WriteEndElement()
 
+    if (-not $NoUi) {
+        # A related installation gets a clear Update/Cancel choice before the
+        # normal install wizard. MajorUpgrade removes the old product only after
+        # Update is selected and the installation proceeds; Windows Installer
+        # can roll the old product back if installing this package fails.
+        $writer.WriteStartElement('UI', $wixNs)
+        $writer.WriteAttributeString('Id', 'Cp3UpgradePrompt')
+        $writer.WriteStartElement('Dialog', $wixNs)
+        $writer.WriteAttributeString('Id', 'Cp3UpgradeDlg')
+        $writer.WriteAttributeString('Width', '370')
+        $writer.WriteAttributeString('Height', '150')
+        $writer.WriteAttributeString('Title', 'Update cp3')
+        $writer.WriteAttributeString('NoMinimize', 'yes')
+
+        $writer.WriteStartElement('Control', $wixNs)
+        $writer.WriteAttributeString('Id', 'Heading')
+        $writer.WriteAttributeString('Type', 'Text')
+        $writer.WriteAttributeString('X', '20')
+        $writer.WriteAttributeString('Y', '18')
+        $writer.WriteAttributeString('Width', '330')
+        $writer.WriteAttributeString('Height', '20')
+        $writer.WriteAttributeString('Text', 'Update cp3 to version [ProductVersion]?')
+        $writer.WriteEndElement()
+
+        $writer.WriteStartElement('Control', $wixNs)
+        $writer.WriteAttributeString('Id', 'Explanation')
+        $writer.WriteAttributeString('Type', 'Text')
+        $writer.WriteAttributeString('X', '20')
+        $writer.WriteAttributeString('Y', '45')
+        $writer.WriteAttributeString('Width', '330')
+        $writer.WriteAttributeString('Height', '42')
+        $writer.WriteAttributeString('Text', 'An existing cp3 installation was found. Update replaces it with this version. Choose Cancel to leave the current installation unchanged.')
+        $writer.WriteEndElement()
+
+        $writer.WriteStartElement('Control', $wixNs)
+        $writer.WriteAttributeString('Id', 'Update')
+        $writer.WriteAttributeString('Type', 'PushButton')
+        $writer.WriteAttributeString('X', '220')
+        $writer.WriteAttributeString('Y', '112')
+        $writer.WriteAttributeString('Width', '70')
+        $writer.WriteAttributeString('Height', '20')
+        $writer.WriteAttributeString('Text', '&Update')
+        $writer.WriteAttributeString('Default', 'yes')
+        $writer.WriteStartElement('Publish', $wixNs)
+        $writer.WriteAttributeString('Event', 'EndDialog')
+        $writer.WriteAttributeString('Value', 'Return')
+        $writer.WriteAttributeString('Condition', '1')
+        $writer.WriteEndElement()
+        $writer.WriteEndElement()
+
+        $writer.WriteStartElement('Control', $wixNs)
+        $writer.WriteAttributeString('Id', 'Cancel')
+        $writer.WriteAttributeString('Type', 'PushButton')
+        $writer.WriteAttributeString('X', '298')
+        $writer.WriteAttributeString('Y', '112')
+        $writer.WriteAttributeString('Width', '55')
+        $writer.WriteAttributeString('Height', '20')
+        $writer.WriteAttributeString('Text', 'Cancel')
+        $writer.WriteAttributeString('Cancel', 'yes')
+        $writer.WriteStartElement('Publish', $wixNs)
+        $writer.WriteAttributeString('Event', 'EndDialog')
+        $writer.WriteAttributeString('Value', 'Exit')
+        $writer.WriteAttributeString('Condition', '1')
+        $writer.WriteEndElement()
+        $writer.WriteEndElement()
+        $writer.WriteEndElement()  # Dialog
+
+        $writer.WriteStartElement('InstallUISequence', $wixNs)
+        $writer.WriteStartElement('Show', $wixNs)
+        $writer.WriteAttributeString('Dialog', 'Cp3UpgradeDlg')
+        $writer.WriteAttributeString('After', 'FindRelatedProducts')
+        $writer.WriteAttributeString('Condition', 'WIX_UPGRADE_DETECTED')
+        $writer.WriteEndElement()
+        $writer.WriteEndElement()  # InstallUISequence
+        $writer.WriteEndElement()  # UI
+    }
+
     $writer.WriteStartElement('MediaTemplate', $wixNs)
     $writer.WriteAttributeString('EmbedCab', 'yes')
     $writer.WriteEndElement()
@@ -341,6 +464,10 @@ try {
     if (-not $NoUi) {
         $writer.WriteStartElement('WixUI', $uiNs)
         $writer.WriteAttributeString('Id', 'WixUI_InstallDir')
+        $writer.WriteEndElement()
+        $writer.WriteStartElement('WixVariable', $wixNs)
+        $writer.WriteAttributeString('Id', 'WixUILicenseRtf')
+        $writer.WriteAttributeString('Value', $licenseRtf)
         $writer.WriteEndElement()
         $writer.WriteStartElement('Property', $wixNs)
         $writer.WriteAttributeString('Id', 'WIXUI_INSTALLDIR')
