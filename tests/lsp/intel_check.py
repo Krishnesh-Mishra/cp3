@@ -126,6 +126,23 @@ NETWORK_RESPONSE_MEMBER = (
 
 BROKEN_DOT = 'const x = 1.\n'
 BROKEN_STRING = 'const s = "abc\n'
+CONSOLE_EVENT_STRING = (
+    'import console from "std/console";\n'
+    'console.on("keyp", (key) => { console.log(key); });\n'
+)
+EMITTER_STRING_ARGUMENT = (
+    'const ev = new EventEmitter();\n'
+    'ev.emit(Strin);\n'
+)
+EMITTER_MEMBER = (
+    'const ev = new EventEmitter();\n'
+    'ev.\n'
+)
+CALLBACK_DIAGNOSTICS = (
+    'import console from "std/console";\n'
+    'const ev = new EventEmitter<string>();\n'
+    'console.on("keypress", (key, aa) => { console.log(key); });\n'
+)
 IMPORT_SPEC = 'import Math from "std/'
 LOCAL_SPEC = 'import x from "./'
 
@@ -596,7 +613,7 @@ def check_hover(report, session, uri):
 
 
 def check_language_diagnostics(report, session, shadow_uri, reserved_uri,
-                               assignment_uri):
+                               assignment_uri, callback_uri):
     shadow = diagnostics_for(session, shadow_uri)
     report.check(
         "diagnostics: shadowing the JS built-in Object is valid",
@@ -635,6 +652,22 @@ def check_language_diagnostics(report, session, shadow_uri, reserved_uri,
             for item in assignments
         ),
         assignments,
+    )
+    callback = diagnostics_for(session, callback_uri)
+    callback_errors = [item for item in (callback or [])
+                       if item.get("severity") == 1]
+    callback_codes = {str(item.get("code", "")) for item in callback_errors}
+    report.check(
+        "diagnostics: unsupported EventEmitter type arguments are rejected",
+        "CP3417" in callback_codes,
+        callback,
+    )
+    extra_param = next((item for item in callback_errors
+                        if "callback parameter 'aa'" in item.get("message", "")), None)
+    report.check(
+        "diagnostics: an event callback's extra required parameter is underlined",
+        extra_param is not None and "CP3401" in callback_codes,
+        callback,
     )
 
 
@@ -824,6 +857,55 @@ def check_completion(report, session, member_uri, object_uri,
         items is not None and all(name in found for name in
                                   ("add", "s", "function", "class", "import",
                                    "const")),
+        found,
+    )
+
+
+def check_semantic_completion(report, session, event_uri, string_uri,
+                              emitter_uri):
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": event_uri},
+        "position": position(CONSOLE_EVENT_STRING, '"keyp', len('"keyp')),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: console.on string argument offers only documented events",
+        items is not None and set(found) == {"keypress", "line", "close"},
+        found,
+    )
+    keypress = next((item for item in items or []
+                     if item.get("label") == "keypress"), {})
+    report.check(
+        "completion: event literal explains when it fires",
+        "each key" in item_documentation(keypress),
+        keypress,
+    )
+
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": string_uri},
+        "position": position(EMITTER_STRING_ARGUMENT, "Strin", len("Strin")),
+    })
+    items = completion_items(response)
+    string_item = next((item for item in items or []
+                        if item.get("label") == "String"), {})
+    report.check(
+        "completion: string argument offers String(value) with a usable call snippet",
+        bool(string_item) and string_item.get("insertText") == "String(${1:value})"
+        and string_item.get("insertTextFormat") == 2,
+        string_item,
+    )
+
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": emitter_uri},
+        "position": position(EMITTER_MEMBER, "ev.\n", len("ev.")),
+    })
+    items = completion_items(response)
+    found = labels(items)
+    report.check(
+        "completion: EventEmitter instance offers its event methods",
+        items is not None and all(name in found for name in
+                                  ("on", "once", "off", "emit")),
         found,
     )
 
@@ -1461,6 +1543,8 @@ def main():
                                               RESERVED_IDENTIFIER),
         "assignment_diagnostics": write_fixture(
             work, "intel_assignment_diagnostics.cp3", ASSIGNMENT_DIAGNOSTICS),
+        "callback_diagnostics": write_fixture(
+            work, "intel_callback_diagnostics.cp3", CALLBACK_DIAGNOSTICS),
         "network_server": write_fixture(work, "intel_network_server.cp3",
                                          NETWORK_SERVER_MEMBER),
         "network_request": write_fixture(work, "intel_network_request.cp3",
@@ -1472,6 +1556,12 @@ def main():
         "broken_dot": write_fixture(work, "intel_broken_dot.cp3", BROKEN_DOT),
         "broken_string": write_fixture(work, "intel_broken_string.cp3",
                                        BROKEN_STRING),
+        "console_event_string": write_fixture(
+            work, "intel_console_event_string.cp3", CONSOLE_EVENT_STRING),
+        "emitter_string_argument": write_fixture(
+            work, "intel_emitter_string_argument.cp3", EMITTER_STRING_ARGUMENT),
+        "emitter_member": write_fixture(
+            work, "intel_emitter_member.cp3", EMITTER_MEMBER),
         "spec": write_fixture(work, "intel_import_spec.cp3", IMPORT_SPEC),
         "local": write_fixture(work, "intel_local_spec.cp3", LOCAL_SPEC),
         "scope": write_fixture(work, "intel_scope.cp3", SCOPE),
@@ -1504,11 +1594,15 @@ def main():
                           ("object_shadow", OBJECT_SHADOW),
                           ("reserved_identifier", RESERVED_IDENTIFIER),
                           ("assignment_diagnostics", ASSIGNMENT_DIAGNOSTICS),
+                          ("callback_diagnostics", CALLBACK_DIAGNOSTICS),
                           ("network_server", NETWORK_SERVER_MEMBER),
                           ("network_request", NETWORK_REQUEST_MEMBER),
                           ("network_response", NETWORK_RESPONSE_MEMBER),
                           ("import", IMPORT_MAIN), ("broken_dot", BROKEN_DOT),
                           ("broken_string", BROKEN_STRING), ("spec", IMPORT_SPEC),
+                          ("console_event_string", CONSOLE_EVENT_STRING),
+                          ("emitter_string_argument", EMITTER_STRING_ARGUMENT),
+                          ("emitter_member", EMITTER_MEMBER),
                           ("local", LOCAL_SPEC), ("scope", SCOPE),
                           ("try", TRY_BLOCK), ("notry", NO_TRY),
                           ("partial", PARTIAL_STATEMENT),
@@ -1532,13 +1626,18 @@ def main():
         check_hover(report, session, uris["main"])
         check_language_diagnostics(report, session, uris["object_shadow"],
                                    uris["reserved_identifier"],
-                                   uris["assignment_diagnostics"])
+                                   uris["assignment_diagnostics"],
+                                   uris["callback_diagnostics"])
         check_completion(report, session, uris["member"],
                          uris["object_member"], uris["object_partial"],
                          uris["network_server"], uris["network_request"],
                          uris["network_response"], uris["broken_dot"],
                          uris["broken_string"], uris["spec"], uris["local"],
                          uris["main"])
+        check_semantic_completion(report, session,
+                                  uris["console_event_string"],
+                                  uris["emitter_string_argument"],
+                                  uris["emitter_member"])
         check_context_completion(report, session, uris["scope"], uris["try"],
                                  uris["notry"], uris["class"], uris["param"],
                                  uris["type"], uris["nested"], uris["partial"])

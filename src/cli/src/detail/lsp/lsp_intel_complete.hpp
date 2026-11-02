@@ -44,6 +44,7 @@ enum class CompletionPosition {
 struct CompletionContext {
     bool member = false;           // `receiver.|`
     bool importSpecifier = false;  // inside an `import ... from "|"` string
+    bool stringLiteral = false;    // inside a normal string argument
     bool blocked = false;          // inside a comment / non-import string
     bool awaitAllowed = false;     // top level or the nearest function is async
     CompletionPosition position = CompletionPosition::Unknown;
@@ -68,6 +69,11 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
 std::vector<lsp::CompletionCandidate> importSpecifierCandidates(
     const std::string& text, const CompletionContext& context,
     std::uint32_t offset);
+
+// Finite values accepted by the active string-literal argument. Returns empty
+// for ordinary open-ended strings and strings outside a call argument.
+std::vector<lsp::CompletionCandidate> stringArgumentCandidates(
+    const AnalyzedDocument& document, std::uint32_t offset);
 
 // The syntactic position of the cursor, from the token stream (what may
 // follow the cursor) and the AST (what encloses it).

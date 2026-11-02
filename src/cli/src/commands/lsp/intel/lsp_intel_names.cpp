@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,7 @@
 #include "cp3/core/ast.hpp"
 #include "cp3/lsp.hpp"
 #include "cp3/std_modules.hpp"
+#include "cp3/std_surface.hpp"
 #include "cp3/core/types.hpp"
 
 namespace cp3::cli {
@@ -83,6 +85,100 @@ void appendSnippet(std::vector<lsp::CompletionCandidate>& out,
     candidate.insertText = insertText;
     candidate.insertTextFormat = 2;
     out.push_back(std::move(candidate));
+}
+
+void appendBuiltinValues(std::vector<lsp::CompletionCandidate>& out) {
+    struct Builtin {
+        const char* name;
+        int kind;
+        const char* detail;
+        const char* documentation;
+    };
+    static constexpr Builtin values[] = {
+        {"Object", 7, "built-in global",
+         "Provides object-related language operations such as `Object.keys(value)`."},
+        {"String", 3, "String(value): string",
+         "Converts a value to its CP3 string representation. With no argument, "
+         "it returns `\"undefined\"`.\n\n```cp3\nconst label = String(value);\n```"},
+        {"Number", 7, "built-in global", "The CP3 Number global."},
+        {"Boolean", 7, "built-in global", "The CP3 Boolean global."},
+        {"Array", 7, "built-in global", "The CP3 Array global."},
+        {"parseInt", 3, "parseInt(text: string): number",
+         "Parses an integer from the beginning of a string."},
+        {"parseFloat", 3, "parseFloat(text: string): number",
+         "Parses a floating-point number from the beginning of a string."},
+        {"isNaN", 3, "built-in function", "Checks whether a number is NaN."},
+        {"isFinite", 3, "built-in function", "Checks whether a number is finite."},
+        {"print", 3, "built-in function", "Prints a value to standard output."},
+        {"Promise", 7, "built-in type and value", "The built-in asynchronous result type."},
+        {"EventEmitter", 7, "built-in class", "Creates an event emitter with `on`, `once`, `off`, and `emit` methods."},
+        {"Worker", 7, "built-in class", "Creates a worker thread."},
+        {"Thread", 7, "built-in class", "The CP3 worker-thread handle type."},
+        {"setTimeout", 3, "built-in function", "Schedules a callback after a delay."},
+        {"setInterval", 3, "built-in function", "Schedules a callback repeatedly."},
+        {"clearTimeout", 3, "built-in function", "Cancels a timeout."},
+        {"clearInterval", 3, "built-in function", "Cancels a repeating timer."},
+        {"sleep", 3, "sleep(ms: number): Promise<void>", "Resolves after the specified delay."},
+        {"Int8Array", 7, "built-in typed-array constructor", "Creates an 8-bit signed integer typed array."},
+        {"Uint8Array", 7, "built-in typed-array constructor", "Creates an 8-bit unsigned integer typed array."},
+        {"Uint8ClampedArray", 7, "built-in typed-array constructor", "Creates an 8-bit clamped unsigned typed array."},
+        {"Int16Array", 7, "built-in typed-array constructor", "Creates a 16-bit signed integer typed array."},
+        {"Uint16Array", 7, "built-in typed-array constructor", "Creates a 16-bit unsigned integer typed array."},
+        {"Int32Array", 7, "built-in typed-array constructor", "Creates a 32-bit signed integer typed array."},
+        {"Uint32Array", 7, "built-in typed-array constructor", "Creates a 32-bit unsigned integer typed array."},
+        {"Float32Array", 7, "built-in typed-array constructor", "Creates a 32-bit floating-point typed array."},
+        {"Float64Array", 7, "built-in typed-array constructor", "Creates a 64-bit floating-point typed array."},
+        {"BigInt64Array", 7, "built-in typed-array constructor", "Creates a 64-bit signed BigInt typed array."},
+        {"BigUint64Array", 7, "built-in typed-array constructor", "Creates a 64-bit unsigned BigInt typed array."},
+        {"ArrayBuffer", 7, "built-in buffer constructor", "Creates a fixed-length raw byte buffer."},
+        {"SharedArrayBuffer", 7, "built-in buffer constructor", "Creates a shared raw byte buffer."},
+        {"DataView", 7, "built-in view constructor", "Reads and writes typed values over an ArrayBuffer."},
+        {"Symbol", 7, "built-in global", "The CP3 Symbol global."},
+        {"BigInt", 7, "built-in global", "The CP3 BigInt global."},
+        {"NaN", 21, "number", "The not-a-number numeric value."},
+        {"Infinity", 21, "number", "The positive infinity numeric value."},
+    };
+    for (const Builtin& value : values) {
+        if (hasLabel(out, value.name)) continue;
+        lsp::CompletionCandidate candidate;
+        candidate.label = value.name;
+        candidate.kind = value.kind;
+        candidate.detail = value.detail;
+        candidate.documentation = value.documentation;
+        if (std::string(value.name) == "String") {
+            // Complete a usable string expression rather than a bare
+            // conversion function value in an argument position.
+            candidate.insertText = "String(${1:value})";
+            candidate.insertTextFormat = 2;
+        }
+        out.push_back(std::move(candidate));
+    }
+}
+
+std::optional<Type> builtinResultType(const std::string& name) {
+    if (name == "String") return Type::string();
+    if (name == "NaN" || name == "Infinity") return Type::number();
+    if (name == "parallel") return Type(TypeKind::Object, "parallel");
+    if (name == "Object" || name == "Promise" || name == "Worker" ||
+        name == "Number" || name == "Boolean" || name == "Array" ||
+        name == "Thread" || name == "EventEmitter" || name == "Symbol" ||
+        name == "BigInt" || name == "parseInt" || name == "parseFloat" ||
+        name == "isNaN" || name == "isFinite" || name == "print" ||
+        name == "setTimeout" || name == "setInterval" ||
+        name == "clearTimeout" || name == "clearInterval" || name == "sleep" ||
+        name == "Int8Array" || name == "Uint8Array" ||
+        name == "Uint8ClampedArray" || name == "Int16Array" ||
+        name == "Uint16Array" || name == "Int32Array" ||
+        name == "Uint32Array" || name == "Float32Array" ||
+        name == "Float64Array" || name == "BigInt64Array" ||
+        name == "BigUint64Array" || name == "ArrayBuffer" ||
+        name == "SharedArrayBuffer" || name == "DataView") {
+        return Type::function({}, Type::named(TypeKind::Class, name));
+    }
+    if (name == "worker") {
+        return Type::function({}, Type::named(TypeKind::Class, "Worker"));
+    }
+    return std::nullopt;
 }
 
 const char* keywordDocumentation(const std::string& keyword) {
@@ -475,6 +571,86 @@ std::vector<lsp::CompletionCandidate> importSpecifierCandidates(
     return candidates;
 }
 
+std::vector<lsp::CompletionCandidate> stringArgumentCandidates(
+    const AnalyzedDocument& document, std::uint32_t offset) {
+    std::vector<lsp::CompletionCandidate> candidates;
+    if (!analysisReady(document) || document.file == nullptr) return candidates;
+
+    const CallExpr* activeCall = nullptr;
+    const MemberExpr* activeMember = nullptr;
+    forEachNode(*document.entry->ast, [&](const Node& node) {
+        if (node.kind != NodeKind::CallExpr || !node.span.valid() ||
+            node.span.file != document.file || offset < node.span.begin.offset ||
+            offset > node.span.end.offset) {
+            return;
+        }
+        const auto& call = static_cast<const CallExpr&>(node);
+        if (call.arguments.empty() || call.arguments.front() == nullptr ||
+            call.arguments.front()->kind != NodeKind::StringLiteral ||
+            call.callee == nullptr || call.callee->kind != NodeKind::MemberExpr) {
+            return;
+        }
+        const SourceSpan& argumentSpan = call.arguments.front()->span;
+        if (!argumentSpan.valid() || argumentSpan.file != document.file ||
+            offset < argumentSpan.begin.offset || offset > argumentSpan.end.offset) {
+            return;
+        }
+        const auto& member = static_cast<const MemberExpr&>(*call.callee);
+        if ((member.property != "on" && member.property != "off") ||
+            member.object == nullptr ||
+            member.object->kind != NodeKind::Identifier) {
+            return;
+        }
+        const auto& object = static_cast<const Identifier&>(*member.object);
+        const auto resolved = document.sema.resolvedBindings.find(object.nodeId);
+        if (resolved == document.sema.resolvedBindings.end()) return;
+        bool isConsoleImport = false;
+        for (const StmtPtr& statement : document.entry->ast->body) {
+            if (statement == nullptr ||
+                statement->kind != NodeKind::ImportDeclaration ||
+                statement->nodeId != resolved->second) {
+                continue;
+            }
+            const auto& import = static_cast<const ImportDeclaration&>(*statement);
+            isConsoleImport = import.source == "std/console" &&
+                (import.defaultBinding == object.name ||
+                 import.namespaceBinding == object.name ||
+                 import.alias == object.name);
+            break;
+        }
+        if (!isConsoleImport) return;
+        if (activeCall == nullptr || node.span.length() < activeCall->span.length()) {
+            activeCall = &call;
+            activeMember = &member;
+        }
+    });
+    if (activeCall == nullptr || activeMember == nullptr) return candidates;
+
+    for (const std::string& value : stdNamespaceMemberArgumentValues(
+             "console", activeMember->property, 0)) {
+        lsp::CompletionCandidate candidate;
+        candidate.label = value;
+        candidate.kind = 20;  // CompletionItemKind.EnumMember
+        candidate.detail = "console event";
+        if (value == "keypress") {
+            candidate.documentation =
+                "Emitted for each key read from stdin. The listener receives "
+                "the key as a string.\n\n```cp3\nconsole.on(\"keypress\", "
+                "(key) => console.log(key));\n```";
+        } else if (value == "line") {
+            candidate.documentation =
+                "Emitted when a complete line is read from stdin, without its "
+                "line terminator. The listener receives the line as a string.";
+        } else if (value == "close") {
+            candidate.documentation =
+                "Emitted once when stdin reaches end of file. The listener "
+                "receives an empty string.";
+        }
+        candidates.push_back(std::move(candidate));
+    }
+    return candidates;
+}
+
 
 std::vector<lsp::CompletionCandidate> generalCandidates(
     const AnalyzedDocument& document, const CompletionContext& context,
@@ -494,6 +670,15 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
     if (!typesOnly) appendImportedCandidates(document, candidates);
     // 3. The module-level declarations.
     appendDeclarationCandidates(document, candidates, typesOnly);
+    // 4. Compiler globals are real expression names, but they are not
+    // published as source declarations in SemaResult. Add them explicitly
+    // after nearer user bindings so they never outrank a local shadow.
+    if (!typesOnly &&
+        (position == CompletionPosition::ExpressionStart ||
+         position == CompletionPosition::StatementStart ||
+         position == CompletionPosition::Unknown)) {
+        appendBuiltinValues(candidates);
+    }
     // If the active argument has a resolved primitive parameter type, omit
     // names that the checker would reject there. Keep unknowns visible while
     // a declaration is still being typed; no speculative type is invented.
@@ -504,6 +689,11 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
                            [&](const lsp::CompletionCandidate& candidate) {
                                const SymbolInfo* symbol = completionSymbol(
                                    document, candidate.label, offset);
+                               if (const std::optional<Type> builtin =
+                                       builtinResultType(candidate.label)) {
+                                   return !candidateFitsExpectedType(*builtin,
+                                                                     expected);
+                               }
                                if (symbol == nullptr || symbol->type.isUnknown() ||
                                    symbol->type.isError()) {
                                    return false;
@@ -513,7 +703,7 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
                            }),
             candidates.end());
     }
-    // 4. The snippets: a statement may start here.
+    // 5. The snippets: a statement may start here.
     if (position == CompletionPosition::StatementStart) {
         appendSnippet(candidates, "import", "import ${1:name} from \"${2:./module.cp3}\";",
                       "import a module");
@@ -524,7 +714,7 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
         appendSnippet(candidates, "interface", "interface ${1:Name} {\n\t${0}\n}",
                       "declare an interface");
     }
-    // 5. The keywords that may legally appear here, last.
+    // 6. The keywords that may legally appear here, last.
     for (const std::string& keyword :
          legalKeywords(position, context.awaitAllowed)) {
         if (!contextualKeywordAllowed(document, offset, keyword)) continue;

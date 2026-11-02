@@ -26,6 +26,7 @@
 #include "cp3/diag/diagnostic.hpp"
 #include "cp3/lexer.hpp"
 #include "cp3/lsp.hpp"
+#include "cp3/std_surface.hpp"
 #include "cp3/core/source.hpp"
 #include "cp3/core/token.hpp"
 
@@ -167,6 +168,11 @@ CompletionContext detectContext(const std::vector<Token>& tokens,
         context.stringBegin = token->span.begin.offset;
         return context;
     }
+    if (isStringKind(token->kind)) {
+        context.stringLiteral = true;
+        context.stringBegin = token->span.begin.offset;
+        return context;
+    }
     context.blocked = true;
     return context;
 }
@@ -198,6 +204,10 @@ std::vector<lsp::CompletionCandidate> completeAt(const std::string& path,
     context.expectedType = expectedArgumentTypeAt(*document, offset);
     if (context.importSpecifier) {
         return importSpecifierCandidates(text, context, offset);
+    }
+    if (context.stringLiteral) {
+        if (!analysisReady(*document)) return {};
+        return stringArgumentCandidates(*document, offset);
     }
     if (context.member) {
         return memberCandidates(*document, text, context, offset);
