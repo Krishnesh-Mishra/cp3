@@ -66,6 +66,7 @@ constexpr const char* kTokenKindNames[] = {
     "await",  // KwAwait
     "weak",  // KwWeak
     "ref",  // KwRef
+    "instanceof",  // KwInstanceof
     "typeof",  // KwTypeof
     "get",  // KwGet
     "set",  // KwSet
@@ -173,6 +174,7 @@ bool isKeyword(TokenKind kind) noexcept {
         case TokenKind::KwAs: case TokenKind::KwNative:
         case TokenKind::KwAsync: case TokenKind::KwAwait:
         case TokenKind::KwWeak: case TokenKind::KwRef:
+        case TokenKind::KwInstanceof:
         case TokenKind::KwTypeof:
         case TokenKind::KwGet: case TokenKind::KwSet:
         case TokenKind::KwTrue: case TokenKind::KwFalse:

@@ -291,7 +291,9 @@ void ParserImpl::assignDeclChildren(Node& node) {
             auto& c = static_cast<ClassDeclaration&>(node);
             assignAll(c.typeParams);
             assignOpt(c.extendsType.get());
+            assignOpt(c.extendsExpr.get());
             assignAll(c.implementsTypes);
+            assignAll(c.decorators);
             assignAll(c.members);
             break;
         }
@@ -395,6 +397,17 @@ void ParserImpl::assignControlChildren(Node& node) {
 
 void ParserImpl::assignMemberChildren(Node& node) {
     switch (node.kind) {
+        case NodeKind::PropertyDeclaration:
+        case NodeKind::MethodDeclaration:
+        case NodeKind::ConstructorDeclaration:
+        case NodeKind::AccessorDeclaration:
+        case NodeKind::StaticBlock:
+            assignAll(static_cast<ClassMember&>(node).decorators);
+            break;
+        default:
+            break;
+    }
+    switch (node.kind) {
         case NodeKind::PropertyDeclaration: {
             auto& p = static_cast<PropertyDeclaration&>(node);
             assignOpt(p.key.get());
@@ -425,6 +438,9 @@ void ParserImpl::assignMemberChildren(Node& node) {
             assignOpt(a.body.get());
             break;
         }
+        case NodeKind::StaticBlock:
+            assignOpt(static_cast<StaticBlock&>(node).body.get());
+            break;
         case NodeKind::PropertySignature: {
             auto& p = static_cast<PropertySignature&>(node);
             assignOpt(p.key.get());

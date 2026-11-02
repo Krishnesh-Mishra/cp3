@@ -29,7 +29,8 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
     for (;;) {
         if (match(TokenKind::Dot)) {
             Token propTok = peek();
-            if (!isNameToken(propTok)) {
+            if (!isNameToken(propTok) &&
+                propTok.kind != TokenKind::PrivateIdentifier) {
                 report(diagcode::kUnexpectedToken, "expected a property name after '.'");
                 break;
             }
@@ -59,7 +60,8 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
                 expr = std::move(index);
             } else {
                 Token propTok = peek();
-                if (!isNameToken(propTok)) {
+                if (!isNameToken(propTok) &&
+                    propTok.kind != TokenKind::PrivateIdentifier) {
                     report(diagcode::kUnexpectedToken, "expected a property name after '?.'");
                     break;
                 }

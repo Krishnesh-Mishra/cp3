@@ -212,6 +212,9 @@ ExprPtr ParserImpl::parseRelational() {
                 op = BinaryOp::In;
                 isIn = true;
                 break;
+            case TokenKind::KwInstanceof:
+                op = BinaryOp::Instanceof;
+                break;
             default: return left;
         }
         (void)isIn;

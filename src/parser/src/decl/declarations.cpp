@@ -208,6 +208,23 @@ ParameterPtr ParserImpl::parseParameter() {
     const Token start = peek();
     auto param = std::make_unique<Parameter>(start.span);
 
+    // TypeScript constructor parameter properties:
+    //   constructor(public name: string, private readonly id: number) {}
+    for (;;) {
+        if (match(TokenKind::KwPublic)) {
+            param->access = AccessModifier::Public;
+        } else if (match(TokenKind::KwPrivate)) {
+            param->access = AccessModifier::Private;
+        } else if (match(TokenKind::KwProtected)) {
+            param->access = AccessModifier::Protected;
+        } else if (looksLikeReadonlyModifier()) {
+            param->isReadonly = true;
+            (void)advance();
+        } else {
+            break;
+        }
+    }
+
     if (match(TokenKind::KwRef)) param->isRef = true;
 
     if (match(TokenKind::Ellipsis)) {

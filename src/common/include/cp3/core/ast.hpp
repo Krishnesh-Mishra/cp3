@@ -51,7 +51,7 @@ enum class BinaryOp {
     Equal, NotEqual, StrictEqual, StrictNotEqual,
     LessThan, GreaterThan, LessThanEqual, GreaterThanEqual,
     BitAnd, BitOr, BitXor, ShiftLeft, ShiftRight, UnsignedShiftRight,
-    In,
+    In, Instanceof,
 };
 
 enum class LogicalOp { And, Or, Nullish };
@@ -146,6 +146,7 @@ enum class ExportKind { Named, Default, Declaration, ReExportAll, ReExportNamed 
     X(MethodDeclaration)          \
     X(ConstructorDeclaration)     \
     X(AccessorDeclaration)        \
+    X(StaticBlock)                \
     X(PropertySignature)          \
     X(MethodSignature)            \
     X(Parameter)                  \
@@ -201,7 +202,14 @@ struct TypeNode : Node {
     TypeNode(NodeKind k, SourceSpan s) : Node(k, std::move(s)) {}
 };
 
+struct Expr;
+using ExprPtr = std::unique_ptr<Expr>;
+
 struct ClassMember : Node {
+    // `@Name` / `@Name(args)` attached to this member. They are compile-time
+    // macros: sema/codegen consume them before emission and the generated C++
+    // never carries decorator metadata.
+    std::vector<ExprPtr> decorators;
     ClassMember(NodeKind k, SourceSpan s) : Node(k, std::move(s)) {}
 };
 
@@ -216,7 +224,6 @@ CP3_AST_NODE_LIST(CP3_FWD)
 
 // Ownership aliases.
 using NodePtr = std::unique_ptr<Node>;
-using ExprPtr = std::unique_ptr<Expr>;
 using StmtPtr = std::unique_ptr<Stmt>;
 using TypePtr = std::unique_ptr<TypeNode>;
 using DeclPtr = std::unique_ptr<Decl>;
@@ -255,7 +262,8 @@ struct Parameter : Node {
     bool optional = false;   // `b?`
     bool isRest = false;     // `...rest`
     bool isRef = false;      // `ref x`
-    AccessModifier access = AccessModifier::None;  // reserved (constructor param props)
+    AccessModifier access = AccessModifier::None;  // constructor parameter property
+    bool isReadonly = false; // `readonly` constructor parameter property
 
     Parameter(SourceSpan s) : Node(NodeKind::Parameter, std::move(s)) {}
 };
@@ -557,8 +565,10 @@ struct ClassDeclaration : Stmt {
     std::string name;
     TypeParamList typeParams;
     TypePtr extendsType;         // single inheritance
+    ExprPtr extendsExpr;         // compile-time `extends` expression (optional)
     TypeList implementsTypes;    // optional, self-documenting only
     std::vector<ClassMemberPtr> members;
+    std::vector<ExprPtr> decorators;  // compile-time macros
     bool isAbstract = false;
     bool isExported = false;
     explicit ClassDeclaration(SourceSpan s)
@@ -745,8 +755,9 @@ struct PropertyDeclaration : ClassMember {
     AccessModifier access = AccessModifier::None;
     bool isStatic = false;
     bool isAbstract = false;
-    bool isWeak = false;      // `weak parent: Parent;` (spec §11)
-    bool isReadonly = false;  // reserved
+    bool isWeak = false;      // removed CP3-only extension (diagnostic only)
+    bool isReadonly = false;
+    bool isOverride = false;
     bool optional = false;
     ExprPtr key;              // Identifier/StringLiteral/NumberLiteral, or expr if computed
     bool computed = false;
@@ -762,6 +773,7 @@ struct MethodDeclaration : ClassMember {
     bool isAbstract = false;   // `abstract function area(): number;`
     bool isAsync = false;
     bool isReadonly = false;
+    bool isOverride = false;
     bool optional = false;     // reserved
     ExprPtr key;               // name
     bool computed = false;
@@ -779,6 +791,14 @@ struct ConstructorDeclaration : ClassMember {
     StmtPtr body;
     explicit ConstructorDeclaration(SourceSpan s)
         : ClassMember(NodeKind::ConstructorDeclaration, std::move(s)) {}
+};
+
+// `static { ... }`: a compile-time-ordered static initialization block. It is
+// ordinary C++ emitted into the unit's static initialization.
+struct StaticBlock : ClassMember {
+    StmtPtr body;
+    explicit StaticBlock(SourceSpan s)
+        : ClassMember(NodeKind::StaticBlock, std::move(s)) {}
 };
 
 // get/set accessors (spec §16 "direct 1:1 mappings").

@@ -72,6 +72,7 @@ enum class TokenKind {
     KwImport, KwExport, KwFrom, KwAs, KwNative,
     KwAsync, KwAwait,
     KwWeak, KwRef,
+    KwInstanceof,
     KwTypeof,
     KwGet, KwSet,
     KwTrue, KwFalse,

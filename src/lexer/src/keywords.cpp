@@ -62,6 +62,7 @@ TokenKind keywordFor(std::string_view s) noexcept {
         {"as", TokenKind::KwAs},           {"native", TokenKind::KwNative},
         {"async", TokenKind::KwAsync},     {"await", TokenKind::KwAwait},
         {"weak", TokenKind::KwWeak},       {"ref", TokenKind::KwRef},
+        {"instanceof", TokenKind::KwInstanceof},
         {"typeof", TokenKind::KwTypeof},   {"get", TokenKind::KwGet},
         {"set", TokenKind::KwSet},         {"true", TokenKind::KwTrue},
         {"false", TokenKind::KwFalse},     {"null", TokenKind::KwNull},

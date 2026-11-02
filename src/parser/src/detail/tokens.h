@@ -61,6 +61,8 @@ struct MemberModifiers {
     bool isWeak = false;
     bool isReadonly = false;
     bool isAsync = false;
+    bool isOverride = false;
+    std::vector<ExprPtr> decorators;
 };
 
 // -----------------------------------------------------------------------------
@@ -133,7 +135,9 @@ private:
     StmtPtr parseTryStatement();
     StmtPtr parseLabeledStatement();
     StmtPtr parseExpressionStatement();
-    // Decorators are deferred: report, skip the expression, return `empty`.
+    // `@Name` / `@Name(args)` compile-time decorators. The expression is kept
+    // in the AST; sema resolves the name to a `comptime function`.
+    void parseDecorators(std::vector<ExprPtr>& out);
     StmtPtr parseDecoratedStatement();
 
     // --- declarations / members (declarations.cpp) ---------------------------
@@ -147,14 +151,20 @@ private:
 
     ClassMemberPtr parseClassMember();
     void parseMemberModifiers(MemberModifiers& mods);
-    ClassMemberPtr parseMethodMember(MemberModifiers& mods);
+    ClassMemberPtr parseMethodMember(MemberModifiers& mods,
+                                     ExprPtr key = nullptr,
+                                     bool computed = false);
     ClassMemberPtr parseAccessorMember(MemberModifiers& mods);
     ClassMemberPtr parseConstructorMember(MemberModifiers& mods);
-    ClassMemberPtr parsePropertyMember(const MemberModifiers& mods);
+    ClassMemberPtr parsePropertyMember(MemberModifiers& mods,
+                                       ExprPtr key = nullptr,
+                                       bool computed = false);
+    ClassMemberPtr parseStaticBlock(MemberModifiers& mods);
     SignatureMemberPtr parseSignatureMember();
     bool looksLikeAccessor() const;
     bool looksLikeConstructor() const;
     bool looksLikeReadonlyModifier() const;
+    bool looksLikeOverrideModifier() const;
     ExprPtr parseMemberKey(bool& computed);
     ExprPtr parsePropertyKey();
 

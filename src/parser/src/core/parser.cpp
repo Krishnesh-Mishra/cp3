@@ -147,21 +147,38 @@ StmtPtr ParserImpl::parseBlock() {
     return block;
 }
 
-// Decorators are deferred and have no AST node: report, skip the decorator
-// expression, and let the decorated declaration parse on its own.
+// `@Name class ...`: decorators are compile-time macros. The parser keeps the
+// decorator expressions on the class node; sema resolves each name to a
+// `comptime function` and the C++ output never carries decorator metadata.
 StmtPtr ParserImpl::parseDecoratedStatement() {
-    Token at = advance();
-    report(diagcode::kUnexpectedToken, "decorators are not supported");
-    if (isNameToken(peek())) (void)advance();
-    if (check(LParen)) {
-        int depth = 0;
-        while (!atEnd()) {
-            Token t = advance();
-            if (t.kind == LParen) ++depth;
-            else if (t.kind == RParen && --depth == 0) break;
+    const Token start = peek();
+    std::vector<ExprPtr> decorators;
+    parseDecorators(decorators);
+
+    if (check(TokenKind::KwClass) ||
+        (check(TokenKind::KwAbstract) && peek(1).kind == TokenKind::KwClass)) {
+        StmtPtr stmt = parseClassDeclaration(false);
+        if (stmt && stmt->kind == NodeKind::ClassDeclaration) {
+            static_cast<ClassDeclaration&>(*stmt).decorators =
+                std::move(decorators);
         }
+        return stmt;
     }
-    return std::make_unique<EmptyStatement>(at.span);
+
+    report(diagcode::kDecoratorsUnsupported,
+           "TypeScript allows runtime decorators on declarations and values; "
+           "CP3 does not run code while a class is being defined and emits no "
+           "runtime metadata, so decorators are compile-time macros only. "
+           "Attach `@Name` to a class or class member, where `Name` names a "
+           "`comptime function` that rewrites the AST before native codegen");
+    while (!atEnd() && !check(TokenKind::Semicolon) &&
+           !check(TokenKind::RBrace)) {
+        (void)advance();
+    }
+    if (match(TokenKind::Semicolon)) {
+        // consumed
+    }
+    return std::make_unique<EmptyStatement>(spanFrom(start));
 }
 
 // =============================================================================
