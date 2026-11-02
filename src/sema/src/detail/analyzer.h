@@ -50,6 +50,7 @@
 #include "cp3/diag/diagnostic.hpp"
 #include "cp3/host/native_bindings.hpp"
 #include "cp3/host/options.hpp"
+#include "cp3/sema.hpp"
 #include "cp3/std_surface.hpp"
 #include "detail/enums.h"
 #include "detail/scopes.h"
@@ -71,8 +72,9 @@ struct NativeArgSite {
 class Analyzer {
 public:
     Analyzer(DiagnosticSink& sink, SemaResult& out,
-             const CompileOptions& options = CompileOptions{})
-        : sink_(sink), out_(out), options_(options) {
+             const CompileOptions& options = CompileOptions{},
+             const ImportedBindings* imports = nullptr)
+        : sink_(sink), out_(out), options_(options), imports_(imports) {
         shapes_[kAmbientLabel] = Shape{};
         shapes_[kAmbientLabel].open = true;
     }
@@ -112,6 +114,9 @@ private:
                         const SourceSpan& span, const BindingSpec& spec = {});
     void declareAmbient(const std::string& name, const SourceSpan& span,
                         std::uint32_t nodeId);
+    // Declares a resolved cross-module import with its exported type/signature.
+    void declareImported(const std::string& name, const ImportedBinding& binding,
+                         const SourceSpan& span, std::uint32_t nodeId);
     // The exported name `local` is bound to, resolving a named std-import alias
     // (`import { Map as M } from "std/collections"` -> M resolves to "Map").
     // Any other spelling resolves to itself.
@@ -570,6 +575,7 @@ private:
     DiagnosticSink& sink_;
     SemaResult& out_;
     CompileOptions options_;
+    const ImportedBindings* imports_ = nullptr;
     std::vector<std::unordered_map<std::string, Binding>> scopes_;
     std::unordered_map<std::string, Shape> shapes_;
     std::unordered_map<std::string, Type> typeNames_;
@@ -654,6 +660,8 @@ std::vector<std::string> osMemberNames();
 std::vector<std::string> processMemberNames();
 std::vector<std::string> envMemberNames();
 std::vector<std::string> consoleMemberNames();
+std::vector<std::string> consoleMemberArgumentValues(
+    const std::string& prop, std::size_t argumentIndex);
 std::vector<std::string> jsonMemberNames();
 std::vector<std::string> cryptoMemberNames();
 std::vector<std::string> fsMemberNames();

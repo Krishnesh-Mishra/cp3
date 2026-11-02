@@ -58,34 +58,6 @@ struct FrontendResult {
     int exitCode = kExitSuccess;
 };
 
-// Any resolved local import ("./x.cp3") routes the build through the
-// whole-program codegen path; std/package/native imports do not.
-bool hasLocalModules(const ModuleGraph& graph) {
-    for (const ModuleDependency& dep : graph.dependencies()) {
-        if (dep.resolution == ModuleResolution::Local &&
-            dep.imported != UINT32_MAX) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Checks every loaded local unit other than the entry and the worker unit
-// (preludes contribute their items through their importers and are never
-// analyzed standalone). Diagnostics share the caller's sink so one broken
-// module fails the build before codegen.
-void analyzeLocalUnits(ModuleGraph& graph, CompilationUnit* entry,
-                       std::unordered_map<std::uint32_t, SemaResult>& out,
-                       DiagnosticSink& sink, const CompileOptions& compile) {
-    for (CompilationUnit* unit : graph.units()) {
-        if (unit == nullptr || unit == entry ||
-            unit->isPrelude || !unit->ast) {
-            continue;
-        }
-        analyzeProgram(*unit->ast, out[unit->id], sink, compile);
-    }
-}
-
 FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
                           const BuildContext& ctx) {
     FrontendResult result;
@@ -96,12 +68,9 @@ FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
     ctx.opt->compile.nativeBindings = result.graph->nativeBindings();
     CompilationUnit* entry = result.graph->entry();
     if (entry != nullptr && entry->ast) {
-        analyzeProgram(*entry->ast, result.sema, feSink, ctx.opt->compile);
-        result.program = hasLocalModules(*result.graph);
-        if (result.program) {
-            analyzeLocalUnits(*result.graph, entry, result.unitSemas,
-                              feSink, ctx.opt->compile);
-        }
+        result.program = hasProgramModules(*result.graph);
+        analyzeProgramGraph(*result.graph, result.sema, result.unitSemas,
+                            feSink, ctx.opt->compile);
     }
     renderDiagnostics(feSink.diagnostics(), *ctx.render, stderr);
     if (feSink.hasErrors()) {

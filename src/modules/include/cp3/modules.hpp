@@ -22,7 +22,11 @@
 // =============================================================================
 #pragma once
 
+#include <filesystem>
+#include <functional>
 #include <memory>
+#include <optional>
+#include <utility>
 
 #include "cp3/diag/diagnostic.hpp"
 #include "cp3/meta/module.hpp"
@@ -30,7 +34,17 @@
 
 namespace cp3 {
 
-// Loads an entry file plus every local module it reaches, transitively.
+// Resolves a package specifier (`import { x } from "addpkg"`) to the package
+// entry `.cp3` file. The CLI supplies this because the package manager owns
+// package.json and `.cp3/lock.json`; the module loader only consumes the
+// resolved path. Returning nullopt leaves the package edge unresolved and
+// reports the normal module-not-found diagnostic.
+using PackageEntryResolver =
+    std::function<std::optional<std::filesystem::path>(
+        const std::string& specifier,
+        const std::filesystem::path& projectRoot)>;
+
+// Loads an entry file plus every local/package module it reaches, transitively.
 //
 // `entry` must already live in `sm` (the CLI adds it before calling). Local
 // dependency sources are added to `sm` as they are discovered; `sm` must
@@ -40,11 +54,14 @@ namespace cp3 {
 class ModuleLoader {
 public:
     explicit ModuleLoader(DiagnosticSink& sink) noexcept : sink_(sink) {}
+    ModuleLoader(DiagnosticSink& sink, PackageEntryResolver packageResolver)
+        : sink_(sink), packageResolver_(std::move(packageResolver)) {}
 
     std::unique_ptr<ModuleGraph> load(SourceManager& sm, const SourceFile& entry);
 
 private:
     DiagnosticSink& sink_;
+    PackageEntryResolver packageResolver_;
 };
 
 }  // namespace cp3

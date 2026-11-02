@@ -103,7 +103,7 @@ void Analyzer::run(Program& program) {
 // =============================================================================
 bool SemanticAnalyzer::analyze(Program& program, SemaResult& out) {
     out.clear();
-    Analyzer analyzer(sink_, out, options_);
+    Analyzer analyzer(sink_, out, options_, imports_);
     analyzer.run(program);
     out.ok = !sink_.hasErrors();
     return out.ok;

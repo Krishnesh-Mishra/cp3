@@ -15,7 +15,9 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -23,6 +25,7 @@
 
 #include "cp3/diag/diagnostic.hpp"
 #include "cp3/meta/module.hpp"
+#include "cp3/modules.hpp"
 #include "cp3/core/source.hpp"
 #include "cp3/core/token.hpp"
 
@@ -42,6 +45,8 @@ struct UnitInfo {
 class ProgramLoader {
 public:
     explicit ProgramLoader(DiagnosticSink& sink) noexcept : sink_(sink) {}
+    ProgramLoader(DiagnosticSink& sink, cp3::PackageEntryResolver packageResolver)
+        : sink_(sink), packageResolver_(std::move(packageResolver)) {}
 
     std::unique_ptr<ModuleGraph> load(SourceManager& sm, const SourceFile& entry);
 
@@ -67,6 +72,8 @@ private:
     void processReExport(CompilationUnit& unit, const ExportDeclaration& decl);
     CompilationUnit* loadLocal(const std::string& specifier, const fs::path& fromFolder,
                                const SourceSpan& span);
+    CompilationUnit* loadPackage(const std::string& specifier,
+                                 const SourceSpan& span);
 
     // --- native_import.cpp ----------------------------------------------------
     // Resolves `import native "id" as alias` to the binding's metadata and
@@ -89,6 +96,7 @@ private:
     void validateImport(const ImportDeclaration& decl, const ExportSurface& surface);
 
     DiagnosticSink& sink_;
+    cp3::PackageEntryResolver packageResolver_;
     SourceManager* sm_ = nullptr;
     ModuleGraph* graph_ = nullptr;
     // The project root and the native binding root (`<root>/.cp3/native`).

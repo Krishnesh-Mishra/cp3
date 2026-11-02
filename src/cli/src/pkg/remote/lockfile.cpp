@@ -25,6 +25,7 @@
 #include "detail/pkg/lockfile.hpp"
 
 #include <algorithm>
+#include <filesystem>
 
 #include "detail/pkg/json.hpp"
 #include "detail/core/util.hpp"
@@ -33,7 +34,30 @@ namespace cp3::cli {
 
 namespace {
 
+namespace fs = std::filesystem;
+
 constexpr int kLockfileVersion = 1;
+
+// Lock files record locations that are meaningful to the project, not to the
+// machine that happened to run `cp3c install`. Absolute paths inside the
+// project (or a sibling link directory) become project-relative paths; a
+// different-drive/UNC path stays absolute because no relative spelling exists.
+std::string projectRelative(fs::path path, const fs::path& projectRoot) {
+    if (!path.is_absolute()) return path.generic_string();
+    const fs::path relative = path.lexically_relative(projectRoot);
+    if (relative.empty()) return path.generic_string();
+    return relative.generic_string();
+}
+
+std::string relativeResolved(const std::string& resolved,
+                             const fs::path& projectRoot) {
+    constexpr const char* kFilePrefix = "file:";
+    if (resolved.rfind(kFilePrefix, 0) == 0) {
+        const fs::path path = fs::path(resolved.substr(5));
+        return std::string(kFilePrefix) + projectRelative(path, projectRoot);
+    }
+    return resolved;
+}
 
 // Appends `"key": "value",` when the value is non-empty. Keeping every
 // optional field out of the file when empty preserves the pre-link shape.
@@ -172,6 +196,14 @@ bool writeLockfile(const fs::path& projectRoot, const std::vector<LockEntry>& en
               [](const LockEntry& a, const LockEntry& b) {
                   return a.name < b.name;
               });
+    for (LockEntry& entry : sorted) {
+        entry.resolved = relativeResolved(entry.resolved, projectRoot);
+        if (entry.resolved.rfind("file:", 0) != 0 &&
+            fs::path(entry.resolved).is_absolute()) {
+            entry.resolved = projectRelative(entry.resolved, projectRoot);
+        }
+        entry.target = projectRelative(entry.target, projectRoot);
+    }
     std::string out;
     out += "{\n";
     out += "  \"lockfileVersion\": " + std::to_string(kLockfileVersion) + ",\n";

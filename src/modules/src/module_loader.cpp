@@ -24,7 +24,7 @@ namespace cp3 {
 
 std::unique_ptr<ModuleGraph> ModuleLoader::load(SourceManager& sm,
                                                 const SourceFile& entry) {
-    modules::ProgramLoader loader(sink_);
+    modules::ProgramLoader loader(sink_, packageResolver_);
     return loader.load(sm, entry);
 }
 

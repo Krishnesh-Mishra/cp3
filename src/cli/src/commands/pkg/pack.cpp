@@ -346,7 +346,10 @@ int packProject(const PackInput& input) {
     PackOutput out;
     out.name = packageName(manifest, projectRoot);
     out.version = packageVersion(manifest);
-    out.main = packageMain(manifest);
+    // The container always places the generated export surface at the archive
+    // root as `index.cp3`; the container manifest names that member, not the
+    // author's pre-pack `main` path (which may be `src/index.cp3`).
+    out.main = "index.cp3";
     out.plan = plan;
     out.cached = cached;
     const fs::path pakPath = outDir / (out.name + ".cp3pak");

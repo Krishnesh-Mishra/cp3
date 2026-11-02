@@ -12,12 +12,34 @@
 // =============================================================================
 #pragma once
 
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 #include "cp3/core/analysis.hpp"
 #include "cp3/core/ast.hpp"
 #include "cp3/diag/diagnostic.hpp"
 #include "cp3/host/options.hpp"
 
 namespace cp3 {
+
+// What one imported binding means in the importing unit. The module loader
+// already validates that the export exists; sema needs the exported value's
+// type (and a function's full signature) so a use is checked and lowered as
+// the real thing rather than as an untyped ambient name.
+struct ImportedBinding {
+    Type type;                       // value type (or nominal type when isType)
+    bool isValue = true;             // a value binding exists at the use site
+    bool isType = false;             // usable in a type position
+    bool isFunction = false;
+    std::vector<Type> paramTypes;
+    std::vector<bool> paramOptional;
+    bool hasRest = false;
+    Type returnType;
+    bool isAsync = false;
+};
+
+using ImportedBindings = std::unordered_map<std::string, ImportedBinding>;
 
 // Name resolution + type checking for one Program. Reports problems through
 // the sink. Returns true when no error/fatal diagnostic was reported.
@@ -29,8 +51,14 @@ public:
     // type-name vocabulary and `options.strictNumericCasts` enables Rust-style
     // refusal of implicit native-width conversions. Additive: the one-argument
     // constructor keeps the TypeScript defaults.
-    SemanticAnalyzer(DiagnosticSink& sink, const CompileOptions& options) noexcept
-        : sink_(sink), options_(options) {}
+    //
+    // `imports` carries the exported types of this unit's resolved module
+    // dependencies, keyed by the local binding name. It must outlive the
+    // analyze() call; nullptr keeps the historical permissive ambient import
+    // behavior (used for std/native/unresolved specifiers).
+    SemanticAnalyzer(DiagnosticSink& sink, const CompileOptions& options,
+                     const ImportedBindings* imports = nullptr) noexcept
+        : sink_(sink), options_(options), imports_(imports) {}
 
     // Analyzes `program` and publishes every inferred type / symbol / signature
     // into `out` (keyed by Node::nodeId). `out` is cleared first. Returns
@@ -44,6 +72,7 @@ public:
 private:
     DiagnosticSink& sink_;
     CompileOptions options_{};
+    const ImportedBindings* imports_ = nullptr;
 };
 
 }  // namespace cp3

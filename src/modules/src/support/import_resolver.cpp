@@ -73,6 +73,13 @@ void ProgramLoader::processImport(CompilationUnit& unit, const ImportDeclaration
             dep.resolved = true;
             validateImport(decl, *surface);
         }
+    } else if (dep.resolution == ModuleResolution::Package) {
+        CompilationUnit* target = loadPackage(decl.source, decl.span);
+        if (target != nullptr) {
+            dep.imported = target->id;
+            dep.resolved = true;
+            validateImport(decl, surfaceOf(*target));
+        }
     }
     graph_->addDependency(std::move(dep));
 }
@@ -96,8 +103,37 @@ void ProgramLoader::processReExport(CompilationUnit& unit, const ExportDeclarati
         }
     } else if (dep.resolution == ModuleResolution::Std) {
         if (stdSurface(decl.source, decl.span) != nullptr) dep.resolved = true;
+    } else if (dep.resolution == ModuleResolution::Package) {
+        CompilationUnit* target = loadPackage(decl.source, decl.span);
+        if (target != nullptr) {
+            dep.imported = target->id;
+            dep.resolved = true;
+        }
     }
     graph_->addDependency(std::move(dep));
+}
+
+CompilationUnit* ProgramLoader::loadPackage(const std::string& specifier,
+                                            const SourceSpan& span) {
+    if (!packageResolver_) {
+        reportOnce(diagcode::kModuleNotFound, span,
+                   "cannot resolve package '" + specifier +
+                       "' (no package resolver configured)");
+        return nullptr;
+    }
+    const std::optional<fs::path> entry =
+        packageResolver_(specifier, projectRoot_);
+    if (!entry) {
+        reportOnce(diagcode::kModuleNotFound, span,
+                   "cannot find package '" + specifier + "'");
+        return nullptr;
+    }
+    CompilationUnit* unit = ensureUnit(*entry);
+    if (unit == nullptr) {
+        reportOnce(diagcode::kModuleNotFound, span,
+                   "cannot read package entry for '" + specifier + "'");
+    }
+    return unit;
 }
 
 CompilationUnit* ProgramLoader::loadLocal(const std::string& specifier,

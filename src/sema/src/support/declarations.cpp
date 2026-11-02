@@ -354,8 +354,25 @@ void Analyzer::declareForBinding(Node* left, const Type& elemType) {
 // Imports + interfaces
 // =============================================================================
 void Analyzer::analyzeImport(ImportDeclaration& d) {
-    if (!d.defaultBinding.empty())
-        declareAmbient(d.defaultBinding, d.span, d.nodeId);
+    const auto imported = [this](const std::string& local)
+        -> const ImportedBinding* {
+        if (imports_ == nullptr || local.empty()) return nullptr;
+        const auto it = imports_->find(local);
+        return it == imports_->end() ? nullptr : &it->second;
+    };
+    const auto declareOne = [this, &imported](const std::string& local,
+                                              const SourceSpan& span,
+                                              std::uint32_t nodeId) {
+        if (local.empty()) return false;
+        if (const ImportedBinding* binding = imported(local)) {
+            declareImported(local, *binding, span, nodeId);
+            return true;
+        }
+        declareAmbient(local, span, nodeId);
+        return false;
+    };
+
+    (void)declareOne(d.defaultBinding, d.span, d.nodeId);
     if (!d.namespaceBinding.empty())
         declareAmbient(d.namespaceBinding, d.span, d.nodeId);
     // A native import's alias was declared by the native pre-pass
@@ -366,13 +383,15 @@ void Analyzer::analyzeImport(ImportDeclaration& d) {
     for (auto& sp : d.specifiers) {
         if (!sp) continue;
         const std::string& local = sp->local.empty() ? sp->imported : sp->local;
-        declareAmbient(local, sp->span, sp->nodeId);
-        // A named import may also be a type (an exported local enum used as a
-        // worker channel payload). Imports are compile-time and sema does not
-        // fetch the other unit; registering the name as an ambient nominal
-        // type lets `Thread<Color, Color>` resolve. Codegen re-emits imported
-        // enum declarations from the module graph (CodegenOptions).
-        typeNames_.emplace(local, Type::named(TypeKind::Class, local));
+        const bool typed = declareOne(local, sp->span, sp->nodeId);
+        if (!typed) {
+            // An unresolved/std named import may also be a type (an exported
+            // local enum used as a worker channel payload). Registering the
+            // name as an ambient nominal type keeps that historical surface;
+            // a resolved module import carries its real exported type instead
+            // (declareImported registers it only when the export is a type).
+            typeNames_.emplace(local, Type::named(TypeKind::Class, local));
+        }
         // A named std import keeps the exported name it was bound to, so a
         // construct that keys on the canonical export (`new M<...>()` where
         // `M` is `Map`) still reaches the family lowering.

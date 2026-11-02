@@ -15,8 +15,10 @@
 // =============================================================================
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cp3/core/analysis.hpp"
@@ -26,6 +28,7 @@
 #include "cp3/meta/module.hpp"
 #include "cp3/host/options.hpp"
 #include "cp3/core/source.hpp"
+#include "cp3/sema.hpp"
 
 namespace cp3::cli {
 
@@ -42,9 +45,26 @@ std::vector<std::string> importedStdModules(const ModuleGraph& graph);
 
 // Runs sema with the project-aware signature (spec 03: `typeSystem` and
 // `strictNumericCasts`), publishing the nodeId-keyed side tables into `out`.
-// Returns true when no error/fatal diagnostic was reported.
+// `imports` carries resolved cross-module export types keyed by local binding;
+// nullptr keeps the permissive ambient-import behavior for std/native and
+// unresolved specifiers. Returns true when no error/fatal diagnostic was
+// reported.
 bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink,
-                    const CompileOptions& compile = CompileOptions{});
+                    const CompileOptions& compile = CompileOptions{},
+                    const ImportedBindings* imports = nullptr);
+
+// True when the graph has at least one resolved whole-program dependency
+// (a local module or a resolved package). Such a graph lowers through the
+// program codegen path rather than the single-unit path.
+bool hasProgramModules(const ModuleGraph& graph);
+
+// Analyzes every reachable unit in dependency order, building each unit's
+// ImportedBindings from the already-analyzed dependencies. `entrySema` receives
+// the entry unit's result and `unitSemas` every other unit's result, keyed by
+// unit id (each parser restarts nodeIds, so the tables cannot be merged).
+void analyzeProgramGraph(ModuleGraph& graph, SemaResult& entrySema,
+                         std::unordered_map<std::uint32_t, SemaResult>& unitSemas,
+                         DiagnosticSink& sink, const CompileOptions& compile);
 
 // The inputs of one `generateModule` call. `lineDirectives` turns on `#line`
 // source mapping, which the Debug profile needs so gdb (and the DAP adapter)

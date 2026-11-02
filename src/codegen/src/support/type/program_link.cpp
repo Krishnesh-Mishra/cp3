@@ -197,8 +197,12 @@ const ModuleDependency* LinkBuilder::dependencyOf(std::uint32_t importer,
 CompilationUnit* LinkBuilder::localTarget(const CompilationUnit& unit,
                                           const SourceSpan& span) const {
     const ModuleDependency* dep = dependencyOf(unit.id, span);
-    if (dep == nullptr || dep->resolution != ModuleResolution::Local ||
-        dep->imported == UINT32_MAX) {
+    if (dep == nullptr || dep->imported == UINT32_MAX) return nullptr;
+    // Local and package units both become ordinary C++ namespaces in the
+    // whole-program translation unit; the package manager resolved the latter
+    // to a concrete entry file before the graph was built.
+    if (dep->resolution != ModuleResolution::Local &&
+        dep->resolution != ModuleResolution::Package) {
         return nullptr;
     }
     return graph_.unit(dep->imported);

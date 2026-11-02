@@ -102,6 +102,50 @@ void Analyzer::declareAmbient(const std::string& name, const SourceSpan& span,
     declareBinding(name, ambient(), span, BindingSpec{.declNodeId = nodeId});
 }
 
+void Analyzer::declareImported(const std::string& name,
+                               const ImportedBinding& binding,
+                               const SourceSpan& span, std::uint32_t nodeId) {
+    if (name.empty()) return;
+    if (binding.isType) {
+        // The imported declaration is usable in a type position. The nominal
+        // class spelling is enough for annotations; the full class table is
+        // still local to the defining unit (a later milestone shares it).
+        typeNames_[name] = binding.type.isUnknown()
+                               ? Type::named(TypeKind::Class, name)
+                               : binding.type;
+    }
+    if (!binding.isValue) {
+        declareAmbient(name, span, nodeId);
+        return;
+    }
+    if (!binding.isFunction) {
+        // A class/enum is both a type and a constructor-like value; keeping
+        // the value ambient preserves the existing `new` behavior without a
+        // shared class table.
+        if (binding.isType) {
+            declareAmbient(name, span, nodeId);
+        } else {
+            declareBinding(name, binding.type, span,
+                           BindingSpec{.declNodeId = nodeId});
+        }
+        return;
+    }
+
+    FuncSig sig;
+    sig.name = name;
+    sig.params = binding.paramTypes;
+    sig.optional = binding.paramOptional;
+    sig.rest = binding.hasRest;
+    sig.ret = binding.returnType;
+    sig.annotatedReturn = true;
+    sig.isAsync = binding.isAsync;
+    sig.declNodeId = nodeId;
+    declareBinding(name, Type::function(binding.paramTypes, binding.returnType),
+                   span,
+                   BindingSpec{.isFunction = true, .declNodeId = nodeId,
+                               .sig = &sig});
+}
+
 void Analyzer::overrideBinding(const std::string& name, const Type& type,
                                const SourceSpan& span) {
     Binding b;
