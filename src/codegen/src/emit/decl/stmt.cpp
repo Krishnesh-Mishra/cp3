@@ -625,7 +625,8 @@ void Generator::emitThrow(const ThrowStatement& t, std::string& out, int indent)
         }
     }
     line(out, indent,
-         "throw ::cp3::runtime::Thrown::make(" + expr(*t.argument) + ");");
+         "throw ::cp3::runtime::Thrown::makeError(" + expr(*t.argument) +
+             ");");
 }
 
 void Generator::emitTry(const TryStatement& ts, std::string& out, int indent) {
@@ -655,15 +656,16 @@ void Generator::emitTry(const TryStatement& ts, std::string& out, int indent) {
         if (ts.tryBlock) emitBranch(*ts.tryBlock, out, indent + 1);
         const CatchClause& cc = *ts.handler;
         line(out, indent, "} catch (...) {");
-        // Box whatever was thrown (`Thrown` values pass through unchanged),
-        // so a cp3 `catch (e)` binds any value (DECISIONS D39).
+        // Every cp3-thrown value is an Error handle; native exceptions are
+        // normalized to one. `catch (e)` therefore binds `Ref<Error>` directly.
         bool bound = cc.param && cc.param->kind == NodeKind::Identifier;
         std::string boundName;
         if (bound) {
             boundName = static_cast<const Identifier&>(*cc.param).name;
             line(out, indent + 1,
                  "auto " + mapIdent(boundName) +
-                     " = ::cp3::runtime::Thrown::fromCurrentException();");
+                     " = ::cp3::runtime::Thrown::fromCurrentException()"
+                     ".asError();");
             thrownBindings_.push_back(boundName);
         }
         if (cc.body) emitBranch(*cc.body, out, indent + 1);

@@ -347,6 +347,51 @@ void ModelRegistry::reset() {
     localClassCounter_ = 0;
 }
 
+void ModelRegistry::registerBuiltinErrorClasses() {
+    struct Builtin {
+        const char* name;
+        const char* base;
+        const char* cpp;
+    };
+    static const Builtin kBuiltins[] = {
+        {"Error", "", "::cp3::Error"},
+        {"TypeError", "Error", "::cp3::TypeError"},
+        {"RangeError", "Error", "::cp3::RangeError"},
+        {"SyntaxError", "Error", "::cp3::SyntaxError"},
+        {"ReferenceError", "Error", "::cp3::ReferenceError"},
+        {"EvalError", "Error", "::cp3::EvalError"},
+        {"URIError", "Error", "::cp3::URIError"},
+        {"AggregateError", "Error", "::cp3::AggregateError"},
+    };
+    const Type errorType = Type::named(TypeKind::Class, "Error");
+    for (const Builtin& spec : kBuiltins) {
+        ClassModel& cm = addClass(spec.name, false, nullptr);
+        cm.builtin = true;
+        cm.membersCollected = true;
+        cm.baseName = spec.base;
+        cm.cpp = spec.cpp;
+        cm.structName = spec.name;
+        auto addField = [&cm](const char* name, const Type& type) {
+            ClassMemberModel m;
+            m.name = name;
+            m.type = type;
+            cm.members.push_back(std::move(m));
+        };
+        addField("message", Type::string());
+        addField("name", Type::string());
+        addField("stack", Type::string());
+        addField("cause", errorType);
+        if (std::string(spec.name) == "AggregateError") {
+            addField("errors", Type::array(errorType));
+        }
+        ClassMemberModel toString;
+        toString.name = "toString";
+        toString.isMethod = true;
+        toString.type = Type::function({}, Type::string());
+        cm.members.push_back(std::move(toString));
+    }
+}
+
 void ModelRegistry::setNamespace(const std::string& ns) { namesp_ = ns; }
 
 ClassModel& ModelRegistry::addClass(const std::string& name, bool local,

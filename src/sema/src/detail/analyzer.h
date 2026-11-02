@@ -212,8 +212,14 @@ private:
     void analyzeCtorBody(ConstructorDeclaration& cd);
     void analyzeAccessorBody(AccessorDeclaration& ad);
     Type thisType() const;
+    // True when `t` is the built-in Error class or a user class deriving from
+    // it. Only such a value may be thrown (v0.2 Error model).
+    bool isErrorType(const Type& t) const;
     // --- classes: conformance + `new` (class_conform_check.cpp) --------------
     Type inferUserConstruct(Identifier& id, Binding& b, NewExpr& n);
+    // The callable form of the built-in Error constructors (`Error("x")`).
+    Type inferErrorCall(CallExpr& call, Identifier& id, Binding& b,
+                        const ClassInfo& ci);
     bool functionTypesEquivalent(const Type& a, const Type& b);
     // Structural class -> object/interface conformance (spec 15).
     bool classConformsToShape(const ClassInfo& ci, const Type& to);

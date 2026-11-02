@@ -49,6 +49,11 @@ Type Analyzer::inferCall(CallExpr& call) {
                 return withType(call, builtin);
             }
         }
+        if (isErrorClassName(id.name)) {
+            if (const ClassInfo* ci = findClass(id.name)) {
+                return inferErrorCall(call, id, b, *ci);
+            }
+        }
         if (b.overloads.size() >= 2) {
             return inferOverloadCall(call, b, id);
         }
@@ -399,6 +404,31 @@ void Analyzer::checkArgs(const FuncSig& sig, CallExpr& call) {
         if (contextualArrow) contextualArrowTypes_[a->nodeId] = pt;
         Type at = inferExpr(*a);
         if (contextualArrow) contextualArrowTypes_.erase(a->nodeId);
+        if (contextualArrow && at.kind == TypeKind::Function &&
+            pt.parts.size() >= 1) {
+            const auto& arrow = static_cast<const ArrowFunction&>(*a);
+            const std::size_t supplied = pt.parts.size() - 1;
+            // A callback may ignore parameters the caller supplies, but it
+            // cannot require parameters the caller never passes. Keep this
+            // check at the extra parameter's span so the editor marks the
+            // offending name (`aa`) instead of underlining the whole call.
+            for (std::size_t parameterIndex = supplied;
+                 parameterIndex < arrow.params.size(); ++parameterIndex) {
+                const Parameter* extra = arrow.params[parameterIndex].get();
+                if (extra == nullptr || extra->optional || extra->defaultValue ||
+                    extra->isRest) {
+                    continue;
+                }
+                const Identifier* name = asIdentifier(extra->name.get());
+                const std::string label = name != nullptr && !name->name.empty()
+                                              ? " '" + name->name + "'"
+                                              : std::string();
+                report(diagcode::kTypeMismatch, extra->span,
+                       "callback parameter" + label +
+                           " has no corresponding argument; the callback "
+                           "provides only " + std::to_string(supplied));
+            }
+        }
         // An explicit `undefined` for an optional/default parameter is the same
         // as omitting the argument (TS accepts it; the default applies), so it
         // is not an assignability error.
@@ -484,3 +514,4 @@ bool Analyzer::overloadViable(const FuncSig& sig,
 }
 
 }  // namespace cp3
+

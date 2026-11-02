@@ -167,6 +167,74 @@ std::string Generator::storeText(const ClassMemberModel& m,
 // Construction + member access
 // -----------------------------------------------------------------------------
 
+// `new C(...)` / `Error(...)`: the built-in Error hierarchy has a fixed
+// constructor surface. The options object is a compile-time shape, so its
+// `cause` property is lowered to the runtime constructor's cause argument.
+std::string Generator::emitErrorCtor(const ExprList& args, const ClassModel& cm,
+                                     const SourceSpan& span) {
+    auto propertyValue = [](const ObjectLiteral& lit,
+                            const std::string& wanted) -> const Expr* {
+        for (const auto& p : lit.properties) {
+            if (!p || p->computed) continue;
+            if (keyNameOf(p->key.get()) != wanted) continue;
+            return p->value ? p->value.get() : p->key.get();
+        }
+        return nullptr;
+    };
+    auto causeText = [&](const Expr* options) -> std::string {
+        if (options == nullptr ||
+            options->kind == NodeKind::UndefinedLiteral ||
+            options->kind == NodeKind::NullLiteral) {
+            return "nullptr";
+        }
+        if (options->kind != NodeKind::ObjectLiteral) {
+            sink_.error(diagcode::kTypeMismatch, options->span,
+                        "the Error options argument must be an object literal "
+                        "with an optional `cause` property");
+            return "nullptr";
+        }
+        const auto& lit = static_cast<const ObjectLiteral&>(*options);
+        const Expr* cause = propertyValue(lit, "cause");
+        if (cause == nullptr || cause->kind == NodeKind::UndefinedLiteral ||
+            cause->kind == NodeKind::NullLiteral) {
+            return "nullptr";
+        }
+        return expr(*cause);
+    };
+
+    const bool aggregate = cm.name == "AggregateError";
+    std::vector<std::string> texts;
+    if (aggregate) {
+        if (!args.empty() && args[0]) {
+            texts.push_back(expr(*args[0]));
+        } else {
+            texts.push_back(
+                "std::vector<::cp3::runtime::Ref<::cp3::Error>>()");
+        }
+        if (args.size() > 1 && args[1]) {
+            texts.push_back(expr(*args[1]));
+        } else {
+            texts.push_back("std::string()");
+        }
+        if (args.size() > 2) texts.push_back(causeText(args[2].get()));
+    } else {
+        if (!args.empty() && args[0]) {
+            texts.push_back(expr(*args[0]));
+        } else {
+            texts.push_back("std::string()");
+        }
+        if (args.size() > 1) texts.push_back(causeText(args[1].get()));
+    }
+    (void)span;
+    return "::cp3::runtime::makeRef<" + cm.cpp + ">(" +
+           joinStrings(texts, ", ") + ")";
+}
+
+std::string Generator::emitErrorCall(const CallExpr& c,
+                                     const ClassModel& cm) {
+    return emitErrorCtor(c.arguments, cm, c.span);
+}
+
 // `new C(...)`: a registered class behind a `Ref<T>` handle. "" when the callee
 // is not a class of this unit (the network / family / emitter hooks run first).
 std::string Generator::emitModelNew(const NewExpr& n) {
@@ -175,6 +243,7 @@ std::string Generator::emitModelNew(const NewExpr& n) {
     const ClassModel* cm = ModelRegistry::get().classByName(name);
     if (cm == nullptr) return std::string();
     needsRef_ = true;
+    if (cm->builtin) return emitErrorCtor(n.arguments, *cm, n.span);
     std::vector<Type> instArgs;
     for (const auto& ta : n.typeArgs) {
         if (ta) instArgs.push_back(modelTypeFromTypeNode(*ta));

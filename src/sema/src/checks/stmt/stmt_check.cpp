@@ -135,7 +135,21 @@ void Analyzer::visitExecStmt(Stmt& s) {
             return;
         case NodeKind::ThrowStatement: {
             auto& t = static_cast<ThrowStatement&>(s);
-            if (t.argument) inferExpr(*t.argument);
+            if (t.argument) {
+                const Type thrown = inferExpr(*t.argument);
+                if (!thrown.isError() && !isErrorType(thrown)) {
+                    report(
+                        diagcode::kThrowNonError, t.span,
+                        "TypeScript allows throwing any value, but CP3 only "
+                        "allows Error objects (Error or a subclass). CP3 "
+                        "rejects throwing '" +
+                            pretty(thrown) +
+                            "' because a catch binds one static Error handle: "
+                            "there is no runtime metadata or hidden boxing in "
+                            "the native output. Construct an Error (or a "
+                            "subclass) and throw that instead.");
+                }
+            }
             return;
         }
         case NodeKind::TryStatement:
@@ -505,7 +519,10 @@ void Analyzer::analyzeTry(TryStatement& stmt) {
     if (stmt.handler) {
         pushScope();
         if (stmt.handler->param) {
-            declarePattern(stmt.handler->param.get(), Type::unknown(), false, 0);
+            // v0.2: every thrown value is an Error handle, so a catch binds
+            // `Error` directly (no narrowing / `instanceof` required).
+            declarePattern(stmt.handler->param.get(),
+                           Type::named(TypeKind::Class, "Error"), false, 0);
         }
         if (stmt.handler->body) visitStmt(*stmt.handler->body);
         popScope();

@@ -24,22 +24,133 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace cp3 {
 
-// Base type for cp3 runtime errors (the future backing of cp3 `throw`/`try`).
-// Minimal on purpose: a message and the standard `what()`. Real error classes
-// will derive from this without reshaping it.
+// The cp3 Error hierarchy. Every thrown value is one of these classes (or a
+// user subclass), so a `catch (e)` binding has one static representation:
+// `Ref<Error>`. The fields are plain data, not runtime metadata: `name` and
+// `message` are ordinary strings, `cause` is an ordinary reference handle, and
+// `stack` is captured when the error is constructed.
 class Error : public std::exception {
 public:
-    Error() = default;
-    explicit Error(std::string message) : message_(std::move(message)) {}
+    std::string message;
+    std::string name = "Error";
+    std::string stack;
+    std::shared_ptr<Error> cause;
 
-    const char* what() const noexcept override { return message_.c_str(); }
+    Error() { refreshStack(); }
+    explicit Error(std::string message,
+                   std::shared_ptr<Error> cause = nullptr)
+        : message(std::move(message)), cause(std::move(cause)) {
+        refreshStack();
+    }
 
-private:
-    std::string message_;
+    const char* what() const noexcept override { return message.c_str(); }
+
+    virtual std::string toString() const {
+        if (message.empty()) return name;
+        return name + ": " + message;
+    }
+
+protected:
+    void refreshStack() {
+        stack = toString();
+    }
+};
+
+// The standard subclasses. Their only behavior is the default `name` and, for
+// AggregateError, the contained error list.
+class TypeError : public Error {
+public:
+    TypeError() { name = "TypeError"; refreshStack(); }
+    explicit TypeError(std::string message,
+                       std::shared_ptr<Error> cause = nullptr)
+        : Error(std::move(message), std::move(cause)) {
+        name = "TypeError";
+        refreshStack();
+    }
+};
+
+class RangeError : public Error {
+public:
+    RangeError() { name = "RangeError"; refreshStack(); }
+    explicit RangeError(std::string message,
+                        std::shared_ptr<Error> cause = nullptr)
+        : Error(std::move(message), std::move(cause)) {
+        name = "RangeError";
+        refreshStack();
+    }
+};
+
+class SyntaxError : public Error {
+public:
+    SyntaxError() { name = "SyntaxError"; refreshStack(); }
+    explicit SyntaxError(std::string message,
+                         std::shared_ptr<Error> cause = nullptr)
+        : Error(std::move(message), std::move(cause)) {
+        name = "SyntaxError";
+        refreshStack();
+    }
+};
+
+class ReferenceError : public Error {
+public:
+    ReferenceError() { name = "ReferenceError"; refreshStack(); }
+    explicit ReferenceError(std::string message,
+                            std::shared_ptr<Error> cause = nullptr)
+        : Error(std::move(message), std::move(cause)) {
+        name = "ReferenceError";
+        refreshStack();
+    }
+};
+
+class EvalError : public Error {
+public:
+    EvalError() { name = "EvalError"; refreshStack(); }
+    explicit EvalError(std::string message,
+                       std::shared_ptr<Error> cause = nullptr)
+        : Error(std::move(message), std::move(cause)) {
+        name = "EvalError";
+        refreshStack();
+    }
+};
+
+class URIError : public Error {
+public:
+    URIError() { name = "URIError"; refreshStack(); }
+    explicit URIError(std::string message,
+                      std::shared_ptr<Error> cause = nullptr)
+        : Error(std::move(message), std::move(cause)) {
+        name = "URIError";
+        refreshStack();
+    }
+};
+
+class AggregateError : public Error {
+public:
+    // cp3 arrays are reference values (`Array<Error>`), so the list is shared
+    // just like any other cp3 array; codegen's field read yields this handle.
+    std::shared_ptr<std::vector<std::shared_ptr<Error>>> errors;
+
+    AggregateError()
+        : errors(std::make_shared<std::vector<std::shared_ptr<Error>>>()) {
+        name = "AggregateError";
+        refreshStack();
+    }
+    AggregateError(std::shared_ptr<std::vector<std::shared_ptr<Error>>> errors,
+                   std::string message = {},
+                   std::shared_ptr<Error> cause = nullptr)
+        : Error(std::move(message), std::move(cause)),
+          errors(errors ? std::move(errors)
+                        : std::make_shared<std::vector<std::shared_ptr<Error>>>()) {
+        name = "AggregateError";
+        refreshStack();
+    }
 };
 
 }  // namespace cp3

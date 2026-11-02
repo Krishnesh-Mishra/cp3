@@ -392,6 +392,17 @@ Type Analyzer::thisType() const {
     return Type::named(TypeKind::Class, classStack_.back());
 }
 
+bool Analyzer::isErrorType(const Type& type) const {
+    if (type.kind != TypeKind::Class) return false;
+    const ClassInfo* ci = findClass(type.name);
+    int guard = 0;
+    while (ci != nullptr && guard++ < 64) {
+        if (isErrorClassName(ci->name)) return true;
+        ci = ci->baseName.empty() ? nullptr : findClass(ci->baseName);
+    }
+    return false;
+}
+
 // =============================================================================
 // Member lookup + access
 // =============================================================================

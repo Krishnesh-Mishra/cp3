@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "detail/expr/call_builder.h"
+#include "detail/class/class_model.h"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/mangle.h"
 #include "detail/expr/spread_call.h"
@@ -719,6 +720,17 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
     // target unit's qualified C++ name. A link miss reports at the use site.
     if (std::string linked = g.emitLinkedCall(c, name); !linked.empty()) {
         return linked;
+    }
+    // The Error hierarchy is callable as well as constructible: `Error("x")`
+    // and `new Error("x")` produce the same handle. A user function or a
+    // shadowing binding still wins.
+    if (g.functions_.find(name) == g.functions_.end() &&
+        g.importBindings_.find(name) == g.importBindings_.end() &&
+        !g.hasValueBinding(name)) {
+        if (const ClassModel* cm = ModelRegistry::get().classByName(name);
+            cm != nullptr && cm->builtin) {
+            return g.emitErrorCall(c, *cm);
+        }
     }
     if (g.functions_.find(name) == g.functions_.end() &&
         g.importBindings_.find(name) == g.importBindings_.end() &&

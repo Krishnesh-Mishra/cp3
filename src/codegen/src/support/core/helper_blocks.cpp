@@ -82,6 +82,11 @@ inline std::string cp3_ts(const cp3::runtime::Maybe<T>& v) {
 // A boxed erroneous value (cp3/core/error.hpp): `catch (e)` binds one, and cp3
 // renders it as the thrown value itself.
 inline std::string cp3_ts(const ::cp3::runtime::Thrown& v) { return v.toString(); }
+// The Error hierarchy is a reference type; a null handle prints as null, and a
+// live one uses its own toString.
+inline std::string cp3_ts(const ::cp3::runtime::Ref<::cp3::Error>& v) {
+    return v ? v->toString() : std::string("null");
+}
 
 // ----- JS truthiness ---------------------------------------------------------
 inline bool cp3_truthy(double v) { return v != 0.0 && !std::isnan(v); }

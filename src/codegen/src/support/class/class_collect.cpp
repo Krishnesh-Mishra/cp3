@@ -25,6 +25,7 @@ namespace cp3 {
 using namespace detail;
 
 void Generator::collectModels(const Program& program) {
+    ModelRegistry::get().registerBuiltinErrorClasses();
     for (const auto& s : program.body) {
         if (s) collectClassNames(*s);
     }

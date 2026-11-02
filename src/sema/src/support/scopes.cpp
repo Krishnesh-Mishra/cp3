@@ -157,7 +157,80 @@ void Analyzer::overrideBinding(const std::string& name, const Type& type,
     scopes_.back()[name] = std::move(b);
 }
 
+bool isErrorClassName(const std::string& name) {
+    static const std::unordered_set<std::string> kNames = {
+        "Error",       "TypeError", "RangeError",     "SyntaxError",
+        "ReferenceError", "EvalError", "URIError",    "AggregateError",
+    };
+    return kNames.count(name) != 0;
+}
+
+bool isErrorClass(const Type& t) {
+    return t.kind == TypeKind::Class && isErrorClassName(t.name);
+}
+
 void Analyzer::declareBuiltins() {
+    // The Error hierarchy is ambient and nominal (v0.2). Its members are
+    // ordinary fields, and its constructor signatures are ordinary checked
+    // signatures; codegen maps the class names onto cp3::Error.
+    const SourceSpan none{};
+    const auto errorType = Type::named(TypeKind::Class, "Error");
+    const auto declareErrorClass =
+        [this, &none, &errorType](const char* name, const char* base,
+                                  std::vector<Type> ctors,
+                                  std::vector<bool> optional) {
+            const Type nominal = Type::named(TypeKind::Class, name);
+            declareBinding(name, nominal, none, BindingSpec{.publish = false});
+            typeNames_[name] = nominal;
+            ClassInfo ci;
+            ci.name = name;
+            ci.baseName = base;
+            ci.hasCtor = true;
+            ci.ctorSig.name = "constructor";
+            ci.ctorSig.params = std::move(ctors);
+            ci.ctorSig.optional = std::move(optional);
+            ci.ctorSig.ret = Type::voidType();
+            const auto addField = [&ci](const char* field, const Type& type) {
+                ClassMemberInfo m;
+                m.name = field;
+                m.type = type;
+                ci.members.push_back(std::move(m));
+            };
+            addField("message", Type::string());
+            addField("name", Type::string());
+            addField("stack", Type::string());
+            addField("cause", errorType);
+            if (std::string(name) == "AggregateError") {
+                addField("errors", Type::array(errorType));
+            }
+            ClassMemberInfo toString;
+            toString.name = "toString";
+            toString.isMethod = true;
+            toString.type = Type::function({}, Type::string());
+            toString.sig.name = "toString";
+            toString.sig.ret = Type::string();
+            toString.sig.annotatedReturn = true;
+            ci.members.push_back(std::move(toString));
+            classes_[name] = std::move(ci);
+        };
+    declareErrorClass("Error", "",
+                      {Type::string(), ambient()}, {true, true});
+    declareErrorClass("TypeError", "Error",
+                      {Type::string(), ambient()}, {true, true});
+    declareErrorClass("RangeError", "Error",
+                      {Type::string(), ambient()}, {true, true});
+    declareErrorClass("SyntaxError", "Error",
+                      {Type::string(), ambient()}, {true, true});
+    declareErrorClass("ReferenceError", "Error",
+                      {Type::string(), ambient()}, {true, true});
+    declareErrorClass("EvalError", "Error",
+                      {Type::string(), ambient()}, {true, true});
+    declareErrorClass("URIError", "Error",
+                      {Type::string(), ambient()}, {true, true});
+    declareErrorClass("AggregateError", "Error",
+                      {Type::array(errorType), Type::string(), ambient()},
+                      {false, true, true});
+
     // Math and JSON are deliberately NOT here: docs/standard-library/04
     // requires `import Math from "std/math"` (and the JSON twin), the same as
     // every other std surface, so a bare `Math` is CP3301 with the exact
@@ -185,7 +258,6 @@ void Analyzer::declareBuiltins() {
         "Float64Array", "BigInt64Array", "BigUint64Array", "ArrayBuffer",
         "SharedArrayBuffer", "DataView",
     };
-    const SourceSpan none{};
     for (const char* name : kGlobals) {
         declareBinding(name, ambient(), none, BindingSpec{.publish = false});
     }

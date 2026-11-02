@@ -1,24 +1,25 @@
 // =============================================================================
-// cp3/core/error.hpp - thrown values and unhandled-rejection reporting.
+// cp3/core/error.hpp - thrown Error handles and unhandled-rejection reporting.
 //
 // OWNERSHIP: runtime module. This header is part of the generated-code ABI.
 //
-// cp3 error handling is JS-shaped (docs/language-spec/07-error-handling.md) and
-// DECISIONS D39 says `throw` accepts ANY value - there is no built-in `Error`
-// hierarchy in M1. A `catch` parameter therefore needs a single, uniform C++
-// type that can carry a value of any cp3 type. That type is `Thrown`.
+// cp3 (v0.2+) follows TypeScript's Error model with one deliberate restriction:
+// only `Error` and its subclasses may be thrown. `catch (e)` therefore binds a
+// `Ref<Error>` directly; `e.message`, `e.name`, `e.stack` and `e.cause` all
+// work without narrowing. The type-erased `Thrown` wrapper remains for Promise
+// rejections and for native C++ exceptions crossing the runtime boundary.
 //
 // CODEGEN CONTRACT (try/catch/throw):
-//   * `throw expr`      -> `throw ::cp3::runtime::Thrown::make(expr);`
+//   * `throw expr`      -> `throw ::cp3::runtime::Thrown::makeError(expr);`
+//     (sema has already proved `expr` is an Error handle);
 //   * `try { } catch (e) { }`
 //        -> `try { ... }
-//            catch (const ::cp3::runtime::Thrown& __thrown) {
-//                 auto e = __thrown.getOrThrow<T>();   // T = sema's type for e
+//            catch (...) {
+//                 auto e = ::cp3::runtime::Thrown::fromCurrentException()
+//                              .asError();
 //                 ...
 //            }`
-//     (a `catch { }` with no binding is the same without the unbox line);
-//   * if the catch binding's cp3 type is `unknown`/a union, use
-//     `__thrown.get<T>()` (returns `const T*`, null on mismatch) and narrow.
+//     (a `catch { }` with no binding omits the `asError` line);
 //   * a `catch (...)` for native C++ exceptions from `cpp/` interop should
 //     box via `::cp3::runtime::Thrown::fromCurrentException()`.
 //
@@ -84,6 +85,15 @@ public:
     // Box the current C++ exception (`std::current_exception`), for catch-all
     // sites bridging native exceptions into cp3.
     static Thrown fromCurrentException();
+
+    // Box an Error handle. Every cp3 `throw` uses this entry point, so the box
+    // always carries `Ref<::cp3::Error>` and a catch can bind it directly.
+    static Thrown makeError(Ref<::cp3::Error> error);
+
+    // Normalize whatever this box carries into an Error. A native exception or
+    // a legacy boxed string becomes a fresh `Error`; an already-boxed Error
+    // handle passes through unchanged. This is what `catch (e)` calls.
+    Ref<::cp3::Error> asError() const;
 
     // True when this carries a boxed value (not the empty/undefined default).
     bool hasValue() const noexcept { return kind_ == Kind::Boxed && static_cast<bool>(box_); }

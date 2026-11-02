@@ -211,6 +211,12 @@ private:
 
     // --- model expressions + initializers (emit/class_expr.cpp) ---------------
     std::string emitModelNew(const NewExpr& n);
+    // The built-in Error constructors. `new Error(...)` and the callable
+    // `Error(...)` share this lowering: plain arguments plus an options object
+    // whose `cause` becomes the runtime constructor's second/third argument.
+    std::string emitErrorCtor(const ExprList& args, const ClassModel& cm,
+                              const SourceSpan& span);
+    std::string emitErrorCall(const CallExpr& c, const ClassModel& cm);
     std::string emitModelMember(const MemberExpr& m);
     std::string emitModelCall(const CallExpr& c, const MemberExpr& m);
     std::string emitModelAssign(const AssignmentExpr& a, const MemberExpr& m);

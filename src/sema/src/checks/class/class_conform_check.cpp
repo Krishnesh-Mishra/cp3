@@ -77,6 +77,47 @@ void Analyzer::inferNewArgs(const ExprList& args, std::vector<Type>& types,
     }
 }
 
+// The callable Error constructors are the same checked signatures as `new`:
+// `Error(message?, options?)`, `AggregateError(errors, message?, options?)`.
+Type Analyzer::inferErrorCall(CallExpr& call, Identifier& id, Binding& b,
+                              const ClassInfo& ci) {
+    setType(id, b.type);
+    std::vector<Type> argTypes;
+    std::vector<bool> spreadArg;
+    inferNewArgs(call.arguments, argTypes, spreadArg);
+    bool hasSpread = false;
+    for (bool isSpread : spreadArg) {
+        if (isSpread) hasSpread = true;
+    }
+    if (!ci.hasCtor) return withType(call, ambient());
+    const FuncSig& sig = ci.ctorSig;
+    std::size_t required = 0;
+    for (bool optional : sig.optional) {
+        if (!optional) ++required;
+    }
+    const bool arityOk =
+        hasSpread ||
+        (argTypes.size() >= required && argTypes.size() <= sig.params.size());
+    if (!arityOk) {
+        report(diagcode::kArityMismatch, call.span,
+               "constructor of class '" + id.name + "' expects " +
+                   arityText(required, sig.params.size(), sig.rest) +
+                   " argument(s)");
+    } else {
+        for (std::size_t i = 0; i < argTypes.size() && i < sig.params.size();
+             ++i) {
+            if (i < spreadArg.size() && spreadArg[i]) continue;
+            const SourceSpan& as =
+                i < call.arguments.size() && call.arguments[i]
+                    ? call.arguments[i]->span
+                    : call.span;
+            checkAssign(argTypes[i], sig.params[i], as, false);
+        }
+    }
+    Type result = Type::named(TypeKind::Class, ci.name);
+    return withType(call, result);
+}
+
 Type Analyzer::inferUserConstruct(Identifier& id, Binding& b, NewExpr& n) {
     const ClassInfo* ci = findClass(id.name);
     setType(id, b.type);

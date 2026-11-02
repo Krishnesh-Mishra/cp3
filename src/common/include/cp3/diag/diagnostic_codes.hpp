@@ -84,6 +84,8 @@ inline constexpr const char* kAwaitOutsideAsync = "CP3506";
 inline constexpr const char* kMissingDestructuringInit = "CP3507";
 
 inline constexpr const char* kContinueNonIterationLabel = "CP3508";
+// v0.2 Error model: `throw` only accepts Error/subclass handles.
+inline constexpr const char* kThrowNonError = "CP3509";
 
 // --- modules / imports --------------------------------------------------------
 inline constexpr const char* kModuleNotFound    = "CP3601";

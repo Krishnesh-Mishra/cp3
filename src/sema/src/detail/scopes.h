@@ -233,6 +233,16 @@ Type promiseValue(const Type& t);
 // member_check.cpp. Codegen maps it onto cp3/async/emitter.hpp.
 bool isEventEmitterType(const Type& t);
 
+// --- the built-in Error hierarchy (v0.2) -------------------------------------
+//
+// `Error`, `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`,
+// `EvalError`, `URIError`, and `AggregateError` are ambient classes. Their
+// members are ordinary fields/methods; codegen maps them onto the runtime
+// `cp3::Error` hierarchy. A user class may extend one, and only an Error
+// (or a subclass) may be thrown.
+bool isErrorClassName(const std::string& name);
+bool isErrorClass(const Type& t);
+
 // --- the JS-compat typed-array family (D69; src/std/typed-arrays/sema.cpp) ---
 //
 // The 11 typed-array class names, the buffer classes and DataView are nominal

@@ -98,6 +98,9 @@ struct ClassModel {
     // under a unique name (a C++ local class cannot be a template).
     std::string structName;
     bool local = false;   // declared inside a function body
+    // A compiler-provided class (the Error hierarchy). It has no cp3 AST
+    // declaration; `cpp` names its runtime C++ base and no struct is emitted.
+    bool builtin = false;
     // The struct is emitted at the unit's namespace scope although the class
     // is declared inside a function body (a generic local class).
     bool namespaceScope = false;
@@ -123,6 +126,11 @@ struct ClassModel {
 class ModelRegistry {
 public:
     static ModelRegistry& get();
+
+    // Registers the built-in Error hierarchy. Called after `reset`, before the
+    // unit's own classes are collected, so a user subclass can resolve a base
+    // and every `new Error(...)` gets a `Ref<Error>` spelling.
+    void registerBuiltinErrorClasses();
 
     void reset();
     void setNamespace(const std::string& ns);
