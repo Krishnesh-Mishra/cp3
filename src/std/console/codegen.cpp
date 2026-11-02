@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/std_surface.hpp"
 #include "detail/class/class_model.h"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/type_map.h"
@@ -43,11 +44,6 @@ using namespace detail;
 namespace {
 
 constexpr const char* kConsoleNs = "::cp3::runtime::console::";
-
-// The documented event names of D75; nothing else can ever fire.
-bool knownEvent(const std::string& event) {
-    return event == "keypress" || event == "line" || event == "close";
-}
 
 // The literal text of an object-literal field key ("" when the field is out of
 // this wave's scope: a method, or a non-name key).
@@ -205,9 +201,24 @@ std::string Generator::emitConsoleListener(const CallExpr& c,
         // recovery node. Keep the emitted C++ valid either way.
         return std::string(kConsoleNs) + method + "(\"\", [](std::string) {})";
     }
+    if (c.arguments[0]->kind != NodeKind::StringLiteral) {
+        sink_.error(diagcode::kInvalidArgumentValue, c.arguments[0]->span,
+                    "console event must be a string literal: expected "
+                    "\"keypress\", \"line\" or \"close\"");
+        return "0.0";
+    }
     const std::string event =
         static_cast<const StringLiteral&>(*c.arguments[0]).value;
-    if (!knownEvent(event)) {
+    const std::vector<std::string> validEvents =
+        stdNamespaceMemberArgumentValues("console", method, 0);
+    bool known = false;
+    for (const std::string& valid : validEvents) {
+        if (event == valid) {
+            known = true;
+            break;
+        }
+    }
+    if (!known) {
         // D75: the three documented events are the only ones that can fire,
         // so any other name is a program error, not a missing feature.
         sink_.error(diagcode::kInvalidArgumentValue, c.arguments[0]->span,
@@ -215,7 +226,7 @@ std::string Generator::emitConsoleListener(const CallExpr& c,
                         "'; expected \"keypress\", \"line\" or \"close\"");
         return "0.0";
     }
-    return std::string(kConsoleNs) + method + "(" + event + ", " +
+    return std::string(kConsoleNs) + method + "(" + cppStringLiteral(event) + ", " +
            consoleListenerArg(*c.arguments[1]) + ")";
 }
 

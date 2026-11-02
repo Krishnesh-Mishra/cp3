@@ -20,6 +20,7 @@
 #pragma once
 
 #include <string>
+#include <cstddef>
 #include <vector>
 
 namespace cp3 {
@@ -49,6 +50,14 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns);
 // the member has no documented entry.
 StdMemberDoc stdNamespaceMemberDoc(const std::string& ns,
                                    const std::string& member);
+
+// Finite literal values accepted by a documented member argument. An empty
+// result means the argument accepts an open-ended value set (or the member / 
+// argument has no such metadata). Completion and codegen validation consume
+// this same table so the editor cannot recommend a literal the compiler rejects.
+std::vector<std::string> stdNamespaceMemberArgumentValues(
+    const std::string& ns, const std::string& member,
+    std::size_t argumentIndex);
 
 // The documentation of a member of a std VALUE surface - a Date instance, a
 // Map, a Set. Empty when the family or the member has no documented entry.

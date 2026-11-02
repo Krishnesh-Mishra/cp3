@@ -222,6 +222,11 @@ Type Analyzer::inferNew(NewExpr& n) {
         if (lookup(id.name, b) && isAmbientType(b.type) &&
             ctor == "EventEmitter") {
             setType(id, b.type);
+            if (!n.typeArgs.empty()) {
+                report(diagcode::kTypeArgsOnNonGeneric, n.span,
+                       "type arguments are not allowed here: EventEmitter is "
+                       "not a generic class");
+            }
             for (auto& a : n.arguments) {
                 if (a) inferExpr(*a);
             }

@@ -20,6 +20,7 @@
 // =============================================================================
 #include "detail/analyzer.h"
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -123,6 +124,17 @@ std::optional<Type> Analyzer::consoleMember(const std::string& prop) {
 }
 
 std::vector<std::string> consoleMemberNames() { return memberNames(kConsoleRows); }
+
+std::vector<std::string> consoleMemberArgumentValues(
+    const std::string& prop, std::size_t argumentIndex) {
+    // D75's event list is a finite API contract, unlike EventEmitter's
+    // application-defined event names. Keep completion and codegen checks
+    // tied to this one list.
+    if (argumentIndex == 0 && (prop == "on" || prop == "off")) {
+        return {"keypress", "line", "close"};
+    }
+    return {};
+}
 
 StdMemberDoc consoleMemberDoc(const std::string& prop) {
     return memberDoc(kConsoleRows, prop);

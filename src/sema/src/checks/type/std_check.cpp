@@ -108,6 +108,15 @@ StdMemberDoc stdNamespaceMemberDoc(const std::string& ns,
     return StdMemberDoc{};
 }
 
+std::vector<std::string> stdNamespaceMemberArgumentValues(
+    const std::string& ns, const std::string& member,
+    std::size_t argumentIndex) {
+    if (ns == "console") {
+        return consoleMemberArgumentValues(member, argumentIndex);
+    }
+    return {};
+}
+
 StdMemberDoc stdInstanceMemberDoc(const std::string& family,
                                    const std::string& member) {
     if (family == "Date") return dateInstanceMemberDoc(member);
@@ -159,6 +168,39 @@ std::string stdImportHint(const std::string& name) {
     for (const ModuleHint& hint : kHints) {
         if (name == hint.binding) {
             return "import " + std::string(hint.binding) + " from \"" +
+                   hint.specifier + "\";";
+        }
+    }
+
+    // Named-export modules. The command-line compiler must give the same
+    // repair the LSP's auto-import offers; a bare `fetch(...)` without the
+    // import is a normal "cannot find name" error, not a mysterious missing
+    // builtin.
+    struct NamedHint {
+        const char* binding;
+        const char* specifier;
+    };
+    static const NamedHint kNamedHints[] = {
+        {"fetch", "std/network"},
+        {"createServer", "std/network"},
+        {"WebSocket", "std/network"},
+        {"WebSocketServer", "std/network"},
+        {"Buffer", "std/buffer"},
+        {"env", "std/env"},
+        {"Map", "std/collections"},
+        {"Set", "std/collections"},
+        {"Mutex", "std/collections"},
+        {"Queue", "std/collections"},
+        {"Stack", "std/collections"},
+        {"PriorityQueue", "std/collections"},
+        {"LRUCache", "std/collections"},
+        {"RingBuffer", "std/collections"},
+        {"BitSet", "std/collections"},
+        {"MultiMap", "std/collections"},
+    };
+    for (const NamedHint& hint : kNamedHints) {
+        if (name == hint.binding) {
+            return "import { " + std::string(hint.binding) + " } from \"" +
                    hint.specifier + "\";";
         }
     }
