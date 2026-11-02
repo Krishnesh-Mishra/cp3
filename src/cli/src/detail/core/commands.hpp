@@ -187,6 +187,10 @@ struct PackInput {
     const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
     const SourceFile* source = nullptr;       // entry source file
     const Program* program = nullptr;         // parsed entry AST
+    // The native bindings the module graph resolved (`import native "<id>"`).
+    // Packing embeds their metadata and assets so the archive is buildable
+    // without a separate platform bundle.
+    const std::vector<NativeBinding>* nativeBindings = nullptr;
     bool execute = false;                     // `cp3c run` was requested
 };
 

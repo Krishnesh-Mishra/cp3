@@ -52,6 +52,51 @@
     },
     {
       "group": "recompile",
+      "name": "uses-embedded-native-includes",
+      "description": "recompile compiles against the archive's embedded native binding",
+      "argv": [
+        "recompile",
+        "deps/native-dep.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "native-source-dep.cp3pak",
+            "to": "deps/native-dep.cp3pak"
+          }
+        ]
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "recompiled"
+        },
+        "files": {
+          "deps/native-dep.cp3pak": {
+            "exists": true,
+            "archive_contains": [
+              "index.cp3",
+              "pak/src/index.cpp",
+              "pak/src/index.hpp",
+              "pak/{platform}/cache.json",
+              "pak/{platform}/src/index.o",
+              ".cp3/native/demo/native.json",
+              ".cp3/native/demo/include/0/demo/native_demo.h",
+              ".cp3/native/demo/runtime/0/demo.dll"
+            ],
+            "archive_text_contains": {
+              "pak/{platform}/cache.json": [
+                "\"platform\": \"{platform}\""
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "recompile",
       "name": "is-idempotent",
       "description": "recompiling a current cache changes nothing",
       "argv": [

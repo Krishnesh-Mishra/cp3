@@ -1,0 +1,10 @@
+{
+  "name": "package-native-cache",
+  "version": "1.0.0",
+  "description": "package that ships a native binding and a cached binary",
+  "type": "package",
+  "main": "src/index.cp3",
+  "build": {
+    "cacheBinary": true
+  }
+}

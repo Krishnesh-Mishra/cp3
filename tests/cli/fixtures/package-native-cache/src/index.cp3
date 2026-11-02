@@ -1,0 +1,7 @@
+import native "demo" as demo;
+
+function add(a: number, b: number): number {
+  return demo.add(a, b);
+}
+
+export default { add };

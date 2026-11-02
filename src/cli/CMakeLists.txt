@@ -96,6 +96,7 @@ set(cp3_cli_sources
     src/archive/zip.cpp
     src/pkg/remote/cp3pak.cpp
     src/pkg/remote/native_bundle.cpp
+    src/pkg/remote/native_pack.cpp
     src/pkg/manifest/semver.cpp
     src/native/libclang/libclang.cpp
     src/native/bindgen/bindgen.cpp

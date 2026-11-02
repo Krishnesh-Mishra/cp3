@@ -39,6 +39,9 @@ struct CacheBuildRequest {
     std::string source;  // the transpiled C++ of that module
     std::string header;  // the transpiled C++ header of that module
     fs::path workDir;    // where the translation unit is written and compiled
+    // The native bindings the implementation includes and uses.
+    std::vector<std::string> includeDirs;
+    std::vector<std::string> defines;
     bool verbose = false;
 };
 

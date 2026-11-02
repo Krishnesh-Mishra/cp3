@@ -30,6 +30,7 @@
 #include "detail/core/commands.hpp"
 #include "detail/pkg/cp3pak.hpp"
 #include "detail/pkg/json.hpp"
+#include "detail/pkg/native_pack.hpp"
 #include "detail/pkg/package_json.hpp"
 #include "detail/archive/platform.hpp"
 #include "detail/pkg/signatures.hpp"
@@ -124,9 +125,32 @@ bool writeIntermediates(const PackInput& input, const fs::path& projectRoot,
     return true;
 }
 
+// The native binding ids the package build resolved. The module graph is the
+// authority; the generated surface is a fallback for callers that only have
+// the pack input.
+std::vector<std::string> nativeIdsForPack(const PackInput& input,
+                                          const std::string& surface) {
+    std::vector<std::string> ids;
+    if (input.nativeBindings != nullptr) {
+        for (const NativeBinding& binding : *input.nativeBindings) {
+            if (binding.id.empty()) continue;
+            if (std::find(ids.begin(), ids.end(), binding.id) == ids.end()) {
+                ids.push_back(binding.id);
+            }
+        }
+    }
+    for (const std::string& id : nativeBindingIdsInText(surface)) {
+        if (std::find(ids.begin(), ids.end(), id) == ids.end()) {
+            ids.push_back(id);
+        }
+    }
+    return ids;
+}
+
 // Archive members, in the order CLI-README §5.3 lists them.
 bool collectEntries(const PackInput& input, const JsonValue& manifest,
                     const fs::path& projectRoot, std::vector<TarEntry>& entries,
+                    const std::vector<std::string>& nativeIds,
                     std::string& err) {
     std::string packageJsonText;
     if (!readTextFile(projectRoot / "package.json", packageJsonText)) {
@@ -134,12 +158,19 @@ bool collectEntries(const PackInput& input, const JsonValue& manifest,
         return false;
     }
     entries.push_back(TarEntry{"package.json", std::move(packageJsonText)});
-    entries.push_back(
-        TarEntry{"index.cp3", stripToSignatures(*input.source, *input.program)});
+    // The declaration surface keeps every native import the implementation
+    // needs, even when the original import lived in a non-exported module.
+    entries.push_back(TarEntry{
+        "index.cp3",
+        ensureNativeImports(stripToSignatures(*input.source, *input.program),
+                            nativeIds)});
     entries.push_back(
         TarEntry{"pak/" + *input.moduleName + ".cpp", input.module->source});
     entries.push_back(
         TarEntry{"pak/" + *input.moduleName + ".hpp", input.module->header});
+    if (!collectNativeBindingMembers(projectRoot, nativeIds, entries, err)) {
+        return false;
+    }
     return appendBuildFiles(manifest, projectRoot, entries, err);
 }
 
@@ -174,6 +205,7 @@ struct CacheProduction {
     const PackInput* input = nullptr;
     const CacheBinaryPlan* plan = nullptr;
     fs::path projectRoot;
+    std::vector<std::string> nativeIds;
     std::vector<TarEntry>* entries = nullptr;
     std::vector<PlatformId>* cached = nullptr;
 };
@@ -201,6 +233,14 @@ bool produceCache(const CacheProduction& work, std::string& err) {
     request.workDir = work.projectRoot / ".cp3" / "build" / "cache" /
                       fs::path(platformIdText(here));
     request.verbose = input.opt->verbose;
+    // The package implementation includes the native binding's headers; the
+    // cached object must see the same include roots and defines as a consumer
+    // compiling the source fallback.
+    if (!nativeBuildFlagsFromProject(work.projectRoot, work.nativeIds,
+                                     request.includeDirs, request.defines,
+                                     err)) {
+        return false;
+    }
     PlatformCacheBuild artifact;
     if (!buildPlatformArtifact(request, artifact, err)) return false;
 
@@ -316,8 +356,14 @@ int packProject(const PackInput& input) {
         return kExitCompileError;
     }
 
+    const std::string surface =
+        stripToSignatures(*input.source, *input.program);
+    const std::vector<std::string> nativeIds =
+        nativeIdsForPack(input, surface);
+
     std::vector<TarEntry> entries;
-    if (!collectEntries(input, manifest, projectRoot, entries, err)) {
+    if (!collectEntries(input, manifest, projectRoot, entries, nativeIds,
+                        err)) {
         std::fprintf(stderr, "cp3c: %s\n", err.c_str());
         return kExitCompileError;
     }
@@ -327,6 +373,7 @@ int packProject(const PackInput& input) {
     production.input = &input;
     production.plan = &plan;
     production.projectRoot = projectRoot;
+    production.nativeIds = nativeIds;
     production.entries = &entries;
     production.cached = &cached;
     if (!produceCache(production, err)) {

@@ -236,6 +236,17 @@ bool installCompanionNativeBundles(const fs::path& projectRoot,
         // leaves a message in `err`.
         return err.empty();
     }
+    // v0.2 archives embed their native binding under `.cp3/native/<id>`. Only
+    // reach for a companion platform asset for bindings the archive did not
+    // already install (beta-one packages published source-only).
+    std::vector<std::string> missing;
+    for (const std::string& id : ids) {
+        std::error_code ec;
+        const fs::path binding =
+            projectRoot / ".cp3" / "native" / id / "native.json";
+        if (!fs::is_regular_file(binding, ec)) missing.push_back(id);
+    }
+    if (missing.empty()) return true;
     std::vector<GithubAsset> matching;
     for (const GithubAsset& asset : assets) {
         if (isNativeBundleForCurrentPlatform(asset.name)) {
@@ -247,7 +258,7 @@ bool installCompanionNativeBundles(const fs::path& projectRoot,
                      "cp3c: warning: package imports native binding '%s', but "
                      "this release has no native bundle for %s; build it with "
                      "'cp3 native-install' or install the bundle manually\n",
-                     ids.front().c_str(),
+                     missing.front().c_str(),
                      platformIdText(currentPlatform()).c_str());
         return true;
     }

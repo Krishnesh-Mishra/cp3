@@ -88,6 +88,62 @@
     },
     {
       "group": "install",
+      "name": "cp3pak-embeds-native-binding",
+      "description": "an embedded native binding installs at the project root, not inside the package",
+      "argv": [
+        "install",
+        "deps/native-dep.cp3pak"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "install-project"
+          },
+          {
+            "name": "native-dep.cp3pak",
+            "to": "deps/native-dep.cp3pak"
+          }
+        ]
+      },
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "installed native-dep 1.0.0"
+        },
+        "files": {
+          ".cp3/native/demo/native.json": {
+            "exists": true,
+            "contains": ".cp3/native/demo/include/0"
+          },
+          ".cp3/native/demo/index.cp3": {
+            "exists": true
+          },
+          ".cp3/native/demo/include/0/demo/native_demo.h": {
+            "exists": true
+          },
+          ".cp3/native/demo/lib/0/libdemo.a": {
+            "exists": true
+          },
+          ".cp3/native/demo/runtime/0/demo.dll": {
+            "exists": true
+          },
+          ".cp3/native/demo/source/0/demo.cpp": {
+            "exists": true
+          },
+          ".cp3/packages/native-dep/index.cp3": {
+            "contains": "import native \"demo\""
+          },
+          ".cp3/lock.json": {
+            "contains": "\"native-dep\""
+          }
+        },
+        "files_absent": [
+          ".cp3/packages/native-dep/.cp3/native/demo/native.json"
+        ]
+      }
+    },
+    {
+      "group": "install",
       "name": "file-prefix",
       "description": "file prefix",
       "argv": [

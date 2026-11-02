@@ -1,0 +1,222 @@
+{
+  "schema": "cp3-native-binding/1",
+  "id": "demo",
+  "source": "sdk/src/demo.cpp",
+  "includeDirs": [
+    "sdk/include"
+  ],
+  "defines": [
+    "DEMO_FEATURE=1"
+  ],
+  "headers": [
+    "demo/native_demo.h"
+  ],
+  "libDirs": [
+    "sdk/lib"
+  ],
+  "linkNames": [],
+  "staticLibraries": [
+    "sdk/lib/libdemo.a"
+  ],
+  "sharedLibraries": [],
+  "runtimeDlls": [
+    "sdk/runtime/demo.dll"
+  ],
+  "abi": "cxx20-libstdc++",
+  "target": "x86_64-w64-mingw32",
+  "libclangVersion": "20.1.0",
+  "contentHash": "b312feb7d4059388abff5a224104d578a38bc8d9e8f5d7a6512a0479175bdb4a",
+  "functions": [
+    {
+      "name": "add",
+      "cppName": "demo::add",
+      "returnType": {
+        "kind": "number"
+      },
+      "returnsCStr": false,
+      "isStatic": false,
+      "params": [
+        {
+          "name": "a",
+          "kind": "value",
+          "type": {
+            "kind": "number"
+          },
+          "cppType": "int",
+          "cppPointer": "",
+          "cppArgCount": 1
+        },
+        {
+          "name": "b",
+          "kind": "value",
+          "type": {
+            "kind": "number"
+          },
+          "cppType": "int",
+          "cppPointer": "",
+          "cppArgCount": 1
+        }
+      ]
+    },
+    {
+      "name": "scale",
+      "cppName": "demo::scale",
+      "returnType": {
+        "kind": "number"
+      },
+      "returnsCStr": false,
+      "isStatic": false,
+      "params": [
+        {
+          "name": "value",
+          "kind": "value",
+          "type": {
+            "kind": "number"
+          },
+          "cppType": "double",
+          "cppPointer": "",
+          "cppArgCount": 1
+        },
+        {
+          "name": "factor",
+          "kind": "value",
+          "type": {
+            "kind": "number"
+          },
+          "cppType": "float",
+          "cppPointer": "",
+          "cppArgCount": 1
+        }
+      ]
+    },
+    {
+      "name": "is_ready",
+      "cppName": "demo::is_ready",
+      "returnType": {
+        "kind": "boolean"
+      },
+      "returnsCStr": false,
+      "isStatic": false,
+      "params": []
+    },
+    {
+      "name": "greet",
+      "cppName": "demo::greet",
+      "returnType": {
+        "kind": "string"
+      },
+      "returnsCStr": false,
+      "isStatic": false,
+      "params": [
+        {
+          "name": "name",
+          "kind": "cstr",
+          "type": {
+            "kind": "string"
+          },
+          "cppType": "const std::string&",
+          "cppPointer": "",
+          "cppArgCount": 1
+        }
+      ]
+    },
+    {
+      "name": "version",
+      "cppName": "demo::version",
+      "returnType": {
+        "kind": "string"
+      },
+      "returnsCStr": true,
+      "isStatic": false,
+      "params": []
+    },
+    {
+      "name": "log_message",
+      "cppName": "demo::log_message",
+      "returnType": {
+        "kind": "void"
+      },
+      "returnsCStr": false,
+      "isStatic": false,
+      "params": [
+        {
+          "name": "text",
+          "kind": "cstr",
+          "type": {
+            "kind": "string"
+          },
+          "cppType": "const char*",
+          "cppPointer": "const char*",
+          "cppArgCount": 1
+        }
+      ]
+    },
+    {
+      "name": "checksum",
+      "cppName": "demo::checksum",
+      "returnType": {
+        "kind": "number"
+      },
+      "returnsCStr": false,
+      "isStatic": false,
+      "params": [
+        {
+          "name": "data",
+          "kind": "byteBuffer",
+          "type": {
+            "kind": "buffer"
+          },
+          "cppType": "const unsigned char*",
+          "cppPointer": "const unsigned char*",
+          "cppArgCount": 2
+        }
+      ]
+    },
+    {
+      "name": "sum_values",
+      "cppName": "demo::sum_values",
+      "returnType": {
+        "kind": "number"
+      },
+      "returnsCStr": false,
+      "isStatic": false,
+      "params": [
+        {
+          "name": "values",
+          "kind": "numberArray",
+          "type": {
+            "kind": "array",
+            "elem": {
+              "kind": "number"
+            }
+          },
+          "cppType": "const double*",
+          "cppPointer": "const double*",
+          "cppArgCount": 2
+        }
+      ]
+    }
+  ],
+  "classes": [],
+  "enums": [
+    {
+      "name": "Color",
+      "cpp": "demo::Color",
+      "members": [
+        {
+          "name": "Red",
+          "cppName": "Red"
+        },
+        {
+          "name": "Green",
+          "cppName": "Green"
+        },
+        {
+          "name": "Blue",
+          "cppName": "Blue"
+        }
+      ]
+    }
+  ],
+  "rejected": []
+}

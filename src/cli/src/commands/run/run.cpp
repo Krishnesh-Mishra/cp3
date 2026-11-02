@@ -392,6 +392,7 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
         input.module = &mod;
         input.source = file;
         input.program = entry->ast.get();
+        input.nativeBindings = &effective.compile.nativeBindings;
         input.execute = execute;
         return detail::packProject(input);
     }

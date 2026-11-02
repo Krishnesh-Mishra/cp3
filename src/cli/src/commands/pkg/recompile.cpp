@@ -23,6 +23,7 @@
 #include "detail/core/commands.hpp"
 #include "detail/pkg/cp3pak.hpp"
 #include "detail/pkg/json.hpp"
+#include "detail/pkg/native_pack.hpp"
 #include "detail/pkg/package_json.hpp"
 #include "detail/archive/platform.hpp"
 #include "detail/archive/tar.hpp"
@@ -133,11 +134,22 @@ std::vector<CacheSourceRef> archiveSources(const std::vector<TarEntry>& members)
 // Compiles every module of the archive for the current platform and returns
 // the cache members: the manifest first, then the artifacts.
 bool compileCacheBlock(const std::vector<CacheSourceRef>& sources,
+                       const std::vector<TarEntry>& members,
                        const fs::path& archivePath, bool verbose,
                        std::vector<TarEntry>& block, std::string& err) {
     const fs::path workDir = recompileWorkDir(archivePath);
     PlatformCacheManifest planned;
     if (!planPlatformCache(sources, planned, err)) return false;
+    // The archive's embedded native assets provide the include roots and
+    // defines the package implementation was written against. Materialize
+    // them in the scratch directory so this machine compiles the same source.
+    std::vector<std::string> includeDirs;
+    std::vector<std::string> defines;
+    if (!nativeBuildFlagsFromArchive(members, workDir, includeDirs, defines,
+                                     err)) {
+        removeTree(workDir);
+        return false;
+    }
     block.push_back(TarEntry{platformCacheManifestMember(currentPlatform()),
                               platformCacheManifestToJson(planned)});
     for (const CacheSourceRef& source : sources) {
@@ -146,6 +158,8 @@ bool compileCacheBlock(const std::vector<CacheSourceRef>& sources,
         request.source = source.source;
         request.header = source.header;
         request.workDir = workDir;
+        request.includeDirs = includeDirs;
+        request.defines = defines;
         request.verbose = verbose;
         PlatformCacheBuild artifact;
         if (!buildPlatformArtifact(request, artifact, err)) {
@@ -296,7 +310,8 @@ int cmdRecompile(const CliOptions& opt) {
     bool changed = false;
     if (!current) {
         std::vector<TarEntry> block;
-        if (!compileCacheBlock(sources, archivePath, opt.verbose, block, err)) {
+        if (!compileCacheBlock(sources, members, archivePath, opt.verbose,
+                               block, err)) {
             std::fprintf(stderr, "cp3c: %s\n", err.c_str());
             return kExitCompileError;
         }

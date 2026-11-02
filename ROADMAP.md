@@ -215,6 +215,14 @@ Known defects fixed in v0.2.0:
   archive (`index.cp3`, not `src/index.cp3`).
 - `.cp3/lock.json` must store project-relative `resolved` and `target` paths,
   not machine-specific absolute paths.
+- A `.cp3pak` must carry every native binding its implementation imports:
+  `native.json`, the declaration index, headers, import libraries, runtime
+  DLLs and the recorded source, relocated under `.cp3/native/<id>/` with the
+  metadata rewritten to those self-contained paths. Installing the archive
+  hoists the binding to the consuming project's `.cp3/native/<id>/`; a
+  precompiled package object and `cp3 recompile` both compile against the
+  embedded include roots. A separate platform asset is now only the fallback
+  for beta-one archives that shipped source-only.
 
 ### 7. TypeScript-only diagnostics
 

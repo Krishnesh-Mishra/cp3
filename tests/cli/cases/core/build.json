@@ -644,6 +644,68 @@
     },
     {
       "group": "build",
+      "name": "package-native-cache-embeds-the-binding",
+      "description": "a package with a cached binary also packs its native binding and assets",
+      "argv": [
+        "build",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "package-native-cache",
+          {
+            "name": "package-native-binding",
+            "to": ".cp3/native/demo"
+          }
+        ],
+        "files": {
+          "sdk/lib/libdemo.a": "fixture static library\n",
+          "sdk/runtime/demo.dll": "fixture runtime library\n"
+        }
+      },
+      "slow": true,
+      "requires": "compiler",
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": [
+            "cached binary for",
+            "packed"
+          ]
+        },
+        "files": {
+          ".cp3/out/package-native-cache.cp3pak": {
+            "exists": true,
+            "archive_contains": [
+              "index.cp3",
+              "pak/src/index.cpp",
+              "pak/src/index.hpp",
+              ".cp3/native/demo/native.json",
+              ".cp3/native/demo/index.cp3",
+              ".cp3/native/demo/include/0/demo/native_demo.h",
+              ".cp3/native/demo/lib/0/libdemo.a",
+              ".cp3/native/demo/runtime/0/demo.dll",
+              ".cp3/native/demo/source/0/demo.cpp",
+              "pak/{platform}/cache.json",
+              "pak/{platform}/src/index.o"
+            ],
+            "archive_text_contains": {
+              "index.cp3": [
+                "import native \"demo\""
+              ],
+              ".cp3/native/demo/native.json": [
+                "\"includeDirs\": [\".cp3/native/demo/include/0\"]",
+                "\"libDirs\": [\".cp3/native/demo/lib/0\"]",
+                "\"runtimeDlls\": [\".cp3/native/demo/runtime/0/demo.dll\"]",
+                "\"contentHash\": \"b312feb7d4059388abff5a224104d578a38bc8d9e8f5d7a6512a0479175bdb4a\""
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "build",
       "name": "package-cache-binary-invalid-platform",
       "description": "package cache binary rejects an unknown platform id",
       "argv": [

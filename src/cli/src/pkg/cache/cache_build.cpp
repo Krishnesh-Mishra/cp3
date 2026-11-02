@@ -85,10 +85,16 @@ bool buildPlatformArtifact(const CacheBuildRequest& request,
 
     std::vector<fs::path> includes = compilerIncludeRoots();
     includes.push_back(request.workDir);
+    for (const std::string& dir : request.includeDirs) {
+        includes.push_back(fs::path(dir));
+    }
     CompileStep step{includes, cpp, obj, {}};
     // The package's entry point is renamed so the artifact is a library
     // object; the consumer program owns the real `main`.
     step.extraFlags.push_back("-Dmain=" + renamedMainSymbol(request.module));
+    for (const std::string& define : request.defines) {
+        step.extraFlags.push_back("-D" + define);
+    }
     const std::vector<std::string> args =
         compileArgs(tc, BuildProfile::Incremental, step);
     if (request.verbose) {

@@ -19,6 +19,7 @@
 #include "detail/cache/checksum.hpp"
 #include "detail/pkg/cp3pak.hpp"
 #include "detail/pkg/json.hpp"
+#include "detail/pkg/native_pack.hpp"
 #include "detail/cache/package_cache.hpp"
 #include "detail/pkg/package_json.hpp"
 #include "detail/core/semver.hpp"
@@ -174,6 +175,13 @@ bool installFromDirectory(const fs::path& source, const fs::path& projectRoot,
 
     removeTree(packageDir);
     if (!copyTree(source, packageDir, err)) return false;
+    // The package's `.cp3/native` tree is not part of the installed package
+    // copy (`copyTree` skips `.cp3`); it belongs to the consuming project so
+    // `import native` resolves it. Relocate the assets under the binding's
+    // self-contained `.cp3/native/<id>/` layout.
+    if (!installNativeBindingsFromDirectory(source, projectRoot, err)) {
+        return false;
+    }
     entry.name = name;
     entry.version = packageVersion(manifest);
     entry.resolved = "file:" + relativeName(projectRoot, source);
@@ -276,7 +284,12 @@ bool installArchivePackage(const fs::path& archive, const fs::path& projectRoot,
     if (!packageDirFor(projectRoot, name, packageDir, err)) return false;
 
     removeTree(packageDir);
+    // Embedded native assets are installed at the project root, not inside the
+    // package directory: the compiler resolves `import native "<id>"` through
+    // `<project>/.cp3/native/<id>`.
+    if (!installNativeMembers(members, projectRoot, err)) return false;
     for (const TarEntry& member : members) {
+        if (isNativeArchiveMember(member.name)) continue;
         if (!writePackageMember(packageDir, member, err)) return false;
     }
 

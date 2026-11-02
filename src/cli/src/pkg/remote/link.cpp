@@ -16,6 +16,7 @@
 #include "detail/cache/checksum.hpp"
 #include "detail/pkg/cp3pak.hpp"
 #include "detail/pkg/json.hpp"
+#include "detail/pkg/native_pack.hpp"
 #include "detail/cache/package_cache.hpp"
 #include "detail/pkg/package_json.hpp"
 #include "detail/core/semver.hpp"
@@ -172,6 +173,12 @@ bool linkDirectory(const LinkRequest& request, const fs::path& source,
     result.entry.version = version;
     result.entry.source = kSourceLink;
     result.entry.kind = kLinkDirectory;
+    // A linked directory is read in place, so its `.cp3/native` tree is not
+    // copied anywhere; expose the binding at the project root the compiler
+    // resolves from.
+    if (!installNativeBindingsFromDirectory(source, request.projectRoot, err)) {
+        return false;
+    }
     result.entry.resolved = source.generic_string();
     result.entry.target = source.generic_string();
     result.reusedCache = false;
@@ -241,12 +248,13 @@ bool linkArtifact(const LinkRequest& request, const fs::path& source,
               " already exists; pass --force to replace it";
         return false;
     }
+    Cp3pakManifest pak;
+    std::vector<TarEntry> members;
+    if (!readCp3pak(source, pak, members, err)) return false;
+    if (!installNativeMembers(members, request.projectRoot, err)) return false;
     if (sameArtifact && cacheExists) {
         result.reusedCache = true;
     } else {
-        Cp3pakManifest pak;
-        std::vector<TarEntry> members;
-        if (!readCp3pak(source, pak, members, err)) return false;
         if (!extractMembers(members, cacheDir, err)) return false;
         result.reusedCache = false;
     }
