@@ -93,7 +93,9 @@ set(cp3_cli_sources
     src/archive/deflate.cpp
     src/archive/gzip.cpp
     src/archive/tar.cpp
+    src/archive/zip.cpp
     src/pkg/remote/cp3pak.cpp
+    src/pkg/remote/native_bundle.cpp
     src/pkg/manifest/semver.cpp
     src/native/libclang/libclang.cpp
     src/native/bindgen/bindgen.cpp

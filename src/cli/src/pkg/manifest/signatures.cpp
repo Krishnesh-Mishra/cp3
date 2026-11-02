@@ -82,22 +82,32 @@ std::string stripClass(const SourceFile& file, const ClassDeclaration& cls) {
     return out;
 }
 
+// Adds the `export` keyword unless the copied declaration text already
+// carries it. The AST sometimes stores the keyword in the declaration span and
+// sometimes only flags `isExported`; both forms end up with exactly one prefix.
+std::string ensureExported(std::string text) {
+    if (text.rfind("export ", 0) == 0 || text.rfind("export\t", 0) == 0) {
+        return text;
+    }
+    return "export " + text;
+}
+
 std::string stripStatement(const SourceFile& file, const Stmt& stmt) {
     switch (stmt.kind) {
         case NodeKind::FunctionDeclaration: {
             const auto& fn = static_cast<const FunctionDeclaration&>(stmt);
-            return (fn.isExported ? std::string("export ") : std::string()) +
-                   withoutBody(file, fn, fn.body.get());
+            const std::string text = withoutBody(file, fn, fn.body.get());
+            return fn.isExported ? ensureExported(text) : text;
         }
         case NodeKind::ClassDeclaration: {
             const auto& cls = static_cast<const ClassDeclaration&>(stmt);
-            return (cls.isExported ? std::string("export ") : std::string()) +
-                   stripClass(file, cls);
+            const std::string text = stripClass(file, cls);
+            return cls.isExported ? ensureExported(text) : text;
         }
         case NodeKind::ExportDeclaration: {
             const auto& exp = static_cast<const ExportDeclaration&>(stmt);
             if (exp.kind == ExportKind::Declaration && exp.declaration) {
-                return "export " + stripStatement(file, *exp.declaration);
+                return ensureExported(stripStatement(file, *exp.declaration));
             }
             // `export default { ... }`, `export { a, b }` and re-exports are
             // part of the surface exactly as written.

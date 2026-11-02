@@ -27,6 +27,7 @@
 #include "detail/pkg/install.hpp"
 #include "detail/pkg/json.hpp"
 #include "detail/pkg/link.hpp"
+#include "detail/pkg/native_bundle.hpp"
 #include "detail/core/semver.hpp"
 #include "detail/archive/tar.hpp"
 #include "detail/core/util.hpp"
@@ -318,6 +319,16 @@ int installSelectedAsset(const Candidate& chosen, const InstallContext& ctx,
     }
     if (existing != nullptr && isLinkEntry(*existing)) {
         removeLinkCache(ctx.request.projectRoot, name);
+    }
+    // A source-only package that imports a native binding ships its headers,
+    // import library and runtime DLLs as a platform asset next to the pak.
+    // Install that asset now so a fresh `cp3 install <repo>` is buildable.
+    const fs::path packageDir =
+        ctx.request.projectRoot / ".cp3" / "packages" / ctx.out.name;
+    if (!installCompanionNativeBundles(ctx.request.projectRoot, packageDir,
+                                       ctx.release.assets,
+                                       chosen.file.parent_path(), err)) {
+        return kExitCompileError;
     }
     ctx.out.source = kSourceGithub;
     ctx.out.repo = ctx.repo.fullName();

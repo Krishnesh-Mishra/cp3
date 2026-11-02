@@ -183,6 +183,36 @@ bool installFromDirectory(const fs::path& source, const fs::path& projectRoot,
     return true;
 }
 
+bool writePackageMember(const fs::path& packageDir, const TarEntry& member,
+                        std::string& err) {
+    std::string data = member.data;
+    // Beta-one archives generated the export surface with a doubled keyword
+    // (`export export function ...`) because the AST span already carried the
+    // modifier. The generator is fixed, but an already-published archive must
+    // keep installing; repair the generated surface on the way in.
+    if (member.name == "index.cp3") {
+        const std::string doubled = "export export ";
+        std::size_t at = 0;
+        while ((at = data.find(doubled, at)) != std::string::npos) {
+            const bool lineStart =
+                at == 0 || data[at - 1] == '\n' || data[at - 1] == '\r';
+            if (!lineStart) {
+                at += doubled.size();
+                continue;
+            }
+            data.erase(at, std::string("export ").size());
+        }
+    }
+    const fs::path dest = packageDir / fs::path(member.name);
+    std::error_code ec;
+    fs::create_directories(dest.parent_path(), ec);
+    if (!writeTextFile(dest, data, nullptr)) {
+        err = "cannot write " + dest.string();
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 bool packageSourceExists(const fs::path& source) {
@@ -247,13 +277,7 @@ bool installArchivePackage(const fs::path& archive, const fs::path& projectRoot,
 
     removeTree(packageDir);
     for (const TarEntry& member : members) {
-        const fs::path dest = packageDir / fs::path(member.name);
-        std::error_code ec;
-        fs::create_directories(dest.parent_path(), ec);
-        if (!writeTextFile(dest, member.data, nullptr)) {
-            err = "cannot write " + dest.string();
-            return false;
-        }
+        if (!writePackageMember(packageDir, member, err)) return false;
     }
 
     std::string bytes;
