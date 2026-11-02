@@ -78,8 +78,11 @@ std::string unitInitDef(const ProgramUnitText& unit) {
 }
 
 // One unit's contribution: its namespace, the declaration section, the
-// definition section and (non-entry units) the module initializer.
+// definition section and (non-entry units) the module initializer. A package
+// unit contributes only its declarations: its implementation is compiled from
+// the archive's `pak/` sources, not regenerated here.
 void appendUnit(std::string& out, const ProgramUnitText& unit, bool definitions) {
+    if (definitions && unit.isPackage) return;
     out += "namespace " + unit.namesp + " {\n\n";
     out += definitions ? unit.defs : unit.decls;
     out += "\n";
@@ -100,7 +103,7 @@ void appendProgramMain(std::string& out, const ProgramAssembly& assembly) {
     if (programHasAwait(assembly)) {
         out += "    auto cp3_top_level = [&]() -> ::cp3::runtime::Promise<void> {\n";
         for (const ProgramUnitText& unit : assembly.units) {
-            if (unit.isEntry) continue;
+            if (unit.isEntry || unit.isPackage) continue;
             out += unit.topLevelAwait ? "        co_await " + initCall(unit) + ";\n"
                                       : "        " + initCall(unit) + ";\n";
         }
@@ -111,7 +114,8 @@ void appendProgramMain(std::string& out, const ProgramAssembly& assembly) {
         out += "    cp3_top_level();\n";
     } else {
         for (const ProgramUnitText& unit : assembly.units) {
-            if (!unit.isEntry) out += "    " + initCall(unit) + ";\n";
+            if (!unit.isEntry && !unit.isPackage)
+                out += "    " + initCall(unit) + ";\n";
         }
         const ProgramUnitText* entry = entryOf(assembly);
         if (entry != nullptr) out += entry->mainBody;
@@ -288,6 +292,7 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     Generator inner(sink_, *semaIt->second, unit.moduleName, lineMapping_,
                     options);
     inner.programMode_ = true;
+    inner.packageSurfaceOnly_ = unit.isPackage;
     const auto importsIt = link.imports.find(unit.id);
     if (importsIt != link.imports.end()) inner.linkedNames_ = importsIt->second;
     ProgramUnitText text;
@@ -296,6 +301,7 @@ void Generator::emitProgramUnit(const ProgramLink& link,
                       ? surfaceIt->second.namesp
                       : suggestNamespace(unit.moduleName);
     text.isEntry = unit.isEntry;
+    text.isPackage = unit.isPackage;
     inner.runUnit(*unit.ast, text.decls, text.defs, text.mainBody,
                   text.globals);
     text.topLevelAwait = inner.topLevelAwait_;

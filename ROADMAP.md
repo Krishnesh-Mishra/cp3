@@ -10,6 +10,108 @@ Status: **in progress**
 Theme: ordinary TypeScript class and error code should work in CP3, while the
 compiler keeps emitting plain native C++ with no hidden runtime machinery.
 
+### CP3 v0.2 APPROVED WORK LEDGER
+
+**Lead-approved scope. Anything not listed here needs lead approval before it
+is added.** Rule 0 applies to every entry:
+
+- User-visible API stays TypeScript-like.
+- Every fast path is internal to the standard library/runtime.
+- Every proof/check fails closed.
+
+#### A. Collections (`std/collections`)
+
+| Item | User API | Internal mechanism (fixed) | Hard rule |
+| --- | --- | --- | --- |
+| `Queue<T>` | `new Queue<T>()`, `push/pop/peek/size/empty/reserve` | ring buffer over **one contiguous `std::vector<T>`**, head/tail indices, 2x growth | never `std::deque` |
+| `Stack<T>` | `push/pop/peek/size` | `std::vector` `push_back`/`pop_back` | `pop` returns a plain value, no optional wrap |
+| `PriorityQueue<T>` | `push/pop/peek` with comparator | binary heap over a contiguous vector, manual sift or `push_heap`/`pop_heap` | no tree nodes |
+| `LRUCache<K,V>` | `get/set/has/delete` with capacity | flat hash map (`ankerl::unordered_dense`) + intrusive doubly-linked list stored as **indices inside entries** | no pointer chasing, no per-node allocation |
+| `RingBuffer<T>` | fixed capacity, overwrite mode | same ring as `Queue` with an overwrite flag | — |
+| `BitSet` | `set/get/clear/count/and/or/xor` | `std::vector<uint64_t>` + `__builtin_popcountll`, word-parallel operations | 64 flags per word |
+| `MultiMap<K,V>` | `get` all, `add`, `has` | flat hash map to inline `SmallVector<V,1>` | one allocation per key, not per pair |
+
+#### B. Reserved
+
+No new approved items in this revision. Add only with lead approval.
+
+#### C. Text, web, and data modules
+
+| Item | Module / API | Internal mechanism (fixed) | Hard rule |
+| --- | --- | --- | --- |
+| `URL` + `URLSearchParams` | `std/url`, `new` | hand-written RFC 3986 parser over `string_view`, zero-copy slices; reuse `percentDecode` from the network runtime | no regex in the parser |
+| `TextEncoder` / `TextDecoder` | `std/text`, new | `simdutf` for UTF-8/UTF-16 validate + convert; hand-written fallback | library internal, API stable |
+| `stopwatch` + `console.time` / `console.timeEnd` | `std/time`, new | `QueryPerformanceCounter` / `CLOCK_MONOTONIC`; monotonic only, zero allocation: `const sw = stopwatch(); sw.start(); sw.elapsed(); sw.stop();` | never wall clock |
+| `Logger` | `std/log`, new | bundled `fmt`, level filter, synchronous by default, optional async sink over `Channel` | — |
+| Checksums | `std/hash`, new; named **checksums, not security** | `crc32`, `crc32c`, `xxhash64`, `fnv1a` via bundled XXHash/CRC32C | documented non-crypto |
+
+#### D. Extensions to existing modules (no new module)
+
+| Module | Additions |
+| --- | --- |
+| `std/crypto` | `hmacSha256`/`hmacSha512` (libsodium `crypto_auth`), `blake2b` (`crypto_generichash`), `getRandomValues` (`randombytes`), `uuidParse`/`uuidValidate`/`uuidVersion`, `sha256Raw` returning `Buffer` |
+| `std/buffer` | `base64Url` variant of the existing codec |
+
+#### E. Hash placement rule (security line, non-negotiable)
+
+- `std/crypto` holds **only** libsodium crypto-safe primitives.
+- `std/hash` holds fast **non-crypto** checksums only.
+- `Map`/`Set` bucket hash = `wyhash` or `xxhash3` with a **per-process random
+  seed from libsodium** (HashDoS defense), never exposed.
+- `wyhash`/`rapidhash`/`xxhash` **never** appear under a crypto name. Fast and
+  safe in crypto = `blake2b` or HMAC.
+
+#### F. Internal-only libraries (user API unchanged, user sees nothing)
+
+- `ankerl::unordered_dense` backs `Map`/`Set` hot paths; keep the
+  insertion-order vector for D44 order.
+- `fast_float` for JSON/env/URL number parsing; keep JS number semantics.
+- `simdutf` for validation, conversion, and `charAt` walking.
+- `miniz` for `std/compress`.
+- `moodycamel` or `Boost.Lockfree` for `Channel` and the async log sink.
+
+#### G. Compiler import suggestions
+
+When a source file uses a standard-library name without importing its module,
+the compiler must fail with the normal "cannot find name" diagnostic **and**
+include the exact import line that fixes it. This applies to default modules
+(`console`, `path`, `Math`, ...) and named modules (`fetch`, `createServer`,
+...) alike. The LSP may auto-insert the same line, but the command-line
+compiler must suggest it too; LSP-only behavior is not enough.
+
+#### H. Standard Library & API implementation targets
+
+Status legend: **Done** = available today, **Partial** = a surface exists but
+the listed API is incomplete, **Planned** = not implemented, awaiting lead
+selection. Every row follows Rule 0 and the verification rules in §8.
+
+| Module / scope | Feature / API | Implementation notes / details | Status |
+| --- | --- | --- | --- |
+| Number / Math | `toFixed`, `toPrecision`, `toExponential` | Number formatting methods. | Planned |
+| Number / Math | `MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `EPSILON` | Standard number constants. | Planned |
+| Number / Math | `Number.isInteger`, `Number.isFinite`, `Number.isNaN` | Number validation methods. | Planned |
+| Math | Math extras | Add the remaining standard math utilities (inverse trig, hyperbolic, `exp`, `log1p`, `hypot`, `sign`, constants). Today: `PI`, `E`, `random`, `min`, `max`, `pow`, `gcd`, `lcm`, `clamp`, `lerp`, `sqrt`, `abs`, `floor`, `ceil`, `round`, `trunc`, `cbrt`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`. | Partial |
+| Array | Callback signature `(value, index, array)` | Standardize every array iteration callback to the JS/TS shape. Today callbacks receive `(value)` only. | Partial |
+| Array | `flatMap`, `findLast`, `findLastIndex`, `at` | Modern query, search, and access methods. | Planned |
+| Array | `toSorted`, `toReversed` | Non-mutating array transformation methods (return new arrays). | Planned |
+| Object | `assign`, `fromEntries`, `is`, `freeze` | Standard object manipulation, creation, and immutability methods. Today: `keys`, `values`, `entries`. | Planned |
+| String | `codePointAt`, `fromCodePoint`, `matchAll`, `raw` | Unicode-aware and modern string methods. Today: no `charCodeAt` lowering either (typed, but not emitted). | Planned |
+| JSON | `JSON.stringify(value, replacer?, space?)` | Extend the serializer to support pretty printing (for example 2-space indent) and a replacer. Today only a numeric indent is typed and emitted. | Partial |
+| Collections | `ConcurrentMap` | Thread-safe map implementation. | Planned |
+| Promise | Full Promise API | Complete TS-compatible Promise surface. Today: `resolve`, `reject`, `all`, `race`, `allSettled`, `then`, `catch`, `finally`. Missing: `any`, `withResolvers`. | Partial |
+| Global | `structuredClone(obj)` | Deep copy without a worker. Reuse the existing worker deep-copy cloner on the main thread. | Planned |
+| `std/process` | `cwd`, `chdir`, `pid`, `ppid`, `uptime`, `memoryUsage`, `hrtime` | Thin OS calls for process information and high-resolution timing. Today: `argv`, `env`, `exit`, `exec`, `spawn`. | Planned |
+| `std/network` | HTTP Router (path params & wildcards) | For example `app.get("/users/:id", ...)`. Today `:name` params work; wildcard segments are not exposed. | Partial |
+| `std/network` | `dns.lookup(hostname)` | Thin wrapper over the libuv `getaddrinfo` already used by `fetch`. | Planned |
+| `std/fs` | `fs.watch(path, callback)` | File-system watcher using libuv `fs_event` (already linked). | Planned |
+| `std/os` | `homedir`, `tmpdir`, `freemem`, `totalmem`, `loadavg`, `networkInterfaces` | Thin OS calls for system environment and resource info. Today: `homedir`, `tmpdir`, `hostname`, `platform`, `cpus`, `totalMemory`, `freeMemory` (note the spelling difference from Node's `totalmem`/`freemem`). | Partial |
+
+The A-H ledger above is part of the v0.2.0 scope and ships with the TypeScript
+compatibility work. The class/error sections below describe the language
+surface; the ledger describes the standard-library additions. Additional
+JavaScript APIs found by the compatibility audit are listed in the issue/PR
+notes and need lead selection before they are added here.
+
 ### 1. Error model
 
 - Add the built-in hierarchy:

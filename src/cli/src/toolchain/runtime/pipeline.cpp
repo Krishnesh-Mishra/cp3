@@ -441,18 +441,28 @@ std::filesystem::path packageRootFor(const std::string& specifier,
 
 // Resolves a package's declared `main`. Archives built before v0.2 can carry
 // `"main": "src/index.cp3"` while the archive root has `index.cp3`; accept both
-// layouts so an old artifact stays usable after the compiler fix.
-std::optional<std::filesystem::path> packageEntry(
+// layouts so an old artifact stays usable after the compiler fix. The returned
+// `moduleName` is still the declared module path (`src/index`), because that is
+// the namespace its shipped C++ implementation was generated under.
+std::optional<PackageEntry> packageEntry(
     const std::filesystem::path& root) {
     std::error_code ec;
-    if (std::filesystem::is_regular_file(root, ec)) return root;
+    if (std::filesystem::is_regular_file(root, ec)) {
+        PackageEntry info;
+        info.path = root;
+        info.root = root.parent_path();
+        info.moduleName = root.stem().string();
+        return info;
+    }
     if (!std::filesystem::is_directory(root, ec)) return std::nullopt;
 
     std::vector<std::filesystem::path> candidates;
     JsonValue manifest;
     std::string err;
-    if (loadPackageJson(root, manifest, err)) {
-        const std::string main = packageMain(manifest);
+    std::string main;
+    const bool hasManifest = loadPackageJson(root, manifest, err);
+    if (hasManifest) {
+        main = packageMain(manifest);
         candidates.push_back(root / std::filesystem::path(main));
         const std::filesystem::path mainPath(main);
         if (!mainPath.filename().empty()) {
@@ -463,12 +473,24 @@ std::optional<std::filesystem::path> packageEntry(
     candidates.push_back(root / "src" / "index.cp3");
 
     for (const std::filesystem::path& candidate : candidates) {
-        if (std::filesystem::is_regular_file(candidate, ec)) return candidate;
+        if (!std::filesystem::is_regular_file(candidate, ec)) continue;
+        std::filesystem::path modulePath =
+            main.empty() ? std::filesystem::relative(candidate, root, ec)
+                         : std::filesystem::path(main);
+        if (main.empty() && ec) modulePath = candidate.filename();
+        modulePath.replace_extension();
+        std::string moduleName = modulePath.generic_string();
+        if (moduleName.empty()) moduleName = candidate.stem().string();
+        PackageEntry info;
+        info.path = candidate;
+        info.root = root;
+        info.moduleName = std::move(moduleName);
+        return info;
     }
     return std::nullopt;
 }
 
-std::optional<std::filesystem::path> resolvePackageEntry(
+std::optional<PackageEntry> resolvePackageEntry(
     const std::string& specifier, const std::filesystem::path& projectRoot) {
     return packageEntry(packageRootFor(specifier, projectRoot));
 }

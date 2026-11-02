@@ -10,6 +10,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -56,6 +57,14 @@ struct CompilationUnit {
     bool isEntry = false;
     bool isPrelude = false;
     PreludeKind preludeKind = PreludeKind::None;
+
+    // A unit loaded through `import ... from "<package>"`. The package's
+    // generated `index.cp3` is a declaration surface: its C++ implementation
+    // (the `pak/` sources shipped in the archive) is compiled and linked by the
+    // CLI instead of being re-emitted as empty stub bodies. `packageRoot` names
+    // the installed package directory so the build can find those sources.
+    bool isPackage = false;
+    std::filesystem::path packageRoot;
 
     // Prelude files whose items were injected at the top of this unit, in
     // application order (same -> strong -> weak), as documented in §18.

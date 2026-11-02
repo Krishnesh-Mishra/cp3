@@ -144,12 +144,27 @@ struct BuildRequest {
         std::string sourceKey;          // incremental cache key (the .cp3 path)
     };
 
+    // One implementation unit of an installed package. The package's generated
+    // `index.cp3` is only a declaration surface; the real definitions live in
+    // either a shipped cached object (`object`, used as is) or the archive's
+    // `pak/` C++ source (`source`, compiled here when no cache exists).
+    struct PackageImplementation {
+        fs::path source;                 // empty when `cached` is true
+        fs::path object;                 // installed cached artifact (.o)
+        std::vector<fs::path> includeDirs;
+        std::string sourceKey;
+        bool cached = false;
+    };
+
     const CliOptions* opt = nullptr;
     const fs::path* entry = nullptr;         // as resolved by the CLI
     const std::string* moduleName = nullptr;  // e.g. "src/index"
     const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
     const std::vector<std::string>* importedStdModules = nullptr;  // D68 selection
     const std::vector<ExtraModule>* extraModules = nullptr;  // worker modules
+    // Installed packages' `pak/` C++ implementations (declaration surfaces are
+    // linked against these, never regenerated as stubs).
+    const std::vector<PackageImplementation>* packageImplementations = nullptr;
     // The native bindings the program imports (`import native "id" as alias`)
     // travel with the compile options: their include roots, defines,
     // libraries and runtime DLLs join the build.

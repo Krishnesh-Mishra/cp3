@@ -7,13 +7,16 @@
 // the entry unit, threads the resulting SemaResult into codegen, then hands the
 // generated module to the toolchain driver. `execute` selects `run` semantics.
 // =============================================================================
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
 #include <system_error>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "cp3/core/analysis.hpp"
@@ -24,6 +27,7 @@
 #include "cp3/core/source.hpp"
 
 #include "detail/cache/cache.hpp"
+#include "detail/cache/package_cache.hpp"
 #include "detail/core/commands.hpp"
 #include "detail/core/diagnostics.hpp"
 #include "detail/pkg/package_json.hpp"
@@ -192,6 +196,91 @@ int prepareWorkers(const WorkerInputs& in, CodegenOptions& options,
     return kExitSuccess;
 }
 
+// Every installed package that contributed a unit to this program carries its
+// implementation beside the declaration surface: either a cached object for
+// this platform (`pak/<platform>/<module>.o`, used as is) or the C++ source
+// generated from its original modules (`pak/**/*.cpp`, compiled here). The
+// entry's `index.cp3` only supplies declarations. Returns the implementation
+// units in link order, with the include roots source units need.
+std::vector<detail::BuildRequest::PackageImplementation>
+collectPackageImplementations(const ModuleGraph& graph) {
+    std::vector<detail::BuildRequest::PackageImplementation> out;
+    std::unordered_set<std::string> seen;
+    for (CompilationUnit* unit : graph.compilationOrder()) {
+        if (unit == nullptr || !unit->isPackage || unit->packageRoot.empty()) {
+            continue;
+        }
+        const fs::path root = unit->packageRoot;
+        std::error_code ec;
+
+        // Prefer the package's cached binary for this platform. The install
+        // step has already checked that an excluded-source package has one;
+        // using it here is what makes a `.cp3pak` self-contained and instant.
+        PlatformCacheManifest cache;
+        if (installedPlatformCache(root, cache) && !cache.artifacts.empty()) {
+            const std::size_t before = out.size();
+            std::vector<const PlatformCacheArtifact*> artifacts;
+            for (const PlatformCacheArtifact& artifact : cache.artifacts) {
+                if (!artifact.member.empty()) artifacts.push_back(&artifact);
+            }
+            std::sort(artifacts.begin(), artifacts.end(),
+                      [](const PlatformCacheArtifact* a,
+                         const PlatformCacheArtifact* b) {
+                          return a->member < b->member;
+                      });
+            for (const PlatformCacheArtifact* artifact : artifacts) {
+                const fs::path object =
+                    (root / artifact->member).lexically_normal();
+                const std::string key = object.generic_string();
+                if (!seen.insert(key).second) continue;
+                detail::BuildRequest::PackageImplementation impl;
+                impl.object = object;
+                impl.sourceKey = key;
+                impl.cached = true;
+                out.push_back(std::move(impl));
+            }
+            if (out.size() != before) continue;
+        }
+
+        const fs::path pak = root / "pak";
+        if (!fs::is_directory(pak, ec)) continue;
+
+        std::vector<fs::path> sources;
+        std::vector<fs::path> includeDirs{pak};
+        for (const auto& entry :
+             fs::recursive_directory_iterator(pak, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file(ec)) continue;
+            const fs::path& path = entry.path();
+            if (path.extension() == ".cpp") {
+                sources.push_back(path);
+            } else if (path.extension() == ".hpp" ||
+                       path.extension() == ".h") {
+                includeDirs.push_back(path.parent_path());
+            }
+        }
+        std::sort(sources.begin(), sources.end());
+        std::sort(includeDirs.begin(), includeDirs.end());
+
+        for (const fs::path& source : sources) {
+            const std::string key = source.generic_string();
+            if (!seen.insert(key).second) continue;
+            detail::BuildRequest::PackageImplementation impl;
+            impl.source = source;
+            impl.sourceKey = key;
+            std::string last;
+            for (const fs::path& dir : includeDirs) {
+                const std::string text = dir.generic_string();
+                if (text == last) continue;
+                impl.includeDirs.push_back(dir);
+                last = text;
+            }
+            out.push_back(std::move(impl));
+        }
+    }
+    return out;
+}
+
 int runOnPackageError(const std::string& entry) {
     // CLI-README 5.1: a package build produces a .cp3pak - there is nothing
     // to run, so `run` is a usage error for a package project.
@@ -311,6 +400,8 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     // the entry) selects that module's native backend for this build (D68).
     const std::vector<std::string> importedStdModules =
         cp3::cli::importedStdModules(*frontend.graph);
+    const std::vector<detail::BuildRequest::PackageImplementation>
+        packageImplementations = collectPackageImplementations(*frontend.graph);
     detail::BuildRequest request;
     request.opt = &effective;
     request.entry = &entryPath;
@@ -318,6 +409,7 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     request.module = &mod;
     request.importedStdModules = &importedStdModules;
     request.extraModules = &extras;
+    request.packageImplementations = &packageImplementations;
     request.execute = execute;
     reportRunProgress(execute, effective.verbose,
                       "preparing native build...");

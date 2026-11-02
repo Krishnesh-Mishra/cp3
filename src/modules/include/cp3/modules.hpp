@@ -34,13 +34,24 @@
 
 namespace cp3 {
 
+// A resolved package entry. The module name is the package's *original* module
+// name (`src/index` for `"main": "src/index.cp3"`), which is what its shipped
+// C++ implementation was generated under; using the archive-relative path
+// (`index`) would look for the wrong namespace at link time. `root` is the
+// installed package directory (the parent of its `pak/` implementation tree).
+struct PackageEntry {
+    std::filesystem::path path;
+    std::filesystem::path root;
+    std::string moduleName;
+};
+
 // Resolves a package specifier (`import { x } from "addpkg"`) to the package
-// entry `.cp3` file. The CLI supplies this because the package manager owns
-// package.json and `.cp3/lock.json`; the module loader only consumes the
-// resolved path. Returning nullopt leaves the package edge unresolved and
-// reports the normal module-not-found diagnostic.
+// entry `.cp3` file and the metadata its implementation needs. The CLI supplies
+// this because the package manager owns package.json and `.cp3/lock.json`; the
+// module loader only consumes the resolved path. Returning nullopt leaves the
+// package edge unresolved and reports the normal module-not-found diagnostic.
 using PackageEntryResolver =
-    std::function<std::optional<std::filesystem::path>(
+    std::function<std::optional<PackageEntry>(
         const std::string& specifier,
         const std::filesystem::path& projectRoot)>;
 

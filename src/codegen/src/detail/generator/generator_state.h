@@ -236,6 +236,10 @@ protected:
     std::vector<std::string> nativeHeaders_;
     // Whole-program build: module-link export forms carry no C++ of their own.
     bool programMode_ = false;
+    // A package unit is a declaration surface: the implementation lives in the
+    // package's shipped `pak/` C++ and is linked separately. Body-less
+    // functions therefore stay declarations instead of becoming empty stubs.
+    bool packageSurfaceOnly_ = false;
     std::unordered_set<std::string> functions_;
     // Local names introduced by imports. A builtin rewrite must not fire when
     // one of these shadows the builtin (e.g. `import { sleep } from "./lib"`).

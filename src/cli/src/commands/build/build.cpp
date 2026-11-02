@@ -155,8 +155,11 @@ CacheEntry* findEntry(std::vector<CacheEntry>& manifest, const std::string& obj)
 
 // Regenerates one object file when needed. `sourceKey` is what the object
 // derives from (the .cp3 path for generated code, the .cpp for the runtime).
+// `extraFlags` adds per-TU flags (package implementations rename their entry
+// `main` so a library-like TU never collides with the program's own).
 bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp,
-               const fs::path& obj) {
+               const fs::path& obj,
+               const std::vector<std::string>* extraFlags = nullptr) {
     std::string content;
     if (!readTextFile(cpp, content)) {
         std::fprintf(stderr, "cp3c: cannot read '%s'\n", cpp.string().c_str());
@@ -180,7 +183,11 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
         return true;
     }
 
-    const CompileStep step{st.layout.includeDirs, cpp, obj, st.nativeFlags.compile};
+    std::vector<std::string> flags = st.nativeFlags.compile;
+    if (extraFlags != nullptr) {
+        flags.insert(flags.end(), extraFlags->begin(), extraFlags->end());
+    }
+    const CompileStep step{st.layout.includeDirs, cpp, obj, std::move(flags)};
     const std::vector<std::string> args =
         compileArgs(st.tc, st.opt.compile.profile, step, st.optimizations);
     if (st.showProgress && !st.compileProgressShown) {
@@ -247,6 +254,77 @@ bool compileExtras(BuildState& st, const BuildRequest& request) {
         writeTextFile(cpp, extra.module->source, nullptr);
         writeTextFile(hpp, extra.module->header, nullptr);
         if (!compileTU(st, extra.sourceKey, cpp, obj)) return false;
+    }
+    return true;
+}
+
+// A cheap identity for a file we do not compile ourselves (a package's cached
+// object): size plus modification time. The link stamp carries it, so replacing
+// the artifact on a reinstall relinks the program even when no local TU changed.
+std::string fileStamp(const fs::path& path) {
+    std::error_code ec;
+    const auto size = fs::file_size(path, ec);
+    if (ec) return std::string();
+    const auto time = fs::last_write_time(path, ec);
+    if (ec) return std::to_string(size);
+    return std::to_string(size) + ":" +
+           std::to_string(static_cast<long long>(
+               time.time_since_epoch().count()));
+}
+
+// Compiles the `pak/` C++ implementation of every installed package the
+// program imports, or records its cached object as a link input. The package
+// entry `index.cp3` is only a declaration surface; these objects are what its
+// exported functions resolve to at link time. Source object names are derived
+// from the stable source key so two packages with same-named files never
+// collide.
+bool compilePackageImplementations(BuildState& st,
+                                   const BuildRequest& request) {
+    if (request.packageImplementations == nullptr) return true;
+    for (const BuildRequest::PackageImplementation& impl :
+         *request.packageImplementations) {
+        if (impl.cached) {
+            std::error_code ec;
+            if (!fs::is_regular_file(impl.object, ec)) {
+                std::fprintf(stderr,
+                             "cp3c: cached package artifact '%s' is missing; "
+                             "reinstall the package\n",
+                             impl.object.string().c_str());
+                return false;
+            }
+            const std::string hash = fileStamp(impl.object);
+            CacheEntry* existing = findEntry(st.manifest, impl.object.string());
+            if (existing == nullptr) {
+                st.manifest.push_back(CacheEntry{
+                    st.profile, impl.sourceKey, hash, st.headerFingerprint,
+                    st.compilerKey, impl.object.string(), impl.object.string()});
+            } else {
+                existing->profile = st.profile;
+                existing->source = impl.sourceKey;
+                existing->hash = hash;
+                existing->header = st.headerFingerprint;
+                existing->compiler = st.compilerKey;
+                existing->cpp = impl.object.string();
+            }
+            st.objects.push_back(impl.object);
+            continue;
+        }
+        const std::string stem = impl.source.stem().string();
+        const fs::path obj =
+            st.layout.buildDir /
+            ("pkg_" + std::to_string(fnv1a64(impl.sourceKey)) + "_" + stem +
+             ".o");
+        // A beta-one package was generated as an entry program, so its C++
+        // carries an `int main()`. The package is linked as a library; rename
+        // that symbol so it cannot collide with the consumer's main. The
+        // package initializer is not called (packages hold no top-level state
+        // in the beta-one surface).
+        const std::vector<std::string> flags{
+            "-Dmain=cp3_pkg_main_" +
+            std::to_string(fnv1a64(impl.sourceKey))};
+        if (!compileTU(st, impl.sourceKey, impl.source, obj, &flags)) {
+            return false;
+        }
     }
     return true;
 }
@@ -644,6 +722,26 @@ int buildWithToolchain(const BuildRequest& request) {
         return kExitCompileError;
     }
 
+    // Package implementations include their own generated headers by relative
+    // path (`#include "index.hpp"`, `#include "src/index.hpp"`). Add every
+    // directory that holds one before the header fingerprint is taken, so a
+    // package update retires the objects built against the old headers.
+    if (request.packageImplementations != nullptr) {
+        for (const BuildRequest::PackageImplementation& impl :
+             *request.packageImplementations) {
+            for (const fs::path& dir : impl.includeDirs) {
+                bool seen = false;
+                for (const fs::path& existing : layout.includeDirs) {
+                    if (existing == dir) {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (!seen) layout.includeDirs.push_back(dir);
+            }
+        }
+    }
+
     selectRuntimeSources(opt, layout, programText);
 
     // --show-runtime: leave the generated C++ and the exact runtime support it
@@ -681,6 +779,9 @@ int buildWithToolchain(const BuildRequest& request) {
     state.showProgress = request.execute && !opt.verbose && isTty(stderr);
 
     if (!compileExtras(state, request)) {
+        return kExitCompileError;
+    }
+    if (!compilePackageImplementations(state, request)) {
         return kExitCompileError;
     }
     if (!compileProgram(state, cppPath, objPath, entry.string())) {

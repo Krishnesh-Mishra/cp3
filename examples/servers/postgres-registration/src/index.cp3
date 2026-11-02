@@ -1,0 +1,130 @@
+import { createServer } from "std/network";
+import console from "std/console";
+import { env } from "std/env";
+import process from "std/process";
+import {
+  clear,
+  connectTo,
+  execute,
+  lastError,
+  query,
+  query1,
+  query2,
+  resultError,
+  resultOk,
+  rowCount,
+  value
+} from "postgres";
+
+// postgres-registration -- an HTTP service that writes real rows to PostgreSQL.
+//
+//   GET  /healthz     -> 200 {"status":"ok"}
+//   POST /register    -> 201 {"id":n,"name":"...","email":"..."}
+//                        400 for a missing/empty field
+//                        409 for a duplicate email
+//   GET  /users/:id   -> 200 {"id":n,"name":"...","email":"..."}
+//                        404 when no such row
+//
+// The package is installed with:
+//
+//   cp3 install https://github.com/Krishnesh-Mishra/postgres-cp3
+//
+// PostgreSQL connection settings come from the environment (see README.md).
+// The table is created on startup, so a fresh database is enough.
+
+interface RegisterBody {
+  name: string;
+  email: string;
+}
+
+const pgHost = env.get<string>("CP3_PG_HOST", { default: "localhost" });
+const pgPort = env.get<number>("CP3_PG_PORT", { default: 5432 });
+const pgDb = env.get<string>("CP3_PG_DB", { default: "postgres" });
+const pgUser = env.get<string>("CP3_PG_USER", { default: "postgres" });
+const pgPassword = env.get<string>("CP3_PG_PASSWORD", { default: "postgres" });
+const httpPort = env.get<number>("PORT", { default: 3000 });
+
+const conn = connectTo(pgHost, pgPort, pgDb, pgUser, pgPassword);
+if (conn <= 0) {
+  console.error(`postgres connection failed: ${lastError()}`);
+  process.exit(1);
+}
+
+const schema = execute(
+  conn,
+  "CREATE TABLE IF NOT EXISTS users (" +
+    "id BIGSERIAL PRIMARY KEY, " +
+    "name TEXT NOT NULL, " +
+    "email TEXT NOT NULL UNIQUE, " +
+    "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"
+);
+if (schema < 0) {
+  console.error("could not create the users table");
+  process.exit(1);
+}
+
+const app = createServer({ threads: 1 });
+
+app.get("/healthz", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+app.post("/register", async (req, res) => {
+  const body = await req.json<RegisterBody>();
+  if (body.name === "" || body.email === "") {
+    res.json({ error: "name and email are required" }, 400);
+    return;
+  }
+
+  const result = query2(
+    conn,
+    "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id",
+    body.name,
+    body.email
+  );
+  if (!resultOk(result)) {
+    const message = resultError(result);
+    clear(result);
+    const status = message.includes("duplicate key") ? 409 : 500;
+    res.json({ error: message }, status);
+    return;
+  }
+
+  const id = parseInt(value(result, 0, 0));
+  clear(result);
+  res.json({ id: id, name: body.name, email: body.email }, 201);
+});
+
+app.get("/users/:id", (req, res) => {
+  const id = `${req.params.get("id")}`;
+  const result = query1(
+    conn,
+    "SELECT id, name, email FROM users WHERE id = $1",
+    id
+  );
+  if (!resultOk(result)) {
+    const message = resultError(result);
+    clear(result);
+    res.json({ error: message }, 500);
+    return;
+  }
+  if (rowCount(result) === 0) {
+    clear(result);
+    res.json({ error: "user not found" }, 404);
+    return;
+  }
+
+  const idText = value(result, 0, 0);
+  const name = value(result, 0, 1);
+  const email = value(result, 0, 2);
+  clear(result);
+  res.json({ id: parseInt(idText), name: name, email: email });
+});
+
+app.use((req, res, next) => {
+  res.status(404).json({ error: "not found", path: req.path });
+});
+
+app.listen(httpPort, () => {
+  console.log(`postgres registration listening on http://localhost:${httpPort}`);
+});

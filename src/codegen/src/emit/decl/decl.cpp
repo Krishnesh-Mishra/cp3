@@ -244,6 +244,11 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
     const std::string signatureDef = prefix + head + joinStrings(paramsDef, ", ") + ")";
     line(decls, 1, signatureDecl + ";");
 
+    // A package's generated entry is a declaration surface. Its C++ body is
+    // compiled from the archive's `pak/` sources and linked; emitting a stub
+    // here would give the linker a definition that returns garbage.
+    if (packageSurfaceOnly_ && !fd.body) return;
+
     // int64 fast path (D64, int_mode.cpp): attempt the body once with every
     // `number` lowered to a guarded std::int64_t. A discarded attempt leaves
     // the ordinary double body below as the only lowering; a kept one is

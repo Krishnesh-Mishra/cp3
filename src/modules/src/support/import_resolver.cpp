@@ -121,18 +121,22 @@ CompilationUnit* ProgramLoader::loadPackage(const std::string& specifier,
                        "' (no package resolver configured)");
         return nullptr;
     }
-    const std::optional<fs::path> entry =
+    const std::optional<PackageEntry> entry =
         packageResolver_(specifier, projectRoot_);
     if (!entry) {
         reportOnce(diagcode::kModuleNotFound, span,
                    "cannot find package '" + specifier + "'");
         return nullptr;
     }
-    CompilationUnit* unit = ensureUnit(*entry);
+    CompilationUnit* unit = ensureUnit(entry->path);
     if (unit == nullptr) {
         reportOnce(diagcode::kModuleNotFound, span,
                    "cannot read package entry for '" + specifier + "'");
+        return nullptr;
     }
+    unit->isPackage = true;
+    unit->packageRoot = entry->root;
+    if (!entry->moduleName.empty()) unit->moduleName = entry->moduleName;
     return unit;
 }
 

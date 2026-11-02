@@ -1,0 +1,12 @@
+{
+  "name": "postgres-registration",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HTTP registration endpoint backed by PostgreSQL through the postgres package",
+  "type": "application",
+  "main": "src/index.cp3",
+  "scripts": {
+    "build": "cp3 build",
+    "start": "cp3 run src/index.cp3"
+  }
+}
