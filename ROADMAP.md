@@ -95,7 +95,7 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | Array | `flatMap`, `findLast`, `findLastIndex`, `at` | Modern query, search, and access methods. | Done |
 | Array | `toSorted`, `toReversed` | Non-mutating array transformation methods (return new arrays). | Done |
 | Object | `assign`, `fromEntries`, `is`, `freeze` | Standard object manipulation, creation, and immutability methods. Today: `keys`, `values`, `entries`. | Planned |
-| String | `codePointAt`, `fromCodePoint`, `matchAll`, `raw` | Unicode-aware and modern string methods. Today: no `charCodeAt` lowering either (typed, but not emitted). | Planned |
+| String | `codePointAt`, `fromCodePoint`, `matchAll`, `raw` | Unicode-aware and modern string methods. | Planned |
 | JSON | `JSON.stringify(value, replacer?, space?)` | Extend the serializer to support pretty printing (for example 2-space indent) and a replacer. Today only a numeric indent is typed and emitted. | Partial |
 | Collections | `ConcurrentMap` | Thread-safe map implementation. | Planned |
 | Promise | Full Promise API | Complete TS-compatible Promise surface. Today: `resolve`, `reject`, `all`, `race`, `allSettled`, `then`, `catch`, `finally`. Missing: `any`, `withResolvers`. | Partial |
