@@ -63,6 +63,19 @@ bool isCppKeyword(const std::string& name) {
 }
 
 std::string mapIdent(const std::string& name) {
+    // `#name` is a JavaScript private member. C++ has no `#` in identifiers,
+    // so map it to a stable ordinary name; access control is already enforced
+    // by sema.
+    if (!name.empty() && name.front() == '#') {
+        std::string out = "cp3_private_";
+        for (const unsigned char c : name.substr(1)) {
+            out.push_back(std::isalnum(c) || c == '_'
+                              ? static_cast<char>(c)
+                              : '_');
+        }
+        if (out == "cp3_private_") out += "member";
+        return out;
+    }
     return isCppKeyword(name) ? name + "_cp3" : name;
 }
 

@@ -123,7 +123,8 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
             ClassMemberModel m;
             m.name = name;
             m.isStatic = p.isStatic;
-            m.isPrivate = p.access == AccessModifier::Private;
+            m.isPrivate = p.access == AccessModifier::Private ||
+                          (!name.empty() && name.front() == '#');
             m.isProtected = p.access == AccessModifier::Protected;
             m.isWeak = p.isWeak;
             m.hasInitializer = p.initializer != nullptr;
@@ -145,10 +146,39 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
             continue;
         }
         if (mp->kind == NodeKind::ConstructorDeclaration) {
+            const auto& cd = static_cast<const ConstructorDeclaration&>(*mp);
+            for (const auto& p : cd.params) {
+                if (!p) continue;
+                if (p->access == AccessModifier::None && !p->isReadonly) {
+                    continue;
+                }
+                const Identifier* id = parameterIdentifier(*p);
+                if (id == nullptr) continue;
+                ClassMemberModel field;
+                field.name = id->name;
+                field.isPrivate = p->access == AccessModifier::Private ||
+                                  (!field.name.empty() &&
+                                   field.name.front() == '#');
+                field.isProtected = p->access == AccessModifier::Protected;
+                field.hasInitializer = true;
+                field.parameterProperty = p.get();
+                if (p->type) {
+                    field.type = modelTypeFromTypeNode(*p->type);
+                } else if (p->defaultValue) {
+                    field.type = widenType(effectiveType(*p->defaultValue));
+                } else {
+                    field.type = Type::unknown();
+                }
+                if (p->optional && !field.type.isUnknown()) {
+                    field.type = Type::nullable(field.type);
+                }
+                rewriteTypeParams(field.type, cm.typeParams);
+                cm.members.push_back(std::move(field));
+            }
             ClassMemberModel m;
             m.name = "constructor";
             m.isMethod = true;
-            m.ctor = &static_cast<const ConstructorDeclaration&>(*mp);
+            m.ctor = &cd;
             cm.members.push_back(std::move(m));
             continue;
         }
@@ -180,7 +210,8 @@ void Generator::collectClassMethodModel(ClassModel& cm,
     ClassMemberModel m;
     m.name = name;
     m.isStatic = md.isStatic;
-    m.isPrivate = md.access == AccessModifier::Private;
+    m.isPrivate = md.access == AccessModifier::Private ||
+                  (!name.empty() && name.front() == '#');
     m.isProtected = md.access == AccessModifier::Protected;
     m.isMethod = true;
     m.isAbstract = md.isAbstract;
@@ -220,7 +251,8 @@ void Generator::collectClassAccessorModel(ClassModel& cm, const ClassMember& mp)
     ClassMemberModel m;
     m.name = name;
     m.isStatic = ad.isStatic;
-    m.isPrivate = ad.access == AccessModifier::Private;
+    m.isPrivate = ad.access == AccessModifier::Private ||
+                  (!name.empty() && name.front() == '#');
     m.isProtected = ad.access == AccessModifier::Protected;
     m.accessor = &ad;
     m.isGetter = ad.accessor == AccessorKind::Get;

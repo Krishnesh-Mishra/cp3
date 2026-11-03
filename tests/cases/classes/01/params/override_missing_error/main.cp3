@@ -1,0 +1,11 @@
+class Base {
+  greet(): string {
+    return "base";
+  }
+}
+
+class Derived extends Base {
+  override missing(): string {
+    return "missing";
+  }
+}

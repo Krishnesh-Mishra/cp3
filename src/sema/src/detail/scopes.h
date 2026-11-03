@@ -172,6 +172,8 @@ struct ClassMemberInfo {
     bool isMethod = false;
     bool isAbstract = false;
     bool isWeak = false;
+    bool isReadonly = false;
+    bool isOverride = false;
     bool hasInitializer = false;
     bool optional = false;
 };

@@ -348,17 +348,31 @@ std::string Generator::memberFieldText(const ClassMemberModel& m) {
     // cannot see type aliases or enum kinds. When it has no spelling, sema's
     // resolved type for the annotation is the authoritative one.
     Type fieldType = untypedAsUnknown(m.type);
-    if (m.field && m.field->type && !classify(fieldType).representable) {
-        if (auto resolved = typeOfNode(*m.field->type)) {
+    const TypeNode* annotation = nullptr;
+    if (m.field && m.field->type) {
+        annotation = m.field->type.get();
+    } else if (m.parameterProperty && m.parameterProperty->type) {
+        annotation = m.parameterProperty->type.get();
+    }
+    if (annotation != nullptr && !classify(fieldType).representable) {
+        if (auto resolved = typeOfNode(*annotation)) {
             fieldType = untypedAsUnknown(*resolved);
         }
     }
+    const Expr* initializer = nullptr;
+    if (m.field) {
+        initializer = m.field->initializer.get();
+    } else if (m.parameterProperty) {
+        initializer = m.parameterProperty->defaultValue.get();
+    }
+    const Node* fieldNode = m.field ? static_cast<const Node*>(m.field)
+                                    : static_cast<const Node*>(m.parameterProperty);
     if (m.isWeak) {
         const std::string pointee = weakPointee(fieldType);
         if (pointee.empty()) {
-            if (m.field) {
+            if (fieldNode != nullptr) {
                 reportUnsupported(
-                    *m.field, diagcode::kTypeMismatch,
+                    *fieldNode, diagcode::kTypeMismatch,
                     "type mismatch: weak field '" + m.name +
                         "' must have a class reference type");
             }
@@ -370,27 +384,26 @@ std::string Generator::memberFieldText(const ClassMemberModel& m) {
     // An explicit `unknown` field has no C++ spelling, but its initializer
     // fixes the representation (`count: unknown = 5`). Infer from the value
     // exactly as an `unknown` method return type does from its body.
-    const bool annotated = m.field != nullptr && m.field->type != nullptr;
-    if (!ci.representable && m.hasInitializer && m.field &&
-        m.field->initializer && (!annotated || fieldType.isUnknown())) {
-        const CppInfo init = info(*m.field->initializer);
+    const bool annotated = annotation != nullptr;
+    if (!ci.representable && m.hasInitializer && initializer != nullptr &&
+        (!annotated || fieldType.isUnknown())) {
+        const CppInfo init = info(*initializer);
         if (init.representable && init.shape != Shape::Void) ci = init;
     }
     if (!ci.representable) {
-        if (m.field) {
+        if (fieldNode != nullptr) {
             reportUnsupported(
-                *m.field, diagcode::kTypeMismatch,
+                *fieldNode, diagcode::kTypeMismatch,
                 "type mismatch: field '" + m.name +
                     "' has a type with no C++ representation");
         }
         return stat + "double " + name + "{}";
     }
-    if (m.hasInitializer && m.field && m.field->initializer) {
-        if (ci.shape == Shape::Optional &&
-            isNullishLiteral(*m.field->initializer)) {
+    if (m.hasInitializer && initializer != nullptr) {
+        if (ci.shape == Shape::Optional && isNullishLiteral(*initializer)) {
             return stat + ci.cpp + " " + name + " = std::nullopt";
         }
-        return stat + ci.cpp + " " + name + " = " + expr(*m.field->initializer);
+        return stat + ci.cpp + " " + name + " = " + expr(*initializer);
     }
     return stat + ci.cpp + " " + name + "{}";
 }
@@ -659,6 +672,16 @@ std::string Generator::ctorBodyText(const ConstructorDeclaration& cd,
         declare(id->name, t);
     }
     std::string body;
+    // Constructor parameter properties are ordinary fields assigned before the
+    // constructor body runs.
+    for (const auto& p : cd.params) {
+        if (!p) continue;
+        if (p->access == AccessModifier::None && !p->isReadonly) continue;
+        const Identifier* id = parameterIdentifier(*p);
+        if (id == nullptr) continue;
+        line(body, indent,
+             "this->" + mapIdent(id->name) + " = " + mapIdent(id->name) + ";");
+    }
     if (cd.body) stmt(*cd.body, body, indent);
     classStack_.pop_back();
     popScope();

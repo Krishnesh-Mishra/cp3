@@ -210,6 +210,7 @@ private:
                          const SourceSpan& span);
     void checkAbstractConformance(const ClassDeclaration& c,
                                   const ClassInfo& ci);
+    void checkClassHierarchy(const ClassDeclaration& c, const ClassInfo& ci);
     void checkClassBodies(ClassDeclaration& c);
     void checkClassMemberBody(ClassMember& m);
     void analyzeMethodBody(MethodDeclaration& md);

@@ -1,0 +1,6 @@
+class Counter {
+  readonly value: number = 1;
+}
+
+const counter = new Counter();
+counter.value = 2;

@@ -141,9 +141,12 @@ void Analyzer::collectClassProperty(PropertyDeclaration& p, ClassInfo& info) {
     mi.name = name;
     mi.span = p.span;
     mi.isStatic = p.isStatic;
-    mi.isPrivate = p.access == AccessModifier::Private;
+    mi.isPrivate = p.access == AccessModifier::Private ||
+                   (!name.empty() && name.front() == '#');
     mi.isProtected = p.access == AccessModifier::Protected;
     mi.isWeak = p.isWeak;
+    mi.isReadonly = p.isReadonly;
+    mi.isOverride = p.isOverride;
     mi.hasInitializer = p.initializer != nullptr;
     mi.optional = p.optional;
     if (p.type) {
@@ -193,10 +196,13 @@ void Analyzer::collectClassMethod(MethodDeclaration& md, ClassInfo& info) {
     mi.name = name;
     mi.span = md.span;
     mi.isStatic = md.isStatic;
-    mi.isPrivate = md.access == AccessModifier::Private;
+    mi.isPrivate = md.access == AccessModifier::Private ||
+                   (!name.empty() && name.front() == '#');
     mi.isProtected = md.access == AccessModifier::Protected;
     mi.isMethod = true;
     mi.isAbstract = md.isAbstract;
+    mi.isReadonly = md.isReadonly;
+    mi.isOverride = md.isOverride;
     mi.optional = md.optional;
     mi.sig = sig;
     mi.type = Type::function(sig.params, sig.ret);
@@ -219,6 +225,51 @@ void Analyzer::collectClassMember(ClassMember& m, ClassInfo& info) {
             sigs_[cd.nodeId] = sig;
             info.ctorSig = sig;
             info.hasCtor = true;
+            // Constructor parameter properties (`constructor(public x: T)`)
+            // declare an instance field and initialize it from the argument.
+            for (const auto& pp : cd.params) {
+                if (!pp) continue;
+                if (pp->access == AccessModifier::None && !pp->isReadonly) {
+                    continue;
+                }
+                if (pp->isRest || !pp->name ||
+                    pp->name->kind != NodeKind::Identifier) {
+                    report(diagcode::kUnexpectedToken, pp->span,
+                           "a constructor parameter property must be a simple "
+                           "identifier");
+                    continue;
+                }
+                const auto& id = static_cast<const Identifier&>(*pp->name);
+                bool duplicate = false;
+                for (const ClassMemberInfo& existing : info.members) {
+                    if (existing.name == id.name) duplicate = true;
+                }
+                if (duplicate) {
+                    report(diagcode::kDuplicateMember, pp->span,
+                           "duplicate class member '" + id.name + "'");
+                    continue;
+                }
+                ClassMemberInfo field;
+                field.name = id.name;
+                field.span = pp->span;
+                field.isPrivate = pp->access == AccessModifier::Private;
+                field.isProtected = pp->access == AccessModifier::Protected;
+                field.isReadonly = pp->isReadonly;
+                field.hasInitializer = true;
+                field.optional = pp->optional;
+                if (pp->type) {
+                    field.type = resolveType(*pp->type);
+                } else if (pp->defaultValue) {
+                    field.type = widen(inferExpr(*pp->defaultValue));
+                } else {
+                    report(diagcode::kTypeMismatch, pp->span,
+                           "parameter property '" + id.name +
+                               "' needs a type annotation or a default value");
+                    field.type = Type::unknown();
+                }
+                if (pp->optional) field.type = nullableIf(true, field.type);
+                info.members.push_back(std::move(field));
+            }
             return;
         }
         case NodeKind::AccessorDeclaration: {
@@ -237,7 +288,8 @@ void Analyzer::collectClassMember(ClassMember& m, ClassInfo& info) {
             mi.name = name;
             mi.span = ad.span;
             mi.isStatic = ad.isStatic;
-            mi.isPrivate = ad.access == AccessModifier::Private;
+            mi.isPrivate = ad.access == AccessModifier::Private ||
+                           (!name.empty() && name.front() == '#');
             mi.isProtected = ad.access == AccessModifier::Protected;
             mi.hasInitializer = true;  // a getter satisfies every read
             mi.type = ad.returnType ? resolveType(*ad.returnType)
@@ -253,7 +305,35 @@ void Analyzer::collectClassMember(ClassMember& m, ClassInfo& info) {
 // =============================================================================
 // Abstract conformance + bodies
 // =============================================================================
+void Analyzer::checkClassHierarchy(const ClassDeclaration& c,
+                                   const ClassInfo& ci) {
+    (void)c;
+    const ClassInfo* base =
+        ci.baseName.empty() ? nullptr : findClass(ci.baseName);
+    for (const ClassMemberInfo& m : ci.members) {
+        if (!m.isOverride) continue;
+        const ClassMemberInfo* inherited =
+            base ? findClassMemberChain(*base, m.name, nullptr) : nullptr;
+        if (inherited == nullptr) {
+            report(diagcode::kMemberNotFound, m.span,
+                   "member '" + m.name + "' is marked override but " +
+                       (base ? "base class '" + base->name + "' has no such "
+                               "member"
+                             : "the class has no base class"));
+            continue;
+        }
+        if (m.isMethod != inherited->isMethod) {
+            report(diagcode::kTypeMismatch, m.span,
+                   "member '" + m.name +
+                       "' cannot override a member of a different kind");
+        }
+    }
+}
+
 void Analyzer::checkClassBodies(ClassDeclaration& c) {
+    if (const ClassInfo* ci = findClass(c.name)) {
+        checkClassHierarchy(c, *ci);
+    }
     if (!findClass(c.name)) return;
     // Generic class bodies check once, with the parameters bound to TypeParam.
     TypeParamScope saved;
@@ -517,6 +597,17 @@ Type Analyzer::userClassMember(const Type& cls, const std::string& prop,
                "property '" + prop + "' of class '" + owner->name + "' is " +
                    (m->isPrivate ? "private" : "protected"));
         return Type::unknown();
+    }
+    if (assignTarget_ && m->isReadonly) {
+        const bool inOwnConstructor =
+            !classStack_.empty() && classStack_.back() == owner->name &&
+            !funcStack_.empty() && funcStack_.back().isCtor;
+        if (!inOwnConstructor) {
+            report(diagcode::kTypeMismatch, span,
+                   "cannot assign to readonly property '" + prop +
+                       "' outside its class constructor");
+            return Type::unknown();
+        }
     }
     Type t = classMemberType(*m);
     // A generic class instantiation substitutes its type arguments into the
