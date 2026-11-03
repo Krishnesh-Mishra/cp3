@@ -108,8 +108,13 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | `std/os` | `homedir`, `tmpdir`, `freemem`, `totalmem`, `loadavg`, `networkInterfaces` | Thin OS calls for system environment and resource info. Today: `homedir`, `tmpdir`, `hostname`, `platform`, `cpus`, `totalMemory`, `freeMemory` (note the spelling difference from Node's `totalmem`/`freemem`). | Partial |
 | `std/io` | `waitReadable`, `waitWritable`, `pollUntilDone`, `POLL_*` | Shared-`EventLoop` fd readiness for libraries with a socket and a non-blocking step API. Phase 1 is the two wait primitives; phase 2 is the shared helper. Phase 3 (`import native async`) is deferred. | Done |
 
-#### I. Non-blocking native I/O (v0.2 phases 1-2)
+#### J. Editor and VS Code extension
 
+| Item | Module / command | Implementation notes | Status |
+| --- | --- | --- | --- |
+| `cp3.run` | `cp3.run` in `cp3-vscode` | A command contributed by the VS Code extension, surfaced as a **run button in the editor title bar** (`editor/title`) when `editorLangId == cp3`. Clicking it saves the active document, resolves `cp3.compilerPath`, runs `<cp3c> run <file>`, streams stdout/stderr into the `cp3 Run` output channel (no terminal panel is opened), and reports non-zero exits with a `Show Output` notification. The command is also in the command palette and the editor context menu. | Done |
+
+#### I. Non-blocking native I/O (v0.2 phases 1-2)
 `async` only schedules continuations on the one event loop. It does not make a
 blocking C call concurrent. v0.2 therefore separates two mechanisms and ships
 only the socket/reactor path first:

@@ -65,6 +65,11 @@
       {
         "command": "cp3.organizeImports",
         "title": "CP3: Organize Imports"
+      },
+      {
+        "command": "cp3.run",
+        "title": "CP3: Run Current File",
+        "icon": "$(play)"
       }
     ],
     "taskDefinitions": [
@@ -119,6 +124,13 @@
       }
     },
     "menus": {
+      "editor/title": [
+        {
+          "command": "cp3.run",
+          "when": "editorLangId == cp3",
+          "group": "navigation@1"
+        }
+      ],
       "editor/context": [
         {
           "command": "editor.action.formatDocument",
@@ -129,11 +141,20 @@
           "command": "cp3.organizeImports",
           "when": "editorLangId == cp3",
           "group": "1_modification@2"
+        },
+        {
+          "command": "cp3.run",
+          "when": "editorLangId == cp3",
+          "group": "1_modification@3"
         }
       ],
       "commandPalette": [
         {
           "command": "cp3.organizeImports",
+          "when": "editorLangId == cp3"
+        },
+        {
+          "command": "cp3.run",
           "when": "editorLangId == cp3"
         }
       ]

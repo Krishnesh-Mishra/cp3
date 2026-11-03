@@ -29,6 +29,8 @@
 // with a clear message.
 
 import * as vscode from "vscode";
+import { spawn } from "node:child_process";
+import * as path from "node:path";
 import {
     CloseAction,
     ErrorAction,
@@ -55,7 +57,11 @@ const TASK_SOURCE = "cp3";
 const PROBLEM_MATCHER = "$cp3c";
 const DEBUG_TYPE = "cp3";
 
+const RUN_COMMAND = "cp3.run";
+const RUN_OUTPUT_NAME = "cp3 Run";
+
 let outputChannel: vscode.LogOutputChannel | undefined;
+let runOutput: vscode.OutputChannel | undefined;
 let client: LanguageClient | undefined;
 
 // The start attempt whose client is currently installed. Anything reported by
@@ -161,6 +167,107 @@ function errorHandler(attempt: StartAttempt): ErrorHandler {
             return { action: CloseAction.DoNotRestart, handled: true };
         },
     };
+}
+
+function runOutputChannel(): vscode.OutputChannel {
+    runOutput ??= vscode.window.createOutputChannel(RUN_OUTPUT_NAME);
+    return runOutput;
+}
+
+// A single `cp3.run` invocation at a time: the editor's top-right button is
+// reachable by accident, so starting a second program while one is still
+// running is reported instead of silently overlapping output.
+let runInFlight = false;
+
+/** Saves the active cp3 document, builds and runs it, streaming output to
+ * the `cp3 Run` output channel (no terminal is opened). */
+async function runActiveCp3File(): Promise<void> {
+    if (runInFlight) {
+        void vscode.window.showInformationMessage(
+            "cp3: a run is already in progress; see the \"cp3 Run\" output channel."
+        );
+        return;
+    }
+    const editor = vscode.window.activeTextEditor;
+    if (editor?.document.languageId !== LANGUAGE_ID) {
+        void vscode.window.showErrorMessage("cp3: open a .cp3 file to run.");
+        return;
+    }
+    const { document } = editor;
+    if (document.isDirty) {
+        try {
+            await document.save();
+        } catch (error) {
+            void vscode.window.showErrorMessage(
+                `cp3: could not save ${document.fileName}: ${String(error)}`
+            );
+            return;
+        }
+    }
+    if (document.uri.scheme !== "file") {
+        void vscode.window.showErrorMessage("cp3: only files on disk can be run.");
+        return;
+    }
+    const file = document.uri.fsPath;
+    const setting = vscode.workspace
+        .getConfiguration()
+        .get<string>(COMPILER_PATH_SETTING, DEFAULT_COMPILER_PATH);
+    const cwd =
+        vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ??
+        workspaceCwd() ??
+        path.dirname(file);
+    const command = resolveCompilerPath(setting, cwd);
+    if (command === undefined) {
+        void vscode.window.showErrorMessage(missingCompilerMessage(setting), "Open Settings").then((choice) => {
+            if (choice === "Open Settings") {
+                void vscode.commands.executeCommand(
+                    "workbench.action.openSettings",
+                    COMPILER_PATH_SETTING
+                );
+            }
+        });
+        return;
+    }
+    const output = runOutputChannel();
+    output.clear();
+    output.appendLine(`> "${command}" run "${file}"`);
+    output.appendLine("");
+    // Show the channel but keep keyboard focus in the editor.
+    output.show(true);
+    runInFlight = true;
+    output.appendLine(`(cwd: ${cwd})`);
+    output.appendLine("");
+    const child = spawn(command, ["run", file], { cwd, windowsHide: true });
+    child.stdout?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => output.append(chunk));
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (chunk: string) => output.append(chunk));
+    child.on("error", (error) => {
+        output.appendLine(`cp3: failed to start: ${error.message}`);
+        void vscode.window.showErrorMessage(
+            `cp3: failed to start (${command}): ${error.message}`
+        );
+        runInFlight = false;
+    });
+    child.on("close", (code, signal) => {
+        runInFlight = false;
+        const summary =
+            code !== null
+                ? `--- exit code ${String(code)} ---`
+                : `--- terminated by signal ${String(signal)} ---`;
+        output.appendLine("");
+        output.appendLine(summary);
+        if (code !== null && code !== 0) {
+            void vscode.window.showErrorMessage(
+                `cp3: run failed (exit code ${String(code)}).`,
+                "Show Output"
+            ).then((choice) => {
+                if (choice === "Show Output") {
+                    runOutputChannel().show();
+                }
+            });
+        }
+    });
 }
 
 function workspaceCwd(): string | undefined {
@@ -406,9 +513,13 @@ class Cp3DebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     context.subscriptions.push(output());
+    context.subscriptions.push(runOutputChannel());
     registerEditorFeatures(context);
     context.subscriptions.push(
         vscode.commands.registerCommand(RESTART_COMMAND, () => startClient(true))
+    );
+    context.subscriptions.push(
+        vscode.commands.registerCommand(RUN_COMMAND, () => runActiveCp3File())
     );
     context.subscriptions.push(
         vscode.tasks.registerTaskProvider(TASK_TYPE, new Cp3TaskProvider())

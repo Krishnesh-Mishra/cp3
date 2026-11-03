@@ -103,8 +103,11 @@ fonts, and a 128x128 PNG).
 
 | Command | What it does |
 | --- | --- |
+| `CP3: Run Current File` | The **play button in the editor's toolbar (top-right corner)** of a `.cp3` file. Saves and runs it through the configured toolchain (`<cp3.compilerPath> run <file>`) and streams output to the `cp3 Run` output channel — no terminal panel is opened. Non-zero exits show a `Show Output` notification. |
 | `cp3: Restart Language Server` | Stops the running server and starts it again from the current `cp3.compilerPath`. |
 | `CP3: Organize Imports` | Sorts a contiguous group of regular imports. Side-effect and multiline imports are left untouched. |
+
+The run button is also available from the Command Palette and the editor context menu. It only appears when a CP3 file is the active editor.
 
 The editor context menu also exposes **Format Document** for CP3 files. It
 uses the formatter provided by `cp3c lsp`; the same command is available from
