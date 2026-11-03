@@ -1,0 +1,7 @@
+import console from "std/console";
+
+const target: { a: number, b: number } = { a: 1, b: 2 };
+const result = Object.assign(target, { a: 9 });
+console.log(`${result.a}`);
+console.log(`${result.b}`);
+console.log(`${target.a}`);

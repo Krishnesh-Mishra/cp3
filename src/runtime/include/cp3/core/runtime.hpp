@@ -21,6 +21,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -188,6 +189,26 @@ std::string toString(Undefined);        // -> "undefined"
 inline std::string nativeString(const char* text) {
     return text == nullptr ? std::string() : std::string(text);
 }
+
+// --- object utilities (spec 15.2) --------------------------------------------
+//
+// `Object.assign` lowers to explicit field copying in the generated unit and
+// `Object.freeze` is a no-op on shared handles; the only ABI helper is
+// `Object.is`, which follows JS exactly: `NaN === NaN`, `-0 !== +0`, and
+// reference handles compare by identity.
+inline bool cp3_object_is(double a, double b) {
+    // Object.is: NaN equals NaN (unlike ==), and -0 is not equal to +0.
+    if (std::isnan(a) || std::isnan(b)) return std::isnan(a) && std::isnan(b);
+    const bool sa = std::signbit(a);
+    const bool sb = std::signbit(b);
+    return a == b && sa == sb;
+}
+inline bool cp3_object_is(const std::string& a, const std::string& b) {
+    return a == b;
+}
+inline bool cp3_object_is(bool a, bool b) { return a == b; }
+// The reference-handle overload lives in value.hpp (which includes this
+// header), so it can name `Ref<T>` without a cycle.
 
 // --- global numeric parsing builtins (STDLIB docs section 3) ----------------
 //

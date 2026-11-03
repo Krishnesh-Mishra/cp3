@@ -94,7 +94,7 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | Array | Callback signature `(value, index, array)` | Standardize every array iteration callback to the JS/TS shape. Callbacks may declare any prefix of `(value, index, array)`. | Done |
 | Array | `flatMap`, `findLast`, `findLastIndex`, `at` | Modern query, search, and access methods. | Done |
 | Array | `toSorted`, `toReversed` | Non-mutating array transformation methods (return new arrays). | Done |
-| Object | `assign`, `fromEntries`, `is`, `freeze` | Standard object manipulation, creation, and immutability methods. Today: `keys`, `values`, `entries`. | Planned |
+| Object | `assign`, `is`, `freeze` | Standard object manipulation, creation, and immutability methods. Today: `keys`, `values`, `entries`, `assign`, `is`, `freeze`. | Partial |
 | String | `codePointAt`, `fromCodePoint`, `matchAll`, `raw` | Unicode-aware and modern string methods. | Planned |
 | JSON | `JSON.stringify(value, replacer?, space?)` | Extend the serializer to support pretty printing (for example 2-space indent) and a replacer. Today only a numeric indent is typed and emitted. | Partial |
 | Collections | `ConcurrentMap` | Thread-safe map implementation. | Planned |

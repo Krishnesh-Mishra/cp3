@@ -38,6 +38,70 @@ Type elementTypeOf(const Type& array) {
 }  // namespace
 
 std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
+    if (m.property == "assign" || m.property == "freeze" ||
+        m.property == "is") {
+        if (m.property == "assign") {
+            if (c.arguments.size() < 2 || !c.arguments.front()) {
+                reportCodegenError(c, diagcode::kArityMismatch,
+                                   "arity mismatch: Object.assign expects at "
+                                   "least two arguments");
+                return "nullptr";
+            }
+            // JS semantics: the first argument is the (shared) target, mutated
+            // in place and returned; aliases of the target observe the writes.
+            const Type target = effectiveType(*c.arguments.front());
+            std::string targetName;
+            std::vector<ObjectField> targetFields;
+            if (!objectShapeOf(target, targetName, targetFields)) {
+                reportCodegenError(c, diagcode::kTypeMismatch,
+                                   "Object.assign requires objects with "
+                                   "statically known fields");
+                return "nullptr";
+            }
+            const std::string targetExpr = expr(*c.arguments.front());
+            std::string out =
+                "([&](){ const auto cp3_t = (" + targetExpr +
+                ");";
+            for (std::size_t i = 1; i < c.arguments.size(); ++i) {
+                const Expr* arg = c.arguments[i].get();
+                if (!arg) continue;
+                const Type source = effectiveType(*arg);
+                std::string sourceName;
+                std::vector<ObjectField> sourceFields;
+                if (!objectShapeOf(source, sourceName, sourceFields)) {
+                    reportCodegenError(*arg, diagcode::kTypeMismatch,
+                                       "Object.assign sources must be objects "
+                                       "with statically known fields");
+                    continue;
+                }
+                out += " { const auto& cp3_s = (" + expr(*arg) + "); ";
+                for (const ObjectField& tf : targetFields) {
+                    for (const ObjectField& sf : sourceFields) {
+                        if (sf.name == tf.name &&
+                            sf.type.kind != TypeKind::Function) {
+                            out += "cp3_t->" + mapIdent(tf.name) + " = "
+                                   "cp3_s->" + mapIdent(sf.name) + "; ";
+                        }
+                    }
+                }
+                out += "} ";
+            }
+            out += "return cp3_t; })()";
+            return out;
+        }
+        if (m.property == "freeze") {
+            const std::string recv = expr(*c.arguments.front());
+            // cp3 objects are shared by reference handle; mutating one handle
+            // is visible through all aliases, so a no-op is the correct v0.2
+            // approximation of Object.freeze.
+            return recv;
+        }
+        // Object.is: NaN is considered equal to itself, and +0 is not equal to
+        // -0, matching JS Object.is exactly.
+        const std::string lhs = expr(*c.arguments.front());
+        const std::string rhs = expr(*c.arguments[1]);
+        return "::cp3::runtime::cp3_object_is(" + lhs + ", " + rhs + ")";
+    }
     if (m.property != "keys" && m.property != "values" &&
         m.property != "entries") {
         return std::string();

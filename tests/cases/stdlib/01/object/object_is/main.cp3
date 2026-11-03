@@ -1,0 +1,15 @@
+import console from "std/console";
+
+const a: number = NaN;
+const b: number = NaN;
+const c: number = 0;
+const d: number = -0;
+const e: number = 5;
+const f: number = 5;
+const g: string = "5";
+const h: string = "5";
+
+console.log(`${Object.is(a, b)}`);
+console.log(`${Object.is(c, d)}`);
+console.log(`${Object.is(e, f)}`);
+console.log(`${Object.is(g, h)}`);
