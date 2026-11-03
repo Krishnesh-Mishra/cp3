@@ -21,6 +21,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -153,6 +154,16 @@ Ref<T> makeRef(Args&&... args) {
                                    std::forward<Args>(args)...);
 }
 
+// The allocation used for a user class instance: the class hierarchy carries
+// one runtime type stamp, and `instanceof` compares it with the ids of the
+// target class and its statically known descendants.
+template <class T, class... Args>
+Ref<T> makeTypedRef(std::uint32_t typeId, Args&&... args) {
+    Ref<T> ref = makeRef<T>(std::forward<Args>(args)...);
+    ref->cp3_type_id = typeId;
+    return ref;
+}
+
 // A reference-counted handle for a compiler-proven thread-confined class.
 // It preserves aliasing and destruction semantics while using a plain count;
 // the compiler emits it only when no worker/parallel boundary, weak reference,
@@ -268,6 +279,13 @@ LocalRef<T> makeLocalRef(Args&&... args) {
         throw;
     }
     return LocalRef<T>(storage);
+}
+
+template <class T, class... Args>
+LocalRef<T> makeLocalTypedRef(std::uint32_t typeId, Args&&... args) {
+    LocalRef<T> ref = makeLocalRef<T>(std::forward<Args>(args)...);
+    ref->cp3_type_id = typeId;
+    return ref;
 }
 
 // A cp3 array `T[]`. Arrays are reference types (spec §10), so the handle is

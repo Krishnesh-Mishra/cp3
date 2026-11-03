@@ -516,6 +516,8 @@ private:
     std::string unaryText(UnaryOp op) const;
     Type inferUpdate(UpdateExpr& up);
     Type inferBinary(BinaryExpr& be);
+    // `x instanceof C`, where C is a class name (not an expression value).
+    Type inferInstanceof(BinaryExpr& be);
     Type evalBinary(BinaryOp op, const Type& l, const Type& r,
                     const SourceSpan& span);
     // Native arithmetic/bitwise result; nullopt lets comparison/equality

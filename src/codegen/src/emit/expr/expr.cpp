@@ -414,6 +414,7 @@ std::string Generator::cond(const Expr& e) {
 }
 
 std::string Generator::emitBinary(const BinaryExpr& b) {
+    if (b.op == BinaryOp::Instanceof) return emitInstanceof(b);
     // A comparison may lower a `%` operand without the `-0.0` bail (exprCmp).
     const bool cmp = isComparisonOp(b.op);
     const CppInfo L = info(*b.left);
@@ -508,6 +509,8 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
             return emitEquality(b, L, R, lhs, rhs);
         case BinaryOp::In:
             return emitInOperator(b);
+        case BinaryOp::Instanceof:
+            return emitInstanceof(b);
     }
     return "false";
 }
@@ -586,6 +589,86 @@ std::string Generator::emitInObject(const BinaryExpr& b, const Type& container) 
         if (field.name == name) return "true";
     }
     return "false";
+}
+
+std::string Generator::emitInstanceof(const BinaryExpr& b) {
+    if (!b.left || !b.right || b.right->kind != NodeKind::Identifier) {
+        reportTypeError(b, "the right operand of 'instanceof' must be a class name");
+        return "false";
+    }
+    const std::string targetName =
+        static_cast<const Identifier&>(*b.right).name;
+    ModelRegistry& reg = ModelRegistry::get();
+    const ClassModel* target = reg.classByName(targetName);
+    if (target == nullptr) {
+        reportTypeError(*b.right,
+                        "the right operand of 'instanceof' must be a class name");
+        return "false";
+    }
+    if (target->builtin) {
+        // Every builtin Error value is a non-null reference. User subclasses
+        // keep the same guarantee. `cp3_truthy` also handles an optional.
+        return "cp3_truthy(" + expr(*b.left) + ")";
+    }
+    const Type lt = effectiveType(*b.left);
+    if (lt.kind == TypeKind::Null || lt.kind == TypeKind::Undefined) {
+        return "false";
+    }
+    bool optional = lt.kind == TypeKind::Nullable;
+    const Type* inner = nullptr;
+    if (lt.kind == TypeKind::Nullable && !lt.parts.empty()) {
+        inner = &lt.parts.front();
+    } else if (lt.kind == TypeKind::Union) {
+        int values = 0;
+        for (const Type& part : lt.parts) {
+            if (part.kind == TypeKind::Null ||
+                part.kind == TypeKind::Undefined) {
+                continue;
+            }
+            ++values;
+            inner = &part;
+        }
+        if (values == 1) optional = true;
+    }
+    if (!(lt.kind == TypeKind::Class || lt.kind == TypeKind::Unknown ||
+          lt.kind == TypeKind::Error || optional)) {
+        return "false";
+    }
+    if (optional && (inner == nullptr || inner->kind != TypeKind::Class)) {
+        return "false";
+    }
+    const ClassModel* leftModel =
+        classModelOf(optional && inner != nullptr ? *inner : lt);
+    if (leftModel != nullptr && leftModel->builtin) return "false";
+
+    std::vector<std::string> ids;
+    for (ClassModel* cm : reg.allClasses()) {
+        if (cm == nullptr || cm->builtin) continue;
+        const ClassModel* k = cm;
+        bool matches = false;
+        int guard = 0;
+        while (k != nullptr && guard++ < 64) {
+            if (k->name == targetName) {
+                matches = true;
+                break;
+            }
+            k = k->baseName.empty() ? nullptr : reg.classByName(k->baseName);
+        }
+        if (matches) ids.push_back(std::to_string(cm->typeId) + "u");
+    }
+    if (ids.empty()) return "false";
+    std::string check;
+    for (std::size_t i = 0; i < ids.size(); ++i) {
+        if (i != 0) check += " || ";
+        check += (optional ? "(*cp3_obj)" : "cp3_obj") +
+                 std::string("->cp3_type_id == ") + ids[i];
+    }
+    const std::string object = expr(*b.left);
+    if (object.empty()) return "false";
+    const std::string guard = optional ? "cp3_obj.has_value()"
+                                       : "cp3_obj != nullptr";
+    return "([&]() { auto cp3_obj = " + object + "; return " + guard +
+           " && (" + check + "); }())";
 }
 
 // Native (`r_'...'` / `c_'...'`) integral operators keep the raw C++ operator:

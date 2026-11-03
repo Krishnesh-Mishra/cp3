@@ -208,6 +208,12 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
     const ClassModel* base =
         cm.baseName.empty() ? nullptr
                             : ModelRegistry::get().classByName(cm.baseName);
+    // The first non-builtin class in an inheritance chain owns the runtime type
+    // stamp. Every `new` site overwrites it with the concrete class id.
+    if (base == nullptr || base->builtin) {
+        line(out, indent + 1,
+             "unsigned int cp3_type_id = " + std::to_string(cm.typeId) + "u;");
+    }
     bool ownCtor = false;
     for (const ClassMemberModel& m : cm.members) {
         if (m.ctor != nullptr) {

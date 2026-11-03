@@ -1,0 +1,14 @@
+import console from "std/console";
+
+class Dog {
+  name: string = "dog";
+
+  label(): string {
+    return this.name;
+  }
+}
+
+let value: Dog | null = new Dog();
+console.log((value instanceof Dog).toString());
+value = null;
+console.log((value instanceof Dog).toString());

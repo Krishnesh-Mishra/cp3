@@ -1,0 +1,29 @@
+import console from "std/console";
+
+class Animal {
+  speak(): string {
+    return "...";
+  }
+}
+
+class Dog extends Animal {
+  speak(): string {
+    return "woof";
+  }
+}
+
+class Cat extends Animal {
+  speak(): string {
+    return "meow";
+  }
+}
+
+const dog: Animal = new Dog();
+const cat: Animal = new Cat();
+const animal: Animal = new Animal();
+
+console.log((dog instanceof Dog).toString());
+console.log((dog instanceof Animal).toString());
+console.log((cat instanceof Dog).toString());
+console.log((animal instanceof Animal).toString());
+console.log((animal instanceof Dog).toString());

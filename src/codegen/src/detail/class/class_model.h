@@ -20,6 +20,7 @@
 // =============================================================================
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -120,6 +121,10 @@ struct ClassModel {
     bool typeParamsRecorded = false;
     const ClassDeclaration* decl = nullptr;
     std::string baseName; // `extends` target ("" for none)
+    // A stable per-unit id stamped into every constructed instance. The field
+    // itself lives in the first non-builtin class of the chain; `instanceof`
+    // compares against the ids of the target and its known descendants.
+    std::uint32_t typeId = 0;
     std::vector<std::string> typeParams;  // generic class parameters
     std::vector<ClassMemberModel> members;
 };
@@ -191,6 +196,7 @@ private:
     int objectCounter_ = 0;
     int litCounter_ = 0;
     int ifaceCounter_ = 0;
+    std::uint32_t typeIdCounter_ = 1;
 
     int localClassCounter_ = 0;
 };

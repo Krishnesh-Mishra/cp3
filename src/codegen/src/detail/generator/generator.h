@@ -316,6 +316,7 @@ private:
     // over an array or a typed view, a field test over a fixed-shape object.
     std::string emitInOperator(const BinaryExpr& b);
     std::string emitInObject(const BinaryExpr& b, const Type& container);
+    std::string emitInstanceof(const BinaryExpr& b);
     // A construction: the class / worker / network / collections / emitter /
     // family dispatch.
     std::string emitNewExprValue(const NewExpr& n);

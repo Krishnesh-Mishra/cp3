@@ -318,9 +318,13 @@ std::string Generator::emitModelNew(const NewExpr& n) {
                 ec.representable && ec.shape != Shape::Void ? ec.cpp : "double");
         }
     }
-    return std::string("::cp3::runtime::") +
-           (cm->localRef ? "makeLocalRef<" : "makeRef<") + self + ">(" +
-           joinStrings(texts, ", ") + ")";
+    const std::string factory =
+        cm->localRef ? "makeLocalTypedRef" : "makeTypedRef";
+    std::string out = "::cp3::runtime::" + factory + "<" + self + ">(" +
+                      std::to_string(cm->typeId) + "u";
+    if (!texts.empty()) out += ", " + joinStrings(texts, ", ");
+    out += ")";
+    return out;
 }
 
 // A member read: `C.staticField`, `(recv)->field` on a class handle, an

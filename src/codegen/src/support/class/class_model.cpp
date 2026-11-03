@@ -364,6 +364,7 @@ void ModelRegistry::reset() {
     objectCounter_ = 0;
     litCounter_ = 0;
     localClassCounter_ = 0;
+    typeIdCounter_ = 1;
 }
 
 void ModelRegistry::registerBuiltinErrorClasses() {
@@ -422,6 +423,7 @@ ClassModel& ModelRegistry::addClass(const std::string& name, bool local,
     cm.local = local;
     cm.decl = decl;
     cm.structName = mapIdent(name);
+    cm.typeId = typeIdCounter_++;
     cm.cpp = local ? cm.structName
                    : "::" + namesp_ + "::" + cm.structName;
     classOrder_.push_back(name);

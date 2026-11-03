@@ -128,7 +128,49 @@ Type Analyzer::inferUpdate(UpdateExpr& up) {
 // =============================================================================
 // Binary + logical + conditional
 // =============================================================================
+Type Analyzer::inferInstanceof(BinaryExpr& be) {
+    Type l = be.left ? inferExpr(*be.left) : Type::unknown();
+    const Identifier* id =
+        be.right && be.right->kind == NodeKind::Identifier
+            ? static_cast<const Identifier*>(be.right.get())
+            : nullptr;
+    const bool targetKnown =
+        id != nullptr &&
+        (findClass(id->name) != nullptr || isErrorClassName(id->name));
+    if (!targetKnown) {
+        report(diagcode::kTypeMismatch, be.right ? be.right->span : be.span,
+               "the right operand of 'instanceof' must be a class name");
+    }
+    bool classLike = l.kind == TypeKind::Class || l.kind == TypeKind::Unknown ||
+                     l.kind == TypeKind::Error || l.kind == TypeKind::Null ||
+                     l.kind == TypeKind::Undefined || isPermissive(l);
+    if (l.kind == TypeKind::Nullable && !l.parts.empty() &&
+        l.parts.front().kind == TypeKind::Class) {
+        classLike = true;
+    }
+    if (l.kind == TypeKind::Union) {
+        int values = 0;
+        bool oneClass = false;
+        for (const Type& part : l.parts) {
+            if (part.kind == TypeKind::Null ||
+                part.kind == TypeKind::Undefined) {
+                continue;
+            }
+            ++values;
+            oneClass = part.kind == TypeKind::Class;
+        }
+        if (values == 1 && oneClass) classLike = true;
+    }
+    if (!classLike) {
+        report(diagcode::kInvalidOperandTypes, be.span,
+               "invalid left operand of type '" + pretty(l) +
+                   "' for 'instanceof'");
+    }
+    return withType(be, Type::boolean());
+}
+
 Type Analyzer::inferBinary(BinaryExpr& be) {
+    if (be.op == BinaryOp::Instanceof) return inferInstanceof(be);
     Type l = be.left ? inferExpr(*be.left) : Type::unknown();
     Type r = be.right ? inferExpr(*be.right) : Type::unknown();
     Type t = evalBinary(be.op, l, r, be.span);
@@ -202,6 +244,8 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
             return Type::boolean();
         case BinaryOp::In:
             return Type::boolean();
+        case BinaryOp::Instanceof:
+            return Type::boolean();
     }
     return Type::unknown();
 }
@@ -229,6 +273,7 @@ std::string Analyzer::binaryText(BinaryOp op) const {
         case BinaryOp::ShiftRight: return ">>";
         case BinaryOp::UnsignedShiftRight: return ">>>";
         case BinaryOp::In: return "in";
+        case BinaryOp::Instanceof: return "instanceof";
     }
     return "?";
 }
