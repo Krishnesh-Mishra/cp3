@@ -4,17 +4,17 @@ chapter: Chapter 1 · The language
 ---
 # Chapter 1 · The language
 
-This chapter describes CP3 source rules: how names are declared, how values are typed, how control flow works, and how the compiler treats functions, objects, modules, and errors. It assumes basic programming experience. Readers coming from JS/TS can start with the [migration guide](#00-welcome/03-javascript-typescript-developers); the pages below define CP3 behavior precisely.
+This chapter describes CP3 source rules: how names are declared, how values are typed, how control flow works, and how the compiler treats functions, objects, modules, and errors. It assumes basic programming experience. Readers coming from JS/TS can start with the [migration guide](../00-welcome/03-javascript-typescript-developers.md); the pages below define CP3 behavior precisely.
 
 ## A useful reading order
 
-1. [Bindings and declarations](#01-language/01-variables-and-bindings/01-bindings): `const`, `let`, `var`, annotations, and initialization.
-2. [Types and inference](#01-language/01-variables-and-bindings/02-types): primitives, arrays, unions, inference, and native type vocabularies.
-3. [Mutability](#01-language/01-variables-and-bindings/03-mutability): binding reassignment versus mutation through a reference.
-4. [Scope and initialization](#01-language/01-variables-and-bindings/04-scope-and-initialization): lexical scope, hoisting, shadowing, and reads before declaration.
-5. [Functions](#01-language/02-functions/01-functions-and-closures) and [control flow](#01-language/03-control-flow/01-conditions-and-loops).
-6. [Arrays and objects](#01-language/04-values-and-objects/01-arrays-and-objects), [classes and interfaces](#01-language/04-values-and-objects/02-classes-and-interfaces), then [enums](#01-language/04-values-and-objects/03-enums).
-7. [Generics](#01-language/05-generics/01-generics), [modules](#01-language/06-modules-and-errors/01-modules), and [errors](#01-language/06-modules-and-errors/02-errors).
+1. [Bindings and declarations](01-variables-and-bindings/01-bindings.md): `const`, `let`, `var`, annotations, and initialization.
+2. [Types and inference](01-variables-and-bindings/02-types.md): primitives, arrays, unions, inference, and native type vocabularies.
+3. [Mutability](01-variables-and-bindings/03-mutability.md): binding reassignment versus mutation through a reference.
+4. [Scope and initialization](01-variables-and-bindings/04-scope-and-initialization.md): lexical scope, hoisting, shadowing, and reads before declaration.
+5. [Functions](02-functions/01-functions-and-closures.md) and [control flow](03-control-flow/01-conditions-and-loops.md).
+6. [Arrays and objects](04-values-and-objects/01-arrays-and-objects.md), [classes and interfaces](04-values-and-objects/02-classes-and-interfaces.md), then [enums](04-values-and-objects/03-enums.md).
+7. [Generics](05-generics/01-generics.md), [modules](06-modules-and-errors/01-modules.md), and [errors](06-modules-and-errors/02-errors.md).
 
 ## Language map
 
@@ -41,7 +41,7 @@ mode = "fast";
 // mode = 3; // type mismatch
 ```
 
-`cp3 check` runs the front end and reports these errors without building the native executable. See [the compilation pipeline](#04-compiler-cli/02-compilation-pipeline) for the boundary between static analysis and native compilation.
+`cp3 check` runs the front end and reports these errors without building the native executable. See [the compilation pipeline](../04-compiler-cli/02-compilation-pipeline.md) for the boundary between static analysis and native compilation.
 
 ## TypeScript resemblance and its limits
 
@@ -53,13 +53,13 @@ Use the compiler diagnostic and tests as evidence. If a source form is rejected,
 
 The `typeSystem` property in the nearest `package.json` can be `typescript`, `cpp`, or `rust`. This selects how supported unprefixed native scalar names are resolved. It does not switch the generated backend from C++ to Rust or C++ source code: CP3 still compiles through its C++ backend.
 
-Explicit prefixed forms such as `r_...`, `c_...`, and `ts_...` select a vocabulary at a type annotation site. These are closed scalar types. Pointer, reference, array, and arbitrary user-defined native type spellings are not general CP3 reference or FFI declarations. See [Project type-system selection](#01-language/07-native-types/01-project-type-system), [Prefixed types](#01-language/07-native-types/02-prefixed-types), and [Native type limitations](#01-language/07-native-types/04-limitations).
+Explicit prefixed forms such as `r_...`, `c_...`, and `ts_...` select a vocabulary at a type annotation site. These are closed scalar types. Pointer, reference, array, and arbitrary user-defined native type spellings are not general CP3 reference or FFI declarations. See [Project type-system selection](07-native-types/01-project-type-system.md), [Prefixed types](07-native-types/02-prefixed-types.md), and [Native type limitations](07-native-types/04-limitations.md).
 
 ## Source types versus runtime representation
 
 Source types express which operations are valid. They do not expose all details of the generated C++ representation. `number` is represented as a floating-point value; native integer annotations can use integer machine types with distinct arithmetic and conversion rules. Arrays and class instances use runtime representations described in Chapter 2.
 
-Do not infer stack allocation, non-atomic reference counting, or vectorization from a source-level type. These are compiler/runtime implementation questions and are documented separately in the [runtime chapter](#02-runtime/00-overview) and [optimization pipeline](#04-compiler-cli/03-optimization-pipeline).
+Do not infer stack allocation, non-atomic reference counting, or vectorization from a source-level type. These are compiler/runtime implementation questions and are documented separately in the [runtime chapter](../02-runtime/00-overview.md) and [optimization pipeline](../04-compiler-cli/03-optimization-pipeline.md).
 
 ## Test corpus as the executable contract
 
@@ -67,14 +67,14 @@ The compiler test cases are grouped by language area under `tests/cases`: for ex
 
 ## Chapter pages
 
-- [Bindings and declarations](#01-language/01-variables-and-bindings/01-bindings)
-- [Types and inference](#01-language/01-variables-and-bindings/02-types)
-- [Functions and closures](#01-language/02-functions/01-functions-and-closures)
-- [Conditions and loops](#01-language/03-control-flow/01-conditions-and-loops)
-- [Arrays and object literals](#01-language/04-values-and-objects/01-arrays-and-objects)
-- [Classes and interfaces](#01-language/04-values-and-objects/02-classes-and-interfaces)
-- [Enums](#01-language/04-values-and-objects/03-enums)
-- [Generics](#01-language/05-generics/01-generics)
-- [Modules and exports](#01-language/06-modules-and-errors/01-modules)
-- [Errors and exceptions](#01-language/06-modules-and-errors/02-errors)
-- [Native type-system selection](#01-language/07-native-types/01-project-type-system)
+- [Bindings and declarations](01-variables-and-bindings/01-bindings.md)
+- [Types and inference](01-variables-and-bindings/02-types.md)
+- [Functions and closures](02-functions/01-functions-and-closures.md)
+- [Conditions and loops](03-control-flow/01-conditions-and-loops.md)
+- [Arrays and object literals](04-values-and-objects/01-arrays-and-objects.md)
+- [Classes and interfaces](04-values-and-objects/02-classes-and-interfaces.md)
+- [Enums](04-values-and-objects/03-enums.md)
+- [Generics](05-generics/01-generics.md)
+- [Modules and exports](06-modules-and-errors/01-modules.md)
+- [Errors and exceptions](06-modules-and-errors/02-errors.md)
+- [Native type-system selection](07-native-types/01-project-type-system.md)

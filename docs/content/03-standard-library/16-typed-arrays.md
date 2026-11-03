@@ -100,7 +100,7 @@ Mutating methods modify the shared backing bytes. A `const` view binding does no
 
 `ArrayBuffer` owns a fixed-length byte sequence. It can be sliced to make a separate buffer, then viewed as a typed array or DataView. Views retain access to the same storage while they exist.
 
-`SharedArrayBuffer` is the shared-storage family supported by the runtime. Sharing storage does not make every access atomic or synchronized. If multiple workers or parallel tasks can touch the same bytes, coordinate access using the supported concurrency mechanisms. See [Thread safety](#02-runtime/10-thread-safety).
+`SharedArrayBuffer` is the shared-storage family supported by the runtime. Sharing storage does not make every access atomic or synchronized. If multiple workers or parallel tasks can touch the same bytes, coordinate access using the supported concurrency mechanisms. See [Thread safety](../02-runtime/10-thread-safety.md).
 
 ## DataView construction
 
@@ -139,7 +139,7 @@ The compiler has narrow range-analysis facts for some typed-array indices. A fac
 
 The current DataView analysis records some possible loop facts, but the facts are not consumed by the per-read emitter. Therefore this compiler does not currently guarantee that a DataView helper call disappears or that a numeric loop is vectorized. Check the generated C++ for the exact loop and require a backend vectorization remark that points to that loop before claiming SIMD.
 
-If the compiler cannot prove an index safe, the checked path preserves out-of-range behavior. Do not modify benchmark input or disable checks to manufacture a faster result. See [Optimization pipeline](#04-compiler-cli/03-optimization-pipeline) and [Inspecting generated C++](#04-compiler-cli/10-generated-cpp-inspection).
+If the compiler cannot prove an index safe, the checked path preserves out-of-range behavior. Do not modify benchmark input or disable checks to manufacture a faster result. See [Optimization pipeline](../04-compiler-cli/03-optimization-pipeline.md) and [Inspecting generated C++](../04-compiler-cli/10-generated-cpp-inspection.md).
 
 ## Test families to consult
 
@@ -159,8 +159,8 @@ These are semantic constraints for optimization: removing a check is correct onl
 
 ## Related pages
 
-- [Byte buffers](#03-standard-library/11-buffer)
-- [Arrays](#03-standard-library/14-arrays)
-- [Typed arrays in the runtime](#02-runtime/06-typed-arrays)
-- [Thread safety](#02-runtime/10-thread-safety)
-- [Performance measurements](#00-welcome/02-performance)
+- [Byte buffers](11-buffer.md)
+- [Arrays](14-arrays.md)
+- [Typed arrays in the runtime](../02-runtime/06-typed-arrays.md)
+- [Thread safety](../02-runtime/10-thread-safety.md)
+- [Performance measurements](../00-welcome/02-performance.md)

@@ -253,7 +253,7 @@ let cppCount: c_'long long' = 9007199254740992;
 annotation. It is not a cast, pointer declaration, or import of another language's runtime. `strictNumericCasts` is a separate boolean that tightens
 implicit native numeric conversions. The canonical mapping and policy are implemented in `src/common/src/native/native_types.cpp` and
 `src/sema/src/checks/native_types.cpp`; the related conformance fixtures live under `tests/cases/types/02` and `tests/cases/types/03`. See the [native
-scalar type guide](#01-language/07-native-types/00-overview) for the supported spellings and numeric rules.
+scalar type guide](../01-language/07-native-types/00-overview.md) for the supported spellings and numeric rules.
 
 ## Inference and annotations
 The analyzer infers types from many initializers.
@@ -598,5 +598,5 @@ method before claiming a win. Use the review checklist below as the final gate. 
 
 When writing CP3 for a user, prefer the smallest supported construct that makes the intended behavior clear. When changing the compiler, follow the
 owning layer, add focused conformance coverage when appropriate, and state exactly what you built or measured. Continue with [Chapter
-1](#01-language/00-overview), [Runtime](#02-runtime/00-overview), [Standard library](#03-standard-library/00-overview), or [Compiler and
-tools](#04-compiler-cli/00-overview) for topic-specific detail.
+1](../01-language/00-overview.md), [Runtime](../02-runtime/00-overview.md), [Standard library](../03-standard-library/00-overview.md), or [Compiler and
+tools](../04-compiler-cli/00-overview.md) for topic-specific detail.

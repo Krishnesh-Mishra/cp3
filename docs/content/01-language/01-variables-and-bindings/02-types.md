@@ -94,7 +94,7 @@ const length = maybeText?.length ?? 0;
 
 ## Literal types and enums
 
-Literal values can participate in type checking, and CP3 supports enum declarations and their backing-value rules. The compiler checks incompatible enum members and invalid enum operations rather than silently widening all enum values to strings or numbers. See the [enums page](#01-language/04-values-and-objects/03-enums) for the implemented syntax.
+Literal values can participate in type checking, and CP3 supports enum declarations and their backing-value rules. The compiler checks incompatible enum members and invalid enum operations rather than silently widening all enum values to strings or numbers. See the [enums page](../04-values-and-objects/03-enums.md) for the implemented syntax.
 
 ## `unknown` is not `any`
 
@@ -106,7 +106,7 @@ The analyzer checks assignments, call arity, argument types, member access, cond
 
 ## Native interoperability types
 
-The language also includes prefixed native type forms used by C++ and Rust interop. They are a separate, explicit facility, not ordinary portable CP3 types. See [Native interop](#04-compiler-cli/07-native-interop) before using them in an application API.
+The language also includes prefixed native type forms used by C++ and Rust interop. They are a separate, explicit facility, not ordinary portable CP3 types. See [Native interop](../../04-compiler-cli/07-native-interop.md) before using them in an application API.
 
 ## Project-native type names
 
@@ -143,11 +143,11 @@ let displayRatio: ts_'number' = 0.25;
 
 This is a type spelling, not a cast expression. An annotation does not bypass assignment checks. Prefixes are especially useful in a project using TypeScript mode that has just one fixed-width field, or in a Rust/C++ mode where one API should explicitly use CP3's regular `number`.
 
-See [Native type-system selection](#01-language/07-native-types/01-project-type-system) for configuration and [Prefixed native types](#01-language/07-native-types/02-prefixed-types) for the supported names.
+See [Native type-system selection](../07-native-types/01-project-type-system.md) for configuration and [Prefixed native types](../07-native-types/02-prefixed-types.md) for the supported names.
 
 ## Native values do not imply foreign function compatibility
 
-A scalar annotation can express the CP3 checker's native numeric type. It does not by itself import a header, resolve a symbol, define a calling convention, transfer ownership, or prove that a target platform uses the same width for `long` or `size_t`. Those concerns belong to the interop boundary; see [Native interop](#04-compiler-cli/07-native-interop).
+A scalar annotation can express the CP3 checker's native numeric type. It does not by itself import a header, resolve a symbol, define a calling convention, transfer ownership, or prove that a target platform uses the same width for `long` or `size_t`. Those concerns belong to the interop boundary; see [Native interop](../../04-compiler-cli/07-native-interop.md).
 
 ## Quick selection table
 
@@ -165,10 +165,10 @@ A scalar annotation can express the CP3 checker's native numeric type. It does n
 
 The native pages are arranged by the decision a developer usually needs to make:
 
-1. [Select a project vocabulary](#01-language/07-native-types/01-project-type-system).
-2. [Choose an explicit spelling](#01-language/07-native-types/02-prefixed-types).
-3. [Understand arithmetic and conversions](#01-language/07-native-types/03-numeric-rules).
-4. [Check limits and diagnostics](#01-language/07-native-types/04-limitations).
+1. [Select a project vocabulary](../07-native-types/01-project-type-system.md).
+2. [Choose an explicit spelling](../07-native-types/02-prefixed-types.md).
+3. [Understand arithmetic and conversions](../07-native-types/03-numeric-rules.md).
+4. [Check limits and diagnostics](../07-native-types/04-limitations.md).
 
 ## A type is a compile-time contract
 
@@ -208,7 +208,7 @@ Avoid annotating every intermediate expression with a type that repeats the init
 
 `number` is CP3's general numeric type. It is a 64-bit floating-point value, similar in broad representation to JavaScript's `number`. It is useful for measurements, ratios, ordinary counters, and math-library operations. It is not an arbitrary-precision integer.
 
-A floating-point number has finite precision. If exact integer values above the safe range matter, use a native integer type from the [native types chapter](#01-language/07-native-types/00-overview) and check its bounds. Do not convert a large exact integer through `number` and expect all low bits to survive.
+A floating-point number has finite precision. If exact integer values above the safe range matter, use a native integer type from the [native types chapter](../07-native-types/00-overview.md) and check its bounds. Do not convert a large exact integer through `number` and expect all low bits to survive.
 
 The compiler's numeric literal syntax includes integer and decimal forms; the type checker treats ordinary numeric expressions as `number` unless a supported native type context applies. Integer division of two ordinary `number` values remains numeric division; native integer division is a distinct operation.
 
@@ -219,9 +219,9 @@ const total = 125 * (1 + taxRate);
 
 ## `string`
 
-`string` represents CP3 text. String literals use quotes or template literals. Concatenation and interpolation create string values; standard string operations are described in [Strings](#03-standard-library/15-strings).
+`string` represents CP3 text. String literals use quotes or template literals. Concatenation and interpolation create string values; standard string operations are described in [Strings](../../03-standard-library/15-strings.md).
 
-CP3 stores string data as UTF-8. Its `length` behavior is byte-oriented rather than JavaScript's UTF-16 code-unit count, while character-oriented methods have their own specified behavior. Do not port JavaScript code that assumes `text.length` counts UTF-16 code units without checking the [string guide](#03-standard-library/15-strings).
+CP3 stores string data as UTF-8. Its `length` behavior is byte-oriented rather than JavaScript's UTF-16 code-unit count, while character-oriented methods have their own specified behavior. Do not port JavaScript code that assumes `text.length` counts UTF-16 code units without checking the [string guide](../../03-standard-library/15-strings.md).
 
 ```ts
 const label: string = "report";
@@ -232,7 +232,7 @@ A CP3 string is an owned CP3 value. A C++ `std::string` or Rust `String` spellin
 
 ## `boolean`
 
-`boolean` contains `true` or `false`. Conditions require a supported boolean context. CP3 does not generally treat every JavaScript truthy or falsey value as a boolean. The current checker has specific rules for conditions; see [Conditions and loops](#01-language/03-control-flow/01-conditions-and-loops).
+`boolean` contains `true` or `false`. Conditions require a supported boolean context. CP3 does not generally treat every JavaScript truthy or falsey value as a boolean. The current checker has specific rules for conditions; see [Conditions and loops](../03-control-flow/01-conditions-and-loops.md).
 
 ```ts
 let connected: boolean = false;
@@ -280,7 +280,7 @@ The exact accepted syntax for function bodies and imports is covered in the link
 
 `unknown` is a checked boundary for a value whose concrete type is not known at the current point. It does not authorize arbitrary property access or calls. Narrow the value using a supported check or pass it to an API that validates it. CP3 does not accept `any` as an unchecked substitute.
 
-JSON parsing often returns `unknown` unless a generic type argument is supplied to the checked parsing API. A generic argument is only as trustworthy as the API's runtime validation; read [JSON](#03-standard-library/09-json) before treating a parsed value as a validated domain object.
+JSON parsing often returns `unknown` unless a generic type argument is supplied to the checked parsing API. A generic argument is only as trustworthy as the API's runtime validation; read [JSON](../../03-standard-library/09-json.md) before treating a parsed value as a validated domain object.
 
 ## Arrays and element types
 
@@ -292,7 +292,7 @@ const names: string[] = [];
 names.push("Asha");
 ```
 
-Arrays are mutable reference-shaped values. `const` prevents rebinding the array variable; it does not freeze the array contents. Two bindings can refer to the same array, so a mutation through either binding is visible through the other. See [Arrays and objects](#01-language/04-values-and-objects/01-arrays-and-objects) and [Mutability](#01-language/01-variables-and-bindings/03-mutability).
+Arrays are mutable reference-shaped values. `const` prevents rebinding the array variable; it does not freeze the array contents. Two bindings can refer to the same array, so a mutation through either binding is visible through the other. See [Arrays and objects](../04-values-and-objects/01-arrays-and-objects.md) and [Mutability](03-mutability.md).
 
 ## Object shapes and named interfaces
 
@@ -313,9 +313,9 @@ A shape check does not mean the runtime object is deeply immutable. Mutability a
 
 ## Function types
 
-A function signature describes parameters and the result. Parameters and return values are checked at call sites and return statements. Optional parameters, rest parameters, generics, and async functions each have additional rules; use [Functions and closures](#01-language/02-functions/01-functions-and-closures) for those details.
+A function signature describes parameters and the result. Parameters and return values are checked at call sites and return statements. Optional parameters, rest parameters, generics, and async functions each have additional rules; use [Functions and closures](../02-functions/01-functions-and-closures.md) for those details.
 
-A function value can be passed or stored where its function type is accepted. Closures can capture surrounding bindings, which affects lifetime and runtime ownership; see [Closures](#02-runtime/04-closures).
+A function value can be passed or stored where its function type is accepted. Closures can capture surrounding bindings, which affects lifetime and runtime ownership; see [Closures](../../02-runtime/04-closures.md).
 
 ## Type aliases and generic aliases
 
@@ -332,7 +332,7 @@ Generic aliases can express reusable shapes where supported:
 type Pair<T> = [T, T];
 ```
 
-The compiler checks substitutions at use sites. A generic alias does not make unsupported type operators or arbitrary TypeScript conditional types available. See [Generics](#01-language/05-generics/01-generics).
+The compiler checks substitutions at use sites. A generic alias does not make unsupported type operators or arbitrary TypeScript conditional types available. See [Generics](../05-generics/01-generics.md).
 
 ## Tuples and unions
 
@@ -343,27 +343,27 @@ type Point = [number, number];
 type Lookup = string | undefined;
 ```
 
-For a union, an operation must be valid for the current narrowed type or for every possible member as the language rules require. Nullish unions are common for optional results. Native scalar unions have additional restrictions described in [Native limitations](#01-language/07-native-types/04-limitations).
+For a union, an operation must be valid for the current narrowed type or for every possible member as the language rules require. Nullish unions are common for optional results. Native scalar unions have additional restrictions described in [Native limitations](../07-native-types/04-limitations.md).
 
 ## Enums
 
-Enums describe a closed named set of values with checked member rules. CP3 validates enum declarations and operations; it does not treat every enum as a string union. Use [Enums](#01-language/04-values-and-objects/03-enums) for the actual declaration syntax, backing-value behavior, and compatibility rules.
+Enums describe a closed named set of values with checked member rules. CP3 validates enum declarations and operations; it does not treat every enum as a string union. Use [Enums](../04-values-and-objects/03-enums.md) for the actual declaration syntax, backing-value behavior, and compatibility rules.
 
 ## Classes and interfaces
 
-Classes describe runtime objects and methods; interfaces describe a checked shape or contract. They are different tools: a class can have construction and runtime identity, while an interface is a type-level contract. See [Classes and interfaces](#01-language/04-values-and-objects/02-classes-and-interfaces) for constructors, inheritance/implementation rules, methods, and limitations.
+Classes describe runtime objects and methods; interfaces describe a checked shape or contract. They are different tools: a class can have construction and runtime identity, while an interface is a type-level contract. See [Classes and interfaces](../04-values-and-objects/02-classes-and-interfaces.md) for constructors, inheritance/implementation rules, methods, and limitations.
 
-Class instances are reference-shaped under the ordinary runtime representation. The annotation does not say that an object lives on the stack. Allocation and ownership behavior are documented in the [runtime chapter](#02-runtime/00-overview).
+Class instances are reference-shaped under the ordinary runtime representation. The annotation does not say that an object lives on the stack. Allocation and ownership behavior are documented in the [runtime chapter](../../02-runtime/00-overview.md).
 
 ## Type narrowing
 
-A value declared as a union may be used more precisely after a supported condition establishes which alternative is present. Nullish coalescing is one common way to supply a fallback. The exact narrowing forms are language features, so do not assume every TypeScript discriminated-union pattern is implemented. Check [control flow](#01-language/03-control-flow/01-conditions-and-loops) and conformance tests when relying on a specific guard.
+A value declared as a union may be used more precisely after a supported condition establishes which alternative is present. Nullish coalescing is one common way to supply a fallback. The exact narrowing forms are language features, so do not assume every TypeScript discriminated-union pattern is implemented. Check [control flow](../03-control-flow/01-conditions-and-loops.md) and conformance tests when relying on a specific guard.
 
 ## Compile-time types and runtime representation
 
 Some types have direct scalar representations; others use runtime-managed objects or tagged/nullish wrappers. The compiler and runtime jointly implement these representations. Source code should rely on language semantics rather than `std::shared_ptr`, generated struct layouts, or C++ aliases, except when deliberately working at a native interop boundary.
 
-CP3 does not have a tracing garbage collector. Reference-shaped runtime values use reference counting: ordinary `Ref<T>` handles have atomic counts, while a conservative compiler gate can select non-atomic `LocalRef<T>` for some class types. Neither representation changes source-level type rules or guarantees stack allocation. See [Reference ownership](#02-runtime/03-reference-ownership) and [No tracing GC](#02-runtime/08-no-tracing-gc).
+CP3 does not have a tracing garbage collector. Reference-shaped runtime values use reference counting: ordinary `Ref<T>` handles have atomic counts, while a conservative compiler gate can select non-atomic `LocalRef<T>` for some class types. Neither representation changes source-level type rules or guarantees stack allocation. See [Reference ownership](../../02-runtime/03-reference-ownership.md) and [No tracing GC](../../02-runtime/08-no-tracing-gc.md).
 
 ## How to resolve common type errors
 
@@ -480,7 +480,7 @@ and write plain supported names. For an isolated declaration, a `c_` prefix avoi
 depend on that project setting.
 
 Do not use the native scalar type tier as a substitute for an FFI design. To call external code, separately define the
-symbol, ABI, target compiler, ownership, and error contract; see [Native interop](#04-compiler-cli/07-native-interop).
+symbol, ABI, target compiler, ownership, and error contract; see [Native interop](../../04-compiler-cli/07-native-interop.md).
 
 ## Understand numeric strictness through a concrete example
 
@@ -530,9 +530,9 @@ analysis; run-mode fixtures are needed to check generated values and observable 
 
 ## Related guides
 
-- [Bindings and declarations](#01-language/01-variables-and-bindings/01-bindings)
-- [Mutability and immutability](#01-language/01-variables-and-bindings/03-mutability)
-- [Project native type-system selection](#01-language/07-native-types/01-project-type-system)
-- [Prefixed native types](#01-language/07-native-types/02-prefixed-types)
-- [Native numeric behavior](#01-language/07-native-types/03-numeric-rules)
-- [Native limitations and diagnostics](#01-language/07-native-types/04-limitations)
+- [Bindings and declarations](01-bindings.md)
+- [Mutability and immutability](03-mutability.md)
+- [Project native type-system selection](../07-native-types/01-project-type-system.md)
+- [Prefixed native types](../07-native-types/02-prefixed-types.md)
+- [Native numeric behavior](../07-native-types/03-numeric-rules.md)
+- [Native limitations and diagnostics](../07-native-types/04-limitations.md)

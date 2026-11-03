@@ -14,7 +14,7 @@ Run a command from inside the project or give it a source path so the CLI can id
 
 ## Type-system settings
 
-`typeSystem` can be `typescript`, `cpp`, or `rust`. It changes resolution of supported unprefixed scalar names, but CP3 still generates C++. `strictNumericCasts` is a separate JSON boolean. See [Types](#01-language/01-variables-and-bindings/02-types) for examples and semantics.
+`typeSystem` can be `typescript`, `cpp`, or `rust`. It changes resolution of supported unprefixed scalar names, but CP3 still generates C++. `strictNumericCasts` is a separate JSON boolean. See [Types](../01-language/01-variables-and-bindings/02-types.md) for examples and semantics.
 
 ## Toolchain settings
 
@@ -53,7 +53,7 @@ Project JSON parsing and compile settings live under `src/cli/src/pkg` and `src/
 
 ## Related pages
 
-- [CLI commands](#04-compiler-cli/01-cli-commands)
-- [Native toolchains](#04-compiler-cli/05-native-toolchains)
-- [Native type selection](#01-language/07-native-types/01-project-type-system)
-- [Compilation pipeline](#04-compiler-cli/02-compilation-pipeline)
+- [CLI commands](01-cli-commands.md)
+- [Native toolchains](05-native-toolchains.md)
+- [Native type selection](../01-language/07-native-types/01-project-type-system.md)
+- [Compilation pipeline](02-compilation-pipeline.md)

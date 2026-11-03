@@ -28,7 +28,7 @@ These limits protect the front end from claiming ownership, layout, or conversio
 
 `r_`, `c_`, and `ts_` forms are scalar type-name escape hatches. The analyzer rejects `*`, `&`, and `[]` in the quoted spelling. For example, `c_'int*'`, `r_'&i32'`, and `c_'char[]'` are invalid. This avoids treating a borrowed pointer or a C++ array declarator as a self-contained CP3 value.
 
-Use CP3 arrays for owned CP3 collections. For native pointers, define a small foreign-function boundary using an explicitly supported interop mechanism, and document which side owns and frees each resource. See [Native interop](#04-compiler-cli/07-native-interop).
+Use CP3 arrays for owned CP3 collections. For native pointers, define a small foreign-function boundary using an explicitly supported interop mechanism, and document which side owns and frees each resource. See [Native interop](../../04-compiler-cli/07-native-interop.md).
 
 ## Unknown name versus unsupported type
 
@@ -69,11 +69,11 @@ A new mapping should include a success fixture and a failure fixture when releva
 
 ## Safe documentation rule
 
-Do not describe a type as ABI-compatible solely because its name resembles a Rust or C++ type. Verify the compiler's generated declaration, platform-width assumptions, call ABI, ownership, and linked implementation. The type vocabulary documents scalar checking; the [compiler's interop guide](#04-compiler-cli/07-native-interop) documents the separate foreign boundary.
+Do not describe a type as ABI-compatible solely because its name resembles a Rust or C++ type. Verify the compiler's generated declaration, platform-width assumptions, call ABI, ownership, and linked implementation. The type vocabulary documents scalar checking; the [compiler's interop guide](../../04-compiler-cli/07-native-interop.md) documents the separate foreign boundary.
 
 ## Related pages
 
-- [Project type-system selection](#01-language/07-native-types/01-project-type-system)
-- [Prefixed native types](#01-language/07-native-types/02-prefixed-types)
-- [Numeric behavior](#01-language/07-native-types/03-numeric-rules)
-- [Types and inference](#01-language/01-variables-and-bindings/02-types)
+- [Project type-system selection](01-project-type-system.md)
+- [Prefixed native types](02-prefixed-types.md)
+- [Numeric behavior](03-numeric-rules.md)
+- [Types and inference](../01-variables-and-bindings/02-types.md)

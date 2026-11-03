@@ -32,13 +32,13 @@ Ref<T> makeRef(Args&&... args) {
 
 The custom allocator keeps a bounded thread-local free list for allocation blocks so a later object of the same allocator specialization can reuse storage. `std::shared_ptr` still owns the handle, so its control-block reference count remains atomic. Pool reuse is not a bump arena and does not remove the shared ownership semantics.
 
-Generated code usually copies the handle when another name receives the same reference. The object itself remains shared. This is how two aliases can observe mutations to one array or instance. For some eligible user classes, the code generator can choose `LocalRef<T>` instead: it preserves reference sharing with a non-atomic count under a conservative compilation-unit safety gate. It is still an allocated control block, not a raw pointer or stack object. See [Reference ownership](#02-runtime/03-reference-ownership) and [Escape analysis](#02-runtime/02-escape-analysis).
+Generated code usually copies the handle when another name receives the same reference. The object itself remains shared. This is how two aliases can observe mutations to one array or instance. For some eligible user classes, the code generator can choose `LocalRef<T>` instead: it preserves reference sharing with a non-atomic count under a conservative compilation-unit safety gate. It is still an allocated control block, not a raw pointer or stack object. See [Reference ownership](03-reference-ownership.md) and [Escape analysis](02-escape-analysis.md).
 
 ## Arrays
 
 The ordinary array representation is a shared handle to a `std::vector<E>`. `makeArray` creates that shared vector. Array growth therefore has at least two costs to reason about: vector capacity changes and copying or moving its elements. If elements are themselves shared references, their handles are copied as the vector grows.
 
-This explains why `reserve` and element representation matter for array-growth performance. The compiler only injects a reserve hint when it proves a specific loop shape and bound; see [Allocation and arrays](#02-runtime/05-allocation-and-arrays).
+This explains why `reserve` and element representation matter for array-growth performance. The compiler only injects a reserve hint when it proves a specific loop shape and bound; see [Allocation and arrays](05-allocation-and-arrays.md).
 
 ## Weak references
 
@@ -52,4 +52,4 @@ A captured binding that is reassigned uses a shared cell in the generated repres
 
 The runtime does not trace all reachable objects, and the language does not enforce Rust’s unique ownership and borrow rules. Strong shared references are released when their reference count reaches zero; a strong cycle can therefore remain alive. Escape analysis can remove some local allocations, but it is not a global lifetime checker.
 
-Read [Reference counts, cycles, and threads](#02-runtime/03-reference-ownership) before designing long-lived object graphs.
+Read [Reference counts, cycles, and threads](03-reference-ownership.md) before designing long-lived object graphs.

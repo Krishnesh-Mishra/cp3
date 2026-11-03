@@ -36,7 +36,7 @@ JavaScript and TypeScript syntax is approachable to many application developers.
 - Strings are UTF-8 byte strings, and some APIs expose byte-oriented behavior.
 - Errors, asynchronous execution, process APIs, and filesystem operations follow CP3's implementation and tests.
 
-The [JavaScript and TypeScript guide](#00-welcome/03-javascript-typescript-developers) is a migration map. The language chapter is the authority for CP3 rules.
+The [JavaScript and TypeScript guide](03-javascript-typescript-developers.md) is a migration map. The language chapter is the authority for CP3 rules.
 
 ## Why use a C++ backend?
 
@@ -49,13 +49,13 @@ This separation has useful consequences:
 3. The C++ backend can optimize the generated translation units according to the selected profile and target.
 4. Generated C++ is available as a debugging artifact when a runtime cost needs investigation.
 
-The backend cannot optimize away every cost. A helper call in a loop, unclear aliasing, allocations, or checks that are needed to preserve semantics can prevent transformations such as inlining or vectorization. The [optimization pipeline](#04-compiler-cli/03-optimization-pipeline) states what the current compiler proves and what it does not.
+The backend cannot optimize away every cost. A helper call in a loop, unclear aliasing, allocations, or checks that are needed to preserve semantics can prevent transformations such as inlining or vectorization. The [optimization pipeline](../04-compiler-cli/03-optimization-pipeline.md) states what the current compiler proves and what it does not.
 
 ## Why avoid a tracing collector?
 
 CP3's current general reference representation is based on reference counting, not a tracing garbage collector. A reference count lets an acyclic object be destroyed when its last strong owner is released. It does not automatically collect a cycle, and reference updates have runtime cost.
 
-This choice is not a claim that reference counting is universally faster or simpler than tracing collection. It is a runtime design with different tradeoffs. CP3's local escape analysis can remove some allocations in restricted patterns, but it is not a general stack-allocation guarantee. Read [Values and references](#02-runtime/01-value-model), [Escape analysis](#02-runtime/02-escape-analysis), and [Cycles and weak links](#02-runtime/09-reference-cycles-and-weak-links) before relying on a particular lifetime behavior.
+This choice is not a claim that reference counting is universally faster or simpler than tracing collection. It is a runtime design with different tradeoffs. CP3's local escape analysis can remove some allocations in restricted patterns, but it is not a general stack-allocation guarantee. Read [Values and references](../02-runtime/01-value-model.md), [Escape analysis](../02-runtime/02-escape-analysis.md), and [Cycles and weak links](../02-runtime/09-reference-cycles-and-weak-links.md) before relying on a particular lifetime behavior.
 
 ## What CP3 is not promising
 
@@ -74,8 +74,8 @@ For a language feature, begin with its page in Chapter 1 and follow the linked t
 
 Useful next pages:
 
-- [Create and run a project](#00-welcome/04-first-project)
-- [Project type-system selection](#01-language/07-native-types/01-project-type-system)
-- [Runtime value model](#02-runtime/01-value-model)
-- [Performance measurements](#00-welcome/02-performance)
-- [Compiler pipeline](#04-compiler-cli/02-compilation-pipeline)
+- [Create and run a project](04-first-project.md)
+- [Project type-system selection](../01-language/07-native-types/01-project-type-system.md)
+- [Runtime value model](../02-runtime/01-value-model.md)
+- [Performance measurements](02-performance.md)
+- [Compiler pipeline](../04-compiler-cli/02-compilation-pipeline.md)

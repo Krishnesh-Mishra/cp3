@@ -55,7 +55,7 @@ The type checker uses the array's element type when checking an indexed read or 
 | `unique` | `unique(): T[]` | Removes adjacent duplicate values in place and returns the receiver. |
 | `shuffle` | `shuffle(): T[]` | Reorders the receiver in place and returns it. |
 
-These operations mutate the array object. A `const` binding can call them because `const` prevents rebinding the name; it does not deeply freeze the array. See [Mutability and immutability](#01-language/01-variables-and-bindings/03-mutability).
+These operations mutate the array object. A `const` binding can call them because `const` prevents rebinding the name; it does not deeply freeze the array. See [Mutability and immutability](../01-language/01-variables-and-bindings/03-mutability.md).
 
 `unique()` removes adjacent duplicates; it does not sort first. If equal values are separated, they remain separated unless you sort or otherwise group them before calling `unique()`.
 
@@ -144,7 +144,7 @@ Use `slice()` or `Array.from()` when a separate array container is needed. A sha
 
 Arrays are growable, so appends may increase capacity and move stored values. `push` is usually the natural append operation. Front insertion/removal can shift later elements and is more costly for large arrays. Creating intermediate arrays with `map`, `filter`, or `slice` uses additional storage.
 
-The compiler has a narrow reserve optimization for some counted loops with proven append patterns. It is not a guarantee that every loop reserves correctly or that array elements avoid their normal representation. See [Allocation and arrays](#02-runtime/05-allocation-and-arrays) and [Optimization pipeline](#04-compiler-cli/03-optimization-pipeline).
+The compiler has a narrow reserve optimization for some counted loops with proven append patterns. It is not a guarantee that every loop reserves correctly or that array elements avoid their normal representation. See [Allocation and arrays](../02-runtime/05-allocation-and-arrays.md) and [Optimization pipeline](../04-compiler-cli/03-optimization-pipeline.md).
 
 ## Method inventory
 
@@ -154,8 +154,8 @@ The method names resemble JavaScript, but use the signatures and semantics descr
 
 ## Related pages and tests
 
-- [Strings](#03-standard-library/15-strings)
-- [Typed arrays, buffers, and DataView](#03-standard-library/16-typed-arrays)
-- [Arrays and object literals](#01-language/04-values-and-objects/01-arrays-and-objects)
-- [Runtime allocation and arrays](#02-runtime/05-allocation-and-arrays)
+- [Strings](15-strings.md)
+- [Typed arrays, buffers, and DataView](16-typed-arrays.md)
+- [Arrays and object literals](../01-language/04-values-and-objects/01-arrays-and-objects.md)
+- [Runtime allocation and arrays](../02-runtime/05-allocation-and-arrays.md)
 - Array behavior is covered across the `arrays-strings`, `perf-array`, and general test families.

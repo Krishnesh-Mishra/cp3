@@ -13,7 +13,7 @@ const counts = new Map<string, number>();
 const seen = new Set<string>();
 ```
 
-Both preserve insertion order when iterating. They are reference values managed by the runtime; see [Values and references](#02-runtime/01-value-model).
+Both preserve insertion order when iterating. They are reference values managed by the runtime; see [Values and references](../02-runtime/01-value-model.md).
 
 ## Map
 

@@ -88,7 +88,7 @@ CP3 compiles source to C++, then the selected native compiler builds an executab
 | A loop vectorizes | The backend optimization remark points to that generated loop and reports successful vectorization. |
 | A refcount optimization applies | Generated handles use the expected representation (`LocalRef` or ordinary `Ref`) for that class in that translation unit. |
 
-`-O3` or a native executable alone proves none of these. A compiler can optimize a runtime helper or standard-library block without transforming the benchmark's loop. Match diagnostic paths and line numbers to the generated benchmark source; ignore unrelated remarks in headers when establishing a workload-specific claim. See [Generated C++ inspection](#04-compiler-cli/10-generated-cpp-inspection) and [Optimization pipeline](#04-compiler-cli/03-optimization-pipeline).
+`-O3` or a native executable alone proves none of these. A compiler can optimize a runtime helper or standard-library block without transforming the benchmark's loop. Match diagnostic paths and line numbers to the generated benchmark source; ignore unrelated remarks in headers when establishing a workload-specific claim. See [Generated C++ inspection](../04-compiler-cli/10-generated-cpp-inspection.md) and [Optimization pipeline](../04-compiler-cli/03-optimization-pipeline.md).
 
 ## Server measurements
 
@@ -100,11 +100,11 @@ The benchmark suite includes both single-server and multicore variants. The sing
 
 ## What “native” does and does not mean
 
-Native code gives the backend optimizer access to the generated C++, but it does not guarantee SIMD, stack allocation, or an optimal algorithm. The optimizer can only exploit what it can prove from the generated loop and runtime calls. The [optimization pipeline](#04-compiler-cli/03-optimization-pipeline) documents which CP3 passes exist; it distinguishes implemented behavior from future work.
+Native code gives the backend optimizer access to the generated C++, but it does not guarantee SIMD, stack allocation, or an optimal algorithm. The optimizer can only exploit what it can prove from the generated loop and runtime calls. The [optimization pipeline](../04-compiler-cli/03-optimization-pipeline.md) documents which CP3 passes exist; it distinguishes implemented behavior from future work.
 
 ## Links
 
 - Latest recorded benchmark results: `benchmarks/results.md` in the repository.
 - Benchmark suite, tasks, and options: `benchmarks/README.md` in the repository.
-- [Compiler optimization pipeline](#04-compiler-cli/03-optimization-pipeline)
-- [Inspect generated C++](#04-compiler-cli/10-generated-cpp-inspection)
+- [Compiler optimization pipeline](../04-compiler-cli/03-optimization-pipeline.md)
+- [Inspect generated C++](../04-compiler-cli/10-generated-cpp-inspection.md)

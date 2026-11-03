@@ -22,7 +22,7 @@ const port: number = 8080;
 // port = 9000; // compile-time error
 ```
 
-`const` restricts the binding, not the complete object graph reachable through it. A constant array reference can still call `push` or assign an element when the array and element types permit it. See [Mutability and immutability](#01-language/01-variables-and-bindings/03-mutability).
+`const` restricts the binding, not the complete object graph reachable through it. A constant array reference can still call `push` or assign an element when the array and element types permit it. See [Mutability and immutability](03-mutability.md).
 
 ## `let`: a reassignable binding
 
@@ -53,7 +53,7 @@ function example(): number {
 }
 ```
 
-`var` does not have the block-local visibility of `let` and `const`. Its declaration is hoisted within the containing function (or module-level function context), but its initializer still executes at its source position. A read before the initializer is not a read of the later initialized value. See [Scope, hoisting, and initialization](#01-language/01-variables-and-bindings/04-scope-and-initialization).
+`var` does not have the block-local visibility of `let` and `const`. Its declaration is hoisted within the containing function (or module-level function context), but its initializer still executes at its source position. A read before the initializer is not a read of the later initialized value. See [Scope, hoisting, and initialization](04-scope-and-initialization.md).
 
 Prefer `const` or `let` for new code unless `var` behavior is specifically required. The tests under `tests/cases/variables` pin CP3's behavior for use before declaration and reassignment.
 
@@ -97,7 +97,7 @@ An empty collection does not reveal an element type by inspection. Annotate it:
 const names: string[] = [];
 ```
 
-For more about union compatibility, inference, and project-dependent native type names, see [Types and inference](#01-language/01-variables-and-bindings/02-types).
+For more about union compatibility, inference, and project-dependent native type names, see [Types and inference](02-types.md).
 
 ## Initializers and absent values
 
@@ -135,13 +135,13 @@ const [x, y] = [4, 9];
 const { name: displayName } = { name: "Ada" };
 ```
 
-The extracted names obey the same `const`/`let`/`var` reassignment rules as ordinary identifiers. The source shape is also checked. Read [Destructuring declarations](#01-language/01-variables-and-bindings/05-destructuring) for tuple rest, object rest, parameter forms, and errors.
+The extracted names obey the same `const`/`let`/`var` reassignment rules as ordinary identifiers. The source shape is also checked. Read [Destructuring declarations](05-destructuring.md) for tuple rest, object rest, parameter forms, and errors.
 
 ## Binding lifetime and captured names
 
 Local bindings exist within their lexical scope. Closures can capture values from an outer scope, which can extend the lifetime of captured state beyond the block that created it. Mutable captures can require a runtime capture cell. This affects representation but not the source-level rule that a `const` binding cannot be reassigned.
 
-See [Functions and closures](#01-language/02-functions/01-functions-and-closures) and [Closure storage and lifetime](#02-runtime/04-closures) before using a closure to retain large objects or shared mutable state.
+See [Functions and closures](../02-functions/01-functions-and-closures.md) and [Closure storage and lifetime](../../02-runtime/04-closures.md) before using a closure to retain large objects or shared mutable state.
 
 ## Practical choice table
 
@@ -169,8 +169,8 @@ The exact diagnostic code is emitted by the compiler. The per-error help page ra
 
 ## Related pages and tests
 
-- [Types and inference](#01-language/01-variables-and-bindings/02-types)
-- [Mutability and immutability](#01-language/01-variables-and-bindings/03-mutability)
-- [Scope and initialization](#01-language/01-variables-and-bindings/04-scope-and-initialization)
-- [Destructuring](#01-language/01-variables-and-bindings/05-destructuring)
+- [Types and inference](02-types.md)
+- [Mutability and immutability](03-mutability.md)
+- [Scope and initialization](04-scope-and-initialization.md)
+- [Destructuring](05-destructuring.md)
 - Test family: `tests/cases/variables` and `tests/cases/destructuring`

@@ -30,7 +30,7 @@ class Box<T> {
 const box = new Box<number>(5);
 ```
 
-The concrete type argument is part of the instance’s static type. CP3 lowers supported generic uses into concrete generated forms. See [Generics and specialization](#04-compiler-cli/04-generics) for how that affects code size and performance.
+The concrete type argument is part of the instance’s static type. CP3 lowers supported generic uses into concrete generated forms. See [Generics and specialization](../../04-compiler-cli/04-generics.md) for how that affects code size and performance.
 
 ## Generic interfaces and aliases
 

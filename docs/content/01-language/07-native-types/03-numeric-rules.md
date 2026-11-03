@@ -117,6 +117,6 @@ When a type error appears:
 
 ## Related pages
 
-- [Project type-system selection](#01-language/07-native-types/01-project-type-system)
-- [Prefixed native types](#01-language/07-native-types/02-prefixed-types)
-- [Limitations and diagnostics](#01-language/07-native-types/04-limitations)
+- [Project type-system selection](01-project-type-system.md)
+- [Prefixed native types](02-prefixed-types.md)
+- [Limitations and diagnostics](04-limitations.md)

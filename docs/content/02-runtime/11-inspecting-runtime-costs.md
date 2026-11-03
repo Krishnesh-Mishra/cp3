@@ -53,8 +53,8 @@ Trace a cost from source to semantic fact, generated C++, runtime helper, and na
 
 ## Related pages
 
-- [Optimization pipeline and guarantees](#04-compiler-cli/03-optimization-pipeline)
-- [Escape analysis and stack storage](#02-runtime/02-escape-analysis)
-- [Allocation, arrays, and object churn](#02-runtime/05-allocation-and-arrays)
-- [Typed arrays and DataView](#02-runtime/06-typed-arrays)
-- [Performance, measured carefully](#00-welcome/02-performance)
+- [Optimization pipeline and guarantees](../04-compiler-cli/03-optimization-pipeline.md)
+- [Escape analysis and stack storage](02-escape-analysis.md)
+- [Allocation, arrays, and object churn](05-allocation-and-arrays.md)
+- [Typed arrays and DataView](06-typed-arrays.md)
+- [Performance, measured carefully](../00-welcome/02-performance.md)

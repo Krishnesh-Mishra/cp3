@@ -85,7 +85,7 @@ process.env.set("APP_MODE", "production");
 
 This changes the CP3 process map. It does **not** call the operating system's environment mutation API. Child processes inherit the operating-system
 environment, not later mutations made only to this CP3 map. Use `std/env` if you need typed reads, defaults, required-value checks, or to load values
-from a `.env` file. See [Environment variables](#03-standard-library/02-env).
+from a `.env` file. See [Environment variables](02-env.md).
 
 ## Choosing an exit code
 
@@ -200,7 +200,7 @@ the language event loop while waiting for a child. `spawn` callbacks are also de
 pipe reader. Keep the event loop alive while your program expects child results or events.
 
 This is distinct from ordinary `async` syntax: `await` coordinates promise completion, while workers and parallel APIs represent separate concurrency
-boundaries. For those distinctions, see [Async and concurrency](#02-runtime/07-async-and-concurrency) and [Thread safety](#02-runtime/10-thread-safety).
+boundaries. For those distinctions, see [Async and concurrency](../02-runtime/07-async-and-concurrency.md) and [Thread safety](../02-runtime/10-thread-safety.md).
 
 ## Node.js compatibility boundary
 
@@ -230,11 +230,11 @@ provide an explicit native integration where the project needs functionality out
 
 ## Related pages and implementation
 
-- [Environment variables](#03-standard-library/02-env)
-- [Console output and input](#03-standard-library/01-console)
-- [Async and concurrency](#02-runtime/07-async-and-concurrency)
-- [Thread safety and ownership boundaries](#02-runtime/10-thread-safety)
-- [Native toolchains](#04-compiler-cli/05-native-toolchains)
+- [Environment variables](02-env.md)
+- [Console output and input](01-console.md)
+- [Async and concurrency](../02-runtime/07-async-and-concurrency.md)
+- [Thread safety and ownership boundaries](../02-runtime/10-thread-safety.md)
+- [Native toolchains](../04-compiler-cli/05-native-toolchains.md)
 
 The semantic API table is in `src/std/process/sema.cpp`; C++ runtime behavior is in `src/std/process/include/cp3/std/process.hpp` and
 `src/std/process/child.cpp`; generated calls are lowered in `src/std/process/codegen.cpp`. The focused source tests live under

@@ -10,10 +10,10 @@ It is deliberately narrower than either C++ or Rust. CP3 maps supported names in
 
 ## Pages in this guide
 
-- [Select the project vocabulary](#01-language/07-native-types/01-project-type-system): configure `typeSystem` and `strictNumericCasts` in `package.json`.
-- [Use explicit prefixes](#01-language/07-native-types/02-prefixed-types): understand `r_`, `c_`, and `ts_`, plus supported mappings.
-- [Apply numeric rules](#01-language/07-native-types/03-numeric-rules): learn literal ranges, promotion, mixed arithmetic, and strict checking.
-- [Understand limitations](#01-language/07-native-types/04-limitations): pointers, unsupported ecosystem types, unions, and diagnostics.
+- [Select the project vocabulary](01-project-type-system.md): configure `typeSystem` and `strictNumericCasts` in `package.json`.
+- [Use explicit prefixes](02-prefixed-types.md): understand `r_`, `c_`, and `ts_`, plus supported mappings.
+- [Apply numeric rules](03-numeric-rules.md): learn literal ranges, promotion, mixed arithmetic, and strict checking.
+- [Understand limitations](04-limitations.md): pointers, unsupported ecosystem types, unions, and diagnostics.
 
 ## A short example
 
@@ -43,6 +43,6 @@ The native type resolver is not an ABI verifier. Before connecting an external C
 
 ## Related type guides
 
-- [Types and inference](#01-language/01-variables-and-bindings/02-types) explains CP3's ordinary types and type checking.
-- [Native interop](#04-compiler-cli/07-native-interop) explains the separate foreign-function boundary.
-- [Compiler pipeline](#04-compiler-cli/02-compilation-pipeline) explains when type resolution happens.
+- [Types and inference](../01-variables-and-bindings/02-types.md) explains CP3's ordinary types and type checking.
+- [Native interop](../../04-compiler-cli/07-native-interop.md) explains the separate foreign-function boundary.
+- [Compiler pipeline](../../04-compiler-cli/02-compilation-pipeline.md) explains when type resolution happens.

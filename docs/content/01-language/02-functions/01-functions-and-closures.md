@@ -61,7 +61,7 @@ function makeCounter(): () => number {
 
 In this example, the returned closure outlives the call to `makeCounter`. `count` must therefore have a lifetime that extends with the closure. This is why escaping closures are not ordinary stack-local captures.
 
-See [Closure lifetime and capture costs](#02-runtime/04-closures) for storage and allocation details.
+See [Closure lifetime and capture costs](../../02-runtime/04-closures.md) for storage and allocation details.
 
 ## Generic functions
 
@@ -75,7 +75,7 @@ function identity<T>(value: T): T {
 const answer = identity<number>(42);
 ```
 
-The compiler monomorphizes supported generic instantiations into concrete native forms. Generic syntax and constraints are described in [Generics](#01-language/05-generics/01-generics).
+The compiler monomorphizes supported generic instantiations into concrete native forms. Generic syntax and constraints are described in [Generics](../05-generics/01-generics.md).
 
 ## Async functions
 
@@ -88,7 +88,7 @@ async function readName(): Promise<string> {
 }
 ```
 
-Async does not mean a new operating-system thread is created for every call. It means the result and continuation are scheduled through the runtime. See [Async and concurrency](#02-runtime/07-async-and-concurrency).
+Async does not mean a new operating-system thread is created for every call. It means the result and continuation are scheduled through the runtime. See [Async and concurrency](../../02-runtime/07-async-and-concurrency.md).
 
 ## Function errors
 

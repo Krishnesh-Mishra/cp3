@@ -67,14 +67,14 @@ On multibyte strings, a byte boundary can fall inside an encoded code point. The
 
 `replace(search, replacement)` replaces the first matching occurrence. `replaceAll(search, replacement)` replaces all occurrences. Both return new strings and leave the source value unchanged.
 
-`split(separator)` accepts a string separator or a `RegExp` according to the checker and code generator. A string separator is matched literally. A regular expression uses CP3's regular-expression runtime. Splitting constructs an array containing the pieces, so account for its memory cost on large inputs; see [Regular expressions](#03-standard-library/17-regular-expressions) for captures, state, and Unicode differences.
+`split(separator)` accepts a string separator or a `RegExp` according to the checker and code generator. A string separator is matched literally. A regular expression uses CP3's regular-expression runtime. Splitting constructs an array containing the pieces, so account for its memory cost on large inputs; see [Regular expressions](17-regular-expressions.md) for captures, state, and Unicode differences.
 
 ```ts
 const fields = "one,two,three".split(",");
 const words = "red   blue".split(/\s+/);
 ```
 
-An empty or non-matching separator follows the runtime implementation and test corpus; do not assume every corner case matches a browser engine. See [Regular expressions](#03-standard-library/00-overview) only if the module guide lists it in the current build; regex values are also covered by the language tests.
+An empty or non-matching separator follows the runtime implementation and test corpus; do not assume every corner case matches a browser engine. See [Regular expressions](00-overview.md) only if the module guide lists it in the current build; regex values are also covered by the language tests.
 
 ## Trimming and case conversion
 
@@ -122,7 +122,7 @@ The method names intentionally resemble JavaScript, but the byte and code-point 
 
 ## Related pages
 
-- [Arrays](#03-standard-library/14-arrays)
-- [Byte buffers](#03-standard-library/11-buffer)
-- [Typed arrays and DataView](#03-standard-library/16-typed-arrays)
-- [Functions and closures](#01-language/02-functions/01-functions-and-closures)
+- [Arrays](14-arrays.md)
+- [Byte buffers](11-buffer.md)
+- [Typed arrays and DataView](16-typed-arrays.md)
+- [Functions and closures](../01-language/02-functions/01-functions-and-closures.md)

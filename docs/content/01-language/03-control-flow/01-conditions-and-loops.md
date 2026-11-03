@@ -58,4 +58,4 @@ CP3 supports the labeled break/continue forms accepted by the parser and semanti
 
 ## Compiler optimization note
 
-The compiler recognizes a narrow set of proven loop patterns, including specific typed-array and DataView loops. That does not change CP3 control-flow semantics. If a pattern is uncertain, code generation keeps the checked runtime operation. The [optimization pipeline](#04-compiler-cli/03-optimization-pipeline) lists the actual proofs; do not rely on a source loop being vectorized without inspecting compiler output and a backend report.
+The compiler recognizes a narrow set of proven loop patterns, including specific typed-array and DataView loops. That does not change CP3 control-flow semantics. If a pattern is uncertain, code generation keeps the checked runtime operation. The [optimization pipeline](../../04-compiler-cli/03-optimization-pipeline.md) lists the actual proofs; do not rely on a source loop being vectorized without inspecting compiler output and a backend report.

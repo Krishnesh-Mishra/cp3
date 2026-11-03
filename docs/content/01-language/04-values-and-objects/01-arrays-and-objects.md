@@ -29,7 +29,7 @@ The index expression is checked and lowered through the array family’s runtime
 
 ## Array methods
 
-CP3 implements a broad array method surface, including `push`, `pop`, `shift`, `unshift`, `map`, `filter`, `reduce`, `find`, `some`, `every`, `slice`, `sort`, `includes`, and `indexOf`. Exact callbacks and return types are defined by the compiler’s array member table. See [Array methods](#03-standard-library/14-arrays) for the full reference.
+CP3 implements a broad array method surface, including `push`, `pop`, `shift`, `unshift`, `map`, `filter`, `reduce`, `find`, `some`, `every`, `slice`, `sort`, `includes`, and `indexOf`. Exact callbacks and return types are defined by the compiler’s array member table. See [Array methods](../../03-standard-library/14-arrays.md) for the full reference.
 
 Some operations mutate the existing array (`push`, `pop`, `sort`, `unique`, `shuffle`); others return a new array (`map`, `filter`, `slice`). Read the individual method description before assuming JS behavior or a copy boundary.
 
@@ -66,7 +66,7 @@ alias.push(2);
 // original now observes the added element as well
 ```
 
-This sharing model matters to escape analysis and lifetime. See [Values and references](#02-runtime/01-value-model).
+This sharing model matters to escape analysis and lifetime. See [Values and references](../../02-runtime/01-value-model.md).
 
 ## Choosing a container
 

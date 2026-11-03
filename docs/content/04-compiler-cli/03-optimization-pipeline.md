@@ -20,13 +20,13 @@ For selected counted-loop patterns, code generation can reserve capacity for an 
 
 The compiler includes analysis scaffolding that recognizes a limited fixed-size DataView pattern and records potential fast reads. The per-read code generator does not currently consume those recorded facts. Therefore the compiler does not yet establish that the DataView helper call is removed or that the loop is SIMD-vectorized.
 
-To claim vectorization, inspect the generated benchmark C++ and verify a backend report tied to that source loop. A report about `shared_ptr` or another standard-library header is unrelated to the numeric loop. See [Typed arrays, buffers, and DataView](#03-standard-library/16-typed-arrays).
+To claim vectorization, inspect the generated benchmark C++ and verify a backend report tied to that source loop. A report about `shared_ptr` or another standard-library header is unrelated to the numeric loop. See [Typed arrays, buffers, and DataView](../03-standard-library/16-typed-arrays.md).
 
 ## Non-atomic `LocalRef` and pooled allocation
 
 The runtime defines `LocalRef<T>` with a non-atomic owner count. Code generation selects it for eligible non-exported, non-generic classes only when a conservative compilation-unit scan finds no workers/parallel calls, weak references, interface declarations, exported values, or inheritance. This is a coarse unit-wide gate, not a per-reference proof. If the scan is unsafe or uncertain, classes keep atomic `Ref<T>`.
 
-`makeRef` uses `std::allocate_shared` with a bounded thread-local free-list allocator. `makeLocalRef` uses the same allocator for its control block. The pool can reuse released storage; it is not a bump arena and does not bulk-free all short-lived objects. `LocalRef` removes atomic count operations for selected handles but still allocates and retains shared aliasing semantics. It is not stack allocation. See [Reference ownership](#02-runtime/03-reference-ownership).
+`makeRef` uses `std::allocate_shared` with a bounded thread-local free-list allocator. `makeLocalRef` uses the same allocator for its control block. The pool can reuse released storage; it is not a bump arena and does not bulk-free all short-lived objects. `LocalRef` removes atomic count operations for selected handles but still allocates and retains shared aliasing semantics. It is not stack allocation. See [Reference ownership](../02-runtime/03-reference-ownership.md).
 
 ## Measure claims against generated output
 
@@ -74,7 +74,7 @@ Report the benchmark name and unchanged source status, expected output, exact co
 
 ## Related pages
 
-- [Escape analysis](#02-runtime/02-escape-analysis)
-- [Allocation and arrays](#02-runtime/05-allocation-and-arrays)
-- [Typed arrays](#02-runtime/06-typed-arrays)
-- [Build profiles and PGO](#04-compiler-cli/11-build-profiles-and-pgo)
+- [Escape analysis](../02-runtime/02-escape-analysis.md)
+- [Allocation and arrays](../02-runtime/05-allocation-and-arrays.md)
+- [Typed arrays](../02-runtime/06-typed-arrays.md)
+- [Build profiles and PGO](11-build-profiles-and-pgo.md)

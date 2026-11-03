@@ -13,7 +13,7 @@ import console from "std/console";
 import { Buffer } from "std/buffer";
 ```
 
-The importer must use the form supported by that module’s registry entry. Some modules expose a default namespace, others expose named values, and some support both. The [standard-library overview](#03-standard-library/00-overview) lists the current import form for every registered module.
+The importer must use the form supported by that module’s registry entry. Some modules expose a default namespace, others expose named values, and some support both. The [standard-library overview](../../03-standard-library/00-overview.md) lists the current import form for every registered module.
 
 ## Import project modules
 
@@ -29,7 +29,7 @@ The module loader considers project files, standard module names, and package me
 
 ## Module initialization
 
-Imported modules are resolved and linked as part of the build pipeline. The compiler tracks dependencies and generated translation units for incremental builds. See [Compilation pipeline](#04-compiler-cli/02-compilation-pipeline).
+Imported modules are resolved and linked as part of the build pipeline. The compiler tracks dependencies and generated translation units for incremental builds. See [Compilation pipeline](../../04-compiler-cli/02-compilation-pipeline.md).
 
 ## Default and named imports
 
@@ -45,7 +45,7 @@ The default import name is chosen by the importer. A named import must match an 
 import { add as sum } from "./math.cp3";
 ```
 
-Standard modules have their own registered export forms. For example, `std/console` uses a default namespace, while `std/buffer` and `std/collections` use named exports. Use the registry-backed forms from the [standard-library overview](#03-standard-library/00-overview).
+Standard modules have their own registered export forms. For example, `std/console` uses a default namespace, while `std/buffer` and `std/collections` use named exports. Use the registry-backed forms from the [standard-library overview](../../03-standard-library/00-overview.md).
 
 ## Export forms
 

@@ -58,7 +58,7 @@ The analyzer tracks abstract class and member forms and rejects instantiation of
 
 ## Runtime identity and storage
 
-Class instances are reference-shaped values in the ordinary runtime representation. `new C()` normally lowers to `Ref<C>` and `makeRef`, which uses `std::allocate_shared` with CP3's pooled allocator. Under a conservative compilation-unit gate, some eligible classes use `LocalRef<C>` and `makeLocalRef` instead. A separate narrow escape-analysis pass can replace selected local objects with stack/value storage; see [Escape analysis](#02-runtime/02-escape-analysis). A source declaration alone does not imply either representation.
+Class instances are reference-shaped values in the ordinary runtime representation. `new C()` normally lowers to `Ref<C>` and `makeRef`, which uses `std::allocate_shared` with CP3's pooled allocator. Under a conservative compilation-unit gate, some eligible classes use `LocalRef<C>` and `makeLocalRef` instead. A separate narrow escape-analysis pass can replace selected local objects with stack/value storage; see [Escape analysis](../../02-runtime/02-escape-analysis.md). A source declaration alone does not imply either representation.
 
 ## Avoid assuming JS class parity
 

@@ -32,7 +32,7 @@ Project builds store generated artifacts under the build directory and may reuse
 
 ## Finding the stage
 
-Read the first reported failure and note whether it names a CP3 diagnostic code, a generated `.cpp` file, or a native link symbol. These point to different stages. The [diagnostics page](#04-compiler-cli/06-diagnostics) describes the generated local help link.
+Read the first reported failure and note whether it names a CP3 diagnostic code, a generated `.cpp` file, or a native link symbol. These point to different stages. The [diagnostics page](06-diagnostics.md) describes the generated local help link.
 
 ## The stages in order
 
@@ -65,7 +65,7 @@ A C++ error in a generated file should be traced back to the CP3 source construc
 
 The CLI records build inputs and can reuse unchanged native compilation outputs. The compiler may still regenerate a translation unit when an upstream dependency or option changes. A CMake build of the CP3 compiler and an application build of a `.cp3` program have separate build trees and caches.
 
-Use the normal build to verify an edit. Clean only when checking a clean-build property or when there is concrete evidence of stale state. See [Project settings and build cache](#04-compiler-cli/09-project-settings-and-cache).
+Use the normal build to verify an edit. Clean only when checking a clean-build property or when there is concrete evidence of stale state. See [Project settings and build cache](09-project-settings-and-cache.md).
 
 ## Source locations and diagnostics
 
@@ -77,6 +77,6 @@ Start at the first stage that produces incorrect behavior. Follow the owning fil
 
 ## Related pages
 
-- [CLI commands](#04-compiler-cli/01-cli-commands)
-- [Diagnostics](#04-compiler-cli/06-diagnostics)
-- [Generated C++ inspection](#04-compiler-cli/10-generated-cpp-inspection)
+- [CLI commands](01-cli-commands.md)
+- [Diagnostics](06-diagnostics.md)
+- [Generated C++ inspection](10-generated-cpp-inspection.md)

@@ -87,13 +87,13 @@ Redeclaring `let` or `const` in the same scope is rejected. A nested block is a 
 
 Function bodies introduce their own local scope. Nested functions do not inherit the caller's local scope merely because they are called from inside it; they capture names from the lexical scope where they were defined.
 
-Module-level bindings belong to the module. An exported binding can be observed by importers and therefore has a wider lifetime than an ordinary local. The module's names and exports are described in [Modules and exports](#01-language/06-modules-and-errors/01-modules).
+Module-level bindings belong to the module. An exported binding can be observed by importers and therefore has a wider lifetime than an ordinary local. The module's names and exports are described in [Modules and exports](../06-modules-and-errors/01-modules.md).
 
 ## Scope does not imply storage duration
 
 Lexical scope describes name visibility in CP3 source. It does not guarantee a particular C++ storage duration. A local reference can point to heap storage, a closure can extend the lifetime of a captured value, and compiler escape analysis may choose local storage only for patterns it proves safe.
 
-Do not infer “stack allocated” from “declared inside a function.” See [Escape analysis](#02-runtime/02-escape-analysis) for the current proof limits and generated-code verification steps.
+Do not infer “stack allocated” from “declared inside a function.” See [Escape analysis](../../02-runtime/02-escape-analysis.md) for the current proof limits and generated-code verification steps.
 
 ## Shadowing and closure examples
 
@@ -109,7 +109,7 @@ function makeCounter(): () => number {
 
 The returned closure outlives the call that created it, so it must retain its captured `count` state. A local block ending does not end a captured binding's lifetime while a closure that uses it remains reachable.
 
-This is one reason scope and ownership are related but not identical topics. Source scope controls lookup; closure storage controls lifetime. Read [Functions and closures](#01-language/02-functions/01-functions-and-closures) and [Closure storage and lifetime](#02-runtime/04-closures).
+This is one reason scope and ownership are related but not identical topics. Source scope controls lookup; closure storage controls lifetime. Read [Functions and closures](../02-functions/01-functions-and-closures.md) and [Closure storage and lifetime](../../02-runtime/04-closures.md).
 
 ## Common mistakes
 
@@ -123,7 +123,7 @@ This is one reason scope and ownership are related but not identical topics. Sou
 
 The `tests/cases/variables` cases cover block scope, loop-scope non-leakage, same-scope redeclaration, lexical read-before-declaration, `var` hoisting, uninitialized locals, and shadowing. `tests/cases/functions-closures` covers captured values and lifetime behavior.
 
-- [Bindings and declarations](#01-language/01-variables-and-bindings/01-bindings)
-- [Mutability](#01-language/01-variables-and-bindings/03-mutability)
-- [Destructuring declarations](#01-language/01-variables-and-bindings/05-destructuring)
-- [Closure storage](#02-runtime/04-closures)
+- [Bindings and declarations](01-bindings.md)
+- [Mutability](03-mutability.md)
+- [Destructuring declarations](05-destructuring.md)
+- [Closure storage](../../02-runtime/04-closures.md)

@@ -25,34 +25,34 @@ import { Buffer } from "std/buffer";
 import { Map, Set } from "std/collections";
 ```
 
-Imports are resolved by the compiler's standard module registry. Unknown module names and unknown closed-surface members are compile-time errors. See [Modules and imports](#01-language/06-modules-and-errors/01-modules).
+Imports are resolved by the compiler's standard module registry. Unknown module names and unknown closed-surface members are compile-time errors. See [Modules and imports](../01-language/06-modules-and-errors/01-modules.md).
 
 ## Module index
 
 | Module | What it provides |
 | --- | --- |
-| [Console](#03-standard-library/01-console) | Terminal output, line and key input, and stdin listeners |
-| [Environment](#03-standard-library/02-env) | Environment lookup and `.env` loading |
-| [Process](#03-standard-library/03-process) | Arguments, environment map, child processes, and exit |
-| [File system](#03-standard-library/04-fs) | Synchronous and promise-based file and directory operations |
-| [Path](#03-standard-library/05-path) | Platform-aware path manipulation |
-| [Operating system](#03-standard-library/06-os) | Host and machine information |
-| [Math](#03-standard-library/07-math) | Numeric constants and common functions |
-| [Date](#03-standard-library/08-date) | Current time, parsing, formatting, and date arithmetic |
-| [JSON](#03-standard-library/09-json) | Serialization and checked parsing |
-| [Cryptography](#03-standard-library/10-crypto) | Random bytes, hashes, UUIDs, and authenticated encryption |
-| [Buffer](#03-standard-library/11-buffer) | Byte buffers and text encodings |
-| [Collections](#03-standard-library/12-collections) | Insertion-ordered Map and Set |
-| [Network](#03-standard-library/13-network) | Fetch, WebSockets, and HTTP server APIs |
-| [Arrays](#03-standard-library/14-arrays) | Built-in array operations |
-| [Strings](#03-standard-library/15-strings) | Built-in UTF-8 string operations |
-| [Typed arrays](#03-standard-library/16-typed-arrays) | Fixed-width numeric arrays, buffers, and DataView |
-| [Regular expressions](#03-standard-library/17-regular-expressions) | Core regex literals, flags, match results, and string splitting |
+| [Console](01-console.md) | Terminal output, line and key input, and stdin listeners |
+| [Environment](02-env.md) | Environment lookup and `.env` loading |
+| [Process](03-process.md) | Arguments, environment map, child processes, and exit |
+| [File system](04-fs.md) | Synchronous and promise-based file and directory operations |
+| [Path](05-path.md) | Platform-aware path manipulation |
+| [Operating system](06-os.md) | Host and machine information |
+| [Math](07-math.md) | Numeric constants and common functions |
+| [Date](08-date.md) | Current time, parsing, formatting, and date arithmetic |
+| [JSON](09-json.md) | Serialization and checked parsing |
+| [Cryptography](10-crypto.md) | Random bytes, hashes, UUIDs, and authenticated encryption |
+| [Buffer](11-buffer.md) | Byte buffers and text encodings |
+| [Collections](12-collections.md) | Insertion-ordered Map and Set |
+| [Network](13-network.md) | Fetch, WebSockets, and HTTP server APIs |
+| [Arrays](14-arrays.md) | Built-in array operations |
+| [Strings](15-strings.md) | Built-in UTF-8 string operations |
+| [Typed arrays](16-typed-arrays.md) | Fixed-width numeric arrays, buffers, and DataView |
+| [Regular expressions](17-regular-expressions.md) | Core regex literals, flags, match results, and string splitting |
 
 ## Error and asynchronous behavior
 
-The exact failure behavior differs by API. Some operations throw synchronously; file, network, and console input APIs may return `Promise` values that reject. Read the page for the operation you use and handle the rejection path where the API documents one. CP3 exceptions and `try`/`catch` syntax are covered in [Errors and exceptions](#01-language/06-modules-and-errors/02-errors).
+The exact failure behavior differs by API. Some operations throw synchronously; file, network, and console input APIs may return `Promise` values that reject. Read the page for the operation you use and handle the rejection path where the API documents one. CP3 exceptions and `try`/`catch` syntax are covered in [Errors and exceptions](../01-language/06-modules-and-errors/02-errors.md).
 
 ## Surface versus compatibility
 
-The compiler's semantic tables define the supported call surface. For example, `std/process` exposes `argv`, `env`, `exit`, `exec`, and `spawn`; it does not expose Node's `process.stdout.write` stream API. The `exec` result provides captured `stdout` and `stderr` after completion. Use `SpawnHandle` when output must be processed while a child is running. See [Process](#03-standard-library/03-process) for the precise distinction.
+The compiler's semantic tables define the supported call surface. For example, `std/process` exposes `argv`, `env`, `exit`, `exec`, and `spawn`; it does not expose Node's `process.stdout.write` stream API. The `exec` result provides captured `stdout` and `stderr` after completion. Use `SpawnHandle` when output must be processed while a child is running. See [Process](03-process.md) for the precise distinction.

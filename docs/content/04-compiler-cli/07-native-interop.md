@@ -10,7 +10,7 @@ Native integration is an explicit boundary. CP3 source types do not turn a forei
 
 CP3 supports a closed set of native scalar types in annotations. `typeSystem` selects the vocabulary for supported unprefixed names, and explicit prefixes can select a vocabulary at a type site. These forms map value types such as fixed-width integers and floating-point values; they do not declare arbitrary foreign functions or native objects.
 
-Pointer and reference spellings are deliberately rejected by the scalar type resolver. A `c_...` or `r_...` annotation should not be interpreted as “import this C++/Rust type.” See [Project type-system selection](#01-language/07-native-types/01-project-type-system), [Prefixed type names](#01-language/07-native-types/02-prefixed-types), and [Native type limitations](#01-language/07-native-types/04-limitations).
+Pointer and reference spellings are deliberately rejected by the scalar type resolver. A `c_...` or `r_...` annotation should not be interpreted as “import this C++/Rust type.” See [Project type-system selection](../01-language/07-native-types/01-project-type-system.md), [Prefixed type names](../01-language/07-native-types/02-prefixed-types.md), and [Native type limitations](../01-language/07-native-types/04-limitations.md).
 
 ## Native SDK packages
 
@@ -71,7 +71,7 @@ Native packages can be target-specific. Test each operating system and architect
 
 ## Related pages
 
-- [Native toolchains](#04-compiler-cli/05-native-toolchains)
-- [Project settings and cache](#04-compiler-cli/09-project-settings-and-cache)
-- [Native scalar type limitations](#01-language/07-native-types/04-limitations)
-- [Thread safety](#02-runtime/10-thread-safety)
+- [Native toolchains](05-native-toolchains.md)
+- [Project settings and cache](09-project-settings-and-cache.md)
+- [Native scalar type limitations](../01-language/07-native-types/04-limitations.md)
+- [Thread safety](../02-runtime/10-thread-safety.md)

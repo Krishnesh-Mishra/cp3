@@ -33,7 +33,7 @@ The compiler contains analysis for narrow zero-based loops that reduce `DataView
 
 The loop emitter currently has code to hoist a raw `rawData` pointer and check the proven range before the loop. However, the current per-read lowering is not connected to the recorded fast-read fact (`fastDataViewReads_` has no consumer in the code generator). Therefore this scaffold does **not** establish that helper calls disappear or that the loop vectorizes. Treat the optimization as incomplete until generated C++ and a backend vectorization report show the direct hot-loop load.
 
-The separate typed-array fill analysis only handles tightly recognized fill loops and still preserves a range check. Neither analysis is a general SIMD guarantee. See [optimization pipeline](#04-compiler-cli/03-optimization-pipeline) for how to verify the actual emitted code.
+The separate typed-array fill analysis only handles tightly recognized fill loops and still preserves a range check. Neither analysis is a general SIMD guarantee. See [optimization pipeline](../04-compiler-cli/03-optimization-pipeline.md) for how to verify the actual emitted code.
 
 ## Typed-array index behavior
 

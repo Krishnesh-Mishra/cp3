@@ -76,7 +76,7 @@ const threshold = 12;
 const isLarge = (value: number): boolean => value > threshold;
 ```
 
-A closure capturing a mutable `let` observes the binding's current value according to the capture semantics implemented by CP3. The compiler may need a shared capture cell for mutable captures, which can affect allocation and lifetime. See [Functions and closures](#01-language/02-functions/01-functions-and-closures) and [Closure storage and lifetime](#02-runtime/04-closures).
+A closure capturing a mutable `let` observes the binding's current value according to the capture semantics implemented by CP3. The compiler may need a shared capture cell for mutable captures, which can affect allocation and lifetime. See [Functions and closures](../02-functions/01-functions-and-closures.md) and [Closure storage and lifetime](../../02-runtime/04-closures.md).
 
 ```ts
 let total = 0;
@@ -86,7 +86,7 @@ const add = (value: number): void => {
 add(5);
 ```
 
-Use a clear owner for mutable state. Capturing a name does not make the state thread-safe; the [thread-safety guide](#02-runtime/10-thread-safety) explains the limits of shared state across worker or parallel execution.
+Use a clear owner for mutable state. Capturing a name does not make the state thread-safe; the [thread-safety guide](../../02-runtime/10-thread-safety.md) explains the limits of shared state across worker or parallel execution.
 
 ## Fields and array elements
 
@@ -105,7 +105,7 @@ const scores: number[] = [7, 8];
 scores[1] = 9;
 ```
 
-Typed-array elements add numeric conversion rules and out-of-range behavior. Do not transfer ordinary-array assumptions to typed arrays; see [Typed arrays and DataView](#03-standard-library/16-typed-arrays).
+Typed-array elements add numeric conversion rules and out-of-range behavior. Do not transfer ordinary-array assumptions to typed arrays; see [Typed arrays and DataView](../../03-standard-library/16-typed-arrays.md).
 
 ## Choosing a declaration
 
@@ -133,7 +133,7 @@ The variable cases cover rejected reassignment of constants, permitted array and
 
 ## Related pages
 
-- [Bindings and declarations](#01-language/01-variables-and-bindings/01-bindings)
-- [Types and inference](#01-language/01-variables-and-bindings/02-types)
-- [Scope and initialization](#01-language/01-variables-and-bindings/04-scope-and-initialization)
-- [Escape analysis](#02-runtime/02-escape-analysis)
+- [Bindings and declarations](01-bindings.md)
+- [Types and inference](02-types.md)
+- [Scope and initialization](04-scope-and-initialization.md)
+- [Escape analysis](../../02-runtime/02-escape-analysis.md)

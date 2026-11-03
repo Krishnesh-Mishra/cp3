@@ -57,7 +57,7 @@ A low allocation count does not guarantee low memory use if a long-lived owner r
 
 ## Related pages
 
-- [Reference counts, cycles, and threads](#02-runtime/03-reference-ownership)
-- [Weak links and reference cycles](#02-runtime/09-reference-cycles-and-weak-links)
-- [Closure storage and lifetime](#02-runtime/04-closures)
-- [Inspecting runtime costs](#02-runtime/11-inspecting-runtime-costs)
+- [Reference counts, cycles, and threads](03-reference-ownership.md)
+- [Weak links and reference cycles](09-reference-cycles-and-weak-links.md)
+- [Closure storage and lifetime](04-closures.md)
+- [Inspecting runtime costs](11-inspecting-runtime-costs.md)

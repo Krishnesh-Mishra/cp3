@@ -98,7 +98,7 @@ Registering a different function with the same body does not remove the original
 
 ## Output streams and compatibility limits
 
-`console.log` and its related methods are complete calls, not writable stream objects. The current API does not define `console.stdout.write`, Node's `process.stdout`, ANSI styling helpers, or a general terminal event emitter. For process pipes, see [Process and child processes](#03-standard-library/03-process).
+`console.log` and its related methods are complete calls, not writable stream objects. The current API does not define `console.stdout.write`, Node's `process.stdout`, ANSI styling helpers, or a general terminal event emitter. For process pipes, see [Process and child processes](03-process.md).
 
 ## Method summary
 

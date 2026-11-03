@@ -8,7 +8,7 @@ CP3 has asynchronous operations that resume on an event loop and separate APIs t
 
 ## Async work does not mean parallel work
 
-An `async` function and `await` coordinate a promise with the runtime event loop. While waiting for I/O, the loop can make progress on other ready tasks. A synchronous CPU-heavy loop still occupies the executing thread until it returns. See [Async and concurrency](#02-runtime/07-async-and-concurrency).
+An `async` function and `await` coordinate a promise with the runtime event loop. While waiting for I/O, the loop can make progress on other ready tasks. A synchronous CPU-heavy loop still occupies the executing thread until it returns. See [Async and concurrency](07-async-and-concurrency.md).
 
 ## Worker and parallel boundaries
 
@@ -54,7 +54,7 @@ A message-oriented design makes ownership clearer: the sender transfers a value,
 
 The runtime provides `LocalRef<T>` with a non-atomic owner count, and code generation selects it for a restricted set of class types when a conservative compilation-unit scan finds no worker/parallel boundary, weak-reference use, interface declaration, exported value, or inheritance. This is a coarse gate, not a precise proof for each reference or a whole-program guarantee. When eligibility is uncertain, generated classes retain atomic `Ref<T>`.
 
-`LocalRef` protects lifetime bookkeeping only. It does not make payload access thread-safe, and it is not a raw pointer or stack allocation. Its control block remains allocated (with storage served by the runtime's bounded thread-local pool). See [Reference ownership](#02-runtime/03-reference-ownership) for representation and limitations.
+`LocalRef` protects lifetime bookkeeping only. It does not make payload access thread-safe, and it is not a raw pointer or stack allocation. Its control block remains allocated (with storage served by the runtime's bounded thread-local pool). See [Reference ownership](03-reference-ownership.md) for representation and limitations.
 
 ## A review checklist for concurrency changes
 
@@ -72,7 +72,7 @@ The semantic checks live under `src/sema` for the corresponding worker and paral
 
 ## Related pages
 
-- [Async and concurrency](#02-runtime/07-async-and-concurrency)
-- [Reference counts, cycles, and threads](#02-runtime/03-reference-ownership)
-- [Closure storage and lifetime](#02-runtime/04-closures)
-- [Escape analysis and stack storage](#02-runtime/02-escape-analysis)
+- [Async and concurrency](07-async-and-concurrency.md)
+- [Reference counts, cycles, and threads](03-reference-ownership.md)
+- [Closure storage and lifetime](04-closures.md)
+- [Escape analysis and stack storage](02-escape-analysis.md)

@@ -51,7 +51,7 @@ The scaffold defaults to TypeScript-style type names. A project may choose anoth
 }
 ```
 
-The accepted `typeSystem` values are `typescript`, `cpp`, and `rust`. The setting chooses how supported unprefixed native scalar type names are interpreted; it does not change the generated backend, which remains C++. For example, `i32` is not the spelling used in every mode. See [Project type-system selection](#01-language/07-native-types/01-project-type-system) and [Prefixed native types](#01-language/07-native-types/02-prefixed-types).
+The accepted `typeSystem` values are `typescript`, `cpp`, and `rust`. The setting chooses how supported unprefixed native scalar type names are interpreted; it does not change the generated backend, which remains C++. For example, `i32` is not the spelling used in every mode. See [Project type-system selection](../01-language/07-native-types/01-project-type-system.md) and [Prefixed native types](../01-language/07-native-types/02-prefixed-types.md).
 
 You can also select the value when scaffolding:
 
@@ -69,7 +69,7 @@ cp3 check src/index.cp3
 
 `check` loads modules, parses the source, resolves names, and runs semantic and type analysis. It is useful as a quick feedback step and does not execute the program. It also does not prove that native C++ compilation and linking will succeed; those occur during a build or run.
 
-When a check fails, read the first diagnostic and its source location. CP3 error codes are stable identifiers that are useful for searching tests and documentation. The [diagnostics guide](#04-compiler-cli/06-diagnostics) explains the local help page and what a code does and does not guarantee.
+When a check fails, read the first diagnostic and its source location. CP3 error codes are stable identifiers that are useful for searching tests and documentation. The [diagnostics guide](../04-compiler-cli/06-diagnostics.md) explains the local help page and what a code does and does not guarantee.
 
 ## 5. Run the entry
 
@@ -79,7 +79,7 @@ cp3 run src/index.cp3
 
 `run` compiles as needed, links the executable, and starts it. You may omit the path when the CLI can find the project manifest and its `main` value. Run the command from the intended project directory so the nearest `package.json` is the one used.
 
-The first run may take longer because the native compiler must build generated sources and runtime support. Later runs can reuse compatible cached build products. A changed source dependency, compiler, toolchain, target, or build option can invalidate some of that cache. See [Project settings and build cache](#04-compiler-cli/09-project-settings-and-cache).
+The first run may take longer because the native compiler must build generated sources and runtime support. Later runs can reuse compatible cached build products. A changed source dependency, compiler, toolchain, target, or build option can invalidate some of that cache. See [Project settings and build cache](../04-compiler-cli/09-project-settings-and-cache.md).
 
 ## 6. Build an executable
 
@@ -96,7 +96,7 @@ cp3 help
 cp3 build --help
 ```
 
-See [Build profiles and PGO](#04-compiler-cli/11-build-profiles-and-pgo) for what profile names mean in this compiler.
+See [Build profiles and PGO](../04-compiler-cli/11-build-profiles-and-pgo.md) for what profile names mean in this compiler.
 
 ## 7. Understand the scaffold scripts
 
@@ -141,8 +141,8 @@ The parameter and return annotations are checked by CP3. Change one argument to 
 
 ## Related pages
 
-- [For JavaScript and TypeScript developers](#00-welcome/03-javascript-typescript-developers)
-- [Bindings and declarations](#01-language/01-variables-and-bindings/01-bindings)
-- [Type-system selection](#01-language/07-native-types/01-project-type-system)
-- [CLI commands](#04-compiler-cli/01-cli-commands)
-- [Compilation pipeline](#04-compiler-cli/02-compilation-pipeline)
+- [For JavaScript and TypeScript developers](03-javascript-typescript-developers.md)
+- [Bindings and declarations](../01-language/01-variables-and-bindings/01-bindings.md)
+- [Type-system selection](../01-language/07-native-types/01-project-type-system.md)
+- [CLI commands](../04-compiler-cli/01-cli-commands.md)
+- [Compilation pipeline](../04-compiler-cli/02-compilation-pipeline.md)

@@ -66,7 +66,7 @@ cp3 toolchain use clang@18 --project
 cp3 toolchain clear --project
 ```
 
-`list` reports candidates and the effective selection; `detect` shows automatic discovery; `use` stores a project or global choice; `clear` removes a stored choice. `cp3 toolchain list --json` is available for scripts. See [Native toolchains](#04-compiler-cli/05-native-toolchains) for scope and precedence.
+`list` reports candidates and the effective selection; `detect` shows automatic discovery; `use` stores a project or global choice; `clear` removes a stored choice. `cp3 toolchain list --json` is available for scripts. See [Native toolchains](05-native-toolchains.md) for scope and precedence.
 
 ## Package commands
 
@@ -82,13 +82,13 @@ Package operations can create caches or write output archives. Read each command
 
 ## Native and editor commands
 
-`native-install` creates bindings from a native SDK using libclang support. It depends on the SDK headers and platform libraries; read [Native packages and ABI boundaries](#04-compiler-cli/07-native-interop) before exposing foreign values to application code.
+`native-install` creates bindings from a native SDK using libclang support. It depends on the SDK headers and platform libraries; read [Native packages and ABI boundaries](07-native-interop.md) before exposing foreign values to application code.
 
 `lsp` starts the language server, usually over stdio for an editor integration. `dap` starts the debug adapter. `editor-plugin` manages the supported editor extension workflow. Their availability and options are versioned with the installed CLI.
 
 ## Documentation commands
 
-`cp3 docs` serves the Markdown guide embedded in the compiler on loopback. `cp3 docs --port 0` asks the operating system for a free port and prints the selected address. The server runs until interrupted. See [Diagnostics and generated help](#04-compiler-cli/06-diagnostics) for a per-error help file, which is separate from the full docs server.
+`cp3 docs` serves the Markdown guide embedded in the compiler on loopback. `cp3 docs --port 0` asks the operating system for a free port and prints the selected address. The server runs until interrupted. See [Diagnostics and generated help](06-diagnostics.md) for a per-error help file, which is separate from the full docs server.
 
 ## Argument forwarding and exit status
 
@@ -102,8 +102,8 @@ In shell scripts, preserve the command exit status and quote file paths and argu
 
 ## Related pages
 
-- [Create and run your first project](#00-welcome/04-first-project)
-- [Project settings and build cache](#04-compiler-cli/09-project-settings-and-cache)
-- [Native toolchains](#04-compiler-cli/05-native-toolchains)
-- [Build profiles and PGO](#04-compiler-cli/11-build-profiles-and-pgo)
-- [Tests and compiler verification](#04-compiler-cli/08-tests-and-verification)
+- [Create and run your first project](../00-welcome/04-first-project.md)
+- [Project settings and build cache](09-project-settings-and-cache.md)
+- [Native toolchains](05-native-toolchains.md)
+- [Build profiles and PGO](11-build-profiles-and-pgo.md)
+- [Tests and compiler verification](08-tests-and-verification.md)

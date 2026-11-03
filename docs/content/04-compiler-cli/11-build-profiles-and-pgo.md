@@ -51,7 +51,7 @@ Do not compare a cached incremental run against another language's optimized rel
 
 ## Related pages
 
-- [Native toolchains](#04-compiler-cli/05-native-toolchains)
-- [Project settings and build cache](#04-compiler-cli/09-project-settings-and-cache)
-- [Tests and compiler verification](#04-compiler-cli/08-tests-and-verification)
-- [Performance](#00-welcome/02-performance)
+- [Native toolchains](05-native-toolchains.md)
+- [Project settings and build cache](09-project-settings-and-cache.md)
+- [Tests and compiler verification](08-tests-and-verification.md)
+- [Performance](../00-welcome/02-performance.md)

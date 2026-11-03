@@ -60,9 +60,9 @@ Strict selection checks the toolchain identity. It does not make native builds d
 
 ## Build profile and optimization
 
-The release profile selects optimization options for the configured native toolchain. The profile can include `-O` optimization, LTO, target-specific instruction selection, loop unrolling, and optional PGO behavior. Debug and incremental profiles have different goals. Consult [Build profiles and PGO](#04-compiler-cli/11-build-profiles-and-pgo) for the current command switches.
+The release profile selects optimization options for the configured native toolchain. The profile can include `-O` optimization, LTO, target-specific instruction selection, loop unrolling, and optional PGO behavior. Debug and incremental profiles have different goals. Consult [Build profiles and PGO](11-build-profiles-and-pgo.md) for the current command switches.
 
-Native optimization operates on generated C++. It may inline or vectorize a loop when the emitted code exposes enough information, but it cannot disregard required checks or observable side effects. Use [Generated C++ inspection](#04-compiler-cli/10-generated-cpp-inspection) and backend diagnostics to establish what happened.
+Native optimization operates on generated C++. It may inline or vectorize a loop when the emitted code exposes enough information, but it cannot disregard required checks or observable side effects. Use [Generated C++ inspection](10-generated-cpp-inspection.md) and backend diagnostics to establish what happened.
 
 ## Troubleshoot native compilation
 
@@ -85,7 +85,7 @@ When investigating vectorization, request a report from the configured backend a
 
 ## Related pages
 
-- [Project settings and build cache](#04-compiler-cli/09-project-settings-and-cache)
-- [Build profiles and PGO](#04-compiler-cli/11-build-profiles-and-pgo)
-- [Compilation pipeline](#04-compiler-cli/02-compilation-pipeline)
-- [Generated C++ inspection](#04-compiler-cli/10-generated-cpp-inspection)
+- [Project settings and build cache](09-project-settings-and-cache.md)
+- [Build profiles and PGO](11-build-profiles-and-pgo.md)
+- [Compilation pipeline](02-compilation-pipeline.md)
+- [Generated C++ inspection](10-generated-cpp-inspection.md)

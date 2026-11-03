@@ -143,7 +143,7 @@ const { name } = user; // name cannot be rebound
 let { age } = user;    // age binding may be reassigned if its type allows
 ```
 
-The extracted value may itself be a reference. A constant local referring to a mutable object still prevents rebinding only; see [Mutability and immutability](#01-language/01-variables-and-bindings/03-mutability).
+The extracted value may itself be a reference. A constant local referring to a mutable object still prevents rebinding only; see [Mutability and immutability](03-mutability.md).
 
 ## Destructuring versus direct access
 
@@ -158,7 +158,7 @@ Destructuring is a readability feature. It does not guarantee a faster represent
 
 ## Related pages and tests
 
-- [Bindings and declarations](#01-language/01-variables-and-bindings/01-bindings)
-- [Types and inference](#01-language/01-variables-and-bindings/02-types)
-- [Scope and initialization](#01-language/01-variables-and-bindings/04-scope-and-initialization)
+- [Bindings and declarations](01-bindings.md)
+- [Types and inference](02-types.md)
+- [Scope and initialization](04-scope-and-initialization.md)
 - Test family: `tests/cases/destructuring`

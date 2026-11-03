@@ -10,7 +10,7 @@ chapter: Chapter 3 · Standard library
 import math from "std/math";
 ```
 
-The CP3 `number` type is a 64-bit floating-point value. A numeric helper may return an integer-valued number, but the type system does not turn it into a fixed-width integer. See [Numeric types](#01-language/01-variables-and-bindings/02-types).
+The CP3 `number` type is a 64-bit floating-point value. A numeric helper may return an integer-valued number, but the type system does not turn it into a fixed-width integer. See [Numeric types](../01-language/01-variables-and-bindings/02-types.md).
 
 ## Constants and random values
 
@@ -93,7 +93,7 @@ Use `std/math` for general floating-point calculations. Use native integer types
 
 ## Related pages
 
-- [Types and inference](#01-language/01-variables-and-bindings/02-types)
-- [Native numeric types](#01-language/07-native-types/03-numeric-rules)
-- [Cryptography](#03-standard-library/10-crypto) for secure random APIs
-- [Typed arrays](#03-standard-library/16-typed-arrays) for fixed-width numeric storage
+- [Types and inference](../01-language/01-variables-and-bindings/02-types.md)
+- [Native numeric types](../01-language/07-native-types/03-numeric-rules.md)
+- [Cryptography](10-crypto.md) for secure random APIs
+- [Typed arrays](16-typed-arrays.md) for fixed-width numeric storage

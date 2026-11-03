@@ -60,7 +60,7 @@ const lookup = new Map<string, number>();
 const names = new Set<string>();
 ```
 
-The compiler checks method calls against the declared arguments. A missing or incompatible type argument can fail before code generation. See [Collections](#03-standard-library/12-collections) for the generic Map/Set API.
+The compiler checks method calls against the declared arguments. A missing or incompatible type argument can fail before code generation. See [Collections](../03-standard-library/12-collections.md) for the generic Map/Set API.
 
 ## Generated-code cost
 
