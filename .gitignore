@@ -68,3 +68,7 @@ tests/cases/**/.cp3/
 !third_party/**/*.a
 !third_party/**/*.lib
 benchmarks/cases/health-server/cp3/merged.txt
+
+# ---- documentation site ----
+site/
+.venv-docs/
