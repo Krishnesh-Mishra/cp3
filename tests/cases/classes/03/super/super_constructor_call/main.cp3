@@ -1,0 +1,11 @@
+import console from "std/console";
+class A {
+  x: number;
+  constructor(x: number) { this.x = x; }
+}
+class B extends A {
+  y: number;
+  constructor(x: number, y: number) { super(x); this.y = y; }
+}
+const b = new B(7, 8);
+console.log(`${b.x} ${b.y}`);

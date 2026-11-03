@@ -134,6 +134,25 @@ const ClassMemberModel* findClassMemberChain(const ClassModel& cm,
     return nullptr;
 }
 
+const ClassMemberModel* findClassCtor(const ClassModel& cm,
+                                      const ClassModel** owner) {
+    const ClassModel* k = &cm;
+    int guard = 0;
+    while (k != nullptr && guard++ < 64) {
+        for (const ClassMemberModel& m : k->members) {
+            if (m.ctor != nullptr) {
+                if (owner != nullptr) *owner = k;
+                return &m;
+            }
+        }
+        k = k->baseName.empty()
+                ? nullptr
+                : ModelRegistry::get().classByName(k->baseName);
+    }
+    if (owner != nullptr) *owner = nullptr;
+    return nullptr;
+}
+
 const ClassMemberModel* findClassAccessor(const ClassModel& cm,
                                           const std::string& name,
                                           bool getter) {

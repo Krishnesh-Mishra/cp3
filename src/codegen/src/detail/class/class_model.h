@@ -225,6 +225,11 @@ const ClassMemberModel* findClassMember(const ClassModel& cm,
 const ClassMemberModel* findClassMemberChain(const ClassModel& cm,
                                              const std::string& name,
                                              const ClassModel** owner);
+// The constructor a `new C(...)` / class literal reaches: `cm`'s own, or the
+// nearest base's (a derived class without a constructor inherits it). `owner`
+// is the class that declares it.
+const ClassMemberModel* findClassCtor(const ClassModel& cm,
+                                      const ClassModel** owner);
 // The get/set accessor named `name`, searching `cm` and its base chain.
 const ClassMemberModel* findClassAccessor(const ClassModel& cm,
                                           const std::string& name,

@@ -282,8 +282,10 @@ std::string Generator::emitModelNew(const NewExpr& n) {
     }
     // A constructor with a rest parameter takes the trailing arguments as
     // one array (spec 15). Resolve the annotation through sema so an alias of
-    // an array type packs the same way a spelled-out `E[]` does.
-    if (const ClassMemberModel* ctor = findClassMember(*cm, "constructor");
+    // an array type packs the same way a spelled-out `E[]` does. A derived
+    // class without its own constructor uses the nearest base's parameters.
+    const ClassModel* ctorOwner = nullptr;
+    if (const ClassMemberModel* ctor = findClassCtor(*cm, &ctorOwner);
         ctor != nullptr && ctor->ctor != nullptr) {
         const ParamList& params = ctor->ctor->params;
         std::size_t restAt = params.size();
@@ -303,6 +305,9 @@ std::string Generator::emitModelNew(const NewExpr& n) {
                 if (const Type* st = sema_.typeOf(rp->name->nodeId)) t = *st;
             }
             rewriteTypeParams(t, cm->typeParams);
+            if (ctorOwner != nullptr) {
+                rewriteTypeParams(t, ctorOwner->typeParams);
+            }
             Type elem = Type::unknown();
             if (t.kind == TypeKind::Array && !t.parts.empty()) {
                 elem = t.parts.front();

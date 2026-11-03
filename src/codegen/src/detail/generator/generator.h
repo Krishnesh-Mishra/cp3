@@ -207,6 +207,10 @@ private:
                                const std::vector<std::string>& methodTypeParams = {});
     std::string ctorBodyText(const ConstructorDeclaration& cd,
                              const ClassModel& cm, int indent);
+    // The C++ base-constructor initializer (` : Base(args)`) for a derived
+    // constructor whose body calls `super(...)`; "" when there is none.
+    std::string ctorBaseInitText(const ConstructorDeclaration& cd,
+                                 const ClassModel& cm);
     std::string weakPointee(const Type& fieldType);
 
     // --- model expressions + initializers (emit/class_expr.cpp) ---------------

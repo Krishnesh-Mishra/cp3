@@ -40,26 +40,28 @@ const Expr* literalValueOf(const ObjectLiteral& lit, const std::string& name) {
     return nullptr;
 }
 
-// The constructor a `makeRef<C>(...)` call reaches: the class's own, or the
-// nearest base's (a derived class without a constructor inherits the base's).
-// `owner` is the class that declares it.
-const ClassMemberModel* ctorOf(const ClassModel& cm, const ClassModel** owner) {
-    const ClassModel* k = &cm;
-    int guard = 0;
-    while (k != nullptr && guard++ < 64) {
-        for (const ClassMemberModel& m : k->members) {
-            if (m.ctor != nullptr) {
-                if (owner != nullptr) *owner = k;
-                return &m;
-            }
+// The direct `super(...)` call of a derived constructor body (TypeScript
+// requires it to be a top-level statement; sema rejects a misplaced one). The
+// call is lowered into the C++ base-constructor initializer, not a statement.
+const CallExpr* superCtorCall(const Stmt* body) {
+    if (body == nullptr || body->kind != NodeKind::BlockStatement) return nullptr;
+    const auto& block = static_cast<const BlockStatement&>(*body);
+    for (const StmtPtr& stmt : block.body) {
+        if (!stmt || stmt->kind != NodeKind::ExpressionStatement) continue;
+        const auto& es = static_cast<const ExpressionStatement&>(*stmt);
+        if (!es.expression || es.expression->kind != NodeKind::CallExpr) continue;
+        const auto& call = static_cast<const CallExpr&>(*es.expression);
+        if (call.callee && call.callee->kind == NodeKind::Identifier &&
+            static_cast<const Identifier&>(*call.callee).name == "super") {
+            return &call;
         }
-        k = k->baseName.empty() ? nullptr
-                                : ModelRegistry::get().classByName(k->baseName);
     }
-    if (owner != nullptr) *owner = nullptr;
     return nullptr;
 }
 
+// The constructor a `makeRef<C>(...)` call reaches: the class's own, or the
+// nearest base's (a derived class without a constructor inherits the base's).
+// `owner` is the class that declares it.
 // The cp3 type of one constructor parameter: the same computation the
 // parameter's own C++ spelling uses (emit/class_decl.cpp's methodParamText).
 Type ctorParamType(const SemaResult& sema, const Parameter& p,
@@ -76,6 +78,22 @@ Type ctorParamType(const SemaResult& sema, const Parameter& p,
 }
 
 }  // namespace
+
+std::string Generator::ctorBaseInitText(const ConstructorDeclaration& cd,
+                                        const ClassModel& cm) {
+    if (cm.baseName.empty()) return std::string();
+    const CallExpr* call = superCtorCall(cd.body.get());
+    if (call == nullptr) return std::string();
+    const ClassModel* base = ModelRegistry::get().classByName(cm.baseName);
+    if (base == nullptr) return std::string();
+    std::vector<std::string> args = emitPlainArgs(*call);
+    const ClassModel* owner = nullptr;
+    const ClassMemberModel* ctor = findClassCtor(*base, &owner);
+    if (ctor != nullptr && ctor->ctor != nullptr) {
+        args = classRestArgs(args, &ctor->ctor->params);
+    }
+    return " : " + base->cpp + "(" + joinStrings(args, ", ") + ")";
+}
 
 // `new C(...args)`: the spread array's elements are the constructor's
 // arguments. One array carries one element type, so that type must fit every
@@ -102,7 +120,7 @@ std::string Generator::newSpreadText(const ClassModel& cm,
         return std::string();
     }
     const ClassModel* owner = nullptr;
-    const ClassMemberModel* ctor = ctorOf(cm, &owner);
+    const ClassMemberModel* ctor = findClassCtor(cm, &owner);
     const ClassModel& decl = owner != nullptr ? *owner : cm;
     std::vector<Type> ptypes;
     std::size_t required = 0;
@@ -224,7 +242,7 @@ std::string Generator::classLiteralInit(const ClassModel& cm,
                                         const ObjectLiteral& lit) {
     needsRef_ = true;
     const ClassModel* owner = nullptr;
-    const ClassMemberModel* ctor = ctorOf(cm, &owner);
+    const ClassMemberModel* ctor = findClassCtor(cm, &owner);
     if (ctor != nullptr && ctor->ctor != nullptr) {
         sink_.error(diagcode::kTypeMismatch, lit.span,
                     "type mismatch: an object literal is not assignable to type '" +

@@ -997,6 +997,12 @@ std::string Generator::linkedMemberMiss(const MemberExpr& m) const {
 }
 
 std::string Generator::emitCall(const CallExpr& c) {
+    // `super(...)` is lowered into the constructor's C++ base-initializer
+    // (ctorBaseInitText); the expression statement itself has no C++ body.
+    if (c.callee && c.callee->kind == NodeKind::Identifier &&
+        static_cast<const Identifier&>(*c.callee).name == "super") {
+        return std::string();
+    }
     if (isConsoleMember(c)) {
         const auto& m = static_cast<const MemberExpr&>(*c.callee);
         std::string text = emitConsoleCall(c, m);

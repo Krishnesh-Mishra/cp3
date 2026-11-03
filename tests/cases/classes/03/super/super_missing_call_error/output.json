@@ -1,0 +1,9 @@
+{
+  "mode": "check",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3404",
+    "line": 2,
+    "contains": "must call super"
+  }
+}

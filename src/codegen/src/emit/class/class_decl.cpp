@@ -200,6 +200,25 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
         head += " : public " + (base != nullptr ? base->cpp : mapIdent(cm.baseName));
     }
     line(out, indent, head + " {");
+    // A derived class with no constructor of its own has the base's
+    // constructors: TypeScript's implicit `constructor(...args) {
+    // super(...args); }` forwards every call. C++ inherited constructors give
+    // the same surface, including the default initialization of this class's
+    // fields (`Base(args)` is `makeRef<Derived>(args)`).
+    const ClassModel* base =
+        cm.baseName.empty() ? nullptr
+                            : ModelRegistry::get().classByName(cm.baseName);
+    bool ownCtor = false;
+    for (const ClassMemberModel& m : cm.members) {
+        if (m.ctor != nullptr) {
+            ownCtor = true;
+            break;
+        }
+    }
+    if (!ownCtor && base != nullptr && hasClassCtor(*base)) {
+        line(out, indent + 1,
+             "using " + base->structName + "::" + base->structName + ";");
+    }
     int current = 0;  // 0 public, 1 protected, 2 private
     for (const ClassMemberModel& m : cm.members) {
         const int want = m.isPrivate ? 2 : (m.isProtected ? 1 : 0);
@@ -255,8 +274,9 @@ void Generator::emitClassMember(const ClassModel& cm,
             line(out, indent, declText + ";");
             return;
         }
+        const std::string baseInit = ctorBaseInitText(cd, cm);
         if (defs == nullptr) {
-            line(out, indent, declText + " {");
+            line(out, indent, declText + baseInit + " {");
             out += ctorBodyText(cd, cm, indent + 1);
             line(out, indent, "}");
             return;
@@ -265,8 +285,8 @@ void Generator::emitClassMember(const ClassModel& cm,
         const std::string qualifier =
             cm.structName + templateUse(cm) + "::" + cm.structName;
         *defs += (cm.typeParams.empty() ? "" : templateHead(cm) + "\n") +
-                 qualifier + "(" + joinStrings(params, ", ") + ") {\n" +
-                 ctorBodyText(cd, cm, 1) + "}\n\n";
+                 qualifier + "(" + joinStrings(params, ", ") + ")" + baseInit +
+                 " {\n" + ctorBodyText(cd, cm, 1) + "}\n\n";
         return;
     }
     if (!m.isMethod || m.method == nullptr) {

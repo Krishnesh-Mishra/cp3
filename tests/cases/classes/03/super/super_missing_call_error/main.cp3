@@ -1,0 +1,2 @@
+class A { x: number = 1; }
+class B extends A { constructor() { } }
