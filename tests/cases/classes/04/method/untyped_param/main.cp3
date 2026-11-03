@@ -1,8 +1,8 @@
 import console from "std/console";
 
 class Echo {
-  function echo(x) { return x; }
-  function ignore(x) { }
+  echo(x) { return x; }
+  ignore(x) { }
 }
 
 class Box {

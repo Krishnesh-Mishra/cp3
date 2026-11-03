@@ -1,4 +1,0 @@
-let a: { next: Node | undefined } = { next: undefined };
-let b = new Node();
-a.next = { weak: b };
-class Node {}

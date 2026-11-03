@@ -1,6 +1,6 @@
 import console from "std/console";
-interface Shape { function area(): number; }
-class Sq { function area(): number { return 4; } }
-class Ci { function area(): number { return 3; } }
+interface Shape { area(): number; }
+class Sq { area(): number { return 4; } }
+class Ci { area(): number { return 3; } }
 let shapes: Shape[] = [new Sq(), new Ci()];
 console.log(`${shapes[0].area() + shapes[1].area()}`);

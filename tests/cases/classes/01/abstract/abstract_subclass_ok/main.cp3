@@ -1,8 +1,8 @@
 import console from "std/console";
 abstract class Shape {
-  abstract function area(): number;
-  function name(): string { return "shape"; }
+  abstract area(): number;
+  name(): string { return "shape"; }
 }
-class Circle extends Shape { function area(): number { return 3; } }
+class Circle extends Shape { area(): number { return 3; } }
 let c = new Circle();
 console.log(`${c.area()} ${c.name()}`);

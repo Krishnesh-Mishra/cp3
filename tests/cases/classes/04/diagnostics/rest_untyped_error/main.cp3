@@ -1,7 +1,7 @@
 import console from "std/console";
 
 class Summer {
-  function sum(...nums) { return nums.length; }
+  sum(...nums) { return nums.length; }
 }
 
 let s = new Summer();

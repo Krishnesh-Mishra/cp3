@@ -14,10 +14,10 @@ class Thing {
     this.color = color;
   }
 
-  function getName(): Name { return this.name; }
-  function getColor(): Color { return this.color; }
-  function paint(c: Color): void { this.color = c; }
-  function add(n: Count): Count {
+  getName(): Name { return this.name; }
+  getColor(): Color { return this.color; }
+  paint(c: Color): void { this.color = c; }
+  add(n: Count): Count {
     this.count = this.count + n;
     return this.count;
   }

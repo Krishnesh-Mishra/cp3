@@ -1,7 +1,0 @@
-import console from "std/console";
-class Node { weak next: Node | undefined; }
-let a = new Node();
-let b: Node | undefined = new Node();
-a.next = b;
-b = undefined;
-console.log(`${a.next === undefined}`);

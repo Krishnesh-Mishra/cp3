@@ -1,5 +1,5 @@
 import console from "std/console";
 class Counter {
-  function answer(): unknown { return 42; }
+  answer(): unknown { return 42; }
 }
 console.log(`${new Counter().answer()}`);

@@ -1,5 +1,5 @@
 import console from "std/console";
-class A { protected v: number = 1; function getV(): number { return this.v; } }
-class B extends A { function double(): number { return this.v * 2; } }
+class A { protected v: number = 1; getV(): number { return this.v; } }
+class B extends A { double(): number { return this.v * 2; } }
 let b = new B();
 console.log(`${b.double()}`);

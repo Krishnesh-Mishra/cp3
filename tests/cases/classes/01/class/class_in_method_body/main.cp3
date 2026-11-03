@@ -1,6 +1,6 @@
 import console from "std/console";
 class Outer {
-  function make(): number {
+  make(): number {
     class Inner { value: number = 7; }
     let i = new Inner();
     return i.value;

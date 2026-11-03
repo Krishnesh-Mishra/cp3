@@ -3,7 +3,7 @@ import console from "std/console";
 // A local binding named `console` shadows the imported one: the call is an
 // ordinary member call on that value, not a console member.
 class Logger {
-    function go(): void {
+    go(): void {
         console.log("go");
     }
 }

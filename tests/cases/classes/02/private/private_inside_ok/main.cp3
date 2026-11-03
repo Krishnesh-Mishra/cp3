@@ -1,4 +1,4 @@
 import console from "std/console";
-class C { private secret: number = 7; function reveal(): number { return this.secret; } }
+class C { private secret: number = 7; reveal(): number { return this.secret; } }
 let c = new C();
 console.log(`${c.reveal()}`);

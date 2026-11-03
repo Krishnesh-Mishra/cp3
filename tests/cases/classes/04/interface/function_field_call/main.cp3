@@ -2,12 +2,12 @@ import console from "std/console";
 
 interface Calc {
   op: (x: number) => number;
-  function describe(): string;
+  describe(): string;
 }
 
 class Doubler implements Calc {
   op: (x: number) => number = (x) => x * 2;
-  function describe(): string { return "doubler"; }
+  describe(): string { return "doubler"; }
 }
 
 let c: Calc = new Doubler();

@@ -1,6 +1,0 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: does reading a weak field into a local take a strong handle (extending the target's lifetime)? Not specified."
-  }
-}

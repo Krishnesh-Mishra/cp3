@@ -1,6 +1,6 @@
 import console from "std/console";
 class Sum {
-  function total(...nums: number[]): number {
+  total(...nums: number[]): number {
     let t = 0;
     for (let i = 0; i < nums.length; i = i + 1) { t = t + nums[i]; }
     return t;
