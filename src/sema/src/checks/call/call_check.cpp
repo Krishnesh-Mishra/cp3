@@ -27,6 +27,7 @@ Type Analyzer::inferCall(CallExpr& call) {
     const FuncSig* sig = nullptr;
     if (call.callee && call.callee->kind == NodeKind::Identifier) {
         auto& id = static_cast<Identifier&>(*call.callee);
+        if (id.name == "super") return inferSuperCall(call, id);
         Binding b;
         if (!lookup(id.name, b)) {
             reportUndefinedCall(call, id);

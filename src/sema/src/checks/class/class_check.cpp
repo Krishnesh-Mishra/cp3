@@ -363,6 +363,9 @@ void Analyzer::analyzeAccessorBody(AccessorDeclaration& ad) {
 
 void Analyzer::analyzeCtorBody(ConstructorDeclaration& cd) {
     const FuncSig& sig = sigs_[cd.nodeId];
+    const ClassInfo* ci =
+        classStack_.empty() ? nullptr : findClass(classStack_.back());
+    const bool derived = ci != nullptr && !ci->baseName.empty();
     pushScope();
     for (std::size_t i = 0; i < cd.params.size() && i < sig.params.size(); ++i) {
         Parameter* p = cd.params[i].get();
@@ -379,9 +382,16 @@ void Analyzer::analyzeCtorBody(ConstructorDeclaration& cd) {
     FuncCtx ctx;
     ctx.annotated = false;
     ctx.ret = Type::voidType();
+    ctx.isCtor = true;
     funcStack_.push_back(ctx);
     const FunctionContext outer = enterFunctionBody();
     if (cd.body) visitStmt(*cd.body);
+    if (derived && cd.body != nullptr && !funcStack_.back().sawSuper) {
+        report(diagcode::kNotCallable, cd.span,
+               "constructor of class '" + classStack_.back() +
+                   "' must call super(...) because it derives from '" +
+                   ci->baseName + "'");
+    }
     leaveFunctionBody(outer);
     funcStack_.pop_back();
     popScope();
@@ -409,6 +419,16 @@ bool Analyzer::isErrorType(const Type& type) const {
 const ClassInfo* Analyzer::findClass(const std::string& name) const {
     const auto it = classes_.find(name);
     return it == classes_.end() ? nullptr : &it->second;
+}
+
+const ClassInfo* Analyzer::constructorOwner(const ClassInfo& ci) const {
+    const ClassInfo* k = &ci;
+    int guard = 0;
+    while (k != nullptr && guard++ < 64) {
+        if (k->hasCtor) return k;
+        k = k->baseName.empty() ? nullptr : findClass(k->baseName);
+    }
+    return nullptr;
 }
 
 const ClassMemberInfo* Analyzer::findClassMember(const ClassInfo& ci,

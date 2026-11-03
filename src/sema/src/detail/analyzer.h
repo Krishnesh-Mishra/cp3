@@ -192,6 +192,10 @@ private:
     void collectClassProperty(PropertyDeclaration& p, ClassInfo& info);
     void collectClassMethod(MethodDeclaration& md, ClassInfo& info);
     const ClassInfo* findClass(const std::string& name) const;
+    // The nearest class in `ci`'s base chain that declares a constructor
+    // (including `ci` itself), or nullptr when no class in the chain has one.
+    // A derived class without its own constructor inherits this signature.
+    const ClassInfo* constructorOwner(const ClassInfo& ci) const;
     const ClassMemberInfo* findClassMember(const ClassInfo& ci,
                                            const std::string& name) const;
     const ClassMemberInfo* findClassMemberChain(
@@ -217,6 +221,9 @@ private:
     bool isErrorType(const Type& t) const;
     // --- classes: conformance + `new` (class_conform_check.cpp) --------------
     Type inferUserConstruct(Identifier& id, Binding& b, NewExpr& n);
+    // `super(...)` in a derived constructor: checks the arguments against the
+    // nearest base constructor and marks the frame as having called it.
+    Type inferSuperCall(CallExpr& call, Identifier& id);
     // The callable form of the built-in Error constructors (`Error("x")`).
     Type inferErrorCall(CallExpr& call, Identifier& id, Binding& b,
                         const ClassInfo& ci);
@@ -639,6 +646,10 @@ private:
         // The frame is an `async` function (or an async arrow): only such a
         // frame may `await` (the top level may too).
         bool isAsync = false;
+        // The frame is a class constructor. A derived constructor must call
+        // `super(...)` exactly once before touching `this`.
+        bool isCtor = false;
+        bool sawSuper = false;
     };
     std::vector<FuncCtx> funcStack_;
     // Induction facts from for-loops recognized by forLoopRange: the loop

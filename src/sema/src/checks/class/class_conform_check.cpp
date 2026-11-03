@@ -118,6 +118,90 @@ Type Analyzer::inferErrorCall(CallExpr& call, Identifier& id, Binding& b,
     return withType(call, result);
 }
 
+// `super(...)` in a derived constructor. TypeScript/JS route the call to the
+// implicit constructor of the direct base, which in turn forwards to the
+// nearest base that declares one; the arity and argument types therefore come
+// from that constructor. A `super()` call in a method, a base class, or a
+// non-constructor function is rejected.
+Type Analyzer::inferSuperCall(CallExpr& call, Identifier& id) {
+    setType(id, Type::voidType());
+    std::vector<Type> argTypes;
+    std::vector<bool> spreadArg;
+    inferNewArgs(call.arguments, argTypes, spreadArg);
+    bool hasSpread = false;
+    for (bool isSpread : spreadArg) {
+        if (isSpread) hasSpread = true;
+    }
+    if (funcStack_.empty() || !funcStack_.back().isCtor) {
+        report(diagcode::kNotCallable, call.span,
+               "super(...) is only valid inside a class constructor");
+        return withType(call, Type::error());
+    }
+    if (classStack_.empty()) {
+        report(diagcode::kNotCallable, call.span,
+               "super(...) is only valid inside a derived class constructor");
+        return withType(call, Type::error());
+    }
+    const ClassInfo* derived = findClass(classStack_.back());
+    if (derived == nullptr || derived->baseName.empty()) {
+        report(diagcode::kNotCallable, call.span,
+               "super(...) is only valid inside a derived class constructor; "
+               "class '" +
+                   classStack_.back() + "' has no base class");
+        return withType(call, Type::error());
+    }
+    FuncCtx& frame = funcStack_.back();
+    if (frame.sawSuper) {
+        report(diagcode::kNotCallable, call.span,
+               "super(...) may only be called once in a derived constructor");
+        return withType(call, Type::error());
+    }
+    frame.sawSuper = true;
+    const ClassInfo* base = findClass(derived->baseName);
+    if (base == nullptr) {
+        // `extends` resolution already reported an unknown base; keep the
+        // call permissive so the body does not cascade.
+        return withType(call, Type::voidType());
+    }
+    const ClassInfo* owner = constructorOwner(*base);
+    if (owner == nullptr) {
+        // The base chain has only implicit default constructors.
+        if (!argTypes.empty() && !hasSpread) {
+            report(diagcode::kArityMismatch, call.span,
+                   "super(...) in the constructor of class '" + derived->name +
+                       "' expects no arguments: base class '" + base->name +
+                       "' has no constructor taking arguments");
+        }
+        return withType(call, Type::voidType());
+    }
+    const FuncSig& sig = owner->ctorSig;
+    std::size_t required = 0;
+    for (bool opt : sig.optional) {
+        if (!opt) ++required;
+    }
+    const bool arityOk =
+        hasSpread || (argTypes.size() >= required &&
+                      (sig.rest || argTypes.size() <= sig.params.size()));
+    if (!arityOk) {
+        report(diagcode::kArityMismatch, call.span,
+               "super(...) in the constructor of class '" + derived->name +
+                   "' expects " +
+                   arityText(required, sig.params.size(), sig.rest) +
+                   " argument(s), from constructor of class '" + owner->name +
+                   "'");
+        return withType(call, Type::voidType());
+    }
+    for (std::size_t i = 0; i < argTypes.size() && i < sig.params.size(); ++i) {
+        if (spreadArg[i]) continue;  // the spread's type is unknown
+        const SourceSpan& as =
+            i < call.arguments.size() && call.arguments[i]
+                ? call.arguments[i]->span
+                : call.span;
+        checkAssign(argTypes[i], sig.params[i], as, false);
+    }
+    return withType(call, Type::voidType());
+}
+
 Type Analyzer::inferUserConstruct(Identifier& id, Binding& b, NewExpr& n) {
     const ClassInfo* ci = findClass(id.name);
     setType(id, b.type);
@@ -152,8 +236,8 @@ Type Analyzer::inferUserConstruct(Identifier& id, Binding& b, NewExpr& n) {
                    std::to_string(ci->typeParamNames.size()) +
                    " type argument(s), got " + std::to_string(instArgs.size()));
     }
-    if (ci->hasCtor) {
-        const FuncSig& sig = ci->ctorSig;
+    if (const ClassInfo* ctorOwner = constructorOwner(*ci)) {
+        const FuncSig& sig = ctorOwner->ctorSig;
         std::size_t required = 0;
         for (bool opt : sig.optional) {
             if (!opt) ++required;
