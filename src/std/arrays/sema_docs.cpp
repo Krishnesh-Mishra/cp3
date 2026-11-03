@@ -46,23 +46,34 @@ const DocRow kArrayDocRows[] = {
      "(negative, zero or positive). Backed by `std::stable_sort`."},
     {"includes", "includes(element: T, fromIndex?: number): boolean",
      "True when the array contains `element`. Backed by `std::find`."},
-    {"filter", "filter(predicate: (element: T) => boolean): T[]",
+    {"filter", "filter(predicate: (element: T, index: number, array: T[]) => boolean): T[]",
      "Returns a new array with the elements the predicate accepts."},
-    {"find", "find(predicate: (element: T) => boolean): T | undefined",
+    {"find", "find(predicate: (element: T, index: number, array: T[]) => boolean): T | undefined",
      "Returns the first element the predicate accepts, or `undefined` when "
      "there is none."},
-    {"findIndex", "findIndex(predicate: (element: T) => boolean): number",
+    {"findLast", "findLast(predicate: (element: T, index: number, array: T[]) => boolean): T | undefined",
+     "Returns the last element the predicate accepts, or `undefined` when "
+     "there is none."},
+    {"findIndex", "findIndex(predicate: (element: T, index: number, array: T[]) => boolean): number",
      "Returns the index of the first element the predicate accepts, or `-1` "
      "when there is none. Backed by `std::find_if`."},
-    {"some", "some(predicate: (element: T) => boolean): boolean",
+    {"findLastIndex", "findLastIndex(predicate: (element: T, index: number, array: T[]) => boolean): number",
+     "Returns the index of the last element the predicate accepts, or `-1` "
+     "when there is none."},
+    {"some", "some(predicate: (element: T, index: number, array: T[]) => boolean): boolean",
      "True when the predicate accepts at least one element. Backed by "
      "`std::any_of`."},
-    {"every", "every(predicate: (element: T) => boolean): boolean",
+    {"every", "every(predicate: (element: T, index: number, array: T[]) => boolean): boolean",
      "True when the predicate accepts every element. Backed by "
      "`std::all_of`."},
-    {"map", "map<U>(transform: (element: T) => U): U[]",
+    {"map", "map<U>(transform: (element: T, index: number, array: T[]) => U): U[]",
      "Returns a new array with the result of `transform` for every element."},
-    {"reduce", "reduce<U>(combine: (accumulator: U, element: T) => U, initial?: U): U",
+    {"flatMap", "flatMap<U>(transform: (element: T, index: number, array: T[]) => U[]): U[]",
+     "Maps every element and flattens the returned arrays by one level."},
+    {"forEach", "forEach(callback: (element: T, index: number, array: T[]) => void): void",
+     "Calls the callback for every element in order. The return value is "
+     "ignored."},
+    {"reduce", "reduce<U>(combine: (accumulator: U, element: T, index: number, array: T[]) => U, initial?: U): U",
      "Folds the array into a single value, calling `combine` for every "
      "element. Without `initial` the first element is the starting value."},
     {"indexOf", "indexOf(element: T, fromIndex?: number): number",
@@ -77,6 +88,14 @@ const DocRow kArrayDocRows[] = {
     {"slice", "slice(start?: number, end?: number): T[]",
      "Returns a new array with the elements from `start` up to (but not "
      "including) `end`."},
+    {"at", "at(index: number): T | undefined",
+     "Returns the element at `index`; a negative index counts from the end, "
+     "and an out-of-range index returns `undefined`."},
+    {"toSorted", "toSorted(comparator?: (a: T, b: T) => number): T[]",
+     "Returns a sorted copy and leaves the receiver unchanged. Uses the same "
+     "type-aware default ordering and stable comparator contract as `sort`."},
+    {"toReversed", "toReversed(): T[]",
+     "Returns a reversed copy and leaves the receiver unchanged."},
     {"flat", "flat(): T[]",
      "Returns a new array with the nested arrays of the receiver flattened "
      "by one level."},

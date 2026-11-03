@@ -1,0 +1,8 @@
+import console from "std/console";
+
+const values = [10, 20, 30];
+let seen = "";
+values.forEach((value, index, array) => {
+  seen += `${index}:${value}:${array.length}|`;
+});
+console.log(seen);

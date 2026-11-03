@@ -253,15 +253,35 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
         Type pred = Type::function({elem}, Type::boolean());
         return Type::function({pred}, Type::array(elem));
     }
-    if (prop == "find") {
+    if (prop == "find" || prop == "findLast") {
         Type pred = Type::function({elem}, Type::boolean());
         return Type::function({pred},
                               Type::unionOf({elem, Type::undefined()}));
     }
-    if (prop == "findIndex" || prop == "some" || prop == "every") {
+    if (prop == "findIndex" || prop == "findLastIndex" || prop == "some" ||
+        prop == "every") {
         Type pred = Type::function({elem}, Type::boolean());
-        Type ret = prop == "findIndex" ? Type::number() : Type::boolean();
+        Type ret = (prop == "findIndex" || prop == "findLastIndex")
+                       ? Type::number()
+                       : Type::boolean();
         return Type::function({pred}, ret);
+    }
+    if (prop == "forEach") {
+        Type cb = Type::function({elem}, Type::voidType());
+        return Type::function({cb}, Type::voidType());
+    }
+    if (prop == "flatMap") {
+        Type cb = Type::function({elem}, Type::array(Type::unknown()));
+        return Type::function({cb}, Type::array(Type::unknown()));
+    }
+    if (prop == "at") {
+        return Type::function({Type::number()},
+                              Type::unionOf({elem, Type::undefined()}));
+    }
+    if (prop == "toReversed") return Type::function({}, arr);
+    if (prop == "toSorted") {
+        Type cmp = Type::function({elem, elem}, Type::number());
+        return withOptionalTail(Type::function({cmp}, Type::array(elem)));
     }
     if (prop == "indexOf") {
         return withOptionalTail(

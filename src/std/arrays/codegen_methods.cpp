@@ -181,6 +181,11 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
                                                const std::string& recvText) {
     const std::string& prop = m.property;
     const ArrowFunction* cb = arrowArg(c, 0);
+    // The C++ spelling of the receiver for the third callback parameter. The
+    // runtime adapter passes the same handle it is iterating.
+    const std::string arrayCpp = "::cp3::runtime::Array<" + ec.cpp + ">";
+    const std::vector<std::string> callbackContext = {ec.cpp, "double",
+                                                      arrayCpp};
     // A named function (or a function-typed binding) is a callback too: the
     // runtime takes any callable, so the function's own C++ signature is
     // used and the element type is not a parameter context.
@@ -206,9 +211,30 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
             return "0.0";
         }
         const std::string call =
-            cb != nullptr ? g.emitArrow(*cb, {ec.cpp}) : g.expr(*fn);
+            cb != nullptr ? g.emitArrow(*cb, callbackContext) : g.expr(*fn);
         return "::cp3::runtime::arrayMap<" + rc.cpp + ">(" + recvText + ", " +
                call + ")";
+    }
+    if (prop == "flatMap") {
+        // The callback returns an array; its element is the flattened result's
+        // element (`U[]` for `(value) => U[]`).
+        const Type resultElem = arrayElemOf(g.effectiveType(c));
+        CppInfo rc;
+        if (!arrayElementInfo(resultElem, rc)) {
+            g.reportArrayElementType(resultElem, c,
+                                     "the result of flatMap()");
+            return "0.0";
+        }
+        const std::string call =
+            cb != nullptr ? g.emitArrow(*cb, callbackContext) : g.expr(*fn);
+        return "::cp3::runtime::arrayFlatMap<" + rc.cpp + ">(" + recvText +
+               ", " + call + ")";
+    }
+    if (prop == "forEach") {
+        const std::string call =
+            cb != nullptr ? g.emitArrow(*cb, callbackContext) : g.expr(*fn);
+        return "::cp3::runtime::arrayForEach<" + ec.cpp + ">(" + recvText +
+               ", " + call + ")";
     }
     if (prop == "reduce") {
         // The accumulator parameter has the fold's result type: the initial
@@ -222,7 +248,9 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
             return "0.0";
         }
         const std::string fold =
-            cb != nullptr ? g.emitArrow(*cb, {rc.cpp, ec.cpp}) : g.expr(*fn);
+            cb != nullptr
+                ? g.emitArrow(*cb, {rc.cpp, ec.cpp, "double", arrayCpp})
+                : g.expr(*fn);
         if (c.arguments.size() > 1 && c.arguments[1]) {
             return "::cp3::runtime::arrayReduce<" + rc.cpp + ">(" + recvText +
                    ", " + fold + ", " + g.expr(*c.arguments[1]) + ")";
@@ -246,12 +274,14 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
     const char* fnName = nullptr;
     if (prop == "filter") fnName = "arrayFilter";
     else if (prop == "find") fnName = "arrayFind";
+    else if (prop == "findLast") fnName = "arrayFindLast";
     else if (prop == "findIndex") fnName = "arrayFindIndex";
+    else if (prop == "findLastIndex") fnName = "arrayFindLastIndex";
     else if (prop == "some") fnName = "arraySome";
     else if (prop == "every") fnName = "arrayEvery";
     if (fnName == nullptr) return std::string();
     const std::string call =
-        cb != nullptr ? g.emitArrow(*cb, {ec.cpp}) : g.expr(*fn);
+        cb != nullptr ? g.emitArrow(*cb, callbackContext) : g.expr(*fn);
     return "::cp3::runtime::" + std::string(fnName) + "<" + ec.cpp + ">(" +
            recvText + ", " + call + ")";
 }
@@ -261,12 +291,14 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
 std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
                                              const MemberExpr& m) {
     if (!m.object) return std::string();
-    static const char* const kCallbacks[] = {"map",     "filter", "reduce",
-                                             "find",    "findIndex",
-                                             "some",    "every"};
+    static const char* const kCallbacks[] = {
+        "map",     "flatMap", "filter", "reduce",    "find",
+        "findLast", "findIndex", "findLastIndex", "some", "every",
+        "forEach"};
     static const char* const kSimple[] = {
         "push", "pop", "unshift", "shift", "unique", "shuffle",
-        "indexOf", "includes", "binarySearch", "slice", "flat"};
+        "indexOf", "includes", "binarySearch", "slice", "flat", "at",
+        "toSorted", "toReversed"};
     const std::string& prop = m.property;
     if (prop == "reduce") {
         const CallExpr* filter = nullptr;
@@ -386,6 +418,35 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
             out += a ? g.expr(*a) : "0.0";
         }
         return out + ")";
+    }
+    if (prop == "at") {
+        return "::cp3::runtime::arrayElementAt<" + ec.cpp + ">(" + recvText +
+               ", " + arg(0) + ")";
+    }
+    if (prop == "toReversed") {
+        return "::cp3::runtime::arrayToReversed<" + ec.cpp + ">(" + recvText +
+               ")";
+    }
+    if (prop == "toSorted") {
+        if (c.arguments.empty()) {
+            return "::cp3::runtime::arrayToSorted<" + ec.cpp + ">(" + recvText +
+                   ")";
+        }
+        const Expr* comparator =
+            c.arguments.front() ? c.arguments.front().get() : nullptr;
+        if (comparator == nullptr) {
+            g.reportCodegenError(c, diagcode::kTypeMismatch,
+                                 "type mismatch: the toSorted comparator must "
+                                 "be a function");
+            return "0.0";
+        }
+        const std::string cmp =
+            comparator->kind == NodeKind::ArrowFunction
+                ? g.emitArrow(static_cast<const ArrowFunction&>(*comparator),
+                              {ec.cpp, ec.cpp})
+                : g.expr(*comparator);
+        return "::cp3::runtime::arrayToSortedWith<" + ec.cpp + ">(" + recvText +
+               ", " + cmp + ")";
     }
     // `flat()`: one level. An array of arrays flattens to the inner element
     // type; an array whose elements are not arrays has nothing to flatten, and

@@ -58,7 +58,8 @@ bool isKnownArrayMember(const std::string& name, bool& mutates) {
         "length", "forEach", "map", "filter", "reduce", "reduceRight", "find",
         "findIndex", "some", "every", "includes", "indexOf", "lastIndexOf",
         "join", "slice", "concat", "flat", "flatMap", "keys", "values",
-        "entries", "toString", "at", "binarySearch"};
+        "entries", "toString", "at", "binarySearch", "toSorted",
+        "toReversed"};
     mutates = kMutating.count(name) != 0;
     return mutates || kReading.count(name) != 0;
 }

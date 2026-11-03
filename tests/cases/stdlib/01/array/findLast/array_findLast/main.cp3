@@ -1,0 +1,6 @@
+import console from "std/console";
+
+const values = [1, 2, 3, 4];
+console.log(`${values.findLast((value) => value < 4)}`);
+console.log(`${values.findLastIndex((value) => value < 4)}`);
+console.log(`${values.findLast((value) => value > 9) === undefined}`);

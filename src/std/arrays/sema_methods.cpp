@@ -24,8 +24,15 @@ namespace {
 
 bool isCallbackMethod(const std::string& prop) {
     return prop == "map" || prop == "filter" || prop == "reduce" ||
-           prop == "find" || prop == "findIndex" || prop == "some" ||
-           prop == "every";
+           prop == "find" || prop == "findIndex" || prop == "findLast" ||
+           prop == "findLastIndex" || prop == "some" || prop == "every" ||
+           prop == "forEach" || prop == "flatMap";
+}
+
+// The JS callback shape: the element, its index, and the receiver. A callback
+// may declare any prefix of it; the runtime adapters select the matching call.
+std::vector<Type> arrayCallbackContext(const Type& elem) {
+    return {elem, Type::number(), Type::array(elem)};
 }
 
 // The inferred signature of a callback arrow: the parameter types the body
@@ -79,39 +86,65 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
     if (cb->kind != NodeKind::ArrowFunction) {
         // A named function (or a function-typed binding) is a callback too:
         // the runtime takes any callable, so the function's own signature
-        // types the call - its parameters must accept the element (and the
-        // accumulator), and its return type is the result.
+        // types the call. Its parameters may be any prefix of the JS callback
+        // shape: `(value)`, `(value, index)`, `(value, index, array)`, and
+        // for `reduce` `(accumulator, value, index, array)`.
         const Type fnType = inferExpr(*cb);
         if (fnType.kind != TypeKind::Function || fnType.parts.empty()) {
             return false;
         }
         const Type ret = fnType.parts.back();
         const std::size_t paramCount = fnType.parts.size() - 1;
+        const std::size_t minParams = isReduce ? 2 : 0;
+        const std::size_t maxParams = isReduce ? 4 : 3;
+        if (paramCount < minParams || paramCount > maxParams) {
+            arity(minParams, maxParams);
+            out = withType(call, Type::unknown());
+            return true;
+        }
         if (isReduce) {
             Type acc = elem;
             if (given == 2 && call.arguments[1]) {
                 acc = widen(inferExpr(*call.arguments[1]));
             }
-            if (paramCount != 2) {
-                arity(2, 2);
-                out = withType(call, Type::unknown());
-                return true;
-            }
             checkAssign(acc, fnType.parts[0], call.span, false);
             checkAssign(elem, fnType.parts[1], call.span, false);
+            if (paramCount > 2) {
+                checkAssign(Type::number(), fnType.parts[2], call.span, false);
+            }
+            if (paramCount > 3) {
+                checkAssign(Type::array(elem), fnType.parts[3], call.span, false);
+            }
             Type result = ret;
             if (result.isUnknown() || result.isVoid()) result = acc;
             out = withType(call, result);
             return true;
         }
-        if (paramCount != 1) {
-            arity(1, 1);
-            out = withType(call, Type::unknown());
-            return true;
-        }
         checkAssign(elem, fnType.parts[0], call.span, false);
+        if (paramCount > 1) {
+            checkAssign(Type::number(), fnType.parts[1], call.span, false);
+        }
+        if (paramCount > 2) {
+            checkAssign(Type::array(elem), fnType.parts[2], call.span, false);
+        }
         if (prop == "map") {
             out = withType(call, Type::array(ret));
+            return true;
+        }
+        if (prop == "flatMap") {
+            if (!ret.isUnknown() && !ret.isVoid() &&
+                ret.kind != TypeKind::Array) {
+                report(diagcode::kTypeMismatch, call.span,
+                       "type mismatch: flatMap() callback must return an "
+                       "array, got '" + describe(ret) + "'");
+                out = withType(call, Type::unknown());
+                return true;
+            }
+            out = withType(call, ret.isVoid() ? Type::unknown() : ret);
+            return true;
+        }
+        if (prop == "forEach") {
+            out = withType(call, Type::voidType());
             return true;
         }
         // The predicate set: the callback must return a boolean; only the
@@ -120,10 +153,11 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
             checkAssign(ret, Type::boolean(), call.span, false);
         }
         if (prop == "filter") out = withType(call, Type::array(elem));
-        else if (prop == "find") {
+        else if (prop == "find" || prop == "findLast") {
             out = withType(call, Type::unionOf({elem, Type::undefined()}));
-        } else if (prop == "findIndex") out = withType(call, Type::number());
-        else out = withType(call, Type::boolean());
+        } else if (prop == "findIndex" || prop == "findLastIndex") {
+            out = withType(call, Type::number());
+        } else out = withType(call, Type::boolean());
         return true;
     }
     auto& arrow = static_cast<ArrowFunction&>(*cb);
@@ -138,11 +172,37 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
         arrowSigs_[arrow.nodeId] = std::move(as);
     };
 
+    std::vector<Type> context = arrayCallbackContext(elem);
     if (prop == "map") {
-        Type ret = widen(inferArrowReturn(arrow, {elem}));
-        publishArrow({elem}, ret);
+        Type ret = widen(inferArrowReturn(arrow, context));
+        publishArrow(context, ret);
         if (ret.isVoid()) ret = Type::unknown();
         out = withType(call, Type::array(ret));
+        return true;
+    }
+
+    if (prop == "flatMap") {
+        Type ret = widen(inferArrowReturn(arrow, context));
+        publishArrow(context, ret);
+        if (ret.isUnknown()) {
+            out = withType(call, Type::array(Type::unknown()));
+            return true;
+        }
+        if (ret.isVoid() || ret.kind != TypeKind::Array) {
+            report(diagcode::kTypeMismatch, arrow.span,
+                   "type mismatch: flatMap() callback must return an array, "
+                   "got '" + describe(ret) + "'");
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        out = withType(call, ret);
+        return true;
+    }
+
+    if (prop == "forEach") {
+        Type ret = widen(inferArrowReturn(arrow, context));
+        publishArrow(context, ret);
+        out = withType(call, Type::voidType());
         return true;
     }
 
@@ -153,25 +213,29 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
         if (given == 2 && call.arguments[1]) {
             acc = widen(inferExpr(*call.arguments[1]));
         }
-        Type ret = widen(inferArrowReturn(arrow, {acc, elem}));
-        publishArrow({acc, elem}, ret);
+        std::vector<Type> reduceContext = {acc, elem, Type::number(),
+                                           Type::array(elem)};
+        Type ret = widen(inferArrowReturn(arrow, reduceContext));
+        publishArrow(reduceContext, ret);
         if (ret.isUnknown() || ret.isVoid()) ret = acc;
         out = withType(call, ret);
         return true;
     }
 
-    // The predicate set: the callback receives the element and must return a
-    // boolean; only the result shape differs per method.
-    Type ret = widen(inferArrowReturn(arrow, {elem}));
-    publishArrow({elem}, ret);
+    // The predicate set: the callback receives the element (and may also use
+    // its index and the receiver) and must return a boolean; only the result
+    // shape differs per method.
+    Type ret = widen(inferArrowReturn(arrow, context));
+    publishArrow(context, ret);
     if (!ret.isUnknown() && !ret.isVoid()) {
         checkAssign(ret, Type::boolean(), arrow.span, false);
     }
     if (prop == "filter") out = withType(call, Type::array(elem));
-    else if (prop == "find") {
+    else if (prop == "find" || prop == "findLast") {
         out = withType(call, Type::unionOf({elem, Type::undefined()}));
-    } else if (prop == "findIndex") out = withType(call, Type::number());
-    else out = withType(call, Type::boolean());
+    } else if (prop == "findIndex" || prop == "findLastIndex") {
+        out = withType(call, Type::number());
+    } else out = withType(call, Type::boolean());
     return true;
 }
 

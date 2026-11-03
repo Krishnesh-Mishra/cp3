@@ -91,9 +91,9 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | Number / Math | `MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `EPSILON` | Standard number constants. | Planned |
 | Number / Math | `Number.isInteger`, `Number.isFinite`, `Number.isNaN` | Number validation methods. | Planned |
 | Math | Math extras | Add the remaining standard math utilities (inverse trig, hyperbolic, `exp`, `log1p`, `hypot`, `sign`, constants). Today: `PI`, `E`, `random`, `min`, `max`, `pow`, `gcd`, `lcm`, `clamp`, `lerp`, `sqrt`, `abs`, `floor`, `ceil`, `round`, `trunc`, `cbrt`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`. | Partial |
-| Array | Callback signature `(value, index, array)` | Standardize every array iteration callback to the JS/TS shape. Today callbacks receive `(value)` only. | Partial |
-| Array | `flatMap`, `findLast`, `findLastIndex`, `at` | Modern query, search, and access methods. | Planned |
-| Array | `toSorted`, `toReversed` | Non-mutating array transformation methods (return new arrays). | Planned |
+| Array | Callback signature `(value, index, array)` | Standardize every array iteration callback to the JS/TS shape. Callbacks may declare any prefix of `(value, index, array)`. | Done |
+| Array | `flatMap`, `findLast`, `findLastIndex`, `at` | Modern query, search, and access methods. | Done |
+| Array | `toSorted`, `toReversed` | Non-mutating array transformation methods (return new arrays). | Done |
 | Object | `assign`, `fromEntries`, `is`, `freeze` | Standard object manipulation, creation, and immutability methods. Today: `keys`, `values`, `entries`. | Planned |
 | String | `codePointAt`, `fromCodePoint`, `matchAll`, `raw` | Unicode-aware and modern string methods. Today: no `charCodeAt` lowering either (typed, but not emitted). | Planned |
 | JSON | `JSON.stringify(value, replacer?, space?)` | Extend the serializer to support pretty printing (for example 2-space indent) and a replacer. Today only a numeric indent is typed and emitted. | Partial |

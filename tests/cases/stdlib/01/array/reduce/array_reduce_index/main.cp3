@@ -1,0 +1,7 @@
+import console from "std/console";
+
+const values = [1, 2, 3];
+const sum = values.reduce((acc, value, index, array) => {
+  return acc + value + index + array.length;
+}, 0);
+console.log(`${sum}`);

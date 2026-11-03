@@ -1,0 +1,7 @@
+import console from "std/console";
+
+const values = [3, 1, 2];
+console.log(values.toSorted().join(","));
+console.log(values.toSorted((a, b) => b - a).join(","));
+console.log(values.toReversed().join(","));
+console.log(values.join(","));

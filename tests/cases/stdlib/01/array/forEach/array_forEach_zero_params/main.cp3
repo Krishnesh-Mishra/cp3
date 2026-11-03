@@ -1,0 +1,8 @@
+import console from "std/console";
+
+const values = [1, 2, 3];
+let count = 0;
+values.forEach(() => {
+  count++;
+});
+console.log(`${count}`);

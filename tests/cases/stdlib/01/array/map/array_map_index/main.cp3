@@ -1,0 +1,4 @@
+import console from "std/console";
+
+console.log([1, 2, 3, 4].map((value, index) => value + index).join(","));
+console.log([1, 2, 3, 4].filter((value, index) => index % 2 === 1).join(","));

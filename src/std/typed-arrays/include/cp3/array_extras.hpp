@@ -104,6 +104,32 @@ Array<E> arraySortWith(const Array<E>& a, F cmp) {
     return a;
 }
 
+// `a.toSorted()` / `a.toSorted(cmp)`: a sorted copy; the receiver is left
+// untouched. The default ordering and comparator contract match `sort`.
+template <class E>
+Array<E> arrayToSorted(const Array<E>& a) {
+    std::vector<E> out(a->begin(), a->end());
+    std::stable_sort(out.begin(), out.end(),
+                     [](const E& x, const E& y) { return x < y; });
+    return makeArray<E>(std::move(out));
+}
+
+template <class E, class F>
+Array<E> arrayToSortedWith(const Array<E>& a, F cmp) {
+    std::vector<E> out(a->begin(), a->end());
+    std::stable_sort(out.begin(), out.end(),
+                     [&cmp](const E& x, const E& y) { return cmp(x, y) < 0.0; });
+    return makeArray<E>(std::move(out));
+}
+
+// `a.toReversed()`: a reversed copy; the receiver is left untouched.
+template <class E>
+Array<E> arrayToReversed(const Array<E>& a) {
+    std::vector<E> out(a->begin(), a->end());
+    std::reverse(out.begin(), out.end());
+    return makeArray<E>(std::move(out));
+}
+
 // SameValueZero (JS `includes` / `indexOf` on the double instantiation):
 // NaN finds itself and +0/-0 compare equal; the template covers every other
 // element type with `==` (bool, string, an enum).
@@ -360,13 +386,70 @@ double arrayUnshift(const Array<E>& a, const E& value) {
     return static_cast<double>(a->size());
 }
 
+// A JS-style array callback accepts the element, its index and the receiver.
+// cp3 lets the callback declare any prefix of that shape, so the adapter picks
+// the widest call the lambda is invocable with. The `if constexpr` branches
+// are discarded at instantiation time, which keeps one-parameter callbacks
+// compiling exactly as before.
+template <class E, class F>
+decltype(auto) callArrayCallback(F& fn, const E& value, std::size_t index,
+                                 const Array<E>& array) {
+    if constexpr (std::is_invocable_v<F&, const E&, double, const Array<E>&>) {
+        return fn(value, static_cast<double>(index), array);
+    } else if constexpr (std::is_invocable_v<F&, const E&, double>) {
+        return fn(value, static_cast<double>(index));
+    } else if constexpr (std::is_invocable_v<F&, const E&>) {
+        return fn(value);
+    } else {
+        return fn();
+    }
+}
+
+// A reduce callback accepts `(accumulator, value, index, array)`; the same
+// prefix rule applies.
+template <class E, class F, class R>
+decltype(auto) callArrayReduceCallback(F& fn, R& accumulator, const E& value,
+                                       std::size_t index,
+                                       const Array<E>& array) {
+    if constexpr (std::is_invocable_v<F&, R&, const E&, double,
+                                      const Array<E>&>) {
+        return fn(accumulator, value, static_cast<double>(index), array);
+    } else if constexpr (std::is_invocable_v<F&, R&, const E&, double>) {
+        return fn(accumulator, value, static_cast<double>(index));
+    } else {
+        return fn(accumulator, value);
+    }
+}
+
 // `a.map(fn)`: a fresh array of the callback results.
 template <class R, class E, class F>
 Array<R> arrayMap(const Array<E>& a, F fn) {
     std::vector<R> out;
     out.reserve(a->size());
-    for (std::size_t i = 0; i < a->size(); ++i) out.push_back(fn((*a)[i]));
+    for (std::size_t i = 0; i < a->size(); ++i) {
+        out.push_back(callArrayCallback<E>(fn, (*a)[i], i, a));
+    }
     return makeArray<R>(std::move(out));
+}
+
+// `a.flatMap(fn)`: map, then flatten one level.
+template <class R, class E, class F>
+Array<R> arrayFlatMap(const Array<E>& a, F fn) {
+    std::vector<R> out;
+    for (std::size_t i = 0; i < a->size(); ++i) {
+        Array<R> mapped = callArrayCallback<E>(fn, (*a)[i], i, a);
+        out.insert(out.end(), mapped->begin(), mapped->end());
+    }
+    return makeArray<R>(std::move(out));
+}
+
+// `a.forEach(fn)`: the callback is called for its effects; the result is
+// discarded, matching JS.
+template <class E, class F>
+void arrayForEach(const Array<E>& a, F fn) {
+    for (std::size_t i = 0; i < a->size(); ++i) {
+        (void)callArrayCallback<E>(fn, (*a)[i], i, a);
+    }
 }
 
 // `a.filter(pred)`: a fresh array of the elements the predicate accepts.
@@ -374,7 +457,7 @@ template <class E, class F>
 Array<E> arrayFilter(const Array<E>& a, F pred) {
     std::vector<E> out;
     for (std::size_t i = 0; i < a->size(); ++i) {
-        if (pred((*a)[i])) out.push_back((*a)[i]);
+        if (callArrayCallback<E>(pred, (*a)[i], i, a)) out.push_back((*a)[i]);
     }
     return makeArray<E>(std::move(out));
 }
@@ -383,7 +466,9 @@ Array<E> arrayFilter(const Array<E>& a, F pred) {
 template <class R, class E, class F>
 R arrayReduce(const Array<E>& a, F fn, const R& initial) {
     R acc = initial;
-    for (std::size_t i = 0; i < a->size(); ++i) acc = fn(acc, (*a)[i]);
+    for (std::size_t i = 0; i < a->size(); ++i) {
+        acc = callArrayReduceCallback<E>(fn, acc, (*a)[i], i, a);
+    }
     return acc;
 }
 
@@ -409,7 +494,9 @@ template <class E, class F>
 E arrayReduceNoInit(const Array<E>& a, F fn) {
     if (a->empty()) typedArrayPanic("reduce of empty array with no initial value");
     E acc = a->front();
-    for (std::size_t i = 1; i < a->size(); ++i) acc = fn(acc, (*a)[i]);
+    for (std::size_t i = 1; i < a->size(); ++i) {
+        acc = callArrayReduceCallback<E>(fn, acc, (*a)[i], i, a);
+    }
     return acc;
 }
 
@@ -417,7 +504,16 @@ E arrayReduceNoInit(const Array<E>& a, F fn) {
 template <class E, class F>
 std::optional<E> arrayFind(const Array<E>& a, F pred) {
     for (std::size_t i = 0; i < a->size(); ++i) {
-        if (pred((*a)[i])) return (*a)[i];
+        if (callArrayCallback<E>(pred, (*a)[i], i, a)) return (*a)[i];
+    }
+    return std::nullopt;
+}
+
+// `a.findLast(pred)`: the last matching element, or `undefined`.
+template <class E, class F>
+std::optional<E> arrayFindLast(const Array<E>& a, F pred) {
+    for (std::size_t i = a->size(); i-- > 0;) {
+        if (callArrayCallback<E>(pred, (*a)[i], i, a)) return (*a)[i];
     }
     return std::nullopt;
 }
@@ -426,7 +522,20 @@ std::optional<E> arrayFind(const Array<E>& a, F pred) {
 template <class E, class F>
 double arrayFindIndex(const Array<E>& a, F pred) {
     for (std::size_t i = 0; i < a->size(); ++i) {
-        if (pred((*a)[i])) return static_cast<double>(i);
+        if (callArrayCallback<E>(pred, (*a)[i], i, a)) {
+            return static_cast<double>(i);
+        }
+    }
+    return -1.0;
+}
+
+// `a.findLastIndex(pred)`: the last matching index, or -1.
+template <class E, class F>
+double arrayFindLastIndex(const Array<E>& a, F pred) {
+    for (std::size_t i = a->size(); i-- > 0;) {
+        if (callArrayCallback<E>(pred, (*a)[i], i, a)) {
+            return static_cast<double>(i);
+        }
     }
     return -1.0;
 }
@@ -436,7 +545,7 @@ double arrayFindIndex(const Array<E>& a, F pred) {
 template <class E, class F>
 bool arraySome(const Array<E>& a, F pred) {
     for (std::size_t i = 0; i < a->size(); ++i) {
-        if (pred((*a)[i])) return true;
+        if (callArrayCallback<E>(pred, (*a)[i], i, a)) return true;
     }
     return false;
 }
@@ -444,9 +553,22 @@ bool arraySome(const Array<E>& a, F pred) {
 template <class E, class F>
 bool arrayEvery(const Array<E>& a, F pred) {
     for (std::size_t i = 0; i < a->size(); ++i) {
-        if (!pred((*a)[i])) return false;
+        if (!callArrayCallback<E>(pred, (*a)[i], i, a)) return false;
     }
     return true;
+}
+
+// `a.at(index)`: a relative index accessor; negative indices count from the
+// end, out-of-range indices produce `undefined`.
+template <class E>
+std::optional<E> arrayElementAt(const Array<E>& a, double index) {
+    if (std::isnan(index)) index = 0.0;
+    double i = std::trunc(index);
+    if (i < 0.0) i += static_cast<double>(a->size());
+    if (!(i >= 0.0) || i >= static_cast<double>(a->size())) {
+        return std::nullopt;
+    }
+    return (*a)[static_cast<std::size_t>(i)];
 }
 
 // `a.indexOf(x, from?)`: the first index equal to x, else -1.

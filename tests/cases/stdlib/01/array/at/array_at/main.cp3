@@ -1,0 +1,5 @@
+import console from "std/console";
+
+const values = [1, 2, 3, 4];
+console.log(`${values.at(0)} ${values.at(-1)} ${values.at(-2)}`);
+console.log(`${values.at(4) === undefined}`);
