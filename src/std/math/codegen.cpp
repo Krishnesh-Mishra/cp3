@@ -22,13 +22,16 @@ namespace {
 
 // Math (docs §04): the variadic `min`/`max` go through the runtime's
 // initializer_list overload; everything else is a 1:1 name.
-const char* const kMathUnary[] = {"sqrt", "abs",  "floor", "ceil", "round",
-                                  "trunc", "cbrt", "log",   "log2", "log10",
-                                  "sin",  "cos",  "tan"};
+const char* const kMathUnary[] = {
+    "sqrt", "abs",  "floor", "ceil",  "round", "trunc", "cbrt",
+    "log",  "log2", "log10", "sin",   "cos",   "tan",   "asin",
+    "acos", "atan", "sinh",  "cosh",  "tanh",  "asinh", "acosh",
+    "atanh", "exp", "log1p", "sign"};
 bool isMathFn(const std::string& name) {
     return name == "random" || name == "pow" || name == "min" || name == "max" ||
            name == "gcd" || name == "lcm" || name == "clamp" ||
-           name == "lerp" || CP3_IN_TABLE(name, kMathUnary);
+           name == "lerp" || name == "atan2" || name == "hypot" ||
+           CP3_IN_TABLE(name, kMathUnary);
 }
 
 }  // namespace
@@ -37,7 +40,7 @@ std::string Generator::emitMathCall(const CallExpr& c, const MemberExpr& m) {
     if (!isMathFn(m.property)) return std::string();
     needsMath_ = true;
     const std::vector<std::string> args = emitPlainArgs(c);
-    if (m.property == "min" || m.property == "max") {
+    if (m.property == "min" || m.property == "max" || m.property == "hypot") {
         // The runtime pair takes an initializer_list<double>; the braces make
         // this a list-initialization context, so each element is forced to
         // double (an int-looking spelling would be a narrowing conversion).
@@ -63,6 +66,30 @@ std::string Generator::emitMathMember(const MemberExpr& m) {
     if (m.property == "E") {
         needsMath_ = true;
         return "::cp3::runtime::math::kE";
+    }
+    if (m.property == "LN2") {
+        needsMath_ = true;
+        return "::cp3::runtime::math::kLn2";
+    }
+    if (m.property == "LN10") {
+        needsMath_ = true;
+        return "::cp3::runtime::math::kLn10";
+    }
+    if (m.property == "LOG2E") {
+        needsMath_ = true;
+        return "::cp3::runtime::math::kLog2e";
+    }
+    if (m.property == "LOG10E") {
+        needsMath_ = true;
+        return "::cp3::runtime::math::kLog10e";
+    }
+    if (m.property == "SQRT1_2") {
+        needsMath_ = true;
+        return "::cp3::runtime::math::kSqrt1_2";
+    }
+    if (m.property == "SQRT2") {
+        needsMath_ = true;
+        return "::cp3::runtime::math::kSqrt2";
     }
     return std::string();
 }

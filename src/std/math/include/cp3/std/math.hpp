@@ -38,6 +38,12 @@ namespace cp3::runtime::math {
 
 inline constexpr double kPi = 3.14159265358979323846264338327950288;
 inline constexpr double kE = 2.71828182845904523536028747135266250;
+inline constexpr double kLn2 = 0.693147180559945309417232121458176568;
+inline constexpr double kLn10 = 2.30258509299404568401799145468436421;
+inline constexpr double kLog2e = 1.44269504088896340735992468100189214;
+inline constexpr double kLog10e = 0.434294481903251827651128918916605082;
+inline constexpr double kSqrt1_2 = 0.707106781186547524400844362104849039;
+inline constexpr double kSqrt2 = 1.41421356237309504880168872420969808;
 
 // [0, 1). One engine per thread, seeded once from std::random_device (a
 // deterministic fallback seed would be acceptable: no case pins
@@ -71,6 +77,32 @@ inline double log10(double x) { return std::log10(x); }
 inline double sin(double x) { return std::sin(x); }
 inline double cos(double x) { return std::cos(x); }
 inline double tan(double x) { return std::tan(x); }
+inline double asin(double x) { return std::asin(x); }
+inline double acos(double x) { return std::acos(x); }
+inline double atan(double x) { return std::atan(x); }
+inline double atan2(double y, double x) { return std::atan2(y, x); }
+inline double sinh(double x) { return std::sinh(x); }
+inline double cosh(double x) { return std::cosh(x); }
+inline double tanh(double x) { return std::tanh(x); }
+inline double asinh(double x) { return std::asinh(x); }
+inline double acosh(double x) { return std::acosh(x); }
+inline double atanh(double x) { return std::atanh(x); }
+inline double exp(double x) { return std::exp(x); }
+inline double log1p(double x) { return std::log1p(x); }
+
+// JS Math.sign: NaN and either zero are returned unchanged.
+inline double sign(double x) {
+    if (std::isnan(x) || x == 0.0) return x;
+    return x < 0.0 ? -1.0 : 1.0;
+}
+
+// JS Math.hypot: no arguments is 0; infinities and NaNs propagate through
+// std::hypot exactly as the scalar helper does.
+inline double hypot(std::initializer_list<double> values) {
+    double result = 0.0;
+    for (double value : values) result = std::hypot(result, value);
+    return result;
+}
 
 // Variadic min/max (ECMAScript): any NaN makes the result NaN; otherwise the
 // smallest/largest argument wins. Empty input is +Infinity / -Infinity.

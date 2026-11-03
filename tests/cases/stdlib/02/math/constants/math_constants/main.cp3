@@ -1,0 +1,8 @@
+import console from "std/console";
+import Math from "std/math";
+console.log(Math.LN2.toFixed(4));
+console.log(Math.LN10.toFixed(4));
+console.log(Math.LOG2E.toFixed(4));
+console.log(Math.LOG10E.toFixed(4));
+console.log(Math.SQRT1_2.toFixed(4));
+console.log(Math.SQRT2.toFixed(4));

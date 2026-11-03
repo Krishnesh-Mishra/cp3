@@ -1,0 +1,5 @@
+import console from "std/console";
+import Math from "std/math";
+console.log(Math.exp(0).toFixed(0));
+console.log(Math.log1p(0).toFixed(0));
+console.log(Math.exp(1).toFixed(4));
