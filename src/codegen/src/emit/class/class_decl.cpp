@@ -261,6 +261,27 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
 void Generator::emitClassMember(const ClassModel& cm,
                                 const ClassMemberModel& m, std::string& out,
                                 int indent, std::string* defs) {
+    if (m.staticBlock != nullptr) {
+        const StaticBlock& sb = *m.staticBlock;
+        const std::string name =
+            "cp3_static_block_" + std::to_string(sb.nodeId);
+        line(out, indent, "inline static bool " + name + " = []() {");
+        const std::string savedReturn = currentReturn_;
+        currentReturn_ = "void";
+        ++nestingDepth_;
+        classStack_.push_back(&cm);
+        pushScope();
+        std::string body;
+        if (sb.body) stmt(*sb.body, body, indent + 1);
+        popScope();
+        classStack_.pop_back();
+        --nestingDepth_;
+        currentReturn_ = savedReturn;
+        out += body;
+        line(out, indent + 1, "return true;");
+        line(out, indent, "}();");
+        return;
+    }
     if (m.ctor != nullptr) {
         const ConstructorDeclaration& cd = *m.ctor;
         std::vector<std::string> params;

@@ -373,6 +373,15 @@ void Analyzer::checkClassMemberBody(ClassMember& m) {
         case NodeKind::AccessorDeclaration:
             analyzeAccessorBody(static_cast<AccessorDeclaration&>(m));
             return;
+        case NodeKind::StaticBlock: {
+            auto& sb = static_cast<StaticBlock&>(m);
+            // A static block has no `this`; static members are reached through
+            // the class name. It is checked in the enclosing class scope.
+            pushScope();
+            if (sb.body) visitStmt(*sb.body);
+            popScope();
+            return;
+        }
         default:
             return;
     }

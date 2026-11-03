@@ -186,8 +186,23 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
             collectClassAccessorModel(cm, *mp);
             continue;
         }
-        // The parser only creates Property, Method, Constructor and Accessor
-        // members; reaching here means the AST violates that invariant.
+        if (mp->kind == NodeKind::StaticBlock) {
+            if (cm.local) {
+                sink_.error(diagcode::kGenericLocalMethod, mp->span,
+                            "a static initialization block in a function-local "
+                            "class is not supported: C++ local classes cannot "
+                            "have static data members");
+                continue;
+            }
+            ClassMemberModel m;
+            m.name = "static block";
+            m.staticBlock = &static_cast<const StaticBlock&>(*mp);
+            cm.members.push_back(std::move(m));
+            continue;
+        }
+        // The parser only creates Property, Method, Constructor, Accessor and
+        // StaticBlock members; reaching here means the AST violates that
+        // invariant.
         reportUnsupported(*mp, diagcode::kInternalError,
                           "internal error: unhandled class member kind");
     }
