@@ -245,6 +245,19 @@ inline std::string charAt(const std::string& s, double index) {
     return std::string();
 }
 
+// `charCodeAt(i)`: the raw UTF-8 byte at byte position `i` (docs 09's
+// deliberate byte-oriented rule; the same value as `str[i]`). An out-of-range
+// or non-integer position returns NaN, matching JS's out-of-range result.
+inline double charCodeAt(const std::string& s, double index) {
+    if (std::isnan(index) || std::isinf(index) ||
+        std::trunc(index) != index || index < 0.0 ||
+        index >= static_cast<double>(s.size())) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    return static_cast<double>(
+        static_cast<unsigned char>(s[static_cast<std::size_t>(index)]));
+}
+
 // The string's code points, in order: the elements a `for (const ch of s)`
 // walks (the JS for-of order - a whole code point, not a byte). cp3 strings
 // are UTF-8 (docs 09), so a multi-byte character is one element.

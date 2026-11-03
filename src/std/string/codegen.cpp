@@ -28,6 +28,7 @@ struct StringMethod {
 };
 constexpr StringMethod kStringMethods[] = {
     {"charAt", "charAt"},       {"at", "charAt"},
+    {"charCodeAt", "charCodeAt"},
     {"startsWith", "startsWith"}, {"endsWith", "endsWith"},
     {"includes", "includes"},   {"repeat", "repeat"},
     {"padStart", "padStart"},   {"padEnd", "padEnd"},
