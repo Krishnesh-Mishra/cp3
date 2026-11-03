@@ -27,6 +27,12 @@ namespace cp3::modules {
 
 namespace {
 
+// v0.2 parks the prelude proposal. The scanner, injector and fixtures stay in
+// the tree so the design can be resumed for v0.4, but no unit receives an
+// injected prelude while this is false. Keep this switch rather than deleting
+// the path: re-enabling should be one line once the design review lands.
+constexpr bool kPreludesEnabled = false;
+
 std::vector<Token> lexFile(const SourceFile& file, DiagnosticSink& sink) {
     Lexer lexer(file, sink);
     return lexer.lex().tokens();
@@ -50,7 +56,7 @@ void ProgramLoader::parseUnit(CompilationUnit& unit, bool withPreludes) {
 
 std::vector<Token> ProgramLoader::unitTokens(CompilationUnit& unit, bool withPreludes) {
     std::vector<Token> assembled;
-    if (withPreludes && unit.file != nullptr) {
+    if (kPreludesEnabled && withPreludes && unit.file != nullptr) {
         for (const PreludeRef& ref : preludesForFolder(folderOfSource(*unit.file))) {
             appendPrelude(unit, ref, assembled);
         }
