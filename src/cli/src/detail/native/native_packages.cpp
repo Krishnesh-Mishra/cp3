@@ -21,6 +21,7 @@
 #include "../../../../std/date/native.hpp"
 #include "../../../../std/env/native.hpp"
 #include "../../../../std/fs/native.hpp"
+#include "../../../../std/io/native.hpp"
 #include "../../../../std/json/native.hpp"
 #include "../../../../std/math/native.hpp"
 #include "../../../../std/network/codegen/native.hpp"
@@ -37,6 +38,7 @@ const std::vector<const NativePackage*>& nativePackages() {
         &kCollectionsNativePackage,
         &kConsoleNativePackage,
         &kFsNativePackage,
+        &kIoNativePackage,
         &kJsonNativePackage,
         &kMathNativePackage,
         &kOsNativePackage,

@@ -324,13 +324,14 @@ constexpr RuntimeUnit kRuntimeUnits[] = {
     {"error.cpp", ""},
     {"eventloop.cpp",
      "cp3/async/|cp3/parallel/|runEventLoop|cp3/std/console.hpp|"
-     "cp3/std/network.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
+     "cp3/std/network.hpp|cp3/std/io.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
     {"timers.cpp",
      "cp3/async/|cp3/parallel/|runEventLoop|cp3/std/console.hpp|"
-     "cp3/std/network.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
+     "cp3/std/network.hpp|cp3/std/io.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
     {"promise.cpp",
      "cp3/async/|cp3/parallel/|runEventLoop|cp3/std/console.hpp|"
-     "cp3/std/network.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
+     "cp3/std/network.hpp|cp3/std/io.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
+    {"uv_loop.cpp", "cp3/std/network.hpp|cp3/std/io.hpp"},
     {"parallel.cpp", "cp3/parallel/parallel.hpp|parallelRunAll|ThreadPool"},
 };
 

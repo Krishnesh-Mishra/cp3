@@ -37,6 +37,7 @@ struct ProgramNeeds {
     bool collections = false;
     bool buffer = false;
     bool fs = false;
+    bool io = false;
     bool tuple = false;
     bool eventEmitter = false;
     bool bitwise = false;        // bitwise/shift ops -> cp3/core/bitwise.hpp

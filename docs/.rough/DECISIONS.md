@@ -1355,3 +1355,80 @@ not proceed without a spec decision. The spec owner ruled:
 Ruling 4 is the reason the "align with our principles" note matters: where
 TypeScript has an answer, cp3 takes TypeScript's answer, and only the C++
 implementation differs.
+
+## Non-blocking native I/O: two mechanisms (2026-11-03, lead)
+
+The v0.2 runtime must not freeze the single event loop when a native library
+blocks. `async` alone is not enough: wrapping a blocking C call in an async
+function still runs it synchronously on the loop thread.
+
+The rule is two mechanisms, selected per library:
+
+- **Socket path (v0.2 phases 1-2).** A library that exposes a socket fd and a
+  non-blocking step API uses `std/io`:
+  `io.waitReadable(fd)`, `io.waitWritable(fd)` and `io.pollUntilDone(getSocket,
+  checkProgress)`. `pollUntilDone` re-calls `getSocket()` every iteration
+  because the fd may change during connect. It exports `POLL_READING`,
+  `POLL_WRITING`, `POLL_DONE` and `POLL_FAILED`. This path is implemented once
+  in the runtime, not per package.
+- **Pool path (v0.2 phase 3, deferred).** A pure blocking C library that has no
+  pollable fd uses `import native async "<lib>" as x;`. Calls return Promises
+  and run on one fixed shared offload pool (default 4 threads, configurable).
+  Phase 3 does not start until phases 1-2 pass their tests.
+
+Anything networked that can use a non-blocking API MUST use the socket path,
+never the pool.
+
+### Phase 1 and 2 contract
+
+- One event loop, one thread. `std/io` adds fd readiness to the existing
+  `EventLoop`; it does not create a second loop.
+- `std/network` and `std/io` share exactly one libuv loop per thread
+  (`cp3/async/uv_loop.hpp`). The `EventLoop` remains authoritative and drives
+  libuv from its idle phase.
+- Many concurrent waiters are supported, including several on the same fd with
+  different directions.
+- A waiter resolves only when its direction is ready. Poll error,
+  hangup/disconnect, an invalid descriptor, or a descriptor closed while
+  waiting rejects the promise. One shared 100 ms descriptor-validity check
+  covers every pending wait; there is never a timer or thread per descriptor.
+- Phase 1 exposes no cancellation token. A pending waiter cannot be cancelled
+  through the public API; a future cancellation/abort model must define it
+  explicitly.
+- Poller/wakeup: Linux uses libuv's epoll backend; Windows uses libuv's IOCP
+  backend. Both use libuv's async handle for cross-thread wakeup (eventfd/pipe
+  internally on Linux, PostQueuedCompletionStatus on Windows).
+
+### Phase 3 preconditions (not implemented yet)
+
+If phase 3 starts, it must obey all six rules:
+
+1. One fixed shared pool, configurable, shared by all libraries; never one
+   worker or pool per library.
+2. Calls on the same handle run strictly one after another; different handles
+   may run in parallel.
+3. Strings and buffers are copied into owned memory before dispatch.
+4. Pool threads never touch the cp3 runtime; they run only the C call and write
+   plain result structs. The loop thread converts the struct into cp3 values.
+5. Completion posts to the loop so an otherwise idle loop wakes immediately.
+6. Handles may opt into a dedicated thread for libraries that require every
+   call from the same thread.
+
+Known limits, documented rather than hidden:
+
+- Pool size caps concurrency; the (N+1)th blocking call queues. This is fine
+  for short/CPU-bound work and bad for multi-second blocking network calls.
+- A started blocking call cannot be cancelled; cancellation can only discard
+  the result.
+
+Non-goals: multiple event loops, per-library workers, and syntax changes beyond
+the optional `import native async`.
+
+### Phase 1-2 acceptance
+
+1. A 100 ms timer fires roughly 20 times while a socket wait resolves after
+   about 2 seconds.
+2. 1000 concurrent waiters on distinct sockets resolve correctly with no
+   thread growth.
+3. Closing the fd while waiting rejects the promise with no hang or crash.
+4. Windows and Linux use the documented poller and wakeup mechanism.

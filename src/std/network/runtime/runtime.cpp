@@ -24,69 +24,33 @@
 
 #include <uv.h>
 
-#include "Loop.h"  // uWS::Loop (borrows the uv loop this TU creates)
+#include "Loop.h"  // uWS::Loop (borrows the shared core uv loop)
 
+#include "cp3/async/uv_loop.hpp"
 #include "runtime_loop.hpp"
 
 namespace cp3::runtime::network {
 
 // =============================================================================
-// The per-thread libuv loop (runtime_loop.hpp)
+// The shared per-thread libuv loop (runtime_loop.hpp)
 // =============================================================================
-namespace {
-
-/// Everything the per-thread loop needs. Created once per thread and leaked on
-/// purpose: it outlives every uWS context and every cp3 object living on it.
-struct LoopState {
-    uv_loop_t loop{};
-    uv_timer_t bridge{};  // one-shot bound armed around each blocking turn
-    uv_async_t wake{};    // thread-safe nudge used by postFromThread
-};
-
-void onBridgeFire(uv_timer_t*) {}  // arming is the whole job
-void onWake(uv_async_t*) {}        // waking the poll is the whole job
-
-LoopState* createLoopState() {
-    LoopState* state = new LoopState;
-    if (uv_loop_init(&state->loop) != 0) {
-        delete state;
-        return nullptr;
+void ensureLoop() {
+    uv::ensureLoop();
+    void* loop = uv::loopHandle();
+    if (loop == nullptr) return;
+    // Hand the shared loop to uWS before any App exists. uSockets borrows it
+    // (cleanMe = false, never freed); integrate() hooks uWS's own unref'd
+    // timers onto it exactly once per thread.
+    static thread_local bool integrated = false;
+    if (!integrated) {
+        uWS::Loop::get(static_cast<uv_loop_t*>(loop))->integrate();
+        integrated = true;
     }
-    uv_timer_init(&state->loop, &state->bridge);
-    uv_async_init(&state->loop, &state->wake, onWake);
-    // Hand the loop to uWS BEFORE any App exists: uSockets borrows it
-    // (cleanMe = false, never freed) and every uWS context on this thread then
-    // lives on it. integrate() hooks uWS's own unref'd timers onto it.
-    uWS::Loop::get(&state->loop)->integrate();
-    // Drive libuv from the runtime loop's idle phase (eventloop.hpp).
-    currentLoop().setExternalSource(
-        [state] { return uv_run(&state->loop, UV_RUN_NOWAIT) != 0; },
-        [state](std::int64_t maxWaitMs) {
-            if (maxWaitMs >= 0) {
-                uv_timer_start(&state->bridge, onBridgeFire,
-                               static_cast<std::uint64_t>(maxWaitMs), 0);
-            } else {
-                uv_timer_stop(&state->bridge);
-            }
-            uv_run(&state->loop, UV_RUN_ONCE);
-            uv_timer_stop(&state->bridge);
-        },
-        [state] { uv_async_send(&state->wake); });
-    return state;
 }
-
-LoopState* loopState() {
-    static thread_local LoopState* state = createLoopState();
-    return state;
-}
-
-}  // namespace
-
-void ensureLoop() { (void)loopState(); }
 
 void* loopHandle() {
-    LoopState* state = loopState();
-    return state == nullptr ? nullptr : &state->loop;
+    uv::ensureLoop();
+    return uv::loopHandle();
 }
 
 void retainNetwork() { currentLoop().retainExternal(); }

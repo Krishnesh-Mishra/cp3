@@ -338,6 +338,8 @@ private:
     // std/fs `FileStats` fields; nullopt keeps ambient fallthrough.
     std::optional<Type> fsReceiverMember(const Type& recv,
                                          const std::string& prop);
+    // std/io fd readiness and poll helper.
+    std::optional<Type> ioMember(const std::string& prop);
     bool tryInferStringBuiltin(CallExpr& call, const Identifier& id, Type& out);
 
     // --- std/network (src/std/network/sema.cpp) ------------------------------
@@ -671,6 +673,7 @@ std::vector<std::string> consoleMemberArgumentValues(
 std::vector<std::string> jsonMemberNames();
 std::vector<std::string> cryptoMemberNames();
 std::vector<std::string> fsMemberNames();
+std::vector<std::string> ioMemberNames();
 std::vector<std::string> dateMemberNames();
 std::vector<std::string> dateInstanceMemberNames();
 
@@ -686,6 +689,7 @@ StdMemberDoc consoleMemberDoc(const std::string& prop);
 StdMemberDoc jsonMemberDoc(const std::string& prop);
 StdMemberDoc cryptoMemberDoc(const std::string& prop);
 StdMemberDoc fsMemberDoc(const std::string& prop);
+StdMemberDoc ioMemberDoc(const std::string& prop);
 StdMemberDoc fsStatsMemberDoc(const std::string& prop);
 std::vector<std::string> fsStatsMemberNames();
 StdMemberDoc dateMemberDoc(const std::string& prop);

@@ -27,6 +27,28 @@ CP3 provides promise member operations and static combinators implemented by the
 
 Timers and pending asynchronous work use the runtime event loop. The loop is associated with a thread, and scheduled tasks may retain closures and their captured state. A long-running synchronous loop blocks progress on that event loop.
 
+## Native non-blocking I/O
+
+`async` schedules continuations; it does not move a blocking C call to another thread. A native call that blocks still freezes the loop. Libraries that expose a socket and a non-blocking step API must use the reactor path instead:
+
+```ts
+import io from "std/io";
+
+await io.waitReadable(fd); // suspend this async function until fd is readable
+await io.waitWritable(fd); // suspend until fd is writable
+
+await io.pollUntilDone(
+  () => getSocket(),   // called again every iteration: connect can change the fd
+  () => checkProgress() // io.POLL_READING | io.POLL_WRITING | io.POLL_DONE | io.POLL_FAILED
+);
+```
+
+Only the awaiting function suspends. Timers, promise continuations and other fd waiters keep running on the same loop. A poll error, hangup/disconnect, invalid descriptor, or a descriptor closed while waiting rejects the promise. One shared 100 ms descriptor-validity check covers all pending waits, so a local close is detected without a timer or thread per descriptor. Phase 1 exposes no cancellation token; a pending waiter stays pending until it settles or the descriptor fails.
+
+`std/io` shares one libuv loop per thread with `std/network`. The runtime `EventLoop` remains authoritative and drives libuv from its idle phase. Linux uses libuv's epoll backend; Windows uses libuv's IOCP backend. Cross-thread wakeup uses libuv's async handle.
+
+Pure blocking C libraries with no pollable fd are the separate pool path: `import native async "<lib>" as x;`. That surface is phase 3 and is not available until the phase 1-2 reactor tests pass. See [Native packages and ABI boundaries](../04-compiler-cli/07-native-interop.md).
+
 ## Parallel operations
 
 The parallel API splits suitable work across native threads and combines results using supported forms. The checker restricts shared mutation, capture reassignment, accumulator types, and closure shapes. Prefer a reduction value over mutation of a shared object.

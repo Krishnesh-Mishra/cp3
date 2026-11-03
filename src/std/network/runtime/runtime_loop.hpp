@@ -5,14 +5,15 @@
 // TUs (runtime.cpp, runtime_server.cpp, runtime_ws.cpp, runtime_ws_client.cpp);
 // not part of the generated-code contract.
 //
-// MODEL. `std/network` owns ONE libuv loop per thread. It is created here, then
-// handed to uWebSockets with `uWS::Loop::get(uvLoop)`: uSockets keeps the
-// pointer with `cleanMe = false` (a borrowed "alien" loop it never frees), and
-// every uWS App created on this thread uses it. The runtime's EventLoop stays
-// authoritative: `ensureLoop()` installs the external event source declared in
-// cp3/async/eventloop.hpp, so `run()` drives libuv from the idle phase and the
-// program exit rule is unchanged (a live fetch, server or socket calls
-// `retainNetwork()` and therefore counts as pending work, exactly like a timer).
+// MODEL. One libuv loop exists per thread, owned by `cp3/async/uv_loop.hpp`.
+// `std/network` shares it with `std/io` and hands it to uWebSockets with
+// `uWS::Loop::get(uvLoop)`: uSockets keeps the pointer with `cleanMe = false`
+// (a borrowed "alien" loop it never frees), and every uWS App created on this
+// thread uses it. The runtime's EventLoop stays authoritative: the shared loop
+// installs the external event source declared in cp3/async/eventloop.hpp, so
+// `run()` drives libuv from the idle phase and the program exit rule is
+// unchanged (a live fetch, server or socket calls `retainNetwork()` and
+// therefore counts as pending work, exactly like a timer).
 // =============================================================================
 #pragma once
 

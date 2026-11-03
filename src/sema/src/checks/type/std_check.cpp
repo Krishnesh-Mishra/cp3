@@ -47,6 +47,7 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
     if (ns == "crypto") return cryptoMember(prop);
     if (ns == "network") return networkMember(prop);
     if (ns == "fs") return fsMember(prop);
+    if (ns == "io") return ioMember(prop);
     if (ns == "console") return consoleMember(prop);
     if (ns == "JSON") return jsonMember(prop);
     if (ns == "Date") return dateMember(prop);
@@ -60,7 +61,7 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
 bool isClosedStdNamespace(const std::string& ns) {
     return ns == "Math" || ns == "path" || ns == "os" || ns == "crypto" ||
            ns == "console" || ns == "JSON" || ns == "Date" || ns == "fs" ||
-           ns == "process" || ns == "env";
+           ns == "io" || ns == "process" || ns == "env";
 }
 
 // The CP3305 candidate lists come from the family units, which own the tables.
@@ -75,6 +76,7 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns) {
     if (ns == "console") return consoleMemberNames();
     if (ns == "Date") return dateMemberNames();
     if (ns == "fs") return fsMemberNames();
+    if (ns == "io") return ioMemberNames();
     return {};
 }
 
@@ -105,6 +107,7 @@ StdMemberDoc stdNamespaceMemberDoc(const std::string& ns,
     if (ns == "JSON") return jsonMemberDoc(member);
     if (ns == "Date") return dateMemberDoc(member);
     if (ns == "fs") return fsMemberDoc(member);
+    if (ns == "io") return ioMemberDoc(member);
     return StdMemberDoc{};
 }
 
@@ -162,8 +165,8 @@ std::string stdImportHint(const std::string& name) {
         {"Math", "std/math"},       {"JSON", "std/json"},
         {"console", "std/console"}, {"path", "std/path"},
         {"os", "std/os"},           {"crypto", "std/crypto"},
-        {"fs", "std/fs"},           {"Date", "std/date"},
-        {"process", "std/process"},
+        {"fs", "std/fs"},           {"io", "std/io"},
+        {"Date", "std/date"},       {"process", "std/process"},
     };
     for (const ModuleHint& hint : kHints) {
         if (name == hint.binding) {

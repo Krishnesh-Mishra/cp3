@@ -204,6 +204,7 @@ std::string programSource(const ProgramAssembly& assembly,
     if (n.collections) out += "#include \"cp3/std/collections.hpp\"\n";
     if (n.buffer) out += "#include \"cp3/std/buffer.hpp\"\n";
     if (n.fs) out += "#include \"cp3/std/fs.hpp\"\n";
+    if (n.io) out += "#include \"cp3/std/io.hpp\"\n";
     if (n.parallel) out += "#include \"cp3/parallel/parallel.hpp\"\n";
     if (n.worker) {
         out += "#include \"cp3/parallel/worker.hpp\"\n";
@@ -324,6 +325,7 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     n.collections |= inner.needsCollections_;
     n.buffer |= inner.needsBuffer_;
     n.fs |= inner.needsFs_;
+    n.io |= inner.needsIo_;
     n.tuple |= inner.needsTuple_;
     n.eventEmitter |= inner.needsEventEmitter_;
     n.bitwise |= inner.needsBitwise_;

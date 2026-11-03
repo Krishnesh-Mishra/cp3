@@ -35,6 +35,7 @@ const StdModuleDef kStdModules[] = {
     {"std/json", true, {}},
     {"std/math", true, {}},
     {"std/fs", true, {}},
+    {"std/io", true, {}},
     {"std/date", true, {}},
     {"std/process", true, {}},
     {"std/path", true, {}},

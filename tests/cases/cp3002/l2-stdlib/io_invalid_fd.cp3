@@ -1,0 +1,9 @@
+import io from "std/io";
+import console from "std/console";
+
+try {
+  await io.waitWritable(-1);
+  console.log("bad");
+} catch (err) {
+  console.log("rejected:" + err.message);
+}

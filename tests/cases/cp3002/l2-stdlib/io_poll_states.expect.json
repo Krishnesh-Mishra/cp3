@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "0,1,2,-1\ndone\nfailed:std/io: pollUntilDone failed\nunknown:std/io: pollUntilDone returned an unknown state\n",
+  "exitCode": 0
+}

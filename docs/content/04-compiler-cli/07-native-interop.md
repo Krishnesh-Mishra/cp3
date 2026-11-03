@@ -24,6 +24,51 @@ cp3 native-install --help
 
 The SDK and its headers must be available to the toolchain. Installation can also depend on libclang and platform-specific libraries. Generated bindings and build metadata are distinct from the native SDK itself; distribution and runtime loading rules depend on the package and target platform.
 
+## Blocking native functions: the package recipe
+
+Do not wrap a blocking native function in `async` and assume it is concurrent. An `async` function runs synchronously up to its first real suspension point; a blocking C call still freezes the loop. Choose the mechanism by the library's API:
+
+| Library has... | Use |
+| --- | --- |
+| A socket fd and a non-blocking step API | `std/io` `pollUntilDone` |
+| No pollable fd, pure blocking C | `import native async` (phase 3, not available in v0.2 phases 1-2) |
+| No pollable fd, multi-second calls | a larger/separate pool, or another library |
+
+For a package with a non-blocking API, keep native handles as scalar numbers and use `std/io` from the package source:
+
+```ts
+// package source: src/index.cp3
+import io from "std/io";
+import native "mypkg-native" as native;
+
+// connect is a synchronous native call that returns a scalar handle.
+export function connect(conninfo: string): number {
+  return native.connect(conninfo);
+}
+
+// The native shim exposes socket(handle) and progress(handle) as scalar calls.
+export async function waitForReady(handle: number): Promise<void> {
+  await io.pollUntilDone(
+    () => native.socket(handle),
+    () => native.progress(handle), // io.POLL_READING / WRITING / DONE / FAILED
+  );
+}
+```
+
+The package author does not write the polling loop. `pollUntilDone` calls `getSocket()` again on every iteration because a connect-time fd can change. A package that exposes a blocking call should keep it synchronous and clearly documented:
+
+```ts
+import native "mypkg-native" as native;
+
+export function hashSync(value: string): string {
+  return native.hash(value);
+}
+```
+
+Do not turn that into `async function hash()`; that only changes the return type and still blocks the event loop. The `import native async "<lib>" as x;` surface that runs blocking calls on one shared offload pool is phase 3. It is deferred until the phase 1-2 reactor tests pass; package authors must not depend on it yet.
+
+A `.cp3pak` carries the native binding metadata and artifacts under `.cp3/native/<id>/`. Installation and linking hoist that directory into the consuming project, and runtime DLLs keep their original basenames beside the executable. Declare functions in the package's generated `index.cp3` surface and keep the `native.json` metadata (headers, libraries, symbols) in the binding directory; do not hand-edit a copied `native.json` in the consuming project.
+
 ## Keep the boundary small
 
 Wrap native calls behind a small CP3 module. Convert input into CP3-owned values close to the call site, check return codes, and keep raw handles out of general application logic.

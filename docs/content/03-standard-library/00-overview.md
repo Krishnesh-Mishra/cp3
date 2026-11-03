@@ -48,6 +48,7 @@ Imports are resolved by the compiler's standard module registry. Unknown module 
 | [Strings](15-strings.md) | Built-in UTF-8 string operations |
 | [Typed arrays](16-typed-arrays.md) | Fixed-width numeric arrays, buffers, and DataView |
 | [Regular expressions](17-regular-expressions.md) | Core regex literals, flags, match results, and string splitting |
+| [I/O readiness](18-io.md) | Non-blocking fd readiness and `pollUntilDone` for native socket libraries |
 
 ## Error and asynchronous behavior
 

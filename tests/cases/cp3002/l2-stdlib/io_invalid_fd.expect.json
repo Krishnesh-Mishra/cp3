@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "rejected:std/io: invalid fd\n",
+  "exitCode": 0
+}

@@ -1,6 +1,6 @@
 ---
 title: CP3 Documentation
-description: Official documentation for CP3, a statically typed language with TypeScript-shaped syntax that compiles to native executables.
+chapter: Home
 ---
 
 # CP3 Documentation

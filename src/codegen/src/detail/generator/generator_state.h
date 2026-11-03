@@ -168,6 +168,7 @@ protected:
     bool scaleMode_ = false;
     std::vector<std::string> moduleInitLines_;
     bool needsFs_ = false;         // std/fs -> cp3/std/fs.hpp include
+    bool needsIo_ = false;         // std/io -> cp3/std/io.hpp include
     bool needsTypedArray_ = false; // the family -> cp3/typed_array.hpp include
     bool needsCollections_ = false;  // std/collections -> cp3/std/collections.hpp
     bool needsBuffer_ = false;       // std/buffer -> cp3/std/buffer.hpp include

@@ -681,6 +681,9 @@ private:
     std::string emitFsMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitFsMemberRead(const MemberExpr& m);
     std::string emitFsStreamOn(const CallExpr& c, const MemberExpr& m);
+    // std/io (src/std/io/codegen.cpp): fd readiness, pollUntilDone and POLL_*.
+    std::string emitIoCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitIoMember(const MemberExpr& m);
     // std/date (src/std/date/codegen.cpp): the `Date.*` statics and the Date
     // value's instance methods; pure family, backed by cp3/std/date.hpp.
     std::string emitDateCall(const CallExpr& c, const MemberExpr& m);

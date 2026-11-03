@@ -24,6 +24,7 @@ set(cp3_runtime_sources
     src/core/error.cpp
     src/core/regex.cpp
     src/async/eventloop.cpp
+    src/async/uv_loop.cpp
     src/async/timers.cpp
     src/parallel/parallel.cpp
     src/async/promise.cpp
@@ -31,6 +32,7 @@ set(cp3_runtime_sources
     ../std/crypto/runtime.cpp
     ../std/process/child.cpp
     ../std/process/runtime.cpp
+    ../std/io/runtime.cpp
     ../std/network/runtime/runtime.cpp
     ../std/network/runtime/runtime_fetch.cpp
     ../std/network/runtime/runtime_fetch_io.cpp
@@ -66,6 +68,7 @@ target_include_directories(cp3_runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/console/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/crypto/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/json/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../std/io/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/network/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/process/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/collections/include"

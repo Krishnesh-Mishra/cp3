@@ -181,6 +181,7 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
         return emitNetworkCall(c, m);
     }
     if (isNamespaceObject(m.object.get(), "fs")) return emitFsCall(c, m);
+    if (isNamespaceObject(m.object.get(), "io")) return emitIoCall(c, m);
     // `process.*` (exit/exec/spawn; argv/env reads lower in emitProcessMember)
     // and the `{ env }` named import from std/env (src/std/env/codegen.cpp).
     if (isNamespaceObject(m.object.get(), "process")) {
@@ -257,6 +258,8 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     if (std::string net = emitNetworkMemberRead(m); !net.empty()) return net;
     // `std/fs` FileStats reads (`stat.size`, `stat.isDirectory`, ...).
     if (std::string fsStat = emitFsMemberRead(m); !fsStat.empty()) return fsStat;
+    // `std/io` constants (`io.POLL_READING`, ...).
+    if (std::string io = emitIoMember(m); !io.empty()) return io;
     if (std::string sep = emitPathMember(m); !sep.empty()) return sep;
     if (m.property == "length" && m.object) {
         if (info(*m.object).shape == Shape::String) {

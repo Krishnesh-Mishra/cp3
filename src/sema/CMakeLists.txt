@@ -41,6 +41,7 @@ set(cp3_sema_sources
     ../std/crypto/sema.cpp
     ../std/network/codegen/sema.cpp
     ../std/fs/sema.cpp
+    ../std/io/sema.cpp
     ../std/typed-arrays/sema.cpp
     ../std/typed-arrays/sema_index.cpp
     ../std/typed-arrays/sema_methods.cpp

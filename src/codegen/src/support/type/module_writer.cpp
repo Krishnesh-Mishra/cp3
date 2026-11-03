@@ -152,6 +152,7 @@ std::string Generator::sourceIncludes() const {
     }
     if (needsBuffer_) out += "#include \"cp3/std/buffer.hpp\"\n";
     if (needsFs_) out += "#include \"cp3/std/fs.hpp\"\n";
+    if (needsIo_) out += "#include \"cp3/std/io.hpp\"\n";
     if (needsParallel_) {
         out += "#include \"cp3/parallel/parallel.hpp\"\n";  // parallel.* (spec 13)
     }
