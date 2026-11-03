@@ -24,6 +24,7 @@ struct ProgramNeeds {
     bool eventLoop = false;      // async/timers: run the event loop in main
     bool arith = false;          // `%`/int64 lowering -> cp3/core/arith.hpp
     bool math = false;
+    bool number = false;         // Number methods/statics -> cp3/core/number.hpp
     bool str = false;            // string methods -> cp3/std/string.hpp
     bool path = false;
     bool os = false;

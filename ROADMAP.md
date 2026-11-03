@@ -87,9 +87,9 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 
 | Module / scope | Feature / API | Implementation notes / details | Status |
 | --- | --- | --- | --- |
-| Number / Math | `toFixed`, `toPrecision`, `toExponential` | Number formatting methods. | Planned |
-| Number / Math | `MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `EPSILON` | Standard number constants. | Planned |
-| Number / Math | `Number.isInteger`, `Number.isFinite`, `Number.isNaN` | Number validation methods. | Planned |
+| Number / Math | `toFixed`, `toPrecision`, `toExponential` | Number formatting methods. | Done |
+| Number / Math | `MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `EPSILON` | Standard number constants, plus `MAX_VALUE`, `MIN_VALUE`, `POSITIVE_INFINITY`, `NEGATIVE_INFINITY` and `NaN`. | Done |
+| Number / Math | `Number.isInteger`, `Number.isFinite`, `Number.isNaN` | Number validation methods. | Done |
 | Math | Math extras | Add the remaining standard math utilities (inverse trig, hyperbolic, `exp`, `log1p`, `hypot`, `sign`, constants). Today: `PI`, `E`, `random`, `min`, `max`, `pow`, `gcd`, `lcm`, `clamp`, `lerp`, `sqrt`, `abs`, `floor`, `ceil`, `round`, `trunc`, `cbrt`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`. | Partial |
 | Array | Callback signature `(value, index, array)` | Standardize every array iteration callback to the JS/TS shape. Callbacks may declare any prefix of `(value, index, array)`. | Done |
 | Array | `flatMap`, `findLast`, `findLastIndex`, `at` | Modern query, search, and access methods. | Done |

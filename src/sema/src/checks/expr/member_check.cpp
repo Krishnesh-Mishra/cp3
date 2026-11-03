@@ -43,6 +43,11 @@ Type Analyzer::inferMember(MemberExpr& m) {
         if (Type native = nativeMemberType(m); !native.isError()) return withType(m, native);
         Binding b;
         if (lookup(id.name, b) && b.isAmbient) {
+            if (id.name == "Number") {
+                if (auto t = numberStaticMember(m.property)) {
+                    return withType(m, *t);
+                }
+            }
             if (auto t = stdNamespaceMember(id.name, m.property)) {
                 return withType(m, *t);
             }
@@ -209,6 +214,7 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
         case TypeKind::Enum:
             return enumMember(ot, prop, span);
         case TypeKind::Number:
+            return numberMember(prop);
         case TypeKind::Boolean:
             return ambient();
         case TypeKind::Literal:

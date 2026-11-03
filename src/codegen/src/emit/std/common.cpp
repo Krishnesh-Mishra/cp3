@@ -169,6 +169,10 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
         }
     }
     if (isNamespaceObject(m.object.get(), "Math")) return emitMathCall(c, m);
+    if (isNamespaceObject(m.object.get(), "Number") &&
+        !hasValueBinding("Number")) {
+        return emitNumberStaticCall(c, m);
+    }
     if (isNamespaceObject(m.object.get(), "path")) return emitPathCall(c, m);
     if (isNamespaceObject(m.object.get(), "os")) return emitOsCall(c, m);
     if (isNamespaceObject(m.object.get(), "JSON")) return emitJsonCall(c, m);
@@ -211,6 +215,10 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
         if (!literal.empty()) return literal;
     } else if (m.object && info(*m.object).shape == Shape::String) {
         return emitStringMethodCall(c, m);
+    } else if (m.object && info(*m.object).shape == Shape::Number) {
+        if (std::string number = emitNumberMethodCall(c, m); !number.empty()) {
+            return number;
+        }
     }
     // A std/network Map-shaped documented field read (`req.headers.get(...)`,
     // `res.headers.get(...)`): the open marker hides the Map type from sema,
@@ -254,6 +262,7 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     // Core regex literals (D48; src/emit/regex.cpp): `.source` / `.flags`.
     if (std::string regex = emitRegexMember(m); !regex.empty()) return regex;
     if (std::string math = emitMathMember(m); !math.empty()) return math;
+    if (std::string number = emitNumberMember(m); !number.empty()) return number;
     // `std/network` field reads (`res.status`, `res.ok`, `req.method`, ...).
     if (std::string net = emitNetworkMemberRead(m); !net.empty()) return net;
     // `std/fs` FileStats reads (`stat.size`, `stat.isDirectory`, ...).

@@ -191,6 +191,7 @@ std::string programSource(const ProgramAssembly& assembly,
     if (n.typedArray) out += "#include \"cp3/typed_array.hpp\"\n";
     if (n.eventEmitter) out += "#include \"cp3/async/emitter.hpp\"\n";
     if (n.consoleStderr || n.consoleAbi) out += "#include \"cp3/std/console.hpp\"\n";
+    if (n.number) out += "#include \"cp3/core/number.hpp\"\n";
     if (n.math) out += "#include \"cp3/std/math.hpp\"\n";
     if (n.str) out += "#include \"cp3/std/string.hpp\"\n";
     if (n.path) out += "#include \"cp3/std/path.hpp\"\n";
@@ -312,6 +313,7 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     n.eventLoop |= inner.needsEventLoop_ || inner.topLevelAwait_;
     n.arith |= inner.needsArith_;
     n.math |= inner.needsMath_;
+    n.number |= inner.needsNumber_;
     n.str |= inner.needsString_;
     n.path |= inner.needsPath_;
     n.os |= inner.needsOs_;

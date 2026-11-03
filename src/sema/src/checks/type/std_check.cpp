@@ -98,6 +98,7 @@ const char* const kSpawnHandleMarker = "$process:SpawnHandle";
 StdMemberDoc stdNamespaceMemberDoc(const std::string& ns,
                                    const std::string& member) {
     if (ns == "Math") return mathMemberDoc(member);
+    if (ns == "Number") return numberStaticMemberDoc(member);
     if (ns == "path") return pathMemberDoc(member);
     if (ns == "os") return osMemberDoc(member);
     if (ns == "process") return processMemberDoc(member);
@@ -123,6 +124,7 @@ std::vector<std::string> stdNamespaceMemberArgumentValues(
 StdMemberDoc stdInstanceMemberDoc(const std::string& family,
                                    const std::string& member) {
     if (family == "Date") return dateInstanceMemberDoc(member);
+    if (family == "Number") return numberMemberDoc(member);
     if (family == "Map") return collectionsMemberDoc("Map", member);
     if (family == "Set") return collectionsMemberDoc("Set", member);
     if (family == kFileStatsMarker) return fsStatsMemberDoc(member);
@@ -133,6 +135,7 @@ StdMemberDoc stdInstanceMemberDoc(const std::string& family,
 
 std::vector<std::string> stdInstanceMemberNames(const std::string& family) {
     if (family == "Date") return dateInstanceMemberNames();
+    if (family == "Number") return numberMemberNames();
     if (family == "Map") return collectionsMemberNames("Map");
     if (family == "Set") return collectionsMemberNames("Set");
     if (family == kFileStatsMarker) return fsStatsMemberNames();

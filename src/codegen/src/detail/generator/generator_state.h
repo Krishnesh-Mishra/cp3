@@ -136,6 +136,7 @@ protected:
     bool suppressDiagnostics_ = false;  // an int64 attempt must not report
     bool needsMath_ = false;       // Math.* -> cp3/std/math.hpp include
     bool needsString_ = false;     // string methods -> cp3/std/string.hpp include
+    bool needsNumber_ = false;     // Number methods/statics -> cp3/core/number.hpp
     bool needsPath_ = false;       // path.* -> cp3/std/path.hpp include
     bool needsOs_ = false;         // os.* -> cp3/std/os.hpp include
     bool needsJson_ = false;       // JSON.stringify/parse -> cp3/std/json.hpp include

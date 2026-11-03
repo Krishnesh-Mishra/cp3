@@ -316,6 +316,9 @@ private:
     // Enum member access (`Color.Green`, spec 04; checks/enum_check.cpp).
     Type enumMember(const Type& ot, const std::string& prop, const SourceSpan& span);
     Type stringMember(const std::string& prop);
+    // Language-level Number methods (`toFixed`, ...) and statics
+    // (`Number.isInteger`, constants).
+    Type numberMember(const std::string& prop);
     // Ambient std namespaces and the `String(x)` global.
     std::optional<Type> stdNamespaceMember(const std::string& ns,
                                            const std::string& prop);
@@ -674,6 +677,8 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns);
 // list `stdNamespaceMemberNames` (std_check.cpp) forwards to. Each family unit
 // (src/std/<family>/sema.cpp) defines its own next to the table.
 std::vector<std::string> mathMemberNames();
+std::vector<std::string> numberMemberNames();
+std::vector<std::string> numberStaticMemberNames();
 std::vector<std::string> pathMemberNames();
 std::vector<std::string> osMemberNames();
 std::vector<std::string> processMemberNames();
@@ -691,7 +696,13 @@ std::vector<std::string> dateInstanceMemberNames();
 // The documentation of one family member: the documented signature and the
 // Markdown description the editor shows. Each family unit defines its own
 // next to the table it already owns, so the two cannot drift apart.
+// `Number.*` statics (`Number.isInteger`, constants); nullopt keeps the ambient
+// fallthrough. Defined in src/std/number/sema.cpp.
+std::optional<Type> numberStaticMember(const std::string& prop);
+
 StdMemberDoc mathMemberDoc(const std::string& prop);
+StdMemberDoc numberMemberDoc(const std::string& prop);
+StdMemberDoc numberStaticMemberDoc(const std::string& prop);
 StdMemberDoc pathMemberDoc(const std::string& prop);
 StdMemberDoc osMemberDoc(const std::string& prop);
 StdMemberDoc processMemberDoc(const std::string& prop);

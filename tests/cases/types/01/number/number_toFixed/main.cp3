@@ -1,0 +1,6 @@
+import console from "std/console";
+
+const value = 1.2345;
+console.log(value.toFixed(2));
+console.log((2).toFixed(1));
+console.log((-1.5).toFixed(0));

@@ -137,6 +137,7 @@ std::string Generator::sourceIncludes() const {
     if (consoleStderr_ || needsConsoleAbi_) {
         out += "#include \"cp3/std/console.hpp\"\n";  // the console family
     }
+    if (needsNumber_) out += "#include \"cp3/core/number.hpp\"\n";
     if (needsMath_) out += "#include \"cp3/std/math.hpp\"\n";
     if (needsString_) out += "#include \"cp3/std/string.hpp\"\n";
     if (needsPath_) out += "#include \"cp3/std/path.hpp\"\n";
