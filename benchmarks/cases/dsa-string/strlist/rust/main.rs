@@ -1,0 +1,2 @@
+fn xs_next(mut x: u64) -> u64 { x ^= x << 13; x ^= x >> 7; x ^= x << 17; x }
+fn main(){ let mut words: Vec<String>=Vec::new(); let mut r:u64=12345; for _ in 0..100000 { r=xs_next(r); let len=3+(r%18); let mut w=String::new(); for _ in 0..len { r=xs_next(r); w.push((b'a'+(r%26) as u8) as char); } words.push(w); } let mut total:u64=0; for _ in 0..4 { for w in &words { total += w.len() as u64 + w.as_bytes()[0] as u64 + w.as_bytes()[w.len()-1] as u64; } } println!("{}",words.len()); println!("{}",total); }

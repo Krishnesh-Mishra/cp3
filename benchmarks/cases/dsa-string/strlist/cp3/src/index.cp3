@@ -1,0 +1,13 @@
+import console from "std/console";
+function xs_next(x: u64): u64 { let y: u64 = x; y = y ^ (y << 13); y = y ^ (y >> 7); y = y ^ (y << 17); return y; }
+let r: u64 = 12345;
+const three: u64 = 3;
+const alpha: string = "abcdefghijklmnopqrstuvwxyz";
+const words: string[] = [];
+let i: u64 = 0;
+while (i < 100000) { r = xs_next(r); const len: u64 = three + (r % 18); let w: string = ""; let j: u64 = 0; while (j < len) { r = xs_next(r); w = w + alpha.charAt(f64(r % 26)); j = j + 1; } words.push(w); i = i + 1; }
+let total: number = 0;
+let p: u64 = 0;
+while (p < 4) { let k: u64 = 0; while (k < words.length) { const w = words[k]; total = total + w.length + w.charCodeAt(0) + w.charCodeAt(w.length - 1); k = k + 1; } p = p + 1; }
+console.log(words.length);
+console.log(total);
