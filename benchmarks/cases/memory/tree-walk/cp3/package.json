@@ -1,0 +1,9 @@
+{
+  "name": "tree-walk",
+  "version": "1.0.0",
+  "description": "cp3 tree-walk benchmark entry",
+  "type": "application",
+  "main": "src/index.cp3",
+  "typeSystem": "rust",
+  "scripts": { "start": "cp3c run src/index.cp3" }
+}

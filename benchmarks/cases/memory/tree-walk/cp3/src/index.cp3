@@ -1,0 +1,51 @@
+import console from "std/console";
+
+const DEPTH: u64 = 13;
+
+function xs_next(x: u64): u64 {
+  let y: u64 = x;
+  y = y ^ (y << 13);
+  y = y ^ (y >> 7);
+  y = y ^ (y << 17);
+  return y;
+}
+
+class TNode {
+  v: u64;
+  l: TNode | null;
+  r: TNode | null;
+  constructor(v: u64, l: TNode | null, r: TNode | null) {
+    this.v = v;
+    this.l = l;
+    this.r = r;
+  }
+}
+
+function build(depth: u64, seed: u64): TNode {
+  const s: u64 = xs_next(seed);
+  if (depth === 0) {
+    return new TNode(s % 1000, null, null);
+  }
+  const l: TNode = build(depth - 1, s);
+  const r: TNode = build(depth - 1, xs_next(s + 1));
+  return new TNode(s % 1000, l, r);
+}
+
+function sum_tree(n: TNode | null, p: u64): u64 {
+  if (n === null) return 0;
+  let s: u64 = n.v ^ p;
+  if (n.l !== null) s = s + sum_tree(n.l, p);
+  if (n.r !== null) s = s + sum_tree(n.r, p);
+  return s;
+}
+
+const root: TNode = build(DEPTH, 12345);
+const count: u64 = 16383;
+let total: u64 = 0;
+let p: u64 = 0;
+while (p < 8) {
+  total = total + sum_tree(root, p);
+  p = p + 1;
+}
+console.log(count);
+console.log(total);
