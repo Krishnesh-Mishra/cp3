@@ -87,6 +87,49 @@ CACHE = BENCHMARKS / ".cache"
 BUILD = CACHE / "build"
 DEPS = CACHE / "deps"
 
+# Split registry: tasks.py (task lists, categories, expected outputs) +
+# langs.py (language lists, gate references). Adding a benchmark only
+# touches tasks.py + a new cases/ folder; this file only dispatches.
+import sys as _sys
+_sys.path.insert(0, str(HERE))
+try:
+    from tasks import (  # noqa: E402
+        SERVER_TASKS as _SERVER_TASKS,
+        COMPUTE_TASKS as _COMPUTE_TASKS,
+        TASK_OMIT_LANGUAGES as _TASK_OMIT,
+        EXPECTED as _EXPECTED,
+        CHURN_DEFAULT_ITERATIONS as _CHURN_DEF,
+        CHURN_STRESS_ITERATIONS as _CHURN_STRESS,
+        CHURN_SCALE_PRESETS as _CHURN_PRESETS,
+        ENV_INJECTION_VARIABLE as _ENV_VAR,
+        ENV_INJECTION_VALUE as _ENV_VAL,
+        find_task_dir as _find_task_dir,
+        category_of as _category_of,
+        task_exists as _task_exists,
+    )
+    from langs import (  # noqa: E402
+        COMPUTE_LANGUAGES as _COMPUTE_LANGS,
+        SERVER_LANGUAGES as _SERVER_LANGS,
+        GATE_REFERENCES as _GATE_REFS,
+        NATIVE_REFERENCES as _NATIVE_REFS,
+        MULTICORE_TASKS as _MULTICORE,
+        GATE_BIG_NATIVE as _GATE_BIG,
+        GATE_WARN_NATIVE as _GATE_WARN,
+        GATE_SCRIPT as _GATE_SCRIPT,
+        GATE_MULTI as _GATE_MULTI,
+        NOISE_FLOOR_MS as _NOISE_FLOOR,
+        language_present as _lang_present,
+    )
+    _REGISTRY_OK = True
+except Exception:  # pragma: no cover - fallback keeps suite running without registry
+    _REGISTRY_OK = False
+    _COMPUTE_LANGS = ["cpp", "rust", "go", "js", "python", "java", "cp3"]
+    _SERVER_LANGS = ["cpp", "rust", "go", "js", "js-fastify", "python", "java", "cp3"]
+    _GATE_REFS = ("cpp", "rust", "go", "js", "python", "java")
+    _NATIVE_REFS = ("cpp", "rust")
+    _MULTICORE = {"compute-multi", "health-server-multi"}
+    _GATE_BIG, _GATE_WARN, _GATE_SCRIPT, _GATE_MULTI, _NOISE_FLOOR = 1.20, 1.05, 1.00, 1.00, 10.0
+
 CP3C: Path | None = None  # set in main() from --cp3c
 EXE = ".exe" if os.name == "nt" else ""
 SERVER_PORTS = {
@@ -101,6 +144,8 @@ SERVER_PORTS = {
         "cp3": 18085,
         "java": 18086,
         "js-fastify": 18087,
+        "dotnet": 18088,
+        "goose": 18089,
     },
     "health-server-multi": {
         "cpp": 18090,
@@ -111,13 +156,15 @@ SERVER_PORTS = {
         "cp3": 18095,
         "java": 18096,
         "js-fastify": 18097,
+        "dotnet": 18098,
+        "goose": 18099,
     },
 }
 # Compute rows keep the native standard library for each language. Server rows
-# add the two framework-specific rows: Java (Undertow) and a second JS row for
-# Fastify. Express is the existing `js` row.
-COMPUTE_LANGUAGES = ["cpp", "rust", "go", "js", "python", "java", "cp3"]
-SERVER_LANGUAGES = ["cpp", "rust", "go", "js", "js-fastify", "python", "java", "cp3"]
+# add the framework rows: Java (Spring Boot preferred, Undertow fallback),
+# .NET (Kestrel) and a second JS row for Fastify. Express is the `js` row.
+COMPUTE_LANGUAGES = _COMPUTE_LANGS
+SERVER_LANGUAGES = _SERVER_LANGS
 LANGUAGES = COMPUTE_LANGUAGES  # kept for callers that need a default ordering
 CURRENT_LANGUAGES = COMPUTE_LANGUAGES  # set per task loop for progress UI
 
@@ -151,40 +198,25 @@ SERVER_RUST_BIN = {
     "health-server-multi": "health-server-multi-rust",
 }
 
-SERVER_TASKS = ["health-server", "health-server-multi"]
-COMPUTE_TASKS = [
-    "compute-single",
-    "compute-single-int",
-    "compute-multi",
-    "hello-world",
-    "string-churn",
-    "sha256-churn",
-    "buffer-copy",
-    "typed-array-sum",
-    "math-kernel",
-    "word-frequency",
-    "object-churn",
-    "array-growth",
-    "closure-capture",
-    "interface-dispatch",
-    "generics-mono",
-    "json-roundtrip",
-    "async-fanout",
-    "env-injection",
-    "file-roundtrip",
-    "path-join",
-    "date-format",
-    "os-probe",
-    "binary-trees",
-    "map-churn",
-    "utf8-text",
-    "regex-scan",
-    "json-parse-large",
-    "deep-recursion",
-    "exception-cost",
-    "file-big",
-]
+SERVER_TASKS = _SERVER_TASKS
+COMPUTE_TASKS = _COMPUTE_TASKS
 ALL_TASKS = SERVER_TASKS + COMPUTE_TASKS
+TASK_OMIT_LANGUAGES = _TASK_OMIT if _REGISTRY_OK else {}
+CHURN_DEFAULT_ITERATIONS = _CHURN_DEF if _REGISTRY_OK else 50000
+CHURN_STRESS_ITERATIONS = _CHURN_STRESS if _REGISTRY_OK else 300000
+CHURN_SCALE_PRESETS = _CHURN_PRESETS if _REGISTRY_OK else {"default": 50000, "stress": 300000}
+ENV_INJECTION_VARIABLE = _ENV_VAR if _REGISTRY_OK else "CP3_BENCH_ENV"
+ENV_INJECTION_VALUE = _ENV_VAL if _REGISTRY_OK else "cp3-benchmark-value"
+EXPECTED = _EXPECTED if _REGISTRY_OK else {}
+CHURN_EXPECTED = {CHURN_DEFAULT_ITERATIONS: "852167", CHURN_STRESS_ITERATIONS: "254546"}
+GATE_BIG_NATIVE = _GATE_BIG
+GATE_WARN_NATIVE = _GATE_WARN
+GATE_SCRIPT = _GATE_SCRIPT
+GATE_MULTI = _GATE_MULTI
+NOISE_FLOOR_MS = _NOISE_FLOOR
+GATE_REFERENCES = _GATE_REFS
+NATIVE_REFERENCES = _NATIVE_REFS
+MULTICORE_TASKS = _MULTICORE
 
 # Per-task language omissions. These rows compare standard-library surfaces
 # that the omitted language does not have: no JSON parser/serializer, no
@@ -279,19 +311,22 @@ CHURN_EXPECTED = {
     CHURN_STRESS_ITERATIONS: "254546",
 }
 
-GATE_BIG_NATIVE = 1.20   # BIG WARN when cp3 is over this multiple of cpp/rust time
-GATE_WARN_NATIVE = 1.05  # WARN when cp3 is over this multiple (the D64 5% band; user directive 2026-10-19)
-GATE_SCRIPT = 1.00       # BIG WARN when cp3 is slower than go/js/python at all
-GATE_MULTI = 1.00        # multicore rows must be FASTER than cpp (user directive 2026-10-19)
-NOISE_FLOOR_MS = 10.0    # compute references faster than this are noise-scale
-GATE_REFERENCES = ("cpp", "rust", "go", "js", "python", "java")
-NATIVE_REFERENCES = ("cpp", "rust")
-# Rows whose cp3 entry is deliberately parallel (TBB). cp3 ships TBB, so these
-# rows are expected to win against a cpp comparator, not merely tie it.
-MULTICORE_TASKS = {"compute-multi", "health-server-multi"}
+GATE_BIG_NATIVE = _GATE_BIG
+GATE_WARN_NATIVE = _GATE_WARN
+GATE_SCRIPT = _GATE_SCRIPT
+GATE_MULTI = _GATE_MULTI
+NOISE_FLOOR_MS = _NOISE_FLOOR
+GATE_REFERENCES = _GATE_REFS
+NATIVE_REFERENCES = _NATIVE_REFS
+MULTICORE_TASKS = _MULTICORE
 GATE_TARGET = ("D64 target: cp3 within about 5% of cpp/rust (WARN over 1.05x); "
-               "BIG WARN over 1.20x cpp/rust or slower than go/js/python/java at all; "
+               "BIG WARN over 1.20x cpp/rust or slower than go/js/python/java/dotnet/goose at all; "
                "multi-core rows must be faster than cpp")
+
+# Registry omits (calc/interp) merge in on top of the legacy block above.
+if _REGISTRY_OK:
+    for _k, _v in _TASK_OMIT.items():
+        TASK_OMIT_LANGUAGES.setdefault(_k, _v)
 
 GATE_WARNINGS: list[str] = []   # tier lines (BIG WARN / WARN), printed at the end
 GATE_NOTES: list[str] = []      # noise-scale notes, printed with the gate block
@@ -654,7 +689,7 @@ def python_server_executable() -> Path:
 def prepare_server_entry(language: str, task: str, port: int,
                          row: dict) -> tuple[bool, list[str], str, str]:
     """Build and return (ok, argv, variant, note) for a non-cp3 server row."""
-    base = CASES / task
+    base = _find_task_dir(task) if _REGISTRY_OK else (CASES / task)
     stem = task
     note = ""
 
@@ -768,6 +803,23 @@ def prepare_server_entry(language: str, task: str, port: int,
         return True, [str(output), str(port)], "Gin (best Go HTTP)", note
 
     if language == "java":
+        # Prefer Spring Boot (java-spring/) when present; Undertow fallback.
+        spring_dir = base / "java-spring"
+        spring_jar = spring_dir / "target" / f"{stem}-spring.jar"
+        if (spring_dir / "pom.xml").exists() or (spring_dir / "build.gradle").exists():
+            if not spring_jar.exists():
+                start = time.perf_counter()
+                if (spring_dir / "pom.xml").exists():
+                    argv = ["mvn", "package", "-DskipTests", "-q"]
+                else:
+                    argv = ["./gradlew", "bootJar", "--offline"]
+                result = run_command(argv, cwd=spring_dir, timeout=1200)
+                row["build_ms"] = (time.perf_counter() - start) * 1000.0
+                if result.returncode != 0:
+                    return False, [], "", f"Spring Boot build failed: {first_diagnostic(result.stderr or result.stdout)}"
+            row["binary_kb"] = stripped_size_kb(spring_jar) if spring_jar.exists() else None
+            return (True, ["java", "-jar", str(spring_jar), f"--server.port={port}"],
+                    "Spring Boot (Tomcat, best Java HTTP)", note)
         source = base / "java" / "Main.java"
         outdir = BUILD / f"{stem}-java-server"
         class_file = outdir / "Main.class"
@@ -786,6 +838,25 @@ def prepare_server_entry(language: str, task: str, port: int,
         row["binary_kb"] = stripped_size_kb(class_file)
         return True, ["java", "-cp", os.pathsep.join([str(outdir), cp]), "Main", str(port)], (
             "Undertow (best Java HTTP)"), note
+
+    if language == "dotnet":
+        csproj = base / "dotnet" / f"{stem}.csproj"
+        if not csproj.exists():
+            return False, [], "", "dotnet entry missing"
+        dll = base / "dotnet" / "bin" / "Release" / "net8.0" / f"{stem}.dll"
+        if not dll.exists():
+            start = time.perf_counter()
+            result = run_command(["dotnet", "publish", "-c", "Release", "-o", str(base / "dotnet" / "publish")],
+                                 cwd=base / "dotnet", timeout=900)
+            row["build_ms"] = (time.perf_counter() - start) * 1000.0
+            if result.returncode != 0:
+                return False, [], "", f"dotnet publish failed: {first_diagnostic(result.stderr or result.stdout)}"
+            dll = base / "dotnet" / "publish" / f"{stem}.dll"
+        row["binary_kb"] = stripped_size_kb(dll) if dll.exists() else None
+        return True, ["dotnet", str(dll), str(port)], "ASP.NET Core (Kestrel)", note
+
+    if language == "goose":
+        return False, [], "", "goose server not supported (compute only)"
 
     if language == "js":
         express = base / "js" / "express" / "server.mjs"
@@ -902,7 +973,7 @@ def run_multi_client_load(port: int, seconds: float, concurrency: int,
 def run_server_trial(language: str, task: str, latency_count: int, warmup: int,
                      seconds: float, concurrency: int, cp3c: Path,
                      clients: int = 4, single_clients: int = 2) -> dict:
-    base = CASES / task
+    base = _find_task_dir(task) if _REGISTRY_OK else (CASES / task)
     row: dict = {"language": language, "variant": "", "build_ms": None,
                  "boot_ms": None, "p50": None, "p95": None, "rps": None,
                  "requests": 0, "errors": 0, "peak_rss_mb": None,
@@ -1059,7 +1130,7 @@ def run_server_repeated(language: str, task: str, reps: int, latency_count: int,
 # --------------------------------------------------------------------------
 def compute_build_spec(language: str, task: str) -> tuple[list[str], Path, Path] | None:
     """(build argv, output binary, source file), or None when there is no build step."""
-    base = CASES / task
+    base = _find_task_dir(task) if _REGISTRY_OK else (CASES / task)
     if language == "cpp":
         output = BUILD / f"{task}-cpp{EXE}"
         return (["g++", "-std=c++20", "-O3", "-o", str(output), str(base / "cpp" / "main.cpp")],
@@ -1081,11 +1152,18 @@ def compute_build_spec(language: str, task: str) -> tuple[list[str], Path, Path]
         outdir = output.parent
         outdir.mkdir(parents=True, exist_ok=True)
         return (["javac", "-d", str(outdir), str(source)], output, source)
+    if language == "goose":
+        output = BUILD / f"{task}-goose{EXE}"
+        source = base / "goose" / "main.goose"
+        return (["goose", "build", "-o", str(output), str(source)], output, source)
+    if language == "dotnet":
+        output = BUILD / f"{task}-dotnet" / "app.dll"
+        return None
     return None
 
 
 def compute_run_argv(language: str, task: str, extra: tuple[str, ...] = ()) -> list[str]:
-    base = CASES / task
+    base = _find_task_dir(task) if _REGISTRY_OK else (CASES / task)
     if language == "cpp":
         return [str(BUILD / f"{task}-cpp{EXE}"), *extra]
     if language == "rust":
@@ -1098,6 +1176,8 @@ def compute_run_argv(language: str, task: str, extra: tuple[str, ...] = ()) -> l
         return [sys.executable, str(base / "python" / "main.py"), *extra]
     if language == "java":
         return ["java", "-cp", str(BUILD / f"{task}-java"), "Main", *extra]
+    if language == "goose":
+        return [str(BUILD / f"{task}-goose{EXE}"), *extra]
     raise ValueError(language)
 
 
@@ -1126,7 +1206,7 @@ def prepare_cp3_churn_variant(entry: Path, iterations: int) -> Path:
 
 def run_compute_trial(language: str, task: str, reps: int, cp3c: Path,
                       extra: tuple[str, ...] = (), cp3_entry: Path | None = None) -> dict:
-    base = CASES / task
+    base = _find_task_dir(task) if _REGISTRY_OK else (CASES / task)
     row: dict = {"language": language, "build_ms": None, "runs_ms": [],
                  "output": None, "note": "", "peak_rss_mb": None, "binary_kb": None}
 
@@ -1314,7 +1394,8 @@ SGR = {
 LANG_STYLE = {
     "cpp": "blue", "rust": "orange", "go": "cyan",
     "js": "yellow", "js-fastify": "yellow", "python": "green",
-    "java": "red", "cp3": "magenta",
+    "java": "red", "java-spring": "red", "dotnet": "blue",
+    "cp3": "magenta", "goose": "cyan",
 }
 
 GLYPH_UNI = {
@@ -2131,6 +2212,7 @@ def main() -> int:
             ("python", [sys.executable, "--version"]),
             ("java", ["java", "-version"]), ("javac", ["javac", "-version"]),
             ("cmake", ["cmake", "--version"]), ("cp3c", [str(cp3c), "version"]),
+            ("dotnet", ["dotnet", "--version"]), ("goose", ["goose", "--version"]),
         ]
         print_header(platform.processor() or platform.machine(), probes, args.reps)
         waiting = time_wait_count()
@@ -2140,10 +2222,12 @@ def main() -> int:
         def present(language: str, server: bool = False) -> bool:
             if language == "cp3":
                 return cp3c.exists()
+            if language in ("goose", "dotnet"):
+                return have(language)
             if language == "js":
                 return have("node")
             if language == "js-fastify":
-                return have("node") and (CASES / "health-server" / "js" / "fastify").exists()
+                return have("node") and (_find_task_dir("health-server") / "js" / "fastify").exists()
             if language == "python":
                 return True
             if language == "java":
