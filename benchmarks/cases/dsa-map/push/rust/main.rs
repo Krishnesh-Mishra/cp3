@@ -1,0 +1,2 @@
+fn xs_next(mut x: u64) -> u64 { x ^= x << 13; x ^= x >> 7; x ^= x << 17; x }
+fn main(){ let mut items: Vec<(u64,u64)>=Vec::new(); let mut marks:Vec<usize>=Vec::new(); let mut r:u64=12345; for i in 0..1_000_000u64 { r=xs_next(r); items.push((r%1_000_000,i%97)); if i%64==0 { marks.push(items.len()-1); } } let total:u64=items.iter().map(|x|x.0).sum(); let mt:u64=marks.iter().map(|&m|items[m].1).sum(); println!("{}",items.len()); println!("{}",marks.len()); println!("{}",total); println!("{}",mt); }

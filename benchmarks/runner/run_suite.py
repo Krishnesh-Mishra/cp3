@@ -307,6 +307,7 @@ EXPECTED = {
     "file-big": "779913",
     "sum-array": "4000000\n15987891712",
     "tree-walk": "16383\n66134180",
+    "push": "1000000\n15625\n499758894813\n750050",
 }
 CHURN_EXPECTED = {
     CHURN_DEFAULT_ITERATIONS: "852167",
