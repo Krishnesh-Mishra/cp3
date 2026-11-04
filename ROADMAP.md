@@ -114,6 +114,19 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | --- | --- | --- | --- |
 | `cp3.run` | `cp3.run` in `cp3-vscode` | A command contributed by the VS Code extension, surfaced as a **run button in the editor title bar** (`editor/title`) when `editorLangId == cp3`. Clicking it saves the active document, resolves `cp3.compilerPath`, runs `<cp3c> run <file>`, streams stdout/stderr into the `cp3 Run` output channel (no terminal panel is opened), and reports non-zero exits with a `Show Output` notification. The command is also in the command palette and the editor context menu. | Done |
 
+#### K. Type-system cleanup (remove `void` and `unknown`)
+
+**Rule: v0.2 has exactly two nullish types, `null` and `undefined`. The `void` and `unknown` keywords are removed from the language surface.**
+
+| Item | Rule | Notes / migration |
+| --- | --- | --- |
+| `void` type | Removed. A function with no `return` infers `undefined` as its return type. | Every `: void` annotation is a compile error whose diagnostic names the fix (`undefined`); TypeScript permits `void`, CP3 does not. A trivial `fmt`-style rewrite updates existing source. |
+| `unknown` type | Removed. `JSON.parse` requires a type argument: `JSON.parse<T>(text)`. | Omitting `T` is a compile error. The internal permissive callback placeholder used by the compiler is not a user type and is never printed as `unknown`; std members receive precise types. |
+| `null`, `undefined` | Kept as the only two nullish primitives. | `===`/`!==` flavor rules, `??` and `== null` semantics are unchanged. |
+| Migration & verification | Corpus, spec, docs and diagnostics referencing `void`/`unknown` are updated; the corpus is grep-rewritten (`: void` → `undefined`, bare `JSON.parse(` → `JSON.parse<T>(`). | Diagnostics explain why (static native output; `catch` binds `Error`; `unknown` forced narrowings) and what to write; llm.md and `docs/content/01-language/01-variables-and-bindings/02-types.md` are updated in the same change. |
+
+**Status: Planned** (not started; spec/corpus-wide breaking change, scheduled with the v0.2 audit).
+
 #### I. Non-blocking native I/O (v0.2 phases 1-2)
 `async` only schedules continuations on the one event loop. It does not make a
 blocking C call concurrent. v0.2 therefore separates two mechanisms and ships
