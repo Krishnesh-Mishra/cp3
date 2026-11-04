@@ -106,6 +106,12 @@ struct SemaResult {
     // False for every unit without the option, which keeps today's lowering.
     bool networkScaleMode = false;
 
+    // Stage 1 of automatic cycle handling: class names whose field types can
+    // reach themselves through class-typed fields (arrays, Map/Set values,
+    // unions and closures included; unknown edges count as cycle-capable).
+    // Report-only in v0.2: no diagnostic is emitted from this set yet.
+    std::vector<std::string> cycleCapableClasses;
+
     // The inferred type of `nodeId`, or nullptr when there is none.
     const Type* typeOf(std::uint32_t nodeId) const {
         const auto it = nodeTypes.find(nodeId);

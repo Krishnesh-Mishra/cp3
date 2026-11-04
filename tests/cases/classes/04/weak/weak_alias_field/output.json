@@ -1,11 +1,5 @@
 {
   "mode": "run",
-  "stdout": "",
-  "exitCode": 1,
-  "error": {
-    "code": "CP3201",
-    "line": 9,
-    "col": 1,
-    "contains": "v0.2 removes it"
-  }
+  "stdout": "some\n",
+  "exitCode": 0
 }

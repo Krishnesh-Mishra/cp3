@@ -11,9 +11,13 @@
 // =============================================================================
 #include "detail/analyzer.h"
 
+#include <algorithm>
 #include <cstddef>
+#include <functional>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -629,6 +633,73 @@ Type Analyzer::userClassMember(const Type& cls, const std::string& prop,
         if (!hasNullish(t)) t = unify(t, Type::undefined());
     }
     return t;
+}
+
+// -----------------------------------------------------------------------------
+// Stage 1: cycle-capability analysis (automatic cycle handling).
+//
+// Builds the strong-edge class graph from field types (arrays, Map/Set
+// values, unions, function parts and closures included; `weak` fields are not
+// strong edges) and marks every class that can reach itself through strong
+// edges. An `unknown`-typed field is an opaque sink: it marks its source
+// cycle-capable (fail closed). Report-only in v0.2: the set is published to
+// SemaResult::cycleCapableClasses; no diagnostic is emitted from it yet, and
+// plain refcounting is unchanged for every type.
+// -----------------------------------------------------------------------------
+void Analyzer::computeCycleCapable() {
+    std::unordered_map<std::string, std::unordered_set<std::string>> graph;
+    std::unordered_set<std::string> unknownRisk;
+    std::function<void(const Type&, std::unordered_set<std::string>&)> walk =
+        [&](const Type& t, std::unordered_set<std::string>& out) {
+            if (t.isUnknown()) {
+                out.insert("$unknown");
+                return;
+            }
+            if (t.kind == TypeKind::Class) {
+                if (classes_.count(t.name)) out.insert(t.name);
+            }
+            for (const Type& p : t.parts) walk(p, out);
+        };
+    for (const auto& [name, info] : classes_) {
+        auto& edges = graph[name];
+        for (const auto& m : info.members) {
+            if (m.isMethod || m.isStatic) continue;
+            if (m.isWeak) continue;  // weak edges do not count toward cycles
+            std::unordered_set<std::string> refs;
+            walk(m.type, refs);
+            for (const std::string& r : refs) {
+                if (r == "$unknown") unknownRisk.insert(name);
+                else if (classes_.count(r)) edges.insert(r);
+            }
+        }
+    }
+    // Reachability: a class is cycle-capable when it can reach itself through
+    // strong edges (covers self-loops and mutual/longer cycles).
+    cycleCapableClasses_.clear();
+    for (const auto& [name, info] : classes_) {
+        (void)info;
+        if (unknownRisk.count(name)) {
+            cycleCapableClasses_.insert(name);
+            continue;
+        }
+        std::unordered_set<std::string> seen;
+        std::vector<std::string> work(graph[name].begin(), graph[name].end());
+        bool reachesSelf = false;
+        while (!work.empty() && !reachesSelf) {
+            std::string cur = work.back();
+            work.pop_back();
+            if (cur == name) {
+                reachesSelf = true;
+                break;
+            }
+            if (!seen.insert(cur).second) continue;
+            for (const std::string& nxt : graph[cur]) work.push_back(nxt);
+        }
+        if (reachesSelf) cycleCapableClasses_.insert(name);
+    }
+    out_.cycleCapableClasses.assign(cycleCapableClasses_.begin(),
+                                    cycleCapableClasses_.end());
+    std::sort(out_.cycleCapableClasses.begin(), out_.cycleCapableClasses.end());
 }
 
 }  // namespace cp3

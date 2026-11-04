@@ -80,6 +80,9 @@ public:
     }
     // Top-level orchestration: builtins + program body (semantic_analyzer.cpp).
     void run(Program& program);
+    // Stage 1: cycle-capability analysis over class field types.
+    void computeCycleCapable();
+    std::unordered_set<std::string> cycleCapableClasses_;
 
 private:
     // --- diagnostics ----------------------------------------------------------

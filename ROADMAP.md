@@ -306,9 +306,20 @@ The target is practical TypeScript class behavior:
 - TypeScript-compatible constructor and method behavior for the supported
   surface.
 
-Existing CP3-only class syntax (`function greet() {}`) and CP3-only
-extensions such as `weak` are **not** kept in v0.2.0: this release moves to
-the TypeScript spelling and the TypeScript compatibility target.
+Existing CP3-only class syntax (`function greet() {}`) is **not** kept in
+v0.2.0: this release moves to the TypeScript spelling and the TypeScript
+compatibility target. The manual `weak` field modifier is retained as an
+escape hatch for reference cycles: a weak field does not count toward the
+refcount and reads as `T | null`.
+
+Automatic cycle handling (memory item): Stage 0 measured the corpus with
+`tools/cycle_stats.py` (see `docs/cycle-stage0.md`): 61 classes, 5
+cycle-capable (3 groups), 56 acyclic (92%). Stage 1 (cycle-capability
+analysis over strong class-field edges, published as
+`SemaResult::cycleCapableClasses`) is implemented report-only. Regions,
+compiler-injected non-owning edges and group counting (stages 2-3) are
+deferred; cycles the analysis marks cycle-capable are resolved today by an
+explicit `weak` edge. No GC and no cycle collector are shipped.
 
 ### 3. Compile-time decorators
 

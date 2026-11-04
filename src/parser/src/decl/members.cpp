@@ -123,12 +123,10 @@ void ParserImpl::parseMemberModifiers(MemberModifiers& mods) {
         else if (match(TokenKind::KwStatic)) mods.isStatic = true;
         else if (match(TokenKind::KwAbstract)) mods.isAbstract = true;
         else if (match(TokenKind::KwWeak)) {
+            // Manual escape hatch for reference cycles (automatic cycle
+            // handling task): a weak field does not count toward the
+            // refcount and reads as `T | null`.
             mods.isWeak = true;
-            report(diagcode::kUnexpectedToken,
-                   "`weak` was a CP3-only class extension; TypeScript classes "
-                   "do not have a `weak` modifier and v0.2 removes it. Use an "
-                   "ordinary reference field, or an explicit WeakRef where the "
-                   "standard library provides one");
         } else if (looksLikeReadonlyModifier()) {
             mods.isReadonly = true;
             (void)advance();

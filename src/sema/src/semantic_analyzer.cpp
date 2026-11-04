@@ -96,6 +96,7 @@ void Analyzer::run(Program& program) {
     checkStmts(program.body);
     popScope();
     popScope();
+    computeCycleCapable();
 }
 
 // =============================================================================

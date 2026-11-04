@@ -184,6 +184,7 @@ abstract class Base { abstract run(): void; }
 - No runtime decorators. Compile-time decorators (`@Name`) are allowed only as macros; runtime metadata tables are rejected.
 - `extends expr` only when `expr` is compile-time foldable; otherwise compile error.
 - Getters/setters use accessor member syntax; `get x() { }` / `set x(v) { }`.
+- `weak` field modifier (manual escape hatch for reference cycles): a weak field does not keep its target alive and reads as `T | null` (narrow before use). Automatic cycle handling is not shipped: no GC, no cycle collector; the compiler's cycle-capability analysis is report-only (Stage 0 numbers: `docs/cycle-stage0.md`).
 
 ## 9. Enums
 

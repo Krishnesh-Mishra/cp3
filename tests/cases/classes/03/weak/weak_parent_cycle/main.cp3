@@ -1,0 +1,22 @@
+import console from "std/console";
+class Parent {
+  child: Child;
+  constructor(child: Child) {
+    this.child = child;
+  }
+}
+class Child {
+  weak parent: Parent | null;
+  value: number;
+  constructor(value: number, parent: Parent | null) {
+    this.value = value;
+    this.parent = parent;
+  }
+}
+const b = new Child(2, null);
+const p = new Parent(b);
+b.parent = p;
+if (b.parent !== null) {
+  console.log(`${b.parent.child.value}`);
+}
+console.log("cycle-ok");
