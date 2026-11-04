@@ -1,0 +1,19 @@
+import console from "std/console";
+class Node {
+  value: number;
+  next: Node | null;
+  constructor(value: number, next: Node | null) {
+    this.value = value;
+    this.next = next;
+  }
+}
+const a = new Node(42, null);
+const n: Node | null = a;
+console.log(`${n!.value}`);
+try {
+  const m: Node | null = null;
+  console.log(`${m!.value}`);
+  console.log("unreachable");
+} catch (e) {
+  console.log("caught");
+}

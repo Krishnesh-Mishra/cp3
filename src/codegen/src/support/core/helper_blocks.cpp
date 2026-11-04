@@ -115,6 +115,13 @@ inline bool cp3_truthy(const std::optional<std::string>& v) {
 inline bool cp3_truthy(const std::optional<bool>& v) {
     return v.has_value() && cp3_truthy(*v);
 }
+// Forward declarations: the Ref/LocalRef overloads are defined in the Ref
+// helper block below; they must be visible before the optional<T> template
+// instantiates cp3_truthy(*v) for T = Ref<U>.
+template <class T>
+inline bool cp3_truthy(const ::cp3::runtime::Ref<T>&);
+template <class T>
+inline bool cp3_truthy(const ::cp3::runtime::LocalRef<T>&);
 template <class T>
 inline bool cp3_truthy(const std::optional<T>& v) {
     return v.has_value() && cp3_truthy(*v);

@@ -21,10 +21,17 @@ namespace cp3 {
 // =============================================================================
 // Scope stack + name tables
 // =============================================================================
-void Analyzer::pushScope() { scopes_.emplace_back(); }
+void Analyzer::pushScope() {
+    scopes_.emplace_back();
+    narrowedScopes_.push_back(narrowedMembersByKey_);
+}
 
 void Analyzer::popScope() {
     if (!scopes_.empty()) scopes_.pop_back();
+    if (!narrowedScopes_.empty()) {
+        narrowedMembersByKey_ = narrowedScopes_.back();
+        narrowedScopes_.pop_back();
+    }
 }
 
 bool Analyzer::lookup(const std::string& name, Binding& out) const {

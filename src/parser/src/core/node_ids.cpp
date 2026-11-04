@@ -25,7 +25,7 @@ static_assert(kOf(NodeKind::ExportSpecifier) < kOf(NodeKind::PropertyDeclaration
 static_assert(kOf(NodeKind::TypeParameter) < kOf(NodeKind::NamedType));
 
 bool isExprKind(NodeKind k) noexcept {
-    return kOf(k) >= kOf(NodeKind::NumberLiteral) && kOf(k) <= kOf(NodeKind::RangeExpr);
+    return kOf(k) >= kOf(NodeKind::NumberLiteral) && kOf(k) <= kOf(NodeKind::NonNullExpr);
 }
 bool isPatternKind(NodeKind k) noexcept {
     return kOf(k) >= kOf(NodeKind::ArrayPattern) && kOf(k) <= kOf(NodeKind::AssignmentPattern);

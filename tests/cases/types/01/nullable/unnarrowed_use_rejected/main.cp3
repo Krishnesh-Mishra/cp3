@@ -1,0 +1,12 @@
+import console from "std/console";
+class Node {
+  value: number;
+  next: Node | null;
+  constructor(value: number, next: Node | null) {
+    this.value = value;
+    this.next = next;
+  }
+}
+const a = new Node(1, new Node(2, null));
+let n = a;
+console.log(`${n.next.value}`);

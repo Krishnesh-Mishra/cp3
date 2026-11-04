@@ -391,6 +391,7 @@ ExprPtr ParserImpl::parsePostfix() {
     const Token start = peek();
     ExprPtr expr = parseCallMember();
     if (!expr) return nullptr;
+    // `expr!` - a non-null assertion (TypeScript postfix `!`).
     if ((check(TokenKind::PlusPlus) || check(TokenKind::MinusMinus)) &&
         !peek().precededByNewline) {
         Token op = advance();

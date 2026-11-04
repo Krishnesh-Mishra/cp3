@@ -89,6 +89,22 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
             call->arguments = parseArguments();
             call->span = spanFrom(start);
             expr = std::move(call);
+        } else if (check(TokenKind::Bang) && !peek().precededByNewline) {
+            advance();
+            auto nonNull = std::make_unique<NonNullExpr>(start.span);
+            nonNull->expression = std::move(expr);
+            nonNull->span = spanFrom(start);
+            expr = std::move(nonNull);
+        } else if (check(TokenKind::KwAs) && !peek().precededByNewline) {
+            advance();
+            TypePtr type = parseType();
+            if (type) {
+                auto asExpr = std::make_unique<AsExpr>(start.span);
+                asExpr->expression = std::move(expr);
+                asExpr->type = std::move(type);
+                asExpr->span = spanFrom(start);
+                expr = std::move(asExpr);
+            }
         } else if (check(TokenKind::Less)) {
             TypeList typeArgs;
             if (!tryParseCallTypeArgs(typeArgs)) break;

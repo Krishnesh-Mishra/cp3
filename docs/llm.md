@@ -79,6 +79,12 @@ myapp/
 
 Type inference: `let x = "hi";` → `string`. Explicit annotation overrides. Native arithmetic follows CP3's own checked rules: operands narrower than `i32` promote to `i32`; mixed widths/signedness pick a common native type; `number` and native ints do not mix silently.
 
+- Nullable class fields: `next: Node | null`, optional `next?: Node`. A member read through a nullable receiver without narrowing or `?.` is rejected (CP3401).
+- Control-flow narrowing: `if (n !== null)`, `if (n)`, `while (n !== null)`, `&&`, `?:`, and early-return guards narrow identifiers and member fields (`n.next`) to non-null. Assignment to the narrowed target invalidates the narrowing.
+- `expr!` asserts non-null at runtime: it throws a catchable `Error` on null.
+- Definite assignment in class bodies: `value!: number`.
+- `expr as Type` asserts a related type (class hierarchy / numeric); unrelated types are CP3401.
+
 ## 5. Bindings, scope, closures
 
 ```ts
@@ -462,7 +468,8 @@ Explicit prefixed types are valid anywhere a native scalar fits:
 
 Native ints print exactly. Arithmetic on narrower-than-`i32` operands promotes to `i32` (so `u8 + u8` is `i32`). Native values do not mix freely with nonliteral `number`: pass a fitting literal where supported, or keep producer/consumer on the same native type. With `strictNumericCasts: true` in `package.json`, assigning `number` to a native type is rejected and mixed native arithmetic is rejected; tests live in `tests/cases/types/03/native_strict`.
 
-There is **no general-purpose cast expression** in CP3. If the annotation is `r_'i64'`, initialise it from a fitting literal or from another native `i64`; the compiler will reject anything else. Do not assume `x as r_'i32'` or `r_'i32'(x)` exists — they are not part of the documented surface. See `docs/content/01-language/07-native-types/03-numeric-rules.md`.
+`expr as Type` is a compile-time-checked type assertion (related class types;
+numeric conversions). Unrelated types are rejected with CP3401. `r_'i32'(x)` still does not exist. For native types without `as`, initialise from a fitting literal or another native `i64`. See `docs/content/01-language/07-native-types/03-numeric-rules.md`.
 
 ## 23. Reading the corpus for semantics
 

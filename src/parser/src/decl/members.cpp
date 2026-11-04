@@ -267,6 +267,10 @@ ClassMemberPtr ParserImpl::parsePropertyMember(MemberModifiers& mods,
     if (computed) prop->computed = true;
     if (!prop->key) report(diagcode::kUnexpectedToken, "expected a class member name");
     if (match(TokenKind::Question)) prop->optional = true;
+    if (check(TokenKind::Bang)) {
+        advance();
+        prop->isDefiniteAssignment = true;
+    }
     if (match(TokenKind::Colon)) prop->type = parseType();
     if (match(TokenKind::Assign)) prop->initializer = parseAssignment();
     consumeSemicolon();

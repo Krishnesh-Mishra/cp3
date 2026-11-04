@@ -275,38 +275,141 @@ bool Analyzer::hasIterationLabel(const std::string& label) const {
 // =============================================================================
 // Control flow
 // =============================================================================
-void Analyzer::analyzeIf(IfStatement& stmt) {
-    std::string narrowName;
-    Type narrowType = Type::unknown();
-    bool narrowed = false;
+void Analyzer::collectNullNarrowings(Expr& cond,
+                                     std::vector<ConditionNarrowing>& out) {
+    if (cond.kind == NodeKind::LogicalExpr) {
+        auto& le = static_cast<LogicalExpr&>(cond);
+        if (le.op == LogicalOp::And) {
+            if (le.left) collectNullNarrowings(*le.left, out);
+            if (le.right) collectNullNarrowings(*le.right, out);
+        }
+        return;
+    }
+    // Truthiness: `if (n)` / `if (n.next)` narrows to non-null.
+    if (cond.kind == NodeKind::Identifier ||
+        cond.kind == NodeKind::MemberExpr) {
+        Type t = typeOfExpr(cond);
+        Type nonNull = t;
+        if (t.isNullable() && !t.parts.empty()) nonNull = t.parts.front();
+        else if (t.isUnion()) {
+            std::vector<Type> nn;
+            for (const Type& m : t.parts) if (!m.isNullish()) nn.push_back(m);
+            if (!nn.empty())
+                nonNull = nn.size() == 1 ? nn.front() : Type::unionOf(nn);
+        }
+        if (!nonNull.isUnknown() && !nonNull.isError() && !nonNull.isNullish()) {
+            ConditionNarrowing cn;
+            cn.type = nonNull;
+            cn.nullish = Type::nullType();
+            cn.negated = true;
+            if (cond.kind == NodeKind::Identifier) {
+                cn.isMember = false;
+                cn.name = static_cast<Identifier&>(cond).name;
+            } else {
+                cn.isMember = true;
+                cn.memberKey = memberKeyFor(cond);
+            }
+            out.push_back(cn);
+        }
+        return;
+    }
+    std::string name;
+    Type type;
     bool negated = false;
+    if (detectTypeofNarrowing(cond, name, type, negated)) {
+        ConditionNarrowing cn;
+        cn.isMember = false;
+        cn.name = name;
+        cn.type = type;
+        cn.nullish = type;
+        cn.negated = negated;
+        out.push_back(cn);
+        return;
+    }
+    std::uint32_t id = 0;
+    Type mt;
+    bool mneg = false;
+    if (detectNullNarrowing(cond, id, mt, mneg)) {
+        ConditionNarrowing cn;
+        cn.isMember = true;
+        cn.memberKey = memberKey_;
+        cn.type = mt;
+        cn.nullish = Type::nullType();
+        cn.negated = mneg;
+        out.push_back(cn);
+    }
+}
+
+std::string Analyzer::memberKeyFor(Expr& e) {
+    if (e.kind != NodeKind::MemberExpr) return {};
+    auto& mem = static_cast<MemberExpr&>(e);
+    if (!mem.object || mem.object->kind != NodeKind::Identifier) return {};
+    return static_cast<Identifier&>(*mem.object).name + ":" + mem.property;
+}
+
+void Analyzer::applyConditionNarrowings(
+    const std::vector<ConditionNarrowing>& in, bool inverted) {
+    for (const auto& cn : in) {
+        const bool thenPolarity = inverted ? !cn.negated : cn.negated;
+        if (!cn.isMember) {
+            Binding orig;
+            if (!lookup(cn.name, orig)) continue;
+            const Type comp = withoutMember(orig.type, cn.type);
+            overrideBinding(cn.name, thenPolarity ? comp : cn.type,
+                            SourceSpan{});
+        } else {
+            narrowedMembersByKey_[cn.memberKey] =
+                thenPolarity ? cn.type : cn.nullish;
+        }
+    }
+}
+
+static bool stmtExits(Stmt* s) {
+    if (!s) return false;
+    if (s->kind == NodeKind::ReturnStatement ||
+        s->kind == NodeKind::ThrowStatement) return true;
+    if (s->kind == NodeKind::BlockStatement) {
+        auto& b = static_cast<BlockStatement&>(*s);
+        if (!b.body.empty() && b.body.back()) return stmtExits(b.body.back().get());
+    }
+    return false;
+}
+
+void Analyzer::analyzeIf(IfStatement& stmt) {
+    std::vector<ConditionNarrowing> narrows;
+    bool hasElse = stmt.elseBranch != nullptr;
+    // Reformulate && in the prepass: narrowings guard the then-branch.
     if (stmt.condition) {
         inferExpr(*stmt.condition);
         checkCondition(typeOfExpr(*stmt.condition), stmt.condition->span);
-        narrowed =
-            detectTypeofNarrowing(*stmt.condition, narrowName, narrowType, negated);
+        collectNullNarrowings(*stmt.condition, narrows);
     }
-    Binding orig;
-    const bool hadOrig = narrowed && lookup(narrowName, orig);
-    const Type complement =
-        hadOrig ? withoutMember(orig.type, narrowType) : Type::unknown();
-
     pushScope();
-    if (narrowed) {
-        overrideBinding(narrowName, negated ? complement : narrowType,
-                        stmt.span);
-    }
+    applyConditionNarrowings(narrows, false);
     if (stmt.thenBranch) visitStmt(*stmt.thenBranch);
     popScope();
-
     if (stmt.elseBranch) {
         pushScope();
-        if (narrowed) {
-            overrideBinding(narrowName, negated ? narrowType : complement,
-                            stmt.span);
-        }
+        // Only a single (non-&&) narrowing has a sound complement in else.
+        if (narrows.size() <= 1) applyConditionNarrowings(narrows, true);
         visitStmt(*stmt.elseBranch);
         popScope();
+    } else if (stmt.thenBranch && stmtExits(stmt.thenBranch.get())) {
+        // Early-exit pattern: `if (x === null) return; use(x)` - the code
+        // after the if sees the non-null narrowing.
+        for (auto& cn : narrows) {
+            if (cn.negated) continue;
+            if (!cn.isMember) {
+                Binding orig;
+                if (lookup(cn.name, orig)) {
+                    overrideBinding(cn.name,
+                                    withoutMember(orig.type, cn.type),
+                                    stmt.span);
+                }
+            } else {
+                narrowedMembersByKey_[cn.memberKey] = cn.type;
+            }
+        }
     }
 }
 
@@ -364,10 +467,63 @@ bool Analyzer::detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
     return true;
 }
 
+// `member !== null` / `member != null` for member expressions
+// (`n.next !== null`): narrowed by node ID. Only the non-null branch is
+// narrowed (the null branch keeps the declared type).
+bool Analyzer::detectNullNarrowing(Expr& cond, std::uint32_t& memberId,
+                                   Type& memberType, bool& negated) {
+    if (cond.kind != NodeKind::BinaryExpr) return false;
+    auto& be = static_cast<BinaryExpr&>(cond);
+    if (be.op != BinaryOp::StrictEqual && be.op != BinaryOp::Equal &&
+        be.op != BinaryOp::StrictNotEqual && be.op != BinaryOp::NotEqual) {
+        return false;
+    }
+    negated = be.op == BinaryOp::StrictNotEqual || be.op == BinaryOp::NotEqual;
+    Expr* lhs = be.left.get();
+    Expr* rhs = be.right.get();
+    const auto isNullish = [](const Expr* e) {
+        return e && (e->kind == NodeKind::NullLiteral ||
+                     e->kind == NodeKind::UndefinedLiteral);
+    };
+    if (!isNullish(rhs)) std::swap(lhs, rhs);
+    if (!lhs || lhs->kind != NodeKind::MemberExpr || !isNullish(rhs)) return false;
+    // Key by base identifier name + property so a second read of the same
+    // member (`n.next` in the body vs `n.next` in the condition) hits the
+    // narrowing (different AST nodes, same path).
+    auto& mem = static_cast<MemberExpr&>(*lhs);
+    if (!mem.object) return false;
+    if (mem.object->kind != NodeKind::Identifier) return false;
+    const std::string key = static_cast<Identifier&>(*mem.object).name +
+                            ":" + mem.property;
+    memberKey_ = key;
+    Type t = typeOfExpr(*lhs);
+    if (t.isNullable() && !t.parts.empty()) {
+        t = t.parts.front();
+    } else if (t.isUnion()) {
+        std::vector<Type> nonNull;
+        for (const Type& m : t.parts) {
+            if (!m.isNullish()) nonNull.push_back(m);
+        }
+        if (!nonNull.empty()) {
+            t = nonNull.size() == 1 ? nonNull.front()
+                                    : Type::unionOf(std::move(nonNull));
+        }
+    }
+    memberType = t;
+    return true;
+}
+
 void Analyzer::analyzeWhile(WhileStatement& w) {
-    if (w.condition) checkCondition(inferExpr(*w.condition), w.condition->span);
+    std::vector<ConditionNarrowing> narrows;
+    if (w.condition) {
+        checkCondition(inferExpr(*w.condition), w.condition->span);
+        collectNullNarrowings(*w.condition, narrows);
+    }
     ++loopDepth_;
+    pushScope();
+    applyConditionNarrowings(narrows, false);
     if (w.body) visitStmt(*w.body);
+    popScope();
     --loopDepth_;
 }
 

@@ -104,6 +104,8 @@ enum class ExportKind { Named, Default, Declaration, ReExportAll, ReExportNamed 
     X(ArrowFunction)              \
     X(AwaitExpr)                  \
     X(RangeExpr)                  \
+    X(AsExpr)                     \
+    X(NonNullExpr)                \
     /* --- patterns --- */         \
     X(ArrayPattern)               \
     X(ObjectPattern)              \
@@ -480,6 +482,20 @@ struct RangeExpr : Expr {
     explicit RangeExpr(SourceSpan s) : Expr(NodeKind::RangeExpr, std::move(s)) {}
 };
 
+// `expr as Type` - a compile-time-checked type assertion (TypeScript `as`).
+struct AsExpr : Expr {
+    ExprPtr expression;
+    TypePtr type;
+    explicit AsExpr(SourceSpan s) : Expr(NodeKind::AsExpr, std::move(s)) {}
+};
+
+// `expr!` - a non-null assertion: emits a null check that throws an `Error`
+// on null.
+struct NonNullExpr : Expr {
+    ExprPtr expression;
+    explicit NonNullExpr(SourceSpan s) : Expr(NodeKind::NonNullExpr, std::move(s)) {}
+};
+
 // =============================================================================
 // Binding patterns (destructuring)
 // =============================================================================
@@ -759,6 +775,7 @@ struct PropertyDeclaration : ClassMember {
     bool isReadonly = false;
     bool isOverride = false;
     bool optional = false;
+    bool isDefiniteAssignment = false;  // `x!: T`
     ExprPtr key;              // Identifier/StringLiteral/NumberLiteral, or expr if computed
     bool computed = false;
     TypePtr type;             // optional (inferred from initializer)

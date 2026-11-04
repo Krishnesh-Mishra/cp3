@@ -294,6 +294,8 @@ private:
     Type inferNew(NewExpr& n);
     Type inferAwait(AwaitExpr& a);
     Type inferRange(RangeExpr& r);
+    Type inferAs(AsExpr& a);
+    Type inferNonNull(NonNullExpr& n);
     Type inferWeak(WeakExpr& w);
     Type inferSpread(SpreadElement& sp);
     Expr* dynamicExpr(Node& n);
@@ -577,6 +579,24 @@ private:
     void analyzeIf(IfStatement& stmt);
     bool detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
                                bool& negated);
+    // `x !== null` / `x != null` / `x === null` narrowing for member
+    // expressions (`n.next !== null`): returns the member node ID and the
+    // non-null type.
+    bool detectNullNarrowing(Expr& cond, std::uint32_t& nodeId, Type& type,
+                             bool& negated);
+    struct ConditionNarrowing {
+        bool isMember = false;
+        std::string name;
+        std::string memberKey;
+        Type type;
+        Type nullish;
+        bool negated = false;
+    };
+    void collectNullNarrowings(Expr& cond,
+                               std::vector<ConditionNarrowing>& out);
+    void applyConditionNarrowings(const std::vector<ConditionNarrowing>& in,
+                                  bool inverted);
+    std::string memberKeyFor(Expr& e);
     void analyzeWhile(WhileStatement& stmt);
     void analyzeDoWhile(DoWhileStatement& stmt);
     void analyzeFor(ForStatement& stmt);
@@ -655,6 +675,15 @@ private:
     std::unordered_set<std::uint32_t> weakReads_;
     bool weakFieldHit_ = false;
     bool assignTarget_ = false;
+    // Control-flow narrowing for member expressions (`n.next`): node IDs of
+    // MemberExpr nodes whose type is narrowed by a null check, mapped to the
+    // narrowed (non-null) type. Scoped like `scopes_` (save/restore on
+    // pushScope/popScope).
+    std::unordered_map<std::uint32_t, Type> narrowedMembers_;
+    std::vector<std::unordered_map<std::string, Type>> narrowedScopes_;
+    std::unordered_map<std::string, Type> narrowedMembersByKey_;
+    // The key from the last detectNullNarrowing call (base id + property).
+    std::string memberKey_;
     struct FuncCtx {
         bool annotated = false;
         Type ret;

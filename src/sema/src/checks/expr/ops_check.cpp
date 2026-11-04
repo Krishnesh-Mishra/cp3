@@ -280,7 +280,17 @@ std::string Analyzer::binaryText(BinaryOp op) const {
 
 Type Analyzer::inferLogical(LogicalExpr& le) {
     Type l = le.left ? inferExpr(*le.left) : Type::unknown();
-    Type r = le.right ? inferExpr(*le.right) : Type::unknown();
+    Type r = Type::unknown();
+    if (le.op == LogicalOp::And && le.left && le.right) {
+        pushScope();
+        std::vector<ConditionNarrowing> narrows;
+        collectNullNarrowings(*le.left, narrows);
+        applyConditionNarrowings(narrows, false);
+        r = inferExpr(*le.right);
+        popScope();
+    } else if (le.right) {
+        r = inferExpr(*le.right);
+    }
     Type t = Type::unknown();
     switch (le.op) {
         case LogicalOp::And:
@@ -310,12 +320,20 @@ Type Analyzer::inferLogical(LogicalExpr& le) {
 }
 
 Type Analyzer::inferConditional(ConditionalExpr& ce) {
+    std::vector<ConditionNarrowing> narrows;
     if (ce.condition) {
         inferExpr(*ce.condition);
         checkCondition(typeOfExpr(*ce.condition), ce.condition->span);
+        collectNullNarrowings(*ce.condition, narrows);
     }
+    pushScope();
+    applyConditionNarrowings(narrows, false);
     Type a = ce.whenTrue ? inferExpr(*ce.whenTrue) : Type::unknown();
+    popScope();
+    pushScope();
+    if (narrows.size() <= 1) applyConditionNarrowings(narrows, true);
     Type b = ce.whenFalse ? inferExpr(*ce.whenFalse) : Type::unknown();
+    popScope();
     Type t = unify(widen(a), widen(b));
     return withType(ce, t);
 }
@@ -329,6 +347,20 @@ Type Analyzer::inferAssignment(AssignmentExpr& ae) {
         return Type::unknown();
     }
     Type valType = ae.value ? inferExpr(*ae.value) : Type::unknown();
+    // Assignment invalidates member narrowing for that target (fail closed).
+    // After the RHS has been read: `cur = cur.next` still sees the old
+    // narrowing on the RHS, and only later reads are un-narrowed.
+    if (ae.target->kind == NodeKind::Identifier) {
+        const std::string prefix =
+            static_cast<Identifier&>(*ae.target).name + ":";
+        for (auto it = narrowedMembersByKey_.begin();
+             it != narrowedMembersByKey_.end();) {
+            if (it->first.rfind(prefix, 0) == 0) it = narrowedMembersByKey_.erase(it);
+            else ++it;
+        }
+    } else if (ae.target->kind == NodeKind::MemberExpr) {
+        narrowedMembersByKey_.erase(memberKeyFor(*ae.target));
+    }
     if (ae.op == AssignOp::Assign) {
         checkAssignToTarget(*ae.target, valType, ae.span);
         return withType(ae, valType);

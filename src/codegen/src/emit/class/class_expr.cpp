@@ -274,19 +274,42 @@ std::string Generator::emitModelNew(const NewExpr& n) {
         }
         return newSpreadText(*cm, self, n.arguments, spreadAt);
     }
+    // The constructor's parameters (for optional-argument lowering below).
+    const ClassModel* ctorOwner = nullptr;
+    const ClassMemberModel* ctor = findClassCtor(*cm, &ctorOwner);
     std::vector<std::string> texts;
-    for (const auto& argPtr : n.arguments) {
-        const Expr* arg = argPtr.get();
+    for (std::size_t ai = 0; ai < n.arguments.size(); ++ai) {
+        const Expr* arg = n.arguments[ai].get();
         if (arg == nullptr) continue;
-        texts.push_back(expr(*arg));
+        // A nullish literal for an optional parameter must lower to
+        // `std::nullopt`: a bare `nullptr` would construct an
+        // `optional<Ref<T>>` *containing* a null pointer (has_value() true).
+        bool nullopt = false;
+        if ((arg->kind == NodeKind::NullLiteral ||
+             arg->kind == NodeKind::UndefinedLiteral) &&
+            ctor != nullptr && ctor->ctor != nullptr &&
+            ai < ctor->ctor->params.size()) {
+            const Parameter* p = ctor->ctor->params[ai].get();
+            Type pt = Type::unknown();
+            if (p && p->type) {
+                if (auto resolved = typeOfNode(*p->type)) pt = *resolved;
+            } else if (p && p->name) {
+                if (const Type* st = sema_.typeOf(p->name->nodeId)) pt = *st;
+            }
+            rewriteTypeParams(pt, cm->typeParams);
+            if (ctorOwner != nullptr) rewriteTypeParams(pt, ctorOwner->typeParams);
+            const CppInfo pc = classify(pt);
+            if (pc.shape == Shape::Optional || pc.shape == Shape::Maybe) {
+                nullopt = true;
+            }
+        }
+        texts.push_back(nullopt ? "std::nullopt" : expr(*arg));
     }
     // A constructor with a rest parameter takes the trailing arguments as
     // one array (spec 15). Resolve the annotation through sema so an alias of
     // an array type packs the same way a spelled-out `E[]` does. A derived
     // class without its own constructor uses the nearest base's parameters.
-    const ClassModel* ctorOwner = nullptr;
-    if (const ClassMemberModel* ctor = findClassCtor(*cm, &ctorOwner);
-        ctor != nullptr && ctor->ctor != nullptr) {
+    if (ctor != nullptr && ctor->ctor != nullptr) {
         const ParamList& params = ctor->ctor->params;
         std::size_t restAt = params.size();
         for (std::size_t i = 0; i < params.size(); ++i) {
@@ -371,16 +394,45 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
             return std::string();
         }
     }
-    Type rt = effectiveType(*m.object);
+    Type rt = m.object ? effectiveType(*m.object) : Type::unknown();
+    // The Narrowed type from sema (for `n.next` inside a null guard) wins
+    // over the re-derived shape: `n.next` is `optional<Ref<Node>>` in C++
+    // but the narrowed `Node` type means "read through the handle".
+    // `declaredInfo` must reflect the declared storage shape, not the
+    // narrowed shape `effectiveType` returns: for a member receiver, look
+    // the field up on its base class model.
+    CppInfo declaredInfo = classify(rt);
+    if (m.object && m.object->kind == NodeKind::MemberExpr) {
+        const auto& rm = static_cast<const MemberExpr&>(*m.object);
+        if (rm.object) {
+            const Type baseT = effectiveType(*rm.object);
+            if (const ClassModel* cm2 = classModelOf(stripNullish(baseT))) {
+                if (const ClassMemberModel* mem2 =
+                        findClassMemberChain(*cm2, rm.property, nullptr)) {
+                    declaredInfo = classify(mem2->type);
+                }
+            }
+        }
+    }
+    bool needUnwrap = false;
+    if (const Type* narrowed = sema_.typeOf(m.object->nodeId)) {
+        if (!narrowed->isUnknown() && !narrowed->isError() &&
+            !narrowed->isNullish() && !narrowed->isNullable() &&
+            !narrowed->isUnion()) {
+            if (declaredInfo.shape == Shape::Optional ||
+                declaredInfo.shape == Shape::Maybe) {
+                needUnwrap = true;
+            }
+            rt = *narrowed;
+        }
+    }
     CppInfo ri = classify(rt);
-    const Shape declaredShape = ri.shape;
-    bool unwrap = false;
+    bool unwrap = needUnwrap;
     // Sema narrows a nullish guard (`if (x === undefined) ... else`) for the
     // branch body, but the declaration environment still spells the binding
     // as its optional storage. When the use site's sema type is the non-null
     // member, read through the held handle.
-    if ((ri.shape == Shape::Optional || ri.shape == Shape::Maybe) &&
-        m.object->kind == NodeKind::Identifier) {
+    if (ri.shape == Shape::Optional || ri.shape == Shape::Maybe) {
         if (const Type* narrowed = sema_.typeOf(m.object->nodeId);
             narrowed && !narrowed->isUnknown() && !narrowed->isError() &&
             !narrowed->isNullish() && !narrowed->isNullable() &&
@@ -408,8 +460,8 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
     }
     const std::string instanceOp = nonOwningReceiver ? "." : "->";
     if (unwrap) {
-        recv = declaredShape == Shape::Optional ? "(*(" + recv + "))"
-                                                : "(" + recv + ").value()";
+        recv = declaredInfo.shape == Shape::Optional ? "(*(" + recv + "))"
+                                                     : "(" + recv + ").value()";
     }
     const Type base = stripNullish(rt);
     if (const ClassModel* cm = classModelOf(base)) {

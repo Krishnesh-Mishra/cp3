@@ -1,0 +1,14 @@
+import console from "std/console";
+class Base {}
+class Derived extends Base {}
+const b: Base = new Base();
+const d = b as Derived;
+console.log(d instanceof Derived || d !== null);
+class Node {
+  value!: number;
+  constructor(value: number) {
+    this.value = value;
+  }
+}
+const n = new Node(7);
+console.log(`${n.value}`);

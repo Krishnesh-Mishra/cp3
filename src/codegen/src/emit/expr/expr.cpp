@@ -130,6 +130,8 @@ std::string Generator::exprPlain(const Expr& e) {
         case NodeKind::WeakExpr:
         case NodeKind::RangeExpr:
         case NodeKind::SpreadElement:
+        case NodeKind::AsExpr:
+        case NodeKind::NonNullExpr:
         default:
             // The expression forms the ordinary table does not own: the weak
             // link wrapper, a range used as a value, a spread outside its
@@ -145,6 +147,39 @@ std::string Generator::emitExtendedExpr(const Expr& e) {
             return emitWeakValue(static_cast<const WeakExpr&>(e));
         case NodeKind::RangeExpr:
             return emitRangeValue(static_cast<const RangeExpr&>(e));
+        case NodeKind::AsExpr: {
+            // `expr as Type` - between related class types the handle is
+            // reinterpreted (static_pointer_cast); for numeric conversions
+            // the value is converted.
+            const auto& asExpr = static_cast<const AsExpr&>(e);
+            if (!asExpr.expression) return "0.0";
+            const std::string value = expr(*asExpr.expression);
+            const Type targetType = effectiveType(e);
+            const CppInfo targetInfo = classify(targetType);
+            if (targetInfo.shape == Shape::ClassRef) {
+                const std::string element = targetInfo.cpp.substr(
+                    targetInfo.cpp.find('<') + 1, targetInfo.cpp.rfind('>') -
+                    targetInfo.cpp.find('<') - 1);
+                return "std::static_pointer_cast<" + element + ">(" +
+                       value + ")";
+            }
+            return "(" + value + ")";
+        }
+        case NodeKind::NonNullExpr: {
+            // `expr!` - a null check that throws an Error on null.
+            const auto& nonNull = static_cast<const NonNullExpr&>(e);
+            if (!nonNull.expression) return "0.0";
+            const std::string value = expr(*nonNull.expression);
+            const CppInfo ci = nonNull.expression ? info(*nonNull.expression) : CppInfo{};
+            const bool isOptional =
+                ci.shape == Shape::Optional || ci.shape == Shape::Maybe;
+            const std::string unwrap =
+                isOptional ? "cp3_v.value()" : "cp3_v";
+            return "[&]{ auto cp3_v = " + value +
+                   "; if (!cp3_v) throw ::cp3::runtime::Thrown::makeError("
+                   "::cp3::runtime::makeRef<::cp3::Error>(\"non-null assertion failed\")); "
+                   "return " + unwrap + "; }()";
+        }
         case NodeKind::SpreadElement:
             // A spread is only meaningful in an argument list or an array /
             // object literal; every one of those forms handles it before the

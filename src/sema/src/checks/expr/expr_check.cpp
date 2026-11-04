@@ -84,6 +84,10 @@ Type Analyzer::inferExpr(Expr& e) {
             return inferAwait(static_cast<AwaitExpr&>(e));
         case NodeKind::RangeExpr:
             return inferRange(static_cast<RangeExpr&>(e));
+        case NodeKind::AsExpr:
+            return inferAs(static_cast<AsExpr&>(e));
+        case NodeKind::NonNullExpr:
+            return inferNonNull(static_cast<NonNullExpr&>(e));
         case NodeKind::WeakExpr:
             return inferWeak(static_cast<WeakExpr&>(e));
         case NodeKind::SpreadElement:
@@ -311,6 +315,55 @@ Type Analyzer::inferRange(RangeExpr& r) {
 Type Analyzer::inferWeak(WeakExpr& w) {
     if (w.value) inferExpr(*w.value);
     return withType(w, ambient());
+}
+
+// `expr as Type` - a compile-time-checked type assertion (TypeScript `as`).
+// Only assertions between related class types (or one of them being unknown)
+// and numeric conversions are legal; anything else is CP3401 (TS-only
+// diagnostics rule §7 - no generic cast syntax).
+Type Analyzer::inferAs(AsExpr& a) {
+    const Type operand = a.expression ? inferExpr(*a.expression) : Type::unknown();
+    Type target = Type::unknown();
+    if (a.type) {
+        target = resolveType(*a.type);
+    }
+    // Unrelated types: reject with a clear diagnostic.
+    const bool operandIsClass =
+        operand.kind == TypeKind::Class;
+    const bool targetIsClass = target.kind == TypeKind::Class;
+    const bool operandIsNumber = operand.isNumber();
+    const bool targetIsNumber = target.isNumber();
+    if (!operandIsClass && !targetIsClass && !operandIsNumber &&
+        !targetIsNumber && !isAmbientType(operand) && !isAmbientType(target)) {
+        report(diagcode::kTypeMismatch, a.span,
+               "type mismatch: '" + operand.name +
+                   "' cannot be asserted as '" + target.name +
+                   "' (unrelated types)");
+    }
+    return withType(a, target);
+}
+
+// `expr!` - a non-null assertion: emits a null check that throws an `Error`
+// on null. Nothing else.
+Type Analyzer::inferNonNull(NonNullExpr& n) {
+    Type operand = n.expression ? inferExpr(*n.expression) : Type::unknown();
+    if (operand.isNullable() && !operand.parts.empty()) {
+        operand = operand.parts.front();
+    } else if (operand.isUnion()) {
+        std::vector<Type> nonNull;
+        for (const Type& m : operand.parts) {
+            if (!m.isNullish()) nonNull.push_back(m);
+        }
+        if (!nonNull.empty()) {
+            operand = nonNull.size() == 1 ? nonNull.front()
+                                          : Type::unionOf(std::move(nonNull));
+        }
+    }
+    if (operand.isNullish()) {
+        report(diagcode::kTypeMismatch, n.span,
+               "'!' assertion on a null/undefined value");
+    }
+    return withType(n, operand);
 }
 
 Type Analyzer::inferSpread(SpreadElement& sp) {

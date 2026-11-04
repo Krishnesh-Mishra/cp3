@@ -23,6 +23,17 @@ namespace cp3 {
 // Member access
 // =============================================================================
 Type Analyzer::inferMember(MemberExpr& m) {
+    // Control-flow narrowing for member expressions (`n.next` inside
+    // `if (n.next !== null)`): the narrowed (non-null) type wins.
+    if (m.object && m.object->kind == NodeKind::Identifier) {
+        const std::string key = static_cast<Identifier&>(*m.object).name +
+                                ":" + m.property;
+        if (const auto it = narrowedMembersByKey_.find(key);
+            it != narrowedMembersByKey_.end()) {
+            if (m.object) inferExpr(*m.object);
+            return withType(m, it->second);
+        }
+    }
     Type ot = m.object ? inferExpr(*m.object) : Type::unknown();
     // spec 11: reading a member through a weak field that has not been
     // narrowed is a possible-undefined use (`c.parent.name` where `parent` is
