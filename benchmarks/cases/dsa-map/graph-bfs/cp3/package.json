@@ -1,0 +1,1 @@
+{"name":"graph-bfs","version":"1.0.0","description":"cp3 graph-bfs","type":"application","main":"src/index.cp3","typeSystem":"rust","scripts":{"start":"cp3c run src/index.cp3"}}

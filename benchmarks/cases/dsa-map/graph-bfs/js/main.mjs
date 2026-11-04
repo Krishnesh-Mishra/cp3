@@ -1,0 +1,4 @@
+const NV=50000,NE=NV*8; const M=0xFFFFFFFFFFFFFFFFn; const xs_next=x=>{x^=(x<<13n)&M;x^=x>>7n;x^=(x<<17n)&M;return x&M};
+const adj=Array.from({length:NV},()=>[]); let r=12345n; for(let e=0;e<NE;e++){r=xs_next(r); adj[Number(r%BigInt(NV))].push(Number((r>>24n)%BigInt(NV)));}
+let total=0; let seed=999n; for(let s=0;s<4;s++){seed=xs_next(seed); const src=Number(seed%BigInt(NV)); const dist=new Int32Array(NV).fill(-1); const q=[src]; dist[src]=0; for(let qh=0;qh<q.length;qh++){const u=q[qh]; const d=dist[u]; total+=d; for(const w of adj[u]) if(dist[w]<0){dist[w]=d+1;q.push(w);}}}
+console.log(NV+NE); console.log(total);

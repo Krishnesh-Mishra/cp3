@@ -1,0 +1,4 @@
+package main
+import "fmt"
+func xs_next(x uint64) uint64 { x^=x<<13; x^=x>>7; x^=x<<17; return x }
+func main(){ const NV=50000; const NE=NV*8; adj:=make([][]uint32, NV); for i:=0;i<NV;i++{adj[i]=make([]uint32,0,8)}; r:=uint64(12345); for e:=0;e<NE;e++ { r=xs_next(r); u:=r%NV; v:=(r>>24)%NV; adj[u]=append(adj[u], uint32(v)) }; dist:=make([]int64, NV); total:=int64(0); seed:=uint64(999); for s:=0;s<4;s++ { seed=xs_next(seed); src:=int(seed%NV); for v:=0;v<NV;v++ { dist[v]=-1 }; q:=make([]int,0,NV); q=append(q,src); dist[src]=0; for qh:=0;qh<len(q);qh++ { u:=q[qh]; d:=dist[u]; total+=d; for _,w:=range adj[u] { wi:=int(w); if dist[wi]<0 { dist[wi]=d+1; q=append(q,wi) } } } }; fmt.Println(NV+NE); fmt.Println(total) }

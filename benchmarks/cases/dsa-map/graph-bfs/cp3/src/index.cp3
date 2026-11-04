@@ -1,0 +1,40 @@
+import console from "std/console";
+function xs_next(x: u64): u64 { let y: u64 = x; y = y ^ (y << 13); y = y ^ (y >> 7); y = y ^ (y << 17); return y; }
+const NV: u64 = 50000;
+const NE: u64 = NV * 8;
+const adj: u64[][] = [];
+let ai: u64 = 0;
+while (ai < NV) { const row: u64[] = []; adj.push(row); ai = ai + 1; }
+let r: u64 = 12345;
+let e: u64 = 0;
+while (e < NE) { r = xs_next(r); const u: u64 = r % NV; const v: u64 = (r >> 24) % NV; adj[u].push(v); e = e + 1; }
+let total: number = 0;
+let seed: u64 = 999;
+let s: u64 = 0;
+while (s < 4) {
+  seed = xs_next(seed);
+  const src: u64 = seed % NV;
+  const dist: number[] = [];
+  let di: u64 = 0;
+  while (di < NV) { dist.push(-1); di = di + 1; }
+  const q: u64[] = [];
+  dist[src] = 0;
+  q.push(src);
+  let qh: u64 = 0;
+  while (qh < q.length) {
+    const u: u64 = q[qh];
+    const d: number = dist[u];
+    total = total + d;
+    const row = adj[u];
+    let k: u64 = 0;
+    while (k < row.length) {
+      const wk: u64 = row[k];
+      if (dist[wk] === -1) { dist[wk] = d + 1; q.push(wk); }
+      k = k + 1;
+    }
+    qh = qh + 1;
+  }
+  s = s + 1;
+}
+console.log(NV + NE);
+console.log(total);
