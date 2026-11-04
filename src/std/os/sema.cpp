@@ -44,11 +44,42 @@ const MemberRow kOsRows[] = {
      "Returns the total amount of system memory in bytes."},
     {"freeMemory", zeroToNumber, "freeMemory(): number",
      "Returns the amount of free system memory in bytes."},
+    {"totalmem", zeroToNumber, "totalmem(): number",
+     "Returns the total amount of system memory in bytes (the Node "
+     "`os.totalmem()` name)."},
+    {"freemem", zeroToNumber, "freemem(): number",
+     "Returns the amount of free system memory in bytes (the Node "
+     "`os.freemem()` name)."},
+    // `loadavg()` and `networkInterfaces()` return tuples/arrays and are
+    // special-cased in `osMember` because the member table cannot build
+    // tuple types; their documentation lives here anyway.
+    {"loadavg", zeroToNumber, "loadavg(): [number, number, number]",
+     "Returns the 1, 5 and 15 minute load averages as a `[number, number, "
+     "number]` tuple. On platforms without load averages the values are "
+     "zero."},
+    {"networkInterfaces", zeroToNumber,
+     "networkInterfaces(): Array<[string, string, string, boolean]>",
+     "Returns one `[name, address, family, internal]` tuple per network "
+     "interface. `family` is `\"IPv4\"` or `\"IPv6\"`; `internal` marks "
+     "loopback-only interfaces."},
 };
 
 }  // namespace
 
 std::optional<Type> Analyzer::osMember(const std::string& prop) {
+    if (prop == "loadavg") {
+        const Type t = makeObjectType({}, false, true,
+                                      {Type::number(), Type::number(),
+                                       Type::number()});
+        return Type::function({}, t);
+    }
+    if (prop == "networkInterfaces") {
+        const Type info =
+            makeObjectType({}, false, true,
+                           {Type::string(), Type::string(), Type::string(),
+                            Type::boolean()});
+        return Type::function({}, Type::array(info));
+    }
     return lookupMember(kOsRows, prop);
 }
 

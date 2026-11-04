@@ -3,9 +3,9 @@
 //
 // OWNERSHIP: the std/os family (src/std/os/**). One row of the D68
 // native-package table; the rest of the table never needs to change for this
-// module. Header-only family: no vendored library and no runtime TU; the
-// row supplies the generated-code include tree, selected when a program
-// imports "std/os".
+// module. The row supplies the generated-code include tree and the libuv-backed
+// runtime TUs selected when a program imports "std/os". libuv is shared with
+// `std/io` and `std/network` through third_party/libuv.
 // =============================================================================
 #pragma once
 
@@ -15,11 +15,22 @@ namespace cp3::cli::detail {
 
 inline const NativePackage kOsNativePackage{
     "std/os",
-    {"src/std/os/include"},
+    {"src/std/os/include", "third_party/libuv/include"},
+    {},
+    {"src/std/os/runtime.cpp"},
     {},
     {},
     {},
-    {},
+    {{"windows-x64",
+      {"third_party/libuv/lib/windows-x64"},
+      {"-luv", "-lws2_32", "-luserenv", "-liphlpapi", "-lole32", "-ldbghelp",
+       "-lsynchronization"}},
+     {"linux-x64",
+      {"third_party/libuv/lib/linux-x64"},
+      {"-luv", "-pthread", "-ldl", "-lrt"}},
+     {"linux-arm64",
+      {"third_party/libuv/lib/linux-arm64"},
+      {"-luv", "-pthread", "-ldl", "-lrt"}}},
 };
 
 }  // namespace cp3::cli::detail

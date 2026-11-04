@@ -1,0 +1,4 @@
+import console from "std/console";
+import os from "std/os";
+const interfaces = os.networkInterfaces();
+console.log(interfaces.length >= 0 && interfaces.length < 1000 ? "ok" : "bad");

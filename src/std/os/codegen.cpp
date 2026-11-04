@@ -21,7 +21,8 @@ namespace {
 // os (docs §04): all zero-argument.
 const char* const kOsFns[] = {"platform", "homedir",    "tmpdir",
                               "hostname", "cpus",       "totalMemory",
-                              "freeMemory"};
+                              "freeMemory", "totalmem", "freemem",
+                              "loadavg",  "networkInterfaces"};
 bool isOsFn(const std::string& name) { return CP3_IN_TABLE(name, kOsFns); }
 
 }  // namespace
@@ -29,6 +30,9 @@ bool isOsFn(const std::string& name) { return CP3_IN_TABLE(name, kOsFns); }
 std::string Generator::emitOsCall(const CallExpr& c, const MemberExpr& m) {
     if (!isOsFn(m.property)) return std::string();
     needsOs_ = true;
+    if (m.property == "loadavg" || m.property == "networkInterfaces") {
+        needsTuple_ = true;
+    }
     return "::cp3::runtime::os::" + m.property + "(" +
            joinStrings(emitPlainArgs(c), ", ") + ")";
 }

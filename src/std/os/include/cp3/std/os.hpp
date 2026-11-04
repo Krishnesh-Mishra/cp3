@@ -1,13 +1,14 @@
 // =============================================================================
 // cp3/std/os.hpp - `os` (std/os) backing: Node-style OS info.
 //
-// OWNERSHIP: the std/os family (src/std/os/**). Additive to the generated-code
-// ABI (D14): all functions are `inline`, header-only.
+// OWNERSHIP: the std/os family (src/std/os/**). Declarations are inline'd
+// where they are portable; the libuv-backed probes live in runtime.cpp and are
+// linked for programs that import "std/os".
 //
 // -----------------------------------------------------------------------------
 // CODEGEN CONTRACT
 // -----------------------------------------------------------------------------
-//   `os.<fn>(args)` -> `::cp3::runtime::os::<fn>(args)` (all zero-argument).
+//   `os.<fn>(args)` -> `::cp3::runtime::os::<fn>(args)` (no arguments).
 //
 // -----------------------------------------------------------------------------
 // SEMANTICS / LIMITATIONS
@@ -16,20 +17,28 @@
 //   * `homedir`/`tmpdir`/`hostname` read the environment with sane fallbacks;
 //     every fallback is non-empty, which is all the corpus pins.
 //   * `cpus()` is std::thread::hardware_concurrency (at least 1).
-//   * `totalMemory`/`freeMemory` are a portable stand-in: the temp volume's
-//     capacity/free bytes via std::filesystem::space. The corpus pins only
-//     "total > 0" / "free >= 0"; a real per-platform RAM probe is a follow-up
-//     (a <windows.h> probe would drag Windows macros into every generated
-//     program that touches `os`).
+//   * `totalMemory`/`freeMemory`/`totalmem`/`freemem` read the system's total
+//     and free RAM via libuv's uv_get_total_memory/uv_get_free_memory.
+//   * `loadavg()` returns the 1/5/15-minute load average as
+//     `[number, number, number]`; on platforms without load averages it
+//     resolves to all-zero, which matches libuv's behavior there.
+//   * `networkInterfaces()` returns
+//     `Array<[string, string, string, boolean]>`, one tuple per interface:
+//     `[name, address, family, internal]`. Values come from libuv's
+//     `uv_interface_addresses`; `family` is `"IPv4"` or `"IPv6"`, and
+//     `internal` flags loopback-only interfaces.
 // =============================================================================
 #pragma once
 
 #include <cstddef>
 #include <cstdlib>
-#include <filesystem>
+#include <map>
 #include <string>
-#include <system_error>
 #include <thread>
+#include <tuple>
+#include <vector>
+
+#include "cp3/core/value.hpp"
 
 namespace cp3::runtime::os {
 
@@ -80,23 +89,19 @@ inline double cpus() {
     return static_cast<double>(count == 0 ? 1 : count);
 }
 
-namespace detail {
+// The libuv probes (src/std/os/runtime.cpp). Implementations are kept out of
+// this header so generated programs do not pull <uv.h> into the C++ TU; the
+// declarations live here for the ABI.
+double totalMemory();
+double freeMemory();
+double totalmem();
+double freemem();
 
-inline std::filesystem::space_info tempSpace() {
-    std::error_code ec;
-    const std::filesystem::space_info info =
-        std::filesystem::space(std::filesystem::temp_directory_path(ec), ec);
-    return ec ? std::filesystem::space_info{} : info;
-}
+std::tuple<double, double, double> loadavg();
 
-}  // namespace detail
-
-inline double totalMemory() {
-    return static_cast<double>(detail::tempSpace().capacity);
-}
-
-inline double freeMemory() {
-    return static_cast<double>(detail::tempSpace().available);
-}
+// Array of [name, address, family, internal] from uv_interface_addresses.
+using NetworkInterfaceInfo =
+    std::tuple<std::string, std::string, std::string, bool>;
+::cp3::runtime::Array<NetworkInterfaceInfo> networkInterfaces();
 
 }  // namespace cp3::runtime::os

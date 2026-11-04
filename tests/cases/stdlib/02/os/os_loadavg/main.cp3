@@ -1,0 +1,4 @@
+import console from "std/console";
+import os from "std/os";
+const [a, b, c] = os.loadavg();
+console.log(a >= 0 && b >= 0 && c >= 0 ? "ok" : "bad");
