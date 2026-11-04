@@ -83,6 +83,13 @@ const DocRow kProcessRows[] = {
     {"hrtime", "hrtime(): [number, number]",
      "Returns `[seconds, nanoseconds]` since an unspecified monotonic origin. "
      "Subtract two results to measure an interval."},
+    {"platform", "platform: string",
+     "The OS platform: `\"win32\"`, `\"darwin\"` or `\"linux\"`."},
+    {"arch", "arch: string",
+     "The CPU architecture: `\"x64\"` or `\"arm64\"`."},
+    {"version", "version: string", "The CP3 runtime version string."},
+    {"exitCode", "exitCode: number",
+     "The stored process exit code (default `0`). Assigning it does not exit."},
     {"nextTick", "nextTick(callback: () => void): void",
      "Queues `callback` on the next-tick queue: it runs before timers and "
      "promise continuations, in FIFO order."},
@@ -209,6 +216,10 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
         return Type::function(
             {Type::function({}, Type::voidType())}, Type::voidType());
     }
+    if (prop == "platform" || prop == "arch" || prop == "version") {
+        return Type::string();
+    }
+    if (prop == "exitCode") return Type::number();
     if (prop == "stdout" || prop == "stderr") {
         return processObjectType(kStdioStream);
     }
@@ -218,7 +229,8 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
 std::vector<std::string> processMemberNames() {
     return {"exit", "argv", "exec", "spawn", "env",
             "cwd",  "chdir", "pid",  "ppid",  "uptime", "memoryUsage", "hrtime",
-            "stdout", "stderr", "nextTick"};
+            "stdout", "stderr", "nextTick", "platform", "arch", "version",
+            "exitCode"};
 }
 
 StdMemberDoc processMemberDoc(const std::string& prop) {

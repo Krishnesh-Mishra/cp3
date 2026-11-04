@@ -99,6 +99,38 @@ extern char** environ;
 namespace cp3::runtime::process {
 
 // -----------------------------------------------------------------------------
+// process info: platform / arch / version / exitCode (STDLIB docs §04)
+// -----------------------------------------------------------------------------
+inline std::string platform() {
+#if defined(_WIN32)
+    return "win32";
+#elif defined(__APPLE__)
+    return "darwin";
+#else
+    return "linux";
+#endif
+}
+
+inline std::string arch() {
+#if defined(_M_X64) || defined(__x86_64__)
+    return "x64";
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    return "arm64";
+#else
+    return "unknown";
+#endif
+}
+
+inline std::string version() { return "v0.2.0"; }
+
+// `process.exitCode`: a plain stored number (default 0). Assigning it does
+// not exit; `process.exit(code)` terminates with `code` regardless.
+inline double& exitCode() {
+    static double code_ = 0.0;
+    return code_;
+}
+
+// -----------------------------------------------------------------------------
 // exit (core, unchanged since the D72 split)
 // -----------------------------------------------------------------------------
 inline void exit(double code) {

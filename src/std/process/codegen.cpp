@@ -272,6 +272,22 @@ std::string Generator::emitProcessMember(const MemberExpr& m) {
         needsEventLoop_ = true;
         return "(" + std::string(kRuntimeNs) + "processStderr())";
     }
+    if (isNsMember(&m, "process", "platform")) {
+        needsProcess_ = true;
+        return std::string(kRuntimeNs) + "platform()";
+    }
+    if (isNsMember(&m, "process", "arch")) {
+        needsProcess_ = true;
+        return std::string(kRuntimeNs) + "arch()";
+    }
+    if (isNsMember(&m, "process", "version")) {
+        needsProcess_ = true;
+        return std::string(kRuntimeNs) + "version()";
+    }
+    if (isNsMember(&m, "process", "exitCode")) {
+        needsProcess_ = true;
+        return std::string(kRuntimeNs) + "exitCode()";
+    }
     if (!m.object || !isProcessObject(m.object.get())) return std::string();
     if (effectiveType(*m.object).name == kMemoryUsage) {
         const bool known = m.property == "rss" || m.property == "heapTotal" ||

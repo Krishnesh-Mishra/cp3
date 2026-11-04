@@ -151,7 +151,7 @@ The remaining JavaScript and TypeScript surface needed so ordinary application c
 | `toSpliced`, `with`, `flat(depth)`, `copyWithin` | Rest of the ES2023 non-mutating array methods. | Small | Planned |
 | `process.stdout.write` / `process.stderr.write` | No newline; CLIs and progress output need it. | Small | Planned |
 | `process.stdin` (read all, read lines) or `std/readline` | Piping input into CLIs; `console.input` covers prompts only. | Small-medium | Planned |
-| `process.exitCode`, `process.platform`, `process.arch`, `process.version` | Basic process info and a graceful exit path. | Small | Planned |
+| `process.exitCode`, `process.platform`, `process.arch`, `process.version` | Basic process info and a graceful exit path. | Small | Done |
 | `console.table`, `console.group`/`groupEnd`, `console.dir`, `console.count`, `console.trace` | Common debug output; `console.time`/`timeEnd` are already covered by the `std/time` ledger entry. | Small | Planned |
 | `Error.captureStackTrace`, `error.toString()`, `error.name` overrides on subclasses | Custom error classes need them. | Small | Planned |
 | `res.redirect`, `res.sendFile`, `res.cookie`, `req.cookies`, `req.ip` | Basic web-server features every app writes by hand today. | Small-medium | Planned |

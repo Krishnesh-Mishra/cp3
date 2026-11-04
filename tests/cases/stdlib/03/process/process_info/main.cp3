@@ -1,0 +1,6 @@
+import console from "std/console";
+import process from "std/process";
+console.log(`${process.platform}`);
+console.log(`${process.arch}`);
+console.log(`${process.version}`);
+console.log(`${process.exitCode}`);
