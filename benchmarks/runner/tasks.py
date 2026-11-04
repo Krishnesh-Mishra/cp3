@@ -42,22 +42,37 @@ ALL_TASKS = SERVER_TASKS + COMPUTE_TASKS
 CATEGORIES: dict[str, str] = {
     # network
     "health-server": "network", "health-server-multi": "network",
-    # compute
+    # compute (pure cpu / loops / dispatch)
     **{t: "compute" for t in [
         "compute-single", "compute-single-int", "compute-multi",
-        "hello-world", "string-churn", "sha256-churn", "buffer-copy",
-        "typed-array-sum", "math-kernel", "word-frequency", "object-churn",
-        "array-growth", "closure-capture", "interface-dispatch",
-        "generics-mono", "json-roundtrip", "async-fanout", "env-injection",
-        "file-roundtrip", "path-join", "date-format", "os-probe",
-        "binary-trees", "map-churn", "utf8-text", "regex-scan",
-        "json-parse-large", "deep-recursion", "exception-cost", "file-big",
+        "hello-world", "closure-capture", "interface-dispatch",
+        "generics-mono", "async-fanout", "deep-recursion", "exception-cost",
     ]},
-    # memory / DSA
+    # dsa-array (vectors, buffers, typed arrays)
+    **{t: "dsa-array" for t in [
+        "array-growth", "buffer-copy", "typed-array-sum", "sum-array", "file-big", "blur",
+    ]},
+    # dsa-object (objects, trees, scene)
+    **{t: "dsa-object" for t in [
+        "object-churn", "binary-trees", "tree-walk", "scene", "interp", "records",
+    ]},
+    # dsa-string (string/word scans)
+    **{t: "dsa-string" for t in [
+        "string-churn", "utf8-text", "regex-scan", "word-frequency", "strlist", "sexp",
+    ]},
+    # dsa-map (hash maps, caches, graphs)
+    **{t: "dsa-map" for t in [
+        "map-churn", "lru", "graph-bfs", "push",
+    ]},
+    # stdlib (one row per stdlib module)
+    **{t: "stdlib" for t in [
+        "sha256-churn", "math-kernel", "os-probe", "date-format", "env-injection",
+        "file-roundtrip", "path-join", "json-roundtrip", "json-parse-large",
+        "respond", "calc", "particles",
+    ]},
+    # memory (allocation-heavy fallback)
     **{t: "memory" for t in [
-        "tree-walk", "graph-bfs", "strlist", "lru", "interp", "blur",
-        "calc", "particles", "push", "records", "scene", "sexp",
-        "respond", "sum-array",
+        "calc", "particles",
     ]},
 }
 
