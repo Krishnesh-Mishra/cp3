@@ -137,7 +137,7 @@ The remaining JavaScript and TypeScript surface needed so ordinary application c
 | Timers, if missing: `setTimeout`, `setInterval`, `clearTimeout`, `sleep` | Every service waits; a 100 ms timer regression test needs them. | Small | Planned |
 | Process lifecycle: `process.on("SIGINT" \| "SIGTERM" \| "exit" \| "unhandledRejection")`, `server.close()` | Servers need graceful shutdown; libuv signal handles are already available. | Small | Planned |
 | Built-in utility types: `Partial`, `Required`, `Readonly`, `Pick`, `Omit`, `Record` | Very common in real TS. The compiler resolves them natively instead of user-written mapped types. | Medium | Planned |
-| Date gaps: `getTime`, `getDay`, the UTC getters, setters, `Date.parse` | The current surface is very thin. | Small | Planned |
+| Date gaps: `getTime`, `getDay`, the UTC getters, setters, `Date.parse` | The current surface is very thin. | Small | Done |
 | `cp3 install <dir>` semantics | Compile the source or reject with a clear "use a `.cp3pak`" error; accept classes via a package's default or named exports (today CP3401 blocks it); make `cp3 test` work for packages. | Small-medium | Planned |
 | Coercion: `parseInt`, `parseFloat`, `Number(x)`, `String(x)`, `Boolean(x)`, `isNaN`, `isFinite` | Basic coercion in every TS codebase. | Small | Planned |
 | Number helpers: `Number.toString(radix)`, `Number.isSafeInteger`, `Number.parseInt`/`parseFloat` | Common helpers plus hex/binary output. | Small | Planned |

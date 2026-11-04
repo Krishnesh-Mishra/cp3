@@ -51,6 +51,15 @@ constexpr DateFn kDateFns[] = {
     {"getFullYear", "getFullYear"}, {"getMonth", "getMonth"},
     {"getDate", "getDate"},         {"getHours", "getHours"},
     {"getMinutes", "getMinutes"},   {"getSeconds", "getSeconds"},
+    {"getTime", "getTime"},         {"getDay", "getDay"},
+    {"getUTCFullYear", "getUTCFullYear"}, {"getUTCMonth", "getUTCMonth"},
+    {"getUTCDate", "getUTCDate"},   {"getUTCDay", "getUTCDay"},
+    {"getUTCHours", "getUTCHours"}, {"getUTCMinutes", "getUTCMinutes"},
+    {"getUTCSeconds", "getUTCSeconds"},
+    {"setTime", "setTime"},         {"setFullYear", "setFullYear"},
+    {"setMonth", "setMonth"},       {"setDate", "setDate"},
+    {"setHours", "setHours"},       {"setMinutes", "setMinutes"},
+    {"setSeconds", "setSeconds"},
     {"addDays", "addDays"},         {"addHours", "addHours"},
     {"addMinutes", "addMinutes"},   {"addSeconds", "addSeconds"},
     {"isBefore", "isBefore"},       {"isAfter", "isAfter"},
@@ -84,6 +93,11 @@ std::string Generator::emitDateCall(const CallExpr& c, const MemberExpr& m) {
         if (m.property == "fromISOString") {
             needsDate_ = true;
             return "::cp3::runtime::date::fromIsoString(" +
+                   joinStrings(emitPlainArgs(c), ", ") + ")";
+        }
+        if (m.property == "parse") {
+            needsDate_ = true;
+            return "::cp3::runtime::date::parse(" +
                    joinStrings(emitPlainArgs(c), ", ") + ")";
         }
         return std::string();

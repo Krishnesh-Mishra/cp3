@@ -43,6 +43,8 @@ Type zeroToNumber() { return Type::function({}, Type::number()); }
 Type numberToDate() { return Type::function({Type::number()}, dateValue()); }
 Type dateToBoolean() { return Type::function({dateValue()}, Type::boolean()); }
 Type dateToNumber() { return Type::function({dateValue()}, Type::number()); }
+Type stringToNumber() { return Type::function({Type::string()}, Type::number()); }
+Type numberToNumber() { return Type::function({Type::number()}, Type::number()); }
 
 // The namespace object's statics (docs 04).
 const MemberRow kDateStaticRows[] = {
@@ -50,6 +52,8 @@ const MemberRow kDateStaticRows[] = {
      "Returns the current date and time as a new `Date`."},
     {"fromISOString", stringToDate, "fromISOString(s: string): Date",
      "Parses an ISO-8601 date string into a `Date`."},
+    {"parse", stringToNumber, "parse(s: string): number",
+     "Parses an ISO-8601 date string into milliseconds since the epoch."},
 };
 
 // The members of a Date value. Every "change" returns a NEW Date: the type
@@ -71,6 +75,38 @@ const MemberRow kDateInstanceRows[] = {
      "Returns the minute of the hour of the date."},
     {"getSeconds", zeroToNumber, "getSeconds(): number",
      "Returns the second of the minute of the date."},
+    {"getTime", zeroToNumber, "getTime(): number",
+     "Returns milliseconds since the epoch."},
+    {"getDay", zeroToNumber, "getDay(): number",
+     "Returns the day of the week (0 = Sunday)."},
+    {"getUTCFullYear", zeroToNumber, "getUTCFullYear(): number",
+     "Returns the UTC year (same as `getFullYear`: all Dates are UTC)."},
+    {"getUTCMonth", zeroToNumber, "getUTCMonth(): number",
+     "Returns the UTC month, 0-indexed."},
+    {"getUTCDate", zeroToNumber, "getUTCDate(): number",
+     "Returns the UTC day of the month."},
+    {"getUTCDay", zeroToNumber, "getUTCDay(): number",
+     "Returns the UTC day of the week, 0 = Sunday."},
+    {"getUTCHours", zeroToNumber, "getUTCHours(): number",
+     "Returns the UTC hour of the day."},
+    {"getUTCMinutes", zeroToNumber, "getUTCMinutes(): number",
+     "Returns the UTC minute of the hour."},
+    {"getUTCSeconds", zeroToNumber, "getUTCSeconds(): number",
+     "Returns the UTC second of the minute."},
+    {"setTime", numberToNumber, "setTime(ms: number): number",
+     "Sets the date to `ms` milliseconds since the epoch, in place."},
+    {"setFullYear", numberToNumber, "setFullYear(year: number): number",
+     "Sets the UTC year in place."},
+    {"setMonth", numberToNumber, "setMonth(month: number): number",
+     "Sets the UTC month (0-indexed) in place."},
+    {"setDate", numberToNumber, "setDate(day: number): number",
+     "Sets the UTC day of the month in place."},
+    {"setHours", numberToNumber, "setHours(hour: number): number",
+     "Sets the UTC hour in place."},
+    {"setMinutes", numberToNumber, "setMinutes(minute: number): number",
+     "Sets the UTC minute in place."},
+    {"setSeconds", numberToNumber, "setSeconds(second: number): number",
+     "Sets the UTC second in place."},
     {"addDays", numberToDate, "addDays(n: number): Date",
      "Returns a NEW `Date` moved `n` days forward; the receiver is "
      "untouched."},
