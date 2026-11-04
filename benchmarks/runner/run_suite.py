@@ -2263,6 +2263,9 @@ def main() -> int:
         for task in COMPUTE_TASKS:
             if task not in wanted:
                 continue
+            if not _task_exists(task):
+                print(f"  {g('info')} {task}: pending (no cases folder yet) -- skipped")
+                continue
             task_index += 1
             CURRENT_LANGUAGES = COMPUTE_LANGUAGES
             extra: tuple[str, ...] = ()
@@ -2316,7 +2319,10 @@ def main() -> int:
                 header = (f"expected = {EXPECTED[task]} | 8 MiB file, "
                           f"8 write/read rounds")
             else:
-                header = f"expected = {EXPECTED[task]}"
+                _exp = EXPECTED.get(task)
+                header = (f"expected = {_exp} | cross-language checksum" if _exp is not None
+                          else f"cross-check only (no oracle yet) | {task}")
+                expected = _exp
             rows = []
             omitted = TASK_OMIT_LANGUAGES.get(task, {})
             for language in COMPUTE_LANGUAGES:
