@@ -815,16 +815,16 @@ def prepare_server_entry(language: str, task: str, port: int,
             if not spring_jar.exists():
                 start = time.perf_counter()
                 if (spring_dir / "pom.xml").exists():
-                    argv = ["mvn", "package", "-DskipTests", "-q"]
-                else:
-                    argv = ["./gradlew", "bootJar", "--offline"]
-                result = run_command(argv, cwd=spring_dir, timeout=1200)
-                row["build_ms"] = (time.perf_counter() - start) * 1000.0
-                if result.returncode != 0:
-                    return False, [], "", f"Spring Boot build failed: {first_diagnostic(result.stderr or result.stdout)}"
-            row["binary_kb"] = stripped_size_kb(spring_jar) if spring_jar.exists() else None
-            return (True, ["java", "-jar", str(spring_jar), f"--server.port={port}"],
-                    "Spring Boot (Tomcat, best Java HTTP)", note)
+                    if have("mvn"):
+                        argv = ["mvn", "package", "-DskipTests", "-q"]
+                        result = run_command(argv, cwd=spring_dir, timeout=1200)
+                        row["build_ms"] = (time.perf_counter() - start) * 1000.0
+                        if result.returncode != 0:
+                            return False, [], "", f"Spring Boot build failed: {first_diagnostic(result.stderr or result.stdout)}"
+                        row["binary_kb"] = stripped_size_kb(spring_jar) if spring_jar.exists() else None
+                        return (True, ["java", "-jar", str(spring_jar), f"--server.port={port}"],
+                                "Spring Boot (Tomcat, best Java HTTP)", note)
+                    note = "Spring Boot skipped (mvn missing), falling back to Undertow"
         source = base / "java" / "Main.java"
         outdir = BUILD / f"{stem}-java-server"
         class_file = outdir / "Main.class"

@@ -1,0 +1,5 @@
+C:\Users\Krishnesh\dev\cp3\benchmarks\cases\network\health-server\dotnet\publish\health-server.exe
+C:\Users\Krishnesh\dev\cp3\benchmarks\cases\network\health-server\dotnet\publish\health-server.dll
+C:\Users\Krishnesh\dev\cp3\benchmarks\cases\network\health-server\dotnet\publish\health-server.deps.json
+C:\Users\Krishnesh\dev\cp3\benchmarks\cases\network\health-server\dotnet\publish\health-server.runtimeconfig.json
+C:\Users\Krishnesh\dev\cp3\benchmarks\cases\network\health-server\dotnet\publish\health-server.pdb

@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "tcQ7YMgCN3ogxxua0+rbjhc4J5EhViNGW+36/C9w+nw=",
+  "Source": "health-server",
+  "BasePath": "_content/health-server",
+  "Mode": "Default",
+  "ManifestType": "Publish",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
