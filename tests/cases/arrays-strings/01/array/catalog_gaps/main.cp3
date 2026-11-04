@@ -1,0 +1,18 @@
+import console from "std/console";
+const a = [1, 2, 3, 2, 1];
+console.log(`${a.lastIndexOf(2)}`);
+console.log(`${a.lastIndexOf(9)}`);
+const removed = a.splice(1, 2, 9);
+console.log(removed.join(","));
+console.log(a.join(","));
+const joined = [1].concat(2, 3, 4);
+console.log(joined.join(","));
+const r = [1, 2, 3];
+r.reverse();
+console.log(r.join(","));
+const nested = [1, [2, 3], 4];
+console.log(nested.flat().join(","));
+console.log([10, 20].keys().join(","));
+console.log([10, 20].values().join(","));
+const total = [1, 2, 3].reduceRight((acc: number, x: number) => acc + x, 0);
+console.log(`${total}`);

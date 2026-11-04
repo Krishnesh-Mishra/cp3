@@ -500,6 +500,94 @@ E arrayReduceNoInit(const Array<E>& a, F fn) {
     return acc;
 }
 
+// `a.reduceRight(fn, initial)`: right fold over the initial value.
+template <class R, class E, class F>
+R arrayReduceRight(const Array<E>& a, F fn, const R& initial) {
+    R acc = initial;
+    for (std::size_t i = a->size(); i-- > 0;) {
+        acc = callArrayReduceCallback<E>(fn, acc, (*a)[i], i, a);
+    }
+    return acc;
+}
+
+// `a.reduceRight(fn)` with no initial value (JS): the accumulator starts as
+// the last element and an empty array is an error.
+template <class E, class F>
+E arrayReduceRightNoInit(const Array<E>& a, F fn) {
+    if (a->empty()) typedArrayPanic("reduceRight of empty array with no initial value");
+    E acc = a->back();
+    for (std::size_t i = a->size() - 1; i-- > 0;) {
+        acc = callArrayReduceCallback<E>(fn, acc, (*a)[i], i, a);
+    }
+    return acc;
+}
+
+// `a.lastIndexOf(x, from?)`: the last index equal to x, else -1. A negative
+// from counts from the end; a positive from past the end is clamped.
+template <class E>
+double arrayLastIndexOf(const Array<E>& a, const E& value, double from = -1.0) {
+    const std::size_t n = a->size();
+    if (n == 0) return -1.0;
+    double i = std::isnan(from) || from >= static_cast<double>(n)
+                   ? static_cast<double>(n) - 1.0
+                   : (from >= 0.0 ? std::trunc(from)
+                                  : static_cast<double>(n) + std::trunc(from));
+    for (std::ptrdiff_t k = static_cast<std::ptrdiff_t>(i); k >= 0; --k) {
+        if ((*a)[static_cast<std::size_t>(k)] == value)
+            return static_cast<double>(k);
+    }
+    return -1.0;
+}
+
+// `a.splice(start, deleteCount, ...items)`: mutating; returns the removed
+// elements as a fresh array. Negative start counts from the end.
+template <class E>
+Array<E> arraySplice(const Array<E>& a, double start, double deleteCount,
+                     std::vector<E> items) {
+    const std::size_t at = startIndex(start, a->size());
+    double dc = std::isnan(deleteCount) ? 0.0 : std::trunc(deleteCount);
+    if (dc < 0.0) dc = 0.0;
+    const std::size_t count =
+        at >= a->size() ? 0 : std::min<std::size_t>(
+                                   static_cast<std::size_t>(dc), a->size() - at);
+    std::vector<E> removed(a->begin() + static_cast<std::ptrdiff_t>(at),
+                           a->begin() + static_cast<std::ptrdiff_t>(at + count));
+    a->erase(a->begin() + static_cast<std::ptrdiff_t>(at),
+             a->begin() + static_cast<std::ptrdiff_t>(at + count));
+    a->insert(a->begin() + static_cast<std::ptrdiff_t>(at), items.begin(),
+              items.end());
+    return makeArray<E>(std::move(removed));
+}
+
+// `a.concat(...items)`: a fresh array; array arguments are spread.
+template <class E>
+Array<E> arrayConcat(const Array<E>& a, std::vector<E> rest) {
+    std::vector<E> out(a->begin(), a->end());
+    out.insert(out.end(), rest.begin(), rest.end());
+    return makeArray<E>(std::move(out));
+}
+
+// `a.reverse()`: mutating; reverses in place and returns the receiver.
+template <class E>
+Array<E> arrayReverse(const Array<E>& a) {
+    std::reverse(a->begin(), a->end());
+    return a;
+}
+
+// `a.keys()`: the indices as a fresh number array.
+template <class E>
+Array<double> arrayKeys(const Array<E>& a) {
+    std::vector<double> out;
+    for (std::size_t i = 0; i < a->size(); ++i) out.push_back(static_cast<double>(i));
+    return makeArray<double>(std::move(out));
+}
+
+// `a.values()`: a fresh copy of the elements.
+template <class E>
+Array<E> arrayValues(const Array<E>& a) {
+    return makeArray<E>(*a);
+}
+
 // `a.find(pred)`: the first matching element, or `undefined`.
 template <class E, class F>
 std::optional<E> arrayFind(const Array<E>& a, F pred) {

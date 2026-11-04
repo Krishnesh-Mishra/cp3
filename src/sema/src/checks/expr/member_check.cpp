@@ -300,10 +300,25 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
         Type cmp = Type::function({elem, elem}, Type::number());
         return withOptionalTail(Type::function({cmp}, Type::array(elem)));
     }
-    if (prop == "indexOf") {
+    if (prop == "indexOf" || prop == "lastIndexOf") {
         return withOptionalTail(
             Type::function({elem, Type::number()}, Type::number()));
     }
+    if (prop == "splice") {
+        Type f = Type::function({Type::number(), Type::number(), elem},
+                                Type::array(elem));
+        f.name = kVariadicLabel;
+        return f;
+    }
+    if (prop == "concat") {
+        Type f = Type::function({Type::unionOf({elem, arr})}, arr);
+        f.name = kVariadicLabel;
+        return f;
+    }
+    if (prop == "reverse") return Type::function({}, arr);
+    if (prop == "reduceRight") return ambient();
+    if (prop == "keys") return Type::function({}, Type::array(Type::number()));
+    if (prop == "values") return Type::function({}, arr);
     if (prop == "binarySearch") {
         return Type::function({elem}, Type::number());
     }

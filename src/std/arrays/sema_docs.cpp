@@ -96,6 +96,20 @@ const DocRow kArrayDocRows[] = {
      "type-aware default ordering and stable comparator contract as `sort`."},
     {"toReversed", "toReversed(): T[]",
      "Returns a reversed copy and leaves the receiver unchanged."},
+    {"reverse", "reverse(): T[]",
+     "Reverses the array in place and returns it."},
+    {"splice", "splice(start: number, deleteCount: number, ...items: T[]): T[]",
+     "Removes `deleteCount` elements at `start`, inserts `items`, and returns "
+     "the removed elements."},
+    {"concat", "concat(...items: (T | T[])[]): T[]",
+     "Returns a new array with the receiver's elements followed by the "
+     "arguments (arrays are spread)."},
+    {"lastIndexOf", "lastIndexOf(element: T, fromIndex?: number): number",
+     "Returns the last index equal to `element`, else -1."},
+    {"reduceRight", "reduceRight<U>(combine: (accumulator: U, element: T, index: number, array: T[]) => U, initial?: U): U",
+     "Like `reduce` but folds from the last element to the first."},
+    {"keys", "keys(): number[]", "Returns the indices of the array."},
+    {"values", "values(): T[]", "Returns a copy of the elements."},
     {"flat", "flat(): T[]",
      "Returns a new array with the nested arrays of the receiver flattened "
      "by one level."},

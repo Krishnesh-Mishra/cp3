@@ -236,23 +236,25 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
         return "::cp3::runtime::arrayForEach<" + ec.cpp + ">(" + recvText +
                ", " + call + ")";
     }
-    if (prop == "reduce") {
+    if (prop == "reduce" || prop == "reduceRight") {
         // The accumulator parameter has the fold's result type: the initial
         // value's when given, the element's otherwise (a no-initial fold seeds
         // from the first element, JS-style). The accumulator is a plain value
         // (not an array element), so any type with a C++ spelling fits.
+        const bool right = prop == "reduceRight";
         const CppInfo rc = classify(g.effectiveType(c));
         if (!rc.representable || rc.shape == Shape::Void) {
-            g.reportTypeError(c, "type mismatch: the result of reduce() has "
-                                 "no C++ spelling");
+            g.reportTypeError(c, "type mismatch: the result of " + prop +
+                                 "() has no C++ spelling");
             return "0.0";
         }
         const std::string fold =
             cb != nullptr
                 ? g.emitArrow(*cb, {rc.cpp, ec.cpp, "double", arrayCpp})
                 : g.expr(*fn);
+        const std::string base = right ? "arrayReduceRight" : "arrayReduce";
         if (c.arguments.size() > 1 && c.arguments[1]) {
-            return "::cp3::runtime::arrayReduce<" + rc.cpp + ">(" + recvText +
+            return "::cp3::runtime::" + base + "<" + rc.cpp + ">(" + recvText +
                    ", " + fold + ", " + g.expr(*c.arguments[1]) + ")";
         }
         // A no-initial fold keeps the element type as the accumulator type
@@ -268,7 +270,7 @@ std::string detail::ArrayEmitter::callbackText(Generator& g, const CallExpr& c,
                                  describe(rc.type) + "'");
             return "0.0";
         }
-        return "::cp3::runtime::arrayReduceNoInit<" + rc.cpp + ">(" + recvText +
+        return "::cp3::runtime::" + base + "NoInit<" + rc.cpp + ">(" + recvText +
                ", " + fold + ")";
     }
     const char* fnName = nullptr;
@@ -292,13 +294,14 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
                                              const MemberExpr& m) {
     if (!m.object) return std::string();
     static const char* const kCallbacks[] = {
-        "map",     "flatMap", "filter", "reduce",    "find",
+        "map",     "flatMap", "filter", "reduce",    "reduceRight", "find",
         "findLast", "findIndex", "findLastIndex", "some", "every",
         "forEach"};
     static const char* const kSimple[] = {
         "push", "pop", "unshift", "shift", "unique", "shuffle",
-        "indexOf", "includes", "binarySearch", "slice", "flat", "at",
-        "toSorted", "toReversed"};
+        "indexOf", "lastIndexOf", "includes", "binarySearch", "slice", "flat",
+        "at", "toSorted", "toReversed", "splice", "concat", "reverse", "keys",
+        "values"};
     const std::string& prop = m.property;
     if (prop == "reduce") {
         const CallExpr* filter = nullptr;
@@ -401,14 +404,51 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
         return "::cp3::runtime::" + std::string(fn) + "<" + ec.cpp + ">(" +
                recvText + ")";
     }
-    if (prop == "indexOf" || prop == "includes" || prop == "binarySearch") {
+    if (prop == "indexOf" || prop == "includes" || prop == "binarySearch" ||
+        prop == "lastIndexOf") {
         const char* fn = prop == "indexOf"   ? "arrayIndexOf"
                          : prop == "includes" ? "arrayIncludes"
-                                              : "arrayBinarySearch";
+                         : prop == "lastIndexOf" ? "arrayLastIndexOf"
+                                                 : "arrayBinarySearch";
         std::string out = "::cp3::runtime::" + std::string(fn) + "<" + ec.cpp +
                           ">(" + recvText + ", " + arg(0);
         if (c.arguments.size() > 1) out += ", " + arg(1);
         return out + ")";
+    }
+    if (prop == "splice") {
+        if (c.arguments.size() < 2) {
+            g.reportCodegenError(c, diagcode::kArityMismatch,
+                                 "arity mismatch: splice() takes at least 2 "
+                                 "arguments (start, deleteCount)");
+            return "0.0";
+        }
+        std::string items = "std::vector<" + ec.cpp + ">{";
+        for (std::size_t i = 2; i < c.arguments.size(); ++i) {
+            if (i > 2) items += ", ";
+            items += arg(i);
+        }
+        items += "}";
+        return "::cp3::runtime::arraySplice<" + ec.cpp + ">(" + recvText +
+               ", " + arg(0) + ", " + arg(1) + ", " + items + ")";
+    }
+    if (prop == "concat") {
+        std::string rest = "std::vector<" + ec.cpp + ">{";
+        for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+            if (i > 0) rest += ", ";
+            rest += arg(i);
+        }
+        rest += "}";
+        return "::cp3::runtime::arrayConcat<" + ec.cpp + ">(" + recvText +
+               ", " + rest + ")";
+    }
+    if (prop == "reverse") {
+        return "::cp3::runtime::arrayReverse<" + ec.cpp + ">(" + recvText + ")";
+    }
+    if (prop == "keys") {
+        return "::cp3::runtime::arrayKeys<" + ec.cpp + ">(" + recvText + ")";
+    }
+    if (prop == "values") {
+        return "::cp3::runtime::arrayValues<" + ec.cpp + ">(" + recvText + ")";
     }
     if (prop == "slice") {
         std::string out =

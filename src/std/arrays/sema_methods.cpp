@@ -24,9 +24,9 @@ namespace {
 
 bool isCallbackMethod(const std::string& prop) {
     return prop == "map" || prop == "filter" || prop == "reduce" ||
-           prop == "find" || prop == "findIndex" || prop == "findLast" ||
-           prop == "findLastIndex" || prop == "some" || prop == "every" ||
-           prop == "forEach" || prop == "flatMap";
+           prop == "reduceRight" || prop == "find" || prop == "findIndex" ||
+           prop == "findLast" || prop == "findLastIndex" || prop == "some" ||
+           prop == "every" || prop == "forEach" || prop == "flatMap";
 }
 
 // The JS callback shape: the element, its index, and the receiver. A callback
@@ -73,7 +73,7 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
                    " argument" + (call.arguments.size() == 1 ? "" : "s"));
     };
 
-    const bool isReduce = prop == "reduce";
+    const bool isReduce = prop == "reduce" || prop == "reduceRight";
     const std::size_t given = call.arguments.size();
     if (isReduce ? (given < 1 || given > 2) : given != 1) {
         arity(1, isReduce ? 2 : 1);
