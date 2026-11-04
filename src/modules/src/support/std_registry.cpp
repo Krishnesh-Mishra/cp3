@@ -43,7 +43,7 @@ const StdModuleDef kStdModules[] = {
     {"std/crypto", true, {}},
     {"std/network", true, {"fetch", "WebSocket", "WebSocketServer", "createServer"}},
     {"std/env", false, {"env"}},
-    {"std/collections", false, {"Map", "Set"}},
+    {"std/collections", false, {"Map", "Set", "LRUCache"}},
     {"std/buffer", false, {"Buffer"}},
     {"std/url", true, {}},
 };

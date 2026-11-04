@@ -42,6 +42,8 @@ const char* const kMapMemberNames[] = {"set",     "get",     "has",     "delete"
                                        "forEach", "size"};
 const char* const kSetMemberNames[] = {"add",   "has",   "delete",  "clear",
                                        "values", "forEach", "size"};
+const char* const kLruMemberNames[] = {"set",     "get",    "has",    "delete",
+                                       "clear",   "size",   "capacity", "keys"};
 
 // The documented members of a `Map` (docs/standard-library/04, Map / Set).
 const DocRow kMapDocRows[] = {
@@ -85,6 +87,25 @@ const DocRow kSetDocRows[] = {
     {"size", "size: number", "The number of values in the set."},
 };
 
+// The documented members of an `LRUCache` (capacity-bounded, evicting).
+const DocRow kLruDocRows[] = {
+    {"set", "set(key: K, value: V): void",
+     "Stores `value` under `key` as most recently used, evicting the least "
+     "recently used entry when over capacity."},
+    {"get", "get(key: K): V | undefined",
+     "Returns the value stored under `key` and marks it most recently used, "
+     "or `undefined` when the key is not in the cache."},
+    {"has", "has(key: K): boolean",
+     "True when `key` is in the cache (does not affect eviction order)."},
+    {"delete", "delete(key: K): boolean",
+     "Removes `key` from the cache and returns whether it was present."},
+    {"clear", "clear(): void", "Removes every entry from the cache."},
+    {"size", "size: number", "The number of entries in the cache."},
+    {"capacity", "capacity: number", "The maximum number of entries."},
+    {"keys", "keys(): K[]",
+     "Returns the keys of the cache, most recently used first."},
+};
+
 template <std::size_t N>
 std::vector<std::string> candidateNames(const char* const (&names)[N]) {
     std::vector<std::string> out;
@@ -99,7 +120,8 @@ std::vector<std::string> candidateNames(const char* const (&names)[N]) {
 // The family model (shared with scopes.h and member_check.cpp)
 // =============================================================================
 bool isCollectionsClass(const Type& t) {
-    return t.kind == TypeKind::Class && (t.name == "Map" || t.name == "Set");
+    return t.kind == TypeKind::Class &&
+           (t.name == "Map" || t.name == "Set" || t.name == "LRUCache");
 }
 
 // =============================================================================
@@ -107,11 +129,12 @@ bool isCollectionsClass(const Type& t) {
 // =============================================================================
 Type Analyzer::inferCollectionsConstruct(const std::string& name,
                                          TypeList& typeArgs) {
-    if (name != "Map" && name != "Set") return Type::unknown();
-    // Map carries { K, V }; Set carries { T }. Missing annotations stay
-    // unknown; codegen reports CP3401 when the constructor has no complete
-    // type argument list to lower.
-    const std::size_t want = name == "Map" ? 2 : 1;
+    if (name != "Map" && name != "Set" && name != "LRUCache")
+        return Type::unknown();
+    // Map/LRUCache carry { K, V }; Set carries { T }. Missing annotations
+    // stay unknown; codegen reports CP3401 when the constructor has no
+    // complete type argument list to lower.
+    const std::size_t want = name == "Set" ? 1 : 2;
     std::vector<Type> parts;
     parts.reserve(want);
     for (std::size_t i = 0; i < want; ++i) {
@@ -131,6 +154,28 @@ Type Analyzer::inferCollectionsConstruct(const std::string& name,
 // =============================================================================
 Type Analyzer::collectionsMember(const Type& recv, const std::string& prop,
                                  const SourceSpan& span) {
+    if (recv.name == "LRUCache") {
+        const Type first =
+            recv.parts.empty() ? Type::unknown() : recv.parts.front();
+        const Type second =
+            recv.parts.size() >= 2 ? recv.parts[1] : Type::unknown();
+        if (prop == "size" || prop == "capacity") return Type::number();
+        if (prop == "set") {
+            return Type::function({first, second}, Type::voidType());
+        }
+        if (prop == "get") {
+            return Type::function(
+                {first}, Type::unionOf({second, Type::undefined()}));
+        }
+        if (prop == "has" || prop == "delete") {
+            return Type::function({first}, Type::boolean());
+        }
+        if (prop == "clear") return Type::function({}, Type::voidType());
+        if (prop == "keys") return Type::function({}, Type::array(first));
+        reportMemberMiss("LRUCache", prop, span,
+                         candidateNames(kLruMemberNames));
+        return Type::unknown();
+    }
     const bool isMap = recv.name == "Map";
     const Type first =
         recv.parts.empty() ? Type::unknown() : recv.parts.front();
@@ -181,12 +226,14 @@ StdMemberDoc collectionsMemberDoc(const std::string& family,
                                    const std::string& prop) {
     if (family == "Map") return memberDoc(kMapDocRows, prop);
     if (family == "Set") return memberDoc(kSetDocRows, prop);
+    if (family == "LRUCache") return memberDoc(kLruDocRows, prop);
     return StdMemberDoc{};
 }
 
 std::vector<std::string> collectionsMemberNames(const std::string& family) {
     if (family == "Map") return docRowNames(kMapDocRows);
     if (family == "Set") return docRowNames(kSetDocRows);
+    if (family == "LRUCache") return docRowNames(kLruDocRows);
     return {};
 }
 

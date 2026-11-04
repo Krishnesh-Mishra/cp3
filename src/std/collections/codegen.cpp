@@ -65,19 +65,21 @@ bool comparableShape(Shape s) {
 bool classifyCollections(const Type& t, CppInfo& info) {
     if (t.kind != TypeKind::Class) return false;
     const bool isMap = t.name == "Map";
-    if (!isMap && t.name != "Set") return false;
+    const bool isLru = t.name == "LRUCache";
+    if (!isMap && !isLru && t.name != "Set") return false;
     if (t.parts.empty()) return false;
     const CppInfo first = classify(t.parts.front());
     if (!first.representable) return false;
     std::string cpp;
-    if (isMap) {
+    if (isMap || isLru) {
         if (!isPrimitiveShape(first.shape)) return false;
         const CppInfo second =
             t.parts.size() >= 2 ? classify(t.parts[1]) : CppInfo{};
         if (!second.representable || !comparableShape(second.shape)) {
             return false;
         }
-        cpp = "::cp3::runtime::collections::Map<" + first.cpp + ", " +
+        cpp = "::cp3::runtime::collections::" +
+              std::string(isMap ? "Map<" : "LRUCache<") + first.cpp + ", " +
               second.cpp + ">";
     } else {
         if (!comparableShape(first.shape)) return false;
@@ -105,6 +107,10 @@ bool isMapType(const Type& t) {
 
 bool isSetType(const Type& t) {
     return t.kind == TypeKind::Class && t.name == "Set";
+}
+
+bool isLruType(const Type& t) {
+    return t.kind == TypeKind::Class && t.name == "LRUCache";
 }
 
 // The sole callback argument of `forEach` when it is an arrow (the only form
@@ -225,7 +231,7 @@ std::string Generator::collectionsForEachCallback(
 // `new Map<string, number>()` / `new Set<number>()`.
 std::string Generator::emitCollectionsNew(const NewExpr& n) {
     const Type t = effectiveType(n);
-    if (!isMapType(t) && !isSetType(t)) return std::string();
+    if (!isMapType(t) && !isSetType(t) && !isLruType(t)) return std::string();
     const CppInfo ci = classify(t);
     if (!ci.representable || t.parts.empty()) {
         reportTypeError(n, collectionsTypeMessage(t));
@@ -233,8 +239,19 @@ std::string Generator::emitCollectionsNew(const NewExpr& n) {
     }
     needsCollections_ = true;
     std::string elems = classify(t.parts.front()).cpp;
-    if (isMapType(t) && t.parts.size() >= 2) {
+    if ((isMapType(t) || isLruType(t)) && t.parts.size() >= 2) {
         elems += ", " + classify(t.parts[1]).cpp;
+    }
+    if (isLruType(t)) {
+        if (n.arguments.size() != 1 || !n.arguments.front()) {
+            reportCodegenError(
+                n, diagcode::kArityMismatch,
+                "arity mismatch: LRUCache's constructor takes exactly one "
+                "argument (capacity)");
+            return "0.0";
+        }
+        return "::cp3::runtime::collections::makeLRU<" + elems + ">(" +
+               expr(*n.arguments.front()) + ")";
     }
     return "::cp3::runtime::collections::" +
            std::string(isMapType(t) ? "makeMap" : "makeSet") + "<" + elems +
@@ -248,7 +265,8 @@ std::string Generator::emitCollectionsMemberCall(const CallExpr& c,
     if (!m.object) return std::string();
     const Type recv = effectiveType(*m.object);
     const bool isMap = isMapType(recv);
-    if (!isMap && !isSetType(recv)) return std::string();
+    const bool isLru = isLruType(recv);
+    if (!isMap && !isLru && !isSetType(recv)) return std::string();
     if (!classify(recv).representable) {
         reportTypeError(c, collectionsTypeMessage(recv));
         return "0.0";
@@ -264,13 +282,14 @@ std::string Generator::emitCollectionsMemberCall(const CallExpr& c,
         }
         return out;
     };
-    if (isMap) {
+    if (isMap || isLru) {
         if (prop == "set") return obj + "->set(" + args() + ")";
         if (prop == "get") return obj + "->get(" + args() + ")";
         if (prop == "has") return obj + "->has(" + args() + ")";
         if (prop == "delete") return obj + "->remove(" + args() + ")";
         if (prop == "clear") return obj + "->clear()";
         if (prop == "keys") return obj + "->keys()";
+        if (isLru) return std::string();
         if (prop == "values") return obj + "->values()";
         if (prop == "entries") return obj + "->entries()";
         if (prop == "forEach") {
@@ -305,10 +324,16 @@ std::string Generator::emitCollectionsMemberCall(const CallExpr& c,
 std::string Generator::emitCollectionsMember(const MemberExpr& m) {
     if (!m.object) return std::string();
     const Type recv = effectiveType(*m.object);
-    if (isMapType(recv) || isSetType(recv)) {
-        if (m.property != "size") return std::string();
-        needsCollections_ = true;
-        return "static_cast<double>((" + expr(*m.object) + ")->size())";
+    if (isMapType(recv) || isSetType(recv) || isLruType(recv)) {
+        if (m.property == "size") {
+            needsCollections_ = true;
+            return "static_cast<double>((" + expr(*m.object) + ")->size())";
+        }
+        if (isLruType(recv) && m.property == "capacity") {
+            needsCollections_ = true;
+            return "static_cast<double>((" + expr(*m.object) + ")->capacity())";
+        }
+        return std::string();
     }
     // `.length` of `m.entries()` (`[K, V][]`): the tuple element has no C++
     // spelling, but the runtime entries array still reports its size.

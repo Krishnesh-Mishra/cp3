@@ -26,7 +26,7 @@ is added.** Rule 0 applies to every entry:
 | `Queue<T>` | `new Queue<T>()`, `push/pop/peek/size/empty/reserve` | ring buffer over **one contiguous `std::vector<T>`**, head/tail indices, 2x growth | never `std::deque` |
 | `Stack<T>` | `push/pop/peek/size` | `std::vector` `push_back`/`pop_back` | `pop` returns a plain value, no optional wrap |
 | `PriorityQueue<T>` | `push/pop/peek` with comparator | binary heap over a contiguous vector, manual sift or `push_heap`/`pop_heap` | no tree nodes |
-| `LRUCache<K,V>` | `get/set/has/delete` with capacity | flat hash map (`ankerl::unordered_dense`) + intrusive doubly-linked list stored as **indices inside entries** | no pointer chasing, no per-node allocation |
+| `LRUCache<K,V>` (Done) | `new LRUCache<K,V>(capacity)`, `get/set/has/delete/clear/size/capacity/keys` | flat hash map + intrusive doubly-linked list stored as **indices inside entries** | no pointer chasing, no per-node allocation |
 | `RingBuffer<T>` | fixed capacity, overwrite mode | same ring as `Queue` with an overwrite flag | — |
 | `BitSet` | `set/get/clear/count/and/or/xor` | `std::vector<uint64_t>` + `__builtin_popcountll`, word-parallel operations | 64 flags per word |
 | `MultiMap<K,V>` | `get` all, `add`, `has` | flat hash map to inline `SmallVector<V,1>` | one allocation per key, not per pair |

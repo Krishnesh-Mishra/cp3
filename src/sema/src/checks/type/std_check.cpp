@@ -131,6 +131,7 @@ StdMemberDoc stdInstanceMemberDoc(const std::string& family,
     if (family == "Number") return numberMemberDoc(member);
     if (family == "Map") return collectionsMemberDoc("Map", member);
     if (family == "Set") return collectionsMemberDoc("Set", member);
+    if (family == "LRUCache") return collectionsMemberDoc("LRUCache", member);
     if (family == kFileStatsMarker) return fsStatsMemberDoc(member);
     if (family == kExecResultMarker) return processExecResultDoc(member);
     if (family == kSpawnHandleMarker) return processSpawnHandleDoc(member);
@@ -143,6 +144,7 @@ std::vector<std::string> stdInstanceMemberNames(const std::string& family) {
     if (family == "Number") return numberMemberNames();
     if (family == "Map") return collectionsMemberNames("Map");
     if (family == "Set") return collectionsMemberNames("Set");
+    if (family == "LRUCache") return collectionsMemberNames("LRUCache");
     if (family == kFileStatsMarker) return fsStatsMemberNames();
     if (family == kExecResultMarker) return processExecResultMemberNames();
     if (family == kSpawnHandleMarker) return processSpawnHandleMemberNames();

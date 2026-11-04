@@ -298,9 +298,10 @@ ExecResult `{ stdout, stderr, exitCode }`; events `"data"`, `"stderr"`, `"exit"`
 `Buffer.from(text, enc?)` · `Buffer.alloc(n)` · `.length` · `.toString(enc?)` · `.slice(a, b?)`
 Encodings: `utf8`, `hex`, `base64`. Invalid hex/base64 throws catchable error.
 
-### `collections` — `import { Map, Set } from "std/collections"`
+### `collections` — `import { Map, Set, LRUCache } from "std/collections"`
 Map: `set` `get` `has` `delete` `clear` `keys` `values` `entries` `forEach((value, key) => ...)` `size`
 Set: `add` `has` `delete` `clear` `values` `forEach(value => ...)` `size`
+LRUCache: `new LRUCache<K, V>(capacity)`, `set` `get` (moves to MRU) `has` (no move) `delete` `clear` `keys` (MRU first) `size` `capacity`; inserting beyond capacity evicts the least recently used entry
 
 ### `network` — `import { fetch, WebSocket, WebSocketServer, createServer } from "std/network"`
 - `fetch(url, init?): Promise<FetchResponse>` — `init`: `method`, `headers: Map<string,string>`, `body`, `timeout?` (0 = none). HTTP only (no TLS yet).

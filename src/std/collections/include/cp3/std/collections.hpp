@@ -298,6 +298,133 @@ private:
 template <class T>
 using Set = Ref<SetData<T>>;
 
+// -----------------------------------------------------------------------------
+// LRUCache
+// -----------------------------------------------------------------------------
+
+// The backing store of `LRUCache<K, V>`: a flat hash map from key to entry
+// index plus an intrusive doubly-linked list stored as indices inside the
+// entries (no pointer chasing, no per-node allocation). Head is the most
+// recently used entry, tail the least recently used; `get` and `set` move
+// the entry to the head, and inserting beyond capacity evicts the tail.
+template <class K, class V>
+class LRUData {
+    struct Entry {
+        K key;
+        V value;
+        std::int64_t prev = -1;
+        std::int64_t next = -1;
+    };
+
+public:
+    explicit LRUData(double capacity)
+        : capacity_(capacity < 0 ? 0 : static_cast<std::size_t>(capacity)) {
+        index_.reserve(64);
+    }
+
+    void set(const K& key, const V& value) {
+        const auto it = index_.find(key);
+        if (it != index_.end()) {
+            const std::size_t idx = it->second;
+            entries_[idx].value = value;
+            moveToHead(idx);
+            return;
+        }
+        const std::size_t idx = entries_.size();
+        entries_.push_back(Entry{key, value, -1, head_});
+        index_.emplace(key, idx);
+        if (head_ >= 0) entries_[static_cast<std::size_t>(head_)].prev =
+                            static_cast<std::int64_t>(idx);
+        head_ = static_cast<std::int64_t>(idx);
+        if (tail_ < 0) tail_ = head_;
+        ++size_;
+        while (size_ > capacity_) evictTail();
+    }
+
+    std::optional<V> get(const K& key) {
+        const auto it = index_.find(key);
+        if (it == index_.end()) return std::nullopt;
+        moveToHead(it->second);
+        return entries_[it->second].value;
+    }
+
+    bool has(const K& key) const { return index_.count(key) != 0; }
+
+    bool remove(const K& key) {
+        const auto it = index_.find(key);
+        if (it == index_.end()) return false;
+        unlink(it->second);
+        index_.erase(it);
+        --size_;
+        return true;
+    }
+
+    void clear() {
+        entries_.clear();
+        index_.clear();
+        head_ = tail_ = -1;
+        size_ = 0;
+    }
+
+    double size() const { return static_cast<double>(size_); }
+    double capacity() const { return static_cast<double>(capacity_); }
+
+    // Keys in most-recently-used-first order.
+    Array<K> keys() const {
+        std::vector<K> ks;
+        for (std::int64_t i = head_; i >= 0;
+             i = entries_[static_cast<std::size_t>(i)].next) {
+            ks.push_back(entries_[static_cast<std::size_t>(i)].key);
+        }
+        return makeArray<K>(ks);
+    }
+
+private:
+    void unlink(std::size_t idx) {
+        const std::int64_t p = entries_[idx].prev;
+        const std::int64_t n = entries_[idx].next;
+        if (p >= 0) entries_[static_cast<std::size_t>(p)].next = n;
+        else head_ = n;
+        if (n >= 0) entries_[static_cast<std::size_t>(n)].prev = p;
+        else tail_ = p;
+        entries_[idx].prev = entries_[idx].next = -1;
+    }
+
+    void moveToHead(std::size_t idx) {
+        if (head_ == static_cast<std::int64_t>(idx)) return;
+        unlink(idx);
+        entries_[idx].prev = -1;
+        entries_[idx].next = head_;
+        if (head_ >= 0) entries_[static_cast<std::size_t>(head_)].prev =
+                            static_cast<std::int64_t>(idx);
+        head_ = static_cast<std::int64_t>(idx);
+        if (tail_ < 0) tail_ = head_;
+    }
+
+    void evictTail() {
+        if (tail_ < 0) return;
+        const std::size_t idx = static_cast<std::size_t>(tail_);
+        index_.erase(entries_[idx].key);
+        unlink(idx);
+        --size_;
+    }
+
+    std::size_t capacity_;
+    std::size_t size_ = 0;
+    std::vector<Entry> entries_;
+    std::unordered_map<K, std::size_t, KeyHash<K>, KeyEqual<K>> index_;
+    std::int64_t head_ = -1;
+    std::int64_t tail_ = -1;
+};
+
+template <class K, class V>
+using LRUCache = Ref<LRUData<K, V>>;
+
+template <class K, class V>
+LRUCache<K, V> makeLRU(double capacity) {
+    return makeRef<LRUData<K, V>>(capacity);
+}
+
 template <class T>
 Set<T> makeSet() {
     return makeRef<SetData<T>>();

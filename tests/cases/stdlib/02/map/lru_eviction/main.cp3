@@ -1,0 +1,14 @@
+import console from "std/console";
+import { LRUCache } from "std/collections";
+const c = new LRUCache<string, number>(2);
+c.set("a", 1);
+c.set("b", 2);
+console.log(`${c.size}`);
+console.log(c.get("a"));
+c.set("c", 3);
+console.log(c.has("b"));
+console.log(c.get("a"));
+console.log(`${c.size}`);
+c.delete("a");
+console.log(c.has("a"));
+console.log(`${c.capacity}`);
