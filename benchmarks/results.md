@@ -476,26 +476,27 @@ gate: BIG WARN (fix this): os-probe: cp3 340 ms is 1.46x java (233 ms), tripwire
 
 <!-- test:binary-trees:start -->
 ### binary-trees
-_Updated 2026-10-30T18:13:31 by `python benchmarks/runner/run_benchmark.py --except typed-array-sum,sha256-churn,string-churn,hello-world,compute-single,compute-multi,compute-single-int,health-server,health-server-multi --reps 7`._
+_Updated 2026-11-04T19:02:00 by `python benchmarks/runner/run_benchmark.py --only binary-trees --reps 2`._
 
 ```text
-  ◆ binary-trees  expected = 1348958 | full binary trees to depth 13, recursive build and check | median/best/p95 ms; CV = varia…
-  lang    median ms  best ms  p95 ms   CV%        vs cp3  RSS MiB  bin KiB
-  ────────────────────────────────────────────────────────────────────────
-  rust        45.63    43.13   68.24  18.3  4.76x faster      4.2      124
-  go          51.50    49.59   61.19   7.8  4.21x faster     11.9     1751
-  cpp         78.59    77.57   85.80   3.5  2.76x faster      5.2       34
-  java        95.25    92.57   117.2   9.1  2.28x faster     60.1        1
-  js          96.22    93.18   107.4   5.5  2.25x faster     44.8        -
-  cp3         217.0    205.3   352.0  25.5      baseline      6.0      440
-  python      366.2    344.0   444.1   9.4  1.69x slower     12.5        -
-    ✓  output verified: 7/7 match oracle '1348958'
+  * binary-trees  expected = 1348958 | full binary trees to depth 13, recursive build and check | median/best/p95 ms; CV = vari..
+  lang    median ms  best ms  p95 ms    CV%        vs cp3  RSS MiB  bin KiB
+  -------------------------------------------------------------------------
+  java        58.19    58.16   58.21    0.1  4.07x faster     60.3        1
+  cpp         61.25    46.05   76.45   35.1  3.87x faster      5.7       34
+  js          62.89    60.31   65.47    5.8  3.77x faster     43.1        -
+  go          89.22    28.77   149.7   95.8  2.66x faster     11.9     1751
+  rust        142.5    26.80   258.1  114.8  1.66x faster      4.7      124
+  python      198.0    192.0   203.9    4.3  1.20x faster     13.0        -
+  cp3         237.0    218.9   255.1   10.8      baseline      7.2      442
+    +  output verified: 7/7 match oracle '1348958'
 
-gate: BIG WARN (fix this): binary-trees: cp3 217 ms is 2.76x cpp (79 ms), tripwire 1.20x
-gate: BIG WARN (fix this): binary-trees: cp3 217 ms is 4.76x rust (46 ms), tripwire 1.20x
-gate: BIG WARN (fix this): binary-trees: cp3 217 ms is 4.21x go (51 ms), tripwire 1.00x
-gate: BIG WARN (fix this): binary-trees: cp3 217 ms is 2.25x js (96 ms), tripwire 1.00x
-gate: BIG WARN (fix this): binary-trees: cp3 217 ms is 2.28x java (95 ms), tripwire 1.00x
+gate: BIG WARN (fix this): binary-trees: cp3 237 ms is 3.87x cpp (61 ms), tripwire 1.20x
+gate: BIG WARN (fix this): binary-trees: cp3 237 ms is 1.66x rust (142 ms), tripwire 1.20x
+gate: BIG WARN (fix this): binary-trees: cp3 237 ms is 2.66x go (89 ms), tripwire 1.00x
+gate: BIG WARN (fix this): binary-trees: cp3 237 ms is 3.77x js (63 ms), tripwire 1.00x
+gate: BIG WARN (fix this): binary-trees: cp3 237 ms is 1.20x python (198 ms), tripwire 1.00x
+gate: BIG WARN (fix this): binary-trees: cp3 237 ms is 4.07x java (58 ms), tripwire 1.00x
 ```
 <!-- test:binary-trees:end -->
 
@@ -654,4 +655,55 @@ gate: BIG WARN (fix this): file-big: cp3 620 ms is 2.51x js (246 ms), tripwire 1
 gate: BIG WARN (fix this): file-big: cp3 620 ms is 2.06x java (301 ms), tripwire 1.00x
 ```
 <!-- test:file-big:end -->
+
+<!-- test:tree-walk:start -->
+### tree-walk
+_Updated 2026-11-04T19:04:08 by `python benchmarks/runner/run_benchmark.py --only tree-walk --reps 1`._
+
+```text
+  * tree-walk  expected = 16383
+66134180 | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%        vs cp3  RSS MiB  bin KiB
+  -----------------------------------------------------------------------
+  cpp         41.24    41.24   41.24    -  2.65x faster      3.3       97
+  js          49.95    49.95   49.95    -  2.19x faster     42.8        -
+  python      50.34    50.34   50.34    -  2.17x faster     12.7        -
+  java        73.32    73.32   73.32    -  1.49x faster     38.1        1
+  cp3         109.3    109.3   109.3    -      baseline      5.7      440
+  go          122.2    122.2   122.2    -  1.12x slower      5.1     1752
+  rust            -        -       -    -             -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    +  output verified: 6/6 match oracle '16383\n66134180'
+
+gate: BIG WARN (fix this): tree-walk: cp3 109 ms is 2.65x cpp (41 ms), tripwire 1.20x
+gate: BIG WARN (fix this): tree-walk: cp3 109 ms is 2.19x js (50 ms), tripwire 1.00x
+gate: BIG WARN (fix this): tree-walk: cp3 109 ms is 2.17x python (50 ms), tripwire 1.00x
+gate: BIG WARN (fix this): tree-walk: cp3 109 ms is 1.49x java (73 ms), tripwire 1.00x
+```
+<!-- test:tree-walk:end -->
+
+<!-- test:sum-array:start -->
+### sum-array
+_Updated 2026-11-04T19:02:29 by `python benchmarks/runner/run_benchmark.py --only sum-array --reps 2`._
+
+```text
+  * sum-array  expected = 4000000
+15987891712 | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms   CV%         vs cp3  RSS MiB  bin KiB
+  -------------------------------------------------------------------------
+  cpp         23.88    21.54   26.22  13.8   4.44x faster     19.3       45
+  go          27.61    25.14   30.07  12.6   3.84x faster     22.0     1750
+  java        82.41    82.30   82.53   0.2   1.29x faster     54.9        1
+  cp3         106.0    81.58   130.4  32.6       baseline     37.2      440
+  js          445.9    441.3   450.4   1.4   4.21x slower     54.8        -
+  python     2134.4   2123.5  2145.4   0.7  20.14x slower    158.3        -
+  rust            -        -       -     -              -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    +  output verified: 6/6 match oracle '4000000\n15987891712'
+
+gate: BIG WARN (fix this): sum-array: cp3 106 ms is 4.44x cpp (24 ms), tripwire 1.20x
+gate: BIG WARN (fix this): sum-array: cp3 106 ms is 3.84x go (28 ms), tripwire 1.00x
+gate: BIG WARN (fix this): sum-array: cp3 106 ms is 1.29x java (82 ms), tripwire 1.00x
+```
+<!-- test:sum-array:end -->
 <!-- latest-by-test:end -->
