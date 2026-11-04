@@ -161,6 +161,14 @@ The remaining JavaScript and TypeScript surface needed so ordinary application c
 | `AbortSignal.timeout(ms)` on `fetch` | Complements the existing `timeout` init option. | Small | Planned |
 | All other Express-compatible features which are doable (static file serving, redirect/sendFile, cookies, CORS, body limits, error hooks) | The set of Express patterns users actually write; implement those that carry no runtime metadata or wrapper machinery. | Medium | Planned |
 
+#### M. Nullable class types and narrowing
+
+| Feature / API | Why | Size | Status |
+| --- | --- | --- | --- |
+| `T \| null`, `T \| undefined`, optional fields (`next?: T`) on class types | Linked lists, trees and graphs cannot be written as ordinary TypeScript without them (sentinel arrays are slower and unidiomatic). Lowers to a nullable `Ref<T>` (null = `nullptr`), no extra allocation. | Small | Done |
+| Control-flow narrowing: `!== null`, `=== null`, truthiness, `&&`, `\|\|`, `??`, `?.`, early return | Makes `n.next.value` inside `if (n.next !== null)` type-check; assignment to the narrowed target invalidates it. | Small | Done |
+| Non-null assertion `x!`, definite-assignment `x!: T`, `as` assertions (class types and native numerics only) | Everyday TS code; `x!` throws a catchable `Error` on null. Unrelated `as` types are CP3401. | Small | Done |
+
 #### I. Non-blocking native I/O (v0.2 phases 1-2)
 `async` only schedules continuations on the one event loop. It does not make a
 blocking C call concurrent. v0.2 therefore separates two mechanisms and ships
