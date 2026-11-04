@@ -95,6 +95,17 @@ std::string Generator::emitProcessCall(const CallExpr& c, const MemberExpr& m) {
         needsProcess_ = true;
         return std::string(kRuntimeNs) + "chdir(" + expr(*arg) + ")";
     }
+    if (prop == "nextTick" && c.arguments.size() == 1) {
+        const Expr* arg = c.arguments.front().get();
+        if (!arg || arg->kind == NodeKind::SpreadElement) return std::string();
+        needsProcess_ = true;
+        needsEventLoop_ = true;
+        const std::string cb =
+            arg->kind == NodeKind::ArrowFunction
+                ? emitArrow(static_cast<const ArrowFunction&>(*arg), {})
+                : expr(*arg);
+        return "::cp3::runtime::nextTick(" + cb + ")";
+    }
     if ((prop == "exec" || prop == "spawn") && c.arguments.size() == 2) {
         const Expr* cmd = c.arguments[0].get();
         const Expr* args = c.arguments[1].get();

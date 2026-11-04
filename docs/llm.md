@@ -245,6 +245,7 @@ async function load(): Promise<string> {
 - Promise rejections are `Error` objects; `catch (e)` binds them.
 - A top-level `await` is allowed in async entry points only if the entry is async; keep `await` inside async functions.
 - Timers/network/fs-async suspend only the async function; other loop work continues.
+- Timers: `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `sleep(ms)`; scheduling: `queueMicrotask(cb)`, `setImmediate(cb)`, `process.nextTick(cb)`.
 
 ## 13. Standard library (current, import form → key APIs)
 

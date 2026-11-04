@@ -83,6 +83,9 @@ const DocRow kProcessRows[] = {
     {"hrtime", "hrtime(): [number, number]",
      "Returns `[seconds, nanoseconds]` since an unspecified monotonic origin. "
      "Subtract two results to measure an interval."},
+    {"nextTick", "nextTick(callback: () => void): void",
+     "Queues `callback` on the next-tick queue: it runs before timers and "
+     "promise continuations, in FIFO order."},
      {"stdout", "stdout: StdioStream",
       "A writable stream for the process standard output; `.write(s)` emits "
       "`s` with no newline, then flushes."},
@@ -202,6 +205,10 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
                                       {Type::number(), Type::number()});
         return Type::function({}, t);
     }
+    if (prop == "nextTick") {
+        return Type::function(
+            {Type::function({}, Type::voidType())}, Type::voidType());
+    }
     if (prop == "stdout" || prop == "stderr") {
         return processObjectType(kStdioStream);
     }
@@ -211,7 +218,7 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
 std::vector<std::string> processMemberNames() {
     return {"exit", "argv", "exec", "spawn", "env",
             "cwd",  "chdir", "pid",  "ppid",  "uptime", "memoryUsage", "hrtime",
-            "stdout", "stderr"};
+            "stdout", "stderr", "nextTick"};
 }
 
 StdMemberDoc processMemberDoc(const std::string& prop) {

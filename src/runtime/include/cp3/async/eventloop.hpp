@@ -411,4 +411,12 @@ TimerHandle setInterval(Task fn, double intervalMs);
 void clearTimeout(TimerHandle handle);
 void clearInterval(TimerHandle handle);
 
+// Scheduling primitives (core builtins, STDLIB §03): `queueMicrotask(cb)`
+// and `process.nextTick(cb)` enqueue on the microtask queue (drained before
+// timers); `setImmediate(cb)` runs on the next loop turn via a zero-delay
+// timer. All keep the loop alive until the callback has run.
+inline void queueMicrotask(Task fn) { currentLoop().post(std::move(fn)); }
+inline void nextTick(Task fn) { currentLoop().post(std::move(fn)); }
+inline void setImmediate(Task fn) { currentLoop().addTimer(0, std::move(fn)); }
+
 }  // namespace cp3::runtime

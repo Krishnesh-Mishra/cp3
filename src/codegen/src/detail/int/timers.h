@@ -15,7 +15,8 @@ namespace detail {
 
 inline bool isTimerBuiltinName(const std::string& name) {
     return name == "setTimeout" || name == "setInterval" ||
-           name == "clearTimeout" || name == "clearInterval" || name == "sleep";
+           name == "clearTimeout" || name == "clearInterval" || name == "sleep" ||
+           name == "queueMicrotask" || name == "setImmediate";
 }
 
 }  // namespace detail

@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "sync\nmicro\ntick\nimmediate\ntimer\n",
+  "exitCode": 0
+}

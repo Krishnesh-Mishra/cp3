@@ -151,6 +151,11 @@ bool Analyzer::tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& o
         out = Type::voidType();
         return true;
     }
+    if (id.name == "queueMicrotask" || id.name == "setImmediate") {
+        inferArgs(call);
+        out = Type::voidType();
+        return true;
+    }
     return false;
 }
 

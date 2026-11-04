@@ -1,0 +1,7 @@
+import console from "std/console";
+import process from "std/process";
+queueMicrotask(() => console.log("micro"));
+process.nextTick(() => console.log("tick"));
+setImmediate(() => console.log("immediate"));
+setTimeout(() => console.log("timer"), 10);
+console.log("sync");
