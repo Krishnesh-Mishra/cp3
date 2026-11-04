@@ -21,7 +21,7 @@ using namespace detail;
 namespace {
 
 const char* const kNumberMethods[] = {"toFixed", "toPrecision",
-                                      "toExponential"};
+                                      "toExponential", "toString"};
 
 const char* numberConstant(const std::string& prop) {
     if (prop == "MAX_SAFE_INTEGER") return "kMaxSafeInteger";
@@ -52,6 +52,11 @@ std::string Generator::emitNumberMethodCall(const CallExpr& c,
                                        : (c.arguments.front()
                                               ? expr(*c.arguments.front())
                                               : "6.0");
+    } else if (m.property == "toString") {
+        argument = c.arguments.empty() ? "10.0"
+                                       : (c.arguments.front()
+                                              ? expr(*c.arguments.front())
+                                              : "10.0");
     } else {
         argument = c.arguments.empty() ? "6.0"
                                        : (c.arguments.front()
@@ -65,7 +70,8 @@ std::string Generator::emitNumberMethodCall(const CallExpr& c,
 std::string Generator::emitNumberStaticCall(const CallExpr& c,
                                             const MemberExpr& m) {
     if (m.property != "isInteger" && m.property != "isFinite" &&
-        m.property != "isNaN") {
+        m.property != "isNaN" && m.property != "isSafeInteger" &&
+        m.property != "parseInt" && m.property != "parseFloat") {
         return std::string();
     }
     needsNumber_ = true;

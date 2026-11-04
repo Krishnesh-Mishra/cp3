@@ -21,12 +21,20 @@ Type Analyzer::numberMember(const std::string& prop) {
         return withOptionalTail(
             Type::function({Type::number()}, Type::string()));
     }
+    if (prop == "toString") {
+        return withOptionalTail(
+            Type::function({Type::number()}, Type::string()));
+    }
     return ambient();
 }
 
 std::optional<Type> numberStaticMember(const std::string& prop) {
-    if (prop == "isInteger" || prop == "isFinite" || prop == "isNaN") {
+    if (prop == "isInteger" || prop == "isFinite" || prop == "isNaN" ||
+        prop == "isSafeInteger") {
         return Type::function({Type::number()}, Type::boolean());
+    }
+    if (prop == "parseInt" || prop == "parseFloat") {
+        return Type::function({Type::string()}, Type::number());
     }
     if (prop == "MAX_SAFE_INTEGER" || prop == "MIN_SAFE_INTEGER" ||
         prop == "EPSILON" || prop == "MAX_VALUE" || prop == "MIN_VALUE" ||

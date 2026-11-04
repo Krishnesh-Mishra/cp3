@@ -20,15 +20,25 @@ const DocRow kNumberMemberRows[] = {
     {"toExponential", "toExponential(digits?: number): string",
      "Returns the number in exponential notation with `digits` digits after "
      "the decimal point."},
+    {"toString", "toString(radix?: number): string",
+     "Returns the number in the given radix (default 10)."},
 };
 
 const DocRow kNumberStaticRows[] = {
     {"isInteger", "isInteger(value: number): boolean",
      "True when `value` is a finite number with no fractional part."},
+    {"isSafeInteger", "isSafeInteger(value: number): boolean",
+     "True when `value` is a finite integer between -(2^53 - 1) and 2^53 - 1."},
     {"isFinite", "isFinite(value: number): boolean",
      "True when `value` is finite (not NaN or either infinity)."},
     {"isNaN", "isNaN(value: number): boolean",
      "True when `value` is NaN."},
+    {"parseInt", "parseInt(text: string): number",
+     "Parses the longest integer prefix of `text` (radix 10) into a number, "
+     "or NaN when no digits are found."},
+    {"parseFloat", "parseFloat(text: string): number",
+     "Parses the longest decimal prefix of `text` into a number, "
+     "or NaN when no digits are found."},
     {"MAX_SAFE_INTEGER", "MAX_SAFE_INTEGER: number",
      "The largest integer exactly representable as a double (2^53 - 1)."},
     {"MIN_SAFE_INTEGER", "MIN_SAFE_INTEGER: number",
