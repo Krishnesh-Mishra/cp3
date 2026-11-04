@@ -721,8 +721,10 @@ StdMemberDoc dateMemberDoc(const std::string& prop);
 StdMemberDoc dateInstanceMemberDoc(const std::string& prop);
 StdMemberDoc processExecResultDoc(const std::string& prop);
 StdMemberDoc processSpawnHandleDoc(const std::string& prop);
+StdMemberDoc processMemoryUsageDoc(const std::string& prop);
 std::vector<std::string> processExecResultMemberNames();
 std::vector<std::string> processSpawnHandleMemberNames();
+std::vector<std::string> processMemoryUsageMemberNames();
 // The `Map` / `Set` members (std/collections).
 StdMemberDoc collectionsMemberDoc(const std::string& family,
                                    const std::string& prop);

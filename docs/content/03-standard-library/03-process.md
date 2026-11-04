@@ -23,6 +23,13 @@ The module has a deliberately small, explicit API. It is not a Node.js compatibi
 | `process.exit(code)` | `void` | Flush standard output and terminate with a numeric exit code. |
 | `process.exec(cmd, args)` | `Promise<ExecResult>` | Run a child and collect both output streams until it exits. |
 | `process.spawn(cmd, args)` | `SpawnHandle` | Start a child and observe output/exit events while it runs. |
+| `process.cwd()` | `string` | The current working directory of the process. |
+| `process.chdir(path)` | `void` | Change the working directory; throws on failure. |
+| `process.pid` | `number` | The process id of the current process. |
+| `process.ppid` | `number` | The process id of the parent process. |
+| `process.uptime()` | `number` | Seconds since the program started (monotonic). |
+| `process.memoryUsage()` | `MemoryUsage` | Process resident-set size; the heap fields are always `0`. |
+| `process.hrtime()` | `[number, number]` | `[seconds, nanoseconds]` since an unspecified monotonic origin. |
 
 The compiler treats this namespace as a closed surface. An unsupported member is a compile-time diagnostic rather than a dynamic property lookup.
 
@@ -201,6 +208,26 @@ pipe reader. Keep the event loop alive while your program expects child results 
 
 This is distinct from ordinary `async` syntax: `await` coordinates promise completion, while workers and parallel APIs represent separate concurrency
 boundaries. For those distinctions, see [Async and concurrency](../02-runtime/07-async-and-concurrency.md) and [Thread safety](../02-runtime/10-thread-safety.md).
+
+## Process information and high-resolution timing
+
+`process.cwd()` returns the current working directory as a string. `process.chdir(path)` changes it; the call throws an ordinary catchable error when the directory cannot be entered. `process.pid` and `process.ppid` report the process id and its parent. `process.uptime()` reports the seconds since the process started on a monotonic clock.
+
+`process.memoryUsage()` returns `{ rss, heapTotal, heapUsed, external, arrayBuffers }`. `rss` is the real resident set size in bytes. The four heap fields are always `0` — CP3 has no managed heap; they are kept so the result matches the Node shape.
+
+`process.hrtime()` returns `[seconds, nanoseconds]` relative to an unspecified monotonic origin. Subtract two readings to measure an interval:
+
+```ts
+const start = process.hrtime();
+doWork();
+const [sec, nanoseconds] = process.hrtime();
+console.log(`elapsed: ${sec}s ${nanoseconds}ns`);
+```
+
+```ts
+const usage = process.memoryUsage();
+console.log(`rss: ${usage.rss} bytes`);
+```
 
 ## Node.js compatibility boundary
 

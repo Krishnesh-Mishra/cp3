@@ -21,6 +21,12 @@
 //   process.spawn(cmd, args)  -> `::cp3::runtime::process::spawn(cmd, args)`
 //                                (SpawnHandle; `.on("data"|"stderr"|"exit")`,
 //                                `.write(..)`, `.kill()`)
+//   process.cwd()             -> `::cp3::runtime::process::cwd()`
+//   process.chdir(path)       -> `::cp3::runtime::process::chdir(path)`
+//   process.pid / .ppid       -> `pid()` / `ppid()` (scalar readers)
+//   process.uptime()          -> `uptime()` (process lifetime in seconds)
+//   process.memoryUsage()     -> `MemoryUsage` (rss only; rest 0)
+//   process.hrtime()          -> `std::tuple<double, double>` ([sec, nsec])
 //
 // -----------------------------------------------------------------------------
 // SEMANTICS
@@ -66,6 +72,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -105,6 +112,30 @@ void initArgv(int argc, char** argv);
 // The program arguments as a cp3 `string[]` (`Array<string>`); a fresh handle
 // over the stored vector, so `.length` lowers to `argv()->size()`.
 Array<std::string> argv();
+
+// -----------------------------------------------------------------------------
+// process information and high-resolution timing (docs §04)
+// -----------------------------------------------------------------------------
+/// `rss` is the real resident set size in bytes. The other fields keep the
+/// Node result shape but are always 0 because cp3 has no managed heap.
+struct MemoryUsage {
+    double rss = 0.0;
+    double heapTotal = 0.0;
+    double heapUsed = 0.0;
+    double external = 0.0;
+    double arrayBuffers = 0.0;
+};
+
+std::string cwd();
+void chdir(const std::string& path);
+double pid();
+double ppid();
+double uptime();
+MemoryUsage memoryUsage();
+// `process.hrtime()` — Node's [seconds, nanoseconds] form; `uv_hrtime()`
+// carries an arbitrary origin, so the pair is monotonic deltas, not absolute
+// time.
+std::tuple<double, double> hrtime();
 
 // -----------------------------------------------------------------------------
 // process.env: the program-wide `Map<string, string>` (docs §04)

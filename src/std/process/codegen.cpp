@@ -44,6 +44,7 @@ namespace {
 
 constexpr const char* kExecResult = "$process:ExecResult";
 constexpr const char* kSpawnHandle = "$process:SpawnHandle";
+constexpr const char* kMemoryUsage = "$process:MemoryUsage";
 constexpr const char* kRuntimeNs = "::cp3::runtime::process::";
 
 /// The literal string value of `e` ("" when it is not a string literal).
@@ -66,7 +67,7 @@ std::vector<std::string> spawnEventParams(const std::string& event) {
 bool Generator::isProcessObject(const Expr* e) const {
     if (e == nullptr) return false;
     const std::string& name = effectiveType(*e).name;
-    return name == kExecResult || name == kSpawnHandle;
+    return name == kExecResult || name == kSpawnHandle || name == kMemoryUsage;
 }
 
 /// `process.exit` plus the two child-process entry points. The calls keep the
@@ -78,6 +79,19 @@ std::string Generator::emitProcessCall(const CallExpr& c, const MemberExpr& m) {
         if (!arg || arg->kind == NodeKind::SpreadElement) return std::string();
         needsProcess_ = true;
         return std::string(kRuntimeNs) + "exit(" + expr(*arg) + ")";
+    }
+    if ((prop == "cwd" || prop == "uptime" || prop == "memoryUsage" ||
+         prop == "hrtime") &&
+        c.arguments.empty()) {
+        needsProcess_ = true;
+        if (prop == "hrtime") needsTuple_ = true;
+        return std::string(kRuntimeNs) + prop + "()";
+    }
+    if (prop == "chdir" && c.arguments.size() == 1) {
+        const Expr* arg = c.arguments.front().get();
+        if (!arg || arg->kind == NodeKind::SpreadElement) return std::string();
+        needsProcess_ = true;
+        return std::string(kRuntimeNs) + "chdir(" + expr(*arg) + ")";
     }
     if ((prop == "exec" || prop == "spawn") && c.arguments.size() == 2) {
         const Expr* cmd = c.arguments[0].get();
@@ -208,6 +222,14 @@ std::string Generator::emitProcessMember(const MemberExpr& m) {
         needsProcess_ = true;
         return std::string(kRuntimeNs) + "argv()";
     }
+    if (isNsMember(&m, "process", "pid")) {
+        needsProcess_ = true;
+        return std::string(kRuntimeNs) + "pid()";
+    }
+    if (isNsMember(&m, "process", "ppid")) {
+        needsProcess_ = true;
+        return std::string(kRuntimeNs) + "ppid()";
+    }
     if (m.property == "length" && isNsMember(m.object.get(), "process", "argv")) {
         needsProcess_ = true;
         return "static_cast<double>(" + std::string(kRuntimeNs) + "argv()->size())";
@@ -220,6 +242,14 @@ std::string Generator::emitProcessMember(const MemberExpr& m) {
         return std::string(kRuntimeNs) + "envMap()";
     }
     if (!m.object || !isProcessObject(m.object.get())) return std::string();
+    if (effectiveType(*m.object).name == kMemoryUsage) {
+        const bool known = m.property == "rss" || m.property == "heapTotal" ||
+                           m.property == "heapUsed" || m.property == "external" ||
+                           m.property == "arrayBuffers";
+        if (!known) return std::string();
+        needsProcess_ = true;
+        return "(" + expr(*m.object) + ")." + m.property;
+    }
     if (effectiveType(*m.object).name != kExecResult) return std::string();
     std::string field;
     if (m.property == "stdout") {

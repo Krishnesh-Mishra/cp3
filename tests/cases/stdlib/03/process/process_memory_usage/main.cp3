@@ -1,0 +1,8 @@
+import console from "std/console";
+import process from "std/process";
+const usage = process.memoryUsage();
+console.log(usage.rss >= 0 ? "ok" : "bad");
+console.log(usage.heapTotal === 0 ? "ok" : "bad");
+console.log(usage.heapUsed === 0 ? "ok" : "bad");
+console.log(usage.external === 0 ? "ok" : "bad");
+console.log(usage.arrayBuffers === 0 ? "ok" : "bad");

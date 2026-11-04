@@ -94,6 +94,7 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns) {
 const char* const kFileStatsMarker = "$fs:FileStats";
 const char* const kExecResultMarker = "$process:ExecResult";
 const char* const kSpawnHandleMarker = "$process:SpawnHandle";
+const char* const kMemoryUsageMarker = "$process:MemoryUsage";
 
 StdMemberDoc stdNamespaceMemberDoc(const std::string& ns,
                                    const std::string& member) {
@@ -130,6 +131,7 @@ StdMemberDoc stdInstanceMemberDoc(const std::string& family,
     if (family == kFileStatsMarker) return fsStatsMemberDoc(member);
     if (family == kExecResultMarker) return processExecResultDoc(member);
     if (family == kSpawnHandleMarker) return processSpawnHandleDoc(member);
+    if (family == kMemoryUsageMarker) return processMemoryUsageDoc(member);
     return StdMemberDoc{};
 }
 
@@ -141,6 +143,7 @@ std::vector<std::string> stdInstanceMemberNames(const std::string& family) {
     if (family == kFileStatsMarker) return fsStatsMemberNames();
     if (family == kExecResultMarker) return processExecResultMemberNames();
     if (family == kSpawnHandleMarker) return processSpawnHandleMemberNames();
+    if (family == kMemoryUsageMarker) return processMemoryUsageMemberNames();
     return {};
 }
 

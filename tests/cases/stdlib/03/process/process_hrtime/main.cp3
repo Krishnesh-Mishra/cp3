@@ -1,0 +1,4 @@
+import console from "std/console";
+import process from "std/process";
+const [seconds, nanoseconds] = process.hrtime();
+console.log(seconds >= 0 && nanoseconds >= 0 && nanoseconds < 1000000000 ? "ok" : "bad");

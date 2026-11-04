@@ -36,6 +36,7 @@ namespace {
 
 const char* const kExecResult = "$process:ExecResult";
 const char* const kSpawnHandle = "$process:SpawnHandle";
+const char* const kMemoryUsage = "$process:MemoryUsage";
 
 /// `(p0, p1, ...) => void` with permissive parameters: the documented event
 /// listener shapes share one grammar and the parameters are typed
@@ -63,6 +64,24 @@ const DocRow kProcessRows[] = {
     {"spawn", "spawn(cmd: string, args: string[]): SpawnHandle",
      "Runs `cmd` with `args` and returns a live `SpawnHandle` right away, so "
      "the output can be consumed as it arrives."},
+    {"cwd", "cwd(): string",
+     "The current working directory of the process."},
+    {"chdir", "chdir(path: string): void",
+     "Changes the current working directory to `path`. Throws an ordinary "
+     "catchable error when the directory cannot be entered."},
+    {"pid", "pid: number",
+     "The process id of the current process."},
+    {"ppid", "ppid: number",
+     "The process id of the parent process."},
+    {"uptime", "uptime(): number",
+     "How many seconds the process has been running (monotonic)."},
+    {"memoryUsage", "memoryUsage(): MemoryUsage",
+     "Returns the resident-set size of the process. The `heapTotal`, "
+     "`heapUsed`, `external` and `arrayBuffers` fields keep the Node result "
+     "shape but are always `0` because cp3 has no managed heap."},
+    {"hrtime", "hrtime(): [number, number]",
+     "Returns `[seconds, nanoseconds]` since an unspecified monotonic origin. "
+     "Subtract two results to measure an interval."},
 };
 
 // The documented fields of an `ExecResult` value.
@@ -83,6 +102,15 @@ const DocRow kSpawnHandleRows[] = {
      "Ends the child process."},
 };
 
+// The documented fields of a `memoryUsage()` value.
+const DocRow kMemoryUsageRows[] = {
+    {"rss", "rss: number", "The resident set size of the process in bytes."},
+    {"heapTotal", "heapTotal: number", "Always `0`: cp3 has no managed heap."},
+    {"heapUsed", "heapUsed: number", "Always `0`: cp3 has no managed heap."},
+    {"external", "external: number", "Always `0`: not tracked by cp3."},
+    {"arrayBuffers", "arrayBuffers: number", "Always `0`: not tracked by cp3."},
+};
+
 }  // namespace
 
 Type Analyzer::processObjectType(const std::string& name) {
@@ -101,6 +129,12 @@ Type Analyzer::processObjectType(const std::string& name) {
         fields.push_back(
             Field{"write", Type::function({Type::string()}, Type::voidType()), false});
         fields.push_back(Field{"kill", Type::function({}, Type::voidType()), false});
+    } else if (name == kMemoryUsage) {
+        fields.push_back(Field{"rss", Type::number(), false});
+        fields.push_back(Field{"heapTotal", Type::number(), false});
+        fields.push_back(Field{"heapUsed", Type::number(), false});
+        fields.push_back(Field{"external", Type::number(), false});
+        fields.push_back(Field{"arrayBuffers", Type::number(), false});
     } else {
         return Type::unknown();
     }
@@ -143,11 +177,26 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
         env.parts.push_back(Type::string());
         return env;
     }
+    if (prop == "cwd") return Type::function({}, Type::string());
+    if (prop == "chdir")
+        return Type::function({Type::string()}, Type::voidType());
+    if (prop == "pid") return Type::number();
+    if (prop == "ppid") return Type::number();
+    if (prop == "uptime") return Type::function({}, Type::number());
+    if (prop == "memoryUsage") {
+        return Type::function({}, processObjectType(kMemoryUsage));
+    }
+    if (prop == "hrtime") {
+        const Type t = makeObjectType({}, false, true,
+                                      {Type::number(), Type::number()});
+        return Type::function({}, t);
+    }
     return std::nullopt;
 }
 
 std::vector<std::string> processMemberNames() {
-    return {"exit", "argv", "exec", "spawn", "env"};
+    return {"exit", "argv", "exec", "spawn", "env",
+            "cwd",  "chdir", "pid",  "ppid",  "uptime", "memoryUsage", "hrtime"};
 }
 
 StdMemberDoc processMemberDoc(const std::string& prop) {
@@ -162,12 +211,20 @@ StdMemberDoc processSpawnHandleDoc(const std::string& prop) {
     return memberDoc(kSpawnHandleRows, prop);
 }
 
+StdMemberDoc processMemoryUsageDoc(const std::string& prop) {
+    return memberDoc(kMemoryUsageRows, prop);
+}
+
 std::vector<std::string> processExecResultMemberNames() {
     return docRowNames(kExecResultRows);
 }
 
 std::vector<std::string> processSpawnHandleMemberNames() {
     return docRowNames(kSpawnHandleRows);
+}
+
+std::vector<std::string> processMemoryUsageMemberNames() {
+    return docRowNames(kMemoryUsageRows);
 }
 
 }  // namespace cp3

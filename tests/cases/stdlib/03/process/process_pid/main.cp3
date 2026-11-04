@@ -1,0 +1,4 @@
+import console from "std/console";
+import process from "std/process";
+console.log(process.pid > 0 ? "ok" : "bad");
+console.log(process.ppid >= 0 ? "ok" : "bad");

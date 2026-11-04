@@ -101,7 +101,7 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | Promise | Full Promise API | Complete TS-compatible Promise surface. Today: `resolve`, `reject`, `all`, `race`, `allSettled`, `then`, `catch`, `finally`. Missing: `any`, `withResolvers`. | Partial |
 | Global | `structuredClone(obj)` | Deep copy without a worker. Reuse the existing worker deep-copy cloner on the main thread. | Planned |
 | Global | `parseTo(string, Type)` | Compile-time typed coercion from a string to a statically known type (for example `parseTo("123", number)` or `parseTo("123", r_'i32')`). The first argument must be a string literal; the second must be a static type name/keyword, never a value; the compiler emits a compile error when the requested target type does not match the source value's type. | Planned |
-| `std/process` | `cwd`, `chdir`, `pid`, `ppid`, `uptime`, `memoryUsage`, `hrtime` | Thin OS calls for process information and high-resolution timing. Today: `argv`, `env`, `exit`, `exec`, `spawn`. | Planned |
+| `std/process` | `cwd`, `chdir`, `pid`, `ppid`, `uptime`, `memoryUsage`, `hrtime` | Thin OS calls for process information and high-resolution timing. Today: `argv`, `env`, `exit`, `exec`, `spawn`, `cwd`, `chdir`, `pid`, `ppid`, `uptime`, `memoryUsage` (rss real; heap fields `0`), `hrtime`, via vendored libuv. | Done |
 | `std/network` | HTTP Router (path params & wildcards) | For example `app.get("/users/:id", ...)`. Today `:name` params work; wildcard segments are not exposed. | Partial |
 | `std/network` | `dns.lookup(hostname)` | Thin wrapper over the libuv `getaddrinfo` already used by `fetch`. | Planned |
 | `std/fs` | `fs.watch(path, callback)` | File-system watcher using libuv `fs_event` (already linked). | Planned |

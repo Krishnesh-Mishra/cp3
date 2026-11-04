@@ -23,12 +23,15 @@
 
 #include "child.hpp"
 
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
+
+#include <uv.h>
 
 namespace cp3::runtime::process {
 
@@ -180,6 +183,61 @@ Array<std::string> argv() {
     const std::vector<std::string>& store = argvStore();
     if (store.empty()) return makeArray(std::vector<std::string>{"cp3"});
     return makeArray(store);
+}
+
+namespace {
+
+// Monotonic origin for `process.uptime()` and `hrtime()`. uv_hrtime() is
+// nanoseconds from an arbitrary origin with an unchanged frequency, so a
+// delta against this stamp is the process lifetime.
+const uint64_t kProcessStartNs = uv_hrtime();
+
+}  // namespace
+
+std::string cwd() {
+    std::vector<char> buffer(4096);
+    size_t size = buffer.size();
+    int rc = uv_cwd(buffer.data(), &size);
+    if (rc == UV_ENOBUFS) {
+        buffer.assign(size + 1, '\0');
+        size = buffer.size();
+        rc = uv_cwd(buffer.data(), &size);
+    }
+    if (rc != 0) {
+        throw Thrown::make(std::string("process.cwd: ") + uv_strerror(rc));
+    }
+    return std::string(buffer.data(), size);
+}
+
+void chdir(const std::string& path) {
+    const int rc = uv_chdir(path.c_str());
+    if (rc != 0) {
+        throw Thrown::make(std::string("process.chdir: ") + uv_strerror(rc));
+    }
+}
+
+double pid() { return static_cast<double>(uv_os_getpid()); }
+double ppid() { return static_cast<double>(uv_os_getppid()); }
+
+double uptime() {
+    const uint64_t now = uv_hrtime();
+    const uint64_t delta = now >= kProcessStartNs ? now - kProcessStartNs : 0;
+    return static_cast<double>(delta) / 1e9;
+}
+
+MemoryUsage memoryUsage() {
+    MemoryUsage report;
+    size_t rss = 0;
+    if (uv_resident_set_memory(&rss) == 0) {
+        report.rss = static_cast<double>(rss);
+    }
+    return report;
+}
+
+std::tuple<double, double> hrtime() {
+    const uint64_t ns = uv_hrtime();
+    return {static_cast<double>(ns / 1000000000ULL),
+            static_cast<double>(ns % 1000000000ULL)};
 }
 
 SpawnHandle::~SpawnHandle() = default;
