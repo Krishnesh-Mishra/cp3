@@ -26,6 +26,8 @@
 //   process.pid / .ppid       -> `pid()` / `ppid()` (scalar readers)
 //   process.uptime()          -> `uptime()` (process lifetime in seconds)
 //   process.memoryUsage()     -> `MemoryUsage` (rss only; rest 0)
+//   process.stdout / .stderr  -> `cp3::runtime::process::StdioStream`
+//                               (`.write(string)` -> C++ write; no newline)
 //   process.hrtime()          -> `std::tuple<double, double>` ([sec, nsec])
 //
 // -----------------------------------------------------------------------------
@@ -76,6 +78,11 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+
+// <cstdio> defines `stdout` / `stderr` as macros (the C stream FILE* handles).
+// cp3's `process.stdout` / `process.stderr` are typed stream accessors, so the
+// accessors are named `processStdout()` / `processStderr()` to avoid the macro
+// clash entirely (codegen maps the cp3 member name onto them).
 
 #include "cp3/async/eventloop.hpp"
 #include "cp3/async/promise.hpp"
@@ -136,6 +143,23 @@ MemoryUsage memoryUsage();
 // carries an arbitrary origin, so the pair is monotonic deltas, not absolute
 // time.
 std::tuple<double, double> hrtime();
+
+// -----------------------------------------------------------------------------
+// stdio: writable C++ streams surfaced as `process.stdout` / `process.stderr`
+// (docs §04). These are typed as `StdioStream` so `.write` resolves even though
+// the surface is just a plain C++ write with no newline.
+// -----------------------------------------------------------------------------
+class StdioStream {
+public:
+    /// Write `text` directly to the underlying C++ stream (stdout/stderr) with
+    /// no newline appended, then flush. The stream is reference-counted so the
+    /// handle remains usable while the program is alive.
+    virtual void write(const std::string& text) = 0;
+    virtual ~StdioStream() = default;
+};
+
+StdioStream& processStdout();
+StdioStream& processStderr();
 
 // -----------------------------------------------------------------------------
 // process.env: the program-wide `Map<string, string>` (docs §04)

@@ -45,6 +45,7 @@ namespace {
 constexpr const char* kExecResult = "$process:ExecResult";
 constexpr const char* kSpawnHandle = "$process:SpawnHandle";
 constexpr const char* kMemoryUsage = "$process:MemoryUsage";
+constexpr const char* kStdioStream = "$process:StdioStream";
 constexpr const char* kRuntimeNs = "::cp3::runtime::process::";
 
 /// The literal string value of `e` ("" when it is not a string literal).
@@ -67,7 +68,8 @@ std::vector<std::string> spawnEventParams(const std::string& event) {
 bool Generator::isProcessObject(const Expr* e) const {
     if (e == nullptr) return false;
     const std::string& name = effectiveType(*e).name;
-    return name == kExecResult || name == kSpawnHandle || name == kMemoryUsage;
+    return name == kExecResult || name == kSpawnHandle ||
+           name == kMemoryUsage || name == kStdioStream;
 }
 
 /// `process.exit` plus the two child-process entry points. The calls keep the
@@ -154,20 +156,28 @@ std::string Generator::processArgs(const Expr& e) {
 /// (sema keeps callback parameters permissive, the network convention).
 std::string Generator::emitProcessObjectCall(const CallExpr& c,
                                              const MemberExpr& m) {
-    if (!m.object || effectiveType(*m.object).name != kSpawnHandle) {
-        return std::string();
-    }
-    if (m.property == "kill" && c.arguments.empty()) {
-        needsProcess_ = true;
-        needsEventLoop_ = true;
-        return "(" + expr(*m.object) + ").kill()";
-    }
+    if (!m.object) return std::string();
+    const std::string& typeName = effectiveType(*m.object).name;
     if (m.property == "write" && c.arguments.size() == 1) {
+        if (typeName == kStdioStream) {
+            needsProcess_ = true;
+            needsEventLoop_ = true;
+            const Expr* arg = c.arguments.front().get();
+            if (!arg || arg->kind == NodeKind::SpreadElement) return std::string();
+            return "(" + expr(*m.object) + ").write(" + expr(*arg) + ")";
+        }
+        if (typeName != kSpawnHandle) return std::string();
         const Expr* arg = c.arguments.front().get();
         if (!arg || arg->kind == NodeKind::SpreadElement) return std::string();
         needsProcess_ = true;
         needsEventLoop_ = true;
         return "(" + expr(*m.object) + ").write(" + expr(*arg) + ")";
+    }
+    if (typeName != kSpawnHandle) return std::string();
+    if (m.property == "kill" && c.arguments.empty()) {
+        needsProcess_ = true;
+        needsEventLoop_ = true;
+        return "(" + expr(*m.object) + ").kill()";
     }
     if (m.property != "on" || c.arguments.size() != 2) return std::string();
     const Expr* event = c.arguments[0].get();
@@ -240,6 +250,16 @@ std::string Generator::emitProcessMember(const MemberExpr& m) {
         needsProcess_ = true;
         needsCollections_ = true;
         return std::string(kRuntimeNs) + "envMap()";
+    }
+    if (isNsMember(&m, "process", "stdout")) {
+        needsProcess_ = true;
+        needsEventLoop_ = true;
+        return "(" + std::string(kRuntimeNs) + "processStdout())";
+    }
+    if (isNsMember(&m, "process", "stderr")) {
+        needsProcess_ = true;
+        needsEventLoop_ = true;
+        return "(" + std::string(kRuntimeNs) + "processStderr())";
     }
     if (!m.object || !isProcessObject(m.object.get())) return std::string();
     if (effectiveType(*m.object).name == kMemoryUsage) {

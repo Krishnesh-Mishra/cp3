@@ -98,7 +98,7 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | String | `codePointAt`, `fromCodePoint`, `matchAll`, `raw` | Unicode-aware and modern string methods. | Planned |
 | JSON | `JSON.stringify(value, replacer?, space?)` | Extend the serializer to support pretty printing (for example 2-space indent) and a replacer. Today only a numeric indent is typed and emitted. | Partial |
 | Collections | `ConcurrentMap` | Thread-safe map implementation. | Planned |
-| Promise | Full Promise API | Complete TS-compatible Promise surface. Today: `resolve`, `reject`, `all`, `race`, `allSettled`, `then`, `catch`, `finally`. Missing: `any`, `withResolvers`. | Partial |
+| Promise | Full Promise API | Complete TS-compatible Promise surface. Today: `resolve`, `reject`, `all`, `race`, `allSettled`, `any`, `withResolvers`, `then`, `catch`, `finally`. | Done |
 | Global | `structuredClone(obj)` | Deep copy without a worker. Reuse the existing worker deep-copy cloner on the main thread. | Planned |
 | Global | `parseTo(string, Type)` | Compile-time typed coercion from a string to a statically known type (for example `parseTo("123", number)` or `parseTo("123", r_'i32')`). The first argument must be a string literal; the second must be a static type name/keyword, never a value; the compiler emits a compile error when the requested target type does not match the source value's type. | Planned |
 | `std/process` | `cwd`, `chdir`, `pid`, `ppid`, `uptime`, `memoryUsage`, `hrtime` | Thin OS calls for process information and high-resolution timing. Today: `argv`, `env`, `exit`, `exec`, `spawn`, `cwd`, `chdir`, `pid`, `ppid`, `uptime`, `memoryUsage` (rss real; heap fields `0`), `hrtime`, via vendored libuv. | Done |

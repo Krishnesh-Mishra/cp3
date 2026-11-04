@@ -4,8 +4,8 @@
 // OWNERSHIP: the std/process family (src/std/process/**). Compiled as a
 // runtime TU by the process native row whenever a program imports
 // "std/process" (src/std/process/native.hpp). The inline surface (exit, the
-// environment map) stays in cp3/std/process.hpp; this unit owns what needs
-// threading and OS handles.
+// environment map, stdout/stderr streams) stays in cp3/std/process.hpp; this
+// unit owns what needs threading and OS handles.
 //
 // Threading model (D71: one event loop per thread, never a second loop):
 //
@@ -273,9 +273,35 @@ void SpawnHandle::kill() {
     detail::killChild(state_->child);
 }
 
-SpawnHandle spawn(const std::string& cmd, const std::vector<std::string>& args) {
-    return SpawnHandle(startSpawn(cmd, args));
-}
+// -----------------------------------------------------------------------------
+// stdout / stderr streams
+// -----------------------------------------------------------------------------
+// Each surface gets its own stream object; the stream's constructor chooses
+// the target C++ stream, so `stdout.write` and `stderr.write` reach the right
+// place with no `this`-pointer tricks.
+namespace {
+    class Stream : public process::StdioStream {
+    public:
+        explicit Stream(std::ostream* out) : out_(out) {}
+        void write(const std::string& text) override {
+            if (out_) {
+                *out_ << text;
+                out_->flush();
+            }
+        }
+    private:
+        std::ostream* out_;
+    };
+    Stream& kStdout() { static Stream s(&std::cout); return s; }
+    Stream& kStderr() { static Stream s(&std::cerr); return s; }
+}  // namespace
+
+process::StdioStream& processStdout() { return kStdout(); }
+process::StdioStream& processStderr() { return kStderr(); }
+
+}  // namespace cp3::runtime::process
+
+namespace cp3::runtime::process {
 
 Promise<ExecResult> exec(const std::string& cmd,
                          const std::vector<std::string>& args) {

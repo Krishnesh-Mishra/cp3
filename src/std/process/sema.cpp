@@ -37,6 +37,7 @@ namespace {
 const char* const kExecResult = "$process:ExecResult";
 const char* const kSpawnHandle = "$process:SpawnHandle";
 const char* const kMemoryUsage = "$process:MemoryUsage";
+const char* const kStdioStream = "$process:StdioStream";
 
 /// `(p0, p1, ...) => void` with permissive parameters: the documented event
 /// listener shapes share one grammar and the parameters are typed
@@ -82,6 +83,12 @@ const DocRow kProcessRows[] = {
     {"hrtime", "hrtime(): [number, number]",
      "Returns `[seconds, nanoseconds]` since an unspecified monotonic origin. "
      "Subtract two results to measure an interval."},
+     {"stdout", "stdout: StdioStream",
+      "A writable stream for the process standard output; `.write(s)` emits "
+      "`s` with no newline, then flushes."},
+     {"stderr", "stderr: StdioStream",
+      "A writable stream for the process standard error; `.write(s)` emits "
+      "`s` with no newline, then flushes."},
 };
 
 // The documented fields of an `ExecResult` value.
@@ -135,6 +142,10 @@ Type Analyzer::processObjectType(const std::string& name) {
         fields.push_back(Field{"heapUsed", Type::number(), false});
         fields.push_back(Field{"external", Type::number(), false});
         fields.push_back(Field{"arrayBuffers", Type::number(), false});
+    } else if (name == kStdioStream) {
+        fields.push_back(Field{"write",
+                               Type::function({Type::string()}, Type::voidType()),
+                               false});
     } else {
         return Type::unknown();
     }
@@ -191,12 +202,16 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
                                       {Type::number(), Type::number()});
         return Type::function({}, t);
     }
+    if (prop == "stdout" || prop == "stderr") {
+        return processObjectType(kStdioStream);
+    }
     return std::nullopt;
 }
 
 std::vector<std::string> processMemberNames() {
     return {"exit", "argv", "exec", "spawn", "env",
-            "cwd",  "chdir", "pid",  "ppid",  "uptime", "memoryUsage", "hrtime"};
+            "cwd",  "chdir", "pid",  "ppid",  "uptime", "memoryUsage", "hrtime",
+            "stdout", "stderr"};
 }
 
 StdMemberDoc processMemberDoc(const std::string& prop) {
