@@ -127,6 +127,40 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 
 **Status: Planned** (not started; spec/corpus-wide breaking change, scheduled with the v0.2 audit).
 
+#### L. JavaScript/TypeScript compatibility backlog (v0.2, highest value first)
+
+The remaining JavaScript and TypeScript surface needed so ordinary application code compiles unchanged against CP3. Ordered highest value first; every row follows Rule 0 and the verification rules in §8. Nothing here is automatic: implementation is feature-by-feature, with tests and a docs update in the same commit.
+
+| Feature | Why | Size | Status |
+| --- | --- | --- | --- |
+| Array/Object/String catalog gaps: `reduce`, `reduceRight`, `splice`, `concat`, `reverse`, `lastIndexOf`, `keys`/`values`/`entries`, `Array.from`/`isArray`/`of`, `Object.fromEntries`, `parseInt` | The `llm.md` catalog does not list them; `reduce`, `splice` and `concat` are everywhere in TS code, so the TS-compatibility theme fails without them. | Small | Planned |
+| Timers, if missing: `setTimeout`, `setInterval`, `clearTimeout`, `sleep` | Every service waits; a 100 ms timer regression test needs them. | Small | Planned |
+| Process lifecycle: `process.on("SIGINT" \| "SIGTERM" \| "exit" \| "unhandledRejection")`, `server.close()` | Servers need graceful shutdown; libuv signal handles are already available. | Small | Planned |
+| Built-in utility types: `Partial`, `Required`, `Readonly`, `Pick`, `Omit`, `Record` | Very common in real TS. The compiler resolves them natively instead of user-written mapped types. | Medium | Planned |
+| Date gaps: `getTime`, `getDay`, the UTC getters, setters, `Date.parse` | The current surface is very thin. | Small | Planned |
+| `cp3 install <dir>` semantics | Compile the source or reject with a clear "use a `.cp3pak`" error; accept classes via a package's default or named exports (today CP3401 blocks it); make `cp3 test` work for packages. | Small-medium | Planned |
+| Coercion: `parseInt`, `parseFloat`, `Number(x)`, `String(x)`, `Boolean(x)`, `isNaN`, `isFinite` | Basic coercion in every TS codebase. | Small | Planned |
+| Number helpers: `Number.toString(radix)`, `Number.isSafeInteger`, `Number.parseInt`/`parseFloat` | Common helpers plus hex/binary output. | Small | Planned |
+| `encodeURIComponent`, `decodeURIComponent`, `encodeURI`, `decodeURI`, `atob`, `btoa` | URL building and Basic auth headers; the network runtime already carries a `percentDecode` helper to adapt. | Small | Planned |
+| Scheduling primitives: `queueMicrotask`, `setImmediate`, `process.nextTick` | What libraries expect alongside timers. | Small | Planned |
+| Generic constraints and defaults: `<T extends X = Y>` | Required for real generic APIs. | Medium | Planned |
+| `const enum` and enum reverse mapping | Common enum use. | Small | Planned |
+| Map/Set constructors from iterables and spread (`[...set]`, `new Map(entries)`) | Everyday code. | Small | Planned |
+| Set algebra: `union`, `intersection`, `difference`, `isSubsetOf` | ES2025 methods; simple on the flat hash set. | Small | Planned |
+| `Object.groupBy` / `Map.groupBy` | Common in reporting code. | Small | Planned |
+| `toSpliced`, `with`, `flat(depth)`, `copyWithin` | Rest of the ES2023 non-mutating array methods. | Small | Planned |
+| `process.stdout.write` / `process.stderr.write` | No newline; CLIs and progress output need it. | Small | Planned |
+| `process.stdin` (read all, read lines) or `std/readline` | Piping input into CLIs; `console.input` covers prompts only. | Small-medium | Planned |
+| `process.exitCode`, `process.platform`, `process.arch`, `process.version` | Basic process info and a graceful exit path. | Small | Planned |
+| `console.table`, `console.group`/`groupEnd`, `console.dir`, `console.count`, `console.trace` | Common debug output; `console.time`/`timeEnd` are already covered by the `std/time` ledger entry. | Small | Planned |
+| `Error.captureStackTrace`, `error.toString()`, `error.name` overrides on subclasses | Custom error classes need them. | Small | Planned |
+| `res.redirect`, `res.sendFile`, `res.cookie`, `req.cookies`, `req.ip` | Basic web-server features every app writes by hand today. | Small-medium | Planned |
+| Built-in middleware: `static(dir)`, `cors(options)`, `bodyLimit(n)` | Production servers need these first; body limits are also a DoS defense. | Medium | Planned |
+| Error-handling hook: `server.onError((err, req, res) => ...)` | An uncaught handler throw returns 500 instead of crashing or hanging. | Small | Planned |
+| `Headers`, `Request`, `Response`, `FormData` classes and `fetch(Request)` | Standard fetch shapes TS code expects. | Medium | Planned |
+| `AbortSignal.timeout(ms)` on `fetch` | Complements the existing `timeout` init option. | Small | Planned |
+| All other Express-compatible features which are doable (static file serving, redirect/sendFile, cookies, CORS, body limits, error hooks) | The set of Express patterns users actually write; implement those that carry no runtime metadata or wrapper machinery. | Medium | Planned |
+
 #### I. Non-blocking native I/O (v0.2 phases 1-2)
 `async` only schedules continuations on the one event loop. It does not make a
 blocking C call concurrent. v0.2 therefore separates two mechanisms and ships
