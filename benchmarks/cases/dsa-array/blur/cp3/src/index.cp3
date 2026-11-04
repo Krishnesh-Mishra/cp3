@@ -1,0 +1,28 @@
+import console from "std/console";
+function xs_next(x: u64): u64 { let y: u64 = x; y = y ^ (y << 13); y = y ^ (y >> 7); y = y ^ (y << 17); return y; }
+const W: u64 = 256;
+const PASSES: u64 = 16;
+let a: u64[] = [];
+let b: u64[] = [];
+let r: u64 = 12345;
+let i: u64 = 0;
+while (i < W * W) { r = xs_next(r); a.push(r % 256); b.push(0); i = i + 1; }
+function blur(src: u64[], dst: u64[]): void {
+  let y: u64 = 1;
+  while (y < W - 1) {
+    let x: u64 = 1;
+    while (x < W - 1) {
+      const c: u64 = y * W + x;
+      const s: u64 = src[c - W - 1] + src[c - W] * 2 + src[c - W + 1] + src[c - 1] * 2 + src[c] * 4 + src[c + 1] * 2 + src[c + W - 1] + src[c + W] * 2 + src[c + W + 1];
+      dst[c] = s >> 4;
+      x = x + 1;
+    }
+    y = y + 1;
+  }
+}
+let p: u64 = 0;
+while (p < PASSES / 2) { blur(a, b); blur(b, a); p = p + 1; }
+let total: u64 = 0; let k: u64 = 0;
+while (k < a.length) { total = total + a[k]; k = k + 1; }
+console.log(W);
+console.log(total);
