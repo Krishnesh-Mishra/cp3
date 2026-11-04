@@ -1,4 +1,4 @@
 import console from "std/console";
 async function good(): Promise<number> { return 1; }
-async function bad(): Promise<number> { throw "err"; }
+async function bad(): Promise<number> { throw new Error("err"); }
 try { await Promise.all([good(), bad()]); console.log("no"); } catch (e) { console.log("rejected"); }

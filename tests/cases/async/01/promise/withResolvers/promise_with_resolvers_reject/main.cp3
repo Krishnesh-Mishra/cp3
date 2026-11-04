@@ -1,0 +1,9 @@
+import console from "std/console";
+const resolvers = Promise.withResolvers<number>();
+resolvers.reject(new Error("nope"));
+try {
+  await resolvers.promise;
+  console.log("unreachable");
+} catch (e) {
+  console.log(e.message);
+}

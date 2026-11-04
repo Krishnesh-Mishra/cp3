@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "AggregateError\nAll promises were rejected\n",
+  "exitCode": 0
+}

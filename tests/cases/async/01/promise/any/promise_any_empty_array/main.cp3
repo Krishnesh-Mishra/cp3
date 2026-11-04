@@ -1,0 +1,8 @@
+import console from "std/console";
+async function never(): Promise<number> { throw new Error("never"); }
+try {
+  await Promise.any([never()]);
+  console.log("unreachable");
+} catch (e) {
+  console.log(e.name);
+}
