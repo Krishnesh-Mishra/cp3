@@ -77,8 +77,7 @@ myapp/
 | `Promise<T>` | async result |
 | `r_'i32'`, `c_'i32'`, `ts_'i32'` | explicit native vocabulary flavours |
 
-Type inference: `let x = "hi";` → `string`. Explicit annotation overrides.
-Native ints round-trip safely through `number` where documented; mixed arithmetic follows usual C++ promotions.
+Type inference: `let x = "hi";` → `string`. Explicit annotation overrides. Native arithmetic follows CP3's own checked rules: operands narrower than `i32` promote to `i32`; mixed widths/signedness pick a common native type; `number` and native ints do not mix silently.
 
 ## 5. Bindings, scope, closures
 
@@ -459,9 +458,9 @@ Explicit prefixed types are valid anywhere a native scalar fits:
 - `c_'int32_t'`, `c_'double'` — C++ vocabulary regardless of `typeSystem`
 - `ts_'number'` — TypeScript vocabulary (explicit) regardless of `typeSystem`
 
-Native ints print exactly, obey the platform's integer rules (promotions, wrap/UB as per C++ for `c_`, modulo for `r_`), and integer division truncates toward zero. Comparisons stay native ints when both sides are native int literals; non-integer literals widen the expression. Chains of `+` on `number` print integers with no decimal point.
+Native ints print exactly. Arithmetic on narrower-than-`i32` operands promotes to `i32` (so `u8 + u8` is `i32`). Native values do not mix freely with nonliteral `number`: pass a fitting literal where supported, or keep producer/consumer on the same native type. With `strictNumericCasts: true` in `package.json`, assigning `number` to a native type is rejected and mixed native arithmetic is rejected; tests live in `tests/cases/types/03/native_strict`.
 
-`x as r_'i32'` / `r_'i32'(x)` style explicit conversions are how to bridge `number` and native ints where the semantics must be exact; ordinary annotation converts where assignable. See `docs/content/01-language/07-native-types/` for the complete table and `cp3 native-install <sdk>` for generating the declaration file a native library needs (`index.cp3` then type-checks calls like ordinary cp3).
+There is **no general-purpose cast expression** in CP3. If the annotation is `r_'i64'`, initialise it from a fitting literal or from another native `i64`; the compiler will reject anything else. Do not assume `x as r_'i32'` or `r_'i32'(x)` exists — they are not part of the documented surface. See `docs/content/01-language/07-native-types/03-numeric-rules.md`.
 
 ## 23. Reading the corpus for semantics
 
