@@ -320,14 +320,23 @@ compatibility target. The manual `weak` field modifier is retained as an
 escape hatch for reference cycles: a weak field does not count toward the
 refcount and reads as `T | null`.
 
-Automatic cycle handling (memory item): Stage 0 measured the corpus with
-`tools/cycle_stats.py` (see `docs/cycle-stage0.md`): 61 classes, 5
-cycle-capable (3 groups), 56 acyclic (92%). Stage 1 (cycle-capability
-analysis over strong class-field edges, published as
-`SemaResult::cycleCapableClasses`) is implemented report-only. Regions,
-compiler-injected non-owning edges and group counting (stages 2-3) are
-deferred; cycles the analysis marks cycle-capable are resolved today by an
-explicit `weak` edge. No GC and no cycle collector are shipped.
+Automatic cycle handling (memory item), no GC and no cycle collector:
+- Stage 0 (`tools/cycle_stats.py`, `docs/cycle-stage0.md`): 61 classes, 5
+  cycle-capable in 3 groups (A/B mutual, BST self-recursive, Child/Parent
+  already weak), 56 acyclic (92%). 2 of 3 groups have no `weak` edge.
+- Stage 1 + shared analysis: strong-edge class graph (weak excluded,
+  unknown fail-closed) published as `SemaResult::cycleCapableClasses` with
+  per-field store/escape sites in `cycleEscapeSites`.
+- Step 4 diagnostics: a cycle through two or more distinct edges (SCC > 1)
+  with no `weak` edge is CP3401 naming the cycle path and asking to mark one
+  edge `weak`. Single self-referencing fields (`next: Node | null`) are
+  exempt (recursive types, not runtime cycles).
+- `cp3 check --report` lists cycle-capable classes, store/escape sites and
+  the manual-weak share. `tools/fuzz_graphs.py` differential fuzzer is clean.
+- Regions, compiler-injected non-owning edges and group counting (stages
+  2-3) are deferred: they need the whole-program ownership proof plus the
+  fuzzer/ASan gate, which is not yet met. Cycles resolve today by an
+  explicit `weak` edge.
 
 ### 3. Compile-time decorators
 

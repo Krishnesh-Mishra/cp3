@@ -1,0 +1,26 @@
+import console from "std/console";
+class Node {
+  value: number;
+  prev: Node | null;
+  next: Node | null;
+  constructor(value: number, prev: Node | null, next: Node | null) {
+    this.value = value;
+    this.prev = prev;
+    this.next = next;
+  }
+}
+const a = new Node(1, null, null);
+const b = new Node(2, a, null);
+const c = new Node(3, b, null);
+a.next = b;
+b.next = c;
+let cur: Node | null = a;
+while (cur !== null && cur.next !== null) {
+  console.log(`${cur.next.value}`);
+  cur = cur.next;
+}
+while (cur !== null && cur.prev !== null) {
+  console.log(`${cur.prev.value}`);
+  cur = cur.prev;
+}
+console.log("doubly-ok");

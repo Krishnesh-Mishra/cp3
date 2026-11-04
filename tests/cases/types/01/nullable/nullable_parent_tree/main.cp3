@@ -1,0 +1,22 @@
+import console from "std/console";
+class Tree {
+  value: number;
+  parent: Tree | null;
+  firstChild: Tree | null;
+  constructor(value: number, parent: Tree | null) {
+    this.value = value;
+    this.parent = parent;
+    this.firstChild = null;
+  }
+}
+const root = new Tree(10, null);
+const left = new Tree(5, root);
+const leaf = new Tree(3, left);
+root.firstChild = left;
+left.firstChild = leaf;
+let cur: Tree | null = leaf;
+while (cur !== null && cur.parent !== null) {
+  console.log(`${cur.parent.value}`);
+  cur = cur.parent;
+}
+console.log("tree-ok");
