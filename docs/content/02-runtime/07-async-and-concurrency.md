@@ -21,7 +21,7 @@ Async I/O avoids blocking the event loop while waiting for that operation. It do
 
 ## Promises
 
-CP3 provides promise member operations and static combinators implemented by the runtime. `Promise.all` waits for all supplied promises; `Promise.race` settles from the first result; `Promise.allSettled` records each outcome. Check the concrete semantic and runtime implementation for accepted container shapes.
+CP3 provides promise member operations and static combinators implemented by the runtime. `Promise.all` waits for all supplied promises; `Promise.race` settles from the first result; `Promise.allSettled` records each outcome; `Promise.any` resolves with the first fulfilled value. `Promise.withResolvers()` returns a record with `promise`, `resolve`, and `reject` — useful for bridging callbacks with async code. An uncaught `Promise.any` rejection surfaces an `AggregateError`.
 
 ## Timers and event loop
 

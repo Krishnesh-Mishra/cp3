@@ -279,6 +279,9 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
         }
     }
     if (std::string proc = emitProcessMember(m); !proc.empty()) return proc;
+    // Promise allSettled/withResolvers record members (`.ok`, `.value`,
+    // `.reason`, `.promise`, `.resolve`, `.reject`).
+    if (std::string rec = emitPromiseRecordMember(m); !rec.empty()) return rec;
     // A std/network Map-shaped field read's `.size` (`req.params.size`): same
     // hint as the call form above (src/std/network/codegen.cpp).
     if (std::string field = emitNetworkMapFieldMember(m); !field.empty()) {

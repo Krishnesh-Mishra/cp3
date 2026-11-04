@@ -783,10 +783,15 @@ private:
     std::string emitPromiseStatic(const CallExpr& c, const MemberExpr& m);
     std::string emitPromiseResolve(const CallExpr& c);
     std::string emitPromiseReject(const CallExpr& c);
-    // The Promise combinators (`Promise.all` / `race` / `allSettled`): the
-    // operand is an array of promises (or of plain values, which are already
-    // resolved), in emit/async_promise.cpp.
+    // The Promise combinators (`Promise.all` / `race` / `allSettled` / `any`):
+    // the operand is an array of promises (or of plain values, which are
+    // already resolved), in emit/async_promise.cpp.
     std::string emitPromiseCombinator(const CallExpr& c, const std::string& prop);
+    // A `$settled` / `$withResolvers` record member read (`.ok` / `.value` /
+    // `.reason` / `.promise` / `.resolve` / `.reject`).
+    std::string emitPromiseRecordMember(const MemberExpr& m);
+    // `Promise.withResolvers()` — constructs the resolver pair.
+    std::string emitPromiseWithResolvers(const CallExpr& c);
 
     // --- spread arguments / spread elements (emit/spread.cpp) ----------------
     // The C++ text of a spread source's first element (`f(...values)` in a

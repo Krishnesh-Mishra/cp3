@@ -220,10 +220,13 @@ std::string Generator::emitPromiseStatic(const CallExpr& c, const MemberExpr& m)
     const std::string prop = m.property;
     if (prop == "resolve") return emitPromiseResolve(c);
     if (prop == "reject") return emitPromiseReject(c);
+    if (prop == "any") return emitPromiseCombinator(c, prop);
+    if (prop == "withResolvers") return emitPromiseWithResolvers(c);
     if (prop != "all" && prop != "race" && prop != "allSettled") {
         // A Promise static outside the documented surface (spec 14: resolve,
-        // reject, all, race, allSettled) is a program error, not a feature
-        // the compiler is still missing: report the member miss.
+        // reject, all, race, allSettled, any, withResolvers) is a program
+        // error, not a feature the compiler is still missing: report the
+        // member miss.
         reportCodegenError(c, diagcode::kMemberNotFound,
                            "'Promise' has no member '" + prop + "'");
         return "0.0";

@@ -233,7 +233,7 @@ async function load(): Promise<string> {
 ```
 
 - `async`/`await` over the single runtime event loop (libuv-backed).
-- Promise APIs: `resolve`, `reject`, `then`, `catch`, `finally`, `all`, `race`, `allSettled`. (`any`, `withResolvers` land with v0.2.)
+- Promise APIs: `resolve`, `reject`, `then`, `catch`, `finally`, `all`, `race`, `allSettled`, `any`, `withResolvers<T>()`.
 - Promise rejections are `Error` objects; `catch (e)` binds them.
 - A top-level `await` is allowed in async entry points only if the entry is async; keep `await` inside async functions.
 - Timers/network/fs-async suspend only the async function; other loop work continues.

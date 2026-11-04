@@ -23,12 +23,13 @@
 //   `p.catch(f)`                -> `p.catchError(f)`  (`catch` is a C++ keyword)
 //   `p.finally(f)`              -> `p.finally(f)`
 //   `Promise.resolve(v)`        -> `::cp3::runtime::Promise<T>::resolve(v)`
-//   `Promise.reject(v)`         -> `Promise<T>::reject(Thrown::make(v))`
-//   `Promise.all/race/allSettled([...])`
-//                               -> `::cp3::runtime::all|race|allSettled(vec)`
+//   `Promise.reject(v)`         -> `Promise<T>::reject(Thrown::makeError(v))`
+//   `Promise.all/race/allSettled/any([...])`
+//                               -> `::cp3::runtime::all|race|allSettled|any(vec)`
 //                               (`all` and `allSettled` resolve with a cp3
 //                               array - `Array<T>` - so the awaited value has
 //                               the array surface)
+//   `Promise.withResolvers()`   -> `::cp3::runtime::withResolvers<T>()`
 //   `sleep(ms)`                 -> `::cp3::runtime::sleep(ms)` (Promise<void>)
 //
 // A rejection handler (`.catch`, `then`'s second argument) takes a

@@ -329,6 +329,14 @@ private:
     std::optional<Type> processMember(const std::string& prop);
     // Documented `process` shapes (`$process:` markers).
     Type processObjectType(const std::string& name);
+    // Promise settlement / resolver records (`$settled` / `$withResolvers`).
+    // The records are registered as fixed shapes in the member table, so
+    // member reads type normally (member_check.cpp).
+    Type promiseSettledRecordType(const Type& value);
+    Type promiseWithResolversRecordType(const Type& value);
+    // The combinator operand: the array's element type (or the unwrapped value
+    // type). Private because typeOfExpr is.
+    Type combinatorOperandValue(CallExpr& call, const std::string& prop);
     std::optional<Type> envMember(const std::string& prop);
     std::optional<Type> consoleMember(const std::string& prop);
     std::optional<Type> jsonMember(const std::string& prop);

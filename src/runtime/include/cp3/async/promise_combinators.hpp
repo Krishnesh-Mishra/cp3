@@ -274,4 +274,145 @@ inline Promise<Array<Settled<void>>> allSettled(
     return detail::allSettledVoidImpl(promises);
 }
 
+/// `Promise.any([...])`.
+///   * resolves as soon as any input fulfils, with that value;
+///   * rejects with an `AggregateError` (message "All promises were rejected")
+///     when every input rejected; an empty input rejects the same way.
+namespace detail {
+
+template <class T>
+struct AnyState {
+    std::vector<Promise<T>> elements;
+    std::vector<Thrown> reasons;
+    std::size_t remaining = 0;
+    Promise<T> derived;
+
+    AnyState(Promise<T> promise, std::vector<Promise<T>> inputs)
+        : elements(std::move(inputs)), reasons(elements.size()),
+          remaining(elements.size()), derived(std::move(promise)) {}
+};
+
+template <class T, std::enable_if_t<!std::is_void_v<T>, int> = 0>
+Promise<T> anyImpl(std::vector<Promise<T>> promises) {
+    Promise<T> derived = Promise<T>::pending();
+    const std::size_t count = promises.size();
+    if (count == 0) {
+        derived.rejectWith(Thrown::makeError(std::make_shared<AggregateError>()));
+        return derived;
+    }
+    auto all = std::make_shared<AnyState<T>>(derived, std::move(promises));
+    for (std::size_t i = 0; i < count; ++i) {
+        const std::shared_ptr<PromiseState<T>> element = all->elements[i].sharedState();
+        addRejectedContinuation<T>(element, [all, i]() {
+            all->reasons[i] = all->elements[i].sharedState()->reason;
+            if (--all->remaining == 0) {
+                std::vector<Ref<Error>> errors;
+                errors.reserve(all->reasons.size());
+                for (const Thrown& reason : all->reasons) {
+                    if (const Ref<Error>* boxed =
+                            reason.get<Ref<Error>>()) {
+                        errors.push_back(*boxed);
+                    } else {
+                        errors.push_back(
+                            std::make_shared<Error>(reason.toString()));
+                    }
+                }
+                auto aggregate = std::make_shared<AggregateError>(
+                    std::make_shared<std::vector<Ref<Error>>>(
+                        std::move(errors)),
+                    std::string("All promises were rejected"));
+                if (!all->derived.settled()) {
+                    all->derived.rejectWith(
+                        Thrown::makeError(std::move(aggregate)));
+                }
+            }
+        });
+        addFulfilledContinuation<T>(element, [all, i]() {
+            if (!all->derived.settled()) {
+                all->derived.fulfill(all->elements[i].sharedState()->slot.value);
+            }
+        });
+    }
+    return derived;
+}
+
+inline Promise<void> anyVoidImpl(const std::vector<Promise<void>>& promises) {
+    Promise<void> derived = Promise<void>::pending();
+    const std::size_t count = promises.size();
+    if (count == 0) {
+        derived.rejectWith(Thrown::makeError(std::make_shared<AggregateError>()));
+        return derived;
+    }
+    // The inputs and the countdown live as long as the continuations need
+    // them (mirrors allSettledVoidImpl).
+    auto inputs = std::make_shared<std::vector<Promise<void>>>(promises);
+    auto remaining = std::make_shared<std::size_t>(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        const std::shared_ptr<PromiseState<void>> element =
+            (*inputs)[i].sharedState();
+        addFulfilledContinuation<void>(element, [derived]() mutable {
+            if (!derived.settled()) derived.fulfill();
+        });
+        addRejectedContinuation<void>(element, [derived, remaining]() mutable {
+            if (--*remaining == 0 && !derived.settled()) {
+                derived.rejectWith(
+                    Thrown::makeError(std::make_shared<AggregateError>()));
+            }
+        });
+    }
+    return derived;
+}
+
+}  // namespace detail
+
+/// `Promise.withResolvers()` — the resolver pair exposed alongside the promise.
+/// `resolve` adopts nothing: it settles with the value it receives. The cp3
+/// source spells the return value as the `$withResolvers` marker (typed via
+/// `Promise.withResolvers<T>()`); codegen emits this struct directly.
+template <class T>
+struct WithResolvers {
+    Promise<T> promise = Promise<T>::pending();
+    std::function<void(T)> resolve;
+    std::function<void(Ref<::cp3::Error>)> reject;
+    WithResolvers() {
+        Promise<T> p = promise;
+        resolve = [p](T value) mutable {
+            if (!p.settled()) p.fulfill(std::move(value));
+        };
+        reject = [p](Ref<::cp3::Error> reason) mutable {
+            if (!p.settled()) p.rejectWith(Thrown::makeError(std::move(reason)));
+        };
+    }
+};
+
+template <>
+struct WithResolvers<void> {
+    Promise<void> promise = Promise<void>::pending();
+    std::function<void()> resolve;
+    std::function<void(Ref<::cp3::Error>)> reject;
+    WithResolvers() {
+        Promise<void> p = promise;
+        resolve = [p]() mutable {
+            if (!p.settled()) p.fulfill();
+        };
+        reject = [p](Ref<::cp3::Error> reason) mutable {
+            if (!p.settled()) p.rejectWith(Thrown::makeError(std::move(reason)));
+        };
+    }
+};
+
+/// `Promise.withResolvers()`.
+template <class T>
+WithResolvers<T> withResolvers() {
+    return WithResolvers<T>{};
+}
+
+template <class T, std::enable_if_t<!std::is_void_v<T>, int> = 0>
+Promise<T> any(std::vector<Promise<T>> promises) {
+    return detail::anyImpl<T>(std::move(promises));
+}
+inline Promise<void> any(const std::vector<Promise<void>>& promises) {
+    return detail::anyVoidImpl(promises);
+}
+
 }  // namespace cp3::runtime

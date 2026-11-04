@@ -139,7 +139,8 @@ public:
     std::shared_ptr<std::vector<std::shared_ptr<Error>>> errors;
 
     AggregateError()
-        : errors(std::make_shared<std::vector<std::shared_ptr<Error>>>()) {
+        : Error("All promises were rejected"),
+          errors(std::make_shared<std::vector<std::shared_ptr<Error>>>()) {
         name = "AggregateError";
         refreshStack();
     }

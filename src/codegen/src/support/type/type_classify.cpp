@@ -121,8 +121,9 @@ static CppInfo classifyFunctionValue(const Type& t) {
     // (an event handler's `unknown` payload) is the boxed `Listener`
     // (D74): every copy shares one identity. A value-returning (or
     // representable-parameter) function is a plain `std::function`
-    // built from the recursive shapes of its parts.
-    bool listener = t.parts.back().isVoid();
+    // built from the recursive shapes of its parts. A zero-parameter
+    // function is not a Listener either: it carries no erased arguments.
+    bool listener = t.parts.size() > 1 && t.parts.back().isVoid();
     for (std::size_t i = 0; i + 1 < t.parts.size(); ++i) {
         if (classify(t.parts[i]).representable) {
             listener = false;
@@ -217,6 +218,26 @@ CppInfo classify(const Type& raw) {
                 info.shape = Shape::Object;
                 info.representable = true;
                 info.cpp = "::cp3::runtime::Settled<" + value.cpp + ">";
+                return info;
+            }
+            // `Promise.withResolvers()` returns this record
+            // (cp3/async/promise_combinators.hpp): a value object holding the
+            // promise plus the two resolver functions.
+            if (t.name == "$withResolvers") {
+                if (t.parts.empty()) return info;
+                const Type& value = t.parts.front();
+                std::string cpp;
+                if (value.isVoid()) {
+                    cpp = "void";
+                } else {
+                    const CppInfo ic = classify(value);
+                    if (!ic.representable || ic.shape == Shape::Void) return info;
+                    cpp = ic.cpp;
+                }
+                info.type = t;
+                info.shape = Shape::Object;
+                info.representable = true;
+                info.cpp = "::cp3::runtime::WithResolvers<" + cpp + ">";
                 return info;
             }
             // A tuple annotation (`$t[...]`) is a std::tuple value: unlike an

@@ -292,7 +292,13 @@ Type Analyzer::inferAwait(AwaitExpr& a) {
     Type arg = a.argument ? inferExpr(*a.argument) : Type::unknown();
     if (arg.isError()) return withType(a, Type::error());
     // `Promise<T>` unwraps to T; DECISIONS D41: any other value yields itself.
-    if (isPromiseType(arg)) return withType(a, promiseValue(arg));
+    if (isPromiseType(arg)) {
+        Type value = promiseValue(arg);
+        // Awaiting a `Promise<void>` yields `undefined` in JS; a binding
+        // cannot hold a `void` expression, so surface it as the value.
+        if (value.isVoid()) return withType(a, Type::undefined());
+        return withType(a, value);
+    }
     return withType(a, arg);
 }
 

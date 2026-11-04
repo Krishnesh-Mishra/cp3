@@ -38,16 +38,24 @@ struct PromiseAwaiter {
                                           [handle]() { handle.resume(); });
     }
 
+    /// `void` has no value shape in C++, so a settled `void` promise resumes
+    /// with the cp3 `undefined` singleton instead.
+    using value_t = std::conditional_t<std::is_void_v<T>, Undefined, T>;
+
     /// A rejection rethrows `Thrown`; the enclosing async body turns it back
     /// into a rejection (PromiseCoroutine::unhandled_exception).
-    T await_resume() {
+    value_t await_resume() {
         if (promise.rejected()) {
             // The `await` itself observes the rejection (DECISIONS D43); the
             // registration in `await_suspend` already did for settled ones.
             detail::markObserved(promise.sharedState());
             throw promise.reason();
         }
-        return detail::ValueAccess<T>::get(*promise.sharedState());
+        if constexpr (std::is_void_v<T>) {
+            return Undefined{};
+        } else {
+            return detail::ValueAccess<T>::get(*promise.sharedState());
+        }
     }
 };
 

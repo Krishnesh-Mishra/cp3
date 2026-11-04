@@ -429,7 +429,13 @@ void Analyzer::analyzeForOf(ForOfStatement& stmt) {
     }
     // `for await` binds the AWAITED value: a promise resolves to its value
     // (D41), anything else is its own value.
-    if (stmt.isAwait && isPromiseType(elem)) elem = promiseValue(elem);
+    if (stmt.isAwait && isPromiseType(elem)) {
+        elem = promiseValue(elem);
+        // Awaiting a `Promise<void>` yields `undefined` in JS; binding a
+        // variable to `void` has no C++ representation, so surface it as
+        // the value (the codegen and the runtime agree on the spelling).
+        if (elem.isVoid()) elem = Type::undefined();
+    }
     declareForBinding(stmt.left.get(), elem);
     ++loopDepth_;
     if (stmt.body) visitStmt(*stmt.body);
