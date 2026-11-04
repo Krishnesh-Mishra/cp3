@@ -45,6 +45,7 @@ const StdModuleDef kStdModules[] = {
     {"std/env", false, {"env"}},
     {"std/collections", false, {"Map", "Set"}},
     {"std/buffer", false, {"Buffer"}},
+    {"std/url", true, {}},
 };
 
 // Specifiers that were once std modules and are now language builtins (D74).

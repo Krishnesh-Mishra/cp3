@@ -33,6 +33,7 @@ struct ProgramNeeds {
     bool env = false;
     bool crypto = false;
     bool date = false;
+    bool url = false;
     bool network = false;
     bool typedArray = false;
     bool collections = false;

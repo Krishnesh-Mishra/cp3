@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "hello%20world\na%3Db%26c\nhello world\nhttps://example.com/a%20b\nhttps://example.com/a b\n",
+  "exitCode": 0
+}

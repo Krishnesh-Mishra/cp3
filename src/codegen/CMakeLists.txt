@@ -110,6 +110,7 @@ set(cp3_codegen_sources
     ../std/collections/codegen_map.cpp
     ../std/date/codegen.cpp
     ../std/buffer/codegen.cpp
+    ../std/url/codegen.cpp
     ../std/console/codegen.cpp
     ../std/fs/codegen.cpp
     ../std/io/codegen.cpp

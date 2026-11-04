@@ -30,6 +30,7 @@
 #include "../../../../std/process/native.hpp"
 #include "../../../../std/string/native.hpp"
 #include "../../../../std/typed-arrays/native.hpp"
+#include "../../../../std/url/native.hpp"
 
 namespace cp3::cli::detail {
 
@@ -51,6 +52,7 @@ const std::vector<const NativePackage*>& nativePackages() {
         &kDateNativePackage,
         &kBufferNativePackage,
         &kEnvNativePackage,
+        &kUrlNativePackage,
     };
     return rows;
 }

@@ -186,6 +186,10 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     }
     if (isNamespaceObject(m.object.get(), "fs")) return emitFsCall(c, m);
     if (isNamespaceObject(m.object.get(), "io")) return emitIoCall(c, m);
+    if (isNamespaceObject(m.object.get(), "url") &&
+        !hasValueBinding("url")) {
+        return emitUrlCall(c, m);
+    }
     // `process.*` (exit/exec/spawn; argv/env reads lower in emitProcessMember)
     // and the `{ env }` named import from std/env (src/std/env/codegen.cpp).
     if (isNamespaceObject(m.object.get(), "process")) {

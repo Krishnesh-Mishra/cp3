@@ -161,6 +161,7 @@ protected:
     bool needsEnv_ = false;        // { env } -> cp3/std/env.hpp include
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
+    bool needsUrl_ = false;        // std/url -> cp3/std/url.hpp include
     bool needsRegex_ = false;      // regex literals -> cp3/core/regex.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
     // D79: this unit opted into `createServer({ threads })`. Namespace-scope

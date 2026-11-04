@@ -345,6 +345,7 @@ private:
     std::optional<Type> networkMember(const std::string& prop);
     // std/date statics and instance members.
     std::optional<Type> dateMember(const std::string& prop);
+    std::optional<Type> urlMember(const std::string& prop);
     std::optional<Type> dateInstanceMember(const Type& recv,
                                            const std::string& prop);
     // RegExp value members (`test`/`match`/`exec`/`source`/`flags`).
@@ -705,6 +706,7 @@ std::vector<std::string> fsMemberNames();
 std::vector<std::string> ioMemberNames();
 std::vector<std::string> dateMemberNames();
 std::vector<std::string> dateInstanceMemberNames();
+std::vector<std::string> urlMemberNames();
 
 // The documentation of one family member: the documented signature and the
 // Markdown description the editor shows. Each family unit defines its own
@@ -728,6 +730,7 @@ StdMemberDoc ioMemberDoc(const std::string& prop);
 StdMemberDoc fsStatsMemberDoc(const std::string& prop);
 std::vector<std::string> fsStatsMemberNames();
 StdMemberDoc dateMemberDoc(const std::string& prop);
+StdMemberDoc urlMemberDoc(const std::string& prop);
 StdMemberDoc dateInstanceMemberDoc(const std::string& prop);
 StdMemberDoc processExecResultDoc(const std::string& prop);
 StdMemberDoc processSpawnHandleDoc(const std::string& prop);

@@ -59,6 +59,7 @@ set(cp3_sema_sources
     ../std/collections/sema.cpp
     ../std/date/sema.cpp
     ../std/buffer/sema.cpp
+    ../std/url/sema.cpp
     ../std/arrays/sema_docs.cpp
     ../std/string/sema_docs.cpp
 )

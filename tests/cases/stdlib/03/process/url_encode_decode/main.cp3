@@ -1,0 +1,7 @@
+import console from "std/console";
+import url from "std/url";
+console.log(url.encodeURIComponent("hello world"));
+console.log(url.encodeURIComponent("a=b&c"));
+console.log(url.decodeURIComponent("hello%20world"));
+console.log(url.encodeURI("https://example.com/a b"));
+console.log(url.decodeURI("https://example.com/a%20b"));

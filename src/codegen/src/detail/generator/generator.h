@@ -657,6 +657,7 @@ private:
     std::string emitMathMember(const MemberExpr& m);
     std::string emitPathCall(const CallExpr& c, const MemberExpr& m);
     std::string emitPathMember(const MemberExpr& m);
+    std::string emitUrlCall(const CallExpr& c, const MemberExpr& m);
     std::string emitOsCall(const CallExpr& c, const MemberExpr& m);
     std::string emitJsonCall(const CallExpr& c, const MemberExpr& m);
     // The JSON record surface (STDLIB §04 / language spec §23): interfaces are

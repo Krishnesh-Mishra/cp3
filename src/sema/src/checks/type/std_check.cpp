@@ -51,6 +51,7 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
     if (ns == "console") return consoleMember(prop);
     if (ns == "JSON") return jsonMember(prop);
     if (ns == "Date") return dateMember(prop);
+    if (ns == "url") return urlMember(prop);
     return std::nullopt;
 }
 
@@ -61,7 +62,7 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
 bool isClosedStdNamespace(const std::string& ns) {
     return ns == "Math" || ns == "path" || ns == "os" || ns == "crypto" ||
            ns == "console" || ns == "JSON" || ns == "Date" || ns == "fs" ||
-           ns == "io" || ns == "process" || ns == "env";
+           ns == "io" || ns == "process" || ns == "env" || ns == "url";
 }
 
 // The CP3305 candidate lists come from the family units, which own the tables.
@@ -77,6 +78,7 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns) {
     if (ns == "Date") return dateMemberNames();
     if (ns == "fs") return fsMemberNames();
     if (ns == "io") return ioMemberNames();
+    if (ns == "url") return urlMemberNames();
     return {};
 }
 
@@ -108,6 +110,7 @@ StdMemberDoc stdNamespaceMemberDoc(const std::string& ns,
     if (ns == "console") return consoleMemberDoc(member);
     if (ns == "JSON") return jsonMemberDoc(member);
     if (ns == "Date") return dateMemberDoc(member);
+    if (ns == "url") return urlMemberDoc(member);
     if (ns == "fs") return fsMemberDoc(member);
     if (ns == "io") return ioMemberDoc(member);
     return StdMemberDoc{};

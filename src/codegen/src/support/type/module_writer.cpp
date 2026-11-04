@@ -147,6 +147,7 @@ std::string Generator::sourceIncludes() const {
     if (needsEnv_) out += "#include \"cp3/std/env.hpp\"\n";
     if (needsCrypto_) out += "#include \"cp3/std/crypto.hpp\"\n";
     if (needsDate_) out += "#include \"cp3/std/date.hpp\"\n";
+    if (needsUrl_) out += "#include \"cp3/std/url.hpp\"\n";
     if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
     if (needsCollections_) {
         out += "#include \"cp3/std/collections.hpp\"\n";  // Map/Set (D44)

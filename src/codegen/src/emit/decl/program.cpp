@@ -201,6 +201,7 @@ std::string programSource(const ProgramAssembly& assembly,
     if (n.env) out += "#include \"cp3/std/env.hpp\"\n";
     if (n.crypto) out += "#include \"cp3/std/crypto.hpp\"\n";
     if (n.date) out += "#include \"cp3/std/date.hpp\"\n";
+    if (n.url) out += "#include \"cp3/std/url.hpp\"\n";
     if (n.network) out += "#include \"cp3/std/network.hpp\"\n";
     if (n.collections) out += "#include \"cp3/std/collections.hpp\"\n";
     if (n.buffer) out += "#include \"cp3/std/buffer.hpp\"\n";
@@ -322,6 +323,7 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     n.env |= inner.needsEnv_;
     n.crypto |= inner.needsCrypto_;
     n.date |= inner.needsDate_;
+    n.url |= inner.needsUrl_;
     n.network |= inner.needsNetwork_;
     n.typedArray |= inner.needsTypedArray_;
     n.collections |= inner.needsCollections_;
