@@ -1,0 +1,19 @@
+import console from "std/console";
+class Node {
+  value: number;
+  next: Node | null;
+  constructor(value: number, next: Node | null) {
+    this.value = value;
+    this.next = next;
+  }
+}
+const a = new Node(1, new Node(2, null));
+let n: Node | null = a;
+if (n === null || n.next === null) {
+  console.log("missing");
+} else {
+  console.log(`${n.next.value}`);
+}
+const m = n ?? new Node(9, null);
+console.log(`${m.value}`);
+console.log(`${n?.next?.value}`);

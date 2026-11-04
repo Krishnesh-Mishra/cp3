@@ -281,10 +281,14 @@ std::string Analyzer::binaryText(BinaryOp op) const {
 Type Analyzer::inferLogical(LogicalExpr& le) {
     Type l = le.left ? inferExpr(*le.left) : Type::unknown();
     Type r = Type::unknown();
-    if (le.op == LogicalOp::And && le.left && le.right) {
+    if (le.left && le.right &&
+        (le.op == LogicalOp::And || le.op == LogicalOp::Or ||
+         le.op == LogicalOp::Nullish)) {
         pushScope();
         std::vector<ConditionNarrowing> narrows;
-        collectNullNarrowings(*le.left, narrows);
+        // Right operand sees the left's true branch for &&, and its false
+        // branch for || and ??.
+        collectCondNarrowings(*le.left, le.op == LogicalOp::And, narrows);
         applyConditionNarrowings(narrows, false);
         r = inferExpr(*le.right);
         popScope();
@@ -324,14 +328,16 @@ Type Analyzer::inferConditional(ConditionalExpr& ce) {
     if (ce.condition) {
         inferExpr(*ce.condition);
         checkCondition(typeOfExpr(*ce.condition), ce.condition->span);
-        collectNullNarrowings(*ce.condition, narrows);
+        collectCondNarrowings(*ce.condition, true, narrows);
     }
     pushScope();
     applyConditionNarrowings(narrows, false);
     Type a = ce.whenTrue ? inferExpr(*ce.whenTrue) : Type::unknown();
     popScope();
+    std::vector<ConditionNarrowing> elseNarrows;
+    if (ce.condition) collectCondNarrowings(*ce.condition, false, elseNarrows);
     pushScope();
-    if (narrows.size() <= 1) applyConditionNarrowings(narrows, true);
+    applyConditionNarrowings(elseNarrows, false);
     Type b = ce.whenFalse ? inferExpr(*ce.whenFalse) : Type::unknown();
     popScope();
     Type t = unify(widen(a), widen(b));

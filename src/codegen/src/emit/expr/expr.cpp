@@ -282,6 +282,35 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
                            "unresolved import: " + miss);
         return "0.0";
     }
+    // Optional chain `a?.b.c`: when the receiver is optional, the whole
+    // chain short-circuits to `undefined` instead of dereferencing null.
+    if (m.optional && m.object) {
+        const CppInfo recv = info(*m.object);
+        const Type* st = sema_.typeOf(m.object->nodeId);
+        const bool nullishSema =
+            st && (st->isNullable() || st->isUnion() || st->isNullish());
+        if (recv.shape == Shape::Optional || recv.shape == Shape::Maybe ||
+            nullishSema) {
+            Type recvType = effectiveType(*m.object);
+            if (st && (st->isUnion() || st->isNullable()))
+                recvType = stripNullish(*st);
+            const bool isClass =
+                classModelOf(stripNullish(recvType)) != nullptr;
+            const Type* mt = sema_.typeOf(m.nodeId);
+            const CppInfo mi =
+                mt ? classify(stripNullish(*mt)) : CppInfo{};
+            const std::string optType =
+                (mi.shape == Shape::Optional || mi.shape == Shape::Maybe)
+                    ? mi.cpp
+                    : (mi.representable ? "std::optional<" + mi.cpp + ">"
+                                        : "std::optional<double>");
+            return "([&]() -> " + optType + " { auto cp3_o = " +
+                   expr(*m.object) +
+                   "; if (!cp3_o.has_value()) return std::nullopt; "
+                   "return cp3_o.value()" +
+                   (isClass ? "->" : ".") + mapIdent(m.property) + "; })()";
+        }
+    }
     // A class / interface / object model member read first (spec 15); then the
     // builtin property reads (`Math.PI`, `path.sep`, `process.argv`,
     // `s.length`) and a std/json record field, then a member read of an object

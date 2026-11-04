@@ -597,6 +597,8 @@ private:
     };
     void collectNullNarrowings(Expr& cond,
                                std::vector<ConditionNarrowing>& out);
+    void collectCondNarrowings(Expr& cond, bool condTrue,
+                               std::vector<ConditionNarrowing>& out);
     void applyConditionNarrowings(const std::vector<ConditionNarrowing>& in,
                                   bool inverted);
     std::string memberKeyFor(Expr& e);

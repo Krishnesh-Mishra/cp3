@@ -275,28 +275,41 @@ bool Analyzer::hasIterationLabel(const std::string& label) const {
 // =============================================================================
 // Control flow
 // =============================================================================
-void Analyzer::collectNullNarrowings(Expr& cond,
+static Type stripNullishType(const Type& t) {
+    if (t.isNullable() && !t.parts.empty()) return t.parts.front();
+    if (t.isUnion()) {
+        std::vector<Type> nn;
+        for (const Type& m : t.parts) if (!m.isNullish()) nn.push_back(m);
+        if (!nn.empty())
+            return nn.size() == 1 ? nn.front() : Type::unionOf(nn);
+    }
+    return t;
+}
+
+void Analyzer::collectCondNarrowings(Expr& cond, bool condTrue,
                                      std::vector<ConditionNarrowing>& out) {
     if (cond.kind == NodeKind::LogicalExpr) {
         auto& le = static_cast<LogicalExpr&>(cond);
         if (le.op == LogicalOp::And) {
-            if (le.left) collectNullNarrowings(*le.left, out);
-            if (le.right) collectNullNarrowings(*le.right, out);
+            if (condTrue) {
+                if (le.left) collectCondNarrowings(*le.left, true, out);
+                if (le.right) collectCondNarrowings(*le.right, true, out);
+            }
+            return;
+        }
+        if (le.op == LogicalOp::Or) {
+            if (!condTrue) {
+                if (le.left) collectCondNarrowings(*le.left, false, out);
+                if (le.right) collectCondNarrowings(*le.right, false, out);
+            }
+            return;
         }
         return;
     }
     // Truthiness: `if (n)` / `if (n.next)` narrows to non-null.
     if (cond.kind == NodeKind::Identifier ||
         cond.kind == NodeKind::MemberExpr) {
-        Type t = typeOfExpr(cond);
-        Type nonNull = t;
-        if (t.isNullable() && !t.parts.empty()) nonNull = t.parts.front();
-        else if (t.isUnion()) {
-            std::vector<Type> nn;
-            for (const Type& m : t.parts) if (!m.isNullish()) nn.push_back(m);
-            if (!nn.empty())
-                nonNull = nn.size() == 1 ? nn.front() : Type::unionOf(nn);
-        }
+        Type nonNull = stripNullishType(typeOfExpr(cond));
         if (!nonNull.isUnknown() && !nonNull.isError() && !nonNull.isNullish()) {
             ConditionNarrowing cn;
             cn.type = nonNull;
@@ -309,6 +322,8 @@ void Analyzer::collectNullNarrowings(Expr& cond,
                 cn.isMember = true;
                 cn.memberKey = memberKeyFor(cond);
             }
+            // Truthiness false-branch sees the nullish flavor.
+            if (!condTrue) cn.type = cn.nullish;
             out.push_back(cn);
         }
         return;
@@ -323,6 +338,18 @@ void Analyzer::collectNullNarrowings(Expr& cond,
         cn.type = type;
         cn.nullish = type;
         cn.negated = negated;
+        // Convert to branch-type form: then-branch type.
+        const bool branchIsNull = (negated == condTrue) ? false : true;
+        Binding orig;
+        if (branchIsNull) {
+            cn.type = type;
+        } else if (lookup(name, orig)) {
+            cn.type = withoutMember(orig.type, type);
+            cn.nullish = type;
+        } else {
+            cn.type = type;
+        }
+        cn.negated = !branchIsNull;
         out.push_back(cn);
         return;
     }
@@ -336,8 +363,18 @@ void Analyzer::collectNullNarrowings(Expr& cond,
         cn.type = mt;
         cn.nullish = Type::nullType();
         cn.negated = mneg;
+        if (!condTrue) {
+            // False branch of `!== null` sees the nullish flavor.
+            if (mneg) cn.type = cn.nullish;
+            cn.negated = mneg;
+        }
         out.push_back(cn);
     }
+}
+
+void Analyzer::collectNullNarrowings(Expr& cond,
+                                     std::vector<ConditionNarrowing>& out) {
+    collectCondNarrowings(cond, true, out);
 }
 
 std::string Analyzer::memberKeyFor(Expr& e) {
@@ -349,17 +386,14 @@ std::string Analyzer::memberKeyFor(Expr& e) {
 
 void Analyzer::applyConditionNarrowings(
     const std::vector<ConditionNarrowing>& in, bool inverted) {
+    // Entries from collectCondNarrowings already carry the branch type in
+    // `type`; `inverted` is kept for call-site symmetry and ignored.
+    (void)inverted;
     for (const auto& cn : in) {
-        const bool thenPolarity = inverted ? !cn.negated : cn.negated;
         if (!cn.isMember) {
-            Binding orig;
-            if (!lookup(cn.name, orig)) continue;
-            const Type comp = withoutMember(orig.type, cn.type);
-            overrideBinding(cn.name, thenPolarity ? comp : cn.type,
-                            SourceSpan{});
+            overrideBinding(cn.name, cn.type, SourceSpan{});
         } else {
-            narrowedMembersByKey_[cn.memberKey] =
-                thenPolarity ? cn.type : cn.nullish;
+            narrowedMembersByKey_[cn.memberKey] = cn.type;
         }
     }
 }
@@ -376,40 +410,26 @@ static bool stmtExits(Stmt* s) {
 }
 
 void Analyzer::analyzeIf(IfStatement& stmt) {
-    std::vector<ConditionNarrowing> narrows;
-    bool hasElse = stmt.elseBranch != nullptr;
-    // Reformulate && in the prepass: narrowings guard the then-branch.
+    std::vector<ConditionNarrowing> thenNarrows, elseNarrows;
     if (stmt.condition) {
         inferExpr(*stmt.condition);
         checkCondition(typeOfExpr(*stmt.condition), stmt.condition->span);
-        collectNullNarrowings(*stmt.condition, narrows);
+        collectCondNarrowings(*stmt.condition, true, thenNarrows);
+        collectCondNarrowings(*stmt.condition, false, elseNarrows);
     }
     pushScope();
-    applyConditionNarrowings(narrows, false);
+    applyConditionNarrowings(thenNarrows, false);
     if (stmt.thenBranch) visitStmt(*stmt.thenBranch);
     popScope();
     if (stmt.elseBranch) {
         pushScope();
-        // Only a single (non-&&) narrowing has a sound complement in else.
-        if (narrows.size() <= 1) applyConditionNarrowings(narrows, true);
+        applyConditionNarrowings(elseNarrows, false);
         visitStmt(*stmt.elseBranch);
         popScope();
     } else if (stmt.thenBranch && stmtExits(stmt.thenBranch.get())) {
         // Early-exit pattern: `if (x === null) return; use(x)` - the code
-        // after the if sees the non-null narrowing.
-        for (auto& cn : narrows) {
-            if (cn.negated) continue;
-            if (!cn.isMember) {
-                Binding orig;
-                if (lookup(cn.name, orig)) {
-                    overrideBinding(cn.name,
-                                    withoutMember(orig.type, cn.type),
-                                    stmt.span);
-                }
-            } else {
-                narrowedMembersByKey_[cn.memberKey] = cn.type;
-            }
-        }
+        // after the if sees the false-branch narrowing.
+        applyConditionNarrowings(elseNarrows, false);
     }
 }
 
@@ -517,7 +537,7 @@ void Analyzer::analyzeWhile(WhileStatement& w) {
     std::vector<ConditionNarrowing> narrows;
     if (w.condition) {
         checkCondition(inferExpr(*w.condition), w.condition->span);
-        collectNullNarrowings(*w.condition, narrows);
+        collectCondNarrowings(*w.condition, true, narrows);
     }
     ++loopDepth_;
     pushScope();
