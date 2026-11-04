@@ -1,0 +1,34 @@
+import console from "std/console";
+
+const N: u64 = 4000000;
+const PASSES: u64 = 8;
+
+function xs_next(x: u64): u64 {
+  let y: u64 = x;
+  y = y ^ (y << 13);
+  y = y ^ (y >> 7);
+  y = y ^ (y << 17);
+  return y;
+}
+
+let r: u64 = 12345;
+const data: u64[] = [];
+let i: u64 = 0;
+while (i < N) {
+  r = xs_next(r);
+  data.push(r % 1000);
+  i = i + 1;
+}
+
+let total: u64 = 0;
+let p: u64 = 0;
+while (p < PASSES) {
+  let j: u64 = 0;
+  while (j < N) {
+    total = total + (data[j] ^ p);
+    j = j + 1;
+  }
+  p = p + 1;
+}
+console.log(N);
+console.log(total);

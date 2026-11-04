@@ -132,6 +132,7 @@ EXPECTED = {
     "deep-recursion": "292249866",
     "exception-cost": "446742259 446742259",
     "file-big": "779913",
+    "sum-array": "4000000\n15987891712",
     # DSA/memory tasks: expected values filled in per-task commit (oracle.py).
 }
 CHURN_EXPECTED = {50000: "852167", 300000: "254546"}
