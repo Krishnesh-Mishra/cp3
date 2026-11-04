@@ -746,6 +746,11 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
         g.functions_.find(name) == g.functions_.end()) {
         return g.emitParseBuiltin(c, name);
     }
+    if ((name == "Number" || name == "Boolean" || name == "isNaN" ||
+         name == "isFinite") &&
+        g.functions_.find(name) == g.functions_.end()) {
+        return g.emitCoercionBuiltin(c, name);
+    }
     const auto declIt = g.functionDecls_.find(name);
     const FunctionDeclaration* decl =
         declIt != g.functionDecls_.end() ? declIt->second : nullptr;

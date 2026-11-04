@@ -58,6 +58,53 @@ std::string Generator::emitParseBuiltin(const CallExpr& c,
     return "0.0";
 }
 
+// The runtime call for one coercion global applied to a value expression.
+// `Number` coerces via toNumber; `Boolean` via toBoolean; `isNaN`/`isFinite`
+// coerce via toNumber first, then test (JS semantics).
+std::string coercionText(const std::string& name, const std::string& value) {
+    if (name == "Number") return "::cp3::runtime::toNumber(" + value + ")";
+    if (name == "Boolean") return "::cp3::runtime::toBoolean(" + value + ")";
+    if (name == "isNaN") return "::cp3::runtime::isNaN(::cp3::runtime::toNumber(" + value + "))";
+    return "::cp3::runtime::isFiniteNumber(::cp3::runtime::toNumber(" + value + "))";
+}
+
+// `Number(value)`, `Boolean(value)`, `isNaN(value)`, `isFinite(value)`:
+// the scalar coercion globals (STDLIB docs §03). Extra arguments are ignored;
+// a spread contributes its first element, exactly like `String`.
+std::string Generator::emitCoercionBuiltin(const CallExpr& c, const std::string& name) {
+    const Expr* arg = c.arguments.empty() ? nullptr : c.arguments.front().get();
+    if (arg == nullptr) {
+        if (name == "Number") return "std::numeric_limits<double>::quiet_NaN()";
+        if (name == "Boolean") return "false";
+        if (name == "isNaN") return "true";
+        return "true";  // isFinite
+    }
+    if (arg->kind == NodeKind::SpreadElement) {
+        const auto& spread = static_cast<const SpreadElement&>(*arg);
+        if (!spread.argument) {
+            if (name == "Number") return "std::numeric_limits<double>::quiet_NaN()";
+            if (name == "Boolean") return "false";
+            if (name == "isNaN") return "true";
+            return "true";
+        }
+        if (info(*spread.argument).shape != Shape::Array) {
+            reportUnsupported(*arg, diagcode::kTypeMismatch,
+                              "type mismatch: a spread argument must be an array");
+            return "0.0";
+        }
+        const std::string src = expr(*spread.argument);
+        std::string fallback;
+        if (name == "Number") fallback = "std::numeric_limits<double>::quiet_NaN()";
+        else if (name == "Boolean") fallback = "false";
+        else if (name == "isNaN") fallback = "true";
+        else fallback = "true";
+        return "[&]{ const auto& cp3_spread = " + src +
+               "; if (cp3_spread->empty()) return " + fallback + "; return " +
+               coercionText(name, "cp3_spread->at(0)") + "; }()";
+    }
+    return coercionText(name, expr(*arg));
+}
+
 // `String(value)`: the scalar conversion global (DECISIONS D46). JS
 // semantics (spec §03): no argument converts `undefined`, the extra
 // arguments are ignored, and a spread contributes its elements as arguments -

@@ -1,0 +1,9 @@
+import console from "std/console";
+console.log(`${Number("42")}`);
+console.log(`${Number("  3.5  ")}`);
+console.log(`${Number("")}`);
+console.log(`${Number("abc")}`);
+console.log(`${Number(true)}`);
+console.log(`${Number(false)}`);
+console.log(`${Number(null)}`);
+console.log(`${Number(undefined)}`);

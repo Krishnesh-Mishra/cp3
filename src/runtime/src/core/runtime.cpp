@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <system_error>
@@ -188,6 +189,45 @@ double parseInt(const std::string& text) {
     if (!any) return std::numeric_limits<double>::quiet_NaN();
     return negative ? -value : value;
 }
+
+double toNumber(double value) { return value; }
+double toNumber(bool value) { return value ? 1.0 : 0.0; }
+double toNumber(std::nullptr_t) { return 0.0; }
+double toNumber(Undefined) {
+    return std::numeric_limits<double>::quiet_NaN();
+}
+double toNumber(const std::string& value) {
+    // ECMAScript Number(string): trims whitespace, then the whole thing must
+    // be a numeric literal (or empty -> 0); a partial literal is NaN.
+    const char* p = value.c_str();
+    while (std::isspace(static_cast<unsigned char>(*p))) ++p;
+    const char* end = p + std::strlen(p);
+    while (end > p && std::isspace(static_cast<unsigned char>(*(end - 1)))) --end;
+    if (p == end) return 0.0;
+    const std::string trimmed(p, end);
+    if (trimmed == "Infinity" || trimmed == "+Infinity") {
+        return std::numeric_limits<double>::infinity();
+    }
+    if (trimmed == "-Infinity") {
+        return -std::numeric_limits<double>::infinity();
+    }
+    char* stop = nullptr;
+    const double result = std::strtod(trimmed.c_str(), &stop);
+    if (stop != nullptr && *stop != '\0') {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    return result;
+}
+bool toBoolean(double value) {
+    // NaN, 0 and -0 are falsy.
+    return value != 0.0 && !std::isnan(value);
+}
+bool toBoolean(bool value) { return value; }
+bool toBoolean(std::nullptr_t) { return false; }
+bool toBoolean(Undefined) { return false; }
+bool toBoolean(const std::string& value) { return !value.empty(); }
+bool isNaN(double value) { return std::isnan(value); }
+bool isFiniteNumber(double value) { return std::isfinite(value); }
 
 double parseFloat(const std::string& text) {
     const char* p = text.c_str();

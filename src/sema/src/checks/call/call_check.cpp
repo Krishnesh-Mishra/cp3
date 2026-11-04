@@ -46,6 +46,9 @@ Type Analyzer::inferCall(CallExpr& call) {
             if (tryParseBuiltinCall(call, id, builtin)) {
                 return withType(call, builtin);
             }
+            if (tryInferCoercionBuiltin(call, id, builtin)) {
+                return withType(call, builtin);
+            }
             if (tryInferNetworkCall(call, id, builtin)) {
                 return withType(call, builtin);
             }
@@ -178,6 +181,19 @@ bool Analyzer::tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& o
     }
     inferArgs(call);
     out = Type::number();
+    return true;
+}
+
+// `Number(x)` -> number, `Boolean(x)`/`isNaN(x)`/`isFinite(x)` -> boolean.
+// The argument is unconstrained (JS converts anything); extra arguments are
+// ignored and a spread contributes its first element, exactly like `String`.
+bool Analyzer::tryInferCoercionBuiltin(CallExpr& call, const Identifier& id, Type& out) {
+    if (id.name != "Number" && id.name != "Boolean" &&
+        id.name != "isNaN" && id.name != "isFinite") {
+        return false;
+    }
+    inferArgs(call);
+    out = id.name == "Number" ? Type::number() : Type::boolean();
     return true;
 }
 

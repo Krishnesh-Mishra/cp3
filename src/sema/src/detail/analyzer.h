@@ -388,6 +388,8 @@ private:
     bool tryTimerBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
     // `parseInt`/`parseFloat` are typed `number`; `String(x)` elsewhere.
     bool tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& out);
+    // `Number(x)` -> number, `Boolean(x)`/`isNaN(x)`/`isFinite(x)` -> boolean.
+    bool tryInferCoercionBuiltin(CallExpr& call, const Identifier& id, Type& out);
     void reportUndefinedCall(CallExpr& call, Identifier& id);
     bool tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out);
     // `Object.keys` / `.values` / `.entries` over a statically known object

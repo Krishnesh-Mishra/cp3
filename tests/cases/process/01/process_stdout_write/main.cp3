@@ -1,0 +1,7 @@
+import console from "std/console";
+import process from "std/process";
+process.stdout.write("hello");
+process.stdout.write(" world");
+console.log("");
+process.stderr.write("err-line");
+process.stderr.write(" no-newline");

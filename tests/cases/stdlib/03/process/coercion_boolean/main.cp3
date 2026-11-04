@@ -1,0 +1,8 @@
+import console from "std/console";
+console.log(`${Boolean(0)}`);
+console.log(`${Boolean(1)}`);
+console.log(`${Boolean("")}`);
+console.log(`${Boolean("x")}`);
+console.log(`${Boolean(NaN)}`);
+console.log(`${Boolean(null)}`);
+console.log(`${Boolean(undefined)}`);

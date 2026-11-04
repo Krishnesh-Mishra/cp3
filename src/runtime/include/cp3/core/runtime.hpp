@@ -181,6 +181,25 @@ std::string toString(bool value);
 std::string toString(std::nullptr_t);   // -> "null"
 std::string toString(Undefined);        // -> "undefined"
 
+// --- coercion: Number(x) / Boolean(x) / isNaN / isFinite --------------------
+// ECMAScript conversion semantics for the global constructors (STDLIB docs §03):
+//   Number(undefined) -> NaN, Number(null) -> 0, Number(true) -> 1,
+//   Number("42") -> 42, Number("  ") -> 0, Number("abc") -> NaN.
+//   Boolean("") -> false, Boolean(0) -> false, Boolean(NaN) -> false,
+//   Boolean(null/undefined) -> false, everything else -> true.
+double toNumber(double value);
+double toNumber(const std::string& value);
+double toNumber(bool value);
+double toNumber(std::nullptr_t);
+double toNumber(Undefined);
+bool toBoolean(double value);
+bool toBoolean(const std::string& value);
+bool toBoolean(bool value);
+bool toBoolean(std::nullptr_t);
+bool toBoolean(Undefined);
+bool isNaN(double value);
+bool isFiniteNumber(double value);
+
 // --- native interop (spec 19) ------------------------------------------------
 //
 // A native function that returns a `const char*` yields a cp3 `string`. A null
