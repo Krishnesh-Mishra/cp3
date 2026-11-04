@@ -75,6 +75,26 @@ int cmdCheck(const CliOptions& opt) {
     if (entry != nullptr && entry->ast) {
         analyzeProgram(*entry->ast, sema, sink, effective.compile);
     }
+    if (opt.reportCycle) {
+        std::vector<std::string> groups;
+        int total = 0;
+        for (const std::string& c : sema.cycleCapableClasses) {
+            groups.push_back(c);
+            ++total;
+        }
+        std::fprintf(stderr, "cycle-capable classes (%d):\n", total);
+        for (const std::string& c : groups) {
+            std::fprintf(stderr, "  needs weak (unresolved): %s\n", c.c_str());
+        }
+        for (const std::string& s : sema.cycleEscapeSites) {
+            std::fprintf(stderr, "  store/escape: %s\n", s.c_str());
+        }
+        const int needsWeak = static_cast<int>(groups.size());
+        const double pct =
+            total == 0 ? 0.0 : 100.0 * needsWeak / static_cast<double>(total);
+        std::fprintf(stderr, "manual weak share: %d/%d (%.0f%%)\n", needsWeak,
+                     total, pct);
+    }
 
     const RenderOptions ro = makeRenderOptions(effective, file->path);
     renderDiagnostics(sink.diagnostics(), ro, stderr);

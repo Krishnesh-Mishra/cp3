@@ -38,6 +38,7 @@ struct CliOptions {
     std::vector<std::string> positionals; // extra positionals (init dir, exec pkg)
     std::vector<std::string> programArgs; // args after `--` for `run`
     bool verbose = false;
+    bool reportCycle = false;             // --report: cycle decisions report
     bool showRuntime = false;             // --show-runtime (--show): copy runtime sources
     bool all = false;                     // clean --all
     bool yes = false;                     // init non-interactive

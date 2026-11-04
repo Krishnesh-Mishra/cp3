@@ -649,6 +649,9 @@ Type Analyzer::userClassMember(const Type& cls, const std::string& prop,
 void Analyzer::computeCycleCapable() {
     std::unordered_map<std::string, std::unordered_set<std::string>> graph;
     std::unordered_set<std::string> unknownRisk;
+    // Weak edges inside each SCC: a cycle group with one of these is broken
+    // by the user and needs no diagnostic.
+    std::unordered_set<std::string> weakEdges;  // "A->B"
     std::function<void(const Type&, std::unordered_set<std::string>&)> walk =
         [&](const Type& t, std::unordered_set<std::string>& out) {
             if (t.isUnknown()) {
@@ -664,18 +667,46 @@ void Analyzer::computeCycleCapable() {
         auto& edges = graph[name];
         for (const auto& m : info.members) {
             if (m.isMethod || m.isStatic) continue;
-            if (m.isWeak) continue;  // weak edges do not count toward cycles
             std::unordered_set<std::string> refs;
             walk(m.type, refs);
+            if (m.isWeak) {
+                for (const std::string& r : refs) {
+                    if (classes_.count(r)) weakEdges.insert(name + "->" + r);
+                }
+                continue;  // weak edges do not count toward cycles
+            }
             for (const std::string& r : refs) {
-                if (r == "$unknown") unknownRisk.insert(name);
-                else if (classes_.count(r)) edges.insert(r);
+                if (r == "$unknown") {
+                    unknownRisk.insert(name);
+                    out_.cycleEscapeSites.push_back(
+                        name + "." + m.name + " : unknown (escape: opaque)");
+                } else if (classes_.count(r)) {
+                    edges.insert(r);
+                    if (cycleCapableClasses_.count(r) ||
+                        graph.count(r)) {
+                        out_.cycleEscapeSites.push_back(
+                            name + "." + m.name + " : " + r +
+                            " (store: field)");
+                    }
+                }
             }
         }
     }
     // Reachability: a class is cycle-capable when it can reach itself through
     // strong edges (covers self-loops and mutual/longer cycles).
     cycleCapableClasses_.clear();
+    auto reaches = [&](const std::string& from, const std::string& target,
+                       std::unordered_set<std::string>& seen) {
+        std::vector<std::string> work{from};
+        while (!work.empty()) {
+            std::string cur = work.back();
+            work.pop_back();
+            if (cur == target) return true;
+            if (!seen.insert(cur).second) continue;
+            for (const std::string& nxt : graph[cur]) work.push_back(nxt);
+        }
+        return false;
+    };
     for (const auto& [name, info] : classes_) {
         (void)info;
         if (unknownRisk.count(name)) {
@@ -683,6 +714,7 @@ void Analyzer::computeCycleCapable() {
             continue;
         }
         std::unordered_set<std::string> seen;
+        // Seed with direct successors so a self-loop is found.
         std::vector<std::string> work(graph[name].begin(), graph[name].end());
         bool reachesSelf = false;
         while (!work.empty() && !reachesSelf) {
@@ -697,9 +729,61 @@ void Analyzer::computeCycleCapable() {
         }
         if (reachesSelf) cycleCapableClasses_.insert(name);
     }
+    // Step 4 diagnostics: a cycle through two or more distinct edges (SCC of
+    // size > 1) with no `weak` edge inside it is a compile error naming the
+    // cycle and asking the user to mark one edge weak. Single self-referencing
+    // fields (`next: Node | null`) are exempt: recursive types are not
+    // runtime cycles and linked lists/trees must keep working.
+    {
+        std::vector<std::vector<std::string>> groups;
+        std::unordered_set<std::string> assigned;
+        for (const std::string& name : cycleCapableClasses_) {
+            if (assigned.count(name)) continue;
+            std::vector<std::string> group{name};
+            assigned.insert(name);
+            for (const std::string& other : cycleCapableClasses_) {
+                if (other == name || assigned.count(other)) continue;
+                std::unordered_set<std::string> s1, s2;
+                if (reaches(name, other, s1) && reaches(other, name, s2)) {
+                    group.push_back(other);
+                    assigned.insert(other);
+                }
+            }
+            groups.push_back(group);
+        }
+        for (auto& group : groups) {
+            if (group.size() <= 1) continue;
+            std::unordered_set<std::string> inGroup(group.begin(), group.end());
+            bool hasWeak = false;
+            for (const std::string& e : weakEdges) {
+                const std::string arrow = "->";
+                const std::size_t pos = e.find(arrow);
+                if (pos == std::string::npos) continue;
+                if (inGroup.count(e.substr(0, pos)) &&
+                    inGroup.count(e.substr(pos + arrow.size())))
+                    hasWeak = true;
+            }
+            if (hasWeak) continue;
+            std::string path;
+            for (std::size_t i = 0; i < group.size(); ++i) {
+                if (i) path += " -> ";
+                path += group[i];
+            }
+            path += " -> " + group.front();
+            const auto it = classes_.find(group.front());
+            const SourceSpan span = it != classes_.end() ? it->second.span
+                                                         : SourceSpan{};
+            report(diagcode::kTypeMismatch, span,
+                   "reference cycle " + path +
+                       " has no weak edge; mark one edge weak to break the "
+                       "cycle (automatic resolution unavailable for this "
+                       "shape)");
+        }
+    }
     out_.cycleCapableClasses.assign(cycleCapableClasses_.begin(),
                                     cycleCapableClasses_.end());
     std::sort(out_.cycleCapableClasses.begin(), out_.cycleCapableClasses.end());
+    std::sort(out_.cycleEscapeSites.begin(), out_.cycleEscapeSites.end());
 }
 
 }  // namespace cp3

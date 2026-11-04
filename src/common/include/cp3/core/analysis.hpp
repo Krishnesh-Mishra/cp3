@@ -109,8 +109,13 @@ struct SemaResult {
     // Stage 1 of automatic cycle handling: class names whose field types can
     // reach themselves through class-typed fields (arrays, Map/Set values,
     // unions and closures included; unknown edges count as cycle-capable).
-    // Report-only in v0.2: no diagnostic is emitted from this set yet.
     std::vector<std::string> cycleCapableClasses;
+
+    // Shared store/escape-site pass (automatic cycle handling): one string
+    // per strong field whose type references a cycle-capable class, e.g.
+    // "Node.next : Node | null (weak: no)". Consumed by `cp3 check --report`
+    // together with cycleCapableClasses to compute the manual-weak share.
+    std::vector<std::string> cycleEscapeSites;
 
     // The inferred type of `nodeId`, or nullptr when there is none.
     const Type* typeOf(std::uint32_t nodeId) const {

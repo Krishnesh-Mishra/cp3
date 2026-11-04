@@ -69,6 +69,7 @@ bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease
     if (t == "--no-pgo") { opt.noPgo = true; return true; }
     if (t == "--pgo-generate") { opt.pgoGenerate = true; return true; }
     if (t == "--verbose" || t == "-v") { opt.verbose = true; return true; }
+    if (t == "--report") { opt.reportCycle = true; return true; }
     if (t == "--show-runtime" || t == "--show") {
         opt.showRuntime = true;
         return true;

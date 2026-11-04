@@ -84,6 +84,8 @@ void printUsage(std::FILE* out) {
         "      --show-runtime    (build/run) copy the runtime headers/TUs used by\n"
         "                        the program into .cp3/build/core/cp3-runtime/\n"
         "      --show            Alias for --show-runtime\n"
+        "      --report          (check/build) print cycle decisions (automatic\n"
+        "                        cycle handling) with reasons and manual-weak share\n"
         "      --toolchain <clang[@version]|path>  Use this Clang for one command\n"
         "      --strict-toolchain  Fail when a saved toolchain pin is missing\n"
         "      --project         (toolchain) save the choice in package.json\n"
