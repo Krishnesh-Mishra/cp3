@@ -1,0 +1,10 @@
+// A `typeSystem: "rust"` package. Its exported signature is written with the
+// unprefixed native spellings; the pack step must emit them as prefixed names
+// in the generated `index.cp3` (Rule 3).
+const PAGE_SIZE: i64 = 4096;
+
+export function offset(dividend: i64, page: i64): i64 {
+  return dividend + page * PAGE_SIZE;
+}
+
+export default offset;

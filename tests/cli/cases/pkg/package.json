@@ -517,6 +517,37 @@
           "dryRun": false
         }
       }
+    },
+    {
+      "group": "package",
+      "name": "publish-rust-native-signatures",
+      "description": "a rust package's native spellings are prefixed in the generated index.cp3 (Rule 3)",
+      "argv": [
+        "publish"
+      ],
+      "setup": {
+        "fixtures": [
+          {
+            "name": "package-rust-native"
+          }
+        ]
+      },
+      "slow": true,
+      "requires": [
+        "command:publish"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          ".cp3/out/rust-page.cp3pak": {
+            "archive_text_contains": {
+              "index.cp3": [
+                "r_'i64'"
+              ]
+            }
+          }
+        }
+      }
     }
   ]
 }

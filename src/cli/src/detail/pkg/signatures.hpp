@@ -17,6 +17,7 @@
 
 #include "cp3/core/ast.hpp"
 #include "cp3/core/source.hpp"
+#include "cp3/host/options.hpp"
 
 namespace cp3::cli {
 
@@ -29,7 +30,10 @@ bool hasDefaultExport(const Program& program);
 // their parameters and return type with the body dropped, class method and
 // constructor bodies are elided, and top-level statements that are not
 // declarations are omitted. Imports, exports, variables and type declarations
-// are preserved verbatim.
-std::string stripToSignatures(const SourceFile& file, const Program& program);
+// are preserved verbatim. Native type names are rewritten to prefixed
+// spellings (see signatures.cpp), so the exported surface resolves
+// identically in every consumer project, regardless of its `typeSystem`.
+std::string stripToSignatures(const SourceFile& file, const Program& program,
+                              TypeSystem typeSystem);
 
 }  // namespace cp3::cli

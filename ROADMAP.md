@@ -112,6 +112,7 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | `std/fs` | `fs.watch(path, callback)` | File-system watcher using libuv `fs_event` (already linked). | Planned |
 | `std/os` | `homedir`, `tmpdir`, `freemem`, `totalmem`, `loadavg`, `networkInterfaces` | Thin OS calls for system environment and resource info. Today: `platform`, `homedir`, `tmpdir`, `hostname`, `cpus`, `totalMemory`, `freeMemory`, `totalmem`, `freemem` (Node names), `loadavg` (1/5/15 min tuple), `networkInterfaces` (`Array<[name, address, family, internal]>`), via vendored libuv. | Done |
 | `std/io` | `waitReadable`, `waitWritable`, `pollUntilDone`, `POLL_*` | Shared-`EventLoop` fd readiness for libraries with a socket and a non-blocking step API. Phase 1 is the two wait primitives; phase 2 is the shared helper. Phase 3 (`import native async`) is deferred. | Done |
+| Packages | Exported types are vocabulary-neutral (Rule 3) | The generated `index.cp3` rewrites a Rust/C++ package's unprefixed native type spellings (`i64`, `long long`) to prefixed spellings (`r_'i64'`, `c_'long long'`), so the exported surface resolves identically in a consumer project of any `typeSystem`; TypeScript-authored packages need no rewriting. | Done |
 
 #### J. Editor and VS Code extension
 

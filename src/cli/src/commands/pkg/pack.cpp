@@ -162,7 +162,10 @@ bool collectEntries(const PackInput& input, const JsonValue& manifest,
     // needs, even when the original import lived in a non-exported module.
     entries.push_back(TarEntry{
         "index.cp3",
-        ensureNativeImports(stripToSignatures(*input.source, *input.program),
+        ensureNativeImports(stripToSignatures(
+                                *input.source, *input.program,
+                                input.opt ? input.opt->compile.typeSystem
+                                        : TypeSystem::TypeScript),
                             nativeIds)});
     entries.push_back(
         TarEntry{"pak/" + *input.moduleName + ".cpp", input.module->source});
@@ -357,7 +360,9 @@ int packProject(const PackInput& input) {
     }
 
     const std::string surface =
-        stripToSignatures(*input.source, *input.program);
+        stripToSignatures(*input.source, *input.program,
+                          input.opt ? input.opt->compile.typeSystem
+                                  : TypeSystem::TypeScript);
     const std::vector<std::string> nativeIds =
         nativeIdsForPack(input, surface);
 

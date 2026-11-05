@@ -449,6 +449,7 @@ When a program is rejected, read the first diagnostic, not the last; later ones 
 - `cp3 link <dir>` / `cp3 unlink <name>` manage local development links to a package.
 - `.cp3pak` carries `package.json`, source (or precompiled library), `native.json`, headers, import libraries and the recorded sources for native bindings; installing hoists them into `.cp3/native/<id>/`.
 - `cp3 native-install <sdk>` (libclang required) generates the declaration index for a native SDK; the generated `index.cp3` then type-checks native calls like ordinary cp3 code.
+- The generated `index.cp3` rewrites a Rust/C++ package's unprefixed native type names to prefixed spellings (`r_'i64'`, `c_'long long'`), so the package's exported types resolve identically in a consumer project of any `typeSystem` (Rule 3).
 
 ## 21. Reproducing a minimal program
 

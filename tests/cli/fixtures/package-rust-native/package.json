@@ -1,0 +1,8 @@
+{
+  "name": "rust-page",
+  "version": "1.0.0",
+  "description": "rust typeSystem package fixture",
+  "type": "package",
+  "main": "src/index.cp3",
+  "typeSystem": "rust"
+}
