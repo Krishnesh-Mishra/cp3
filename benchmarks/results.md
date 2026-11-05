@@ -726,6 +726,32 @@ _Updated 2026-11-04T20:12:08 by `python benchmarks/runner/run_benchmark.py --onl
 ```
 <!-- test:strlist:end -->
 
+<!-- test:interp:start -->
+### interp
+_Updated 2026-11-05T10:53:22 by `python benchmarks/runner/run_benchmark.py --only interp --reps 1`._
+
+```text
+  ◆ interp  expected = 24
+914237 | cross-language checksum | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%         vs cp3  RSS MiB  bin KiB
+  ────────────────────────────────────────────────────────────────────────
+  cpp         16.89    16.89   16.89    -  15.46x faster      2.1       48
+  python      66.13    66.13   66.13    -   3.95x faster      4.1        -
+  java        71.56    71.56   71.56    -   3.65x faster     37.6        1
+  cp3         261.2    261.2   261.2    -       baseline      2.0     1229
+  js              -        -       -    -              -        -        -
+  goose           -        -       -    -              -        -        -
+    ✗ js  run failed: file:///C:/Users/Krishnesh/dev/cp3/benchmarks/cases/dsa-object/interp/js/main.mjs:3
+    ✗ goose  build failed: C:\Users\Krishnesh\dev\cp3\benchmarks\cases\dsa-object\interp\goose\main.goose:2: error: cannot find
+             the module rng, looked for
+    ✓  output verified: 4/4 match oracle '24\n914237'
+
+gate: BIG WARN (fix this): interp: cp3 261 ms is 15.46x cpp (17 ms), tripwire 1.20x
+gate: BIG WARN (fix this): interp: cp3 261 ms is 3.95x python (66 ms), tripwire 1.00x
+gate: BIG WARN (fix this): interp: cp3 261 ms is 3.65x java (72 ms), tripwire 1.00x
+```
+<!-- test:interp:end -->
+
 <!-- test:blur:start -->
 ### blur
 _Updated 2026-11-04T20:10:15 by `python benchmarks/runner/run_benchmark.py --only blur --reps 1`._
@@ -752,6 +778,60 @@ gate: BIG WARN (fix this): blur: cp3 121 ms is 1.37x java (88 ms), tripwire 1.00
 ```
 <!-- test:blur:end -->
 
+<!-- test:calc:start -->
+### calc
+_Updated 2026-11-05T13:25:50 by `python benchmarks/runner/run_benchmark.py --only calc,particles,records,scene --reps 1`._
+
+```text
+  * calc  expected = 3750
+1250
+580458 | cross-language checksum | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%        vs cp3  RSS MiB  bin KiB
+  -----------------------------------------------------------------------
+  python      92.17    92.17   92.17    -  3.12x faster     11.2        -
+  js          98.41    98.41   98.41    -  2.92x faster     43.8        -
+  cpp         100.6    100.6   100.6    -  2.86x faster      2.6       54
+  java        120.4    120.4   120.4    -  2.39x faster     41.8        2
+  goose       154.8    154.8   154.8    -  1.86x faster      2.1       58
+  cp3         287.5    287.5   287.5    -      baseline      4.9     1242
+  go          349.1    349.1   349.1    -  1.21x slower      5.3     1754
+  rust            -        -       -    -             -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    +  output verified: 7/7 match oracle '3750\n1250\n580458'
+
+gate: BIG WARN (fix this): calc: cp3 288 ms is 2.86x cpp (101 ms), tripwire 1.20x
+gate: BIG WARN (fix this): calc: cp3 288 ms is 2.92x js (98 ms), tripwire 1.00x
+gate: BIG WARN (fix this): calc: cp3 288 ms is 3.12x python (92 ms), tripwire 1.00x
+gate: BIG WARN (fix this): calc: cp3 288 ms is 2.39x java (120 ms), tripwire 1.00x
+```
+<!-- test:calc:end -->
+
+<!-- test:particles:start -->
+### particles
+_Updated 2026-11-05T13:26:04 by `python benchmarks/runner/run_benchmark.py --only calc,particles,records,scene --reps 1`._
+
+```text
+  * particles  expected = 5000
+28315536 | cross-language checksum | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%        vs cp3  RSS MiB  bin KiB
+  -----------------------------------------------------------------------
+  java        102.7    102.7   102.7    -  2.76x faster     38.0        1
+  cpp         104.9    104.9   104.9    -  2.70x faster      3.2       45
+  js          107.0    107.0   107.0    -  2.65x faster     39.2        -
+  goose       113.2    113.2   113.2    -  2.50x faster      3.5       58
+  cp3         283.0    283.0   283.0    -      baseline      5.1     1235
+  go          286.6    286.6   286.6    -  1.01x slower      2.1     1751
+  python      491.4    491.4   491.4    -  1.74x slower     11.9        -
+  rust            -        -       -    -             -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    +  output verified: 7/7 match oracle '5000\n28315536'
+
+gate: BIG WARN (fix this): particles: cp3 283 ms is 2.70x cpp (105 ms), tripwire 1.20x
+gate: BIG WARN (fix this): particles: cp3 283 ms is 2.65x js (107 ms), tripwire 1.00x
+gate: BIG WARN (fix this): particles: cp3 283 ms is 2.76x java (103 ms), tripwire 1.00x
+```
+<!-- test:particles:end -->
+
 <!-- test:push:start -->
 ### push
 _Updated 2026-11-04T20:03:02 by `python benchmarks/runner/run_benchmark.py --only push --reps 1`._
@@ -777,6 +857,83 @@ gate: BIG WARN (fix this): push: cp3 73 ms is 5.08x cpp (14 ms), tripwire 1.20x
 gate: BIG WARN (fix this): push: cp3 73 ms is 4.28x go (17 ms), tripwire 1.00x
 ```
 <!-- test:push:end -->
+
+<!-- test:records:start -->
+### records
+_Updated 2026-11-05T13:26:18 by `python benchmarks/runner/run_benchmark.py --only calc,particles,records,scene --reps 1`._
+
+```text
+  * records  expected = 100000
+17463411840 | cross-language checksum | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%        vs cp3  RSS MiB  bin KiB
+  -----------------------------------------------------------------------
+  cpp         87.59    87.59   87.59    -  3.26x faster      2.1       47
+  java        106.6    106.6   106.6    -  2.68x faster     43.5        2
+  goose       106.8    106.8   106.8    -  2.67x faster      3.5       58
+  js          153.3    153.3   153.3    -  1.86x faster     67.7        -
+  python      235.0    235.0   235.0    -  1.21x faster     25.6        -
+  cp3         285.4    285.4   285.4    -      baseline     14.7     1236
+  go          382.9    382.9   382.9    -  1.34x slower     11.3     1752
+  rust            -        -       -    -             -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    +  output verified: 7/7 match oracle '100000\n17463411840'
+
+gate: BIG WARN (fix this): records: cp3 285 ms is 3.26x cpp (88 ms), tripwire 1.20x
+gate: BIG WARN (fix this): records: cp3 285 ms is 1.86x js (153 ms), tripwire 1.00x
+gate: BIG WARN (fix this): records: cp3 285 ms is 1.21x python (235 ms), tripwire 1.00x
+gate: BIG WARN (fix this): records: cp3 285 ms is 2.68x java (107 ms), tripwire 1.00x
+```
+<!-- test:records:end -->
+
+<!-- test:scene:start -->
+### scene
+_Updated 2026-11-05T13:26:32 by `python benchmarks/runner/run_benchmark.py --only calc,particles,records,scene --reps 1`._
+
+```text
+  * scene  expected = 23
+4747 | cross-language checksum | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%        vs cp3  RSS MiB  bin KiB
+  -----------------------------------------------------------------------
+  python      49.87    49.87   49.87    -  4.40x faster     11.0        -
+  js          78.06    78.06   78.06    -  2.81x faster     33.9        -
+  cpp         82.42    82.42   82.42    -  2.66x faster      4.6       50
+  java        82.69    82.69   82.69    -  2.65x faster     38.8        2
+  goose       98.72    98.72   98.72    -  2.22x faster      3.4       58
+  cp3         219.2    219.2   219.2    -      baseline      5.4     1238
+  go          316.8    316.8   316.8    -  1.45x slower      4.2     1752
+  rust            -        -       -    -             -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    +  output verified: 7/7 match oracle '23\n4747'
+
+gate: BIG WARN (fix this): scene: cp3 219 ms is 2.66x cpp (82 ms), tripwire 1.20x
+gate: BIG WARN (fix this): scene: cp3 219 ms is 2.81x js (78 ms), tripwire 1.00x
+gate: BIG WARN (fix this): scene: cp3 219 ms is 4.40x python (50 ms), tripwire 1.00x
+gate: BIG WARN (fix this): scene: cp3 219 ms is 2.65x java (83 ms), tripwire 1.00x
+```
+<!-- test:scene:end -->
+
+<!-- test:respond:start -->
+### respond
+_Updated 2026-11-05T13:26:42 by `python benchmarks/runner/run_benchmark.py --only respond --reps 1`._
+
+```text
+  * respond  expected = 578079
+3348416444655930007 | cross-language checksum | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%  vs cp3  RSS MiB  bin KiB
+  -----------------------------------------------------------------
+  goose       20.27    20.27   20.27    -       -      1.9       58
+  cpp         20.41    20.41   20.41    -       -      1.9       50
+  go          40.76    40.76   40.76    -       -     10.1     1756
+  js          132.7    132.7   132.7    -       -     59.5        -
+  java        142.2    142.2   142.2    -       -     43.2        2
+  python     2206.7   2206.7  2206.7    -       -     12.9        -
+  rust            -        -       -    -       -        -        -
+  cp3             -        -       -    -       -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    ! cp3  not runnable yet: src/index.cp3:42:21: error: CP3401: type mismatch: 'fromCharCode' is not a method of this value
+    +  output verified: 6/6 match oracle '578079\n3348416444655930007'
+```
+<!-- test:respond:end -->
 
 <!-- test:sum-array:start -->
 ### sum-array
