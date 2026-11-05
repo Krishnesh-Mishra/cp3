@@ -4,16 +4,16 @@
 
 Run: `python benchmarks/runner/run_benchmark.py --only respond`
 
-## CP3 status: not runnable yet
+## CP3 status
 
-`cp3/src/index.cp3` is the natural std-only implementation; it deliberately
-does not fall back to hand-written `if` chains. The surface it needs:
+`cp3/src/index.cp3` is the natural std-only implementation. It uses the
+current native/string surface, with no hand-written `if` chains:
 
-| Missing surface | Why the benchmark needs it |
+| Surface | Status |
 | --- | --- |
-| `String.fromCharCode(code)` | Build the name byte (`'a' + r % 26`, plus `"`/`\`) |
-| Exact 64-bit integer literals | `1469598103934665603` is rounded as a `number` literal |
-| Wrapping `u64` multiplication | FNV-1a's `h * 1099511628211` wraps modulo 2^64; cp3 native arithmetic traps on overflow |
+| Exact 64-bit integer literals | Available with `typeSystem: "rust"` (set in `cp3/package.json`); `1469598103934665603` keeps its exact value |
+| `String.fromCharCode(code)` | Available; builds each name byte (`'a' + r % 26`, plus `"`/`\`) |
+| Wrapping `u64` multiplication | Checked `*` throws on overflow by design; FNV-1a uses the explicit `u64.wrappingMul(x)` escape hatch |
 
 Already present: `String#charCodeAt` (a byte `number`), string indexing
 `s[i]` (also a byte `number`), `parseTo<r_'u64'>` of those bytes, and
