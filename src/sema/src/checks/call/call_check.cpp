@@ -10,7 +10,9 @@
 // =============================================================================
 #include "detail/analyzer.h"
 
+#include <cctype>
 #include <cstddef>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -50,6 +52,9 @@ Type Analyzer::inferCall(CallExpr& call) {
                 return withType(call, builtin);
             }
             if (tryInferBase64Builtin(call, id, builtin)) {
+                return withType(call, builtin);
+            }
+            if (tryInferParseToBuiltin(call, id, builtin)) {
                 return withType(call, builtin);
             }
             if (tryInferNetworkCall(call, id, builtin)) {
@@ -214,7 +219,136 @@ bool Analyzer::tryInferBase64Builtin(CallExpr& call, const Identifier& id,
     return true;
 }
 
-// `Number(x)` -> number, `Boolean(x)`/`isNaN(x)`/`isFinite(x)` -> boolean.
+// `parseTo(text, keyword)` / `parseTo<Type>(text)`: compile-time typed
+// coercion of a string literal (ROADMAP: `parseTo("123", number)` or
+// `parseTo("123", r_'i32')`). The first argument must be a string literal
+// and the target a static type: the `number`/`string`/`boolean` keyword in
+// the two-argument form, or any supported type in the call's type argument
+// (`r_'i32'` cannot name a value, so natives take the type-argument form).
+// A literal the target cannot represent is CP3401 at compile time.
+bool Analyzer::tryInferParseToBuiltin(CallExpr& call, const Identifier& id,
+                                      Type& out) {
+    if (id.name != "parseTo") return false;
+    if (call.arguments.empty()) {
+        report(diagcode::kArityMismatch, call.span,
+               "arity mismatch: parseTo expects a string literal and a target "
+               "type");
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    Type target;
+    if (!call.typeArgs.empty() && call.typeArgs.front()) {
+        target = resolveType(*call.typeArgs.front());
+        if (call.arguments.size() != 1) {
+            report(diagcode::kArityMismatch, call.span,
+                   "arity mismatch: parseTo<T>(text) expects exactly one "
+                   "argument (the text)");
+            inferArgs(call);
+            out = withType(call, Type::unknown());
+            return true;
+        }
+    } else if (call.arguments.size() == 2 &&
+               call.arguments[1] &&
+               call.arguments[1]->kind == NodeKind::Identifier) {
+        const std::string& keyword =
+            static_cast<Identifier&>(*call.arguments[1]).name;
+        if (keyword == "number") target = Type::number();
+        else if (keyword == "string") target = Type::string();
+        else if (keyword == "boolean") target = Type::boolean();
+        else {
+            report(diagcode::kTypeMismatch, call.arguments[1]->span,
+                   "type mismatch: parseTo's second argument must be a static "
+                   "type (number, string, boolean) or use the type-argument "
+                   "form parseTo<T>(text)");
+            inferArgs(call);
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        inferExpr(*call.arguments[0]);
+    } else {
+        report(diagcode::kTypeMismatch, call.span,
+               "type mismatch: parseTo expects parseTo(text, Type) or "
+               "parseTo<Type>(text)");
+        inferArgs(call);
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    const Expr* text = call.arguments.front().get();
+    if (text == nullptr || text->kind != NodeKind::StringLiteral) {
+        report(diagcode::kTypeMismatch,
+               text != nullptr ? text->span : call.span,
+               "type mismatch: parseTo's first argument must be a string "
+               "literal (the value is checked at compile time)");
+        inferArgs(call);
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    const std::string& value = static_cast<StringLiteral&>(*text).value;
+    bool fits = true;
+    if (target.kind == TypeKind::Native) {
+        double parsed = 0.0;
+        fits = textIsNumber(value, parsed) &&
+               nativeCanRepresentLiteral(target, parsed);
+    } else if (target.kind == TypeKind::Number) {
+        double parsed = 0.0;
+        fits = textIsNumber(value, parsed);
+    } else if (target.kind == TypeKind::String) {
+        fits = true;
+    } else if (target.kind == TypeKind::Boolean) {
+        fits = value == "true" || value == "false";
+    } else {
+        fits = false;
+    }
+    if (!fits) {
+        report(diagcode::kTypeMismatch, call.span,
+               "type mismatch: '" + value + "' cannot be parsed to the "
+               "requested target type '" + pretty(target) + "'");
+        inferArgs(call);
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    inferArgs(call);
+    out = withType(call, target);
+    return true;
+}
+
+// A full ECMAScript `Number()`-style literal text: the runtime's toNumber
+// applies to the same text, so what is accepted here is exactly what parses
+// (decimal/exponent, 0x/0b/0o, surrounding whitespace, empty = 0).
+bool Analyzer::textIsNumber(const std::string& text, double& value) {
+    // Trim ASCII whitespace.
+    std::size_t start = 0;
+    while (start < text.size() &&
+           std::isspace(static_cast<unsigned char>(text[start]))) {
+        ++start;
+    }
+    std::size_t end = text.size();
+    while (end > start &&
+           std::isspace(static_cast<unsigned char>(text[end - 1]))) {
+        --end;
+    }
+    if (start >= end) {
+        value = 0.0;
+        return true;  // Number("") === 0
+    }
+    const std::string trimmed = text.substr(start, end - start);
+    const char* begin = trimmed.c_str();
+    char* finish = nullptr;
+    // strtod handles sign, decimal, exponent and 0x; 0b/0o are spelled here.
+    if (trimmed.size() > 2 && trimmed[0] == '0' &&
+        (trimmed[1] == 'b' || trimmed[1] == 'B' || trimmed[1] == 'o' ||
+         trimmed[1] == 'O')) {
+        const int base = (trimmed[1] == 'b' || trimmed[1] == 'B') ? 2 : 8;
+        unsigned long parsed = std::strtoul(begin + 2, &finish, base);
+        if (finish != begin + trimmed.size() || finish == begin + 2) {
+            return false;
+        }
+        value = static_cast<double>(parsed);
+        return true;
+    }
+    value = std::strtod(begin, &finish);
+    return finish == begin + trimmed.size() && finish != begin;
+}
 // The argument is unconstrained (JS converts anything); extra arguments are
 // ignored and a spread contributes its first element, exactly like `String`.
 bool Analyzer::tryInferCoercionBuiltin(CallExpr& call, const Identifier& id, Type& out) {

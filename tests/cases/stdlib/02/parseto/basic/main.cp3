@@ -1,0 +1,11 @@
+import console from "std/console";
+console.log(parseTo("123", number));
+console.log(parseTo("3.5", number));
+console.log(parseTo("0x1F", number));
+console.log(parseTo("-42", number));
+console.log(parseTo("true", boolean));
+console.log(parseTo("any text", string));
+let n: r_'i32' = parseTo<r_'i32'>("777");
+console.log(n);
+let u: r_'u8' = parseTo<r_'u8'>("255");
+console.log(u);

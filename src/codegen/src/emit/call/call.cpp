@@ -85,6 +85,39 @@ std::string Generator::emitBase64Builtin(const CallExpr& c,
     return "0.0";
 }
 
+// `parseTo<T>(text)`: the compile-time typed string coercion (ROADMAP).
+// `number` parses via toNumber (sema already proved the literal fits),
+// `boolean` is the literal itself, `string` is identity, and a native
+// target is a static_cast of the parsed double.
+std::string Generator::emitParseToBuiltin(const CallExpr& c) {
+    if (c.arguments.empty() || !c.arguments.front() ||
+        c.arguments.front()->kind == NodeKind::SpreadElement) {
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "parseTo expects a string literal and a target "
+                           "type");
+        return "0.0";
+    }
+    const std::string value = expr(*c.arguments.front());
+    const Type target = effectiveType(c);
+    CppInfo tc = classify(target);
+    if (!tc.representable) {
+        reportTypeError(c, "type mismatch: parseTo's target type is not "
+                           "supported");
+        return "0.0";
+    }
+    if (target.kind == TypeKind::Native) {
+        return "static_cast<" + tc.cpp + ">(::cp3::runtime::toNumber(" + value +
+               "))";
+    }
+    if (target.kind == TypeKind::Boolean) {
+        return "::cp3::runtime::toBoolean(" + value + ")";
+    }
+    if (target.kind == TypeKind::String) {
+        return value;
+    }
+    return "::cp3::runtime::toNumber(" + value + ")";
+}
+
 // `Number(value)`, `Boolean(value)`, `isNaN(value)`, `isFinite(value)`:
 // the scalar coercion globals (STDLIB docs §03). Extra arguments are ignored;
 // a spread contributes its first element, exactly like `String`.

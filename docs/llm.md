@@ -242,6 +242,7 @@ async function load(): Promise<string> {
 - `async`/`await` over the single runtime event loop (libuv-backed).
 - Promise APIs: `resolve`, `reject`, `then`, `catch`, `finally`, `all`, `race`, `allSettled`, `any`, `withResolvers<T>()`.
 - Coercion globals: `parseInt(s)`, `parseFloat(s)`, `Number(x)`, `String(x)`, `Boolean(x)`, `isNaN(x)`, `isFinite(x)`.
+- `parseTo(text, Type)` / `parseTo<Type>(text)`: compile-time coercion of a string literal to `number`/`string`/`boolean` (keyword form) or any supported type incl. natives (`parseTo<r_'i32'>("777")`). First arg must be a literal; an unrepresentable literal is CP3401.
 - Encoding globals: `atob(s)`, `btoa(s)` (base64; `atob` throws a catchable `Error` on invalid input).
 - Promise rejections are `Error` objects; `catch (e)` binds them.
 - A top-level `await` is allowed in async entry points only if the entry is async; keep `await` inside async functions.

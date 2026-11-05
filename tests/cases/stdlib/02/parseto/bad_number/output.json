@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 2,
+    "col": 13,
+    "contains": "cannot be parsed to the requested target type"
+  }
+}
