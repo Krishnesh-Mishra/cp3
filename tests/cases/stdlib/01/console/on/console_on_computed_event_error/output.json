@@ -4,8 +4,8 @@
   "exitCode": 1,
   "error": {
     "code": "CP3419",
-    "line": 11,
-    "col": 17,
-    "contains": "unknown console event"
+    "line": 10,
+    "col": 16,
+    "contains": "must be a string literal"
   }
 }
