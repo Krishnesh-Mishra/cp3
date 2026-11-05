@@ -110,6 +110,8 @@ const DocRow kArrayDocRows[] = {
      "Like `reduce` but folds from the last element to the first."},
     {"keys", "keys(): number[]", "Returns the indices of the array."},
     {"values", "values(): T[]", "Returns a copy of the elements."},
+    {"entries", "entries(): [number, T][]",
+     "Returns `[index, value]` pairs for the array."},
     {"flat", "flat(): T[]",
      "Returns a new array with the nested arrays of the receiver flattened "
      "by one level."},

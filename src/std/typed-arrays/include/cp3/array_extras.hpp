@@ -18,6 +18,7 @@
 #include <optional>
 #include <random>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -586,6 +587,17 @@ Array<double> arrayKeys(const Array<E>& a) {
 template <class E>
 Array<E> arrayValues(const Array<E>& a) {
     return makeArray<E>(*a);
+}
+
+// `a.entries()`: `[index, value]` pairs as a fresh array.
+template <class E>
+Array<std::tuple<double, E>> arrayEntries(const Array<E>& a) {
+    std::vector<std::tuple<double, E>> out;
+    out.reserve(a->size());
+    for (std::size_t i = 0; i < a->size(); ++i) {
+        out.emplace_back(static_cast<double>(i), (*a)[i]);
+    }
+    return makeArray<std::tuple<double, E>>(std::move(out));
 }
 
 // `a.find(pred)`: the first matching element, or `undefined`.

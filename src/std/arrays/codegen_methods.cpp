@@ -301,7 +301,7 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
         "push", "pop", "unshift", "shift", "unique", "shuffle",
         "indexOf", "lastIndexOf", "includes", "binarySearch", "slice", "flat",
         "at", "toSorted", "toReversed", "splice", "concat", "reverse", "keys",
-        "values"};
+        "values", "entries"};
     const std::string& prop = m.property;
     if (prop == "reduce") {
         const CallExpr* filter = nullptr;
@@ -449,6 +449,10 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
     }
     if (prop == "values") {
         return "::cp3::runtime::arrayValues<" + ec.cpp + ">(" + recvText + ")";
+    }
+    if (prop == "entries") {
+        g.needsTuple_ = true;
+        return "::cp3::runtime::arrayEntries<" + ec.cpp + ">(" + recvText + ")";
     }
     if (prop == "slice") {
         std::string out =

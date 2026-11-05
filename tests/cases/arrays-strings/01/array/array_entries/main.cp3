@@ -1,0 +1,6 @@
+import console from "std/console";
+const a = [10, 20, 30];
+const e = a.entries();
+console.log(`${e.length}`);
+console.log(`${e[0][0]}:${e[0][1]}`);
+console.log(`${e[2][0]}:${e[2][1]}`);

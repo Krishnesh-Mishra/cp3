@@ -254,7 +254,7 @@ async function load(): Promise<string> {
 | --- | --- |
 | `string` methods | `charAt`, `at`, `indexOf`, `lastIndexOf`, `startsWith`, `endsWith`, `includes`, `repeat`, `padStart`, `padEnd`, `trim`, `trimStart`, `trimEnd`, `slice`, `substring`, `replace`, `replaceAll`, `split`, `toUpperCase`, `toLowerCase`, `length`, `charCodeAt` |
 | `number` statics/methods | `toFixed`, `toPrecision`, `toExponential`, `isInteger`, `isFinite`, `isNaN`, `MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `EPSILON`, `MAX_VALUE`, `MIN_VALUE`, `POSITIVE_INFINITY`, `NEGATIVE_INFINITY`, `NaN` |
-| `array` methods | `push`, `unshift`, `pop`, `shift`, `sort`, `fill`, `includes`, `indexOf`, `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `slice`, `map`, `filter`, `flat`, `flatMap`, `join`, `forEach`, `binarySearch`, `unique`, `shuffle`, `at`, `toSorted`, `toReversed`, `length` |
+| `array` methods | `push`, `unshift`, `pop`, `shift`, `sort`, `fill`, `includes`, `indexOf`, `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `slice`, `map`, `filter`, `flat`, `flatMap`, `join`, `forEach`, `binarySearch`, `unique`, `shuffle`, `at`, `toSorted`, `toReversed`, `length`, `reduce`, `reduceRight`, `splice`, `concat`, `reverse`, `lastIndexOf`, `keys`, `values`, `entries` |
 | Array callbacks | `(value, index, array)` — may declare any prefix |
 
 ### `console` — `import console from "std/console"`

@@ -319,6 +319,11 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
     if (prop == "reduceRight") return ambient();
     if (prop == "keys") return Type::function({}, Type::array(Type::number()));
     if (prop == "values") return Type::function({}, arr);
+    if (prop == "entries") {
+        // `[index, value]` pairs, as `Object.entries` spells its tuples.
+        Type entry = makeObjectType({}, false, true, {Type::number(), elem});
+        return Type::function({}, Type::array(entry));
+    }
     if (prop == "binarySearch") {
         return Type::function({elem}, Type::number());
     }
