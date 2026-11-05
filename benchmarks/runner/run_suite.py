@@ -53,7 +53,9 @@
 # MULTICORE_TASKS) must additionally be FASTER than cpp: any ratio above 1.00
 # warns. Compute references under 10 ms are noise-scale and not gated. D64
 # targets cp3 within about 5% of cpp/rust for the native-type tiers; --strict
-# turns any tier line into exit code 1.
+# turns any tier line into exit code 1. When an attempted row could not build
+# or run, the gate verdict is N/A rather than "no warnings": a missing timing
+# makes the comparison incomplete, even when nothing crossed a warning tier.
 #
 # Python 3 stdlib only. Usage:  python run_suite.py [options]
 # =============================================================================
@@ -310,6 +312,12 @@ EXPECTED = {
     "push": "1000000\n15625\n499758894813\n750050",
     "blur": "256\n7734030",
     "strlist": "100000\n92177148",
+    "interp": "24\n914237",
+    "calc": "3750\n1250\n580458",
+    "particles": "5000\n28315536",
+    "records": "100000\n17463411840",
+    "scene": "23\n4747",
+    "respond": "578079\n3348416444655930007",
 }
 CHURN_EXPECTED = {
     CHURN_DEFAULT_ITERATIONS: "852167",
@@ -338,6 +346,7 @@ GATE_NOTES: list[str] = []      # noise-scale notes, printed with the gate block
 LOAD_PROCS: list = []   # live load-client processes, killed on Ctrl+C
 TASK_SECTIONS: dict = {}   # task -> (stamp, text) for results.md
 GATE_BLOCKERS: list[str] = []   # CP3002 rows that cannot be measured at all
+GATE_NOT_RUN: list[str] = []    # attempted rows that produced no measurement
 
 
 # --------------------------------------------------------------------------
@@ -378,7 +387,14 @@ def first_diagnostic(text: str) -> str:
     return text.strip().split("\n")[0][:160] if text.strip() else "failed"
 
 
+# Goose is vendored under benchmarks/runner/goose/ so the suite is self-contained
+# (no manual PATH install step). `have("goose")` checks this dir first.
+GOOSE_VENDORED: Path = HERE / "goose" / ("goose.exe" if os.name == "nt" else "goose")
+
+
 def have(tool: str) -> bool:
+    if tool == "goose" and GOOSE_VENDORED.exists():
+        return True
     return shutil.which(tool) is not None
 
 
@@ -391,7 +407,8 @@ def run_command(argv: list[str], cwd: Path | None = None, timeout: float = 300.0
     """subprocess.run with a guaranteed-bounded wait: on timeout the child is
     killed and the wait for it is itself bounded, so the suite can never hang."""
     process = subprocess.Popen(
-        argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        encoding="utf-8", errors="replace"
     )
     try:
         out, err = process.communicate(timeout=timeout)
@@ -418,7 +435,7 @@ def run_measured(argv: list[str], cwd: Path | None = None, timeout: float = 900.
     start = time.perf_counter()
     process = subprocess.Popen(
         argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        env=env
+        encoding="utf-8", errors="replace", env=env
     )
     sampler = RssSampler(process.pid)
     sampler.start()
@@ -1160,7 +1177,7 @@ def compute_build_spec(language: str, task: str) -> tuple[list[str], Path, Path]
     if language == "goose":
         output = BUILD / f"{task}-goose{EXE}"
         source = base / "goose" / "main.goose"
-        return (["goose", "build", "-o", str(output), str(source)], output, source)
+        return ([str(GOOSE_VENDORED), "build", "-o", str(output), str(source)], output, source)
     if language == "dotnet":
         output = BUILD / f"{task}-dotnet" / "app.dll"
         return None
@@ -1779,6 +1796,10 @@ def print_server_table(task: str, rows: list[dict]) -> None:
     gate_row(task, cp3_rps, references, unit="rps")
 
     ran = {r["language"]: r["boot_ms"] is not None for r in rows}
+    for row in rows:
+        if not ran[row["language"]]:
+            GATE_NOT_RUN.append(
+                f"{task}: {row['language']}: {row.get('note') or 'no run'}")
     best_boot = best_langs({r["language"]: r["boot_ms"] for r in rows})
     best_p50 = best_langs({r["language"]: r["p50"] for r in rows})
     best_p95 = best_langs({r["language"]: r["p95"] for r in rows})
@@ -1852,6 +1873,10 @@ def _print_compute_like(task: str, rows: list[dict], header_text: str,
     register_gate(task, cp3_median, reference_values["cpp"],
                   reference_values["rust"], reference_values["go"], reference_values["js"],
                   reference_values["python"], reference_values["java"])
+    for row in rows:
+        if not row["runs_ms"]:
+            GATE_NOT_RUN.append(
+                f"{task}: {row['language']}: {row.get('note') or 'no run'}")
 
     medians = {r["language"]: (median(r["runs_ms"]) if r["runs_ms"] else None)
                for r in rows}
@@ -1965,7 +1990,13 @@ def print_gate() -> None:
         plain = len(GATE_WARNINGS) - big
         verdict = (f"gate: {big} BIG WARN(s), {plain} WARN(s); "
                    f"rerun with --strict to fail on warnings")
+        if GATE_NOT_RUN:
+            verdict += f"; {len(GATE_NOT_RUN)} row(s) did not run"
         print(f"  {paint(g('warn'), 'yellow', 'bold')} {paint(verdict, 'yellow', 'bold')}")
+    elif GATE_NOT_RUN:
+        verdict = (f"gate: N/A; {len(GATE_NOT_RUN)} row(s) did not run, "
+                   f"so the comparison is incomplete")
+        print(f"  {paint(g('info'), 'yellow', 'bold')} {paint(verdict, 'yellow', 'bold')}")
     else:
         print(f"  {paint(g('ok'), 'green', 'bold')} {paint('gate: no warnings', 'green', 'bold')}")
     print()
@@ -2217,7 +2248,7 @@ def main() -> int:
             ("python", [sys.executable, "--version"]),
             ("java", ["java", "-version"]), ("javac", ["javac", "-version"]),
             ("cmake", ["cmake", "--version"]), ("cp3c", [str(cp3c), "version"]),
-            ("dotnet", ["dotnet", "--version"]), ("goose", ["goose", "--version"]),
+            ("dotnet", ["dotnet", "--version"]), ("goose", [str(GOOSE_VENDORED), "--help"]),
         ]
         print_header(platform.processor() or platform.machine(), probes, args.reps)
         waiting = time_wait_count()
@@ -2254,6 +2285,7 @@ def main() -> int:
             for language in SERVER_LANGUAGES:
                 if not present(language, server=True):
                     announce_skip(language)
+                    GATE_NOT_RUN.append(f"{task}: {language}: toolchain not available")
                     continue
                 announce_run(task, language, task_index, task_total, 1)
                 rows.append(run_server_repeated(
@@ -2333,6 +2365,7 @@ def main() -> int:
                     continue
                 if not present(language):
                     announce_skip(language)
+                    GATE_NOT_RUN.append(f"{task}: {language}: toolchain not available")
                     continue
                 announce_run(task, language, task_index, task_total, reps)
                 rows.append(run_compute_trial(language, task, reps, cp3c,

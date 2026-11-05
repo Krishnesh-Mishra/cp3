@@ -106,10 +106,6 @@ TASK_OMIT_LANGUAGES = {
         "rust": "no exceptions in Rust; Result is the returned-value path, not throw/catch",
         "go": "no exceptions in Go; error values are the returned-value path, not throw/catch",
     },
-    "calc": {
-        "rust": "no exceptions in Rust; error codes are the returned-value path, not throw/catch",
-        "go": "no exceptions in Go; error codes are the returned-value path",
-    },
     "interp": {
         "rust": "no virtual dispatch in Rust; enum + match is the idiomatic analogue (kept for cross-language comparison but listed here to match exception-cost)",
         "go": "no inheritance in Go; interface + type-switch is the idiomatic analogue",
@@ -152,6 +148,12 @@ EXPECTED = {
     "push": "1000000\n15625\n499758894813\n750050",
     "blur": "256\n7734030",
     "strlist": "100000\n92177148",
+    "interp": "24\n914237",
+    "calc": "3750\n1250\n580458",
+    "particles": "5000\n28315536",
+    "records": "100000\n17463411840",
+    "scene": "23\n4747",
+    "respond": "578079\n3348416444655930007",
     # DSA/memory tasks: expected values filled in per-task commit (oracle.py).
 }
 CHURN_EXPECTED = {50000: "852167", 300000: "254546"}
