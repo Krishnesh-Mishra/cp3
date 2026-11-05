@@ -166,6 +166,12 @@ private:
 /// fails, or when `init.timeoutMs` elapses.
 Promise<FetchResponse> fetch(const std::string& url, const FetchInit& init = FetchInit());
 
+/// `dns.lookup(hostname)`: resolves with the address (text form) of the
+/// first result; rejects when the hostname cannot be resolved. Uses the
+/// same libuv resolution the fetch client drives, off the calling thread's
+/// loop, never a blocking `getaddrinfo`.
+Promise<std::string> dnsResolve(const std::string& host);
+
 // =============================================================================
 // HTTP server (`createServer`)
 // =============================================================================
