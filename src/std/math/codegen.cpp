@@ -39,6 +39,11 @@ bool isMathFn(const std::string& name) {
 std::string Generator::emitMathCall(const CallExpr& c, const MemberExpr& m) {
     if (!isMathFn(m.property)) return std::string();
     needsMath_ = true;
+    // A native result type (argument-driven narrowing, src/std/math/sema.cpp)
+    // casts the double runtime result back to that native type.
+    const Type resultType = effectiveType(c);
+    CppInfo resultInfo = classify(resultType);
+    std::string call;
     const std::vector<std::string> args = emitPlainArgs(c);
     if (m.property == "min" || m.property == "max" || m.property == "hypot") {
         // The runtime pair takes an initializer_list<double>; the braces make
@@ -49,10 +54,15 @@ std::string Generator::emitMathCall(const CallExpr& c, const MemberExpr& m) {
             if (!list.empty()) list += ", ";
             list += "static_cast<double>(" + arg + ")";
         }
-        return "::cp3::runtime::math::" + m.property + "({" + list + "})";
+        call = "::cp3::runtime::math::" + m.property + "({" + list + "})";
+    } else {
+        call = "::cp3::runtime::math::" + m.property + "(" +
+               joinStrings(args, ", ") + ")";
     }
-    return "::cp3::runtime::math::" + m.property + "(" +
-           joinStrings(args, ", ") + ")";
+    if (resultType.kind == TypeKind::Native && resultInfo.representable) {
+        return "static_cast<" + resultInfo.cpp + ">(" + call + ")";
+    }
+    return call;
 }
 
 // The two `Math` property reads. Returns "" when `m` is not one of them

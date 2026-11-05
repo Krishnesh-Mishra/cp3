@@ -407,6 +407,8 @@ private:
     bool tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out);
     // `Map.groupBy(list, callback)` (src/std/collections/sema.cpp).
     bool tryInferCollectionsStaticCall(CallExpr& call, MemberExpr& m, Type& out);
+    // `Math.<fn>(args)` with native-argument result typing (src/std/math/sema.cpp).
+    bool tryInferMathCall(CallExpr& call, MemberExpr& m, Type& out);
     // `Error.captureStackTrace(error, fn?)` (src/std/object/sema.cpp).
     bool tryInferErrorStaticCall(CallExpr& call, MemberExpr& m, Type& out);
     // `env.get<T>`: explicit T, else `{ default }`, else `string`.

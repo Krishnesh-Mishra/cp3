@@ -287,6 +287,7 @@ ExecResult `{ stdout, stderr, exitCode }`; events `"data"`, `"stderr"`, `"exit"`
 
 ### `math` — `import math from "std/math"`
 `PI`, `E`, `LN2`, `LN10`, `LOG2E`, `LOG10E`, `SQRT1_2`, `SQRT2` · `random()` · `min(...xs)` · `max(...xs)` · `pow(x,y)` · `gcd(a,b)` · `lcm(a,b)` · `clamp(x,min,max)` · `lerp(a,b,t)` · `sqrt`, `abs`, `floor`, `ceil`, `round`, `trunc`, `cbrt`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `exp`, `log1p`, `hypot(...xs)`, `sign`.
+Results are `number` (`r_'f64'` ≡ `number`). With *native* arguments the result narrows: `f32` args keep `f32`; integral args keep their native type for `abs`/`sign`/`floor`/`ceil`/`trunc`/`round`/`min`/`max`/`hypot`/`clamp`/`lerp`/`gcd`/`lcm`, while fractional helpers (`sqrt`, trig, `log`, `exp`, `pow`, ...) widen to `number` unless every argument is `f32`. Any `number` argument widens the call to `number`.
 
 ### `date` — `import date from "std/date"`
 `Date.now()` · `Date.fromISOString(s)` · `Date.parse(s)` · `toISOString()` · `toString()` · `getFullYear/getMonth/getDate/getHours/getMinutes/getSeconds()` · `getTime()` · `getDay()` · `getUTCFullYear/getUTCMonth/getUTCDate/getUTCDay/getUTCHours/getUTCMinutes/getUTCSeconds()` · `setTime/setFullYear/setMonth/setDate/setHours/setMinutes/setSeconds(n)` (in place) · `addDays/addHours/addMinutes/addSeconds(n)` · `isBefore/isAfter(other)` · `diffMs(other)`

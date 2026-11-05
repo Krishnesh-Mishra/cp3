@@ -131,6 +131,7 @@ bool Analyzer::tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
     if (tryInferPromiseStaticCall(call, m, out)) return true;
     if (tryInferCollectionsStaticCall(call, m, out)) return true;
     if (tryInferErrorStaticCall(call, m, out)) return true;
+    if (tryInferMathCall(call, m, out)) return true;
     if (tryInferEnvCall(call, m, out)) return true;
     // std/network generics: `res.json<T>()` / `req.json<T>()` (src/std/network/sema.cpp).
     if (tryInferNetworkMemberCall(call, m, out)) return true;

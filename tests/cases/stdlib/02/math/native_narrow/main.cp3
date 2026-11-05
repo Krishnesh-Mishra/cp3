@@ -1,0 +1,17 @@
+import console from "std/console";
+import Math from "std/math";
+let a: r_'i32' = -42;
+console.log(Math.abs(a));
+console.log(Math.sign(a));
+let b: r_'i64' = 9007199254740992;
+console.log(Math.floor(b));
+let f: r_'f32' = 1.5;
+console.log(Math.sin(f) > 0.99 && Math.sin(f) < 1);
+console.log(Math.abs(f));
+let c: r_'u32' = 17;
+let d: r_'i32' = 5;
+console.log(Math.gcd(c, d));
+console.log(Math.abs(2.5));
+console.log(Math.sin(0));
+let e: r_'i32' = 3;
+console.log(Math.sqrt(e) > 1.7 && Math.sqrt(e) < 1.8);

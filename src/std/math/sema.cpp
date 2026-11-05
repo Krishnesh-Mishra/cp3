@@ -25,6 +25,8 @@
 
 #include "detail/std_tables.hpp"
 
+#include "cp3/host/native_types.hpp"
+
 namespace cp3 {
 
 namespace {
@@ -148,6 +150,156 @@ const MemberRow kMathRows[] = {
 
 std::optional<Type> Analyzer::mathMember(const std::string& prop) {
     return lookupMember(kMathRows, prop);
+}
+
+std::optional<Type> Analyzer::mathMember(const std::string& prop) {
+    return lookupMember(kMathRows, prop);
+}
+
+// -------------------------------------------------------------------------
+// Argument-driven result typing
+// ---------------------------------------------------------------------------
+// `number` stays the result for `number` arguments (JS parity; `r_'f64'`
+// is `number`). A native argument narrows the result instead:
+//   * integral/float/rounding helpers (`abs`, `sign`, `floor`, `ceil`,
+//     `trunc`, `round`, `min`, `max`, `hypot`, `clamp`, `lerp`, `gcd`,
+//     `lcm`) keep the native kind - an all-`f32` call stays `f32`, an
+//     all-integral call stays its own native type (mixed natives use the
+//     usual arithmetic common type);
+//   * fractional helpers (`sqrt`, `cbrt`, `log*`, `sin`/`cos`/`tan`, the
+//     inverse and hyperbolic forms, `exp`, `log1p`, `pow`, `atan2`) stay
+//     `f32` only for all-`f32` arguments and widen to `number` otherwise
+//     (an integer has no fractional representation here).
+// Any `number` argument widens the whole call to `number`, exactly as
+// native arithmetic does. The runtime helpers are still double-based;
+// codegen casts the result back to the narrowed type.
+
+namespace {
+
+// The three numeric classes a Math argument can carry.
+enum class MathClass { Number, NativeInt, NativeFloat, Other };
+
+MathClass mathClassOf(const Type& t) {
+    if (t.kind == TypeKind::Number || t.kind == TypeKind::Literal) {
+        return MathClass::Number;
+    }
+    if (isNativeType(t)) {
+        return isNativeFloat(t) ? MathClass::NativeFloat
+                                : MathClass::NativeInt;
+    }
+    return MathClass::Other;
+}
+
+bool isFractionalMathFn(const std::string& prop) {
+    static const char* const kFractional[] = {
+        "sqrt", "cbrt", "pow",  "log",  "log2",  "log10", "sin", "cos",
+        "tan",  "asin", "acos", "atan", "atan2", "sinh",  "cosh", "tanh",
+        "asinh", "acosh", "atanh", "exp", "log1p"};
+    for (const char* name : kFractional) {
+        if (prop == name) return true;
+    }
+    return false;
+}
+
+std::optional<Type> mathResultType(const std::string& prop,
+                                   const std::vector<Type>& args) {
+    bool anyNumber = false;
+    bool anyInt = false;
+    bool anyFloat = false;
+    Type commonNative = Type::unknown();
+    for (const Type& arg : args) {
+        switch (mathClassOf(arg)) {
+            case MathClass::Number: anyNumber = true; break;
+            case MathClass::NativeInt: {
+                anyInt = true;
+                if (commonNative.isUnknown()) {
+                    commonNative = arg;
+                } else if (auto common = nativeArithmeticResult(commonNative, arg)) {
+                    commonNative = *common;
+                } else {
+                    return Type::number();
+                }
+                break;
+            }
+            case MathClass::NativeFloat: anyFloat = true; break;
+            case MathClass::Other: return std::nullopt;
+        }
+    }
+    if (anyNumber) return Type::number();
+    if (isFractionalMathFn(prop)) {
+        if (anyFloat && !anyInt) return Type::native("f32");
+        return Type::number();
+    }
+    // Integral-preserving helpers keep the native kind.
+    if (anyFloat && !anyInt) return Type::native("f32");
+    if (anyInt && !anyFloat) return commonNative;
+    if (anyFloat && anyInt) return Type::native("f32");
+    return Type::number();
+}
+
+}  // namespace
+
+bool Analyzer::tryInferMathCall(CallExpr& call, MemberExpr& m, Type& out) {
+    if (!m.object || m.object->kind != NodeKind::Identifier ||
+        static_cast<Identifier&>(*m.object).name != "Math") {
+        return false;
+    }
+    static const char* const kMathFns[] = {
+        "abs",    "acos",   "acosh",  "asin",  "asinh",  "atan",   "atan2",
+        "atanh",  "cbrt",   "ceil",   "clamp", "cos",    "cosh",   "exp",
+        "floor",  "gcd",    "hypot",  "lcm",   "lerp",   "log",    "log10",
+        "log1p",  "log2",   "max",    "min",   "pow",    "random", "round",
+        "sign",   "sin",    "sinh",   "sqrt",  "tan",    "tanh",   "trunc"};
+    bool known = false;
+    for (const char* name : kMathFns) {
+        if (m.property == name) known = true;
+    }
+    if (!known) return false;
+    Binding mathBinding;
+    if (lookup("Math", mathBinding) && !mathBinding.isAmbient) {
+        return false;  // a user `Math` shadows the std/math surface
+    }
+    std::vector<Type> argTypes;
+    for (auto& arg : call.arguments) {
+        if (!arg) continue;
+        if (arg->kind == NodeKind::SpreadElement) {
+            auto& sp = static_cast<SpreadElement&>(*arg);
+            Type at = sp.argument ? inferExpr(*sp.argument) : Type::unknown();
+            argTypes.push_back(at.kind == TypeKind::Array ? elemOf(at)
+                                                          : Type::unknown());
+            continue;
+        }
+        argTypes.push_back(inferExpr(*arg));
+    }
+    if (m.property == "random") {
+        out = withType(call, Type::number());
+        return true;
+    }
+    // Non-numeric arguments are rejected exactly like the table signature
+    // (`number` params) rejects them.
+    bool bad = false;
+    for (std::size_t i = 0; i < argTypes.size(); ++i) {
+        const Type& t = argTypes[i];
+        if (mathClassOf(t) == MathClass::Other && !t.isUnknown()) {
+            if (!bad) {
+                report(diagcode::kTypeMismatch,
+                       call.arguments[i] ? call.arguments[i]->span : call.span,
+                       "type mismatch: Math." + m.property + "'s argument must "
+                       "be a number or a native numeric value");
+                bad = true;
+            }
+        }
+    }
+    if (bad) {
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    Type result = Type::number();
+    if (auto computed = mathResultType(m.property, argTypes)) {
+        result = *computed;
+    }
+    out = withType(call, result);
+    return true;
 }
 
 std::vector<std::string> mathMemberNames() { return memberNames(kMathRows); }

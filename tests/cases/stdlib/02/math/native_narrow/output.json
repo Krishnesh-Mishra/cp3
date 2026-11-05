@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "42\n-1\n9007199254740992\ntrue\n1.5\n1\n2.5\n0\ntrue\n",
+  "exitCode": 0
+}
