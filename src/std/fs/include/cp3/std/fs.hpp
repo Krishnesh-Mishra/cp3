@@ -37,6 +37,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -63,7 +64,9 @@ struct WriteStreamImpl;
 /// `FileStats { size, isFile, isDirectory, modifiedAt }` with `modifiedAt` the
 /// real std/date value.
 struct FileStats {
-    double size = 0.0;
+    // The exact byte count: `u64` in a Rust/C++ project, cast to `number` at
+    // the read site in a TypeScript project (src/std/fs/codegen.cpp).
+    std::uint64_t size = 0;
     bool isFile = false;
     bool isDirectory = false;
     ::cp3::runtime::date::Date modifiedAt;

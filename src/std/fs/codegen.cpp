@@ -8,8 +8,9 @@
 //   fs.<member>(...)        -> ::cp3::runtime::fs::<member>(...)  (the table
 //                              below mirrors src/std/fs/sema.cpp 1:1)
 //   stat.isDirectory        -> (stat).isDirectory            (FileStats reads,
-//   stat.size               -> static_cast<double>((stat).size)  and the
-//                              nullary `isFile()` / `isDirectory()` call form)
+//   stat.size               -> (stat).size (u64; static_cast<double> only in
+//                              a TypeScript project) and the nullary
+//                              `isFile()` / `isDirectory()` call form)
 //   stat.modifiedAt         -> (stat).modifiedAt            (a std/date value)
 //   rs.on("data", (chunk) => ...) -> (rs).on("data", [](Buffer chunk){...})
 //   ws.write(chunk)         -> (ws).write(chunk)  (string or Buffer overload)
@@ -241,7 +242,12 @@ std::string Generator::emitFsMemberRead(const MemberExpr& m) {
     }
     needsFs_ = true;
     const std::string field = "(" + expr(*m.object) + ")." + m.property;
-    if (m.property == "size") return "static_cast<double>(" + field + ")";
+    // `size` is the exact `u64` byte count; a TypeScript project sees it as
+    // `number`, exactly as the std integer table says.
+    if (m.property == "size" &&
+        options_.typeSystem == TypeSystem::TypeScript) {
+        return "static_cast<double>(" + field + ")";
+    }
     return field;
 }
 

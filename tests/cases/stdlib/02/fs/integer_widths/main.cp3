@@ -1,0 +1,15 @@
+import console from "std/console";
+import fs from "std/fs";
+
+// A Rust project sees exact fs widths: FileStats.size is u64 and the stream
+// chunk size is the same file-size quantity.
+const name = "size_probe.bin";
+fs.writeFileSync(name, "hello");
+const size: u64 = fs.statSync(name).size;
+console.log(size.toString());
+
+const chunk: u64 = 65536;
+fs.readFileStream(name, chunk);
+console.log("stream");
+
+fs.unlinkSync(name);

@@ -351,7 +351,7 @@ FileStats statSync(const std::string& path) {
     if (out.isFile) {
         std::error_code sizeEc;
         const std::uintmax_t size = std::filesystem::file_size(toPath(path), sizeEc);
-        if (!sizeEc) out.size = static_cast<double>(size);
+        if (!sizeEc) out.size = static_cast<std::uint64_t>(size);
     }
     std::error_code timeEc;
     const std::filesystem::file_time_type modified =

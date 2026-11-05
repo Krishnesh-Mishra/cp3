@@ -276,7 +276,7 @@ ExecResult `{ stdout, stderr, exitCode }`; events `"data"`, `"stderr"`, `"exit"`
 - Sync: `readFileSync` · `writeFileSync` · `appendFileSync` · `existsSync` · `mkdirSync` · `readdirSync` · `statSync` · `unlinkSync`
 - Async (promise): `readFile` · `writeFile` · `appendFile` · `mkdir` · `readdir` · `stat` · `unlink`
 - Streams: `readFileStream(path, chunkSize?)` · `writeFileStream(path)`
-- `fs.stat(...)` → **FileStats** `{ size: number, isFile: boolean, isDirectory: boolean, modifiedAt: Date }`
+- `fs.stat(...)` → **FileStats** `{ size: number | u64, isFile: boolean, isDirectory: boolean, modifiedAt: Date }` (`size` is exact `u64` in a Rust/C++ project; `number` in a TypeScript project. `readFileStream`'s `chunkSize` follows the same width.)
 - Sync calls throw synchronously; async calls reject promises — `await` them or attach `.catch`.
 - `exists` is point-in-time; prefer performing the operation and handling its error for anything that matters.
 - Paths are strings; compose with `path.join`.

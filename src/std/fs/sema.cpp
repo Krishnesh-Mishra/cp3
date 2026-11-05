@@ -46,6 +46,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/host/std_integer.hpp"
 #include "detail/std_tables.hpp"
 
 namespace cp3 {
@@ -169,7 +170,15 @@ const DocRow kFsStatsRows[] = {
 }  // namespace
 
 std::optional<Type> Analyzer::fsMember(const std::string& prop) {
-    return lookupMember(kFsRows, prop);
+    std::optional<Type> member = lookupMember(kFsRows, prop);
+    if (!member) return member;
+    // The stream's chunk size is a file-size quantity: `u64` in a Rust/C++
+    // project, `number` in a TypeScript project.
+    if (prop == "readFileStream" && member->parts.size() > 1) {
+        member->parts[1] =
+            stdIntegerType(StdIntegerKind::FileSize, options_.typeSystem);
+    }
+    return member;
 }
 
 // =============================================================================
@@ -184,7 +193,9 @@ std::optional<Type> Analyzer::fsReceiverMember(const Type& recv,
     if (recv.kind != TypeKind::Object || recv.name != kFileStats) {
         return std::nullopt;
     }
-    if (prop == "size") return Type::number();
+    if (prop == "size") {
+        return stdIntegerType(StdIntegerKind::FileSize, options_.typeSystem);
+    }
     if (prop == "isFile" || prop == "isDirectory") return Type::boolean();
     if (prop == "modifiedAt") return Type::named(TypeKind::Class, "Date");
     return std::nullopt;
