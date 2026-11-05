@@ -97,19 +97,21 @@ std::string Generator::emitCloneBuiltin(const CallExpr& c) {
     return "::cp3::runtime::clone(" + expr(*c.arguments.front()) + ")";
 }
 
-// `parseTo<T>(text)`: the compile-time typed string coercion (ROADMAP).
-// `number` parses via toNumber (sema already proved the literal fits),
-// `boolean` is the literal itself, `string` is identity, and a native
-// target is a static_cast of the parsed double.
+// `parseTo(value, Type)` / `parseTo<Type>(value)`: the bidirectional scalar
+// converter (ROADMAP). The target decides the coercion; a native source is
+// cast to double first so the runtime overload set is unambiguous. A string
+// target formats natively instead: the integral `toString` overload prints
+// 64-bit values exactly, while a literal boolean source is folded to its
+// value (sema already proved it is exactly `true` or `false`).
 std::string Generator::emitParseToBuiltin(const CallExpr& c) {
     if (c.arguments.empty() || !c.arguments.front() ||
         c.arguments.front()->kind == NodeKind::SpreadElement) {
         reportCodegenError(c, diagcode::kArityMismatch,
-                           "parseTo expects a string literal and a target "
-                           "type");
+                           "parseTo expects a value and a target type");
         return "0.0";
     }
-    const std::string value = expr(*c.arguments.front());
+    const Expr& arg = *c.arguments.front();
+    const std::string value = expr(arg);
     const Type target = effectiveType(c);
     CppInfo tc = classify(target);
     if (!tc.representable) {
@@ -117,17 +119,31 @@ std::string Generator::emitParseToBuiltin(const CallExpr& c) {
                            "supported");
         return "0.0";
     }
+    const Type source = effectiveType(arg).literalBaseType();
+    const bool nativeSource = source.kind == TypeKind::Native;
+    const std::string asDouble =
+        nativeSource ? "static_cast<double>(" + value + ")" : value;
     if (target.kind == TypeKind::Native) {
-        return "static_cast<" + tc.cpp + ">(::cp3::runtime::toNumber(" + value +
-               "))";
+        return "static_cast<" + tc.cpp + ">(::cp3::runtime::toNumber(" +
+               asDouble + "))";
     }
     if (target.kind == TypeKind::Boolean) {
-        return "::cp3::runtime::toBoolean(" + value + ")";
+        if (source.kind == TypeKind::String) {
+            // parseTo parses the boolean text, so "false" is false (plain
+            // Boolean("false") is true; parseTo is not truthiness).
+            if (arg.kind == NodeKind::StringLiteral) {
+                return static_cast<const StringLiteral&>(arg).value == "true"
+                           ? "true"
+                           : "false";
+            }
+            return "(" + value + " == \"true\")";
+        }
+        return "::cp3::runtime::toBoolean(" + asDouble + ")";
     }
     if (target.kind == TypeKind::String) {
-        return value;
+        return "::cp3::runtime::toString(" + value + ")";
     }
-    return "::cp3::runtime::toNumber(" + value + ")";
+    return "::cp3::runtime::toNumber(" + asDouble + ")";
 }
 
 // `Number(value)`, `Boolean(value)`, `isNaN(value)`, `isFinite(value)`:

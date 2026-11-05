@@ -242,7 +242,7 @@ async function load(): Promise<string> {
 - `async`/`await` over the single runtime event loop (libuv-backed).
 - Promise APIs: `resolve`, `reject`, `then`, `catch`, `finally`, `all`, `race`, `allSettled`, `any`, `withResolvers<T>()`.
 - Coercion globals: `parseInt(s)`, `parseFloat(s)`, `Number(x)`, `String(x)`, `Boolean(x)`, `isNaN(x)`, `isFinite(x)`.
-- `parseTo(text, Type)` / `parseTo<Type>(text)`: compile-time coercion of a string literal to `number`/`string`/`boolean` (keyword form) or any supported type incl. natives (`parseTo<r_'i32'>("777")`). First arg must be a literal; an unrepresentable literal is CP3401.
+- `parseTo(value, Type)` / `parseTo<Type>(value)`: typed scalar conversion between `string`, `number`, `boolean` and the native numeric types, in both directions (`parseTo("123", number)`, `parseTo(n, string)`, `parseTo<r_'i32'>(i64Value)`). A literal source is checked at compile time (CP3401 when the target cannot represent it); a variable source converts at run time.
 - Encoding globals: `atob(s)`, `btoa(s)` (base64; `atob` throws a catchable `Error` on invalid input).
 - `structuredClone(value)`: deep copy of arrays, objects, maps, sets and clonable class instances (result has the argument's type).
 - Promise rejections are `Error` objects; `catch (e)` binds them.

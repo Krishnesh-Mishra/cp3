@@ -27,6 +27,7 @@
 #include <exception>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -194,6 +195,15 @@ std::string toString(const std::string& value);
 std::string toString(bool value);
 std::string toString(std::nullptr_t);   // -> "null"
 std::string toString(Undefined);        // -> "undefined"
+
+// Integer formatting for the native numeric types: going through `double`
+// would lose precision above 2^53, so `parseTo(i64Value, string)` formats the
+// integer directly. The non-template overloads above stay preferred for
+// `bool` and the nullish singletons.
+template <typename T, std::enable_if_t<std::is_integral<T>::value, int> = 0>
+std::string toString(T value) {
+    return std::to_string(value);
+}
 
 // --- coercion: Number(x) / Boolean(x) / isNaN / isFinite --------------------
 // ECMAScript conversion semantics for the global constructors (STDLIB docs §03):

@@ -1,0 +1,29 @@
+import console from "std/console";
+
+// A variable source is converted at run time (no compile-time literal check).
+const text: string = "250";
+const n = parseTo(text, number);
+console.log(n);
+console.log(parseTo(n, string));
+
+// Scalar cross-conversions in both directions.
+console.log(parseTo(true, number));
+console.log(parseTo(false, string));
+console.log(parseTo(0, boolean));
+console.log(parseTo("false", boolean));
+
+// Native source -> cp3 scalars and back.
+const small: r_'i16' = 300;
+console.log(parseTo(small, number));
+console.log(parseTo(small, string));
+console.log(parseTo<r_'i32'>(small));
+
+// Number -> native, and a string variable -> native.
+const parsed: r_'i32' = parseTo<r_'i32'>(42);
+console.log(parsed);
+console.log(parseTo<r_'i32'>(text));
+
+// 64-bit integer formatting stays exact (the integral toString overload).
+const big: r_'i64' = 9007199254740992;
+const bigger: r_'i64' = big + 1;
+console.log(parseTo(bigger, string));

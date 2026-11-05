@@ -241,36 +241,51 @@ bool Analyzer::tryInferBase64Builtin(CallExpr& call, const Identifier& id,
     return true;
 }
 
-// `parseTo(text, keyword)` / `parseTo<Type>(text)`: compile-time typed
-// coercion of a string literal (ROADMAP: `parseTo("123", number)` or
-// `parseTo("123", r_'i32')`). The first argument must be a string literal
-// and the target a static type: the `number`/`string`/`boolean` keyword in
-// the two-argument form, or any supported type in the call's type argument
-// (`r_'i32'` cannot name a value, so natives take the type-argument form).
-// A literal the target cannot represent is CP3401 at compile time.
+// The scalar shapes parseTo converts between: string, number, boolean and the
+// native numeric types (a native is already the value type, never a pointer or
+// reference, so it has a runtime coercion). Everything compound (arrays,
+// objects, classes, unions...) is rejected.
+namespace {
+
+bool parseScalarType(const Type& t) {
+    const Type base = t.literalBaseType();
+    return base.kind == TypeKind::String || base.kind == TypeKind::Number ||
+           base.kind == TypeKind::Boolean || isNativeType(base);
+}
+
+}  // namespace
+
+// `parseTo(value, keyword)` / `parseTo<Type>(value)`: a bidirectional scalar
+// converter (ROADMAP). The target is a static type: the
+// `number`/`string`/`boolean` keyword in the two-argument form, or any scalar
+// type in the call's type argument (`r_'i32'` cannot name a value, so natives
+// take the type-argument form). The source may be any scalar value, so
+// `parseTo("123", number)`, `parseTo(n, string)` and
+// `parseTo<r_'i64'>(i32Value)` all work. A literal source is still checked
+// against the target at compile time (an unrepresentable literal is CP3401);
+// a variable source is converted by the runtime coercion helpers.
 bool Analyzer::tryInferParseToBuiltin(CallExpr& call, const Identifier& id,
                                       Type& out) {
     if (id.name != "parseTo") return false;
     if (call.arguments.empty()) {
         report(diagcode::kArityMismatch, call.span,
-               "arity mismatch: parseTo expects a string literal and a target "
-               "type");
+               "arity mismatch: parseTo expects a value and a target type");
         out = withType(call, Type::unknown());
         return true;
     }
+    const Expr* value = call.arguments.front().get();
     Type target;
     if (!call.typeArgs.empty() && call.typeArgs.front()) {
         target = resolveType(*call.typeArgs.front());
         if (call.arguments.size() != 1) {
             report(diagcode::kArityMismatch, call.span,
-                   "arity mismatch: parseTo<T>(text) expects exactly one "
-                   "argument (the text)");
-            inferArgs(call);
+                   "arity mismatch: parseTo<T>(value) expects exactly one "
+                   "argument (the value)");
+            if (value != nullptr) inferExpr(*value);
             out = withType(call, Type::unknown());
             return true;
         }
-    } else if (call.arguments.size() == 2 &&
-               call.arguments[1] &&
+    } else if (call.arguments.size() == 2 && call.arguments[1] &&
                call.arguments[1]->kind == NodeKind::Identifier) {
         const std::string& keyword =
             static_cast<Identifier&>(*call.arguments[1]).name;
@@ -281,55 +296,75 @@ bool Analyzer::tryInferParseToBuiltin(CallExpr& call, const Identifier& id,
             report(diagcode::kTypeMismatch, call.arguments[1]->span,
                    "type mismatch: parseTo's second argument must be a static "
                    "type (number, string, boolean) or use the type-argument "
-                   "form parseTo<T>(text)");
-            inferArgs(call);
+                   "form parseTo<T>(value)");
+            if (value != nullptr) inferExpr(*value);
             out = withType(call, Type::unknown());
             return true;
         }
-        inferExpr(*call.arguments[0]);
     } else {
         report(diagcode::kTypeMismatch, call.span,
-               "type mismatch: parseTo expects parseTo(text, Type) or "
-               "parseTo<Type>(text)");
+               "type mismatch: parseTo expects parseTo(value, Type) or "
+               "parseTo<Type>(value)");
         inferArgs(call);
         out = withType(call, Type::unknown());
         return true;
     }
-    const Expr* text = call.arguments.front().get();
-    if (text == nullptr || text->kind != NodeKind::StringLiteral) {
+    // The keyword form's second argument is type syntax, not a value: infer
+    // the source only (inferring `number` would report an undefined name).
+    const Type source = value != nullptr ? inferExpr(*value) : Type::error();
+    if (source.isError()) {
+        out = withType(call, Type::error());
+        return true;
+    }
+    if (!parseScalarType(target)) {
+        report(diagcode::kTypeMismatch, call.span,
+               "type mismatch: parseTo's target must be a scalar type "
+               "(number, string, boolean, or a native numeric type), got '" +
+                   pretty(target) + "'");
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    if (!source.isUnknown() && !parseScalarType(source)) {
         report(diagcode::kTypeMismatch,
-               text != nullptr ? text->span : call.span,
-               "type mismatch: parseTo's first argument must be a string "
-               "literal (the value is checked at compile time)");
-        inferArgs(call);
+               value != nullptr ? value->span : call.span,
+               "type mismatch: parseTo's value must be a scalar (string, "
+               "number, boolean, or a native numeric type), got '" +
+                   pretty(source) + "'");
         out = withType(call, Type::unknown());
         return true;
     }
-    const std::string& value = static_cast<StringLiteral&>(*text).value;
+    // A literal source keeps the compile-time fit check: the runtime coercion
+    // sees the same text/value, so an unrepresentable literal is reported now.
     bool fits = true;
-    if (target.kind == TypeKind::Native) {
-        double parsed = 0.0;
-        fits = textIsNumber(value, parsed) &&
-               nativeCanRepresentLiteral(target, parsed);
-    } else if (target.kind == TypeKind::Number) {
-        double parsed = 0.0;
-        fits = textIsNumber(value, parsed);
-    } else if (target.kind == TypeKind::String) {
-        fits = true;
-    } else if (target.kind == TypeKind::Boolean) {
-        fits = value == "true" || value == "false";
-    } else {
-        fits = false;
+    std::string literalText;
+    if (value != nullptr && value->kind == NodeKind::StringLiteral) {
+        literalText = static_cast<const StringLiteral&>(*value).value;
+        if (target.kind == TypeKind::Native) {
+            double parsed = 0.0;
+            fits = textIsNumber(literalText, parsed) &&
+                   nativeCanRepresentLiteral(target, parsed);
+        } else if (target.kind == TypeKind::Number) {
+            double parsed = 0.0;
+            fits = textIsNumber(literalText, parsed);
+        } else if (target.kind == TypeKind::Boolean) {
+            fits = literalText == "true" || literalText == "false";
+        }
+    } else if (value != nullptr && value->kind == NodeKind::NumberLiteral &&
+               target.kind == TypeKind::Native) {
+        fits = nativeCanRepresentLiteral(
+            target, static_cast<const NumberLiteral&>(*value).value);
     }
     if (!fits) {
+        std::string what = "the value";
+        if (value != nullptr && value->kind == NodeKind::StringLiteral) {
+            what = "'" + literalText + "'";
+        }
         report(diagcode::kTypeMismatch, call.span,
-               "type mismatch: '" + value + "' cannot be parsed to the "
+               "type mismatch: " + what + " cannot be parsed to the "
                "requested target type '" + pretty(target) + "'");
-        inferArgs(call);
         out = withType(call, Type::unknown());
         return true;
     }
-    inferArgs(call);
     out = withType(call, target);
     return true;
 }
