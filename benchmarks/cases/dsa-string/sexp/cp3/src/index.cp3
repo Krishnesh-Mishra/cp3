@@ -1,0 +1,33 @@
+import console from "std/console";
+function xs_next(x: u64): u64 { let y: u64 = x; y = y ^ (y << 13); y = y ^ (y >> 7); y = y ^ (y << 17); return y; }
+let text: string = "";
+function gen(depth: u64, seed: u64): u64 {
+  let r: u64 = xs_next(seed);
+  if (depth === 0 || r % 4 === 0) {
+    if ((r >> 8) % 2 === 0) {
+      const n: u64 = 3 + (r % 12);
+      const alpha: string = "abcdefghijklmnopqrstuvwxyz";
+      let j: u64 = 0;
+      while (j < n) { r = xs_next(r); text = text + alpha.charAt(f64(r % 26)); j = j + 1; }
+    } else {
+      text = text + "12345";
+    }
+    text = text + " ";
+    return r;
+  }
+  text = text + "(";
+  const kids: u64 = 2 + ((r >> 24) % 4);
+  let k: u64 = 0;
+  while (k < kids) { r = gen(depth - 1, r); k = k + 1; }
+  text = text + ")";
+  text = text + " ";
+  return r;
+}
+let seed: u64 = 12345;
+let i: u64 = 0;
+while (i < 100) { seed = gen(4, seed); i = i + 1; }
+let h: u64 = 1469598103934665603;
+let k: i64 = 0;
+while (k < text.length) { h = (h ^ text.charCodeAt(k)) * 1099511628211; k = k + 1; }
+console.log(text.length);
+console.log(h);

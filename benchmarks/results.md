@@ -5,20 +5,21 @@
 <!-- latest-by-test:start -->
 <!-- test:health-server:start -->
 ### health-server
-_Updated 2026-10-30T16:55:14 by `python benchmarks/runner/run_benchmark.py`._
+_Updated 2026-11-04T20:22:33 by `python benchmarks/runner/run_benchmark.py --only health-server --reps 1 --latency 5 --seconds 3 --concurrency 2`._
 
 ```text
-  ◆ health-server  median boot/req/s; pooled latency p50/p95; CV = run-to-run variation %
-  lang        ok/run  boot ms  p50 ms  p95 ms   req/s  RPS CV%  errors        vs cp3  RSS MiB  bin KiB
-  ────────────────────────────────────────────────────────────────────────────────────────────────────
-  cp3            1/1    536.8    0.36    0.50  15,719        -       0      baseline      9.5     1616
-  js-fastify     1/1    555.7    0.19    0.56  15,054        -       0  1.04x slower     68.1        -
-  java           1/1   1191.1    0.34    0.75  14,863        -       0  1.06x slower    269.2        4
-  cpp            1/1    528.4    0.22    0.34  14,858        -       0  1.06x slower     10.9       42
-  go             1/1    509.4    0.17    0.29  14,066        -       0  1.12x slower     21.2    15630
-  rust           1/1    538.2    0.13    0.26  14,016        -       0  1.12x slower      6.9     1098
-  js             1/1    568.9    0.36    0.53  13,980        -       0  1.12x slower     62.4        -
-  python         1/1   1644.7    0.89    1.18   1,816        -       0  8.66x slower      4.1        -
+  * health-server  median boot/req/s; pooled latency p50/p95; CV = run-to-run variation %
+  lang        ok/run  boot ms  p50 ms  p95 ms   req/s  RPS CV%  errors         vs cp3  RSS MiB  bin KiB
+  -----------------------------------------------------------------------------------------------------
+  cpp            1/1    514.5    0.11    0.13  25,585        -       0   1.02x faster      5.3       60
+  cp3            1/1    523.0    0.07    0.07  25,200        -       0       baseline      9.5     1622
+  rust           1/1    531.1    0.07    0.07  24,686        -       0   1.02x slower      6.3     1098
+  go             1/1    511.6    0.09    0.09  22,365        -       0   1.13x slower     20.6    15630
+  js-fastify     1/1    517.9    0.13    0.19  21,706        -       0   1.16x slower     67.8        -
+  java           1/1    587.6    0.27    0.31  21,328        -       0   1.18x slower    177.2        4
+  dotnet         1/1    528.4    0.14    0.18  20,295        -       0   1.24x slower    193.5        8
+  js             1/1    519.2    0.28    0.30  16,869        -       0   1.49x slower     62.3        -
+  python         1/1   1056.2    0.42    0.54   1,819        -       0  13.86x slower      4.0        -
 ```
 <!-- test:health-server:end -->
 
@@ -681,6 +682,101 @@ gate: BIG WARN (fix this): tree-walk: cp3 109 ms is 2.17x python (50 ms), tripwi
 gate: BIG WARN (fix this): tree-walk: cp3 109 ms is 1.49x java (73 ms), tripwire 1.00x
 ```
 <!-- test:tree-walk:end -->
+
+<!-- test:graph-bfs:start -->
+### graph-bfs
+_Updated 2026-11-04T20:07:35 by `python benchmarks/runner/run_benchmark.py --only graph-bfs --reps 1`._
+
+```text
+  * graph-bfs  cross-check only (no oracle yet) | graph-bfs | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%  vs cp3  RSS MiB  bin KiB
+  -----------------------------------------------------------------
+  go          23.83    23.83   23.83    -       -      8.6     1751
+  cpp         36.58    36.58   36.58    -       -      9.6       47
+  java        144.5    144.5   144.5    -       -     71.8        1
+  js          254.3    254.3   254.3    -       -     85.8        -
+  python      645.2    645.2   645.2    -       -     33.1        -
+  rust            -        -       -    -       -        -        -
+  cp3             -        -       -    -       -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    ! cp3  not runnable yet: src/index.cp3:19:1: error: CP3401: type mismatch: cannot assign 'number' to 'u64'
+    +  output verified: 5/5 match across languages
+```
+<!-- test:graph-bfs:end -->
+
+<!-- test:strlist:start -->
+### strlist
+_Updated 2026-11-04T20:12:08 by `python benchmarks/runner/run_benchmark.py --only strlist --reps 1`._
+
+```text
+  * strlist  expected = 100000
+92177148 | cross-language checksum | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%  vs cp3  RSS MiB  bin KiB
+  -----------------------------------------------------------------
+  cpp         21.82    21.82   21.82    -       -      2.4       47
+  go          34.95    34.95   34.95    -       -     14.9     1751
+  java        98.96    98.96   98.96    -       -     52.4        1
+  js          259.1    259.1   259.1    -       -     83.4        -
+  python      793.5    793.5   793.5    -       -     18.5        -
+  rust            -        -       -    -       -        -        -
+  cp3             -        -       -    -       -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    ! cp3  not runnable yet: src/index.cp3:8:1: error: CP3301: cannot find name 'f64'
+    +  output verified: 5/5 match oracle '100000\n92177148'
+```
+<!-- test:strlist:end -->
+
+<!-- test:blur:start -->
+### blur
+_Updated 2026-11-04T20:10:15 by `python benchmarks/runner/run_benchmark.py --only blur --reps 1`._
+
+```text
+  * blur  expected = 256
+7734030 | cross-language checksum | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%         vs cp3  RSS MiB  bin KiB
+  ------------------------------------------------------------------------
+  go          10.28    10.28   10.28    -  11.79x faster      5.9     1750
+  cpp         10.49    10.49   10.49    -  11.55x faster      2.1       49
+  js          63.74    63.74   63.74    -   1.90x faster     40.6        -
+  java        88.49    88.49   88.49    -   1.37x faster     38.6        1
+  cp3         121.1    121.1   121.1    -       baseline      2.0      439
+  python      397.4    397.4   397.4    -   3.28x slower     12.4        -
+  rust            -        -       -    -              -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    +  output verified: 6/6 match oracle '256\n7734030'
+
+gate: BIG WARN (fix this): blur: cp3 121 ms is 11.55x cpp (10 ms), tripwire 1.20x
+gate: BIG WARN (fix this): blur: cp3 121 ms is 11.79x go (10 ms), tripwire 1.00x
+gate: BIG WARN (fix this): blur: cp3 121 ms is 1.90x js (64 ms), tripwire 1.00x
+gate: BIG WARN (fix this): blur: cp3 121 ms is 1.37x java (88 ms), tripwire 1.00x
+```
+<!-- test:blur:end -->
+
+<!-- test:push:start -->
+### push
+_Updated 2026-11-04T20:03:02 by `python benchmarks/runner/run_benchmark.py --only push --reps 1`._
+
+```text
+  * push  expected = 1000000
+15625
+499758894813
+750050 | median/best/p95 ms; CV = variation %
+  lang    median ms  best ms  p95 ms  CV%        vs cp3  RSS MiB  bin KiB
+  -----------------------------------------------------------------------
+  cpp         14.37    14.37   14.37    -  5.08x faster      2.1       46
+  go          17.07    17.07   17.07    -  4.28x faster      2.1     1752
+  cp3         72.99    72.99   72.99    -      baseline     15.7      446
+  java        74.97    74.97   74.97    -  1.03x slower     80.5        1
+  js          283.2    283.2   283.2    -  3.88x slower    296.6        -
+  python      527.0    527.0   527.0    -  7.22x slower    112.5        -
+  rust            -        -       -    -             -        -        -
+    x rust  build failed: error: linker `link.exe` not found
+    +  output verified: 6/6 match oracle '1000000\n15625\n499758894813\n750050'
+
+gate: BIG WARN (fix this): push: cp3 73 ms is 5.08x cpp (14 ms), tripwire 1.20x
+gate: BIG WARN (fix this): push: cp3 73 ms is 4.28x go (17 ms), tripwire 1.00x
+```
+<!-- test:push:end -->
 
 <!-- test:sum-array:start -->
 ### sum-array

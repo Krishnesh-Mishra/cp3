@@ -1,0 +1,3 @@
+const M=0xFFFFFFFFFFFFFFFFn; const xs_next=x=>{x^=(x<<13n)&M;x^=x>>7n;x^=(x<<17n)&M;return x&M};
+let text=""; function gen(depth,seed){let r=xs_next(seed); if(depth===0||r%4n===0n){ if((r>>8n)%2n===0n){ const n=Number(3n+(r%12n)); for(let i=0;i<n;i++){r=xs_next(r); text+=String.fromCharCode(97+Number(r%26n));}} else text+=String(Number((r>>16n)%100000n)); text+=" "; return r;} text+="("; const kids=Number(2n+((r>>24n)%4n)); for(let k=0;k<kids;k++) r=gen(depth-1,r); text+=") "; return r;}
+let seed=12345n; for(let i=0;i<100;i++) seed=gen(4,seed); let h=1469598103934665603n; for(let i=0;i<text.length;i++) h=(h^BigInt(text.charCodeAt(i)))*1099511628211n & M; console.log(text.length); console.log(h.toString());
