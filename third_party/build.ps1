@@ -97,7 +97,12 @@ $pins = @(
     [pscustomobject]@{ Name='libuv';       Url='https://github.com/libuv/libuv.git';            Tag='v1.53.0';        Sha='840404ce8ba7cc0204be52389a6cfff9f2c90fb6' },
     [pscustomobject]@{ Name='uWebSockets'; Url='https://github.com/uNetworking/uWebSockets.git';Tag='v20.80.0';       Sha='3ffd6f44c9c3c92c96345d9f96bd01ba9c025ab5' },
     [pscustomobject]@{ Name='oneTBB';      Url='https://github.com/uxlfoundation/oneTBB.git';   Tag='v2023.1.0';      Sha='3046c8b0c29df995980003ea24f4d78c80ec0c8d' },
-    [pscustomobject]@{ Name='pcre2';       Url='https://github.com/PCRE2Project/pcre2.git';     Tag='pcre2-10.49';    Sha='6f9d7c1373262c541324a16a358785b33ef116cf' }
+    [pscustomobject]@{ Name='pcre2';       Url='https://github.com/PCRE2Project/pcre2.git';     Tag='pcre2-10.49';    Sha='6f9d7c1373262c541324a16a358785b33ef116cf' },
+    [pscustomobject]@{ Name='unordered_dense'; Url='https://github.com/martinus/unordered_dense.git'; Tag='v4.3.1'; Sha='7c58a8b7a48e790fe72f6508eb3b46317cbba9d5' },
+    [pscustomobject]@{ Name='fast_float'; Url='https://github.com/lemire/fast_float.git'; Tag='master'; Sha='6a3fabc342d4d149722fc2316babdcf24fdf8fb9' },
+    [pscustomobject]@{ Name='moodycamel'; Url='https://github.com/cameron314/concurrentqueue.git'; Tag='v1.0.4'; Sha='6dd38b8a1dbaa7863aa907045f32308a56a6ff5d' },
+    [pscustomobject]@{ Name='xxhash'; Url='https://github.com/Cyan4973/xxHash.git'; Tag='v0.8.3'; Sha='e626a72bc2321cd320e953a0ccf1584cad60f363' },
+    [pscustomobject]@{ Name='simdutf'; Url='https://github.com/simdutf/simdutf.git'; Tag='v6.1.0'; Sha='7852150e454ebacbf7e65cbf2c5e3feac5e660ec' }
 )
 foreach ($p in $pins) {
     $dir = Join-Path $SrcDir $p.Name
