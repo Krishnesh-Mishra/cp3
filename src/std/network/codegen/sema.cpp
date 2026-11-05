@@ -348,6 +348,10 @@ std::optional<Type> Analyzer::networkMember(const std::string& prop) {
     if (prop == "WebSocketServer") {
         return Type::function({ambient()}, networkObjectType(kWebSocketServer));
     }
+    if (prop == "lookup") {
+        // `dns.lookup(hostname)`: resolves with the first address.
+        return Type::function({Type::string()}, promiseOf(Type::string()));
+    }
     return std::nullopt;
 }
 
