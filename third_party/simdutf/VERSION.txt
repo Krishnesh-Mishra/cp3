@@ -1,0 +1,1 @@
+https://github.com/simdutf/simdutf.git v6.1.0 7852150e454ebacbf7e65cbf2c5e3feac5e660ec 2026-11-05

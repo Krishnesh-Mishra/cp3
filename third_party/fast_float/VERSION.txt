@@ -1,0 +1,1 @@
+https://github.com/lemire/fast_float.git master 6a3fabc342d4d149722fc2316babdcf24fdf8fb9 2026-11-05

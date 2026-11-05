@@ -318,29 +318,23 @@ Notes:
 6. See also: build/scratch/vend/WAVE-VEND-REPORT.md for the full wave report,
    issues and handoff.
 
-## Ledger F — internal-only libraries (PLANNED, not yet vendored)
+## Ledger F — internal-only libraries (VENDORED 2026-11-05, per lead decisions)
 
-> Status: inventory only. Nothing in this section has been downloaded,
-> built, or delivered. No `VERSION.txt`, archive, or include tree exists
-> under `third_party/` for any library below. Do not treat these rows as
-> pins: SHA/tag must be chosen and verified by the lead at vendoring time
-> (record it here + in the per-vendor `VERSION.txt` then, following the
-> format of the five rows above). Wiring snippets are for the lead to
-> land in `src/**` CMake / `native.hpp` files — this section deliberately
-> does not edit them. Detail: `docs/design/internal-libs.md`.
+> Status: 5 vendored (unordered_dense, fast_float, simdutf, moodycamel, XXHash).
+> No compress/miniz (lead: no std/compress lib), no fmt (logger stays hand-written),
+> no Boost.Lockfree (moodycamel chosen), no wyhash (XXH3 chosen), CRC32C hand-rolled stays.
+> Pins below are real (cloned at tags); VERSION.txt written; windows-x64 archives built
+> for compiled libs (xxhash, simdutf); linux-x64/arm64 archives follow the same single-TU
+> pattern (documented in build.ps1 pins). Detail: docs/design/internal-libs.md.
 
 | library | upstream (candidate) | kind | internal hot path (current stand-in) | status |
 | --- | --- | --- | --- | --- |
-| ankerl::unordered_dense | https://github.com/ankerl/unordered_dense | header-only (MIT) | `std/collections` Map/Set (`std::unordered_map`), `std/io` fd table | MISSING |
-| fast_float | https://github.com/fast_float/fast_float | header-only (Apache-2.0) | `std/json` (`strtod`), `std/env`/`std/url` number parse, typed-arrays `strtod` | MISSING |
-| simdutf | https://github.com/simdutf/simdutf | compiled static (Apache-2.0) | `std/text` hand-validated `decode`, `std/string` `charAt` O(n) code-point scan | MISSING |
-| miniz | https://github.com/richgel999/miniz | compiled/ amalgamated (MIT) | `std/compress` (does not exist yet); uWS deflate off (`UWS_NO_ZLIB`) | MISSING |
-| moodycamel concurrentqueue | https://github.com/cameron314/concurrentqueue | header-only (BSD-2-Clause) | `Channel` (does not exist yet); `std/log` synchronous `std::cout` sink | MISSING |
-| Boost.Lockfree | https://github.com/boostorg/lockfree (Boost 1.8x) | header-only (Boost-1.0) | same as above — alternative/complement to moodycamel; pick ONE queue first | MISSING |
-| fmt | https://github.com/fmtlib/fmt | compiled or header-only macro (MIT) | `std/log` hand-written `renderValue`; `console.*` formatting | MISSING |
-| XXHash (XXH32/64) | https://github.com/Cyan4973/xxHash | compiled static (BSD-2-Clause) | `std/hash` `xxhash64` BLOCKED (explicit in `hash.hpp`/`sema.cpp`); CRC32/CRC32C hand-written tables already OK | MISSING (xxhash64) |
-| wyhash / XXH3 | wyhash: `wangyi-fudan/wyhash` (single-file, see Limitations); XXH3 via XXHash above | header-only / compiled | Map/Set bucket hash (`collections.hpp` `KeyHash` -> `std::hash`) | MISSING |
-| CRC32C (vendored) | https://github.com/google/crc32c | compiled static (BSD-3-Clause) | OPTIONAL upgrade: current table-driven `crc32c` in `hash.hpp` is correct; vendor only for HW-accel at scale | NOT NEEDED (hand-rolled present) |
+| ankerl::unordered_dense | https://github.com/martinus/unordered_dense.git v4.3.1 7c58a8b7a48e790fe72f6508eb3b46317cbba9d5 | header-only (MIT) | `std/collections` Map/Set, `std/io` fd table | VENDORED (headers) |
+| fast_float | https://github.com/lemire/fast_float.git master 6a3fabc342d4d149722fc2316babdcf24fdf8fb9 | header-only (Apache-2.0) | `std/json`/`std/env`/`std/url` number parse | VENDORED (headers) |
+| simdutf | https://github.com/simdutf/simdutf.git v6.1.0 7852150e454ebacbf7e65cbf2c5e3feac5e660ec | compiled static (Apache-2.0) | `std/text` decode, `std/string` `charAt` | VENDORED (windows-x64 .a) |
+| moodycamel concurrentqueue | https://github.com/cameron314/concurrentqueue.git v1.0.4 6dd38b8a1dbaa7863aa907045f32308a56a6ff5d | header-only (BSD-2-Clause) | `Channel`, async log sink | VENDORED (headers) |
+| XXHash (XXH32/64/3) | https://github.com/Cyan4973/xxHash.git v0.8.3 e626a72bc2321cd320e953a0ccf1584cad60f363 | compiled static (BSD-2-Clause) | `std/hash` xxhash64, Map/Set bucket (XXH3) | VENDORED (windows-x64 .a) |
+| miniz / fmt / Boost.Lockfree / wyhash / CRC32C | — | — | — | DEFERRED per lead (no compress, logger stays, moodycamel over Boost, XXH3 over wyhash, CRC32C hand-rolled) |
 | libsodium seed / CSPRNG | already vendored (see Pins) | compiled static (ISC) | `std/crypto` `randombytes_buf`/`sodium_init` — PRESENT, nothing to add | PRESENT |
 
 ### Wiring notes for the lead (do not land until vendored)
