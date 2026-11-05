@@ -1,0 +1,40 @@
+import console from "std/console";
+function xs_next(x: u64): u64 { let y: u64 = x; y = y ^ (y << 13); y = y ^ (y >> 7); y = y ^ (y << 17); return y; }
+const M: i64 = 1000003;
+class Expr { kind: i64; v: i64; l: Expr | null; r: Expr | null; constructor(k: i64, v: i64, l: Expr | null, r: Expr | null) { this.kind = k; this.v = v; this.l = l; this.r = r; } }
+function build(depth: u64, seed: u64): Expr {
+  const s: u64 = xs_next(seed);
+  if (depth === 0) {
+    const v: i64 = s % 1000;
+    return new Expr(0, v, null, null);
+  }
+  const k: i64 = s % 8;
+  if (k < 1) {
+    const inner: Expr = build(depth - 1, s);
+    return new Expr(3, 0, inner, null);
+  }
+  const a: Expr = build(depth - 1, s);
+  const b: Expr = build(depth - 1, xs_next(s));
+  if (k < 5) {
+    return new Expr(1, 0, a, b);
+  }
+  return new Expr(2, 0, a, b);
+}
+function eval_(e: Expr | null, p: i64): i64 {
+  if (e === null) return 0;
+  if (e.kind === 0) return (e.v + p) % M;
+  if (e.kind === 1) return (eval_(e.l, p) + eval_(e.r, p)) % M;
+  if (e.kind === 2) return (eval_(e.l, p) * eval_(e.r, p)) % M;
+  return (M - eval_(e.l, p)) % M;
+}
+function count_(e: Expr | null): i64 {
+  if (e === null) return 0;
+  return 1 + count_(e.l) + count_(e.r);
+}
+const root: Expr = build(4, 12345);
+const c: i64 = count_(root);
+let total: i64 = 0;
+let p: i64 = 0;
+while (p < 8) { total = (total + eval_(root, p)) % M; p = p + 1; }
+console.log(c);
+console.log(total);
