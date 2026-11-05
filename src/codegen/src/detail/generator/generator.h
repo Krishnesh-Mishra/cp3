@@ -502,6 +502,7 @@ private:
     std::string emitConsoleLogCall(const CallExpr& c);
     std::string emitConsoleStreamCall(const CallExpr& c, const std::string& method);
     std::string emitConsoleAssert(const CallExpr& c);
+    std::string emitConsoleTable(const CallExpr& c);
     std::string emitConsoleInput(const CallExpr& c);
     std::string emitConsoleListener(const CallExpr& c, const std::string& method);
     std::string consoleListenerArg(const Expr& arg);

@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "{ a: 1, b: 2 }\nTrace: checkpoint 7\nhits: 1\nhits: 2\ndefault: 1\nsection\n  inside\noutside\n(index) (value)\n0 10\n1 20\nx 1\ny 's'\n",
+  "exitCode": 0
+}

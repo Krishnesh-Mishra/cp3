@@ -112,7 +112,10 @@ std::string join(const std::vector<std::string>& parts) {
 
 }  // namespace detail
 
-void writeLineStdout(const std::string& text) { writeLine(std::cout, text); }
+void writeLineStdout(const std::string& text) {
+    // Open console groups indent every stdout line by two spaces per level.
+    writeLine(std::cout, groupIndentText() + text);
+}
 void writeLineStderr(const std::string& text) { writeLine(std::cerr, text); }
 
 void clear() {

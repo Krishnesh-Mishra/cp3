@@ -31,9 +31,11 @@ namespace cp3 {
 
 namespace {
 
-// The twelve documented members (docs/standard-library/04-imported-std-modules.md
+// The documented members (docs/standard-library/04-imported-std-modules.md
 // §console): log, info, warn, error, input, readKey, clear, assert, on, off,
-// hide, show. All are real, so all are candidate suggestions for a typo.
+// hide, show - plus the v0.2 debug helpers dir, trace, count, countReset,
+// group, groupEnd, table. All are real, so all are candidate suggestions for
+// a typo.
 //
 // The members type as ambient (permissive signatures, like the other std
 // families' surface members): the documented signature below is the precise
@@ -76,6 +78,26 @@ const MemberRow kConsoleRows[] = {
      "Prints the arguments to **stderr**, separated by a space and followed by "
      "a newline - the error counterpart of `warn`.\n\n"
      "**Example**\n\n```cp3\nconsole.error(\"request failed\", error);\n```"},
+    {"dir", ambient, "dir(value: unknown): void",
+     "Prints the value like `log` (objects in field order). Inspection depth "
+     "options are ignored in v0.2.\n\n"
+     "**Example**\n\n```cp3\nconsole.dir({ a: 1 });\n```"},
+    {"trace", ambient, "trace(...args: Printable[]): void",
+     "Prints a `Trace:` line with the arguments (no stack in v0.2).\n\n"
+     "**Example**\n\n```cp3\nconsole.trace(\"checkpoint\", n);\n```"},
+    {"count", ambient, "count(label?: string): void",
+     "Prints `label: N` for a per-label counter (default label `default`); "
+     "each call increments before printing."},
+    {"countReset", ambient, "countReset(label?: string): void",
+     "Resets a `count` label so the next `count` prints 1 again."},
+    {"group", ambient, "group(...args: Printable[]): void",
+     "Prints the arguments, then indents every following stdout line by two "
+     "spaces until `groupEnd`."},
+    {"groupEnd", ambient, "groupEnd(): void",
+     "Closes the innermost open group (never below zero)."},
+    {"table", ambient, "table(rows: unknown[]): void",
+     "Prints an `(index) (value)` header then one `i value` line per array "
+     "element, or one `key value` line per field of an object literal."},
     {"input", ambient, "input(prompt?: string): Promise<string>",
      "Reads one line from stdin and resolves with it; on EOF it resolves with "
      "an empty string instead of rejecting.\n\n"

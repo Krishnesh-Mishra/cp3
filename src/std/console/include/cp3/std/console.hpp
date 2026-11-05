@@ -51,6 +51,7 @@
 
 #include <functional>
 #include <initializer_list>
+#include <map>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -125,6 +126,47 @@ std::string renderAll(const Ts&... args) {
 
 void writeLineStdout(const std::string& text);
 void writeLineStderr(const std::string& text);
+
+// Group indentation (console.group/groupEnd): each open group adds two spaces
+// to every subsequent stdout line. Kept in an inline-function static so all
+// translation units share one counter.
+inline int& groupDepthStorage() {
+    static int depth = 0;
+    return depth;
+}
+inline std::string groupIndentText() {
+    return std::string(static_cast<std::size_t>(groupDepthStorage()) * 2, ' ');
+}
+// `console.group(...args)`: prints the args at the current depth, then opens
+// a group; `console.groupEnd()`: closes one (never below zero).
+inline void groupStart(const std::vector<std::string>& parts) {
+    writeLineStdout(detail::join(parts));
+    ++groupDepthStorage();
+}
+inline void groupEnd() {
+    if (groupDepthStorage() > 0) --groupDepthStorage();
+}
+
+// `console.count(label?)` / `console.countReset(label?)`: a per-label counter
+// printed as `label: N` (default label `default`).
+inline std::map<std::string, int>& countStorage() {
+    static std::map<std::string, int> counts;
+    return counts;
+}
+inline void count(const std::string& label) {
+    const int n = ++countStorage()[label];
+    writeLineStdout(label + ": " + std::to_string(n));
+}
+inline void countReset(const std::string& label) { countStorage().erase(label); }
+
+// `console.trace(...args)`: a `Trace:` line (no stack yet in v0.2).
+inline void traceParts(const std::vector<std::string>& parts) {
+    writeLineStdout("Trace: " + detail::join(parts));
+}
+// `console.dir(x)`: prints the value like log, without full depth inspection.
+inline void dirParts(const std::vector<std::string>& parts) {
+    writeLineStdout(detail::join(parts));
+}
 
 // The parts form: a call with a spread argument (`console.log(...parts)`)
 // collects the rendered arguments first - a spread contributes the array's

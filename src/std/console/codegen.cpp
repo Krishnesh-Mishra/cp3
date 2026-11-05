@@ -84,6 +84,28 @@ std::string Generator::emitConsoleCall(const CallExpr& c, const MemberExpr& m) {
     const std::string& prop = m.property;
     if (prop == "log" || prop == "info") return emitConsoleLogCall(c);
     if (prop == "warn" || prop == "error") return emitConsoleStreamCall(c, prop);
+    if (prop == "dir" || prop == "trace" || prop == "group") {
+        needsConsoleAbi_ = true;
+        const std::string parts = consolePartsText(c, 0);
+        const std::string fn = prop == "dir" ? "dirParts"
+                               : prop == "trace" ? "traceParts"
+                                                 : "groupStart";
+        return std::string(kConsoleNs) + fn + "(" + parts + ")";
+    }
+    if (prop == "groupEnd") {
+        needsConsoleAbi_ = true;
+        return std::string(kConsoleNs) + "groupEnd()";
+    }
+    if (prop == "count" || prop == "countReset") {
+        needsConsoleAbi_ = true;
+        std::string label = "\"default\"";
+        if (!c.arguments.empty() && c.arguments.front() &&
+            c.arguments.front()->kind != NodeKind::SpreadElement) {
+            label = tsCall(*c.arguments.front());
+        }
+        return std::string(kConsoleNs) + prop + "(" + label + ")";
+    }
+    if (prop == "table") return emitConsoleTable(c);
     if (prop == "assert") return emitConsoleAssert(c);
     if (prop == "input") return emitConsoleInput(c);
     if (prop == "on" || prop == "off") return emitConsoleListener(c, prop);
@@ -104,23 +126,17 @@ std::string Generator::emitConsoleCall(const CallExpr& c, const MemberExpr& m) {
     return std::string();
 }
 
-// `.log` / `.info`: the joined string goes to `println` (stdout), exactly as
-// before; only an object-literal argument changed form (formatObject). A
-// spread argument contributes the array's elements to the line, so the call
-// lowers onto the parts form (the runtime joins them with one space).
+// `.log` / `.info`: the parts go to `console::logParts` (stdout), so open
+// groups indent the line. A spread argument contributes the array's elements
+// to the line, exactly like the variadic form.
 std::string Generator::emitConsoleLogCall(const CallExpr& c) {
-    if (c.arguments.empty()) {
-        return "cp3::runtime::println(std::string())";
+    const std::string parts = consolePartsText(c, 0);
+    if (!parts.empty()) {
+        // The parts form lives in the console family's header.
+        needsConsoleAbi_ = true;
+        return std::string(kConsoleNs) + "logParts(" + parts + ")";
     }
-    if (hasSpread(c)) {
-        const std::string parts = consolePartsText(c, 0);
-        if (!parts.empty()) {
-            // The parts form lives in the console family's header.
-            needsConsoleAbi_ = true;
-            return std::string(kConsoleNs) + "logParts(" + parts + ")";
-        }
-        // The spread was reported; the plain form keeps the unit compilable.
-    }
+    // The spread was reported; the plain form keeps the unit compilable.
     std::string joined = consoleArgText(*c.arguments.front());
     for (std::size_t i = 1; i < c.arguments.size(); ++i) {
         joined += " + std::string(\" \") + " + consoleArgText(*c.arguments[i]);
@@ -174,6 +190,50 @@ std::string Generator::emitConsoleAssert(const CallExpr& c) {
         out += ", " + consoleArgText(*c.arguments[i]);
     }
     return out + ")";
+}
+
+// `.table(x)`: a compact two-column listing. An array prints an
+// `(index) (value)` header then one `i value` line per element; an object
+// literal prints one `key value` line per field, in insertion order. Only
+// formattable elements are supported (the same values log can print).
+std::string Generator::emitConsoleTable(const CallExpr& c) {
+    needsConsoleAbi_ = true;
+    if (c.arguments.empty() || !c.arguments.front()) {
+        return "0.0";
+    }
+    const Expr& arg = *c.arguments.front();
+    if (arg.kind == NodeKind::ObjectLiteral) {
+        const auto& literal = static_cast<const ObjectLiteral&>(arg);
+        std::string body;
+        for (const auto& propertyPtr : literal.properties) {
+            const ObjectProperty* p = propertyPtr.get();
+            if (!p || !p->value) continue;
+            const std::string key = fieldKey(*p);
+            if (key.empty()) continue;
+            body += " ::cp3::runtime::console::writeLineStdout(std::string(\"" +
+                    key + "\") + \" \" + " +
+                    consoleNestedValue(*p->value) + ");";
+        }
+        return "([&]{ " + body + " }())";
+    }
+    const Type type = effectiveType(arg);
+    const Type elem =
+        type.kind == TypeKind::Array && !type.parts.empty()
+            ? type.parts.front()
+            : Type::unknown();
+    const CppInfo ec = classify(elem);
+    if (!ec.representable || !isPrimitiveShape(ec.shape) ||
+        !valueFormattable(elem)) {
+        sink_.error(diagcode::kInvalidArgumentValue, arg.span,
+                    "console.table expects an array of printable values or an "
+                    "object literal");
+        return "0.0";
+    }
+    return "([&]{ const auto& cp3_t = (" + expr(arg) + "); " +
+           "::cp3::runtime::console::writeLineStdout(\"(index) (value)\"); "
+           "std::size_t cp3_i = 0; for (const auto& cp3_e : *cp3_t) { " +
+           "::cp3::runtime::console::writeLineStdout(std::to_string(cp3_i++) + "
+           "\" \" + ::cp3::runtime::formatValue(cp3_e)); } }())";
 }
 
 // `.input(prompt?)` -> `console::input(prompt)`; the prompt is optional.

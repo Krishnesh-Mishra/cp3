@@ -258,7 +258,7 @@ async function load(): Promise<string> {
 | Array callbacks | `(value, index, array)` — may declare any prefix |
 
 ### `console` — `import console from "std/console"`
-`log`, `info`, `warn`, `error`, `assert`, `input(prompt?): Promise<string>`, `readKey(): Promise<string>`, `on/off(event, listener)`, `clear()`, `hide()/show()`
+`log`, `info`, `warn`, `error`, `assert`, `input(prompt?): Promise<string>`, `readKey(): Promise<string>`, `on/off(event, listener)`, `clear()`, `hide()/show()`, `dir(x)`, `trace(...args)` (`Trace:` line, no stack), `count(label?)/countReset(label?)`, `group(...args)/groupEnd()` (indents later stdout lines by 2 spaces per level), `table(array|object)`
 
 ### `env` — `import { env } from "std/env"`
 `env.get<T>(key)` · `env.get<T>(key, { default })` · `env.has(key)` · `env.load(path)`
