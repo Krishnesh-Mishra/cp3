@@ -16,7 +16,9 @@
 #include <string>
 #include <vector>
 
+#include "cp3/core/ast.hpp"
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/native_types.hpp"
 
 namespace cp3 {
 
