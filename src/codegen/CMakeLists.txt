@@ -88,12 +88,12 @@ set(cp3_codegen_sources
     src/emit/worker/worker_module.cpp
     src/emit/worker/worker_scan.cpp
     src/emit/worker/worker_scan_stmt.cpp
-    ../std/typed-arrays/codegen.cpp
-    ../std/typed-arrays/codegen_constructors.cpp
-    ../std/typed-arrays/codegen_methods.cpp
-    ../std/arrays/codegen.cpp
-    ../std/arrays/codegen_methods.cpp
-    ../std/number/codegen.cpp
+    ../language/typed-arrays/codegen.cpp
+    ../language/typed-arrays/codegen_constructors.cpp
+    ../language/typed-arrays/codegen_methods.cpp
+    ../language/arrays/codegen.cpp
+    ../language/arrays/codegen_methods.cpp
+    ../language/number/codegen.cpp
     src/emit/std/common.cpp
     ../std/math/codegen.cpp
     ../std/os/codegen.cpp

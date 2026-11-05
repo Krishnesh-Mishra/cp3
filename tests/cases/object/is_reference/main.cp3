@@ -1,0 +1,12 @@
+import console from "std/console";
+
+const o: { x: number } = { x: 1 };
+const p: { x: number } = { x: 1 };
+const arr = [1, 2];
+console.log(`${Object.is(o, o)}`);
+console.log(`${Object.is(o, p)}`);
+console.log(`${Object.is(arr, arr)}`);
+console.log(`${Object.is(null, null)}`);
+console.log(`${Object.is(o, null)}`);
+console.log(`${Object.is(null, undefined)}`);
+console.log(`${Object.is(undefined, undefined)}`);

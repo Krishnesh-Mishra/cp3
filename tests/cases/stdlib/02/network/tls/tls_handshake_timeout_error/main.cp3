@@ -1,0 +1,17 @@
+import console from "std/console";
+import { fetch } from "std/network";
+
+// TLS handshake timeout, surfaced as Error (deterministic, no network I/O
+// beyond loopback policy: no external host is contacted).
+// LIMITATION: TLS is off in this build (D70) -- `fetch` is http:// only
+// and rejects an https:// URL before any handshake, and there is no TLS
+// socket / handshake-timeout API whose timer could be exercised. This
+// case pins the part of the contract that holds today: a TLS (https)
+// request with a short timeout must fail as a rejected Error, never
+// resolve, hang, or throw an uncatchable failure. The catch arm prints a
+// fixed token; the rejection value's shape is not pinned.
+fetch("https://127.0.0.1:48245/", { timeout: 100 }).then((res) => {
+  console.log("unexpected-ok");
+}).catch((e) => {
+  console.log("Error:tls-handshake");
+});

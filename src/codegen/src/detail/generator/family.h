@@ -2,7 +2,7 @@
 // src/codegen/src/detail/family.h - PRIVATE family data for the JS-compat
 // typed-array family (D69).
 //
-// Shared by src/std/typed-arrays/codegen.cpp and codegen_methods.cpp: the class
+// Shared by src/language/typed-arrays/codegen.cpp and codegen_methods.cpp: the class
 // table, the tag / constructor-name lookups, the array-element shape gate and
 // the `Array(...)` constructor recognizer.
 // =============================================================================

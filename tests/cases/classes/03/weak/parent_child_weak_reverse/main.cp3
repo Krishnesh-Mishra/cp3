@@ -1,0 +1,2 @@
+class Child { parent: Parent | undefined; }
+class Parent { weak child: Child | null; }

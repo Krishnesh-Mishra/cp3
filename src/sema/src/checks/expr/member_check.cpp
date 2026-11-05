@@ -253,7 +253,7 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             if (isEventEmitterType(ot)) {
                 return eventEmitterMember(prop, span);
             }
-            // The JS-compat family (src/std/typed-arrays/sema.cpp): typed
+            // The JS-compat family (src/language/typed-arrays/sema.cpp): typed
             // views, the buffer classes and DataView have their own tables.
             if (isTypedArrayClass(ot)) return typedArrayMember(ot, prop);
             if (isBufferClass(ot)) return bufferMember(ot, prop);
@@ -345,7 +345,7 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
     }
     // The wave-3 method surface (docs/language-spec/09-arrays-strings.md).
     // `map` / `reduce` are typed by `tryInferArrayCall` because their result
-    // follows the callback (src/std/arrays/sema_methods.cpp); the rest have a
+    // follows the callback (src/language/arrays/sema_methods.cpp); the rest have a
     // result the signature alone fixes.
     if (prop == "filter") {
         Type pred = Type::function({elem}, Type::boolean());
@@ -545,7 +545,7 @@ Type Analyzer::indexOfProbe(const Type& ot, IndexExpr& ix) {
         case TypeKind::Class:
             // Typed-array elements are `number` when the literal index is
             // provably in range, `number | undefined` otherwise
-            // (src/std/typed-arrays/sema.cpp).
+            // (src/language/typed-arrays/sema.cpp).
             if (isTypedArrayClass(ot)) return typedIndexRead(ix);
             // Record<string, V> / Map<string, V> subscript: a missing key
             // reads `undefined` (same rule as Map.get); a write is checked

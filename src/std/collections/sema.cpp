@@ -620,7 +620,7 @@ bool Analyzer::tryInferCollectionsStaticCall(CallExpr& call, MemberExpr& m,
     // `w.charAt(0)`) against the wrong parameter type. The first argument
     // was already inferred above and a non-arrow callback was inferred in
     // the branch above, so only the arrow's own node type remains to set.
-    // (The array callback methods in src/std/arrays/sema_methods.cpp follow
+    // (The array callback methods in src/language/arrays/sema_methods.cpp follow
     // the same pattern: inferArrowReturn + publish, then return.)
     if (cb != nullptr && cb->kind == NodeKind::ArrowFunction) {
         const std::vector<Type> context = {elem, Type::number(),

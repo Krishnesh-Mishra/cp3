@@ -27,7 +27,7 @@
 //   support/docs.cpp        the doc-comment reader (JSDoc-style comments)
 //   src/std/<family>/sema.cpp per-family std member tables (math / path / os /
 //                           process / console / JSON)
-//   src/std/typed-arrays/sema.cpp the JS-compat typed-array family (D69)
+//   src/language/typed-arrays/sema.cpp the JS-compat typed-array family (D69)
 //   checks/parallel_check.cpp      parallel.* capture safety: statements + hook
 //   checks/parallel_expr_check.cpp parallel.* capture safety: webserverions + scopes
 //
@@ -476,7 +476,7 @@ private:
     bool overloadViable(const FuncSig& sig, const std::vector<Type>& argTypes,
                         bool hasSpread);
 
-    // --- the JS-compat typed-array family (src/std/typed-arrays/sema.cpp) ----
+    // --- the JS-compat typed-array family (src/language/typed-arrays/sema.cpp) ----
     // Family constructors and nominal types (D69); codegen owns the C++.
     Type inferFamilyConstruct(const std::string& cls, ExprList& args,
                               const SourceSpan& span);
@@ -503,7 +503,7 @@ private:
     Type bufferMember(const Type& recv, const std::string& prop);
     Type dataViewMember(const std::string& prop);
     Type typedIndexRead(IndexExpr& ix);
-    // Typed-array proof machinery (src/std/typed-arrays/sema_index.cpp): the
+    // Typed-array proof machinery (src/language/typed-arrays/sema_index.cpp): the
     // constant-value and length helpers, the in-range proof for an index, and
     // the for-loop induction analysis that feeds it.
     std::optional<double> constantNumber(const Expr& e) const;
@@ -801,7 +801,7 @@ std::vector<std::string> readlineMemberArgumentValues(
 // Markdown description the editor shows. Each family unit defines its own
 // next to the table it already owns, so the two cannot drift apart.
 // `Number.*` statics (`Number.isInteger`, constants); nullopt keeps the ambient
-// fallthrough. Defined in src/std/number/sema.cpp.
+// fallthrough. Defined in src/language/number/sema.cpp.
 std::optional<Type> numberStaticMember(const std::string& prop);
 
 StdMemberDoc mathMemberDoc(const std::string& prop);

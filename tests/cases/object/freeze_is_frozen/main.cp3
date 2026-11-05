@@ -1,0 +1,15 @@
+import console from "std/console";
+
+const o: { x: number } = { x: 1 };
+console.log(`${Object.isFrozen(Object.freeze(o))}`);
+console.log(`${Object.isSealed(Object.freeze(o))}`);
+console.log(`${Object.isExtensible(Object.freeze(o))}`);
+console.log(`${Object.is(Object.freeze(o), o)}`);
+
+const outer: { inner: { y: number } } = { inner: { y: 2 } };
+console.log(`${Object.isFrozen(Object.freeze(outer).inner)}`);
+console.log(`${Object.isFrozen(Object.freeze(outer).inner.y)}`);
+
+console.log(`${Object.isFrozen(42)}`);
+console.log(`${Object.isSealed("hi")}`);
+console.log(`${Object.isExtensible("hi")}`);

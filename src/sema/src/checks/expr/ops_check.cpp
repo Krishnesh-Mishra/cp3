@@ -510,7 +510,7 @@ void Analyzer::checkAssignToTarget(Expr& target, const Type& valType,
             if (isTypedArrayClass(ot)) {
                 // A typed-array element target is `number`: out-of-range
                 // stores are ignored at runtime (JS semantics), and a
-                // non-number write is CP3401 (src/std/typed-arrays/sema.cpp
+                // non-number write is CP3401 (src/language/typed-arrays/sema.cpp
                 // owns the read refinement).
                 if (ix.index) inferExpr(*ix.index);
                 setType(ix, Type::number());

@@ -230,7 +230,7 @@ std::string Generator::emitFor(const ForStatement& f,
 // -----------------------------------------------------------------------------
 // for-of / for-in
 // -----------------------------------------------------------------------------
-// The array lowering lives in its family unit (src/std/arrays/codegen_methods.cpp):
+// The array lowering lives in its family unit (src/language/arrays/codegen_methods.cpp):
 // it owns the element-type gate and the lifetime-safe source handle.
 void Generator::emitForOf(const ForOfStatement& f, const std::string& jsLabel,
                           std::string& out, int indent) {

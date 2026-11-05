@@ -11,7 +11,7 @@
 //     both the assigned value and the skipped right-hand evaluation.
 //
 // `emitBinary`/`emitUpdate` stay in emit/expr.cpp; the `IndexExpr` target keeps
-// its family write path (src/std/typed-arrays/codegen_methods.cpp).
+// its family write path (src/language/typed-arrays/codegen_methods.cpp).
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -475,7 +475,7 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
     if (a.target->kind != NodeKind::Identifier) {
         // Array/typed-view element writes (`a[1] = 9`, `u8[0] = 5`) lower to
         // the family's checked writes first
-        // (src/std/typed-arrays/codegen_methods.cpp).
+        // (src/language/typed-arrays/codegen_methods.cpp).
         if (a.target->kind == NodeKind::IndexExpr) {
             // Record<string, V> / Map<string, V> writes (`r[k] = v` and the
             // compounds) lower to the collections `set`/`get` forms, before

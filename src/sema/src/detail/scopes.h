@@ -245,7 +245,7 @@ bool isEventEmitterType(const Type& t);
 bool isErrorClassName(const std::string& name);
 bool isErrorClass(const Type& t);
 
-// --- the JS-compat typed-array family (D69; src/std/typed-arrays/sema.cpp) ---
+// --- the JS-compat typed-array family (D69; src/language/typed-arrays/sema.cpp) ---
 //
 // The 11 typed-array class names, the buffer classes and DataView are nominal
 // `TypeKind::Class` types with no extra metadata; codegen owns the C++ mapping

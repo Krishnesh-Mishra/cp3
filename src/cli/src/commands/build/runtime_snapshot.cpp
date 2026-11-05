@@ -11,7 +11,7 @@
 //   core/runtime.hpp      <- src/runtime/include/cp3/core/runtime.hpp
 //   core/runtime.cpp      <- src/runtime/src/core/runtime.cpp
 //   async/eventloop.cpp   <- src/runtime/src/async/eventloop.cpp
-//   typed_array.hpp       <- src/std/typed-arrays/include/cp3/typed_array.hpp
+//   typed_array.hpp       <- src/language/typed-arrays/include/cp3/typed_array.hpp
 //   std/console.hpp       <- src/std/console/include/cp3/std/console.hpp
 //   std/network.hpp       <- src/std/network/include/cp3/std/network.hpp
 //   std/console/runtime.cpp   <- src/std/console/runtime.cpp
@@ -95,7 +95,7 @@ std::string readmeText() {
         "  core/runtime.hpp            src/runtime/include/cp3/core/runtime.hpp\n"
         "  core/runtime.cpp            src/runtime/src/core/runtime.cpp\n"
         "  async/eventloop.cpp         src/runtime/src/async/eventloop.cpp\n"
-        "  typed_array.hpp             src/std/typed-arrays/include/cp3/typed_array.hpp\n"
+        "  typed_array.hpp             src/language/typed-arrays/include/cp3/typed_array.hpp\n"
         "  std/console.hpp             src/std/console/include/cp3/std/console.hpp\n"
         "  std/network.hpp             src/std/network/include/cp3/std/network.hpp\n"
         "  std/console/runtime.cpp     src/std/console/runtime.cpp\n"
@@ -144,7 +144,7 @@ fs::path copyRuntimeSnapshot(const BuildLayout& layout, bool verbose) {
     // The always-available typed-array ABI header is part of every generated
     // program header even though it lives under src/std.
     const fs::path typedArray =
-        resolveIncludeRoot(repo, "src/std/typed-arrays/include") /
+        resolveIncludeRoot(repo, "src/language/typed-arrays/include") /
         "cp3" / "typed_array.hpp";
     if (fs::is_regular_file(typedArray, ec) &&
         !copyOne(typedArray, root / "typed_array.hpp", verbose)) {

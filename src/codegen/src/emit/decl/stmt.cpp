@@ -539,7 +539,7 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
                    !special.empty()) {
             // `let a: number[] = Array(3)` / `let a: number[] = []` (the
             // annotation fixes the element type;
-            // src/std/typed-arrays/codegen.cpp).
+            // src/language/typed-arrays/codegen.cpp).
             initText = special;
         } else {
             const std::optional<Type> savedExpected = expected_;

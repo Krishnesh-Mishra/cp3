@@ -164,7 +164,7 @@ bool objectReceiver(const Type& t, Type& object, bool& optional);
 // the entry TU spell the same `$o{...}` shape as one nominal type.
 std::string objectGlobalDeclsFor(const std::string& text, bool cloneValues);
 
-// The JS-compat typed-array family (D69; src/std/typed-arrays/codegen.cpp):
+// The JS-compat typed-array family (D69; src/language/typed-arrays/codegen.cpp):
 // regular arrays with a value-like element type (`number`, `string`,
 // `boolean` or a nested array), the 11 typed views, the buffer classes and
 // DataView. Fills `info` and returns true when `t` is one of them; every other

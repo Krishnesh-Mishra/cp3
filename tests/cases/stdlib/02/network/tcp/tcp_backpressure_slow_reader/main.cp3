@@ -1,0 +1,36 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// Back-pressure / slow reader (deterministic, loopback only).
+// LIMITATION: there is no raw TCP socket API and no socket-buffer / memory
+// introspection in `std/network`, so "memory bounded" cannot be asserted
+// directly (no RSS/buffer-size reading exists to pin). What can be pinned
+// deterministically is the slow-reader contract over the available HTTP
+// transport: the server writes a fixed, bounded payload (8 chunks x 16
+// bytes = 128 bytes) and the reader is deliberately slow (holds the
+// response for 50ms before reading it). The reader must still receive
+// exactly those 128 bytes, in order, with nothing extra buffered or lost.
+// Do not increase the payload in this case: unbounded growth is exactly
+// what this bound guards against.
+const app = createServer();
+app.get("/slow", (req, res) => {
+  res.write("0123456789abcdef");
+  res.write("0123456789abcdef");
+  res.write("0123456789abcdef");
+  res.write("0123456789abcdef");
+  res.write("0123456789abcdef");
+  res.write("0123456789abcdef");
+  res.write("0123456789abcdef");
+  res.write("0123456789abcdef");
+  res.end();
+});
+app.listen(48242, () => {});
+
+let pending = fetch("http://127.0.0.1:48242/slow");
+await sleep(50);
+let res = await pending;
+let body = await res.text();
+console.log(`${res.status}`);
+console.log(`${body.length}`);
+console.log(body);
+app.close();

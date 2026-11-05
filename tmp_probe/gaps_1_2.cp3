@@ -1,0 +1,7 @@
+import console from "std/console";
+
+console.log(String.fromCharCode(72, 105));
+
+let a: i64 = 123;
+let f: f32 = 1.5;
+console.log(a.toString(), f.toString());

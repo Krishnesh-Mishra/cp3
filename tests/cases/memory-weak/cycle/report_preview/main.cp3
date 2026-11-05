@@ -1,0 +1,3 @@
+class Node { next: Node | null; }
+class Team { lead: Person | undefined; }
+class Person { weak team: Team | null; }

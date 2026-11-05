@@ -1,0 +1,6 @@
+import console from "std/console";
+
+const o: { x: number } = { x: 1 };
+const p: { y: number } = { y: 2 };
+Object.setPrototypeOf(o, p);
+console.log(`${o.x}`);

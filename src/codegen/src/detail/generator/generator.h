@@ -27,7 +27,7 @@
 //   emit/decl.cpp          forward decls, function definitions, declarations
 //   emit/enum.cpp          enum declarations, member access, same-enum switch
 //                          (spec 04)
-//   src/std/typed-arrays/codegen.cpp  the JS-compat typed-array family (D69)
+//   src/language/typed-arrays/codegen.cpp  the JS-compat typed-array family (D69)
 //   emit/std/common.cpp               ambient std surface: shared helpers +
 //                                     dispatch
 //   src/std/<family>/codegen.cpp      Math / path / os / process / JSON /
@@ -64,7 +64,7 @@ namespace cp3 {
 
 class Generator;
 
-// The regular-array method surface (src/std/arrays/codegen_methods.cpp): push/
+// The regular-array method surface (src/language/arrays/codegen_methods.cpp): push/
 // pop, the callback set, searching, slicing, the in-place mutators, a
 // `for...of` and its `for await` form; a friend of Generator, defined in that
 // unit.
@@ -142,7 +142,7 @@ public:
                          detail::ProgramAssembly& assembly);
 
 private:
-    friend struct detail::ArrayEmitter;  // src/std/arrays/codegen_methods.cpp
+    friend struct detail::ArrayEmitter;  // src/language/arrays/codegen_methods.cpp
     friend struct detail::PatternEmitter;  // emit/destructure.cpp
     friend struct detail::ModuleVarEmitter;  // emit/module_var.cpp
     friend struct detail::AssignEmitter;  // emit/assignment.cpp
@@ -525,7 +525,7 @@ private:
     std::string emitListenerValue(const Expr& e);
     std::string emitEventEmitterCall(const CallExpr& c, const MemberExpr& m);
 
-    // --- the JS-compat typed-array family (src/std/typed-arrays/codegen.cpp) ---
+    // --- the JS-compat typed-array family (src/language/typed-arrays/codegen.cpp) ---
     // Constructors, statics, method tables, indexed access and the declarator
     // forms whose element type comes from the binding; "" outside the family.
     std::string emitFamilyCtorCall(const CallExpr& c, const std::string& name);
@@ -689,7 +689,7 @@ private:
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
     // `String.fromCharCode(...)` (src/std/string/codegen.cpp).
     std::string emitStringStaticCall(const CallExpr& c, const MemberExpr& m);
-    // Language-level Number methods/statics (src/std/number/codegen.cpp).
+    // Language-level Number methods/statics (src/language/number/codegen.cpp).
     std::string emitNumberMethodCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNumberStaticCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNumberMember(const MemberExpr& m);

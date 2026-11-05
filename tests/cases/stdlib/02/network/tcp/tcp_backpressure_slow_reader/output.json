@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "200\n128\n0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n",
+  "exitCode": 0
+}

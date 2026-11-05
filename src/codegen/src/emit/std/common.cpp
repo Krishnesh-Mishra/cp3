@@ -315,13 +315,13 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     if (std::string coll = emitCollectionsMemberCall(c, m); !coll.empty()) {
         return coll;
     }
-    // The regular-array method surface (src/std/arrays/codegen_methods.cpp):
+    // The regular-array method surface (src/language/arrays/codegen_methods.cpp):
     // push/pop, map/filter/reduce/find/..., indexOf/includes/binarySearch,
     // slice/flat/unique/shuffle.
     if (std::string arr = ArrayEmitter::methodCall(*this, c, m); !arr.empty()) {
         return arr;
     }
-    // The JS-compat typed-array family (src/std/typed-arrays/codegen.cpp):
+    // The JS-compat typed-array family (src/language/typed-arrays/codegen.cpp):
     // `Array.of/from`, the array/typed-view method tables, the buffer `.slice`
     // and DataView.
     if (std::string family = emitFamilyMemberCall(c, m); !family.empty()) {
@@ -373,7 +373,7 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     // `std/collections` `m.size` / `s.size` reads and the `entries().length`
     // case (src/std/collections/codegen.cpp).
     if (std::string coll = emitCollectionsMember(m); !coll.empty()) return coll;
-    // The JS-compat typed-array family (src/std/typed-arrays/codegen.cpp):
+    // The JS-compat typed-array family (src/language/typed-arrays/codegen.cpp):
     // `.length` of a cp3 array, typed-view/buffer/DataView members,
     // `X.BYTES_PER_ELEMENT`.
     if (std::string family = emitFamilyMember(m); !family.empty()) {

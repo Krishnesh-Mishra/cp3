@@ -247,7 +247,7 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
     }
     // `let a: number[] = Array(3)` / `let a: number[] = []`: the
     // annotation fixes an otherwise unknowable element type
-    // (src/std/typed-arrays/codegen.cpp). The annotation is also the shape an
+    // (src/language/typed-arrays/codegen.cpp). The annotation is also the shape an
     // object literal is built against.
     std::string initText;
     {

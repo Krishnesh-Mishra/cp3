@@ -53,7 +53,7 @@
 //
 // The `Uint8Array` is the JS-compat family type
 // `::cp3::runtime::TypedArray<::cp3::runtime::Uint8Tag>` (cp3/typed_array.hpp,
-// src/std/typed-arrays/sema.cpp). The native row bundles that include tree
+// src/language/typed-arrays/sema.cpp). The native row bundles that include tree
 // alongside this one, exactly as std/fs bundles std/buffer for its `Buffer`
 // chunk (src/std/fs/native.hpp).
 // =============================================================================

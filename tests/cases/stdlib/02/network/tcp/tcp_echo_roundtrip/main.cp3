@@ -1,0 +1,30 @@
+import console from "std/console";
+import { WebSocket, WebSocketServer } from "std/network";
+
+// TCP echo roundtrip (deterministic, loopback only).
+// LIMITATION: `std/network` exports no raw TCP socket API (registry:
+// fetch, lookup, WebSocket, WebSocketServer, createServer, ...), so a
+// byte-stream echo cannot be written against a documented surface today.
+// This case pins the closest available TCP-backed echo semantics over
+// ws:// (a TCP transport): one client sends one payload, the server echoes
+// it verbatim, and the client prints exactly what came back. When a raw
+// socket API lands, this case should be rewritten against it; until then
+// it must not claim to exercise raw sockets.
+const wss = new WebSocketServer({ port: 48241 });
+wss.on("connection", (ws) => {
+  ws.on("message", (message) => {
+    ws.send("echo:" + message);
+  });
+});
+
+const ws = new WebSocket("ws://127.0.0.1:48241/");
+ws.on("open", () => {
+  ws.send("ping");
+});
+ws.on("message", (message) => {
+  console.log(message);
+  ws.close();
+  wss.close();
+});
+
+await sleep(500);

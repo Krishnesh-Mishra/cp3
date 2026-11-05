@@ -1,0 +1,15 @@
+import { createUdpSocket } from "std/network";
+
+// UDP echo (datagram roundtrip) -- intended behaviour once a UDP API lands:
+// bind a datagram socket on loopback, send one datagram, receive the exact
+// same datagram back, print it. There is currently NO UDP/datagram surface
+// in `std/network` (registry exports fetch, lookup, WebSocket,
+// WebSocketServer, createServer, Headers, Request, Response, FormData,
+// AbortSignal, static, cors, bodyLimit, Router, webserver, cookieParser),
+// so this case cannot run today. It is pinned as a check diagnostic
+// (CP3304: module 'std/network' does not export 'createUdpSocket') so the
+// missing API is explicit and deterministic instead of a fake passing
+// echo over a stream transport. Do NOT rewrite this as a TCP/HTTP echo:
+// that would mislabel stream semantics as datagram semantics.
+let udp = createUdpSocket();
+udp.send("ping", "127.0.0.1", 48244);

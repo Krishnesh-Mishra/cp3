@@ -29,7 +29,7 @@
 #include "../../../../std/path/native.hpp"
 #include "../../../../std/process/native.hpp"
 #include "../../../../std/string/native.hpp"
-#include "../../../../std/typed-arrays/native.hpp"
+#include "../../../../language/typed-arrays/native.hpp"
 #include "../../../../std/url/native.hpp"
 #include "../../../../std/time/native.hpp"
 #include "../../../../std/hash/native.hpp"

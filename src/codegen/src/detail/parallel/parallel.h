@@ -9,7 +9,7 @@
 // arm (classifyFamily would otherwise claim it as `Array<double>`), which keeps
 // the marker non-representable: a binding of a `parallel.run` result lowers to
 // `auto`, and index reads/writes go through the marker branches in
-// src/std/typed-arrays/codegen_methods.cpp.
+// src/language/typed-arrays/codegen_methods.cpp.
 // =============================================================================
 #pragma once
 

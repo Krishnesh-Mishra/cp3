@@ -1,0 +1,2 @@
+class A { b: B | undefined; }
+class B { weak a: A | null; }

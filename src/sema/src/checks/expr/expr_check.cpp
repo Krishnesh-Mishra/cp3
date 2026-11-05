@@ -222,7 +222,7 @@ Type Analyzer::inferObject(ObjectLiteral& ol) {
 Type Analyzer::inferNew(NewExpr& n) {
     // The JS-compat family constructors (`new Int8Array(...)`, `new Array(2)`,
     // `new DataView(buf)`): nominal types from the family grammar
-    // (src/std/typed-arrays/sema.cpp). A name the program shadowed is not
+    // (src/language/typed-arrays/sema.cpp). A name the program shadowed is not
     // ambient, so user declarations keep the generic path below.
     if (n.callee && n.callee->kind == NodeKind::Identifier) {
         auto& id = static_cast<Identifier&>(*n.callee);

@@ -1,0 +1,8 @@
+import console from "std/console";
+
+const o: { x: number } = { x: 1 };
+console.log(`${Object.getPrototypeOf(o)}`);
+console.log(`${Object.getPrototypeOf(o) === null}`);
+const same = Object.setPrototypeOf(o, null);
+console.log(`${same.x}`);
+console.log(`${Object.is(same, o)}`);

@@ -280,7 +280,7 @@ std::vector<fs::path> compilerIncludeRoots() {
     // native row when the program imports it (native_packages.cpp).
     for (const char* rel : {"src/runtime/include", "src/common/include",
                             "src/std/string/include",
-                            "src/std/typed-arrays/include"}) {
+                            "src/language/typed-arrays/include"}) {
         const fs::path candidate = resolveIncludeRoot(repo, rel);
         std::error_code ec;
         if (fs::is_directory(candidate, ec)) roots.push_back(candidate);

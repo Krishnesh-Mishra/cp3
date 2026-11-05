@@ -1,0 +1,15 @@
+import console from "std/console";
+import { lookup } from "std/network";
+
+// DNS lookup of localhost (deterministic, loopback only).
+// The resolved address text for "localhost" is NOT deterministic across
+// hosts (127.0.0.1 vs ::1 depends on /etc/hosts / DNS order), so this
+// case pins only that resolution succeeds, printing a fixed token.
+// (The exact IPv4-literal form is already pinned by the existing
+// network/dns_lookup case; a second racing lookup here would make the
+// output order non-deterministic, so it is deliberately omitted.)
+lookup("localhost").then((addr) => {
+  console.log("resolved");
+}).catch((e) => {
+  console.log("err");
+});

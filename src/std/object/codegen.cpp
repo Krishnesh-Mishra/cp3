@@ -80,25 +80,6 @@ std::string freezeFamilyCall(const Expr& e) {
     return m.property;
 }
 
-// True when `e` is a member/index chain rooted in a freeze-family call, e.g.
-// `Object.freeze(o).nested` or `Object.freeze(o).list[0]`. This is the
-// deep-freeze query surface: the nested value of a frozen object is itself
-// frozen under the deep-freeze reading of `freeze` (see emitObjectCall).
-bool freezeRooted(const Expr& e) {
-    const Expr* cur = &e;
-    while (cur != nullptr) {
-        if (!freezeFamilyCall(*cur).empty()) return true;
-        if (cur->kind == NodeKind::MemberExpr) {
-            cur = static_cast<const MemberExpr&>(*cur).object.get();
-        } else if (cur->kind == NodeKind::IndexExpr) {
-            cur = static_cast<const IndexExpr&>(*cur).object.get();
-        } else {
-            return false;
-        }
-    }
-    return false;
-}
-
 // The freeze-family method a freeze-rooted chain is rooted in ("" if none).
 std::string freezeRootMethod(const Expr& e) {
     const Expr* cur = &e;
@@ -120,7 +101,10 @@ std::string freezeRootMethod(const Expr& e) {
 
 std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
     if (m.property == "assign" || m.property == "freeze" ||
-        m.property == "is") {
+        m.property == "seal" || m.property == "preventExtensions" ||
+        m.property == "isFrozen" || m.property == "isSealed" ||
+        m.property == "isExtensible" || m.property == "getPrototypeOf" ||
+        m.property == "setPrototypeOf" || m.property == "is") {
         if (m.property == "assign") {
             if (c.arguments.size() < 2 || !c.arguments.front()) {
                 reportCodegenError(c, diagcode::kArityMismatch,
@@ -143,19 +127,41 @@ std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
             std::string out =
                 "([&](){ const auto cp3_t = (" + targetExpr +
                 ");";
+            // JS (strict): assigning into a frozen target throws a TypeError.
+            // Only the syntactic `Object.assign(Object.freeze(o), ...)` form
+            // is provable here; a frozen object reached through a variable
+            // cannot be tracked without runtime state (see object.hpp).
+            if (freezeRootMethod(*c.arguments.front()) == "freeze") {
+                out += " throw ::cp3::runtime::Thrown::makeError("
+                       "::cp3::runtime::makeRef<::cp3::Error>("
+                       "\"Cannot assign to read only property of frozen "
+                       "object\")); ";
+            }
             for (std::size_t i = 1; i < c.arguments.size(); ++i) {
                 const Expr* arg = c.arguments[i].get();
                 if (!arg) continue;
                 const Type source = effectiveType(*arg);
+                // JS: null/undefined sources are ignored (the argument
+                // expression is still evaluated for side effects).
+                if (source.isNullish()) {
+                    out += " { (void)(" + expr(*arg) + "); } ";
+                    continue;
+                }
+                Type sourceType = source;
+                const bool nullableSource = source.isNullable();
+                if (nullableSource && !source.parts.empty()) {
+                    sourceType = source.parts.front();
+                }
                 std::string sourceName;
                 std::vector<ObjectField> sourceFields;
-                if (!objectShapeOf(source, sourceName, sourceFields)) {
+                if (!objectShapeOf(sourceType, sourceName, sourceFields)) {
                     reportCodegenError(*arg, diagcode::kTypeMismatch,
                                        "Object.assign sources must be objects "
                                        "with statically known fields");
                     continue;
                 }
                 out += " { const auto& cp3_s = (" + expr(*arg) + "); ";
+                if (nullableSource) out += "if (cp3_s) { ";
                 for (const ObjectField& tf : targetFields) {
                     for (const ObjectField& sf : sourceFields) {
                         if (sf.name == tf.name &&
@@ -165,23 +171,115 @@ std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
                         }
                     }
                 }
+                if (nullableSource) out += "} ";
                 out += "} ";
             }
             out += "return cp3_t; })()";
             return out;
         }
-        if (m.property == "freeze") {
+        if (m.property == "freeze" || m.property == "seal" ||
+            m.property == "preventExtensions") {
             const std::string recv = expr(*c.arguments.front());
-            // cp3 objects are shared by reference handle; mutating one handle
-            // is visible through all aliases, so a no-op is the correct v0.2
-            // approximation of Object.freeze.
+            // cp3 objects are shared by reference handle with a statically
+            // known shape and no runtime property table, so immutability
+            // cannot be stored on the object itself. The v0.2 approximation
+            // (matching the pre-existing `freeze` lowering) is identity:
+            // the same handle is returned, so aliases keep working and
+            // `Object.is(freeze(o), o)` holds. The freeze queries below fold
+            // on a directly frozen argument, which covers the deep-freeze
+            // reading for nested values reached through a frozen root.
+            // The canonical runtime registry for a future wiring step lives
+            // in object.hpp (`cp3::runtime::object::freeze/seal/...`).
+            (void)recv;
             return recv;
         }
-        // Object.is: NaN is considered equal to itself, and +0 is not equal to
-        // -0, matching JS Object.is exactly.
+        if (m.property == "isFrozen" || m.property == "isSealed" ||
+            m.property == "isExtensible") {
+            if (c.arguments.size() != 1 || !c.arguments.front()) {
+                reportCodegenError(c, diagcode::kArityMismatch,
+                                   "arity mismatch: Object." + m.property +
+                                       " expects one argument");
+                return "false";
+            }
+            const Expr& arg = *c.arguments.front();
+            const Type recvType = effectiveType(arg);
+            // JS: primitives are already frozen/sealed and non-extensible.
+            if (isPrimitiveValue(recvType)) {
+                return m.property == "isExtensible" ? "false" : "true";
+            }
+            const std::string root = freezeRootMethod(arg);
+            const bool rooted = !root.empty();
+            if (m.property == "isFrozen") {
+                // Deep-freeze: a nested value of a frozen root is frozen.
+                return rooted && root == "freeze" ? "true" : "false";
+            }
+            if (m.property == "isSealed") {
+                // Frozen implies sealed; a nested value of a frozen root
+                // is sealed as well.
+                return rooted ? "true" : "false";
+            }
+            return rooted ? "false" : "true";
+        }
+        if (m.property == "getPrototypeOf") {
+            if (c.arguments.size() != 1 || !c.arguments.front()) {
+                reportCodegenError(c, diagcode::kArityMismatch,
+                                   "arity mismatch: Object.getPrototypeOf "
+                                   "expects one argument");
+                return "nullptr";
+            }
+            // CP3 objects have no prototype (static shapes, no runtime
+            // metadata), so the prototype is always null.
+            return "nullptr";
+        }
+        if (m.property == "setPrototypeOf") {
+            if (c.arguments.size() != 2 || !c.arguments.front()) {
+                reportCodegenError(c, diagcode::kArityMismatch,
+                                   "arity mismatch: Object.setPrototypeOf "
+                                   "expects two arguments");
+                return "nullptr";
+            }
+            // Sema guarantees the prototype argument is null, which already
+            // matches the static model, so this is identity.
+            return expr(*c.arguments.front());
+        }
+        // Object.is: NaN is considered equal to itself, and +0 is not equal
+        // to -0, matching JS Object.is exactly for number/string/boolean.
+        // Reference handles (objects, arrays, classes) compare by identity,
+        // which is plain handle equality; null/undefined compare by value.
+        // The runtime helper has no Ref overload, so non-primitives use ==.
         const std::string lhs = expr(*c.arguments.front());
         const std::string rhs = expr(*c.arguments[1]);
-        return "::cp3::runtime::cp3_object_is(" + lhs + ", " + rhs + ")";
+        const Type lhsType = effectiveType(*c.arguments.front());
+        const Type rhsType = effectiveType(*c.arguments[1]);
+        if (lhsType.kind == TypeKind::Function ||
+            rhsType.kind == TypeKind::Function) {
+            // Function identity is not a handle equality in the generated
+            // representation; two distinct function values are not the same
+            // object. (Limitation: the same function value compared with
+            // itself also yields false here.)
+            return "false";
+        }
+        if (isIsPrimitive(lhsType) && isIsPrimitive(rhsType)) {
+            return "::cp3::runtime::cp3_object_is(" + lhs + ", " + rhs + ")";
+        }
+        if (lhsType.isNullish() && rhsType.isNullish()) {
+            // `nullptr_t` and `Undefined` have no cross comparison; the
+            // nullish kinds are static, so the result is a compile-time
+            // constant (null equals null, undefined equals undefined, and
+            // null never equals undefined under Object.is).
+            return lhsType.isNull() == rhsType.isNull() ? "true" : "false";
+        }
+        if (lhsType.isNullish() || rhsType.isNullish()) {
+            // A statically non-nullish value is never Object.is-equal to
+            // null/undefined (and the C++ spellings are incomparable).
+            // Nullable values take the runtime comparison below instead.
+            const Type& other = lhsType.isNullish() ? rhsType : lhsType;
+            if (!other.isNullable() && !other.isUnion() &&
+                !other.isUnknown()) {
+                return "false";
+            }
+        }
+        return "((" + lhs + ") == (" + rhs + "))";
     }
     if (m.property == "fromEntries") {
         if (c.arguments.size() != 1 || !c.arguments.front()) {

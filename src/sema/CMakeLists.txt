@@ -42,12 +42,12 @@ set(cp3_sema_sources
     ../std/network/codegen/sema.cpp
     ../std/fs/sema.cpp
     ../std/io/sema.cpp
-    ../std/typed-arrays/sema.cpp
-    ../std/typed-arrays/sema_index.cpp
-    ../std/typed-arrays/sema_methods.cpp
-    ../std/arrays/sema_methods.cpp
-    ../std/number/sema.cpp
-    ../std/number/sema_docs.cpp
+    ../language/typed-arrays/sema.cpp
+    ../language/typed-arrays/sema_index.cpp
+    ../language/typed-arrays/sema_methods.cpp
+    ../language/arrays/sema_methods.cpp
+    ../language/number/sema.cpp
+    ../language/number/sema_docs.cpp
     ../std/math/sema.cpp
     ../std/path/sema.cpp
     ../std/os/sema.cpp
@@ -67,7 +67,7 @@ set(cp3_sema_sources
     ../std/readline/sema.cpp
     ../std/network/webserver/settings/sema.cpp
     ../std/network/webserver/request/sema.cpp
-    ../std/arrays/sema_docs.cpp
+    ../language/arrays/sema_docs.cpp
     ../std/string/sema_docs.cpp
 )
 

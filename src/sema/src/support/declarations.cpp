@@ -117,7 +117,7 @@ void Analyzer::declareDeclarator(VariableDeclarator& d, VarKind kind) {
                "(annotate the array with a union type)");
     }
 
-    // The `Array(n)` dense form (src/std/typed-arrays/sema.cpp): the element
+    // The `Array(n)` dense form (src/language/typed-arrays/sema.cpp): the element
     // type must be inferable from an annotation and default-initializable. Once
     // handled, the generic assign check must not re-report `unknown[]` -> `T[]`.
     const bool arrayCtorForm =

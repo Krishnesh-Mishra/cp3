@@ -141,7 +141,7 @@ bool Analyzer::tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
     // std/network generics: `res.json<T>()` / `req.json<T>()` (src/std/network/sema.cpp).
     if (tryInferNetworkMemberCall(call, m, out)) return true;
     // The regular-array callback folds (`map` / `reduce`;
-    // src/std/arrays/sema_methods.cpp); the family hook owns `fill`.
+    // src/language/arrays/sema_methods.cpp); the family hook owns `fill`.
     if (tryInferArrayCall(call, m, out)) return true;
     if (tryInferFamilyMethodCall(call, m, out)) return true;
     return tryInferBufferCall(call, m, out);

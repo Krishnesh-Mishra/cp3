@@ -31,7 +31,7 @@
 // `import { TextEncoder, TextDecoder } from "std/text"`; an annotation
 // resolves only while that ambient binding is in scope, so the names never
 // leak into programs that do not import the module. `Uint8Array` is the
-// JS-compat family's nominal class (src/std/typed-arrays/sema.cpp).
+// JS-compat family's nominal class (src/language/typed-arrays/sema.cpp).
 // =============================================================================
 #include "detail/analyzer.h"
 

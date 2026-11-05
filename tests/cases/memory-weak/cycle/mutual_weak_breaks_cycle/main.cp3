@@ -1,0 +1,23 @@
+import console from "std/console";
+class A {
+  b: B | undefined;
+  constructor(b: B | undefined) {
+    this.b = b;
+  }
+}
+class B {
+  weak a: A | null;
+  value: number;
+  constructor(value: number, a: A | null) {
+    this.value = value;
+    this.a = a;
+  }
+}
+const b = new B(7, null);
+const a = new A(b);
+b.a = a;
+const pair = b.a;
+if (pair !== null && pair.b !== undefined) {
+  console.log(`${pair.b.value}`);
+}
+console.log("mutual-weak-ok");

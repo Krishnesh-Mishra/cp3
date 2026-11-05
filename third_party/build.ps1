@@ -29,10 +29,14 @@
 # (ar records object file timestamps); see third_party/MANIFEST.md.
 #
 # Ledger F (internal-only libs: unordered_dense, fast_float, simdutf, miniz,
-# moodycamel/Boost.Lockfree, fmt, XXHash/wyhash/XXH3): PLANNED ONLY — not in
-# $pins below, nothing downloaded. Add a $pins row + build/vendor steps here
-# only when the lead vendors them; see MANIFEST.md "Ledger F" and
-# docs/design/internal-libs.md.
+# moodycamel/Boost.Lockfree, fmt, XXHash/wyhash/XXH3): XXHash and simdutf
+# are now vendored (windows-x64 archives; see the $pins rows and the
+# Linux-xxHash note in section 9b below). The rest remain PLANNED ONLY.
+# Add a $pins row + build/vendor steps here only when the lead vendors
+# them; see MANIFEST.md "Ledger F" and docs/design/internal-libs.md. (simdutf was vendored 2026-11-05 — its
+# windows-x64 archive is delivered; the linux-x64/arm64 archives follow the
+# single-TU pattern in third_party/simdutf/build-linux-simdutf.sh, §11 below
+# and docs/design/linux-packaging-simdutf.md.)
 
 [CmdletBinding()]
 param(
@@ -197,6 +201,27 @@ Set-Content -Path (Join-Path $Tp 'uWebSockets\VERSION.txt') -Value 'https://gith
 Set-Content -Path (Join-Path $Tp 'oneTBB\VERSION.txt')      -Value 'https://github.com/uxlfoundation/oneTBB.git v2023.1.0 3046c8b0c29df995980003ea24f4d78c80ec0c8d 2026-10-18' -Encoding ASCII
 
 # ---------------------------------------------------------------------------
+# 9b. xxHash Linux archives (linux-x64 / linux-arm64) - NOT built by this
+#     script. build.ps1 is the Windows rebuild; the Linux archives are
+#     built on a Linux host (or with an aarch64 cross toolchain) by the
+#     vendored single-TU recipe in third_party/xxhash/build-linux.sh:
+#
+#       third_party/xxhash/build-linux.sh --arch x64    # gcc -O3, native
+#       third_party/xxhash/build-linux.sh --arch arm64  # aarch64-linux-gnu-gcc -O3
+#
+#     which compiles third_party/xxhash/include/xxhash.c (pinned
+#     v0.8.3, e626a72bc2321cd320e953a0ccf1584cad60f363) with
+#     "gcc -O3 -std=c99 -Wall -c", archives it with ar/ranlib, and writes
+#     libxxhash.a + a VERSION.txt copy to
+#     third_party/xxhash/lib/linux-<arch>/ (libsodium pattern).
+#     lib/linux-x64 and lib/linux-arm64 currently hold README
+#     placeholders only. Full recipe, proposed MANIFEST.md rows, and the
+#     src/std/hash + src/std/collections native.hpp wiring lines (do not
+#     land until the archives exist): docs/design/linux-packaging.md.
+#     No logic below this comment needs to change for the Linux archives.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 # 10. smoke matrix (each program is compiled from a clean directory using ONLY
 #    third_party includes and archives, linked, and run to exit code 0):
 #    3 link variants per program: dynamic, -static-libgcc -static-libstdc++,
@@ -209,3 +234,30 @@ if (-not $SkipSmokes) {
 
 Write-Host ''
 Write-Host 'third_party rebuild complete.'
+
+# ---------------------------------------------------------------------------
+# 11. simdutf Linux archives (linux-x64 / linux-arm64)
+#
+# simdutf is built from its single amalgamated translation unit
+# (src/simdutf.cpp) with plain g++ -O3 -- no CMake file list to invoke
+# here. The Windows flow above deliberately does NOT cross-compile ELF
+# archives from this host. The authoritative producer is
+# third_party/simdutf/build-linux-simdutf.sh, run on a Linux host:
+#
+#   g++ -O3 -std=c++17 -I <src>/include -I <src>/src -c <src>/src/simdutf.cpp -o simdutf.o
+#   ar rcs libsimdutf.a simdutf.o
+#
+# for --arch x64 natively and --arch arm64 natively or via an
+# aarch64-linux-gnu cross toolchain, pin v6.1.0 7852150e454ebacbf7e65cbf2c5e3feac5e660ec.
+# Recipe, MANIFEST rows and native.hpp wiring:
+# docs/design/linux-packaging-simdutf.md. This section only ensures the
+# deliverable dirs exist and warns when an archive is still pending, so
+# a Windows rebuild never silently produces (or claims) Linux archives.
+# ---------------------------------------------------------------------------
+foreach ($triple in 'linux-x64','linux-arm64') {
+    $linuxLib = Join-Path $Tp "simdutf\lib\$triple"
+    New-Item -ItemType Directory -Force -Path $linuxLib | Out-Null
+    if (-not (Test-Path (Join-Path $linuxLib 'libsimdutf.a'))) {
+        Write-Host ("simdutf {0} archive pending: run third_party/simdutf/build-linux-simdutf.sh on a Linux host (see docs/design/linux-packaging-simdutf.md)" -f $triple)
+    }
+}

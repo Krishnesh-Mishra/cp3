@@ -192,3 +192,52 @@ pair (§3).
   inside `.d.ts`-style declaration files emitted by tooling are
   subject to the same CP3421 error; emitter owners should stop
   spelling `unknown` (§5).
+
+## 8. §K finish — landed (sema, scoped)
+
+Implemented by the §K owner; code only (no build/test, no commit).
+Scope: `src/sema/src/checks/stmt/stmt_check.cpp`,
+`src/sema/src/checks/expr/expr_check.cpp`,
+`src/sema/src/checks/call/call_check.cpp` only (§6.1/§6.2/§6.4).
+
+* **§6.1 no-return → `undefined`** `stmt_check.cpp:758`
+  (`Type::voidType()` → `Type::undefined()` for unannotated
+  declarations) and `expr_check.cpp` block-body arrows (same swap).
+  Async follows via the existing `promiseOf(...)` wraps →
+  `Promise<undefined>`. `Type::voidType()` survivors elsewhere in sema
+  (member_check, class, promise_call, call_check timers, type_check
+  sentinel) are untouched — retire phase by phase.
+* **§6.4 arrow double-report cleanup** `expr_check.cpp::inferArrowReturn`:
+  removed the dead first `resolveType(*arrow.returnType)` on the
+  expression-body branch (`else if (arrow.returnType)`), which was
+  immediately overwritten by the trailing resolve; the annotation now
+  resolves exactly once for both body shapes. A `: void` / `: unknown`
+  arrow annotation therefore reports CP3420/CP3421 once, matching
+  function declarations (`buildSig`).
+* **§6.2 `JSON.parse` missing-arg check moved to sema**
+  `call_check.cpp::tryInferJsonCall`: `property == "parse"` with
+  empty/`null` type args now reports CP3208 at `call.span` and returns
+  `Type::undefined()`; typed `JSON.parse<T>(x)` and
+  `JSON.stringify` are unchanged (argument checking still runs via
+  `checkArgs`).
+* **Parser helper NOT deleted (out of scope)**: deleting
+  `isBareJsonParse` + its three call sites in
+  `src/parser/src/expr/primary.cpp` was not permitted under the
+  file-scope constraint for this change, so the interim parser
+  CP3208 currently **duplicates** the new sema CP3208 for
+  `JSON.parse(x)`. Lead follow-up (must land with this to avoid
+  double diagnostics): delete the parser helper in `primary.cpp`
+  (the `isBareJsonParse` block and its uses in the `?.` call,
+  `(` call, and `<…>`-type-args call branches) and re-baseline the
+  `stdlib/02/json/parse/untyped/*` fixtures to a single CP3208.
+
+Behavior changes: untyped `JSON.parse` value type `unknown` →
+`undefined` (all use sites now see `undefined`); unannotated
+no-return functions/arrows print/assign as `undefined` instead of
+`void`; arrow `: void`/`: unknown` annotations now single-report.
+
+Limitations: no build/test run (per scope); `Type::voidType()`
+lowering stays until the remaining sema/codegen users are retired;
+shadowed-`JSON` false positive remains until the parser helper is
+deleted (sema recognition is still name-based, as before); the
+`void` operator, `never`, and §6.3 corpus/docs sweep are untouched.

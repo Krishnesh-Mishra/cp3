@@ -1,0 +1,6 @@
+{
+  "name": "test",
+  "version": "0.1.0",
+  "type": "application",
+  "main": "src/main.cp3"
+}

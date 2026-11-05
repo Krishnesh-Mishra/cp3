@@ -914,24 +914,26 @@ gate: BIG WARN (fix this): scene: cp3 219 ms is 2.65x java (83 ms), tripwire 1.0
 
 <!-- test:respond:start -->
 ### respond
-_Updated 2026-11-05T13:26:42 by `python benchmarks/runner/run_benchmark.py --only respond --reps 1`._
+_Updated 2026-11-05T13:37:14 by `python benchmarks/runner/run_benchmark.py --only respond`._
 
 ```text
-  * respond  expected = 578079
+  ◆ respond  expected = 578079
 3348416444655930007 | cross-language checksum | median/best/p95 ms; CV = variation %
-  lang    median ms  best ms  p95 ms  CV%  vs cp3  RSS MiB  bin KiB
-  -----------------------------------------------------------------
-  goose       20.27    20.27   20.27    -       -      1.9       58
-  cpp         20.41    20.41   20.41    -       -      1.9       50
-  go          40.76    40.76   40.76    -       -     10.1     1756
-  js          132.7    132.7   132.7    -       -     59.5        -
-  java        142.2    142.2   142.2    -       -     43.2        2
-  python     2206.7   2206.7  2206.7    -       -     12.9        -
-  rust            -        -       -    -       -        -        -
-  cp3             -        -       -    -       -        -        -
-    x rust  build failed: error: linker `link.exe` not found
-    ! cp3  not runnable yet: src/index.cp3:42:21: error: CP3401: type mismatch: 'fromCharCode' is not a method of this value
-    +  output verified: 6/6 match oracle '578079\n3348416444655930007'
+  lang    median ms  best ms  p95 ms   CV%         vs cp3  RSS MiB  bin KiB
+  ─────────────────────────────────────────────────────────────────────────
+  goose       10.15     9.69   10.58  22.8   9.16x faster      4.8       58
+  cpp         14.40    12.47   55.70  66.6   6.46x faster      5.9       50
+  go          16.61    13.94   19.69  19.0   5.60x faster     10.2     1756
+  cp3         93.03    84.91   372.4  75.2       baseline      7.1     1243
+  java        95.31    91.07   111.8   8.9   1.02x slower     43.5        2
+  js          138.8    133.8   156.8   7.4   1.49x slower     60.1        -
+  python     1468.6   1061.7  2489.9  33.7  15.79x slower      4.1        -
+  rust            -        -       -     -              -        -        -
+    ✗ rust  build failed: error: linker `link.exe` not found
+    ✓  output verified: 7/7 match oracle '578079\n3348416444655930007'
+
+gate: BIG WARN (fix this): respond: cp3 93 ms is 6.46x cpp (14 ms), tripwire 1.20x
+gate: BIG WARN (fix this): respond: cp3 93 ms is 5.60x go (17 ms), tripwire 1.00x
 ```
 <!-- test:respond:end -->
 

@@ -94,7 +94,7 @@ std::string Generator::emitStringStaticCall(const CallExpr& c,
 std::string Generator::emitStringMethodCall(const CallExpr& c, const MemberExpr& m) {
     // Literal array element set: `["a", "b"].includes(x)` lowers to an equality
     // chain. Any other form on an array receiver is left to the array family
-    // (src/std/arrays/codegen_methods.cpp) - never fall through to the string
+    // (src/language/arrays/codegen_methods.cpp) - never fall through to the string
     // method table.
     if (m.object && m.object->kind == NodeKind::ArrayLiteral) {
         if (m.property != "includes" || c.arguments.size() != 1) {
@@ -135,7 +135,7 @@ std::string Generator::emitStringMethodCall(const CallExpr& c, const MemberExpr&
     if (!fn && m.property == "split") {
         // `s.split(sep)`: a string separator splits through the string runtime
         // (the array extras' `makeArray` wraps the pieces;
-        // src/std/arrays/codegen_methods.cpp lowers the methods it feeds into);
+        // src/language/arrays/codegen_methods.cpp lowers the methods it feeds into);
         // a RegExp separator lowers onto the D48 engine's JS scan
         // (cp3/core/regex.hpp, Regex::split).
         if (c.arguments.size() != 1 || !c.arguments.front()) {

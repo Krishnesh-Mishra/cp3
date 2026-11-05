@@ -4,5 +4,22 @@ import console from "std/console";
 //
 // `console` is not built into the language: it is the std/console module
 // (spec 20), imported by name. console.log writes to stdout.
+const ev = new EventEmitter();
 
-console.log("Hello, world!");
+const main = () => {
+  console.log("Hello, world!");
+    let a = 0;
+    ev.on("inc", () => {
+        a++;
+        console.log(" incremented a by 1 , current value:", a);
+    });
+
+};
+
+
+const interval = setInterval(() => {
+    ev.emit("inc") ;
+}, 1000);
+
+main();
+console.log("Done.");

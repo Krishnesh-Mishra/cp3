@@ -1,0 +1,18 @@
+import console from "std/console";
+class Node {
+  next: Node | null;
+  constructor(next: Node | null) {
+    this.next = next;
+  }
+}
+function length(head: Node | null): number {
+  let n = 0;
+  let cur: Node | null = head;
+  while (cur !== null) {
+    n += 1;
+    cur = cur.next;
+  }
+  return n;
+}
+console.log(length(new Node(new Node(new Node(null)))));
+console.log("self-ref-ok");

@@ -6,6 +6,22 @@ and their fields, builds the class->class field graph (including arrays,
 Map/Set values and unions, conservatively), and reports cycle statistics:
 self-references, mutual cycles, longer cycles, and how many already use weak.
 
+Auto-weak coverage (upper bound): each cycle SCC is classified as
+  - already-weak   : a manual `weak` edge already breaks the cycle.
+  - exempt         : single-node self-loop (recursive type, no manual weak
+                     needed today).
+  - auto-weak      : SCC > 1 with no weak edge and no `unknown`-typed
+                     field anywhere in the SCC -- a *candidate* for
+                     compiler-injected non-owning edges. This is an
+                     upper bound: the whole-program ownership proof
+                     (docs/design/cycle-proof.md, obligations P2/P3:
+                     narrowing + independent strong path at every
+                     store/escape site) is not modelled here, so real
+                     compiler coverage will be <= this figure.
+  - manual-weak    : SCC > 1 with no weak edge that involves an
+                     `unknown` field -- fail-closed, manual `weak`
+                     required (proof obligation P8).
+
 Usage: python tools/cycle_stats.py [--root DIR] [--out FILE]
 """
 import argparse
@@ -62,6 +78,12 @@ def type_refs(typetext: str, known: set) -> set:
     return ids & known
 
 
+def type_has_unknown(typetext: str) -> bool:
+    # Mirrors the compiler's fail-closed rule: an `unknown` anywhere in
+    # the field type (incl. inside unions/containers) is opaque.
+    return re.search(r"\bunknown\b", typetext) is not None
+
+
 def find_cycles(graph):
     sys.setrecursionlimit(100000)
     index = {}
@@ -99,6 +121,26 @@ def find_cycles(graph):
     return sccs
 
 
+def classify_scc(comp, graph, weak_edges, unknown_classes):
+    """Return (decision, reason) for one SCC under the auto-weak model."""
+    if len(comp) == 1:
+        return "exempt", "single self-referencing field; no manual weak needed"
+    comp_edges = [
+        (a, b) for a in comp for b in graph.get(a, ()) if b in comp
+    ]
+    if any(e in weak_edges for e in comp_edges):
+        return "already-weak", "manual weak edge already breaks the cycle"
+    if any(c in unknown_classes for c in comp):
+        return (
+            "manual-weak",
+            "unknown-typed field in SCC (fail-closed, P8); mark one edge weak",
+        )
+    return (
+        "auto-weak",
+        "candidate for injected non-owning edge (upper bound; P2/P3 unproven)",
+    )
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=".")
@@ -130,11 +172,14 @@ def main():
             loc.setdefault(name, str(f.relative_to(root)))
     graph = defaultdict(set)
     weak_edges = set()
+    unknown_classes = set()
     total_fields = 0
     class_edges = 0
     for cls, fields in raw.items():
         for fname, ftype, weak in fields:
             total_fields += 1
+            if type_has_unknown(ftype):
+                unknown_classes.add(cls)
             for target in type_refs(ftype, known):
                 graph[cls].add(target)
                 class_edges += 1
@@ -149,12 +194,31 @@ def main():
         cyclic_classes.update(comp)
     acyclic = len(known) - len(cyclic_classes)
     unresolved = 0
+    decisions = {}
     for comp in sccs:
         comp_edges = [
             (a, b) for a in comp for b in graph.get(a, ()) if b in comp
         ]
         if not any(e in weak_edges for e in comp_edges):
             unresolved += 1
+        decisions[tuple(sorted(comp))] = classify_scc(
+            comp, graph, weak_edges, unknown_classes
+        )
+    # Auto-weak coverage: among classes that (today) need a manual weak
+    # edge to break an SCC > 1, how many would an auto-weak injection
+    # candidate cover, vs how many still need manual weak?
+    auto_classes = set()
+    manual_classes = set()
+    for comp in sccs:
+        decision, _reason = decisions[tuple(sorted(comp))]
+        if decision == "auto-weak":
+            auto_classes.update(comp)
+        elif decision == "manual-weak":
+            manual_classes.update(comp)
+    needing = auto_classes | manual_classes
+    auto_pct = (
+        100.0 * len(auto_classes) / len(needing) if needing else 0.0
+    )
     lines = []
     lines.append("# Stage 0 cycle statistics (automatic cycle handling)")
     lines.append("")
@@ -173,16 +237,38 @@ def main():
         f"{unresolved} of {len(sccs)} groups"
     )
     lines.append("")
+    lines.append("## Auto-weak coverage (upper bound; see docs/design/cycle-proof.md)")
+    lines.append("")
+    lines.append(
+        f"- classes needing a cycle break (SCC > 1, no weak edge): {len(needing)}"
+    )
+    lines.append(f"- auto-weak candidates (no unknown in SCC): {len(auto_classes)}")
+    lines.append(f"- manual weak still required (unknown in SCC): {len(manual_classes)}")
+    lines.append(
+        f"- auto-weak coverage %: {auto_pct:.0f}% "
+        f"({len(auto_classes)}/{len(needing)} classes; "
+        f"manual weak share {100.0 - auto_pct:.0f}%)"
+    )
+    lines.append(
+        "- note: upper bound only -- narrowing (P2) and independent "
+        "strong-path (P3) proofs are not modelled; compiler coverage "
+        "will be <= this figure."
+    )
+    lines.append("")
     lines.append("Cycle groups:")
     for comp in sorted(sccs, key=lambda c: sorted(c)):
         comp_edges = [
             (a, b) for a in comp for b in graph.get(a, ()) if b in comp
         ]
         has_weak = any(e in weak_edges for e in comp_edges)
+        decision, reason = decisions[tuple(sorted(comp))]
         members = ", ".join(
             f"{c} ({loc.get(c, '?')})" for c in sorted(comp)
         )
-        lines.append(f"- {members} [weak: {'yes' if has_weak else 'no'}]")
+        lines.append(
+            f"- {members} [weak: {'yes' if has_weak else 'no'}; "
+            f"auto-weak: {decision} -- {reason}]"
+        )
     report = "\n".join(lines) + "\n"
     print(report, end="")
     if args.out:

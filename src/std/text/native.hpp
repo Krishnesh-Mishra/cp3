@@ -30,7 +30,7 @@ namespace cp3::cli::detail {
 
 inline const NativePackage kTextNativePackage{
     "std/text",
-    {"src/std/text/include", "src/std/typed-arrays/include",
+    {"src/std/text/include", "src/language/typed-arrays/include",
      "third_party/simdutf/include"},
     {},
     {},

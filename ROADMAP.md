@@ -94,10 +94,10 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | Array | Callback signature `(value, index, array)` | Standardize every array iteration callback to the JS/TS shape. Callbacks may declare any prefix of `(value, index, array)`. | Done |
 | Array | `flatMap`, `findLast`, `findLastIndex`, `at` | Modern query, search, and access methods. | Done |
 | Array | `toSorted`, `toReversed` | Non-mutating array transformation methods (return new arrays). | Done |
-| Object | `assign`, `is`, `freeze` | Standard object manipulation, creation, and immutability methods. Today: `keys`, `values`, `entries`, `assign`, `is`, `freeze`. | Partial |
+| Object | `assign`, `is`, `freeze` | Standard object manipulation, creation, and immutability methods. Today: `keys`, `values`, `entries`, `assign`, `is`, `freeze`. | Done (verified in `docs/design/verified-gaps.md`; `freeze` is a documented no-op approximation) |
 | String | `codePointAt`, `fromCodePoint`, `matchAll`, `raw` | Unicode-aware and modern string methods. | Planned |
-| JSON | `JSON.stringify(value, replacer?, space?)` | Extend the serializer to support pretty printing (for example 2-space indent) and a replacer. Today only a numeric indent is typed and emitted. | Partial |
-| Collections | `ConcurrentMap` | Thread-safe map implementation. | Planned |
+| JSON | `JSON.stringify(value, replacer?, space?)` | Extend the serializer to support pretty printing (for example 2-space indent) and a replacer. Today only a numeric indent is typed and emitted. | Done (verified in `docs/design/verified-gaps.md`: replacer fn, `string[]` allowlist, `space: number \| string`, legacy indent) |
+| Collections | `ConcurrentMap` | Thread-safe map implementation. | Done (verified in `docs/design/verified-gaps.md`: mutex-backed `set/get/has/remove/size`) |
 | Promise | Full Promise API | Complete TS-compatible Promise surface. Today: `resolve`, `reject`, `all`, `race`, `allSettled`, `any`, `withResolvers`, `then`, `catch`, `finally`. | Done |
 | Global | `structuredClone(obj)` | Deep copy without a worker. Reuse the existing worker deep-copy cloner on the main thread. | Done |
 | Global | `parseTo(value, Type)` | Typed scalar conversion between `string`, `number`, `boolean` and the native numeric types, in both directions (for example `parseTo("123", number)`, `parseTo(n, string)`, `parseTo<r_'i32'>(i64Value)`). The target is a static type keyword or type argument, never a value. A literal source is checked at compile time (CP3401 when the target cannot represent it); a variable source is converted by the runtime coercion helpers. | Done (native targets take the type-argument form `parseTo<r_'i32'>("777")` since `r_'i32'` is type syntax, not a value) |
@@ -107,9 +107,9 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | Native types | `.toString()` and `wrappingMul` | Every supported native numeric width (Rust and C++ aliases, including `char`, `long`, `unsigned long` and `f32`) formats exactly via `.toString()`; `value.wrappingMul(other)` opts into modulo-2^N multiplication for FNV-style hashing while checked `*` remains the default. Tests: `native_checked/tostring`, `native_checked/wrapping_mul`, `native_project_cpp/tostring`. | Done |
 | String | `String.fromCharCode` | Byte-oriented inverse of `charCodeAt`: each code is reduced modulo 256 and appended as one raw UTF-8 byte; no arguments yields the empty string. Tests: `tests/cases/arrays-strings/02/str/fromcharcode`. | Done |
 | `std/process` | `cwd`, `chdir`, `pid`, `ppid`, `uptime`, `memoryUsage`, `hrtime` | Thin OS calls for process information and high-resolution timing. Today: `argv`, `env`, `exit`, `exec`, `spawn`, `cwd`, `chdir`, `pid`, `ppid`, `uptime`, `memoryUsage` (rss real; heap fields `0`), `hrtime`, via vendored libuv. | Done |
-| `std/network` | HTTP Router (path params & wildcards) | For example `app.get("/users/:id", ...)`. Today `:name` params work; wildcard segments are not exposed. | Partial |
+| `std/network` | HTTP Router (path params & wildcards) | For example `app.get("/users/:id", ...)`. Today `:name` params work; wildcard segments are not exposed. | Done (verified in `docs/design/verified-gaps.md`: `*` last-segment/mid-pattern wildcards, `*`/`/*` match-any) |
 | `std/network` | `dns.lookup(hostname)` | Thin wrapper over the libuv `getaddrinfo` already used by `fetch`. | Done (`network.lookup` and the named `lookup` import; resolves the first address as text) |
-| `std/fs` | `fs.watch(path, callback)` | File-system watcher using libuv `fs_event` (already linked). | Planned |
+| `std/fs` | `fs.watch(path, callback)` | File-system watcher using libuv `fs_event` (already linked). | Done (verified in `docs/design/verified-gaps.md`: `uv_fs_event` + `FsWatcher.close()`) |
 | `std/os` | `homedir`, `tmpdir`, `freemem`, `totalmem`, `loadavg`, `networkInterfaces` | Thin OS calls for system environment and resource info. Today: `platform`, `homedir`, `tmpdir`, `hostname`, `cpus`, `totalMemory`, `freeMemory`, `totalmem`, `freemem` (Node names), `loadavg` (1/5/15 min tuple), `networkInterfaces` (`Array<[name, address, family, internal]>`), via vendored libuv. | Done |
 | `std/io` | `waitReadable`, `waitWritable`, `pollUntilDone`, `POLL_*` | Shared-`EventLoop` fd readiness for libraries with a socket and a non-blocking step API. Phase 1 is the two wait primitives; phase 2 is the shared helper. Phase 3 (`import native async`) is deferred. | Done |
 | Packages | Exported types are vocabulary-neutral (Rule 3) | The generated `index.cp3` rewrites a Rust/C++ package's unprefixed native type spellings (`i64`, `long long`) to prefixed spellings (`r_'i64'`, `c_'long long'`), so the exported surface resolves identically in a consumer project of any `typeSystem`; TypeScript-authored packages need no rewriting. | Done |
@@ -131,7 +131,7 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | `null`, `undefined` | Kept as the only two nullish primitives. | `===`/`!==` flavor rules, `??` and `== null` semantics are unchanged. |
 | Migration & verification | Corpus, spec, docs and diagnostics referencing `void`/`unknown` are updated; the corpus is grep-rewritten (`: void` → `undefined`, bare `JSON.parse(` → `JSON.parse<T>(`). | Diagnostics explain why (static native output; `catch` binds `Error`; `unknown` forced narrowings) and what to write; llm.md and `docs/content/01-language/01-variables-and-bindings/02-types.md` are updated in the same change. |
 
-**Status: Planned** (not started; spec/corpus-wide breaking change, scheduled with the v0.2 audit).
+**Status: Partial** (src ban implemented — `void`/`unknown` annotations and bare `JSON.parse` rejected; doc-string/corpus sweep still open — see `docs/design/verified-gaps.md` #6).
 
 #### L. JavaScript/TypeScript compatibility backlog (v0.2, highest value first)
 
@@ -139,33 +139,33 @@ The remaining JavaScript and TypeScript surface needed so ordinary application c
 
 | Feature | Why | Size | Status |
 | --- | --- | --- | --- |
-| Array/Object/String catalog gaps: `reduce`, `reduceRight`, `splice`, `concat`, `reverse`, `lastIndexOf`, `keys`/`values`/`entries`, `Array.from`/`isArray`/`of`, `Object.fromEntries`, `parseInt` | The `llm.md` catalog does not list them; `reduce`, `splice` and `concat` are everywhere in TS code, so the TS-compatibility theme fails without them. | Small | In progress (all done except `Object.fromEntries`, blocked on `Record<string,V>`) |
+| Array/Object/String catalog gaps: `reduce`, `reduceRight`, `splice`, `concat`, `reverse`, `lastIndexOf`, `keys`/`values`/`entries`, `Array.from`/`isArray`/`of`, `Object.fromEntries`, `parseInt` | The `llm.md` catalog does not list them; `reduce`, `splice` and `concat` are everywhere in TS code, so the TS-compatibility theme fails without them. | Small | Done (verified in `docs/design/verified-gaps.md` #18; `Record<string,V>` now canonicalizes to `Map<string,V>`, unblocking `Object.fromEntries`) |
 | Timers, if missing: `setTimeout`, `setInterval`, `clearTimeout`, `sleep` | Every service waits; a 100 ms timer regression test needs them. | Small | Done |
-| Process lifecycle: `process.on("SIGINT" \| "SIGTERM" \| "exit" \| "unhandledRejection")`, `server.close()` | Servers need graceful shutdown; libuv signal handles are already available. | Small | Planned |
-| Built-in utility types: `Partial`, `Required`, `Readonly`, `Pick`, `Omit`, `Record` | Very common in real TS. The compiler resolves them natively instead of user-written mapped types. | Medium | Planned |
+| Process lifecycle: `process.on("SIGINT" \| "SIGTERM" \| "exit" \| "unhandledRejection")`, `server.close()` | Servers need graceful shutdown; libuv signal handles are already available. | Small | Done (verified in `docs/design/verified-gaps.md` #7) |
+| Built-in utility types: `Partial`, `Required`, `Readonly`, `Pick`, `Omit`, `Record` | Very common in real TS. The compiler resolves them natively instead of user-written mapped types. | Medium | Done (verified in `docs/design/verified-gaps.md` #8) |
 | Date gaps: `getTime`, `getDay`, the UTC getters, setters, `Date.parse` | The current surface is very thin. | Small | Done |
-| `cp3 install <dir>` semantics | Compile the source or reject with a clear "use a `.cp3pak`" error; accept classes via a package's default or named exports (today CP3401 blocks it); make `cp3 test` work for packages. | Small-medium | Planned |
+| `cp3 install <dir>` semantics | Compile the source or reject with a clear "use a `.cp3pak`" error; accept classes via a package's default or named exports (today CP3401 blocks it); make `cp3 test` work for packages. | Small-medium | Done (verified in `docs/design/verified-gaps.md` #9) |
 | Coercion: `parseInt`, `parseFloat`, `Number(x)`, `String(x)`, `Boolean(x)`, `isNaN`, `isFinite` | Basic coercion in every TS codebase. | Small | Done |
 | Number helpers: `Number.toString(radix)`, `Number.isSafeInteger`, `Number.parseInt`/`parseFloat` | Common helpers plus hex/binary output. | Small | Done |
 | `encodeURIComponent`, `decodeURIComponent`, `encodeURI`, `decodeURI`, `atob`, `btoa` | URL building and Basic auth headers; the network runtime already carries a `percentDecode` helper to adapt. | Small | Done |
 | Scheduling primitives: `queueMicrotask`, `setImmediate`, `process.nextTick` | What libraries expect alongside timers. | Small | Done |
-| Generic constraints and defaults: `<T extends X = Y>` | Required for real generic APIs. | Medium | Planned |
-| `const enum` and enum reverse mapping | Common enum use. | Small | Planned |
+| Generic constraints and defaults: `<T extends X = Y>` | Required for real generic APIs. | Medium | Partial (verified in `docs/design/verified-gaps.md` #10: parser + function-side constraint check done; default-fill/alias legs not wired) |
+| `const enum` and enum reverse mapping | Common enum use. | Small | Done (verified in `docs/design/verified-gaps.md` #11) |
 | Map/Set constructors from iterables and spread (`[...set]`, `new Map(entries)`) | Everyday code. | Small | Done |
 | Set algebra: `union`, `intersection`, `difference`, `isSubsetOf` | ES2025 methods; simple on the flat hash set. | Small | Done |
-| `Object.groupBy` / `Map.groupBy` | Common in reporting code. | Small | In progress (`Map.groupBy` done; `Object.groupBy` returns an object with runtime keys and waits on `Record`) |
+| `Object.groupBy` / `Map.groupBy` | Common in reporting code. | Small | Done (verified in `docs/design/verified-gaps.md` #19; `Object.groupBy` returns canonical `Map<string,T[]>`; non-string keys use `Map.groupBy`) |
 | `toSpliced`, `with`, `flat(depth)`, `copyWithin` | Rest of the ES2023 non-mutating array methods. | Small | Done |
 | `process.stdout.write` / `process.stderr.write` | No newline; CLIs and progress output need it. | Small | Done |
-| `process.stdin` (read all, read lines) or `std/readline` | Piping input into CLIs; `console.input` covers prompts only. | Small-medium | Planned |
+| `process.stdin` (read all, read lines) or `std/readline` | Piping input into CLIs; `console.input` covers prompts only. | Small-medium | Done (verified in `docs/design/verified-gaps.md` #12: `readAll/readLines/readLine`, plus separate `std/readline`) |
 | `process.exitCode`, `process.platform`, `process.arch`, `process.version` | Basic process info and a graceful exit path. | Small | Done |
 | `console.table`, `console.group`/`groupEnd`, `console.dir`, `console.count`, `console.trace` | Common debug output; `console.time`/`timeEnd` are already covered by the `std/time` ledger entry. | Small | Done |
 | `Error.captureStackTrace`, `error.toString()`, `error.name` overrides on subclasses | Custom error classes need them. | Small | Done |
 | `res.redirect`, `res.sendFile`, `res.cookie`, `req.cookies`, `req.ip` | Basic web-server features every app writes by hand today. | Small-medium | Done |
-| Built-in middleware: `static(dir)`, `cors(options)`, `bodyLimit(n)` | Production servers need these first; body limits are also a DoS defense. | Medium | Planned |
-| Error-handling hook: `server.onError((err, req, res) => ...)` | An uncaught handler throw returns 500 instead of crashing or hanging. | Small | Planned |
-| `Headers`, `Request`, `Response`, `FormData` classes and `fetch(Request)` | Standard fetch shapes TS code expects. | Medium | Planned |
-| `AbortSignal.timeout(ms)` on `fetch` | Complements the existing `timeout` init option. | Small | Planned |
-| All other Express-compatible features which are doable (static file serving, redirect/sendFile, cookies, CORS, body limits, error hooks) | The set of Express patterns users actually write; implement those that carry no runtime metadata or wrapper machinery. | Medium | Planned |
+| Built-in middleware: `static(dir)`, `cors(options)`, `bodyLimit(n)` | Production servers need these first; body limits are also a DoS defense. | Medium | Done (verified in `docs/design/verified-gaps.md` #13) |
+| Error-handling hook: `server.onError((err, req, res) => ...)` | An uncaught handler throw returns 500 instead of crashing or hanging. | Small | Done (verified in `docs/design/verified-gaps.md` #14; without it the dispatcher answers 500) |
+| `Headers`, `Request`, `Response`, `FormData` classes and `fetch(Request)` | Standard fetch shapes TS code expects. | Medium | Done (verified in `docs/design/verified-gaps.md` #15) |
+| `AbortSignal.timeout(ms)` on `fetch` | Complements the existing `timeout` init option. | Small | Done (verified in `docs/design/verified-gaps.md` #16) |
+| All other Express-compatible features which are doable (static file serving, redirect/sendFile, cookies, CORS, body limits, error hooks) | The set of Express patterns users actually write; implement those that carry no runtime metadata or wrapper machinery. | Medium | Done for the listed set (verified in `docs/design/verified-gaps.md` #17; `express()`/`Router()`, sendFile/static options, cookies, body-parse) |
 
 #### M. Nullable class types and narrowing
 

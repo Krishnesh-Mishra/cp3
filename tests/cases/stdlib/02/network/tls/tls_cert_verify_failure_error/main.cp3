@@ -1,0 +1,19 @@
+import console from "std/console";
+import { WebSocket } from "std/network";
+
+// TLS certificate-verification failure, surfaced as Error (deterministic).
+// LIMITATION: there is no TLS API and no certificate store / verify option
+// in `std/network` (wss:// is rejected with "TLS is off"), so a real
+// self-signed-certificate verification failure cannot be produced today.
+// What holds deterministically: constructing a wss:// WebSocket throws a
+// catchable Error synchronously (the runtime rejects the TLS URL in the
+// constructor, before any "open"/"error" event can fire). This pins that
+// failure mode -- a TLS connection attempt must fail as Error, never open
+// -- without claiming to exercise actual X.509 verification. No external
+// host is contacted.
+try {
+  const ws = new WebSocket("wss://127.0.0.1:48246/");
+  console.log("unexpected-open");
+} catch (e) {
+  console.log("Error:tls-cert-verify");
+}
