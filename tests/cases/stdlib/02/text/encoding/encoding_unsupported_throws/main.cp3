@@ -1,0 +1,19 @@
+import console from "std/console";
+import { TextEncoder, TextDecoder } from "std/text";
+const label = "latin1";
+let caughtDecoder = false;
+try {
+  const d = new TextDecoder(label);
+} catch (e) {
+  caughtDecoder = true;
+}
+let caughtEncoder = false;
+try {
+  const e = new TextEncoder(label);
+} catch (e) {
+  caughtEncoder = true;
+}
+console.log(caughtDecoder ? "caught" : "missed");
+console.log(caughtEncoder ? "caught" : "missed");
+const ok = new TextDecoder("UTF8");
+console.log(ok.encoding);

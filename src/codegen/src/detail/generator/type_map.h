@@ -181,6 +181,12 @@ bool classifyCollections(const Type& t, CppInfo& info);
 // named "Date" lowering to `::cp3::runtime::date::Date`. Returns false for
 // every other type.
 bool classifyDate(const Type& t, CppInfo& info);
+// The Stopwatch value type (std/time).
+bool classifyStopwatch(const Type& t, CppInfo& info);
+// TextEncoder/TextDecoder (std/text).
+bool classifyText(const Type& t, CppInfo& info);
+// Logger (std/log).
+bool classifyLogger(const Type& t, CppInfo& info);
 
 // The core regex value type (D48; src/emit/regex.cpp): a nominal class named
 // "RegExp" lowering to `::cp3::runtime::regex::Regex`. Returns false for every

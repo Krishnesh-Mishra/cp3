@@ -261,6 +261,9 @@ bool isDataViewClass(const Type& t);
 // type arguments (parts == { K, V } / { T }); the member table and the CP3305
 // candidates live in the family unit.
 bool isCollectionsClass(const Type& t);
+bool isLogClass(const Type& t);
+bool isTextClass(const Type& t);
+bool isTextTypeName(const std::string& name);
 
 // True for every constructor name the family registers (`Array` included);
 // scopes.cpp declares them as ambient builtins and type names.

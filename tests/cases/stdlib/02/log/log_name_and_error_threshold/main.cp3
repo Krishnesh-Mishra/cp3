@@ -1,0 +1,11 @@
+import { Logger } from "std/log";
+import console from "std/console";
+
+// `name` reads back the constructor name, and at level error only error
+// lines pass the filter.
+const log = new Logger("svc");
+console.log(log.name);
+log.setLevel("error");
+log.warn("hidden");
+log.info("hidden too");
+log.error("boom");

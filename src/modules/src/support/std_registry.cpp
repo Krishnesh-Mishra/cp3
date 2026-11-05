@@ -41,11 +41,16 @@ const StdModuleDef kStdModules[] = {
     {"std/path", true, {}},
     {"std/os", true, {}},
     {"std/crypto", true, {}},
-    {"std/network", true, {"fetch", "lookup", "WebSocket", "WebSocketServer", "createServer"}},
+    {"std/network", true, {"fetch", "lookup", "WebSocket", "WebSocketServer", "createServer", "Headers", "Request", "Response", "FormData", "AbortSignal", "static", "cors", "bodyLimit", "Router", "express", "cookieParser"}},
     {"std/env", false, {"env"}},
-    {"std/collections", false, {"Map", "Set", "LRUCache"}},
+    {"std/collections", false, {"Map", "Set", "LRUCache", "Queue", "Stack", "PriorityQueue", "RingBuffer", "BitSet", "MultiMap", "ConcurrentMap"}},
     {"std/buffer", false, {"Buffer"}},
-    {"std/url", true, {}},
+    {"std/url", true, {"URL", "URLSearchParams"}},
+    {"std/time", true, {}},
+    {"std/hash", true, {}},
+    {"std/log", false, {"Logger"}},
+    {"std/text", false, {"TextEncoder", "TextDecoder"}},
+    {"std/readline", true, {}},
 };
 
 // Specifiers that were once std modules and are now language builtins (D74).

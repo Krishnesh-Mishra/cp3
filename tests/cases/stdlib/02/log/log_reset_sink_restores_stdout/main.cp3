@@ -1,0 +1,14 @@
+import { Logger } from "std/log";
+import console from "std/console";
+
+// `resetSink()` restores stdout: lines logged while a sink is installed are
+// captured only, lines after the reset go to stdout again.
+const log = new Logger("svc");
+const lines: string[] = [];
+log.setSink((line: string) => { lines.push(line); });
+log.info("before");
+log.resetSink();
+log.info("after");
+for (const l of lines) {
+  console.log(l);
+}

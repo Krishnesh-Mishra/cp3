@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "DEBUG svc d\nINFO svc i\n",
+  "exitCode": 0
+}

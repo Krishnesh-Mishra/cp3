@@ -1,0 +1,43 @@
+// =============================================================================
+// src/std/readline/native.hpp - `std/readline` native backend row (D68).
+//
+// OWNERSHIP: the std/readline family (src/std/readline/**). One row of the
+// D68 native-package table; the rest of the table never needs to change for
+// this module.
+//
+// Backend: the readline surface is header-only delegation onto the process
+// family's stdin pump (cp3/std/process.hpp), so this row lists the process
+// runtime TUs (child.cpp + runtime.cpp) and the libuv link line alongside
+// its own anchor TU. A program importing std/readline alone still links the
+// stdin pump; a program importing both rows compiles each TU once (the
+// build driver deduplicates by path).
+// =============================================================================
+#pragma once
+
+#include "detail/native/native_packages.hpp"
+
+namespace cp3::cli::detail {
+
+inline const NativePackage kReadlineNativePackage{
+    "std/readline",
+    {"src/std/readline/include", "src/std/process/include",
+     "src/std/collections/include", "third_party/libuv/include"},
+    {},
+    {"src/std/readline/runtime.cpp", "src/std/process/child.cpp",
+     "src/std/process/runtime.cpp"},
+    {},
+    {},
+    {},
+    {{"windows-x64",
+      {"third_party/libuv/lib/windows-x64"},
+      {"-luv", "-lws2_32", "-luserenv", "-liphlpapi", "-lole32", "-ldbghelp",
+       "-lsynchronization"}},
+     {"linux-x64",
+      {"third_party/libuv/lib/linux-x64"},
+      {"-luv", "-pthread", "-ldl", "-lrt"}},
+     {"linux-arm64",
+      {"third_party/libuv/lib/linux-arm64"},
+      {"-luv", "-pthread", "-ldl", "-lrt"}}},
+};
+
+}  // namespace cp3::cli::detail

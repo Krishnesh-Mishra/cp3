@@ -662,6 +662,9 @@ private:
     std::string emitPathCall(const CallExpr& c, const MemberExpr& m);
     std::string emitPathMember(const MemberExpr& m);
     std::string emitUrlCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitUrlNew(const NewExpr& n);
+    std::string emitUrlMemberCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitUrlMember(const MemberExpr& m);
     std::string emitOsCall(const CallExpr& c, const MemberExpr& m);
     std::string emitJsonCall(const CallExpr& c, const MemberExpr& m);
     // The JSON record surface (STDLIB §04 / language spec §23): interfaces are
@@ -706,6 +709,31 @@ private:
     // std/date (src/std/date/codegen.cpp): the `Date.*` statics and the Date
     // value's instance methods; pure family, backed by cp3/std/date.hpp.
     std::string emitDateCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitTimeCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitHashCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitReadlineCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitReadlineMember(const MemberExpr& m);
+    std::string emitReadlineObjectCall(const CallExpr& c, const MemberExpr& m);
+    bool isReadlineObject(const Expr* e) const;
+    std::string emitTextNew(const NewExpr& n);
+    std::string emitTextMemberCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitTextMember(const MemberExpr& m);
+    std::string emitLogNew(const NewExpr& n);
+    std::string emitLogMemberCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitLogMember(const MemberExpr& m);
+    std::string emitExpressSettingsMemberCall(const CallExpr& c,
+                                              const MemberExpr& m);
+    std::string emitExpressSettingsMemberRead(const MemberExpr& m);
+    std::string emitExpressLocalsIndexRead(const IndexExpr& ix);
+    std::string emitExpressLocalsAssign(const AssignmentExpr& a,
+                                        const MemberExpr& m);
+    std::string emitExpressLocalsIndexWrite(const AssignmentExpr& a);
+    std::string expressSettingValueText(const Expr& value);
+    std::string expressRenderOptionsText(const CallExpr& call);
+    std::string expressSettingsArg(const CallExpr& call, std::size_t index);
+    std::string expressSettingsArgs(const CallExpr& call);
+    std::string emitExpressRequestCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitExpressRequestMember(const MemberExpr& m);
     std::string emitRegexLiteral(const RegExpLiteral& lit);  // D48, cp3/core/regex.hpp
     std::string emitRegexCall(const CallExpr& c, const MemberExpr& m);  // test/match/exec
     std::string emitRegexMember(const MemberExpr& m);  // source/flags reads

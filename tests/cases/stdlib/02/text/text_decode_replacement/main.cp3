@@ -1,0 +1,7 @@
+import console from "std/console";
+import { TextDecoder } from "std/text";
+
+const dec = new TextDecoder();
+console.log(dec.decode(new Uint8Array([255, 65])));
+console.log(dec.decode(new Uint8Array([226, 130])));
+console.log(dec.decode(new Uint8Array([195, 169])));

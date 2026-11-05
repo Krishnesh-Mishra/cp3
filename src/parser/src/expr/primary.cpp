@@ -18,6 +18,31 @@
 
 namespace cp3 {
 
+namespace {
+
+// Ledger K (docs/design/remove-void-unknown.md): `JSON.parse` without a
+// type argument is a compile error; the result type is only known with
+// `JSON.parse<T>(...)`. This is the interim parser-side check: it mirrors
+// sema's own callee recognition in `tryInferJsonCall` (call_check.cpp),
+// which only looks at the callee's object name ("JSON") and property
+// ("parse"), so the two stages agree on which calls count. Moving the
+// check to sema (where imports are resolved) removes the shadowed-`JSON`
+// false positive; see design doc §6.2. True for a callee of the exact
+// shape `JSON.parse` (no type arguments on the call).
+bool isBareJsonParse(const Expr* callee) {
+    if (callee == nullptr || callee->kind != NodeKind::MemberExpr) {
+        return false;
+    }
+    const auto& member = static_cast<const MemberExpr&>(*callee);
+    if (member.property != "parse" || member.object == nullptr ||
+        member.object->kind != NodeKind::Identifier) {
+        return false;
+    }
+    return static_cast<const AstIdentifier&>(*member.object).name == "JSON";
+}
+
+}  // namespace
+
 ExprPtr ParserImpl::parseCallMember() {
     const Token start = peek();
     ExprPtr expr = parsePrimary();
@@ -49,6 +74,11 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
                 call->optional = true;
                 call->arguments = parseArguments();
                 call->span = spanFrom(qd);
+                if (isBareJsonParse(call->callee.get())) {
+                    report(diagcode::kJsonParseMissingTypeArgument,
+                           "JSON.parse requires a type argument; use "
+                           "JSON.parse<T>(x)");
+                }
                 expr = std::move(call);
             } else if (match(TokenKind::LBracket)) {
                 auto index = std::make_unique<IndexExpr>(expr->span);
@@ -88,6 +118,11 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
             call->optional = false;
             call->arguments = parseArguments();
             call->span = spanFrom(start);
+            if (isBareJsonParse(call->callee.get())) {
+                report(diagcode::kJsonParseMissingTypeArgument,
+                       "JSON.parse requires a type argument; use "
+                       "JSON.parse<T>(x)");
+            }
             expr = std::move(call);
         } else if (check(TokenKind::Bang) && !peek().precededByNewline) {
             advance();
@@ -113,6 +148,12 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
             call->typeArgs = std::move(typeArgs);
             call->arguments = parseArguments();
             call->span = spanFrom(start);
+            if (call->typeArgs.empty() &&
+                isBareJsonParse(call->callee.get())) {
+                report(diagcode::kJsonParseMissingTypeArgument,
+                       "JSON.parse requires a type argument; use "
+                       "JSON.parse<T>(x)");
+            }
             expr = std::move(call);
         } else {
             break;

@@ -34,7 +34,13 @@ struct ProgramNeeds {
     bool crypto = false;
     bool date = false;
     bool url = false;
+    bool time = false;
+    bool hash = false;
+    bool log = false;
+    bool text = false;
+    bool readline = false;
     bool network = false;
+    bool expressSettings = false;
     bool typedArray = false;
     bool collections = false;
     bool buffer = false;

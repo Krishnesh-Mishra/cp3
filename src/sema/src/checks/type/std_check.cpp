@@ -52,6 +52,9 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
     if (ns == "JSON") return jsonMember(prop);
     if (ns == "Date") return dateMember(prop);
     if (ns == "url") return urlMember(prop);
+    if (ns == "time") return timeMember(prop);
+    if (ns == "hash") return hashMember(prop);
+    if (ns == "readline") return readlineMember(prop);
     return std::nullopt;
 }
 
@@ -62,7 +65,8 @@ std::optional<Type> Analyzer::stdNamespaceMember(const std::string& ns,
 bool isClosedStdNamespace(const std::string& ns) {
     return ns == "Math" || ns == "path" || ns == "os" || ns == "crypto" ||
            ns == "console" || ns == "JSON" || ns == "Date" || ns == "fs" ||
-           ns == "io" || ns == "process" || ns == "env" || ns == "url";
+           ns == "io" || ns == "process" || ns == "env" || ns == "url" ||
+           ns == "time" || ns == "hash" || ns == "readline";
 }
 
 // The CP3305 candidate lists come from the family units, which own the tables.
@@ -79,6 +83,9 @@ std::vector<std::string> stdNamespaceMemberNames(const std::string& ns) {
     if (ns == "fs") return fsMemberNames();
     if (ns == "io") return ioMemberNames();
     if (ns == "url") return urlMemberNames();
+    if (ns == "time") return timeMemberNames();
+    if (ns == "hash") return hashMemberNames();
+    if (ns == "readline") return readlineMemberNames();
     return {};
 }
 
@@ -111,6 +118,9 @@ StdMemberDoc stdNamespaceMemberDoc(const std::string& ns,
     if (ns == "JSON") return jsonMemberDoc(member);
     if (ns == "Date") return dateMemberDoc(member);
     if (ns == "url") return urlMemberDoc(member);
+    if (ns == "time") return timeMemberDoc(member);
+    if (ns == "hash") return hashMemberDoc(member);
+    if (ns == "readline") return readlineMemberDoc(member);
     if (ns == "fs") return fsMemberDoc(member);
     if (ns == "io") return ioMemberDoc(member);
     return StdMemberDoc{};
@@ -122,16 +132,33 @@ std::vector<std::string> stdNamespaceMemberArgumentValues(
     if (ns == "console") {
         return consoleMemberArgumentValues(member, argumentIndex);
     }
+    if (ns == "readline") {
+        return readlineMemberArgumentValues(member, argumentIndex);
+    }
     return {};
 }
 
 StdMemberDoc stdInstanceMemberDoc(const std::string& family,
                                    const std::string& member) {
     if (family == "Date") return dateInstanceMemberDoc(member);
+    if (family == "Stopwatch") return timeInstanceMemberDoc(member);
     if (family == "Number") return numberMemberDoc(member);
     if (family == "Map") return collectionsMemberDoc("Map", member);
     if (family == "Set") return collectionsMemberDoc("Set", member);
     if (family == "LRUCache") return collectionsMemberDoc("LRUCache", member);
+    if (family == "Queue") return collectionsMemberDoc("Queue", member);
+    if (family == "Stack") return collectionsMemberDoc("Stack", member);
+    if (family == "PriorityQueue") return collectionsMemberDoc("PriorityQueue", member);
+    if (family == "RingBuffer") return collectionsMemberDoc("RingBuffer", member);
+    if (family == "BitSet") return collectionsMemberDoc("BitSet", member);
+    if (family == "MultiMap") return collectionsMemberDoc("MultiMap", member);
+    if (family == "ConcurrentMap") return collectionsMemberDoc("ConcurrentMap", member);
+    if (family == "TextEncoder") return textMemberDoc("TextEncoder", member);
+    if (family == "TextDecoder") return textMemberDoc("TextDecoder", member);
+    if (family == "Logger") return logMemberDoc(member);
+    if (family == "URL") return urlClassMemberDoc("URL", member);
+    if (family == "URLSearchParams") return urlClassMemberDoc("URLSearchParams", member);
+    if (family == "$readline:LineReader") return readlineLineReaderDoc(member);
     if (family == kFileStatsMarker) return fsStatsMemberDoc(member);
     if (family == kExecResultMarker) return processExecResultDoc(member);
     if (family == kSpawnHandleMarker) return processSpawnHandleDoc(member);
@@ -141,10 +168,24 @@ StdMemberDoc stdInstanceMemberDoc(const std::string& family,
 
 std::vector<std::string> stdInstanceMemberNames(const std::string& family) {
     if (family == "Date") return dateInstanceMemberNames();
+    if (family == "Stopwatch") return timeInstanceMemberNames();
     if (family == "Number") return numberMemberNames();
     if (family == "Map") return collectionsMemberNames("Map");
     if (family == "Set") return collectionsMemberNames("Set");
     if (family == "LRUCache") return collectionsMemberNames("LRUCache");
+    if (family == "Queue") return collectionsMemberNames("Queue");
+    if (family == "Stack") return collectionsMemberNames("Stack");
+    if (family == "PriorityQueue") return collectionsMemberNames("PriorityQueue");
+    if (family == "RingBuffer") return collectionsMemberNames("RingBuffer");
+    if (family == "BitSet") return collectionsMemberNames("BitSet");
+    if (family == "MultiMap") return collectionsMemberNames("MultiMap");
+    if (family == "ConcurrentMap") return collectionsMemberNames("ConcurrentMap");
+    if (family == "TextEncoder") return textMemberNames("TextEncoder");
+    if (family == "TextDecoder") return textMemberNames("TextDecoder");
+    if (family == "Logger") return logMemberNames();
+    if (family == "URL") return urlClassMemberNames("URL");
+    if (family == "URLSearchParams") return urlClassMemberNames("URLSearchParams");
+    if (family == "$readline:LineReader") return readlineLineReaderMemberNames();
     if (family == kFileStatsMarker) return fsStatsMemberNames();
     if (family == kExecResultMarker) return processExecResultMemberNames();
     if (family == kSpawnHandleMarker) return processSpawnHandleMemberNames();
@@ -169,15 +210,28 @@ std::string stdImportHint(const std::string& name) {
         const char* binding;
         const char* specifier;
     };
-    // The default-exported std modules (std_registry.cpp) whose import line a
-    // bare name follows from. Named-only modules (std/env, std/collections,
-    // ...) are handled by import validation instead.
+    // The default-exported std modules whose import line a bare name follows
+    // from. Coverage is every default surface in the std registry
+    // (src/modules/src/support/std_registry.cpp) plus the newer default
+    // families (std/time, std/hash) whose sema tables and docs landed with
+    // them; see docs/design/import-suggestions.md. The table deliberately
+    // stays in this already-compiled unit: moving it to a new
+    // src/sema/src/support/*.cpp would need a CMake change, which this
+    // change must not make.
+    //
+    // A bare name that is NOT a documented default binding gets no hint:
+    // `std/network` has a default slot in the registry but no documented
+    // default binding name (its documented surface is the named imports
+    // below), and `Stopwatch` is only ever reached as `time.stopwatch()`,
+    // never as a direct import, so neither appears here.
     static const ModuleHint kHints[] = {
         {"Math", "std/math"},       {"JSON", "std/json"},
         {"console", "std/console"}, {"path", "std/path"},
         {"os", "std/os"},           {"crypto", "std/crypto"},
         {"fs", "std/fs"},           {"io", "std/io"},
         {"Date", "std/date"},       {"process", "std/process"},
+        {"url", "std/url"},         {"time", "std/time"},
+        {"hash", "std/hash"},
     };
     for (const ModuleHint& hint : kHints) {
         if (name == hint.binding) {
@@ -189,7 +243,18 @@ std::string stdImportHint(const std::string& name) {
     // Named-export modules. The command-line compiler must give the same
     // repair the LSP's auto-import offers; a bare `fetch(...)` without the
     // import is a normal "cannot find name" error, not a mysterious missing
-    // builtin.
+    // builtin. This is the ONLY hint table: the LSP and the CLI both end up
+    // here through Analyzer::reportUndefinedName (semantic_analyzer.cpp),
+    // which embeds the returned line in the diagnostic message itself, so
+    // the CLI machine line (diagnostics.cpp: machineLine, D2 contract)
+    // carries it even with no TTY and no suggestions rendering.
+    //
+    // Only names with a real export surface are listed. The former
+    // Mutex/Queue/Stack/PriorityQueue/RingBuffer/BitSet/MultiMap rows were
+    // removed: no such export exists in std/collections (sema, codegen and
+    // docs all agree), so hinting `import { Mutex } from
+    // "std/collections"` would only trade one error for a CP3604
+    // import-validation error.
     struct NamedHint {
         const char* binding;
         const char* specifier;
@@ -204,14 +269,12 @@ std::string stdImportHint(const std::string& name) {
         {"env", "std/env"},
         {"Map", "std/collections"},
         {"Set", "std/collections"},
-        {"Mutex", "std/collections"},
-        {"Queue", "std/collections"},
-        {"Stack", "std/collections"},
-        {"PriorityQueue", "std/collections"},
         {"LRUCache", "std/collections"},
-        {"RingBuffer", "std/collections"},
-        {"BitSet", "std/collections"},
-        {"MultiMap", "std/collections"},
+        {"URL", "std/url"},
+        {"URLSearchParams", "std/url"},
+        {"TextEncoder", "std/text"},
+        {"TextDecoder", "std/text"},
+        {"Logger", "std/log"},
     };
     for (const NamedHint& hint : kNamedHints) {
         if (name == hint.binding) {

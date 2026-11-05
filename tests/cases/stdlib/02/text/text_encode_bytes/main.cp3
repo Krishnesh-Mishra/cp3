@@ -1,0 +1,7 @@
+import console from "std/console";
+import { TextEncoder } from "std/text";
+
+const enc = new TextEncoder();
+const bytes = enc.encode("hello");
+console.log(bytes.join(","));
+console.log(enc.encoding);

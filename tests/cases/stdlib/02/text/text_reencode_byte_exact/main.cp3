@@ -1,0 +1,15 @@
+import console from "std/console";
+import { TextEncoder, TextDecoder } from "std/text";
+
+// Byte-exact roundtrip both ways: encode pins the exact UTF-8 bytes of a
+// multibyte string, and decode-then-re-encode reproduces those bytes.
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const text = "café ✓";
+const bytes = enc.encode(text);
+console.log(bytes.join(","));
+console.log(bytes.length);
+const decoded = dec.decode(bytes);
+console.log(decoded === text ? "ok" : "bad");
+const reencoded = enc.encode(decoded);
+console.log(reencoded.join(",") === bytes.join(",") ? "ok" : "bad");

@@ -1,0 +1,15 @@
+import console from "std/console";
+import { Buffer } from "std/buffer";
+import hash from "std/hash";
+
+// Empty and non-empty Buffer inputs hash the exact bytes, identically to
+// the string form. Empty input: crc32/crc32c = 0, fnv1a32 = offset basis.
+console.log(hash.crc32(Buffer.from("")));
+console.log(hash.crc32c(Buffer.from("")));
+console.log(hash.fnv1a32(Buffer.from("")));
+console.log(hash.crc32(Buffer.from("abc")));
+console.log(hash.crc32(Buffer.from("123456789")));
+console.log(hash.crc32c(Buffer.from("123456789")));
+console.log(hash.fnv1a32(Buffer.from("abc")));
+console.log(hash.fnv1a64(Buffer.from("")) === hash.fnv1a64("") ? "fnv1a64emptybuffer" : "bad");
+console.log(hash.fnv1a64(Buffer.from("abc")) === hash.fnv1a64("abc") ? "fnv1a64buffer" : "bad");

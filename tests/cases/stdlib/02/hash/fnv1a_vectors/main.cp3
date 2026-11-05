@@ -1,0 +1,15 @@
+import console from "std/console";
+import hash from "std/hash";
+
+// Pinned FNV-1a 32-bit vectors (offset basis 2166136261, prime 16777619).
+// All values are below 2^53, so the default (number) project prints them
+// exactly. fnv1a64 is only checked for stability/change here; its exact
+// 64-bit values are pinned by the Rust integer_widths case via toString().
+console.log(hash.fnv1a32(""));
+console.log(hash.fnv1a32("a"));
+console.log(hash.fnv1a32("abc"));
+console.log(hash.fnv1a32("123456789"));
+console.log(hash.fnv1a32("hello"));
+console.log(hash.fnv1a64("abc") === hash.fnv1a64("abc") ? "fnv1a64stable" : "bad");
+console.log(hash.fnv1a64("abc") !== hash.fnv1a64("abd") ? "fnv1a64differs" : "bad");
+console.log(hash.fnv1a64("") !== hash.fnv1a64("a") ? "fnv1a64empty" : "bad");

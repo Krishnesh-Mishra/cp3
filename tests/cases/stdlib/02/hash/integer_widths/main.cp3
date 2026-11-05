@@ -1,0 +1,32 @@
+import console from "std/console";
+import hash from "std/hash";
+
+// A Rust project sees exact hash widths: crc32/crc32c/fnv1a32 are u32 and
+// fnv1a64 is u64, so no value passes through a floating-point number.
+// Every pinned value below is printed via toString() on the exact width.
+const crc: u32 = hash.crc32("123456789");
+const crcC: u32 = hash.crc32c("123456789");
+const fnv32: u32 = hash.fnv1a32("");
+const fnv64: u64 = hash.fnv1a64("abc");
+console.log(crc.toString());
+console.log(crcC.toString());
+console.log(fnv32.toString());
+console.log(fnv64.toString());
+
+const crcEmpty: u32 = hash.crc32("");
+const crcCEmpty: u32 = hash.crc32c("");
+const fnv32abc: u32 = hash.fnv1a32("abc");
+const fnv64empty: u64 = hash.fnv1a64("");
+console.log(crcEmpty.toString());
+console.log(crcCEmpty.toString());
+console.log(fnv32abc.toString());
+console.log(fnv64empty.toString());
+
+const crcHello: u32 = hash.crc32("hello");
+const fnv32a: u32 = hash.fnv1a32("a");
+const fnv64a: u64 = hash.fnv1a64("a");
+const fnv64hello: u64 = hash.fnv1a64("hello");
+console.log(crcHello.toString());
+console.log(fnv32a.toString());
+console.log(fnv64a.toString());
+console.log(fnv64hello.toString());

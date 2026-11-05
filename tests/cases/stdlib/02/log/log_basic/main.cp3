@@ -1,0 +1,5 @@
+import { Logger } from "std/log";
+const log = new Logger("app");
+log.info("started");
+log.warn("slow");
+log.error("failed");

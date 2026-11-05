@@ -60,6 +60,13 @@ set(cp3_sema_sources
     ../std/date/sema.cpp
     ../std/buffer/sema.cpp
     ../std/url/sema.cpp
+    ../std/time/sema.cpp
+    ../std/hash/sema.cpp
+    ../std/log/sema.cpp
+    ../std/text/sema.cpp
+    ../std/readline/sema.cpp
+    ../std/network/express/settings/sema.cpp
+    ../std/network/express/request/sema.cpp
     ../std/arrays/sema_docs.cpp
     ../std/string/sema_docs.cpp
 )

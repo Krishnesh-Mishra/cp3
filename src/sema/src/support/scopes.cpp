@@ -281,6 +281,7 @@ void Analyzer::declareBuiltins() {
     // Date`), matching the family names above; the VALUE still requires
     // `import Date from "std/date";`, which is where the import hint points.
     typeNames_.emplace("Date", Type::named(TypeKind::Class, "Date"));
+    typeNames_.emplace("Stopwatch", Type::named(TypeKind::Class, "Stopwatch"));
     // `EventEmitter` resolves as a type annotation too: the ambient binding is
     // a constructor value, the nominal class type is what `new` produces
     // (D74; the members are typed in member_check.cpp).

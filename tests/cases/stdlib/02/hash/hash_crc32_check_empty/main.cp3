@@ -1,0 +1,4 @@
+import console from "std/console";
+import hash from "std/hash";
+console.log(hash.crc32(""));
+console.log(hash.crc32("123456789"));

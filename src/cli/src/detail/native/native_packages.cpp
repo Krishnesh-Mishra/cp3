@@ -31,6 +31,11 @@
 #include "../../../../std/string/native.hpp"
 #include "../../../../std/typed-arrays/native.hpp"
 #include "../../../../std/url/native.hpp"
+#include "../../../../std/time/native.hpp"
+#include "../../../../std/hash/native.hpp"
+#include "../../../../std/log/native.hpp"
+#include "../../../../std/text/native.hpp"
+#include "../../../../std/readline/native.hpp"
 
 namespace cp3::cli::detail {
 
@@ -53,6 +58,11 @@ const std::vector<const NativePackage*>& nativePackages() {
         &kBufferNativePackage,
         &kEnvNativePackage,
         &kUrlNativePackage,
+        &kTimeNativePackage,
+        &kHashNativePackage,
+        &kLogNativePackage,
+        &kTextNativePackage,
+        &kReadlineNativePackage,
     };
     return rows;
 }

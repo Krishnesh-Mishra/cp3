@@ -111,6 +111,13 @@ set(cp3_codegen_sources
     ../std/date/codegen.cpp
     ../std/buffer/codegen.cpp
     ../std/url/codegen.cpp
+    ../std/time/codegen.cpp
+    ../std/hash/codegen.cpp
+    ../std/log/codegen.cpp
+    ../std/text/codegen.cpp
+    ../std/readline/codegen.cpp
+    ../std/network/express/settings/codegen.cpp
+    ../std/network/express/request/codegen.cpp
     ../std/console/codegen.cpp
     ../std/fs/codegen.cpp
     ../std/io/codegen.cpp

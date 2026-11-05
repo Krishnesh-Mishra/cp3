@@ -1,0 +1,12 @@
+import console from "std/console";
+import { TextEncoder, TextDecoder } from "std/text";
+
+// A BOM-only byte stream decodes to the empty string, and `encode` adds no
+// BOM: a single ASCII char encodes to exactly its one byte.
+const dec = new TextDecoder();
+console.log(dec.decode(new Uint8Array([239, 187, 191])));
+console.log(dec.decode(new Uint8Array(0)));
+const enc = new TextEncoder();
+const bytes = enc.encode("A");
+console.log(bytes.length);
+console.log(bytes.join(","));

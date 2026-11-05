@@ -1,0 +1,10 @@
+import { Logger } from "std/log";
+
+// At level debug, all four levels emit in call order with their uppercase
+// tags: DEBUG < INFO < WARN < ERROR.
+const log = new Logger("svc");
+log.setLevel("debug");
+log.debug("d");
+log.info("i");
+log.warn("w");
+log.error("e");

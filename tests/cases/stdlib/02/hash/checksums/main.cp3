@@ -1,0 +1,27 @@
+import console from "std/console";
+import { Buffer } from "std/buffer";
+import hash from "std/hash";
+
+// Checksums, not security: these are fast non-crypto checksums for cache
+// keys / corruption checks, never for authentication or integrity against
+// an adversary (use std/crypto for that).
+
+// Standard check values: crc32("123456789") = 0xCBF43926,
+// crc32c("123456789") = 0xE3069283.
+console.log(hash.crc32("123456789") === 3421780262 ? "crc32" : "bad");
+console.log(hash.crc32c("123456789") === 3808858755 ? "crc32c" : "bad");
+console.log(hash.crc32("") === 0 ? "crc32empty" : "bad");
+console.log(hash.crc32c("") === 0 ? "crc32cempty" : "bad");
+
+// FNV-1a 32-bit offset basis: fnv1a32("") = 2166136261.
+console.log(hash.fnv1a32("") === 2166136261 ? "fnv1a32empty" : "bad");
+
+// Buffer input hashes the exact bytes, same as the string form.
+console.log(hash.crc32(Buffer.from("123456789")) === 3421780262 ? "crc32buffer" : "bad");
+console.log(hash.crc32c(Buffer.from("123456789")) === 3808858755 ? "crc32cbuffer" : "bad");
+console.log(hash.fnv1a32(Buffer.from("abc")) === hash.fnv1a32("abc") ? "fnv1a32buffer" : "bad");
+
+// fnv1a64 is deterministic; its exact 64-bit value is covered by the Rust
+// integer_widths case (a TypeScript number cannot hold it exactly).
+console.log(hash.fnv1a64("abc") === hash.fnv1a64("abc") ? "fnv1a64stable" : "bad");
+console.log(hash.fnv1a64("abc") !== hash.fnv1a64("abd") ? "fnv1a64differs" : "bad");

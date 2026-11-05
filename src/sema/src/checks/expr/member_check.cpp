@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/native_types.hpp"
 #include "cp3/std_surface.hpp"
 
 namespace cp3 {
@@ -60,6 +61,36 @@ Type Analyzer::inferMember(MemberExpr& m) {
                 // matching JS).
                 Type fn =
                     Type::function({Type::number()}, Type::string());
+                fn.name = kVariadicOptionalTailLabel;
+                return withType(m, fn);
+            }
+            if (id.name == "String" && m.property == "fromCodePoint") {
+                // `String.fromCodePoint(...codes: number[])`: mirror of
+                // `fromCharCode` above, but each code is a Unicode scalar
+                // (0..0x10FFFF, no surrogates) UTF-8 encoded - the inverse
+                // of `codePointAt`. Zero arguments is the empty string; an
+                // out-of-range code is a runtime RangeError
+                // (src/std/string/include/cp3/std/string.hpp).
+                Type fn =
+                    Type::function({Type::number()}, Type::string());
+                fn.name = kVariadicOptionalTailLabel;
+                return withType(m, fn);
+            }
+            if (id.name == "String" && m.property == "raw") {
+                // `String.raw(...)`: the call form of the tagged-template
+                // raw helper (CP3 has no tagged templates). One signature
+                // covers both spellings: `raw(chunk: string)` is the
+                // identity, and `raw(parts: string[], ...subs: string[])`
+                // interleaves the substitutions between the chunks.
+                // `kVariadicOptionalTailLabel` makes the substitution
+                // tail optional and unbounded, so the one-argument chunk
+                // form type-checks against the same function type; the
+                // codegen (src/std/string/codegen.cpp) splits on arity.
+                Type fn = Type::function(
+                    {Type::unionOf({Type::string(),
+                                    Type::array(Type::string())}),
+                     Type::string()},
+                    Type::string());
                 fn.name = kVariadicOptionalTailLabel;
                 return withType(m, fn);
             }
@@ -175,6 +206,19 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
     switch (ot.kind) {
         case TypeKind::Object: {
             if (isAmbientType(ot)) return ambient();
+            // Express settings (std/network/express/settings/sema.cpp).
+            if (auto express = expressObjectMember(ot, prop)) return *express;
+            const std::vector<std::string> expressNames =
+                expressObjectMemberNames(ot.name);
+            if (!expressNames.empty() &&
+                ot.name.rfind("$express:", 0) == 0) {
+                reportMemberMiss("express value", prop, span, expressNames);
+                return Type::unknown();
+            }
+            // Express request helpers (std/network/express/request/sema.cpp).
+            if (ot.name == "$network:HttpRequest") {
+                if (auto req = expressRequestMember(ot, prop)) return *req;
+            }
             // Network marker members and their diagnostics share one field
             // table. An unknown member on a known network value must not
             // silently become ambient (`server.custom` is a typo).
@@ -216,10 +260,19 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             if (isDataViewClass(ot)) return dataViewMember(prop);
             // `std/collections` Map/Set (src/std/collections/sema.cpp).
             if (isCollectionsClass(ot)) return collectionsMember(ot, prop, span);
+            if (isTextClass(ot)) return textMember(ot, prop, span);
+            if (isLogClass(ot)) return logMember(ot, prop, span);
+            if (isUrlClass(ot)) return urlClassMember(ot, prop, span);
             // `std/date` values: a closed surface (miss -> CP3305 below).
             if (isDateClass(ot)) {
                 if (auto t = dateInstanceMember(ot, prop)) return *t;
                 reportMemberMiss("Date", prop, span, dateInstanceMemberNames());
+                return Type::unknown();
+            }
+            // `std/time` Stopwatch values: a closed surface (miss -> CP3305).
+            if (isStopwatchClass(ot)) {
+                if (auto t = timeInstanceMember(ot, prop)) return *t;
+                reportMemberMiss("Stopwatch", prop, span, timeInstanceMemberNames());
                 return Type::unknown();
             }
             if (isRegexClass(ot)) return memberOfRegex(ot, prop, span);  // D48
@@ -242,7 +295,13 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             }
             if (prop == "wrappingMul") {
                 // Explicitly wrapping integer multiply (FNV-style hashing);
-                // checked `*` remains the default and still traps.
+                // checked `*` remains the default and still traps. Floats
+                // have no modulo-2^N arithmetic, so the method is integer-only.
+                if (!isNativeInteger(ot)) {
+                    reportMemberMiss("native float value", prop, span,
+                                     {"toString"});
+                    return Type::unknown();
+                }
                 return Type::function({ot}, ot);
             }
             return ambient();
@@ -389,6 +448,13 @@ Type Analyzer::stringMember(const std::string& prop) {
     if (prop == "charCodeAt") {
         return Type::function({Type::number()}, Type::number());
     }
+    if (prop == "codePointAt") {
+        // `codePointAt(index: number): number`: Unicode scalar value of
+        // the code point at code-point position `index` (the unit
+        // `charAt` counts, not bytes / JS UTF-16 code units);
+        // out-of-range returns `NaN`, like `charCodeAt`.
+        return Type::function({Type::number()}, Type::number());
+    }
     if (prop == "startsWith" || prop == "endsWith" || prop == "includes") {
         return Type::function({Type::string()}, Type::boolean());
     }
@@ -421,6 +487,15 @@ Type Analyzer::stringMember(const std::string& prop) {
             {Type::unionOf(
                 {Type::string(), Type::named(TypeKind::Class, "RegExp")})},
             Type::array(Type::string()));
+    }
+    if (prop == "matchAll") {
+        // `matchAll(regexp: RegExp): string[][]`: every match of a
+        // global regexp as a `[full, group1, ...]` array per match.
+        // Eager `Array<Array<string>>` (no lazy iterator in CP3); a
+        // non-global regexp is a runtime TypeError.
+        return Type::function(
+            {Type::named(TypeKind::Class, "RegExp")},
+            Type::array(Type::array(Type::string())));
     }
     return ambient();
 }

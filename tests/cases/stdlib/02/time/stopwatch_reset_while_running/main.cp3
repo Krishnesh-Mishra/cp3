@@ -1,0 +1,15 @@
+import console from "std/console";
+import time from "std/time";
+
+// `reset()` while running both zeroes and stops: elapsed is exactly 0 and
+// stays 0 (a still-running watch would read a large now-minus-epoch value).
+// The watch can then be started again from zero.
+let sw = time.stopwatch();
+sw.start();
+sw.reset();
+console.log(sw.elapsed() === 0 ? "ok" : "bad");
+console.log(sw.elapsed() === 0 ? "ok" : "bad");
+sw.start();
+sw.stop();
+const stopped = sw.elapsed();
+console.log(stopped >= 0 && sw.elapsed() === stopped ? "ok" : "bad");

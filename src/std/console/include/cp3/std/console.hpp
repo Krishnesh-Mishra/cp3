@@ -21,6 +21,10 @@
 //   `console.off(ev, fn)`-> `::cp3::runtime::console::off(ev, fn)`
 //   `console.hide()`     -> `::cp3::runtime::console::hide()`
 //   `console.show()`     -> `::cp3::runtime::console::show()`
+//   `console.time(label?)`   -> `::cp3::runtime::console::time(label)`
+//   `console.timeEnd(label?)`-> `::cp3::runtime::console::timeEnd(label)`
+//   `console.time(label?)`    -> `::cp3::runtime::console::time(label)`
+//   `console.timeEnd(label?)` -> `::cp3::runtime::console::timeEnd(label)`
 //
 //   Arguments are rendered by `::cp3::runtime::formatValue` and joined with a
 //   single space, then a newline is written. `.log`/`.info` -> stdout,
@@ -49,9 +53,14 @@
 // =============================================================================
 #pragma once
 
+#include <chrono>
+#include <cstdio>
+#include <chrono>
 #include <functional>
+#include <iomanip>
 #include <initializer_list>
 #include <map>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -158,6 +167,41 @@ inline void count(const std::string& label) {
     writeLineStdout(label + ": " + std::to_string(n));
 }
 inline void countReset(const std::string& label) { countStorage().erase(label); }
+
+// `console.time(label?)` / `console.timeEnd(label?)` (v0.2 ledger, ROADMAP
+// §C): a per-label monotonic timer on `std::chrono::steady_clock` (the same
+// clock as std/time's Stopwatch; never the wall clock). `time` records the
+// start instant for the label (default label `default`), restarting an
+// existing one; `timeEnd` prints `label: <ms>ms` (milliseconds, three
+// decimals) to stdout and removes the label, Node-style. A `timeEnd` for a
+// label that was never started prints `Timer "label" does not exist` to
+// stderr and prints nothing to stdout.
+inline std::map<std::string, std::chrono::steady_clock::time_point>&
+timeStorage() {
+    static std::map<std::string, std::chrono::steady_clock::time_point>
+        timers;
+    return timers;
+}
+inline void time(const std::string& label) {
+    timeStorage()[label] = std::chrono::steady_clock::now();
+}
+inline void timeEnd(const std::string& label) {
+    auto& timers = timeStorage();
+    const auto it = timers.find(label);
+    if (it == timers.end()) {
+        writeLineStderr("Timer \"" + label + "\" does not exist");
+        return;
+    }
+    const double ms =
+        std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - it->second)
+            .count();
+    timers.erase(it);
+    std::ostringstream out;
+    out << label << ": " << std::fixed << std::setprecision(3) << ms
+        << "ms";
+    writeLineStdout(out.str());
+}
 
 // `console.trace(...args)`: a `Trace:` line (no stack yet in v0.2).
 inline void traceParts(const std::vector<std::string>& parts) {

@@ -1,0 +1,8 @@
+import { Logger } from "std/log";
+import console from "std/console";
+
+const log = new Logger();
+log.info("hello");
+console.log(log.level);
+log.setLevel("debug");
+console.log(log.level);

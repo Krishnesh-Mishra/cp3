@@ -1,0 +1,13 @@
+import console from "std/console";
+import time from "std/time";
+let sw = time.stopwatch();
+console.log(sw.elapsed() === 0 ? "ok" : "bad");
+sw.start();
+console.log(sw.elapsed() >= 0 ? "ok" : "bad");
+sw.stop();
+const stopped = sw.elapsed();
+console.log(stopped >= 0 ? "ok" : "bad");
+console.log(sw.elapsed() === stopped ? "ok" : "bad");
+sw.start();
+sw.stop();
+console.log(sw.elapsed() >= 0 ? "ok" : "bad");

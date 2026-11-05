@@ -313,6 +313,8 @@ std::string Generator::emitNewExprValue(const NewExpr& n) {
         return net;
     }
     if (std::string coll = emitCollectionsNew(n); !coll.empty()) return coll;
+    if (std::string text = emitTextNew(n); !text.empty()) return text;
+    if (std::string lg = emitLogNew(n); !lg.empty()) return lg;
     if (std::string em = emitEventEmitterNew(n); !em.empty()) return em;
     return emitFamilyNew(n);
 }

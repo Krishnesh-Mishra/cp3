@@ -1,0 +1,12 @@
+import console from "std/console";
+import time from "std/time";
+
+// A second `stop()` on an already-stopped stopwatch is a no-op: the frozen
+// value does not move. Only ordering/equality is asserted, never a ms value.
+let sw = time.stopwatch();
+sw.start();
+sw.stop();
+sw.stop();
+const first = sw.elapsed();
+sw.stop();
+console.log(first >= 0 && sw.elapsed() === first ? "ok" : "bad");

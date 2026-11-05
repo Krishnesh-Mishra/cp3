@@ -10,10 +10,12 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "cp3/core/utility_types.hpp"
 #include "cp3/diag/diagnostic_codes.hpp"
 #include "cp3/host/native_types.hpp"
 
@@ -301,6 +303,57 @@ Type Analyzer::omitShape(const Type& source,
 }
 
 // =============================================================================
+// Built-in utility types: Partial / Required / Readonly / Pick / Omit / Record
+// =============================================================================
+// The transforms below are pure over the resolved shape's field list (see
+// `Analyzer::resolveNamedType`, which applies them and publishes the result
+// through the ordinary `resolveType` side table - codegen reads the resolved
+// shape exactly like any other object shape; there is no runtime metadata).
+// Full design: docs/design/utility-types.md.
+
+namespace {
+
+// The field names a Pick/Omit/Record key type stands for: a string (or
+// integral number) literal, or a union of them. False when the key type is
+// anything else (`string` without a literal, a type parameter, ...): the
+// caller reports CP3401 and keeps `unknown`.
+bool utilityKeysOf(const Type& keys, std::vector<std::string>& out) {
+    out.clear();
+    const auto one = [&out](const Type& t) -> bool {
+        if (t.isLiteral() && t.literalBase == TypeKind::String) {
+            out.push_back(t.stringValue);
+            return true;
+        }
+        if (t.isLiteral() && t.literalBase == TypeKind::Number) {
+            const double v = t.numberValue;
+            if (v == static_cast<double>(static_cast<long long>(v))) {
+                out.push_back(std::to_string(static_cast<long long>(v)));
+                return true;
+            }
+        }
+        return false;
+    };
+    if (keys.isUnion()) {
+        for (const Type& m : keys.parts) {
+            if (!one(m)) return false;
+        }
+        return true;
+    }
+    return one(keys);
+}
+
+// True when `keys` is a union whose every member is a string/number literal
+// (the closed `Record<"a" | "b", V>` form). A single literal is *not* closed:
+// it canonicalizes to `Map<string, V>` like `Record<string, V>` does.
+bool isClosedLiteralKeys(const Type& keys) {
+    if (!keys.isUnion() || keys.parts.empty()) return false;
+    std::vector<std::string> tmp;
+    return utilityKeysOf(keys, tmp);
+}
+
+}  // namespace
+
+// =============================================================================
 // Type resolution
 // =============================================================================
 // Every resolved type annotation is published into the `SemaResult` side table
@@ -392,6 +445,36 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
         checkBannedAny(nt.span);
         return ambient();
     }
+    // Ledger K (docs/design/remove-void-unknown.md): the `void` and
+    // `unknown` spellings are retired as annotations. `void` always means
+    // "this returns nothing" -> the language says `undefined`; an untyped
+    // value is spelled `object`, and anything else takes the concrete type.
+    // This is the one choke point for every annotation position (variables,
+    // parameters, return types, type aliases, type arguments, ...) because
+    // resolveType recurses through union/array/tuple/function/object
+    // nodes into resolveNamedType, so nested spellings (`Promise<void>`,
+    // `void[]`, `unknown | null`) are caught by recursion. It fires on the
+    // source spelling only: the internal `Type::unknown()` /
+    // `Type::voidType()` sentinels (errors, inference) are untouched, so
+    // nothing cascades. `void` resolves to `undefined` so a misannotated
+    // program still type-checks against the intended type (and codegen
+    // sees a representable type); `unknown` keeps the unknown sentinel
+    // for the same reason (the error is already reported). Precedence
+    // matches the old primitive lookup below: a user type or type
+    // parameter named `void`/`unknown` was already unnameable (the keyword
+    // token wins), so no behaviour changes beyond the diagnostic.
+    if (nt.name == "void") {
+        report(diagcode::kVoidTypeBanned, nt.span,
+               "the 'void' type is removed; annotate the return as "
+               "'undefined' instead");
+        return Type::undefined();
+    }
+    if (nt.name == "unknown") {
+        report(diagcode::kUnknownTypeBanned, nt.span,
+               "the 'unknown' type is removed; use a concrete type, or "
+               "'object' for an untyped value");
+        return Type::unknown();
+    }
     Type primitive;
     if (primitiveTypeOf(nt.name, primitive)) return primitive;
     // `Promise<T>` is the one built-in generic (spec §14): a nominal class type
@@ -407,14 +490,84 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
         Binding b;
         if (lookup(nt.name, b) && b.isAmbient) return byteBufferType();
     }
+    if (isTextTypeName(nt.name)) {
+        Binding b;
+        if (lookup(nt.name, b) && b.isAmbient)
+            return Type::named(TypeKind::Class, nt.name);
+    }
+    if (nt.name == "Logger") {
+        Binding b;
+        if (lookup(nt.name, b) && b.isAmbient)
+            return Type::named(TypeKind::Class, "Logger");
+    }
     // A type alias names a type: a generic alias substitutes its type
     // arguments into the aliased type (`Pair<number>` is `[number, number]`).
+    // Instantiation is checked here (arity, then substitution); constraints
+    // and defaults are checked against the alias's parameter specs - today
+    // only the parameter *names* are recorded for aliases (see the
+    // `GenericParamSpec` note in docs/design/utility-types.md §5), so the
+    // constraint/default legs below activate once the spec producer lands.
     if (typeAliasParams_.count(nt.name) != 0) {
-        return resolveTypeAlias(nt.name, args);
+        const auto& params = typeAliasParams_.at(nt.name);
+        if (args.size() > params.size()) {
+            report(diagcode::kInvalidTypeArgument, nt.span,
+                   "type alias '" + nt.name + "' expects " +
+                       std::to_string(params.size()) +
+                       " type argument(s); got " +
+                       std::to_string(args.size()));
+            return Type::unknown();
+        }
+        const auto baseIt = typeNames_.find(nt.name);
+        if (baseIt == typeNames_.end()) return Type::unknown();
+        // Shape-aware substitution: `substituteTypeParams` (declarations.cpp)
+        // only walks `Type::parts`, so a generic alias whose body is an
+        // object shape (`type Box<T> = { value: T }`) would keep its bare
+        // `T`. This walk also substitutes inside object/tuple shapes, which
+        // is what makes `Box<number>` the shape `{ value: number }`.
+        std::function<Type(const Type&)> subst = [&](const Type& t) -> Type {
+            if (t.kind == TypeKind::TypeParam) {
+                for (std::size_t i = 0; i < params.size(); ++i) {
+                    if (params[i] != t.name) continue;
+                    if (i < args.size()) return args[i];
+                    return t;  // missing argument: permissive bare parameter
+                }
+                return t;
+            }
+            if (t.kind == TypeKind::Object) {
+                Shape* sh = shapeOf(t);
+                if (!sh) return t;
+                if (sh->tuple) {
+                    std::vector<Type> elems;
+                    elems.reserve(sh->tupleElems.size());
+                    for (const Type& e : sh->tupleElems) elems.push_back(subst(e));
+                    return makeObjectType({}, false, true, std::move(elems));
+                }
+                if (sh->open || sh->fields.empty()) return t;
+                std::vector<Field> fields;
+                fields.reserve(sh->fields.size());
+                for (const Field& f : sh->fields) {
+                    fields.push_back(Field{f.name, subst(f.type), f.optional});
+                }
+                return makeObjectType(std::move(fields), false, false, {});
+            }
+            Type out = t;
+            for (Type& part : out.parts) part = subst(part);
+            return out;
+        };
+        return subst(baseIt->second);
     }
     // A generic interface (D26): the type arguments are substituted into the
     // interface's members, so `Box<number>` is the shape `{ value: number }`.
     if (genericInterfaces_.count(nt.name) != 0) {
+        const auto& gi = genericInterfaces_.at(nt.name);
+        if (args.size() > gi.typeParams.size()) {
+            report(diagcode::kInvalidTypeArgument, nt.span,
+                   "interface '" + nt.name + "' expects " +
+                       std::to_string(gi.typeParams.size()) +
+                       " type argument(s); got " +
+                       std::to_string(args.size()));
+            return Type::unknown();
+        }
         return resolveGenericInterface(nt.name, args);
     }
     const auto it = typeNames_.find(nt.name);
@@ -422,10 +575,235 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
         Type base = it->second;
         // A user class instantiation (`Box<number>`): the type arguments are
         // carried in `parts` for member substitution and codegen spelling.
+        // An excess argument list for a known generic class is CP3418; a
+        // class the unit does not know keeps the permissive fallthrough.
         if (base.kind == TypeKind::Class && !args.empty()) {
+            if (const ClassInfo* ci = findClass(nt.name)) {
+                if (args.size() > ci->typeParamNames.size()) {
+                    report(diagcode::kInvalidTypeArgument, nt.span,
+                           "class '" + nt.name + "' expects " +
+                               std::to_string(ci->typeParamNames.size()) +
+                               " type argument(s); got " +
+                               std::to_string(args.size()));
+                    return Type::unknown();
+                }
+            }
             base.parts = args;
         }
         return base;
+    }
+    // The built-in utility types (Partial / Required / Readonly / Pick /
+    // Omit / Record). The placement after the user alias/interface/type-name
+    // lookups above means a user-declared `Partial` etc. shadows the
+    // builtin, as for every other name (and as `Record` already behaved).
+    // Every utility resolves *structurally* to a plain `Type` - an object
+    // shape (or, for the open `Record<string, V>` form, the canonical
+    // `Map<string, V>` of docs/design/record-index-signatures.md) - so the
+    // resolved type is published through the ordinary `resolveType` side
+    // table and codegen needs no utility-specific lowering. Full design:
+    // docs/design/utility-types.md.
+    if (const std::optional<UtilityKind> uk = utilityKindOf(nt.name)) {
+        const UtilityKind kind = *uk;
+        const std::size_t want = utilityArity(kind);
+        if (args.size() != want) {
+            report(diagcode::kInvalidTypeArgument, nt.span,
+                   std::string(utilityKindName(kind)) +
+                       " requires exactly " + std::to_string(want) +
+                       " type argument(s); got " +
+                       std::to_string(args.size()));
+            return Type::unknown();
+        }
+        // `Record` is the odd one out: its first argument is a *key* type,
+        // not a source object type.
+        if (kind == UtilityKind::Record) {
+            const Type& keys = args[0];
+            const Type& value = args[1];
+            // Closed form: `Record<"a" | "b", V>` is the object shape with
+            // exactly those fields, each of type V (TypeScript semantics).
+            if (isClosedLiteralKeys(keys)) {
+                std::vector<std::string> names;
+                (void)utilityKeysOf(keys, names);
+                std::vector<Field> fields;
+                fields.reserve(names.size());
+                for (const std::string& n : names) {
+                    fields.push_back(Field{n, value, false});
+                }
+                return makeObjectType(std::move(fields), false, false, {});
+            }
+            // Open form: `Record<string, V>` canonicalizes to `Map<string,
+            // V>` (see docs/design/record-index-signatures.md). Only a
+            // string key is a record; a non-string key is the dynamic-key
+            // dictionary CP3803 already bans for index signatures, and
+            // `Map<K,V>` is its supported form. A type parameter / unknown
+            // / error key is deferred (cascade suppression, as elsewhere
+            // in this function) rather than diagnosed here.
+            if (!isStringish(keys) && !keys.isUnknown() && !keys.isError() &&
+                keys.kind != TypeKind::TypeParam) {
+                report(diagcode::kIndexSignatureBanned, nt.span,
+                       "Record<K, V> requires K to be string; use Map<K, V> for "
+                       "non-string keys");
+                return Type::unknown();
+            }
+            Type record(TypeKind::Class, "Map");
+            record.parts = {Type::string(), value};
+            return record;
+        }
+        // Partial / Required / Readonly / Pick / Omit over a source type.
+        const Type source = args[0];
+        std::vector<std::string> keys;
+        if (kind == UtilityKind::Pick || kind == UtilityKind::Omit) {
+            if (!utilityKeysOf(args[1], keys)) {
+                report(diagcode::kTypeMismatch, nt.span,
+                       std::string(utilityKindName(kind)) +
+                           " keys must be string literal types (for example "
+                           "\"a\" | \"b\")");
+                return Type::unknown();
+            }
+        }
+        // Applies the field transform to one (non-union) source type.
+        // `transform` returns the resolved type for any source it can
+        // enumerate; anything else falls through to the permissive cases
+        // below. Class sources are enumerated from their member table
+        // (instance members only; methods keep their function type).
+        const auto transformFields = [&](std::vector<Field> fields) -> Type {
+            switch (kind) {
+                case UtilityKind::Partial:
+                    for (Field& f : fields) f.optional = true;
+                    return makeObjectType(std::move(fields), false, false, {});
+                case UtilityKind::Required:
+                    for (Field& f : fields) f.optional = false;
+                    return makeObjectType(std::move(fields), false, false, {});
+                case UtilityKind::Readonly: {
+                    // Readonly keeps the same fields and optionality but is
+                    // a *distinct* type from the mutable shape: the label
+                    // carries an `$ro` prefix so `Type::operator==`
+                    // distinguishes them while assignability (which walks
+                    // the shape fields) treats them as mutually assignable,
+                    // TypeScript-style. The readonly *write* rejection is a
+                    // member-assignment concern; see the design doc §4.
+                    std::string label = "$ro{";
+                    for (const Field& f : fields) {
+                        label += f.name;
+                        label += f.optional ? "?" : "";
+                        label += ':';
+                        label += typeKey(f.type);
+                        label += ',';
+                    }
+                    label += '}';
+                    if (shapes_.find(label) == shapes_.end()) {
+                        Shape s;
+                        s.fields = fields;
+                        shapes_.emplace(label, std::move(s));
+                    }
+                    return Type(TypeKind::Object, label);
+                }
+                case UtilityKind::Pick: {
+                    std::vector<Field> kept;
+                    for (const Field& f : fields) {
+                        if (std::find(keys.begin(), keys.end(), f.name) !=
+                            keys.end()) {
+                            kept.push_back(f);
+                        }
+                    }
+                    return makeObjectType(std::move(kept), false, false, {});
+                }
+                case UtilityKind::Omit: {
+                    std::vector<Field> kept;
+                    for (const Field& f : fields) {
+                        if (std::find(keys.begin(), keys.end(), f.name) ==
+                            keys.end()) {
+                            kept.push_back(f);
+                        }
+                    }
+                    return makeObjectType(std::move(kept), false, false, {});
+                }
+                case UtilityKind::Record:
+                    break;  // handled above
+            }
+            return Type::unknown();
+        };
+        std::function<Type(const Type&)> apply =
+            [&](const Type& src) -> Type {
+            if (src.isUnion()) {
+                std::vector<Type> members;
+                members.reserve(src.parts.size());
+                for (const Type& m : src.parts) members.push_back(apply(m));
+                return Type::unionOf(std::move(members));
+            }
+            if (src.isNullable()) {
+                const Type inner =
+                    src.parts.empty() ? Type::unknown() : src.parts.front();
+                return Type::nullable(apply(inner));
+            }
+            if (src.kind == TypeKind::TypeParam) {
+                // A type parameter stands for its constraint: transform the
+                // constraint when it is an enumerable shape, otherwise keep
+                // the bare parameter (permissive, as elsewhere).
+                if (!src.parts.empty()) {
+                    const Type& c = src.parts.front();
+                    if (Shape* cs = shapeOf(c)) {
+                        if (!cs->open && !cs->tuple) {
+                            return transformFields(cs->fields);
+                        }
+                    }
+                }
+                return src;
+            }
+            if (src.kind == TypeKind::Class) {
+                if (const ClassInfo* ci = findClass(src.name)) {
+                    std::vector<Field> fields;
+                    for (const ClassMemberInfo& m : ci->members) {
+                        if (m.isStatic) continue;
+                        if (m.isMethod) {
+                            fields.push_back(Field{m.name,
+                                                   Type::function(m.sig.params,
+                                                                  m.sig.ret),
+                                                   m.optional});
+                        } else {
+                            // Instantiate the member type first, so
+                            // `Partial<Box<number>>` sees `number`, not `T`.
+                            const Type mt = src.parts.empty()
+                                                ? m.type
+                                                : substituteClassTypeParams(
+                                                      m.type, *ci, src.parts);
+                            fields.push_back(Field{m.name, mt, m.optional});
+                        }
+                    }
+                    return transformFields(std::move(fields));
+                }
+                // Nominal class the unit does not know: no enumerable shape.
+                return Type::unknown();
+            }
+            Shape* sh = shapeOf(src);
+            if (sh != nullptr) {
+                if (sh->tuple) {
+                    // Tuple elements have no per-element optionality in the
+                    // shape model, so Partial/Required/Readonly keep the
+                    // tuple as-is (documented limitation); Pick/Omit over a
+                    // tuple have no field set to select from.
+                    if (kind == UtilityKind::Pick ||
+                        kind == UtilityKind::Omit) {
+                        return Type::unknown();
+                    }
+                    return src;
+                }
+                if (sh->open) {
+                    // Open (ambient/computed) shapes accept any property:
+                    // the member set is unchanged by Partial/Required/
+                    // Readonly, and unknowable by Pick/Omit.
+                    if (kind == UtilityKind::Pick ||
+                        kind == UtilityKind::Omit) {
+                        return Type::unknown();
+                    }
+                    return src;
+                }
+                return transformFields(sh->fields);
+            }
+            // Arrays, primitives and everything else pass through untouched:
+            // `Partial<number>` is `number` in TypeScript too.
+            return src;
+        };
+        return apply(source);
     }
     // A non-TypeScript project also accepts its own plain value-type names:
     // `let a: i64 = 10;` (rust) or `let a: long long = 10;` (cpp). Unsupported

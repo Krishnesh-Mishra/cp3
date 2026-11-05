@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "INFO app started\nWARN app slow\nERROR app failed\n",
+  "exitCode": 0
+}

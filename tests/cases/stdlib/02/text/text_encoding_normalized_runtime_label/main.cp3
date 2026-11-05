@@ -1,0 +1,13 @@
+import console from "std/console";
+import { TextEncoder, TextDecoder } from "std/text";
+
+// A runtime (non-literal) encoding label is normalized: ASCII whitespace is
+// trimmed, case is folded, and the `utf8` alias maps to the canonical
+// `utf-8` reported by `encoding`.
+const spaced = " UTF-8 ";
+const dec = new TextDecoder(spaced);
+console.log(dec.encoding);
+const alias = "utf8";
+const enc = new TextEncoder(alias);
+console.log(enc.encoding);
+console.log(dec.decode(enc.encode("ok")));

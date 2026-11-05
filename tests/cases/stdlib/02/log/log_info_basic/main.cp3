@@ -1,0 +1,5 @@
+import { Logger } from "std/log";
+
+const log = new Logger("app");
+log.debug("hidden at the default level");
+log.info("hello");

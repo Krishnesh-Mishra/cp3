@@ -1,0 +1,12 @@
+import console from "std/console";
+import { TextDecoder } from "std/text";
+
+const label = "latin1";
+let caught = false;
+try {
+    const dec = new TextDecoder(label);
+    console.log(dec.encoding);
+} catch (e) {
+    caught = true;
+}
+console.log(caught ? "caught" : "missed");

@@ -355,6 +355,20 @@ private:
     // std/date statics and instance members.
     std::optional<Type> dateMember(const std::string& prop);
     std::optional<Type> urlMember(const std::string& prop);
+    Type inferUrlConstruct(const std::string& name, ExprList& args,
+                           const SourceSpan& span);
+    Type urlClassMember(const Type& recv, const std::string& prop,
+                        const SourceSpan& span);
+    std::optional<Type> timeMember(const std::string& prop);
+    std::optional<Type> timeInstanceMember(const Type& recv,
+                                           const std::string& prop);
+    std::optional<Type> hashMember(const std::string& prop);
+    std::optional<Type> readlineMember(const std::string& prop);
+    Type expressObjectType(const std::string& name);
+    std::optional<Type> expressObjectMember(const Type& recv,
+                                            const std::string& prop);
+    std::optional<Type> expressRequestMember(const Type& recv,
+                                             const std::string& prop);
     std::optional<Type> dateInstanceMember(const Type& recv,
                                            const std::string& prop);
     // RegExp value members (`test`/`match`/`exec`/`source`/`flags`).
@@ -512,6 +526,18 @@ private:
     // Map/Set member surface; a miss is CP3305.
     Type collectionsMember(const Type& recv, const std::string& prop,
                            const SourceSpan& span);
+    // --- std/text, std/log (class families) ---------------------------------
+    Type inferTextConstruct(const std::string& name, ExprList& args,
+                            const SourceSpan& span);
+    Type textMember(const Type& recv, const std::string& prop,
+                    const SourceSpan& span);
+    bool checkTextEncoding(const Expr* arg, const std::string& cls);
+    Type inferLogConstruct(const std::string& name, ExprList& args,
+                           const SourceSpan& span);
+    Type logMember(const Type& recv, const std::string& prop,
+                   const SourceSpan& span);
+    // --- std/readline --------------------------------------------------------
+    Type readlineObjectType(const std::string& name);
 
     // --- the std/buffer `Buffer` family (src/std/buffer/sema.cpp) ------------
     // Buffer member table, statics, and the D47 encoding check.
@@ -755,6 +781,21 @@ std::vector<std::string> ioMemberNames();
 std::vector<std::string> dateMemberNames();
 std::vector<std::string> dateInstanceMemberNames();
 std::vector<std::string> urlMemberNames();
+StdMemberDoc urlClassMemberDoc(const std::string& family,
+                               const std::string& prop);
+std::vector<std::string> urlClassMemberNames(const std::string& family);
+std::vector<std::string> timeMemberNames();
+std::vector<std::string> timeInstanceMemberNames();
+std::vector<std::string> hashMemberNames();
+std::vector<std::string> readlineMemberNames();
+std::vector<std::string> expressObjectMemberNames(
+    const std::string& objectTypeName);
+StdMemberDoc expressObjectMemberDoc(const std::string& objectTypeName,
+                                    const std::string& member, TypeSystem);
+std::vector<std::string> expressRequestMemberNames();
+StdMemberDoc expressRequestMemberDoc(const std::string& member);
+std::vector<std::string> readlineMemberArgumentValues(
+    const std::string& prop, std::size_t argumentIndex);
 
 // The documentation of one family member: the documented signature and the
 // Markdown description the editor shows. Each family unit defines its own
@@ -779,6 +820,12 @@ StdMemberDoc fsStatsMemberDoc(const std::string& prop);
 std::vector<std::string> fsStatsMemberNames();
 StdMemberDoc dateMemberDoc(const std::string& prop);
 StdMemberDoc urlMemberDoc(const std::string& prop);
+StdMemberDoc timeMemberDoc(const std::string& prop);
+StdMemberDoc timeInstanceMemberDoc(const std::string& prop);
+StdMemberDoc hashMemberDoc(const std::string& prop);
+StdMemberDoc readlineMemberDoc(const std::string& prop);
+StdMemberDoc readlineLineReaderDoc(const std::string& prop);
+std::vector<std::string> readlineLineReaderMemberNames();
 StdMemberDoc dateInstanceMemberDoc(const std::string& prop);
 StdMemberDoc processExecResultDoc(const std::string& prop);
 StdMemberDoc processSpawnHandleDoc(const std::string& prop);
@@ -790,6 +837,10 @@ std::vector<std::string> processMemoryUsageMemberNames();
 StdMemberDoc collectionsMemberDoc(const std::string& family,
                                    const std::string& prop);
 std::vector<std::string> collectionsMemberNames(const std::string& family);
+StdMemberDoc textMemberDoc(const std::string& family, const std::string& prop);
+std::vector<std::string> textMemberNames(const std::string& family);
+StdMemberDoc logMemberDoc(const std::string& prop);
+std::vector<std::string> logMemberNames();
 // The array and string method surfaces.
 StdMemberDoc arrayMemberDoc(const std::string& prop);
 std::vector<std::string> arrayMemberNames();
@@ -800,6 +851,11 @@ std::vector<std::string> stringMemberNames();
 // routes a Date receiver's members to the family table and reports CP3305 for
 // a miss, so the class never falls back to the permissive ambient shape.
 bool isDateClass(const Type& t);
+bool isUrlClass(const Type& t);
+bool isStopwatchClass(const Type& t);
+bool isTextClass(const Type& t);
+bool isTextTypeName(const std::string& name);
+bool isLogClass(const Type& t);
 
 // The nominal RegExp value type (core regex literals, D48;
 // src/sema/src/checks/regex_check.cpp). expr_check types a RegExpLiteral as

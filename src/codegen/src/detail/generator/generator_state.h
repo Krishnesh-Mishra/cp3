@@ -162,6 +162,13 @@ protected:
     bool needsCrypto_ = false;     // crypto.* -> cp3/std/crypto.hpp include
     bool needsDate_ = false;       // std/date -> cp3/std/date.hpp include
     bool needsUrl_ = false;        // std/url -> cp3/std/url.hpp include
+    bool needsTime_ = false;       // std/time -> cp3/std/time.hpp include
+    bool needsHash_ = false;       // std/hash -> cp3/std/hash.hpp include
+    bool needsLog_ = false;        // std/log -> cp3/std/log.hpp include
+    bool needsText_ = false;       // std/text -> cp3/std/text.hpp include
+    bool needsReadline_ = false;   // std/readline -> cp3/std/readline.hpp
+    bool needsExpressSettings_ = false;
+    bool needsExpressRequest_ = false;
     bool needsRegex_ = false;      // regex literals -> cp3/core/regex.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
     // D79: this unit opted into `createServer({ threads })`. Namespace-scope

@@ -179,6 +179,40 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
             return "::cp3::runtime::checked::wrappingMul<" + receiver.cpp +
                    ">(" + expr(*m.object) + ", " + args.front() + ")";
         }
+        // Native scalar `.toString()` (sema member_check.cpp): zero arguments,
+        // exact decimal spelling for every width. The runtime overload set
+        // routes ints through the exact integral formatter (never `double`)
+        // and floats through the shortest-float spelling.
+        if (m.property == "toString" && receiver.representable) {
+            const std::vector<std::string> args = emitPlainArgs(c);
+            if (!args.empty()) return std::string();
+            return "::cp3::runtime::toString(" + expr(*m.object) + ")";
+        }
+    }
+    if (isNamespaceObject(m.object.get(), "String") &&
+        m.property == "fromCharCode" && !hasValueBinding("String")) {
+        // A native-integer argument keeps its exact value: casting it to
+        // `double` would round u64 codes above 2^53. The byte semantics are
+        // the same (trunc and modulo 256); only the carrier differs. Plain
+        // `number` lists keep the std string path untouched.
+        bool hasNative = false;
+        for (const auto& argPtr : c.arguments) {
+            const Expr* arg = argPtr.get();
+            if (arg && info(*arg).shape == Shape::Native) {
+                hasNative = true;
+                break;
+            }
+        }
+        if (hasNative) {
+            needsString_ = true;
+            std::string list;
+            for (const std::string& arg : emitPlainArgs(c)) {
+                if (!list.empty()) list += ", ";
+                list += "::cp3::runtime::scalar::byteOf(" + arg + ")";
+            }
+            return "::cp3::runtime::scalar::fromCharCodeBytes({" + list + "})";
+        }
+        return emitStringStaticCall(c, m);
     }
     if (isNamespaceObject(m.object.get(), "String") &&
         !hasValueBinding("String")) {
@@ -235,6 +269,8 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     // `std/network` receivers (`res.status(404).text(...)`, `app.get(...)`,
     // `ws.send(...)`, `wss.on(...)`): the documented members lower to the plain
     // C++ member call on the runtime object (src/std/network/codegen.cpp).
+    if (std::string ex = emitExpressSettingsMemberCall(c, m); !ex.empty()) return ex;
+    if (std::string er = emitExpressRequestCall(c, m); !er.empty()) return er;
     if (isNetworkObject(m.object.get())) return emitNetworkMemberCall(c, m);
     // `std/fs` receivers (`statSync(...).isDirectory`, `rs.on(...)`,
     // `ws.write(...)`, `chunk.toString()`); src/std/fs/codegen.cpp.
@@ -242,6 +278,18 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     // `std/date` (src/std/date/codegen.cpp): the `Date.*` statics and the Date
     // value's instance methods (`d.addDays(1)`, `d.getFullYear()`).
     if (std::string date = emitDateCall(c, m); !date.empty()) return date;
+    // `std/time` (src/std/time/codegen.cpp): `time.stopwatch()` and Stopwatch
+    // value members (`sw.start()`, `sw.elapsed()`).
+    if (std::string time = emitTimeCall(c, m); !time.empty()) return time;
+    // `std/hash` (src/std/hash/codegen.cpp): `hash.crc32/...` calls.
+    if (isNamespaceObject(m.object.get(), "hash")) return emitHashCall(c, m);
+    // `std/readline` (src/std/readline/codegen.cpp).
+    if (std::string rl = emitReadlineCall(c, m); !rl.empty()) return rl;
+    if (isReadlineObject(m.object.get())) return emitReadlineObjectCall(c, m);
+    // `std/text` + `std/log` value members (src/std/text/codegen.cpp,
+    // src/std/log/codegen.cpp).
+    if (std::string text = emitTextMemberCall(c, m); !text.empty()) return text;
+    if (std::string lg = emitLogMemberCall(c, m); !lg.empty()) return lg;
     // Core regex literals (D48; src/emit/regex.cpp): `r.test(s)`, `r.match(s)`,
     // `r.exec(s)` on a RegExp value.
     if (std::string regex = emitRegexCall(c, m); !regex.empty()) return regex;
@@ -336,6 +384,11 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     if (std::string json = emitJsonMember(m); !json.empty()) return json;
     // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): `.length`.
     if (std::string buf = emitByteBufferMember(m); !buf.empty()) return buf;
+    if (std::string text = emitTextMember(m); !text.empty()) return text;
+    if (std::string lg = emitLogMember(m); !lg.empty()) return lg;
+    if (std::string rl = emitReadlineMember(m); !rl.empty()) return rl;
+    if (std::string ex = emitExpressSettingsMemberRead(m); !ex.empty()) return ex;
+    if (std::string er = emitExpressRequestMember(m); !er.empty()) return er;
     return std::string();
 }
 

@@ -1,0 +1,10 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3305",
+    "line": 3,
+    "contains": "'Stopwatch' has no member 'elapse'"
+  }
+}

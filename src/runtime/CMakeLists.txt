@@ -29,6 +29,7 @@ set(cp3_runtime_sources
     src/parallel/parallel.cpp
     src/async/promise.cpp
     src/core/runtime.cpp
+    src/core/bucket_hash.cpp
     ../std/crypto/runtime.cpp
     ../std/process/child.cpp
     ../std/process/runtime.cpp

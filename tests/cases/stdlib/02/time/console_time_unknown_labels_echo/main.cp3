@@ -1,0 +1,8 @@
+import console from "std/console";
+
+// `timeEnd` for never-started labels deterministically prints
+// `label: 0.000ms` per label (the frozen zero, never a wall-clock value),
+// echoing each label in call order, and execution continues afterwards.
+console.timeEnd("alpha-x");
+console.timeEnd("beta-y");
+console.log("done");

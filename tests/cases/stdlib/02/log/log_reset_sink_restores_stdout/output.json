@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "INFO svc after\nINFO svc before\n",
+  "exitCode": 0
+}

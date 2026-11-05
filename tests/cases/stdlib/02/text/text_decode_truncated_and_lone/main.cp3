@@ -1,0 +1,13 @@
+import console from "std/console";
+import { TextDecoder } from "std/text";
+
+// Invalid bytes decode to U+FFFD per maximal subpart and never throw:
+// a lone continuation, an out-of-range lead, a truncated 4-byte tail and an
+// overlong E0 form each collapse as pinned below; a valid 4-byte emoji
+// passes through verbatim.
+const dec = new TextDecoder();
+console.log(dec.decode(new Uint8Array([128])));
+console.log(dec.decode(new Uint8Array([245])));
+console.log(dec.decode(new Uint8Array([240, 159, 146])));
+console.log(dec.decode(new Uint8Array([240, 159, 152, 128])));
+console.log(dec.decode(new Uint8Array([224, 128, 128])));

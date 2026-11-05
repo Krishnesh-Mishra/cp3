@@ -1,0 +1,14 @@
+import console from "std/console";
+import time from "std/time";
+
+// While running, elapsed is monotonic non-decreasing (steady_clock). Only
+// ordering is asserted; no wall-clock ms value is pinned.
+let sw = time.stopwatch();
+sw.start();
+const a = sw.elapsed();
+const b = sw.elapsed();
+const c = sw.elapsed();
+console.log(a >= 0 && b >= a && c >= b ? "ok" : "bad");
+sw.stop();
+const frozen = sw.elapsed();
+console.log(frozen >= c && sw.elapsed() === frozen ? "ok" : "bad");

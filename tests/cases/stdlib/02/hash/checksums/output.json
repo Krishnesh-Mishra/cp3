@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "crc32\ncrc32c\ncrc32empty\ncrc32cempty\nfnv1a32empty\ncrc32buffer\ncrc32cbuffer\nfnv1a32buffer\nfnv1a64stable\nfnv1a64differs\n",
+  "exitCode": 0
+}

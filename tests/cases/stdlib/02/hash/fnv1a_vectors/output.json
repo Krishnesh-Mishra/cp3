@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "2166136261\n3826002220\n440920331\n3146166556\n1335831723\nfnv1a64stable\nfnv1a64differs\nfnv1a64empty\n",
+  "exitCode": 0
+}

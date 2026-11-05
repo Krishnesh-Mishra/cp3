@@ -1,0 +1,9 @@
+import console from "std/console";
+import time from "std/time";
+
+// `stop()` on a never-started (stopped) stopwatch is a no-op: elapsed is
+// exactly 0, deterministically, with no wall-clock value asserted.
+let sw = time.stopwatch();
+sw.stop();
+console.log(sw.elapsed() === 0 ? "ok" : "bad");
+console.log(sw.elapsed() === 0 ? "ok" : "bad");

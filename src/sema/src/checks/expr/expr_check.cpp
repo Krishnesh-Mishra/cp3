@@ -300,6 +300,24 @@ Type Analyzer::inferNew(NewExpr& n) {
                 return withType(n, coll);
             }
         }
+        if (lookup(id.name, b) && isAmbientType(b.type)) {
+            // `new TextEncoder(...)` / `new TextDecoder(...)`: std/text.
+            setType(id, b.type);
+            Type txt = inferTextConstruct(ctor, n.arguments, n.span);
+            if (!txt.isUnknown()) return withType(n, txt);
+        }
+        if (lookup(id.name, b) && isAmbientType(b.type)) {
+            // `new Logger(...)`: std/log.
+            setType(id, b.type);
+            Type lg = inferLogConstruct(ctor, n.arguments, n.span);
+            if (!lg.isUnknown()) return withType(n, lg);
+        }
+        if (lookup(id.name, b) && isAmbientType(b.type)) {
+            // `new URL(...)` / `new URLSearchParams(...)`: std/url.
+            setType(id, b.type);
+            Type u = inferUrlConstruct(ctor, n.arguments, n.span);
+            if (!u.isUnknown()) return withType(n, u);
+        }
         // User classes (spec 15): `new C(args)` checks the constructor and
         // yields the nominal instance type; abstract classes are CP3413
         // (class_conform_check.cpp).
