@@ -146,10 +146,10 @@ void waitChild(ChildProcess& child) {
     WaitForSingleObject(static_cast<HANDLE>(child.process), INFINITE);
 }
 
-double childExitCode(ChildProcess& child) {
+std::int32_t childExitCode(ChildProcess& child) {
     DWORD code = 0;
     GetExitCodeProcess(static_cast<HANDLE>(child.process), &code);
-    return static_cast<double>(code);
+    return static_cast<std::int32_t>(code);
 }
 
 void writeChild(ChildProcess& child, const std::string& data) {
@@ -242,12 +242,14 @@ void waitChild(ChildProcess& child) {
     child.exitStatus = status;
 }
 
-double childExitCode(ChildProcess& child) {
-    if (WIFEXITED(child.exitStatus)) return static_cast<double>(WEXITSTATUS(child.exitStatus));
-    if (WIFSIGNALED(child.exitStatus)) {
-        return 128.0 + static_cast<double>(WTERMSIG(child.exitStatus));
+std::int32_t childExitCode(ChildProcess& child) {
+    if (WIFEXITED(child.exitStatus)) {
+        return static_cast<std::int32_t>(WEXITSTATUS(child.exitStatus));
     }
-    return -1.0;
+    if (WIFSIGNALED(child.exitStatus)) {
+        return static_cast<std::int32_t>(128 + WTERMSIG(child.exitStatus));
+    }
+    return -1;
 }
 
 void writeChild(ChildProcess& child, const std::string& data) {

@@ -45,7 +45,7 @@ struct SpawnState {
     std::mutex mutex;
     std::vector<std::function<void(std::string)>> data;
     std::vector<std::function<void(std::string)>> error;
-    std::vector<std::function<void(double)>> exits;
+    std::vector<std::function<void(std::int32_t)>> exits;
     detail::ChildProcess child;
     bool closed = false;
 };
@@ -66,8 +66,8 @@ void deliverChunk(SpawnState& state, bool fromStderr, const std::string& chunk) 
     for (auto& handler : handlers) handler(chunk);
 }
 
-void deliverExit(SpawnState& state, double code) {
-    std::vector<std::function<void(double)>> handlers;
+void deliverExit(SpawnState& state, std::int32_t code) {
+    std::vector<std::function<void(std::int32_t)>> handlers;
     {
         std::lock_guard<std::mutex> lock(state.mutex);
         handlers = state.exits;
@@ -98,7 +98,7 @@ void waitAndPost(const std::shared_ptr<SpawnState>& state, EventLoop& loop,
     detail::waitChild(state->child);
     if (outThread.joinable()) outThread.join();
     if (errThread.joinable()) errThread.join();
-    const double code = detail::childExitCode(state->child);
+    const std::int32_t code = detail::childExitCode(state->child);
     {
         std::lock_guard<std::mutex> lock(state->mutex);
         detail::closeChild(state->child);
@@ -216,8 +216,8 @@ void chdir(const std::string& path) {
     }
 }
 
-double pid() { return static_cast<double>(uv_os_getpid()); }
-double ppid() { return static_cast<double>(uv_os_getppid()); }
+std::int32_t pid() { return static_cast<std::int32_t>(uv_os_getpid()); }
+std::int32_t ppid() { return static_cast<std::int32_t>(uv_os_getppid()); }
 
 double uptime() {
     const uint64_t now = uv_hrtime();
@@ -253,7 +253,7 @@ void SpawnHandle::addChunkListener(const std::string& event,
     }
 }
 
-void SpawnHandle::addExitListener(std::function<void(double)> listener) {
+void SpawnHandle::addExitListener(std::function<void(std::int32_t)> listener) {
     if (!state_) return;
     std::lock_guard<std::mutex> lock(state_->mutex);
     state_->exits.push_back(std::move(listener));
@@ -271,6 +271,13 @@ void SpawnHandle::kill() {
     std::lock_guard<std::mutex> lock(state_->mutex);
     if (state_->closed) return;
     detail::killChild(state_->child);
+}
+
+// -----------------------------------------------------------------------------
+// spawn: the public entry point (it was accidentally dropped in 412e3c98)
+// -----------------------------------------------------------------------------
+SpawnHandle spawn(const std::string& cmd, const std::vector<std::string>& args) {
+    return SpawnHandle(startSpawn(cmd, args));
 }
 
 // -----------------------------------------------------------------------------

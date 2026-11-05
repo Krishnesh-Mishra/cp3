@@ -19,7 +19,8 @@
 // keeps away from the stdio macros); the SpawnHandle methods
 // (`on`/`write`/`kill`) lower to the runtime member calls, the listener's
 // parameter types chosen by the literal event name ("data" and "stderr"
-// chunks are std::string, the "exit" code is double).
+// chunks are std::string, the "exit" code is the std exit-code width: i32 in
+// a Rust/C++ project, double in a TypeScript one).
 //
 // `args` lowers to the runtime's std::vector<std::string> (a string[] literal
 // or an Array<string> binding). Anything else is a type error (processArgs
@@ -56,9 +57,14 @@ std::string stringLiteralOf(const Expr* e) {
 
 /// The documented listener parameter types for one spawn event name. An
 /// unidentified event gets no context types: the emitted lambda stays generic
-/// and the runtime adapts it (a listener may also take no parameters).
-std::vector<std::string> spawnEventParams(const std::string& event) {
-    if (event == "exit") return {"double"};
+/// and the runtime adapts it (a listener may also take no parameters). The
+/// `"exit"` payload is the std integer table's exit-code width: `i32` in a
+/// Rust/C++ project, `number` (double) in a TypeScript one.
+std::vector<std::string> spawnEventParams(const std::string& event,
+                                          TypeSystem ts) {
+    if (event == "exit") {
+        return {ts == TypeSystem::TypeScript ? "double" : "std::int32_t"};
+    }
     if (event == "data" || event == "stderr") return {"std::string"};
     return {};
 }
@@ -80,7 +86,10 @@ std::string Generator::emitProcessCall(const CallExpr& c, const MemberExpr& m) {
         const Expr* arg = c.arguments.front().get();
         if (!arg || arg->kind == NodeKind::SpreadElement) return std::string();
         needsProcess_ = true;
-        return std::string(kRuntimeNs) + "exit(" + expr(*arg) + ")";
+        // The runtime stores the exact i32 exit-code width; a TypeScript
+        // project's `number` argument narrows here.
+        return std::string(kRuntimeNs) + "exit(static_cast<std::int32_t>(" +
+               expr(*arg) + "))";
     }
     if ((prop == "cwd" || prop == "uptime" || prop == "memoryUsage" ||
          prop == "hrtime") &&
@@ -200,7 +209,8 @@ std::string Generator::emitProcessObjectCall(const CallExpr& c,
     needsProcess_ = true;
     needsEventLoop_ = true;
     const std::string eventName = stringLiteralOf(event);
-    const std::vector<std::string> context = spawnEventParams(eventName);
+    const std::vector<std::string> context =
+        spawnEventParams(eventName, options_.typeSystem);
     const std::string call = "(" + expr(*m.object) + ").on(" + expr(*event) + ", ";
     if (listener->kind != NodeKind::ArrowFunction) {
         return call + expr(*listener) + ")";
@@ -286,7 +296,13 @@ std::string Generator::emitProcessMember(const MemberExpr& m) {
     }
     if (isNsMember(&m, "process", "exitCode")) {
         needsProcess_ = true;
-        return std::string(kRuntimeNs) + "exitCode()";
+        const std::string read = std::string(kRuntimeNs) + "exitCode()";
+        // The runtime stores the exact i32; a TypeScript project keeps
+        // `number`, so the read widens at the boundary.
+        if (options_.typeSystem == TypeSystem::TypeScript) {
+            return "static_cast<double>(" + read + ")";
+        }
+        return read;
     }
     if (!m.object || !isProcessObject(m.object.get())) return std::string();
     if (effectiveType(*m.object).name == kMemoryUsage) {
@@ -309,7 +325,14 @@ std::string Generator::emitProcessMember(const MemberExpr& m) {
         return std::string();
     }
     needsProcess_ = true;
-    return "(" + expr(*m.object) + ")." + field;
+    const std::string read = "(" + expr(*m.object) + ")." + field;
+    // `exitCode` is the exact i32 exit-code width; a TypeScript project reads
+    // it as `number`.
+    if (field == "exitCode" &&
+        options_.typeSystem == TypeSystem::TypeScript) {
+        return "static_cast<double>(" + read + ")";
+    }
+    return read;
 }
 
 }  // namespace cp3

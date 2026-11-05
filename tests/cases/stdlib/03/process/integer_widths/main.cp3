@@ -1,0 +1,25 @@
+import console from "std/console";
+import os from "std/os";
+import process from "std/process";
+
+// A Rust project sees exact process widths: ids and exit codes are i32.
+const me: i32 = process.pid;
+const parent: i32 = process.ppid;
+console.log(me > 0 ? "pid" : "bad");
+console.log(parent >= 0 ? "ppid" : "bad");
+
+const stored: i32 = process.exitCode;
+console.log(stored.toString());
+
+const windows = os.platform() === "windows";
+const cmd = windows ? "cmd" : "sh";
+const args = windows ? ["/c", "exit", "5"] : ["-c", "exit 5"];
+
+const result = await process.exec(cmd, args);
+const status: i32 = result.exitCode;
+console.log(status.toString());
+
+let child = process.spawn(cmd, args);
+child.on("exit", (code: i32) => {
+    console.log(code.toString());
+});

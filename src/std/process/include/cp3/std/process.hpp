@@ -35,7 +35,8 @@
 // -----------------------------------------------------------------------------
 //   * exit(code): flushes stdout, then terminates the process with `code`
 //     (Node `process.exit`, corpus-pinned by process_exit_zero/nonzero and
-//     cli/run_exit_code_propagates).
+//     cli/run_exit_code_propagates). The code's exact width is the std
+//     integer table's `i32`.
 //   * argv(): the program-argument vector initArgv stored in main (argv[0] is
 //     the program name, so argv().size() >= 1, as in Node). A program that
 //     never imported std/process has no argv store; argv() then reports a
@@ -66,6 +67,7 @@
 // =============================================================================
 #pragma once
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -123,17 +125,19 @@ inline std::string arch() {
 
 inline std::string version() { return "v0.2.0"; }
 
-// `process.exitCode`: a plain stored number (default 0). Assigning it does
-// not exit; `process.exit(code)` terminates with `code` regardless.
-inline double& exitCode() {
-    static double code_ = 0.0;
+// `process.exitCode`: a plain stored exit code (default 0). Assigning it does
+// not exit; `process.exit(code)` terminates with `code` regardless. The exact
+// width is the std integer table's `i32`; a TypeScript project sees `number`
+// and codegen casts at the read site.
+inline std::int32_t& exitCode() {
+    static std::int32_t code_ = 0;
     return code_;
 }
 
 // -----------------------------------------------------------------------------
 // exit (core, unchanged since the D72 split)
 // -----------------------------------------------------------------------------
-inline void exit(double code) {
+inline void exit(std::int32_t code) {
     // std::exit runs static destructors (which flush std::cout), but be
     // explicit: a generated program may have written through the C streams.
     std::cout.flush();
@@ -167,8 +171,8 @@ struct MemoryUsage {
 
 std::string cwd();
 void chdir(const std::string& path);
-double pid();
-double ppid();
+std::int32_t pid();
+std::int32_t ppid();
 double uptime();
 MemoryUsage memoryUsage();
 // `process.hrtime()` — Node's [seconds, nanoseconds] form; `uv_hrtime()`
@@ -248,7 +252,7 @@ inline void envSet(const std::string& name, const std::string& value) {
 struct ExecResult {
     std::string out;
     std::string err;
-    double exitCode = 0.0;
+    std::int32_t exitCode = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -294,7 +298,7 @@ private:
 
     void addChunkListener(const std::string& event,
                           std::function<void(std::string)> listener);
-    void addExitListener(std::function<void(double)> listener);
+    void addExitListener(std::function<void(std::int32_t)> listener);
 
     template <class F>
     static std::function<void(std::string)> adaptChunk(F&& listener) {
@@ -312,15 +316,17 @@ private:
     }
 
     template <class F>
-    static std::function<void(double)> adaptExit(F&& listener) {
-        if constexpr (std::is_invocable_v<F&, double>) {
-            return std::function<void(double)>(std::forward<F>(listener));
+    static std::function<void(std::int32_t)> adaptExit(F&& listener) {
+        if constexpr (std::is_invocable_v<F&, std::int32_t>) {
+            return std::function<void(std::int32_t)>(std::forward<F>(listener));
         } else if constexpr (std::is_invocable_v<F&>) {
-            return [fn = std::forward<F>(listener)](double) mutable { fn(); };
+            return [fn = std::forward<F>(listener)](std::int32_t) mutable {
+                fn();
+            };
         } else {
             // The dead branch of `on`'s runtime dispatch (a chunk-shaped
             // listener): never attached, only required to compile.
-            return [](double) {};
+            return [](std::int32_t) {};
         }
     }
 

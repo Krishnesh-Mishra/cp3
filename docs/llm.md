@@ -271,6 +271,7 @@ async function load(): Promise<string> {
 `argv` · `env` (Map) · `exit(code)` · `exec(cmd, args): Promise<ExecResult>` · `spawn(cmd, args): SpawnHandle`
 `cwd(): string` · `chdir(path)` (throws catchable) · `pid` · `ppid` · `uptime(): number` · `memoryUsage(): { rss, heapTotal, heapUsed, external, arrayBuffers }` (rss only; heap fields `0`) · `hrtime(): [number, number]` · `platform` · `arch` · `version` · `exitCode` · `stdout`/`stderr` streams (`.write`) · `nextTick(cb)`
 ExecResult `{ stdout, stderr, exitCode }`; events `"data"`, `"stderr"`, `"exit"`. `SpawnHandle`: `on(...)`, `write()`, `kill()`.
+- Exact widths in a `rust`/`cpp` project: `pid`, `ppid`, `exit`/`exitCode`, `ExecResult.exitCode`, and the `"exit"` event payload are `i32`; a `typescript` project keeps `number`.
 
 ### `fs` — `import fs from "std/fs"`
 - Sync: `readFileSync` · `writeFileSync` · `appendFileSync` · `existsSync` · `mkdirSync` · `readdirSync` · `statSync` · `unlinkSync`

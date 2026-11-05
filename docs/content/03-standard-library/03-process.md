@@ -33,6 +33,8 @@ The module has a deliberately small, explicit API. It is not a Node.js compatibi
 
 The compiler treats this namespace as a closed surface. An unsupported member is a compile-time diagnostic rather than a dynamic property lookup.
 
+Numeric process values follow the project vocabulary. A `typescript` project keeps `number`; a `rust` or `cpp` project uses the exact standard-library width: `process.pid`, `process.ppid`, `process.exit`/`process.exitCode`, every `ExecResult.exitCode`, and the `"exit"` event payload are `i32` (`int32_t` in C++), so an exit status never passes through a floating-point value.
+
 ## Reading command-line arguments
 
 `process.argv` is a `string[]` populated by the generated program entry point:

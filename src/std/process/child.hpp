@@ -14,6 +14,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -48,8 +49,9 @@ bool readChunk(ChildProcess& child, bool fromStderr, char* buffer,
 /// Block until the child exits.
 void waitChild(ChildProcess& child);
 
-/// The child's exit code (call after waitChild, before closeChild).
-double childExitCode(ChildProcess& child);
+/// The child's exit code (call after waitChild, before closeChild). The exact
+/// std integer width is `i32` (cp3/host/std_integer.hpp).
+std::int32_t childExitCode(ChildProcess& child);
 
 /// Write to the child's stdin (best effort: partial writes are not retried).
 void writeChild(ChildProcess& child, const std::string& data);

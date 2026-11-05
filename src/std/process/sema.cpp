@@ -28,6 +28,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/host/std_integer.hpp"
 #include "detail/std_tables.hpp"
 
 namespace cp3 {
@@ -135,7 +136,10 @@ Type Analyzer::processObjectType(const std::string& name) {
     if (name == kExecResult) {
         fields.push_back(Field{"stdout", Type::string(), false});
         fields.push_back(Field{"stderr", Type::string(), false});
-        fields.push_back(Field{"exitCode", Type::number(), false});
+        fields.push_back(Field{
+            "exitCode",
+            stdIntegerType(StdIntegerKind::ExitCode, options_.typeSystem),
+            false});
     } else if (name == kSpawnHandle) {
         // The three documented events ("data"/"stderr"/"exit") are call-site
         // arguments of `on`, so the field is the listener-taking method.
@@ -175,7 +179,9 @@ Type Analyzer::processObjectType(const std::string& name) {
 
 std::optional<Type> Analyzer::processMember(const std::string& prop) {
     if (prop == "exit") {
-        return Type::function({Type::number()}, Type::voidType());
+        return Type::function(
+            {stdIntegerType(StdIntegerKind::ExitCode, options_.typeSystem)},
+            Type::voidType());
     }
     if (prop == "argv") return Type::array(Type::string());
     if (prop == "exec") {
@@ -201,8 +207,12 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
     if (prop == "cwd") return Type::function({}, Type::string());
     if (prop == "chdir")
         return Type::function({Type::string()}, Type::voidType());
-    if (prop == "pid") return Type::number();
-    if (prop == "ppid") return Type::number();
+    if (prop == "pid") {
+        return stdIntegerType(StdIntegerKind::Pid, options_.typeSystem);
+    }
+    if (prop == "ppid") {
+        return stdIntegerType(StdIntegerKind::Pid, options_.typeSystem);
+    }
     if (prop == "uptime") return Type::function({}, Type::number());
     if (prop == "memoryUsage") {
         return Type::function({}, processObjectType(kMemoryUsage));
@@ -219,7 +229,9 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
     if (prop == "platform" || prop == "arch" || prop == "version") {
         return Type::string();
     }
-    if (prop == "exitCode") return Type::number();
+    if (prop == "exitCode") {
+        return stdIntegerType(StdIntegerKind::ExitCode, options_.typeSystem);
+    }
     if (prop == "stdout" || prop == "stderr") {
         return processObjectType(kStdioStream);
     }
