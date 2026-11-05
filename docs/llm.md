@@ -308,7 +308,7 @@ Map: `set` `get` `has` `delete` `clear` `keys` `values` `entries` `forEach((valu
 Set: `add` `has` `delete` `clear` `values` `forEach(value => ...)` `size`, `union`/`intersection`/`difference`/`isSubsetOf`; `new Set<T>(elements)`
 LRUCache: `new LRUCache<K, V>(capacity)`, `set` `get` (moves to MRU) `has` (no move) `delete` `clear` `keys` (MRU first) `size` `capacity`; inserting beyond capacity evicts the least recently used entry
 
-### `network` — `import { fetch, WebSocket, WebSocketServer, createServer } from "std/network"`
+### `network` — `import { fetch, WebSocket, WebSocketServer, createServer, lookup } from "std/network"`
 - `fetch(url, init?): Promise<FetchResponse>` — `init`: `method`, `headers: Map<string,string>`, `body`, `timeout?` (0 = none). HTTP only (no TLS yet).
 - Response: `ok`, `status`, `statusText`, `headers`, `text(): Promise<string>`, `arrayBuffer(): Promise<Buffer>`, `json<T>()`.
 - WebSocket client: `new WebSocket(url)` — `on(event, handler)`, `send(str|Buffer)`, `close(code?, reason?)`; events: `open`, `message`, `close`, `error`.

@@ -1,0 +1,7 @@
+import console from "std/console";
+import { lookup } from "std/network";
+lookup("127.0.0.1").then((addr) => {
+    console.log(addr);
+}).catch((e) => {
+    console.log("err: " + e.toString());
+});

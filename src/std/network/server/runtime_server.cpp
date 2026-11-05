@@ -348,7 +348,7 @@ void HttpResponse::sendFile(const std::string& path) {
         return;
     }
     impl_->body = bytes;
-    sendBuffered(*impl_, detail::fileContentType(path), false);
+    sendBuffered(*impl_, fileContentType(path), false);
 }
 
 // =============================================================================
@@ -384,7 +384,7 @@ void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
     pending->context.request.setCookies(
         parseCookies(std::string(req->getHeader("cookie"))));
     pending->context.request.setRemoteAddress(
-        std::string(req->getRemoteAddressAsText()));
+        std::string(res->getRemoteAddressAsText()));
     pending->context.response.bindNative(res);
     res->onAborted([pending] {
         // The native response is gone: drop the pointer so a handler that

@@ -199,6 +199,7 @@ std::string stdImportHint(const std::string& name) {
         {"createServer", "std/network"},
         {"WebSocket", "std/network"},
         {"WebSocketServer", "std/network"},
+        {"lookup", "std/network"},
         {"Buffer", "std/buffer"},
         {"env", "std/env"},
         {"Map", "std/collections"},
