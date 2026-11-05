@@ -1,7 +1,7 @@
 // =============================================================================
-// src/parser/src/expressions.cpp - operator-precedence expression chain.
+// src/parser/src/webserverions.cpp - operator-precedence webserverion chain.
 //
-// Implements the expression grammar as a descending chain of functions, one
+// Implements the webserverion grammar as a descending chain of functions, one
 // per precedence level (assignment > conditional > nullish > || > && >
 // | > ^ > & > equality > relational > range > shift > additive >
 // multiplicative > power > unary > postfix). Primary/postfix forms live in
@@ -16,7 +16,7 @@
 
 namespace cp3 {
 
-ExprPtr ParserImpl::parseExpression() { return parseAssignment(); }
+ExprPtr ParserImpl::parsewebserverion() { return parseAssignment(); }
 
 ExprPtr ParserImpl::parseAssignment() {
     const Token start = peek();
@@ -57,7 +57,7 @@ ExprPtr ParserImpl::parseConditional() {
     if (!cond) return nullptr;
     if (match(TokenKind::Question)) {
         ExprPtr whenTrue = parseAssignment();
-        (void)expect(TokenKind::Colon, "expected ':' in conditional expression");
+        (void)expect(TokenKind::Colon, "expected ':' in conditional webserverion");
         ExprPtr whenFalse = parseAssignment();
         auto expr = std::make_unique<ConditionalExpr>(start.span);
         expr->condition = std::move(cond);

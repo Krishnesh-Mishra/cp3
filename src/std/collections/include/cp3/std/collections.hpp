@@ -61,6 +61,7 @@
 #include <utility>
 #include <vector>
 
+#include "ankerl/unordered_dense.h"
 #include "cp3/core/bucket_hash.hpp"
 #include "cp3/core/runtime.hpp"
 #include "cp3/core/value.hpp"
@@ -101,6 +102,10 @@ bool sameKey(const K& a, const K& b) {
 //   bool = 0x400000004, other/fallback = 0x500000005.
 template <class K>
 struct KeyHash {
+    // wyhash output is avalanching (every bit is mixed), so tell the dense
+    // table not to re-mix it; the per-process seed above is what keeps
+    // this HashDoS-safe.
+    using is_avalanching = void;
     std::size_t operator()(const K& key) const {
         if constexpr (std::is_floating_point_v<K>) {
             std::uint64_t bits = 0;
@@ -165,7 +170,16 @@ struct KeyEqual {
 // The backing store of `Map<K, V>`: an insertion-ordered key vector (the
 // iteration order, D44) plus a hash index that owns the values. A lookup is one
 // probe; keeping the values behind a key -> row index instead would put a
-// dependent load on every update (measured: 25% on word-frequency).
+// dependent load on every update (measured: 25% on word-frequency). The index
+// is ankerl::unordered_dense::map (v5.3.3, vendored under third_party/): a
+// dense open-addressing table that stores values inline in a vector instead
+// of per-node allocations, while the side `order_` vector still pins D44
+// iteration order. NOTE the deliberate tradeoff versus the old node-based
+// index: values live inline, so a `V*`/`V&` from `findRef`/`getOrInsert` is
+// NOT stable across a later insert that grows the table -- callers must
+// re-fetch after any `set` that may have grown the map. Within one probe
+// (`get`/`findRef`/`getOrInsert` return before any other insert) the
+// reference is valid.
 template <class K, class V>
 class MapData {
     struct ValueEntry {
@@ -174,14 +188,15 @@ class MapData {
     };
 
 public:
-    // A `Map` starts at 541 buckets (libstdc++'s prime just above 512, ~4 KB).
+    // A `Map` starts reserved for 512 entries. The old node-based table
+    // aimed at 541 buckets (libstdc++'s prime just above 512, ~4 KB).
     // On word-frequency (64 keys, 3M updates) the bucket count, not the load
-    // factor, dominates the lookup cost: 257 buckets -> 60.4 ms, 541 -> 56.0,
+    // factor, dominated the lookup cost: 257 buckets -> 60.4 ms, 541 -> 56.0,
     // 769 -> 55.6, 1031 -> 51.2 (best), versus 57.5-58.4 for the cpp entry.
-    // 541 is the smallest count that recovered the whole gap; 1031 buys ~4 ms
-    // more for a table nobody asked for. The default growth (13, 29, ...)
-    // spends the same probes on collision chains.
-    MapData() { values_.rehash(512); }
+    // 541 is the smallest count that recovered the whole gap. The dense table
+    // sizes its index in power-of-two slot groups rather than primes, so the
+    // equivalent starting point is an element reserve of 512.
+    MapData() { values_.reserve(512); }
 
     void set(const K& key, const V& value) {
         const std::size_t orderIndex = order_.size();
@@ -209,8 +224,9 @@ public:
 
     // The stored value for `key`, or nullptr when the key is absent: a mutable
     // pointer so an update can run in place, one probe instead of a `get`
-    // followed by a `set`. The index is node-based, so the pointer stays valid
-    // across insertions of other keys.
+    // followed by a `set`. The dense table stores values inline, so the
+    // pointer is valid until the table grows on a later insert of another
+    // key (it is NOT node-stable like the old `std::unordered_map` index).
     V* findRef(const K& key) {
         const auto it = values_.find(key);
         if (it == values_.end()) return nullptr;
@@ -309,7 +325,7 @@ private:
     }
 
     std::vector<std::optional<K>> order_;
-    std::unordered_map<K, ValueEntry, KeyHash<K>, KeyEqual<K>> values_;
+    ankerl::unordered_dense::map<K, ValueEntry, KeyHash<K>, KeyEqual<K>> values_;
     std::size_t tombstones_ = 0;
 };
 
@@ -424,7 +440,7 @@ public:
 
 private:
     std::vector<T> items_;
-    std::unordered_map<T, std::size_t, KeyHash<T>, KeyEqual<T>> index_;
+    ankerl::unordered_dense::map<T, std::size_t, KeyHash<T>, KeyEqual<T>> index_;
 };
 
 // -----------------------------------------------------------------------------
@@ -561,7 +577,7 @@ private:
     std::uint64_t size_ = 0;
     std::vector<Entry> entries_;
     std::vector<std::size_t> free_;
-    std::unordered_map<K, std::size_t, KeyHash<K>, KeyEqual<K>> index_;
+    ankerl::unordered_dense::map<K, std::size_t, KeyHash<K>, KeyEqual<K>> index_;
     std::int64_t head_ = -1;
     std::int64_t tail_ = -1;
 };
@@ -1035,7 +1051,7 @@ inline BitSet makeBitSet(std::uint64_t size = 0) {
 
 // Codegen lowers `b.and(other)` / `b.or(other)` / `b.xor(other)` onto these
 // member spellings (C++ alternative tokens cannot name a member, exactly
-// like `delete` -> `remove` in Map/Set above). The expression-level return
+// like `delete` -> `remove` in Map/Set above). The webserverion-level return
 // is a `BitSet` handle; the value-level ops above return `BitSetData` by
 // value, and the `->` on the handle unwraps to the same call. Codegen emits
 // the value-level spelling through the handle (see emitCollectionsMemberCall).

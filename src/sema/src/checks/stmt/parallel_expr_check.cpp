@@ -1,10 +1,10 @@
 // =============================================================================
-// src/sema/src/checks/parallel_expr_check.cpp - parallel.* capture safety: expression
+// src/sema/src/checks/parallel_expr_check.cpp - parallel.* capture safety: webserverion
 // walk and closure-local scope tracking.
 //
-// Expression half of the capture-safety walk declared in parallel_check.h and
+// webserverion half of the capture-safety walk declared in parallel_check.h and
 // documented there and in parallel_check.cpp (docs/language-spec §13): every
-// expression form is traversed so that a write through it (assignment or
+// webserverion form is traversed so that a write through it (assignment or
 // update target, field write, indexed write, mutating method call) is found,
 // while plain reads pass through unchanged. Scope tracking records the names
 // declared inside the closure, so a write to a local is never mistaken for a
@@ -115,9 +115,9 @@ void ClosureScanner::addIndex(const SourceSpan& span) {
 }
 
 // =============================================================================
-// Expression dispatch
+// webserverion dispatch
 // =============================================================================
-// Every expression is walked; only assignment, update, call and member/index
+// Every webserverion is walked; only assignment, update, call and member/index
 // chains can reach a write, so those dispatch to the target-aware helpers and
 // everything else is scanned read-only.
 void ClosureScanner::scanExpr(Expr& e) {
@@ -210,7 +210,7 @@ void ClosureScanner::scanOperatorExprs(Expr& e) {
     }
 }
 
-// Forms with a single child expression.
+// Forms with a single child webserverion.
 void ClosureScanner::scanSingleChildExprs(Expr& e) {
     switch (e.kind) {
         case NodeKind::MemberExpr: {
@@ -263,7 +263,7 @@ void ClosureScanner::scanContainerExprs(Expr& e) {
         }
         case NodeKind::TemplateLiteral: {
             auto& tl = static_cast<TemplateLiteral&>(e);
-            for (auto& ex : tl.expressions) scanMaybeExpr(ex.get());
+            for (auto& ex : tl.webserverions) scanMaybeExpr(ex.get());
             return;
         }
         case NodeKind::NewExpr: {

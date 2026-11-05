@@ -209,7 +209,7 @@ std::string programSource(const ProgramAssembly& assembly,
     if (n.text) out += "#include \"cp3/std/text.hpp\"\n";
     if (n.readline) out += "#include \"cp3/std/readline.hpp\"\n";
     if (n.network) out += "#include \"cp3/std/network.hpp\"\n";
-    if (n.expressSettings) out += "#include \"cp3/std/network/express/settings.hpp\"\n";
+    if (n.webserverSettings) out += "#include \"cp3/std/network/webserver/settings.hpp\"\n";
     if (n.collections) out += "#include \"cp3/std/collections.hpp\"\n";
     if (n.buffer) out += "#include \"cp3/std/buffer.hpp\"\n";
     if (n.fs) out += "#include \"cp3/std/fs.hpp\"\n";
@@ -337,7 +337,7 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     n.text |= inner.needsText_;
     n.readline |= inner.needsReadline_;
     n.network |= inner.needsNetwork_;
-    n.expressSettings |= inner.needsExpressSettings_;
+    n.webserverSettings |= inner.needswebserverSettings_;
     n.typedArray |= inner.needsTypedArray_;
     n.collections |= inner.needsCollections_;
     n.buffer |= inner.needsBuffer_;

@@ -9,10 +9,12 @@
 // diagnostics (CP3905-CP3911, CP3601) are available in check mode exactly as
 // in build/run mode; non-worker codegen diagnostics stay part of build/run.
 // =============================================================================
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -76,24 +78,76 @@ int cmdCheck(const CliOptions& opt) {
         analyzeProgram(*entry->ast, sema, sink, effective.compile);
     }
     if (opt.reportCycle) {
-        std::vector<std::string> groups;
-        int total = 0;
-        for (const std::string& c : sema.cycleCapableClasses) {
-            groups.push_back(c);
-            ++total;
+        // Cycle decision summary (automatic cycle handling, Stages 0-1):
+        //   * cycleCapableClasses - classes that can reach themselves through
+        //     strong edges (weak edges excluded, unknown fail-closed).
+        //   * cycleEscapeSites - one line per strong field storing an object
+        //     of a cycle-capable (or unknown) type.
+        //   * manual-weak share - the fraction of the cycle-capable classes
+        //     that still need a manually marked `weak` edge. A class counts
+        //     as needing one when the CP3401 cycle diagnostic names it in its
+        //     "reference cycle ... has no weak edge" path. The rest are exempt
+        //     single self-references (e.g. `Node.next`), which must keep
+        //     working. Groups already broken by a user `weak` edge never
+        //     become strong-cycle-capable, so they do not appear here.
+        const std::unordered_set<std::string> capable(
+            sema.cycleCapableClasses.begin(), sema.cycleCapableClasses.end());
+        std::unordered_set<std::string> unresolved;
+        for (const Diagnostic& d : sink.diagnostics()) {
+            if (d.code != diagcode::kTypeMismatch) continue;
+            if (d.message.find("has no weak edge") == std::string::npos) {
+                continue;
+            }
+            // The cycle path is the only identifier-bearing phrase in this
+            // message, so any capable class named in it is unresolved.
+            std::string token;
+            for (const char ch : d.message) {
+                const bool ident =
+                    (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                    (ch >= '0' && ch <= '9') || ch == '_';
+                if (ident) {
+                    token.push_back(ch);
+                } else {
+                    if (capable.count(token)) unresolved.insert(token);
+                    token.clear();
+                }
+            }
+            if (capable.count(token)) unresolved.insert(token);
         }
+
+        const int total = static_cast<int>(sema.cycleCapableClasses.size());
         std::fprintf(stderr, "cycle-capable classes (%d):\n", total);
-        for (const std::string& c : groups) {
-            std::fprintf(stderr, "  needs weak (unresolved): %s\n", c.c_str());
+        int needsWeak = 0;
+        for (const std::string& c : sema.cycleCapableClasses) {
+            if (unresolved.count(c) != 0) {
+                ++needsWeak;
+                std::fprintf(stderr, "  needs weak (unresolved): %s\n",
+                             c.c_str());
+            } else {
+                std::fprintf(stderr, "  exempt (self-reference): %s\n",
+                             c.c_str());
+            }
         }
-        for (const std::string& s : sema.cycleEscapeSites) {
+
+        std::vector<std::string> sites = sema.cycleEscapeSites;
+        std::sort(sites.begin(), sites.end());
+        sites.erase(std::unique(sites.begin(), sites.end()), sites.end());
+        std::fprintf(stderr, "store/escape sites (%d):\n",
+                     static_cast<int>(sites.size()));
+        for (const std::string& s : sites) {
             std::fprintf(stderr, "  store/escape: %s\n", s.c_str());
         }
-        const int needsWeak = static_cast<int>(groups.size());
-        const double pct =
-            total == 0 ? 0.0 : 100.0 * needsWeak / static_cast<double>(total);
+
+        const double pct = total == 0
+                               ? 0.0
+                               : 100.0 * needsWeak / static_cast<double>(total);
         std::fprintf(stderr, "manual weak share: %d/%d (%.0f%%)\n", needsWeak,
                      total, pct);
+        // Stages 2-3 (compiler-injected non-owning edges) are deferred: this
+        // report previews the analysis without changing any ownership.
+        std::fprintf(stderr,
+                     "auto-weak preview: no change (deferred); break cycles "
+                     "with an explicit weak edge\n");
     }
 
     const RenderOptions ro = makeRenderOptions(effective, file->path);

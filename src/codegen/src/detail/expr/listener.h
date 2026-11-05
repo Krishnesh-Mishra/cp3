@@ -33,7 +33,7 @@ class Generator;
 namespace detail {
 
 struct ListenerBuilder {
-    // The boxed listener value of a listener expression ("" when the value is
+    // The boxed listener value of a listener webserverion ("" when the value is
     // not a listener this lowering can spell).
     static std::string value(Generator& g, const Expr& e);
     // The boxed listener of an inline arrow.

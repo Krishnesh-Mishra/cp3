@@ -15,10 +15,12 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdlib>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
+
+#include <fast_float/fast_float.h>
 
 #include "cp3/std/json_value.hpp"
 
@@ -171,7 +173,25 @@ private:
             if (!parse_detail::isDigit(peek())) fail("expected an exponent digit");
             while (parse_detail::isDigit(peek())) ++pos_;
         }
-        return std::strtod(text_.c_str() + start, nullptr);
+        // The token above is already validated against the JSON number
+        // grammar, so this is a pure decimal -> double conversion over the
+        // exact [start, pos_) span (fast_float never reads past `last`).
+        // IEEE-754 round-to-nearest-even, exactly like strtod in the "C"
+        // locale, which is also the ECMAScript Number semantics: overflow
+        // yields +/-Infinity, underflow yields +/-0 (so -0 survives), and
+        // subnormals are correctly rounded. result_out_of_range is
+        // therefore accepted, not a parse error (this vendored fast_float
+        // reports overflow/underflow in the value itself and leaves ec
+        // clear; accepting the code keeps the contract if it is updated).
+        double parsed = 0.0;
+        const fast_float::from_chars_result result = fast_float::from_chars(
+            text_.data() + start, text_.data() + pos_, parsed);
+        if ((result.ec != std::errc() &&
+             result.ec != std::errc::result_out_of_range) ||
+            result.ptr != text_.data() + pos_) {
+            fail("invalid number");
+        }
+        return parsed;
     }
 
     unsigned readHex4() {

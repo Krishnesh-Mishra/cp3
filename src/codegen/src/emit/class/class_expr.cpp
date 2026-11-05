@@ -1,13 +1,13 @@
 // =============================================================================
-// src/codegen/src/emit/class_expr.cpp - class / interface / object expressions
+// src/codegen/src/emit/class_expr.cpp - class / interface / object webserverions
 // for the spec §15 object surface (STYLE.md §8).
 //
-// The expression side of the object surface, hooked from the generic emitters
+// The webserverion side of the object surface, hooked from the generic emitters
 // (emit/expr.cpp, emit/call.cpp, emit/stmt.cpp, emit/decl.cpp). Each entry point
 // recognizes one model form and returns its C++ spelling; "" means "not a model
 // form", so the caller keeps its own path (usually its unsupported-form
 // diagnostic). The
-// structs these expressions name are emitted by emit/class_decl.cpp (classes)
+// structs these webserverions name are emitted by emit/class_decl.cpp (classes)
 // and emit/class_shape.cpp (object / interface shapes).
 // =============================================================================
 #include "detail/generator/generator.h"
@@ -18,6 +18,7 @@
 
 #include "detail/class/class_model.h"
 #include "detail/class/class_walk.h"
+#include "emit/class/auto_weak.h"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
@@ -30,7 +31,7 @@ using namespace detail;
 
 namespace {
 
-// A setter store (`c.value = v`, D21) as an expression: evaluates to the
+// A setter store (`c.value = v`, D21) as an webserverion: evaluates to the
 // assigned value, like an assignment does.
 std::string setterStoreText(const std::string& setter,
                             const std::string& value) {
@@ -107,6 +108,21 @@ std::vector<std::string> packRestArgs(const std::vector<std::string>& args,
 
 }  // namespace
 
+namespace {
+
+// Stage 2 auto-weak (see emit/class_decl.cpp): storeText(m, ...) has no
+// owner class, so its callers push the declaring class name for the call.
+std::vector<std::string> g_autoWeakStoreOwnerStack;
+
+bool storeIsAutoWeak(const SemaResult& sema, const ClassMemberModel& m) {
+    if (g_autoWeakStoreOwnerStack.empty()) return false;
+    const ClassModel* cm =
+        ModelRegistry::get().classByName(g_autoWeakStoreOwnerStack.back());
+    return cm != nullptr && isAutoWeakField(sema, *cm, m.name);
+}
+
+}  // namespace
+
 // One store of `value` into the lvalue (an instance or static field). A weak
 // field stores through `WeakRef::operator=` / `.reset()`; an optional field
 // folds a nullish store into `std::nullopt`; `%=` reuses the `%` lowering.
@@ -122,7 +138,10 @@ std::string Generator::storeText(const ClassMemberModel& m,
         if (auto resolved = typeOfNode(*m.field->type)) memberType = *resolved;
     }
     const bool nullish = isNullishLiteral(*a.value);
-    if (m.isWeak && (a.op == AssignOp::Assign)) {
+    // A proven auto-weak field stores through WeakRef exactly like a
+    // manual `weak` field (see memberFieldText in class_decl.cpp).
+    if ((m.isWeak || storeIsAutoWeak(sema_, m)) &&
+        (a.op == AssignOp::Assign)) {
         if (nullish) return "(" + lvalue + ".reset())";
         // A weak store accepts either a strong handle or the optional result
         // of a weak read (`Node | undefined`). An empty optional clears the
@@ -476,9 +495,10 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
         const ClassMemberModel* mem =
             findClassMemberChain(*cm, m.property, nullptr);
         if (mem == nullptr) return std::string();
-        if (mem->isWeak) {
-            // A weak read is `T | undefined`: `readWeak` returns the optional
-            // strong handle (`MaybeRef<T>`), and narrowing decides the use.
+        // A weak (manual or proven auto-weak) read is `T | undefined`:
+        // `readWeak` returns the optional strong handle (`MaybeRef<T>`),
+        // and narrowing decides the use.
+        if (mem->isWeak || isAutoWeakField(sema_, *cm, mem->name)) {
             return "::cp3::runtime::readWeak((" + recv + ")" + instanceOp +
                    mapIdent(mem->name) + ")";
         }
@@ -623,8 +643,12 @@ std::string Generator::emitSuperMemberAssign(const AssignmentExpr& a,
     if (mem == nullptr || mem->isMethod || mem->isStatic) {
         return std::string();
     }
-    return storeText(*mem, base->cpp + "::" + mapIdent(mem->name), a,
-                     expr(*a.value));
+    g_autoWeakStoreOwnerStack.push_back(base->name);
+    const std::string superStore =
+        storeText(*mem, base->cpp + "::" + mapIdent(mem->name), a,
+                  expr(*a.value));
+    g_autoWeakStoreOwnerStack.pop_back();
+    return superStore;
 }
 
 // A write through a member: instance / static field stores (including the
@@ -658,8 +682,12 @@ std::string Generator::emitModelAssign(const AssignmentExpr& a,
         if (mem == nullptr || !mem->isStatic || mem->isMethod) {
             return std::string();
         }
-        return storeText(*mem, cm->cpp + "::" + mapIdent(mem->name), a,
-                         expr(*a.value));
+        g_autoWeakStoreOwnerStack.push_back(cm->name);
+        const std::string staticStore =
+            storeText(*mem, cm->cpp + "::" + mapIdent(mem->name), a,
+                      expr(*a.value));
+        g_autoWeakStoreOwnerStack.pop_back();
+        return staticStore;
     }
     const Type base = stripNullish(effectiveType(*m.object));
     if (const ClassModel* cm = classModelOf(base)) {
@@ -679,7 +707,10 @@ std::string Generator::emitModelAssign(const AssignmentExpr& a,
         const std::string lvalue =
             mem->isStatic ? cm->cpp + "::" + mapIdent(mem->name)
                           : "(" + expr(*m.object) + ")->" + mapIdent(mem->name);
-        return storeText(*mem, lvalue, a, expr(*a.value));
+        g_autoWeakStoreOwnerStack.push_back(cm->name);
+        const std::string fieldStore = storeText(*mem, lvalue, a, expr(*a.value));
+        g_autoWeakStoreOwnerStack.pop_back();
+        return fieldStore;
     }
     // A plain structural object behind `Ref<struct>`: a field store. An
     // interface wrapper stores through its generated setter thunk, which

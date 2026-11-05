@@ -4,7 +4,7 @@
 // OWNERSHIP: codegen module. The statement half of the inline worker pre-scan
 // (D80): it walks declarations, control flow and try/switch bodies inside the
 // entry arrow, declaring bindings into the shared scope stack and visiting
-// every expression through emit/worker_scan.cpp's `walkExpr`. Split from
+// every webserverion through emit/worker_scan.cpp's `walkExpr`. Split from
 // worker_scan.cpp for the file budget (STYLE.md sec.2).
 // =============================================================================
 #include <string>
@@ -37,7 +37,7 @@ void walkFunction(const FunctionDeclaration& fd, SiteScan& scan) {
     if (fd.body) walkStmt(*fd.body, scan);
 }
 
-// A for/for-of/for-in header: the init may be a declaration or an expression.
+// A for/for-of/for-in header: the init may be a declaration or an webserverion.
 void walkForHeader(const NodePtr& left, const ExprPtr& condition,
                    const ExprPtr& update, SiteScan& scan) {
     if (left) {
@@ -94,9 +94,9 @@ void walkWhile(const WhileStatement& w, SiteScan& scan) {
 
 void walkStmt(const Stmt& s, SiteScan& scan) {
     switch (s.kind) {
-        case NodeKind::ExpressionStatement: {
-            const auto& e = static_cast<const ExpressionStatement&>(s);
-            if (e.expression) walkExpr(*e.expression, scan);
+        case NodeKind::webserverionStatement: {
+            const auto& e = static_cast<const webserverionStatement&>(s);
+            if (e.webserverion) walkExpr(*e.webserverion, scan);
             return;
         }
         case NodeKind::BlockStatement: {

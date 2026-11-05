@@ -2,7 +2,7 @@
 // src/sema/src/detail/scopes.h - PRIVATE sema model, scope tables and type helpers.
 //
 // Declares the implementation-private value model the analyzer's scope and
-// declaration tables are expressed in (`Binding`, `FuncSig`, `Shape`, `Field`),
+// declaration tables are webservered in (`Binding`, `FuncSig`, `Shape`, `Field`),
 // together with the small helpers over the frozen `Type` (cp3/types.hpp) that
 // the analyzer's translation units share. The `Analyzer` class itself is
 // declared in `detail/analyzer.h` (STYLE.md §8).
@@ -34,7 +34,7 @@ constexpr const char* kAmbientLabel = "$ambient";
 
 // Function-type marker for the variadic array mutators (`push`/`unshift`):
 // their parameter list is unbounded (at least one), which the fixed-arity
-// `Type::function` cannot express, so we tag the type and widen the
+// `Type::function` cannot webserver, so we tag the type and widen the
 // corresponding signature's `rest` flag in `inferCall`.
 constexpr const char* kVariadicLabel = "$variadic";
 

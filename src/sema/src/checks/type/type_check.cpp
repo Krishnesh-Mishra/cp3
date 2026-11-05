@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -431,6 +432,156 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
     }
     const bool hasArg = !args.empty();
     const Type firstArg = hasArg ? args.front() : Type::unknown();
+    // -------------------------------------------------------------------------
+    // Generic constraints/defaults (`<T extends X = Y>`, ROADMAP L "Generic
+    // constraints and defaults"): instantiation checking against
+    // `GenericParamSpec` (cp3/core/utility_types.hpp). See
+    // docs/design/generic-constraints.md.
+    //
+    // Encoding contract for a resolved `TypeKind::TypeParam` (the producer
+    // side - `registerTypeParams` / `enterClassTypeParams`, outside this
+    // file's allowed set - must honour it): `parts[0]`, when present, is the
+    // resolved `extends` constraint (the pre-existing convention, already
+    // used by generic function calls in generic_check.cpp), and `parts[1]`,
+    // when present, is the resolved `= Y` default. `GenericParamSpec` is
+    // the wider record that also carries the parameter name and the
+    // hasConstraint/hasDefault flags, so the check below is written once
+    // against the spec instead of re-deriving it per declaration kind.
+    //
+    // The specs for an alias/interface/class are recovered here from the
+    // `TypeParam` leaves of its already-resolved body (alias body,
+    // interface fields, class member/signature types): a leaf names its
+    // parameter and carries its constraint/default in the slots above.
+    // A parameter that never occurs in the body carries no leaf to recover
+    // from and is therefore unchecked - the producer must store the specs
+    // beside the name lists to close that gap (design doc, "Producer
+    // contract"); this consumer is what activates the moment the leaves
+    // carry the slots.
+    // -------------------------------------------------------------------------
+    auto collectSpecs = [&](const std::vector<std::string>& names,
+                            const std::vector<Type>& bodies) {
+        std::vector<GenericParamSpec> specs;
+        specs.reserve(names.size());
+        for (const std::string& n : names) {
+            GenericParamSpec s;
+            s.name = n;
+            specs.push_back(std::move(s));
+        }
+        std::function<void(const Type&)> walk = [&](const Type& t) {
+            if (t.kind == TypeKind::TypeParam) {
+                for (std::size_t i = 0; i < names.size(); ++i) {
+                    if (names[i] != t.name) continue;
+                    if (!t.parts.empty() && !specs[i].hasConstraint) {
+                        specs[i].constraint = t.parts.front();
+                        specs[i].hasConstraint = true;
+                    }
+                    if (t.parts.size() >= 2 && !specs[i].hasDefault) {
+                        specs[i].defaultType = t.parts[1];
+                        specs[i].hasDefault = true;
+                    }
+                }
+            }
+            if (t.kind == TypeKind::Object) {
+                Shape* sh = shapeOf(t);
+                if (sh != nullptr) {
+                    if (sh->tuple) {
+                        for (const Type& e : sh->tupleElems) walk(e);
+                    } else {
+                        for (const Field& f : sh->fields) walk(f.type);
+                    }
+                }
+            }
+            for (const Type& p : t.parts) walk(p);
+        };
+        for (const Type& b : bodies) walk(b);
+        return specs;
+    };
+    // True when `t` mentions the type parameter `name` (a self-referential
+    // constraint such as `T extends Box<T>` cannot be decided by
+    // `wouldAccept` and is treated permissively).
+    auto mentionsParam = [&](const Type& t, const std::string& name) {
+        std::function<bool(const Type&)> has = [&](const Type& x) {
+            if (x.kind == TypeKind::TypeParam && x.name == name) return true;
+            if (x.kind == TypeKind::Object) {
+                Shape* sh = shapeOf(x);
+                if (sh != nullptr) {
+                    if (sh->tuple) {
+                        for (const Type& e : sh->tupleElems)
+                            if (has(e)) return true;
+                    } else {
+                        for (const Field& f : sh->fields)
+                            if (has(f.type)) return true;
+                    }
+                }
+            }
+            for (const Type& p : x.parts)
+                if (has(p)) return true;
+            return false;
+        };
+        return has(t);
+    };
+    // Checks the provided arguments against the specs (CP3412 on a
+    // violation) and fills the missing ones from their defaults into
+    // `effArgs` (which starts as the provided list). Returns false when any
+    // provided argument violates its constraint, in which case the caller
+    // resolves the instantiation to `unknown` (fail-closed, mirroring the
+    // excess-arity CP3418 legs). Only *provided* arguments are checked: a
+    // default that violates its own constraint is a declaration-site error
+    // (the producer's job), and reporting it at every use site would point
+    // at the wrong span.
+    auto checkInstantiation =
+        [&](const std::string& kind, const std::string& declName,
+            const std::vector<GenericParamSpec>& specs,
+            std::vector<Type>& effArgs) -> bool {
+        const std::size_t provided = effArgs.size();
+        std::unordered_map<std::string, Type> known;
+        for (std::size_t i = 0; i < specs.size(); ++i) {
+            if (i < effArgs.size()) {
+                known[specs[i].name] = effArgs[i];
+            } else if (specs[i].hasDefault) {
+                // A default may mention earlier parameters
+                // (`<T, U extends T = T>`); substitute what is known.
+                Type d = substituteType(specs[i].defaultType, known);
+                known[specs[i].name] = d;
+                effArgs.push_back(std::move(d));
+            }
+        }
+        bool ok = true;
+        const std::size_t checked =
+            provided < specs.size() ? provided : specs.size();
+        for (std::size_t i = 0; i < checked; ++i) {
+            const GenericParamSpec& spec = specs[i];
+            if (!spec.hasConstraint) continue;
+            const Type& arg = effArgs[i];
+            // Cascade suppression, mirroring generic_check.cpp: an
+            // unknown/error/ambient argument or constraint carries no
+            // information, and a type-parameter argument is accepted by
+            // `wouldAccept` unconditionally (its own constraint is not
+            // compared here).
+            if (arg.isUnknown() || arg.isError() || isAmbientType(arg))
+                continue;
+            std::unordered_map<std::string, Type> earlier;
+            for (std::size_t j = 0; j < i; ++j) {
+                earlier[specs[j].name] = effArgs[j];
+            }
+            Type constraint = substituteType(spec.constraint, earlier);
+            if (constraint.isUnknown() || isAmbientType(constraint)) continue;
+            if (mentionsParam(constraint, spec.name)) continue;
+            if (wouldAccept(arg, constraint, false)) continue;
+            ok = false;
+            std::string cname = pretty(constraint);
+            auto spelled = typeParamConstraintNames_.find(typeKey(constraint));
+            if (spelled != typeParamConstraintNames_.end()) {
+                cname = spelled->second;
+            }
+            report(diagcode::kConstraintNotSatisfied, nt.span,
+                   "type argument '" + pretty(arg) +
+                       "' does not satisfy the constraint '" + cname +
+                       "' of type parameter '" + spec.name + "' in " + kind +
+                       " '" + declName + "'");
+        }
+        return ok;
+    };
     // The concurrency channel types (D80, spec 13): ambient generic classes.
     // `Thread<In, Out>` types the worker entry's parameter; `Worker<In, Out>`
     // is the main side's handle type. Both are nominal Class types whose parts
@@ -502,11 +653,10 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
     }
     // A type alias names a type: a generic alias substitutes its type
     // arguments into the aliased type (`Pair<number>` is `[number, number]`).
-    // Instantiation is checked here (arity, then substitution); constraints
-    // and defaults are checked against the alias's parameter specs - today
-    // only the parameter *names* are recorded for aliases (see the
-    // `GenericParamSpec` note in docs/design/utility-types.md §5), so the
-    // constraint/default legs below activate once the spec producer lands.
+    // Instantiation is checked here: arity (CP3418), then constraints
+    // (CP3412) and default-fill against the recovered `GenericParamSpec`s,
+    // then substitution. A missing argument with no default keeps today's
+    // permissive bare-parameter behaviour.
     if (typeAliasParams_.count(nt.name) != 0) {
         const auto& params = typeAliasParams_.at(nt.name);
         if (args.size() > params.size()) {
@@ -519,6 +669,12 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
         }
         const auto baseIt = typeNames_.find(nt.name);
         if (baseIt == typeNames_.end()) return Type::unknown();
+        const std::vector<GenericParamSpec> specs =
+            collectSpecs(params, {baseIt->second});
+        std::vector<Type> effArgs = args;
+        if (!checkInstantiation("type alias", nt.name, specs, effArgs)) {
+            return Type::unknown();
+        }
         // Shape-aware substitution: `substituteTypeParams` (declarations.cpp)
         // only walks `Type::parts`, so a generic alias whose body is an
         // object shape (`type Box<T> = { value: T }`) would keep its bare
@@ -528,7 +684,7 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
             if (t.kind == TypeKind::TypeParam) {
                 for (std::size_t i = 0; i < params.size(); ++i) {
                     if (params[i] != t.name) continue;
-                    if (i < args.size()) return args[i];
+                    if (i < effArgs.size()) return effArgs[i];
                     return t;  // missing argument: permissive bare parameter
                 }
                 return t;
@@ -558,6 +714,8 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
     }
     // A generic interface (D26): the type arguments are substituted into the
     // interface's members, so `Box<number>` is the shape `{ value: number }`.
+    // Instantiation is checked here first: arity (CP3418), then constraints
+    // (CP3412) and default-fill against the recovered specs.
     if (genericInterfaces_.count(nt.name) != 0) {
         const auto& gi = genericInterfaces_.at(nt.name);
         if (args.size() > gi.typeParams.size()) {
@@ -568,16 +726,28 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
                        std::to_string(args.size()));
             return Type::unknown();
         }
-        return resolveGenericInterface(nt.name, args);
+        std::vector<Type> bodies;
+        bodies.reserve(gi.fields.size());
+        for (const Field& f : gi.fields) bodies.push_back(f.type);
+        const std::vector<GenericParamSpec> specs =
+            collectSpecs(gi.typeParams, bodies);
+        std::vector<Type> effArgs = args;
+        if (!checkInstantiation("interface", nt.name, specs, effArgs)) {
+            return Type::unknown();
+        }
+        return resolveGenericInterface(nt.name, effArgs);
     }
     const auto it = typeNames_.find(nt.name);
     if (it != typeNames_.end()) {
         Type base = it->second;
         // A user class instantiation (`Box<number>`): the type arguments are
         // carried in `parts` for member substitution and codegen spelling.
-        // An excess argument list for a known generic class is CP3418; a
-        // class the unit does not know keeps the permissive fallthrough.
-        if (base.kind == TypeKind::Class && !args.empty()) {
+        // An excess argument list for a known generic class is CP3418; its
+        // provided arguments are then checked against the recovered specs
+        // (CP3412) and missing ones filled from defaults, so a bare
+        // `Box` for `class Box<T = number>` carries `number`. A class the
+        // unit does not know keeps the permissive fallthrough.
+        if (base.kind == TypeKind::Class) {
             if (const ClassInfo* ci = findClass(nt.name)) {
                 if (args.size() > ci->typeParamNames.size()) {
                     report(diagcode::kInvalidTypeArgument, nt.span,
@@ -587,8 +757,24 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
                                std::to_string(args.size()));
                     return Type::unknown();
                 }
+                std::vector<Type> bodies;
+                for (const ClassMemberInfo& m : ci->members) {
+                    bodies.push_back(m.type);
+                    for (const Type& p : m.sig.params) bodies.push_back(p);
+                    bodies.push_back(m.sig.ret);
+                }
+                for (const Type& p : ci->ctorSig.params) bodies.push_back(p);
+                bodies.push_back(ci->ctorSig.ret);
+                const std::vector<GenericParamSpec> specs =
+                    collectSpecs(ci->typeParamNames, bodies);
+                std::vector<Type> effArgs = args;
+                if (!checkInstantiation("class", nt.name, specs, effArgs)) {
+                    return Type::unknown();
+                }
+                if (!effArgs.empty()) base.parts = effArgs;
+                return base;
             }
-            base.parts = args;
+            if (!args.empty()) base.parts = args;
         }
         return base;
     }

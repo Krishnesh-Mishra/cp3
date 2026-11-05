@@ -17,7 +17,7 @@
 //
 // The scanner walks the closure body structurally (it does NOT re-run type
 // inference) and is declared in parallel_check.h: statements are here,
-// expressions and closure-local scope tracking in parallel_expr_check.cpp,
+// webserverions and closure-local scope tracking in parallel_expr_check.cpp,
 // and the `Analyzer` entry point at the bottom of this file. Diagnostics anchor
 // at column 1 of the offending node's begin line (D54).
 //
@@ -58,7 +58,7 @@ void ClosureScanner::scan(ArrowFunction& arrow) {
         if (p) declarePattern(p->name.get());
     }
     if (arrow.body) {
-        if (arrow.expressionBody) {
+        if (arrow.webserverionBody) {
             scanExpr(*static_cast<Expr*>(arrow.body.get()));
         } else {
             scanStmt(static_cast<Stmt&>(*arrow.body));
@@ -67,7 +67,7 @@ void ClosureScanner::scan(ArrowFunction& arrow) {
     popScope();
 }
 
-// Statement dispatch: block/labeled forms, declarations, expression statements
+// Statement dispatch: block/labeled forms, declarations, webserverion statements
 // and the `return`/`throw` jumps are handled here; the control-flow statements
 // go through scanControlStmt, and each form keeps its focused helper below.
 void ClosureScanner::scanStmt(Stmt& s) {
@@ -75,8 +75,8 @@ void ClosureScanner::scanStmt(Stmt& s) {
         case NodeKind::BlockStatement:
             scanBlock(static_cast<BlockStatement&>(s));
             return;
-        case NodeKind::ExpressionStatement:
-            scanMaybeExpr(static_cast<ExpressionStatement&>(s).expression.get());
+        case NodeKind::webserverionStatement:
+            scanMaybeExpr(static_cast<webserverionStatement&>(s).webserverion.get());
             return;
         case NodeKind::VariableDeclaration:
             scanVarDecl(static_cast<VariableDeclaration&>(s));
@@ -253,9 +253,9 @@ void ClosureScanner::scanVarDecl(VariableDeclaration& vd) {
 void ClosureScanner::scanForInit(Node& init) {
     if (init.kind == NodeKind::VariableDeclaration) {
         scanVarDecl(static_cast<VariableDeclaration&>(init));
-    } else if (init.kind == NodeKind::ExpressionStatement) {
-        auto& es = static_cast<ExpressionStatement&>(init);
-        scanMaybeExpr(es.expression.get());
+    } else if (init.kind == NodeKind::webserverionStatement) {
+        auto& es = static_cast<webserverionStatement&>(init);
+        scanMaybeExpr(es.webserverion.get());
     }
 }
 

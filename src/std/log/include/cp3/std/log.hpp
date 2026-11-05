@@ -114,7 +114,7 @@ inline std::string renderValue(double value) {
     if (result.ec == std::errc()) return std::string(buf, result.ptr);
     return std::string("NaN");
 }
-// Integral values (e.g. a native-int expression) render as their double
+// Integral values (e.g. a native-int webserverion) render as their double
 // spelling. Without this overload an `int` argument is ambiguous between
 // the `bool` and `double` overloads above.
 template <class T>

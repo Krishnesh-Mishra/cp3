@@ -112,13 +112,13 @@ std::string Generator::arrowBodyText(const ArrowFunction& a, bool isAsync,
                                 pt.value_or(Type::unknown()), false};
         unpackPattern(*p->name, src, body, 1);
     }
-    if (a.body && a.expressionBody) {
+    if (a.body && a.webserverionBody) {
         body += (isAsync ? "co_return " : "return ") +
                 expr(*static_cast<const Expr*>(a.body.get())) + ";";
     } else if (a.body) {
         stmt(*static_cast<const Stmt*>(a.body.get()), body, 1);
     }
-    if (isAsync && !(a.body && a.expressionBody)) {
+    if (isAsync && !(a.body && a.webserverionBody)) {
         line(body, 1, bodyRet == "void" ? "co_return;" : "co_return {};");
     }
 

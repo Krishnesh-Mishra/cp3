@@ -6,8 +6,9 @@
 // the `needsHash_` flag in generator_state.h / module_writer.cpp, so the
 // rest of codegen never needs to change for this module.
 //
-// Every documented member lowers 1:1 onto the header-only runtime surface in
-// cp3/std/hash.hpp (namespace cp3::runtime::hash); a member outside the
+// Every documented member lowers 1:1 onto the cp3/std/hash.hpp runtime
+// surface (namespace cp3::runtime::hash; crc32/crc32c/fnv are inline in the
+// header, xxhash64 is defined in src/std/hash/runtime.cpp); a member outside the
 // table returns "" (defensive: the closed hash surface is rejected in sema
 // as CP3305 first). A Buffer argument lowers to its byte view
 // (cp3/std/buffer.hpp, the crypto sha256/sha512 pattern); a string argument
@@ -30,7 +31,8 @@ using namespace detail;
 
 namespace {
 
-const char* const kHashMethods[] = {"crc32", "crc32c", "fnv1a32", "fnv1a64"};
+const char* const kHashMethods[] = {"crc32", "crc32c", "fnv1a32", "fnv1a64",
+                                    "xxhash64"};
 
 }  // namespace
 

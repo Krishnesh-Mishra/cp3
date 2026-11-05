@@ -1,6 +1,7 @@
 // =============================================================================
 // src/std/object/sema.cpp - the `Object.keys` / `.values` / `.entries` surface,
-// plus `Object.fromEntries` / `Object.groupBy` (ROADMAP L).
+// plus `Object.assign` / `.is` / `.freeze` family and
+// `Object.fromEntries` / `Object.groupBy` (ROADMAP §H + L).
 //
 // cp3's object literals have a statically known shape (`$o{...}`), so the
 // three enumeration helpers can be typed without runtime reflection. The
@@ -40,7 +41,27 @@ namespace {
 bool isObjectBuiltin(const std::string& name) {
     return name == "keys" || name == "values" || name == "entries" ||
            name == "assign" || name == "is" || name == "freeze" ||
-           name == "fromEntries" || name == "groupBy";
+           name == "seal" || name == "preventExtensions" ||
+           name == "isFrozen" || name == "isSealed" ||
+           name == "isExtensible" || name == "getPrototypeOf" ||
+           name == "setPrototypeOf" || name == "fromEntries" ||
+           name == "groupBy";
+}
+
+// The freeze family (`freeze` / `seal` / `preventExtensions`): one argument,
+// returned unchanged. CP3 objects have a statically known shape and no
+// runtime property table, so immutability is a static-model approximation
+// (see codegen.cpp): the call is identity, and the `isFrozen` / `isSealed` /
+// `isExtensible` queries fold on a directly frozen argument. The canonical
+// runtime registry lives in object.hpp for the wiring step.
+bool isFreezeFamily(const std::string& name) {
+    return name == "freeze" || name == "seal" ||
+           name == "preventExtensions";
+}
+
+bool isFreezeQuery(const std::string& name) {
+    return name == "isFrozen" || name == "isSealed" ||
+           name == "isExtensible";
 }
 
 // The canonical `Record<string, V>` type: `TypeKind::Class "Map"` with
@@ -90,18 +111,98 @@ bool Analyzer::tryInferObjectCall(CallExpr& call, MemberExpr& m, Type& out) {
         out = withType(call, Type::boolean());
         return true;
     }
-    if (m.property == "freeze") {
+    if (isFreezeFamily(m.property)) {
         if (call.arguments.size() != 1 || !call.arguments.front()) {
             report(diagcode::kArityMismatch, call.span,
-                   "arity mismatch: Object.freeze expects one argument");
+                   "arity mismatch: Object." + m.property +
+                       " expects one argument");
             out = withType(call, Type::unknown());
             return true;
         }
         const Type recv = typeOfExpr(*call.arguments.front());
         if (recv.isUnknown()) {
             report(diagcode::kTypeMismatch, call.span,
-                   "Object.freeze requires a value with a known type");
+                   "Object." + m.property +
+                       " requires a value with a known type");
             out = withType(call, Type::unknown());
+            return true;
+        }
+        // JS: freeze/seal/preventExtensions on a primitive returns the
+        // primitive unchanged; on an object it returns the same object.
+        // CP3 follows the same identity contract (codegen.cpp).
+        out = withType(call, recv);
+        return true;
+    }
+    if (isFreezeQuery(m.property)) {
+        if (call.arguments.size() != 1 || !call.arguments.front()) {
+            report(diagcode::kArityMismatch, call.span,
+                   "arity mismatch: Object." + m.property +
+                       " expects one argument");
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        const Type recv = typeOfExpr(*call.arguments.front());
+        if (recv.isUnknown()) {
+            report(diagcode::kTypeMismatch, call.span,
+                   "Object." + m.property +
+                       " requires a value with a known type");
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        out = withType(call, Type::boolean());
+        return true;
+    }
+    if (m.property == "getPrototypeOf") {
+        if (call.arguments.size() != 1 || !call.arguments.front()) {
+            report(diagcode::kArityMismatch, call.span,
+                   "arity mismatch: Object.getPrototypeOf expects one "
+                   "argument");
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        const Type recv = typeOfExpr(*call.arguments.front());
+        if (recv.isUnknown()) {
+            report(diagcode::kTypeMismatch, call.span,
+                   "Object.getPrototypeOf requires a value with a known "
+                   "type");
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        // CP3 object literals are plain static shapes with no prototype
+        // chain and no runtime metadata, so the prototype is always null.
+        out = withType(call, Type::nullType());
+        return true;
+    }
+    if (m.property == "setPrototypeOf") {
+        if (call.arguments.size() != 2 || !call.arguments.front() ||
+            !call.arguments[1]) {
+            report(diagcode::kArityMismatch, call.span,
+                   "arity mismatch: Object.setPrototypeOf expects two "
+                   "arguments");
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        const Type recv = typeOfExpr(*call.arguments.front());
+        if (recv.isUnknown()) {
+            report(diagcode::kTypeMismatch, call.span,
+                   "Object.setPrototypeOf requires a value with a known "
+                   "type");
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        const Type proto = typeOfExpr(*call.arguments[1]);
+        if (!proto.isNull()) {
+            // ROADMAP §7: TypeScript allows a runtime prototype, but CP3
+            // does not, because CP3 emits static native output with no
+            // runtime metadata and no dynamic class resolution. A null
+            // prototype is the only setting that matches the static model.
+            report(diagcode::kTypeMismatch, call.arguments[1]->span,
+                   "type mismatch: Object.setPrototypeOf's prototype must "
+                   "be null (CP3 objects have no prototype; TypeScript "
+                   "allows a runtime prototype, but CP3 does not because "
+                   "CP3 emits static native output with no runtime "
+                   "metadata or dynamic class resolution)");
+            out = withType(call, recv);
             return true;
         }
         out = withType(call, recv);
@@ -135,12 +236,21 @@ bool Analyzer::tryInferObjectCall(CallExpr& call, MemberExpr& m, Type& out) {
             const ExprPtr& arg = call.arguments[i];
             if (!arg) continue;
             const Type source = typeOfExpr(*arg);
-            const Shape* sourceShape = shapeOf(source);
-            if (source.kind != TypeKind::Object || sourceShape == nullptr ||
+            // JS: null and undefined sources are ignored by Object.assign.
+            if (source.isNullish()) continue;
+            // A nullable object source is allowed; codegen null-checks it
+            // before copying (a null value at runtime is ignored, as in JS).
+            Type sourceType = source;
+            if (source.isNullable() && !source.parts.empty()) {
+                sourceType = source.parts.front();
+                if (sourceType.isNullish()) continue;
+            }
+            const Shape* sourceShape = shapeOf(sourceType);
+            if (sourceType.kind != TypeKind::Object || sourceShape == nullptr ||
                 sourceShape->open || sourceShape->tuple) {
                 report(diagcode::kTypeMismatch, arg->span,
                        "Object.assign sources must be objects with statically "
-                       "known fields");
+                       "known fields (or null/undefined, which are ignored)");
             }
         }
         out = withType(call, target);

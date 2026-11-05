@@ -3,7 +3,12 @@
 //
 // OWNERSHIP: the std/text family (src/std/text/**). Additive to the
 // generated-code ABI (D14): everything is `inline`, header-only, and mirrors
-// the STDLIB docs `TextEncoder` / `TextDecoder` surface one-to-one.
+// the STDLIB docs `TextEncoder` / `TextDecoder` surface one-to-one. The
+// only compiled dependency is simdutf (third_party/simdutf): the generated
+// program links `libsimdutf.a` for `windows-x64` via the `std/text` native
+// row (src/std/text/native.hpp), which also adds its include root. When
+// `simdutf.h` is not on the include path the header still compiles and the
+// hand-written decode loop below is the sole path.
 //
 // -----------------------------------------------------------------------------
 // CODEGEN CONTRACT
@@ -33,12 +38,16 @@
 //   * A cp3 string is already a UTF-8 byte string, so `encode` copies the
 //     bytes verbatim into a fresh `Uint8Array`: no transcoding, no
 //     normalization, no BOM is added.
-//   * `decode` hand-validates the byte stream (no `simdutf` dependency; the
-//     roadmap's hand-written fallback is the shipped path) and replaces each
-//     invalid maximal subpart with U+FFFD (the WHATWG/Unicode substitution
-//     rule), including a truncated sequence at the end of input and an
-//     encoded surrogate or an out-of-range code point. A leading UTF-8 BOM
-//     is stripped, matching `TextDecoder`'s default.
+//   * `decode` validates the byte stream with the simdutf fast path
+//     (`simdutf::validate_utf8`, vendored in third_party/simdutf and linked
+//     for `windows-x64` by this module's native row) and returns a valid
+//     stream verbatim. A stream simdutf rejects (or a build without
+//     `simdutf.h`) falls back to the hand-written decoder below, which
+//     replaces each invalid maximal subpart with U+FFFD (the WHATWG/Unicode
+//     substitution rule), including a truncated sequence at the end of
+//     input and an encoded surrogate or an out-of-range code point. A
+//     leading UTF-8 BOM is stripped before either path runs, matching
+//     `TextDecoder`'s default.
 //   * `decode` is total: it never throws on malformed bytes. The only
 //     catchable error this module raises is the unsupported-encoding error.
 //
@@ -57,6 +66,18 @@
 
 #include "cp3/core/error.hpp"
 #include "cp3/typed_array.hpp"
+
+// simdutf fast path for `decode` validation. The `std/text` native row
+// (src/std/text/native.hpp) adds `third_party/simdutf/include` and, for
+// `windows-x64`, links `libsimdutf.a`; programs importing `std/text` get it
+// automatically. `__has_include` keeps this header self-contained when the
+// row's include root is absent: the hand-written loop in `decodeUtf8` is
+// then the only validator (slower, same results). CP3_TEXT_HAS_SIMDUTF is
+// a consumer-visible signal for diagnostics only.
+#if defined(__has_include) && __has_include(<simdutf.h>)
+#include <simdutf.h>
+#define CP3_TEXT_HAS_SIMDUTF 1
+#endif
 
 namespace cp3::runtime::text {
 
@@ -98,18 +119,35 @@ inline std::string checkedEncoding(const std::string& encoding,
 /// subpart.
 inline constexpr char kReplacement[] = "\xEF\xBF\xBD";
 
-/// Hand-written UTF-8 validation + decode: valid sequences pass through
-/// verbatim (a cp3 string is already UTF-8, so no transcoding is needed) and
-/// each invalid maximal subpart is replaced by U+FFFD. The second-byte ranges
-/// exclude overlong forms (E0/F0), surrogates (ED) and code points above
-/// U+10FFFF (F4); a leading BOM is stripped.
+/// UTF-8 validation + decode. When the simdutf fast path is available, a
+/// stream `simdutf::validate_utf8` accepts is returned verbatim (a cp3
+/// string is already UTF-8, so no transcoding is needed). Otherwise the
+/// hand-written loop below runs: valid sequences pass through verbatim and
+/// each invalid maximal subpart is replaced by U+FFFD. The second-byte
+/// ranges exclude overlong forms (E0/F0), surrogates (ED) and code points
+/// above U+10FFFF (F4); a leading BOM is stripped before either path runs.
 inline std::string decodeUtf8(const std::uint8_t* data, std::size_t size) {
     std::string out;
     out.reserve(size);
+    if (data == nullptr || size == 0) return std::string();
     std::size_t i = 0;
     if (size >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF) {
         i = 3;
     }
+#if defined(CP3_TEXT_HAS_SIMDUTF)
+    // Fast path: simdutf scans in SIMD blocks and rejects exactly the
+    // streams this loop would otherwise per-byte walk. Valid input returns
+    // straight away; invalid input (or a short post-BOM tail) falls through
+    // so the WHATWG replacement below — which simdutf's boolean validate
+    // API cannot webserver — stays the single replacement implementation.
+    // `size - i == 0` (BOM-only input) returns empty without calling into
+    // simdutf on a zero-length span.
+    if (size <= i) return std::string();
+    if (simdutf::validate_utf8(reinterpret_cast<const char*>(data + i),
+                               size - i)) {
+        return std::string(reinterpret_cast<const char*>(data + i), size - i);
+    }
+#endif
     while (i < size) {
         const std::uint8_t lead = data[i];
         if (lead < 0x80) {
@@ -210,8 +248,9 @@ private:
 // =============================================================================
 // TextDecoder
 // =============================================================================
-/// `new TextDecoder()` / `new TextDecoder(encoding)`. `decode` hand-validates
-/// the bytes as UTF-8, replacing each invalid maximal subpart with U+FFFD.
+/// `new TextDecoder()` / `new TextDecoder(encoding)`. `decode` validates the
+/// bytes as UTF-8 — simdutf fast path when linked, hand-written fallback
+/// otherwise — replacing each invalid maximal subpart with U+FFFD.
 class TextDecoder {
 public:
     explicit TextDecoder(std::string encoding = "utf-8")

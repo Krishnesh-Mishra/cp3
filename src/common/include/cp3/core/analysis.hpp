@@ -5,7 +5,7 @@
 //
 // Sema does NOT mutate the AST (see ast.hpp design rules). It publishes every
 // result it computes into a `SemaResult`, keyed by `Node::nodeId`:
-//   * nodeTypes  - inferred type of an expression / declared type of a binding;
+//   * nodeTypes  - inferred type of an webserverion / declared type of a binding;
 //   * symbols    - the binding table (one entry per declaration site);
 //   * functions  - resolved signature of every function-like declaration;
 //   * docs       - the doc comment of a declaration (one entry per documented
@@ -118,6 +118,34 @@ struct SemaResult {
     // together with cycleCapableClasses to compute the manual-weak share.
     std::vector<std::string> cycleEscapeSites;
 
+    // Stage 3 of automatic cycle handling: one entry per cycle group (the
+    // strongly-connected component of cycleCapableClasses, incl. singleton
+    // self-loops), with the region/group-counting verdict. Structured form
+    // for a future codegen consumer; the two string views below carry the
+    // same verdict for `cp3 check --report`.
+    struct CycleGroupInfo {
+        std::vector<std::string> classes;  // sorted group members
+        bool hasWeakEdge = false;          // user already broke the cycle
+        bool regionEligible = false;       // bump-arena candidate (see below)
+        std::string regionKind;            // "none" | "bump-arena-candidate"
+        std::string regionReason;          // why eligible / fail-closed reason
+        bool groupCountEligible = false;   // per-group refcount elision
+        std::string countReason;           // why eligible / fail-closed reason
+        int strongInternalEdges = 0;       // elided retain/release pairs
+        int weakInternalEdges = 0;
+        int externalStrongEdges = 0;       // strong edges leaving the group
+        int unknownRefs = 0;               // opaque unknown-typed fields
+    };
+    std::vector<CycleGroupInfo> cycleGroups;
+
+    // One human-readable line per group with regionKind != "none", e.g.
+    // "BST : bump-arena-candidate (closed group, short-lived candidate)".
+    std::vector<std::string> cycleRegions;
+
+    // One human-readable line per group, e.g.
+    // "A,B : group-count eligible (2 internal edges elided)".
+    std::vector<std::string> cycleGroupCounts;
+
     // The resolved values (and numeric reverse map) of every enum
     // declaration of this unit, keyed by the declaration's nodeId. This is
     // the formerly deferred `enumInfo` table: sema fills it for regular and
@@ -141,6 +169,11 @@ struct SemaResult {
         functions.clear();
         docs.clear();
         constEnums.clear();
+        cycleCapableClasses.clear();
+        cycleEscapeSites.clear();
+        cycleGroups.clear();
+        cycleRegions.clear();
+        cycleGroupCounts.clear();
         ok = false;
         networkScaleMode = false;
     }

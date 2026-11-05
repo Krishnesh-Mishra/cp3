@@ -23,7 +23,7 @@
 namespace cp3 {
 namespace detail {
 
-// Is `e` the member expression `ns.<prop>` on a bare namespace identifier?
+// Is `e` the member webserverion `ns.<prop>` on a bare namespace identifier?
 inline bool isNsMember(const Expr* e, const char* ns, const char* prop) {
     if (!e || e->kind != NodeKind::MemberExpr) return false;
     const auto& m = static_cast<const MemberExpr&>(*e);

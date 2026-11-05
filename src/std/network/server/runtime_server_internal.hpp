@@ -14,6 +14,7 @@
 
 #include <condition_variable>
 #include <cstddef>
+#include <map>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -68,6 +69,10 @@ struct ServerImpl {
     // Ledger L (appended): `app.onError(...)` handler, or null for the
     // default 500 response.
     ErrorFn errorHandler;
+    // webserver routing agent: `app.param(name, fn)` callbacks.
+    std::vector<std::pair<std::string, ParamFn>> paramHandlers;
+    // Regex-routing agent: app settings ("case sensitive routing", etc).
+    std::map<std::string, bool> routingSettings;
 };
 
 /// The buffered response bound to one request.

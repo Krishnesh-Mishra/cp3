@@ -1,10 +1,10 @@
 // =============================================================================
-// src/parser/src/primary.cpp - primary and postfix (call/member) expressions.
+// src/parser/src/primary.cpp - primary and postfix (call/member) webserverions.
 //
-// Implements the leaf expressions (literals, identifiers, template literals),
+// Implements the leaf webserverions (literals, identifiers, template literals),
 // array/object literals, `new`, calls and member/index access (including
 // optional chaining and explicit call type arguments), and arrow functions
-// (plain and generic). The operator-precedence chain lives in expressions.cpp.
+// (plain and generic). The operator-precedence chain lives in webserverions.cpp.
 // =============================================================================
 #include "detail/tokens.h"
 
@@ -84,7 +84,7 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
                 auto index = std::make_unique<IndexExpr>(expr->span);
                 index->object = std::move(expr);
                 index->optional = true;
-                index->index = parseExpression();
+                index->index = parsewebserverion();
                 (void)expect(TokenKind::RBracket, "expected ']' after index");
                 index->span = spanFrom(qd);
                 expr = std::move(index);
@@ -108,7 +108,7 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
             auto index = std::make_unique<IndexExpr>(expr->span);
             index->object = std::move(expr);
             index->optional = false;
-            index->index = parseExpression();
+            index->index = parsewebserverion();
             (void)expect(TokenKind::RBracket, "expected ']' after index");
             index->span = spanFrom(bracket);
             expr = std::move(index);
@@ -127,7 +127,7 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
         } else if (check(TokenKind::Bang) && !peek().precededByNewline) {
             advance();
             auto nonNull = std::make_unique<NonNullExpr>(start.span);
-            nonNull->expression = std::move(expr);
+            nonNull->webserverion = std::move(expr);
             nonNull->span = spanFrom(start);
             expr = std::move(nonNull);
         } else if (check(TokenKind::KwAs) && !peek().precededByNewline) {
@@ -135,7 +135,7 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
             TypePtr type = parseType();
             if (type) {
                 auto asExpr = std::make_unique<AsExpr>(start.span);
-                asExpr->expression = std::move(expr);
+                asExpr->webserverion = std::move(expr);
                 asExpr->type = std::move(type);
                 asExpr->span = spanFrom(start);
                 expr = std::move(asExpr);
@@ -219,7 +219,7 @@ ExprPtr ParserImpl::parsePrimary() {
             return parseParenOrArrow();
         case TokenKind::Less:
             // A generic arrow function (`<T,>(x: T) => x`): the only cp3
-            // expression that starts with `<`.
+            // webserverion that starts with `<`.
             if (ExprPtr arrow = parseGenericArrow()) return arrow;
             break;
         case TokenKind::KwAsync:
@@ -236,7 +236,7 @@ ExprPtr ParserImpl::parsePrimary() {
         return std::make_unique<AstIdentifier>(t.span, textOf(t));
     }
 
-    report(diagcode::kUnexpectedToken, "expected an expression");
+    report(diagcode::kUnexpectedToken, "expected an webserverion");
     return nullptr;
 }
 
@@ -362,7 +362,7 @@ ExprPtr ParserImpl::parseNewCallee() {
             Token bracket = advance();
             auto index = std::make_unique<IndexExpr>(expr->span);
             index->object = std::move(expr);
-            index->index = parseExpression();
+            index->index = parsewebserverion();
             (void)expect(TokenKind::RBracket, "expected ']' after index");
             index->span = spanFrom(bracket);
             expr = std::move(index);
@@ -388,22 +388,22 @@ ExprPtr ParserImpl::parseParenOrArrow() {
                 fn->returnType = std::move(returnType);
                 if (check(TokenKind::LBrace)) {
                     fn->body = parseBlock();
-                    fn->expressionBody = false;
+                    fn->webserverionBody = false;
                 } else {
                     fn->body = parseAssignment();
-                    fn->expressionBody = true;
+                    fn->webserverionBody = true;
                 }
                 fn->span = spanFrom(start);
                 return fn;
             }
         }
     }
-    return parseGroupedExpression();
+    return parseGroupedwebserverion();
 }
 
-ExprPtr ParserImpl::parseGroupedExpression() {
+ExprPtr ParserImpl::parseGroupedwebserverion() {
     (void)expect(TokenKind::LParen, "expected '('");
-    ExprPtr e = parseExpression();
+    ExprPtr e = parsewebserverion();
     (void)expect(TokenKind::RParen, "expected ')'");
     return e;
 }
@@ -422,10 +422,10 @@ ExprPtr ParserImpl::parseSingleParamArrow(bool isAsync) {
     fn->params = std::move(params);
     if (check(TokenKind::LBrace)) {
         fn->body = parseBlock();
-        fn->expressionBody = false;
+        fn->webserverionBody = false;
     } else {
         fn->body = parseAssignment();
-        fn->expressionBody = true;
+        fn->webserverionBody = true;
     }
     fn->span = spanFrom(start);
     return fn;
@@ -438,10 +438,10 @@ ExprPtr ParserImpl::parseSingleParamArrow(bool isAsync) {
 // arrow from a JSX element in TypeScript is optional in cp3, which has no
 // JSX, so `<T>(x: T) => x` reads the same way.
 //
-// The production is a trial parse: `<` also opens a relational expression, so
+// The production is a trial parse: `<` also opens a relational webserverion, so
 // the type-parameter list, the parameter list and the `=>` all have to line
 // up before the arrow is committed. A failed trial restores the cursor and
-// lets the ordinary expression parser report the real error.
+// lets the ordinary webserverion parser report the real error.
 ExprPtr ParserImpl::parseGenericArrow() {
     const Token start = peek();
     Trial trial(*this);
@@ -463,10 +463,10 @@ ExprPtr ParserImpl::parseGenericArrow() {
     fn->returnType = std::move(returnType);
     if (check(TokenKind::LBrace)) {
         fn->body = parseBlock();
-        fn->expressionBody = false;
+        fn->webserverionBody = false;
     } else {
         fn->body = parseAssignment();
-        fn->expressionBody = true;
+        fn->webserverionBody = true;
     }
     fn->span = spanFrom(start);
     return fn;

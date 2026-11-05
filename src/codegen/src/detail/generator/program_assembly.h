@@ -40,7 +40,7 @@ struct ProgramNeeds {
     bool text = false;
     bool readline = false;
     bool network = false;
-    bool expressSettings = false;
+    bool webserverSettings = false;
     bool typedArray = false;
     bool collections = false;
     bool buffer = false;

@@ -269,8 +269,8 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     // `std/network` receivers (`res.status(404).text(...)`, `app.get(...)`,
     // `ws.send(...)`, `wss.on(...)`): the documented members lower to the plain
     // C++ member call on the runtime object (src/std/network/codegen.cpp).
-    if (std::string ex = emitExpressSettingsMemberCall(c, m); !ex.empty()) return ex;
-    if (std::string er = emitExpressRequestCall(c, m); !er.empty()) return er;
+    if (std::string ex = emitwebserverSettingsMemberCall(c, m); !ex.empty()) return ex;
+    if (std::string er = emitwebserverRequestCall(c, m); !er.empty()) return er;
     if (isNetworkObject(m.object.get())) return emitNetworkMemberCall(c, m);
     // `std/fs` receivers (`statSync(...).isDirectory`, `rs.on(...)`,
     // `ws.write(...)`, `chunk.toString()`); src/std/fs/codegen.cpp.
@@ -356,7 +356,7 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     if (m.property == "length" && m.object) {
         if (info(*m.object).shape == Shape::String) {
             // D63: `.length` is the UTF-8 byte count; a double keeps the
-            // generated expression numeric (the template `cp3_ts` overloads
+            // generated webserverion numeric (the template `cp3_ts` overloads
             // would be ambiguous for size_t).
             return "static_cast<double>((" + expr(*m.object) + ").size())";
         }
@@ -387,8 +387,8 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     if (std::string text = emitTextMember(m); !text.empty()) return text;
     if (std::string lg = emitLogMember(m); !lg.empty()) return lg;
     if (std::string rl = emitReadlineMember(m); !rl.empty()) return rl;
-    if (std::string ex = emitExpressSettingsMemberRead(m); !ex.empty()) return ex;
-    if (std::string er = emitExpressRequestMember(m); !er.empty()) return er;
+    if (std::string ex = emitwebserverSettingsMemberRead(m); !ex.empty()) return ex;
+    if (std::string er = emitwebserverRequestMember(m); !er.empty()) return er;
     return std::string();
 }
 

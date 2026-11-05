@@ -11,6 +11,7 @@
 //   hash.crc32c(s)    -> ::cp3::runtime::hash::crc32c(s)     (std::uint32_t)
 //   hash.fnv1a32(s)   -> ::cp3::runtime::hash::fnv1a32(s)    (std::uint32_t)
 //   hash.fnv1a64(s)   -> ::cp3::runtime::hash::fnv1a64(s)    (std::uint64_t)
+//   hash.xxhash64(s)  -> ::cp3::runtime::hash::xxhash64(s)   (std::uint64_t)
 //
 // A Buffer argument lowers to its byte view
 // (`::cp3::runtime::buffer::view`, cp3/std/buffer.hpp); a string argument
@@ -33,13 +34,22 @@
 //     0xFFFFFFFF and are table-driven (256-entry tables built constexpr).
 //   * fnv1a32 / fnv1a64 are FNV-1a (offset basis, xor-then-multiply) at
 //     32 and 64 bits.
-//   * xxhash64 is deliberately NOT provided: no XXHash archive is vendored
-//     (third_party/MANIFEST.md has no xxhash row), so it is BLOCKED and must
-//     not be hand-rolled here under that name. Roadmap section E also
-//     reserves wyhash/xxhash-class hashes to the internal Map/Set bucket
-//     hash, never to a user-facing checksum name.
-//   * Header-only, table-driven CRC and scalar FNV: no vendored dependency,
-//     no runtime TU, no link flags.
+//   * xxhash64 is the XXH64 checksum (third_party/xxhash, v0.8.3) with the
+//     seed fixed to 0: deterministic across runs, hence safe for persisted
+//     cache keys. It takes no seed parameter by design (a caller-chosen
+//     seed would invite HashDoS-style seed games); only this exact wrapper
+//     name exists under std/hash. The internal Map/Set bucket hash is the
+//     DIFFERENT XXH3 (`src/runtime/.../bucket_hash.hpp`) seeded per-process
+//     from libsodium; no XXH3 name exists under std/hash and it is never
+//     user-facing.
+//   * Header-only for crc32/crc32c/fnv stays header-only; xxhash64 is
+//     declared here and defined in src/std/hash/runtime.cpp, which is
+//     compiled + linked (against third_party/xxhash/lib/windows-x64/
+//     libxxhash.a) only when a program imports "std/hash"
+//     (src/std/hash/native.hpp, D68). A program that imports std/hash but
+//     never calls xxhash64 still links the archive (harmless); only
+//     windows-x64 is vendored so far - other targets fail the build loudly
+//     (NativePackage::platforms), see the native row.
 // =============================================================================
 #pragma once
 
@@ -120,5 +130,13 @@ inline std::uint64_t fnv1a64(std::string_view data) {
     }
     return h;
 }
+
+/// `hash.xxhash64(data)`: XXH64 (third_party/xxhash v0.8.3) with seed 0 as
+/// an unsigned 64-bit value. Deterministic across runs (safe for persisted
+/// cache keys); a fast non-crypto checksum, not security - use std/crypto
+/// for authentication or adversarial integrity. The seed is fixed to 0 and
+/// is deliberately not a parameter. Defined in src/std/hash/runtime.cpp;
+/// the archive is linked via the std/hash native row (windows-x64 only).
+std::uint64_t xxhash64(std::string_view data);
 
 }  // namespace cp3::runtime::hash

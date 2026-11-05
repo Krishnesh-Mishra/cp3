@@ -32,7 +32,7 @@ namespace cp3 {
 namespace {
 
 /// A numeric `threads` literal, including a negated one (`-1` parses as a
-/// unary expression, not a NumberLiteral).
+/// unary webserverion, not a NumberLiteral).
 bool literalThreadCount(const Expr& e, double& out) {
     if (e.kind == NodeKind::NumberLiteral) {
         out = static_cast<const NumberLiteral&>(e).value;
@@ -62,6 +62,12 @@ const char* const kRequest = "$network:Request";
 const char* const kResponse = "$network:Response";
 const char* const kFormData = "$network:FormData";
 const char* const kAbortSignal = "$network:AbortSignal";
+// webserver agents (pasted): router / routing / errors.
+const char* const kRouter = "$network:Router";
+const char* const kRoute = "$network:Route";
+const char* const kRouteChain = "$network:RouteChain";
+const char* const kwebserverApp = "$network:webserverApp";
+const char* const kHttpError = "$network:HttpError";
 
 /// `Map<string, string>` (std/collections): the documented shape of the
 /// request/fetch headers, route params and query string.
@@ -149,6 +155,11 @@ std::vector<Field> httpRequestFields() {
         Field{"headers", stringMap(), false},
         // Parsed from the `Cookie` header.
         Field{"cookies", stringMap(), false},
+        // Cookie agent: verified signed cookies.
+        Field{"signedCookies", stringMap(), false},
+        // Router agent: mount-path reads.
+        Field{"baseUrl", Type::string(), false},
+        Field{"originalUrl", Type::string(), false},
         // The remote address as text.
         Field{"ip", Type::string(), false},
         // SEAM(readstream/fs): `body: ReadStream`; the runtime buffers the
@@ -199,13 +210,59 @@ std::vector<Field> httpResponseFields(TypeSystem ts) {
               Type::function({Type::unionOf({Type::string(), bufferType()})},
                              Type::voidType()), false},
         Field{"end", Type::function({}, Type::voidType()), false},
+        // Cookie agent.
+        Field{"clearCookie",
+              withOptionalTail(Type::function(
+                  {Type::string(), Type::unknown()},
+                  networkValue(kHttpResponse))),
+              false},
+        // Response agent (§3a): chainable header helpers + terminals.
+        Field{"set",
+              withOptionalTail(Type::function(
+                  {Type::unknown(), Type::unknown()},
+                  networkValue(kHttpResponse))),
+              false},
+        Field{"append",
+              Type::function({Type::string(), Type::string()},
+                             networkValue(kHttpResponse)),
+              false},
+        Field{"get",
+              Type::function({Type::string()}, Type::string()),
+              false},
+        Field{"type",
+              Type::function({Type::string()}, networkValue(kHttpResponse)),
+              false},
+        Field{"format",
+              Type::function({Type::unknown()}, Type::voidType()),
+              false},
+        Field{"render",
+              withOptionalTail(Type::function(
+                  {Type::string(), Type::unknown()}, Type::voidType())),
+              false},
+        Field{"download",
+              withOptionalTail(Type::function(
+                  {Type::string(), Type::string()}, Type::voidType())),
+              false},
+        Field{"attach",
+              Type::function({Type::string()}, networkValue(kHttpResponse)),
+              false},
+        Field{"links",
+              Type::function({Type::unknown()}, networkValue(kHttpResponse)),
+              false},
+        Field{"location",
+              Type::function({Type::string()}, networkValue(kHttpResponse)),
+              false},
+        Field{"vary",
+              Type::function({Type::unknown()}, networkValue(kHttpResponse)),
+              false},
+        Field{"headersSent", Type::boolean(), false},
     };
 }
 
 std::vector<Field> httpServerFields(TypeSystem ts) {
     std::vector<Field> fields;
     const Type route = httpRouteHandler();
-    // The documented four verbs plus the Express-style extras the runtime grew
+    // The documented four verbs plus the webserver-style extras the runtime grew
     // so this table stays truthful; codegen maps the cp3 `delete` onto the
     // runtime `del` member (`delete` is a C++ keyword).
     for (const char* verb : {"get", "post", "put", "delete", "patch", "head", "options",
@@ -215,6 +272,43 @@ std::vector<Field> httpServerFields(TypeSystem ts) {
     }
     fields.push_back(Field{"use", Type::function({httpMiddleware()}, Type::voidType()),
                            false});
+    // Router agent [S7]: app-mount spellings.
+    fields.push_back(Field{"use",
+                           Type::function({networkValue(kRouter)},
+                                          Type::voidType()), false});
+    fields.push_back(Field{"use",
+                           Type::function({Type::string(),
+                                           networkValue(kRouter)},
+                                          Type::voidType()), false});
+    // Middleware agent: app.use("/api", mw) mount form.
+    fields.push_back(Field{"use",
+                           Type::function({Type::string(), httpMiddleware()},
+                                          Type::voidType()), false});
+    // Cookie agent: app.set(name, value) chainable ("secret" lowered).
+    fields.push_back(Field{"set",
+                           Type::function({Type::string(), Type::unknown()},
+                                          networkValue(kHttpServer)),
+                           false});
+    // Regex-routing agent: app settings.
+    fields.push_back(Field{"enable",
+                           Type::function({Type::string()}, networkValue(kHttpServer)),
+                           false});
+    fields.push_back(Field{"disable",
+                           Type::function({Type::string()}, networkValue(kHttpServer)),
+                           false});
+    fields.push_back(Field{"enabled", Type::function({Type::string()}, Type::boolean()), false});
+    fields.push_back(Field{"disabled", Type::function({Type::string()}, Type::boolean()), false});
+    // Routing agent: all / route / param.
+    fields.push_back(Field{"all", Type::function({Type::string(), route}, Type::voidType()), false});
+    fields.push_back(Field{"route", Type::function({Type::string()}, networkValue(kRouteChain)), false});
+    fields.push_back(Field{"param",
+                           Type::function({Type::string(),
+                                           Type::function({networkValue(kHttpRequest),
+                                                           networkValue(kHttpResponse),
+                                                           Type(TypeKind::Object, kHttpNext),
+                                                           Type::string()},
+                                                          Type::voidType())},
+                                          Type::voidType()), false});
     // Ledger L (appended): `app.onError((err, req, res) => ...)`.
     fields.push_back(Field{"onError", Type::function({httpErrorHandler()}, Type::voidType()),
                            false});
@@ -226,6 +320,90 @@ std::vector<Field> httpServerFields(TypeSystem ts) {
               false});
     fields.push_back(Field{"close", Type::function({}, Type::voidType()), false});
     return fields;
+}
+
+// Router agent [S2] (pasted from sema_router.cpp).
+std::vector<Field> routerFields(TypeSystem ts) {
+    std::vector<Field> fields;
+    const Type route = httpRouteHandler();
+    for (const char* verb : {"get", "post", "put", "delete", "patch", "head",
+                             "options", "all"}) {
+        fields.push_back(Field{verb, Type::function({Type::string(), route}, Type::voidType()),
+                               false});
+    }
+    const Type router = networkValue(kRouter);
+    fields.push_back(Field{"use",
+                           Type::function({httpMiddleware()}, Type::voidType()), false});
+    fields.push_back(Field{"use",
+                           Type::function({Type::string(), httpMiddleware()},
+                                          Type::voidType()), false});
+    fields.push_back(Field{"use",
+                           Type::function({Type::string(), router},
+                                          Type::voidType()), false});
+    fields.push_back(Field{"use",
+                           Type::function({router}, Type::voidType()), false});
+    fields.push_back(Field{"param",
+                           Type::function(
+                               {Type::string(),
+                                Type::function({networkValue(kHttpRequest),
+                                                networkValue(kHttpResponse),
+                                                Type(TypeKind::Object, kHttpNext),
+                                                Type::string()},
+                                               Type::voidType())},
+                               Type::voidType()), false});
+    fields.push_back(Field{"route",
+                           Type::function({Type::string()}, networkValue(kRoute)),
+                           false});
+    fields.push_back(Field{"handle",
+                           Type::function(
+                               {networkValue(kHttpRequest),
+                                networkValue(kHttpResponse),
+                                Type(TypeKind::Object, kHttpNext)},
+                               promiseOf(Type::voidType())), false});
+    fields.push_back(Field{"handler",
+                           Type::function({}, httpMiddleware()), false});
+    fields.push_back(Field{"mountMiddleware",
+                           Type::function({Type::string()}, httpMiddleware()),
+                           false});
+    (void)ts;
+    return fields;
+}
+
+std::vector<Field> routeFields() {
+    std::vector<Field> fields;
+    const Type route = httpRouteHandler();
+    for (const char* verb : {"get", "post", "put", "delete", "patch", "head",
+                             "options", "all"}) {
+        fields.push_back(
+            Field{verb, Type::function({route}, networkValue(kRoute)), false});
+    }
+    return fields;
+}
+
+// Routing agent (pasted from sema_routing.cpp): RouteChain verbs return the chain.
+std::vector<Field> routeChainFields() {
+    std::vector<Field> fields;
+    Type handlerArray = Type(TypeKind::Array, "Array");
+    handlerArray.parts.push_back(httpRouteHandler());
+    const Type handlerList = Type::unionOf({httpRouteHandler(), handlerArray});
+    const Type chain = networkValue(kRouteChain);
+    for (const char* verb : {"get", "post", "put", "delete", "patch", "head",
+                             "options", "all"}) {
+        fields.push_back(Field{verb, Type::function({handlerList}, chain), false});
+    }
+    return fields;
+}
+
+// Errors agent (pasted from sema_errors.cpp): HttpError fields.
+std::vector<Field> httpErrorFields() {
+    return {
+        Field{"status", Type::number(), false},
+        Field{"statusCode", Type::number(), false},
+        Field{"expose", Type::boolean(), false},
+        Field{"message", Type::string(), false},
+        Field{"code", Type::string(), false},
+        Field{"stack", Type::string(), false},
+    };
 }
 
 std::vector<Field> webSocketFields() {
@@ -317,6 +495,11 @@ std::vector<Field> networkFieldsFor(const std::string& name, TypeSystem ts) {
     if (name == kAbortSignal) return abortSignalFields();
     if (name == kRequest) return requestFields();
     if (name == kResponse) return responseFields(ts);
+    if (name == kRouter) return routerFields(ts);
+    if (name == kRoute) return routeFields();
+    if (name == kRouteChain) return routeChainFields();
+    if (name == kwebserverApp) return routerFields(ts);
+    if (name == kHttpError) return httpErrorFields();
     return {};
 }
 
@@ -449,6 +632,68 @@ StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
         if (member == "json") return {"json<T>(): Promise<T>", "Parses the response body as JSON typed as `T`."};
         if (member == "arrayBuffer") return {"arrayBuffer(): Promise<Buffer>", "Reads the response body as raw bytes."};
     }
+    // webserver agents (pasted docs).
+    if (type == "HttpRequest") {
+        if (member == "signedCookies") return {"signedCookies: Map<string, string>", "Verified signed cookies (`s:` values that pass HMAC verification against the secret from `app.set(\"secret\", ...)` / `cookieParser(secret)`). Tampered cookies are omitted. Empty when no secret is configured."};
+        if (member == "baseUrl") return {"baseUrl: string", "The mount prefix chain (e.g. \"/api/v1\"); \"\" when no router has matched yet."};
+        if (member == "originalUrl") return {"originalUrl: string", "The full request path as the server received it (no query string)."};
+    }
+    if (type == "HttpResponse") {
+        if (member == "clearCookie") return {"clearCookie(name: string, options?: CookieOptions): HttpResponse", "Appends an expired `Set-Cookie` for `name` (Expires in the past, Max-Age=0, Path=/ by default). Returns the response for chaining."};
+        if (member == "set") return {"set(name: string, value: string): HttpResponse | set(headers: object | Map<string, string>): HttpResponse", "Sets one or more response headers, replacing any existing values. Returns the response for chaining."};
+        if (member == "append") return {"append(name: string, value: string): HttpResponse", "Appends a header value (comma-joins when the header already exists). Returns the response for chaining."};
+        if (member == "get") return {"get(name: string): string", "Returns the response header value, or \"\" when missing."};
+        if (member == "type") return {"type(type: string): HttpResponse", "Sets the Content-Type header (a mime string or a short extension such as \"html\"/\"json\"). Returns the response for chaining."};
+        if (member == "format") return {"format(formats: { [mediaType: string]: () => void }): void", "Invokes the handler for the negotiated media type (the first entry, or a `default` entry) and sets its Content-Type when unset. Terminal in the sense the chosen handler answers."};
+        if (member == "render") return {"render(view: string, locals?: object): void", "Renders a template view with optional locals and sends it as text/html. Terminal."};
+        if (member == "download") return {"download(path: string, filename?: string): void", "Sends the file at `path` as an attachment (Content-Disposition). Terminal."};
+        if (member == "attach") return {"attach(filename: string): HttpResponse", "Sets Content-Disposition attachment for `filename` without sending the body. Returns the response for chaining."};
+        if (member == "links") return {"links(links: { [rel: string]: string }): HttpResponse", "Appends Link header entries from `rel -> href` pairs. Returns the response for chaining."};
+        if (member == "location") return {"location(url: string): HttpResponse", "Sets the Location header. Returns the response for chaining."};
+        if (member == "vary") return {"vary(field: string): HttpResponse", "Appends a field to the Vary header (duplicates ignored; \"*\" pins it to \"*\"). Returns the response for chaining."};
+        if (member == "headersSent") return {"headersSent: boolean", "Whether the response head has been written (a terminal write happened)."};
+    }
+    if (type == "HttpServer") {
+        if (member == "set") return {"set(name: string, value: unknown): HttpServer", "webserver-style settings setter, chainable. `set(\"secret\", ...)` is lowered (the cookie-signing secret); `set(\"case sensitive routing\", bool)` / `set(\"strict routing\", bool)` set routing settings; other keys are accepted and ignored."};
+        if (member == "enable" || member == "disable") return {member + "(key: string): HttpServer", "Alias for set(key, true/false), e.g. app.enable(\"strict routing\")."};
+        if (member == "enabled" || member == "disabled") return {member + "(key: string): boolean", "Reads an app setting (the routing defaults are false)."};
+        if (member == "all") return {"all(path: string, handler: (req: HttpRequest, res: HttpResponse) => void): void", "Registers a handler for every method."};
+        if (member == "route") return {"route(path: string): RouteChain", "Returns the chainable route object: `app.route(\"/x\").get(h).post(h)`."};
+        if (member == "param") return {"param(name: string, handler: (req: HttpRequest, res: HttpResponse, next: () => Promise<void>, value: string) => void): void", "Runs `handler` before every route whose pattern contains `:name`, with that segment's value."};
+    }
+    if (type == "Router" || type == "webserverApp") {
+        if (member == "get" || member == "post" || member == "put" ||
+            member == "delete" || member == "patch" || member == "head" ||
+            member == "options" || member == "all") {
+            return {member + "(path: string, handler: (req: HttpRequest, res: HttpResponse) => void): void",
+                    "Registers a handler on this router for matching requests. Routers are mounted on the server with `app.use(router.handler())` (or at a prefix with `router.mountMiddleware(path)`) and nested with `router.use(path, subRouter)`. `all` matches every method."};
+        }
+        if (member == "use") return {"use(middleware | Router [, ...]): void",
+            "Registers middleware on this router, or mounts a sub-router: `router.use(\"/v1\", subRouter)`."};
+        if (member == "param") return {"param(name: string, handler: (req: HttpRequest, res: HttpResponse, next: () => Promise<void>, value: string) => void): void",
+            "Runs `handler` before every route whose pattern contains `:name`, with that segment's value."};
+        if (member == "route") return {"route(path: string): Route",
+            "Returns the chainable Route object for one path."};
+        if (member == "handle") return {"handle(req: HttpRequest, res: HttpResponse, next: () => Promise<void>): Promise<void>",
+            "Runs this router's stack against one request; calls `next()` when the stack is exhausted without a response."};
+        if (member == "handler") return {"handler(): (req: HttpRequest, res: HttpResponse, next: () => Promise<void>) => void",
+            "The `app.use(...)` form: mounts this router at \"/\"."};
+        if (member == "mountMiddleware") return {"mountMiddleware(path: string): (req: HttpRequest, res: HttpResponse, next: () => Promise<void>) => void",
+            "The `app.use(\"/api\", router)` form: matches the mount prefix, strips it, extends `req.baseUrl`, then runs this router."};
+        if (member == "listen") return {"listen(port: " + port + ", callback?: () => void): void", "Starts accepting HTTP requests on `port` (webserverApp only)."};
+        if (member == "close") return {"close(): void", "Stops accepting new connections (webserverApp only)."};
+    }
+    if (type == "Route" || type == "RouteChain") {
+        return {member + "(handler: (req: HttpRequest, res: HttpResponse) => void): Route",
+                "Registers one verb on the owning router for the route's path and returns the same Route for chaining."};
+    }
+    if (type == "HttpError") {
+        if (member == "status" || member == "statusCode") return {member + ": number", "The HTTP status code."};
+        if (member == "expose") return {"expose: boolean", "Whether the message is safe to show to the client."};
+        if (member == "message") return {"message: string", "The error message."};
+        if (member == "code") return {"code: string", "The machine code, e.g. \"ENOENT\"."};
+        if (member == "stack") return {"stack: string", "The captured stack (development only)."};
+    }
     return {};
 }
 
@@ -478,6 +723,22 @@ std::optional<Type> Analyzer::networkMember(const std::string& prop) {
     // Ledger L (appended): namespace-corner spellings.
     if (prop == "static" || prop == "cors" || prop == "bodyLimit") {
         return Type::function({ambient()}, httpMiddleware());
+    }
+    // webserver agents (pasted).
+    if (prop == "cookieParser") {
+        return withOptionalTail(Type::function({ambient()}, httpMiddleware()));
+    }
+    if (prop == "json" || prop == "urlencoded" || prop == "text" || prop == "raw") {
+        return Type::function({ambient()}, httpMiddleware());
+    }
+    if (prop == "Router") {
+        return Type::function({ambient()}, networkObjectType(kRouter));
+    }
+    if (prop == "webserver") {
+        return Type::function({ambient()}, networkObjectType(kwebserverApp));
+    }
+    if (prop == "httpError") {
+        return Type::function({Type::number(), Type::string()}, networkObjectType(kHttpError));
     }
     if (prop == "Headers") return Type::function({ambient()}, networkObjectType(kHeaders));
     if (prop == "Request") return Type::function({Type::string(), ambient()}, networkObjectType(kRequest));
@@ -520,6 +781,35 @@ bool Analyzer::tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& o
     if (id.name == "static" || id.name == "cors" || id.name == "bodyLimit") {
         inferArgs(call);
         out = httpMiddleware();
+        return true;
+    }
+    // webserver agents (pasted).
+    if (id.name == "cookieParser") {
+        inferArgs(call);
+        if (call.arguments.size() > 1) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "cookieParser(secret?) takes at most one argument");
+        }
+        out = httpMiddleware();
+        return true;
+    }
+    if (id.name == "json" || id.name == "urlencoded" || id.name == "text" || id.name == "raw") {
+        inferArgs(call);
+        out = httpMiddleware();
+        return true;
+    }
+    if (id.name == "Router" || id.name == "webserver") {
+        inferArgs(call);
+        out = networkObjectType(id.name == "Router" ? kRouter : kwebserverApp);
+        return true;
+    }
+    if (id.name == "httpError") {
+        inferArgs(call);
+        if (call.arguments.size() != 2) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "httpError(status, message) takes two arguments");
+        }
+        out = networkObjectType(kHttpError);
         return true;
     }
     if (id.name == "Headers" || id.name == "FormData") {
@@ -610,6 +900,15 @@ bool Analyzer::checkCreateServerOptions(CallExpr& call) {
 
 Type Analyzer::inferNetworkConstruct(const std::string& name, ExprList& args,
                                      const SourceSpan& span) {
+    // Router agent [S6]: `new Router()` / `new Router(options?)`.
+    if (name == "Router") {
+        for (auto& arg : args) { if (arg) inferExpr(*arg); }
+        return networkObjectType(kRouter);
+    }
+    if (name == "webserver") {
+        for (auto& arg : args) { if (arg) inferExpr(*arg); }
+        return networkObjectType(kwebserverApp);
+    }
     // Ledger L (appended): `new Headers()/Request()/Response()/FormData()/AbortSignal()`.
     if (name == "Headers" || name == "Request" || name == "Response" ||
         name == "FormData" || name == "AbortSignal") {
@@ -681,6 +980,56 @@ bool Analyzer::tryInferNetworkMemberCall(CallExpr& call, MemberExpr& m, Type& ou
                        "AbortSignal.timeout(ms) takes exactly one argument");
             }
             out = networkObjectType(kAbortSignal);
+            return true;
+        }
+    }
+    // Body-parse agent: `webserver.json()` etc namespace spelling.
+    if ((m.property == "json" || m.property == "urlencoded" ||
+         m.property == "text" || m.property == "raw") &&
+        m.object && m.object->kind == NodeKind::Identifier) {
+        const auto& id = static_cast<const Identifier&>(*m.object);
+        Binding binding;
+        if (id.name == "webserver" && lookup(id.name, binding) && binding.isAmbient) {
+            inferArgs(call);
+            out = httpMiddleware();
+            return true;
+        }
+    }
+    // Regex-routing agent: (path, options, handler) 3-arg verb form + the
+    // 1-arg settings reads (app.get("strict routing")).
+    {
+        const bool isVerb = m.property == "get" || m.property == "post" ||
+                            m.property == "put" || m.property == "delete" ||
+                            m.property == "patch" || m.property == "head" ||
+                            m.property == "options" || m.property == "any" ||
+                            m.property == "all";
+        const Type recv = m.object ? typeOfExpr(*m.object) : Type::unknown();
+        const bool isServer = recv.kind == TypeKind::Object && recv.name == kHttpServer;
+        if (isVerb && isServer && call.arguments.size() == 3) {
+            inferArgs(call);
+            FuncSig sig;
+            sig.name = m.property;
+            sig.params = {Type::unknown(), Type::unknown(), httpRouteHandler()};
+            sig.ret = Type::voidType();
+            checkArgs(sig, call);
+            if (auto* opts = call.arguments[1].get();
+                opts && opts->kind == NodeKind::ObjectLiteral) {
+                for (auto& prop : static_cast<const ObjectLiteral&>(*opts).properties) {
+                    if (!prop || !prop->value) continue;
+                    const std::string key = keyName(prop->key.get());
+                    if (key != "caseSensitive" && key != "strict") {
+                        report(diagcode::kTypeMismatch, anchorSpan(prop->span),
+                               "unknown route option '" + key +
+                                   "' (only 'caseSensitive' and 'strict' are supported)");
+                    }
+                }
+            }
+            out = Type::voidType();
+            return true;
+        }
+        if (isServer && m.property == "get" && call.arguments.size() == 1) {
+            inferArgs(call);
+            out = Type::boolean();
             return true;
         }
     }

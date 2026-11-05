@@ -1,10 +1,10 @@
 // =============================================================================
-// src/sema/src/checks/member_check.cpp - member / index expression inference.
+// src/sema/src/checks/member_check.cpp - member / index webserverion inference.
 //
 // Owns property access (`inferMember` / `memberOf` / `memberOfProbe`) and
 // subscript access (`inferIndex` / `indexOf` / `indexOfObject` /
 // `tupleIndexAt`). Call inference (`inferCall` + argument arity/type
-// checking) lives in call_check.cpp; primary expressions live in
+// checking) lives in call_check.cpp; primary webserverions live in
 // expr_check.cpp (STYLE.md §8).
 // =============================================================================
 #include "detail/analyzer.h"
@@ -24,7 +24,7 @@ namespace cp3 {
 // Member access
 // =============================================================================
 Type Analyzer::inferMember(MemberExpr& m) {
-    // Control-flow narrowing for member expressions (`n.next` inside
+    // Control-flow narrowing for member webserverions (`n.next` inside
     // `if (n.next !== null)`): the narrowed (non-null) type wins.
     if (m.object && m.object->kind == NodeKind::Identifier) {
         const std::string key = static_cast<Identifier&>(*m.object).name +
@@ -206,18 +206,18 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
     switch (ot.kind) {
         case TypeKind::Object: {
             if (isAmbientType(ot)) return ambient();
-            // Express settings (std/network/express/settings/sema.cpp).
-            if (auto express = expressObjectMember(ot, prop)) return *express;
-            const std::vector<std::string> expressNames =
-                expressObjectMemberNames(ot.name);
-            if (!expressNames.empty() &&
-                ot.name.rfind("$express:", 0) == 0) {
-                reportMemberMiss("express value", prop, span, expressNames);
+            // webserver settings (std/network/webserver/settings/sema.cpp).
+            if (auto webserver = webserverObjectMember(ot, prop)) return *webserver;
+            const std::vector<std::string> webserverNames =
+                webserverObjectMemberNames(ot.name);
+            if (!webserverNames.empty() &&
+                ot.name.rfind("$webserver:", 0) == 0) {
+                reportMemberMiss("webserver value", prop, span, webserverNames);
                 return Type::unknown();
             }
-            // Express request helpers (std/network/express/request/sema.cpp).
+            // webserver request helpers (std/network/webserver/request/sema.cpp).
             if (ot.name == "$network:HttpRequest") {
-                if (auto req = expressRequestMember(ot, prop)) return *req;
+                if (auto req = webserverRequestMember(ot, prop)) return *req;
             }
             // Network marker members and their diagnostics share one field
             // table. An unknown member on a known network value must not

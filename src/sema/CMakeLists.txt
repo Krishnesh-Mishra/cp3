@@ -65,8 +65,8 @@ set(cp3_sema_sources
     ../std/log/sema.cpp
     ../std/text/sema.cpp
     ../std/readline/sema.cpp
-    ../std/network/express/settings/sema.cpp
-    ../std/network/express/request/sema.cpp
+    ../std/network/webserver/settings/sema.cpp
+    ../std/network/webserver/request/sema.cpp
     ../std/arrays/sema_docs.cpp
     ../std/string/sema_docs.cpp
 )

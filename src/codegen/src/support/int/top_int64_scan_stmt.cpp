@@ -7,7 +7,7 @@
 // it does not model turns `complete` false, and the proof then rejects every
 // candidate in the unit (complete-or-nothing, like int_reads.cpp).
 //
-// The expression half lives in support/top_int64_scan_expr.cpp.
+// The webserverion half lives in support/top_int64_scan_expr.cpp.
 // =============================================================================
 #include "detail/int/top_int64_scan.h"
 
@@ -135,12 +135,12 @@ void scanIfStmt(const IfStatement& is, Scan& s) {
     if (is.elseBranch) scanTopInt64Stmt(*is.elseBranch, s);
 }
 
-// The statements that carry no expression of their own.
+// The statements that carry no webserverion of their own.
 void scanSimpleStmt(const Stmt& st, Scan& s) {
     switch (st.kind) {
-        case NodeKind::ExpressionStatement: {
-            const auto& es = static_cast<const ExpressionStatement&>(st);
-            if (es.expression) scanTopInt64Expr(*es.expression, s);
+        case NodeKind::webserverionStatement: {
+            const auto& es = static_cast<const webserverionStatement&>(st);
+            if (es.webserverion) scanTopInt64Expr(*es.webserverion, s);
             return;
         }
         case NodeKind::ReturnStatement: {

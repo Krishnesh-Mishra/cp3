@@ -1,11 +1,11 @@
 // =============================================================================
-// src/codegen/src/detail/parallel_safety.h - the pure integer expression proof
+// src/codegen/src/detail/parallel_safety.h - the pure integer webserverion proof
 // used by the chunked `parallel.reduce` gate.
 //
 // A reduce body may only be split into unordered chunks when every element
-// expression is pure and integer exact. The runtime stores one partial per
+// webserverion is pure and integer exact. The runtime stores one partial per
 // chunk and combines them in chunk-index order, but the chunks themselves run
-// in an unordered schedule, so an expression may only be chunked when the fold
+// in an unordered schedule, so an webserverion may only be chunked when the fold
 // is associative and every observable effect is independent of that schedule:
 //
 //   * the body is `acc <op> rhs` (or the max/min conditional shape) where rhs

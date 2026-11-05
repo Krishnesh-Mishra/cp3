@@ -58,7 +58,7 @@ std::string Generator::emitParseBuiltin(const CallExpr& c,
     return "0.0";
 }
 
-// The runtime call for one coercion global applied to a value expression.
+// The runtime call for one coercion global applied to a value webserverion.
 // `Number` coerces via toNumber; `Boolean` via toBoolean; `isNaN`/`isFinite`
 // coerce via toNumber first, then test (JS semantics).
 std::string coercionText(const std::string& name, const std::string& value,

@@ -219,7 +219,7 @@ bool isNullishLiteral(const Expr& e);
 // The exact value of an integral number literal (`5`, `-2`), if it has one:
 // finite, integral, and within 2^53, so it is exact in both the int64 and the
 // double domain. Anything else (a fractional literal, an out-of-range literal,
-// a non-literal expression) has no value, which keeps the caller on the
+// a non-literal webserverion) has no value, which keeps the caller on the
 // `std::fmod` path. Used by the `%` lowering (`modConst<K>`) and the int64 fast
 // path (`imulConst<K>`).
 std::optional<std::int64_t> integralLiteralValue(const Expr& e);

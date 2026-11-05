@@ -49,7 +49,7 @@ bool containsPromiseType(const Type& t) {
     return false;
 }
 
-// The delay expression of a direct `sleep(ms)` call, or nullptr when the await
+// The delay webserverion of a direct `sleep(ms)` call, or nullptr when the await
 // target is not the builtin (wrong shape, or a user declaration, import, or
 // local binding shadows the name). Zero-argument calls are left to the
 // ordinary call path so their arity is checked the same way as any other call.

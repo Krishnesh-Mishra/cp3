@@ -45,7 +45,7 @@ struct EnumConst {
 };
 
 // The compile-time value of an enum member initializer, or nullopt when the
-// initializer is not a constant expression (support/enum_values.cpp).
+// initializer is not a constant webserverion (support/enum_values.cpp).
 std::optional<EnumConst> evalEnumInit(const Expr* init,
                                       const std::vector<EnumCppMember>& known,
                                       const std::string& enumName);

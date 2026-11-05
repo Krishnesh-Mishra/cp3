@@ -1,5 +1,5 @@
 // =============================================================================
-// src/codegen/src/support/top_int64_scan_expr.cpp - the expression half of the
+// src/codegen/src/support/top_int64_scan_expr.cpp - the webserverion half of the
 // whole-unit walk behind the entry-body int64 proof.
 //
 // The walk records every binding declaration, every reference, every write and
@@ -47,7 +47,7 @@ void scanLeafExpr(const Expr& e, Scan& s) {
 // Template / array / object / spread / weak: a value built from other values.
 void scanValueExpr(const Expr& e, Scan& s) {
     if (e.kind == NodeKind::TemplateLiteral) {
-        scanTopInt64ExprList(static_cast<const TemplateLiteral&>(e).expressions, s);
+        scanTopInt64ExprList(static_cast<const TemplateLiteral&>(e).webserverions, s);
         return;
     }
     if (e.kind == NodeKind::ArrayLiteral) {
@@ -243,7 +243,7 @@ void scanExpr(const Expr& e, Scan& s) {
             scanArrowExpr(e, s);
             return;
         default:
-            // Patterns and any future expression kind: not modelled.
+            // Patterns and any future webserverion kind: not modelled.
             s.complete = false;
             return;
     }

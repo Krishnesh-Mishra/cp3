@@ -9,7 +9,7 @@
 //
 // Codegen and sema communicate ONLY through the frozen AST plus the `SemaResult`
 // side tables (DECISIONS D1): codegen looks up `sema.typeOf(node.nodeId)` to
-// obtain an expression's inferred type and uses `sema.symbols`/`sema.functions`
+// obtain an webserverion's inferred type and uses `sema.symbols`/`sema.functions`
 // for resolved bindings and signatures.
 // =============================================================================
 #pragma once
@@ -38,7 +38,7 @@ struct GeneratedModule {
 // TU, and hands codegen the site: the entry names the generated header and
 // spells the channel's direction types. A site's `nodeId` is the `NewExpr` in
 // the entry unit; codegen matches it during its own walk, so the entry's
-// expression lowering never re-resolves a path. Inline sites (`new Worker(
+// webserverion lowering never re-resolves a path. Inline sites (`new Worker(
 // (thread: Thread<In, Out>) => ...)`) are synthesized by codegen itself into
 // the entry TU and never carry a header path.
 struct WorkerSite {

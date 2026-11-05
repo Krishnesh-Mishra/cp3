@@ -3,7 +3,7 @@
 // member initializer (spec 04).
 //
 // An enum member carries a compile-time constant: a literal, a constant
-// expression over literals (`A = 1 + 1`), or a link to an earlier member of the
+// webserverion over literals (`A = 1 + 1`), or a link to an earlier member of the
 // same enum (`B = A`). The sema accepts exactly the initializers this
 // evaluator can read (src/sema/src/checks/enum_check.cpp keeps the two in step:
 // it rejects a non-constant initializer before codegen runs), so a nullopt

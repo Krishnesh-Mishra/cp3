@@ -2,7 +2,7 @@
 // src/sema/src/detail/std_tables.hpp - PRIVATE shared std-member table helpers.
 //
 // The row model every std family check unit (`src/std/<family>/sema.cpp`)
-// expresses its member surface in, plus the type factories more than one
+// webserveres its member surface in, plus the type factories more than one
 // family uses. Extracted from `checks/std_check.cpp` (D72 stage 2) so a family
 // unit is self-contained: its table drives member typing and the CP3305
 // candidate list at once, and the dispatch core forwards by name.

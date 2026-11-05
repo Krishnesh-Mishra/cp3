@@ -6,7 +6,7 @@
 //
 // The server is one uWS App per `createServer()` with a single wildcard route
 // (`any("/*")`) and the routing itself lives here: routes and middleware run in
-// registration order (Express semantics), a handler stops the chain by
+// registration order (webserver semantics), a handler stops the chain by
 // answering, `next()` continues it, and a chain that ends without an answer
 // replies 404. Request bodies are fully buffered before the chain runs. A
 // handler may return a promise (an `async` handler): the dispatcher keeps the
@@ -231,7 +231,7 @@ StringMap requestHeaders(NativeRequest* req) {
 }
 
 /// `req.cookies`: the `Cookie` header parsed into a map. Cookie pairs are
-/// `name=value; ...`; values are NOT percent-decoded (Express's parser
+/// `name=value; ...`; values are NOT percent-decoded (webserver's parser
 /// keeps them raw unless a decoder is configured).
 StringMap parseCookies(const std::string& header) {
     StringMap map = collections::makeMap<std::string, std::string>();
@@ -532,6 +532,22 @@ void HttpServer::addMiddlewareImpl(detail::RouteFn handler) const {
 }
 
 /// Ledger L (appended): `app.onError(...)` storage.
+void HttpServer::addParamImpl(const std::string& name, detail::ParamFn handler) const {
+    if (!impl_ || !handler) return;
+    impl_->paramHandlers.emplace_back(name, std::move(handler));
+}
+
+void HttpServer::setRoutingSetting(const std::string& key, bool value) const {
+    if (!impl_) return;
+    impl_->routingSettings[key] = value;
+}
+
+bool HttpServer::getRoutingSetting(const std::string& key) const {
+    if (!impl_) return false;
+    auto it = impl_->routingSettings.find(key);
+    return it != impl_->routingSettings.end() ? it->second : false;
+}
+
 void HttpServer::setErrorHandlerImpl(detail::ErrorFn handler) const {
     if (!impl_) return;
     impl_->errorHandler = std::move(handler);

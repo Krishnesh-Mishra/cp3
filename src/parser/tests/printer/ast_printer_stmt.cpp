@@ -34,9 +34,9 @@ bool printVarStmt(const Node* n, int ind) {
 
 bool printSimpleStmt(const Node* n, int ind) {
     switch (n->kind) {
-        case NodeKind::ExpressionStatement:
+        case NodeKind::webserverionStatement:
             std::printf("\n");
-            printNode(static_cast<const ExpressionStatement*>(n)->expression.get(), ind + 2);
+            printNode(static_cast<const webserverionStatement*>(n)->webserverion.get(), ind + 2);
             return true;
         case NodeKind::BlockStatement:
             std::printf("\n");

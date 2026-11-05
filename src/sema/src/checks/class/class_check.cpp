@@ -25,6 +25,294 @@
 
 namespace cp3 {
 
+namespace {
+
+// -----------------------------------------------------------------------------
+// Stage 2 (automatic cycle handling): compiler-injected non-owning edges.
+//
+// The compiler may treat ONE strong edge per SCC cycle group as non-owning
+// (weak-cost zero, i.e. a `WeakRef` field) when the whole-program ownership
+// proof holds, so the user does not need a manual `weak`. The proof
+// obligations (docs/design/auto-weak.md) are, for the chosen edge A.f -> B:
+//
+//   P1 direct    : A.f is a direct class reference (nullable/union-with-
+//                  nullish stripped); container/function edges (`B[]`, Map/Set
+//                  values, closures) cannot be a single `WeakRef`.
+//   P2 no-unknown: neither A.f's type nor A is unknown-risk (an opaque
+//                  `unknown` field is an escape we cannot see through).
+//   P3 escape-   : no escape site for A.f other than `escape: none`; the
+//      none         target B does not escape through this field.
+//   P4 one-per-  : exactly one edge is chosen per SCC group, chosen
+//      SCC          deterministically (lexicographically smallest A.f).
+//   P5 body      : body-level escapes of B (return, global/static store,
+//      escapes       closure capture, native/worker crossing) are absent.
+//                  NOT yet modeled by the field-type escape sites -> the
+//                  proof is incomplete today, so the gate below stays off.
+//   P6 instance  : A.f is an instance field (static fields are excluded
+//                  from the strong-edge graph entirely).
+//   P7 gate      : the differential fuzzer + ASan gate has passed.
+//
+// `kAutoWeakGateEnabled` is the P5+P7 gate: while it is false the compiler
+// runs in report-only mode. Sema still selects and publishes the candidate
+// edge (in SemaResult::cycleEscapeSites, consumed by `cp3 check --report`)
+// but never marks it `proven`, never suppresses CP3401, and codegen never
+// weakens the field. Flipping the gate requires P5 (body escape analysis)
+// and P7 (tools/fuzz_graphs.py differential + ASan) to be met first.
+// -----------------------------------------------------------------------------
+constexpr bool kAutoWeakGateEnabled = false;
+
+struct CycleEdgeInfo {
+    std::string src;
+    std::string field;
+    std::string dst;
+    bool direct = false;  // P1: the field type is exactly the dst class ref
+    bool unknown = false; // P2/P3: the field type mentions `unknown`
+};
+
+struct CycleGraphInfo {
+    std::unordered_map<std::string, std::unordered_set<std::string>> graph;
+    std::unordered_set<std::string> unknownRisk;
+    std::unordered_set<std::string> weakEdges;  // "A->B", manual `weak`
+    std::vector<CycleEdgeInfo> edges;           // every strong field edge
+};
+
+struct AutoWeakDecision {
+    std::string state;  // "candidate" | "proven" | "rejected"
+    std::string reason; // empty for candidate/proven
+};
+
+// The class a field type names directly, or "" when it is not a direct
+// class reference: `B`, `B?`, `B | null`, `B | undefined` are direct;
+// `B[]`, `Map<_, B>`, `(b: B) => void`, `B | Other`, `unknown` are not
+// (P1). A union of one class plus nullish members is direct.
+std::string directClassRef(
+    const Type& t, const std::unordered_map<std::string, ClassInfo>& classes) {
+    if (t.kind == TypeKind::Class) {
+        return classes.count(t.name) ? t.name : std::string();
+    }
+    if (t.kind == TypeKind::Nullable) {
+        return t.parts.size() == 1
+                   ? directClassRef(t.parts.front(), classes)
+                   : std::string();
+    }
+    if (t.kind == TypeKind::Union) {
+        std::string found;
+        for (const Type& p : t.parts) {
+            if (p.isNullish()) continue;
+            const std::string r = directClassRef(p, classes);
+            if (r.empty() || (!found.empty() && found != r)) return std::string();
+            found = r;
+        }
+        return found;
+    }
+    return std::string();
+}
+
+// The strong-edge class graph (weak excluded, unknown fail-closed), plus the
+// per-field edge list the auto-weak selection needs. Mirrors the graph the
+// Stage 1 analysis built inline in computeCycleCapable.
+CycleGraphInfo buildCycleGraph(
+    const std::unordered_map<std::string, ClassInfo>& classes) {
+    CycleGraphInfo info;
+    std::function<void(const Type&, std::unordered_set<std::string>&)> walk =
+        [&](const Type& t, std::unordered_set<std::string>& out) {
+            if (t.isUnknown()) {
+                out.insert("$unknown");
+                return;
+            }
+            if (t.kind == TypeKind::Class) {
+                if (classes.count(t.name)) out.insert(t.name);
+            }
+            for (const Type& p : t.parts) walk(p, out);
+        };
+    for (const auto& [name, cls] : classes) {
+        auto& edges = info.graph[name];
+        for (const auto& m : cls.members) {
+            if (m.isMethod || m.isStatic) continue;  // P6
+            std::unordered_set<std::string> refs;
+            walk(m.type, refs);
+            if (m.isWeak) {
+                for (const std::string& r : refs) {
+                    if (classes.count(r)) info.weakEdges.insert(name + "->" + r);
+                }
+                continue;
+            }
+            const std::string direct = directClassRef(m.type, classes);
+            for (const std::string& r : refs) {
+                if (r == "$unknown") {
+                    info.unknownRisk.insert(name);
+                    continue;
+                }
+                if (!classes.count(r)) continue;
+                edges.insert(r);
+                CycleEdgeInfo e;
+                e.src = name;
+                e.field = m.name;
+                e.dst = r;
+                e.direct = direct == r;
+                e.unknown = refs.count("$unknown") != 0;
+                info.edges.push_back(e);
+            }
+        }
+    }
+    return info;
+}
+
+// Reachability over the strong-edge graph (the Stage 1 `reaches`).
+bool cycleReaches(const CycleGraphInfo& info, const std::string& from,
+                  const std::string& target) {
+    std::unordered_set<std::string> seen;
+    std::vector<std::string> work{from};
+    while (!work.empty()) {
+        std::string cur = work.back();
+        work.pop_back();
+        if (cur == target) return true;
+        if (!seen.insert(cur).second) continue;
+        const auto it = info.graph.find(cur);
+        if (it != info.graph.end()) {
+            for (const std::string& nxt : it->second) work.push_back(nxt);
+        }
+    }
+    return false;
+}
+
+// The cycle-capable set: classes that can reach themselves through strong
+// edges (unknown-risk classes included, fail closed).
+std::unordered_set<std::string> cycleCapableOf(
+    const CycleGraphInfo& info,
+    const std::unordered_map<std::string, ClassInfo>& classes) {
+    std::unordered_set<std::string> capable;
+    for (const auto& [name, cls] : classes) {
+        (void)cls;
+        if (info.unknownRisk.count(name)) {
+            capable.insert(name);
+            continue;
+        }
+        const auto git = info.graph.find(name);
+        if (git == info.graph.end()) continue;
+        std::unordered_set<std::string> seen;
+        std::vector<std::string> work(git->second.begin(), git->second.end());
+        bool reachesSelf = false;
+        while (!work.empty() && !reachesSelf) {
+            std::string cur = work.back();
+            work.pop_back();
+            if (cur == name) {
+                reachesSelf = true;
+                break;
+            }
+            if (!seen.insert(cur).second) continue;
+            const auto it = info.graph.find(cur);
+            if (it != info.graph.end()) {
+                for (const std::string& nxt : it->second) work.push_back(nxt);
+            }
+        }
+        if (reachesSelf) capable.insert(name);
+    }
+    return capable;
+}
+
+// SCC cycle groups of size > 1 over the cycle-capable set (the grouping the
+// Stage 1 diagnostic used). Single self-references are not groups.
+std::vector<std::vector<std::string>> cycleGroupsOf(
+    const CycleGraphInfo& info,
+    const std::unordered_set<std::string>& capable) {
+    std::vector<std::vector<std::string>> groups;
+    std::unordered_set<std::string> assigned;
+    for (const std::string& name : capable) {
+        if (assigned.count(name)) continue;
+        std::vector<std::string> group{name};
+        assigned.insert(name);
+        for (const std::string& other : capable) {
+            if (other == name || assigned.count(other)) continue;
+            if (cycleReaches(info, name, other) &&
+                cycleReaches(info, other, name)) {
+                group.push_back(other);
+                assigned.insert(other);
+            }
+        }
+        if (group.size() > 1) {
+            std::sort(group.begin(), group.end());
+            groups.push_back(group);
+        }
+    }
+    std::sort(groups.begin(), groups.end());
+    return groups;
+}
+
+// Does a cycle group already contain a manual `weak` edge?
+bool groupHasManualWeak(const CycleGraphInfo& info,
+                        const std::vector<std::string>& group) {
+    std::unordered_set<std::string> inGroup(group.begin(), group.end());
+    for (const std::string& e : info.weakEdges) {
+        const std::size_t pos = e.find("->");
+        if (pos == std::string::npos) continue;
+        if (inGroup.count(e.substr(0, pos)) &&
+            inGroup.count(e.substr(pos + 2)))
+            return true;
+    }
+    return false;
+}
+
+// Selects ONE edge per unresolved cycle group (P4): the lexicographically
+// smallest eligible `Src.field -> Dst` (by src, then field, then dst).
+// Eligible means P1 (direct), P2 (no unknown) and P3 (no escape site for
+// the edge other than the field store itself) hold at the field-type level;
+// P5 is the remaining whole-program obligation and keeps the gate off.
+// Returns decisions keyed "Src.field" for every intra-group strong edge of
+// every group without a manual weak edge.
+std::unordered_map<std::string, AutoWeakDecision> selectAutoWeak(
+    const CycleGraphInfo& info,
+    const std::vector<std::vector<std::string>>& groups) {
+    std::unordered_map<std::string, AutoWeakDecision> out;
+    for (const auto& group : groups) {
+        if (groupHasManualWeak(info, group)) continue;
+        std::unordered_set<std::string> inGroup(group.begin(), group.end());
+        std::vector<const CycleEdgeInfo*> eligible;
+        std::vector<const CycleEdgeInfo*> intra;
+        for (const CycleEdgeInfo& e : info.edges) {
+            if (!inGroup.count(e.src) || !inGroup.count(e.dst)) continue;
+            intra.push_back(&e);
+            if (e.unknown || info.unknownRisk.count(e.src)) continue;  // P2
+            if (!e.direct) continue;                                  // P1
+            eligible.push_back(&e);
+        }
+        std::sort(eligible.begin(), eligible.end(),
+                  [](const CycleEdgeInfo* a, const CycleEdgeInfo* b) {
+                      if (a->src != b->src) return a->src < b->src;
+                      if (a->field != b->field) return a->field < b->field;
+                      return a->dst < b->dst;
+                  });
+        const CycleEdgeInfo* chosen =
+            eligible.empty() ? nullptr : eligible.front();
+        for (const CycleEdgeInfo* e : intra) {
+            const std::string key = e->src + "." + e->field;
+            // One decision per field: the chosen (candidate/proven) edge
+            // wins over a rejected edge of the same field naming another
+            // dst (a non-direct union field can list several refs).
+            const auto existing = out.find(key);
+            if (existing != out.end() && existing->second.state != "rejected" &&
+                e != chosen) {
+                continue;
+            }
+            if (e == chosen) {
+                // Report-only until P5+P7 pass: a candidate is a preview,
+                // only a proven edge may suppress CP3401 / lower as weak.
+                out[key] = AutoWeakDecision{
+                    kAutoWeakGateEnabled ? "proven" : "candidate", ""};
+            } else if (e->unknown || info.unknownRisk.count(e->src)) {
+                out[key] = AutoWeakDecision{"rejected", "unknown-risk"};
+            } else if (!e->direct) {
+                out[key] = AutoWeakDecision{"rejected", "container-edge"};
+            } else {
+                out[key] = AutoWeakDecision{"rejected", "not-selected"};
+            }
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
 // =============================================================================
 // Resolution
 // =============================================================================
@@ -121,7 +409,7 @@ void Analyzer::collectClassMembers(const ClassDeclaration& c, ClassInfo& info) {
 
 // A class member's name: the key of a property, method or accessor. A
 // computed key (`[expr]`) names the member at runtime, which a cp3 class
-// (a fixed set of members) cannot express - unless the key is a literal, the
+// (a fixed set of members) cannot webserver - unless the key is a literal, the
 // one form whose value is known at compile time.
 std::string Analyzer::classMemberName(Expr* key, bool computed) {
     if (key == nullptr) return {};
@@ -578,7 +866,7 @@ Type Analyzer::classMemberType(const ClassMemberInfo& m) const {
     if (!m.overloads.empty()) return ambient();
     Type t = Type::function(m.sig.params, m.sig.ret);
     // A rest parameter takes an unbounded argument list, which the fixed-arity
-    // function type cannot express: the tag widens the signature's `rest` flag
+    // function type cannot webserver: the tag widens the signature's `rest` flag
     // at the call site (the marker the variadic array mutators use, scopes.h).
     if (m.sig.rest) t.name = kVariadicOptionalTailLabel;
     return t;
@@ -631,6 +919,19 @@ Type Analyzer::userClassMember(const Type& cls, const std::string& prop,
     if (m->isWeak && !assignTarget_) {
         weakFieldHit_ = true;
         if (!hasNullish(t)) t = unify(t, Type::undefined());
+    } else if (kAutoWeakGateEnabled && !assignTarget_ && owner != nullptr) {
+        // Stage 2 (report-only until the P5+P7 gate passes): a proven
+        // compiler-injected edge reads exactly like a manual `weak` field
+        // (`T | undefined`, so member access through it needs narrowing).
+        // While the gate is off this branch is dead and reads stay strong.
+        const CycleGraphInfo graph = buildCycleGraph(classes_);
+        const auto decisions =
+            selectAutoWeak(graph, cycleGroupsOf(graph, cycleCapableOf(graph, classes_)));
+        const auto it = decisions.find(owner->name + "." + m->name);
+        if (it != decisions.end() && it->second.state == "proven") {
+            weakFieldHit_ = true;
+            if (!hasNullish(t)) t = unify(t, Type::undefined());
+        }
     }
     return t;
 }
@@ -645,6 +946,12 @@ Type Analyzer::userClassMember(const Type& cls, const std::string& prop,
 // cycle-capable (fail closed). Report-only in v0.2: the set is published to
 // SemaResult::cycleCapableClasses; no diagnostic is emitted from it yet, and
 // plain refcounting is unchanged for every type.
+//
+// Stage 3 (below, inside computeCycleCapable): region inference + group
+// counting per cycle group. Both verdicts are fail-closed candidates
+// published in SemaResult::cycleGroups / cycleRegions / cycleGroupCounts;
+// no codegen consumes them yet, so plain refcounting is still unchanged for
+// every type. See docs/design/cycle-regions.md.
 // -----------------------------------------------------------------------------
 void Analyzer::computeCycleCapable() {
     std::unordered_map<std::string, std::unordered_set<std::string>> graph;
@@ -729,13 +1036,11 @@ void Analyzer::computeCycleCapable() {
         }
         if (reachesSelf) cycleCapableClasses_.insert(name);
     }
-    // Step 4 diagnostics: a cycle through two or more distinct edges (SCC of
-    // size > 1) with no `weak` edge inside it is a compile error naming the
-    // cycle and asking the user to mark one edge weak. Single self-referencing
-    // fields (`next: Node | null`) are exempt: recursive types are not
-    // runtime cycles and linked lists/trees must keep working.
+    // Cycle groups: the strongly-connected components of
+    // cycleCapableClasses (mutual reachability), singleton self-loops
+    // included. Shared by the step-4 diagnostics and the stage-3 verdicts.
+    std::vector<std::vector<std::string>> groups;
     {
-        std::vector<std::vector<std::string>> groups;
         std::unordered_set<std::string> assigned;
         for (const std::string& name : cycleCapableClasses_) {
             if (assigned.count(name)) continue;
@@ -749,36 +1054,318 @@ void Analyzer::computeCycleCapable() {
                     assigned.insert(other);
                 }
             }
-            groups.push_back(group);
+            std::sort(group.begin(), group.end());
+            groups.push_back(std::move(group));
         }
-        for (auto& group : groups) {
-            if (group.size() <= 1) continue;
-            std::unordered_set<std::string> inGroup(group.begin(), group.end());
-            bool hasWeak = false;
+        std::sort(groups.begin(), groups.end(),
+                  [](const std::vector<std::string>& a,
+                     const std::vector<std::string>& b) {
+                      return a.front() < b.front();
+                  });
+    }
+    // -----------------------------------------------------------------
+    // Stage 2: compiler-injected non-owning edges (auto-weak).
+    //
+    // Selects ONE candidate edge per unresolved SCC group (P1-P4) and
+    // publishes every decision in SemaResult::cycleEscapeSites, which
+    // `cp3 check --report` already prints: this is the `--report`
+    // auto-weak preview. The line format is the sema<->codegen contract:
+    //
+    //   auto-weak Src.field -> Dst : candidate (escape: none)
+    //   auto-weak Src.field -> Dst : proven (escape: none)
+    //   auto-weak Src.field -> Dst : rejected (reason: container-edge)
+    //
+    // Only `proven` may suppress CP3401 below and lower as `WeakRef` in
+    // codegen. While kAutoWeakGateEnabled is false (P5 body escapes and
+    // P7 fuzzer/ASan gate outstanding) every chosen edge is only a
+    // `candidate`: report-only, CP3401 is kept, codegen is unchanged.
+    // -----------------------------------------------------------------
+    std::unordered_map<std::string, AutoWeakDecision> autoWeakDecisions;
+    std::unordered_map<std::string, std::string> autoWeakDst;
+    {
+        const CycleGraphInfo info = buildCycleGraph(classes_);
+        const std::vector<std::vector<std::string>> sccGroups =
+            cycleGroupsOf(info, cycleCapableOf(info, classes_));
+        autoWeakDecisions = selectAutoWeak(info, sccGroups);
+        for (const CycleEdgeInfo& e : info.edges) {
+            autoWeakDst.emplace(e.src + "." + e.field, e.dst);
+        }
+        std::vector<std::string> lines;
+        for (const auto& [key, decision] : autoWeakDecisions) {
+            const auto dit = autoWeakDst.find(key);
+            if (dit == autoWeakDst.end()) continue;
+            std::string line =
+                "auto-weak " + key + " -> " + dit->second + " : " + decision.state;
+            if (decision.state == "rejected") {
+                line += " (reason: " + decision.reason + ")";
+            } else {
+                line += " (escape: none)";
+            }
+            lines.push_back(line);
+        }
+        std::sort(lines.begin(), lines.end());
+        for (const std::string& line : lines) {
+            out_.cycleEscapeSites.push_back(line);
+        }
+    }
+    // Step 4 diagnostics: a cycle through two or more distinct edges (SCC of
+    // size > 1) with no `weak` edge inside it is a compile error naming the
+    // cycle and asking the user to mark one edge weak. Single self-referencing
+    // fields (`next: Node | null`) are exempt: recursive types are not
+    // runtime cycles and linked lists/trees must keep working.
+    for (const auto& group : groups) {
+        if (group.size() <= 1) continue;
+        std::unordered_set<std::string> inGroup(group.begin(), group.end());
+        bool hasWeak = false;
+        for (const std::string& e : weakEdges) {
+            const std::string arrow = "->";
+            const std::size_t pos = e.find(arrow);
+            if (pos == std::string::npos) continue;
+            if (inGroup.count(e.substr(0, pos)) &&
+                inGroup.count(e.substr(pos + arrow.size())))
+                hasWeak = true;
+        }
+        if (hasWeak) continue;
+        // Stage 2: a proven compiler-injected edge (gate on, P1-P7 met)
+        // breaks the cycle with weak-cost zero, so CP3401 is suppressed.
+        // A mere candidate keeps CP3401 (report-only default) and is named
+        // in the diagnostic as the would-be automatic edge.
+        std::string autoWeakPick;
+        bool autoWeakProven = false;
+        for (const auto& [key, decision] : autoWeakDecisions) {
+            const std::size_t dot = key.find('.');
+            if (dot == std::string::npos) continue;
+            if (!inGroup.count(key.substr(0, dot))) continue;
+            if (decision.state == "proven") {
+                autoWeakProven = true;
+                autoWeakPick = key;
+                break;
+            }
+            if (decision.state == "candidate" && autoWeakPick.empty()) {
+                autoWeakPick = key;
+            }
+        }
+        if (autoWeakProven) continue;
+        std::string path;
+        for (std::size_t i = 0; i < group.size(); ++i) {
+            if (i) path += " -> ";
+            path += group[i];
+        }
+        path += " -> " + group.front();
+        const auto it = classes_.find(group.front());
+        const SourceSpan span = it != classes_.end() ? it->second.span
+                                                     : SourceSpan{};
+        report(diagcode::kTypeMismatch, span,
+               "reference cycle " + path +
+                   " has no weak edge; mark one edge weak to break the "
+                   "cycle (automatic resolution unavailable for this "
+                   "shape)" +
+                   (autoWeakPick.empty()
+                        ? std::string()
+                        : "; auto-weak candidate " + autoWeakPick +
+                              " -> " + autoWeakDst[autoWeakPick] +
+                              " (report-only: whole-program ownership proof "
+                              "not yet available)"));
+    }
+    // -----------------------------------------------------------------
+    // Stage 3: region inference + group counting per cycle group.
+    //
+    // Region inference (bump-arena candidates): a group is a candidate
+    // only when every fact a bump arena needs is provable from the class
+    // graph alone - closed group (no strong edge leaves it), no opaque
+    // `unknown` field, no static field (a program-lifetime root), no
+    // function-typed field referencing the group (a closure can hold a
+    // hidden reference), no generic/abstract member (the concrete shape
+    // is not closed), no base-class edge in either direction (inheritance
+    // is an invisible strong edge), and no user `weak` edge (already
+    // resolved manually). Anything else, or anything unprovable, fails
+    // closed to `regionKind == "none"`: no region, plain refcounting.
+    // Candidacy is NOT activation: codegen must still prove the group's
+    // allocation sites are function-local before placing them in an
+    // arena (see docs/design/cycle-regions.md).
+    //
+    // Group counting (refcount elision per group): one group counter
+    // replaces the per-object counters of the group's members; strong
+    // edges inside the group - and only those - stop touching any
+    // counter. Sound under the same fail-closed facts as above, except
+    // external strong edges and a user `weak` edge are allowed: external
+    // edges are the group's roots (they acquire/release the group
+    // counter) and a `weak` edge never retained anything.
+    // -----------------------------------------------------------------
+    {
+        // True when `t` carries a function-typed part that references a
+        // class of `inGroup`: a closure field is a hidden reference the
+        // field graph does not count, so it defeats both verdicts.
+        std::function<bool(const Type&, const std::unordered_set<std::string>&)>
+            hasClosureRef = [&](const Type& t,
+                                  const std::unordered_set<std::string>& inGroup)
+                -> bool {
+            if (t.kind == TypeKind::Function) {
+                std::unordered_set<std::string> refs;
+                walk(t, refs);
+                for (const std::string& r : refs) {
+                    if (inGroup.count(r)) return true;
+                }
+            }
+            for (const Type& p : t.parts) {
+                if (hasClosureRef(p, inGroup)) return true;
+            }
+            return false;
+        };
+        for (const auto& group : groups) {
+            SemaResult::CycleGroupInfo info;
+            info.classes = group;
+            const std::unordered_set<std::string> inGroup(group.begin(),
+                                                          group.end());
+            bool hasStaticRef = false;
+            bool hasClosure = false;
+            bool genericOrAbstract = false;
+            for (const std::string& name : group) {
+                const auto it = classes_.find(name);
+                if (it == classes_.end()) continue;
+                const ClassInfo& ci = it->second;
+                if (ci.isAbstract || !ci.typeParamNames.empty()) {
+                    genericOrAbstract = true;
+                }
+                for (const ClassMemberInfo& m : ci.members) {
+                    if (m.isMethod) continue;
+                    std::unordered_set<std::string> refs;
+                    walk(m.type, refs);
+                    for (const std::string& r : refs) {
+                        if (!inGroup.count(r)) continue;
+                        if (m.isStatic) hasStaticRef = true;
+                        if (hasClosureRef(m.type, inGroup)) hasClosure = true;
+                    }
+                }
+            }
+            // Inheritance is an invisible strong edge in both directions:
+            // a group member's base outside the group, or a derived class
+            // outside the group inheriting a group member's fields.
+            bool baseLeaks = false;
+            for (const std::string& name : group) {
+                const auto it = classes_.find(name);
+                if (it == classes_.end()) continue;
+                const std::string& base = it->second.baseName;
+                if (!base.empty() && !inGroup.count(base)) baseLeaks = true;
+            }
+            for (const auto& [name, ci] : classes_) {
+                if (inGroup.count(name)) continue;
+                if (inGroup.count(ci.baseName)) baseLeaks = true;
+            }
+            // A closed region also needs no incoming strong edge: a heap
+            // object outside the group holding a group class can outlive
+            // any function-local arena, and sema has no allocation-site
+            // proof to rule that out. Static fields of outside classes
+            // referencing the group are the same root in stronger form.
+            // (Group counting is unaffected: incoming edges are roots.)
+            bool hasIncoming = false;
+            for (const auto& [name, edges] : graph) {
+                if (inGroup.count(name)) continue;
+                for (const std::string& tgt : edges) {
+                    if (inGroup.count(tgt)) hasIncoming = true;
+                }
+            }
+            for (const auto& [name, ci] : classes_) {
+                if (inGroup.count(name)) continue;
+                for (const ClassMemberInfo& m : ci.members) {
+                    if (m.isMethod || !m.isStatic) continue;
+                    std::unordered_set<std::string> refs;
+                    walk(m.type, refs);
+                    for (const std::string& r : refs) {
+                        if (inGroup.count(r)) hasIncoming = true;
+                    }
+                }
+            }
+            for (const std::string& name : group) {
+                if (unknownRisk.count(name)) ++info.unknownRefs;
+                const auto git = graph.find(name);
+                if (git == graph.end()) continue;
+                for (const std::string& tgt : git->second) {
+                    if (inGroup.count(tgt)) {
+                        ++info.strongInternalEdges;
+                    } else {
+                        ++info.externalStrongEdges;
+                    }
+                }
+            }
             for (const std::string& e : weakEdges) {
                 const std::string arrow = "->";
                 const std::size_t pos = e.find(arrow);
                 if (pos == std::string::npos) continue;
                 if (inGroup.count(e.substr(0, pos)) &&
                     inGroup.count(e.substr(pos + arrow.size())))
-                    hasWeak = true;
+                    ++info.weakInternalEdges;
             }
-            if (hasWeak) continue;
-            std::string path;
+            info.hasWeakEdge = info.weakInternalEdges > 0;
+            std::string label;
             for (std::size_t i = 0; i < group.size(); ++i) {
-                if (i) path += " -> ";
-                path += group[i];
+                if (i) label += ",";
+                label += group[i];
             }
-            path += " -> " + group.front();
-            const auto it = classes_.find(group.front());
-            const SourceSpan span = it != classes_.end() ? it->second.span
-                                                         : SourceSpan{};
-            report(diagcode::kTypeMismatch, span,
-                   "reference cycle " + path +
-                       " has no weak edge; mark one edge weak to break the "
-                       "cycle (automatic resolution unavailable for this "
-                       "shape)");
+            // Fail-closed reasons, in a fixed priority order so the
+            // report is deterministic. The first applicable reason wins.
+            std::string failReason;
+            if (info.unknownRefs > 0) {
+                failReason = "unknown-typed field (opaque, unprovable)";
+            } else if (hasStaticRef) {
+                failReason = "static field stores a group class (program root)";
+            } else if (hasClosure) {
+                failReason = "function-typed field references the group (closure escape unknown)";
+            } else if (genericOrAbstract) {
+                failReason = "generic or abstract class in group (shape not closed)";
+            } else if (baseLeaks) {
+                failReason = "base-class edge crosses the group boundary (inherited fields invisible)";
+            }
+            info.regionEligible = failReason.empty() &&
+                                  info.externalStrongEdges == 0 &&
+                                  !hasIncoming && !info.hasWeakEdge;
+            if (info.regionEligible) {
+                info.regionKind = "bump-arena-candidate";
+                info.regionReason =
+                    "closed group, short-lived candidate (codegen still "
+                    "must prove function-local allocation sites)";
+            } else {
+                info.regionKind = "none";
+                if (!failReason.empty()) {
+                    info.regionReason = failReason;
+                } else if (info.externalStrongEdges > 0) {
+                    info.regionReason =
+                        "strong edge leaves the group (not a closed region)";
+                } else if (hasIncoming) {
+                    info.regionReason =
+                        "strong edge enters the group from outside (root lifetime unprovable)";
+                } else {
+                    info.regionReason =
+                        "user weak edge already breaks the cycle (manual resolution)";
+                }
+            }
+            info.groupCountEligible = failReason.empty();
+            if (info.groupCountEligible) {
+                info.countReason =
+                    std::to_string(info.strongInternalEdges) +
+                    " internal strong edge(s) elided" +
+                    (info.hasWeakEdge ? "; weak edge never counted" : "");
+            } else {
+                info.countReason = failReason;
+            }
+            out_.cycleGroups.push_back(info);
+            if (info.regionKind != "none") {
+                out_.cycleRegions.push_back(label + " : " + info.regionKind +
+                                            " (" + info.regionReason + ")");
+            }
+            out_.cycleGroupCounts.push_back(
+                label + " : " +
+                (info.groupCountEligible ? "group-count eligible ("
+                                         : "group-count ineligible (") +
+                info.countReason + ")");
         }
+        std::sort(out_.cycleGroups.begin(), out_.cycleGroups.end(),
+                  [](const SemaResult::CycleGroupInfo& a,
+                     const SemaResult::CycleGroupInfo& b) {
+                      return a.classes.front() < b.classes.front();
+                  });
+        std::sort(out_.cycleRegions.begin(), out_.cycleRegions.end());
+        std::sort(out_.cycleGroupCounts.begin(), out_.cycleGroupCounts.end());
     }
     out_.cycleCapableClasses.assign(cycleCapableClasses_.begin(),
                                     cycleCapableClasses_.end());

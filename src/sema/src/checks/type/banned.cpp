@@ -4,7 +4,7 @@
 // Owns the four banned-JS-pattern checks: `delete` (kDeleteBanned),
 // `arguments` (kArgumentsBanned), `for...in` over a plain object
 // (kForInPlainObjectBanned) and the `any` type (kAnyTypeBanned). Each helper is
-// called from the expression / statement pass that reaches the construct, so the
+// called from the webserverion / statement pass that reaches the construct, so the
 // diagnostic still anchors to the offending node (D2).
 // =============================================================================
 #include "detail/analyzer.h"

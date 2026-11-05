@@ -204,7 +204,7 @@ class Listener {
 public:
     Listener() = default;
 
-    // Boxes one callable (codegen: an arrow expression, or a function-typed
+    // Boxes one callable (codegen: an arrow webserverion, or a function-typed
     // local's initializer). Copies of the returned handle are the same box.
     template <class F>
     static Listener box(F fn) {

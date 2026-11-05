@@ -18,7 +18,7 @@
 //   support/helper_blocks.cpp the generated-code helper blocks (new families)
 //   support/int_mode.cpp   the guarded int64 fast path + `%` lowering
 //   support/int_reads.cpp  the read-only-inside-return analysis for int mode
-//   emit/expr.cpp          expression lowering (operators, literals, tsCall/cond)
+//   emit/expr.cpp          webserverion lowering (operators, literals, tsCall/cond)
 //   emit/objects.cpp       object value shapes: member reads + literal values
 //   emit/assignment.cpp    assignment lowering (compounds, bitwise, logical)
 //   emit/call.cpp          call lowering (dispatch only, D72)
@@ -213,7 +213,7 @@ private:
                                  const ClassModel& cm);
     std::string weakPointee(const Type& fieldType);
 
-    // --- model expressions + initializers (emit/class_expr.cpp) ---------------
+    // --- model webserverions + initializers (emit/class_expr.cpp) ---------------
     std::string emitModelNew(const NewExpr& n);
     // The built-in Error constructors. `new Error(...)` and the callable
     // `Error(...)` share this lowering: plain arguments plus an options object
@@ -292,7 +292,7 @@ private:
     void rewriteEnumTypes(Type& t) const;
     Type effectiveType(const Expr& e) const;
     // The value of a temporary `Promise.resolve(v)` over a non-promise, or
-    // nullptr when the awaited expression is not that shape.
+    // nullptr when the awaited webserverion is not that shape.
     const Expr* temporaryResolveValue(const Expr* argument) const;
     Type memberReadType(const MemberExpr& m) const;
     Type inferBinary(const BinaryExpr& b) const;
@@ -300,7 +300,7 @@ private:
     Type inferUnary(const UnaryExpr& u) const;
     detail::CppInfo info(const Expr& e) const;
 
-    // --- expressions (emit_expr.cpp) -----------------------------------------
+    // --- webserverions (emit_expr.cpp) -----------------------------------------
     std::string exprPlain(const Expr& e);
     std::string expr(const Expr& e);
     std::string exprCmp(const Expr& e);
@@ -347,7 +347,7 @@ private:
     // class) plus the field's cp3 type.
     bool memberFieldTarget(const MemberExpr& m, std::string& lvalue,
                            Type& fieldType);
-    // The expression forms the ordinary table does not own: the weak-link
+    // The webserverion forms the ordinary table does not own: the weak-link
     // wrapper (`{ weak: value }`, spec §11), a range used as a value
     // (`0..5`) and a spread outside its legal position.
     std::string emitExtendedExpr(const Expr& e);
@@ -519,7 +519,7 @@ private:
     // Construction, the boxed-listener value form and the on/once/off/emit
     // calls; each returns "" for a form it does not own.
     std::string emitEventEmitterNew(const NewExpr& n);
-    // A function value in a generic expression position (spec 10): boxed as a
+    // A function value in a generic webserverion position (spec 10): boxed as a
     // Listener when the context wants one, else a `std::function`.
     std::string emitArrowValue(const Expr& e, const ArrowFunction& a);
     std::string emitListenerValue(const Expr& e);
@@ -537,7 +537,7 @@ private:
     std::string emitFamilyMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitFamilyMember(const MemberExpr& m);
     std::string emitFamilyIndexRead(const IndexExpr& ix);
-    bool isStackValueArray(const Expr& expression) const;
+    bool isStackValueArray(const Expr& webserverion) const;
     std::string indexOperandText(const Expr& index);  // enum member -> number
     // The `IndexExpr` dispatch: the family read, else a type-error report.
     std::string emitIndexExpr(const IndexExpr& ix);
@@ -601,7 +601,7 @@ private:
                              std::string& out, int indent);
     // The runtime value of a rest object binding: a fresh object shape that
     // holds the source's fields except the ones the pattern named (the
-    // TypeScript Omit). `source` is the C++ expression holding the source
+    // TypeScript Omit). `source` is the C++ webserverion holding the source
     // value and `sourceType` its cp3 type; `restType` is filled with the
     // Omit type. Empty when the source has no enumerable shape - the caller
     // reports the reason.
@@ -611,11 +611,11 @@ private:
                            std::string& out, int indent);
     // A destructuring *assignment* (`[a, b] = expr`, `{ x } = expr`): the
     // right side is evaluated once and every target of the pattern is
-    // written. The expression's value is the right side (JS).
+    // written. The webserverion's value is the right side (JS).
     std::string emitDestructuringAssign(const AssignmentExpr& a);
     // One target of a destructuring assignment: an identifier is written, a
     // nested array/object literal is unpacked in turn. `access` is the C++
-    // expression that reads the value. False when the target has a form the
+    // webserverion that reads the value. False when the target has a form the
     // write does not cover.
     bool assignDestructuringTarget(const Node& target, const std::string& access,
                                     const Type& source, std::string& body);
@@ -721,19 +721,19 @@ private:
     std::string emitLogNew(const NewExpr& n);
     std::string emitLogMemberCall(const CallExpr& c, const MemberExpr& m);
     std::string emitLogMember(const MemberExpr& m);
-    std::string emitExpressSettingsMemberCall(const CallExpr& c,
+    std::string emitwebserverSettingsMemberCall(const CallExpr& c,
                                               const MemberExpr& m);
-    std::string emitExpressSettingsMemberRead(const MemberExpr& m);
-    std::string emitExpressLocalsIndexRead(const IndexExpr& ix);
-    std::string emitExpressLocalsAssign(const AssignmentExpr& a,
+    std::string emitwebserverSettingsMemberRead(const MemberExpr& m);
+    std::string emitwebserverLocalsIndexRead(const IndexExpr& ix);
+    std::string emitwebserverLocalsAssign(const AssignmentExpr& a,
                                         const MemberExpr& m);
-    std::string emitExpressLocalsIndexWrite(const AssignmentExpr& a);
-    std::string expressSettingValueText(const Expr& value);
-    std::string expressRenderOptionsText(const CallExpr& call);
-    std::string expressSettingsArg(const CallExpr& call, std::size_t index);
-    std::string expressSettingsArgs(const CallExpr& call);
-    std::string emitExpressRequestCall(const CallExpr& c, const MemberExpr& m);
-    std::string emitExpressRequestMember(const MemberExpr& m);
+    std::string emitwebserverLocalsIndexWrite(const AssignmentExpr& a);
+    std::string webserverSettingValueText(const Expr& value);
+    std::string webserverRenderOptionsText(const CallExpr& call);
+    std::string webserverSettingsArg(const CallExpr& call, std::size_t index);
+    std::string webserverSettingsArgs(const CallExpr& call);
+    std::string emitwebserverRequestCall(const CallExpr& c, const MemberExpr& m);
+    std::string emitwebserverRequestMember(const MemberExpr& m);
     std::string emitRegexLiteral(const RegExpLiteral& lit);  // D48, cp3/core/regex.hpp
     std::string emitRegexCall(const CallExpr& c, const MemberExpr& m);  // test/match/exec
     std::string emitRegexMember(const MemberExpr& m);  // source/flags reads
@@ -842,7 +842,7 @@ private:
     std::string spreadArrayText(const SpreadElement& sp,
                                  const std::string& wantCpp);
     // The C++ text of a runtime-built `std::vector<E>`: the parts in order,
-    // each either an element expression or a spread of an array.
+    // each either an element webserverion or a spread of an array.
     std::string spreadListText(const Type& elemType, const ExprList& parts);
 
     // --- statements (emit/stmt.cpp) ------------------------------------------
@@ -940,7 +940,7 @@ private:
     // A guarded int64 body plus its double wrapper (D64).
     // `analyzeTopInt64` (support/top_int64.cpp) proves the two entry-body shapes
     // that stay integral for their whole life and records them for the
-    // statement/expression emitters.
+    // statement/webserverion emitters.
     void analyzeTopInt64(const Program& program);
     void collectNumericConstants(const Program& program);
     bool moduleUsesBeforeDecl(const Program& program) const;
@@ -964,7 +964,7 @@ private:
         const Expr& e);
     // An observable effect or a `ref` argument discards the fast attempt.
     bool intEffectful(const Expr& e) const;
-    // The guard every expression of the fast body passes.
+    // The guard every webserverion of the fast body passes.
     void intGuardExpr(const Expr& e);
     // The read text of an entry-body int64 binding (empty when it is none).
     std::string int64ReadText(const std::string& name);

@@ -179,7 +179,7 @@ std::string Generator::arrayStaticCallText(const CallExpr& c,
         return "0.0";
     }
     if (prop == "isArray" && c.arguments.size() == 1 && c.arguments.front()) {
-        // An array literal (or any Array-typed expression) is an array; every
+        // An array literal (or any Array-typed webserverion) is an array; every
         // other static type is not. Typed views are distinct classes at
         // runtime, so they correctly report false here too.
         const Expr& arg = *c.arguments.front();

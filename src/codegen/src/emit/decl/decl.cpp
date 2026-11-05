@@ -399,7 +399,7 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
     }
     // A tuple return type has a `std::tuple` spelling regardless of whether its
     // elements are primitive, so resolve it before the general value-type
-    // fallback (which may otherwise pick a narrower returned expression type).
+    // fallback (which may otherwise pick a narrower returned webserverion type).
     if (fd.returnType) {
         if (auto t = typeOfNode(*fd.returnType)) {
             if (const auto tuple = tupleSpelling(*t)) return *tuple;
@@ -463,7 +463,7 @@ Type Generator::asyncValueType(const FunctionDeclaration& fd) const {
         if (!value.isUnknown() && !value.isError()) return value;
     }
     // An `unknown` annotation has no C++ spelling, but the first returned
-    // expression still fixes the promise's carried value (the same concrete
+    // webserverion still fixes the promise's carried value (the same concrete
     // deduction an unannotated synchronous function gets).
     if (fd.body) {
         if (const Expr* returned = firstReturnedExpr(*fd.body)) {

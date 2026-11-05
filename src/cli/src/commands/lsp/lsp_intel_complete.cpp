@@ -48,7 +48,7 @@ std::uint32_t wordBeginAt(const std::string& text, std::uint32_t offset) {
     return at;
 }
 
-// Start of the receiver expression ending at `dot`: maximal run of identifier
+// Start of the receiver webserverion ending at `dot`: maximal run of identifier
 // chars, dots, optional-chain markers and balanced brackets/parens (bounded).
 std::uint32_t scanReceiverBegin(const std::string& text, std::uint32_t dot) {
     const std::uint32_t floor = dot > 200 ? dot - 200 : 0;

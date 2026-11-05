@@ -3,9 +3,11 @@
 //
 // OWNERSHIP: the std/json family (src/std/json/**). One row of the D68
 // native-package table; the rest of the table never needs to change for this
-// module. Header-only family: no vendored library and no runtime TU; the
-// row supplies the generated-code include tree, selected when a program
-// imports "std/json".
+// module. Header-only family: no runtime TU and no vendored archive; the
+// row supplies the generated-code include trees, selected when a program
+// imports "std/json" - its own include tree plus the vendored fast_float
+// headers, which cp3/std/json_parse.hpp needs for fast_float::from_chars
+// (JSON number parsing; header-only, so no libDirs / linkFlags).
 // =============================================================================
 #pragma once
 
@@ -13,9 +15,11 @@
 
 namespace cp3::cli::detail {
 
+// Verified consumer flags (header-only backend):
+//   compile: -I src/std/json/include -I third_party/fast_float/include
 inline const NativePackage kJsonNativePackage{
     "std/json",
-    {"src/std/json/include"},
+    {"src/std/json/include", "third_party/fast_float/include"},
     {},
     {},
     {},

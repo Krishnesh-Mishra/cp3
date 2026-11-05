@@ -66,7 +66,7 @@ std::string objectKey(const ObjectProperty& p) {
     return std::string();
 }
 
-/// The value expression of the options object's `default` entry, or nullptr
+/// The value webserverion of the options object's `default` entry, or nullptr
 /// when `options` is not an object literal carrying one (`{ default: v }` is
 /// the documented shape; the `default: v` named-argument spelling stays the
 /// open question recorded by the `_ambiguous` marker).

@@ -20,6 +20,7 @@
 
 #include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/class/class_model.h"
+#include "emit/class/auto_weak.h"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/mangle.h"
 #include "detail/expr/pattern_emitter.h"
@@ -98,6 +99,22 @@ bool hasToString(const ClassModel& cm) {
                 : ModelRegistry::get().classByName(k->baseName);
     }
     return false;
+}
+
+// Stage 2 auto-weak: memberFieldText(m) has no owner class, so
+// emitClassMember (which does) pushes the declaring class name here for the
+// duration of the memberFieldText call and memberFieldText checks the top
+// of the stack. Emission is single-threaded per Generator and the push/pop
+// pair is lexical, so a nested emission (a field initializer) sees its own
+// entry. Empty in report-only mode (no `proven` lines), hence no output
+// change until sema's gate passes.
+std::vector<std::string> g_autoWeakOwnerStack;
+
+bool memberIsAutoWeak(const SemaResult& sema, const ClassMemberModel& m) {
+    if (g_autoWeakOwnerStack.empty()) return false;
+    const ClassModel* cm =
+        ModelRegistry::get().classByName(g_autoWeakOwnerStack.back());
+    return cm != nullptr && isAutoWeakField(sema, *cm, m.name);
 }
 
 }  // namespace
@@ -322,7 +339,10 @@ void Generator::emitClassMember(const ClassModel& cm,
             emitClassAccessorMember(cm, m, out, indent, defs);
             return;
         }
-        line(out, indent, memberFieldText(m) + ";");
+        g_autoWeakOwnerStack.push_back(cm.name);
+        const std::string fieldText = memberFieldText(m);
+        g_autoWeakOwnerStack.pop_back();
+        line(out, indent, fieldText + ";");
         return;
     }
     emitClassMethodMember(cm, m, out, indent, defs);
@@ -394,7 +414,10 @@ std::string Generator::memberFieldText(const ClassMemberModel& m) {
     }
     const Node* fieldNode = m.field ? static_cast<const Node*>(m.field)
                                     : static_cast<const Node*>(m.parameterProperty);
-    if (m.isWeak) {
+    // Stage 2: a proven compiler-injected edge lowers exactly like a
+    // manual `weak` field (WeakRef, weak-cost zero). Candidates and
+    // rejected edges stay strong refs (report-only default).
+    if (m.isWeak || memberIsAutoWeak(sema_, m)) {
         const std::string pointee = weakPointee(fieldType);
         if (pointee.empty()) {
             if (fieldNode != nullptr) {
@@ -468,7 +491,7 @@ std::string Generator::methodReturnType(const MethodDeclaration& md,
             const CppInfo ci = info(*returned);
             if (ci.representable && ci.shape != Shape::Void) return ci.cpp;
             // An inferred return whose value has no type spelling is deduced
-            // by C++ from the returned expression, like an unannotated
+            // by C++ from the returned webserverion, like an unannotated
             // function's return (emit/decl.cpp).
             if (!ci.representable) return "auto";
         }

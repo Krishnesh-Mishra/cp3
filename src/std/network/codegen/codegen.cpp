@@ -74,6 +74,11 @@ constexpr const char* kRequest = "$network:Request";
 constexpr const char* kResponse = "$network:Response";
 constexpr const char* kFormData = "$network:FormData";
 constexpr const char* kAbortSignal = "$network:AbortSignal";
+constexpr const char* kRouter = "$network:Router";        // Router agent
+constexpr const char* kRoute = "$network:Route";          // Router agent
+constexpr const char* kRouteChain = "$network:RouteChain";  // Routing agent
+constexpr const char* kwebserverApp = "$network:webserverApp";  // Routing agent
+constexpr const char* kHttpError = "$network:HttpError";  // Errors agent
 
 constexpr const char* kRuntimeNs = "::cp3::runtime::network::";
 
@@ -182,7 +187,8 @@ bool Generator::isNetworkObject(const Expr* e) const {
     if (name == kFetchResponse || name == kHttpRequest || name == kHttpResponse ||
         name == kHttpServer || name == kWebSocket || name == kWebSocketServer ||
         name == kHeaders || name == kRequest || name == kResponse ||
-        name == kFormData || name == kAbortSignal) {
+        name == kFormData || name == kAbortSignal || name == kRouter ||
+        name == kRoute || name == kRouteChain || name == kwebserverApp) {
         return true;
     }
     // `res.status(404).text(...)` / `res.header(...).send(...)`: the chainable
@@ -193,7 +199,11 @@ bool Generator::isNetworkObject(const Expr* e) const {
     const auto& call = static_cast<const CallExpr&>(*e);
     if (!call.callee || call.callee->kind != NodeKind::MemberExpr) return false;
     const auto& inner = static_cast<const MemberExpr&>(*call.callee);
-    if (inner.property != "status" && inner.property != "header") return false;
+    if (inner.property != "status" && inner.property != "header" &&
+        inner.property != "set" && inner.property != "append" &&
+        inner.property != "type" && inner.property != "links" &&
+        inner.property != "location" && inner.property != "vary" &&
+        inner.property != "attach" && inner.property != "cookie") return false;
     return isNetworkObject(inner.object.get());
 }
 
@@ -277,7 +287,7 @@ std::string Generator::fetchInitText(const Expr& init) {
             timeout = expr(*p->value);
         } else if (key == "headers") {
             // RequestInit.headers is `Map<string, string>` (docs 04 §network,
-            // D77): the Map expression reaches FetchInit.headers and
+            // D77): the Map webserverion reaches FetchInit.headers and
             // buildRequest (runtime_fetch.cpp) writes one `Name: value` line
             // per entry. A plain object literal in that position is off the
             // documented surface, so it is a type error at the use site (the
@@ -410,6 +420,84 @@ std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::strin
             [this](const Expr& e) { return expr(e); },
             [this](const Expr& e) { return effectiveType(e).name; });
     }
+    // Cookie agent: cookieParser(secret?).
+    if (name == "cookieParser") {
+        needsNetwork_ = true;
+        if (c.arguments.empty() || !c.arguments.front()) {
+            return std::string(kRuntimeNs) + "webserver::makeCookieParserMiddleware()";
+        }
+        return std::string(kRuntimeNs) + "webserver::makeCookieParserMiddleware(" +
+               expr(*c.arguments.front()) + ")";
+    }
+    // Body-parse agent: json/urlencoded/text/raw(options?).
+    if (name == "json" || name == "urlencoded" || name == "text" || name == "raw") {
+        needsNetwork_ = true;
+        std::string opts;
+        // Options object literal: limit (number -> limitBytes, string ->
+        // parseLimitText), strict/extended (bool), type (string).
+        std::string inner;
+        if (!c.arguments.empty() && c.arguments.front() &&
+            c.arguments.front()->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*c.arguments.front());
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                if (key == "limit") {
+                    if (p->value->kind == NodeKind::StringLiteral) {
+                        inner += ".limitBytes = ::cp3::runtime::network::webserver::body_parse::parseLimitText(" + expr(*p->value) + "); ";
+                    } else {
+                        inner += ".limitBytes = " + expr(*p->value) + "; ";
+                    }
+                } else if (key == "strict" || key == "extended") {
+                    inner += "." + key + " = " + expr(*p->value) + "; ";
+                } else if (key == "type") {
+                    inner += ".type = " + expr(*p->value) + "; ";
+                }
+            }
+        }
+        const std::string optType = name == "json" ? "JsonBodyOptions"
+            : name == "urlencoded" ? "UrlEncodedBodyOptions"
+            : name == "text" ? "TextBodyOptions" : "RawBodyOptions";
+        const std::string factory = name == "json" ? "makeJsonMiddleware"
+            : name == "urlencoded" ? "makeUrlEncodedMiddleware"
+            : name == "text" ? "makeTextMiddleware" : "makeRawMiddleware";
+        opts = "[&] { ::cp3::runtime::network::webserver::body_parse::" + optType + " o; " + inner + "return o; }()";
+        return std::string(kRuntimeNs) + "webserver::body_parse::" + factory + "(" + opts + ")";
+    }
+    // Router/routing agents: bare Router() / webserver().
+    if (name == "Router") {
+        needsNetwork_ = true;
+        std::string options = std::string(kRuntimeNs) + "webserver::RouterOptions{}";
+        if (!c.arguments.empty() && c.arguments.front() &&
+            c.arguments.front()->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*c.arguments.front());
+            std::string inner;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                if (key == "caseSensitive") inner += ".caseSensitive = " + expr(*p->value) + "; ";
+                else if (key == "strict") inner += ".strict = " + expr(*p->value) + "; ";
+                else if (key == "mergeParams") inner += ".mergeParams = " + expr(*p->value) + "; ";
+            }
+            options = "[&] { " + std::string(kRuntimeNs) + "webserver::RouterOptions o; " + inner + "return o; }()";
+        }
+        return std::string(kRuntimeNs) + "webserver::Router(" + options + ")";
+    }
+    if (name == "webserver") {
+        needsNetwork_ = true;
+        return std::string(kRuntimeNs) + "webserver::makewebserverApp()";
+    }
+    // Errors agent: httpError(status, message).
+    if (name == "httpError") {
+        needsNetwork_ = true;
+        std::string args;
+        for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+            if (!c.arguments[i]) continue;
+            if (!args.empty()) args += ", ";
+            args += expr(*c.arguments[i]);
+        }
+        return std::string(kRuntimeNs) + "webserver::errors::httpError(" + args + ")";
+    }
     return std::string();
 }
 
@@ -428,13 +516,22 @@ std::string Generator::emitUnresolvedCall(const CallExpr& c, const std::string& 
     const std::optional<detail::Binding> binding = lookup(name);
     if (binding && binding->type.name == kNextMarker) {
         needsNetwork_ = true;
+        // Middleware/errors agents: next("route") and next(err).
+        if (c.arguments.size() == 1 && c.arguments[0] &&
+            c.arguments[0]->kind == NodeKind::StringLiteral &&
+            static_cast<const StringLiteral&>(*c.arguments[0]).value == "route") {
+            return mapIdent(name) + ".route()";
+        }
+        if (c.arguments.size() == 1 && c.arguments[0]) {
+            // next(err): divert to the error handler (Next::error throws,
+            // the dispatcher routes it to app.onError()/500).
+            return mapIdent(name) + ".error(" + expr(*c.arguments[0]) + ")";
+        }
         if (!c.arguments.empty()) {
-            // The documented continuation takes no argument (docs 04 §network:
-            // `type NextFunction = () => Promise<void>`), so `next(x)` is an
-            // arity error - a program error, not a missing feature.
             reportCodegenError(c, diagcode::kArityMismatch,
                                "arity mismatch: the std/network next() "
-                               "continuation takes no arguments, got " +
+                               "continuation takes at most one argument (the "
+                               "error, or \"route\"), got " +
                                    std::to_string(c.arguments.size()));
             return "0.0";
         }
@@ -455,6 +552,27 @@ std::string Generator::emitUnresolvedCall(const CallExpr& c, const std::string& 
 std::string Generator::emitNetworkNew(const NewExpr& n) {
     if (!n.callee || n.callee->kind != NodeKind::Identifier) return std::string();
     const std::string name = static_cast<const Identifier&>(*n.callee).name;
+    // Router agent [C8]: `new Router()` / `new Router(options?)`.
+    if (name == "Router") {
+        needsNetwork_ = true;
+        std::string options = std::string(kRuntimeNs) + "webserver::RouterOptions{}";
+        if (!n.arguments.empty() && n.arguments.front() &&
+            n.arguments.front()->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*n.arguments.front());
+            std::string inner;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                if (key == "caseSensitive") inner += ".caseSensitive = " + expr(*p->value) + "; ";
+                else if (key == "strict") inner += ".strict = " + expr(*p->value) + "; ";
+                else if (key == "mergeParams") inner += ".mergeParams = " + expr(*p->value) + "; ";
+            }
+            options = "[&] { " + std::string(kRuntimeNs) + "webserver::RouterOptions o; " + inner + "return o; }()";
+        } else if (!n.arguments.empty() && n.arguments.front()) {
+            reportTypeError(*n.arguments.front(), "type mismatch: new Router() options must be an object literal");
+        }
+        return std::string(kRuntimeNs) + "webserver::Router(" + options + ")";
+    }
     // Ledger L (appended): `new Headers/Request/Response/FormData/AbortSignal`.
     if (name == "Headers" || name == "Request" || name == "Response" ||
         name == "FormData" || name == "AbortSignal") {
@@ -523,6 +641,15 @@ std::string Generator::emitNetworkCall(const CallExpr& c, const MemberExpr& m) {
     if (m.property == "fetch") return emitNetworkFetch(c, c.arguments);
     if (m.property == "lookup") return emitNetworkIdentifier(c, "lookup");
     if (m.property == "createServer") return emitNetworkIdentifier(c, "createServer");
+    // Body-parse + router agents: webserver.json() / webserver.Router() etc.
+    if (m.property == "json" || m.property == "urlencoded" ||
+        m.property == "text" || m.property == "raw" || m.property == "Router" ||
+        m.property == "webserver") {
+        if (m.object && m.object->kind == NodeKind::Identifier &&
+            static_cast<const Identifier&>(*m.object).name == "webserver") {
+            return emitNetworkIdentifier(c, m.property);
+        }
+    }
     if (m.property == "WebSocket" || m.property == "WebSocketServer") {
         // The class-shaped namespace member: `network.WebSocket(url)`.
         needsNetwork_ = true;

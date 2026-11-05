@@ -206,7 +206,7 @@ void walkType(const TypeNode* type, Normalizer& norm) {
     }
 }
 
-// Type spellings can also hide inside expressions that the surface copies
+// Type spellings can also hide inside webserverions that the surface copies
 // verbatim: initializers, `export default <expr>`, explicit generic arguments
 // (`f<i64>(...)`, `new Box<i64>()`), `as` casts, arrow-function parameter and
 // return annotations, decorator arguments and computed keys. Renames are
@@ -256,7 +256,7 @@ void collectFromExpr(const Expr* expr, Normalizer& norm) {
     switch (expr->kind) {
         case NodeKind::AsExpr: {
             const auto& cast = *static_cast<const AsExpr*>(expr);
-            collectFromExpr(cast.expression.get(), norm);
+            collectFromExpr(cast.webserverion.get(), norm);
             walkType(cast.type.get(), norm);
             return;
         }
@@ -381,12 +381,12 @@ void collectFromExpr(const Expr* expr, Normalizer& norm) {
         }
         case NodeKind::NonNullExpr:
             collectFromExpr(
-                static_cast<const NonNullExpr*>(expr)->expression.get(),
+                static_cast<const NonNullExpr*>(expr)->webserverion.get(),
                 norm);
             return;
         case NodeKind::TemplateLiteral:
             for (const ExprPtr& element :
-                 static_cast<const TemplateLiteral*>(expr)->expressions) {
+                 static_cast<const TemplateLiteral*>(expr)->webserverions) {
                 collectFromExpr(element.get(), norm);
             }
             return;
@@ -522,7 +522,7 @@ void collectFromDeclaration(const Stmt& decl, Normalizer& norm) {
 }
 
 // `for (let i: i64 = ...)`-style slots (`init`/`left`) hold either a variable
-// declaration or a bare expression/pattern.
+// declaration or a bare webserverion/pattern.
 void collectFromNodeSlot(const Node* node, Normalizer& norm) {
     if (node == nullptr) return;
     if (node->kind == NodeKind::VariableDeclaration ||
@@ -546,10 +546,10 @@ void collectFromStatement(const Stmt& stmt, Normalizer& norm) {
             collectFromExpr(exp.defaultExpr.get(), norm);
             return;
         }
-        case NodeKind::ExpressionStatement:
+        case NodeKind::webserverionStatement:
             collectFromExpr(
-                static_cast<const ExpressionStatement*>(&stmt)
-                    ->expression.get(),
+                static_cast<const webserverionStatement*>(&stmt)
+                    ->webserverion.get(),
                 norm);
             return;
         case NodeKind::BlockStatement:

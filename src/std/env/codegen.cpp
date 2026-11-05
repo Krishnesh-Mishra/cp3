@@ -43,7 +43,7 @@ std::string objectKey(const ObjectProperty& p) {
     return std::string();
 }
 
-/// The value expression of the options object's `default` entry, or nullptr
+/// The value webserverion of the options object's `default` entry, or nullptr
 /// when `options` is not an object literal carrying one.
 const Expr* defaultOption(const Expr* options) {
     if (!options || options->kind != NodeKind::ObjectLiteral) return nullptr;

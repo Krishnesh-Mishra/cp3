@@ -12,6 +12,8 @@
 // =============================================================================
 #include "detail/generator/generator.h"
 
+#include <cctype>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -40,6 +42,11 @@ constexpr const char* kRequest = "$network:Request";
 constexpr const char* kResponse = "$network:Response";
 constexpr const char* kFormData = "$network:FormData";
 constexpr const char* kAbortSignal = "$network:AbortSignal";
+constexpr const char* kRouter = "$network:Router";        // Router agent
+constexpr const char* kRoute = "$network:Route";          // Router agent
+constexpr const char* kRouteChain = "$network:RouteChain";  // Routing agent
+constexpr const char* kwebserverApp = "$network:webserverApp";  // Routing agent
+constexpr const char* kHttpError = "$network:HttpError";  // Errors agent
 
 constexpr const char* kReqType = "::cp3::runtime::network::HttpRequest&";
 constexpr const char* kResType = "::cp3::runtime::network::HttpResponse&";
@@ -116,7 +123,11 @@ Type contextType(const std::string& cpp) {
     }
     if (cpp == kNextType) return Type::named(TypeKind::Object, kNextMarker);
     if (cpp == kThrownType) return Type::unknown();  // Ledger L: onError err param stays ambient in sema
-    if (cpp == "std::string") return Type::string();
+    if (cpp == "std::string" || cpp == "const std::string&") return Type::string();  // Router [C7]
+    if (cpp == "::cp3::runtime::network::webserver::errors::HttpError" ||
+        cpp == "::cp3::runtime::network::webserver::errors::HttpError&") {
+        return Type::named(TypeKind::Object, kHttpError);
+    }
     if (cpp == "double") return Type::number();
     return Type::unknown();
 }
@@ -146,15 +157,25 @@ bool networkTypeArgsText(const TypeList& typeArgs, std::string& out) {
 /// so the HttpServer handle cannot spell it (docs 04 §network lists `.delete`).
 std::string networkMemberName(const Type& receiver, const std::string& property) {
     if (receiver.name == kHttpServer && property == "delete") return "del";
+    // Router agent [C5].
+    if ((receiver.name == kRouter || receiver.name == kRoute ||
+         receiver.name == kRouteChain || receiver.name == kwebserverApp) &&
+        property == "delete") return "del";
     // Ledger L (appended): JS `delete` is not a C++ identifier.
     if ((receiver.name == kHeaders || receiver.name == kFormData) &&
         property == "delete") return "remove";
     return property;
 }
 
+bool isRegexRoutingVerb(const std::string& property) {
+    return property == "get" || property == "post" || property == "put" ||
+           property == "delete" || property == "patch" || property == "head" ||
+           property == "options" || property == "any" || property == "all";
+}
+
 }  // namespace
 
-/// The documented field read behind an expression (`res.headers`,
+/// The documented field read behind an webserverion (`res.headers`,
 /// `req.params`, `req.query`, `req.headers`, `req.method`, `req.path`,
 /// `res.ok`, `res.status`, `res.statusText`), with the Map fields as
 /// `Map<string, string>` (docs 04 §network), or nullopt. The `get(k)` result
@@ -206,13 +227,22 @@ std::optional<Type> Generator::networkFieldType(const Expr& e) const {
     if (recv == kAbortSignal && m.property == "aborted") return Type::boolean();
     if (recv == kHttpRequest) {
         if (m.property == "params" || m.property == "query" ||
-            m.property == "headers" || m.property == "cookies") {
+            m.property == "headers" || m.property == "cookies" ||
+            m.property == "signedCookies") {
             return stringMapType();
         }
         if (m.property == "method" || m.property == "path" ||
             m.property == "ip") {
             return Type::string();
         }
+        // Router agent [C3].
+        if (m.property == "baseUrl" || m.property == "originalUrl") {
+            return Type::string();
+        }
+    }
+    // Response agent: res.headersSent read type.
+    if (recv == kHttpResponse && m.property == "headersSent") {
+        return Type::boolean();
     }
     return std::nullopt;
 }
@@ -254,13 +284,35 @@ std::string Generator::networkArg(const Type& receiver, const std::string& prope
         if (property == "listen") {
             context = {};
         } else if (property == "onError") {
-            // Ledger L (appended): `(err, req, res)`.
+            // Ledger L (appended): `(err, req, res)`. Errors agent: a 4-arg
+            // `(err, req, res, next)` handler is also accepted; the 4th
+            // parameter is the Next continuation.
             context = {kThrownType, kReqType, kResType};
+            if (arg.kind == NodeKind::ArrowFunction &&
+                static_cast<const ArrowFunction&>(arg).params.size() == 4) {
+                context.push_back(kNextType);
+            }
+        } else if (property == "use") {
+            context = {kReqType, kResType, kNextType};
+        } else if (property == "param") {
+            context = {kReqType, kResType, kNextType, "const std::string&"};
+        } else {
+            context = {kReqType, kResType};
+        }
+    } else if (receiver.name == kRouter || receiver.name == kwebserverApp) {
+        // Router agent [C6].
+        if (property == "param") {
+            context = {kReqType, kResType, kNextType, "const std::string&"};
         } else if (property == "use") {
             context = {kReqType, kResType, kNextType};
         } else {
             context = {kReqType, kResType};
         }
+    } else if (receiver.name == kRoute || receiver.name == kRouteChain) {
+        // Router [C6]: router.route(path).get(handler): (req, res).
+        // Routing agent: RouteChain verbs take handler lists, but the
+        // single-handler form keeps the 2-arity context.
+        context = {kReqType, kResType};
     } else if (receiver.name == kWebSocket || receiver.name == kWebSocketServer) {
         // The event name is the first literal argument.
         std::string event = "open";
@@ -285,7 +337,11 @@ std::string Generator::networkArg(const Type& receiver, const std::string& prope
         declare(static_cast<const Identifier&>(*p->name).name, type);
     }
     std::string text;
-    if (arrow.isAsync && receiver.name == kHttpServer) {
+    if (arrow.isAsync && (receiver.name == kHttpServer ||
+                          receiver.name == kRouter ||
+                          receiver.name == kRoute ||
+                          receiver.name == kRouteChain ||
+                          receiver.name == kwebserverApp)) {
         // An `async` HTTP handler is a coroutine lambda. The runtime waits for
         // its promise before it continues the chain or answers 404, so
         // `await req.text()` inside the handler is safe. WebSocket event
@@ -380,50 +436,393 @@ std::string Generator::emitNetworkMemberCall(const CallExpr& c, const MemberExpr
             return payload;
         }
     }
-    if (m.property == "cookie" &&
+    // Errors/middleware agents: `app.use((err, req, res, next) => ...)`
+    // (4-arg arrow) is error middleware -> onError slot.
+    if (receiver.name == kHttpServer && m.property == "use" &&
+        c.arguments.size() == 1 && c.arguments[0] &&
+        c.arguments[0]->kind == NodeKind::ArrowFunction &&
+        static_cast<const ArrowFunction&>(*c.arguments[0]).params.size() == 4) {
+        return "(" + expr(*m.object) + ").useError(" +
+               networkArg(receiver, "onError", c, *c.arguments[0], 0) + ")";
+    }
+    // Router agent [C9]: `app.use("/api", router)` / `app.use(router)`.
+    if (receiver.name == kHttpServer && m.property == "use") {
+        const std::string pathArg =
+            (c.arguments.size() >= 2 && c.arguments.front())
+                ? expr(*c.arguments.front()) : std::string();
+        const Expr* routerExpr = nullptr;
+        if (c.arguments.size() >= 2 && c.arguments[1] &&
+            effectiveType(*c.arguments[1]).name == kRouter) {
+            routerExpr = c.arguments[1].get();
+        } else if (c.arguments.size() == 1 && c.arguments.front() &&
+                   effectiveType(*c.arguments.front()).name == kRouter) {
+            routerExpr = c.arguments.front().get();
+        }
+        if (routerExpr != nullptr) {
+            needsNetwork_ = true;
+            const std::string routerText = expr(*routerExpr);
+            if (pathArg.empty()) {
+                return "(" + expr(*m.object) + ").use((" + routerText +
+                       ").handler())";
+            }
+            return "(" + expr(*m.object) + ").use((" + routerText +
+                   ").mountMiddleware(" + pathArg + "))";
+        }
+    }
+    // Regex-routing agent: settings dispatch (before the verb hunk).
+    if (receiver.name == kHttpServer &&
+        (m.property == "set" || m.property == "enable" ||
+         m.property == "disable" || m.property == "get" ||
+         m.property == "enabled" || m.property == "disabled")) {
+        if (m.property == "set" && c.arguments.size() == 2 &&
+            c.arguments[0] && c.arguments[1] &&
+            c.arguments[0]->kind == NodeKind::StringLiteral) {
+            const std::string key =
+                static_cast<StringLiteral&>(*c.arguments[0]).value;
+            // Routing settings (bool value) vs cookie secret (string value).
+            if (key == "case sensitive routing" || key == "strict routing") {
+                return "(" + expr(*m.object) + ").setRoutingSetting(" +
+                       expr(*c.arguments[0]) + ", " + expr(*c.arguments[1]) + ")";
+            }
+        }
+        if (m.property == "enable" || m.property == "disable") {
+            if (c.arguments.size() != 1 || !c.arguments[0]) return "0.0";
+            return "(" + expr(*m.object) + ").setRoutingSetting(" +
+                   expr(*c.arguments[0]) + ", " +
+                   (m.property == "enable" ? "true" : "false") + ")";
+        }
+        if ((m.property == "get" || m.property == "enabled" ||
+             m.property == "disabled") &&
+            c.arguments.size() == 1 && c.arguments[0]) {
+            std::string read = "(" + expr(*m.object) +
+                               ").getRoutingSetting(" + expr(*c.arguments[0]) + ")";
+            return m.property == "disabled" ? "(!" + read + ")" : read;
+        }
+        // app.set with a non-routing key falls through (cookie arm below).
+        if (m.property != "set") {
+            // get with 2 args is the route verb; handled by the verb hunk.
+        }
+    }
+    // Regex-routing agent: verb dispatch (PathSpec / options forms).
+    if (isRegexRoutingVerb(m.property) && receiver.name == kHttpServer) {
+        const std::string methodName = networkMemberName(receiver, m.property);
+        std::function<std::string(const Expr&)> pathText = [this, &pathText](const Expr& e) -> std::string {
+            if (e.kind == NodeKind::RegExpLiteral) {
+                const auto& re = static_cast<const RegExpLiteral&>(e);
+                needsRegex_ = true;
+                return "::cp3::runtime::network::regex_routing::PathSpec::makeRegex("
+                       "::cp3::runtime::regex::Regex::compile(" +
+                       cppStringLiteral(re.pattern) + ", " +
+                       cppStringLiteral(re.flags) + "))";
+            }
+            if (e.kind == NodeKind::ArrayLiteral) {
+                const auto& lit = static_cast<const ArrayLiteral&>(e);
+                std::string inner;
+                for (const auto& el : lit.elements) {
+                    if (!el || el->kind == NodeKind::SpreadElement) {
+                        reportTypeError(e, "type mismatch: a spread element in a route-path array cannot be classified at compile time");
+                        continue;
+                    }
+                    if (!inner.empty()) inner += ", ";
+                    inner += pathText(*el);
+                }
+                return "::cp3::runtime::network::regex_routing::PathSpec::makeArray({" + inner + "})";
+            }
+            return "::cp3::runtime::network::regex_routing::PathSpec::makeString(" + expr(e) + ")";
+        };
+        auto optionsText = [this](const Expr& arg) -> std::string {
+            if (arg.kind != NodeKind::ObjectLiteral) {
+                reportTypeError(arg, "type mismatch: route options must be an object literal { caseSensitive?: boolean, strict?: boolean }");
+                return "::cp3::runtime::network::regex_routing::RoutingOptions{}";
+            }
+            const auto& lit = static_cast<const ObjectLiteral&>(arg);
+            std::string cs = "std::nullopt", st = "std::nullopt";
+            for (const auto& prop : lit.properties) {
+                if (!prop || !prop->value || prop->isMethod || !prop->key) continue;
+                std::string key;
+                if (prop->key->kind == NodeKind::Identifier) key = static_cast<Identifier&>(*prop->key).name;
+                else if (prop->key->kind == NodeKind::StringLiteral) key = static_cast<StringLiteral&>(*prop->key).value;
+                else continue;
+                if (key == "caseSensitive") cs = expr(*prop->value);
+                else if (key == "strict") st = expr(*prop->value);
+            }
+            return "::cp3::runtime::network::regex_routing::RoutingOptions{" + cs + ", " + st + "}";
+        };
+        if (c.arguments.size() == 3 && c.arguments[0] && c.arguments[1] && c.arguments[2]) {
+            needsNetwork_ = true;
+            const std::string path = pathText(*c.arguments[0]);
+            const std::string opts = optionsText(*c.arguments[1]);
+            const std::string handler = networkArg(receiver, m.property, c, *c.arguments[2], 2);
+            const std::string methodLit = methodName == "del" ? "\"DELETE\""
+                : methodName == "all" || methodName == "any" ? "\"*\""
+                : "\"" + [&] { std::string u = methodName; for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch))); return u; }() + "\"";
+            return "::cp3::runtime::network::addRegexRoute((" + expr(*m.object) + "), " + methodLit + ", " + path + ", " + opts + ", " + handler + ")";
+        }
+        if (c.arguments.size() == 2 && c.arguments[0] && c.arguments[1]) {
+            const Expr* first = c.arguments[0].get();
+            const bool isStringPath = first && first->kind != NodeKind::RegExpLiteral &&
+                                      first->kind != NodeKind::ArrayLiteral &&
+                                      effectiveType(*first).name != "RegExp";
+            const bool hasHandlerList = c.arguments[1]->kind == NodeKind::ArrayLiteral;
+            if (isStringPath && !hasHandlerList) {
+                // Keep today's call shape exactly for string paths.
+                return "(" + expr(*m.object) + ")." + methodName + "(" +
+                       networkArg(receiver, m.property, c, *first, 0) + ", " +
+                       networkArg(receiver, m.property, c, *c.arguments[1], 1) + ")";
+            }
+            if (isStringPath && hasHandlerList) {
+                // Routing agent: array handlers on a string path.
+                std::vector<std::string> handlers;
+                const auto& literal = static_cast<const ArrayLiteral&>(*c.arguments[1]);
+                for (const auto& element : literal.elements) {
+                    if (!element) continue;
+                    handlers.push_back(networkArg(receiver, m.property, c, *element, 1));
+                }
+                std::string list;
+                for (std::size_t i = 0; i < handlers.size(); ++i) { if (i) list += ", "; list += handlers[i]; }
+                return "(" + expr(*m.object) + ")." + methodName + "(" +
+                       expr(*first) + ", ::cp3::runtime::network::detail::HandlerList{" + list + "})";
+            }
+            needsNetwork_ = true;
+            const std::string path = pathText(*first);
+            const std::string handler = networkArg(receiver, m.property, c, *c.arguments[1], 1);
+            const std::string methodLit = methodName == "del" ? "\"DELETE\""
+                : methodName == "all" || methodName == "any" ? "\"*\""
+                : "\"" + [&] { std::string u = methodName; for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch))); return u; }() + "\"";
+            return "::cp3::runtime::network::addRegexRoute((" + expr(*m.object) + "), " + methodLit + ", " + path + ", ::cp3::runtime::network::regex_routing::RoutingOptions{}, " + handler + ")";
+        }
+        if (c.arguments.size() > 2) {
+            // Routing agent: variadic handler tail on HttpServer verbs.
+            // Falls through to the generic path for Router/RouteChain below;
+            // for HttpServer the HandlerList overload is reached via the
+            // array-form check in the routing block.
+        }
+    }
+    // Routing agent: route()/param()/HandlerList verbs (inlined from
+    // codegen_routing.cpp emitRoutingMemberCall).
+    {
+        const bool isRouter = receiver.name == kRouter;
+        const bool isApp = receiver.name == kwebserverApp;
+        const bool isChain = receiver.name == kRouteChain || receiver.name == kRoute;
+        if (isRouter || isApp || isChain || receiver.name == kHttpServer) {
+            if (m.property == "route" && !isChain) {
+                if (c.arguments.empty() || !c.arguments.front()) {
+                    reportCodegenError(c, diagcode::kArityMismatch, "route(path) takes a path argument");
+                    return "0.0";
+                }
+                return "(" + expr(*m.object) + ").route(" + expr(*c.arguments.front()) + ")";
+            }
+            if (m.property == "param" && !isChain) {
+                if (c.arguments.size() < 2 || !c.arguments[0] || !c.arguments[1]) {
+                    reportCodegenError(c, diagcode::kArityMismatch, "param(name, callback) takes two arguments");
+                    return "0.0";
+                }
+                return "(" + expr(*m.object) + ").param(" + expr(*c.arguments[0]) + ", " +
+                       networkArg(receiver, m.property, c, *c.arguments[1], 1) + ")";
+            }
+            const bool isVerb = m.property == "get" || m.property == "post" ||
+                                m.property == "put" || m.property == "delete" ||
+                                m.property == "patch" || m.property == "head" ||
+                                m.property == "options" || m.property == "all";
+            if (isVerb && isChain) {
+                // Single handler: generic path below (RouteChain& / Route&).
+                bool arrayTail = false;
+                for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+                    if (c.arguments[i] && c.arguments[i]->kind == NodeKind::ArrayLiteral) arrayTail = true;
+                }
+                if (arrayTail || c.arguments.size() > 1) {
+                    std::vector<std::string> handlers;
+                    for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+                        const Expr* arg = c.arguments[i].get();
+                        if (!arg) continue;
+                        if (arg->kind == NodeKind::ArrayLiteral) {
+                            const auto& literal = static_cast<const ArrayLiteral&>(*arg);
+                            for (const auto& element : literal.elements) {
+                                if (!element) continue;
+                                handlers.push_back(networkArg(receiver, m.property, c, *element, i));
+                            }
+                            continue;
+                        }
+                        handlers.push_back(networkArg(receiver, m.property, c, *arg, i));
+                    }
+                    std::string list;
+                    for (std::size_t i = 0; i < handlers.size(); ++i) { if (i) list += ", "; list += handlers[i]; }
+                    return "(" + expr(*m.object) + ")." + networkMemberName(receiver, m.property) +
+                           "(::cp3::runtime::network::detail::HandlerList{" + list + "})";
+                }
+            }
+            if (isVerb && (isRouter || isApp) && c.arguments.size() == 2 &&
+                c.arguments[1] && c.arguments[1]->kind == NodeKind::ArrayLiteral) {
+                std::vector<std::string> handlers;
+                const auto& literal = static_cast<const ArrayLiteral&>(*c.arguments[1]);
+                for (const auto& element : literal.elements) {
+                    if (!element) continue;
+                    handlers.push_back(networkArg(receiver, m.property, c, *element, 1));
+                }
+                std::string list;
+                for (std::size_t i = 0; i < handlers.size(); ++i) { if (i) list += ", "; list += handlers[i]; }
+                return "(" + expr(*m.object) + ")." + networkMemberName(receiver, m.property) +
+                       "(" + expr(*c.arguments[0]) + ", ::cp3::runtime::network::detail::HandlerList{" + list + "})";
+            }
+            if (isVerb && receiver.name == kHttpServer && c.arguments.size() > 2) {
+                // Variadic tail: collect handlers[1..] into a HandlerList.
+                std::vector<std::string> handlers;
+                for (std::size_t i = 1; i < c.arguments.size(); ++i) {
+                    if (!c.arguments[i]) continue;
+                    handlers.push_back(networkArg(receiver, m.property, c, *c.arguments[i], i));
+                }
+                std::string list;
+                for (std::size_t i = 0; i < handlers.size(); ++i) { if (i) list += ", "; list += handlers[i]; }
+                return "(" + expr(*m.object) + ")." + networkMemberName(receiver, m.property) +
+                       "(" + expr(*c.arguments[0]) + ", ::cp3::runtime::network::detail::HandlerList{" + list + "})";
+            }
+        }
+    }
+    // Response agent (§5b, inlined emitwebserverResponseCall).
+    if (receiver.name == kHttpResponse) {
+        const std::string recv = "(" + expr(*m.object) + ")";
+        if ((m.property == "set" || m.property == "links") && c.arguments.size() == 1 &&
+            c.arguments.front() && c.arguments.front()->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*c.arguments.front());
+            std::string pairs;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value || p->isMethod) continue;
+                std::string key;
+                if (p->key && p->key->kind == NodeKind::Identifier && !p->computed) key = static_cast<Identifier&>(*p->key).name;
+                else if (p->key && p->key->kind == NodeKind::StringLiteral && !p->computed) key = static_cast<StringLiteral&>(*p->key).value;
+                else if (p->key) key = expr(*p->key);
+                else continue;
+                if (!pairs.empty()) pairs += ", ";
+                pairs += "{\"" + key + "\", " + expr(*p->value) + "}";
+            }
+            return recv + "." + m.property +
+                   "(std::vector<std::pair<std::string, std::string>>{" + pairs + "})";
+        }
+        if (m.property == "set" && c.arguments.size() == 1 && c.arguments.front()) {
+            const Type argType = effectiveType(*c.arguments.front());
+            if (argType.name == "Map" || argType.kind == TypeKind::Class) {
+                needsCollections_ = true;
+                return recv + ".set(" + expr(*c.arguments.front()) + ")";
+            }
+        }
+        if (m.property == "format" && c.arguments.size() == 1 && c.arguments.front() &&
+            c.arguments.front()->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*c.arguments.front());
+            std::string entries;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value || p->isMethod) continue;
+                std::string key;
+                if (p->key && p->key->kind == NodeKind::Identifier && !p->computed) key = static_cast<Identifier&>(*p->key).name;
+                else if (p->key && p->key->kind == NodeKind::StringLiteral && !p->computed) key = static_cast<StringLiteral&>(*p->key).value;
+                else continue;
+                if (!entries.empty()) entries += ", ";
+                entries += "{\"" + key + "\", " + expr(*p->value) + "}";
+            }
+            return recv + ".format(std::vector<std::pair<std::string, std::function<void()>>>{" + entries + "})";
+        }
+        if (m.property == "render" && c.arguments.size() >= 1 && c.arguments.front()) {
+            if (c.arguments.size() == 1) {
+                return recv + ".render(" + expr(*c.arguments.front()) + ")";
+            }
+            if (c.arguments.size() >= 2 && c.arguments[1]) {
+                const std::string locals = networkJsonValueText(*c.arguments[1]);
+                if (locals.empty()) {
+                    reportTypeError(*c.arguments[1], "type mismatch: res.render(view, locals) needs a serialisable locals object");
+                    return "0.0";
+                }
+                needsJson_ = true;
+                return recv + ".render(" + expr(*c.arguments.front()) + ", " + locals + ")";
+            }
+        }
+        if (m.property == "vary" && c.arguments.size() == 1 && c.arguments.front() &&
+            c.arguments.front()->kind == NodeKind::ArrayLiteral) {
+            const auto& arr = static_cast<const ArrayLiteral&>(*c.arguments.front());
+            std::string items;
+            for (const auto& e : arr.elements) {
+                if (!e) continue;
+                if (!items.empty()) items += ", ";
+                items += expr(*e);
+            }
+            return recv + ".vary(std::vector<std::string>{" + items + "})";
+        }
+    }
+    if ((m.property == "cookie" || m.property == "clearCookie") &&
         effectiveType(*m.object).name == kHttpResponse) {
-        // `res.cookie(name, value, options?)`: build the Set-Cookie header
-        // value. `options` (an object literal) contributes `maxAge`,
-        // `path`, `httpOnly` and `secure` when present as literals; unknown
-        // options are ignored, like JS's.
-        if (c.arguments.size() < 2 || !c.arguments[0] || !c.arguments[1]) {
+        // Cookie agent (codegen_cookie.inc A, verbatim logic).
+        if (c.arguments.size() < (m.property == "cookie" ? 2u : 1u) ||
+            !c.arguments[0]) {
             reportCodegenError(c, diagcode::kArityMismatch,
-                               "arity mismatch: res.cookie() expects at least "
-                               "a name and a value");
+                               "arity mismatch: res." + m.property +
+                                   "() expects a name (and a value for cookie)");
             return "0.0";
         }
-        std::string value = expr(*c.arguments[0]) + " + \"=\" + " +
-                            expr(*c.arguments[1]);
-        if (c.arguments.size() >= 3 && c.arguments[2] &&
-            c.arguments[2]->kind == NodeKind::ObjectLiteral) {
-            const auto& options =
-                static_cast<const ObjectLiteral&>(*c.arguments[2]);
-            for (const auto& propertyPtr : options.properties) {
+        std::string opts = "([&]{ ::cp3::runtime::network::webserver::CookieOptions o;";
+        if (c.arguments.size() >= (m.property == "cookie" ? 3u : 2u) &&
+            c.arguments[m.property == "cookie" ? 2 : 1]) {
+            const Expr& optArg = *c.arguments[m.property == "cookie" ? 2 : 1];
+            if (optArg.kind != NodeKind::ObjectLiteral) {
+                reportCodegenError(c, diagcode::kTypeMismatch,
+                                   "res." + m.property +
+                                       "() options must be an object literal");
+                return "0.0";
+            }
+            for (const auto& propertyPtr :
+                 static_cast<const ObjectLiteral&>(optArg).properties) {
                 const ObjectProperty* p = propertyPtr.get();
                 if (!p || !p->value || p->isMethod || !p->key ||
-                    p->key->kind != NodeKind::Identifier) {
-                    continue;
-                }
-                const std::string field =
-                    static_cast<Identifier&>(*p->key).name;
+                    p->key->kind != NodeKind::Identifier) continue;
+                const std::string field = static_cast<Identifier&>(*p->key).name;
+                const Expr& v = *p->value;
                 if (field == "maxAge") {
-                    value += " + \"; Max-Age=\" + ::cp3::runtime::toString(" +
-                             expr(*p->value) + ")";
+                    opts += " o.hasMaxAge=true; o.maxAge=(" + expr(v) + ")/1000.0;";
+                } else if (field == "expires") {
+                    if (v.kind == NodeKind::NumberLiteral)
+                        opts += " o.expires=::cp3::runtime::network::webserver::httpDateFromEpochMs(" + expr(v) + ");";
+                    else
+                        opts += " o.expires=::cp3::runtime::toString(" + expr(v) + ");";
                 } else if (field == "path") {
-                    value += " + \"; Path=\" + ::cp3::runtime::toString(" +
-                             expr(*p->value) + ")";
-                } else if (field == "httpOnly" &&
-                           p->value->kind == NodeKind::BoolLiteral &&
-                           static_cast<BoolLiteral&>(*p->value).value) {
-                    value += " + \"; HttpOnly\"";
-                } else if (field == "secure" &&
-                           p->value->kind == NodeKind::BoolLiteral &&
-                           static_cast<BoolLiteral&>(*p->value).value) {
-                    value += " + \"; Secure\"";
+                    opts += " o.path=::cp3::runtime::toString(" + expr(v) + ");";
+                } else if (field == "domain") {
+                    opts += " o.domain=::cp3::runtime::toString(" + expr(v) + ");";
+                } else if (field == "secure") {
+                    opts += " o.secure=(" + expr(v) + ")!=0;";
+                } else if (field == "httpOnly") {
+                    opts += " o.httpOnly=(" + expr(v) + ")!=0;";
+                } else if (field == "signed") {
+                    opts += " o.signed_= (" + expr(v) + ")!=0;";
+                } else if (field == "sameSite") {
+                    if (v.kind == NodeKind::StringLiteral) {
+                        const std::string s = static_cast<StringLiteral&>(v).value;
+                        if (s == "strict") opts += " o.sameSite=::cp3::runtime::network::webserver::SameSite::kStrict;";
+                        else if (s == "lax") opts += " o.sameSite=::cp3::runtime::network::webserver::SameSite::kLax;";
+                        else if (s == "none") opts += " o.sameSite=::cp3::runtime::network::webserver::SameSite::kNone;";
+                        else opts += " o.sameSite=::cp3::runtime::network::webserver::SameSite::kUnset;";
+                    } else {
+                        reportCodegenError(c, diagcode::kTypeMismatch,
+                                           "res.cookie() 'sameSite' must be a string literal: \"strict\"|\"lax\"|\"none\"");
+                        return "0.0";
+                    }
                 }
             }
         }
-        return "(" + expr(*m.object) + ").cookie(" + value + ")";
+        opts += " return o; }())";
+        if (m.property == "cookie") {
+            return "::cp3::runtime::network::webserver::setCookie((" + expr(*m.object) +
+                   "), " + expr(*c.arguments[0]) + ", " + expr(*c.arguments[1]) +
+                   ", " + opts + ")";
+        }
+        return "::cp3::runtime::network::webserver::clearCookie((" + expr(*m.object) +
+               "), " + expr(*c.arguments[0]) + ", " + opts + ")";
+    }
+    if (m.property == "set" && effectiveType(*m.object).name == kHttpServer) {
+        // Cookie agent: app.set("secret", s) (routing settings handled above).
+        if (c.arguments.size() == 2 && c.arguments[0] && c.arguments[1] &&
+            c.arguments[0]->kind == NodeKind::StringLiteral &&
+            static_cast<StringLiteral&>(*c.arguments[0]).value == "secret") {
+            return "(::cp3::runtime::network::webserver::setCookieSecret(" +
+                   expr(*c.arguments[1]) + "), (" + expr(*m.object) + "))";
+        }
+        return "(" + expr(*m.object) + ")"; // other keys: accepted, no-op (yet)
     }
     const std::string args = networkArgs(receiver, m.property, c);
     // Explicit generics (`res.json<T>()`): a T with no C++ spelling (a
@@ -603,7 +1002,7 @@ std::string Generator::networkFieldRead(const std::string& recv, const Type& typ
 /// The json value tree text of a response payload literal (docs 04
 /// §network). The json family's jsonValueText carries the plain literal
 /// forms; a payload also accepts a computed key (`{ [k]: 1 }`, whose key is a
-/// runtime expression) and a spread element (`{ ...base, b: 2 }`, whose source
+/// runtime webserverion) and a spread element (`{ ...base, b: 2 }`, whose source
 /// fields become members). "" when the payload holds a form the tree cannot
 /// carry (a method property, a computed key that is not a string, a nested
 /// spread).
@@ -625,7 +1024,7 @@ std::string Generator::networkJsonValueText(const Expr& e) {
     if (e.kind == NodeKind::ObjectLiteral) {
         const auto& literal = static_cast<const ObjectLiteral&>(e);
         // The members in source order: the key's C++ text (a literal name or
-        // a computed expression), the value's text, and the key the dedupe
+        // a computed webserverion), the value's text, and the key the dedupe
         // compares (a later member with the same key wins, the JS object
         // semantics, so an earlier one is dropped).
         struct Member {
@@ -671,7 +1070,7 @@ std::string Generator::networkJsonValueText(const Expr& e) {
                 continue;
             }
             if (property->computed) {
-                // A computed key: the key is a runtime expression and must be
+                // A computed key: the key is a runtime webserverion and must be
                 // a string.
                 if (!property->key) return std::string();
                 const CppInfo ci = info(*property->key);
@@ -717,6 +1116,23 @@ std::string Generator::networkJsonValueText(const Expr& e) {
 std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
     if (m.object == nullptr) return std::string();
     const std::string& name = effectiveType(*m.object).name;
+    // Cookie agent: req.signedCookies is computed, not a stored field.
+    if (name == kHttpRequest && m.property == "signedCookies") {
+        needsNetwork_ = true;
+        return "::cp3::runtime::network::webserver::signedCookiesFor(" +
+               expr(*m.object) + ")";
+    }
+    // Router agent [C4a]: baseUrl/originalUrl are stored fields on
+    // HttpRequest (maintained by Router::mountMiddleware in network.hpp).
+    if (name == kHttpRequest && (m.property == "baseUrl" || m.property == "originalUrl")) {
+        needsNetwork_ = true;
+        return "(" + expr(*m.object) + ")." + m.property;
+    }
+    // Response agent: res.headersSent -> headersSent() method.
+    if (name == kHttpResponse && m.property == "headersSent") {
+        needsNetwork_ = true;
+        return "(" + expr(*m.object) + ").headersSent()";
+    }
     bool known = false;
     if (name == kFetchResponse) {
         known = m.property == "ok" || m.property == "status" ||
@@ -754,19 +1170,13 @@ std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
         }
         return read;
     }
-    // `req.body` is the one documented read whose runtime member still does not
-    // exist: the body is buffered before dispatch, and the documented
-    // `ReadStream` shape is the fs family's file-backed stream
-    // (SEAM(readstream/fs)). A correct `body` needs an fs-owned stream over a
-    // buffer plus a streaming request pipeline, so report the documented
-    // alternative instead of emitting a raw C++ read that would not compile.
+    // Body-parse agent: `req.body` is the parsed body value tree
+    // (webserver::body_parse::parsedBody), replacing the old
+    // SEAM(readstream/fs) reportUnsupported arm.
     if (name == kHttpRequest && m.property == "body") {
-        reportUnsupported(
-            m, diagcode::kTypeMismatch,
-            "type mismatch: 'req.body' is unavailable because the runtime "
-            "buffers the request body; use 'await req.text()' or "
-            "'await req.json<T>()' instead");
-        return "0.0";
+        needsNetwork_ = true;
+        return "::cp3::runtime::network::webserver::body_parse::parsedBody(" +
+               expr(*m.object) + ")";
     }
     return std::string();
 }

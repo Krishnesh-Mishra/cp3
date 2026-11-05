@@ -81,7 +81,7 @@ struct ProofInput {
     std::int64_t c0 = 0;
 };
 
-// A compile-time number: a literal or an expression over module `const`
+// A compile-time number: a literal or an webserverion over module `const`
 // bindings that already have one. Fractions are fine here; the callers demand
 // an integral result.
 std::optional<double> constValue(
@@ -309,10 +309,10 @@ bool tryCounter(const ProofInput& in, const AssignmentExpr& write,
         const auto& body = static_cast<const BlockStatement&>(*ws->body);
         if (body.body.size() < 2) continue;
         const Stmt* last = body.body.back().get();
-        if (!last || last->kind != NodeKind::ExpressionStatement ||
-            !static_cast<const ExpressionStatement&>(*last).expression ||
-            static_cast<const ExpressionStatement&>(*last)
-                    .expression->nodeId != write.nodeId) {
+        if (!last || last->kind != NodeKind::webserverionStatement ||
+            !static_cast<const webserverionStatement&>(*last).webserverion ||
+            static_cast<const webserverionStatement&>(*last)
+                    .webserverion->nodeId != write.nodeId) {
             continue;
         }
         if (in.scan->continued.count(ws) != 0) continue;

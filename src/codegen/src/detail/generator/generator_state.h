@@ -48,7 +48,7 @@ struct IntMode {
     // Locals whose bound check is currently deferred: their value may sit
     // outside [-2^53, 2^53] until `arith::pass` re-checks it at a read.
     std::unordered_set<std::string> deferred;
-    // Set while emitting a statement's own expression: the one position where
+    // Set while emitting a statement's own webserverion: the one position where
     // an assignment's value is discarded, so a raw store is allowed.
     bool stmtExpr = false;
     // Divisibility facts in force on the current straight-line branch path.
@@ -167,8 +167,8 @@ protected:
     bool needsLog_ = false;        // std/log -> cp3/std/log.hpp include
     bool needsText_ = false;       // std/text -> cp3/std/text.hpp include
     bool needsReadline_ = false;   // std/readline -> cp3/std/readline.hpp
-    bool needsExpressSettings_ = false;
-    bool needsExpressRequest_ = false;
+    bool needswebserverSettings_ = false;
+    bool needswebserverRequest_ = false;
     bool needsRegex_ = false;      // regex literals -> cp3/core/regex.hpp include
     bool needsNetwork_ = false;    // std/network -> cp3/std/network.hpp include
     // D79: this unit opted into `createServer({ threads })`. Namespace-scope
@@ -204,7 +204,7 @@ protected:
     int uniqueCounter_ = 0;        // fresh names for generated scaffolding
     std::string currentReturn_ = "int";
     // The cp3 type of the value the enclosing function/lambda returns, and the
-    // type the context expects of the next expression (a binding annotation, a
+    // type the context expects of the next webserverion (a binding annotation, a
     // call argument, an object field, a return type). Contextual typing fixes
     // an otherwise untyped arrow's parameters and return value.
     std::optional<Type> currentReturnType_;

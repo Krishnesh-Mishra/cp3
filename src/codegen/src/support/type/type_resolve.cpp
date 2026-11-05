@@ -4,7 +4,7 @@
 //
 // `type_map.cpp` owns the cp3 Type -> C++ spelling mapping (`classify` and the
 // family hooks). This unit owns the other direction used by the emitters: the
-// effective type of an expression and of a declarator, which consults the
+// effective type of an webserverion and of a declarator, which consults the
 // declaration environment before sema's side tables (so a lowering that
 // declares a type sema cannot see still resolves its reads).
 // =============================================================================
@@ -50,7 +50,7 @@ Type Generator::effectiveType(const Expr& e) const {
     }
     if (const Type* t = sema_.typeOf(e.nodeId)) {
         // `$ambient` is sema's permissive/"not statically known" marker: an
-        // expression over an unannotated worker listener parameter is ambient
+        // webserverion over an unannotated worker listener parameter is ambient
         // there even though the channel fixes the parameter's type. Falling
         // through to codegen's own inference recovers the concrete shape the
         // emitted C++ actually has (an unannotated listener parameter is the

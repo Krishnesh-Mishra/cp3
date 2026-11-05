@@ -477,7 +477,7 @@ void Analyzer::hoistVarsIn(Stmt& s) {
         case NodeKind::LabeledStatement:
             return hoistVarBody(static_cast<LabeledStatement&>(s).body);
         default:
-            return;  // expression/return/etc. have no nested statements
+            return;  // webserverion/return/etc. have no nested statements
     }
 }
 

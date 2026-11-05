@@ -1,12 +1,12 @@
-﻿// =============================================================================
+// =============================================================================
 // src/sema/src/checks/call_check.cpp - call inference and overload resolution.
 //
-// Owns `inferCall` (the call-expression dispatcher), argument arity/type
+// Owns `inferCall` (the call-webserverion dispatcher), argument arity/type
 // checking (`checkArgs`), the per-callable special cases (`JSON.parse`/
 // `stringify`, the timer builtins) and overload resolution
-// (spec Â§17). The Promise statics live in the sibling promise_call.cpp;
+// (spec §17). The Promise statics live in the sibling promise_call.cpp;
 // member/index inference lives in member_check.cpp; primary
-// expressions live in expr_check.cpp (STYLE.md Â§8).
+// webserverions live in expr_check.cpp (STYLE.md §8).
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -81,7 +81,7 @@ Type Analyzer::inferCall(CallExpr& call) {
     } else if (call.callee) {
         ct = inferExpr(*call.callee);
         // JSON.parse returns `unknown`: the shape is only known at runtime, so
-        // callers must narrow before use (spec Â§20).
+        // callers must narrow before use (spec §20).
         if (call.callee->kind == NodeKind::MemberExpr) {
             checkParallelCall(call);
             auto& member = static_cast<MemberExpr&>(*call.callee);
@@ -104,7 +104,7 @@ Type Analyzer::inferCall(CallExpr& call) {
     }
 
     if (sig != nullptr) {
-        // A generic function substitutes its type arguments first (spec Â§16).
+        // A generic function substitutes its type arguments first (spec §16).
         if (!sig->typeParams.empty()) return inferGenericCall(call, *sig);
         checkArgs(*sig, call);
         return withType(call, sig->ret);
@@ -147,7 +147,7 @@ bool Analyzer::tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
     return tryInferBufferCall(call, m, out);
 }
 
-// Core timer builtins (spec Â§14, STDLIB docs Â§03): honest result types so
+// Core timer builtins (spec §14, STDLIB docs §03): honest result types so
 // `let id = setInterval(...)`, `clearTimeout(id)` and `await sleep(...)` type
 // correctly (the ambient table is permissive by default). Returns true when
 // `id` is one of them and `out` is set.
@@ -446,9 +446,11 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
         FuncSig sig;
         sig.annotatedReturn = true;
         sig.name = "JSON." + m.property;
-        // JSON.parse<T>(...) returns T (explicit) or `unknown` (callers must
-        // narrow); JSON.stringify yields a string.
+        // JSON.parse<T>(...) returns T (explicit). Bare JSON.parse(...)
+        // is a compile error (CP3208, docs/design/remove-void-unknown.md
+        // �6.2): the result type is only known with a type argument.
         Type t = Type::unknown();
+        bool parseMissingTypeArg = false;
         if (m.property == "stringify") {
             const Type replacer = Type::function(
                 {Type::string(), Type::unknown()}, Type::unknown());
@@ -465,8 +467,21 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
             sig.optional = {false};
             if (!call.typeArgs.empty() && call.typeArgs.front()) {
                 t = resolveType(*call.typeArgs.front());
+            } else {
+                // Untyped JSON.parse(text): report CP3208 and return
+                // `undefined` (no value type is known; callers must write
+                // JSON.parse<T>(x)). The check lives here so imports are
+                // resolved, unlike the token-level spelling check the
+                // parser used to do.
+                parseMissingTypeArg = true;
+                t = Type::undefined();
             }
             sig.ret = t;
+        }
+        if (parseMissingTypeArg) {
+            report(diagcode::kJsonParseMissingTypeArgument, call.span,
+                   "JSON.parse requires a type argument; use "
+                   "JSON.parse<T>(x)");
         }
         checkArgs(sig, call);
         out = withType(call, t);
@@ -715,7 +730,7 @@ std::string Analyzer::arityText(std::size_t required, std::size_t maxArgs,
 }
 
 // =============================================================================
-// Overload resolution (spec Â§17)
+// Overload resolution (spec §17)
 // =============================================================================
 Type Analyzer::inferOverloadCall(CallExpr& call, const Binding& binding,
                                  Identifier& id) {

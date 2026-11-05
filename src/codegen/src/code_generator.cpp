@@ -242,20 +242,20 @@ void Generator::runUnit(const Program& program, std::string& decls,
 namespace {
 
 std::optional<double> evalNumericConstant(
-    const Expr& expression,
+    const Expr& webserverion,
     const std::unordered_map<std::string, double>& values) {
-    switch (expression.kind) {
+    switch (webserverion.kind) {
         case NodeKind::NumberLiteral:
-            return static_cast<const NumberLiteral&>(expression).value;
+            return static_cast<const NumberLiteral&>(webserverion).value;
         case NodeKind::Identifier: {
             const std::string& name =
-                static_cast<const Identifier&>(expression).name;
+                static_cast<const Identifier&>(webserverion).name;
             const auto found = values.find(name);
             return found == values.end() ? std::nullopt
                                          : std::optional<double>(found->second);
         }
         case NodeKind::UnaryExpr: {
-            const auto& unary = static_cast<const UnaryExpr&>(expression);
+            const auto& unary = static_cast<const UnaryExpr&>(webserverion);
             if (!unary.operand || (unary.op != UnaryOp::Negate &&
                                    unary.op != UnaryOp::Plus)) {
                 return std::nullopt;
@@ -268,7 +268,7 @@ std::optional<double> evalNumericConstant(
                                          : std::nullopt;
         }
         case NodeKind::BinaryExpr: {
-            const auto& binary = static_cast<const BinaryExpr&>(expression);
+            const auto& binary = static_cast<const BinaryExpr&>(webserverion);
             if (!binary.left || !binary.right) return std::nullopt;
             const auto left = evalNumericConstant(*binary.left, values);
             const auto right = evalNumericConstant(*binary.right, values);

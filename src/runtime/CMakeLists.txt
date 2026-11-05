@@ -51,9 +51,14 @@ target_include_directories(cp3_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inclu
 # time (src/cli/src/detail/native_packages.hpp), not into this library.
 target_include_directories(cp3_runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/libsodium/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/unordered_dense/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/libuv/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/uWebSockets/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/pcre2/include"
+    # Header-only: cp3/std/json_parse.hpp converts JSON numbers with
+    # fast_float::from_chars (no archive to link). Needed here because the
+    # network TUs include cp3/std/json.hpp.
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/fast_float/include"
 )
 # PCRE2 is consumed as a static 8-bit library: pcre2.h needs both defines
 # before it is included (src/core/regex.cpp is the only TU that includes it).

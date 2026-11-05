@@ -542,7 +542,7 @@ std::string Generator::emitIndexExpr(const IndexExpr& ix) {
     if (recv.isLiteral()) recv = recv.literalBaseType();
     if (recv.isError()) {
         // Sema already reported the ill-typed receiver; a second diagnostic
-        // for the same expression would only duplicate it.
+        // for the same webserverion would only duplicate it.
         return "0.0";
     }
     if (recv.isUnknown()) {

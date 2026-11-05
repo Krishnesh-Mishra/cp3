@@ -91,9 +91,9 @@ std::vector<std::string> networkObjectMemberNames(
 StdMemberDoc networkObjectMemberDoc(
     const std::string& objectTypeName, const std::string& member,
     TypeSystem ts = TypeSystem::TypeScript);
-std::vector<std::string> expressObjectMemberNames(
+std::vector<std::string> webserverObjectMemberNames(
     const std::string& objectTypeName);
-StdMemberDoc expressObjectMemberDoc(const std::string& objectTypeName,
+StdMemberDoc webserverObjectMemberDoc(const std::string& objectTypeName,
                                     const std::string& member,
                                     TypeSystem ts = TypeSystem::TypeScript);
 

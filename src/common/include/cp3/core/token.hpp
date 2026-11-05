@@ -9,12 +9,12 @@
 //
 // Template literals (`` `a${b}c` ``) are emitted as a small sequence, exactly
 // like JavaScript engines do, so the parser can drive re-lexing of the
-// interpolated expressions:
+// interpolated webserverions:
 //
 //     TemplateHead   "`a${"          (template with >= 1 substitution, opening)
-//     ... tokens of expression b ...
+//     ... tokens of webserverion b ...
 //     TemplateMiddle "}c${"          (zero or more; only if another sub follows)
-//     TemplateTail   "}" + "`"       (closing part after the last expression)
+//     TemplateTail   "}" + "`"       (closing part after the last webserverion)
 //     TemplateTail   also covers "}`" for the single-substitution case
 //   and for a template with NO substitution:
 //     TemplateString "`a c`"         (NoSubstitutionTemplate)

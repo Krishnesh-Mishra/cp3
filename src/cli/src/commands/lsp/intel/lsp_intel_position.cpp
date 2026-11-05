@@ -62,8 +62,8 @@ std::size_t significantAfter(const std::vector<Token>& tokens,
     return tokens.size();
 }
 
-// The tokens that must be followed by an expression.
-const TokenKind kExpressionOperators[] = {
+// The tokens that must be followed by an webserverion.
+const TokenKind kwebserverionOperators[] = {
     TokenKind::Assign, TokenKind::PlusAssign, TokenKind::MinusAssign,
     TokenKind::StarAssign, TokenKind::SlashAssign, TokenKind::PercentAssign,
     TokenKind::StarStarAssign, TokenKind::AmpersandAssign,
@@ -81,9 +81,9 @@ const TokenKind kExpressionOperators[] = {
     TokenKind::Arrow, TokenKind::Question,
 };
 
-// True when the token must be followed by an expression.
-bool expectsExpression(TokenKind kind) {
-    for (const TokenKind candidate : kExpressionOperators) {
+// True when the token must be followed by an webserverion.
+bool expectswebserverion(TokenKind kind) {
+    for (const TokenKind candidate : kwebserverionOperators) {
         if (candidate == kind) return true;
     }
     return false;
@@ -193,7 +193,7 @@ std::vector<OpenBracket> openBrackets(const std::vector<Token>& tokens,
 }
 
 // The position a keyword implies: the keyword opens a statement, an
-// expression, a declaration's name, a type or an import clause.
+// webserverion, a declaration's name, a type or an import clause.
 CompletionPosition keywordPosition(TokenKind kind) {
     switch (kind) {
         case TokenKind::KwReturn:
@@ -213,7 +213,7 @@ CompletionPosition keywordPosition(TokenKind kind) {
         case TokenKind::KwFor:
         case TokenKind::KwSwitch:
         case TokenKind::KwCatch:
-            return CompletionPosition::ExpressionStart;
+            return CompletionPosition::webserverionStart;
         case TokenKind::KwLet:
         case TokenKind::KwConst:
         case TokenKind::KwVar:
@@ -283,7 +283,7 @@ CompletionPosition tokenPosition(const std::vector<Token>& tokens,
     if (prev == nullptr) return CompletionPosition::StatementStart;
     // A line break ends the previous statement (cp3 has ASI).
     if (lineBreakBetween(text, prev->span.end.offset, offset) &&
-        !expectsExpression(prev->kind)) {
+        !expectswebserverion(prev->kind)) {
         return CompletionPosition::StatementStart;
     }
     switch (prev->kind) {
@@ -297,14 +297,14 @@ CompletionPosition tokenPosition(const std::vector<Token>& tokens,
         case TokenKind::Arrow:
         case TokenKind::Question:
         case TokenKind::Colon:
-            return CompletionPosition::ExpressionStart;
+            return CompletionPosition::webserverionStart;
         default:
             break;
     }
     const CompletionPosition keyword = keywordPosition(prev->kind);
     if (keyword != CompletionPosition::Unknown) return keyword;
-    // An identifier, a literal or a closing bracket: the expression goes on.
-    return CompletionPosition::ExpressionStart;
+    // An identifier, a literal or a closing bracket: the webserverion goes on.
+    return CompletionPosition::webserverionStart;
 }
 
 // -----------------------------------------------------------------------------

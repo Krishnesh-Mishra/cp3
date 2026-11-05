@@ -4,7 +4,7 @@
 // OWNERSHIP: the std/network family (src/std/network/**). Split out of
 // runtime_server.cpp (STYLE.md sec.2 source budget): the single-loop server and
 // the D79 scaled server share this dispatcher. It walks `ServerImpl::routes` in
-// registration order (Express semantics), runs `next()` continuations, and
+// registration order (webserver semantics), runs `next()` continuations, and
 // keeps a request alive across async handlers until their promise settles.
 // =============================================================================
 #include "cp3/std/network.hpp"
@@ -29,7 +29,7 @@ namespace {
 ///     slashes included), and mid-pattern it swallows exactly one segment.
 ///     The swallowed text is recorded under the capture name "*" (a repeated
 ///     wildcard overwrites). A trailing `/*` needs the `/` in the path, so
-///     `/files/*` matches `/files/a/b` but not bare `/files` (Express rule).
+///     `/files/*` matches `/files/a/b` but not bare `/files` (webserver rule).
 ///   * `*` and `/*` as the whole pattern match any path; a `*` inside a
 ///     larger segment is NOT a wildcard (it compares literally).
 bool pathMatches(const std::string& pattern, const std::string& path,
@@ -188,6 +188,50 @@ void runChain(const std::shared_ptr<PendingRequest>& pending) {
         StringMap params = collections::makeMap<std::string, std::string>();
         for (auto& [name, value] : captures) params->set(name, value);
         ctx.request.setParams(std::move(params));
+        // webserver `app.param(name, fn)` (routing/router agents): run the
+        // callbacks for captured names, in capture order, before the route
+        // handler. Each callback's next() advances; a pending promise defers
+        // the rest of the chain (via observeHandler on resume).
+        {
+            std::vector<std::pair<ParamFn, std::string>> steps;
+            for (auto& [cname, cvalue] : captures) {
+                for (auto& [pname, pf] : ctx.server->paramHandlers) {
+                    if (pname == cname) steps.emplace_back(pf, cvalue);
+                }
+            }
+            if (!steps.empty()) {
+                auto stepsShared = std::make_shared<std::vector<std::pair<ParamFn, std::string>>>(std::move(steps));
+                auto routeShared = std::make_shared<ServerImpl::Route>(route);
+                auto runStep = std::make_shared<std::function<void(std::size_t)>>();
+                *runStep = [pending, stepsShared, routeShared, runStep](std::size_t idx) {
+                    RequestContext& c = pending->context;
+                    if (c.done || c.response.sent()) return;
+                    if (idx >= stepsShared->size()) {
+                        auto advanced = std::make_shared<bool>(false);
+                        Next next([pending, advanced] { *advanced = true; runChain(pending); });
+                        Promise<void> promise = (*routeShared).handler(c.request, c.response, next);
+                        if (!promise.settled()) { observeHandler(pending, std::move(promise)); return; }
+                        if (promise.rejected()) throw promise.reason();
+                        if (*advanced) return;
+                        return;
+                    }
+                    auto advanced = std::make_shared<bool>(false);
+                    Next next([runStep, idx, advanced] { *advanced = true; (*runStep)(idx + 1); });
+                    Promise<void> promise = (*stepsShared)[idx].first(c.request, c.response, next, (*stepsShared)[idx].second);
+                    if (!promise.settled()) {
+                        ++c.pending;
+                        promise.then([pending, runStep, idx, advanced]() { if (pending->context.pending != 0) --pending->context.pending; if (*advanced) return; (*runStep)(idx + 1); continueChain(pending); }, [pending](Thrown err) { if (pending->context.pending != 0) --pending->context.pending; failRequestWithError(pending, err); });
+                        return;
+                    }
+                    if (promise.rejected()) throw promise.reason();
+                    if (*advanced) return;
+                    (*runStep)(idx + 1);
+                    return;
+                };
+                try { (*runStep)(0); } catch (...) { failRequestWithError(pending, Thrown::make("internal server error")); }
+                return;
+            }
+        }
         // `next()` owns chain progress from here. The flag lives on the heap so
         // an async handler that stores its `next` and calls it later is safe.
         auto advanced = std::make_shared<bool>(false);

@@ -1,7 +1,7 @@
 // =============================================================================
 // src/codegen/src/detail/expr_ops.h - PRIVATE binary-operator spelling helpers.
 //
-// Shared by the expression and equality emitters (STYLE section 8): the C++
+// Shared by the webserverion and equality emitters (STYLE section 8): the C++
 // token for the arithmetic/relational operators, and the comparison set whose
 // operands may use the no-negative-zero `%` lowering.
 // =============================================================================

@@ -116,8 +116,8 @@ set(cp3_codegen_sources
     ../std/log/codegen.cpp
     ../std/text/codegen.cpp
     ../std/readline/codegen.cpp
-    ../std/network/express/settings/codegen.cpp
-    ../std/network/express/request/codegen.cpp
+    ../std/network/webserver/settings/codegen.cpp
+    ../std/network/webserver/request/codegen.cpp
     ../std/console/codegen.cpp
     ../std/fs/codegen.cpp
     ../std/io/codegen.cpp

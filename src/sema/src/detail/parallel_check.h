@@ -6,7 +6,7 @@
 // it walks one closure body and records writes to captured state (CP3902) and
 // unsafe computed-index writes (CP3901). The class is defined across
 // parallel_check.cpp (statements + the `Analyzer` hook) and
-// parallel_expr_check.cpp (expressions + scope tracking); the small AST
+// parallel_expr_check.cpp (webserverions + scope tracking); the small AST
 // predicates below are shared by both walks and therefore live here.
 //
 // Implementation detail: lives under `src/sema/src/detail/` and is never included by
@@ -34,7 +34,7 @@ struct Finding {
     std::string message;
 };
 
-// --- AST predicates shared by the statement and expression walks -------------
+// --- AST predicates shared by the statement and webserverion walks -------------
 
 // The base identifier a member/index chain is rooted at (`a.b[i]` -> `a`), or
 // nullptr when the chain does not start at a simple identifier.
@@ -137,7 +137,7 @@ private:
     void scanFunctionBody(Stmt* body, ParamList& params);
     void scanExport(ExportDeclaration& e);
 
-    // --- expressions (parallel_expr_check.cpp) -------------------------------
+    // --- webserverions (parallel_expr_check.cpp) -------------------------------
     void scanExpr(Expr& e);
     void scanExprChildren(Expr& e);
     void scanOperatorExprs(Expr& e);

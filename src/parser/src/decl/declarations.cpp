@@ -271,6 +271,15 @@ ParamList ParserImpl::parseParamList() {
     return out;
 }
 
+// Generic type parameters: `<T extends X = Y>`, `<T extends X>`, `<T = Y>`
+// and `<T>`. The `extends` constraint and the `= Y` default are each a full
+// `parseType()` (so nested generics `Box<number>`, unions, function and
+// object types all parse, and nested `>>` closing is handled by
+// `expectGreater`); `extends` must precede `=`, and a default may appear
+// without a constraint. Both children are recorded on the `TypeParameter`
+// node (`constraint` / `defaultType`) and get node ids
+// (`node_ids.cpp`), so sema can resolve them into a `GenericParamSpec`.
+// See docs/design/generic-constraints.md.
 TypeParamList ParserImpl::parseTypeParamsIfPresent() {
     TypeParamList out;
     if (!check(TokenKind::Less)) return out;

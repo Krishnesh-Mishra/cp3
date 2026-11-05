@@ -46,6 +46,76 @@ Type elementTypeOf(const Type& array) {
     return array.parts.front();
 }
 
+// True for the value kinds that `Object.is` compares with the numeric /
+// string / bool runtime helper (JS semantics: NaN equals NaN, +0 != -0).
+bool isIsPrimitive(const Type& t) {
+    const Type base = t.literalBaseType();
+    return base.kind == TypeKind::Number || base.kind == TypeKind::String ||
+           base.kind == TypeKind::Boolean;
+}
+
+// True for kinds with no reference identity (primitives plus nullish).
+bool isPrimitiveValue(const Type& t) {
+    const Type base = t.literalBaseType();
+    return base.kind == TypeKind::Number || base.kind == TypeKind::String ||
+           base.kind == TypeKind::Boolean || base.kind == TypeKind::Null ||
+           base.kind == TypeKind::Undefined || base.kind == TypeKind::Native;
+}
+
+// If `e` is `Object.freeze` / `.seal` / `.preventExtensions` applied to
+// anything, return that method name; otherwise "".
+std::string freezeFamilyCall(const Expr& e) {
+    if (e.kind != NodeKind::CallExpr) return "";
+    const auto& call = static_cast<const CallExpr&>(e);
+    if (!call.callee || call.callee->kind != NodeKind::MemberExpr) return "";
+    const auto& m = static_cast<const MemberExpr&>(*call.callee);
+    if (m.property != "freeze" && m.property != "seal" &&
+        m.property != "preventExtensions") {
+        return "";
+    }
+    if (!m.object || m.object->kind != NodeKind::Identifier ||
+        static_cast<const Identifier&>(*m.object).name != "Object") {
+        return "";
+    }
+    return m.property;
+}
+
+// True when `e` is a member/index chain rooted in a freeze-family call, e.g.
+// `Object.freeze(o).nested` or `Object.freeze(o).list[0]`. This is the
+// deep-freeze query surface: the nested value of a frozen object is itself
+// frozen under the deep-freeze reading of `freeze` (see emitObjectCall).
+bool freezeRooted(const Expr& e) {
+    const Expr* cur = &e;
+    while (cur != nullptr) {
+        if (!freezeFamilyCall(*cur).empty()) return true;
+        if (cur->kind == NodeKind::MemberExpr) {
+            cur = static_cast<const MemberExpr&>(*cur).object.get();
+        } else if (cur->kind == NodeKind::IndexExpr) {
+            cur = static_cast<const IndexExpr&>(*cur).object.get();
+        } else {
+            return false;
+        }
+    }
+    return false;
+}
+
+// The freeze-family method a freeze-rooted chain is rooted in ("" if none).
+std::string freezeRootMethod(const Expr& e) {
+    const Expr* cur = &e;
+    while (cur != nullptr) {
+        const std::string name = freezeFamilyCall(*cur);
+        if (!name.empty()) return name;
+        if (cur->kind == NodeKind::MemberExpr) {
+            cur = static_cast<const MemberExpr&>(*cur).object.get();
+        } else if (cur->kind == NodeKind::IndexExpr) {
+            cur = static_cast<const IndexExpr&>(*cur).object.get();
+        } else {
+            return "";
+        }
+    }
+    return "";
+}
+
 }  // namespace
 
 std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {

@@ -24,7 +24,7 @@ void ParserImpl::parseDecorators(std::vector<ExprPtr>& out) {
         ExprPtr expr = parseAssignment();
         if (!expr) {
             report(diagcode::kUnexpectedToken,
-                   "expected a decorator expression after '@'");
+                   "expected a decorator webserverion after '@'");
             return;
         }
         expr->span = spanFrom(at);

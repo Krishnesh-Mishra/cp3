@@ -177,7 +177,7 @@ std::string Generator::workerListenerLambda(const ArrowFunction& arrow,
         }
         paramList = paramType + " " + name;
     }
-    if (arrow.body && arrow.expressionBody) {
+    if (arrow.body && arrow.webserverionBody) {
         body += expr(*static_cast<const Expr*>(arrow.body.get())) + ";";
     } else if (arrow.body) {
         stmt(*static_cast<const Stmt*>(arrow.body.get()), body, 1);

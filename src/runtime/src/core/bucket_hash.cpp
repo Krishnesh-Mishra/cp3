@@ -1,5 +1,5 @@
 // =============================================================================
-// cp3/src/core/bucket_hash.cpp - per-process seed for the internal bucket hash.
+// cp3/src/core/bucket_hash.cpp - per-process seed + XXH3 bucket mix.
 //
 // See cp3/core/bucket_hash.hpp and docs/design/hash-placement.md. This TU is
 // the only place libsodium is touched for bucket hashing: sodium_init() +
@@ -7,21 +7,44 @@
 // seed is never returned to user code.
 //
 // Backend: libsodium 1.0.22 static (third_party/libsodium, D70), the same
-// backend std/crypto uses. The generated-program link for any program that
-// uses Map/Set/LRUCache must therefore carry -lsodium (lead wiring, see
-// docs/design/hash-placement.md). Until that wiring lands, a program that
-// does not link libsodium and uses a collection will fail the final link
-// with an undefined reference to this TU's sodium symbols - that failure is
-// intentional and visible, not a silent fallback to std::hash.
-// Other runtime TUs that do not reference bucketSeed() do not pay for it:
-// the static archive only pulls this object when the symbol is referenced.
+// backend std/crypto uses, plus the vendored XXHash static archive
+// (third_party/xxhash, v0.8.3). The mix function is XXH3_64bits_withSeed
+// (XXH3, NOT the XXH64 that std/hash exposes as hash.xxhash64); XXH3 is the
+// faster of the two and its algorithmic instability across upstream minor
+// versions is safe here because bucket values are per-process only. The
+// generated-program link for any program that uses Map/Set/LRUCache must
+// therefore carry -lsodium AND -lxxhash (src/std/collections/native.hpp).
+// Until the -lxxhash wiring lands, a program that does not link libxxhash.a
+// and uses a collection will fail the final link with an undefined reference
+// to XXH3_64bits_withSeed - that failure is intentional and visible, not a
+// silent fallback to std::hash or wyhash (the wyhash implementation is
+// retired; do not reintroduce it as a fallback).
+// Other runtime TUs that do not reference bucketSeed()/bucketHashBytes() do
+// not pay for either archive: the static archive only pulls this object when
+// the symbol is referenced.
+//
+// XXH3_64bits_withSeed is declared below with a signature identical to
+// third_party/xxhash/include/xxhash.h (uint64_t(const void*, size_t,
+// uint64_t); XXH64_hash_t IS uint64_t and xxhash.h wraps its declarations in
+// extern "C", so this declaration is compatible if <xxhash.h> is ever
+// included alongside it). Declaring it directly keeps the cp3_runtime unit
+// build compiling without a new include root; if the runtime CMake gains
+// third_party/xxhash/include (the lead follow-up noted in bucket_hash.hpp),
+// replace this declaration with `#include <xxhash.h>`.
 // =============================================================================
 #include "cp3/core/bucket_hash.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <random>
 
 #include <sodium.h>
+
+// XXH3_64bits_withSeed, C linkage, exactly as declared in xxhash.h
+// (bool return type does not exist; the function always returns a hash).
+extern "C" std::uint64_t XXH3_64bits_withSeed(const void* input,
+                                              std::size_t length,
+                                              std::uint64_t seed);
 
 namespace cp3::runtime::detail {
 namespace {
@@ -72,5 +95,14 @@ std::uint64_t cachedSeed() noexcept {
 void ensureBucketSeed() noexcept { (void)cachedSeed(); }
 
 std::uint64_t bucketSeed() noexcept { return cachedSeed(); }
+
+std::uint64_t bucketHashBytes(const void* data, std::size_t len,
+                              std::uint64_t domainTag) noexcept {
+    // XXH3 accepts a null pointer only for length 0; spell the empty case
+    // out so behavior is identical whatever the caller passes for data.
+    const void* bytes = data != nullptr ? data : "";
+    const std::size_t count = data != nullptr ? len : 0;
+    return XXH3_64bits_withSeed(bytes, count, bucketSeed() ^ domainTag);
+}
 
 }  // namespace cp3::runtime::detail

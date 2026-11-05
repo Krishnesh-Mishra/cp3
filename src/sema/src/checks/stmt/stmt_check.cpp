@@ -46,7 +46,7 @@ void Analyzer::checkStmts(StmtList& body) {
 void Analyzer::visitStmt(Stmt& s) {
     switch (s.kind) {
         case NodeKind::EmptyStatement:
-        case NodeKind::ExpressionStatement:
+        case NodeKind::webserverionStatement:
         case NodeKind::BlockStatement:
         case NodeKind::VariableDeclaration:
         case NodeKind::FunctionDeclaration:
@@ -82,9 +82,9 @@ void Analyzer::visitExecStmt(Stmt& s) {
     switch (s.kind) {
         case NodeKind::EmptyStatement:
             return;
-        case NodeKind::ExpressionStatement: {
-            auto& es = static_cast<ExpressionStatement&>(s);
-            if (es.expression) inferExpr(*es.expression);
+        case NodeKind::webserverionStatement: {
+            auto& es = static_cast<webserverionStatement&>(s);
+            if (es.webserverion) inferExpr(*es.webserverion);
             return;
         }
         case NodeKind::BlockStatement: {
@@ -252,7 +252,7 @@ void Analyzer::visitLabeled(LabeledStatement& l) {
 void Analyzer::checkCondition(const Type& t, const SourceSpan& span) {
     if (t.isVoid()) {
         report(diagcode::kInvalidCondition, span,
-               "invalid condition: a void expression is not a valid condition");
+               "invalid condition: a void webserverion is not a valid condition");
     }
 }
 
@@ -487,7 +487,7 @@ bool Analyzer::detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
     return true;
 }
 
-// `member !== null` / `member != null` for member expressions
+// `member !== null` / `member != null` for member webserverions
 // (`n.next !== null`): narrowed by node ID. Only the non-null branch is
 // narrowed (the null branch keeps the declared type).
 bool Analyzer::detectNullNarrowing(Expr& cond, std::uint32_t& memberId,
@@ -560,11 +560,11 @@ void Analyzer::analyzeFor(ForStatement& stmt) {
         if (stmt.init->kind == NodeKind::VariableDeclaration) {
             declareVariableDeclaration(
                 static_cast<VariableDeclaration&>(*stmt.init));
-        } else if (stmt.init->kind == NodeKind::ExpressionStatement) {
-            auto& es = static_cast<ExpressionStatement&>(*stmt.init);
-            if (es.expression) inferExpr(*es.expression);
+        } else if (stmt.init->kind == NodeKind::webserverionStatement) {
+            auto& es = static_cast<webserverionStatement&>(*stmt.init);
+            if (es.webserverion) inferExpr(*es.webserverion);
         } else {
-            // init may be a bare expression node.
+            // init may be a bare webserverion node.
             if (auto* e = dynamicExpr(*stmt.init)) inferExpr(*e);
         }
     }
@@ -676,7 +676,7 @@ void Analyzer::analyzeReturn(ReturnStatement& stmt) {
             }
         } else if (hasArg) {
             // A tuple return type takes its element types from the literal
-            // positionally; the inferred array type cannot express that, so
+            // positionally; the inferred array type cannot webserver that, so
             // the tuple path checks the literal element by element.
             if (isTupleType(ctx.ret) &&
                 stmt.argument->kind == NodeKind::ArrayLiteral) {
@@ -755,7 +755,7 @@ void Analyzer::analyzeFunctionBody(FunctionDeclaration& fn) {
     Type inferredRet = finalCtx.ret;
     if (!sig.annotatedReturn) {
         inferredRet = finalCtx.returnTypes.empty()
-                          ? Type::voidType()
+                          ? Type::undefined()
                           : Type::unionOf(finalCtx.returnTypes);
     }
     updateFunctionReturnType(fn.nodeId,

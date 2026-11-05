@@ -9,8 +9,8 @@
 //   declarations.cpp  declarations, parameters, class/interface members
 //   patterns.cpp      binding patterns (destructuring)
 //   types.cpp         type syntax
-//   expressions.cpp   operator-precedence expression chain
-//   primary.cpp       primary/postfix expressions, call/member, literals
+//   webserverions.cpp   operator-precedence webserverion chain
+//   primary.cpp       primary/postfix webserverions, call/member, literals
 //   node_ids.cpp      nodeId assignment (DECISIONS.md D6)
 //   tokens.cpp        cursor / diagnostic / recovery helpers  (this header)
 //
@@ -134,8 +134,8 @@ private:
     StmtPtr parseThrowStatement();
     StmtPtr parseTryStatement();
     StmtPtr parseLabeledStatement();
-    StmtPtr parseExpressionStatement();
-    // `@Name` / `@Name(args)` compile-time decorators. The expression is kept
+    StmtPtr parsewebserverionStatement();
+    // `@Name` / `@Name(args)` compile-time decorators. The webserverion is kept
     // in the AST; sema resolves the name to a `comptime function`.
     void parseDecorators(std::vector<ExprPtr>& out);
     StmtPtr parseDecoratedStatement();
@@ -190,8 +190,8 @@ private:
     TypePtr parseObjectType();
     TypeList parseTypeArgs();
 
-    // --- expressions (expressions.cpp) --------------------------------------
-    ExprPtr parseExpression();
+    // --- webserverions (webserverions.cpp) --------------------------------------
+    ExprPtr parsewebserverion();
     ExprPtr parseAssignment();
     ExprPtr parseConditional();
     ExprPtr parseNullish();
@@ -210,7 +210,7 @@ private:
     ExprPtr parseUnary();
     ExprPtr parsePostfix();
 
-    // --- primary/postfix expressions (primary.cpp) --------------------------
+    // --- primary/postfix webserverions (primary.cpp) --------------------------
     ExprPtr parseCallMember();
     ExprPtr parseMemberAccess(ExprPtr expr, const Token& start);
     ExprPtr parsePrimaryLiteral(const Token& t);
@@ -222,7 +222,7 @@ private:
     ExprPtr parseObjectLiteral();
     ExprPtr parseTemplateLiteral();
     ExprPtr parseParenOrArrow();
-    ExprPtr parseGroupedExpression();
+    ExprPtr parseGroupedwebserverion();
     ExprPtr parseSingleParamArrow(bool isAsync);
     ExprPtr parseGenericArrow();
     bool tryParseCallTypeArgs(TypeList& out);

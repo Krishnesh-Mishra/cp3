@@ -3,7 +3,7 @@
 //
 // FROZEN INTERFACE (Beta One, frozen by the contracts pass - DECISIONS D14).
 //
-// This is the *semantic* type of a cp3 expression/binding, not the C++ spelling.
+// This is the *semantic* type of a cp3 webserverion/binding, not the C++ spelling.
 // sema computes it and publishes it in nodeId-keyed side tables (cp3/analysis.hpp);
 // codegen reads it back to choose C++ types and emitter strategies.
 //

@@ -77,7 +77,7 @@ bool repeatable(const Expr& e, const TypeOf& typeOf) {
             return true;
         case NodeKind::TemplateLiteral: {
             const auto& tl = static_cast<const TemplateLiteral&>(e);
-            for (const auto& part : tl.expressions) {
+            for (const auto& part : tl.webserverions) {
                 if (!part || !repeatable(*part, typeOf) ||
                     !formatSafe(typeOf(*part))) {
                     return false;
@@ -132,14 +132,14 @@ bool repeatable(const Expr& e, const TypeOf& typeOf) {
     }
 }
 
-// Does the expression read the binding `name`?
+// Does the webserverion read the binding `name`?
 bool mentionsName(const Expr& e, const std::string& name) {
     switch (e.kind) {
         case NodeKind::Identifier:
             return static_cast<const Identifier&>(e).name == name;
         case NodeKind::TemplateLiteral: {
             for (const auto& part :
-                 static_cast<const TemplateLiteral&>(e).expressions) {
+                 static_cast<const TemplateLiteral&>(e).webserverions) {
                 if (part && mentionsName(*part, name)) return true;
             }
             return false;
@@ -238,7 +238,7 @@ bool fusedMapShape(const StmtList& body, std::size_t index,
     const Stmt* first = body[index].get();
     const Stmt* second = body[index + 1].get();
     if (!first || !second || first->kind != NodeKind::VariableDeclaration ||
-        second->kind != NodeKind::ExpressionStatement) {
+        second->kind != NodeKind::webserverionStatement) {
         return false;
     }
     const auto& vd = static_cast<const VariableDeclaration&>(*first);
@@ -261,9 +261,9 @@ bool fusedMapShape(const StmtList& body, std::size_t index,
         return false;
     }
     if (ctx.infoOf(*nullish.left).shape != Shape::Optional) return false;
-    const auto& es = static_cast<const ExpressionStatement&>(*second);
-    if (!es.expression) return false;
-    const CallExpr* set = mapSetCall(*es.expression);
+    const auto& es = static_cast<const webserverionStatement&>(*second);
+    if (!es.webserverion) return false;
+    const CallExpr* set = mapSetCall(*es.webserverion);
     if (set == nullptr || !ctx.isPure(*set->arguments[0])) return false;
     const auto& setMember = static_cast<const MemberExpr&>(*set->callee);
     if (!setMember.object || !ctx.isPure(*setMember.object) ||
@@ -286,7 +286,7 @@ bool fusedMapShape(const StmtList& body, std::size_t index,
 }
 
 // A suffix for the fused form's generated names that none of the fused
-// expressions mention. The lambda opens a new C++ scope, so a user binding
+// webserverions mention. The lambda opens a new C++ scope, so a user binding
 // that happens to share a generated name is shadowed, not redeclared; the
 // suffix keeps that shadowing unobservable.
 std::string uniqueFusedSuffix(const std::string& texts, int& counter) {
@@ -320,7 +320,7 @@ std::string uniqueFusedSuffix(const std::string& texts, int& counter) {
 //       return v;
 //   })(m);
 //
-// The key is materialized as a value, not a reference. A key expression such
+// The key is materialized as a value, not a reference. A key webserverion such
 // as a chained `std::string("").append(...)` returns a reference to a
 // temporary; binding that result to `const auto&` would not extend the
 // temporary's lifetime, and the key would dangle before `findRef` uses it.
@@ -391,14 +391,14 @@ bool Generator::emitFusedMapUpdate(const StmtList& body, std::size_t& index,
     const std::string valueText = expr(*shape.value);
     // The lambda opens a new C++ scope, so a user binding that happens to
     // share a generated name is shadowed, not redeclared. Pick a suffix none
-    // of the expressions mention, so the shadowing cannot be observed.
+    // of the webserverions mention, so the shadowing cannot be observed.
     const std::string texts = obj + "\n" + key + "\n" + fallback + "\n" + valueText;
     const std::string suffix = uniqueFusedSuffix(texts, uniqueCounter_);
     const std::string mapVar = "cp3_map" + suffix;
     const std::string keyVar = "cp3_key" + suffix;
     const std::string slotVar = "cp3_slot" + suffix;
     const std::string valueVar = "cp3_value" + suffix;
-    // An identifier already names a live lvalue for the whole expression.
+    // An identifier already names a live lvalue for the whole webserverion.
     // Hold it by reference so string keys avoid a per-iteration copy; keep the
     // owning value form for computed keys, which may be temporary results.
     const std::string keyDecl =

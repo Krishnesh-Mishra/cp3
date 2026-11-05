@@ -11,6 +11,7 @@
 //   crc32c(input: string | Buffer): u32   (Castagnoli CRC-32C)
 //   fnv1a32(input: string | Buffer): u32  (FNV-1a 32-bit)
 //   fnv1a64(input: string | Buffer): u64  (FNV-1a 64-bit)
+//   xxhash64(input: string | Buffer): u64 (XXH64, seed 0)
 //
 // Width pattern (fs/process, cp3/host/std_integer.hpp): a TypeScript project
 // keeps `number` for every return; a Rust/C++ project gets the exact native
@@ -18,9 +19,13 @@
 // (canonical "u64") through stdIntegerType, so the module spells no native
 // id itself and typing/docs cannot drift when the table moves.
 //
-// xxhash64 is NOT in the table: no XXHash archive is vendored
-// (third_party/MANIFEST.md has no xxhash row), so it stays BLOCKED and any
-// use is CP3305 like any other undocumented member.
+// xxhash64 IS in the table: the vendored XXHash static archive
+// (third_party/xxhash, v0.8.3) is wired through the std/hash native row
+// (src/std/hash/native.hpp) and implemented in src/std/hash/runtime.cpp as
+// XXH64(data, len, seed 0). Only this wrapper may implement the name - a
+// hand-rolled replica is forbidden exactly as before. The internal bucket
+// hash (XXH3, seeded per-process) is a different function and never appears
+// in this table.
 //
 // The same table drives member typing, the CP3305 candidate list and the
 // editor documentation, so the three can never drift apart. hash is a CLOSED
@@ -77,6 +82,14 @@ const MemberRow kHashRows[] = {
      "non-crypto checksum, not security: safe for cache keys and corruption "
      "checks, never for authentication or integrity against an adversary "
      "(use std/crypto for that)."},
+    {"xxhash64", stringOrBufferToNumber,
+     "xxhash64(input: string | Buffer): u64",
+     "XXH64 checksum (seed 0, deterministic across runs) as an unsigned "
+     "64-bit value (number in a TypeScript project, where values above "
+     "2^53 lose precision). Fast non-crypto checksum, not security: safe "
+     "for cache keys and corruption checks, never for authentication or "
+     "integrity against an adversary (use std/crypto for that). The seed "
+     "is fixed to 0 and is not a parameter."},
 };
 
 }  // namespace
@@ -88,7 +101,7 @@ std::optional<Type> Analyzer::hashMember(const std::string& prop) {
     // Rust/C++ project gets the exact native width. The table row above
     // carries `number` as the placeholder return (last function part).
     if (!member->parts.empty()) {
-        if (prop == "fnv1a64") {
+        if (prop == "fnv1a64" || prop == "xxhash64") {
             member->parts.back() =
                 stdIntegerType(StdIntegerKind::Checksum64, options_.typeSystem);
         } else {

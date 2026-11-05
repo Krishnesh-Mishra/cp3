@@ -1,5 +1,5 @@
 // =============================================================================
-// Implementation of the pure integer expression proof; see
+// Implementation of the pure integer webserverion proof; see
 // detail/parallel_safety.h for the accepted subset and the soundness rules.
 // =============================================================================
 #include "detail/parallel/parallel_safety.h"
@@ -138,7 +138,7 @@ public:
         const SemaResult& sema, TypeSystem typeSystem)
         : functions_(functions), sema_(sema), typeSystem_(typeSystem) {}
 
-    bool expression(const Expr& e, const std::unordered_set<std::string>& names,
+    bool webserverion(const Expr& e, const std::unordered_set<std::string>& names,
                     const DivFacts& facts) {
         switch (e.kind) {
             case NodeKind::NumberLiteral:
@@ -152,15 +152,15 @@ public:
             case NodeKind::LogicalExpr: {
                 const auto& l = static_cast<const LogicalExpr&>(e);
                 return l.left && l.right &&
-                       expression(*l.left, names, facts) &&
-                       expression(*l.right, names, facts);
+                       webserverion(*l.left, names, facts) &&
+                       webserverion(*l.right, names, facts);
             }
             case NodeKind::ConditionalExpr: {
                 const auto& c = static_cast<const ConditionalExpr&>(e);
                 return c.condition && c.whenTrue && c.whenFalse &&
-                       expression(*c.condition, names, facts) &&
-                       expression(*c.whenTrue, names, facts) &&
-                       expression(*c.whenFalse, names, facts);
+                       webserverion(*c.condition, names, facts) &&
+                       webserverion(*c.whenTrue, names, facts) &&
+                       webserverion(*c.whenFalse, names, facts);
             }
             case NodeKind::UnaryExpr: {
                 const auto& u = static_cast<const UnaryExpr&>(e);
@@ -169,7 +169,7 @@ public:
                     u.op != UnaryOp::Not) {
                     return false;
                 }
-                return expression(*u.operand, names, facts);
+                return webserverion(*u.operand, names, facts);
             }
             case NodeKind::CallExpr:
                 return callExpr(static_cast<const CallExpr&>(e), names, facts);
@@ -191,8 +191,8 @@ private:
                     const std::unordered_set<std::string>& names,
                     const DivFacts& facts) {
         if (!b.left || !b.right) return false;
-        if (!expression(*b.left, names, facts) ||
-            !expression(*b.right, names, facts)) {
+        if (!webserverion(*b.left, names, facts) ||
+            !webserverion(*b.right, names, facts)) {
             return false;
         }
         switch (b.op) {
@@ -243,7 +243,7 @@ private:
         if (decl == functions_.end() || decl->second == nullptr) return false;
         if (c.arguments.size() != decl->second->params.size()) return false;
         for (const auto& arg : c.arguments) {
-            if (!arg || !expression(*arg, names, facts)) return false;
+            if (!arg || !webserverion(*arg, names, facts)) return false;
         }
         return function(callee);
     }
@@ -323,9 +323,9 @@ private:
             case NodeKind::VariableDeclaration:
                 return variableDeclaration(
                     static_cast<const VariableDeclaration&>(s), ctx);
-            case NodeKind::ExpressionStatement: {
-                const auto& es = static_cast<const ExpressionStatement&>(s);
-                return es.expression && writeExpression(*es.expression, ctx);
+            case NodeKind::webserverionStatement: {
+                const auto& es = static_cast<const webserverionStatement&>(s);
+                return es.webserverion && writewebserverion(*es.webserverion, ctx);
             }
             case NodeKind::IfStatement:
                 return ifStatement(static_cast<const IfStatement&>(s), ctx);
@@ -335,7 +335,7 @@ private:
                 ctx.facts.clear();
                 const bool ok =
                     ws.condition &&
-                    expression(*ws.condition, ctx.locals, ctx.facts) &&
+                    webserverion(*ws.condition, ctx.locals, ctx.facts) &&
                     loopBody(ws.body, ctx);
                 ctx.facts.clear();
                 return ok;
@@ -345,7 +345,7 @@ private:
                 ctx.facts.clear();
                 const bool ok =
                     loopBody(ds.body, ctx) && ds.condition &&
-                    expression(*ds.condition, ctx.locals, ctx.facts);
+                    webserverion(*ds.condition, ctx.locals, ctx.facts);
                 ctx.facts.clear();
                 return ok;
             }
@@ -354,7 +354,7 @@ private:
             case NodeKind::ReturnStatement: {
                 const auto& rs = static_cast<const ReturnStatement&>(s);
                 if (!rs.argument ||
-                    !expression(*rs.argument, ctx.locals, ctx.facts)) {
+                    !webserverion(*rs.argument, ctx.locals, ctx.facts)) {
                     return false;
                 }
                 ctx.sawReturn = true;
@@ -386,7 +386,7 @@ private:
                 return false;
             }
             if (!annotationIsNumber(d->type, sema_, typeSystem_)) return false;
-            if (!expression(*d->init, ctx.locals, ctx.facts)) return false;
+            if (!webserverion(*d->init, ctx.locals, ctx.facts)) return false;
             const std::string& name =
                 static_cast<const Identifier&>(*d->id).name;
             dropFacts(ctx.facts, name);
@@ -396,7 +396,7 @@ private:
     }
 
     bool ifStatement(const IfStatement& is, Context& ctx) {
-        if (!is.condition || !expression(*is.condition, ctx.locals, ctx.facts)) {
+        if (!is.condition || !webserverion(*is.condition, ctx.locals, ctx.facts)) {
             return false;
         }
         const auto baseFacts = ctx.facts;
@@ -447,17 +447,17 @@ private:
                 if (!statement(*initStmt, ctx)) return false;
             } else if (auto* initExpr =
                            dynamic_cast<const Expr*>(fs.init.get())) {
-                if (!writeExpression(*initExpr, ctx)) return false;
+                if (!writewebserverion(*initExpr, ctx)) return false;
             } else {
                 return false;
             }
         }
         // Init runs once; the repeating part may invalidate any outer fact.
         ctx.facts.clear();
-        if (fs.condition && !expression(*fs.condition, ctx.locals, ctx.facts)) {
+        if (fs.condition && !webserverion(*fs.condition, ctx.locals, ctx.facts)) {
             return false;
         }
-        if (fs.update && !writeExpression(*fs.update, ctx)) return false;
+        if (fs.update && !writewebserverion(*fs.update, ctx)) return false;
         if (fs.body && !statement(*fs.body, ctx)) return false;
         ctx.locals = savedLocals;
         ctx.facts.clear();
@@ -466,7 +466,7 @@ private:
 
     // Assignments may write only the function's own locals; any other target
     // is an observable effect and rejects.
-    bool writeExpression(const Expr& e, Context& ctx) {
+    bool writewebserverion(const Expr& e, Context& ctx) {
         if (e.kind == NodeKind::AssignmentExpr) {
             const auto& a = static_cast<const AssignmentExpr&>(e);
             if (!a.target || a.target->kind != NodeKind::Identifier ||
@@ -480,7 +480,7 @@ private:
                 a.op != AssignOp::Subtract && a.op != AssignOp::Multiply) {
                 return false;
             }
-            if (!expression(*a.value, ctx.locals, ctx.facts)) return false;
+            if (!webserverion(*a.value, ctx.locals, ctx.facts)) return false;
             dropFacts(ctx.facts, name);
             return true;
         }
@@ -495,7 +495,7 @@ private:
             dropFacts(ctx.facts, name);
             return true;
         }
-        return expression(e, ctx.locals, ctx.facts);
+        return webserverion(e, ctx.locals, ctx.facts);
     }
 
     const std::unordered_map<std::string, const FunctionDeclaration*>&
@@ -512,7 +512,7 @@ bool parallelPureIntegerExpr(
     const std::unordered_map<std::string, const FunctionDeclaration*>& functions,
     const SemaResult& sema, TypeSystem typeSystem) {
     Classifier classifier(functions, sema, typeSystem);
-    return classifier.expression(e, integerNames, {});
+    return classifier.webserverion(e, integerNames, {});
 }
 
 }  // namespace detail

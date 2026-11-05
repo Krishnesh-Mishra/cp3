@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // src/codegen/src/emit/call_args.cpp - argument lowering and value calls
 // (STYLE.md section 8).
 //
@@ -33,7 +33,7 @@ namespace cp3 {
 using namespace detail;
 
 namespace detail {
-// default expression, or is declared optional (`a?: T` lowers to
+// default webserverion, or is declared optional (`a?: T` lowers to
 // `std::optional<T> = std::nullopt`).
 bool optionalParamAt(const ParamList& params, std::size_t i) {
     if (i >= params.size()) return false;
@@ -766,7 +766,7 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
     const FunctionDeclaration* decl =
         declIt != g.functionDecls_.end() ? declIt->second : nullptr;
     // A `let f = <T>(x: T) => x` binding: the arrow owns the type parameters,
-    // so an explicit type-argument list names them (spec §16) exactly like a
+    // so an explicit type-argument list names them (spec �16) exactly like a
     // declared generic function's.
     const bool genericArrow = g.isGenericArrowBinding(name);
     const bool generic =
@@ -1015,7 +1015,7 @@ std::string Generator::linkedMemberMiss(const MemberExpr& m) const {
 
 std::string Generator::emitCall(const CallExpr& c) {
     // `super(...)` is lowered into the constructor's C++ base-initializer
-    // (ctorBaseInitText); the expression statement itself has no C++ body.
+    // (ctorBaseInitText); the webserverion statement itself has no C++ body.
     if (c.callee && c.callee->kind == NodeKind::Identifier &&
         static_cast<const Identifier&>(*c.callee).name == "super") {
         return std::string();
@@ -1038,14 +1038,14 @@ std::string Generator::emitCall(const CallExpr& c) {
         return calls.emitMemberCall(c, static_cast<const MemberExpr&>(*c.callee));
     }
     // A call through an indexed function value (`closures[i](x)`): the element
-    // expression is the callee.
+    // webserverion is the callee.
     if (c.callee->kind == NodeKind::IndexExpr) {
         const Type fnType = effectiveType(*c.callee);
         if (fnType.kind == TypeKind::Function) {
             return calls.emitFunctionCall(c, expr(*c.callee), fnType, nullptr);
         }
     }
-    // A call through any other expression (`f()(x)`, an immediately invoked
+    // A call through any other webserverion (`f()(x)`, an immediately invoked
     // arrow, a conditional function value): the callee is a function value.
     const Type fnType = effectiveType(*c.callee);
     if (fnType.kind == TypeKind::Function) {

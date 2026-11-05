@@ -92,7 +92,7 @@ const char* const kStatements[] = {
     "}",
 };
 
-const char* const kExpressions[] = {
+const char* const kwebserverions[] = {
     "let a = 1 + 2 * 3 ** 2 - 4 / 5 % 6;",
     "let b = x << 2 | y & 3 ^ ~z;",
     "let c = p && q || r ?? s;",
@@ -162,7 +162,7 @@ const CaseData kCases[] = {
     {"declarations", kDeclarations, 15},
     {"classes", kClasses, 19},
     {"statements", kStatements, 21},
-    {"expressions", kExpressions, 21},
+    {"webserverions", kwebserverions, 21},
     {"types", kTypes, 11},
     {"errors", kErrors, 2},
     {"edge", kEdge, 12},

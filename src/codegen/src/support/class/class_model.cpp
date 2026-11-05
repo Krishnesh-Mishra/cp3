@@ -78,7 +78,7 @@ std::string keyNameOf(const Expr* key) {
 
 // A class member's name: the key of a property, method or accessor. A
 // computed key (`[expr]`) names the member at runtime, which a cp3 class (a
-// fixed set of members) cannot express - unless the key is a literal, the one
+// fixed set of members) cannot webserver - unless the key is a literal, the one
 // form whose value is known at compile time.
 std::string classMemberName(const Expr* key, bool computed) {
     if (key == nullptr) return {};

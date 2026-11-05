@@ -126,7 +126,7 @@ bool Generator::intEffectful(const Expr& e) const {
         e.kind == NodeKind::AwaitExpr) {
         return true;
     }
-    // A write is allowed only as the whole expression of a statement. Nested
+    // A write is allowed only as the whole webserverion of a statement. Nested
     // writes would be evaluated in C++'s unspecified operand order (or after
     // the other operand), while JS evaluates left to right; reject the attempt
     // rather than guessing.
@@ -167,15 +167,15 @@ std::string Generator::int64DeclaratorText(const VariableDeclarator& d) {
            std::to_string(it->second.start);
 }
 
-// The guard every expression of the fast body passes: a call, a construction,
+// The guard every webserverion of the fast body passes: a call, a construction,
 // an await, a delete or a write outside a statement position is an observable
 // side effect the fast body must not run (the wrapper re-runs the double body
 // after a bail, so it would happen twice). A nested write would also follow
 // C++'s unspecified operand order, while JS evaluates left to right.
 void Generator::intGuardExpr(const Expr& e) {
     if (intEffectful(e)) intFail();
-    // Only a statement's whole expression may be a write (intEffectful): clear
-    // the flag before descending into the operands of any other expression so
+    // Only a statement's whole webserverion may be a write (intEffectful): clear
+    // the flag before descending into the operands of any other webserverion so
     // a nested write rejects the attempt.
     if (intMode_ && intMode_->stmtExpr &&
         e.kind != NodeKind::AssignmentExpr &&
@@ -255,7 +255,7 @@ std::string Generator::intUpdate(const UpdateExpr& u) {
         return kNoValue;
     }
     // The helpers take a reference, so the old value must be in range *before*
-    // the update, and a deferred read is a comma expression, not an lvalue.
+    // the update, and a deferred read is a comma webserverion, not an lvalue.
     if (intMode_ && intMode_->deferred.count(id.name)) {
         intFail();
         return kNoValue;

@@ -18,6 +18,7 @@
 #include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/class/class_model.h"
 #include "detail/class/class_walk.h"
+#include "emit/class/auto_weak.h"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
@@ -47,10 +48,10 @@ const CallExpr* superCtorCall(const Stmt* body) {
     if (body == nullptr || body->kind != NodeKind::BlockStatement) return nullptr;
     const auto& block = static_cast<const BlockStatement&>(*body);
     for (const StmtPtr& stmt : block.body) {
-        if (!stmt || stmt->kind != NodeKind::ExpressionStatement) continue;
-        const auto& es = static_cast<const ExpressionStatement&>(*stmt);
-        if (!es.expression || es.expression->kind != NodeKind::CallExpr) continue;
-        const auto& call = static_cast<const CallExpr&>(*es.expression);
+        if (!stmt || stmt->kind != NodeKind::webserverionStatement) continue;
+        const auto& es = static_cast<const webserverionStatement&>(*stmt);
+        if (!es.webserverion || es.webserverion->kind != NodeKind::CallExpr) continue;
+        const auto& call = static_cast<const CallExpr&>(*es.webserverion);
         if (call.callee && call.callee->kind == NodeKind::Identifier &&
             static_cast<const Identifier&>(*call.callee).name == "super") {
             return &call;
@@ -263,7 +264,9 @@ std::string Generator::classLiteralInit(const ClassModel& cm,
         if (value == nullptr) continue;
         const std::string field = "cp3_v->" + mapIdent(m.name);
         const bool nullish = isNullishLiteral(*value);
-        if (m.isWeak) {
+        // A proven auto-weak field initializes through WeakRef exactly
+        // like a manual `weak` field.
+        if (m.isWeak || isAutoWeakField(sema_, cm, m.name)) {
             out += " " + field + (nullish ? ".reset()" : " = " + expr(*value)) +
                    ";";
             continue;

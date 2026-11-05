@@ -1,12 +1,12 @@
 // =============================================================================
-// src/codegen/src/detail/expr_mixed.h - PRIVATE mixed-type expression
+// src/codegen/src/detail/expr_mixed.h - PRIVATE mixed-type webserverion
 // lowerings (STYLE.md section 8).
 //
 // A logical operator or a ternary whose two sides have different C++ types
 // must pick ONE type for the result. This helper owns that choice:
 //
 //   * a union over primitives -> the canonical `std::variant`
-//     (cp3/core/union.hpp); each side is wrapped into it, so the expression
+//     (cp3/core/union.hpp); each side is wrapped into it, so the webserverion
 //     has the variant's type;
 //   * a union with a nullish side -> the optional / `Maybe<T>` the nullish
 //     union lowers to; the nullish side is the empty slot.
@@ -24,7 +24,7 @@
 namespace cp3 {
 namespace detail {
 
-// The two sides of a mixed expression, with the text the emitter already
+// The two sides of a mixed webserverion, with the text the emitter already
 // produced for them and the result type the value model picked.
 struct MixedBranches {
     CppInfo left;               // the true / left side

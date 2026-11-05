@@ -155,7 +155,7 @@ std::string Generator::sourceIncludes() const {
     if (needsText_) out += "#include \"cp3/std/text.hpp\"\n";
     if (needsReadline_) out += "#include \"cp3/std/readline.hpp\"\n";
     if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
-    if (needsExpressSettings_) out += "#include \"cp3/std/network/express/settings.hpp\"\n";
+    if (needswebserverSettings_) out += "#include \"cp3/std/network/webserver/settings.hpp\"\n";
     if (needsCollections_) {
         out += "#include \"cp3/std/collections.hpp\"\n";  // Map/Set (D44)
     }

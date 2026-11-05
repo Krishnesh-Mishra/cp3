@@ -425,7 +425,7 @@ inline std::string fromCodePoint(std::initializer_list<double> codes) {
 
 // --- matchAll + raw ---------------------------------------------------------
 
-// `s.matchAll(regexp)`: every match of a GLOBAL regular expression, one
+// `s.matchAll(regexp)`: every match of a GLOBAL regular webserverion, one
 // `string[]` per match ([full, group1, ...], the same shape `RegExp.exec`
 // returns). JS returns a lazy iterator; CP3 returns the eager
 // `Array<Array<string>>` of every match instead (there is no iterator for
@@ -441,7 +441,7 @@ inline ::cp3::runtime::Array<::cp3::runtime::Array<std::string>> matchAll(
     if (flags.find('g') == std::string::npos) {
         std::fprintf(stderr,
                      "cp3: TypeError: String.matchAll requires a global "
-                     "regular expression (flag 'g')\n");
+                     "regular webserverion (flag 'g')\n");
         std::fflush(stderr);
         std::exit(1);
     }

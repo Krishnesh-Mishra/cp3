@@ -15,7 +15,7 @@
 //     codegen keep side tables keyed by nodeId, so the AST stays a pure parse
 //     product. Fields reserved for later use are documented as such.
 //
-// Coverage note - constructs the spec expresses without a dedicated node are
+// Coverage note - constructs the spec webserveres without a dedicated node are
 // modelled by composition and MUST be documented in ARCHITECTURE.md:
 //   * `parallel.for(...)` / `parallel.reduce(...)` / `parallel.run(...)`
 //        -> CallExpr{ callee = MemberExpr{ Identifier("parallel"), "for" }, ... }
@@ -75,7 +75,7 @@ enum class ExportKind { Named, Default, Declaration, ReExportAll, ReExportNamed 
 // -----------------------------------------------------------------------------
 #define CP3_AST_NODE_LIST(X) \
     X(Program)                    \
-    /* --- expressions --- */     \
+    /* --- webserverions --- */     \
     X(NumberLiteral)              \
     X(StringLiteral)              \
     X(BoolLiteral)                \
@@ -113,7 +113,7 @@ enum class ExportKind { Named, Default, Declaration, ReExportAll, ReExportNamed 
     X(RestElement)                \
     X(AssignmentPattern)          \
     /* --- statements --- */       \
-    X(ExpressionStatement)        \
+    X(webserverionStatement)        \
     X(BlockStatement)             \
     X(EmptyStatement)             \
     X(VariableDeclaration)        \
@@ -288,7 +288,7 @@ struct Program : Node {
 };
 
 // =============================================================================
-// Expressions
+// webserverions
 // =============================================================================
 struct NumberLiteral : Expr {
     double value = 0.0;
@@ -327,10 +327,10 @@ struct TemplateElement : Node {
     explicit TemplateElement(SourceSpan s) : Node(NodeKind::TemplateElement, std::move(s)) {}
 };
 
-// `head${e0}mid${e1}tail` - quasis.size() == expressions.size() + 1.
+// `head${e0}mid${e1}tail` - quasis.size() == webserverions.size() + 1.
 struct TemplateLiteral : Expr {
     std::vector<TemplateElementPtr> quasis;
-    ExprList expressions;
+    ExprList webserverions;
     explicit TemplateLiteral(SourceSpan s) : Expr(NodeKind::TemplateLiteral, std::move(s)) {}
 };
 
@@ -360,7 +360,7 @@ struct ArrayLiteral : Expr {
 };
 
 // A property in an object literal. `key` is an Identifier/StringLiteral/
-// NumberLiteral, or an arbitrary expression when `computed`.
+// NumberLiteral, or an arbitrary webserverion when `computed`.
 struct ObjectProperty : Node {
     ExprPtr key;
     ExprPtr value;          // may be nullptr for shorthand (`{ a }` -> value = Identifier a)
@@ -465,8 +465,8 @@ struct ArrowFunction : Expr {
     TypeParamList typeParams;
     ParamList params;
     TypePtr returnType;     // optional
-    NodePtr body;           // Expression (expressionBody=true) or BlockStatement
-    bool expressionBody = true;
+    NodePtr body;           // webserverion (webserverionBody=true) or BlockStatement
+    bool webserverionBody = true;
     explicit ArrowFunction(SourceSpan s) : Expr(NodeKind::ArrowFunction, std::move(s)) {}
 };
 
@@ -484,7 +484,7 @@ struct RangeExpr : Expr {
 
 // `expr as Type` - a compile-time-checked type assertion (TypeScript `as`).
 struct AsExpr : Expr {
-    ExprPtr expression;
+    ExprPtr webserverion;
     TypePtr type;
     explicit AsExpr(SourceSpan s) : Expr(NodeKind::AsExpr, std::move(s)) {}
 };
@@ -492,7 +492,7 @@ struct AsExpr : Expr {
 // `expr!` - a non-null assertion: emits a null check that throws an `Error`
 // on null.
 struct NonNullExpr : Expr {
-    ExprPtr expression;
+    ExprPtr webserverion;
     explicit NonNullExpr(SourceSpan s) : Expr(NodeKind::NonNullExpr, std::move(s)) {}
 };
 
@@ -535,10 +535,10 @@ struct AssignmentPattern : Node {
 // =============================================================================
 // Statements & declarations
 // =============================================================================
-struct ExpressionStatement : Stmt {
-    ExprPtr expression;
-    explicit ExpressionStatement(SourceSpan s)
-        : Stmt(NodeKind::ExpressionStatement, std::move(s)) {}
+struct webserverionStatement : Stmt {
+    ExprPtr webserverion;
+    explicit webserverionStatement(SourceSpan s)
+        : Stmt(NodeKind::webserverionStatement, std::move(s)) {}
 };
 
 struct BlockStatement : Stmt {
@@ -581,7 +581,7 @@ struct ClassDeclaration : Stmt {
     std::string name;
     TypeParamList typeParams;
     TypePtr extendsType;         // single inheritance
-    ExprPtr extendsExpr;         // compile-time `extends` expression (optional)
+    ExprPtr extendsExpr;         // compile-time `extends` webserverion (optional)
     TypeList implementsTypes;    // optional, self-documenting only
     std::vector<ClassMemberPtr> members;
     std::vector<ExprPtr> decorators;  // compile-time macros
@@ -650,7 +650,7 @@ struct DoWhileStatement : Stmt {
         : Stmt(NodeKind::DoWhileStatement, std::move(s)) {}
 };
 
-// init is a VariableDeclaration or an Expression (or nullptr).
+// init is a VariableDeclaration or an webserverion (or nullptr).
 struct ForStatement : Stmt {
     NodePtr init;
     ExprPtr condition;  // optional
@@ -659,7 +659,7 @@ struct ForStatement : Stmt {
     explicit ForStatement(SourceSpan s) : Stmt(NodeKind::ForStatement, std::move(s)) {}
 };
 
-// left is a VariableDeclaration or a pattern/expression.
+// left is a VariableDeclaration or a pattern/webserverion.
 struct ForOfStatement : Stmt {
     NodePtr left;
     ExprPtr right;

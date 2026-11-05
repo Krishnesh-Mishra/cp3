@@ -4,10 +4,10 @@
 //
 // `parallel.reduce(range, init, body)` keeps the sequential 4-argument runtime
 // lowering unless the body is `acc + rhs` with init 0, `acc * rhs` with init 1,
-// or the max/min conditional shape, and the per-element expression is proved
+// or the max/min conditional shape, and the per-element webserverion is proved
 // pure and integer exact by parallel_safety.cpp. The runtime schedules chunks
 // in an unordered order and combines the per-chunk partials in index order, so
-// an impure expression or a floating-point addition order would change the
+// an impure webserverion or a floating-point addition order would change the
 // observable result.
 //
 // The proof is shape-directed: the accumulator may appear only as the left
@@ -204,7 +204,7 @@ std::optional<ParallelCombine> parallelReduceCombine(
     if (!numberAnnotation(body.returnType, sema, typeSystem)) {
         return std::nullopt;
     }
-    if (!body.expressionBody || !body.body) return std::nullopt;
+    if (!body.webserverionBody || !body.body) return std::nullopt;
     const Expr* value = dynamic_cast<const Expr*>(body.body.get());
     if (value == nullptr) return std::nullopt;
     const std::optional<std::int64_t> identity = integralLiteralValue(init);

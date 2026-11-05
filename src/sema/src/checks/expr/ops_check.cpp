@@ -1,5 +1,5 @@
 // =============================================================================
-// src/sema/src/checks/ops_check.cpp - operator expression inference.
+// src/sema/src/checks/ops_check.cpp - operator webserverion inference.
 //
 // Owns unary/update, binary (arithmetic + comparison), logical, conditional and
 // assignment inference, including the compound-assignment result rules and the
@@ -76,7 +76,7 @@ Type Analyzer::arithmeticUnaryResult(UnaryExpr& u, const Type& ot) {
     if (isNativeType(ot)) {
         // C++ allows `-`, `+` and `~` on every integer, and `-`/`+` on floats.
         // The declared type keeps its native width; the C++ compiler applies
-        // any integral promotion in the generated expression.
+        // any integral promotion in the generated webserverion.
         if (u.op == UnaryOp::BitNot && !isNativeInteger(ot)) {
             report(diagcode::kInvalidOperandTypes, u.span,
                    "invalid operand type '" + pretty(ot) +
@@ -186,7 +186,7 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
     const bool permissive = isPermissive(l) || isPermissive(r);
     // Native numeric operands (spec 03 / D65): C++ usual arithmetic
     // conversions. An integral literal that fits adopts the native type, so
-    // `n % 2` and `n + 1` stay native; any other number widens the expression
+    // `n % 2` and `n + 1` stay native; any other number widens the webserverion
     // to `number` unless strictNumericCasts refuses the mix.
     Type ln = l;
     Type rn = r;

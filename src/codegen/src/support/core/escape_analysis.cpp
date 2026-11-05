@@ -34,7 +34,7 @@ struct ObjectUse {
 
 struct IndexUse {
     std::uint32_t identifier = 0;
-    std::uint32_t expression = 0;
+    std::uint32_t webserverion = 0;
     int frame = 0;
 };
 
@@ -174,7 +174,7 @@ protected:
                 // Allocation candidates and use maps are keyed by the
                 // declarator node ID, which is also the sema binding ID.
                 // Declaration identifiers are not guaranteed to have their
-                // own resolvedBindings entry (only reference expressions do).
+                // own resolvedBindings entry (only reference webserverions do).
                 aliases.push_back({&declaration, declaration.nodeId,
                                    sourceBinding->second, source.nodeId, frame_});
             }
@@ -387,13 +387,13 @@ bool stackSafeConstructor(const detail::ClassModel& model) {
     if (constructor->body->kind != NodeKind::BlockStatement) return false;
     const auto& body = static_cast<const BlockStatement&>(*constructor->body);
     for (const StmtPtr& statement : body.body) {
-        if (!statement || statement->kind != NodeKind::ExpressionStatement) {
+        if (!statement || statement->kind != NodeKind::webserverionStatement) {
             return false;
         }
-        const auto& expression =
-            static_cast<const ExpressionStatement&>(*statement).expression;
-        if (!expression || expression->kind != NodeKind::AssignmentExpr) return false;
-        const auto& assignment = static_cast<const AssignmentExpr&>(*expression);
+        const auto& webserverion =
+            static_cast<const webserverionStatement&>(*statement).webserverion;
+        if (!webserverion || webserverion->kind != NodeKind::AssignmentExpr) return false;
+        const auto& assignment = static_cast<const AssignmentExpr&>(*webserverion);
         if (assignment.op != AssignOp::Assign || !assignment.target ||
             assignment.target->kind != NodeKind::MemberExpr || !assignment.value) {
             return false;
@@ -524,7 +524,7 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
     // writes, method dispatch, captures, or unknown calls. This covers
     // recursive read-only traversals such as `check(node.children[i])`: the
     // Ref held by the parent array keeps the child alive for the full call
-    // expression, while the callee avoids copying an atomic shared_ptr on
+    // webserverion, while the callee avoids copying an atomic shared_ptr on
     // entry. Anything not fully accounted for keeps the owning Ref<T> ABI.
     for (const StmtPtr& statement : program.body) {
         if (!statement || statement->kind != NodeKind::FunctionDeclaration) continue;
@@ -809,7 +809,7 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
                     if (valueSafe) {
                         for (const IndexUse& use : indexUses->second) {
                             if (use.frame != candidate.frame ||
-                                memberIndices.count(use.expression) == 0) {
+                                memberIndices.count(use.webserverion) == 0) {
                                 valueSafe = false;
                                 break;
                             }
@@ -974,8 +974,8 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
     }
 }
 
-bool Generator::isStackValueArray(const Expr& expression) const {
-    const Expr* base = &expression;
+bool Generator::isStackValueArray(const Expr& webserverion) const {
+    const Expr* base = &webserverion;
     if (base->kind == NodeKind::IndexExpr) {
         base = static_cast<const IndexExpr&>(*base).object.get();
     }
@@ -994,9 +994,9 @@ const Identifier* identifier(const Node* node) {
                : nullptr;
 }
 
-bool numberIs(const Expr* expression, double value) {
-    return expression && expression->kind == NodeKind::NumberLiteral &&
-           static_cast<const NumberLiteral&>(*expression).value == value;
+bool numberIs(const Expr* webserverion, double value) {
+    return webserverion && webserverion->kind == NodeKind::NumberLiteral &&
+           static_cast<const NumberLiteral&>(*webserverion).value == value;
 }
 
 bool isName(const Node* node, const std::string& name) {
@@ -1006,10 +1006,10 @@ bool isName(const Node* node, const std::string& name) {
 
 bool assignmentTo(const Stmt* statement, const std::string& name,
                   const AssignmentExpr*& assignment) {
-    if (!statement || statement->kind != NodeKind::ExpressionStatement) return false;
-    const auto& es = static_cast<const ExpressionStatement&>(*statement);
-    if (!es.expression || es.expression->kind != NodeKind::AssignmentExpr) return false;
-    assignment = &static_cast<const AssignmentExpr&>(*es.expression);
+    if (!statement || statement->kind != NodeKind::webserverionStatement) return false;
+    const auto& es = static_cast<const webserverionStatement&>(*statement);
+    if (!es.webserverion || es.webserverion->kind != NodeKind::AssignmentExpr) return false;
+    assignment = &static_cast<const AssignmentExpr&>(*es.webserverion);
     return assignment->op == AssignOp::Assign && isName(assignment->target.get(), name);
 }
 
@@ -1069,8 +1069,8 @@ bool exactAtRange(const ExactRange& range) {
            9007199254740992.0L;
 }
 
-bool sideEffectFreeValue(const Expr& expression) {
-    switch (expression.kind) {
+bool sideEffectFreeValue(const Expr& webserverion) {
+    switch (webserverion.kind) {
         case NodeKind::NumberLiteral:
         case NodeKind::StringLiteral:
         case NodeKind::BoolLiteral:
@@ -1080,35 +1080,35 @@ bool sideEffectFreeValue(const Expr& expression) {
         case NodeKind::ThisExpr:
             return true;
         case NodeKind::MemberExpr: {
-            const auto& member = static_cast<const MemberExpr&>(expression);
+            const auto& member = static_cast<const MemberExpr&>(webserverion);
             return !member.optional && member.object &&
                    sideEffectFreeValue(*member.object);
         }
         case NodeKind::IndexExpr: {
-            const auto& index = static_cast<const IndexExpr&>(expression);
+            const auto& index = static_cast<const IndexExpr&>(webserverion);
             return index.object && index.index &&
                    sideEffectFreeValue(*index.object) &&
                    sideEffectFreeValue(*index.index);
         }
         case NodeKind::UnaryExpr: {
-            const auto& unary = static_cast<const UnaryExpr&>(expression);
+            const auto& unary = static_cast<const UnaryExpr&>(webserverion);
             return unary.op != UnaryOp::Delete && unary.operand &&
                    sideEffectFreeValue(*unary.operand);
         }
         case NodeKind::BinaryExpr: {
-            const auto& binary = static_cast<const BinaryExpr&>(expression);
+            const auto& binary = static_cast<const BinaryExpr&>(webserverion);
             return binary.left && binary.right &&
                    sideEffectFreeValue(*binary.left) &&
                    sideEffectFreeValue(*binary.right);
         }
         case NodeKind::LogicalExpr: {
-            const auto& logical = static_cast<const LogicalExpr&>(expression);
+            const auto& logical = static_cast<const LogicalExpr&>(webserverion);
             return logical.left && logical.right &&
                    sideEffectFreeValue(*logical.left) &&
                    sideEffectFreeValue(*logical.right);
         }
         case NodeKind::ConditionalExpr: {
-            const auto& conditional = static_cast<const ConditionalExpr&>(expression);
+            const auto& conditional = static_cast<const ConditionalExpr&>(webserverion);
             return conditional.condition && conditional.whenTrue &&
                    conditional.whenFalse &&
                    sideEffectFreeValue(*conditional.condition) &&
@@ -1120,18 +1120,18 @@ bool sideEffectFreeValue(const Expr& expression) {
     }
 }
 
-std::optional<ExactRange> exactExpressionRange(
-    const Expr& expression, const std::string& induction,
+std::optional<ExactRange> exactwebserverionRange(
+    const Expr& webserverion, const std::string& induction,
     long double inductionMaximum,
     const std::unordered_map<std::string, double>& constants) {
-    if (expression.kind == NodeKind::NumberLiteral) {
-        const double value = static_cast<const NumberLiteral&>(expression).value;
+    if (webserverion.kind == NodeKind::NumberLiteral) {
+        const double value = static_cast<const NumberLiteral&>(webserverion).value;
         const auto bits = exactFractionalBits(value);
         if (!bits) return std::nullopt;
         return ExactRange{value, value, *bits};
     }
-    if (expression.kind == NodeKind::Identifier) {
-        const std::string& name = static_cast<const Identifier&>(expression).name;
+    if (webserverion.kind == NodeKind::Identifier) {
+        const std::string& name = static_cast<const Identifier&>(webserverion).name;
         if (name == induction) return ExactRange{0.0L, inductionMaximum, 0};
         const auto constant = constants.find(name);
         if (constant == constants.end()) return std::nullopt;
@@ -1139,12 +1139,12 @@ std::optional<ExactRange> exactExpressionRange(
         if (!bits) return std::nullopt;
         return ExactRange{constant->second, constant->second, *bits};
     }
-    if (expression.kind != NodeKind::BinaryExpr) return std::nullopt;
-    const auto& binary = static_cast<const BinaryExpr&>(expression);
+    if (webserverion.kind != NodeKind::BinaryExpr) return std::nullopt;
+    const auto& binary = static_cast<const BinaryExpr&>(webserverion);
     if (!binary.left || !binary.right) return std::nullopt;
-    const auto left = exactExpressionRange(*binary.left, induction,
+    const auto left = exactwebserverionRange(*binary.left, induction,
                                            inductionMaximum, constants);
-    const auto right = exactExpressionRange(*binary.right, induction,
+    const auto right = exactwebserverionRange(*binary.right, induction,
                                             inductionMaximum, constants);
     if (!left || !right) return std::nullopt;
     ExactRange result;
@@ -1403,24 +1403,24 @@ std::optional<ExactRange> proveExactArrayFill(
         length > 9007199254740991.0) return std::nullopt;
     const auto& body = static_cast<const BlockStatement&>(*loop.body);
     if (body.body.size() != 3 || !body.body.back() ||
-        body.body.back()->kind != NodeKind::ExpressionStatement) return std::nullopt;
-    const auto& incrementStmt = static_cast<const ExpressionStatement&>(*body.body.back());
-    if (!incrementStmt.expression ||
-        incrementStmt.expression->kind != NodeKind::AssignmentExpr) return std::nullopt;
-    const auto& increment = static_cast<const AssignmentExpr&>(*incrementStmt.expression);
+        body.body.back()->kind != NodeKind::webserverionStatement) return std::nullopt;
+    const auto& incrementStmt = static_cast<const webserverionStatement&>(*body.body.back());
+    if (!incrementStmt.webserverion ||
+        incrementStmt.webserverion->kind != NodeKind::AssignmentExpr) return std::nullopt;
+    const auto& increment = static_cast<const AssignmentExpr&>(*incrementStmt.webserverion);
     if (increment.op != AssignOp::Assign || !unitIncrement(increment, indexName)) {
         return std::nullopt;
     }
     const AssignmentExpr* fill = nullptr;
     for (std::size_t i = 0; i + 1 < body.body.size(); ++i) {
-        if (!body.body[i] || body.body[i]->kind != NodeKind::ExpressionStatement) {
+        if (!body.body[i] || body.body[i]->kind != NodeKind::webserverionStatement) {
             return std::nullopt;
         }
-        const auto& statement = static_cast<const ExpressionStatement&>(*body.body[i]);
-        if (!statement.expression || statement.expression->kind != NodeKind::AssignmentExpr) {
+        const auto& statement = static_cast<const webserverionStatement&>(*body.body[i]);
+        if (!statement.webserverion || statement.webserverion->kind != NodeKind::AssignmentExpr) {
             return std::nullopt;
         }
-        const auto& assignment = static_cast<const AssignmentExpr&>(*statement.expression);
+        const auto& assignment = static_cast<const AssignmentExpr&>(*statement.webserverion);
         if (assignment.op != AssignOp::Assign || !assignment.value ||
             !sideEffectFreeValue(*assignment.value) || !assignment.target ||
             assignment.target->kind != NodeKind::IndexExpr) return std::nullopt;
@@ -1460,7 +1460,7 @@ std::optional<ExactRange> proveExactArrayFill(
         (indexType->kind != TypeKind::Native && indexType->kind != TypeKind::Number)) {
         return std::nullopt;
     }
-    return exactExpressionRange(*fill->value, indexName,
+    return exactwebserverionRange(*fill->value, indexName,
                                 static_cast<long double>(length - 1.0), constants);
 }
 
@@ -1485,10 +1485,10 @@ bool proveDataViewLoop(const WhileStatement& loop, const std::string& index,
     const AssignmentExpr* increment = nullptr;
     if (!assignmentTo(body.body[0].get(), "", reduce)) {
         // The reduction target is discovered from its assignment node below.
-        if (!body.body[0] || body.body[0]->kind != NodeKind::ExpressionStatement) return false;
-        const auto& es = static_cast<const ExpressionStatement&>(*body.body[0]);
-        if (!es.expression || es.expression->kind != NodeKind::AssignmentExpr) return false;
-        reduce = &static_cast<const AssignmentExpr&>(*es.expression);
+        if (!body.body[0] || body.body[0]->kind != NodeKind::webserverionStatement) return false;
+        const auto& es = static_cast<const webserverionStatement&>(*body.body[0]);
+        if (!es.webserverion || es.webserverion->kind != NodeKind::AssignmentExpr) return false;
+        reduce = &static_cast<const AssignmentExpr&>(*es.webserverion);
     }
     if (!reduce || reduce->op != AssignOp::Assign || !identifier(reduce->target.get()) ||
         !reduce->value || reduce->value->kind != NodeKind::BinaryExpr) return false;
@@ -1623,10 +1623,10 @@ void Generator::analyzeDataViewLoops(const Program& program) {
                 }
                 continue;
             }
-            if (statement->kind == NodeKind::ExpressionStatement) {
-                const auto& es = static_cast<const ExpressionStatement&>(*statement);
-                if (es.expression && es.expression->kind == NodeKind::AssignmentExpr) {
-                    const auto& assignment = static_cast<const AssignmentExpr&>(*es.expression);
+            if (statement->kind == NodeKind::webserverionStatement) {
+                const auto& es = static_cast<const webserverionStatement&>(*statement);
+                if (es.webserverion && es.webserverion->kind == NodeKind::AssignmentExpr) {
+                    const auto& assignment = static_cast<const AssignmentExpr&>(*es.webserverion);
                     const Identifier* target = identifier(assignment.target.get());
                     if (target && assignment.op == AssignOp::Assign && numberIs(assignment.value.get(), 0.0)) {
                         zero.insert(target->name);

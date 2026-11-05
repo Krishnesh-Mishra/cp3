@@ -41,7 +41,7 @@ const StdModuleDef kStdModules[] = {
     {"std/path", true, {}},
     {"std/os", true, {}},
     {"std/crypto", true, {}},
-    {"std/network", true, {"fetch", "lookup", "WebSocket", "WebSocketServer", "createServer", "Headers", "Request", "Response", "FormData", "AbortSignal", "static", "cors", "bodyLimit", "Router", "express", "cookieParser"}},
+    {"std/network", true, {"fetch", "lookup", "WebSocket", "WebSocketServer", "createServer", "Headers", "Request", "Response", "FormData", "AbortSignal", "static", "cors", "bodyLimit", "Router", "webserver", "cookieParser"}},
     {"std/env", false, {"env"}},
     {"std/collections", false, {"Map", "Set", "LRUCache", "Queue", "Stack", "PriorityQueue", "RingBuffer", "BitSet", "MultiMap", "ConcurrentMap"}},
     {"std/buffer", false, {"Buffer"}},

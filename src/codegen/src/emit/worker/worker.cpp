@@ -279,7 +279,7 @@ void Generator::emitWorkerEntryBody(const ArrowFunction& arrow, const Type& in,
     if (!threadName.empty()) {
         declare(threadName, channelHandleType(true, in, outType, namesp_));
     }
-    if (arrow.body && arrow.expressionBody) {
+    if (arrow.body && arrow.webserverionBody) {
         line(outText, 1, expr(*static_cast<const Expr*>(arrow.body.get())) + ";");
     } else if (arrow.body) {
         stmt(*static_cast<const Stmt*>(arrow.body.get()), outText, 1);

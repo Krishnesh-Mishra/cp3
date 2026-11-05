@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // src/codegen/src/support/int_mode.cpp - the int64 fast path for `number` (D64).
 //
 // cp3 `number` is a double, so an integral hot loop pays for double-domain
@@ -9,7 +9,7 @@
 //   * `intEligible` accepts a non-async function returning `number` whose
 //     parameters are all plain `number` values (no rest/ref/optional/default).
 //   * `intBody` emits the body once with `intMode_` set: every node whose type
-//     is `number` lowers to a std::int64_t expression built from the guarded
+//     is `number` lowers to a std::int64_t webserverion built from the guarded
 //     helpers in cp3/core/arith.hpp (`iadd`, `imulConst`, `idiv`, ...). Any node the
 //     fast path cannot lower exactly calls `intFail()` instead of emitting
 //     something unsound, so the attempt is discarded. Proof equals emission:
@@ -177,7 +177,7 @@ std::string Generator::modCall(const std::string& lhs, const Expr& rhs,
 // -----------------------------------------------------------------------------
 
 // Every emitter below returns C++ text whose type is std::int64_t and that is
-// observationally identical to the double expression it replaces, or calls
+// observationally identical to the double webserverion it replaces, or calls
 // `intFail()` and returns a placeholder (the attempt is discarded either way).
 
 std::string Generator::intLiteral(const Expr& e) {
@@ -200,7 +200,7 @@ std::string Generator::intIdentifier(const Identifier& id) {
     if (intMode_ && intMode_->deferred.erase(id.name) > 0) {
         // The bound check of this value was deferred (see intDeferable): this
         // read is where it becomes observable again, so restore the invariant
-        // here. A comma expression keeps the text usable as an operand.
+        // here. A comma webserverion keeps the text usable as an operand.
         return "(" + arith("pass(") + mapIdent(id.name) + "), " + mapIdent(id.name) + ")";
     }
     return mapIdent(id.name);
@@ -313,13 +313,13 @@ std::string Generator::intAssignment(const AssignmentExpr& a) {
 // The value of a deferred assignment: a `+`/`-` with a small integral literal,
 // the one shape whose unchecked result cannot overflow int64 in any runnable
 // time. Each raw store moves the value by at most 512 (a raw operand is either
-// a deferred value, whose magnitude is inherited, or an in-range expression),
+// a deferred value, whose magnitude is inherited, or an in-range webserverion),
 // so an overflow needs on the order of 2^54 raw stores. Returns an empty string
 // for every other shape, and the caller then uses the checked lowering.
 std::string Generator::intAssignText(const AssignmentExpr& a, const Identifier& id) {
     const std::string bare = mapIdent(id.name);
     if (a.op == AssignOp::Assign) {
-        // Only a statement's own expression may defer: its value is discarded,
+        // Only a statement's own webserverion may defer: its value is discarded,
         // so the raw result is never observed. The operands are emitted with
         // the flag cleared, so a nested assignment stays checked (its value
         // would flow into this one).
