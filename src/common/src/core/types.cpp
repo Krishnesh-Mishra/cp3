@@ -64,7 +64,7 @@ std::string formatDouble(double value) {
 std::optional<bool> nativeAssignable(const Type& from, const Type& to) {
     if (to.kind == TypeKind::Native) {
         if (from.isLiteral() && from.literalBase == TypeKind::Number) {
-            return nativeCanRepresentLiteral(to, from.numberValue);
+            return nativeCanRepresentLiteral(to, from);
         }
         return from.kind == TypeKind::Native;
     }
@@ -115,9 +115,14 @@ Type Type::native(std::string id) { return Type(TypeKind::Native, std::move(id))
 // --- literal constructors ----------------------------------------------------
 
 Type Type::numberLiteral(double value) {
+    return numberLiteral(value, std::string());
+}
+
+Type Type::numberLiteral(double value, std::string raw) {
     Type t(TypeKind::Literal);
     t.literalBase = TypeKind::Number;
     t.numberValue = value;
+    t.numberRaw = std::move(raw);
     return t;
 }
 

@@ -83,4 +83,15 @@ std::optional<Type> nativeArithmeticResult(const Type& l, const Type& r);
 // value for a float.
 bool nativeCanRepresentLiteral(const Type& native, double value);
 
+// The same check for a literal `Type`, using its exact source spelling when
+// available. `18446744073709551615` is not representable as a double, so the
+// double-only overload cannot accept it for `u64`; this one can.
+bool nativeCanRepresentLiteral(const Type& native, const Type& literal);
+
+// Parses an integer literal spelling (decimal, 0x/0b/0o, `_` separators and
+// an optional leading sign) into an exact 64-bit magnitude. Returns false for
+// a fractional/exponent form or a magnitude above 2^64-1.
+bool parseExactIntegerLiteral(const std::string& raw, bool& negative,
+                              unsigned long long& magnitude);
+
 }  // namespace cp3

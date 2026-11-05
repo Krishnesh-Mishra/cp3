@@ -167,6 +167,15 @@ T mod(A a, B b) {
     return static_cast<T>(x % y);
 }
 
+// Explicitly wrapping multiply, the escape hatch for hash functions such as
+// FNV that rely on modulo-2^N arithmetic. Checked `mul` stays the default.
+template <typename T, typename A, typename B>
+T wrappingMul(A a, B b) {
+    using U = std::make_unsigned_t<T>;
+    return static_cast<T>(static_cast<U>(static_cast<T>(a)) *
+                          static_cast<U>(static_cast<T>(b)));
+}
+
 template <typename T, typename A>
 T neg(A a) {
     const T x = static_cast<T>(a);

@@ -684,6 +684,8 @@ private:
     // get/has/load calls, backed by cp3/std/env.hpp (composed on process).
     std::string emitEnvCall(const CallExpr& c, const MemberExpr& m);
     std::string emitStringMethodCall(const CallExpr& c, const MemberExpr& m);
+    // `String.fromCharCode(...)` (src/std/string/codegen.cpp).
+    std::string emitStringStaticCall(const CallExpr& c, const MemberExpr& m);
     // Language-level Number methods/statics (src/std/number/codegen.cpp).
     std::string emitNumberMethodCall(const CallExpr& c, const MemberExpr& m);
     std::string emitNumberStaticCall(const CallExpr& c, const MemberExpr& m);

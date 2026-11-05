@@ -256,6 +256,7 @@ async function load(): Promise<string> {
 | API | Usage |
 | --- | --- |
 | `string` methods | `charAt`, `at`, `indexOf`, `lastIndexOf`, `startsWith`, `endsWith`, `includes`, `repeat`, `padStart`, `padEnd`, `trim`, `trimStart`, `trimEnd`, `slice`, `substring`, `replace`, `replaceAll`, `split`, `toUpperCase`, `toLowerCase`, `length`, `charCodeAt` |
+| `String` statics | `String.fromCharCode(...codes)` — byte-oriented inverse of `charCodeAt`: each code is reduced modulo 256 and appended as one raw UTF-8 byte; zero args yields `""` |
 | `number` statics/methods | `toFixed`, `toPrecision`, `toExponential`, `isInteger`, `isFinite`, `isNaN`, `MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `EPSILON`, `MAX_VALUE`, `MIN_VALUE`, `POSITIVE_INFINITY`, `NEGATIVE_INFINITY`, `NaN` |
 | `array` methods | `push`, `unshift`, `pop`, `shift`, `sort`, `fill`, `includes`, `indexOf`, `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `slice`, `map`, `filter`, `flat(depth?)`, `flatMap`, `join`, `forEach`, `binarySearch`, `unique`, `shuffle`, `at`, `toSorted`, `toReversed`, `length`, `reduce`, `reduceRight`, `splice`, `concat`, `reverse`, `lastIndexOf`, `keys`, `values`, `entries`, `toSpliced`, `with`, `copyWithin` |
 | Array callbacks | `(value, index, array)` — may declare any prefix |
@@ -477,6 +478,10 @@ Explicit prefixed types are valid anywhere a native scalar fits:
 Native ints print exactly. Arithmetic on narrower-than-`i32` operands promotes to `i32` (so `u8 + u8` is `i32`). Native values do not mix freely with nonliteral `number`: pass a fitting literal where supported, or keep producer/consumer on the same native type. Mixing signed and unsigned integers is rejected in every mode; convert one side explicitly. With `strictNumericCasts: true` in `package.json`, assigning `number` to a native type is rejected and mixed native arithmetic is rejected; tests live in `tests/cases/types/03/native_strict`.
 
 Native integer arithmetic is checked in every mode: `+ - * / %`, unary `-`, `++`/`--` and the arithmetic compound assignments throw a catchable `Error` on overflow or division by zero. Signed division truncates toward zero and `%` takes the dividend's sign (`-7 / 2 == -3`, `-7 % 2 == -1`).
+
+The literal fit check uses the exact source spelling, not the rounded `number` value, so `9223372036854775807`, `-9223372036854775808` and `18446744073709551615` initialize `i64`/`u64` directly. Decimal, `0x`, `0b` and `0o` spellings with optional `_` separators are accepted.
+
+Every supported native numeric width has an exact `.toString()`; `f32` prints the shortest spelling of the float value. `value.wrappingMul(other)` is the explicit modulo-2^N multiply for FNV-style hashing; checked `*` stays the default. `String.fromCharCode(...codes)` is the byte-oriented inverse of `charCodeAt`.
 
 `expr as Type` asserts a related class type or converts any scalar numeric pair. `number` to native and native to native are checked narrowings (fractional or out-of-range values throw at runtime); native to `number` is the explicit precision-losing direction. `parseTo<T>(value)` performs the same checked conversion and also converts between strings, numbers and booleans. Unrelated types are rejected with CP3401. Tests live in `tests/cases/types/03/native_checked`. See `docs/content/01-language/07-native-types/03-numeric-rules.md`.
 

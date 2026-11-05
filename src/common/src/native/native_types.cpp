@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -416,6 +417,80 @@ bool nativeCanRepresentLiteral(const Type& native, double value) {
                                                           : row->bits);
     if (row->isSigned) return value >= -magnitude && value < magnitude;
     return value >= 0.0 && value < magnitude;
+}
+
+bool parseExactIntegerLiteral(const std::string& raw, bool& negative,
+                              unsigned long long& magnitude) {
+    std::size_t i = 0;
+    negative = false;
+    if (i < raw.size() && (raw[i] == '+' || raw[i] == '-')) {
+        negative = raw[i] == '-';
+        ++i;
+    }
+    int base = 10;
+    if (i + 1 < raw.size() && raw[i] == '0') {
+        const char prefix = raw[i + 1];
+        if (prefix == 'x' || prefix == 'X') {
+            base = 16;
+            i += 2;
+        } else if (prefix == 'b' || prefix == 'B') {
+            base = 2;
+            i += 2;
+        } else if (prefix == 'o' || prefix == 'O') {
+            base = 8;
+            i += 2;
+        }
+    }
+    bool sawDigit = false;
+    unsigned long long value = 0;
+    const unsigned long long limit =
+        std::numeric_limits<unsigned long long>::max();
+    for (; i < raw.size(); ++i) {
+        const char c = raw[i];
+        if (c == '_') continue;
+        int digit = -1;
+        if (c >= '0' && c <= '9') {
+            digit = c - '0';
+        } else if (c >= 'a' && c <= 'f') {
+            digit = c - 'a' + 10;
+        } else if (c >= 'A' && c <= 'F') {
+            digit = c - 'A' + 10;
+        }
+        if (digit < 0 || digit >= base) return false;
+        if (value > (limit - static_cast<unsigned>(digit)) /
+                        static_cast<unsigned>(base)) {
+            return false;
+        }
+        value = value * static_cast<unsigned>(base) +
+                static_cast<unsigned>(digit);
+        sawDigit = true;
+    }
+    if (!sawDigit) return false;
+    magnitude = value;
+    return true;
+}
+
+bool nativeCanRepresentLiteral(const Type& native, const Type& literal) {
+    if (!literal.isLiteral() || literal.literalBase != TypeKind::Number) {
+        return false;
+    }
+    const NativeTypeInfo* row =
+        isNativeType(native) ? nativeById(native.name) : nullptr;
+    if (row == nullptr) return false;
+    bool negative = false;
+    unsigned long long magnitude = 0;
+    if (!literal.numberRaw.empty() &&
+        parseExactIntegerLiteral(literal.numberRaw, negative, magnitude)) {
+        if (row->cls == NC::Float) return std::isfinite(literal.numberValue);
+        if (negative && magnitude != 0 && !row->isSigned) return false;
+        if (row->isSigned) {
+            const unsigned long long limit = 1ULL << (row->bits - 1);
+            return negative ? magnitude <= limit : magnitude <= limit - 1;
+        }
+        if (row->bits >= 64) return true;
+        return magnitude <= (1ULL << row->bits) - 1;
+    }
+    return nativeCanRepresentLiteral(native, literal.numberValue);
 }
 
 }  // namespace cp3

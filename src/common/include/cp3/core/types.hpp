@@ -77,6 +77,12 @@ struct Type {
     // The underlying primitive the literal belongs to (Number/String/Boolean).
     TypeKind literalBase = TypeKind::Unknown;
     double numberValue = 0.0;
+    // The literal's source spelling when it has one (`18446744073709551615`).
+    // `numberValue` is the `number` value (a double), so it cannot distinguish
+    // a 64-bit integer literal from its rounded neighbour; the exact-integer
+    // native fit check reads this spelling instead. Empty for computed or
+    // synthesized literal types.
+    std::string numberRaw;
     std::string stringValue;
     bool boolValue = false;
 
@@ -99,6 +105,7 @@ struct Type {
 
     // --- literal constructors ------------------------------------------------
     static Type numberLiteral(double value);
+    static Type numberLiteral(double value, std::string raw);
     static Type stringLiteral(std::string value);
     static Type boolLiteral(bool value);
 

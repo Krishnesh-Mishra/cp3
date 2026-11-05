@@ -43,7 +43,7 @@ bool Analyzer::wouldAccept(const Type& from, const Type& to, bool freshLiteral) 
         (isNativeType(from) || isNativeType(to))) {
         if (from.isLiteral() && from.literalBase == TypeKind::Number &&
             isNativeType(to)) {
-            return nativeCanRepresentLiteral(to, from.numberValue);
+            return nativeCanRepresentLiteral(to, from);
         }
         if (isNativeType(from) && isNativeType(to)) {
             return from.name == to.name;

@@ -170,6 +170,20 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
         }
     }
     if (isNamespaceObject(m.object.get(), "Math")) return emitMathCall(c, m);
+    // Native-integer methods (src/sema member_check.cpp): `v.wrappingMul(x)`.
+    if (m.object && info(*m.object).shape == Shape::Native) {
+        const CppInfo receiver = info(*m.object);
+        if (m.property == "wrappingMul" && receiver.representable) {
+            const std::vector<std::string> args = emitPlainArgs(c);
+            if (args.size() != 1) return std::string();
+            return "::cp3::runtime::checked::wrappingMul<" + receiver.cpp +
+                   ">(" + expr(*m.object) + ", " + args.front() + ")";
+        }
+    }
+    if (isNamespaceObject(m.object.get(), "String") &&
+        !hasValueBinding("String")) {
+        return emitStringStaticCall(c, m);
+    }
     if (isNamespaceObject(m.object.get(), "Number") &&
         !hasValueBinding("Number")) {
         return emitNumberStaticCall(c, m);

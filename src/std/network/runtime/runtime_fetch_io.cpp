@@ -129,65 +129,7 @@ void onResolved(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
 
 }  // namespace
 
-// `dns.lookup(hostname)`: a one-shot resolution that settles a promise with
-// the first address's text form (the fetch client's own callbacks own the
-// pattern; this is the promise-only sibling). Lives in detail so the entry
-// points below can name them.
-namespace dns_detail {
-struct DnsOp {
-    uv_getaddrinfo_t dns{};
-    Promise<std::string> promise;
-    std::string host;
-};
-
-inline void onDnsResolved(uv_getaddrinfo_t* req, int status,
-                          struct addrinfo* res) {
-    std::unique_ptr<DnsOp> op(static_cast<DnsOp*>(req->data));
-    if (status != 0 || res == nullptr) {
-        if (res != nullptr) uv_freeaddrinfo(res);
-        op->promise.rejectWith(
-            Thrown::make("dns.lookup: could not resolve '" + op->host + "'"));
-        return;
-    }
-    char text[80]{};
-    uv_inet_ntop(res->ai_family, res->ai_addr, text, sizeof(text));
-    uv_freeaddrinfo(res);
-    op->promise.fulfill(std::string(text));
-}
-}  // namespace dns_detail
-
 }  // namespace cp3::runtime::network::detail
-
-namespace cp3::runtime::network {
-
-Promise<std::string> dnsResolve(const std::string& host) {
-    Promise<std::string> promise;
-    uv_loop_t* loop = static_cast<uv_loop_t*>(loopHandle());
-    if (loop == nullptr) {
-        return Promise<std::string>::reject(
-            Thrown::make("dns.lookup: could not create the libuv loop"));
-    }
-    retainNetwork();
-    auto* op = new detail::dns_detail::DnsOp{};
-    op->host = host;
-    op->promise = promise;
-    op->dns.data = op;
-    struct addrinfo hints{};
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    const int rc = uv_getaddrinfo(loop, &op->dns,
-                                  detail::dns_detail::onDnsResolved,
-                                  host.c_str(), nullptr, &hints);
-    if (rc != 0) {
-        promise.rejectWith(
-            Thrown::make("dns.lookup could not start for '" + host + "'"));
-        delete op;
-        return promise;
-    }
-    return promise;
-}
-
-}  // namespace cp3::runtime::network
 
 namespace cp3::runtime::network::detail {
 

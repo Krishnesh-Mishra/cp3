@@ -49,6 +49,18 @@ const char* stringRuntimeFn(const std::string& method) {
 
 }  // namespace
 
+std::string Generator::emitStringStaticCall(const CallExpr& c,
+                                            const MemberExpr& m) {
+    if (m.property != "fromCharCode") return std::string();
+    needsString_ = true;
+    std::string list;
+    for (const std::string& arg : emitPlainArgs(c)) {
+        if (!list.empty()) list += ", ";
+        list += "static_cast<double>(" + arg + ")";
+    }
+    return "::cp3::runtime::strings::fromCharCode({" + list + "})";
+}
+
 std::string Generator::emitStringMethodCall(const CallExpr& c, const MemberExpr& m) {
     // Literal array element set: `["a", "b"].includes(x)` lowers to an equality
     // chain. Any other form on an array receiver is left to the array family

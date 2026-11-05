@@ -24,6 +24,16 @@ let fraction: r_'f32' = 1.5;
 
 For native integer literals, the analyzer checks that the literal is integral and within the target type's range. A negative literal is valid for signed types but not unsigned types. Float types accept finite numeric literals. Keep values in range; do not rely on wraparound as an input-validation rule.
 
+The check reads the literal's exact source spelling, not its rounded `number` value, so the 64-bit boundaries initialize without losing precision:
+
+```ts
+let maxI64: r_'i64' = 9223372036854775807;
+let minI64: r_'i64' = -9223372036854775808;
+let maxU64: r_'u64' = 18446744073709551615;
+```
+
+`18446744073709551615` exceeds the exact integer range of `number` but still fits `u64`, and the negative `i64` boundary is accepted because unary minus applies to the exact literal magnitude. Decimal, hexadecimal (`0x`), binary (`0b`) and octal (`0o`) spellings are accepted, with optional `_` separators.
+
 ## Integral promotion
 
 Small integer operands are promoted before arithmetic. CP3 currently follows an integral-promotion model in which integer ranks narrower than `i32` promote to `i32`. Thus `u8 + u8` produces an `i32` result in the tested rule:
@@ -94,6 +104,17 @@ let text: string = parseTo(code, string);
 
 `parseTo` is a global builtin: no import is required.
 
+## Text conversion
+
+Every supported native numeric width has a `.toString()` method. Integers format exactly at their own width without a detour through `number`, so the 64-bit values above round-trip:
+
+```ts
+let id: r_'u64' = 18446744073709551615;
+let text: string = id.toString();   // "18446744073709551615"
+```
+
+An `f32` prints the shortest decimal that identifies the float value, so `0.1f.toString()` is `"0.1"` rather than the longer double expansion of the promoted value. `String.fromCharCode(...codes)` performs the reverse byte-level conversion from numeric codes to a string; see the string documentation for its byte-oriented semantics.
+
 ## Arithmetic operators
 
 Native integers support the checked native arithmetic operators implemented by CP3: addition, subtraction, multiplication, division, remainder, bitwise AND/OR/XOR, left/right shifts, comparisons, unary sign and bitwise negation, and increment/decrement where valid. `**` (power) and JavaScript's unsigned right shift `>>>` are rejected for native types. Convert to ordinary `number` for exponentiation or use a suitable standard-library math function where precision requirements allow.
@@ -101,6 +122,17 @@ Native integers support the checked native arithmetic operators implemented by C
 Integer arithmetic is checked in every project mode. Addition, subtraction, multiplication, unary negation, increment/decrement and the arithmetic compound assignments throw an `Error` on overflow instead of wrapping (unsigned) or invoking undefined behaviour (signed). Division and remainder throw on a zero divisor, and signed `INT_MIN / -1` throws.
 
 Signed integer division truncates toward zero (`-7 / 2` is `-3`) and remainder takes the sign of the dividend (`-7 % 2` is `-1`), matching the values JavaScript's number arithmetic produces. Division by zero is a thrown error rather than an infinity or NaN.
+
+Checked arithmetic is the default. Hashing code that intentionally relies on modulo-2^N arithmetic can opt in per operation with `value.wrappingMul(other)`, which wraps at the receiver's width:
+
+```ts
+let byte: r_'u8' = 97;
+let hash: r_'u64' = 14695981039346656037;
+hash = hash ^ (byte as r_'u64');
+hash = hash.wrappingMul(1099511628211);
+```
+
+Only multiplication has an explicit wrapping form; every other operator remains checked.
 
 ## Nullish options
 

@@ -40,6 +40,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -256,6 +257,24 @@ inline double charCodeAt(const std::string& s, double index) {
     }
     return static_cast<double>(
         static_cast<unsigned char>(s[static_cast<std::size_t>(index)]));
+}
+
+// `String.fromCharCode(...codes)`: the inverse of `charCodeAt` on the byte
+// surface (docs 09). Each code is reduced modulo 256 and appended as one raw
+// UTF-8 byte, so `String.fromCharCode(s.charCodeAt(i))` returns the byte at
+// `i`. A non-finite code contributes a zero byte (JS ToUint16 makes NaN 0).
+inline std::string fromCharCode(std::initializer_list<double> codes) {
+    std::string out;
+    out.reserve(codes.size());
+    for (double code : codes) {
+        double byte = 0.0;
+        if (std::isfinite(code)) {
+            byte = std::fmod(std::trunc(code), 256.0);
+            if (byte < 0.0) byte += 256.0;
+        }
+        out.push_back(static_cast<char>(static_cast<unsigned>(byte)));
+    }
+    return out;
 }
 
 // The string's code points, in order: the elements a `for (const ch of s)`

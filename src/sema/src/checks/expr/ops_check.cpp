@@ -67,7 +67,11 @@ Type Analyzer::arithmeticUnaryResult(UnaryExpr& u, const Type& ot) {
     // (Codegen's integralLiteralValue already folds the same shape.)
     if (u.op == UnaryOp::Negate && ot.isLiteral() &&
         ot.literalBase == TypeKind::Number) {
-        return Type::numberLiteral(-ot.numberValue);
+        // Keep the exact spelling for the 64-bit boundaries: `-9223372036854775808`
+        // fits i64 even though its positive magnitude does not fit i64.
+        const std::string raw =
+            ot.numberRaw.empty() ? std::string() : "-" + ot.numberRaw;
+        return Type::numberLiteral(-ot.numberValue, raw);
     }
     if (isNativeType(ot)) {
         // C++ allows `-`, `+` and `~` on every integer, and `-`/`+` on floats.
@@ -187,10 +191,10 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
     Type ln = l;
     Type rn = r;
     if (isNativeType(ln) && isNumberLiteralValue(r) &&
-        nativeCanRepresentLiteral(ln, r.numberValue)) {
+        nativeCanRepresentLiteral(ln, r)) {
         rn = ln;
     } else if (isNativeType(rn) && isNumberLiteralValue(l) &&
-               nativeCanRepresentLiteral(rn, l.numberValue)) {
+               nativeCanRepresentLiteral(rn, l)) {
         ln = rn;
     }
     if (!permissive && (isNativeType(ln) || isNativeType(rn))) {

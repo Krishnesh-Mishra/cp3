@@ -351,8 +351,9 @@ bool Analyzer::tryInferParseToBuiltin(CallExpr& call, const Identifier& id,
         }
     } else if (value != nullptr && value->kind == NodeKind::NumberLiteral &&
                target.kind == TypeKind::Native) {
+        const auto& literal = static_cast<const NumberLiteral&>(*value);
         fits = nativeCanRepresentLiteral(
-            target, static_cast<const NumberLiteral&>(*value).value);
+            target, Type::numberLiteral(literal.value, literal.raw));
     }
     if (!fits) {
         std::string what = "the value";

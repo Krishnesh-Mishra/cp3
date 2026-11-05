@@ -912,7 +912,8 @@ std::string CallBuilder::emitMemberCall(const CallExpr& c,
     // The primitive value formatters (`age.toString()`).
     if (c.arguments.empty() && m.property == "toString" && m.object) {
         const CppInfo recv = g.info(*m.object);
-        if (recv.shape == Shape::Number || recv.shape == Shape::Bool) {
+        if (recv.shape == Shape::Number || recv.shape == Shape::Bool ||
+            recv.shape == Shape::Native) {
             return "::cp3::runtime::toString(" + g.expr(*m.object) + ")";
         }
     }

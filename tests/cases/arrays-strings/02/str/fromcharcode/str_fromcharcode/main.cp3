@@ -1,0 +1,9 @@
+import console from "std/console";
+
+// `String.fromCharCode` is the byte-oriented inverse of `charCodeAt` (CP3
+// strings are UTF-8 bytes; docs 09). Codes are reduced modulo 256.
+console.log(String.fromCharCode(72, 105));
+console.log(String.fromCharCode());
+console.log(String.fromCharCode("A".charCodeAt(0)));
+console.log(String.fromCharCode(0x41, 0x42));
+console.log(String.fromCharCode(321));

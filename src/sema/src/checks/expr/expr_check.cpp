@@ -31,7 +31,7 @@ Type Analyzer::inferExpr(Expr& e) {
     switch (e.kind) {
         case NodeKind::NumberLiteral: {
             auto& n = static_cast<NumberLiteral&>(e);
-            return withType(n, Type::numberLiteral(n.value));
+            return withType(n, Type::numberLiteral(n.value, n.raw));
         }
         case NodeKind::StringLiteral: {
             auto& s = static_cast<StringLiteral&>(e);

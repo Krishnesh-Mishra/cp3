@@ -191,6 +191,7 @@ inline constexpr Undefined undefined{};
 // Infinity/-Infinity/NaN print as those words, and finite values use the
 // shortest round-tripping decimal.
 std::string toString(double value);
+std::string toString(float value);  // f32: shortest spelling for the float value
 std::string toString(const std::string& value);
 std::string toString(bool value);
 std::string toString(std::nullptr_t);   // -> "null"

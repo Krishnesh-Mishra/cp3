@@ -103,8 +103,11 @@ std::string placeDecimalPoint(const std::string& digits, int n) {
 }
 
 // The shortest round-tripping decimal of a finite, positive `value`, formatted
-// as ECMAScript would (no sign; the caller adds it).
-std::string positiveNumberToString(double value) {
+// as ECMAScript would (no sign; the caller adds it). The float specialisation
+// keeps the shortest spelling of the `float` value: promoting `0.1f` to double
+// first would print its longer double expansion.
+template <typename Float>
+std::string positiveNumberToString(Float value) {
     char buf[64];
     // The scientific shortest form is unique and exact; the default/general form
     // is not shortest on every libstdc++, so we re-place the point ourselves.
@@ -116,7 +119,9 @@ std::string positiveNumberToString(double value) {
     } else {
         // Defensive fallback; should not happen for a 64-byte buffer.
         char fallback[64];
-        std::snprintf(fallback, sizeof(fallback), "%.17g", value);
+        std::snprintf(fallback, sizeof(fallback), "%.*g",
+                      std::numeric_limits<Float>::max_digits10,
+                      static_cast<double>(value));
         repr.assign(fallback);
     }
     std::string digits;
@@ -132,7 +137,8 @@ std::string positiveNumberToString(double value) {
 }
 
 // ECMAScript Number::toString(value, 10) - DECISIONS D9.
-std::string numberToString(double value) {
+template <typename Float>
+std::string numberToString(Float value) {
     if (std::isnan(value)) {
         return "NaN";
     }
@@ -153,6 +159,7 @@ std::string numberToString(double value) {
 }  // namespace
 
 std::string toString(double value) { return numberToString(value); }
+std::string toString(float value) { return numberToString(value); }
 std::string toString(const std::string& value) { return value; }
 std::string toString(bool value) { return value ? "true" : "false"; }
 std::string toString(std::nullptr_t) { return "null"; }

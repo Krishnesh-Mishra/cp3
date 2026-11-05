@@ -1,0 +1,32 @@
+import console from "std/console";
+
+// Every Rust-native numeric width has an exact `.toString()`: integers format
+// directly (no `double` detour), and `f32` keeps the shortest spelling of the
+// float value.
+let i8v: i8 = -128;
+let i16v: i16 = -32768;
+let i32v: i32 = -2147483648;
+let i64v: i64 = 9223372036854775807;
+let i64min: i64 = -9223372036854775808;
+let iszv: isize = -9223372036854775808;
+let u8v: u8 = 255;
+let u16v: u16 = 65535;
+let u32v: u32 = 4294967295;
+let u64v: u64 = 18446744073709551615;
+let uszv: usize = 18446744073709551615;
+let fv: f32 = 0.1;
+let fwhole: f32 = 1.5;
+
+console.log(i8v.toString());
+console.log(i16v.toString());
+console.log(i32v.toString());
+console.log(i64v.toString());
+console.log(i64min.toString());
+console.log(iszv.toString());
+console.log(u8v.toString());
+console.log(u16v.toString());
+console.log(u32v.toString());
+console.log(u64v.toString());
+console.log(uszv.toString());
+console.log(fv.toString());
+console.log(fwhole.toString());

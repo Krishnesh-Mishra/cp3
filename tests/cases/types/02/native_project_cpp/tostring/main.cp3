@@ -1,0 +1,37 @@
+import console from "std/console";
+
+// Every C++-native numeric width has an exact `.toString()`: the integer
+// spellings that map to a distinct NativeTypeInfo row (char and the
+// platform-width `long`) format directly, and `float` keeps the shortest
+// spelling of the float value.
+let cv: char = 65;
+let scv: signed char = -128;
+let ucv: unsigned char = 255;
+let sv: short = -32768;
+let usv: unsigned short = 65535;
+let iv: int = -2147483648;
+let uiv: unsigned int = 4294967295;
+let lv: long = -2147483648;
+let ulv: unsigned long = 4294967295;
+let llv: long long = 9223372036854775807;
+let ullv: unsigned long long = 18446744073709551615;
+let i64v: int64_t = -9223372036854775808;
+let u64v: uint64_t = 18446744073709551615;
+let fv: float = 0.1;
+let fwhole: float = 1.5;
+
+console.log(cv.toString());
+console.log(scv.toString());
+console.log(ucv.toString());
+console.log(sv.toString());
+console.log(usv.toString());
+console.log(iv.toString());
+console.log(uiv.toString());
+console.log(lv.toString());
+console.log(ulv.toString());
+console.log(llv.toString());
+console.log(ullv.toString());
+console.log(i64v.toString());
+console.log(u64v.toString());
+console.log(fv.toString());
+console.log(fwhole.toString());

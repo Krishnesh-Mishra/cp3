@@ -1,0 +1,17 @@
+import console from "std/console";
+
+// Checked `*` still traps, but hash functions opt into modulo-2^64 arithmetic
+// with the explicit `.wrappingMul(other)` method.
+let hash: u64 = 14695981039346656037;
+let prime: u64 = 1099511628211;
+const text = "abc";
+for (let i = 0; i < text.length; i++) {
+  hash = hash ^ (text.charCodeAt(i) as u64);
+  hash = hash.wrappingMul(prime);
+}
+console.log(hash.toString());
+
+let one: u64 = 1;
+let max: u64 = 18446744073709551615;
+console.log(one.wrappingMul(max).toString());
+console.log(max.wrappingMul(max).toString());

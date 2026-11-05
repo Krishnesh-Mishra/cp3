@@ -36,6 +36,7 @@ set(cp3_runtime_sources
     ../std/network/runtime/runtime.cpp
     ../std/network/runtime/runtime_fetch.cpp
     ../std/network/runtime/runtime_fetch_io.cpp
+    ../std/network/runtime/runtime_dns.cpp
     ../std/network/server/runtime_server.cpp
     ../std/network/ws/runtime_ws.cpp
     ../std/network/ws/runtime_ws_client.cpp

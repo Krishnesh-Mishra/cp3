@@ -29,6 +29,40 @@ namespace cp3 {
 
 using namespace detail;
 
+namespace {
+
+// An integer literal written directly into a native-integer context. The
+// literal's `number` value is a double, so the 64-bit boundaries must come
+// from the source spelling; `nativeCanRepresentLiteral` applies the same fit
+// rule sema used, and the explicit cast gives the C++ expression the target's
+// type (a bare `ULL`/`LL` token has the literal's own promoted type).
+std::string nativeIntegerLiteralText(const std::string& raw,
+                                     const Type& target) {
+    if (!isNativeInteger(target)) return std::string();
+    const NativeTypeInfo* row = nativeById(target.name);
+    if (row == nullptr) return std::string();
+    bool negative = false;
+    unsigned long long magnitude = 0;
+    if (!parseExactIntegerLiteral(raw, negative, magnitude)) {
+        return std::string();
+    }
+    if (!nativeCanRepresentLiteral(target, Type::numberLiteral(0.0, raw))) {
+        return std::string();
+    }
+    if (magnitude == 0) negative = false;
+    // INT64_MIN has no positive `LL` spelling: write it as -(MAX) - 1.
+    if (row->isSigned && negative &&
+        magnitude == (1ULL << (row->bits - 1))) {
+        return "static_cast<" + row->cpp + ">(-" + std::to_string(magnitude - 1) +
+               "LL - 1LL)";
+    }
+    const std::string suffix = row->isSigned ? "LL" : "ULL";
+    return "static_cast<" + row->cpp + ">(" + (negative ? "-" : "") +
+           std::to_string(magnitude) + suffix + ")";
+}
+
+}  // namespace
+
 // A whole array in a formatter or truthiness test pulls the arr family block
 // (D69), even when this unit never spells the C++ type itself.
 void Generator::noteFamilyUse(const Expr& e) {
@@ -74,8 +108,15 @@ std::string Generator::exprCmp(const Expr& e) {
 
 std::string Generator::exprPlain(const Expr& e) {
     switch (e.kind) {
-        case NodeKind::NumberLiteral:
-            return numberLiteralText(static_cast<const NumberLiteral&>(e).value);
+        case NodeKind::NumberLiteral: {
+            const auto& literal = static_cast<const NumberLiteral&>(e);
+            if (expected_ && isNativeInteger(*expected_)) {
+                const std::string exact =
+                    nativeIntegerLiteralText(literal.raw, *expected_);
+                if (!exact.empty()) return exact;
+            }
+            return numberLiteralText(literal.value);
+        }
         case NodeKind::StringLiteral:
             // Emit as a typed std::string: a bare literal would bind to
             // `cp3_ts(bool)`/`cp3_truthy(bool)` and print every literal as "true".
@@ -880,6 +921,17 @@ std::string Generator::emitUnary(const UnaryExpr& u) {
         case UnaryOp::Not:
             return "(! " + cond(*u.operand) + ")";
         case UnaryOp::Negate: {
+            // `-9223372036854775808` as an i64: the positive magnitude does
+            // not fit the target, so the exact spelling belongs to the unary
+            // expression, not to its operand.
+            if (u.operand && u.operand->kind == NodeKind::NumberLiteral &&
+                expected_ && isNativeInteger(*expected_)) {
+                const auto& literal =
+                    static_cast<const NumberLiteral&>(*u.operand);
+                const std::string exact = nativeIntegerLiteralText(
+                    "-" + literal.raw, *expected_);
+                if (!exact.empty()) return exact;
+            }
             const Type result = effectiveType(u);
             if (isNativeInteger(result) && u.operand) {
                 const CppInfo target = classify(result);

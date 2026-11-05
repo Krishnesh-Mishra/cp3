@@ -20,7 +20,7 @@ The emoji occupies multiple bytes but one code point. A displayed symbol can als
 
 `charAt(index)` and `at(index)` return a whole UTF-8 code point as a string. The index is a code-point position. An out-of-range `charAt` returns an empty string. For a negative or non-finite index, follow the current runtime implementation and tests rather than assuming full ECMAScript `String.prototype.at` behavior; CP3's `at` is currently lowered to the same operation as `charAt`.
 
-The method table in semantic analysis also declares `charCodeAt`, but the current string code generator/runtime does not provide its lowering. There is no positive conformance case for it in the arrays-and-strings corpus. Treat this member as an implementation gap and check the installed compiler before using it.
+`charCodeAt(index)` returns the raw UTF-8 byte at byte position `index` as a number, the same value as `text[index]`. An out-of-range or non-integer index returns `NaN`. `String.fromCharCode(...codes)` is the byte-oriented inverse: each code is reduced modulo 256 and appended as one raw UTF-8 byte, so `String.fromCharCode(text.charCodeAt(i))` reproduces the byte at `i`. With no arguments it returns the empty string.
 
 ## Iterating text
 
@@ -116,7 +116,7 @@ Assigning a string to another binding does not create mutable shared text. Reass
 
 ## Method surface
 
-The documented checker surface includes `length`, `charAt`, `at`, `charCodeAt`, `startsWith`, `endsWith`, `includes`, `repeat`, `padStart`, `padEnd`, `toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd`, `indexOf`, `lastIndexOf`, `slice`, `substring`, `replace`, `replaceAll`, and `split`. Current code-generation support should be checked for less-tested members such as `charCodeAt`; a signature alone does not prove a working runtime implementation.
+The documented checker surface includes `length`, `charAt`, `at`, `charCodeAt`, `startsWith`, `endsWith`, `includes`, `repeat`, `padStart`, `padEnd`, `toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd`, `indexOf`, `lastIndexOf`, `slice`, `substring`, `replace`, `replaceAll`, and `split`. The static `String.fromCharCode(...codes)` constructs a byte string from numeric codes. The `tests/cases/arrays-strings/02/str` corpus pins the runtime behavior.
 
 The method names intentionally resemble JavaScript, but the byte and code-point distinctions above are CP3's current behavior. For exact support, inspect `src/std/string` and the `tests/cases/arrays-strings` family in the same checkout as your compiler.
 

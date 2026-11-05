@@ -54,6 +54,15 @@ Type Analyzer::inferMember(MemberExpr& m) {
         if (Type native = nativeMemberType(m); !native.isError()) return withType(m, native);
         Binding b;
         if (lookup(id.name, b) && b.isAmbient) {
+            if (id.name == "String" && m.property == "fromCharCode") {
+                // `String.fromCharCode(...codes: number[])`: any number of
+                // byte values (the zero-argument call is the empty string,
+                // matching JS).
+                Type fn =
+                    Type::function({Type::number()}, Type::string());
+                fn.name = kVariadicOptionalTailLabel;
+                return withType(m, fn);
+            }
             if (id.name == "Number") {
                 if (auto t = numberStaticMember(m.property)) {
                     return withType(m, *t);
@@ -224,6 +233,19 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             return stringMember(prop);
         case TypeKind::Enum:
             return enumMember(ot, prop, span);
+        case TypeKind::Native:
+            // Every supported native numeric value can spell itself. The
+            // conversion is exact for the 64-bit integers; `f32` keeps the
+            // shortest float spelling (cp3/core/runtime.cpp).
+            if (prop == "toString") {
+                return Type::function({}, Type::string());
+            }
+            if (prop == "wrappingMul") {
+                // Explicitly wrapping integer multiply (FNV-style hashing);
+                // checked `*` remains the default and still traps.
+                return Type::function({ot}, ot);
+            }
+            return ambient();
         case TypeKind::Number:
             return numberMember(prop);
         case TypeKind::Boolean:
