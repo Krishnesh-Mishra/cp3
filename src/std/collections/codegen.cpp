@@ -251,8 +251,8 @@ std::string Generator::emitCollectionsNew(const NewExpr& n) {
                 "argument (capacity)");
             return "0.0";
         }
-        return "::cp3::runtime::collections::makeLRU<" + elems + ">(" +
-               expr(*n.arguments.front()) + ")";
+        return "::cp3::runtime::collections::makeLRU<" + elems + ">(static_cast<std::uint64_t>(" +
+               expr(*n.arguments.front()) + "))";
     }
     if (!n.arguments.empty() && n.arguments.front()) {
         // The from-iterable form: `new Set<T>(elements)` / `new
@@ -383,13 +383,23 @@ std::string Generator::emitCollectionsMember(const MemberExpr& m) {
     if (!m.object) return std::string();
     const Type recv = effectiveType(*m.object);
     if (isMapType(recv) || isSetType(recv) || isLruType(recv)) {
+        // `.size` / `.capacity` are the std count width (`usize` in a rust
+        // project); a TypeScript project keeps `number`, so cast there.
+        const auto read = [this](const std::string& self,
+                                 const char* name) -> std::string {
+            const std::string call = "(" + self + ")->" + name + "()";
+            if (options_.typeSystem == TypeSystem::TypeScript) {
+                return "static_cast<double>(" + call + ")";
+            }
+            return call;
+        };
         if (m.property == "size") {
             needsCollections_ = true;
-            return "static_cast<double>((" + expr(*m.object) + ")->size())";
+            return read(expr(*m.object), "size");
         }
         if (isLruType(recv) && m.property == "capacity") {
             needsCollections_ = true;
-            return "static_cast<double>((" + expr(*m.object) + ")->capacity())";
+            return read(expr(*m.object), "capacity");
         }
         return std::string();
     }

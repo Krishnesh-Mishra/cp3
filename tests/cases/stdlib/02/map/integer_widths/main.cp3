@@ -1,0 +1,23 @@
+import console from "std/console";
+import { LRUCache, Map, Set } from "std/collections";
+
+// A Rust project sees exact collection counts: `size` and LRUCache `capacity`
+// are usize.
+const m = new Map<string, number>();
+m.set("a", 1);
+const ms: usize = m.size;
+console.log(ms === 1 ? "map" : "bad");
+
+const s = new Set<number>();
+s.add(1);
+s.add(2);
+const ss: usize = s.size;
+console.log(ss === 2 ? "set" : "bad");
+
+const lru = new LRUCache<string, number>(2);
+const cap: usize = lru.capacity;
+lru.set("a", 1);
+lru.set("b", 2);
+lru.set("c", 3);
+const ls: usize = lru.size;
+console.log(cap === 2 && ls === 2 ? "lru" : "bad");

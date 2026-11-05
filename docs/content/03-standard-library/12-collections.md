@@ -91,9 +91,11 @@ A Map needs two type arguments (`K`, `V`); a Set needs one (`T`). The constructo
 | Set | `clear` | `clear(): void` |
 | Set | `values` | `values(): T[]` |
 | Set | `forEach` | `(value: T) => void` callback |
-| Both | `size` | Read-only `number` property |
+| Both | `size` | Read-only count property |
 
 `delete` reports whether an entry/value existed and was removed. `clear` always returns `void`. `get` distinguishes a missing key by returning `undefined`, so use `has` when the distinction between “missing” and a stored value matters.
+
+Numeric collection values follow the project vocabulary. A `typescript` project keeps `number`; a `rust` or `cpp` project uses the exact standard-library count width: `size` (Map/Set/LRUCache) and LRUCache's `capacity` are `usize` (`size_t` in C++), so counts never pass through a floating-point value.
 
 ## Ordering and snapshots
 

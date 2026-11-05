@@ -42,6 +42,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <type_traits>
@@ -179,8 +180,9 @@ public:
         tombstones_ = 0;
     }
 
-    // `size` is a property; codegen widens the count to a cp3 number.
-    double size() const { return static_cast<double>(values_.size()); }
+    // `size` is the std count width (`usize` in the language semantics);
+    // codegen widens it to a cp3 `number` only in a TypeScript project.
+    std::uint64_t size() const { return static_cast<std::uint64_t>(values_.size()); }
 
     Array<K> keys() const {
         std::vector<K> keys;
@@ -286,7 +288,7 @@ public:
 
     void clear() { items_.clear(); }
 
-    double size() const { return static_cast<double>(items_.size()); }
+    std::uint64_t size() const { return static_cast<std::uint64_t>(items_.size()); }
 
     Array<T> values() const { return makeArray<T>(items_); }
 
@@ -354,8 +356,8 @@ class LRUData {
     };
 
 public:
-    explicit LRUData(double capacity)
-        : capacity_(capacity < 0 ? 0 : static_cast<std::size_t>(capacity)) {
+    explicit LRUData(std::uint64_t capacity)
+        : capacity_(capacity) {
         index_.reserve(64);
     }
 
@@ -403,8 +405,10 @@ public:
         size_ = 0;
     }
 
-    double size() const { return static_cast<double>(size_); }
-    double capacity() const { return static_cast<double>(capacity_); }
+    std::uint64_t size() const { return static_cast<std::uint64_t>(size_); }
+    std::uint64_t capacity() const {
+        return static_cast<std::uint64_t>(capacity_);
+    }
 
     // Keys in most-recently-used-first order.
     Array<K> keys() const {
@@ -458,7 +462,7 @@ template <class K, class V>
 using LRUCache = Ref<LRUData<K, V>>;
 
 template <class K, class V>
-LRUCache<K, V> makeLRU(double capacity) {
+LRUCache<K, V> makeLRU(std::uint64_t capacity) {
     return makeRef<LRUData<K, V>>(capacity);
 }
 

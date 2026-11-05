@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/std_integer.hpp"
 #include "detail/std_tables.hpp"
 
 namespace cp3 {
@@ -172,7 +173,11 @@ Type Analyzer::collectionsMember(const Type& recv, const std::string& prop,
             recv.parts.empty() ? Type::unknown() : recv.parts.front();
         const Type second =
             recv.parts.size() >= 2 ? recv.parts[1] : Type::unknown();
-        if (prop == "size" || prop == "capacity") return Type::number();
+        // The count/capacity surface is the std count width: `usize` in a
+        // Rust project (`size_t` in a C++ one; number in TypeScript).
+        if (prop == "size" || prop == "capacity") {
+            return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+        }
         if (prop == "set") {
             return Type::function({first, second}, Type::voidType());
         }
@@ -194,7 +199,9 @@ Type Analyzer::collectionsMember(const Type& recv, const std::string& prop,
         recv.parts.empty() ? Type::unknown() : recv.parts.front();
     const Type second =
         recv.parts.size() >= 2 ? recv.parts[1] : Type::unknown();
-    if (prop == "size") return Type::number();
+    if (prop == "size") {
+        return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+    }
     if (isMap) {
         if (prop == "set") {
             return Type::function({first, second}, Type::voidType());

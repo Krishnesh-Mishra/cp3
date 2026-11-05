@@ -310,6 +310,7 @@ Encodings: `utf8`, `hex`, `base64`. Invalid hex/base64 throws catchable error.
 Map: `set` `get` `has` `delete` `clear` `keys` `values` `entries` `forEach((value, key) => ...)` `size`; `new Map<K, V>(entries)` (from `[k, v]` pairs / `entries()`); static `Map.groupBy(list, (item, index) => key): Map<K, T[]>`
 Set: `add` `has` `delete` `clear` `values` `forEach(value => ...)` `size`, `union`/`intersection`/`difference`/`isSubsetOf`; `new Set<T>(elements)`
 LRUCache: `new LRUCache<K, V>(capacity)`, `set` `get` (moves to MRU) `has` (no move) `delete` `clear` `keys` (MRU first) `size` `capacity`; inserting beyond capacity evicts the least recently used entry
+- Exact widths in a `rust`/`cpp` project: `size` (Map/Set/LRUCache) and LRUCache `capacity` are `usize` (`size_t` in C++); a `typescript` project keeps `number`.
 ### `network` — `import { fetch, WebSocket, WebSocketServer, createServer, lookup } from "std/network"`
 - `fetch(url, init?): Promise<FetchResponse>` — `init`: `method`, `headers: Map<string,string>`, `body`, `timeout?` (0 = none). HTTP only (no TLS yet).
 - Response: `ok`, `status`, `statusText`, `headers`, `text(): Promise<string>`, `arrayBuffer(): Promise<Buffer>`, `json<T>()`. `status` is `number` in a `typescript` project and `u16` in `rust`/`cpp` (see the std integer widths table in the native-types docs).
