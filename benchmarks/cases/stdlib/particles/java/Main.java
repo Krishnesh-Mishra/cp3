@@ -1,0 +1,4 @@
+public class Main{
+ static long xsNext(long x){x^=x<<13;x^=x>>>7;x^=x<<17;return x;}
+ public static void main(String[]a){ int N=5000,STEPS=50; float dt=0.0625f,g=8.0f; float[]x=new float[N],y=new float[N],vx=new float[N],vy=new float[N]; long r=12345; for(int i=0;i<N;i++){ r=xsNext(r); x[i]=(float)(Long.remainderUnsigned(r,1600))*0.0625f; r=xsNext(r); y[i]=(float)(Long.remainderUnsigned(r,1600))*0.0625f; r=xsNext(r); vx[i]=(float)(Long.remainderUnsigned(r,200)-100)*0.0625f; r=xsNext(r); vy[i]=(float)(Long.remainderUnsigned(r,200)-100)*0.0625f; } for(int s=0;s<STEPS;s++) for(int i=0;i<N;i++){ x[i]+=vx[i]*dt; y[i]+=vy[i]*dt; vy[i]-=g*dt; if(y[i]<0){y[i]=-y[i]; vy[i]=-vy[i]*0.5f;} if(x[i]>=100.0f) x[i]-=100.0f; if(x[i]<0) x[i]+=100.0f; } long total=0; for(int i=0;i<N;i++) total+=(long)(x[i]*100)+(long)(y[i]*100)+(long)(vx[i]*100)+(long)(vy[i]*100); total%=1000000007; if(total<0) total+=1000000007; System.out.println(N); System.out.println(total); }
+}

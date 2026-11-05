@@ -1,0 +1,46 @@
+import console from "std/console";
+import Math from "std/math";
+function xs_next(x: u64): u64 { let y: u64 = x; y = y ^ (y << 13); y = y ^ (y >> 7); y = y ^ (y << 17); return y; }
+const SIZE: number = 5000;
+const STEPS: number = 50;
+const x: Float32Array = new Float32Array(SIZE);
+const y: Float32Array = new Float32Array(SIZE);
+const vx: Float32Array = new Float32Array(SIZE);
+const vy: Float32Array = new Float32Array(SIZE);
+let r: u64 = 12345;
+for (let i: u64 = 0; i < SIZE; i = i + 1) {
+  r = xs_next(r);
+  x[i] = (r % 1600) * 0.0625;
+  r = xs_next(r);
+  y[i] = (r % 1600) * 0.0625;
+  r = xs_next(r);
+  vx[i] = (r % 200) * 0.0625 - 6.25;
+  r = xs_next(r);
+  vy[i] = (r % 200) * 0.0625 - 6.25;
+}
+for (let s: u64 = 0; s < STEPS; s = s + 1) {
+  for (let j: u64 = 0; j < SIZE; j = j + 1) {
+    let px: number = x[j];
+    let py: number = y[j];
+    let pvx: number = vx[j];
+    let pvy: number = vy[j];
+    px = px + pvx * 0.0625;
+    py = py + pvy * 0.0625;
+    pvy = pvy - 8 * 0.0625;
+    if (py < 0) { py = -py; pvy = -pvy * 0.5; }
+    if (px >= 100) px = px - 100;
+    if (px < 0) px = px + 100;
+    x[j] = px;
+    y[j] = py;
+    vx[j] = pvx;
+    vy[j] = pvy;
+  }
+}
+let total: number = 0;
+for (let k: u64 = 0; k < SIZE; k = k + 1) {
+  total = total + Math.trunc(x[k] * 100) + Math.trunc(y[k] * 100) + Math.trunc(vx[k] * 100) + Math.trunc(vy[k] * 100);
+}
+total = total % 1000000007;
+if (total < 0) total = total + 1000000007;
+console.log(SIZE);
+console.log(`${total}`);

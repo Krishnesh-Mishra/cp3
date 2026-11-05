@@ -1,0 +1,32 @@
+import console from "std/console";
+function xs_next(x: u64): u64 { let y: u64 = x; y = y ^ (y << 13); y = y ^ (y >> 7); y = y ^ (y << 17); return y; }
+class Node { id: u64; tx: u64; ty: u64; tz: u64; rot: u64; kids: Node[]; constructor() { this.id = 0; this.tx = 0; this.ty = 0; this.tz = 0; this.rot = 0; const init: Node[] = []; this.kids = init; } }
+let count: u64 = 0;
+function build(depth: u64, seed: u64): Node {
+  const r: u64 = xs_next(seed);
+  const n: Node = new Node();
+  n.id = count; count = count + 1;
+  n.tx = r % 9; n.ty = (r >> 16) % 9; n.tz = (r >> 24) % 9; n.rot = (r >> 12) % 4;
+  if (depth === 0) return n;
+  const k: u64 = 1 + ((r >> 40) % 4);
+  let i: u64 = 0;
+  while (i < k) { n.kids.push(build(depth - 1, xs_next(r + i))); i = i + 1; }
+  return n;
+}
+function animate(n: Node, phase: u64): void {
+  if (n.id % 7 === phase) { n.rot = (n.rot + 1) % 4; n.tx = (n.tx + 1) % 9; }
+  let i: u64 = 0;
+  while (i < n.kids.length) { animate(n.kids[i], phase); i = i + 1; }
+}
+function gather(n: Node): u64 {
+  let t: u64 = n.tx + n.ty + n.tz;
+  let i: u64 = 0;
+  while (i < n.kids.length) { t = t + gather(n.kids[i]); i = i + 1; }
+  return t;
+}
+let root: Node = build(4, 12345);
+let total: number = 0;
+let f: u64 = 0;
+while (f < 16) { animate(root, f % 7); total = (total + gather(root)) % 1000000007; f = f + 1; }
+console.log(count);
+console.log(`${total}`);

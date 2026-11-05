@@ -1,0 +1,104 @@
+import console from "std/console";
+import Math from "std/math";
+function xs_next(x: u64): u64 { let y: u64 = x; y = y ^ (y << 13); y = y ^ (y >> 7); y = y ^ (y << 17); return y; }
+function numch(i: u64): string {
+  if (i === 0) return "0"; if (i === 1) return "1"; if (i === 2) return "2"; if (i === 3) return "3";
+  if (i === 4) return "4"; if (i === 5) return "5"; if (i === 6) return "6"; if (i === 7) return "7";
+  if (i === 8) return "8"; return "9";
+}
+function gen_expr(seed: u64, corrupt: bool): string {
+  let r: u64 = seed;
+  let s: string = "";
+  r = xs_next(r);
+  const terms: u64 = 3 + (r % 4);
+  let i: u64 = 0;
+  while (i < terms) {
+    if (i > 0) {
+      r = xs_next(r);
+      const op: u64 = r % 4;
+      if (op === 0) s = s + "+";
+      else if (op === 1) s = s + "-";
+      else if (op === 2) s = s + "*";
+      else s = s + "/";
+    }
+    r = xs_next(r);
+    const n: u64 = (r % 99) + 1;
+    if (n >= 10) { s = s + numch(n / 10) + numch(n % 10); }
+    else { s = s + numch(n); }
+    i = i + 1;
+  }
+  if (corrupt) { s = s + "x"; }
+  return s;
+}
+let g_s: string = "";
+let g_pos: number = 0;
+let g_err: bool = false;
+function peek(): number {
+  if (g_pos >= g_s.length) return -1;
+  return g_s.charCodeAt(g_pos);
+}
+function parse_factor(): number {
+  if (g_pos >= g_s.length) { g_err = true; return 0; }
+  const c: number = peek();
+  if (c === 40) {
+    g_pos = g_pos + 1;
+    const v: number = parse_expr();
+    if (g_pos >= g_s.length || peek() !== 41) { g_err = true; return 0; }
+    g_pos = g_pos + 1;
+    return v;
+  }
+  if (c === 45) { g_pos = g_pos + 1; return -parse_factor(); }
+  if (c >= 48 && c <= 57) {
+    let v: number = 0;
+    while (g_pos < g_s.length) {
+      const d: number = peek();
+      if (d < 48 || d > 57) break;
+      v = v * 10 + (d - 48);
+      g_pos = g_pos + 1;
+    }
+    return v;
+  }
+  g_err = true;
+  return 0;
+}
+function parse_term(): number {
+  let v: number = parse_factor();
+  while (!g_err && g_pos < g_s.length) {
+    const c: number = peek();
+    if (c !== 42 && c !== 47) break;
+    g_pos = g_pos + 1;
+    const f: number = parse_factor();
+    if (c === 42) { v = v * f; }
+    else { if (f === 0) { g_err = true; break; } v = Math.trunc(v / f); }
+  }
+  return v;
+}
+function parse_expr(): number {
+  let v: number = parse_term();
+  while (!g_err && g_pos < g_s.length) {
+    const c: number = peek();
+    if (c !== 43 && c !== 45) break;
+    g_pos = g_pos + 1;
+    const t: number = parse_term();
+    if (c === 43) v = v + t;
+    else v = v - t;
+  }
+  return v;
+}
+let ok: u64 = 0;
+let errn: u64 = 0;
+let total: number = 0;
+let t: u64 = 0;
+while (t < 5000) {
+  const corrupt: bool = t % 4 === 3;
+  g_s = gen_expr(12345 + t, corrupt);
+  g_pos = 0;
+  g_err = false;
+  const v: number = parse_expr();
+  if (g_err || g_pos !== g_s.length) { errn = errn + 1; }
+  else { ok = ok + 1; total = (total + v) % 1000003; if (total < 0) total = total + 1000003; }
+  t = t + 1;
+}
+console.log(ok);
+console.log(errn);
+console.log(`${total}`);

@@ -1,0 +1,64 @@
+// respond - JSON render + FNV-1a
+//
+// NOT RUNNABLE ON CP3 YET. This is the natural std-only form of the benchmark;
+// the compiler/runtime surface it needs is missing:
+//
+//   1. String.fromCharCode(code) - no such member: there is no way to build a
+//      character from its byte code (charAt/at only go string -> character).
+//   2. Exact 64-bit integer literals - a numeric literal is a `number`
+//      (double), so 1469598103934665603 initialises as 1469598103934665728.
+//   3. Wrapping u64 multiplication - native arithmetic is checked and throws
+//      on overflow, so the FNV-1a step `h * 1099511628211` traps.
+//
+// Already present: String#charCodeAt (returns a byte `number`), string
+// indexing `s[i]` (also a byte `number`), parseTo<u64>(byte) (the 0..255
+// range check succeeds) and parseTo(value, string), which renders a native
+// u64 exactly (used here instead of the number-only u64.toString()).
+// Hand-rolled if-chains are deliberately not used to fake the missing
+// fromCharCode surface.
+import console from "std/console";
+
+function xsNext(x: u64): u64 {
+  let y: u64 = x;
+  y = y ^ (y << 13);
+  y = y ^ (y >> 7);
+  y = y ^ (y << 17);
+  return y;
+}
+
+let out: string = "";
+let r: u64 = 12345;
+let i: u64 = 0;
+while (i < 10000) {
+  r = xsNext(r);
+  const id: u64 = r % 100000;
+  r = xsNext(r);
+  const length: u64 = 4 + (r % 9);
+  let name: string = "";
+  let j: u64 = 0;
+  while (j < length) {
+    r = xsNext(r);
+    if (j % 8 === 7) {
+      name = name + String.fromCharCode(r % 2 === 0 ? 34 : 92);
+    } else {
+      name = name + String.fromCharCode(97 + (r % 26));
+    }
+    j = j + 1;
+  }
+  r = xsNext(r);
+  const score: u64 = r % 1000;
+  const active: bool = (r >> 8) % 2 === 0;
+  out = out + "{\"id\":" + parseTo(id, string) + ",\"name\":\"" + name +
+        "\",\"score\":" + parseTo(score, string) + ",\"active\":" +
+        (active ? "true" : "false") + "},";
+  i = i + 1;
+}
+
+let h: u64 = 1469598103934665603;
+let k: u64 = 0;
+while (k < out.length) {
+  h = (h ^ parseTo<r_'u64'>(out.charCodeAt(k))) * 1099511628211;
+  k = k + 1;
+}
+console.log(out.length);
+console.log(`${h}`);

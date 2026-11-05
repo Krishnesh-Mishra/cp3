@@ -1,0 +1,9 @@
+{
+  "name": "particles",
+  "version": "1.0.0",
+  "description": "cp3 particles benchmark entry",
+  "type": "application",
+  "main": "src/index.cp3",
+  "typeSystem": "rust",
+  "scripts": { "start": "cp3c run src/index.cp3" }
+}
