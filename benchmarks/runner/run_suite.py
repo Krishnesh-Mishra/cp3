@@ -423,6 +423,46 @@ def run_command(argv: list[str], cwd: Path | None = None, timeout: float = 300.0
         return subprocess.CompletedProcess(argv, -1, out or "", err)
 
 
+_RUST_TARGET: str | None = None
+_RUST_TARGET_READY = False
+
+
+def rust_target() -> str | None:
+    """Optional cargo/rustc `--target` for this machine, or None.
+
+    A Windows rustc host is normally `x86_64-pc-windows-msvc`, whose linker is
+    `link.exe` plus the Windows SDK import libraries. Some machines have rustc
+    but neither (only MinGW gcc), so use the GNU target when its std is
+    installed. Machines with a visible MSVC linker keep the host default. The
+    probe runs once per suite process.
+    """
+    global _RUST_TARGET, _RUST_TARGET_READY
+    if _RUST_TARGET_READY:
+        return _RUST_TARGET
+    _RUST_TARGET_READY = True
+    if os.name != "nt":
+        return _RUST_TARGET
+    try:
+        info = run_command(["rustc", "-vV"], timeout=30)
+        sysroot = run_command(["rustc", "--print", "sysroot"], timeout=30)
+    except OSError:
+        return _RUST_TARGET
+    host = next((line[6:].strip() for line in (info.stdout or "").splitlines()
+                 if line.startswith("host: ")), "")
+    gnu_lib = (Path((sysroot.stdout or "").strip()) / "lib" / "rustlib" /
+               "x86_64-pc-windows-gnu" / "lib")
+    if (host == "x86_64-pc-windows-msvc" and sysroot.returncode == 0
+            and gnu_lib.is_dir() and shutil.which("link.exe") is None
+            and shutil.which("gcc") is not None):
+        _RUST_TARGET = "x86_64-pc-windows-gnu"
+    return _RUST_TARGET
+
+
+def rust_target_args() -> list[str]:
+    target = rust_target()
+    return ["--target", target] if target else []
+
+
 def run_measured(argv: list[str], cwd: Path | None = None, timeout: float = 900.0,
                  env: dict[str, str] | None = None):
     """run_command plus wall time plus peak-RSS sampling of the child process.
@@ -778,11 +818,15 @@ def prepare_server_entry(language: str, task: str, port: int,
             source = rust_dir / "main.rs"
         if cargo_file.exists():
             binary_name = SERVER_RUST_BIN[task]
-            output = rust_dir / "target" / "release" / f"{binary_name}{EXE}"
+            target = rust_target()
+            target_dir = (rust_dir / "target" / target if target
+                          else rust_dir / "target")
+            output = target_dir / "release" / f"{binary_name}{EXE}"
             inputs = [cargo_file, source, rust_dir / "Cargo.lock"]
             if not output_current(output, inputs):
                 start = time.perf_counter()
-                result = run_command(["cargo", "build", "--release"], cwd=rust_dir, timeout=900)
+                argv = ["cargo", "build", "--release", *rust_target_args()]
+                result = run_command(argv, cwd=rust_dir, timeout=900)
                 row["build_ms"] = (time.perf_counter() - start) * 1000.0
                 if result.returncode != 0:
                     return False, [], "", f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
@@ -793,7 +837,8 @@ def prepare_server_entry(language: str, task: str, port: int,
         output = BUILD / f"{stem}-rust{EXE}"
         if not output_current(output, [source]):
             start = time.perf_counter()
-            result = run_command(["rustc", "-O", "-o", str(output), str(source)])
+            result = run_command(["rustc", "-O", *rust_target_args(),
+                                  "-o", str(output), str(source)])
             row["build_ms"] = (time.perf_counter() - start) * 1000.0
             if result.returncode != 0:
                 return False, [], "", f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
@@ -1160,7 +1205,8 @@ def compute_build_spec(language: str, task: str) -> tuple[list[str], Path, Path]
     if language == "rust":
         output = BUILD / f"{task}-rust{EXE}"
         return (
-        ["rustc", "-C", "opt-level=3", "-o", str(output), str(base / "rust" / "main.rs")],
+        ["rustc", "-C", "opt-level=3", *rust_target_args(),
+         "-o", str(output), str(base / "rust" / "main.rs")],
         output,
         base / "rust" / "main.rs",)
 

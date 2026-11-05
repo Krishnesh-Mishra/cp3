@@ -283,6 +283,12 @@ recorded, and the next full refresh will show the blocker and tier format.
   only writes the generated C++ plus a runtime snapshot under
   `.cp3/build/core/cp3-runtime/`; it does not change the measured executable.
   No debug builds anywhere, for any language.
+- On Windows, `rustc` normally targets `x86_64-pc-windows-msvc`. When no
+  `link.exe` is visible (no MSVC linker/Windows SDK) but the official GNU
+  target and MinGW `gcc` are installed, the runner passes
+  `--target x86_64-pc-windows-gnu` (including the matching cargo target
+  directory). Same optimized Rust source and release settings; no row is
+  skipped.
 - HTTP rows use the installed frameworks listed in
   `cases/health-server/README.md`; the runner falls back to the dependency-free
   entry only when a dependency is missing and prints the chosen variant.
