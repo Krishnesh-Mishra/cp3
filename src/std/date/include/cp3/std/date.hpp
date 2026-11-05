@@ -355,7 +355,8 @@ inline Date addSeconds(const Date& d, double n) {
 }
 
 // `getTime()`: milliseconds since the epoch (the Date has no other state).
-inline double getTime(const Date& d) { return static_cast<double>(d.ms); }
+// The exact std timestamp width `i64`.
+inline std::int64_t getTime(const Date& d) { return d.ms; }
 
 // `getDay()`: day of the week, 0 = Sunday .. 6 = Saturday (1970-01-01 was a
 // Thursday, hence the +4).
@@ -375,9 +376,11 @@ inline double getUTCMinutes(const Date& d) { return getMinutes(d); }
 inline double getUTCSeconds(const Date& d) { return getSeconds(d); }
 
 // The setters: mutate the receiver in place (JS semantics), UTC-backed.
-inline double setTime(Date& d, double ms) {
-    d.ms = static_cast<std::int64_t>(ms);
-    return ms;
+// `setTime` takes a timestamp and every setter returns the new timestamp;
+// the exact std width is `i64`.
+inline std::int64_t setTime(Date& d, std::int64_t ms) {
+    d.ms = ms;
+    return d.ms;
 }
 
 namespace detail {
@@ -392,47 +395,48 @@ inline Date withComponents(Date d, int year, int month, int day, int hour,
 }
 }  // namespace detail
 
-inline double setFullYear(Date& d, double year) {
+inline std::int64_t setFullYear(Date& d, double year) {
     const auto c = detail::componentsFor(d.ms);
     d = detail::withComponents(d, static_cast<int>(year), c.month, c.day,
                                c.hour, c.minute, c.second);
-    return static_cast<double>(d.ms);
+    return d.ms;
 }
-inline double setMonth(Date& d, double month) {
+inline std::int64_t setMonth(Date& d, double month) {
     const auto c = detail::componentsFor(d.ms);
     d = detail::withComponents(d, c.year, static_cast<int>(month) + 1, c.day,
                                c.hour, c.minute, c.second);
-    return static_cast<double>(d.ms);
+    return d.ms;
 }
-inline double setDate(Date& d, double day) {
+inline std::int64_t setDate(Date& d, double day) {
     const auto c = detail::componentsFor(d.ms);
     d = detail::withComponents(d, c.year, c.month, static_cast<int>(day),
                                c.hour, c.minute, c.second);
-    return static_cast<double>(d.ms);
+    return d.ms;
 }
-inline double setHours(Date& d, double hour) {
+inline std::int64_t setHours(Date& d, double hour) {
     const auto c = detail::componentsFor(d.ms);
     d = detail::withComponents(d, c.year, c.month, c.day,
                                static_cast<int>(hour), c.minute, c.second);
-    return static_cast<double>(d.ms);
+    return d.ms;
 }
-inline double setMinutes(Date& d, double minute) {
+inline std::int64_t setMinutes(Date& d, double minute) {
     const auto c = detail::componentsFor(d.ms);
     d = detail::withComponents(d, c.year, c.month, c.day, c.hour,
                                static_cast<int>(minute), c.second);
-    return static_cast<double>(d.ms);
+    return d.ms;
 }
-inline double setSeconds(Date& d, double second) {
+inline std::int64_t setSeconds(Date& d, double second) {
     const auto c = detail::componentsFor(d.ms);
     d = detail::withComponents(d, c.year, c.month, c.day, c.hour, c.minute,
                                static_cast<int>(second));
-    return static_cast<double>(d.ms);
+    return d.ms;
 }
 
 // `Date.parse(s)`: milliseconds since the epoch for an ISO-8601 string;
 // NaN is impossible here (bad input parses to the epoch, like fromISOString).
-inline double parse(const std::string& text) {
-    return static_cast<double>(fromIsoString(text).ms);
+// The exact std timestamp width `i64`.
+inline std::int64_t parse(const std::string& text) {
+    return fromIsoString(text).ms;
 }
 
 // Comparisons + `diffMs` (this minus other, in milliseconds).
@@ -444,8 +448,9 @@ inline bool isAfter(const Date& d, const Date& other) {
     return d.ms > other.ms;
 }
 
-inline double diffMs(const Date& d, const Date& other) {
-    return static_cast<double>(d.ms - other.ms);
+// The exact std timestamp width `i64`.
+inline std::int64_t diffMs(const Date& d, const Date& other) {
+    return d.ms - other.ms;
 }
 
 }  // namespace cp3::runtime::date

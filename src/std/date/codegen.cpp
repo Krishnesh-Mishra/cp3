@@ -16,6 +16,7 @@
 #include "detail/generator/generator.h"
 
 #include <string>
+#include <vector>
 
 #include "detail/int/builtin_tables.h"
 #include "detail/generator/cpp_writer.h"
@@ -79,6 +80,15 @@ bool isDateValue(const Type& t) {
     return t.kind == TypeKind::Class && t.name == "Date";
 }
 
+// The timestamp-returning Date surface: the exact `i64` milliseconds width in
+// a Rust/C++ project; a TypeScript project keeps `number`, so a read widens
+// at the call site.
+bool isTimestampResult(const std::string& fn) {
+    return fn == "getTime" || fn == "diffMs" || fn == "setTime" ||
+           fn == "setFullYear" || fn == "setMonth" || fn == "setDate" ||
+           fn == "setHours" || fn == "setMinutes" || fn == "setSeconds";
+}
+
 }  // namespace
 
 std::string Generator::emitDateCall(const CallExpr& c, const MemberExpr& m) {
@@ -97,8 +107,15 @@ std::string Generator::emitDateCall(const CallExpr& c, const MemberExpr& m) {
         }
         if (m.property == "parse") {
             needsDate_ = true;
-            return "::cp3::runtime::date::parse(" +
-                   joinStrings(emitPlainArgs(c), ", ") + ")";
+            const std::string call =
+                "::cp3::runtime::date::parse(" +
+                joinStrings(emitPlainArgs(c), ", ") + ")";
+            // `parse` returns a timestamp: `i64` in a Rust/C++ project, a
+            // widened `number` in a TypeScript one.
+            if (options_.typeSystem == TypeSystem::TypeScript) {
+                return "static_cast<double>(" + call + ")";
+            }
+            return call;
         }
         return std::string();
     }
@@ -107,12 +124,26 @@ std::string Generator::emitDateCall(const CallExpr& c, const MemberExpr& m) {
     const char* fn = dateRuntimeFn(m.property);
     if (fn == nullptr) return std::string();
     needsDate_ = true;
+    std::vector<std::string> args = emitPlainArgs(c);
+    if (m.property == "setTime" && !args.empty()) {
+        // The runtime takes the exact `i64` timestamp width; a TypeScript
+        // project's `number` argument narrows here.
+        args[0] =
+            "static_cast<std::int64_t>(" + std::move(args[0]) + ")";
+    }
     std::string out = "::cp3::runtime::date::" + std::string(fn) + "(" +
                       expr(*m.object);
-    for (const std::string& arg : emitPlainArgs(c)) {
+    for (const std::string& arg : args) {
         out += ", " + arg;
     }
-    return out + ")";
+    out += ")";
+    // The timestamp surface is the exact `i64` in a Rust/C++ project; a
+    // TypeScript project keeps `number`, so the read widens here.
+    if (options_.typeSystem == TypeSystem::TypeScript &&
+        isTimestampResult(fn)) {
+        return "static_cast<double>(" + out + ")";
+    }
+    return out;
 }
 
 }  // namespace cp3

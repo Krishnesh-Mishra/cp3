@@ -28,6 +28,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/host/std_integer.hpp"
 #include "detail/std_tables.hpp"
 
 namespace cp3 {
@@ -131,6 +132,13 @@ const MemberRow kDateInstanceRows[] = {
 }  // namespace
 
 std::optional<Type> Analyzer::dateMember(const std::string& prop) {
+    // `Date.parse` returns a timestamp: the exact `i64` milliseconds width in
+    // a Rust/C++ project, `number` in a TypeScript one.
+    if (prop == "parse") {
+        return Type::function(
+            {Type::string()},
+            stdIntegerType(StdIntegerKind::Timestamp, options_.typeSystem));
+    }
     return lookupMember(kDateStaticRows, prop);
 }
 
@@ -139,6 +147,29 @@ std::optional<Type> Analyzer::dateMember(const std::string& prop) {
 std::optional<Type> Analyzer::dateInstanceMember(const Type& recv,
                                                  const std::string& prop) {
     (void)recv;
+    // The timestamp surface carries the exact `i64` milliseconds width in a
+    // Rust/C++ project, `number` in a TypeScript one: the timestamp getters
+    // and the millisecond setter. The component getters/setters and the
+    // `add*` steps stay `number` (they are calendar fields).
+    const StdIntegerKind kTimestamp = StdIntegerKind::Timestamp;
+    if (prop == "getTime" || prop == "diffMs") {
+        return Type::function(
+            prop == "diffMs" ? std::vector<Type>{dateValue()} : std::vector<Type>{},
+            stdIntegerType(kTimestamp, options_.typeSystem));
+    }
+    if (prop == "setTime") {
+        const Type timestamp =
+            stdIntegerType(kTimestamp, options_.typeSystem);
+        return Type::function({timestamp}, timestamp);
+    }
+    if (prop == "setFullYear" || prop == "setMonth" || prop == "setDate" ||
+        prop == "setHours" || prop == "setMinutes" || prop == "setSeconds") {
+        // The parameter is a calendar field (`number`); the return is the
+        // new timestamp.
+        return Type::function(
+            {Type::number()},
+            stdIntegerType(kTimestamp, options_.typeSystem));
+    }
     return lookupMember(kDateInstanceRows, prop);
 }
 

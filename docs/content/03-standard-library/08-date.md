@@ -57,7 +57,9 @@ The original `release` remains unchanged after `addDays`.
 
 ## API index
 
-Static: `now()`, `fromISOString(s)`. Instance: `toISOString()`, `toString()`, `getFullYear()`, `getMonth()`, `getDate()`, `getHours()`, `getMinutes()`, `getSeconds()`, `addDays(n)`, `addHours(n)`, `addMinutes(n)`, `addSeconds(n)`, `isBefore(other)`, `isAfter(other)`, `diffMs(other)`.
+Static: `now()`, `fromISOString(s)`, `parse(s)`. Instance: `toISOString()`, `toString()`, `getFullYear()`, `getMonth()`, `getDate()`, `getHours()`, `getMinutes()`, `getSeconds()`, `getTime()`, `setTime()`, `addDays(n)`, `addHours(n)`, `addMinutes(n)`, `addSeconds(n)`, `isBefore(other)`, `isAfter(other)`, `diffMs(other)`.
+
+Numeric Date values follow the project vocabulary. A `typescript` project keeps `number`; a `rust` or `cpp` project uses the exact standard-library width: `Date.parse(s)`, `getTime()`, `diffMs(other)`, `setTime(ms)` and every mutator's returned milliseconds are `i64` (`int64_t` in C++), and `setTime` takes that same `i64`. The calendar getters and the calendar parameters of `setFullYear` through `setSeconds` stay `number`.
 
 ## Full method reference
 
@@ -73,7 +75,9 @@ Static: `now()`, `fromISOString(s)`. Instance: `toISOString()`, `toString()`, `g
 | `getHours`, `getMinutes`, `getSeconds` | `(): number` | Corresponding time component |
 | `addDays`, `addHours`, `addMinutes`, `addSeconds` | `(n: number): Date` | New Date shifted by the requested amount |
 | `isBefore`, `isAfter` | `(other: Date): boolean` | Compare date ordering |
-| `diffMs` | `(other: Date): number` | This timestamp minus the other's, in milliseconds |
+| `getTime` | `getTime(): i64 (`number` in TypeScript projects)` | Milliseconds since the epoch |
+| `setTime` | `setTime(ms: i64): i64` | Set this Date from a millisecond timestamp (`number`/`double` in TypeScript projects) |
+| `diffMs` | `(other: Date): i64` | This timestamp minus the other's, in milliseconds |
 
 `Date` is a built-in nominal type. Importing `std/date` provides the static namespace operations; instance methods operate on Date values. Unknown static and instance members are not an invitation to use the full JavaScript Date API.
 

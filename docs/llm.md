@@ -294,6 +294,7 @@ Results are `number` (`r_'f64'` ≡ `number`). With *native* arguments the resul
 
 ### `date` — `import date from "std/date"`
 `Date.now()` · `Date.fromISOString(s)` · `Date.parse(s)` · `toISOString()` · `toString()` · `getFullYear/getMonth/getDate/getHours/getMinutes/getSeconds()` · `getTime()` · `getDay()` · `getUTCFullYear/getUTCMonth/getUTCDate/getUTCDay/getUTCHours/getUTCMinutes/getUTCSeconds()` · `setTime/setFullYear/setMonth/setDate/setHours/setMinutes/setSeconds(n)` (in place) · `addDays/addHours/addMinutes/addSeconds(n)` · `isBefore/isAfter(other)` · `diffMs(other)`
+- Exact widths in a `rust`/`cpp` project: `Date.parse`, `getTime()`, `diffMs(...)`, `setTime(ms)` and every `set*` return value are `i64` timestamps (`number` in a TypeScript project). Calendar getters/setter parameters stay `number`.
 
 ### `json` — `import JSON from "std/json"`
 `JSON.parse<T>(text)` (throws catchable error on bad input) · `JSON.stringify(value, indent?)` (numeric indent pretty-prints)
@@ -309,7 +310,6 @@ Encodings: `utf8`, `hex`, `base64`. Invalid hex/base64 throws catchable error.
 Map: `set` `get` `has` `delete` `clear` `keys` `values` `entries` `forEach((value, key) => ...)` `size`; `new Map<K, V>(entries)` (from `[k, v]` pairs / `entries()`); static `Map.groupBy(list, (item, index) => key): Map<K, T[]>`
 Set: `add` `has` `delete` `clear` `values` `forEach(value => ...)` `size`, `union`/`intersection`/`difference`/`isSubsetOf`; `new Set<T>(elements)`
 LRUCache: `new LRUCache<K, V>(capacity)`, `set` `get` (moves to MRU) `has` (no move) `delete` `clear` `keys` (MRU first) `size` `capacity`; inserting beyond capacity evicts the least recently used entry
-
 ### `network` — `import { fetch, WebSocket, WebSocketServer, createServer, lookup } from "std/network"`
 - `fetch(url, init?): Promise<FetchResponse>` — `init`: `method`, `headers: Map<string,string>`, `body`, `timeout?` (0 = none). HTTP only (no TLS yet).
 - Response: `ok`, `status`, `statusText`, `headers`, `text(): Promise<string>`, `arrayBuffer(): Promise<Buffer>`, `json<T>()`. `status` is `number` in a `typescript` project and `u16` in `rust`/`cpp` (see the std integer widths table in the native-types docs).
