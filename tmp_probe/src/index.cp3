@@ -1,5 +1,0 @@
-import console from "std/console";
-import { Set } from "std/collections";
-const s = new Set<number>([1, 2, 3]);
-const a = [...s];
-console.log(a.join(","));
