@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "cp3\n2\nq=cp3&page=2\nq=cp3&page=2&extra=1\n?q=cp3&page=2\nhttps://example.com/search?q=cp3&page=2\nhttps://example.com/search?q=cp3&page=2&extra=1\n1\n",
+  "exitCode": 0
+}

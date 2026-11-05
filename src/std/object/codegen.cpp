@@ -1,5 +1,6 @@
 // =============================================================================
-// src/std/object/codegen.cpp - `Object.keys` / `.values` / `.entries` lowering.
+// src/std/object/codegen.cpp - `Object.keys` / `.values` / `.entries` lowering,
+// plus `Object.fromEntries` / `Object.groupBy` (ROADMAP L).
 //
 // The argument's static value shape fixes the field list and order. Each call
 // evaluates the receiver once, then builds a cp3 array:
@@ -8,9 +9,19 @@
 //   Object.values(o)  -> makeArray<V>({ o->a, o->b })
 //   Object.entries(o) -> makeArray<tuple<string, V>>({ make_tuple("a", o->a), ... })
 //
+// `Record<string, V>` canonicalizes to `Map<string, V>`, so the two
+// dynamic-key helpers lower onto the collections runtime (the runtime logic
+// for both lives here, in the emitted code; no new include flag is needed
+// beyond the existing `needsCollections_`):
+//
+//   Object.fromEntries(entries) -> makeMap<std::string, V>() + a set loop
+//                                  over std::get<0>/<1> (pair and tuple
+//                                  entries alike, as `new Map(entries)` does)
+//   Object.groupBy(list, keyFn) -> collections::groupBy<std::string, T>(list, cb)
+//
 // Sema (src/std/object/sema.cpp) owns the result types; this unit only emits
-// the matching array construction. Shapes with no static field list are
-// rejected there, so an empty spelling here is a real lowering gap.
+// the matching construction. Shapes with no static field list are rejected
+// there, so an empty spelling here is a real lowering gap.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -101,6 +112,105 @@ std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
         const std::string lhs = expr(*c.arguments.front());
         const std::string rhs = expr(*c.arguments[1]);
         return "::cp3::runtime::cp3_object_is(" + lhs + ", " + rhs + ")";
+    }
+    if (m.property == "fromEntries") {
+        if (c.arguments.size() != 1 || !c.arguments.front()) {
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "arity mismatch: Object.fromEntries expects "
+                               "exactly one argument (the entries array)");
+            return "0.0";
+        }
+        const Type ret = effectiveType(c);
+        if (ret.kind != TypeKind::Class || ret.name != "Map" ||
+            ret.parts.size() < 2) {
+            reportTypeError(c, "type mismatch: Object.fromEntries needs an "
+                               "array of [key, value] entries");
+            return "0.0";
+        }
+        const CppInfo vc = classify(ret.parts[1]);
+        if (!vc.representable) {
+            reportTypeError(c, "type mismatch: Object.fromEntries needs a "
+                               "known value type (Record<string, V>)");
+            return "0.0";
+        }
+        needsCollections_ = true;
+        needsTuple_ = true;
+        // Same runtime as `new Map<K, V>(entries)`: std::get reads a pair
+        // (Map.entries) and a tuple (Object.entries / a [k, v] literal)
+        // alike, so one loop covers both sources. Later duplicate keys
+        // overwrite earlier ones, in place (Map.set semantics).
+        return "([&]{ auto cp3_m = ::cp3::runtime::collections::makeMap<std::"
+               "string, " +
+               vc.cpp + ">(); for (const auto& cp3_e : *(" +
+               expr(*c.arguments.front()) + ")) " +
+               "cp3_m->set(std::get<0>(cp3_e), std::get<1>(cp3_e)); "
+               "return cp3_m; }())";
+    }
+    if (m.property == "groupBy") {
+        if (c.arguments.size() != 2 || !c.arguments.front() ||
+            !c.arguments[1]) {
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "arity mismatch: Object.groupBy expects "
+                               "exactly two arguments (the list and the key "
+                               "callback)");
+            return "0.0";
+        }
+        const Type ret = effectiveType(c);
+        if (ret.kind != TypeKind::Class || ret.name != "Map" ||
+            ret.parts.size() < 2 ||
+            ret.parts[1].kind != TypeKind::Array ||
+            ret.parts[1].parts.empty()) {
+            reportTypeError(c, "type mismatch: Object.groupBy needs an array "
+                               "and a key callback returning string");
+            return "0.0";
+        }
+        const Type elem = ret.parts[1].parts.front();
+        const CppInfo ec = classify(elem);
+        if (!ec.representable) {
+            reportTypeError(c, "type mismatch: Object.groupBy needs a known "
+                               "element type");
+            return "0.0";
+        }
+        needsCollections_ = true;
+        const Expr& items = *c.arguments.front();
+        const Expr& cb = *c.arguments[1];
+        // Callback context (item, index, array), matching sema - the same
+        // adaptation as Map.groupBy (src/std/collections/codegen.cpp): an
+        // arrow takes the context types, any other callable is adapted to
+        // the runtime's 3-argument call with the prefix it declares.
+        const std::string arrayCpp = "::cp3::runtime::Array<" + ec.cpp + ">";
+        std::string callback;
+        if (cb.kind == NodeKind::ArrowFunction) {
+            callback = emitArrow(static_cast<const ArrowFunction&>(cb),
+                                 {ec.cpp, "double", arrayCpp});
+        } else {
+            const Type fnType = effectiveType(cb);
+            if (fnType.kind == TypeKind::Function && !fnType.parts.empty()) {
+                const std::size_t arity =
+                    fnType.parts.size() > 1 ? fnType.parts.size() - 1 : 0;
+                if (arity > 3) {
+                    reportTypeError(
+                        cb, "type mismatch: the Object.groupBy callback takes "
+                            "at most 3 argument(s), got " +
+                                std::to_string(arity));
+                    return "0.0";
+                }
+                const std::string fnText = expr(cb);
+                std::string call;
+                for (std::size_t i = 0; i < arity; ++i) {
+                    if (i != 0) call += ", ";
+                    call += "cp3_value" + std::to_string(i);
+                }
+                callback = "[cp3_cb = (" + fnText + ")](" + ec.cpp +
+                           " cp3_value0, double cp3_value1, " + arrayCpp +
+                           " cp3_value2) -> std::string { return cp3_cb(" +
+                           call + "); }";
+            } else {
+                callback = expr(cb);
+            }
+        }
+        return "::cp3::runtime::collections::groupBy<std::string, " +
+               ec.cpp + ">(" + expr(items) + ", " + callback + ")";
     }
     if (m.property != "keys" && m.property != "values" &&
         m.property != "entries") {

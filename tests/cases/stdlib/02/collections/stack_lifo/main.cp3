@@ -1,0 +1,21 @@
+import console from "std/console";
+import { Stack } from "std/collections";
+
+// Stack is LIFO: push adds to the top, pop removes from the top,
+// peek reads the top without removing it.
+const s = new Stack<number>();
+console.log(s.isEmpty());
+s.push(10);
+s.push(20);
+s.push(30);
+console.log(`${s.size}`);
+console.log(`${s.peek()}`);
+console.log(`${s.pop()}`);
+console.log(`${s.pop()}`);
+console.log(`${s.size}`);
+console.log(`${s.peek()}`);
+s.clear();
+console.log(s.isEmpty());
+console.log(`${s.size}`);
+console.log(s.pop() === undefined ? "empty" : "not-empty");
+console.log(s.peek() === undefined ? "empty" : "not-empty");

@@ -1,0 +1,13 @@
+import console from "std/console";
+import { URL } from "std/url";
+const u = new URL("http://user:pass@example.com/secret");
+console.log(u.username);
+console.log(u.password);
+console.log(u.host);
+console.log(u.hostname);
+console.log(u.href);
+const v = new URL("http://[::1]:8080/a");
+console.log(v.hostname);
+console.log(v.host);
+console.log(v.port);
+console.log(v.href);

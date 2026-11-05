@@ -129,6 +129,18 @@ const char* checkedCompoundName(AssignOp op) {
     }
 }
 
+// True for a Record<string, V> / Map<string, V> receiver (mirror of
+// emit/expr/expr.cpp; only the exact non-nullish Map qualifies).
+bool isStringKeyMapTarget(const Type& t) {
+    if (t.kind != TypeKind::Class || t.name != "Map" || t.parts.size() < 2) {
+        return false;
+    }
+    const Type& key = t.parts[0];
+    return key.isString() ||
+           (key.isLiteral() && key.literalBase == TypeKind::String) ||
+           key.kind == TypeKind::TypeParam;
+}
+
 }  // namespace
 
 namespace detail {
@@ -153,6 +165,10 @@ struct AssignEmitter {
     std::string cellValue(AssignOp op, const CppInfo& T,
                           const std::string& target, const std::string& value,
                           const Expr& rhs);
+    // A Record<string, V> / Map<string, V> index write (`r[k] = v` and the
+    // compounds): `set` with a read-modify-write through `get`. Empty when
+    // the target is not a string-keyed Map, so the family path keeps it.
+    std::string mapIndexWrite(const AssignmentExpr& a);
 };
 
 // A compound write to a shared cell: the cell's own value is read, combined
@@ -243,6 +259,109 @@ std::string AssignEmitter::cellValue(AssignOp op, const CppInfo& T,
         default:
             return "(" + target + ".set(" + value + "), " + current + ")";
     }
+}
+
+// `r[k] = v` and the compounds over a Record<string, V> / Map<string, V>:
+// `set` with a read-modify-write through `get`, never through a temporary
+// object property. Receiver and key are bound once; the assigned value is
+// bound once and returned (JS assignment yields the stored value).
+std::string AssignEmitter::mapIndexWrite(const AssignmentExpr& a) {
+    if (!a.target || a.target->kind != NodeKind::IndexExpr || !a.value) {
+        return std::string();
+    }
+    const auto& ix = static_cast<const IndexExpr&>(*a.target);
+    if (!ix.object || !ix.index) return std::string();
+    Type recv = g.effectiveType(*ix.object);
+    if (recv.isLiteral()) recv = recv.literalBaseType();
+    if (!isStringKeyMapTarget(recv)) return std::string();
+    g.needsCollections_ = true;
+    const Type valueType = recv.parts[1];
+    const std::string recvText = g.expr(*ix.object);
+    const std::string keyText = g.expr(*ix.index);
+    // The assigned value against V (the map's value type).
+    const std::optional<Type> savedExpected = g.expected_;
+    g.expected_ = valueType;
+    const std::string valueText = g.expr(*a.value);
+    g.expected_ = savedExpected;
+    if (a.op == AssignOp::Assign) {
+        return "([&]{ auto cp3_m = " + recvText + "; auto cp3_k = " + keyText +
+               "; auto cp3_v = " + valueText +
+               "; cp3_m->set(cp3_k, cp3_v); return cp3_v; }())";
+    }
+    // Short-circuit compounds must not evaluate the right operand eagerly.
+    // The right operand text appears only inside the taken branch, so an
+    // effectful right operand runs exactly when JS demands it.
+    if (a.op == AssignOp::LogicalAnd || a.op == AssignOp::LogicalOr ||
+        a.op == AssignOp::Nullish) {
+        const std::string head = "([&]{ auto cp3_m = " + recvText +
+                                 "; auto cp3_k = " + keyText +
+                                 "; auto cp3_o = cp3_m->get(cp3_k); ";
+        if (a.op == AssignOp::LogicalAnd) {
+            return head +
+                   "if (cp3_o.has_value() && cp3_truthy(*cp3_o)) { auto cp3_r = " +
+                   valueText +
+                   "; cp3_m->set(cp3_k, cp3_r); return cp3_m->get(cp3_k); } "
+                   "return cp3_o; }())";
+        }
+        if (a.op == AssignOp::LogicalOr) {
+            return head +
+                   "if (cp3_o.has_value() && cp3_truthy(*cp3_o)) return cp3_o; "
+                   "auto cp3_r = " +
+                   valueText +
+                   "; cp3_m->set(cp3_k, cp3_r); return cp3_m->get(cp3_k); }())";
+        }
+        // Nullish: the result is V (the stored value), not the optional.
+        return head +
+               "if (cp3_o.has_value()) return *cp3_o; auto cp3_r = " +
+               valueText +
+               "; cp3_m->set(cp3_k, cp3_r); return cp3_r; }())";
+    }
+    // Arithmetic / bitwise / shift / modulo / power: read-modify-write.
+    const CppInfo vc = classify(valueType);
+    if (vc.shape != Shape::Number && vc.shape != Shape::Native) {
+        g.reportTypeError(a, "this compound assignment operator has no C++ lowering");
+        return "0.0";
+    }
+    // Missing-key seed per op family: NaN for double arithmetic, 0 for
+    // ToInt32/native (JS `undefined` coerces to NaN, then to 0 for `&` etc.).
+    const bool bitwise = bitwiseHelper(a.op) != nullptr;
+    const std::string seed = (vc.shape == Shape::Native || bitwise)
+                                 ? std::string("0")
+                                 : std::string("std::numeric_limits<double>::quiet_NaN()");
+    const std::string head =
+        "([&]{ auto cp3_m = " + recvText + "; auto cp3_k = " + keyText +
+        "; auto cp3_o = cp3_m->get(cp3_k); auto cp3_old = cp3_o.value_or(" +
+        seed + "); auto cp3_r = " + valueText + "; ";
+    std::string next;
+    if (vc.shape == Shape::Native && isNativeInteger(valueType)) {
+        if (const char* fn = checkedCompoundName(a.op); fn != nullptr) {
+            next = "::cp3::runtime::checked::" + std::string(fn) + "<" +
+                   vc.cpp + ">(cp3_old, cp3_r)";
+        } else if (const char* raw = nativeCompoundOp(a.op); raw != nullptr) {
+            next = "(cp3_old " + std::string(raw) + " cp3_r)";
+        } else {
+            g.reportTypeError(a, "this compound assignment operator has no C++ lowering");
+            return "0.0";
+        }
+    } else if (const char* helper = bitwiseHelper(a.op)) {
+        next = "::cp3::runtime::bitwise::" + std::string(helper) + "(cp3_old, cp3_r)";
+    } else {
+        switch (a.op) {
+            case AssignOp::Add: next = "(cp3_old + cp3_r)"; break;
+            case AssignOp::Subtract: next = "(cp3_old - cp3_r)"; break;
+            case AssignOp::Multiply: next = "(cp3_old * cp3_r)"; break;
+            case AssignOp::Divide: next = "(cp3_old / cp3_r)"; break;
+            case AssignOp::Modulo:
+                next = g.modCall("cp3_old", *a.value, "cp3_r");
+                break;
+            case AssignOp::Power: next = "std::pow(cp3_old, cp3_r)"; break;
+            default:
+                g.reportTypeError(a, "this compound assignment operator has no C++ lowering");
+                return "0.0";
+        }
+    }
+    return head + "auto cp3_new = " + next +
+           "; cp3_m->set(cp3_k, cp3_new); return cp3_new; }())";
 }
 
 std::string AssignEmitter::int64WriteText(const AssignmentExpr& a) {
@@ -358,6 +477,13 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
         // the family's checked writes first
         // (src/std/typed-arrays/codegen_methods.cpp).
         if (a.target->kind == NodeKind::IndexExpr) {
+            // Record<string, V> / Map<string, V> writes (`r[k] = v` and the
+            // compounds) lower to the collections `set`/`get` forms, before
+            // the family's checked writes (typed array / array).
+            if (std::string w = detail::AssignEmitter(*this).mapIndexWrite(a);
+                !w.empty()) {
+                return w;
+            }
             if (std::string w = emitFamilyIndexWrite(a); !w.empty()) return w;
             // A tuple slot (`t[0] = 2`): std::get<i> is the lvalue.
             const auto& ix = static_cast<const IndexExpr&>(*a.target);

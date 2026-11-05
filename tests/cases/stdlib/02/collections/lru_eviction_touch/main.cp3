@@ -1,0 +1,16 @@
+import console from "std/console";
+import { LRUCache } from "std/collections";
+
+// get marks a key most recently used, so the next insert evicts the
+// other (least recently used) key.
+const c = new LRUCache<string, number>(2);
+c.set("a", 1);
+c.set("b", 2);
+console.log(`${c.get("a")}`);
+c.set("c", 3);
+console.log(c.has("b"));
+console.log(c.has("a"));
+console.log(c.has("c"));
+console.log(c.keys().join(","));
+console.log(`${c.size}`);
+console.log(`${c.capacity}`);

@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "greeting=hello+world&tok=a%26b%3Dc\n1\nA\n",
+  "exitCode": 0
+}

@@ -1,0 +1,20 @@
+import console from "std/console";
+import { MultiMap } from "std/collections";
+
+// MultiMap stores a list of values per key: add appends, get returns
+// every value for the key in add order (empty array when absent).
+const m = new MultiMap<string, number>();
+m.add("a", 1);
+m.add("a", 2);
+m.add("b", 3);
+console.log(`${m.size}`);
+console.log(m.get("a").join(","));
+console.log(m.get("b").join(","));
+console.log(`${m.get("missing").length}`);
+console.log(m.has("a"));
+console.log(m.has("missing"));
+console.log(m.delete("a"));
+console.log(m.has("a"));
+console.log(`${m.size}`);
+m.clear();
+console.log(`${m.size}`);

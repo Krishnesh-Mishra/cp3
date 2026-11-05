@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "mailto:\nUser@Example.com\nno-host\nno-port\nno-origin\nmailto:User@Example.com\n",
+  "exitCode": 0
+}

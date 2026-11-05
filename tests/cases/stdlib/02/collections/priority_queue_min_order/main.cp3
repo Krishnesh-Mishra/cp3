@@ -1,0 +1,12 @@
+import console from "std/console";
+import { PriorityQueue } from "std/collections";
+
+// Default PriorityQueue is a min-heap: the smallest element pops first.
+const pq = new PriorityQueue<number>();
+pq.push(5);
+pq.push(1);
+pq.push(3);
+console.log(`${pq.peek()}`);
+console.log(`${pq.pop()}`);
+console.log(`${pq.pop()}`);
+console.log(`${pq.pop()}`);

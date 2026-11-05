@@ -1,0 +1,40 @@
+import console from "std/console";
+import { BitSet, LRUCache, Map, MultiMap, PriorityQueue, Queue, RingBuffer, Set, Stack } from "std/collections";
+
+// Every collection type is imported from the single "std/collections"
+// specifier; there are no per-type module specifiers.
+const m = new Map<string, number>();
+m.set("a", 1);
+console.log(`${m.size}`);
+
+const s = new Set<number>();
+s.add(1);
+console.log(`${s.size}`);
+
+const l = new LRUCache<string, number>(1);
+l.set("a", 1);
+console.log(`${l.capacity}`);
+
+const q = new Queue<number>();
+q.enqueue(1);
+console.log(`${q.size}`);
+
+const st = new Stack<number>();
+st.push(1);
+console.log(`${st.size}`);
+
+const pq = new PriorityQueue<number>();
+pq.push(1);
+console.log(`${pq.peek()}`);
+
+const rb = new RingBuffer<number>(1);
+rb.push(1);
+console.log(`${rb.size}`);
+
+const bs = new BitSet();
+bs.set(0);
+console.log(`${bs.count()}`);
+
+const mm = new MultiMap<string, number>();
+mm.add("a", 1);
+console.log(`${mm.size}`);

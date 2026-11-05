@@ -1,0 +1,10 @@
+import console from "std/console";
+let o = { a: 1, b: 2 };
+let r: Record<string, number> = Object.fromEntries(Object.entries(o));
+console.log(`${r.get("a")}`);
+console.log(`${r.get("b")}`);
+console.log(r.size);
+let r2 = Object.fromEntries([["x", 10], ["y", 20]]);
+console.log(`${r2.get("x")}`);
+console.log(`${r2.get("y")}`);
+console.log(`${r2.size}`);

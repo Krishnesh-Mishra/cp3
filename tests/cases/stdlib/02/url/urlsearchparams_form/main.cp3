@@ -1,0 +1,9 @@
+import console from "std/console";
+import { URLSearchParams } from "std/url";
+const sp = new URLSearchParams();
+sp.append("greeting", "hello world");
+sp.append("tok", "a&b=c");
+console.log(sp.toString());
+const q = new URLSearchParams("hello+world=1&x=%41");
+console.log(`${q.get("hello world")}`);
+console.log(`${q.get("x")}`);

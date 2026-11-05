@@ -1,0 +1,18 @@
+import console from "std/console";
+import { URL, URLSearchParams } from "std/url";
+
+// Parse -> read -> serialize -> re-parse -> rebuild: the query must
+// roundtrip exactly, including form encoding (`+` for space, `%26` for `&`).
+const u = new URL("https://example.com/search?q=hello+world&page=2&tag=a%26b#frag");
+console.log(`${u.searchParams.get("q")}`);
+console.log(`${u.searchParams.get("page")}`);
+console.log(`${u.searchParams.get("tag")}`);
+console.log(u.searchParams.toString());
+const again = new URLSearchParams(u.searchParams.toString());
+console.log(again.toString());
+console.log(`${again.get("q")}`);
+console.log(`${again.get("tag")}`);
+console.log(again.getAll("page").join(","));
+const rebuilt = new URL("https://example.com/search?" + again.toString() + "#frag");
+console.log(rebuilt.href);
+console.log(rebuilt.href === u.href ? "roundtrip" : "bad");

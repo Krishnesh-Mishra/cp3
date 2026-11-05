@@ -1,0 +1,22 @@
+import console from "std/console";
+import { RingBuffer } from "std/collections";
+
+// RingBuffer has a fixed capacity: pushing past capacity overwrites
+// the oldest element and the ring never grows.
+const r = new RingBuffer<number>(3);
+console.log(`${r.capacity}`);
+console.log(`${r.size}`);
+console.log(r.isFull);
+r.push(1);
+r.push(2);
+r.push(3);
+console.log(r.isFull);
+console.log(`${r.size}`);
+console.log(`${r.peek()}`);
+r.push(4);
+console.log(`${r.size}`);
+console.log(`${r.pop()}`);
+console.log(`${r.pop()}`);
+console.log(`${r.pop()}`);
+console.log(r.pop() === undefined ? "empty" : "not-empty");
+console.log(r.isFull);

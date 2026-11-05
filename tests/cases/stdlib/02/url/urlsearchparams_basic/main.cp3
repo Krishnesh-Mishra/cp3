@@ -1,0 +1,14 @@
+import console from "std/console";
+import { URLSearchParams } from "std/url";
+const sp = new URLSearchParams("a=1&b=2&a=3");
+console.log(`${sp.get("a")}`);
+console.log(sp.get("missing") === undefined ? "missing" : "bad");
+console.log(sp.getAll("a").join(","));
+console.log(sp.has("b") ? "yes" : "no");
+sp.append("c", "4");
+console.log(sp.toString());
+sp.set("a", "9");
+console.log(sp.toString());
+console.log(sp.delete("b") ? "deleted" : "none");
+console.log(sp.toString());
+console.log(`${sp.entries().length}`);

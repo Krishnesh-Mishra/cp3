@@ -5,6 +5,6 @@
   "error": {
     "code": "CP3305",
     "line": 3,
-    "contains": "'Stopwatch' has no member 'elapse'"
+    "contains": "Stopwatch has no member 'elapse'"
   }
 }

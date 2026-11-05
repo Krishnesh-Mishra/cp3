@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "3\n0\nfalse\ntrue\n3\n1\n3\n2\n3\n4\nempty\nfalse\n",
+  "exitCode": 0
+}

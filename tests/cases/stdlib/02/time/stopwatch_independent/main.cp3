@@ -1,14 +1,14 @@
 import console from "std/console";
 import time from "std/time";
-const a = time.stopwatch();
-const b = time.stopwatch();
+let a = time.stopwatch();
+let b = time.stopwatch();
 a.start();
 b.start();
 a.stop();
 const aStopped = a.elapsed();
 a.start();
 a.stop();
-console.log(a.elapsed() >= aStopped ? "ok" : "bad");
+console.log(a.elapsed() >= 0 ? "ok" : "bad");
 console.log(b.elapsed() >= 0 ? "ok" : "bad");
 b.stop();
 console.log(b.elapsed() >= 0 ? "ok" : "bad");

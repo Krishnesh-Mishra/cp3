@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "hello world\n2\na&b\nq=hello+world&page=2&tag=a%26b\nq=hello+world&page=2&tag=a%26b\nhello world\na&b\n2\nhttps://example.com/search?q=hello+world&page=2&tag=a%26b#frag\nroundtrip\n",
+  "exitCode": 0
+}

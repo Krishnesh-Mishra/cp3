@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "http://example.com/\nno-port\nhttp://example.com\nhttps://example.com/x\nno-port\n",
+  "exitCode": 0
+}

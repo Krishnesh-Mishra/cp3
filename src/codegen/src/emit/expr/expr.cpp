@@ -61,6 +61,20 @@ std::string nativeIntegerLiteralText(const std::string& raw,
            std::to_string(magnitude) + suffix + ")";
 }
 
+// True for a Record<string, V> / Map<string, V> receiver (the canonical
+// Record type, docs/design/record-index-signatures.md). Only the exact
+// non-nullish Map qualifies: a nullable/union receiver must be narrowed
+// before subscripting (the member-call surface has the same rule).
+bool isStringKeyMap(const Type& t) {
+    if (t.kind != TypeKind::Class || t.name != "Map" || t.parts.size() < 2) {
+        return false;
+    }
+    const Type& key = t.parts[0];
+    return key.isString() ||
+           (key.isLiteral() && key.literalBase == TypeKind::String) ||
+           key.kind == TypeKind::TypeParam;
+}
+
 }  // namespace
 
 // A whole array in a formatter or truthiness test pulls the arr family block
@@ -152,8 +166,23 @@ std::string Generator::exprPlain(const Expr& e) {
             return emitNewExprValue(static_cast<const NewExpr&>(e));
         case NodeKind::ArrayLiteral:
             return arrayLiteralText(static_cast<const ArrayLiteral&>(e), Type::unknown());
-        case NodeKind::IndexExpr:
-            return emitIndexExpr(static_cast<const IndexExpr&>(e));
+        case NodeKind::IndexExpr: {
+            const auto& ix = static_cast<const IndexExpr&>(e);
+            // Record<string, V> / Map<string, V> read: reuse the exact C++
+            // the `get` member call lowers to (`(recv)->get(key)`), so a
+            // missing key yields `undefined` (std::nullopt) with the same
+            // semantics as `r.get(k)`. The family dispatch owns the rest.
+            if (ix.object && ix.index) {
+                Type recv = effectiveType(*ix.object);
+                if (recv.isLiteral()) recv = recv.literalBaseType();
+                if (isStringKeyMap(recv)) {
+                    needsCollections_ = true;
+                    return "(" + expr(*ix.object) + ")->get(" +
+                           expr(*ix.index) + ")";
+                }
+            }
+            return emitIndexExpr(ix);
+        }
         case NodeKind::AwaitExpr:
             return emitAwait(static_cast<const AwaitExpr&>(e));
         case NodeKind::MemberExpr:
@@ -1085,6 +1114,36 @@ std::string Generator::emitUpdateIndex(const UpdateExpr& u,
     }
     Type receiver = effectiveType(*ix.object);
     if (receiver.isLiteral()) receiver = receiver.literalBaseType();
+    // Record<string, V> / Map<string, V> update: read-modify-write through
+    // the `get`/`set` member-call forms, with receiver and key bound once.
+    // A missing key reads as undefined, so the arithmetic starts from NaN
+    // (JS `undefined + 1 === NaN`), exactly as a plain `r[k] + 1` would.
+    if (isStringKeyMap(receiver)) {
+        const CppInfo vc = classify(receiver.parts[1]);
+        if (vc.shape != Shape::Number && vc.shape != Shape::Native) {
+            reportTypeError(u, "cannot increment an element that is not a "
+                               "number");
+            return "0.0";
+        }
+        needsCollections_ = true;
+        // Native integers use the checked helper, like the identifier path.
+        const std::string step = (vc.shape == Shape::Native)
+            ? (std::string("::cp3::runtime::checked::") +
+               (u.op == UpdateOp::Increment ? "add" : "sub") + "<" + vc.cpp +
+               ">(cp3_old, 1)")
+            : ("(cp3_old " + std::string(op) + " " + amount + ")");
+        const std::string fallback = (vc.shape == Shape::Native)
+            ? "0"
+            : "std::numeric_limits<double>::quiet_NaN()";
+        const std::string recvText = expr(*ix.object);
+        const std::string keyText = expr(*ix.index);
+        const std::string head =
+            "([&]{ auto cp3_m = " + recvText + "; auto cp3_k = " + keyText +
+            "; auto cp3_o = cp3_m->get(cp3_k); auto cp3_old = cp3_o.value_or(" +
+            fallback + "); auto cp3_new = " + step +
+            "; cp3_m->set(cp3_k, cp3_new); return ";
+        return head + (u.prefix ? "cp3_new;" : "cp3_old;") + " }())";
+    }
     const CppInfo shape = classify(receiver);
     const std::string recv = expr(*ix.object);
     const std::string index = indexOperandText(*ix.index);

@@ -1,0 +1,12 @@
+import console from "std/console";
+import { URL } from "std/url";
+const u = new URL("https://Example.COM:8080/path/file.html?q=1&x=hello%20world#top");
+console.log(u.protocol);
+console.log(u.host);
+console.log(u.hostname);
+console.log(u.port);
+console.log(u.pathname);
+console.log(u.search);
+console.log(u.hash);
+console.log(u.origin);
+console.log(u.href);

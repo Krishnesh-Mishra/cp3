@@ -1,0 +1,33 @@
+import console from "std/console";
+import { LRUCache, Map, Set } from "std/collections";
+
+// Deterministic size/capacity counts: overwriting a Map key does not grow
+// it, deleting shrinks it, duplicate Set adds do not grow it, and an
+// LRUCache evicts past its capacity.
+const m = new Map<string, number>();
+m.set("a", 1);
+m.set("b", 2);
+m.set("a", 10);
+console.log(`${m.size}`);
+m.delete("b");
+console.log(`${m.size}`);
+m.set("c", 3);
+console.log(`${m.size}`);
+
+const s = new Set<number>();
+s.add(1);
+s.add(2);
+s.add(2);
+s.add(3);
+console.log(`${s.size}`);
+s.delete(3);
+console.log(`${s.size}`);
+
+const lru = new LRUCache<string, number>(2);
+console.log(`${lru.capacity}`);
+console.log(`${lru.size}`);
+lru.set("a", 1);
+lru.set("b", 2);
+lru.set("c", 3);
+console.log(`${lru.size}`);
+console.log(`${lru.capacity}`);

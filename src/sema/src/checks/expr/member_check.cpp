@@ -547,6 +547,40 @@ Type Analyzer::indexOfProbe(const Type& ot, IndexExpr& ix) {
             // provably in range, `number | undefined` otherwise
             // (src/std/typed-arrays/sema.cpp).
             if (isTypedArrayClass(ot)) return typedIndexRead(ix);
+            // Record<string, V> / Map<string, V> subscript: a missing key
+            // reads `undefined` (same rule as Map.get); a write is checked
+            // against V by checkAssignToTarget via this result. Gated on a
+            // string(ish) key part so Map<number, V> keeps today's ambient
+            // until separately designed.
+            if (ot.name == "Map" && ot.parts.size() >= 2) {
+                const Type& keyPart = ot.parts[0];
+                const bool stringKey =
+                    keyPart.isString() ||
+                    (keyPart.isLiteral() &&
+                     keyPart.literalBase == TypeKind::String) ||
+                    keyPart.kind == TypeKind::TypeParam || keyPart.isUnknown();
+                if (stringKey) {
+                    if (ix.index) {
+                        // indexOf already inferred the key (member_check.cpp:
+                        // indexOf); reuse that entry instead of re-inferring.
+                        // Only infer on the fallback path (a direct probe with
+                        // no entry yet).
+                        Type it = typeOfExpr(*ix.index);
+                        if (it.isUnknown() &&
+                            out_.nodeTypes.find(ix.index->nodeId) ==
+                                out_.nodeTypes.end()) {
+                            it = inferExpr(*ix.index);
+                        }
+                        if (!isStringish(it) && !isPermissive(it)) {
+                            report(diagcode::kIndexSignatureBanned,
+                                   ix.index->span,
+                                   "index into Record<string, V> must be a "
+                                   "string");
+                        }
+                    }
+                    return Type::unionOf({ot.parts[1], Type::undefined()});
+                }
+            }
             return ambient();
         default:
             return ambient();

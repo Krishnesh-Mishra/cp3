@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "1\nmissing\n1,3\nyes\na=1&b=2&a=3&c=4\na=9&b=2&c=4\ndeleted\na=9&c=4\n2\n",
+  "exitCode": 0
+}

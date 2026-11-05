@@ -1,0 +1,9 @@
+import console from "std/console";
+import { URL } from "std/url";
+const m = new URL("mailto:User@Example.com");
+console.log(m.protocol);
+console.log(m.pathname);
+console.log(m.hostname === "" ? "no-host" : "host");
+console.log(m.port === "" ? "no-port" : "port");
+console.log(m.origin === "" ? "no-origin" : "origin");
+console.log(m.href);

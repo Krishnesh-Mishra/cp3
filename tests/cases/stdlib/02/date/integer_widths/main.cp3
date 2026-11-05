@@ -1,0 +1,27 @@
+import console from "std/console";
+import Date from "std/date";
+
+// A Rust project sees exact Date timestamps: milliseconds since the epoch
+// are i64 end to end (getTime/parse/diffMs/setTime), printed via toString().
+// 2038 and 1900 sit outside the signed 32-bit millisecond range, and the
+// fractional instant pins milliseconds rather than seconds.
+const epoch = Date.fromISOString("1970-01-01T00:00:00Z");
+const msEpoch: i64 = epoch.getTime();
+console.log(msEpoch.toString());
+
+const d = Date.fromISOString("2020-01-02T12:00:00.123Z");
+const ms: i64 = d.getTime();
+console.log(ms.toString());
+
+const parsed: i64 = Date.parse("2038-01-19T03:14:07Z");
+console.log(parsed.toString());
+
+const old: i64 = Date.parse("1900-01-01T00:00:00Z");
+console.log(old.toString());
+
+const later = Date.fromISOString("2021-01-01T00:00:00Z");
+const diff: i64 = later.diffMs(d);
+console.log(diff.toString());
+
+const moved: i64 = d.setTime(parsed);
+console.log(moved.toString());

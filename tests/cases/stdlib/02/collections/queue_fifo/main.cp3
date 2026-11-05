@@ -1,0 +1,21 @@
+import console from "std/console";
+import { Queue } from "std/collections";
+
+// Queue is FIFO: enqueue appends to the back, dequeue removes from the
+// front, peek reads the front without removing it.
+const q = new Queue<number>();
+console.log(q.isEmpty());
+q.enqueue(10);
+q.enqueue(20);
+q.enqueue(30);
+console.log(`${q.size}`);
+console.log(`${q.peek()}`);
+console.log(`${q.dequeue()}`);
+console.log(`${q.dequeue()}`);
+console.log(`${q.size}`);
+console.log(`${q.peek()}`);
+q.clear();
+console.log(q.isEmpty());
+console.log(`${q.size}`);
+console.log(q.dequeue() === undefined ? "empty" : "not-empty");
+console.log(q.peek() === undefined ? "empty" : "not-empty");

@@ -1,0 +1,37 @@
+import console from "std/console";
+import { BitSet } from "std/collections";
+
+// BitSet flags are set/get/cleared by index; and/or/xor return fresh
+// sets and leave both operands unchanged.
+const a = new BitSet();
+a.set(0);
+a.set(2);
+a.set(5);
+console.log(a.get(0));
+console.log(a.get(1));
+console.log(a.get(5));
+console.log(`${a.count()}`);
+a.clear(2);
+console.log(a.get(2));
+console.log(`${a.count()}`);
+
+const b = new BitSet();
+b.set(2);
+b.set(5);
+b.set(7);
+
+const both = a.and(b);
+console.log(both.get(5));
+console.log(both.get(0));
+console.log(`${both.count()}`);
+
+const either = a.or(b);
+console.log(`${either.count()}`);
+
+const exactlyOne = a.xor(b);
+console.log(`${exactlyOne.count()}`);
+console.log(exactlyOne.get(5));
+console.log(exactlyOne.get(0));
+
+console.log(`${a.count()}`);
+console.log(`${b.count()}`);

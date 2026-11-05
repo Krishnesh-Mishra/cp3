@@ -1,0 +1,4 @@
+import console from "std/console";
+const words = ["apple", "banana"];
+let g = Object.groupBy(words, (w) => w.length);
+console.log(g.size);

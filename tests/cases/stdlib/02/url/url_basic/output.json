@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "https:\nexample.com:8080\nexample.com\n8080\n/path/file.html\n?q=1&x=hello%20world\n#top\nhttps://example.com:8080\nhttps://example.com:8080/path/file.html?q=1&x=hello%20world#top\n",
+  "exitCode": 0
+}

@@ -930,6 +930,8 @@ RingBuffer<T> makeRingBuffer(std::uint64_t capacity) {
 // `clear(i)` beyond the size is a no-op. `count()` is a word-parallel
 // popcount. `andSet`/`orSet`/`xorSet` return a fresh set sized to the larger
 // operand; neither operand is modified.
+class BitSetData;
+using BitSet = ::cp3::runtime::Ref<BitSetData>;
 class BitSetData {
 public:
     explicit BitSetData(std::uint64_t size = 0)
@@ -958,21 +960,24 @@ public:
 
     std::uint64_t size() const { return size_; }
 
-    BitSetData andSet(const BitSetData& other) const {
-        return combine(other, [](std::uint64_t a, std::uint64_t b) {
+    BitSet andSet(const BitSetData& other) const {
+        return makeRef<BitSetData>(combine(other, [](std::uint64_t a, std::uint64_t b) {
             return a & b;
-        });
+        }));
     }
-    BitSetData orSet(const BitSetData& other) const {
-        return combine(other, [](std::uint64_t a, std::uint64_t b) {
+    BitSet orSet(const BitSetData& other) const {
+        return makeRef<BitSetData>(combine(other, [](std::uint64_t a, std::uint64_t b) {
             return a | b;
-        });
+        }));
     }
-    BitSetData xorSet(const BitSetData& other) const {
-        return combine(other, [](std::uint64_t a, std::uint64_t b) {
+    BitSet xorSet(const BitSetData& other) const {
+        return makeRef<BitSetData>(combine(other, [](std::uint64_t a, std::uint64_t b) {
             return a ^ b;
-        });
+        }));
     }
+    BitSet andSet(const BitSet& other) const { return andSet(*other); }
+    BitSet orSet(const BitSet& other) const { return orSet(*other); }
+    BitSet xorSet(const BitSet& other) const { return xorSet(*other); }
 
 private:
     static constexpr std::uint64_t kBitsPerWord = 64;

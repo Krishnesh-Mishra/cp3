@@ -1,0 +1,10 @@
+import console from "std/console";
+import { URL } from "std/url";
+const a = new URL("c", "https://example.com/a/b");
+console.log(a.href);
+const b = new URL("/x", "https://example.com/a/b");
+console.log(b.href);
+const c = new URL("//cdn.example.com/lib.js", "https://example.com/a/b");
+console.log(c.href);
+const d = new URL("?page=2", "https://example.com/a/b?old=1");
+console.log(d.href);

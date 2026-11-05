@@ -5,8 +5,8 @@ import time from "std/time";
 // ordering is asserted; no wall-clock ms value is pinned.
 let sw = time.stopwatch();
 sw.start();
-const a = sw.elapsed();
-const b = sw.elapsed();
+let a = sw.elapsed();
+let b = sw.elapsed();
 const c = sw.elapsed();
 console.log(a >= 0 && b >= a && c >= b ? "ok" : "bad");
 sw.stop();

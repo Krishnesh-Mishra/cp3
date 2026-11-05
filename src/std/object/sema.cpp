@@ -1,5 +1,6 @@
 // =============================================================================
-// src/std/object/sema.cpp - the `Object.keys` / `.values` / `.entries` surface.
+// src/std/object/sema.cpp - the `Object.keys` / `.values` / `.entries` surface,
+// plus `Object.fromEntries` / `Object.groupBy` (ROADMAP L).
 //
 // cp3's object literals have a statically known shape (`$o{...}`), so the
 // three enumeration helpers can be typed without runtime reflection. The
@@ -9,9 +10,21 @@
 //   Object.values(o)  -> V[]  (V is the unified field type)
 //   Object.entries(o) -> [string, V][]
 //
-// Codegen (src/std/object/codegen.cpp) lowers the same shape to array
-// construction from the generated value struct. An open/computed shape has no
-// static field list; that is a type error, not a silent `unknown[]`.
+// `Record<string, V>` canonicalizes to `Map<string, V>` (see
+// docs/design/record-index-signatures.md), so the two dynamic-key helpers
+// return the canonical type directly:
+//
+//   Object.fromEntries(entries)          -> Map<string, V>   (Record<string, V>)
+//   Object.groupBy(list, keyFn)          -> Map<string, T[]> (Record<string, T[]>)
+//
+// The key side is string-only in both: a non-string entry key / callback
+// return is CP3401, exactly the `Record<string, V>` key rule. JS would
+// ToPropertyKey-coerce the key; CP3 stays statically typed instead.
+//
+// Codegen (src/std/object/codegen.cpp) lowers the same shapes onto the
+// collections runtime (`makeMap` + `set` loop / `collections::groupBy`); an
+// open/computed shape has no static field list and is a type error, not a
+// silent `unknown[]`.
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -26,7 +39,31 @@ namespace {
 
 bool isObjectBuiltin(const std::string& name) {
     return name == "keys" || name == "values" || name == "entries" ||
-           name == "assign" || name == "is" || name == "freeze";
+           name == "assign" || name == "is" || name == "freeze" ||
+           name == "fromEntries" || name == "groupBy";
+}
+
+// The canonical `Record<string, V>` type: `TypeKind::Class "Map"` with
+// parts {string, V} (docs/design/record-index-signatures.md §2).
+Type recordOf(const Type& value) {
+    Type t(TypeKind::Class, "Map");
+    t.parts = {Type::string(), value};
+    return t;
+}
+
+// Extract the [key, value] pair from an entry element type: a `$mapEntry`
+// tuple (Map.entries), a `$t[...]` tuple (Object.entries, `[string, V][]`,
+// a `[k, v]` literal after contextual typing) - both carry parts {K, V}.
+bool entryPairOf(const Type& elem, Type& key, Type& value) {
+    if (elem.kind != TypeKind::Object || elem.parts.size() < 2) return false;
+    if (elem.name != "$mapEntry" && !isTupleType(elem)) return false;
+    key = elem.parts.front();
+    value = elem.parts[1];
+    return true;
+}
+
+bool stringKeyOf(const Type& key) {
+    return isStringish(key) || isPermissive(key) || key.isUnknown();
 }
 
 }  // namespace
@@ -107,6 +144,191 @@ bool Analyzer::tryInferObjectCall(CallExpr& call, MemberExpr& m, Type& out) {
             }
         }
         out = withType(call, target);
+        return true;
+    }
+    if (m.property == "fromEntries") {
+        if (call.arguments.size() != 1 || !call.arguments.front()) {
+            report(diagcode::kArityMismatch, call.span,
+                   "arity mismatch: Object.fromEntries expects exactly one "
+                   "argument (the entries array), got " +
+                       std::to_string(call.arguments.size()));
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        Expr* arg = call.arguments.front().get();
+        Type value = Type::unknown();
+        bool haveValue = false;
+        bool bad = false;
+        if (arg->kind == NodeKind::ArrayLiteral) {
+            auto& lit = static_cast<ArrayLiteral&>(*arg);
+            if (lit.elements.empty()) {
+                report(diagcode::kTypeMismatch, arg->span,
+                       "type mismatch: Object.fromEntries cannot infer the "
+                       "value type from an empty entries array; use a typed "
+                       "entries variable or Record<string, V>");
+                out = withType(call, Type::unknown());
+                return true;
+            }
+            for (auto& e : lit.elements) {
+                if (!e) continue;
+                Type key = Type::unknown();
+                Type v = Type::unknown();
+                bool pair = false;
+                if (e->kind == NodeKind::ArrayLiteral) {
+                    auto& inner = static_cast<ArrayLiteral&>(*e);
+                    if (inner.elements.size() != 2 || !inner.elements.front() ||
+                        !inner.elements[1]) {
+                        report(diagcode::kTypeMismatch, e->span,
+                               "type mismatch: each Object.fromEntries entry "
+                               "must be a [key, value] pair");
+                        bad = true;
+                        continue;
+                    }
+                    key = inferExpr(*inner.elements.front());
+                    v = inferExpr(*inner.elements[1]);
+                    pair = true;
+                } else {
+                    pair = entryPairOf(inferExpr(*e), key, v);
+                    if (!pair) {
+                        report(diagcode::kTypeMismatch, e->span,
+                               "type mismatch: each Object.fromEntries entry "
+                               "must be a [key, value] pair");
+                        bad = true;
+                        continue;
+                    }
+                }
+                if (pair && !stringKeyOf(key)) {
+                    report(diagcode::kTypeMismatch, e->span,
+                           "type mismatch: Object.fromEntries keys must be "
+                           "strings (Record<string, V> requires a string key)");
+                    bad = true;
+                }
+                const Type widened = widen(v);
+                if (!haveValue) {
+                    value = widened;
+                    haveValue = true;
+                } else {
+                    value = unify(value, widened);
+                }
+            }
+            if (bad || !haveValue) {
+                out = withType(call, Type::unknown());
+                return true;
+            }
+            // Contextually re-check the literal against the inferred entry
+            // type so codegen gets the tuple spelling (mirrors the
+            // `new Map<K, V>(entries)` from-iterable path in expr_check.cpp).
+            Type entry = makeObjectType({}, false, true,
+                                        {Type::string(), value});
+            checkArrayLiteral(lit, Type::array(entry));
+        } else {
+            const Type entries = inferExpr(*arg);
+            if (entries.kind != TypeKind::Array) {
+                report(diagcode::kTypeMismatch, arg->span,
+                       "type mismatch: Object.fromEntries expects an array "
+                       "of [key, value] entries");
+                out = withType(call, Type::unknown());
+                return true;
+            }
+            Type key = Type::unknown();
+            if (!entryPairOf(elemOf(entries), key, value)) {
+                report(diagcode::kTypeMismatch, arg->span,
+                       "type mismatch: Object.fromEntries expects an array "
+                       "of [key, value] entries, e.g. Object.entries(o) or "
+                       "[[\"a\", 1]]");
+                out = withType(call, Type::unknown());
+                return true;
+            }
+            if (!stringKeyOf(key)) {
+                report(diagcode::kTypeMismatch, arg->span,
+                       "type mismatch: Object.fromEntries keys must be "
+                       "strings (Record<string, V> requires a string key)");
+                out = withType(call, Type::unknown());
+                return true;
+            }
+        }
+        out = withType(call, recordOf(value));
+        return true;
+    }
+    if (m.property == "groupBy") {
+        if (call.arguments.size() != 2) {
+            report(diagcode::kArityMismatch, call.span,
+                   "arity mismatch: Object.groupBy expects exactly 2 "
+                   "arguments (the list and the key callback), got " +
+                       std::to_string(call.arguments.size()));
+            inferArgs(call);
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        Type items = call.arguments.front() ? inferExpr(*call.arguments.front())
+                                            : Type::unknown();
+        if (items.kind != TypeKind::Array) {
+            report(diagcode::kTypeMismatch,
+                   call.arguments.front() ? call.arguments.front()->span
+                                          : call.span,
+                   "type mismatch: Object.groupBy's first argument must be an "
+                   "array");
+            inferArgs(call);
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        const Type elem = elemOf(items);
+        Type key = Type::unknown();
+        Expr* cb = call.arguments[1] ? call.arguments[1].get() : nullptr;
+        if (cb != nullptr && cb->kind == NodeKind::ArrowFunction) {
+            auto& arrow = static_cast<ArrowFunction&>(*cb);
+            const std::vector<Type> context = {elem, Type::number(),
+                                               Type::array(elem)};
+            key = widen(inferArrowReturn(arrow, context));
+            // Publish the inferred signature for codegen's parameter types
+            // (mirrors Map.groupBy in src/std/collections/sema.cpp).
+            if (arrow.nodeId != 0) {
+                FuncSig as;
+                as.ret = key;
+                as.declNodeId = arrow.nodeId;
+                for (std::size_t i = 0; i < arrow.params.size(); ++i) {
+                    const Parameter* p = arrow.params[i].get();
+                    as.params.push_back(i < context.size() ? context[i]
+                                                           : Type::unknown());
+                    as.optional.push_back(p != nullptr &&
+                                          (p->optional ||
+                                           p->defaultValue != nullptr));
+                }
+                publishFunction(as, "");
+                arrowSigs_[arrow.nodeId] = std::move(as);
+            }
+        } else if (cb != nullptr) {
+            const Type fnType = inferExpr(*cb);
+            if (fnType.kind == TypeKind::Function && !fnType.parts.empty()) {
+                key = widen(fnType.parts.back());
+            }
+        }
+        // Do NOT call inferArgs(call) here for the arrow form: it would
+        // re-infer the callback with ambient parameters and overwrite the
+        // signature published above (see Map.groupBy).
+        if (cb != nullptr && cb->kind == NodeKind::ArrowFunction) {
+            const std::vector<Type> context = {elem, Type::number(),
+                                               Type::array(elem)};
+            withType(*cb, Type::function(context, key));
+        }
+        if (key.isVoid()) {
+            report(diagcode::kTypeMismatch,
+                   call.arguments[1] ? call.arguments[1]->span : call.span,
+                   "type mismatch: Object.groupBy callback must return a "
+                   "string key, got 'void'");
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        if (!stringKeyOf(key)) {
+            report(diagcode::kTypeMismatch,
+                   call.arguments[1] ? call.arguments[1]->span : call.span,
+                   "type mismatch: Object.groupBy callback must return a "
+                   "string key (Record<string, T[]> requires a string key); "
+                   "use Map.groupBy for non-string keys");
+            out = withType(call, Type::unknown());
+            return true;
+        }
+        out = withType(call, recordOf(Type::array(elem)));
         return true;
     }
     if (call.arguments.size() != 1 || !call.arguments.front()) {

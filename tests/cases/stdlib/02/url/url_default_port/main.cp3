@@ -1,0 +1,9 @@
+import console from "std/console";
+import { URL } from "std/url";
+const u = new URL("http://example.com:80/");
+console.log(u.href);
+console.log(u.port === "" ? "no-port" : "port");
+console.log(u.origin);
+const v = new URL("https://example.com:443/x");
+console.log(v.href);
+console.log(v.port === "" ? "no-port" : "port");

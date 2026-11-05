@@ -1,0 +1,12 @@
+import console from "std/console";
+import { PriorityQueue } from "std/collections";
+
+// A comparator `(a, b) => a > b` makes a max-heap: the largest pops first.
+const pq = new PriorityQueue<number>((a, b) => a > b);
+pq.push(5);
+pq.push(1);
+pq.push(3);
+console.log(`${pq.peek()}`);
+console.log(`${pq.pop()}`);
+console.log(`${pq.pop()}`);
+console.log(`${pq.pop()}`);

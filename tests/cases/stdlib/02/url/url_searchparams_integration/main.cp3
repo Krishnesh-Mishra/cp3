@@ -1,0 +1,15 @@
+import console from "std/console";
+import { URL } from "std/url";
+const u = new URL("https://example.com/search?q=cp3&page=2");
+console.log(`${u.searchParams.get("q")}`);
+console.log(`${u.searchParams.get("page")}`);
+console.log(u.searchParams.toString());
+u.searchParams.append("extra", "1");
+console.log(u.searchParams.toString());
+// Snapshot semantics: mutating searchParams does not rewrite search/href;
+// build a new URL from the serialized params to get the new query.
+console.log(u.search);
+console.log(u.href);
+const rebuilt = new URL("https://example.com/search?" + u.searchParams.toString());
+console.log(rebuilt.href);
+console.log(`${rebuilt.searchParams.get("extra")}`);

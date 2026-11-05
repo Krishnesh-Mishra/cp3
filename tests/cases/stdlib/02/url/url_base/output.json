@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "https://example.com/a/c\nhttps://example.com/x\nhttps://cdn.example.com/lib.js\nhttps://example.com/a/b?page=2\n",
+  "exitCode": 0
+}

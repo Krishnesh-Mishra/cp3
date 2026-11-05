@@ -1,0 +1,4 @@
+import { Map } from "std/collections";
+let m = new Map<number, number>();
+let r = Object.fromEntries(m.entries());
+console.log(r.size);

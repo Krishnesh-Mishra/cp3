@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "user\npass\nexample.com\nexample.com\nhttp://user:pass@example.com/secret\n::1\n[::1]:8080\n8080\nhttp://[::1]:8080/a\n",
+  "exitCode": 0
+}
