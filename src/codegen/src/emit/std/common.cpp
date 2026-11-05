@@ -180,6 +180,22 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
         !hasValueBinding("Object")) {
         return emitObjectCall(c, m);
     }
+    if (isNamespaceObject(m.object.get(), "Error") &&
+        !hasValueBinding("Error") && m.property == "captureStackTrace" &&
+        !c.arguments.empty() && c.arguments.front()) {
+        // Refresh the error's stack (v0.2: `name: message` plus one `at <fn>`
+        // frame when the optional function is given; sema already proved the
+        // target is an Error handle so the cast stays in C++).
+        const Expr& target = *c.arguments.front();
+        std::string fnName = "\"\"";
+        if (c.arguments.size() > 1 && c.arguments[1] &&
+            c.arguments[1]->kind == NodeKind::Identifier) {
+            fnName = cppStringLiteral(
+                static_cast<Identifier&>(*c.arguments[1]).name);
+        }
+        return "::cp3::Error::captureStackTrace(" + expr(target) + ", " +
+               fnName + ")";
+    }
     if (isNamespaceObject(m.object.get(), "crypto")) return emitCryptoCall(c, m);
     if (isNamespaceObject(m.object.get(), "network")) {
         return emitNetworkCall(c, m);

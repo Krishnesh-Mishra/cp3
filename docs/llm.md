@@ -144,7 +144,7 @@ const { size = 0, ...spec } = opts;
 try { work(); } catch (e) { e.message; e.name; e.stack; e.cause; } finally { cleanup(); }
 ```
 
-Only `Error` (or a subclass) may be thrown. `throw 404;` · `throw "x";` · `throw {};` — compile errors. `catch (e)` binds `Error` directly.
+Only `Error` (or a subclass) may be thrown. `throw 404;` · `throw "x";` · `throw {};` — compile errors. `catch (e)` binds `Error` directly. `e.toString()` is `name: message`; `error.name` is a plain mutable field (`this.name = "..."` in a subclass constructor overrides it). `Error.captureStackTrace(error, fn?)` refreshes `error.stack` (in v0.2: `name: message` plus one `at fn` frame when `fn` is given — there is no true JS stack yet).
 
 ## 8. Classes
 

@@ -58,6 +58,20 @@ public:
         return name + ": " + message;
     }
 
+    // `Error.captureStackTrace(error, fn?)`: refreshes `stack` from the
+    // current representation. cp3 captures no true JS stack in v0.2: the
+    // first line is the error's `name: message`, followed by a single
+    // `at <fn>` frame when a function name is given (V8's API shapes the
+    // `stack` format, not the frames). The handle is shared, so a copy
+    // still mutates the caller's error.
+    static void captureStackTrace(std::shared_ptr<Error> target,
+                                  const std::string& fnName = "") {
+        if (!target) return;
+        std::string text = target->toString();
+        if (!fnName.empty()) text += "\n    at " + fnName;
+        target->stack = text;
+    }
+
 protected:
     void refreshStack() {
         stack = toString();

@@ -405,6 +405,8 @@ private:
     bool tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out);
     // `Map.groupBy(list, callback)` (src/std/collections/sema.cpp).
     bool tryInferCollectionsStaticCall(CallExpr& call, MemberExpr& m, Type& out);
+    // `Error.captureStackTrace(error, fn?)` (src/std/object/sema.cpp).
+    bool tryInferErrorStaticCall(CallExpr& call, MemberExpr& m, Type& out);
     // `env.get<T>`: explicit T, else `{ default }`, else `string`.
     bool tryInferEnvCall(CallExpr& call, MemberExpr& m, Type& out);
     // Member-call inference chain (JSON, Promise, env, family, Buffer).

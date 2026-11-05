@@ -1,0 +1,21 @@
+import console from "std/console";
+class MyError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "MyError";
+    }
+}
+const plain = new Error("boom");
+console.log(plain.toString());
+console.log(plain.name);
+const custom = new MyError("bad thing");
+console.log(custom.toString());
+console.log(custom.name);
+Error.captureStackTrace(plain);
+console.log(plain.stack);
+function helper(): Error {
+    const e = new Error("traced");
+    Error.captureStackTrace(e, helper);
+    return e;
+}
+console.log(helper().stack);

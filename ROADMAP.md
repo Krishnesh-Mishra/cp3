@@ -153,7 +153,7 @@ The remaining JavaScript and TypeScript surface needed so ordinary application c
 | `process.stdin` (read all, read lines) or `std/readline` | Piping input into CLIs; `console.input` covers prompts only. | Small-medium | Planned |
 | `process.exitCode`, `process.platform`, `process.arch`, `process.version` | Basic process info and a graceful exit path. | Small | Done |
 | `console.table`, `console.group`/`groupEnd`, `console.dir`, `console.count`, `console.trace` | Common debug output; `console.time`/`timeEnd` are already covered by the `std/time` ledger entry. | Small | Done |
-| `Error.captureStackTrace`, `error.toString()`, `error.name` overrides on subclasses | Custom error classes need them. | Small | Planned |
+| `Error.captureStackTrace`, `error.toString()`, `error.name` overrides on subclasses | Custom error classes need them. | Small | Done |
 | `res.redirect`, `res.sendFile`, `res.cookie`, `req.cookies`, `req.ip` | Basic web-server features every app writes by hand today. | Small-medium | Planned |
 | Built-in middleware: `static(dir)`, `cors(options)`, `bodyLimit(n)` | Production servers need these first; body limits are also a DoS defense. | Medium | Planned |
 | Error-handling hook: `server.onError((err, req, res) => ...)` | An uncaught handler throw returns 500 instead of crashing or hanging. | Small | Planned |

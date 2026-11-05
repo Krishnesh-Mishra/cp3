@@ -149,4 +149,41 @@ bool Analyzer::tryInferObjectCall(CallExpr& call, MemberExpr& m, Type& out) {
     return true;
 }
 
+// `Error.captureStackTrace(error, fn?)`: refreshes the error's `stack` from
+// its current representation (cp3 captures no true JS stack in v0.2: `stack`
+// is `name: message` at construction; the captured text gets one `at <fn>`
+// frame when the optional fn is given). Result: `void`.
+bool Analyzer::tryInferErrorStaticCall(CallExpr& call, MemberExpr& m,
+                                       Type& out) {
+    if (!m.object || m.object->kind != NodeKind::Identifier ||
+        static_cast<Identifier&>(*m.object).name != "Error" ||
+        m.property != "captureStackTrace") {
+        return false;
+    }
+    Binding errorBinding;
+    if (lookup("Error", errorBinding) && !errorBinding.isAmbient) {
+        return false;  // a user `Error` shadows the builtin
+    }
+    if (call.arguments.empty() || !call.arguments.front()) {
+        report(diagcode::kArityMismatch, call.span,
+               "arity mismatch: Error.captureStackTrace expects an error "
+               "argument");
+        inferArgs(call);
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    Type target = inferExpr(*call.arguments.front());
+    if (!isErrorClass(target)) {
+        report(diagcode::kTypeMismatch, call.span,
+               "type mismatch: Error.captureStackTrace's first argument must "
+               "be an Error");
+        inferArgs(call);
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    inferArgs(call);
+    out = withType(call, Type::voidType());
+    return true;
+}
+
 }  // namespace cp3

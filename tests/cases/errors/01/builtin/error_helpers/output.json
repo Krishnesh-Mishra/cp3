@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "Error: boom\nError\nMyError: bad thing\nMyError\nError: boom\nError: traced\n    at helper\n",
+  "exitCode": 0
+}
