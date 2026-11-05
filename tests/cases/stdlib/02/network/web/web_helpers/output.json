@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "200 new\n200 <h1>hi</h1>\n404 Not Found\nno-cookie sid=42; Max-Age=60; HttpOnly\n127.0.0.1\n",
+  "exitCode": 0
+}

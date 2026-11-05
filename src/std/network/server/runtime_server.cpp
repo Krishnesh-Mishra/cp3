@@ -20,6 +20,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <string>
@@ -138,6 +139,33 @@ StringMap requestHeaders(NativeRequest* req) {
     return map;
 }
 
+/// `req.cookies`: the `Cookie` header parsed into a map. Cookie pairs are
+/// `name=value; ...`; values are NOT percent-decoded (Express's parser
+/// keeps them raw unless a decoder is configured).
+StringMap parseCookies(const std::string& header) {
+    StringMap map = collections::makeMap<std::string, std::string>();
+    std::size_t start = 0;
+    while (start < header.size()) {
+        const std::size_t semi = header.find(';', start);
+        const std::size_t end = semi == std::string::npos ? header.size() : semi;
+        const std::string part = header.substr(start, end - start);
+        const std::size_t eq = part.find('=');
+        if (eq != std::string::npos) {
+            std::string name = part.substr(0, eq);
+            const std::string value = part.substr(eq + 1);
+            // Trim the space after the `;` separator.
+            const std::size_t first = name.find_first_not_of(' ');
+            if (first != std::string::npos) {
+                name = name.substr(first, name.find_last_not_of(' ') - first + 1);
+            }
+            map->set(name, value);
+        }
+        if (semi == std::string::npos) break;
+        start = semi + 1;
+    }
+    return map;
+}
+
 }  // namespace
 
 namespace detail {
@@ -175,6 +203,27 @@ NativeResponse* startHead(ResponseImpl& impl) {
         res->writeHeader(name, value);
     }
     return res;
+}
+
+/// A static-site content type by file extension (`res.sendFile`); unknown
+/// extensions are served as bytes.
+std::string fileContentType(const std::string& path) {
+    const std::size_t dot = path.find_last_of('.');
+    if (dot == std::string::npos) return "application/octet-stream";
+    const std::string ext = lowerAscii(path.substr(dot));
+    if (ext == ".html" || ext == ".htm") return "text/html; charset=utf-8";
+    if (ext == ".css") return "text/css; charset=utf-8";
+    if (ext == ".js" || ext == ".mjs") return "text/javascript; charset=utf-8";
+    if (ext == ".json") return "application/json; charset=utf-8";
+    if (ext == ".txt") return "text/plain; charset=utf-8";
+    if (ext == ".svg") return "image/svg+xml";
+    if (ext == ".png") return "image/png";
+    if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
+    if (ext == ".gif") return "image/gif";
+    if (ext == ".ico") return "image/x-icon";
+    if (ext == ".xml") return "application/xml; charset=utf-8";
+    if (ext == ".wasm") return "application/wasm";
+    return "application/octet-stream";
 }
 
 /// Sends `impl.body` as the whole response (Content-Length) or as the tail of a
@@ -272,6 +321,36 @@ void HttpResponse::end() {
     sendBuffered(*impl_, "", true);
 }
 
+void HttpResponse::redirect(const std::string& url, double code) {
+    if (!impl_ || impl_->finished) return;
+    if (code <= 0) code = 302.0;
+    impl_->status = code;
+    impl_->headers.emplace_back("Location", url);
+    sendBuffered(*impl_, "text/plain; charset=utf-8", false);
+}
+
+HttpResponse& HttpResponse::cookie(const std::string& setCookieValue) {
+    if (impl_) impl_->headers.emplace_back("Set-Cookie", setCookieValue);
+    return *this;
+}
+
+void HttpResponse::sendFile(const std::string& path) {
+    if (!impl_ || impl_->finished) return;
+    std::ifstream in(path, std::ios::binary);
+    std::string bytes;
+    if (in) {
+        bytes.assign(std::istreambuf_iterator<char>(in),
+                     std::istreambuf_iterator<char>());
+    } else {
+        impl_->status = 404.0;
+        impl_->body = "Not Found";
+        sendBuffered(*impl_, "text/plain; charset=utf-8", false);
+        return;
+    }
+    impl_->body = bytes;
+    sendBuffered(*impl_, detail::fileContentType(path), false);
+}
+
 // =============================================================================
 // The uWS glue: one wildcard route feeds every request into the dispatcher
 // (runtime_server_dispatch.cpp)
@@ -302,6 +381,10 @@ void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
     pending->context.request.path = std::string(req->getUrl());
     pending->context.request.setQuery(parseQuery(std::string(req->getQuery())));
     pending->context.request.setHeaders(requestHeaders(req));
+    pending->context.request.setCookies(
+        parseCookies(std::string(req->getHeader("cookie"))));
+    pending->context.request.setRemoteAddress(
+        std::string(req->getRemoteAddressAsText()));
     pending->context.response.bindNative(res);
     res->onAborted([pending] {
         // The native response is gone: drop the pointer so a handler that

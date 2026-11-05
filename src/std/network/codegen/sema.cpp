@@ -132,6 +132,10 @@ std::vector<Field> httpRequestFields() {
         Field{"params", stringMap(), false},
         Field{"query", stringMap(), false},
         Field{"headers", stringMap(), false},
+        // Parsed from the `Cookie` header.
+        Field{"cookies", stringMap(), false},
+        // The remote address as text.
+        Field{"ip", Type::string(), false},
         // SEAM(readstream/fs): `body: ReadStream`; the runtime buffers the
         // body before the chain runs, and the landed fs ReadStream is
         // file-backed, so nothing stream-shaped exists yet.
@@ -160,6 +164,18 @@ std::vector<Field> httpResponseFields() {
                                               Type::voidType())), false},
         Field{"send",
               withOptionalTail(Type::function({Type::number()}, Type::voidType())),
+              false},
+        Field{"redirect",
+              withOptionalTail(
+                  Type::function({Type::string(), Type::number()},
+                                 Type::voidType())),
+              false},
+        Field{"sendFile", Type::function({Type::string()}, Type::voidType()),
+              false},
+        Field{"cookie",
+              withOptionalTail2(Type::function(
+                  {Type::string(), Type::string(), Type::unknown()},
+                  networkValue(kHttpResponse))),
               false},
         Field{"write",
               Type::function({Type::unionOf({Type::string(), bufferType()})},
@@ -281,6 +297,8 @@ StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
         if (member == "params") return {"params: Map<string, string>", "Route parameters captured from a route pattern such as `/users/:id`."};
         if (member == "query") return {"query: Map<string, string>", "URL query parameters parsed from the request."};
         if (member == "headers") return {"headers: Map<string, string>", "Request headers. Header names are looked up case-insensitively by the runtime."};
+        if (member == "cookies") return {"cookies: Map<string, string>", "Cookies from the request's `Cookie` header (values are raw, not decoded)."};
+        if (member == "ip") return {"ip: string", "The remote address that connected, as text."};
         if (member == "body") return {"body: unknown", "The buffered request body. Prefer `text()` or `json<T>()` to decode it."};
         if (member == "text") return {"text(): Promise<string>", "Returns the buffered request body as text."};
         if (member == "json") return {"json<T>(): Promise<T>", "Parses the buffered request body as JSON and types the result as `T`. The annotation describes the expected shape; validate untrusted input before relying on it."};
@@ -291,6 +309,9 @@ StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
         if (member == "text") return {"text(data: string, status?: number): void", "Sends a text response. This is a terminal write: once a response has been sent, later terminal writes are ignored."};
         if (member == "json") return {"json(data: unknown, status?: number): void", "Serializes a value as JSON and sends it as the response. A second argument may set the status."};
         if (member == "send") return {"send(status?: number): void", "Sends the response data previously buffered with `write`, or an empty response."};
+        if (member == "redirect") return {"redirect(url: string, status?: number): void", "Answers with a redirect (302 by default) and the `Location` header. Terminal."};
+        if (member == "sendFile") return {"sendFile(path: string): void", "Serves the file's bytes with a content type from its extension, or 404 when missing. Terminal."};
+        if (member == "cookie") return {"cookie(name: string, value: string, options?: object): HttpResponse", "Appends a `Set-Cookie` header; options may carry `maxAge` (seconds), `path`, `httpOnly` and `secure`. Returns the response for chaining."};
         if (member == "write") return {"write(chunk: string | Buffer): void", "Appends a string or raw Buffer bytes to a chunked response. Finish the response with `end()`."};
         if (member == "end") return {"end(): void", "Finishes a chunked response started with `write()`."};
     }

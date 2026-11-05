@@ -195,6 +195,10 @@ public:
     StringMap params;
     StringMap query;
     StringMap headers;
+    /// `req.cookies` (parsed from the `Cookie` header; empty when none).
+    StringMap cookies;
+    /// `req.ip`: the remote address as text (IPv4/IPv6, as the OS reports).
+    std::string ip;
 
     /// `await req.text()`; the body is buffered before the handler chain runs.
     Promise<std::string> text() const { return Promise<std::string>::resolve(body_); }
@@ -226,6 +230,9 @@ public:
     /// Internal: the server stores the query/header maps before dispatch.
     void setQuery(StringMap map) { query = std::move(map); }
     void setHeaders(StringMap map) { headers = std::move(map); }
+    /// Internal: the parsed `Cookie` header and the remote address.
+    void setCookies(StringMap map) { cookies = std::move(map); }
+    void setRemoteAddress(std::string address) { ip = std::move(address); }
     /// Internal: the matched route's `:name` parameters (one Map per match, so
     /// a chain that runs through several routes never sees stale params).
     void setParams(StringMap map) { params = std::move(map); }
@@ -257,6 +264,17 @@ public:
     void json(const ::cp3::runtime::json::Value& data, double status = 0.0);
     /// `res.send(status?)`: whatever has been buffered, empty if nothing.
     void send(double status = 0.0);
+    /// `res.redirect(url, status?)`: terminal; answers with the `Location`
+    /// header and that status (302 by default).
+    void redirect(const std::string& url, double status = 0.0);
+    /// `res.cookie(name, value, options?)`: appends a `Set-Cookie` header
+    /// and returns the response (chainable). `options` is rendered by
+    /// codegen into the header value; the runtime just records it.
+    HttpResponse& cookie(const std::string& setCookieValue);
+    /// `res.sendFile(path)`: terminal; streams the file's bytes with a
+    /// content type inferred from the extension; a missing file answers
+    /// 404 with a short text body.
+    void sendFile(const std::string& path);
     /// `res.write(chunk)`: chunked streaming; `string | Buffer` (docs 04
     /// §network), the Buffer arm writes the raw bytes.
     void write(const std::string& chunk);

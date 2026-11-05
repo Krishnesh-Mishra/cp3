@@ -1,0 +1,26 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+import fs from "std/fs";
+fs.writeFileSync("page.html", "<h1>hi</h1>");
+const app = createServer();
+app.get("/old", (req, res) => { res.redirect("/new"); });
+app.get("/new", (req, res) => { res.text("new"); });
+app.get("/page", (req, res) => { res.sendFile("page.html"); });
+app.get("/missing", (req, res) => { res.sendFile("nope.html"); });
+app.get("/c", (req, res) => {
+  res.cookie("sid", "42", { maxAge: 60, httpOnly: true });
+  res.text(req.cookies.get("sid") ?? "no-cookie");
+});
+app.get("/ip", (req, res) => { res.text(req.ip); });
+app.listen(48214, () => {});
+const r1 = await fetch("http://127.0.0.1:48214/old");
+console.log(`${r1.status} ${await r1.text()}`);
+const r2 = await fetch("http://127.0.0.1:48214/page");
+console.log(`${r2.status} ${await r2.text()}`);
+const r3 = await fetch("http://127.0.0.1:48214/missing");
+console.log(`${r3.status} ${await r3.text()}`);
+const r4 = await fetch("http://127.0.0.1:48214/c");
+console.log(`${await r4.text()} ${r4.headers.get("set-cookie") ?? "?"}`);
+const r5 = await fetch("http://127.0.0.1:48214/ip");
+console.log(`${await r5.text()}`);
+app.close();

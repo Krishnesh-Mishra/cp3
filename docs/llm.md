@@ -310,7 +310,7 @@ LRUCache: `new LRUCache<K, V>(capacity)`, `set` `get` (moves to MRU) `has` (no m
 - Response: `ok`, `status`, `statusText`, `headers`, `text(): Promise<string>`, `arrayBuffer(): Promise<Buffer>`, `json<T>()`.
 - WebSocket client: `new WebSocket(url)` — `on(event, handler)`, `send(str|Buffer)`, `close(code?, reason?)`; events: `open`, `message`, `close`, `error`.
 - WebSocket server: `new WebSocketServer({ port, path? })`; `on("connection", handler)`.
-- HTTP server: `createServer({ threads? })` — `get/post/put/delete/patch/head/options/any/use` — request: `method`, `path`, `params`, query Map, headers Map, `text(): Promise<string>`, `json<T>()`. Response chainable: `status(n)`, `header(k,v)`, terminal `text` / `json` / `send`; `write`, `end`.
+- HTTP server: `createServer({ threads? })` - `get/post/put/delete/patch/head/options/any/use` - request: `method`, `path`, `params`, query Map, headers Map, `cookies` Map, `ip`, `text(): Promise<string>`, `json<T>()`. Response chainable: `status(n)`, `header(k,v)`, `cookie(name, value, {maxAge?, path?, httpOnly?, secure?}?)`, terminal `text` / `json` / `send` / `redirect(url, status?)` / `sendFile(path)`; `write`, `end`.
 - Route params: `:name` segments match one path segment (e.g. `/users/:id`); handlers run in registration order; middleware calls `next()` (a `Promise<void>`) to continue the chain; a chain that never responds returns 404.
 - A non-2xx HTTP status still resolves to a response — check `ok` / `status`.
 

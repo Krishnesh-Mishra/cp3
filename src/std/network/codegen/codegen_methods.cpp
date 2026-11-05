@@ -179,10 +179,11 @@ std::optional<Type> Generator::networkFieldType(const Expr& e) const {
     }
     if (recv == kHttpRequest) {
         if (m.property == "params" || m.property == "query" ||
-            m.property == "headers") {
+            m.property == "headers" || m.property == "cookies") {
             return stringMapType();
         }
-        if (m.property == "method" || m.property == "path") {
+        if (m.property == "method" || m.property == "path" ||
+            m.property == "ip") {
             return Type::string();
         }
     }
@@ -348,6 +349,51 @@ std::string Generator::emitNetworkMemberCall(const CallExpr& c, const MemberExpr
         if (std::string payload = networkResponseJson(c, m); !payload.empty()) {
             return payload;
         }
+    }
+    if (m.property == "cookie" &&
+        effectiveType(*m.object).name == kHttpResponse) {
+        // `res.cookie(name, value, options?)`: build the Set-Cookie header
+        // value. `options` (an object literal) contributes `maxAge`,
+        // `path`, `httpOnly` and `secure` when present as literals; unknown
+        // options are ignored, like JS's.
+        if (c.arguments.size() < 2 || !c.arguments[0] || !c.arguments[1]) {
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "arity mismatch: res.cookie() expects at least "
+                               "a name and a value");
+            return "0.0";
+        }
+        std::string value = expr(*c.arguments[0]) + " + \"=\" + " +
+                            expr(*c.arguments[1]);
+        if (c.arguments.size() >= 3 && c.arguments[2] &&
+            c.arguments[2]->kind == NodeKind::ObjectLiteral) {
+            const auto& options =
+                static_cast<const ObjectLiteral&>(*c.arguments[2]);
+            for (const auto& propertyPtr : options.properties) {
+                const ObjectProperty* p = propertyPtr.get();
+                if (!p || !p->value || p->isMethod || !p->key ||
+                    p->key->kind != NodeKind::Identifier) {
+                    continue;
+                }
+                const std::string field =
+                    static_cast<Identifier&>(*p->key).name;
+                if (field == "maxAge") {
+                    value += " + \"; Max-Age=\" + ::cp3::runtime::toString(" +
+                             expr(*p->value) + ")";
+                } else if (field == "path") {
+                    value += " + \"; Path=\" + ::cp3::runtime::toString(" +
+                             expr(*p->value) + ")";
+                } else if (field == "httpOnly" &&
+                           p->value->kind == NodeKind::BoolLiteral &&
+                           static_cast<BoolLiteral&>(*p->value).value) {
+                    value += " + \"; HttpOnly\"";
+                } else if (field == "secure" &&
+                           p->value->kind == NodeKind::BoolLiteral &&
+                           static_cast<BoolLiteral&>(*p->value).value) {
+                    value += " + \"; Secure\"";
+                }
+            }
+        }
+        return "(" + expr(*m.object) + ").cookie(" + value + ")";
     }
     const std::string args = networkArgs(receiver, m.property, c);
     // Explicit generics (`res.json<T>()`): a T with no C++ spelling (a
@@ -648,7 +694,8 @@ std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
     } else if (name == kHttpRequest) {
         known = m.property == "method" || m.property == "path" ||
                 m.property == "params" || m.property == "query" ||
-                m.property == "headers";
+                m.property == "headers" || m.property == "cookies" ||
+                m.property == "ip";
     }
     if (known) {
         needsNetwork_ = true;
