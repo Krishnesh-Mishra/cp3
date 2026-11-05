@@ -58,6 +58,25 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
     const Type recv = typeOfExpr(*m.object);
     if (recv.kind != TypeKind::Array) return false;
     const std::string& prop = m.property;
+
+    // `flat(depth?)`: the result peels `depth` array layers (1 by default).
+    // Only a literal depth is peeled statically; a computed depth yields the
+    // innermost type (codegen still requires the literal, so the two agree).
+    if (prop == "flat") {
+        int depth = 1;
+        if (!call.arguments.empty() && call.arguments.front() &&
+            call.arguments.front()->kind == NodeKind::NumberLiteral) {
+            depth = static_cast<int>(
+                static_cast<NumberLiteral&>(*call.arguments.front()).value);
+        }
+        Type inner = elemOf(recv);
+        for (int i = 0; i < depth && inner.kind == TypeKind::Array; ++i) {
+            inner = elemOf(inner);
+        }
+        inferArgs(call);
+        out = withType(call, Type::array(inner));
+        return true;
+    }
     if (!isCallbackMethod(prop)) return false;
     const Type elem = elemOf(recv);
 

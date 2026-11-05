@@ -148,7 +148,7 @@ The remaining JavaScript and TypeScript surface needed so ordinary application c
 | Map/Set constructors from iterables and spread (`[...set]`, `new Map(entries)`) | Everyday code. | Small | Planned |
 | Set algebra: `union`, `intersection`, `difference`, `isSubsetOf` | ES2025 methods; simple on the flat hash set. | Small | Planned |
 | `Object.groupBy` / `Map.groupBy` | Common in reporting code. | Small | Planned |
-| `toSpliced`, `with`, `flat(depth)`, `copyWithin` | Rest of the ES2023 non-mutating array methods. | Small | Planned |
+| `toSpliced`, `with`, `flat(depth)`, `copyWithin` | Rest of the ES2023 non-mutating array methods. | Small | Done |
 | `process.stdout.write` / `process.stderr.write` | No newline; CLIs and progress output need it. | Small | Planned |
 | `process.stdin` (read all, read lines) or `std/readline` | Piping input into CLIs; `console.input` covers prompts only. | Small-medium | Planned |
 | `process.exitCode`, `process.platform`, `process.arch`, `process.version` | Basic process info and a graceful exit path. | Small | Done |

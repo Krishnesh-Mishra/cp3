@@ -310,6 +310,19 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
         f.name = kVariadicLabel;
         return f;
     }
+    if (prop == "toSpliced") {
+        Type f = Type::function({Type::number(), Type::number(), elem}, arr);
+        f.name = kVariadicLabel;
+        return f;
+    }
+    if (prop == "with") {
+        return Type::function({Type::number(), elem}, arr);
+    }
+    if (prop == "copyWithin") {
+        return withOptionalTail2(
+            Type::function({Type::number(), Type::number(), Type::number()},
+                           arr));
+    }
     if (prop == "concat") {
         Type f = Type::function({Type::unionOf({elem, arr})}, arr);
         f.name = kVariadicLabel;
@@ -332,13 +345,13 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
             Type::function({Type::number(), Type::number()}, Type::array(elem)));
     }
     if (prop == "flat") {
-        // One level: an array of arrays flattens to the inner element type.
-        // An array whose elements are not arrays has nothing to flatten, and
-        // the result is the receiver's own type (JS).
+        // `flat(depth?)`: one level by default; the call site peels `depth`
+        // levels when the depth is a literal (tryInferArrayCall).
         if (elem.kind == TypeKind::Array) {
-            return Type::function({}, Type::array(elemOf(elem)));
+            return withOptionalTail(
+                Type::function({Type::number()}, Type::array(elemOf(elem))));
         }
-        return Type::function({}, arr);
+        return withOptionalTail(Type::function({Type::number()}, arr));
     }
     if (prop == "unique" || prop == "shuffle") {
         return Type::function({}, arr);

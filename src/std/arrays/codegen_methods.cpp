@@ -301,7 +301,7 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
         "push", "pop", "unshift", "shift", "unique", "shuffle",
         "indexOf", "lastIndexOf", "includes", "binarySearch", "slice", "flat",
         "at", "toSorted", "toReversed", "splice", "concat", "reverse", "keys",
-        "values", "entries"};
+        "values", "entries", "toSpliced", "with", "copyWithin"};
     const std::string& prop = m.property;
     if (prop == "reduce") {
         const CallExpr* filter = nullptr;
@@ -431,6 +431,32 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
         return "::cp3::runtime::arraySplice<" + ec.cpp + ">(" + recvText +
                ", " + arg(0) + ", " + arg(1) + ", " + items + ")";
     }
+    if (prop == "toSpliced") {
+        if (c.arguments.size() < 2) {
+            g.reportCodegenError(c, diagcode::kArityMismatch,
+                                 "arity mismatch: toSpliced() takes at least 2 "
+                                 "arguments (start, deleteCount)");
+            return "0.0";
+        }
+        std::string items = "std::vector<" + ec.cpp + ">{";
+        for (std::size_t i = 2; i < c.arguments.size(); ++i) {
+            if (i > 2) items += ", ";
+            items += arg(i);
+        }
+        items += "}";
+        return "::cp3::runtime::arrayToSpliced<" + ec.cpp + ">(" + recvText +
+               ", " + arg(0) + ", " + arg(1) + ", " + items + ")";
+    }
+    if (prop == "with") {
+        return "::cp3::runtime::arrayWith<" + ec.cpp + ">(" + recvText + ", " +
+               arg(0) + ", " + arg(1) + ")";
+    }
+    if (prop == "copyWithin") {
+        std::string out = "::cp3::runtime::arrayCopyWithin<" + ec.cpp + ">(" +
+                          recvText + ", " + arg(0) + ", " + arg(1);
+        if (c.arguments.size() > 2) out += ", " + arg(2);
+        return out + ")";
+    }
     if (prop == "concat") {
         std::string rest = "std::vector<" + ec.cpp + ">{";
         for (std::size_t i = 0; i < c.arguments.size(); ++i) {
@@ -492,18 +518,37 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
         return "::cp3::runtime::arrayToSortedWith<" + ec.cpp + ">(" + recvText +
                ", " + cmp + ")";
     }
-    // `flat()`: one level. An array of arrays flattens to the inner element
-    // type; an array whose elements are not arrays has nothing to flatten, and
-    // JS returns a copy of the receiver.
-    if (elem.kind == TypeKind::Array) {
-        CppInfo ic;
-        if (arrayElementInfo(arrayElemOf(elem), ic)) {
-            return "::cp3::runtime::arrayFlat<" + ic.cpp + ">(" + recvText + ")";
+    // `flat(depth?)`: one level by default (JS); a literal depth peels that
+    // many levels by nesting `arrayFlat` calls. An array whose elements are
+    // not arrays has nothing to flatten, and JS returns a copy of the
+    // receiver.
+    if (prop == "flat") {
+        int depth = 1;
+        if (!c.arguments.empty() && c.arguments.front() &&
+            c.arguments.front()->kind == NodeKind::NumberLiteral) {
+            depth = static_cast<int>(
+                static_cast<NumberLiteral&>(*c.arguments.front()).value);
         }
-        g.reportArrayElementType(arrayElemOf(elem), c, "a flattened array");
-        return "0.0";
+        if (depth < 0) depth = 0;
+        if (depth == 0 || elem.kind != TypeKind::Array) {
+            return "::cp3::runtime::arrayFromArray<" + ec.cpp + ">(" + recvText +
+                   ")";
+        }
+        // Peel `depth` layers: each `arrayFlat` drops one.
+        std::string text = recvText;
+        Type inner = elem;
+        for (int i = 0; i < depth && inner.kind == TypeKind::Array; ++i) {
+            CppInfo ic;
+            if (!arrayElementInfo(arrayElemOf(inner), ic)) {
+                g.reportArrayElementType(arrayElemOf(inner), c,
+                                         "a flattened array");
+                return "0.0";
+            }
+            text = "::cp3::runtime::arrayFlat<" + ic.cpp + ">(" + text + ")";
+            inner = arrayElemOf(inner);
+        }
+        return text;
     }
-    return "::cp3::runtime::arrayFromArray<" + ec.cpp + ">(" + recvText + ")";
 }
 
 // The `for...of` source: the element type the loop binds and the C++ type of

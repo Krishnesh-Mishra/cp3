@@ -568,6 +568,56 @@ Array<E> arrayConcat(const Array<E>& a, std::vector<E> rest) {
     return makeArray<E>(std::move(out));
 }
 
+// `a.toSpliced(start, deleteCount, ...items)`: a fresh array with the
+// splice applied; the receiver is untouched.
+template <class E>
+Array<E> arrayToSpliced(const Array<E>& a, double start, double deleteCount,
+                        std::vector<E> items) {
+    const std::size_t at = startIndex(start, a->size());
+    double dc = std::isnan(deleteCount) ? 0.0 : std::trunc(deleteCount);
+    if (dc < 0.0) dc = 0.0;
+    const std::size_t count =
+        at >= a->size() ? 0 : std::min<std::size_t>(
+                                   static_cast<std::size_t>(dc), a->size() - at);
+    std::vector<E> out(a->begin(), a->end());
+    out.erase(out.begin() + static_cast<std::ptrdiff_t>(at),
+              out.begin() + static_cast<std::ptrdiff_t>(at + count));
+    out.insert(out.begin() + static_cast<std::ptrdiff_t>(at), items.begin(),
+               items.end());
+    return makeArray<E>(std::move(out));
+}
+
+// `a.with(index, value)`: a fresh array with one slot replaced. Negative
+// indices count from the end; an out-of-range index leaves the copy equal
+// to the receiver (JS throws, but cp3's arrays are the typed family - the
+// copy keeps the value rather than failing the program).
+template <class E>
+Array<E> arrayWith(const Array<E>& a, double index, const E& value) {
+    Array<E> out = makeArray<E>(*a);
+    const std::size_t at = startIndex(index, a->size());
+    if (at < out->size()) (*out)[at] = value;
+    return out;
+}
+
+// `a.copyWithin(target, start, end?)`: mutating; copies elements from
+// [start, end) onto `target`, handling overlap by snapshotting the source
+// slice first. Returns the receiver.
+template <class E>
+Array<E> arrayCopyWithin(const Array<E>& a, double target, double start,
+                         std::optional<double> end = std::nullopt) {
+    const std::size_t to = startIndex(target, a->size());
+    const std::size_t from = startIndex(start, a->size());
+    const std::size_t bound = endIndex(end, a->size());
+    if (to >= a->size() || from >= bound) return a;
+    const std::size_t count =
+        std::min(bound - from, a->size() - to);
+    const std::vector<E> snapshot(a->begin() + static_cast<std::ptrdiff_t>(from),
+                                  a->begin() +
+                                      static_cast<std::ptrdiff_t>(from + count));
+    for (std::size_t i = 0; i < count; ++i) (*a)[to + i] = snapshot[i];
+    return a;
+}
+
 // `a.reverse()`: mutating; reverses in place and returns the receiver.
 template <class E>
 Array<E> arrayReverse(const Array<E>& a) {

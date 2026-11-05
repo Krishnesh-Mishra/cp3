@@ -112,9 +112,17 @@ const DocRow kArrayDocRows[] = {
     {"values", "values(): T[]", "Returns a copy of the elements."},
     {"entries", "entries(): [number, T][]",
      "Returns `[index, value]` pairs for the array."},
-    {"flat", "flat(): T[]",
+    {"toSpliced", "toSpliced(start: number, deleteCount: number, ...items: T[]): T[]",
+     "Like `splice` but returns a new array and leaves the receiver untouched."},
+    {"with", "with(index: number, value: T): T[]",
+     "Returns a copy of the array with the element at `index` replaced "
+     "(negative indices count from the end)."},
+    {"copyWithin", "copyWithin(target: number, start: number, end?: number): T[]",
+     "Copies a slice of the array onto `target` in place (overlap-safe) and "
+     "returns the receiver."},
+    {"flat", "flat(depth?: number): T[]",
      "Returns a new array with the nested arrays of the receiver flattened "
-     "by one level."},
+     "by `depth` levels (one by default)."},
     {"unique", "unique(): T[]",
      "Removes the adjacent duplicates in place and returns the array. Backed "
      "by `std::unique`."},
