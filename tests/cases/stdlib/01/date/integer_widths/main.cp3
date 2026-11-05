@@ -4,7 +4,8 @@ import Date from "std/date";
 // A Rust project sees exact Date timestamps: milliseconds since the epoch
 // are i64 end to end.
 const parsed: i64 = Date.parse("2020-01-02T12:00:00Z");
-const d = Date.fromISOString("2020-01-02T12:00:00Z");
+const created = Date.fromISOString("2020-01-02T12:00:00Z");
+let d = created;
 const ms: i64 = d.getTime();
 console.log(parsed === ms ? "parse" : "bad");
 
