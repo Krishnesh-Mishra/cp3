@@ -49,6 +49,9 @@ Type Analyzer::inferCall(CallExpr& call) {
             if (tryInferCoercionBuiltin(call, id, builtin)) {
                 return withType(call, builtin);
             }
+            if (tryInferBase64Builtin(call, id, builtin)) {
+                return withType(call, builtin);
+            }
             if (tryInferNetworkCall(call, id, builtin)) {
                 return withType(call, builtin);
             }
@@ -186,6 +189,26 @@ bool Analyzer::tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& o
     }
     inferArgs(call);
     out = Type::number();
+    return true;
+}
+
+// The `atob` / `btoa` globals: base64 text <-> byte text, both `string`.
+// Exactly one argument (the text); any other argument list is CP3403.
+bool Analyzer::tryInferBase64Builtin(CallExpr& call, const Identifier& id,
+                                     Type& out) {
+    if (id.name != "atob" && id.name != "btoa") return false;
+    if (call.arguments.size() != 1 || !call.arguments.front()) {
+        const std::size_t given = call.arguments.size();
+        report(diagcode::kArityMismatch, call.span,
+               "arity mismatch: " + id.name + "() expects exactly 1 argument, "
+               "got " + std::to_string(given) +
+                   (given == 1 ? " argument" : " arguments"));
+        inferArgs(call);
+        out = Type::unknown();
+        return true;
+    }
+    inferArgs(call);
+    out = Type::string();
     return true;
 }
 

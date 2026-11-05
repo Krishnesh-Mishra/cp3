@@ -68,6 +68,23 @@ std::string coercionText(const std::string& name, const std::string& value) {
     return "::cp3::runtime::isFiniteNumber(::cp3::runtime::toNumber(" + value + "))";
 }
 
+// `atob(text)` / `btoa(text)`: base64 <-> byte text (stdlib §03). The
+// helpers live in the buffer family header; one string argument, exactly
+// like the parse globals.
+std::string Generator::emitBase64Builtin(const CallExpr& c,
+                                         const std::string& name) {
+    if (c.arguments.size() == 1 && c.arguments.front() &&
+        c.arguments.front()->kind != NodeKind::SpreadElement) {
+        needsBuffer_ = true;
+        return "::cp3::runtime::buffer::" + name +
+               "(::cp3::runtime::toString(" + expr(*c.arguments.front()) + "))";
+    }
+    reportCodegenError(c, diagcode::kArityMismatch,
+                       name + "() takes exactly one argument (the text to "
+                       "convert)");
+    return "0.0";
+}
+
 // `Number(value)`, `Boolean(value)`, `isNaN(value)`, `isFinite(value)`:
 // the scalar coercion globals (STDLIB docs §03). Extra arguments are ignored;
 // a spread contributes its first element, exactly like `String`.

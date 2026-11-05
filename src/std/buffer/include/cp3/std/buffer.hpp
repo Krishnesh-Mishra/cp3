@@ -292,6 +292,20 @@ using BufferString = std::basic_string<char, std::char_traits<char>,
 
 }  // namespace detail
 
+// The `atob` / `btoa` globals: base64 text <-> byte text. `atob` rejects
+// malformed input with a catchable cp3 error (the decoder's message names
+// Buffer.from; rethrow it under atob's name).
+inline std::string atob(const std::string& text) {
+    try {
+        return detail::base64Decode(text);
+    } catch (const Thrown&) {
+        detail::fail("atob: invalid base64 input");
+    }
+}
+inline std::string btoa(const std::string& bytes) {
+    return detail::base64Encode(bytes);
+}
+
 // The nominal `Buffer` byte sequence. Immutable: the factory functions below
 // are the only writers, and codegen never spells the constructor itself.
 //

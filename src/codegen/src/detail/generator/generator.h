@@ -370,6 +370,7 @@ private:
     // The documented global numeric parsers (`parseInt`/`parseFloat`):
     // argument coercion plus the runtime helper (STDLIB section 3).
     std::string emitParseBuiltin(const CallExpr& c, const std::string& name);
+    std::string emitBase64Builtin(const CallExpr& c, const std::string& name);
     // `Number(value)`, `Boolean(value)`, `isNaN(value)`, `isFinite(value)`:
     // the scalar coercion globals (STDLIB docs §03).
     std::string emitCoercionBuiltin(const CallExpr& c, const std::string& name);

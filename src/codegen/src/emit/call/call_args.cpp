@@ -751,6 +751,10 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
         g.functions_.find(name) == g.functions_.end()) {
         return g.emitCoercionBuiltin(c, name);
     }
+    if ((name == "atob" || name == "btoa") &&
+        g.functions_.find(name) == g.functions_.end()) {
+        return g.emitBase64Builtin(c, name);
+    }
     const auto declIt = g.functionDecls_.find(name);
     const FunctionDeclaration* decl =
         declIt != g.functionDecls_.end() ? declIt->second : nullptr;

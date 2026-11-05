@@ -141,7 +141,7 @@ The remaining JavaScript and TypeScript surface needed so ordinary application c
 | `cp3 install <dir>` semantics | Compile the source or reject with a clear "use a `.cp3pak`" error; accept classes via a package's default or named exports (today CP3401 blocks it); make `cp3 test` work for packages. | Small-medium | Planned |
 | Coercion: `parseInt`, `parseFloat`, `Number(x)`, `String(x)`, `Boolean(x)`, `isNaN`, `isFinite` | Basic coercion in every TS codebase. | Small | Done |
 | Number helpers: `Number.toString(radix)`, `Number.isSafeInteger`, `Number.parseInt`/`parseFloat` | Common helpers plus hex/binary output. | Small | Done |
-| `encodeURIComponent`, `decodeURIComponent`, `encodeURI`, `decodeURI`, `atob`, `btoa` | URL building and Basic auth headers; the network runtime already carries a `percentDecode` helper to adapt. | Small | Planned |
+| `encodeURIComponent`, `decodeURIComponent`, `encodeURI`, `decodeURI`, `atob`, `btoa` | URL building and Basic auth headers; the network runtime already carries a `percentDecode` helper to adapt. | Small | Done |
 | Scheduling primitives: `queueMicrotask`, `setImmediate`, `process.nextTick` | What libraries expect alongside timers. | Small | Done |
 | Generic constraints and defaults: `<T extends X = Y>` | Required for real generic APIs. | Medium | Planned |
 | `const enum` and enum reverse mapping | Common enum use. | Small | Planned |
