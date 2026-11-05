@@ -10,7 +10,7 @@ console.log(joined.join(","));
 const r = [1, 2, 3];
 r.reverse();
 console.log(r.join(","));
-const nested = [1, [2, 3], 4];
+const nested = [[1], [2, 3], [4]];
 console.log(nested.flat().join(","));
 console.log([10, 20].keys().join(","));
 console.log([10, 20].values().join(","));
