@@ -1,0 +1,16 @@
+import console from "std/console";
+import { Map } from "std/collections";
+const a = [1, 2, [3, 4]];
+const b = structuredClone(a);
+b[2][0] = 99;
+console.log(a[2][0]);
+console.log(b[2][0]);
+const o = { x: 1 };
+const p = structuredClone(o);
+p.x = 7;
+console.log(o.x);
+const m = new Map<string, number>([["k", 1]]);
+const m2 = structuredClone(m);
+m2.set("k", 2);
+console.log(m.get("k"));
+console.log(m2.get("k"));

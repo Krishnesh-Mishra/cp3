@@ -57,6 +57,9 @@ Type Analyzer::inferCall(CallExpr& call) {
             if (tryInferParseToBuiltin(call, id, builtin)) {
                 return withType(call, builtin);
             }
+            if (tryInferCloneBuiltin(call, id, builtin)) {
+                return withType(call, builtin);
+            }
             if (tryInferNetworkCall(call, id, builtin)) {
                 return withType(call, builtin);
             }
@@ -197,6 +200,22 @@ bool Analyzer::tryParseBuiltinCall(CallExpr& call, const Identifier& id, Type& o
     }
     inferArgs(call);
     out = Type::number();
+    return true;
+}
+
+// `structuredClone(value)`: deep-copies the value (arrays, objects, maps,
+// sets, class instances with a cloner). Result type is the argument's type.
+bool Analyzer::tryInferCloneBuiltin(CallExpr& call, const Identifier& id,
+                                    Type& out) {
+    if (id.name != "structuredClone") return false;
+    if (call.arguments.empty() || !call.arguments.front()) {
+        report(diagcode::kArityMismatch, call.span,
+               "arity mismatch: structuredClone expects exactly one argument");
+        inferArgs(call);
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    out = withType(call, inferExpr(*call.arguments.front()));
     return true;
 }
 

@@ -85,6 +85,18 @@ std::string Generator::emitBase64Builtin(const CallExpr& c,
     return "0.0";
 }
 
+// `structuredClone(value)`: the runtime deep copy (`cp3::runtime::clone`,
+// the worker boundary primitive). One argument, any type.
+std::string Generator::emitCloneBuiltin(const CallExpr& c) {
+    if (c.arguments.empty() || !c.arguments.front() ||
+        c.arguments.front()->kind == NodeKind::SpreadElement) {
+        reportCodegenError(c, diagcode::kArityMismatch,
+                           "structuredClone() takes exactly one argument");
+        return "0.0";
+    }
+    return "::cp3::runtime::clone(" + expr(*c.arguments.front()) + ")";
+}
+
 // `parseTo<T>(text)`: the compile-time typed string coercion (ROADMAP).
 // `number` parses via toNumber (sema already proved the literal fits),
 // `boolean` is the literal itself, `string` is identity, and a native

@@ -758,6 +758,10 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
     if (name == "parseTo" && g.functions_.find(name) == g.functions_.end()) {
         return g.emitParseToBuiltin(c);
     }
+    if (name == "structuredClone" &&
+        g.functions_.find(name) == g.functions_.end()) {
+        return g.emitCloneBuiltin(c);
+    }
     const auto declIt = g.functionDecls_.find(name);
     const FunctionDeclaration* decl =
         declIt != g.functionDecls_.end() ? declIt->second : nullptr;

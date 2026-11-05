@@ -244,6 +244,7 @@ async function load(): Promise<string> {
 - Coercion globals: `parseInt(s)`, `parseFloat(s)`, `Number(x)`, `String(x)`, `Boolean(x)`, `isNaN(x)`, `isFinite(x)`.
 - `parseTo(text, Type)` / `parseTo<Type>(text)`: compile-time coercion of a string literal to `number`/`string`/`boolean` (keyword form) or any supported type incl. natives (`parseTo<r_'i32'>("777")`). First arg must be a literal; an unrepresentable literal is CP3401.
 - Encoding globals: `atob(s)`, `btoa(s)` (base64; `atob` throws a catchable `Error` on invalid input).
+- `structuredClone(value)`: deep copy of arrays, objects, maps, sets and clonable class instances (result has the argument's type).
 - Promise rejections are `Error` objects; `catch (e)` binds them.
 - A top-level `await` is allowed in async entry points only if the entry is async; keep `await` inside async functions.
 - Timers/network/fs-async suspend only the async function; other loop work continues.
