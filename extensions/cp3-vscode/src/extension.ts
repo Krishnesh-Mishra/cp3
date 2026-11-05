@@ -44,6 +44,11 @@ import {
 
 import { resolveCompilerPath } from "./compilerPath";
 import { registerEditorFeatures } from "./editorFeatures";
+import {
+    applyPackageJsonSchema,
+    registerPackageJsonSchemaCommand,
+    workspaceLooksLikeCp3,
+} from "./packageJsonSchema";
 
 const LANGUAGE_ID = "cp3";
 const CLIENT_ID = "cp3";
@@ -536,6 +541,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             new Cp3DebugAdapterFactory()
         )
     );
+    registerPackageJsonSchemaCommand(context);
+    // A cp3 project's package.json uses the cp3 manifest schema (not npm's);
+    // associate it before the first JSON file is validated. The language
+    // server only auto-starts for cp3-looking workspaces, so opening an npm
+    // project's package.json does not spawn cp3c; opening a .cp3 file still
+    // starts it here.
+    const looksLikeCp3 = await workspaceLooksLikeCp3().catch(() => false);
+    if (looksLikeCp3) {
+        void applyPackageJsonSchema(context, false).catch(() => undefined);
+        await startClient();
+    } else {
+        let serverStarted = false;
+        context.subscriptions.push(
+            vscode.workspace.onDidOpenTextDocument((document) => {
+                if (document.languageId === LANGUAGE_ID && !serverStarted) {
+                    serverStarted = true;
+                    void startClient();
+                }
+            })
+        );
+    }
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((event) => {
             if (event.affectsConfiguration(COMPILER_PATH_SETTING)) {
@@ -543,7 +569,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             }
         })
     );
-    await startClient();
 }
 
 export function deactivate(): Thenable<void> | undefined {

@@ -106,6 +106,17 @@ fonts, and a 128x128 PNG).
 | `CP3: Run Current File` | The **play button in the editor's toolbar (top-right corner)** of a `.cp3` file. Saves and runs it through the configured toolchain (`<cp3.compilerPath> run <file>`) and streams output to the `cp3 Run` output channel — no terminal panel is opened. Non-zero exits show a `Show Output` notification. |
 | `cp3: Restart Language Server` | Stops the running server and starts it again from the current `cp3.compilerPath`. |
 | `CP3: Organize Imports` | Sorts a contiguous group of regular imports. Side-effect and multiline imports are left untouched. |
+| `cp3: Apply cp3 Manifest Schema to package.json` | Re-associates the workspace `package.json` with the bundled cp3 manifest schema (normally applied automatically when the workspace root manifest is a cp3 project). |
+
+The last command covers the cp3 project manifest: a `package.json` with a
+`.cp3` `main`, `typeSystem`, or `cp3c` scripts is a cp3 project, not an npm
+one. When the extension activates in such a workspace it records the
+bundled schema (`schemas/cp3-package.schema.json`) in the workspace
+`json.schemas` setting for `package.json`, so the manifest validates and
+completes with cp3 fields (`typeSystem`, `main`, `scripts`, ...) instead of
+the npm schema. Only that one entry (replaced idempotently) is ever
+written, and only for detected cp3 workspaces; npm workspaces keep the npm
+schema.
 
 The run button is also available from the Command Palette and the editor context menu. It only appears when a CP3 file is the active editor.
 

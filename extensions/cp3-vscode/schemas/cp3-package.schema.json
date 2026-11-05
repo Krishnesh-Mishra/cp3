@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cp3 package.json",
+  "description": "The cp3 project manifest read by cp3c (src/cli package_json.cpp). Other package.json fields are ignored by cp3c, so they are allowed but undocumented here.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Package name (falls back to the directory name)."
+    },
+    "version": {
+      "type": "string",
+      "description": "Package version (falls back to 0.0.0)."
+    },
+    "description": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["application", "package"],
+      "description": "\"package\" marks a publishable package (cp3 publish); \"application\" is a runnable project."
+    },
+    "main": {
+      "type": "string",
+      "description": "Entry point (defaults to src/index.cp3)."
+    },
+    "typeSystem": {
+      "type": "string",
+      "enum": ["typescript", "rust", "cpp"],
+      "description": "The project's type-name vocabulary: \"rust\"/\"cpp\" enable the plain native value-type spellings (i64, u64, ...); \"typescript\" is the default."
+    },
+    "strictNumericCasts": {
+      "type": "boolean",
+      "description": "Reject implicit numeric mixing at checked conversion points."
+    },
+    "scripts": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Runnable package scripts (`cp3c <script>`); the standard develop/compile/start/verify set is created by `cp3c init`."
+    },
+    "build": {
+      "type": "object",
+      "properties": {
+        "bundleNativeDlls": {
+          "type": "boolean",
+          "description": "Bundle native DLLs next to the executable (default true)."
+        }
+      }
+    }
+  }
+}

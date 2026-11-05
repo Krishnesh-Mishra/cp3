@@ -18,8 +18,10 @@
   ],
   "activationEvents": [
     "onLanguage:cp3",
+    "onLanguage:json",
     "onTaskType:cp3",
-    "onDebugResolve:cp3"
+    "onDebugResolve:cp3",
+    "onCommand:cp3.applyPackageJsonSchema"
   ],
   "main": "./dist/extension.js",
   "icon": "images/cp3-logo.png",
@@ -61,6 +63,10 @@
       {
         "command": "cp3.restartServer",
         "title": "cp3: Restart Language Server"
+      },
+      {
+        "command": "cp3.applyPackageJsonSchema",
+        "title": "cp3: Apply cp3 Manifest Schema to package.json"
       },
       {
         "command": "cp3.organizeImports",
@@ -152,6 +158,9 @@
         {
           "command": "cp3.organizeImports",
           "when": "editorLangId == cp3"
+        },
+        {
+          "command": "cp3.applyPackageJsonSchema"
         },
         {
           "command": "cp3.run",
