@@ -321,12 +321,28 @@ std::string Generator::consoleArgText(const Expr& arg) {
     return tsCall(arg);
 }
 
-// The console argument list of a call that carries a spread: the fixed
-// arguments are rendered strings, a spread contributes the array's elements.
-// The parts are collected in a vector in argument order (JS parity: the
-// arguments are evaluated left to right) and the runtime joins them with one
-// space. "" when a spread has no C++ spelling (the report is raised).
+// The console argument list: the fixed arguments are rendered strings, a
+// spread contributes the array's elements. The parts are collected in a
+// vector in argument order (JS parity: the arguments are evaluated left to
+// right) and the runtime joins them with one space. A spread needs the loop
+// form; everything else is a braced initializer list so `await` inside an
+// argument does not turn the synthetic lambda into a coroutine. "" when a
+// spread has no C++ spelling (the report is raised).
 std::string Generator::consolePartsText(const CallExpr& c, std::size_t from) {
+    // The fixed-argument case constructs the vector directly. A braced
+    // initializer list evaluates in order, and - unlike a lambda - it is not
+    // a function, so an argument that contains `co_await` stays in the
+    // enclosing coroutine.
+    if (!hasSpread(c)) {
+        std::string list;
+        for (std::size_t i = from; i < c.arguments.size(); ++i) {
+            const Expr* arg = c.arguments[i].get();
+            if (!arg) continue;
+            if (!list.empty()) list += ", ";
+            list += consoleArgText(*arg);
+        }
+        return "std::vector<std::string>{" + list + "}";
+    }
     std::string body;
     for (std::size_t i = from; i < c.arguments.size(); ++i) {
         const Expr* arg = c.arguments[i].get();
@@ -352,8 +368,11 @@ std::string Generator::consolePartsText(const CallExpr& c, std::size_t from) {
         }
         body += " cp3_parts.push_back(" + consoleArgText(*arg) + ");";
     }
-    return "([&]() { std::vector<std::string> cp3_parts;" + body +
-           " return cp3_parts; }())";
+    // The explicit return type matters: an argument may contain `await`, and
+    // C++ forbids `co_await` inside a lambda whose return type is deduced.
+    return "([&]() -> std::vector<std::string> { std::vector<std::string> "
+           "cp3_parts;" +
+           body + " return cp3_parts; }())";
 }
 
 // `{ a: 1 }` -> `::cp3::runtime::formatObject({{"a", ...}})`: fields in

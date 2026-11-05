@@ -28,6 +28,7 @@
 #include "cp3/core/analysis.hpp"
 #include "cp3/core/ast.hpp"
 #include "cp3/diag/diagnostic.hpp"
+#include "cp3/host/options.hpp"
 #include "cp3/lsp.hpp"
 #include "cp3/meta/module.hpp"
 #include "cp3/core/source.hpp"
@@ -44,6 +45,9 @@ struct AnalyzedDocument {
     CompilationUnit* entry = nullptr;
     SemaResult sema;
     std::vector<Diagnostic> diagnostics;
+    // The project vocabulary the analysis used; std documentation spells
+    // native integer results (`u16`, `usize`, ...) in this vocabulary.
+    TypeSystem typeSystem = TypeSystem::TypeScript;
 };
 
 // Loads `text` as the file at `path` (preludes, local imports, sema). Never

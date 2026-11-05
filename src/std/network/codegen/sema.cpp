@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/std_integer.hpp"
 
 namespace cp3 {
 
@@ -104,10 +105,10 @@ Type eventListener() { return callbackOf(2); }
 // hands each accepted read its row type. SEAM comments mark the still-blocked
 // swap point (the fs ReadStream body).
 // -----------------------------------------------------------------------------
-std::vector<Field> fetchResponseFields() {
+std::vector<Field> fetchResponseFields(TypeSystem ts) {
     return {
         Field{"ok", Type::boolean(), false},
-        Field{"status", Type::number(), false},
+        Field{"status", stdIntegerType(StdIntegerKind::Status, ts), false},
         Field{"statusText", Type::string(), false},
         // Map<string, string>; the runtime fills it in parseHead
         // (runtime_fetch.cpp) from the response header block.
@@ -145,30 +146,33 @@ std::vector<Field> httpRequestFields() {
     };
 }
 
-std::vector<Field> httpResponseFields() {
+std::vector<Field> httpResponseFields(TypeSystem ts) {
+    const Type status = stdIntegerType(StdIntegerKind::Status, ts);
     return {
         // `status` / `header` chain; the terminal writers return nothing.
         Field{"status",
-              Type::function({Type::number()}, networkValue(kHttpResponse)), false},
+              Type::function({status}, networkValue(kHttpResponse)), false},
         Field{"header",
               Type::function({Type::string(), Type::string()},
                              networkValue(kHttpResponse)), false},
         Field{"text",
-              withOptionalTail(Type::function({Type::string(), Type::number()},
+              withOptionalTail(Type::function({Type::string(), status},
                                               Type::voidType())), false},
         // `res.json(payload)`: a scalar spells directly, an object/array
         // literal lowers to the json dynamic value tree (codegen_methods.cpp),
         // and a reified interface goes through the record tables.
+        // `res.json()` / `res.json(payload)` / `res.json(payload, status)`:
+        // the generic writer form takes no value argument at all, so the
+        // payload is optional together with the status.
         Field{"json",
-              withOptionalTail(Type::function({Type::unknown(), Type::number()},
-                                              Type::voidType())), false},
+              withOptionalTail2(Type::function({Type::unknown(), status},
+                                               Type::voidType())), false},
         Field{"send",
-              withOptionalTail(Type::function({Type::number()}, Type::voidType())),
+              withOptionalTail(Type::function({status}, Type::voidType())),
               false},
         Field{"redirect",
               withOptionalTail(
-                  Type::function({Type::string(), Type::number()},
-                                 Type::voidType())),
+                  Type::function({Type::string(), status}, Type::voidType())),
               false},
         Field{"sendFile", Type::function({Type::string()}, Type::voidType()),
               false},
@@ -184,7 +188,7 @@ std::vector<Field> httpResponseFields() {
     };
 }
 
-std::vector<Field> httpServerFields() {
+std::vector<Field> httpServerFields(TypeSystem ts) {
     std::vector<Field> fields;
     const Type route = httpRouteHandler();
     // The documented four verbs plus the Express-style extras the runtime grew
@@ -199,8 +203,9 @@ std::vector<Field> httpServerFields() {
                            false});
     fields.push_back(
         Field{"listen",
-              withOptionalTail(
-                  Type::function({Type::number(), callbackOf(0)}, Type::voidType())),
+              withOptionalTail(Type::function(
+                  {stdIntegerType(StdIntegerKind::Port, ts), callbackOf(0)},
+                  Type::voidType())),
               false});
     fields.push_back(Field{"close", Type::function({}, Type::voidType()), false});
     return fields;
@@ -232,11 +237,11 @@ std::vector<Field> webSocketServerFields() {
 /// The documented field rows of one marker table, or {} when `name` is not a
 /// network marker. Shared by `networkObjectType` (the marker itself) and
 /// `networkObjectMember` (one documented read).
-std::vector<Field> networkFieldsFor(const std::string& name) {
-    if (name == kFetchResponse) return fetchResponseFields();
+std::vector<Field> networkFieldsFor(const std::string& name, TypeSystem ts) {
+    if (name == kFetchResponse) return fetchResponseFields(ts);
     if (name == kHttpRequest) return httpRequestFields();
-    if (name == kHttpResponse) return httpResponseFields();
-    if (name == kHttpServer) return httpServerFields();
+    if (name == kHttpResponse) return httpResponseFields(ts);
+    if (name == kHttpServer) return httpServerFields(ts);
     if (name == kWebSocket) return webSocketFields();
     if (name == kWebSocketServer) return webSocketServerFields();
     return {};
@@ -245,7 +250,7 @@ std::vector<Field> networkFieldsFor(const std::string& name) {
 }  // namespace
 
 Type Analyzer::networkObjectType(const std::string& name) {
-    std::vector<Field> fields = networkFieldsFor(name);
+    std::vector<Field> fields = networkFieldsFor(name, options_.typeSystem);
     if (fields.empty()) return Type::unknown();
     // Keep the nominal network marker; member_check uses the same field table
     // to resolve known members and report CP3305 for unknown ones.
@@ -255,7 +260,8 @@ Type Analyzer::networkObjectType(const std::string& name) {
 std::optional<Type> Analyzer::networkObjectMember(const Type& recv,
                                                   const std::string& prop) {
     if (recv.kind != TypeKind::Object) return std::nullopt;
-    const std::vector<Field> fields = networkFieldsFor(recv.name);
+    const std::vector<Field> fields =
+        networkFieldsFor(recv.name, options_.typeSystem);
     for (const Field& field : fields) {
         if (field.name == prop) return field.type;
     }
@@ -265,14 +271,18 @@ std::optional<Type> Analyzer::networkObjectMember(const Type& recv,
 std::vector<std::string> networkObjectMemberNames(
     const std::string& objectTypeName) {
     std::vector<std::string> names;
-    for (const Field& field : networkFieldsFor(objectTypeName)) {
+    for (const Field& field :
+         networkFieldsFor(objectTypeName, TypeSystem::TypeScript)) {
         names.push_back(field.name);
     }
     return names;
 }
 
 StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
-                                   const std::string& member) {
+                                   const std::string& member,
+                                   TypeSystem ts) {
+    const std::string status = stdIntegerSpelling(StdIntegerKind::Status, ts);
+    const std::string port = stdIntegerSpelling(StdIntegerKind::Port, ts);
     const std::string type = objectTypeName.rfind("$network:", 0) == 0
                                  ? objectTypeName.substr(9)
                                  : objectTypeName;
@@ -287,7 +297,7 @@ StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
         if (member == "use") return {"use(handler: (req: HttpRequest, res: HttpResponse, next: () => Promise<void>) => void): void",
             "Registers middleware in order. Call `next()` (or `await next()` in an async handler) to continue to the next matching route or middleware. A response can be sent without calling `next()` to finish the request.\n\n"
             "**Example**\n\n```cp3\napp.use(async (req, res, next) => {\n  console.log(req.method, req.path);\n  await next();\n});\n```"};
-        if (member == "listen") return {"listen(port: number, callback?: () => void): void",
+        if (member == "listen") return {"listen(port: " + port + ", callback?: () => void): void",
             "Starts accepting HTTP requests on `port`. The optional callback runs once the listener is ready.\n\n**Example**\n\n```cp3\napp.listen(3000, () => console.log(\"ready\"));\n```"};
         if (member == "close") return {"close(): void", "Stops accepting new connections and closes the server."};
     }
@@ -304,12 +314,12 @@ StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
         if (member == "json") return {"json<T>(): Promise<T>", "Parses the buffered request body as JSON and types the result as `T`. The annotation describes the expected shape; validate untrusted input before relying on it."};
     }
     if (type == "HttpResponse") {
-        if (member == "status") return {"status(code: number): HttpResponse", "Sets the status for the response and returns the response so calls can be chained."};
+        if (member == "status") return {"status(code: " + status + "): HttpResponse", "Sets the status for the response and returns the response so calls can be chained."};
         if (member == "header") return {"header(name: string, value: string): HttpResponse", "Sets a response header and returns the response so calls can be chained."};
-        if (member == "text") return {"text(data: string, status?: number): void", "Sends a text response. This is a terminal write: once a response has been sent, later terminal writes are ignored."};
-        if (member == "json") return {"json(data: unknown, status?: number): void", "Serializes a value as JSON and sends it as the response. A second argument may set the status."};
-        if (member == "send") return {"send(status?: number): void", "Sends the response data previously buffered with `write`, or an empty response."};
-        if (member == "redirect") return {"redirect(url: string, status?: number): void", "Answers with a redirect (302 by default) and the `Location` header. Terminal."};
+        if (member == "text") return {"text(data: string, status?: " + status + "): void", "Sends a text response. This is a terminal write: once a response has been sent, later terminal writes are ignored."};
+        if (member == "json") return {"json(data: unknown, status?: " + status + "): void", "Serializes a value as JSON and sends it as the response. A second argument may set the status."};
+        if (member == "send") return {"send(status?: " + status + "): void", "Sends the response data previously buffered with `write`, or an empty response."};
+        if (member == "redirect") return {"redirect(url: string, status?: " + status + "): void", "Answers with a redirect (302 by default) and the `Location` header. Terminal."};
         if (member == "sendFile") return {"sendFile(path: string): void", "Serves the file's bytes with a content type from its extension, or 404 when missing. Terminal."};
         if (member == "cookie") return {"cookie(name: string, value: string, options?: object): HttpResponse", "Appends a `Set-Cookie` header; options may carry `maxAge` (seconds), `path`, `httpOnly` and `secure`. Returns the response for chaining."};
         if (member == "write") return {"write(chunk: string | Buffer): void", "Appends a string or raw Buffer bytes to a chunked response. Finish the response with `end()`."};
@@ -317,7 +327,7 @@ StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
     }
     if (type == "FetchResponse") {
         if (member == "ok") return {"ok: boolean", "Whether the response status is in the successful 200–299 range."};
-        if (member == "status") return {"status: number", "The HTTP status code returned by the server."};
+        if (member == "status") return {"status: " + status, "The HTTP status code returned by the server."};
         if (member == "statusText") return {"statusText: string", "The response's reason phrase, when provided."};
         if (member == "headers") return {"headers: Map<string, string>", "The response headers."};
         if (member == "text") return {"text(): Promise<string>", "Reads the response body as text."};

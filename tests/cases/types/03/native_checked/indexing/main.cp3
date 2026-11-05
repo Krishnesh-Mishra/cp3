@@ -1,0 +1,15 @@
+import console from "std/console";
+
+// Every numeric vocabulary indexes the same array: a `number`, an i32, an i64
+// and a usize all lower to a bounds-checked element read.
+let xs: i64[] = [10, 20, 30];
+let n: number = 1;
+let i: i32 = 0;
+let j: i64 = 2;
+let k: usize = 1;
+console.log(`${xs[n]} ${xs[i]} ${xs[j]} ${xs[k]}`);
+
+// `arr.length` stays a number (JavaScript semantics), so `length - 1` is a
+// number even for a native-element array.
+let last: number = xs.length - 1;
+console.log(`${last} ${xs[last]}`);

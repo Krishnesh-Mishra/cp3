@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/std_tables.hpp"
 
 namespace cp3 {
@@ -290,7 +291,7 @@ bool Analyzer::tryInferCollectionsStaticCall(CallExpr& call, MemberExpr& m,
     }
     const Type elem = elemOf(items);
     Type key = Type::unknown();
-    const Expr* cb = call.arguments[1] ? call.arguments[1].get() : nullptr;
+    Expr* cb = call.arguments[1] ? call.arguments[1].get() : nullptr;
     if (cb != nullptr && cb->kind == NodeKind::ArrowFunction) {
         auto& arrow = static_cast<ArrowFunction&>(*cb);
         const std::vector<Type> context = {elem, Type::number(),

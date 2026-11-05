@@ -89,6 +89,10 @@ private:
     // Anchors diagnostics to column 1 of the offending node's begin line (D2).
     SourceSpan anchorSpan(const SourceSpan& s) const;
     void report(const char* code, const SourceSpan& span, std::string message);
+    // Reports at the exact span (columns preserved). Reserved for diagnostics
+    // that name a sub-expression whose column is part of the contract, such
+    // as the `parseTo` callee in a literal-source fit check.
+    void reportAt(const char* code, const SourceSpan& span, std::string message);
     // Like report(), plus `help:` entries for the pretty renderer.
     void reportSuggestive(const char* code, const SourceSpan& span,
                           std::string message,

@@ -25,6 +25,7 @@ set(cp3_common_sources
     src/detail/native_fields.cpp
     src/support/checksum.cpp
     src/support/options.cpp
+    src/support/std_integer.cpp
     src/support/suggest.cpp
     src/support/version.cpp
 )

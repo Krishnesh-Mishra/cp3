@@ -99,6 +99,21 @@ A project manifest supplies defaults to compilations made in that project. Keep 
 
 The compiler defaults to TypeScript mode when no usable setting is loaded. An absent setting therefore means portable CP3 names, not implicit C++ or Rust names. An unrecognized `typeSystem` string is not one of the accepted settings; fix the manifest rather than depending on fallback behavior.
 
+## Standard-library integer widths
+
+Integer-valued standard-library results use one semantic-width table. A `typescript` project keeps `number` for every row; `rust` and `cpp` projects use the exact native width. Modules never choose these spellings themselves, so typing and editor documentation stay in sync.
+
+| Value | `typescript` | `rust` | `cpp` |
+| --- | --- | --- | --- |
+| HTTP status, WebSocket close code | `number` | `u16` | `uint16_t` |
+| Listen/bind port | `number` | `u16` | `uint16_t` |
+| Process id, child exit code | `number` | `i32` | `int32_t` |
+| Epoch timestamp (`Date.now`, `getTime`) | `number` | `i64` | `int64_t` |
+| File/byte size | `number` | `u64` | `uint64_t` |
+| Collection length, index, count | `number` | `usize` | `size_t` |
+
+Matching parameters (for example `res.status(code)` and `app.listen(port)`) use the same row. An integer literal that fits the target is accepted directly; passing a computed `number` to a native-width parameter is an explicit conversion (`parseTo<u16>(value)` in a Rust project) rather than a silent narrowing.
+
 ## Strict numeric conversions are a second switch
 
 `strictNumericCasts` controls implicit conversions involving native numeric values. It defaults to `false`. With strict mode enabled, implicit mixing or assignment between `number` and a native numeric type, or between distinct native numeric types, is rejected in the cases checked by the analyzer. The setting can be enabled in the same manifest:

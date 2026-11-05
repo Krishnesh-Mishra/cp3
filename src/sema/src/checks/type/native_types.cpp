@@ -26,6 +26,18 @@ bool numericOperand(const Type& t) {
     return isNativeType(t) || isNumberish(t);
 }
 
+// Signed and unsigned integers use different comparison and division rules in
+// C++ (a negative signed value converts to a large unsigned one). CP3 rejects
+// the mix explicitly rather than inheriting that surprise; convert one side.
+bool mixedSignedIntegers(const Type& l, const Type& r) {
+    if (!isNativeType(l) || !isNativeType(r)) return false;
+    const NativeTypeInfo* li = nativeById(l.name);
+    const NativeTypeInfo* ri = nativeById(r.name);
+    if (li == nullptr || ri == nullptr) return false;
+    return li->cls == NativeClass::Integer && ri->cls == NativeClass::Integer &&
+           li->isSigned != ri->isSigned;
+}
+
 }  // namespace
 
 Type Analyzer::resolvePrefixedType(PrefixedType& pt) {
@@ -89,6 +101,13 @@ std::optional<Type> Analyzer::evalNativeBinary(BinaryOp op, const Type& ln,
         report(diagcode::kInvalidOperandTypes, span,
                "the native type '" + pretty(native) +
                    "' has no '>>>' operator; use '>>' or a number value");
+        return Type::error();
+    }
+    if (mixedSignedIntegers(ln, rn)) {
+        report(diagcode::kMixedTypeArithmetic, span,
+               "type mismatch: cannot mix signed '" + pretty(ln) +
+                   "' with unsigned '" + pretty(rn) +
+                   "'; convert one side explicitly");
         return Type::error();
     }
     // Comparisons and equality consume numeric operands and produce boolean;

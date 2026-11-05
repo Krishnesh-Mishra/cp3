@@ -23,6 +23,8 @@
 #include <cstddef>
 #include <vector>
 
+#include "cp3/host/options.hpp"
+
 namespace cp3 {
 
 // The documentation of one std member.
@@ -86,7 +88,8 @@ std::vector<std::string> stdStringMemberNames();
 // this same table so completion cannot drift from accepted member access.
 std::vector<std::string> networkObjectMemberNames(
     const std::string& objectTypeName);
-StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
-                                   const std::string& member);
+StdMemberDoc networkObjectMemberDoc(
+    const std::string& objectTypeName, const std::string& member,
+    TypeSystem ts = TypeSystem::TypeScript);
 
 }  // namespace cp3

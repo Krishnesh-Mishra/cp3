@@ -19,6 +19,7 @@
 #include <string>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/native_types.hpp"
 #include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
 
@@ -116,6 +117,18 @@ const char* nativeCompoundOp(AssignOp op) {
     }
 }
 
+// The checked native-integer helper for a compound write, or nullptr.
+const char* checkedCompoundName(AssignOp op) {
+    switch (op) {
+        case AssignOp::Add: return "add";
+        case AssignOp::Subtract: return "sub";
+        case AssignOp::Multiply: return "mul";
+        case AssignOp::Divide: return "div";
+        case AssignOp::Modulo: return "mod";
+        default: return nullptr;
+    }
+}
+
 }  // namespace
 
 namespace detail {
@@ -137,8 +150,9 @@ struct AssignEmitter {
     std::string cell(AssignOp op, const CppInfo& T, const std::string& target,
                      const std::string& value, const Expr& rhs);
     // The arithmetic/bitwise half of a cell write.
-    std::string cellValue(AssignOp op, const std::string& target,
-                          const std::string& value, const Expr& rhs);
+    std::string cellValue(AssignOp op, const CppInfo& T,
+                          const std::string& target, const std::string& value,
+                          const Expr& rhs);
 };
 
 // A compound write to a shared cell: the cell's own value is read, combined
@@ -176,15 +190,23 @@ std::string AssignEmitter::cell(AssignOp op, const CppInfo& T,
             return current;
         }
         default:
-            return cellValue(op, target, value, rhs);
+            return cellValue(op, T, target, value, rhs);
     }
 }
 
 // The arithmetic and bitwise half of a cell write: the cell's value is
 // combined with the assigned one and written back.
-std::string AssignEmitter::cellValue(AssignOp op, const std::string& target,
+std::string AssignEmitter::cellValue(AssignOp op, const CppInfo& T,
+                                     const std::string& target,
                                      const std::string& value, const Expr& rhs) {
     const std::string current = target + ".get()";
+    if (T.shape == Shape::Native && isNativeInteger(T.type)) {
+        if (const char* fn = checkedCompoundName(op); fn != nullptr) {
+            return "(" + target + ".set(::cp3::runtime::checked::" + fn +
+                   "<" + T.cpp + ">(" + current + ", " + value + ")), " +
+                   current + ")";
+        }
+    }
     switch (op) {
         case AssignOp::Add:
         case AssignOp::Subtract:
@@ -261,8 +283,15 @@ std::string AssignEmitter::identifier(const AssignmentExpr& a,
         if (const auto k = integralLiteralValue(*a.value)) value = std::to_string(*k);
     }
 
-    // A native integer keeps the C++ compound operator (full width, integer
-    // `%`); the bitwise helpers below are the ToInt32 `number` path.
+    // Native integer arithmetic is checked (overflow/division by zero throw).
+    if (T.shape == Shape::Native && isNativeInteger(T.type)) {
+        if (const char* fn = checkedCompoundName(a.op); fn != nullptr) {
+            return "(" + target + " = ::cp3::runtime::checked::" + fn + "<" +
+                   T.cpp + ">(" + target + ", " + value + "))";
+        }
+    }
+    // A native integer keeps the C++ compound operator for the bitwise/shift
+    // forms; the helpers below are the ToInt32 `number` path.
     if (T.shape == Shape::Native) {
         if (const char* op = nativeCompoundOp(a.op); op != nullptr) {
             return "(" + target + " " + op + "= " + value + ")";

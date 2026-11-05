@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/native_types.hpp"
 
 namespace cp3 {
 
@@ -366,10 +367,15 @@ Type Analyzer::inferAs(AsExpr& a) {
     const bool operandIsClass =
         operand.kind == TypeKind::Class;
     const bool targetIsClass = target.kind == TypeKind::Class;
-    const bool operandIsNumber = operand.isNumber();
-    const bool targetIsNumber = target.isNumber();
-    if (!operandIsClass && !targetIsClass && !operandIsNumber &&
-        !targetIsNumber && !isAmbientType(operand) && !isAmbientType(target)) {
+    // Any scalar numeric pair is a legal assertion: number <-> native and
+    // native <-> native. The runtime conversion is explicit and checked.
+    const bool operandIsNumeric = operand.isNumber() || isNativeType(operand) ||
+                                  (operand.isLiteral() &&
+                                   operand.literalBaseType().isNumber());
+    const bool targetIsNumeric = target.isNumber() || isNativeType(target);
+    const bool numericPair = operandIsNumeric && targetIsNumeric;
+    if (!operandIsClass && !targetIsClass && !numericPair &&
+        !isAmbientType(operand) && !isAmbientType(target)) {
         report(diagcode::kTypeMismatch, a.span,
                "type mismatch: '" + operand.name +
                    "' cannot be asserted as '" + target.name +

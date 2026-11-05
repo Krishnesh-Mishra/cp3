@@ -183,6 +183,7 @@ std::string programSource(const ProgramAssembly& assembly,
     out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
     out += "#include \"cp3/core/error.hpp\"\n";
+    out += "#include \"cp3/core/checked.hpp\"\n";
     if (n.bitwise) out += "#include \"cp3/core/bitwise.hpp\"\n";
     if (n.unionValue) out += "#include \"cp3/core/union.hpp\"\n";
     if (n.arith) out += "#include \"cp3/core/arith.hpp\"\n";

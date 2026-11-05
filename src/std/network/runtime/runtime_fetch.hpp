@@ -60,7 +60,7 @@ struct FetchOp {
 
     std::string raw;         // every byte received so far
     std::size_t cursor = 0;  // parse cursor into `raw`
-    double statusCode = 0.0;
+    std::uint16_t statusCode = 0;
     std::string statusText;
     std::vector<std::pair<std::string, std::string>> responseHeaders;  // name lower cased
     long long contentLength = -1;

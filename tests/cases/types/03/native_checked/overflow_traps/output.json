@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "add:overflow\nmul:overflow\nmin-div:overflow\ndiv-zero:integer division by zero\ninc:overflow\ndec:overflow\nneg:overflow\n",
+  "exitCode": 0
+}

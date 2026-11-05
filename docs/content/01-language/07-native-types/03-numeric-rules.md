@@ -34,11 +34,19 @@ let b: r_'u8' = 100;
 let sum: r_'i32' = a + b;
 ```
 
-This is why the result type need not match either operand. Declare the result type from the operation's checked result, not from an assumption that addition retains the left-hand width.
+This is why the result type need not match either operand. Declare the result type from the operation's checked result, not from an assumption that addition retains the left-hand width. Arithmetic is checked at the result width, so `a + b` above throws when the `i32` sum is out of range; a narrow compound write (`x += 1`, `x++`) is checked at `x`'s width.
 
 ## Usual arithmetic conversion behavior
 
-When two native values have different widths or signedness, the checker chooses a common result using the native arithmetic rules implemented in CP3. Equal signedness generally selects the higher rank. Mixed signed and unsigned values select a representable common type where available. If no supported common native type exists, the checker reports an error.
+When two native values have different widths, the checker chooses a common result using the native arithmetic rules implemented in CP3. Equal signedness generally selects the higher rank. If no supported common native type exists, the checker reports an error.
+
+Mixing a signed and an unsigned integer is rejected in every project mode, not only in strict mode: C++ would otherwise convert a negative signed value to a large unsigned one, so comparisons and division would silently change meaning. Convert one side explicitly before mixing them.
+
+```ts
+let a: r_'i64' = 10;
+let b: r_'u32' = 3;
+let c: r_'i64' = a + (b as r_'i64');   // explicit conversion
+```
 
 The C++ and Rust source spellings resolve to CP3 canonical native identities. Arithmetic behavior is defined by that resolver and checker, not by blindly copying every detail of either language's full specification.
 
@@ -69,13 +77,30 @@ Set `strictNumericCasts` to `true` in `package.json` to reject implicit numeric 
 
 With strict mode, assigning a `number` variable to a native numeric type is rejected, and mixed native arithmetic across different native types is rejected. The error requests an explicit conversion. The mode also rejects mixed arithmetic between a native type and a `number` variable. Tests in `tests/cases/types/03/native_strict` cover literal initialization, assignment, and mixed arithmetic.
 
-The project currently does not document a general-purpose numeric cast expression on this page because the supported conversion syntax is narrower and must be checked against the exact compiler feature in use. Do not assume that a cast accepted by TypeScript, C++, or Rust is accepted in CP3. Keep the producer and consumer in a compatible type, or use a specifically supported conversion API/construct once verified for that use.
+## Explicit conversions
+
+Two forms convert runtime values. The result type is the target type:
+
+```ts
+let n: number = 70000;
+let code: r_'u16' = n as r_'u16';        // checked narrowing
+let parsed: r_'u32' = parseTo<r_'u32'>("4294967295");
+let text: string = parseTo(code, string);
+```
+
+- **Widening is implicit.** A narrower native integer can be used where a wider one of the same signedness is expected, and a fitting literal initializes a native value directly.
+- **A 64-bit integer to `number` is explicit.** `i64`/`u64` can exceed the exact range of a `number`, so write `value as number` (or `Number(value)`) and accept the documented precision loss.
+- **Narrowing is explicit and checked.** `value as u16` and `parseTo<u16>(value)` verify the value at runtime and throw an `Error` when it is fractional or out of range; they never truncate silently. `parseTo` also converts strings, numbers and booleans in both directions.
+
+`parseTo` is a global builtin: no import is required.
 
 ## Arithmetic operators
 
 Native integers support the checked native arithmetic operators implemented by CP3: addition, subtraction, multiplication, division, remainder, bitwise AND/OR/XOR, left/right shifts, comparisons, unary sign and bitwise negation, and increment/decrement where valid. `**` (power) and JavaScript's unsigned right shift `>>>` are rejected for native types. Convert to ordinary `number` for exponentiation or use a suitable standard-library math function where precision requirements allow.
 
-Integer division truncates according to signed integer division semantics; remainder follows the dividend sign behavior exercised by native tests. Division by zero remains an invalid runtime operation and should be prevented or handled by application logic.
+Integer arithmetic is checked in every project mode. Addition, subtraction, multiplication, unary negation, increment/decrement and the arithmetic compound assignments throw an `Error` on overflow instead of wrapping (unsigned) or invoking undefined behaviour (signed). Division and remainder throw on a zero divisor, and signed `INT_MIN / -1` throws.
+
+Signed integer division truncates toward zero (`-7 / 2` is `-3`) and remainder takes the sign of the dividend (`-7 % 2` is `-1`), matching the values JavaScript's number arithmetic produces. Division by zero is a thrown error rather than an infinity or NaN.
 
 ## Nullish options
 

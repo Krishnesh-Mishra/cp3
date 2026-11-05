@@ -106,9 +106,9 @@ struct FetchInit {
 class FetchResponse {
 public:
     FetchResponse() = default;
-    FetchResponse(double statusCode, std::string statusText_, std::string body,
-                  StringMap headers_)
-        : ok(statusCode >= 200.0 && statusCode < 300.0),
+    FetchResponse(std::uint16_t statusCode, std::string statusText_,
+                  std::string body, StringMap headers_)
+        : ok(statusCode >= 200 && statusCode < 300),
           status(statusCode),
           statusText(std::move(statusText_)),
           headers(std::move(headers_)),
@@ -116,7 +116,9 @@ public:
 
     /// `res.ok` / `res.status` / `res.statusText`.
     bool ok = false;
-    double status = 0.0;
+    /// The HTTP status code. Held exactly (the semantic width is `u16`); a
+    /// TypeScript-mode read widens it to `number` at codegen.
+    std::uint16_t status = 0;
     std::string statusText;
     /// `res.headers`: the response header block, names lower cased like the
     /// JS Headers object (parseHead in runtime_fetch.cpp fills it).

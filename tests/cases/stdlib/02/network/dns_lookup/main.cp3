@@ -3,5 +3,7 @@ import { lookup } from "std/network";
 lookup("127.0.0.1").then((addr) => {
     console.log(addr);
 }).catch((e) => {
-    console.log("err: " + e.toString());
+    // The resolution of 127.0.0.1 succeeds; this arm only keeps the failure
+    // path explicit without depending on the rejection value's shape.
+    console.log("err");
 });

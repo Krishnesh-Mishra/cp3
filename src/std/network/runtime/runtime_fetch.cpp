@@ -109,12 +109,13 @@ std::string trimAscii(const std::string& text) {
     return text.substr(first, last - first + 1);
 }
 
-bool parseStatusCode(const std::string& text, double& code) {
+bool parseStatusCode(const std::string& text, std::uint16_t& code) {
     if (text.size() != 3) return false;
     for (char c : text) {
         if (c < '0' || c > '9') return false;
     }
-    code = static_cast<double>((text[0] - '0') * 100 + (text[1] - '0') * 10 + (text[2] - '0'));
+    code = static_cast<std::uint16_t>((text[0] - '0') * 100 +
+                                      (text[1] - '0') * 10 + (text[2] - '0'));
     return true;
 }
 

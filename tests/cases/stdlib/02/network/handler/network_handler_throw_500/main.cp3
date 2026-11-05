@@ -3,7 +3,7 @@ import { fetch, createServer } from "std/network";
 
 const app = createServer();
 app.get("/boom", (req, res) => {
-  throw "handler failed";
+  throw new Error("handler failed");
 });
 app.get("/ok", (req, res) => {
   res.text("still ok");

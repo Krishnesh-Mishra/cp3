@@ -1,0 +1,19 @@
+import console from "std/console";
+import { fetch, createServer } from "std/network";
+
+// A Rust project sees the exact standard-library widths: status and ports are
+// u16, not number.
+async function statusCode(): Promise<u16> {
+  const res = await fetch("http://example.com");
+  const code: u16 = res.status;
+  return code;
+}
+
+const server = createServer();
+const port: u16 = 8080;
+server.listen(port);
+server.get("/", (req, res) => {
+  res.status(201).text("ok");
+});
+
+console.log(statusCode);

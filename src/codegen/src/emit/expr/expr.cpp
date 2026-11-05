@@ -23,6 +23,7 @@
 #include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/native_types.hpp"
 
 namespace cp3 {
 
@@ -163,6 +164,19 @@ std::string Generator::emitExtendedExpr(const Expr& e) {
                 return "std::static_pointer_cast<" + element + ">(" +
                        value + ")";
             }
+            const CppInfo sourceInfo = info(*asExpr.expression);
+            // A native target is an explicit, checked narrowing (widening
+            // passes through the same helper). A native source targeting
+            // `number` is the one explicit precision-losing direction.
+            if (targetInfo.shape == Shape::Native) {
+                return "::cp3::runtime::checked::narrow<" + targetInfo.cpp +
+                       ">(static_cast<double>(" + value + "), \"" +
+                       targetType.name + "\")";
+            }
+            if (targetInfo.shape == Shape::Number &&
+                sourceInfo.shape == Shape::Native) {
+                return "static_cast<double>(" + value + ")";
+            }
             return "(" + value + ")";
         }
         case NodeKind::NonNullExpr: {
@@ -294,8 +308,17 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
             Type recvType = effectiveType(*m.object);
             if (st && (st->isUnion() || st->isNullable()))
                 recvType = stripNullish(*st);
-            const bool isClass =
-                classModelOf(stripNullish(recvType)) != nullptr;
+            // A class handle and a plain object shape are both held behind a
+            // `Ref<T>`, so the field read uses `->` for either. Only the
+            // remaining value shapes (a string, a primitive union) read
+            // through the optional's value itself.
+            bool isHandle = classModelOf(stripNullish(recvType)) != nullptr;
+            if (!isHandle) {
+                std::string structName;
+                std::vector<ObjectField> fields;
+                isHandle =
+                    objectShapeOf(stripNullish(recvType), structName, fields);
+            }
             const Type* mt = sema_.typeOf(m.nodeId);
             const CppInfo mi =
                 mt ? classify(stripNullish(*mt)) : CppInfo{};
@@ -308,7 +331,7 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
                    expr(*m.object) +
                    "; if (!cp3_o.has_value()) return std::nullopt; "
                    "return cp3_o.value()" +
-                   (isClass ? "->" : ".") + mapIdent(m.property) + "; })()";
+                   (isHandle ? "->" : ".") + mapIdent(m.property) + "; })()";
         }
     }
     // A class / interface / object model member read first (spec 15); then the
@@ -496,6 +519,30 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
         if (const auto k = integralLiteralValue(*b.right);
             k && !R.type.isNative()) {
             rhs = std::to_string(*k);
+        }
+    }
+
+    // Native integer arithmetic is checked: overflow and division by zero
+    // throw a cp3 Error instead of wrapping (unsigned) or invoking undefined
+    // behaviour (signed). The semantic result type is the usual-arithmetic
+    // common type, so a promoted `u8 + u8` is checked as `i32`.
+    const Type resultType = effectiveType(b);
+    if (L.shape == Shape::Native || R.shape == Shape::Native) {
+        const char* fn = nullptr;
+        switch (b.op) {
+            case BinaryOp::Add: fn = "add"; break;
+            case BinaryOp::Subtract: fn = "sub"; break;
+            case BinaryOp::Multiply: fn = "mul"; break;
+            case BinaryOp::Divide: fn = "div"; break;
+            case BinaryOp::Modulo: fn = "mod"; break;
+            default: break;
+        }
+        if (fn != nullptr && isNativeInteger(resultType)) {
+            const CppInfo resultInfo = info(b);
+            if (resultInfo.representable) {
+                return "::cp3::runtime::checked::" + std::string(fn) + "<" +
+                       resultInfo.cpp + ">(" + lhs + ", " + rhs + ")";
+            }
         }
     }
 
@@ -832,8 +879,17 @@ std::string Generator::emitUnary(const UnaryExpr& u) {
     switch (u.op) {
         case UnaryOp::Not:
             return "(! " + cond(*u.operand) + ")";
-        case UnaryOp::Negate:
+        case UnaryOp::Negate: {
+            const Type result = effectiveType(u);
+            if (isNativeInteger(result) && u.operand) {
+                const CppInfo target = classify(result);
+                if (target.representable) {
+                    return "::cp3::runtime::checked::neg<" + target.cpp +
+                           ">(" + expr(*u.operand) + ")";
+                }
+            }
             return "(-(" + expr(*u.operand) + "))";
+        }
         case UnaryOp::Plus:
             return "(+(" + expr(*u.operand) + "))";
         case UnaryOp::BitNot:
@@ -870,6 +926,15 @@ std::string Generator::emitUpdate(const UpdateExpr& u) {
         out += u.prefix ? (target + ".get();") : "cp3_o;";
         out += " }())";
         return out;
+    }
+    const CppInfo T = info(*u.operand);
+    if (T.shape == Shape::Native && isNativeInteger(T.type)) {
+        const char* fn = u.op == UpdateOp::Increment ? "add" : "sub";
+        const std::string next = "::cp3::runtime::checked::" + std::string(fn) +
+                                 "<" + T.cpp + ">(" + target + ", 1)";
+        if (u.prefix) return "(" + target + " = " + next + ")";
+        return "([&]{ auto cp3_o = " + target + "; " + target + " = " + next +
+               "; return cp3_o; }())";
     }
     if (u.op == UpdateOp::Increment) {
         return u.prefix ? "(++" + target + ")" : "(" + target + "++)";

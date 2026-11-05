@@ -244,7 +244,7 @@ void Analyzer::declareBuiltins() {
     // import statement as a suggestion (stdImportHint, std_check.cpp).
     static const char* const kGlobals[] = {
         "Object", "String",   "Number",   "Boolean",
-        "Array",  "parseInt", "parseFloat", "isNaN", "isFinite",
+        "Array",  "parseInt", "parseFloat", "parseTo", "isNaN", "isFinite",
         "print",  "worker",  "parallel", "Promise", "Symbol",   "BigInt",
         // The worker channel types (D80, spec 13): ambient generic types in
         // every unit. `Worker` also has a value binding, so `new Worker(...)`

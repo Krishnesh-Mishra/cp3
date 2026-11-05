@@ -21,6 +21,7 @@
 #include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/std_integer.hpp"
 
 namespace cp3 {
 
@@ -173,7 +174,9 @@ std::optional<Type> Generator::networkFieldType(const Expr& e) const {
     if (recv == kFetchResponse) {
         if (m.property == "headers") return stringMapType();
         if (m.property == "ok") return Type::boolean();
-        if (m.property == "status") return Type::number();
+        if (m.property == "status") {
+            return stdIntegerType(StdIntegerKind::Status, options_.typeSystem);
+        }
         if (m.property == "statusText") return Type::string();
         return std::nullopt;
     }
@@ -699,7 +702,16 @@ std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
     }
     if (known) {
         needsNetwork_ = true;
-        return "(" + expr(*m.object) + ")." + m.property;
+        const std::string read =
+            "(" + expr(*m.object) + ")." + m.property;
+        // The runtime holds the status as the exact semantic width (`u16`).
+        // A TypeScript project types the read as `number`, so widen it there;
+        // a Rust/C++ project already sees the native value.
+        if (name == kFetchResponse && m.property == "status" &&
+            effectiveType(m).kind == TypeKind::Number) {
+            return "static_cast<double>(" + read + ")";
+        }
+        return read;
     }
     // `req.body` is the one documented read whose runtime member still does not
     // exist: the body is buffered before dispatch, and the documented

@@ -1,0 +1,21 @@
+import console from "std/console";
+
+// Integer division truncates toward zero and `%` takes the sign of the
+// dividend, exactly like the values JavaScript's number arithmetic produces.
+let a: i64 = -7;
+let b: i64 = 2;
+let c: i64 = 7;
+let d: i64 = -2;
+console.log(`${a / b} ${a % b} ${c / d} ${c % d}`);
+
+// An integer literal initialises a native loop counter; `i++` stays checked.
+let total: i64 = 0;
+for (let i: i64 = 0; i < 5; i++) {
+  total += i;
+}
+console.log(`${total}`);
+
+// Unsigned arithmetic keeps unsigned division and remainder.
+let u: u64 = 9;
+let v: u64 = 4;
+console.log(`${u / v} ${u % v}`);

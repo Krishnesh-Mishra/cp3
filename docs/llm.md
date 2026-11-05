@@ -77,7 +77,7 @@ myapp/
 | `Promise<T>` | async result |
 | `r_'i32'`, `c_'i32'`, `ts_'i32'` | explicit native vocabulary flavours |
 
-Type inference: `let x = "hi";` → `string`. Explicit annotation overrides. Native arithmetic follows CP3's own checked rules: operands narrower than `i32` promote to `i32`; mixed widths/signedness pick a common native type; `number` and native ints do not mix silently.
+Type inference: `let x = "hi";` → `string`. Explicit annotation overrides. Native arithmetic follows CP3's own checked rules: operands narrower than `i32` promote to `i32`; mixed widths of the same signedness pick a common native type; signed/unsigned mixing is rejected; `number` and native ints do not mix silently.
 
 - Nullable class fields: `next: Node | null`, optional `next?: Node`. A member read through a nullable receiver without narrowing or `?.` is rejected (CP3401).
 - Control-flow narrowing: `if (n !== null)`, `if (n)`, `while (n !== null)`, `&&`, `?:`, and early-return guards narrow identifiers and member fields (`n.next`) to non-null. Assignment to the narrowed target invalidates the narrowing.
@@ -310,10 +310,10 @@ LRUCache: `new LRUCache<K, V>(capacity)`, `set` `get` (moves to MRU) `has` (no m
 
 ### `network` — `import { fetch, WebSocket, WebSocketServer, createServer, lookup } from "std/network"`
 - `fetch(url, init?): Promise<FetchResponse>` — `init`: `method`, `headers: Map<string,string>`, `body`, `timeout?` (0 = none). HTTP only (no TLS yet).
-- Response: `ok`, `status`, `statusText`, `headers`, `text(): Promise<string>`, `arrayBuffer(): Promise<Buffer>`, `json<T>()`.
+- Response: `ok`, `status`, `statusText`, `headers`, `text(): Promise<string>`, `arrayBuffer(): Promise<Buffer>`, `json<T>()`. `status` is `number` in a `typescript` project and `u16` in `rust`/`cpp` (see the std integer widths table in the native-types docs).
 - WebSocket client: `new WebSocket(url)` — `on(event, handler)`, `send(str|Buffer)`, `close(code?, reason?)`; events: `open`, `message`, `close`, `error`.
 - WebSocket server: `new WebSocketServer({ port, path? })`; `on("connection", handler)`.
-- HTTP server: `createServer({ threads? })` - `get/post/put/delete/patch/head/options/any/use` - request: `method`, `path`, `params`, query Map, headers Map, `cookies` Map, `ip`, `text(): Promise<string>`, `json<T>()`. Response chainable: `status(n)`, `header(k,v)`, `cookie(name, value, {maxAge?, path?, httpOnly?, secure?}?)`, terminal `text` / `json` / `send` / `redirect(url, status?)` / `sendFile(path)`; `write`, `end`.
+- HTTP server: `createServer({ threads? })` - `get/post/put/delete/patch/head/options/any/use` - request: `method`, `path`, `params`, query Map, headers Map, `cookies` Map, `ip`, `text(): Promise<string>`, `json<T>()`. Response chainable: `status(n)`, `header(k,v)`, `cookie(name, value, {maxAge?, path?, httpOnly?, secure?}?)`, terminal `text` / `json` / `send` / `redirect(url, status?)` / `sendFile(path)`; `write`, `end`. `listen(port)` and the status parameters are `number` in a `typescript` project and `u16` in `rust`/`cpp`.
 - Route params: `:name` segments match one path segment (e.g. `/users/:id`); handlers run in registration order; middleware calls `next()` (a `Promise<void>`) to continue the chain; a chain that never responds returns 404.
 - A non-2xx HTTP status still resolves to a response — check `ok` / `status`.
 
@@ -474,10 +474,11 @@ Explicit prefixed types are valid anywhere a native scalar fits:
 - `c_'int32_t'`, `c_'double'` — C++ vocabulary regardless of `typeSystem`
 - `ts_'number'` — TypeScript vocabulary (explicit) regardless of `typeSystem`
 
-Native ints print exactly. Arithmetic on narrower-than-`i32` operands promotes to `i32` (so `u8 + u8` is `i32`). Native values do not mix freely with nonliteral `number`: pass a fitting literal where supported, or keep producer/consumer on the same native type. With `strictNumericCasts: true` in `package.json`, assigning `number` to a native type is rejected and mixed native arithmetic is rejected; tests live in `tests/cases/types/03/native_strict`.
+Native ints print exactly. Arithmetic on narrower-than-`i32` operands promotes to `i32` (so `u8 + u8` is `i32`). Native values do not mix freely with nonliteral `number`: pass a fitting literal where supported, or keep producer/consumer on the same native type. Mixing signed and unsigned integers is rejected in every mode; convert one side explicitly. With `strictNumericCasts: true` in `package.json`, assigning `number` to a native type is rejected and mixed native arithmetic is rejected; tests live in `tests/cases/types/03/native_strict`.
 
-`expr as Type` is a compile-time-checked type assertion (related class types;
-numeric conversions). Unrelated types are rejected with CP3401. `r_'i32'(x)` still does not exist. For native types without `as`, initialise from a fitting literal or another native `i64`. See `docs/content/01-language/07-native-types/03-numeric-rules.md`.
+Native integer arithmetic is checked in every mode: `+ - * / %`, unary `-`, `++`/`--` and the arithmetic compound assignments throw a catchable `Error` on overflow or division by zero. Signed division truncates toward zero and `%` takes the dividend's sign (`-7 / 2 == -3`, `-7 % 2 == -1`).
+
+`expr as Type` asserts a related class type or converts any scalar numeric pair. `number` to native and native to native are checked narrowings (fractional or out-of-range values throw at runtime); native to `number` is the explicit precision-losing direction. `parseTo<T>(value)` performs the same checked conversion and also converts between strings, numbers and booleans. Unrelated types are rejected with CP3401. Tests live in `tests/cases/types/03/native_checked`. See `docs/content/01-language/07-native-types/03-numeric-rules.md`.
 
 ## 23. Reading the corpus for semantics
 

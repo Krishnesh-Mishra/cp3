@@ -63,6 +63,7 @@ std::unique_ptr<AnalyzedDocument> analyzeDocument(const std::string& path,
                 applyProjectTypeSettings(root, compile);
             }
             compile.nativeBindings = document->graph->nativeBindings();
+            document->typeSystem = compile.typeSystem;
             analyzeProgram(*document->entry->ast, document->sema, sink,
                            compile);
         }

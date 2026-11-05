@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "as:value 70000 is out of range for u16\nparseTo:value 70000 is out of range for u16\nfraction:value 1.5 is out of range for i32\n42 42 42\n",
+  "exitCode": 0
+}

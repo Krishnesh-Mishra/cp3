@@ -1,0 +1,63 @@
+import console from "std/console";
+
+// Overflow traps in every mode; each catch turns the thrown Error into a
+// visible line so the case asserts that the operation did NOT wrap.
+try {
+  let x: i32 = 2147483647;
+  x = x + 1;
+  console.log("add:no");
+} catch (e) {
+  console.log("add:overflow");
+}
+
+try {
+  let x: i32 = 100000;
+  x = x * 100000;
+  console.log("mul:no");
+} catch (e) {
+  console.log("mul:overflow");
+}
+
+try {
+  let x: i32 = -2147483647;
+  x = x - 1;
+  let y: i32 = -1;
+  let z: i32 = x / y;
+  console.log("min-div:no");
+} catch (e) {
+  console.log("min-div:overflow");
+}
+
+try {
+  let x: i32 = 1;
+  let y: i32 = 0;
+  let z: i32 = x / y;
+  console.log("div-zero:no");
+} catch (e) {
+  console.log("div-zero:" + e.message);
+}
+
+try {
+  let x: u8 = 255;
+  x++;
+  console.log("inc:no");
+} catch (e) {
+  console.log("inc:overflow");
+}
+
+try {
+  let x: u8 = 0;
+  x--;
+  console.log("dec:no");
+} catch (e) {
+  console.log("dec:overflow");
+}
+
+try {
+  let x: i32 = -2147483647;
+  x = x - 1;
+  let y: i32 = -x;
+  console.log("neg:no");
+} catch (e) {
+  console.log("neg:overflow");
+}

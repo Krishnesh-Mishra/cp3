@@ -41,6 +41,11 @@ void Analyzer::report(const char* code, const SourceSpan& span,
     sink_.error(code, anchorSpan(span), std::move(message));
 }
 
+void Analyzer::reportAt(const char* code, const SourceSpan& span,
+                        std::string message) {
+    sink_.error(code, span, std::move(message));
+}
+
 void Analyzer::reportSuggestive(const char* code, const SourceSpan& span,
                                 std::string message,
                                 std::vector<std::string> suggestions) {

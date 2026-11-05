@@ -233,7 +233,10 @@ std::vector<lsp::CompletionCandidate> knownReceiverCandidates(
             signature = stdNamespaceMemberDoc(namespaceName, name).signature;
         } else if (receiverType != nullptr &&
                    receiverType->kind == TypeKind::Object) {
-            signature = networkObjectMemberDoc(receiverType->name, name).signature;
+            signature =
+                networkObjectMemberDoc(receiverType->name, name,
+                                       document.typeSystem)
+                    .signature;
         } else if (receiverType != nullptr &&
                    receiverType->kind == TypeKind::Class) {
             signature = stdInstanceMemberDoc(receiverType->name, name).signature;

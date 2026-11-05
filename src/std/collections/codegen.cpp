@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "detail/generator/cpp_writer.h"
+#include "detail/generator/family.h"
 #include "detail/generator/type_map.h"
 #include "cp3/diag/diagnostic_codes.hpp"
 

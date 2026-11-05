@@ -20,6 +20,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <functional>
 #include <memory>
@@ -48,6 +49,96 @@ std::string lowerAscii(const std::string& text) {
         if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
     }
     return out;
+}
+
+std::string ipv4Quad(unsigned a, unsigned b, unsigned c, unsigned d) {
+    return std::to_string(a) + "." + std::to_string(b) + "." +
+           std::to_string(c) + "." + std::to_string(d);
+}
+
+bool parseHexGroup(std::string_view part, unsigned& value) {
+    if (part.empty() || part.size() > 4) return false;
+    value = 0;
+    for (char c : part) {
+        unsigned digit = 0;
+        if (c >= '0' && c <= '9') {
+            digit = static_cast<unsigned>(c - '0');
+        } else if (c >= 'a' && c <= 'f') {
+            digit = static_cast<unsigned>(c - 'a' + 10);
+        } else if (c >= 'A' && c <= 'F') {
+            digit = static_cast<unsigned>(c - 'A' + 10);
+        } else {
+            return false;
+        }
+        value = value * 16 + digit;
+    }
+    return true;
+}
+
+// uWS reports a peer address as the raw 4- or 16-byte socket form, and some
+// builds hand back its textual IPv6 form instead. `req.ip` is documented text,
+// so spell IPv4 (including IPv4-mapped IPv6, which is what a loopback IPv4
+// client arrives as) in dotted-quad form and other IPv6 addresses as eight
+// hexadecimal groups.
+std::string remoteAddressText(std::string_view raw) {
+    const auto* bytes = reinterpret_cast<const unsigned char*>(raw.data());
+    if (raw.size() == 4) {
+        return ipv4Quad(bytes[0], bytes[1], bytes[2], bytes[3]);
+    }
+    if (raw.size() == 16) {
+        bool mapped = true;
+        for (std::size_t i = 0; i < 10; ++i) {
+            if (bytes[i] != 0) {
+                mapped = false;
+                break;
+            }
+        }
+        if (mapped && bytes[10] == 0xff && bytes[11] == 0xff) {
+            return ipv4Quad(bytes[12], bytes[13], bytes[14], bytes[15]);
+        }
+        char text[48];
+        std::snprintf(text, sizeof text, "%x:%x:%x:%x:%x:%x:%x:%x",
+                      static_cast<unsigned>((bytes[0] << 8) | bytes[1]),
+                      static_cast<unsigned>((bytes[2] << 8) | bytes[3]),
+                      static_cast<unsigned>((bytes[4] << 8) | bytes[5]),
+                      static_cast<unsigned>((bytes[6] << 8) | bytes[7]),
+                      static_cast<unsigned>((bytes[8] << 8) | bytes[9]),
+                      static_cast<unsigned>((bytes[10] << 8) | bytes[11]),
+                      static_cast<unsigned>((bytes[12] << 8) | bytes[13]),
+                      static_cast<unsigned>((bytes[14] << 8) | bytes[15]));
+        return text;
+    }
+    // The textual form: eight expanded hex groups. An IPv4-mapped address
+    // (`0000:0000:0000:0000:0000:ffff:7f00:0001`) becomes dotted quad.
+    unsigned groups[8] = {};
+    std::size_t pos = 0;
+    bool valid = true;
+    for (std::size_t i = 0; i < 8; ++i) {
+        const std::size_t colon = raw.find(':', pos);
+        const std::string_view part =
+            raw.substr(pos, colon == std::string_view::npos
+                                ? std::string_view::npos
+                                : colon - pos);
+        if (!parseHexGroup(part, groups[i])) {
+            valid = false;
+            break;
+        }
+        if (i == 7) {
+            valid = colon == std::string_view::npos;
+            break;
+        }
+        if (colon == std::string_view::npos) {
+            valid = false;
+            break;
+        }
+        pos = colon + 1;
+    }
+    if (valid && groups[0] == 0 && groups[1] == 0 && groups[2] == 0 &&
+        groups[3] == 0 && groups[4] == 0 && groups[5] == 0xffff) {
+        return ipv4Quad(groups[6] >> 8, groups[6] & 0xff, groups[7] >> 8,
+                        groups[7] & 0xff);
+    }
+    return std::string(raw);
 }
 
 std::string reasonPhrase(double code) {
@@ -384,7 +475,7 @@ void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
     pending->context.request.setCookies(
         parseCookies(std::string(req->getHeader("cookie"))));
     pending->context.request.setRemoteAddress(
-        std::string(res->getRemoteAddressAsText()));
+        remoteAddressText(res->getRemoteAddressAsText()));
     pending->context.response.bindNative(res);
     res->onAborted([pending] {
         // The native response is gone: drop the pointer so a handler that

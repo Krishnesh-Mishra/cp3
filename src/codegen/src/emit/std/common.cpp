@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "detail/int/builtin_tables.h"
+#include "detail/generator/cpp_writer.h"
 #include "detail/generator/type_map.h"
 #include "cp3/diag/diagnostic_codes.hpp"
 

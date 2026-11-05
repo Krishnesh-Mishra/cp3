@@ -26,6 +26,8 @@ const text = await response.text();
 
 `FetchResponse` exposes `ok`, `status`, `statusText`, and `headers`. Its body is buffered before `fetch` resolves. `text()` returns a promise for the text body, `arrayBuffer()` returns a promise for a Buffer, and `json<T>()` parses supported scalar or reified interface shapes. A failed HTTP status still resolves to a response; check `ok` or `status`. DNS, connection, timeout, unsupported-scheme, and protocol failures reject the promise.
 
+Numeric network values follow the project vocabulary. A `typescript` project keeps `number`; a `rust` or `cpp` project uses the exact standard-library width: `status` and ports are `u16` (`uint16_t` in C++), so `res.status` and `listen(port)` never pass through a floating-point value.
+
 A timeout of zero means no timeout. A request that never settles remains pending and keeps event-loop work alive. Use a positive timeout for operations that need a deadline. Headers are represented by a CP3 Map, and the implementation owns framing headers such as host and content length.
 
 ## WebSocket client
@@ -56,7 +58,7 @@ server.get("/health", (request, response): void => {
 server.listen(8080, (): void => console.log("ready"));
 ```
 
-The server supports `get`, `post`, `put`, `delete`, `patch`, `head`, `options`, `any`, and `use`. `listen(port, callback?)` begins accepting requests; `close()` shuts down the listener and connections. Request values include method, path, route `params`, query Map, and headers Map. Request bodies are buffered before dispatch; `text()` and `json<T>()` read that body.
+The server supports `get`, `post`, `put`, `delete`, `patch`, `head`, `options`, `any`, and `use`. `listen(port, callback?)` begins accepting requests; `close()` shuts down the listener and connections. Request values include method, path, route `params`, query Map, and headers Map. Request bodies are buffered before dispatch; `text()` and `json<T>()` read that body. The `port` and status-code parameters are `number` in a `typescript` project and `u16` in a `rust`/`cpp` project, matching the values returned by `res.status`.
 
 Responses support chainable `status(code)` and `header(name, value)`, plus terminal `text`, `json`, and `send` operations. `write(string | Buffer)` and `end()` provide chunked response writes. The first terminal response operation wins; code that tries to send a second response does not start a new response.
 

@@ -118,6 +118,7 @@ std::string Generator::sourceIncludes() const {
     out += "\n";
     out += "#include \"cp3/core/runtime.hpp\"\n";
     out += "#include \"cp3/core/error.hpp\"\n";
+    out += "#include \"cp3/core/checked.hpp\"\n";  // explicit narrowing casts
     out += "#include \"cp3/core/value.hpp\"\n";  // Cell<T> (spec 10 closures)
     if (needsBitwise_) out += "#include \"cp3/core/bitwise.hpp\"\n";  // & | ^ ~ << >> >>>
     if (needsUnion_) out += "#include \"cp3/core/union.hpp\"\n";  // primitive unions

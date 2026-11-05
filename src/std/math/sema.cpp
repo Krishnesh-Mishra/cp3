@@ -25,6 +25,7 @@
 
 #include "detail/std_tables.hpp"
 
+#include "cp3/diag/diagnostic_codes.hpp"
 #include "cp3/host/native_types.hpp"
 
 namespace cp3 {
@@ -147,10 +148,6 @@ const MemberRow kMathRows[] = {
 };
 
 }  // namespace
-
-std::optional<Type> Analyzer::mathMember(const std::string& prop) {
-    return lookupMember(kMathRows, prop);
-}
 
 std::optional<Type> Analyzer::mathMember(const std::string& prop) {
     return lookupMember(kMathRows, prop);

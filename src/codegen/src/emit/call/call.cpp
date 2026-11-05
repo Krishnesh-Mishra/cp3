@@ -61,11 +61,25 @@ std::string Generator::emitParseBuiltin(const CallExpr& c,
 // The runtime call for one coercion global applied to a value expression.
 // `Number` coerces via toNumber; `Boolean` via toBoolean; `isNaN`/`isFinite`
 // coerce via toNumber first, then test (JS semantics).
-std::string coercionText(const std::string& name, const std::string& value) {
-    if (name == "Number") return "::cp3::runtime::toNumber(" + value + ")";
-    if (name == "Boolean") return "::cp3::runtime::toBoolean(" + value + ")";
-    if (name == "isNaN") return "::cp3::runtime::isNaN(::cp3::runtime::toNumber(" + value + "))";
-    return "::cp3::runtime::isFiniteNumber(::cp3::runtime::toNumber(" + value + "))";
+std::string coercionText(const std::string& name, const std::string& value,
+                         bool native = false) {
+    // `Number(native)` is the explicit native -> number conversion (allowed to
+    // lose precision for i64/u64); the standard argument overload set would be
+    // ambiguous for an integer, so spell the double conversion here.
+    const std::string asDouble =
+        native ? "static_cast<double>(" + value + ")" : value;
+    if (name == "Number") {
+        return "::cp3::runtime::toNumber(" + asDouble + ")";
+    }
+    if (name == "Boolean") {
+        return "::cp3::runtime::toBoolean(" + asDouble + ")";
+    }
+    if (name == "isNaN") {
+        return "::cp3::runtime::isNaN(::cp3::runtime::toNumber(" + asDouble +
+               "))";
+    }
+    return "::cp3::runtime::isFiniteNumber(::cp3::runtime::toNumber(" +
+           asDouble + "))";
 }
 
 // `atob(text)` / `btoa(text)`: base64 <-> byte text (stdlib §03). The
@@ -124,8 +138,11 @@ std::string Generator::emitParseToBuiltin(const CallExpr& c) {
     const std::string asDouble =
         nativeSource ? "static_cast<double>(" + value + ")" : value;
     if (target.kind == TypeKind::Native) {
-        return "static_cast<" + tc.cpp + ">(::cp3::runtime::toNumber(" +
-               asDouble + "))";
+        // An explicit conversion is range-checked: narrowing a computed value
+        // throws instead of truncating. Widening passes through unchanged.
+        return "::cp3::runtime::checked::narrow<" + tc.cpp +
+               ">(::cp3::runtime::toNumber(" + asDouble + "), \"" +
+               target.name + "\")";
     }
     if (target.kind == TypeKind::Boolean) {
         if (source.kind == TypeKind::String) {
@@ -180,7 +197,8 @@ std::string Generator::emitCoercionBuiltin(const CallExpr& c, const std::string&
                "; if (cp3_spread->empty()) return " + fallback + "; return " +
                coercionText(name, "cp3_spread->at(0)") + "; }()";
     }
-    return coercionText(name, expr(*arg));
+    return coercionText(name, expr(*arg),
+                        info(*arg).shape == Shape::Native);
 }
 
 // `String(value)`: the scalar conversion global (DECISIONS D46). JS

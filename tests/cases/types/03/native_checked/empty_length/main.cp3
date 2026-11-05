@@ -1,0 +1,14 @@
+import console from "std/console";
+
+// On an empty array `length - 1` is -1 (a number), not an unsigned wrap.
+let empty: i64[] = [];
+let none: number = empty.length - 1;
+console.log(`${none} ${none < 0}`);
+
+// The same expression drives the usual "last element" loop guard without
+// indexing the array.
+let seen: number = 0;
+for (let i: number = 0; i <= empty.length - 1; i++) {
+  seen += 1;
+}
+console.log(`${seen}`);

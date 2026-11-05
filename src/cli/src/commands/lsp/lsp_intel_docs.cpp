@@ -216,7 +216,8 @@ std::string completionMemberDoc(const AnalyzedDocument& document,
     }
     if (receiverType != nullptr && receiverType->kind == TypeKind::Object &&
         contains(networkObjectMemberNames(receiverType->name), member)) {
-        const StdMemberDoc doc = networkObjectMemberDoc(receiverType->name, member);
+        const StdMemberDoc doc = networkObjectMemberDoc(
+            receiverType->name, member, document.typeSystem);
         if (!doc.empty()) return renderStdDoc(doc.signature, doc.body);
         return missingDocText(receiverType->name + "." + member);
     }
@@ -319,7 +320,8 @@ DocAnswer stdMemberDocAt(const AnalyzedDocument& document,
             label = type->name + "." + member.property;
             known = stdInstanceMemberNames(type->name);
         } else if (type->kind == TypeKind::Object) {
-            doc = networkObjectMemberDoc(type->name, member.property);
+            doc = networkObjectMemberDoc(type->name, member.property,
+                                         document.typeSystem);
             label = type->name + "." + member.property;
             known = networkObjectMemberNames(type->name);
         } else if (type->kind == TypeKind::Array) {

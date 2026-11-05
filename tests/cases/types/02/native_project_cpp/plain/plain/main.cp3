@@ -1,6 +1,6 @@
 import console from "std/console";
 
-function scale(value: long long, factor: unsigned int): long long {
+function scale(value: long long, factor: long long): long long {
   return value * factor;
 }
 

@@ -273,7 +273,7 @@ bool Analyzer::tryInferParseToBuiltin(CallExpr& call, const Identifier& id,
         out = withType(call, Type::unknown());
         return true;
     }
-    const Expr* value = call.arguments.front().get();
+    Expr* value = call.arguments.front().get();
     Type target;
     if (!call.typeArgs.empty() && call.typeArgs.front()) {
         target = resolveType(*call.typeArgs.front());
@@ -359,9 +359,11 @@ bool Analyzer::tryInferParseToBuiltin(CallExpr& call, const Identifier& id,
         if (value != nullptr && value->kind == NodeKind::StringLiteral) {
             what = "'" + literalText + "'";
         }
-        report(diagcode::kTypeMismatch, call.span,
-               "type mismatch: " + what + " cannot be parsed to the "
-               "requested target type '" + pretty(target) + "'");
+        // Point at `parseTo` itself, keeping its real column; the value's
+        // line is the same, and the call is what the reader must change.
+        reportAt(diagcode::kTypeMismatch, id.span,
+                 "type mismatch: " + what + " cannot be parsed to the "
+                 "requested target type '" + pretty(target) + "'");
         out = withType(call, Type::unknown());
         return true;
     }
@@ -467,6 +469,10 @@ void Analyzer::inferArgs(CallExpr& call) {
 
 void Analyzer::sigFromFunctionType(const Type& ct, FuncSig& localSig) {
     localSig.name = "";
+    // A family marker (`$network:Next`, ...) survives into the signature so
+    // the arity report can name the documented surface instead of printing
+    // the parameter counts behind the marker's callable shape.
+    if (!ct.name.empty() && ct.name.front() == '$') localSig.name = ct.name;
     localSig.annotatedReturn = true;
     if (!ct.parts.empty()) {
         localSig.ret = ct.parts.back();
@@ -602,11 +608,21 @@ void Analyzer::checkArgs(const FuncSig& sig, CallExpr& call) {
     const std::size_t maxArgs =
         sig.rest ? static_cast<std::size_t>(-1) : sig.params.size();
     if (!hasSpread && (given < required || given > maxArgs)) {
-        report(diagcode::kArityMismatch, call.span,
-               "arity mismatch: expected " +
-                   arityText(required, maxArgs, sig.rest) + ", got " +
-                   std::to_string(given) + " argument" +
-                   (given == 1 ? "" : "s"));
+        // The middleware continuation is callable with no parameters; an
+        // argument is the documented `next()` contract violation, so name it
+        // instead of printing "expected 0".
+        if (sig.name == "$network:Next") {
+            report(diagcode::kArityMismatch, call.span,
+                   "arity mismatch: the std/network next() continuation takes "
+                   "no arguments, got " +
+                       std::to_string(given));
+        } else {
+            report(diagcode::kArityMismatch, call.span,
+                   "arity mismatch: expected " +
+                       arityText(required, maxArgs, sig.rest) + ", got " +
+                       std::to_string(given) + " argument" +
+                       (given == 1 ? "" : "s"));
+        }
     }
     if (hasSpread && !sig.rest) {
         // A spread into a fixed-argument signature fills the parameters it
