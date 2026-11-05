@@ -145,6 +145,144 @@ MemberInit classifyMemberInit(const Expr* init,
     return MemberInit::Other;
 }
 
+// -----------------------------------------------------------------------------
+// Constant evaluation: the member values + reverse map (const enum support)
+// -----------------------------------------------------------------------------
+// `registerEnum` classifies every member above; the helpers below *evaluate*
+// the same constant expressions into the compile-time values published in
+// `SemaResult::constEnums` (cp3/core/utility_types.hpp). The accepted forms
+// deliberately mirror `constKind` (a literal, a unary sign / bit-not, an
+// arithmetic operator over constants, a link to an earlier member) so the
+// two can never drift: anything `constKind` calls a constant evaluates
+// here, and vice versa. Codegen inlines `const enum` member accesses from
+// the published table - there is no runtime enum object and no runtime
+// metadata.
+
+// The already-resolved value of the member `name`, or nullptr.
+const ConstEnumValue* resolvedMember(const std::vector<ConstEnumValue>& values,
+                                     const std::string& name) {
+    for (const ConstEnumValue& v : values) {
+        if (v.name == name) return &v;
+    }
+    return nullptr;
+}
+
+// The linked member an initializer names (same forms as `linkedTarget`,
+// but over the evaluated values): a bare name (`A`) or `Enum.A`.
+const ConstEnumValue* resolvedTarget(
+    const Expr* e, const std::vector<ConstEnumValue>& values,
+    const std::string& enumName) {
+    if (e == nullptr) return nullptr;
+    if (e->kind == NodeKind::Identifier) {
+        return resolvedMember(values,
+                              static_cast<const Identifier&>(*e).name);
+    }
+    if (e->kind != NodeKind::MemberExpr) return nullptr;
+    const auto& m = static_cast<const MemberExpr&>(*e);
+    if (!m.object || m.object->kind != NodeKind::Identifier) return nullptr;
+    if (static_cast<const Identifier&>(*m.object).name != enumName) {
+        return nullptr;
+    }
+    return resolvedMember(values, m.property);
+}
+
+// Evaluates a constant *number* expression. False when the expression is
+// not a numeric constant (the caller keeps the member valueless; the
+// classification pass already reported non-constants).
+bool evalConstNumber(const Expr* e,
+                     const std::vector<ConstEnumValue>& values,
+                     const std::string& enumName, double& out) {
+    if (e == nullptr) return false;
+    switch (e->kind) {
+        case NodeKind::NumberLiteral:
+            out = static_cast<const NumberLiteral&>(*e).value;
+            return true;
+        case NodeKind::UnaryExpr: {
+            const auto& u = static_cast<const UnaryExpr&>(*e);
+            if (u.op != UnaryOp::Negate && u.op != UnaryOp::Plus &&
+                u.op != UnaryOp::BitNot) {
+                return false;
+            }
+            double inner = 0.0;
+            if (!evalConstNumber(u.operand.get(), values, enumName, inner)) {
+                return false;
+            }
+            switch (u.op) {
+                case UnaryOp::Negate: out = -inner; break;
+                case UnaryOp::Plus: out = inner; break;
+                case UnaryOp::BitNot:
+                    out = static_cast<double>(~static_cast<long long>(inner));
+                    break;
+                default: return false;
+            }
+            return true;
+        }
+        case NodeKind::BinaryExpr: {
+            const auto& b = static_cast<const BinaryExpr&>(*e);
+            double l = 0.0, r = 0.0;
+            if (!evalConstNumber(b.left.get(), values, enumName, l) ||
+                !evalConstNumber(b.right.get(), values, enumName, r)) {
+                return false;
+            }
+            switch (b.op) {
+                case BinaryOp::Add: out = l + r; break;
+                case BinaryOp::Subtract: out = l - r; break;
+                case BinaryOp::Multiply: out = l * r; break;
+                case BinaryOp::Divide:
+                    if (r == 0.0) return false;
+                    out = l / r;
+                    break;
+                case BinaryOp::Modulo: {
+                    if (r == 0.0) return false;
+                    // Truncating remainder (JS `%` semantics).
+                    out = l - static_cast<double>(
+                                  static_cast<long long>(l / r)) * r;
+                    break;
+                }
+                default: return false;
+            }
+            return true;
+        }
+        default:
+            break;
+    }
+    const ConstEnumValue* target = resolvedTarget(e, values, enumName);
+    if (target == nullptr || target->isString || !target->hasValue) {
+        return false;
+    }
+    out = target->numberValue;
+    return true;
+}
+
+// Evaluates a constant *string* expression: a literal, `+` over two string
+// constants, or a link to an earlier string member.
+bool evalConstString(const Expr* e,
+                     const std::vector<ConstEnumValue>& values,
+                     const std::string& enumName, std::string& out) {
+    if (e == nullptr) return false;
+    if (e->kind == NodeKind::StringLiteral) {
+        out = static_cast<const StringLiteral&>(*e).value;
+        return true;
+    }
+    if (e->kind == NodeKind::BinaryExpr) {
+        const auto& b = static_cast<const BinaryExpr&>(*e);
+        if (b.op != BinaryOp::Add) return false;
+        std::string l, r;
+        if (!evalConstString(b.left.get(), values, enumName, l) ||
+            !evalConstString(b.right.get(), values, enumName, r)) {
+            return false;
+        }
+        out = l + r;
+        return true;
+    }
+    const ConstEnumValue* target = resolvedTarget(e, values, enumName);
+    if (target == nullptr || !target->isString || !target->hasValue) {
+        return false;
+    }
+    out = target->stringValue;
+    return true;
+}
+
 }  // namespace
 
 void Analyzer::registerEnum(EnumDeclaration& e) {
@@ -206,6 +344,70 @@ void Analyzer::registerEnum(EnumDeclaration& e) {
                    "by one kind only");
     }
     info.stringBacked = sawString;
+
+    // The compile-time values + reverse map (const enum support): walk the
+    // members again, evaluating each initializer with the helpers above.
+    // Numeric members auto-increment (the first implicit member is 0, each
+    // later one is previous + 1) exactly as the codegen evaluator reads
+    // them; string members keep their string. The reverse map covers
+    // numeric values only (TypeScript parity) and collapses duplicates to
+    // the last member with that value. Published for regular and `const`
+    // enums alike: a `const enum` is consumed by inlining, a regular one
+    // by its runtime object - both read the same table.
+    {
+        ConstEnumInfo resolved;
+        resolved.name = e.name;
+        resolved.isConst = e.isConst;
+        resolved.stringBacked = sawString;
+        resolved.declNodeId = e.nodeId;
+        double previousNumber = -1.0;
+        bool havePreviousNumber = false;
+        for (auto& m : e.members) {
+            if (!m) continue;
+            const EnumMemberInfo* decl = info.member(m->name);
+            ConstEnumValue v;
+            v.name = m->name;
+            v.isString = decl != nullptr && decl->isString;
+            if (m->initializer) {
+                if (v.isString) {
+                    v.hasValue = evalConstString(m->initializer.get(),
+                                                 resolved.values, e.name,
+                                                 v.stringValue);
+                } else {
+                    v.hasValue = evalConstNumber(m->initializer.get(),
+                                                 resolved.values, e.name,
+                                                 v.numberValue);
+                }
+            } else if (!v.isString) {
+                // Implicit member: previous + 1 (0 for the first).
+                v.numberValue = havePreviousNumber ? previousNumber + 1.0 : 0.0;
+                v.hasValue = true;
+            }
+            if (v.hasValue && !v.isString) {
+                previousNumber = v.numberValue;
+                havePreviousNumber = true;
+            }
+            resolved.values.push_back(std::move(v));
+        }
+        if (!sawString) {
+            for (const ConstEnumValue& v : resolved.values) {
+                if (!v.hasValue || v.isString) continue;
+                bool replaced = false;
+                for (ConstEnumReverseEntry& entry : resolved.reverse) {
+                    if (entry.numberValue == v.numberValue) {
+                        entry.name = v.name;  // last member wins
+                        replaced = true;
+                        break;
+                    }
+                }
+                if (!replaced) {
+                    resolved.reverse.push_back(
+                        ConstEnumReverseEntry{v.numberValue, v.name});
+                }
+            }
+        }
+        out_.constEnums[e.nodeId] = std::move(resolved);
+    }
 
     const Type enumType = Type::named(TypeKind::Enum, e.name);
     if (!e.name.empty()) {

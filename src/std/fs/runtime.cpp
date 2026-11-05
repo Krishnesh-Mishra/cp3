@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <system_error>
@@ -68,11 +69,12 @@ std::int64_t modifiedMillis(std::filesystem::file_time_type when) {
 namespace detail {
 
 struct ReadStreamImpl {
-    ReadStreamImpl(std::string p, std::size_t c)
-        : path(std::move(p)), chunkSize(c == 0 ? kDefaultChunkSize : c) {}
+    ReadStreamImpl(std::string p, std::uint64_t c)
+        : path(std::move(p)),
+          chunkSize(c == 0 ? static_cast<std::uint64_t>(kDefaultChunkSize) : c) {}
 
     std::string path;
-    std::size_t chunkSize;
+    std::uint64_t chunkSize;
     std::ifstream in;
     bool started = false;
     bool finished = false;
@@ -124,7 +126,16 @@ void deliverEnd(const std::shared_ptr<detail::ReadStreamImpl>& impl) {
 /// post the next pump turn so the loop is never blocked on file I/O.
 void pumpRead(const std::shared_ptr<detail::ReadStreamImpl>& impl) {
     if (impl->failed || impl->finished) return;
-    std::string chunk(impl->chunkSize, '\0');
+    // `chunkSize` is u64 storage, but one `ifstream::read` takes a
+    // `streamsize` count into a `size_t`-sized buffer: cap the allocation at
+    // both maxima so a huge requested chunk never narrows to a negative
+    // streamsize (realistic chunks are far below either limit).
+    const std::uint64_t maxAlloc = std::min<std::uint64_t>(
+        static_cast<std::uint64_t>(std::numeric_limits<std::streamsize>::max()),
+        static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()));
+    const std::size_t allocSize =
+        static_cast<std::size_t>(std::min(impl->chunkSize, maxAlloc));
+    std::string chunk(allocSize, '\0');
     impl->in.read(chunk.data(), static_cast<std::streamsize>(chunk.size()));
     const std::streamsize got = impl->in.gcount();
     if (impl->in.bad()) {
@@ -197,10 +208,8 @@ void ReadStream::on(const std::string& event, std::function<void()> handler) con
     if (event == "end") deliverEnd(impl_);
 }
 
-ReadStream readFileStream(const std::string& path, double chunkSize) {
-    std::size_t size = 0;
-    if (chunkSize > 0.0) size = static_cast<std::size_t>(chunkSize);
-    return ReadStream(std::make_shared<detail::ReadStreamImpl>(path, size));
+ReadStream readFileStream(const std::string& path, std::uint64_t chunkSize) {
+    return ReadStream(std::make_shared<detail::ReadStreamImpl>(path, chunkSize));
 }
 
 // =============================================================================
@@ -351,7 +360,15 @@ FileStats statSync(const std::string& path) {
     if (out.isFile) {
         std::error_code sizeEc;
         const std::uintmax_t size = std::filesystem::file_size(toPath(path), sizeEc);
-        if (!sizeEc) out.size = static_cast<std::uint64_t>(size);
+        if (!sizeEc) {
+            // `FileStats.size` is u64: saturate rather than wrap if the
+            // platform's uintmax_t is ever wider than 64 bits.
+            out.size =
+                size > static_cast<std::uintmax_t>(
+                           std::numeric_limits<std::uint64_t>::max())
+                    ? std::numeric_limits<std::uint64_t>::max()
+                    : static_cast<std::uint64_t>(size);
+        }
     }
     std::error_code timeEc;
     const std::filesystem::file_time_type modified =

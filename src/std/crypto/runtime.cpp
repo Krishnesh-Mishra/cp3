@@ -17,6 +17,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -126,6 +127,16 @@ std::string randomBytes(double length) {
     return out;
 }
 
+std::string randomBytes(std::uint64_t length) {
+    ensureInit();
+    if (length > static_cast<std::uint64_t>(kMaxRandomBytes)) {
+        fail("crypto.randomBytes: size must be a non-negative integer below 2^31");
+    }
+    std::string out(static_cast<std::size_t>(length), '\0');
+    if (length != 0) randombytes_buf(out.data(), static_cast<std::size_t>(length));
+    return out;
+}
+
 std::string sha256(std::string_view data) {
     ensureInit();
     // Hashing is deterministic and this one-entry thread-local cache helps
@@ -222,6 +233,138 @@ std::string aes256Decrypt(const std::string& key, const std::string& encrypted) 
     }
     return std::string(reinterpret_cast<const char*>(message.data()),
                        static_cast<std::size_t>(mlen));
+}
+
+// --- Ledger D extensions (append-only) ---------------------------------------
+
+std::string hmacSha256(std::string_view key, std::string_view data) {
+    ensureInit();
+    crypto_auth_hmacsha256_state state;
+    if (crypto_auth_hmacsha256_init(
+            &state, reinterpret_cast<const unsigned char*>(key.data()),
+            key.size()) != 0 ||
+        crypto_auth_hmacsha256_update(
+            &state, reinterpret_cast<const unsigned char*>(data.data()),
+            data.size()) != 0) {
+        fail("crypto.hmacSha256: HMAC initialization failed");
+    }
+    unsigned char mac[crypto_auth_hmacsha256_BYTES];
+    if (crypto_auth_hmacsha256_final(&state, mac) != 0) {
+        fail("crypto.hmacSha256: HMAC finalization failed");
+    }
+    return toHex(mac, sizeof(mac));
+}
+
+std::string hmacSha512(std::string_view key, std::string_view data) {
+    ensureInit();
+    crypto_auth_hmacsha512_state state;
+    if (crypto_auth_hmacsha512_init(
+            &state, reinterpret_cast<const unsigned char*>(key.data()),
+            key.size()) != 0 ||
+        crypto_auth_hmacsha512_update(
+            &state, reinterpret_cast<const unsigned char*>(data.data()),
+            data.size()) != 0) {
+        fail("crypto.hmacSha512: HMAC initialization failed");
+    }
+    unsigned char mac[crypto_auth_hmacsha512_BYTES];
+    if (crypto_auth_hmacsha512_final(&state, mac) != 0) {
+        fail("crypto.hmacSha512: HMAC finalization failed");
+    }
+    return toHex(mac, sizeof(mac));
+}
+
+std::string blake2b(std::string_view data) {
+    ensureInit();
+    unsigned char digest[crypto_generichash_BYTES];
+    if (crypto_generichash(
+            digest, sizeof(digest),
+            reinterpret_cast<const unsigned char*>(data.data()), data.size(),
+            nullptr, 0) != 0) {
+        fail("crypto.blake2b: hashing failed");
+    }
+    return toHex(digest, sizeof(digest));
+}
+
+std::string getRandomValues(double length) {
+    ensureInit();
+    const std::size_t size = checkedLength(length, "crypto.getRandomValues");
+    std::string out(size, '\0');
+    if (size != 0) randombytes_buf(out.data(), size);
+    return out;
+}
+
+std::string getRandomValues(std::uint64_t length) {
+    ensureInit();
+    if (length > static_cast<std::uint64_t>(kMaxRandomBytes)) {
+        fail("crypto.getRandomValues: size must be a non-negative integer below 2^31");
+    }
+    std::string out(static_cast<std::size_t>(length), '\0');
+    if (length != 0) randombytes_buf(out.data(), static_cast<std::size_t>(length));
+    return out;
+}
+
+namespace {
+
+// Canonical UUID parsing shared by uuidParse/uuidValidate/uuidVersion.
+// Returns false (writing nothing meaningful) unless `text` is exactly
+// 36 chars: hex digits with '-' at positions 8, 13, 18, 23.
+bool tryParseUuid(const std::string& text, unsigned char out[16]) {
+    if (text.size() != 36) return false;
+    auto hexVal = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    std::size_t byteIdx = 0;
+    int hi = -1;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (i == 8 || i == 13 || i == 18 || i == 23) {
+            if (c != '-') return false;
+            continue;
+        }
+        const int v = hexVal(c);
+        if (v < 0) return false;
+        if (hi < 0) {
+            hi = v;
+        } else {
+            out[byteIdx++] = static_cast<unsigned char>((hi << 4) | v);
+            hi = -1;
+        }
+    }
+    return byteIdx == 16 && hi < 0;
+}
+
+}  // namespace
+
+std::string uuidParse(const std::string& text) {
+    ensureInit();
+    unsigned char bytes[16];
+    if (!tryParseUuid(text, bytes)) {
+        fail("crypto.uuidParse: not a canonical UUID string");
+    }
+    return std::string(reinterpret_cast<const char*>(bytes), sizeof(bytes));
+}
+
+bool uuidValidate(const std::string& text) {
+    unsigned char bytes[16];
+    return tryParseUuid(text, bytes);
+}
+
+double uuidVersion(const std::string& text) {
+    unsigned char bytes[16];
+    if (!tryParseUuid(text, bytes)) return 0.0;
+    return static_cast<double>((bytes[6] >> 4) & 0x0fU);
+}
+
+std::string sha256Raw(std::string_view data) {
+    ensureInit();
+    unsigned char digest[crypto_hash_sha256_BYTES];
+    crypto_hash_sha256(digest,
+                       reinterpret_cast<const unsigned char*>(data.data()),
+                       data.size());
+    return std::string(reinterpret_cast<const char*>(digest), sizeof(digest));
 }
 
 }  // namespace cp3::runtime::crypto

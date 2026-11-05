@@ -56,6 +56,12 @@ const char* const kHttpServer = "$network:HttpServer";
 const char* const kHttpNext = "$network:Next";
 const char* const kWebSocket = "$network:WebSocket";
 const char* const kWebSocketServer = "$network:WebSocketServer";
+// Ledger L (appended): Headers/Request/Response/FormData/AbortSignal markers.
+const char* const kHeaders = "$network:Headers";
+const char* const kRequest = "$network:Request";
+const char* const kResponse = "$network:Response";
+const char* const kFormData = "$network:FormData";
+const char* const kAbortSignal = "$network:AbortSignal";
 
 /// `Map<string, string>` (std/collections): the documented shape of the
 /// request/fetch headers, route params and query string.
@@ -98,6 +104,14 @@ Type httpMiddleware() {
 }
 
 Type eventListener() { return callbackOf(2); }
+
+// Ledger L (appended): `app.onError((err, req, res) => ...)` handler type.
+// `err` is ambient (the runtime passes a Thrown); req/res are typed so member
+// calls inside the body resolve.
+Type httpErrorHandler() {
+    return Type::function({ambient(), networkValue(kHttpRequest), networkValue(kHttpResponse)},
+                          Type::voidType());
+}
 
 // -----------------------------------------------------------------------------
 // The documented field rows per receiver (docs 04 §network). These rows are
@@ -201,6 +215,9 @@ std::vector<Field> httpServerFields(TypeSystem ts) {
     }
     fields.push_back(Field{"use", Type::function({httpMiddleware()}, Type::voidType()),
                            false});
+    // Ledger L (appended): `app.onError((err, req, res) => ...)`.
+    fields.push_back(Field{"onError", Type::function({httpErrorHandler()}, Type::voidType()),
+                           false});
     fields.push_back(
         Field{"listen",
               withOptionalTail(Type::function(
@@ -234,6 +251,57 @@ std::vector<Field> webSocketServerFields() {
     };
 }
 
+// Ledger L (appended) field rows.
+std::vector<Field> headersFields() {
+    const Type fn2 = Type::function({Type::string(), Type::string()}, Type::voidType());
+    return {
+        Field{"get", Type::function({Type::string()}, Type::string()), false},
+        Field{"has", Type::function({Type::string()}, Type::boolean()), false},
+        Field{"set", fn2, false},
+        Field{"append", fn2, false},
+        Field{"delete", Type::function({Type::string()}, Type::voidType()), false},
+    };
+}
+std::vector<Field> formDataFields() {
+    const Type fn2 = Type::function({Type::string(), Type::string()}, Type::voidType());
+    return {
+        Field{"append", fn2, false},
+        Field{"get", Type::function({Type::string()}, Type::string()), false},
+        Field{"has", Type::function({Type::string()}, Type::boolean()), false},
+        Field{"set", fn2, false},
+        Field{"delete", Type::function({Type::string()}, Type::voidType()), false},
+    };
+}
+std::vector<Field> abortSignalFields() {
+    return {
+        Field{"aborted", Type::boolean(), false},
+        Field{"timeout", Type::function({Type::number()}, networkValue(kAbortSignal)), false},
+    };
+}
+std::vector<Field> requestFields() {
+    return {
+        Field{"url", Type::string(), false},
+        Field{"method", Type::string(), false},
+        Field{"headers", networkValue(kHeaders), false},
+        Field{"signal", networkValue(kAbortSignal), false},
+        Field{"text", Type::function({}, promiseOf(Type::string())), false},
+        Field{"json", Type::function({}, promiseOf(ambient())), false},
+        Field{"arrayBuffer", Type::function({}, promiseOf(bufferType())), false},
+    };
+}
+std::vector<Field> responseFields(TypeSystem ts) {
+    return {
+        Field{"ok", Type::boolean(), false},
+        Field{"status", stdIntegerType(StdIntegerKind::Status, ts), false},
+        Field{"statusText", Type::string(), false},
+        Field{"headers", networkValue(kHeaders), false},
+        Field{"url", Type::string(), false},
+        Field{"text", Type::function({}, promiseOf(Type::string())), false},
+        Field{"json", Type::function({}, promiseOf(ambient())), false},
+        Field{"arrayBuffer", Type::function({}, promiseOf(bufferType())), false},
+    };
+}
+
 /// The documented field rows of one marker table, or {} when `name` is not a
 /// network marker. Shared by `networkObjectType` (the marker itself) and
 /// `networkObjectMember` (one documented read).
@@ -244,6 +312,11 @@ std::vector<Field> networkFieldsFor(const std::string& name, TypeSystem ts) {
     if (name == kHttpServer) return httpServerFields(ts);
     if (name == kWebSocket) return webSocketFields();
     if (name == kWebSocketServer) return webSocketServerFields();
+    if (name == kHeaders) return headersFields();
+    if (name == kFormData) return formDataFields();
+    if (name == kAbortSignal) return abortSignalFields();
+    if (name == kRequest) return requestFields();
+    if (name == kResponse) return responseFields(ts);
     return {};
 }
 
@@ -297,6 +370,8 @@ StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
         if (member == "use") return {"use(handler: (req: HttpRequest, res: HttpResponse, next: () => Promise<void>) => void): void",
             "Registers middleware in order. Call `next()` (or `await next()` in an async handler) to continue to the next matching route or middleware. A response can be sent without calling `next()` to finish the request.\n\n"
             "**Example**\n\n```cp3\napp.use(async (req, res, next) => {\n  console.log(req.method, req.path);\n  await next();\n});\n```"};
+        if (member == "onError") return {"onError(handler: (err: unknown, req: HttpRequest, res: HttpResponse) => void): void",
+            "Registers the error handler invoked when a route/middleware handler throws or rejects and no response was sent yet. Without it the dispatcher answers 500.\n\n**Example**\n\n```cp3\napp.onError((err, req, res) => {\n  res.status(500).json({ error: \"failed\" });\n});\n```"};
         if (member == "listen") return {"listen(port: " + port + ", callback?: () => void): void",
             "Starts accepting HTTP requests on `port`. The optional callback runs once the listener is ready.\n\n**Example**\n\n```cp3\napp.listen(3000, () => console.log(\"ready\"));\n```"};
         if (member == "close") return {"close(): void", "Stops accepting new connections and closes the server."};
@@ -336,6 +411,44 @@ StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
     }
     if (type == "WebSocket" && member == "send") return {"send(data: string | Buffer): void", "Sends UTF-8 text or raw Buffer bytes to the connected WebSocket peer."};
     if (type == "WebSocketServer" && member == "close") return {"close(): void", "Closes the WebSocket listener and its connections."};
+    // Ledger L (appended) docs.
+    if (type == "Headers") {
+        if (member == "get") return {"get(name: string): string", "Returns the header value, or \"\" when missing."};
+        if (member == "has") return {"has(name: string): boolean", "Whether the header is present (case-insensitive)."};
+        if (member == "set") return {"set(name: string, value: string): void", "Sets a header, replacing any existing value."};
+        if (member == "append") return {"append(name: string, value: string): void", "Appends a header value."};
+        if (member == "delete") return {"delete(name: string): void", "Removes a header."};
+    }
+    if (type == "FormData") {
+        if (member == "append") return {"append(name: string, value: string): void", "Appends a form field; usable as a fetch `body`."};
+        if (member == "get") return {"get(name: string): string", "Returns the field value, or \"\" when missing."};
+        if (member == "has") return {"has(name: string): boolean", "Whether the field is present."};
+        if (member == "set") return {"set(name: string, value: string): void", "Sets a form field."};
+        if (member == "delete") return {"delete(name: string): void", "Removes a form field."};
+    }
+    if (type == "AbortSignal") {
+        if (member == "aborted") return {"aborted: boolean", "Whether the signal has aborted."};
+        if (member == "timeout") return {"timeout(ms: number): AbortSignal", "Creates a signal that times out after `ms`; `fetch(url, { signal })` applies it as the request timeout."};
+    }
+    if (type == "Request") {
+        if (member == "url") return {"url: string", "The request URL."};
+        if (member == "method") return {"method: string", "The request method."};
+        if (member == "headers") return {"headers: Headers", "The request headers."};
+        if (member == "signal") return {"signal: AbortSignal", "The request abort signal."};
+        if (member == "text") return {"text(): Promise<string>", "Reads the request body as text."};
+        if (member == "json") return {"json<T>(): Promise<T>", "Parses the request body as JSON typed as `T`."};
+        if (member == "arrayBuffer") return {"arrayBuffer(): Promise<Buffer>", "Reads the request body as raw bytes."};
+    }
+    if (type == "Response") {
+        if (member == "ok") return {"ok: boolean", "Whether the status is 200-299."};
+        if (member == "status") return {"status: " + status, "The response status code."};
+        if (member == "statusText") return {"statusText: string", "The reason phrase."};
+        if (member == "headers") return {"headers: Headers", "The response headers."};
+        if (member == "url") return {"url: string", "The response URL."};
+        if (member == "text") return {"text(): Promise<string>", "Reads the response body as text."};
+        if (member == "json") return {"json<T>(): Promise<T>", "Parses the response body as JSON typed as `T`."};
+        if (member == "arrayBuffer") return {"arrayBuffer(): Promise<Buffer>", "Reads the response body as raw bytes."};
+    }
     return {};
 }
 
@@ -362,6 +475,15 @@ std::optional<Type> Analyzer::networkMember(const std::string& prop) {
         // `dns.lookup(hostname)`: resolves with the first address.
         return Type::function({Type::string()}, promiseOf(Type::string()));
     }
+    // Ledger L (appended): namespace-corner spellings.
+    if (prop == "static" || prop == "cors" || prop == "bodyLimit") {
+        return Type::function({ambient()}, httpMiddleware());
+    }
+    if (prop == "Headers") return Type::function({ambient()}, networkObjectType(kHeaders));
+    if (prop == "Request") return Type::function({Type::string(), ambient()}, networkObjectType(kRequest));
+    if (prop == "Response") return Type::function({ambient(), ambient()}, networkObjectType(kResponse));
+    if (prop == "FormData") return Type::function({}, networkObjectType(kFormData));
+    if (prop == "AbortSignal") return networkObjectType(kAbortSignal);
     return std::nullopt;
 }
 
@@ -391,6 +513,28 @@ bool Analyzer::tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& o
                    "dns.lookup(hostname) takes exactly one argument");
         }
         out = promiseOf(Type::string());
+        return true;
+    }
+    // Ledger L (appended): middleware factories + bare class constructions.
+    // `fetch(Request)` is already typed by the `fetch` arm above.
+    if (id.name == "static" || id.name == "cors" || id.name == "bodyLimit") {
+        inferArgs(call);
+        out = httpMiddleware();
+        return true;
+    }
+    if (id.name == "Headers" || id.name == "FormData") {
+        inferArgs(call);
+        out = networkObjectType(id.name == "Headers" ? kHeaders : kFormData);
+        return true;
+    }
+    if (id.name == "Request" || id.name == "Response") {
+        inferArgs(call);
+        out = networkObjectType(id.name == "Request" ? kRequest : kResponse);
+        return true;
+    }
+    if (id.name == "AbortSignal") {
+        inferArgs(call);
+        out = networkObjectType(kAbortSignal);
         return true;
     }
     return false;
@@ -466,6 +610,19 @@ bool Analyzer::checkCreateServerOptions(CallExpr& call) {
 
 Type Analyzer::inferNetworkConstruct(const std::string& name, ExprList& args,
                                      const SourceSpan& span) {
+    // Ledger L (appended): `new Headers()/Request()/Response()/FormData()/AbortSignal()`.
+    if (name == "Headers" || name == "Request" || name == "Response" ||
+        name == "FormData" || name == "AbortSignal") {
+        for (auto& arg : args) { if (arg) inferExpr(*arg); }
+        if (name == "Request" && args.empty()) {
+            report(diagcode::kArityMismatch, anchorSpan(span), "new Request(url, init?) needs a URL");
+        }
+        if (name == "Headers") return networkObjectType(kHeaders);
+        if (name == "Request") return networkObjectType(kRequest);
+        if (name == "Response") return networkObjectType(kResponse);
+        if (name == "FormData") return networkObjectType(kFormData);
+        return networkObjectType(kAbortSignal);
+    }
     if (name != "WebSocket" && name != "WebSocketServer") return Type::unknown();
     for (auto& arg : args) {
         if (arg) inferExpr(*arg);
@@ -512,10 +669,26 @@ bool Analyzer::tryInferNetworkMemberCall(CallExpr& call, MemberExpr& m, Type& ou
             return true;
         }
     }
+    // Ledger L (appended): `AbortSignal.timeout(ms)`.
+    if (m.property == "timeout" && m.object &&
+        m.object->kind == NodeKind::Identifier) {
+        const auto& id = static_cast<const Identifier&>(*m.object);
+        Binding binding;
+        if (id.name == "AbortSignal" && lookup(id.name, binding) && binding.isAmbient) {
+            inferArgs(call);
+            if (call.arguments.size() != 1 || !call.arguments.front()) {
+                report(diagcode::kArityMismatch, anchorSpan(call.span),
+                       "AbortSignal.timeout(ms) takes exactly one argument");
+            }
+            out = networkObjectType(kAbortSignal);
+            return true;
+        }
+    }
     if (m.property != "json" || m.object == nullptr) return false;
     const Type recv = typeOfExpr(*m.object);
     if (recv.kind != TypeKind::Object) return false;
-    if (recv.name != kFetchResponse && recv.name != kHttpRequest) return false;
+    if (recv.name != kFetchResponse && recv.name != kHttpRequest &&
+        recv.name != kRequest && recv.name != kResponse) return false;
     if (call.typeArgs.empty() || !call.typeArgs.front()) return false;
     // `res.json<T>()` / `req.json<T>()` takes no arguments (docs 04 §network);
     // the explicit T substitutes into the promise exactly like

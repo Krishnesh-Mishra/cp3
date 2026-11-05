@@ -23,7 +23,7 @@ namespace cp3::runtime::json {
 
 class Value {
 public:
-    enum class Kind { Null, Bool, Number, String, Array, Object };
+    enum class Kind { Null, Bool, Number, String, Array, Object, Undefined };
 
     // Completed after Value. std::vector supports an incomplete element type;
     // std::pair<std::string, Value> does not, and Clang rejects instantiating
@@ -47,6 +47,25 @@ struct Value::Field {
 };
 
 inline Value nullValue() { return Value{}; }
+
+// The `undefined` sentinel: the value a replacer returns to omit a property
+// (ECMAScript JSON.stringify). It is never produced by the parser (JSON has no
+// `undefined` literal); a top-level `undefined` stringifies to "" (see
+// json.hpp). A `Value` that is returned as-is by a CP3 replacer lambda is the
+// identity overload below, so returning the `value` parameter forwards it.
+inline Value undefinedValue() {
+    Value out;
+    out.kind = Value::Kind::Undefined;
+    return out;
+}
+
+inline bool isUndefined(const Value& v) {
+    return v.kind == Value::Kind::Undefined;
+}
+
+inline Value value(const Value& v) { return v; }
+
+inline Value value(Undefined) { return undefinedValue(); }
 
 inline Value value(double v) {
     Value out;

@@ -42,6 +42,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "cp3/async/promise.hpp"
 #include "cp3/core/error.hpp"
@@ -64,6 +65,10 @@ struct ServerImpl;
 struct WssImpl;
 struct WsImpl;
 }  // namespace detail
+
+class Headers;
+class FormData;
+class AbortSignal;
 
 // =============================================================================
 // JSON scalar readers (shared by `res.json<T>()` / `req.json<T>()`)
@@ -99,6 +104,11 @@ struct FetchInit {
     bool hasBody = false;
     double timeoutMs = 0.0;
     StringMap headers;
+    // Ledger L (appended): `signal: AbortSignal.timeout(ms)` (fetch uses its
+    // timeoutMs when no explicit timeout is set, or the smaller of the two)
+    // and `body: FormData` (encoded by `withFormData`, see below).
+    std::shared_ptr<AbortSignal> signal;
+    std::shared_ptr<FormData> form;
 };
 
 /// The `FetchResponse` a resolved `fetch` fulfils with. The body is fully
@@ -235,6 +245,8 @@ public:
 
     /// Internal: the server stores the buffered body before dispatch.
     void setBody(std::string body) { body_ = std::move(body); }
+    /// Ledger L (appended): buffered body size in bytes (bodyLimit middleware).
+    std::size_t bodySize() const { return body_.size(); }
     /// Internal: the server stores the query/header maps before dispatch.
     void setQuery(StringMap map) { query = std::move(map); }
     void setHeaders(StringMap map) { headers = std::move(map); }
@@ -362,6 +374,17 @@ RouteFn makeMiddleware(F fn) {
     };
 }
 
+/// Ledger L: an error handler `(err, req, res)` as the dispatcher's uniform
+/// callable, for `server.onError(...)`.
+using ErrorFn = std::function<Promise<void>(Thrown, HttpRequest&, HttpResponse&)>;
+template <class F>
+ErrorFn makeErrorHandler(F fn) {
+    return [fn = std::move(fn)](Thrown err, HttpRequest& req,
+                                HttpResponse& res) mutable -> Promise<void> {
+        return callAsPromise(fn, err, req, res);
+    };
+}
+
 }  // namespace detail
 
 /// `createServer()`. Routes and middleware run in registration order (Express
@@ -425,6 +448,13 @@ public:
     void use(F middleware) const {
         addMiddlewareImpl(detail::makeMiddleware(std::move(middleware)));
     }
+    /// Ledger L: `app.onError((err, req, res) => ...)`; invoked by the
+    /// dispatcher when a handler throws/rejects and no response was sent yet.
+    /// Without it the dispatcher answers 500 as before.
+    template <class F>
+    void onError(F handler) const {
+        setErrorHandlerImpl(detail::makeErrorHandler(std::move(handler)));
+    }
     /// `app.listen(port, callback?)`; the callback runs once the port is bound.
     void listen(double port, std::function<void()> callback = {}) const;
     /// `app.close()`: closes listen sockets and connections.
@@ -434,6 +464,7 @@ private:
     void addRouteImpl(const char* method, const std::string& path,
                       detail::RouteFn handler) const;
     void addMiddlewareImpl(detail::RouteFn handler) const;
+    void setErrorHandlerImpl(detail::ErrorFn handler) const;  // Ledger L
     std::shared_ptr<detail::ServerImpl> impl_;
 };
 
@@ -511,5 +542,162 @@ public:
 private:
     std::shared_ptr<detail::WssImpl> impl_;
 };
+
+// =============================================================================
+// Ledger L: Headers / FormData / AbortSignal / Request / Response
+// =============================================================================
+/// Case-insensitive header collection (Fetch `Headers`). Names are matched
+/// case-insensitively; `get` returns "" for a missing name.
+class Headers {
+public:
+    Headers() = default;
+    explicit Headers(const StringMap& map);
+    explicit Headers(std::vector<std::pair<std::string, std::string>> pairs);
+    std::string get(const std::string& name) const;
+    bool has(const std::string& name) const;
+    void set(const std::string& name, const std::string& value);
+    void append(const std::string& name, const std::string& value);
+    void remove(const std::string& name);  // JS `delete`
+    StringMap toMap() const;
+    const std::vector<std::pair<std::string, std::string>>& entries() const { return entries_; }
+private:
+    std::vector<std::pair<std::string, std::string>> entries_;
+};
+
+/// Multipart form fields (Fetch `FormData`). Values are text/bytes; files are
+/// out of scope (no Blob/File surface).
+class FormData {
+public:
+    FormData() = default;
+    void append(const std::string& name, const std::string& value);
+    void append(const std::string& name, const buffer::Buffer& value);
+    std::string get(const std::string& name) const;
+    bool has(const std::string& name) const;
+    void set(const std::string& name, const std::string& value);
+    void remove(const std::string& name);  // JS `delete`
+    std::string encode(const std::string& boundary) const;
+    const std::vector<std::pair<std::string, std::string>>& entries() const { return entries_; }
+private:
+    std::vector<std::pair<std::string, std::string>> entries_;
+};
+
+/// `AbortSignal.timeout(ms)`: carries the timeout a `fetch` should apply.
+/// The fetch transport already has a libuv timeout, so the signal timeout is
+/// honoured through it; `aborted` flips only when fetch rejects on timeout
+/// (the shared signal object is not mutated after fetch returns).
+class AbortSignal {
+public:
+    AbortSignal() = default;
+    static AbortSignal timeout(double ms) {
+        AbortSignal s; s.timeoutMs = ms; return s;
+    }
+    bool aborted = false;
+    double timeoutMs = 0.0;
+};
+
+/// Encodes `form` as multipart/form-data into `init.body`, sets its
+/// Content-Type header and returns the init (fetch `body: FormData`).
+FetchInit withFormData(FetchInit init, const FormData& form);
+
+struct CorsOptions {
+    std::string origin = "*";
+    std::string methods = "GET,POST,PUT,PATCH,DELETE,OPTIONS";
+    std::string headers;
+    bool credentials = false;
+    double maxAge = 0.0;
+};
+
+struct RequestInit {
+    std::string method = "GET";
+    std::string body;
+    bool hasBody = false;
+    StringMap headers;
+    std::shared_ptr<Headers> headersObj;
+    std::shared_ptr<FormData> form;
+    std::shared_ptr<AbortSignal> signal;
+};
+
+/// Fetch `Request`: `new Request(url, init?)`, usable as `fetch(request)`.
+class Request {
+public:
+    Request() = default;
+    explicit Request(std::string url);
+    Request(std::string url, RequestInit init);
+    std::string url;
+    std::string method = "GET";
+    Headers headers;
+    std::string body;
+    bool hasBody = false;
+    std::shared_ptr<FormData> form;
+    std::shared_ptr<AbortSignal> signal;
+    Promise<std::string> text() const { return Promise<std::string>::resolve(body); }
+    Promise<buffer::Buffer> arrayBuffer() const { return Promise<buffer::Buffer>::resolve(buffer::from(body)); }
+    template <class T>
+    Promise<T> json() const {
+        if constexpr (std::is_same_v<T, std::string>) {
+            return Promise<std::string>::resolve(detail::jsonString(body));
+        } else if constexpr (std::is_same_v<T, double>) {
+            return Promise<double>::resolve(detail::jsonNumber(body));
+        } else if constexpr (std::is_same_v<T, bool>) {
+            return Promise<bool>::resolve(detail::jsonBool(body));
+        } else {
+            static_assert(sizeof(T) == 0, "std/network: json<T>() supports number, string and boolean");
+        }
+    }
+    template <class T, class F>
+    Promise<T> json(F build) const {
+        return Promise<T>::resolve(::cp3::runtime::json::parseRecord(body, build));
+    }
+};
+
+/// Fetch `Response`: `new Response(body?, init?)` for constructing a response
+/// value (e.g. a fetch fallback); `fetch` itself still returns FetchResponse.
+class Response {
+public:
+    Response() = default;
+    explicit Response(std::string body);
+    Response(std::string body, double status, Headers headers);
+    bool ok = false;
+    std::uint16_t status = 200;
+    std::string statusText;
+    Headers headers;
+    std::string url;
+    std::string body;
+    Promise<std::string> text() const { return Promise<std::string>::resolve(body); }
+    Promise<buffer::Buffer> arrayBuffer() const { return Promise<buffer::Buffer>::resolve(buffer::from(body)); }
+    template <class T>
+    Promise<T> json() const {
+        if constexpr (std::is_same_v<T, std::string>) {
+            return Promise<std::string>::resolve(detail::jsonString(body));
+        } else if constexpr (std::is_same_v<T, double>) {
+            return Promise<double>::resolve(detail::jsonNumber(body));
+        } else if constexpr (std::is_same_v<T, bool>) {
+            return Promise<bool>::resolve(detail::jsonBool(body));
+        } else {
+            static_assert(sizeof(T) == 0, "std/network: json<T>() supports number, string and boolean");
+        }
+    }
+    template <class T, class F>
+    Promise<T> json(F build) const {
+        return Promise<T>::resolve(::cp3::runtime::json::parseRecord(body, build));
+    }
+};
+
+/// `fetch(request)`: the Request's url/method/headers/body/form/signal drive
+/// the same transport as `fetch(url, init)`.
+Promise<FetchResponse> fetch(const Request& request);
+
+// =============================================================================
+// Ledger L: Express-style middleware factories (for `app.use(...)`)
+// =============================================================================
+using MiddlewareFn = detail::RouteFn;
+/// Serves regular files under `dir` for GET/HEAD requests whose path maps to
+/// an existing file (traversal outside `dir` is refused); other requests
+/// continue the chain with `next()`.
+MiddlewareFn makeStaticMiddleware(std::string dir);
+/// Sets CORS response headers; answers OPTIONS preflights without `next()`.
+MiddlewareFn makeCorsMiddleware(CorsOptions options = CorsOptions());
+/// Rejects with 413 when the buffered request body exceeds `limit` bytes.
+MiddlewareFn makeBodyLimitMiddleware(double limit);
 
 }  // namespace cp3::runtime::network

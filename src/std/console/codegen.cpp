@@ -13,6 +13,7 @@
 //   readKey     -> ::cp3::runtime::console::readKey()
 //   on/off      -> ::cp3::runtime::console::on/off(event, listener)
 //   hide/show   -> ::cp3::runtime::console::hide()/show()
+//   time/timeEnd-> ::cp3::runtime::console::time/timeEnd(label)
 //
 // Every argument is rendered through tsCall; an object literal is the one
 // exception (D49: `console.log({ a: 1 })` -> `{ a: 1 }`), emitted as an
@@ -96,7 +97,17 @@ std::string Generator::emitConsoleCall(const CallExpr& c, const MemberExpr& m) {
         needsConsoleAbi_ = true;
         return std::string(kConsoleNs) + "groupEnd()";
     }
-    if (prop == "count" || prop == "countReset") {
+    if (prop == "count" || prop == "countReset" || prop == "time" ||
+        prop == "timeEnd") {
+        needsConsoleAbi_ = true;
+        std::string label = "\"default\"";
+        if (!c.arguments.empty() && c.arguments.front() &&
+            c.arguments.front()->kind != NodeKind::SpreadElement) {
+            label = tsCall(*c.arguments.front());
+        }
+        return std::string(kConsoleNs) + prop + "(" + label + ")";
+    }
+    if (prop == "time" || prop == "timeEnd") {
         needsConsoleAbi_ = true;
         std::string label = "\"default\"";
         if (!c.arguments.empty() && c.arguments.front() &&

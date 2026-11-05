@@ -1,5 +1,5 @@
 import console from "std/console";
-function copy(src: unknown): void {
+function copy(src: object): undefined {
   let arr = Array.from(src);
   console.log("x");
 }

@@ -1,5 +1,5 @@
 import console from "std/console";
-function setVal(o: { n: number }): void {
+function setVal(o: { n: number }): undefined {
   o.n = 9;
 }
 let a = { n: 1 };

@@ -42,6 +42,9 @@ inline constexpr const char* kInvalidAssignmentTarget = "CP3204";
 inline constexpr const char* kInvalidStatement  = "CP3205";
 inline constexpr const char* kExpectedDeclaration = "CP3206";
 inline constexpr const char* kMissingSemicolon  = "CP3207";
+// Ledger K (docs/design/remove-void-unknown.md): `JSON.parse` without an
+// explicit type argument. Interim parser-side check.
+inline constexpr const char* kJsonParseMissingTypeArgument = "CP3208";
 
 // --- name resolution (sema) ---------------------------------------------------
 inline constexpr const char* kUndefinedIdentifier = "CP3301";
@@ -71,6 +74,11 @@ inline constexpr const char* kNoMatchingOverload = "CP3416";
 inline constexpr const char* kTypeArgsOnNonGeneric = "CP3417";
 // The console event name is outside the documented set (D75).
 inline constexpr const char* kInvalidArgumentValue = "CP3419";
+// Ledger K (docs/design/remove-void-unknown.md): the retired annotation
+// spellings. Any annotation position counts (variables, params, returns,
+// aliases, type args); internal sentinels are unaffected.
+inline constexpr const char* kVoidTypeBanned    = "CP3420";
+inline constexpr const char* kUnknownTypeBanned = "CP3421";
 // A generic class instantiation without the explicit type arguments (D25).
 inline constexpr const char* kInvalidTypeArgument = "CP3418";
 

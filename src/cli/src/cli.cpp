@@ -45,12 +45,13 @@ void printUsage(std::FILE* out) {
         "  build [file.cp3]   Transpile + link, or pack (\"type\": \"package\")\n"
         "  check <file.cp3>   Frontend only: parse + type-check (no C++ generation)\n"
         "  dev [file.cp3]     Watch, build and restart on save (--once for one run)\n"
+        "  test [file.cp3...] Discover and run test files (packages included)\n"
         "  fmt <file.cp3>     Zero-config formatter\n"
         "  clean              Remove .cp3/build and .cp3/out; keeps .cp3/native\n"
         "                     (--all also clears .cp3/packages and .cp3/native)\n"
         "  init [dir]         Scaffold a new project (package.json + src/index.cp3)\n"
         "  toolchain          Choose the Clang compiler (list/detect/use/clear)\n"
-        "  install [src]      Install a local .cp3pak/dir or GitHub release\n"
+        "  install [src]      Install a local .cp3pak/dir (dirs compile) or GitHub release\n"
         "  publish [dir]      Build a package and report/copy the .cp3pak (no registry)\n"
         "  recompile <pak>    Add this platform's cached binary to a .cp3pak\n"
         "  link <path>        Link a local package directory or .cp3pak\n"
@@ -116,9 +117,10 @@ bool startsWithDash(std::string_view s) { return !s.empty() && s[0] == '-'; }
 
 bool isBuiltinCommand(const std::string& command) {
     return command == "run" || command == "build" || command == "check" ||
-           command == "dev" || command == "fmt" || command == "clean" ||
-           command == "init" || command == "exec" || command == "install" ||
-           command == "publish" || command == "link" || command == "unlink" ||
+           command == "dev" || command == "test" || command == "fmt" ||
+           command == "clean" || command == "init" || command == "exec" ||
+           command == "install" || command == "publish" ||
+           command == "link" || command == "unlink" ||
            command == "recompile" || command == "editor-plugin" ||
            command == "editor-plugins" || command == "lsp" || command == "dap" ||
            command == "toolchain" || command == "native-install" ||
@@ -293,6 +295,10 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
             opt.file = cp3::cli::defaultEntryFile();
         }
         return cp3::cli::cmdDev(opt);
+    }
+    if (command == "test") {
+        opt.testMode = true;
+        return cp3::cli::cmdTest(opt);
     }
     if (command == "fmt") {
         return cp3::cli::cmdFmt(opt);

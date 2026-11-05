@@ -1,0 +1,17 @@
+import console from "std/console";
+import { LRUCache } from "std/collections";
+
+// Inserting past capacity evicts the least recently used entry.
+const c = new LRUCache<string, number>(2);
+console.log(`${c.capacity}`);
+console.log(`${c.size}`);
+c.set("a", 1);
+c.set("b", 2);
+c.set("c", 3);
+console.log(`${c.size}`);
+console.log(c.has("a"));
+console.log(c.has("b"));
+console.log(c.has("c"));
+console.log(`${c.get("c")}`);
+console.log(c.delete("b"));
+console.log(`${c.size}`);

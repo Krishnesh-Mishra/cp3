@@ -26,6 +26,13 @@ namespace cp3::cli {
 // produce a `.cp3pak` without it.
 bool hasDefaultExport(const Program& program);
 
+// True when the module carries any usable package export surface: a default
+// export, an `export <declaration>` (e.g. `export class Counter`), or a
+// non-empty `export { ... }` list (including re-exports). A package entry may
+// export classes through named exports without an object-literal default
+// export; the pack/install validation accepts either form.
+bool hasPackageExportSurface(const Program& program);
+
 // Rewrites `file`'s module down to declarations: function signatures keep
 // their parameters and return type with the body dropped, class method and
 // constructor bodies are elided, and top-level statements that are not

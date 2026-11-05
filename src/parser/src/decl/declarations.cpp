@@ -157,8 +157,15 @@ StmtPtr ParserImpl::parseInterfaceDeclaration(bool isExported) {
 
 StmtPtr ParserImpl::parseEnumDeclaration(bool isExported) {
     const Token start = peek();
-    (void)expect(TokenKind::KwEnum, "expected 'enum'");
     auto en = std::make_unique<EnumDeclaration>(start.span);
+    // `const enum Color { ... }`: an optional `const` modifier. Its members
+    // are compile-time constants (sema resolves their values and the numeric
+    // reverse map; codegen inlines them - see cp3/core/utility_types.hpp).
+    if (check(TokenKind::KwConst)) {
+        en->isConst = true;
+        (void)advance();
+    }
+    (void)expect(TokenKind::KwEnum, "expected 'enum'");
     en->isExported = isExported;
     en->name = expectName("an enum name");
     (void)expect(TokenKind::LBrace, "expected '{' to open enum body");

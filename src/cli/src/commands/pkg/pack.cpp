@@ -91,10 +91,16 @@ bool appendBuildFiles(const JsonValue& manifest, const fs::path& projectRoot,
 // Refuses the properties of a package build this build cannot honor.
 // Returns kExitSuccess when packing may proceed.
 int checkPackManifest(const std::string& entryText, const Program& program) {
-    if (!hasDefaultExport(program)) {
+    // A package may surface its API through a default export
+    // (`export default { ... }`, `export default Counter`) or through named
+    // exports (`export class Counter`, `export { Counter }`); either form
+    // packs cleanly because the generated `index.cp3` carries both the
+    // verbatim default export and the named class exports.
+    if (!hasPackageExportSurface(program)) {
         std::fprintf(stderr,
                      "cp3c: %s: 'type: package' projects need an "
-                     "`export default { ... }` in the entry file (CLI-README "
+                     "`export default { ... }`, `export class <Name>` or an "
+                     "`export { ... }` in the entry file (CLI-README "
                      "§5.2); no .cp3pak was produced\n",
                      entryText.c_str());
         return kExitCompileError;

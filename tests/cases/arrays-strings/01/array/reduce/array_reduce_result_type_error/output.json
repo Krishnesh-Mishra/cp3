@@ -1,10 +1,10 @@
 {
-  "mode": "run",
+  "mode": "check",
   "stdout": "",
   "exitCode": 1,
   "error": {
-    "code": "CP3401",
-    "line": 5,
-    "contains": "the result of reduce() has no C++ spelling"
+    "code": "CP3421",
+    "line": 4,
+    "contains": "unknown"
   }
 }

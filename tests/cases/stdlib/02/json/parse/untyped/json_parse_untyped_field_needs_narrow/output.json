@@ -3,9 +3,8 @@
   "stdout": "",
   "exitCode": 1,
   "error": {
-    "code": "CP3xxxx",
-    "line": 4,
-    "col": 1,
-    "contains": "unknown"
+    "code": "CP3208",
+    "line": 3,
+    "contains": "JSON.parse"
   }
 }

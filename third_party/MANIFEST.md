@@ -318,6 +318,67 @@ Notes:
 6. See also: build/scratch/vend/WAVE-VEND-REPORT.md for the full wave report,
    issues and handoff.
 
+## Ledger F — internal-only libraries (PLANNED, not yet vendored)
+
+> Status: inventory only. Nothing in this section has been downloaded,
+> built, or delivered. No `VERSION.txt`, archive, or include tree exists
+> under `third_party/` for any library below. Do not treat these rows as
+> pins: SHA/tag must be chosen and verified by the lead at vendoring time
+> (record it here + in the per-vendor `VERSION.txt` then, following the
+> format of the five rows above). Wiring snippets are for the lead to
+> land in `src/**` CMake / `native.hpp` files — this section deliberately
+> does not edit them. Detail: `docs/design/internal-libs.md`.
+
+| library | upstream (candidate) | kind | internal hot path (current stand-in) | status |
+| --- | --- | --- | --- | --- |
+| ankerl::unordered_dense | https://github.com/ankerl/unordered_dense | header-only (MIT) | `std/collections` Map/Set (`std::unordered_map`), `std/io` fd table | MISSING |
+| fast_float | https://github.com/fast_float/fast_float | header-only (Apache-2.0) | `std/json` (`strtod`), `std/env`/`std/url` number parse, typed-arrays `strtod` | MISSING |
+| simdutf | https://github.com/simdutf/simdutf | compiled static (Apache-2.0) | `std/text` hand-validated `decode`, `std/string` `charAt` O(n) code-point scan | MISSING |
+| miniz | https://github.com/richgel999/miniz | compiled/ amalgamated (MIT) | `std/compress` (does not exist yet); uWS deflate off (`UWS_NO_ZLIB`) | MISSING |
+| moodycamel concurrentqueue | https://github.com/cameron314/concurrentqueue | header-only (BSD-2-Clause) | `Channel` (does not exist yet); `std/log` synchronous `std::cout` sink | MISSING |
+| Boost.Lockfree | https://github.com/boostorg/lockfree (Boost 1.8x) | header-only (Boost-1.0) | same as above — alternative/complement to moodycamel; pick ONE queue first | MISSING |
+| fmt | https://github.com/fmtlib/fmt | compiled or header-only macro (MIT) | `std/log` hand-written `renderValue`; `console.*` formatting | MISSING |
+| XXHash (XXH32/64) | https://github.com/Cyan4973/xxHash | compiled static (BSD-2-Clause) | `std/hash` `xxhash64` BLOCKED (explicit in `hash.hpp`/`sema.cpp`); CRC32/CRC32C hand-written tables already OK | MISSING (xxhash64) |
+| wyhash / XXH3 | wyhash: `wangyi-fudan/wyhash` (single-file, see Limitations); XXH3 via XXHash above | header-only / compiled | Map/Set bucket hash (`collections.hpp` `KeyHash` -> `std::hash`) | MISSING |
+| CRC32C (vendored) | https://github.com/google/crc32c | compiled static (BSD-3-Clause) | OPTIONAL upgrade: current table-driven `crc32c` in `hash.hpp` is correct; vendor only for HW-accel at scale | NOT NEEDED (hand-rolled present) |
+| libsodium seed / CSPRNG | already vendored (see Pins) | compiled static (ISC) | `std/crypto` `randombytes_buf`/`sodium_init` — PRESENT, nothing to add | PRESENT |
+
+### Wiring notes for the lead (do not land until vendored)
+
+Header-only (include dir only, no archive):
+
+```cmake
+# cp3_runtime (src/runtime/CMakeLists.txt), PRIVATE
+target_include_directories(cp3_runtime PRIVATE
+    "../../third_party/unordered_dense/include"   # ankerl::unordered_dense
+    "../../third_party/fast_float/include"        # fast_float (fast_float.h)
+    "../../third_party/concurrentqueue/include"   # moodycamel OR boost lockfree, not both yet
+    # "../../third_party/boost/include"           # if Boost.Lockfree chosen instead
+    "../../third_party/wyhash/include"            # if wyhash chosen for bucket hash
+)
+```
+
+Compiled static (archive per-triple like libsodium/libuv, `native.hpp` row):
+
+```
+fmt:        -I third_party/fmt/include                  -L third_party/fmt/lib/<triple> -lfmt
+            (or -DFMT_HEADER_ONLY, fmt/include only — decide once; header-only inflates TU count)
+simdutf:    -I third_party/simdutf/include              -L third_party/simdutf/lib/<triple> -lsimdutf
+miniz:      -I third_party/miniz/include                -L third_party/miniz/lib/<triple> -lminiz
+xxhash:     -I third_party/xxhash/include               -L third_party/xxhash/lib/<triple> -lxxhash
+crc32c:     (only if HW-accel wanted) -I third_party/crc32c/include -L third_party/crc32c/lib/<triple> -lcrc32c
+```
+
+Per-family first consumers (after vendoring): unordered_dense ->
+`src/std/collections/include/cp3/std/collections.hpp` Map/Set index;
+fast_float -> `src/std/json/include/cp3/std/json_parse.hpp` number parse
+(then env/url); simdutf -> `src/std/text` decode + `std/string` charAt;
+fmt -> `src/std/log/include/cp3/std/log.hpp` render + console;
+xxhash/wyhash -> `collections.hpp` KeyHash and unblock `std/hash` xxhash64;
+miniz -> new `src/std/compress/**` (family does not exist yet);
+moodycamel/Boost.Lockfree -> new Channel + async log sink (neither exists yet).
+libsodium: no change.
+
 ## Reproducing
 
 Run third_party/build.ps1. It clones the pinned sources into

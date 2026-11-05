@@ -20,30 +20,80 @@
 namespace cp3::runtime::network::detail {
 namespace {
 
-/// `*` and `/*` match any path; `:name` segments swallow one path segment and
-/// record the captured value under `name` (used by the `req.params` Map).
+/// Match `pattern` against `path` segment by segment (ledger H wildcards):
+///   * literal segments must be byte-equal;
+///   * `:name` segments swallow one path segment and record it under `name`
+///     (used by the `req.params` Map);
+///   * a `*` segment (a whole segment exactly "*") is a wildcard: as the LAST
+///     segment it swallows the remainder of the path (any number of segments,
+///     slashes included), and mid-pattern it swallows exactly one segment.
+///     The swallowed text is recorded under the capture name "*" (a repeated
+///     wildcard overwrites). A trailing `/*` needs the `/` in the path, so
+///     `/files/*` matches `/files/a/b` but not bare `/files` (Express rule).
+///   * `*` and `/*` as the whole pattern match any path; a `*` inside a
+///     larger segment is NOT a wildcard (it compares literally).
 bool pathMatches(const std::string& pattern, const std::string& path,
                  std::vector<std::pair<std::string, std::string>>* params) {
     if (pattern == "*" || pattern == "/*") return true;
+    // Split both on '/', keeping empty segments (leading '/' -> first "",
+    // trailing '/' -> last ""), so "//" and trailing slashes compare exactly.
+    auto split = [](const std::string& s) {
+        std::vector<std::string> parts;
+        std::size_t start = 0;
+        for (;;) {
+            const std::size_t slash = s.find('/', start);
+            if (slash == std::string::npos) {
+                parts.push_back(s.substr(start));
+                return parts;
+            }
+            parts.push_back(s.substr(start, slash - start));
+            start = slash + 1;
+        }
+    };
+    const std::vector<std::string> pSegs = split(pattern);
+    const std::vector<std::string> sSegs = split(path);
     std::size_t pi = 0;
     std::size_t si = 0;
-    while (pi < pattern.size() && si < path.size()) {
-        if (pattern[pi] == ':') {
-            const std::size_t nameStart = ++pi;
-            while (pi < pattern.size() && pattern[pi] != '/') ++pi;
-            const std::size_t valueStart = si;
-            while (si < path.size() && path[si] != '/') ++si;
-            if (params != nullptr) {
-                params->emplace_back(pattern.substr(nameStart, pi - nameStart),
-                                     path.substr(valueStart, si - valueStart));
+    while (pi < pSegs.size()) {
+        const std::string& seg = pSegs[pi];
+        const bool last = pi + 1 == pSegs.size();
+        if (seg == "*") {
+            if (last) {
+                // Remainder (steps onto at least one remaining segment).
+                if (si >= sSegs.size()) return false;
+                if (params != nullptr) {
+                    std::string rest = sSegs[si];
+                    for (std::size_t k = si + 1; k < sSegs.size(); ++k) {
+                        rest += "/";
+                        rest += sSegs[k];
+                    }
+                    params->emplace_back("*", rest);
+                }
+                return true;
             }
+            // Mid-pattern: exactly one segment.
+            if (si >= sSegs.size()) return false;
+            if (params != nullptr) {
+                params->emplace_back("*", sSegs[si]);
+            }
+            ++pi;
+            ++si;
             continue;
         }
-        if (pattern[pi] != path[si]) return false;
+        if (si >= sSegs.size()) return false;
+        if (!seg.empty() && seg.front() == ':') {
+            if (params != nullptr) {
+                params->emplace_back(seg.substr(1), sSegs[si]);
+            }
+            ++pi;
+            ++si;
+            continue;
+        }
+        if (seg != sSegs[si]) return false;
         ++pi;
         ++si;
     }
-    return pi == pattern.size() && si == path.size();
+    return si == sSegs.size();
 }
 
 void runChain(const std::shared_ptr<PendingRequest>& pending);
@@ -71,6 +121,32 @@ void failRequest(RequestContext& ctx) {
     }
 }
 
+/// Ledger L (appended): route a failure through `app.onError(...)` when one
+/// is registered and nothing was sent yet; otherwise the default 500.
+void failRequestWithError(const std::shared_ptr<PendingRequest>& pending, Thrown err) {
+    RequestContext& ctx = pending->context;
+    if (ctx.done) return;
+    if (ctx.response.sent() || ctx.server == nullptr || !ctx.server->errorHandler) {
+        failRequest(ctx);
+        return;
+    }
+    ctx.done = true;
+    try {
+        Promise<void> promise = ctx.server->errorHandler(err, ctx.request, ctx.response);
+        if (!promise.settled()) {
+            promise.then([] {}, [pending](Thrown) {
+                if (!pending->context.response.sent()) {
+                    pending->context.response.status(500).text("internal server error");
+                }
+            });
+        } else if (promise.rejected()) {
+            throw promise.reason();
+        }
+    } catch (...) {
+        if (!ctx.response.sent()) ctx.response.status(500).text("internal server error");
+    }
+}
+
 /// Keep the request alive until `promise` settles, then resume the chain.
 void observeHandler(const std::shared_ptr<PendingRequest>& pending,
                     Promise<void> promise) {
@@ -80,9 +156,9 @@ void observeHandler(const std::shared_ptr<PendingRequest>& pending,
             if (pending->context.pending != 0) --pending->context.pending;
             continueChain(pending);
         },
-        [pending](Thrown) {
+        [pending](Thrown err) {
             if (pending->context.pending != 0) --pending->context.pending;
-            failRequest(pending->context);
+            failRequestWithError(pending, err);
         });
 }
 
@@ -93,7 +169,7 @@ void continueChain(const std::shared_ptr<PendingRequest>& pending) {
         runChain(pending);
         finishChain(ctx);
     } catch (...) {
-        failRequest(ctx);
+        failRequestWithError(pending, Thrown::make("internal server error"));
     }
 }
 

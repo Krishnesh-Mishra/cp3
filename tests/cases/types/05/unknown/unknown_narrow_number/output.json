@@ -1,5 +1,10 @@
 {
-  "mode": "run",
-  "stdout": "6\n",
-  "exitCode": 0
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3421",
+    "line": 2,
+    "contains": "unknown"
+  }
 }

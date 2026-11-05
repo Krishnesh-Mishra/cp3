@@ -252,11 +252,22 @@ std::string Generator::typedMethodCallText(const CallExpr& c,
     needsTypedArray_ = true;
     std::string out = "::cp3::runtime::" + std::string(fn) + "<" + t + ">(" +
                       recv;
+    // Relative-index parameters keep the runtime's `double` JS semantics
+    // (truncate/NaN/negative-from-end): a Rust/C++ project's signed-index
+    // argument converts there; a TypeScript project's `number` already is
+    // that `double`. No cast is emitted (a cast would lose the JS rules).
     for (const auto& arg : c.arguments) {
         out += ", ";
         out += arg ? expr(*arg) : "0.0";
     }
-    return out + ")";
+    out += ")";
+    // `indexOf` returns the exact signed-index width; a TypeScript project
+    // keeps `number`, so the read widens there.
+    if (prop == "indexOf" &&
+        options_.typeSystem == TypeSystem::TypeScript) {
+        return "static_cast<double>(" + out + ")";
+    }
+    return out;
 }
 
 // The DataView `get*`/`set*` surface; the runtime keeps the big-endian
@@ -348,7 +359,12 @@ std::string Generator::emitFamilyMember(const MemberExpr& m) {
             const FamilyClass* fc = familyClass(name);
             if (fc != nullptr && fc->bytes > 0) {
                 needsTypedArray_ = true;
-                return "static_cast<double>(" + std::to_string(fc->bytes) + ")";
+                // The std count width; a TypeScript project keeps `number`.
+                if (options_.typeSystem == TypeSystem::TypeScript) {
+                    return "static_cast<double>(" + std::to_string(fc->bytes) +
+                           ")";
+                }
+                return std::to_string(fc->bytes);
             }
         }
     }
@@ -367,7 +383,16 @@ std::string Generator::emitFamilyMember(const MemberExpr& m) {
         }
         if (recv.kind == TypeKind::Class && familyTag(recv.name) != nullptr) {
             needsTypedArray_ = true;
-            return "static_cast<double>((" + expr(*m.object) + ")->length)";
+            // The exact std length width (`usize`/`size_t`); a TypeScript
+            // project keeps `number`, so the read widens there. (The
+            // regular-array and parallel-run branches above stay `double`:
+            // their typing is not this family's.)
+            const std::string read =
+                "((" + expr(*m.object) + ")->length)";
+            if (options_.typeSystem == TypeSystem::TypeScript) {
+                return "static_cast<double>(" + read + ")";
+            }
+            return read;
         }
         return std::string();
     }
@@ -376,22 +401,28 @@ std::string Generator::emitFamilyMember(const MemberExpr& m) {
     const bool isBuffer =
         recv.name == "ArrayBuffer" || recv.name == "SharedArrayBuffer";
     const bool isDataView = recv.name == "DataView";
+    // The exact std length/index widths; a TypeScript project widens here.
+    auto readWidth = [this](const std::string& read) {
+        if (options_.typeSystem == TypeSystem::TypeScript) {
+            return "static_cast<double>(" + read + ")";
+        }
+        return read;
+    };
     if (m.property == "byteLength") {
         if (isView || isBuffer) {
             needsTypedArray_ = true;
-            return "static_cast<double>((" + expr(*m.object) +
-                   ")->byteLength())";
+            return readWidth("((" + expr(*m.object) + ")->byteLength())");
         }
         if (isDataView) {
             needsTypedArray_ = true;
-            return "static_cast<double>((" + expr(*m.object) + ")->byteLength)";
+            return readWidth("((" + expr(*m.object) + ")->byteLength)");
         }
         return std::string();
     }
     if (m.property == "byteOffset") {
         if (isView || isDataView) {
             needsTypedArray_ = true;
-            return "static_cast<double>((" + expr(*m.object) + ")->byteOffset)";
+            return readWidth("((" + expr(*m.object) + ")->byteOffset)");
         }
         return std::string();
     }
@@ -488,10 +519,16 @@ std::string Generator::emitFamilyIndexRead(const IndexExpr& ix) {
                ", " + idxText + ")";
     }
     if (ot.kind == TypeKind::String) {
-        // Docs 09: the raw UTF-8 byte at a byte position, as a number.
+        // Docs 09: the raw UTF-8 byte at a byte position. The runtime
+        // returns the exact std byte-value width (`u8`); a TypeScript
+        // project keeps `number`, so the read widens there.
         needsString_ = true;
-        return "::cp3::runtime::strings::byteAt(" + expr(*ix.object) + ", " +
-               idxText + ")";
+        const std::string read = "::cp3::runtime::strings::byteAt(" +
+                                 expr(*ix.object) + ", " + idxText + ")";
+        if (options_.typeSystem == TypeSystem::TypeScript) {
+            return "static_cast<double>(" + read + ")";
+        }
+        return read;
     }
     return std::string();
 }

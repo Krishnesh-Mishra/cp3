@@ -6,7 +6,7 @@ const event: string = "line";
 
 // The registration is compiled but never run (a live listener would wait for
 // stdin); the call itself must lower.
-function register(): void {
+function register(): undefined {
     console.on(event, (line) => console.log("line:", line));
     console.off(event, (line) => console.log("line:", line));
 }

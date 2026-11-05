@@ -43,6 +43,7 @@
 // =============================================================================
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -56,7 +57,14 @@ std::string randomUuid();
 /// raw-byte string; codegen wraps the result into the nominal `Buffer`
 /// (`::cp3::runtime::buffer::from`). Throws a catchable value when `length`
 /// is negative, fractional or above 2^31 - 1.
+///
+/// The `double` form is the TypeScript project's entry point: codegen passes
+/// the `number` argument through unchanged so the fractional/negative
+/// validation below still fires. The exact-width form takes the std length
+/// width (`usize`/`size_t`, canonical `u64`); a Rust/C++ project's argument
+/// is already that width, so only the 2^31 - 1 cap remains to check.
 std::string randomBytes(double length);
+std::string randomBytes(std::uint64_t length);
 
 /// `crypto.sha256(data)`: the lowercase hex SHA-256 digest (64 characters).
 std::string sha256(std::string_view data);
@@ -72,5 +80,63 @@ std::string aes256Encrypt(const std::string& key, const std::string& data);
 /// Throws a catchable value when the payload is malformed or the auth tag
 /// does not verify (wrong key or tampered ciphertext).
 std::string aes256Decrypt(const std::string& key, const std::string& encrypted);
+
+// --- Ledger D extensions (append-only) ---------------------------------------
+// CODEGEN CONTRACT additions:
+//   crypto.hmacSha256(key, data)   -> ::cp3::runtime::crypto::hmacSha256
+//   crypto.hmacSha512(key, data)   -> ::cp3::runtime::crypto::hmacSha512
+//   crypto.blake2b(data)           -> ::cp3::runtime::crypto::blake2b
+//   crypto.getRandomValues(n)      -> ::cp3::runtime::crypto::getRandomValues
+//     (wrapped with ::cp3::runtime::buffer::from, like randomBytes)
+//   crypto.uuidParse(s)            -> ::cp3::runtime::crypto::uuidParse
+//     (wrapped with ::cp3::runtime::buffer::from)
+//   crypto.uuidValidate(s)         -> ::cp3::runtime::crypto::uuidValidate
+//   crypto.uuidVersion(s)          -> ::cp3::runtime::crypto::uuidVersion
+//   crypto.sha256Raw(data)         -> ::cp3::runtime::crypto::sha256Raw
+//     (wrapped with ::cp3::runtime::buffer::from)
+// A `string | Buffer` argument lowers to its byte view
+// (`::cp3::runtime::buffer::view`), as for sha256/sha512; the C++ surface
+// takes non-owning `std::string_view`s. Raw-byte results are `std::string`s
+// that codegen wraps into the nominal `Buffer`.
+
+/// `crypto.hmacSha256(key, data)`: lowercase hex HMAC-SHA-256 (64 chars).
+/// libsodium `crypto_auth_hmacsha256` (state API, so any key length works;
+/// the one-shot form would demand exactly 32 key bytes).
+std::string hmacSha256(std::string_view key, std::string_view data);
+
+/// `crypto.hmacSha512(key, data)`: lowercase hex HMAC-SHA-512 (128 chars).
+/// libsodium `crypto_auth_hmacsha512` (state API, any key length).
+std::string hmacSha512(std::string_view key, std::string_view data);
+
+/// `crypto.blake2b(data)`: lowercase hex BLAKE2b digest (64 chars).
+/// libsodium `crypto_generichash`, unkeyed, default 32-byte output.
+std::string blake2b(std::string_view data);
+
+/// `crypto.getRandomValues(length)`: `length` random bytes as a raw-byte
+/// string (codegen wraps it into the nominal `Buffer`). WebCrypto-inspired
+/// alias of `randomBytes`, backed by libsodium `randombytes_buf`; same
+/// size validation (non-negative integer below 2^31).
+std::string getRandomValues(double length);
+/// Exact-width form of `getRandomValues` (see `randomBytes` above).
+std::string getRandomValues(std::uint64_t length);
+
+/// `crypto.uuidParse(text)`: the 16 raw bytes of a canonical UUID string
+/// (8-4-4-4-12 hex, case-insensitive) as a raw-byte string; codegen wraps
+/// it into the nominal `Buffer`. Throws a catchable value on malformed input.
+std::string uuidParse(const std::string& text);
+
+/// `crypto.uuidValidate(text)`: true iff `text` is a canonical UUID string.
+/// Format only: the version/variant nibbles are not constrained, so any
+/// version (or a version nibble of 0) validates.
+bool uuidValidate(const std::string& text);
+
+/// `crypto.uuidVersion(text)`: the version nibble (0-15) of a canonical UUID
+/// string, or 0 when `text` is not a canonical UUID string.
+double uuidVersion(const std::string& text);
+
+/// `crypto.sha256Raw(data)`: the 32 raw SHA-256 digest bytes as a raw-byte
+/// string; codegen wraps it into the nominal `Buffer`. Same input and
+/// backend as `sha256`, without the hex encoding.
+std::string sha256Raw(std::string_view data);
 
 }  // namespace cp3::runtime::crypto

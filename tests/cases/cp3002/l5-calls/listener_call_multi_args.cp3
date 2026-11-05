@@ -1,7 +1,7 @@
 import console from "std/console";
 
 // A listener-typed value takes the erased values its call passes it.
-function fire(cb: (a: unknown, b: unknown) => void): void {
+function fire(cb: (a: object, b: object) => undefined): undefined {
   cb(1, 2);
 }
 

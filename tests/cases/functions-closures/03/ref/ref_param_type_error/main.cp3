@@ -1,2 +1,2 @@
-function addTen(ref x: number): void { x = x + 10; }
+function addTen(ref x: number): undefined { x = x + 10; }
 addTen("s");

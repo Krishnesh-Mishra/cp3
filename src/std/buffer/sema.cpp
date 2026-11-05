@@ -34,6 +34,7 @@
 #include <string>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/std_integer.hpp"
 
 namespace cp3 {
 
@@ -85,10 +86,13 @@ bool literalNumberValue(const Expr& e, double& out) {
 bool Analyzer::checkByteBufferEncoding(const Expr* arg) {
     if (arg == nullptr || arg->kind != NodeKind::StringLiteral) return true;
     const std::string& enc = static_cast<const StringLiteral&>(*arg).value;
-    if (enc == "utf8" || enc == "base64" || enc == "hex") return true;
+    // Ledger D extension: "base64url" (alias "base64Url") joins the D47 set.
+    if (enc == "utf8" || enc == "base64" || enc == "base64url" ||
+        enc == "base64Url" || enc == "hex") return true;
     report(diagcode::kTypeMismatch, arg->span,
            "type mismatch: encoding \"" + enc +
-               "\" is not supported (only \"utf8\", \"base64\" and \"hex\")");
+               "\" is not supported (only \"utf8\", \"base64\", \"base64url\" "
+               "and \"hex\")");
     return false;
 }
 
@@ -96,14 +100,20 @@ bool Analyzer::checkByteBufferEncoding(const Expr* arg) {
 // Members (member_check.cpp consults `byteBufferMember`)
 // -----------------------------------------------------------------------------
 Type Analyzer::byteBufferMember(const Type& recv, const std::string& prop) {
-    if (prop == "length") return Type::number();
+    // Width pattern: `length` is the std length width (`usize`/`size_t`,
+    // `number` in TypeScript); `slice` bounds are signed relative indices
+    // (JS counts negatives from the end, so an unsigned width cannot be used).
+    if (prop == "length") {
+        return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+    }
     if (prop == "toString") {
         return withOptionalTail(
             Type::function({Type::string()}, Type::string()));
     }
     if (prop == "slice") {
-        return withOptionalTail(
-            Type::function({Type::number(), Type::number()}, recv));
+        const Type idx =
+            stdIntegerType(StdIntegerKind::SignedIndex, options_.typeSystem);
+        return withOptionalTail(Type::function({idx, idx}, recv));
     }
     // A member outside the documented surface stays ambient here (the member
     // probe has no span to report against); codegen reports CP3305 at the use
@@ -130,7 +140,9 @@ bool Analyzer::tryInferBufferStaticCall(CallExpr& call, MemberExpr& m, Type& out
     sig.name = "Buffer." + m.property;
     sig.ret = byteBufferType();
     if (m.property == "alloc") {
-        sig.params = {Type::number()};
+        // The byte count is the std length width (see `length` above).
+        sig.params = {
+            stdIntegerType(StdIntegerKind::Length, options_.typeSystem)};
         sig.optional = {false};
     } else {
         sig.params = {Type::string(), Type::string()};
@@ -174,7 +186,9 @@ bool Analyzer::tryInferBufferCall(CallExpr& call, MemberExpr& m, Type& out) {
         sig.optional = {true};
         sig.ret = Type::string();
     } else if (m.property == "slice") {
-        sig.params = {Type::number(), Type::number()};
+        const Type idx =
+            stdIntegerType(StdIntegerKind::SignedIndex, options_.typeSystem);
+        sig.params = {idx, idx};
         sig.optional = {false, true};
         sig.ret = recv;
     } else {

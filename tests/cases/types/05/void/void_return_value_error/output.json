@@ -3,9 +3,8 @@
   "stdout": "",
   "exitCode": 1,
   "error": {
-    "code": "CP3402",
+    "code": "CP3420",
     "line": 2,
-    "col": 1,
     "contains": "void"
   }
 }

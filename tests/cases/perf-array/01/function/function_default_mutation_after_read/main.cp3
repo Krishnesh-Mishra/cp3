@@ -4,7 +4,7 @@ function bump(): string {
   words[0] = "zulu";
   return "x";
 }
-function run(v: string = bump()): void {
+function run(v: string = bump()): undefined {
   console.log(v);
 }
 {

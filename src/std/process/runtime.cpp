@@ -337,3 +337,439 @@ Promise<ExecResult> exec(const std::string& cmd,
 }
 
 }  // namespace cp3::runtime::process
+
+// =============================================================================
+// Lifecycle + stdin (ledger L, appended; see cp3/std/process.hpp).
+// =============================================================================
+#include <atomic>
+#include <csignal>
+#include <cstdlib>
+#include <deque>
+
+namespace cp3::runtime::process {
+
+namespace {
+
+// ---------------------------------------------------------------------------
+// Lifecycle registry. Registration happens on the caller (loop) thread; the
+// signal path snapshots under the mutex and invokes on the loop thread, so no
+// listener ever runs inside the OS signal handler itself.
+// ---------------------------------------------------------------------------
+struct LifecycleState {
+    std::mutex mutex;
+    std::vector<ExitListener> exit;
+    std::vector<std::pair<std::string, SignalListener>> signals;
+    std::vector<RejectionListener> rejections;
+    std::atomic<bool> hooksRan{false};
+    std::atomic<bool> exitArmed{false};
+    std::atomic<bool> signalsInstalled{false};
+    std::atomic<bool> handlingSignal{false};
+};
+
+LifecycleState& lifecycle() {
+    // Leaked on purpose: static-destructor order must never matter - the
+    // atexit handler can run after every other static is gone.
+    static LifecycleState* state = new LifecycleState();
+    return *state;
+}
+
+std::vector<ExitListener> snapshotExit() {
+    std::lock_guard<std::mutex> lock(lifecycle().mutex);
+    return lifecycle().exit;
+}
+
+void armExitHook() {
+    LifecycleState& st = lifecycle();
+    bool expected = false;
+    if (st.exitArmed.compare_exchange_strong(expected, true)) {
+        std::atexit([]() { runExitHooks(exitCode()); });
+    }
+}
+
+void onOsSignal(int sig) {
+    const char* name = sig == SIGINT ? "SIGINT" : "SIGTERM";
+    const std::int32_t code = sig == SIGINT ? 130 : 143;
+    // Async-signal-safety: only atomic stores + the loop's thread-safe post
+    // (mutex + condition variable). No allocation, no listener invocation.
+    LifecycleState& st = lifecycle();
+    bool expected = false;
+    if (!st.handlingSignal.compare_exchange_strong(expected, true)) return;
+    // Capture state by reference: the registry is process-lifetime.
+    try {
+        currentLoop().postFromThread([name, code]() {
+            handleSignal(name, code);
+        });
+    } catch (...) {
+        st.handlingSignal.store(false);
+    }
+}
+
+}  // namespace
+
+void addExitListener(ExitListener listener) {
+    armExitHook();
+    std::lock_guard<std::mutex> lock(lifecycle().mutex);
+    lifecycle().exit.push_back(std::move(listener));
+}
+
+void addShutdownHook(ExitListener listener) { addExitListener(std::move(listener)); }
+
+void addSignalListener(const std::string& signal, SignalListener listener) {
+    installSignalHandlers();
+    armExitHook();
+    std::lock_guard<std::mutex> lock(lifecycle().mutex);
+    lifecycle().signals.emplace_back(signal, std::move(listener));
+}
+
+void addRejectionListener(RejectionListener listener) {
+    std::lock_guard<std::mutex> lock(lifecycle().mutex);
+    lifecycle().rejections.push_back(std::move(listener));
+}
+
+bool exitHooksRan() { return lifecycle().hooksRan.load(); }
+
+void runExitHooks(std::int32_t code) {
+    LifecycleState& st = lifecycle();
+    bool expected = false;
+    if (!st.hooksRan.compare_exchange_strong(expected, true)) return;
+    for (auto& hook : snapshotExit()) {
+        try {
+            hook(code);
+        } catch (...) {
+            // A throwing hook must not stop the remaining hooks or the exit.
+        }
+    }
+}
+
+void installSignalHandlers() {
+    LifecycleState& st = lifecycle();
+    bool expected = false;
+    if (!st.signalsInstalled.compare_exchange_strong(expected, true)) return;
+    std::signal(SIGINT, onOsSignal);
+    std::signal(SIGTERM, onOsSignal);
+}
+
+void handleSignal(const std::string& signal, std::int32_t code) {
+    LifecycleState& st = lifecycle();
+    std::vector<SignalListener> handlers;
+    {
+        std::lock_guard<std::mutex> lock(st.mutex);
+        for (auto& entry : st.signals) {
+            if (entry.first == signal) handlers.push_back(entry.second);
+        }
+    }
+    for (auto& handler : handlers) {
+        try {
+            handler(signal);
+        } catch (...) {
+        }
+    }
+    // Graceful exit: exit hooks run, then the process ends with 128+signum.
+    runExitHooks(code);
+    st.handlingSignal.store(false);
+    exit(code);
+}
+
+bool emitUnhandledRejection(const std::string& reason) {
+    std::vector<RejectionListener> handlers;
+    {
+        std::lock_guard<std::mutex> lock(lifecycle().mutex);
+        handlers = lifecycle().rejections;
+    }
+    if (handlers.empty()) return false;
+    for (auto& handler : handlers) {
+        try {
+            handler(reason);
+        } catch (...) {
+        }
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// stdin pump. One reader thread block-reads fd 0 (std::fread, portable on
+// pipes and terminals) and posts drain tasks; all consumer state lives under
+// the mutex and delivery happens on the loop thread.
+// ---------------------------------------------------------------------------
+namespace {
+
+struct StdinState {
+    std::mutex mutex;
+    EventLoop* loop = nullptr;
+    bool started = false;
+    bool retained = false;
+    bool eof = false;
+    bool closed = false;
+    std::string raw;                       // every byte read, for readAll
+    std::deque<std::string> lines;         // complete lines not yet consumed
+    std::string partial;                   // bytes after the last '\n'
+    bool hasPartial = false;               // partial holds a final unterminated line
+    std::deque<Promise<std::string>> pendingLines;
+    std::deque<Promise<std::string>> pendingAll;
+    std::deque<Promise<Array<std::string>>> pendingLinesAll;
+    std::vector<std::function<void(std::string)>> lineListeners;
+    std::vector<std::function<void(std::string)>> closeListeners;
+};
+
+StdinState& stdinState() {
+    static StdinState* state = new StdinState();
+    return *state;
+}
+
+void drainStdin() {
+    StdinState& st = stdinState();
+    std::vector<std::string> newLines;
+    std::vector<Promise<std::string>> linePromises;
+    std::vector<Promise<std::string>> allPromises;
+    std::vector<Promise<Array<std::string>>> linesAllPromises;
+    std::vector<std::function<void(std::string)>> lineListeners;
+    std::vector<std::function<void(std::string)>> closeListeners;
+    std::string allText;
+    std::vector<std::string> allLines;
+    bool eof = false;
+    bool release = false;
+    {
+        std::lock_guard<std::mutex> lock(st.mutex);
+        newLines.assign(st.lines.begin(), st.lines.end());
+        st.lines.clear();
+        eof = st.eof;
+        lineListeners = st.lineListeners;
+        while (!st.pendingLines.empty() && !newLines.empty()) {
+            linePromises.push_back(std::move(st.pendingLines.front()));
+            st.pendingLines.pop_front();
+        }
+        if (eof) {
+            allText = st.raw;
+            std::string cur;
+            for (char ch : st.raw) {
+                if (ch == '\n') {
+                    if (!cur.empty() && cur.back() == '\r') cur.pop_back();
+                    allLines.push_back(cur);
+                    cur.clear();
+                } else {
+                    cur.push_back(ch);
+                }
+            }
+            if (!cur.empty()) {
+                if (!cur.empty() && cur.back() == '\r') cur.pop_back();
+                allLines.push_back(cur);
+            }
+            while (!st.pendingAll.empty()) {
+                allPromises.push_back(std::move(st.pendingAll.front()));
+                st.pendingAll.pop_front();
+            }
+            while (!st.pendingLinesAll.empty()) {
+                linesAllPromises.push_back(std::move(st.pendingLinesAll.front()));
+                st.pendingLinesAll.pop_front();
+            }
+            while (!st.pendingLines.empty()) {
+                linePromises.push_back(std::move(st.pendingLines.front()));
+                st.pendingLines.pop_front();
+            }
+            closeListeners = st.closeListeners;
+            if (st.retained) {
+                st.retained = false;
+                release = true;
+            }
+        }
+    }
+    // Pending readLine promises consume the drained lines in order.
+    std::size_t consumed = 0;
+    for (auto& promise : linePromises) {
+        if (consumed < newLines.size()) {
+            promise.fulfill(newLines[consumed++]);
+        } else {
+            promise.fulfill(std::string());
+        }
+    }
+    // Unconsumed lines stay queued for later readLine calls.
+    if (consumed < newLines.size()) {
+        std::lock_guard<std::mutex> lock(st.mutex);
+        for (std::size_t i = consumed; i < newLines.size(); ++i) {
+            st.lines.push_back(newLines[i]);
+        }
+    }
+    for (auto& promise : allPromises) promise.fulfill(allText);
+    for (auto& promise : linesAllPromises) {
+        promise.fulfill(makeArray<std::string>(allLines));
+    }
+    // Line listeners are an observation tap over every drained line.
+    for (auto& line : newLines) {
+        for (auto& listener : lineListeners) {
+            try { listener(line); } catch (...) {}
+        }
+    }
+    if (eof) {
+        for (auto& listener : closeListeners) {
+            try { listener(std::string()); } catch (...) {}
+        }
+        if (release && st.loop != nullptr) st.loop->releaseExternal();
+    }
+}
+
+void stdinReaderMain() {
+    StdinState& st = stdinState();
+    char buffer[4096];
+    for (;;) {
+        std::size_t got = std::fread(buffer, 1, sizeof(buffer), stdin);
+        bool done = got == 0;
+        {
+            std::lock_guard<std::mutex> lock(st.mutex);
+            if (got > 0) {
+                st.raw.append(buffer, got);
+                st.partial.append(buffer, got);
+                std::string::size_type pos = 0;
+                for (;;) {
+                    std::string::size_type nl = st.partial.find('\n', pos);
+                    if (nl == std::string::npos) break;
+                    std::string line = st.partial.substr(pos, nl - pos);
+                    if (!line.empty() && line.back() == '\r') line.pop_back();
+                    st.lines.push_back(line);
+                    pos = nl + 1;
+                }
+                st.partial.erase(0, pos);
+                st.hasPartial = !st.partial.empty();
+            }
+            if (done) {
+                st.eof = true;
+                if (st.hasPartial) {
+                    std::string tail = st.partial;
+                    if (!tail.empty() && tail.back() == '\r') tail.pop_back();
+                    st.lines.push_back(tail);
+                    st.partial.clear();
+                    st.hasPartial = false;
+                }
+            }
+        }
+        if (st.loop != nullptr) {
+            st.loop->postFromThread([]() { drainStdin(); });
+        }
+        if (done) return;
+    }
+}
+
+void startStdinReader() {
+    StdinState& st = stdinState();
+    std::lock_guard<std::mutex> lock(st.mutex);
+    if (st.started) return;
+    st.started = true;
+    st.loop = &currentLoop();
+    st.loop->retainExternal();
+    st.retained = true;
+    try {
+        std::thread(stdinReaderMain).detach();
+    } catch (...) {
+        st.started = false;
+        st.retained = false;
+        st.loop->releaseExternal();
+        st.eof = true;
+        st.loop->postFromThread([]() { drainStdin(); });
+    }
+}
+
+}  // namespace
+
+Promise<std::string> stdinReadAll() {
+    startStdinReader();
+    StdinState& st = stdinState();
+    Promise<std::string> promise = Promise<std::string>::pending();
+    bool done = false;
+    std::string text;
+    {
+        std::lock_guard<std::mutex> lock(st.mutex);
+        if (st.eof) {
+            done = true;
+            text = st.raw;
+        } else {
+            st.pendingAll.push_back(promise);
+        }
+    }
+    if (done) promise.fulfill(text);
+    return promise;
+}
+
+Promise<Array<std::string>> stdinReadLines() {
+    startStdinReader();
+    StdinState& st = stdinState();
+    Promise<Array<std::string>> promise = Promise<Array<std::string>>::pending();
+    bool done = false;
+    std::vector<std::string> lines;
+    {
+        std::lock_guard<std::mutex> lock(st.mutex);
+        if (st.eof) {
+            done = true;
+            std::string cur;
+            for (char ch : st.raw) {
+                if (ch == '\n') {
+                    if (!cur.empty() && cur.back() == '\r') cur.pop_back();
+                    lines.push_back(cur);
+                    cur.clear();
+                } else {
+                    cur.push_back(ch);
+                }
+            }
+            if (!cur.empty()) {
+                if (!cur.empty() && cur.back() == '\r') cur.pop_back();
+                lines.push_back(cur);
+            }
+        } else {
+            st.pendingLinesAll.push_back(promise);
+        }
+    }
+    if (done) promise.fulfill(makeArray<std::string>(lines));
+    return promise;
+}
+
+Promise<std::string> stdinReadLine() {
+    startStdinReader();
+    StdinState& st = stdinState();
+    Promise<std::string> promise = Promise<std::string>::pending();
+    bool done = false;
+    std::string line;
+    {
+        std::lock_guard<std::mutex> lock(st.mutex);
+        if (!st.lines.empty()) {
+            done = true;
+            line = st.lines.front();
+            st.lines.pop_front();
+        } else if (st.eof) {
+            done = true;
+        } else {
+            st.pendingLines.push_back(promise);
+        }
+    }
+    if (done) promise.fulfill(line);
+    return promise;
+}
+
+void stdinAddLineListener(std::function<void(std::string)> listener) {
+    startStdinReader();
+    std::lock_guard<std::mutex> lock(stdinState().mutex);
+    stdinState().lineListeners.push_back(std::move(listener));
+}
+
+void stdinAddCloseListener(std::function<void(std::string)> listener) {
+    startStdinReader();
+    std::lock_guard<std::mutex> lock(stdinState().mutex);
+    stdinState().closeListeners.push_back(std::move(listener));
+}
+
+void stdinClose() {
+    std::lock_guard<std::mutex> lock(stdinState().mutex);
+    stdinState().closed = true;
+}
+
+void StdinStream::addLineListener(std::function<void(std::string)> listener) {
+    stdinAddLineListener(std::move(listener));
+}
+
+void StdinStream::addCloseListener(std::function<void(std::string)> listener) {
+    stdinAddCloseListener(std::move(listener));
+}
+
+StdinStream& processStdin() {
+    static StdinStream stream;
+    return stream;
+}
+
+}  // namespace cp3::runtime::process

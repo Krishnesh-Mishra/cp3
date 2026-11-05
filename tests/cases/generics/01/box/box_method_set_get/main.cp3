@@ -1,7 +1,7 @@
 import console from "std/console";
 class Box<T> {
   value: T;
-  function set(v: T): void { this.value = v; }
+  function set(v: T): undefined { this.value = v; }
   function get(): T { return this.value; }
 }
 let b = new Box<string>();

@@ -3,7 +3,7 @@ import console from "std/console";
 // A call with a `ref` argument mutates the local through shared storage, and
 // the int64 fast body cannot bind an int64 local to a double reference.
 // Oracle: x becomes 5, 5 / 4 = 1.25.
-function bump(ref x: number): void {
+function bump(ref x: number): undefined {
   x = 5;
 }
 

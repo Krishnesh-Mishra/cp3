@@ -61,9 +61,13 @@ std::string readMainText(const fs::path& root, const JsonValue& manifest,
         err = "package entry '" + main + "' cannot be read";
         return {};
     }
-    if (text.find("export default") == std::string::npos) {
+    // A package may use a default export (`export default`) or named
+    // exports (`export class`, `export {`, ...). Both satisfy this check;
+    // the compiler validates the exact export shape during a build.
+    if (text.find("export ") == std::string::npos) {
         err = "package entry '" + main +
-              "' has no `export default { ... }` (CLI-README §5.2)";
+              "' has no `export default { ... }` or named exports such as "
+              "`export class <Name>` (CLI-README §5.2)";
         return {};
     }
     return text;
@@ -115,7 +119,7 @@ bool validateArchivePackage(const fs::path& archive, std::string& name,
     bool sawIndex = false;
     for (const TarEntry& member : members) {
         if (member.name != "index.cp3") continue;
-        sawIndex = member.data.find("export default") != std::string::npos;
+        sawIndex = member.data.find("export ") != std::string::npos;
     }
     if (!sawIndex) {
         err = "archive has no exported index.cp3 surface; rebuild it with "

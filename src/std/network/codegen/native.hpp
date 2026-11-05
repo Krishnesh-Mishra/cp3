@@ -37,6 +37,7 @@ inline const NativePackage kNetworkNativePackage{
      "src/std/network/runtime/runtime_fetch.cpp",
      "src/std/network/runtime/runtime_fetch_io.cpp",
      "src/std/network/runtime/runtime_dns.cpp",
+     "src/std/network/runtime/runtime_web.cpp",
      "src/std/network/server/runtime_server.cpp",
      "src/std/network/server/runtime_server_dispatch.cpp",
      "src/std/network/server/runtime_server_scaled.cpp",
@@ -51,7 +52,7 @@ inline const NativePackage kNetworkNativePackage{
     // scaled server TU are selected by the same HttpServer marker as
     // runtime_server.cpp: listen/close reference the scaled entry points, and
     // the request glue references the dispatcher.
-    {"", "fetch(", "fetch(", "dnsResolve(", "HttpServer(", "HttpServer(",
+    {"", "fetch(", "fetch(", "dnsResolve(", "makeStaticMiddleware(|makeCorsMiddleware(|makeBodyLimitMiddleware(|Headers(|Request(|Response(|FormData(|AbortSignal::", "HttpServer(", "HttpServer(",
      "HttpServer(", "WebSocket", "WebSocket", "WebSocket"},
     {{"windows-x64", {"third_party/uWebSockets/lib/windows-x64",
                        "third_party/libuv/lib/windows-x64"},

@@ -1,6 +1,6 @@
 import console from "std/console";
 interface Person { name: string; age: number; }
-function greet({ name }: Person): void {
+function greet({ name }: Person): undefined {
   console.log(name);
 }
 greet({ name: "Bob", age: 20 });

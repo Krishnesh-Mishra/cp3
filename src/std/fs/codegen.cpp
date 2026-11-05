@@ -52,6 +52,7 @@ namespace {
 constexpr const char* kFileStats = "$fs:FileStats";
 constexpr const char* kReadStream = "$fs:ReadStream";
 constexpr const char* kWriteStream = "$fs:WriteStream";
+constexpr const char* kFsWatcher = "$fs:FsWatcher";
 
 constexpr const char* kRuntimeNs = "::cp3::runtime::fs::";
 
@@ -61,7 +62,7 @@ const char* const kFsMembers[] = {
     "mkdirSync",    "readdirSync",   "statSync",       "unlinkSync",
     "readFile",     "writeFile",     "appendFile",     "mkdir",
     "readdir",      "stat",          "unlink",         "readFileStream",
-    "writeFileStream",
+    "writeFileStream", "watch",
 };
 
 /// The Promise-valued members: calling one schedules a continuation.
@@ -72,8 +73,11 @@ bool isPromiseMember(const std::string& prop) {
 }
 
 /// The stream entry points: the pump/close run through the event loop.
+/// `watch` joins them: the uv event is posted as a microtask, so the loop
+/// must be driven even when the program has no `await`.
 bool isStreamMember(const std::string& prop) {
-    return prop == "readFileStream" || prop == "writeFileStream";
+    return prop == "readFileStream" || prop == "writeFileStream" ||
+           prop == "watch";
 }
 
 /// The sema marker behind a listener's first declared parameter, or Unknown.
@@ -91,6 +95,7 @@ Type listenerParamType(const std::string& event) {
 std::vector<std::string> streamMemberNames(const std::string& receiver) {
     if (receiver == kReadStream) return {"on"};
     if (receiver == kWriteStream) return {"write", "end", "on"};
+    if (receiver == kFsWatcher) return {"close"};
     return {};
 }
 
@@ -98,6 +103,7 @@ std::vector<std::string> streamMemberNames(const std::string& receiver) {
 std::string streamReceiverName(const std::string& receiver) {
     if (receiver == kReadStream) return "ReadStream";
     if (receiver == kWriteStream) return "WriteStream";
+    if (receiver == kFsWatcher) return "FsWatcher";
     return receiver;
 }
 
@@ -178,7 +184,8 @@ std::string listenerDiagnostic(const Type& listener, const Type& payload,
 bool Generator::isFsReceiver(const Expr* e) const {
     if (e == nullptr) return false;
     const std::string& name = effectiveType(*e).name;
-    return name == kFileStats || name == kReadStream || name == kWriteStream;
+    return name == kFileStats || name == kReadStream || name == kWriteStream ||
+           name == kFsWatcher;
 }
 
 // =============================================================================
@@ -189,6 +196,28 @@ std::string Generator::emitFsCall(const CallExpr& c, const MemberExpr& m) {
     needsFs_ = true;
     if (isPromiseMember(m.property) || isStreamMember(m.property)) {
         needsEventLoop_ = true;
+    }
+    if (m.property == "watch") {
+        // `fs.watch(path, callback)`: the callback is an
+        // `(eventType: string, filename: string) => void` listener. An arrow
+        // is emitted with those two parameter types (the forEach pattern);
+        // a function value lowers unchanged.
+        if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1]) {
+            reportCodegenError(
+                c, diagcode::kArityMismatch,
+                "arity mismatch: fs.watch(path, callback) takes two arguments");
+            return "0.0";
+        }
+        const Expr& listener = *c.arguments[1];
+        std::string callback;
+        if (listener.kind == NodeKind::ArrowFunction) {
+            callback = emitArrow(static_cast<const ArrowFunction&>(listener),
+                                 {"std::string", "std::string"});
+        } else {
+            callback = expr(listener);
+        }
+        return std::string(kRuntimeNs) + "watch(" + expr(*c.arguments[0]) +
+               ", " + callback + ")";
     }
     return std::string(kRuntimeNs) + m.property + "(" +
            joinStrings(emitPlainArgs(c), ", ") + ")";
@@ -219,6 +248,9 @@ std::string Generator::emitFsMemberCall(const CallExpr& c, const MemberExpr& m) 
     }
     if (receiver == kWriteStream && m.property == "end" && c.arguments.empty()) {
         return "(" + expr(*m.object) + ").end()";
+    }
+    if (receiver == kFsWatcher && m.property == "close" && c.arguments.empty()) {
+        return "(" + expr(*m.object) + ").close()";
     }
     // A member outside the documented stream interface (docs 04 §fs): the
     // documented members are the candidate list for a typo (CP3305), the same

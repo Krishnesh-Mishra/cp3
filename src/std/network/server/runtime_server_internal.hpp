@@ -64,6 +64,10 @@ struct ServerImpl {
     // POSIX port 0: loop 0 resolves the ephemeral port before any child
     // starts, then every loop binds the resolved port with SO_REUSEPORT.
     int requestedPort = 0;
+
+    // Ledger L (appended): `app.onError(...)` handler, or null for the
+    // default 500 response.
+    ErrorFn errorHandler;
 };
 
 /// The buffered response bound to one request.

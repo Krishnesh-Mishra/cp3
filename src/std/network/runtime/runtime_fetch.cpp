@@ -353,7 +353,12 @@ Promise<FetchResponse> fetch(const std::string& url, const FetchInit& init) {
         return Promise<FetchResponse>::reject(Thrown::make(error));
     }
     ensureLoop();
-    const std::shared_ptr<detail::FetchOp> op = detail::beginFetch(parts, init);
+    FetchInit effective = init;  // Ledger L (appended): AbortSignal.timeout
+    if (effective.signal && effective.signal->timeoutMs > 0 &&
+        (effective.timeoutMs <= 0 || effective.signal->timeoutMs < effective.timeoutMs)) {
+        effective.timeoutMs = effective.signal->timeoutMs;
+    }
+    const std::shared_ptr<detail::FetchOp> op = detail::beginFetch(parts, effective);
     return op->promise;
 }
 

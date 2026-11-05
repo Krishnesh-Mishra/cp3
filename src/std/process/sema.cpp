@@ -39,6 +39,12 @@ const char* const kExecResult = "$process:ExecResult";
 const char* const kSpawnHandle = "$process:SpawnHandle";
 const char* const kMemoryUsage = "$process:MemoryUsage";
 const char* const kStdioStream = "$process:StdioStream";
+const char* const kStdinStream = "$process:StdinStream";
+
+/// The documented lifecycle events of `process.on` (ledger L). A finite API
+/// contract like console's event list, so completion/codegen share one list.
+const char* const kProcessEvents[] = {"SIGINT", "SIGTERM", "exit",
+                                      "unhandledRejection"};
 
 /// `(p0, p1, ...) => void` with permissive parameters: the documented event
 /// listener shapes share one grammar and the parameters are typed
@@ -100,6 +106,22 @@ const DocRow kProcessRows[] = {
      {"stderr", "stderr: StdioStream",
       "A writable stream for the process standard error; `.write(s)` emits "
       "`s` with no newline, then flushes."},
+     {"on",
+      "on(event: \"SIGINT\" | \"SIGTERM\" | \"exit\" | \"unhandledRejection\", "
+      "listener: (value: string) => void): void",
+      "Registers a lifecycle listener: `\"SIGINT\"` / `\"SIGTERM\"` deliver "
+      "the signal name, `\"exit\"` delivers the exit code, "
+      "`\"unhandledRejection\"` delivers the rejection reason text. "
+      "Listeners are synchronous and run in registration order."},
+     {"onShutdown", "onShutdown(listener: (code: number) => void): void",
+      "Registers a graceful-exit hook (sugar for `on(\"exit\", ...)`): it "
+      "runs once, in registration order, before the process ends - on "
+      "`process.exit`, on a SIGINT/SIGTERM, or on normal drain."},
+     {"stdin", "stdin: StdinStream",
+      "The process standard input: `.readAll()` resolves with every byte to "
+      "EOF, `.readLines()` with every line to EOF, `.readLine()` with the "
+      "next line (`\"\"` on EOF), and `.on(\"line\" | \"close\", ...)` "
+      "observes lines as they arrive."},
 };
 
 // The documented fields of an `ExecResult` value.
@@ -118,6 +140,26 @@ const DocRow kSpawnHandleRows[] = {
      "Writes `input` to the child's stdin."},
     {"kill", "kill(): void",
      "Ends the child process."},
+};
+
+// The documented members of a `process.stdin` value (ledger L).
+const DocRow kStdinStreamRows[] = {
+    {"readAll", "readAll(): Promise<string>",
+     "Resolves with every byte of stdin read to EOF (never rejects; EOF is "
+     "the normal end)."},
+    {"readLines", "readLines(): Promise<string[]>",
+     "Resolves with every line of stdin read to EOF, terminators removed "
+     "(`\\r\\n` counts as one terminator)."},
+    {"readLine", "readLine(): Promise<string>",
+     "Resolves with the next line of stdin, terminator removed; `\"\"` on "
+     "EOF. Successive calls never lose bytes."},
+    {"on",
+     "on(event: \"line\" | \"close\", listener: (value: string) => void): void",
+     "Observes every completed line (`\"line\"`) or stdin EOF (`\"close\"`, "
+     "once, with `\"\"`). A tap: it never consumes a line a pending "
+     "`readLine` also sees."},
+    {"close", "close(): void",
+     "Stops accepting new stdin reads; already-pending reads settle normally."},
 };
 
 // The documented fields of a `memoryUsage()` value.
@@ -160,6 +202,22 @@ Type Analyzer::processObjectType(const std::string& name) {
         fields.push_back(Field{"write",
                                Type::function({Type::string()}, Type::voidType()),
                                false});
+    } else if (name == kStdinStream) {
+        fields.push_back(Field{"readAll",
+                               Type::function({}, promiseOf(Type::string())),
+                               false});
+        fields.push_back(
+            Field{"readLines",
+                  Type::function({}, promiseOf(Type::array(Type::string()))),
+                  false});
+        fields.push_back(Field{"readLine",
+                               Type::function({}, promiseOf(Type::string())),
+                               false});
+        fields.push_back(Field{"on",
+                               Type::function({Type::string(), callbackOf(1)},
+                                              Type::voidType()),
+                               false});
+        fields.push_back(Field{"close", Type::function({}, Type::voidType()), false});
     } else {
         return Type::unknown();
     }
@@ -235,6 +293,17 @@ std::optional<Type> Analyzer::processMember(const std::string& prop) {
     if (prop == "stdout" || prop == "stderr") {
         return processObjectType(kStdioStream);
     }
+    if (prop == "on") {
+        // The event name is a finite contract (kProcessEvents); the listener
+        // stays permissive (payload or nullary, like the spawn listener).
+        return Type::function({Type::string(), callbackOf(1)}, Type::voidType());
+    }
+    if (prop == "onShutdown") {
+        return Type::function({callbackOf(1)}, Type::voidType());
+    }
+    if (prop == "stdin") {
+        return processObjectType(kStdinStream);
+    }
     return std::nullopt;
 }
 
@@ -242,7 +311,15 @@ std::vector<std::string> processMemberNames() {
     return {"exit", "argv", "exec", "spawn", "env",
             "cwd",  "chdir", "pid",  "ppid",  "uptime", "memoryUsage", "hrtime",
             "stdout", "stderr", "nextTick", "platform", "arch", "version",
-            "exitCode"};
+            "exitCode", "on", "onShutdown", "stdin"};
+}
+
+std::vector<std::string> processMemberArgumentValues(const std::string& prop,
+                                                       std::size_t argumentIndex) {
+    if (argumentIndex == 0 && prop == "on") {
+        return {"SIGINT", "SIGTERM", "exit", "unhandledRejection"};
+    }
+    return {};
 }
 
 StdMemberDoc processMemberDoc(const std::string& prop) {
@@ -261,6 +338,10 @@ StdMemberDoc processMemoryUsageDoc(const std::string& prop) {
     return memberDoc(kMemoryUsageRows, prop);
 }
 
+StdMemberDoc processStdinStreamDoc(const std::string& prop) {
+    return memberDoc(kStdinStreamRows, prop);
+}
+
 std::vector<std::string> processExecResultMemberNames() {
     return docRowNames(kExecResultRows);
 }
@@ -271,6 +352,10 @@ std::vector<std::string> processSpawnHandleMemberNames() {
 
 std::vector<std::string> processMemoryUsageMemberNames() {
     return docRowNames(kMemoryUsageRows);
+}
+
+std::vector<std::string> processStdinStreamMemberNames() {
+    return docRowNames(kStdinStreamRows);
 }
 
 }  // namespace cp3

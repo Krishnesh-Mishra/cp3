@@ -1,8 +1,10 @@
 {
-  "mode": "run",
+  "mode": "check",
+  "stdout": "",
   "exitCode": 1,
   "error": {
-    "code": "CP3418",
-    "contains": "invalid type argument"
+    "code": "CP3421",
+    "line": 4,
+    "contains": "unknown"
   }
 }

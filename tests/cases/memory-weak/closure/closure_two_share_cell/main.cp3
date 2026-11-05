@@ -1,5 +1,5 @@
 import console from "std/console";
-function make(): { inc: () => void; get: () => number } {
+function make(): { inc: () => undefined; get: () => number } {
   let count = 0;
   let inc = () => { count = count + 1; };
   let get = () => count;

@@ -11,6 +11,17 @@
 // (docs/language-spec/09-arrays-strings.md, "String" section) plus the UTF-8
 // rules of the same chapter: cp3 strings are UTF-8, `str[i]` indexes raw
 // bytes and `str.charAt(i)` returns the visual character.
+//
+// INTEGER-WIDTH NOTE: the signatures below keep the TypeScript `number`
+// spelling (the doc-table precedent of the other std families). The exact
+// widths live in cp3/host/std_integer.hpp and are applied by the runtime
+// (cp3/std/string.hpp) and codegen (codegen.cpp): `length` is the length
+// width, `charAt`/`at`/`slice`/`substring`/`indexOf`/`lastIndexOf` indices
+// and `indexOf` results are signed indices, `repeat`'s count is a count,
+// `padStart`/`padEnd`'s target is a length, and `str[i]` is a byte value
+// (`charCodeAt`/`codePointAt` stay `number`: their NaN sentinel has no
+// exact width). The member TYPING that must carry those widths is in the
+// core (`stringMember`, outside this family) - see the audit report.
 // =============================================================================
 #include "detail/std_tables.hpp"
 
@@ -33,6 +44,21 @@ const DocRow kStringDocRows[] = {
      "Returns the character at `index`."},
     {"charCodeAt", "charCodeAt(index: number): number",
      "Returns the byte value of the character at `index`."},
+    {"codePointAt", "codePointAt(index: number): number",
+     "Returns the Unicode scalar value of the code point at code-point "
+     "`index` (the unit `charAt` counts, not JS's UTF-16 code units). "
+     "An out-of-range position returns `NaN`."},
+    {"matchAll", "matchAll(regexp: RegExp): string[][]",
+     "Returns every match of a global (`g`) regexp as an array of "
+     "match arrays (`[full, group1, ...]`, the `exec` shape). The regexp "
+     "must carry the `g` flag; the scan stops after the first empty match."},
+    {"fromCodePoint", "fromCodePoint(...codes: number[]): string",
+     "Constructs a string by UTF-8 encoding each Unicode scalar code. "
+     "A code outside 0..0x10FFFF, or a surrogate, is a RangeError."},
+    {"raw", "raw(chunk: string): string | raw(parts: string[], ...subs: string[]): string",
+     "Returns `chunk` unchanged (no escape processing), or joins the "
+     "`parts` chunks with the interpolated substitutions between them. "
+     "This is the call form of `String.raw`; CP3 has no tagged templates."},
     {"startsWith", "startsWith(search: string): boolean",
      "True when the string starts with `search`. Backed by "
      "`std::string::starts_with`."},

@@ -31,6 +31,15 @@
 //   * `slice`/`substring` follow JS argument normalization on byte indices
 //     (consistent with `.length` bytes): slice counts negatives from the end,
 //     substring clamps at 0 and swaps start/end when start > end.
+//   * `codePointAt(i)` counts code points (like `charAt`), not JS's UTF-16
+//     code units, because CP3 strings are UTF-8; `fromCodePoint` encodes the
+//     scalar as UTF-8 and fatally rejects surrogates (no UTF-8 encoding).
+//   * `matchAll` is the eager `Array<Array<string>>` of every match of a
+//     global regexp (JS's lazy iterator has no CP3 spelling); the scan stops
+//     after the first empty match because the regexp engine exposes no
+//     `lastIndex` write to advance past it.
+//   * `String.raw` is the call form (`raw(parts, subs...)`); CP3 has no
+//     tagged templates, so there is no `` String.raw`...` `` spelling.
 // =============================================================================
 #pragma once
 
@@ -44,7 +53,10 @@
 #include <limits>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
+
+#include "cp3/core/regex.hpp"
 
 namespace cp3::runtime::strings {
 
@@ -295,6 +307,185 @@ inline std::vector<std::string> codePoints(const std::string& s) {
     return out;
 }
 
+// --- Unicode code points (`codePointAt` / `String.fromCodePoint`) -----------
+
+namespace detail {
+
+// Decode the UTF-8 scalar at byte offset `at` (input assumed well-formed).
+// A truncated or ill-formed sequence decodes to its leading byte, so this
+// never reads past the end.
+inline std::uint32_t decodeUtf8(const std::string& s, std::size_t at) {
+    const unsigned char lead = static_cast<unsigned char>(s[at]);
+    if (lead < 0x80u) return lead;
+    if ((lead & 0xE0u) == 0xC0u && at + 1 < s.size()) {
+        const unsigned char b1 = static_cast<unsigned char>(s[at + 1]);
+        if ((b1 & 0xC0u) == 0x80u) {
+            return ((lead & 0x1Fu) << 6) | (b1 & 0x3Fu);
+        }
+    } else if ((lead & 0xF0u) == 0xE0u && at + 2 < s.size()) {
+        const unsigned char b1 = static_cast<unsigned char>(s[at + 1]);
+        const unsigned char b2 = static_cast<unsigned char>(s[at + 2]);
+        if ((b1 & 0xC0u) == 0x80u && (b2 & 0xC0u) == 0x80u) {
+            return ((lead & 0x0Fu) << 12) | ((b1 & 0x3Fu) << 6) | (b2 & 0x3Fu);
+        }
+    } else if ((lead & 0xF8u) == 0xF0u && at + 3 < s.size()) {
+        const unsigned char b1 = static_cast<unsigned char>(s[at + 1]);
+        const unsigned char b2 = static_cast<unsigned char>(s[at + 2]);
+        const unsigned char b3 = static_cast<unsigned char>(s[at + 3]);
+        if ((b1 & 0xC0u) == 0x80u && (b2 & 0xC0u) == 0x80u &&
+            (b3 & 0xC0u) == 0x80u) {
+            return ((lead & 0x07u) << 18) | ((b1 & 0x3Fu) << 12) |
+                   ((b2 & 0x3Fu) << 6) | (b3 & 0x3Fu);
+        }
+    }
+    return lead;
+}
+
+// Encode one Unicode scalar as UTF-8.
+inline void appendUtf8(std::string& out, std::uint32_t cp) {
+    if (cp < 0x80u) {
+        out.push_back(static_cast<char>(cp));
+    } else if (cp < 0x800u) {
+        out.push_back(static_cast<char>(0xC0u | (cp >> 6)));
+        out.push_back(static_cast<char>(0x80u | (cp & 0x3Fu)));
+    } else if (cp < 0x10000u) {
+        out.push_back(static_cast<char>(0xE0u | (cp >> 12)));
+        out.push_back(static_cast<char>(0x80u | ((cp >> 6) & 0x3Fu)));
+        out.push_back(static_cast<char>(0x80u | (cp & 0x3Fu)));
+    } else {
+        out.push_back(static_cast<char>(0xF0u | (cp >> 18)));
+        out.push_back(static_cast<char>(0x80u | ((cp >> 12) & 0x3Fu)));
+        out.push_back(static_cast<char>(0x80u | ((cp >> 6) & 0x3Fu)));
+        out.push_back(static_cast<char>(0x80u | (cp & 0x3Fu)));
+    }
+}
+
+}  // namespace detail
+
+// `s.codePointAt(i)`: the Unicode scalar value of the code point at code-
+// point position `i` (the unit `charAt` counts - NOT JS's UTF-16 code
+// units). An out-of-range, non-integer or non-finite position returns NaN,
+// the same result `charCodeAt` gives off the end.
+inline double codePointAt(const std::string& s, double index) {
+    if (std::isnan(index) || std::isinf(index) ||
+        std::trunc(index) != index || index < 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const std::size_t want = static_cast<std::size_t>(index);
+    std::size_t at = 0;
+    std::size_t codepoint = 0;
+    while (at < s.size()) {
+        if (codepoint == want) {
+            return static_cast<double>(detail::decodeUtf8(s, at));
+        }
+        at += 1;
+        while (at < s.size() &&
+               !detail::isCodePointStart(static_cast<unsigned char>(s[at]))) {
+            ++at;
+        }
+        ++codepoint;
+    }
+    return std::numeric_limits<double>::quiet_NaN();
+}
+
+// `String.fromCodePoint(...codes)`: each code is a Unicode scalar in
+// 0..0x10FFFF and is UTF-8 encoded, the inverse of `codePointAt` (unlike
+// `fromCharCode`, which is byte-oriented). A non-finite code follows JS's
+// ToNumber-then-truncate rule: NaN becomes 0 (like `fromCharCode`), while
+// +Infinity is out of range. A value outside the scalar range (negative,
+// greater than 0x10FFFF, or a UTF-16 surrogate D800..DFFF, which UTF-8
+// cannot encode) is a hard RangeError (exit 1, like `str[i]` indexing).
+// Fractional codes truncate toward zero, as in JS.
+[[noreturn]] inline void rangeFail(const char* what) {
+    std::fprintf(stderr, "cp3: RangeError: %s\n", what);
+    std::fflush(stderr);
+    std::exit(1);
+}
+
+inline std::string fromCodePoint(std::initializer_list<double> codes) {
+    std::string out;
+    for (double code : codes) {
+        if (std::isinf(code)) rangeFail("String.fromCodePoint: infinite code point");
+        if (std::isnan(code)) {
+            out.push_back('\0');
+            continue;
+        }
+        const double truncated = std::trunc(code);
+        if (truncated < 0.0 || truncated > 0x10FFFF) {
+            rangeFail("String.fromCodePoint: code point out of range");
+        }
+        const std::uint32_t cp = static_cast<std::uint32_t>(truncated);
+        if (cp >= 0xD800u && cp <= 0xDFFFu) {
+            rangeFail("String.fromCodePoint: lone surrogate has no UTF-8 encoding");
+        }
+        detail::appendUtf8(out, cp);
+    }
+    return out;
+}
+
+// --- matchAll + raw ---------------------------------------------------------
+
+// `s.matchAll(regexp)`: every match of a GLOBAL regular expression, one
+// `string[]` per match ([full, group1, ...], the same shape `RegExp.exec`
+// returns). JS returns a lazy iterator; CP3 returns the eager
+// `Array<Array<string>>` of every match instead (there is no iterator for
+// the elements to flow through). A non-global regexp is a hard TypeError.
+// The scan runs on a fresh clone of the regexp (JS's matchAll clones, so a
+// shared `g` regexp's `lastIndex` is not disturbed); a sticky `y` regexp
+// is honored. An empty match is collected and then stops the scan: the
+// engine exposes no `lastIndex` write to advance past it the way JS's
+// AdvanceStringIndex does, so continuing would revisit the same match.
+inline ::cp3::runtime::Array<::cp3::runtime::Array<std::string>> matchAll(
+    const std::string& s, const ::cp3::runtime::regex::Regex& regexp) {
+    const std::string flags = regexp.flags();
+    if (flags.find('g') == std::string::npos) {
+        std::fprintf(stderr,
+                     "cp3: TypeError: String.matchAll requires a global "
+                     "regular expression (flag 'g')\n");
+        std::fflush(stderr);
+        std::exit(1);
+    }
+    const ::cp3::runtime::regex::Regex clone =
+        ::cp3::runtime::regex::Regex::compile(regexp.source(), flags);
+    std::vector<::cp3::runtime::Array<std::string>> out;
+    while (true) {
+        const ::cp3::runtime::Array<std::string> match = clone.exec(s);
+        if (!match || match->empty()) break;
+        const bool empty = (*match)[0].empty();
+        out.push_back(match);
+        if (empty) break;
+    }
+    return ::cp3::runtime::makeArray<::cp3::runtime::Array<std::string>>(
+        std::move(out));
+}
+
+// `String.raw(...)`: the raw form of a tagged template, in the CALL form
+// (CP3 has no tagged templates). `String.raw(chunk)` is the identity on
+// one chunk (no escape processing, so it stays raw); `String.raw(parts)`
+// joins the `parts` chunks; `String.raw(parts, sub0, ...)` interleaves the
+// interpolated substitutions between the chunks, converting each with the
+// usual `toString` (numbers, strings, booleans). Substitutions past
+// `parts.length - 1` are ignored, as in JS.
+inline std::string raw(const std::string& chunk) { return chunk; }
+
+inline std::string raw(const ::cp3::runtime::Array<std::string>& parts) {
+    if (!parts) return std::string();
+    std::string out;
+    for (const std::string& part : *parts) out += part;
+    return out;
+}
+
+inline std::string raw(const ::cp3::runtime::Array<std::string>& parts,
+                       std::initializer_list<std::string> subs) {
+    if (!parts || parts->empty()) return std::string();
+    std::string out = (*parts)[0];
+    for (std::size_t i = 1; i < parts->size(); ++i) {
+        if (i - 1 < subs.size()) out += subs.begin()[i - 1];
+        out += (*parts)[i];
+    }
+    return out;
+}
+
 /// Docs 09: `str[i]` is the raw UTF-8 byte at byte position `i` as a number
 /// (a deliberate departure from JS's UTF-16 code unit: a multi-byte character
 /// yields one of its bytes, not the character). An out-of-range or
@@ -306,13 +497,16 @@ inline std::vector<std::string> codePoints(const std::string& s) {
     std::exit(1);
 }
 
-inline double byteAt(const std::string& s, double index) {
+// The result is the exact std byte-value width (`u8`): an out-of-range
+// position panics (above), so there is no NaN sentinel to widen for.
+// Codegen casts to `double` only in a TypeScript project. (Unlike
+// `charCodeAt`, which returns NaN off the end and therefore stays `number`.)
+inline std::uint8_t byteAt(const std::string& s, double index) {
     if (std::isnan(index) || std::isinf(index) || std::trunc(index) != index ||
         index < 0.0 || index >= static_cast<double>(s.size())) {
         indexFail();
     }
-    return static_cast<double>(
-        static_cast<unsigned char>(s[static_cast<std::size_t>(index)]));
+    return static_cast<unsigned char>(s[static_cast<std::size_t>(index)]);
 }
 
 // --- predicates ---------------------------------------------------------------
@@ -344,26 +538,31 @@ inline bool oneOf(const std::string& value,
 
 // --- search -------------------------------------------------------------------
 
-// Codepoint index of the first occurrence, or -1 (JS `indexOf`).
-inline double indexOf(const std::string& s, const std::string& needle) {
+// Codepoint index of the first occurrence, or -1 (JS `indexOf`). The result
+// is the exact std signed-index width (`isize`/`ptrdiff_t`, canonical
+// `i64`): -1 is the not-found sentinel, so an unsigned width cannot be
+// used. Codegen casts to `double` only in a TypeScript project.
+inline std::int64_t indexOf(const std::string& s, const std::string& needle) {
     const std::size_t pos = s.find(needle);
-    if (pos == std::string::npos) return -1.0;
+    if (pos == std::string::npos) return -1;
     std::size_t codepoints = 0;
     for (std::size_t i = 0; i < pos; ++i) {
         if (detail::isCodePointStart(static_cast<unsigned char>(s[i]))) ++codepoints;
     }
-    return static_cast<double>(codepoints);
+    return static_cast<std::int64_t>(codepoints);
 }
 
-// Codepoint index of the last occurrence, or -1 (JS `lastIndexOf`).
-inline double lastIndexOf(const std::string& s, const std::string& needle) {
+// Codepoint index of the last occurrence, or -1 (JS `lastIndexOf`). See
+// `indexOf` above for the exact width.
+inline std::int64_t lastIndexOf(const std::string& s,
+                                const std::string& needle) {
     const std::size_t pos = s.rfind(needle);
-    if (pos == std::string::npos) return -1.0;
+    if (pos == std::string::npos) return -1;
     std::size_t codepoints = 0;
     for (std::size_t i = 0; i < pos; ++i) {
         if (detail::isCodePointStart(static_cast<unsigned char>(s[i]))) ++codepoints;
     }
-    return static_cast<double>(codepoints);
+    return static_cast<std::int64_t>(codepoints);
 }
 
 // --- building -----------------------------------------------------------------

@@ -1,2 +1,2 @@
-interface Handler { onEvent: (str: string) => void; }
+interface Handler { onEvent: (str: string) => undefined; }
 let b: Handler = { onEvent: (str) => { } };

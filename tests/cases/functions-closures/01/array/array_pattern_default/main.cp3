@@ -1,5 +1,5 @@
 import console from "std/console";
-function f(): void {
+function f(): undefined {
   let empty: number[] = [];
   let [a = 7] = empty;
   let [b = 7] = [5];

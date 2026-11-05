@@ -1,7 +1,7 @@
 import console from "std/console";
 // A destructuring declaration needs an initializer: there is no value to
 // destructure.
-function g(): void {
+function g(): undefined {
   let { a, b };
   console.log("x");
 }

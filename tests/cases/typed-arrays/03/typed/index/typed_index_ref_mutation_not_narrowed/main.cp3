@@ -1,6 +1,6 @@
 import console from "std/console";
 
-function moveOut(ref index: r_'i64'): void {
+function moveOut(ref index: r_'i64'): undefined {
   index = index + 4;
 }
 

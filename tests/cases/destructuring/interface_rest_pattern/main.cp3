@@ -5,12 +5,12 @@ interface Person {
   age?: number;
 }
 
-function show(person: Person): void {
+function show(person: Person): undefined {
   let { age, ...rest } = person;
   console.log(`${rest.name}`);
 }
 
-function showParam({ age, ...rest }: Person): void {
+function showParam({ age, ...rest }: Person): undefined {
   console.log(`${rest.name}`);
 }
 

@@ -204,6 +204,10 @@ Type Type::literalBaseType() const {
 bool operator==(const Type& a, const Type& b) noexcept {
     return a.kind == b.kind && a.parts == b.parts && a.name == b.name &&
            a.literalBase == b.literalBase && a.numberValue == b.numberValue &&
+           // The exact source spelling distinguishes two 64-bit literals
+           // whose `double` values rounded together (18446744073709551615 vs
+           // 18446744073709551614); union de-duplication must not collapse them.
+           a.numberRaw == b.numberRaw &&
            a.stringValue == b.stringValue && a.boolValue == b.boolValue;
 }
 
@@ -396,7 +400,10 @@ Type unify(const Type& a, const Type& b) {
         const Type& nativeType = a.kind == TypeKind::Native ? a : b;
         const Type& other = a.kind == TypeKind::Native ? b : a;
         if (other.isLiteral() && other.literalBase == TypeKind::Number) {
-            if (nativeCanRepresentLiteral(nativeType, other.numberValue)) {
+            // The exact-spelling overload: 18446744073709551615 fits u64 even
+            // though its double rounds up to 2^64; the double-only check
+            // would widen it to number and lose the native type.
+            if (nativeCanRepresentLiteral(nativeType, other)) {
                 return nativeType;
             }
             return Type::number();

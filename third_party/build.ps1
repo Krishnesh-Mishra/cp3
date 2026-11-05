@@ -27,6 +27,12 @@
 #
 # Note: a full rebuild is not guaranteed to reproduce byte-identical archives
 # (ar records object file timestamps); see third_party/MANIFEST.md.
+#
+# Ledger F (internal-only libs: unordered_dense, fast_float, simdutf, miniz,
+# moodycamel/Boost.Lockfree, fmt, XXHash/wyhash/XXH3): PLANNED ONLY — not in
+# $pins below, nothing downloaded. Add a $pins row + build/vendor steps here
+# only when the lead vendors them; see MANIFEST.md "Ledger F" and
+# docs/design/internal-libs.md.
 
 [CmdletBinding()]
 param(

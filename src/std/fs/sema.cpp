@@ -57,6 +57,7 @@ namespace {
 const char* kFileStats = "$fs:FileStats";
 const char* kReadStream = "$fs:ReadStream";
 const char* kWriteStream = "$fs:WriteStream";
+const char* kFsWatcher = "$fs:FsWatcher";
 
 // -----------------------------------------------------------------------------
 // Receiver objects
@@ -71,6 +72,7 @@ const char* kWriteStream = "$fs:WriteStream";
 Type fsStatsObject() { return Type::named(TypeKind::Object, kFileStats); }
 Type fsReadStreamObject() { return Type::named(TypeKind::Object, kReadStream); }
 Type fsWriteStreamObject() { return Type::named(TypeKind::Object, kWriteStream); }
+Type fsWatcherObject() { return Type::named(TypeKind::Object, kFsWatcher); }
 
 // -----------------------------------------------------------------------------
 // Member type factories
@@ -157,6 +159,21 @@ const MemberRow kFsRows[] = {
      [] { return Type::function({Type::string()}, fsWriteStreamObject()); },
      "writeFileStream(path: string): WriteStream",
      "Opens the file at `path` for streaming writes."},
+    // `fs.watch(path, callback)`: the callback takes (eventType, filename);
+    // both are strings. The FsWatcher receiver's `close()` is typed by
+    // `fsReceiverMember` below (the documented-member typing lives with the
+    // FileStats fields).
+    {"watch",
+     [] {
+         const Type cb =
+             Type::function({Type::string(), Type::string()}, Type::voidType());
+         return Type::function({Type::string(), cb}, fsWatcherObject());
+     },
+     "watch(path: string, callback: (eventType: string, filename: string) => void): FsWatcher",
+     "Watches the file or directory at `path` and calls `callback(eventType, filename)` "
+     "on every change, where `eventType` is \"change\" or \"rename\". The returned "
+     "FsWatcher stops delivery when `close()` is called; the watcher keeps the "
+     "program alive until then."},
 };
 
 // The documented fields of a `FileStats` value.
@@ -190,6 +207,11 @@ std::optional<Type> Analyzer::fsMember(const std::string& prop) {
 // matching codegen read is emitFsMemberRead (src/std/fs/codegen.cpp).
 std::optional<Type> Analyzer::fsReceiverMember(const Type& recv,
                                                const std::string& prop) {
+    if (recv.kind == TypeKind::Object && recv.name == kFsWatcher) {
+        // The FsWatcher's one documented member (docs/ledger H §fs.watch).
+        if (prop == "close") return Type::function({}, Type::voidType());
+        return std::nullopt;
+    }
     if (recv.kind != TypeKind::Object || recv.name != kFileStats) {
         return std::nullopt;
     }

@@ -349,4 +349,156 @@ Promise<ExecResult> exec(const std::string& cmd,
 /// for any program that spawns). Throws `Thrown` when the child cannot start.
 SpawnHandle spawn(const std::string& cmd, const std::vector<std::string>& args);
 
+// -----------------------------------------------------------------------------
+// process lifecycle: `process.on` / `process.onShutdown` (ledger L, appended).
+//
+//   process.on("SIGINT" | "SIGTERM", (signal: string) => void)
+//   process.on("exit", (code: number) => void)
+//   process.on("unhandledRejection", (reason: string) => void)
+//   process.onShutdown((code: number) => void)   // = on("exit")
+//
+// Semantics (server-agnostic graceful exit: no server/network coupling, the
+// hook is plain process lifetime):
+//   * "exit" / onShutdown listeners run exactly once, in registration order,
+//     from an atexit handler, so they also fire on the plain `process.exit`
+//     path (which ends in std::exit) without any change to that function.
+//     They receive the stored exit code (0 unless `process.exitCode` /
+//     `process.exit` set it; the signal path reports 128+signum).
+//   * "SIGINT" / "SIGTERM" listeners run on the event-loop thread once the
+//     OS signal arrives; afterwards the exit hooks run and the process ends
+//     with 128+signum (130 / 143). Listeners are synchronous: async cleanup
+//     must be started before the signal, not inside the handler.
+//   * "unhandledRejection" listeners observe the rejection reason text. The
+//     notification entry point is `emitUnhandledRejection` (returns whether
+//     any listener ran); automatic D43 drain integration needs the lead's
+//     one-line hook in promise.cpp (see the report) - until then a program
+//     may call it from its own rejection surface.
+//   * A listener may take the payload parameter or none (the SpawnHandle
+//     adapters below, same convention). Unknown event names are ignored.
+// -----------------------------------------------------------------------------
+
+using ExitListener = std::function<void(std::int32_t)>;
+using SignalListener = std::function<void(std::string)>;
+using RejectionListener = std::function<void(std::string)>;
+
+void addExitListener(ExitListener listener);
+void addSignalListener(const std::string& signal, SignalListener listener);
+void addRejectionListener(RejectionListener listener);
+void addShutdownHook(ExitListener listener);
+
+/// Runs every registered exit/shutdown hook once, in registration order;
+/// later calls are no-ops. `code` is the payload each hook receives.
+void runExitHooks(std::int32_t code);
+/// True once the exit hooks have run (retired records are kept for atexit
+/// idempotence; this only reports the once-only flag).
+bool exitHooksRan();
+/// Installs the SIGINT/SIGTERM handlers (idempotent; called on first use).
+void installSignalHandlers();
+/// Delivers one signal to its listeners, then runs the exit hooks and ends
+/// the process with `code` (128+signum). Called by the OS signal handler via
+/// the loop; not a cp3 surface.
+void handleSignal(const std::string& signal, std::int32_t code);
+/// Notifies "unhandledRejection" listeners with `reason`; returns true when
+/// at least one listener ran.
+bool emitUnhandledRejection(const std::string& reason);
+
+namespace detail {
+
+template <class F>
+std::function<void(std::int32_t)> adaptExitListener(F&& listener) {
+    if constexpr (std::is_invocable_v<F&, std::int32_t>) {
+        return std::function<void(std::int32_t)>(std::forward<F>(listener));
+    } else if constexpr (std::is_invocable_v<F&>) {
+        return [fn = std::forward<F>(listener)](std::int32_t) mutable { fn(); };
+    } else {
+        return [](std::int32_t) {};
+    }
+}
+
+template <class F>
+std::function<void(std::string)> adaptStringListener(F&& listener) {
+    if constexpr (std::is_invocable_v<F&, std::string&>) {
+        return std::function<void(std::string)>(std::forward<F>(listener));
+    } else if constexpr (std::is_invocable_v<F&>) {
+        return [fn = std::forward<F>(listener)](std::string) mutable { fn(); };
+    } else {
+        return [](std::string) {};
+    }
+}
+
+}  // namespace detail
+
+/// `process.on(event, listener)`: "exit" takes the exit-code listener, the
+/// signal/rejection events take the string listener. Both adapters are
+/// instantiated (the SpawnHandle `on` convention); the one that does not fit
+/// the listener's shape compiles to an inert wrapper.
+template <class F>
+void on(const std::string& event, F&& listener) {
+    if (event == "exit") {
+        addExitListener(detail::adaptExitListener(std::forward<F>(listener)));
+    } else if (event == "SIGINT" || event == "SIGTERM") {
+        addSignalListener(event,
+                          detail::adaptStringListener(std::forward<F>(listener)));
+    } else if (event == "unhandledRejection") {
+        addRejectionListener(
+            detail::adaptStringListener(std::forward<F>(listener)));
+    }
+}
+
+/// `process.onShutdown(listener)`: the server-agnostic graceful-exit hook -
+/// sugar for `on("exit", listener)`, spelled for shutdown-site callers.
+template <class F>
+void onShutdown(F&& listener) {
+    addShutdownHook(detail::adaptExitListener(std::forward<F>(listener)));
+}
+
+// -----------------------------------------------------------------------------
+// process.stdin: read-all / read-lines (ledger L, appended).
+//
+//   process.stdin.readAll()  -> Promise<string>       (all bytes to EOF)
+//   process.stdin.readLines()-> Promise<string[]>     (all lines to EOF)
+//   process.stdin.readLine() -> Promise<string>       (next line; "" on EOF)
+//   process.stdin.on("line", (line: string) => void)
+//   process.stdin.on("close", () => void)
+//   process.stdin.close()    -> void (stops accepting new reads)
+//
+// One sibling reader thread pumps fd 0 and posts to the loop (the exec/spawn
+// pattern); consumers share one buffered line queue, so successive readLine
+// calls never lose bytes. Mixing this with console.input()/readline in one
+// program is a race (each family owns its own stdin pump); see Limitations.
+// -----------------------------------------------------------------------------
+
+Promise<std::string> stdinReadAll();
+Promise<Array<std::string>> stdinReadLines();
+Promise<std::string> stdinReadLine();
+void stdinAddLineListener(std::function<void(std::string)> listener);
+void stdinAddCloseListener(std::function<void(std::string)> listener);
+void stdinClose();
+
+class StdinStream {
+public:
+    Promise<std::string> readAll() { return stdinReadAll(); }
+    Promise<Array<std::string>> readLines() { return stdinReadLines(); }
+    Promise<std::string> readLine() { return stdinReadLine(); }
+
+    /// `stdin.on("line", cb)` / `stdin.on("close", cb)`; a listener may take
+    /// no parameter. Unknown events are ignored.
+    template <class F>
+    void on(const std::string& event, F&& listener) {
+        if (event == "close") {
+            addCloseListener(detail::adaptStringListener(std::forward<F>(listener)));
+        } else {
+            addLineListener(detail::adaptStringListener(std::forward<F>(listener)));
+        }
+    }
+
+    void close() { stdinClose(); }
+
+private:
+    void addLineListener(std::function<void(std::string)> listener);
+    void addCloseListener(std::function<void(std::string)> listener);
+};
+
+StdinStream& processStdin();
+
 }  // namespace cp3::runtime::process

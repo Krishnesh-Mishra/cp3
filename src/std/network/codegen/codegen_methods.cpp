@@ -35,6 +35,11 @@ constexpr const char* kHttpResponse = "$network:HttpResponse";
 constexpr const char* kHttpServer = "$network:HttpServer";
 constexpr const char* kWebSocket = "$network:WebSocket";
 constexpr const char* kWebSocketServer = "$network:WebSocketServer";
+constexpr const char* kHeaders = "$network:Headers";  // Ledger L (appended)
+constexpr const char* kRequest = "$network:Request";
+constexpr const char* kResponse = "$network:Response";
+constexpr const char* kFormData = "$network:FormData";
+constexpr const char* kAbortSignal = "$network:AbortSignal";
 
 constexpr const char* kReqType = "::cp3::runtime::network::HttpRequest&";
 constexpr const char* kResType = "::cp3::runtime::network::HttpResponse&";
@@ -110,6 +115,7 @@ Type contextType(const std::string& cpp) {
         return Type::named(TypeKind::Object, kWebSocket);
     }
     if (cpp == kNextType) return Type::named(TypeKind::Object, kNextMarker);
+    if (cpp == kThrownType) return Type::unknown();  // Ledger L: onError err param stays ambient in sema
     if (cpp == "std::string") return Type::string();
     if (cpp == "double") return Type::number();
     return Type::unknown();
@@ -140,6 +146,9 @@ bool networkTypeArgsText(const TypeList& typeArgs, std::string& out) {
 /// so the HttpServer handle cannot spell it (docs 04 §network lists `.delete`).
 std::string networkMemberName(const Type& receiver, const std::string& property) {
     if (receiver.name == kHttpServer && property == "delete") return "del";
+    // Ledger L (appended): JS `delete` is not a C++ identifier.
+    if ((receiver.name == kHeaders || receiver.name == kFormData) &&
+        property == "delete") return "remove";
     return property;
 }
 
@@ -180,6 +189,21 @@ std::optional<Type> Generator::networkFieldType(const Expr& e) const {
         if (m.property == "statusText") return Type::string();
         return std::nullopt;
     }
+    // Ledger L (appended) reads.
+    if (recv == kRequest) {
+        if (m.property == "url" || m.property == "method") return Type::string();
+        if (m.property == "headers") return Type::named(TypeKind::Object, kHeaders);
+        if (m.property == "signal") return Type::named(TypeKind::Object, kAbortSignal);
+        return std::nullopt;
+    }
+    if (recv == kResponse) {
+        if (m.property == "ok") return Type::boolean();
+        if (m.property == "status") return stdIntegerType(StdIntegerKind::Status, options_.typeSystem);
+        if (m.property == "statusText" || m.property == "url") return Type::string();
+        if (m.property == "headers") return Type::named(TypeKind::Object, kHeaders);
+        return std::nullopt;
+    }
+    if (recv == kAbortSignal && m.property == "aborted") return Type::boolean();
     if (recv == kHttpRequest) {
         if (m.property == "params" || m.property == "query" ||
             m.property == "headers" || m.property == "cookies") {
@@ -229,6 +253,9 @@ std::string Generator::networkArg(const Type& receiver, const std::string& prope
     if (receiver.name == kHttpServer) {
         if (property == "listen") {
             context = {};
+        } else if (property == "onError") {
+            // Ledger L (appended): `(err, req, res)`.
+            context = {kThrownType, kReqType, kResType};
         } else if (property == "use") {
             context = {kReqType, kResType, kNextType};
         } else {
@@ -699,6 +726,16 @@ std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
                 m.property == "params" || m.property == "query" ||
                 m.property == "headers" || m.property == "cookies" ||
                 m.property == "ip";
+    } else if (name == kRequest) {
+        // Ledger L (appended).
+        known = m.property == "url" || m.property == "method" ||
+                m.property == "headers" || m.property == "signal";
+    } else if (name == kResponse) {
+        known = m.property == "ok" || m.property == "status" ||
+                m.property == "statusText" || m.property == "headers" ||
+                m.property == "url";
+    } else if (name == kAbortSignal) {
+        known = m.property == "aborted";
     }
     if (known) {
         needsNetwork_ = true;
@@ -708,6 +745,10 @@ std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
         // A TypeScript project types the read as `number`, so widen it there;
         // a Rust/C++ project already sees the native value.
         if (name == kFetchResponse && m.property == "status" &&
+            effectiveType(m).kind == TypeKind::Number) {
+            return "static_cast<double>(" + read + ")";
+        }
+        if (name == kResponse && m.property == "status" &&
             effectiveType(m).kind == TypeKind::Number) {
             return "static_cast<double>(" + read + ")";
         }

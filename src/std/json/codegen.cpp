@@ -374,49 +374,204 @@ std::string Generator::emitJsonStringify(const CallExpr& c) {
     if (c.arguments.empty() || !c.arguments.front()) return std::string();
     const Expr* arg = c.arguments.front().get();
     if (arg->kind == NodeKind::SpreadElement) return std::string();
-    // The optional indent argument applies to every form that lowers through
-    // the dynamic value tree (`stringify(Value, int)`).
-    std::string indent;
+    for (std::size_t i = 1; i < c.arguments.size(); ++i) {
+        const Expr* opt = c.arguments[i].get();
+        if (!opt || opt->kind == NodeKind::SpreadElement) return std::string();
+    }
+    if (c.arguments.size() > 3) return std::string();
+    // The second-argument classification: the legacy indent is a number; the
+    // ECMAScript replacer is a function, an allowlist array, or nullish.
+    // A string in the second slot is read as the `space` gap (a string is
+    // not a valid replacer anyway; ECMAScript would ignore it).
+    enum class Second { None, Indent, Space, Nullish, Replacer, Allowlist };
+    Second second = Second::None;
     if (c.arguments.size() >= 2) {
-        const Expr* indentArg = c.arguments[1].get();
-        if (!indentArg || indentArg->kind == NodeKind::SpreadElement) {
+        const Expr* secondArg = c.arguments[1].get();
+        const Shape shape = info(*secondArg).shape;
+        const Type type = effectiveType(*secondArg);
+        if (secondArg->kind == NodeKind::NullLiteral ||
+            secondArg->kind == NodeKind::UndefinedLiteral) {
+            second = Second::Nullish;  // nullish replacer = no replacer
+        } else if (shape == Shape::Number) {
+            second = Second::Indent;
+        } else if (shape == Shape::String) {
+            second = Second::Space;
+        } else if (secondArg->kind == NodeKind::ArrayLiteral ||
+                   secondArg->kind == NodeKind::ArrowFunction ||
+                   type.kind == TypeKind::Function ||
+                   (type.kind == TypeKind::Array && !type.parts.empty())) {
+            second = (secondArg->kind == NodeKind::ArrayLiteral ||
+                      (type.kind == TypeKind::Array && !type.parts.empty() &&
+                       type.parts.front().kind == TypeKind::String))
+                         ? Second::Allowlist
+                         : Second::Replacer;
+        } else {
             return std::string();
         }
-        indent = ", static_cast<int>(" + expr(*indentArg) + ")";
+        if (c.arguments.size() >= 3 && second == Second::Indent) {
+            return std::string();  // indent and space are mutually exclusive
+        }
+        if (c.arguments.size() >= 3 && second == Second::Allowlist &&
+            c.arguments[1].get()->kind == NodeKind::ArrayLiteral) {
+            // An allowlist never takes a callback; `space` is arg 3 by the
+            // same rule as the callback form, so only the nullish/space
+            // shapes reach the allowlist path below.
+            if (const Expr* third = c.arguments[2].get()) {
+                const Shape thirdShape = info(*third).shape;
+                if (thirdShape != Shape::Number && thirdShape != Shape::String) {
+                    return std::string();
+                }
+            }
+        }
     }
-    // A composite literal serializes through the dynamic value tree.
-    if (arg->kind == NodeKind::ArrayLiteral || arg->kind == NodeKind::ObjectLiteral) {
-        const std::string built = jsonValueText(*arg);
-        if (built.empty()) return std::string();
-        needsJson_ = true;
-        return "::cp3::runtime::json::stringify(" + built + indent + ")";
-    }
-    const Type argType = effectiveType(*arg);
-    const Shape shape = info(*arg).shape;
-    if (shape == Shape::Number || shape == Shape::String ||
-        shape == Shape::Bool || shape == Shape::Null) {
-        needsJson_ = true;
-        return "::cp3::runtime::json::stringify(" + expr(*arg) + ")";
-    }
-    // A primitive (or nested primitive) array keeps the direct Array<E>
-    // overload; every other array goes through the value tree.
-    if (shape == Shape::Array && argType.kind == TypeKind::Array &&
-        !argType.parts.empty()) {
-        const CppInfo elem = classify(argType.parts.front());
-        if (elem.shape == Shape::Number || elem.shape == Shape::String ||
-            elem.shape == Shape::Bool || elem.shape == Shape::Array) {
+    // No replacer and no space: the legacy fast paths (scalars, primitive
+    // arrays, literal composites, indent). A nullish replacer with a third
+    // argument still carries a `space`, so it takes the gap path below.
+    if (second == Second::None ||
+        (second == Second::Indent) ||
+        (second == Second::Nullish && c.arguments.size() < 3)) {
+        // The optional indent argument applies to every form that lowers
+        // through the dynamic value tree (`stringify(Value, int)`).
+        std::string indent;
+        if (second == Second::Indent) {
+            indent = ", static_cast<int>(" + expr(*c.arguments[1]) + ")";
+        }
+        // A composite literal serializes through the dynamic value tree.
+        if (arg->kind == NodeKind::ArrayLiteral ||
+            arg->kind == NodeKind::ObjectLiteral) {
+            const std::string built = jsonValueText(*arg);
+            if (built.empty()) return std::string();
+            needsJson_ = true;
+            return "::cp3::runtime::json::stringify(" + built + indent + ")";
+        }
+        const Type argType = effectiveType(*arg);
+        const Shape shape = info(*arg).shape;
+        if (shape == Shape::Number || shape == Shape::String ||
+            shape == Shape::Bool || shape == Shape::Null) {
             needsJson_ = true;
             return "::cp3::runtime::json::stringify(" + expr(*arg) + ")";
         }
+        // A primitive (or nested primitive) array keeps the direct Array<E>
+        // overload; every other array goes through the value tree.
+        if (shape == Shape::Array && argType.kind == TypeKind::Array &&
+            !argType.parts.empty()) {
+            const CppInfo elem = classify(argType.parts.front());
+            if (elem.shape == Shape::Number || elem.shape == Shape::String ||
+                elem.shape == Shape::Bool || elem.shape == Shape::Array) {
+                needsJson_ = true;
+                return "::cp3::runtime::json::stringify(" + expr(*arg) + ")";
+            }
+        }
+        std::string value;
+        if (jsonValueForType(argType, "cp3_json_v", value, 0)) {
+            needsJson_ = true;
+            return "([&]{ const auto& cp3_json_v = (" + expr(*arg) +
+                   "); return ::cp3::runtime::json::stringify(" + value +
+                   indent + "); }())";
+        }
+        return std::string();
     }
-    std::string value;
-    if (jsonValueForType(argType, "cp3_json_v", value, 0)) {
-        needsJson_ = true;
-        return "([&]{ const auto& cp3_json_v = (" + expr(*arg) +
-               "); return ::cp3::runtime::json::stringify(" + value + indent +
-               "); }())";
+    // The replacer/space path: always through the dynamic value tree.
+    std::string gap = "std::string()";
+    if (second == Second::Space) {
+        gap = "::cp3::runtime::json::normalizeSpace(" + expr(*c.arguments[1]) + ")";
+    } else if (c.arguments.size() >= 3) {
+        const Expr* third = c.arguments[2].get();
+        const Shape shape = info(*third).shape;
+        if (shape != Shape::Number && shape != Shape::String) {
+            return std::string();
+        }
+        gap = "::cp3::runtime::json::normalizeSpace(" + expr(*third) + ")";
     }
-    return std::string();
+    // The `Value` the replacer walks.
+    std::string valueExpr;
+    if (arg->kind == NodeKind::ArrayLiteral ||
+        arg->kind == NodeKind::ObjectLiteral) {
+        const std::string built = jsonValueText(*arg);
+        if (built.empty()) return std::string();
+        valueExpr = built;
+    } else {
+        std::string converted;
+        if (!jsonValueForType(effectiveType(*arg), "cp3_json_v", converted, 0)) {
+            return std::string();
+        }
+        valueExpr = "([&]{ const auto& cp3_json_v = (" + expr(*arg) +
+                    "); return " + converted + "; }())";
+    }
+    // The replacer text (`Replacer` or allowlist vector).
+    std::string replacerExpr;
+    if (second == Second::Allowlist) {
+        if (c.arguments[1].get()->kind == NodeKind::ArrayLiteral) {
+            const auto& lit =
+                static_cast<const ArrayLiteral&>(*c.arguments[1]);
+            std::vector<std::string> items;
+            for (const auto& elementPtr : lit.elements) {
+                const Expr* element = elementPtr.get();
+                if (!element ||
+                    element->kind == NodeKind::SpreadElement) {
+                    return std::string();
+                }
+                if (element->kind == NodeKind::StringLiteral) {
+                    items.push_back(cppStringLiteral(
+                        static_cast<const StringLiteral&>(*element).value));
+                } else {
+                    return std::string();
+                }
+            }
+            replacerExpr = "std::vector<std::string>{" +
+                           joinStrings(items, ", ") + "}";
+        } else {
+            replacerExpr = "*(" + expr(*c.arguments[1]) + ")";
+        }
+    } else if (second == Second::Replacer) {
+        const Expr* replacerArg = c.arguments[1].get();
+        std::string callback;
+        if (replacerArg->kind == NodeKind::ArrowFunction) {
+            const auto& arrow = static_cast<const ArrowFunction&>(*replacerArg);
+            // The C++ spelling of the two replacer parameters: the key is a
+            // string, the value is the dynamic JSON tree. An annotation of
+            // `unknown` (the placeholder) falls back to the context type.
+            callback = emitArrow(arrow, {"std::string",
+                                         "::cp3::runtime::json::Value"});
+            std::size_t takes = arrow.params.size();
+            std::string call = "cp3_fn";
+            if (takes >= 2) {
+                call += "(cp3_key, cp3_old)";
+            } else if (takes == 1) {
+                call += "(cp3_key)";
+            } else {
+                call += "()";
+            }
+            replacerExpr =
+                "([&]{ auto cp3_fn = " + callback +
+                "; return ::cp3::runtime::json::Replacer("
+                "[cp3_fn](const std::string& cp3_key, "
+                "const ::cp3::runtime::json::Value& cp3_old) -> "
+                "std::optional<::cp3::runtime::json::Value> { return "
+                "::cp3::runtime::json::toOptionalValue("
+                "::cp3::runtime::json::value(" +
+                call + ")); }); }())";
+        } else {
+            // A named function / function-typed value: it must accept the two
+            // replacer arguments (key, value).
+            replacerExpr =
+                "([&]{ auto cp3_fn = (" + expr(*replacerArg) +
+                "); return ::cp3::runtime::json::Replacer("
+                "[cp3_fn](const std::string& cp3_key, "
+                "const ::cp3::runtime::json::Value& cp3_old) -> "
+                "std::optional<::cp3::runtime::json::Value> { return "
+                "::cp3::runtime::json::toOptionalValue("
+                "::cp3::runtime::json::value(cp3_fn(cp3_key, cp3_old))); }); "
+                "}())";
+        }
+    }
+    needsJson_ = true;
+    if (second == Second::Space || second == Second::Nullish) {
+        return "::cp3::runtime::json::stringify(" + valueExpr + ", " + gap +
+               ")";
+    }
+    return "::cp3::runtime::json::stringify(" + valueExpr + ", " + replacerExpr +
+           ", " + gap + ")";
 }
 
 std::string Generator::jsonValueText(const Expr& e) {

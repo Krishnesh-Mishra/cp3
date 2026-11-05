@@ -394,13 +394,19 @@ TypedArray<Tag> typedArrayReverse(const TypedArray<Tag>& a) {
     return a;
 }
 
+// The result is the std signed-index width (`isize`/`ptrdiff_t`, canonical
+// `i64`): an element position or -1 when absent. Codegen casts to `double`
+// only in a TypeScript project. The `from` index keeps the JS `double`
+// semantics (truncate, NaN -> 0, negatives count from the end).
 template <class Tag>
-double typedArrayIndexOf(const TypedArray<Tag>& a, double value,
-                         double from = 0.0) {
+std::int64_t typedArrayIndexOf(const TypedArray<Tag>& a, double value,
+                               double from = 0.0) {
     for (std::size_t i = startIndex(from, a->length); i < a->length; ++i) {
-        if (Tag::read(a->load(i)) == value) return static_cast<double>(i);
+        if (Tag::read(a->load(i)) == value) {
+            return static_cast<std::int64_t>(i);
+        }
     }
-    return -1.0;
+    return -1;
 }
 
 template <class Tag>

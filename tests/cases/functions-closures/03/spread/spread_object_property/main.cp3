@@ -3,7 +3,7 @@ class Sq { side: number; }
 function makeBox(): { x: number, s: Sq } {
   return { x: 1, s: new Sq() };
 }
-function f(): void {
+function f(): undefined {
   let a = makeBox();
   let b = { ...a };
   console.log(`${b.x}`);

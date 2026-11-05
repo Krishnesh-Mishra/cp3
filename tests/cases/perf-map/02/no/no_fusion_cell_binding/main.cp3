@@ -9,10 +9,10 @@ const counts = new Map<string, number>();
 // pair keeps the ordinary lowering. The map starts empty: v = 0, the set
 // stores 0 + 1 = 1, the closure then adds 1 to the cell (v = 1), and the map
 // still holds 1.
-function run(): void {
+function run(): undefined {
   let v = counts.get("k") ?? 0;
   counts.set("k", v + 1);
-  const bump = (): void => { v = v + 1; };
+  const bump = (): undefined => { v = v + 1; };
   bump();
   console.log(`${v}`);
   console.log(`${counts.get("k")}`);

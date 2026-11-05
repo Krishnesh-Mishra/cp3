@@ -1,2 +1,2 @@
-function f(a: number, b: number): void { }
+function f(a: number, b: number): undefined { }
 f(1);

@@ -16,7 +16,7 @@ class Thing {
 
   getName(): Name { return this.name; }
   getColor(): Color { return this.color; }
-  paint(c: Color): void { this.color = c; }
+  paint(c: Color): undefined { this.color = c; }
   add(n: Count): Count {
     this.count = this.count + n;
     return this.count;

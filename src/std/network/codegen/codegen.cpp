@@ -47,6 +47,7 @@
 // =============================================================================
 #include "detail/generator/generator.h"
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -68,6 +69,11 @@ constexpr const char* kHttpResponse = "$network:HttpResponse";
 constexpr const char* kHttpServer = "$network:HttpServer";
 constexpr const char* kWebSocket = "$network:WebSocket";
 constexpr const char* kWebSocketServer = "$network:WebSocketServer";
+constexpr const char* kHeaders = "$network:Headers";  // Ledger L (appended)
+constexpr const char* kRequest = "$network:Request";
+constexpr const char* kResponse = "$network:Response";
+constexpr const char* kFormData = "$network:FormData";
+constexpr const char* kAbortSignal = "$network:AbortSignal";
 
 constexpr const char* kRuntimeNs = "::cp3::runtime::network::";
 
@@ -89,13 +95,94 @@ std::string objectKey(const ObjectProperty& p) {
     return std::string();
 }
 
+/// Ledger L (appended): `new Headers/Request/Response/FormData/AbortSignal`
+/// construction text, shared by emitNetworkNew and bare-call lowering.
+std::string networkClassText(const std::string& name, const ExprList& args,
+                             const std::function<std::string(const Expr&)>& emit,
+                             const std::function<std::string(const Expr&)>& typeName) {
+    const std::string ns = kRuntimeNs;
+    if (name == "Headers") {
+        if (args.empty() || !args.front()) return ns + "Headers()";
+        const Expr& a = *args.front();
+        if (a.kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(a);
+            std::string pairs;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                if (!pairs.empty()) pairs += ", ";
+                pairs += "{\"\"" + objectKey(*p) + "\", " + emit(*p->value) + "}";
+            }
+            return ns + "Headers(std::vector<std::pair<std::string, std::string>>{" + pairs + "})";
+        }
+        return ns + "Headers(" + emit(a) + ")";
+    }
+    if (name == "FormData" || name == "AbortSignal") return ns + name + "()";
+    if (name == "Request") {
+        if (args.empty() || !args.front()) return ns + "Request()";
+        std::string text = ns + "Request(" + emit(*args.front());
+        if (args.size() >= 2 && args[1] && args[1]->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*args[1]);
+            std::string init = ns + "RequestInit{";
+            std::string method, body, headers, signal, form;
+            bool hasBody = false;
+            bool headersIsObj = false;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                if (key == "method") method = emit(*p->value);
+                else if (key == "body") {
+                    if (typeName(*p->value) == kFormData) form = emit(*p->value);
+                    else { body = emit(*p->value); hasBody = true; }
+                } else if (key == "headers") {
+                    if (typeName(*p->value) == kHeaders) { headers = emit(*p->value); headersIsObj = true; }
+                    else headers = emit(*p->value);
+                } else if (key == "signal") signal = "std::make_shared<" + ns + "AbortSignal>(" + emit(*p->value) + ")";
+            }
+            init += (method.empty() ? "std::string(\"GET\")" : method) + ", " + body + ", " +
+                    (hasBody ? "true" : "false") + ", " +
+                    ((headers.empty() || headersIsObj) ? ns + "StringMap()" : headers) + ", " +
+                    (headersIsObj ? "std::make_shared<" + ns + "Headers>(" + headers + ")" : "nullptr") + ", ";
+            if (!form.empty()) init += "std::make_shared<" + ns + "FormData>(" + form + "), ";
+            else init += "nullptr, ";
+            if (!signal.empty()) init += signal;
+            init += "}";
+            text += ", " + init;
+        } else if (args.size() >= 2 && args[1]) {
+            text += ", " + ns + "RequestInit{}";
+        }
+        return text + ")";
+    }
+    if (name == "Response") {
+        if (args.empty() || !args.front()) return ns + "Response()";
+        std::string text = ns + "Response(" + emit(*args.front());
+        if (args.size() >= 2 && args[1] && args[1]->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*args[1]);
+            std::string status = "200.0", headers = ns + "Headers()";
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                if (key == "status") status = emit(*p->value);
+                else if (key == "headers") {
+                    if (typeName(*p->value) == kHeaders) headers = emit(*p->value);
+                    else headers = ns + "Headers(" + emit(*p->value) + ")";
+                }
+            }
+            text += ", " + status + ", " + headers;
+        }
+        return text + ")";
+    }
+    return std::string();
+}
+
 }  // namespace
 
 bool Generator::isNetworkObject(const Expr* e) const {
     if (e == nullptr) return false;
     const std::string& name = effectiveType(*e).name;
     if (name == kFetchResponse || name == kHttpRequest || name == kHttpResponse ||
-        name == kHttpServer || name == kWebSocket || name == kWebSocketServer) {
+        name == kHttpServer || name == kWebSocket || name == kWebSocketServer ||
+        name == kHeaders || name == kRequest || name == kResponse ||
+        name == kFormData || name == kAbortSignal) {
         return true;
     }
     // `res.status(404).text(...)` / `res.header(...).send(...)`: the chainable
@@ -172,6 +259,8 @@ std::string Generator::fetchInitText(const Expr& init) {
     std::string body = "std::string()";
     std::string timeout = "0.0";
     std::string headers;
+    std::string signal;  // Ledger L (appended)
+    std::string formBody;
     bool hasBody = false;
     for (const auto& p : literal.properties) {
         if (!p || !p->value) continue;
@@ -179,8 +268,11 @@ std::string Generator::fetchInitText(const Expr& init) {
         if (key == "method") {
             method = expr(*p->value);
         } else if (key == "body") {
-            body = expr(*p->value);
+            if (effectiveType(*p->value).name == kFormData) formBody = expr(*p->value);
+            else body = expr(*p->value);
             hasBody = true;
+        } else if (key == "signal") {
+            signal = expr(*p->value);
         } else if (key == "timeout") {
             timeout = expr(*p->value);
         } else if (key == "headers") {
@@ -197,14 +289,23 @@ std::string Generator::fetchInitText(const Expr& init) {
                                 "Map<string, string>, not an object literal");
                 continue;
             }
-            headers = expr(*p->value);
+            // Ledger L: a Headers object lowers through its toMap().
+            if (effectiveType(*p->value).name == kHeaders) {
+                headers = "(" + expr(*p->value) + ").toMap()";
+            } else {
+                headers = expr(*p->value);
+            }
             needsCollections_ = true;
         }
     }
     std::string text = std::string(kRuntimeNs) + "FetchInit{" + method + ", " + body +
                        ", " + (hasBody ? "true" : "false") + ", " + timeout;
     if (!headers.empty()) text += ", " + headers;
-    return text + "}";
+    else if (!signal.empty()) text += ", ::cp3::runtime::network::StringMap()";
+    if (!signal.empty()) text += ", std::make_shared<::cp3::runtime::network::AbortSignal>(" + signal + ")";
+    text += "}";
+    if (!formBody.empty()) text = std::string(kRuntimeNs) + "withFormData(" + text + ", " + formBody + ")";
+    return text;
 }
 
 std::string Generator::emitNetworkFetch(const CallExpr& c, const ExprList& args) {
@@ -217,6 +318,10 @@ std::string Generator::emitNetworkFetch(const CallExpr& c, const ExprList& args)
         reportCodegenError(c, diagcode::kArityMismatch,
                            "fetch(url, options?) takes one or two arguments");
         return "0.0";
+    }
+    // Ledger L (appended): `fetch(request)`.
+    if (effectiveType(*args.front()).name == kRequest) {
+        return std::string(kRuntimeNs) + "fetch(" + expr(*args.front()) + ")";
     }
     const std::string url = expr(*args.front());
     if (args.size() < 2 || !args[1]) {
@@ -264,6 +369,47 @@ std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::strin
         if (threads.empty()) return std::string(kRuntimeNs) + "HttpServer()";
         return std::string(kRuntimeNs) + "HttpServer(" + threads + ")";
     }
+    // Ledger L (appended): middleware factories + bare class constructions.
+    if (name == "static") {
+        needsNetwork_ = true;
+        std::string dir = c.arguments.empty() || !c.arguments.front() ? "std::string()" : expr(*c.arguments.front());
+        return std::string(kRuntimeNs) + "makeStaticMiddleware(" + dir + ")";
+    }
+    if (name == "bodyLimit") {
+        needsNetwork_ = true;
+        std::string limit = c.arguments.empty() || !c.arguments.front() ? "0.0" : expr(*c.arguments.front());
+        return std::string(kRuntimeNs) + "makeBodyLimitMiddleware(" + limit + ")";
+    }
+    if (name == "cors") {
+        needsNetwork_ = true;
+        std::string opts = std::string(kRuntimeNs) + "CorsOptions()";
+        if (!c.arguments.empty() && c.arguments.front() &&
+            c.arguments.front()->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*c.arguments.front());
+            std::string inner;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                if (key == "origin") inner += ".origin = " + expr(*p->value) + "; ";
+                else if (key == "methods") inner += ".methods = " + expr(*p->value) + "; ";
+                else if (key == "headers") inner += ".headers = " + expr(*p->value) + "; ";
+                else if (key == "credentials") inner += ".credentials = " + expr(*p->value) + "; ";
+                else if (key == "maxAge") inner += ".maxAge = " + expr(*p->value) + "; ";
+            }
+            opts = "[&] { " + std::string(kRuntimeNs) + "CorsOptions o; " + inner + "return o; }()";
+        } else if (!c.arguments.empty() && c.arguments.front()) {
+            reportTypeError(*c.arguments.front(), "type mismatch: cors() options must be an object literal");
+        }
+        return std::string(kRuntimeNs) + "makeCorsMiddleware(" + opts + ")";
+    }
+    if (name == "Headers" || name == "FormData" || name == "Request" ||
+        name == "Response" || name == "AbortSignal") {
+        needsNetwork_ = true;
+        needsEventLoop_ = name == "Request";
+        return networkClassText(name, c.arguments,
+            [this](const Expr& e) { return expr(e); },
+            [this](const Expr& e) { return effectiveType(e).name; });
+    }
     return std::string();
 }
 
@@ -309,6 +455,14 @@ std::string Generator::emitUnresolvedCall(const CallExpr& c, const std::string& 
 std::string Generator::emitNetworkNew(const NewExpr& n) {
     if (!n.callee || n.callee->kind != NodeKind::Identifier) return std::string();
     const std::string name = static_cast<const Identifier&>(*n.callee).name;
+    // Ledger L (appended): `new Headers/Request/Response/FormData/AbortSignal`.
+    if (name == "Headers" || name == "Request" || name == "Response" ||
+        name == "FormData" || name == "AbortSignal") {
+        needsNetwork_ = true;
+        return networkClassText(name, n.arguments,
+            [this](const Expr& e) { return expr(e); },
+            [this](const Expr& e) { return effectiveType(e).name; });
+    }
     if (name == "WebSocket") {
         needsNetwork_ = true;
         needsEventLoop_ = true;
@@ -357,6 +511,15 @@ std::string Generator::emitNetworkNew(const NewExpr& n) {
 // =============================================================================
 
 std::string Generator::emitNetworkCall(const CallExpr& c, const MemberExpr& m) {
+    // Ledger L (appended): `AbortSignal.timeout(ms)` (also reached via the
+    // lead's `AbortSignal` dispatch line, see wiring notes).
+    if (m.property == "timeout" && m.object &&
+        m.object->kind == NodeKind::Identifier &&
+        static_cast<const Identifier&>(*m.object).name == "AbortSignal") {
+        needsNetwork_ = true;
+        std::string ms = c.arguments.empty() || !c.arguments.front() ? "0.0" : expr(*c.arguments.front());
+        return std::string(kRuntimeNs) + "AbortSignal::timeout(" + ms + ")";
+    }
     if (m.property == "fetch") return emitNetworkFetch(c, c.arguments);
     if (m.property == "lookup") return emitNetworkIdentifier(c, "lookup");
     if (m.property == "createServer") return emitNetworkIdentifier(c, "createServer");

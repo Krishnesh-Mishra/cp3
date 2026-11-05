@@ -1,7 +1,7 @@
 import { createServer } from "std/network";
 
 // The documented middleware continuation takes no argument (docs 04 network:
-// `type NextFunction = () => Promise<void>`), so `next(x)` is an arity error.
+// `type NextFunction = () => Promise<undefined>`), so `next(x)` is an arity error.
 const app = createServer();
 app.use((req, res, next) => {
   next("boom");

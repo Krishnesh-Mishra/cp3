@@ -28,6 +28,10 @@ constexpr StdIntegerRow kRows[] = {
     {StdIntegerKind::Length, "u64", "usize", "size_t"},
     {StdIntegerKind::Index, "u64", "usize", "size_t"},
     {StdIntegerKind::Count, "u64", "usize", "size_t"},
+    {StdIntegerKind::Checksum32, "u32", "u32", "uint32_t"},
+    {StdIntegerKind::Checksum64, "u64", "u64", "uint64_t"},
+    {StdIntegerKind::ByteValue, "u8", "u8", "uint8_t"},
+    {StdIntegerKind::SignedIndex, "i64", "isize", "ptrdiff_t"},
 };
 
 const StdIntegerRow& rowOf(StdIntegerKind kind) noexcept {

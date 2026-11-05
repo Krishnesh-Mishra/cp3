@@ -1,11 +1,10 @@
 {
-  "mode": "run",
+  "mode": "check",
   "stdout": "",
   "exitCode": 1,
   "error": {
-    "code": "CP3401",
+    "code": "CP3421",
     "line": 4,
-    "col": 3,
-    "contains": "field 'value'"
+    "contains": "unknown"
   }
 }

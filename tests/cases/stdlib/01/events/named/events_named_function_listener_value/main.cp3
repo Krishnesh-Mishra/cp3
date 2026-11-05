@@ -1,5 +1,5 @@
 import console from "std/console";
-function handler(name: string): void {
+function handler(name: string): undefined {
   console.log(`hello ${name}`);
 }
 let e = new EventEmitter();

@@ -78,6 +78,10 @@ struct CliOptions {
     // says `"type": "package"`, but the tool itself is a runnable program, so
     // build/run must treat it as an application rather than pack it.
     bool execTool = false;
+    // Internal: `test` builds each test file as a runnable program even
+    // inside a `"type": "package"` project, so `cp3 test` works for
+    // packages (the test binary imports the package entry).
+    bool testMode = false;
 };
 
 // -----------------------------------------------------------------------------
@@ -112,7 +116,7 @@ int cmdFmt(const CliOptions& opt);
 int cmdClean(const CliOptions& opt);
 int cmdInit(const CliOptions& opt);
 int cmdToolchain(const CliOptions& opt);
-
+int cmdTest(const CliOptions& opt);
 // Interactive family, version and scope flow, shared by `cp3c toolchain`.
 int runToolchainWizard(const CliOptions& opt);
 

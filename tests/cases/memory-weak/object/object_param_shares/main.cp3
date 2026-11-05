@@ -1,5 +1,5 @@
 import console from "std/console";
-function bump(o: { v: number }): void { o.v = o.v + 1; }
+function bump(o: { v: number }): undefined { o.v = o.v + 1; }
 let o = { v: 1 };
 bump(o);
 console.log(`${o.v}`);

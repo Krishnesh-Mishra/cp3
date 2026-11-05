@@ -27,15 +27,24 @@ namespace cp3 {
 
 namespace {
 
-// `(text: string) => unknown` / `(value: unknown, indent?: number) => string`.
-// The real call typing stays in tryInferJsonCall (call_check.cpp); these rows
-// only mark the surface closed and give member reads a type.
+// `(text: string) => unknown` / `(value: unknown, replacer?: ..., space?:
+// number | string) => string`. The real call typing stays in tryInferJsonCall
+// (call_check.cpp); these rows only mark the surface closed and give member
+// reads a type. The second parameter's union keeps the CP3 indent form
+// (`stringify(v, 2)`: a number) alongside the ECMAScript replacer form.
 Type jsonParseSignature() {
     return Type::function({Type::string()}, Type::unknown());
 }
+Type jsonReplacerSignature() {
+    return Type::function({Type::string(), Type::unknown()}, Type::unknown());
+}
 Type jsonStringifySignature() {
-    return withOptionalTail(
-        Type::function({Type::unknown(), Type::number()}, Type::string()));
+    const Type replacerOrIndent = Type::unionOf({
+        Type::number(), jsonReplacerSignature(), Type::array(Type::string())});
+    const Type space = Type::unionOf({Type::number(), Type::string()});
+    return withOptionalTail2(
+        Type::function({Type::unknown(), replacerOrIndent, space},
+                       Type::string()));
 }
 
 const MemberRow kJsonRows[] = {
@@ -45,9 +54,13 @@ const MemberRow kJsonRows[] = {
      "before use. With `parse<T>` the parsed value is validated against `T`'s "
      "shape at runtime, and a mismatch throws an ordinary catchable error."},
     {"stringify", jsonStringifySignature,
-     "stringify<T>(value: T, indent?: number): string",
-     "Serializes `value` as JSON text. With `indent`, the result is "
-     "pretty-printed with that indentation."},
+     "stringify<T>(value: T, replacer?: ((key: string, value: unknown) => unknown) | string[] | number, space?: number | string): string",
+     "Serializes `value` as JSON text. `replacer` is an ECMAScript replacer "
+     "callback `(key, value) => replacement` (return `undefined` to omit a "
+     "property) or a `string[]` allowlist of property names; `space` (number "
+     "or string) controls pretty-print indentation. For back-compat, "
+     "`stringify(value, indentNumber)` is still accepted as the second "
+     "argument."},
 };
 
 }  // namespace

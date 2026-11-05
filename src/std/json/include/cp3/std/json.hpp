@@ -13,6 +13,12 @@
 //     scalars use the dedicated overloads; an array value uses the `Array<E>`
 //     template; a composite literal lowers through the dynamic value tree
 //     (`arrayValue` / `objectValue` / `value`) into `stringify(Value, indent)`.
+//   `JSON.stringify(value, replacer?, space?)`: the ECMAScript replacer +
+//     space forms. `replacer` is a CP3 callback `(key, value) => replacement`
+//     (adapted to `Replacer`) or a `string[]` allowlist; `space` is a number
+//     or a string, normalized by `normalizeSpace`. The CP3 indent form
+//     `stringify(value, indentNumber)` is kept as the second-argument number
+//     case (see emitJsonStringify).
 //   `JSON.parse<number|string|boolean>(text)` -> `parseNumber` / `parseString` /
 //     `parseBoolean`: parse the text and throw `ParseError` on invalid JSON or
 //     a kind mismatch.
@@ -46,6 +52,8 @@
 
 #include <cmath>
 #include <cstddef>
+#include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -150,6 +158,7 @@ inline void writeValue(const Value& v, std::string& out, int indent, int depth) 
         case Value::Kind::String: out += stringify(v.text); return;
         case Value::Kind::Array: writeArray(v, out, indent, depth); return;
         case Value::Kind::Object: writeObject(v, out, indent, depth); return;
+        case Value::Kind::Undefined: out += "undefined"; return;
     }
 }
 
@@ -174,6 +183,181 @@ inline std::string stringify(const Array<E>& elements) {
     }
     out.push_back(']');
     return out;
+}
+
+// =============================================================================
+// Replacer + space (the ECMAScript JSON.stringify options)
+// =============================================================================
+
+// The replacer the CP3 call lowering adapts a CP3 callback to: it receives
+// the property key and the original value tree and returns the replacement
+// tree, or `std::nullopt` to omit the property (ECMAScript `undefined`).
+// The codegen wrapper homogenizes a CP3 callback's scalar return through
+// `value(...)` first, so returning the `value` parameter forwards the child.
+using Replacer =
+    std::function<std::optional<Value>(const std::string&, const Value&)>;
+
+inline std::optional<Value> toOptionalValue(const Value& v) {
+    if (isUndefined(v)) return std::nullopt;
+    return v;
+}
+
+// Normalize the `space` argument the way ECMAScript does: a number clamps to
+// 0..10 spaces per level (a negative count is 0), a string keeps at most its
+// first 10 characters. The empty gap means compact (no pretty-printing).
+inline std::string normalizeSpace(double space) {
+    if (!std::isfinite(space)) return std::string();
+    double count = std::trunc(space);
+    if (count < 0.0) count = 0.0;
+    if (count > 10.0) count = 10.0;
+    return std::string(static_cast<std::size_t>(count), ' ');
+}
+
+inline std::string normalizeSpace(const std::string& space) {
+    return space.size() > 10 ? space.substr(0, 10) : space;
+}
+
+// The gap-aware pretty writer used by the replacer/allowlist forms. `gap`
+// empty is the compact form; otherwise every member is preceded by a newline
+// plus `depth` copies of `gap` (ECMAScript SerializeJSONProperty).
+inline void writeGapPad(std::string& out, const std::string& gap, int depth) {
+    if (gap.empty()) return;
+    out.push_back('\n');
+    for (int i = 0; i < depth; ++i) out += gap;
+}
+
+inline void writeValueGap(const Value& v, std::string& out,
+                          const std::string& gap, int depth);
+
+inline void writeArrayGap(const Value& v, std::string& out,
+                          const std::string& gap, int depth) {
+    if (v.items.empty()) {
+        out += "[]";
+        return;
+    }
+    out.push_back('[');
+    for (std::size_t i = 0; i < v.items.size(); ++i) {
+        if (i != 0) out.push_back(',');
+        writeGapPad(out, gap, depth + 1);
+        writeValueGap(v.items[i], out, gap, depth + 1);
+    }
+    writeGapPad(out, gap, depth);
+    out.push_back(']');
+}
+
+inline void writeObjectGap(const Value& v, std::string& out,
+                           const std::string& gap, int depth) {
+    if (v.fields.empty()) {
+        out += "{}";
+        return;
+    }
+    out.push_back('{');
+    for (std::size_t i = 0; i < v.fields.size(); ++i) {
+        if (i != 0) out.push_back(',');
+        writeGapPad(out, gap, depth + 1);
+        out += stringify(v.fields[i].key);
+        out.push_back(':');
+        if (!gap.empty()) out.push_back(' ');
+        writeValueGap(v.fields[i].value, out, gap, depth + 1);
+    }
+    writeGapPad(out, gap, depth);
+    out.push_back('}');
+}
+
+inline void writeValueGap(const Value& v, std::string& out,
+                          const std::string& gap, int depth) {
+    switch (v.kind) {
+        case Value::Kind::Null: out += "null"; return;
+        case Value::Kind::Bool: out += stringify(v.boolean); return;
+        case Value::Kind::Number: out += stringify(v.number); return;
+        case Value::Kind::String: out += stringify(v.text); return;
+        case Value::Kind::Array: writeArrayGap(v, out, gap, depth); return;
+        case Value::Kind::Object: writeObjectGap(v, out, gap, depth); return;
+        case Value::Kind::Undefined: out += "undefined"; return;
+    }
+}
+
+inline std::string stringify(const Value& v, const std::string& gap) {
+    std::string out;
+    writeValueGap(v, out, normalizeSpace(gap), 0);
+    return out;
+}
+
+// Forward declarations: the replacer forms below call these.
+inline std::optional<Value> applyReplacer(const std::string& key,
+                                          const Value& original,
+                                          const Replacer& replacer);
+inline Replacer allowlistReplacer(const std::vector<std::string>& allow);
+
+// `JSON.stringify(value, replacer, space?)`: the transformed tree writes with
+// the normalized gap (`space: number | string`); a replacer that omits the
+// root yields "" (ECMAScript returns `undefined`, which has no `string`
+// spelling in CP3).
+inline std::string stringify(const Value& v, const Replacer& replacer,
+                             const std::string& gap) {
+    const std::optional<Value> kept = applyReplacer("", v, replacer);
+    if (!kept.has_value()) return std::string();
+    return stringify(*kept, gap);
+}
+
+// `JSON.stringify(value, allowlist, space?)`: the array-replacer form, where
+// the list is already a `std::vector<std::string>` of property names.
+inline std::string stringify(const Value& v,
+                             const std::vector<std::string>& allow,
+                             const std::string& gap) {
+    return stringify(v, allowlistReplacer(allow), gap);
+}
+
+// The replacer traversal (ECMAScript SerializeJSONProperty, minus `toJSON`
+// and the holder `this`): the replacer runs top-down on every node under the
+// root `{"": value}` holder; an omitted node never recurses into its
+// children. `nullopt` omits a property or (for the root only) yields "".
+// Array elements omitted by the replacer serialize as `null`, object fields
+// are dropped, exactly as ECMAScript specifies.
+inline std::optional<Value> applyReplacer(const std::string& key,
+                                          const Value& original,
+                                          const Replacer& replacer) {
+    const std::optional<Value> replaced = replacer(key, original);
+    if (!replaced.has_value() || isUndefined(*replaced)) return std::nullopt;
+    Value out = *replaced;
+    if (out.kind == Value::Kind::Array) {
+        std::vector<Value> kept;
+        kept.reserve(out.items.size());
+        for (std::size_t i = 0; i < out.items.size(); ++i) {
+            const std::optional<Value> child =
+                applyReplacer(std::to_string(i), out.items[i], replacer);
+            kept.push_back(child.has_value() ? std::move(*child) : nullValue());
+        }
+        out.items = std::move(kept);
+    } else if (out.kind == Value::Kind::Object) {
+        Fields kept;
+        kept.reserve(out.fields.size());
+        for (const Value::Field& field : out.fields) {
+            const std::optional<Value> child =
+                applyReplacer(field.key, field.value, replacer);
+            if (child.has_value()) {
+                kept.emplace_back(field.key, std::move(*child));
+            }
+        }
+        out.fields = std::move(kept);
+    }
+    return out;
+}
+
+// An allowlist replacer (ECMAScript: a replacer that is an array keeps only
+// the listed keys; the root and every array index pass through): the array
+// elements are the listed property names.
+inline Replacer allowlistReplacer(const std::vector<std::string>& allow) {
+    return [allow](const std::string& key, const Value& v) -> std::optional<Value> {
+        if (key.empty()) return v;  // the root holder
+        // Primitives and arrays always pass (ECMAScript only drops
+        // non-array objects whose key is missing from the list).
+        if (v.kind != Value::Kind::Object) return v;
+        for (const std::string& name : allow) {
+            if (name == key) return v;
+        }
+        return std::nullopt;
+    };
 }
 
 }  // namespace cp3::runtime::json

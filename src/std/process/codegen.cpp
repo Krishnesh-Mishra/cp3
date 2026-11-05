@@ -47,6 +47,7 @@ constexpr const char* kExecResult = "$process:ExecResult";
 constexpr const char* kSpawnHandle = "$process:SpawnHandle";
 constexpr const char* kMemoryUsage = "$process:MemoryUsage";
 constexpr const char* kStdioStream = "$process:StdioStream";
+constexpr const char* kStdinStream = "$process:StdinStream";
 constexpr const char* kRuntimeNs = "::cp3::runtime::process::";
 
 /// The literal string value of `e` ("" when it is not a string literal).
@@ -69,13 +70,30 @@ std::vector<std::string> spawnEventParams(const std::string& event,
     return {};
 }
 
+/// The documented listener parameter types for one `process.on` event name
+/// (ledger L): "exit" carries the exit code (the std exit-code width),
+/// "SIGINT"/"SIGTERM"/"unhandledRejection" carry a string (the signal name /
+/// the rejection reason text). stdin's "line"/"close" carry a string.
+std::vector<std::string> lifecycleEventParams(const std::string& event,
+                                              TypeSystem ts) {
+    if (event == "exit") {
+        return {ts == TypeSystem::TypeScript ? "double" : "std::int32_t"};
+    }
+    if (event == "SIGINT" || event == "SIGTERM" || event == "unhandledRejection" ||
+        event == "line" || event == "close") {
+        return {"std::string"};
+    }
+    return {};
+}
+
 }  // namespace
 
 bool Generator::isProcessObject(const Expr* e) const {
     if (e == nullptr) return false;
     const std::string& name = effectiveType(*e).name;
     return name == kExecResult || name == kSpawnHandle ||
-           name == kMemoryUsage || name == kStdioStream;
+           name == kMemoryUsage || name == kStdioStream ||
+           name == kStdinStream;
 }
 
 /// `process.exit` plus the two child-process entry points. The calls keep the
@@ -126,6 +144,73 @@ std::string Generator::emitProcessCall(const CallExpr& c, const MemberExpr& m) {
         needsEventLoop_ = true;  // the result / handle events need the loop
         return std::string(kRuntimeNs) + prop + "(" + expr(*cmd) + ", " +
                processArgs(*args) + ")";
+    }
+    if (prop == "on" && c.arguments.size() == 2) {
+        const Expr* event = c.arguments[0].get();
+        const Expr* listener = c.arguments[1].get();
+        if (!event || !listener || event->kind == NodeKind::SpreadElement ||
+            listener->kind == NodeKind::SpreadElement) {
+            return std::string();
+        }
+        needsProcess_ = true;
+        needsEventLoop_ = true;  // signal/rejection delivery is a loop task
+        const std::string eventName = stringLiteralOf(event);
+        const std::vector<std::string> context =
+            lifecycleEventParams(eventName, options_.typeSystem);
+        const std::string call =
+            std::string(kRuntimeNs) + "on(" + expr(*event) + ", ";
+        if (listener->kind != NodeKind::ArrowFunction) {
+            return call + expr(*listener) + ")";
+        }
+        const auto& arrow = static_cast<const ArrowFunction&>(*listener);
+        if (eventName.empty()) {
+            if (!arrow.params.empty()) {
+                reportTypeError(*event, "the process event name must be a "
+                                        "string literal (\"SIGINT\", \"SIGTERM\", "
+                                        "\"exit\" or \"unhandledRejection\"): the "
+                                        "listener's payload type depends on it");
+                return "0.0";
+            }
+        }
+        pushScope();
+        for (std::size_t i = 0; i < arrow.params.size() && i < context.size(); ++i) {
+            const Parameter* p = arrow.params[i].get();
+            if (!p || !p->name || p->name->kind != NodeKind::Identifier) continue;
+            if (context[i] == "std::string") {
+                declare(static_cast<const Identifier&>(*p->name).name, Type::string());
+            } else if (context[i] == "double") {
+                declare(static_cast<const Identifier&>(*p->name).name, Type::number());
+            }
+        }
+        std::string text = call + emitArrow(arrow, context) + ")";
+        popScope();
+        return text;
+    }
+    if (prop == "onShutdown" && c.arguments.size() == 1) {
+        const Expr* listener = c.arguments.front().get();
+        if (!listener || listener->kind == NodeKind::SpreadElement) {
+            return std::string();
+        }
+        needsProcess_ = true;
+        needsEventLoop_ = true;
+        const std::vector<std::string> context =
+            lifecycleEventParams("exit", options_.typeSystem);
+        if (listener->kind != NodeKind::ArrowFunction) {
+            return std::string(kRuntimeNs) + "onShutdown(" + expr(*listener) + ")";
+        }
+        const auto& arrow = static_cast<const ArrowFunction&>(*listener);
+        pushScope();
+        for (std::size_t i = 0; i < arrow.params.size() && i < context.size(); ++i) {
+            const Parameter* p = arrow.params[i].get();
+            if (!p || !p->name || p->name->kind != NodeKind::Identifier) continue;
+            if (context[i] == "double") {
+                declare(static_cast<const Identifier&>(*p->name).name, Type::number());
+            }
+        }
+        std::string text =
+            std::string(kRuntimeNs) + "onShutdown(" + emitArrow(arrow, context) + ")";
+        popScope();
+        return text;
     }
     return std::string();
 }
@@ -193,6 +278,50 @@ std::string Generator::emitProcessObjectCall(const CallExpr& c,
         needsEventLoop_ = true;
         return "(" + expr(*m.object) + ").write(" + expr(*arg) + ")";
     }
+    if (typeName == kStdinStream) {
+        if ((m.property == "readAll" || m.property == "readLines" ||
+             m.property == "readLine" || m.property == "close") &&
+            c.arguments.empty()) {
+            needsProcess_ = true;
+            needsEventLoop_ = true;
+            return "(" + expr(*m.object) + ")." + m.property + "()";
+        }
+        if (m.property != "on" || c.arguments.size() != 2) return std::string();
+        const Expr* event = c.arguments[0].get();
+        const Expr* listener = c.arguments[1].get();
+        if (!event || !listener || event->kind == NodeKind::SpreadElement ||
+            listener->kind == NodeKind::SpreadElement) {
+            return std::string();
+        }
+        needsProcess_ = true;
+        needsEventLoop_ = true;
+        const std::string eventName = stringLiteralOf(event);
+        const std::vector<std::string> context =
+            lifecycleEventParams(eventName, options_.typeSystem);
+        const std::string call =
+            "(" + expr(*m.object) + ").on(" + expr(*event) + ", ";
+        if (listener->kind != NodeKind::ArrowFunction) {
+            return call + expr(*listener) + ")";
+        }
+        const auto& arrow = static_cast<const ArrowFunction&>(*listener);
+        if (eventName.empty() && !arrow.params.empty()) {
+            reportTypeError(*event, "the stdin event name must be a string "
+                                    "literal (\"line\" or \"close\"): the "
+                                    "listener's payload type depends on it");
+            return "0.0";
+        }
+        pushScope();
+        for (std::size_t i = 0; i < arrow.params.size() && i < context.size(); ++i) {
+            const Parameter* p = arrow.params[i].get();
+            if (!p || !p->name || p->name->kind != NodeKind::Identifier) continue;
+            if (context[i] == "std::string") {
+                declare(static_cast<const Identifier&>(*p->name).name, Type::string());
+            }
+        }
+        std::string text = call + emitArrow(arrow, context) + ")";
+        popScope();
+        return text;
+    }
     if (typeName != kSpawnHandle) return std::string();
     if (m.property == "kill" && c.arguments.empty()) {
         needsProcess_ = true;
@@ -237,6 +366,10 @@ std::string Generator::emitProcessObjectCall(const CallExpr& c,
             declare(static_cast<const Identifier&>(*p->name).name, Type::string());
         } else if (context[i] == "double") {
             declare(static_cast<const Identifier&>(*p->name).name, Type::number());
+        } else if (context[i] == "std::int32_t") {
+            // The "exit" payload in a Rust/C++ project: the exact i32 width.
+            declare(static_cast<const Identifier&>(*p->name).name,
+                    Type::native("i32"));
         }
     }
     std::string text = call + emitArrow(arrow, context) + ")";
@@ -253,13 +386,16 @@ std::string Generator::emitProcessMember(const MemberExpr& m) {
         needsProcess_ = true;
         return std::string(kRuntimeNs) + "argv()";
     }
-    if (isNsMember(&m, "process", "pid")) {
+    if (isNsMember(&m, "process", "pid") ||
+        isNsMember(&m, "process", "ppid")) {
         needsProcess_ = true;
-        return std::string(kRuntimeNs) + "pid()";
-    }
-    if (isNsMember(&m, "process", "ppid")) {
-        needsProcess_ = true;
-        return std::string(kRuntimeNs) + "ppid()";
+        const std::string read = std::string(kRuntimeNs) + m.property + "()";
+        // The runtime stores the exact i32; a TypeScript project keeps
+        // `number`, so the read widens at the boundary (RFC integer widths).
+        if (options_.typeSystem == TypeSystem::TypeScript) {
+            return "static_cast<double>(" + read + ")";
+        }
+        return read;
     }
     if (m.property == "length" && isNsMember(m.object.get(), "process", "argv")) {
         needsProcess_ = true;
@@ -293,6 +429,11 @@ std::string Generator::emitProcessMember(const MemberExpr& m) {
     if (isNsMember(&m, "process", "version")) {
         needsProcess_ = true;
         return std::string(kRuntimeNs) + "version()";
+    }
+    if (isNsMember(&m, "process", "stdin")) {
+        needsProcess_ = true;
+        needsEventLoop_ = true;
+        return "(" + std::string(kRuntimeNs) + "processStdin())";
     }
     if (isNsMember(&m, "process", "exitCode")) {
         needsProcess_ = true;

@@ -1,5 +1,5 @@
 import console from "std/console";
-function inc(x: number): void {
+function inc(x: number): undefined {
   x = x + 1;
 }
 let a = 5;

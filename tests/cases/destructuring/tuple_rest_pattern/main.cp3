@@ -4,7 +4,7 @@ let t: [number, string, boolean] = [1, "a", true];
 let [first, ...rest] = t;
 console.log(`${first} ${rest.length} ${rest[0]} ${rest[1]}`);
 
-function local(): void {
+function local(): undefined {
   let u: [number, number, number] = [1, 2, 3];
   let [a, ...tail] = u;
   console.log(`${a} ${tail.length} ${tail[1]}`);

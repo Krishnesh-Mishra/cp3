@@ -1,11 +1,11 @@
 // The direct `await sleep(0)` lowering must arm the same timer and post the
-// resume as a microtask, exactly like awaiting the temporary Promise<void>.
+// resume as a microtask, exactly like awaiting the temporary Promise<undefined>.
 // Oracle: the callee runs synchronously to the await, the caller regains
 // control, the sleep timer fires before the later timer, and the resume runs
 // before the next timer.
 import console from "std/console";
 
-async function f(): Promise<void> {
+async function f(): Promise<undefined> {
   console.log("before");
   await sleep(0);
   console.log("after");

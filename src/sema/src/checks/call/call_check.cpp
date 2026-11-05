@@ -434,10 +434,15 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
     if ((m.property == "parse" || m.property == "stringify") && m.object &&
         m.object->kind == NodeKind::Identifier &&
         static_cast<Identifier&>(*m.object).name == "JSON") {
-        // JSON.stringify(value, indent?): `unknown` accepts any argument type
-        // (M1 cannot represent objects/arrays yet, but must not reject them),
-        // and the optional indent is a number. JSON.parse(text) requires a
-        // string. Both are enforced in `check` (M2 open bug 9).
+        // JSON.stringify(value, replacer?, space?): `unknown` accepts any
+        // argument type (M1 cannot represent objects/arrays yet, but must
+        // not reject them). The replacer is the ECMAScript callback
+        // `(key: string, value: unknown) => unknown`, a `string[]`
+        // allowlist, or a legacy numeric indent; `space` is
+        // `number | string`. Both tail parameters are optional, mirroring
+        // the member table in src/std/json/sema.cpp
+        // (`jsonStringifySignature`). JSON.parse(text) requires a string.
+        // Both are enforced in `check` (M2 open bug 9).
         FuncSig sig;
         sig.annotatedReturn = true;
         sig.name = "JSON." + m.property;
@@ -445,8 +450,14 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
         // narrow); JSON.stringify yields a string.
         Type t = Type::unknown();
         if (m.property == "stringify") {
-            sig.params = {Type::unknown(), Type::number()};
-            sig.optional = {false, true};
+            const Type replacer = Type::function(
+                {Type::string(), Type::unknown()}, Type::unknown());
+            const Type replacerOrIndent = Type::unionOf(
+                {Type::number(), replacer, Type::array(Type::string())});
+            const Type space =
+                Type::unionOf({Type::number(), Type::string()});
+            sig.params = {Type::unknown(), replacerOrIndent, space};
+            sig.optional = {false, true, true};
             sig.ret = Type::string();
             t = Type::string();
         } else {

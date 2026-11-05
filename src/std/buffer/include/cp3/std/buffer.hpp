@@ -46,6 +46,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -181,6 +182,79 @@ inline std::string base64Decode(const std::string& text) {
         }
     }
     if (bits >= 6 || padding > 2) fail("Buffer.from: invalid base64 input");
+    return out;
+}
+
+// --- Ledger D extension: base64url (RFC 4648 §5, unpadded) ------------------
+// Same 6-bit packing as base64, with '-'/'_' in place of '+'/'/' and no
+// trailing '=' padding on encode. Decode accepts both padded and unpadded
+// input and still rejects '+'/'/'.
+inline std::string base64UrlEncode(const std::string& bytes) {
+    static const char kAlphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    std::string out;
+    out.reserve((bytes.size() + 2) / 3 * 4);
+    std::size_t i = 0;
+    for (; i + 3 <= bytes.size(); i += 3) {
+        const unsigned triple =
+            (static_cast<unsigned char>(bytes[i]) << 16) |
+            (static_cast<unsigned char>(bytes[i + 1]) << 8) |
+            static_cast<unsigned char>(bytes[i + 2]);
+        out.push_back(kAlphabet[(triple >> 18) & 0x3f]);
+        out.push_back(kAlphabet[(triple >> 12) & 0x3f]);
+        out.push_back(kAlphabet[(triple >> 6) & 0x3f]);
+        out.push_back(kAlphabet[triple & 0x3f]);
+    }
+    const std::size_t rest = bytes.size() - i;
+    if (rest == 1) {
+        const unsigned triple = static_cast<unsigned char>(bytes[i]) << 16;
+        out.push_back(kAlphabet[(triple >> 18) & 0x3f]);
+        out.push_back(kAlphabet[(triple >> 12) & 0x3f]);
+    } else if (rest == 2) {
+        const unsigned triple =
+            (static_cast<unsigned char>(bytes[i]) << 16) |
+            (static_cast<unsigned char>(bytes[i + 1]) << 8);
+        out.push_back(kAlphabet[(triple >> 18) & 0x3f]);
+        out.push_back(kAlphabet[(triple >> 12) & 0x3f]);
+        out.push_back(kAlphabet[(triple >> 6) & 0x3f]);
+    }
+    return out;
+}
+
+inline int base64UrlValue(char c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '-') return 62;
+    if (c == '_') return 63;
+    return -1;
+}
+
+inline std::string base64UrlDecode(const std::string& text) {
+    std::string out;
+    out.reserve(text.size() / 4 * 3 + 3);
+    unsigned acc = 0;
+    int bits = 0;
+    int padding = 0;
+    for (char c : text) {
+        if (c == ' ' || c == '\n' || c == '\r' || c == '\t') continue;
+        if (c == '=') {
+            ++padding;
+            continue;
+        }
+        if (padding != 0) {
+            fail("Buffer.from: \"=\" is only allowed at the end of base64url input");
+        }
+        const int value = base64UrlValue(c);
+        if (value < 0) fail("Buffer.from: invalid base64url input");
+        acc = (acc << 6) | static_cast<unsigned>(value);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<char>((acc >> bits) & 0xffu));
+        }
+    }
+    if (bits >= 6 || padding > 2) fail("Buffer.from: invalid base64url input");
     return out;
 }
 
@@ -332,10 +406,13 @@ public:
     // A copy of the bytes. Kept for callers that need an owning std::string;
     // the crypto boundary uses `view` and never materializes one.
     std::string bytes() const { return std::string(view()); }
-    double size() const { return static_cast<double>(length_); }
+    // The exact std length width (`usize`/`size_t`, canonical `u64`); a
+    // TypeScript project casts at the codegen read site.
+    std::uint64_t size() const { return static_cast<std::uint64_t>(length_); }
 
 private:
     friend Buffer slice(const Buffer&, double, double);
+    friend Buffer slice(const Buffer&, std::int64_t, std::int64_t);
     Buffer(std::shared_ptr<const detail::BufferString> owner, std::size_t offset,
            std::size_t length)
         : owner_(std::move(owner)), offset_(offset), length_(length) {}
@@ -345,12 +422,23 @@ private:
     std::size_t length_ = 0;
 };
 
-/// `Buffer.alloc(size)`: a zero-filled buffer of `size` bytes.
+/// `Buffer.alloc(size)`: a zero-filled buffer of `size` bytes. The `double`
+/// form is the TypeScript project's entry point (codegen passes the `number`
+/// through so fractional/negative validation still fires); the exact-width
+/// form takes the std length width (`usize`/`size_t`, canonical `u64`).
 inline Buffer alloc(double size) {
     if (!(size >= 0.0) || size != std::floor(size) || size > detail::kMaxSize) {
         detail::fail("Buffer.alloc: size must be a non-negative integer");
     }
     return Buffer(detail::BufferString(static_cast<std::size_t>(size), '\0'));
+}
+
+inline Buffer alloc(std::uint64_t size) {
+    if (size > static_cast<std::uint64_t>(detail::kMaxSize)) {
+        detail::fail("Buffer.alloc: size must be a non-negative integer");
+    }
+    return Buffer(
+        detail::BufferString(static_cast<std::size_t>(size), '\0'));
 }
 
 /// `Buffer.from(input)`: the UTF-8 bytes of `input` (the default encoding).
@@ -361,25 +449,32 @@ inline Buffer from(const std::string& input) { return Buffer(input); }
 /// extra copy.
 inline Buffer from(std::string&& input) { return Buffer(std::move(input)); }
 
-/// `Buffer.from(input, encoding)`: decode `input` from `utf8`/`base64`/`hex`.
+/// `Buffer.from(input, encoding)`: decode `input` from `utf8`/`base64`/
+/// `base64url`/`hex`. `base64url` is the RFC 4648 §5 unpadded variant;
+/// `base64Url` is accepted as an alias spelling.
 inline Buffer from(const std::string& input, const std::string& encoding) {
     if (encoding == "utf8") return from(input);
     if (encoding == "base64") return Buffer(detail::base64Decode(input));
+    if (encoding == "base64url" || encoding == "base64Url")
+        return Buffer(detail::base64UrlDecode(input));
     if (encoding == "hex") return Buffer(detail::hexDecode(input));
     detail::fail("Buffer.from: unsupported encoding \"" + encoding +
-                 "\" (only \"utf8\", \"base64\" and \"hex\")");
+                 "\" (only \"utf8\", \"base64\", \"base64url\" and \"hex\")");
 }
 
 /// `buf.toString()`: the buffer's bytes as a UTF-8 string.
 inline std::string toString(const Buffer& value) { return value.bytes(); }
 
-/// `buf.toString(encoding)`: `utf8` (identity), `base64` or lowercase `hex`.
+/// `buf.toString(encoding)`: `utf8` (identity), `base64`, `base64url`
+/// (unpadded) or lowercase `hex`. `base64Url` is accepted as an alias.
 inline std::string toString(const Buffer& value, const std::string& encoding) {
     if (encoding == "utf8") return value.bytes();
     if (encoding == "base64") return detail::base64Encode(value.bytes());
+    if (encoding == "base64url" || encoding == "base64Url")
+        return detail::base64UrlEncode(value.bytes());
     if (encoding == "hex") return detail::hexEncode(value.bytes());
     detail::fail("Buffer.toString: unsupported encoding \"" + encoding +
-                 "\" (only \"utf8\", \"base64\" and \"hex\")");
+                 "\" (only \"utf8\", \"base64\", \"base64url\" and \"hex\")");
 }
 
 namespace detail {
@@ -438,21 +533,46 @@ Buffer fromConcat(const Parts&... parts) {
 /// `buf.slice(start, end)`: the bytes in [start, end) (JS semantics). The
 /// result is an immutable view of the same owner, not an observable alias:
 /// there is no write surface, and `toString` still copies.
+///
+/// The `double` form is the TypeScript project's entry point (fractional
+/// indices truncate, NaN means the default); the exact-width form takes the
+/// std signed-index width (`isize`/`ptrdiff_t`, canonical `i64`), where
+/// negatives count from the end and out-of-range indices clamp, as in JS.
 inline Buffer slice(const Buffer& value, double start, double end) {
-    const double len = value.size();
+    const double len = static_cast<double>(value.size());
     const std::size_t from = detail::sliceBegin(start, len);
     const std::size_t to = detail::sliceEnd(end, len);
     if (to <= from) return Buffer();
     return Buffer(value.owner_, value.offset_ + from, to - from);
 }
 
-/// `buf.slice(start)`: the bytes from `start` to the end.
-inline Buffer slice(const Buffer& value, double start) {
-    return slice(value, start, value.size());
+inline Buffer slice(const Buffer& value, std::int64_t start, std::int64_t end) {
+    const std::int64_t len = static_cast<std::int64_t>(value.size());
+    auto rel = [len](std::int64_t v) {
+        if (v < 0) v += len;
+        if (v < 0) return std::size_t(0);
+        if (v > len) return static_cast<std::size_t>(len);
+        return static_cast<std::size_t>(v);
+    };
+    const std::size_t from = rel(start);
+    const std::size_t to = rel(end);
+    if (to <= from) return Buffer();
+    return Buffer(value.owner_, value.offset_ + from, to - from);
 }
 
-/// `buf.length`: the byte count (codegen casts this to the cp3 `number`).
-inline double size(const Buffer& value) { return value.size(); }
+/// `buf.slice(start)`: the bytes from `start` to the end.
+inline Buffer slice(const Buffer& value, double start) {
+    return slice(value, start, static_cast<double>(value.size()));
+}
+
+inline Buffer slice(const Buffer& value, std::int64_t start) {
+    return slice(value, start, static_cast<std::int64_t>(value.size()));
+}
+
+/// `buf.length`: the exact std length width (`usize`/`size_t`, canonical
+/// `u64`); codegen casts this to the cp3 `number` only in a TypeScript
+/// project.
+inline std::uint64_t size(const Buffer& value) { return value.size(); }
 
 /// The bytes as a non-owning view, for std families that consume a Buffer
 /// without needing an owning copy (crypto digests).

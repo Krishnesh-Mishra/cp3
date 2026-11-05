@@ -2,7 +2,7 @@ import console from "std/console";
 // A `continue` inside a function never reaches a loop of the enclosing
 // function: the arrow is a function of its own.
 for (let i = 0; i < 3; i = i + 1) {
-  const step = (): void => {
+  const step = (): undefined => {
     continue;
   };
   step();

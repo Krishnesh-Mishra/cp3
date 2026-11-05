@@ -55,6 +55,7 @@ namespace cp3::runtime::fs {
 namespace detail {
 struct ReadStreamImpl;
 struct WriteStreamImpl;
+struct FsWatcherImpl;
 }  // namespace detail
 
 // =============================================================================
@@ -136,7 +137,9 @@ private:
 };
 
 /// `fs.readFileStream(path, chunkSize?)`; 0 (the default) means 64 KiB.
-ReadStream readFileStream(const std::string& path, double chunkSize = 0.0);
+/// `chunkSize` is the exact `u64` file-size quantity (cast to `number` at the
+/// call site in a TypeScript project, like `FileStats.size`).
+ReadStream readFileStream(const std::string& path, std::uint64_t chunkSize = 0);
 
 // =============================================================================
 // WriteStream (`fs.writeFileStream`)
@@ -162,5 +165,35 @@ private:
 };
 
 WriteStream writeFileStream(const std::string& path);
+
+// =============================================================================
+// FsWatcher (`fs.watch`)
+// =============================================================================
+/// `fs.watch(path, callback)`: watches `path` (a file or a directory) and
+/// invokes `callback(eventType, filename)` on every change. `eventType` is
+/// "change" (content/metadata) or "rename" (file created/deleted/moved);
+/// `filename` is the entry name relative to a watched directory, or "" when
+/// the platform does not report one (always "" for a single-file watch on
+/// some platforms). `close()` stops delivery and is idempotent. The watcher
+/// keeps the event loop alive (pending work) until closed. Backend: libuv
+/// `uv_fs_event` on the shared per-thread loop (src/std/fs/runtime_watch.cpp).
+class FsWatcher {
+public:
+    /// Internal: created by `watch` only.
+    explicit FsWatcher(std::shared_ptr<detail::FsWatcherImpl> impl);
+    ~FsWatcher();  // closes (idempotent) so a dropped watcher releases its retain
+
+    /// Stops delivering events. Idempotent; safe to call twice.
+    void close() const;
+
+private:
+    std::shared_ptr<detail::FsWatcherImpl> impl_;
+};
+
+/// `fs.watch(path, callback)`; throws `Thrown` when the path cannot be
+/// watched (e.g. it does not exist). Event-callback errors during running
+/// cannot be reported (there is no "error" listener surface) and are dropped.
+FsWatcher watch(const std::string& path,
+                std::function<void(std::string eventType, std::string filename)> callback);
 
 }  // namespace cp3::runtime::fs

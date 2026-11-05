@@ -609,6 +609,11 @@ struct EnumMember : Node {
 
 struct EnumDeclaration : Stmt {
     std::string name;
+    // `const enum Color { Red }`: members are compile-time constants that
+    // codegen inlines (no runtime enum object). Sema resolves their values
+    // and the numeric reverse map into `SemaResult::constEnums`
+    // (cp3/core/utility_types.hpp).
+    bool isConst = false;
     bool stringBacked = false;  // `enum Status { Active = "active" }`
     std::vector<EnumMemberPtr> members;
     bool isExported = false;

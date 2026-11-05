@@ -10,7 +10,7 @@ class FakePromise {
   }
 }
 
-async function f(): Promise<void> {
+async function f(): Promise<undefined> {
   const Promise = new FakePromise();
   await Promise.resolve(1);
   console.log("callee");

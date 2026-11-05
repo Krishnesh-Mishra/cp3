@@ -121,6 +121,15 @@ std::string Generator::emitByteBufferStaticCall(const CallExpr& c,
             return call + ")";
         }
     }
+    // `Buffer.alloc(size)`: `size` is the std length width. A Rust/C++
+    // project's argument is already `u64` (cast so a widened literal picks
+    // the exact overload); a TypeScript project's `number` passes through
+    // to the `double` overload, keeping fractional/negative validation.
+    if (m.property == "alloc" && c.arguments.size() == 1 &&
+        options_.typeSystem != TypeSystem::TypeScript) {
+        return "::cp3::runtime::buffer::alloc(static_cast<std::uint64_t>(" +
+               joinStrings(emitPlainArgs(c), ", ") + "))";
+    }
     return "::cp3::runtime::buffer::" + m.property + "(" +
            joinStrings(emitPlainArgs(c), ", ") + ")";
 }
@@ -150,11 +159,23 @@ std::string Generator::emitByteBufferMethodCall(const CallExpr& c,
     needsBuffer_ = true;
     std::string call =
         "::cp3::runtime::buffer::" + m.property + "(" + expr(*m.object);
-    for (const std::string& arg : args) call += ", " + arg;
+    for (const std::string& arg : args) {
+        call += ", ";
+        // `slice` bounds are the std signed-index width: cast in a Rust/C++
+        // project so the exact overload is picked; a TypeScript project's
+        // `number` keeps the `double` overload (trunc/NaN JS semantics).
+        if (m.property == "slice" &&
+            options_.typeSystem != TypeSystem::TypeScript) {
+            call += "static_cast<std::int64_t>(" + arg + ")";
+        } else {
+            call += arg;
+        }
+    }
     return call + ")";
 }
 
-// `buf.length`: the byte count (the runtime helper already yields a double).
+// `buf.length`: the exact std length width (`usize`/`size_t`); a TypeScript
+// project keeps `number`, so the read widens there.
 std::string Generator::emitByteBufferMember(const MemberExpr& m) {
     if (!m.object) return std::string();
     if (info(*m.object).shape != Shape::Buffer) return std::string();
@@ -170,7 +191,12 @@ std::string Generator::emitByteBufferMember(const MemberExpr& m) {
         return "0.0";
     }
     needsBuffer_ = true;
-    return "::cp3::runtime::buffer::size(" + expr(*m.object) + ")";
+    const std::string read =
+        "::cp3::runtime::buffer::size(" + expr(*m.object) + ")";
+    if (options_.typeSystem == TypeSystem::TypeScript) {
+        return "static_cast<double>(" + read + ")";
+    }
+    return read;
 }
 
 }  // namespace cp3

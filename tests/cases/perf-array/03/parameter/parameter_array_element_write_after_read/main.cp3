@@ -1,5 +1,5 @@
 import console from "std/console";
-function show(words: string[]): void {
+function show(words: string[]): undefined {
   const word = words[0];
   words[0] = "zulu";
   console.log(word);

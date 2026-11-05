@@ -119,6 +119,11 @@ StmtPtr ParserImpl::parseDeclaration(bool isExported) {
     }
     if (check(TokenKind::KwInterface)) return parseInterfaceDeclaration(isExported);
     if (check(TokenKind::KwEnum)) return parseEnumDeclaration(isExported);
+    // `const enum Color { ... }`: the `const` modifier in front of `enum`
+    // (parseEnumDeclaration consumes it and sets EnumDeclaration::isConst).
+    if (check(TokenKind::KwConst) && peek(1).kind == TokenKind::KwEnum) {
+        return parseEnumDeclaration(isExported);
+    }
     if (check(TokenKind::KwType) && isIdentLike(peek(1))) return parseTypeAlias(isExported);
     if (check(TokenKind::KwLet) || check(TokenKind::KwVar) || check(TokenKind::KwConst)) {
         return parseVariableDeclaration(true);

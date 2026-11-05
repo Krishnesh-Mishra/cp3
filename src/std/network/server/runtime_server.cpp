@@ -531,6 +531,12 @@ void HttpServer::addMiddlewareImpl(detail::RouteFn handler) const {
     impl_->routes.push_back(std::move(route));
 }
 
+/// Ledger L (appended): `app.onError(...)` storage.
+void HttpServer::setErrorHandlerImpl(detail::ErrorFn handler) const {
+    if (!impl_) return;
+    impl_->errorHandler = std::move(handler);
+}
+
 void HttpServer::listen(double port, std::function<void()> callback) const {
     if (!impl_ || impl_->listening) return;
     if (impl_->scaled) {

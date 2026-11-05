@@ -4,7 +4,7 @@
 // Oracle: local-7 then done, both before f() returns.
 import console from "std/console";
 
-async function f(): Promise<void> {
+async function f(): Promise<undefined> {
   const sleep = (ms: number): number => {
     console.log(`local-${ms}`);
     return ms;

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/std_integer.hpp"
 
 namespace cp3 {
 
@@ -96,9 +97,13 @@ bool Analyzer::tryInferFillCall(CallExpr& call, MemberExpr& m, Type& out) {
     const Type ot = typeOfExpr(*m.object);
     if (ot.kind != TypeKind::Array && !isTypedArrayClass(ot)) return false;
     const Type elem = ot.kind == TypeKind::Array ? elemOf(ot) : Type::number();
+    // `start`/`end` are signed relative indices (negatives count from the
+    // end); the filled value stays the element type (`number` for a view).
+    const Type idx =
+        stdIntegerType(StdIntegerKind::SignedIndex, options_.typeSystem);
     FuncSig sig;
     sig.name = "fill";
-    sig.params = {elem, Type::number(), Type::number()};
+    sig.params = {elem, idx, idx};
     sig.optional = {false, true, true};
     sig.ret = ot;
     checkArgs(sig, call);
@@ -142,28 +147,36 @@ Type Analyzer::inferCallOrFamily(CallExpr& call) {
 // Member tables (the JS surface the corpus pins)
 // =============================================================================
 Type Analyzer::typedArrayMember(const Type& recv, const std::string& prop) {
-    if (prop == "length" || prop == "byteLength" || prop == "byteOffset" ||
-        prop == "BYTES_PER_ELEMENT") {
-        return Type::number();
+    // Width pattern: `length`/`byteLength`/`byteOffset` are the std length
+    // width (`usize`/`size_t`, canonical `u64`); `BYTES_PER_ELEMENT` is a
+    // byte count (the std count width). Relative index parameters are signed
+    // indices (negatives count from the end), except `set`'s offset which
+    // stays signed so a negative still reaches the runtime RangeError.
+    // Element values (`indexOf` search value, `set` source, `fill` value)
+    // stay `number`: they are typed-array elements, not std integers.
+    const Type len = stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+    const Type idx =
+        stdIntegerType(StdIntegerKind::SignedIndex, options_.typeSystem);
+    if (prop == "length" || prop == "byteLength" || prop == "byteOffset") {
+        return len;
+    }
+    if (prop == "BYTES_PER_ELEMENT") {
+        return stdIntegerType(StdIntegerKind::Count, options_.typeSystem);
     }
     if (prop == "buffer") return Type::named(TypeKind::Class, "ArrayBuffer");
     if (prop == "subarray" || prop == "slice") {
-        return withOptionalTail2(
-            Type::function({Type::number(), Type::number()}, recv));
+        return withOptionalTail2(Type::function({idx, idx}, recv));
     }
     if (prop == "copyWithin") {
-        return withOptionalTail2(
-            Type::function({Type::number(), Type::number(), Type::number()},
-                           recv));
+        return withOptionalTail2(Type::function({idx, idx, idx}, recv));
     }
     if (prop == "reverse") return Type::function({}, recv);
     if (prop == "indexOf") {
-        return withOptionalTail(
-            Type::function({Type::number(), Type::number()}, Type::number()));
+        return withOptionalTail(Type::function({Type::number(), idx}, idx));
     }
     if (prop == "includes") {
         return withOptionalTail(
-            Type::function({Type::number(), Type::number()}, Type::boolean()));
+            Type::function({Type::number(), idx}, Type::boolean()));
     }
     if (prop == "join") {
         return withOptionalTail(
@@ -171,35 +184,48 @@ Type Analyzer::typedArrayMember(const Type& recv, const std::string& prop) {
     }
     if (prop == "set") {
         return withOptionalTail(
-            Type::function({Type::unknown(), Type::number()}, Type::voidType()));
+            Type::function({Type::unknown(), idx}, Type::voidType()));
     }
     if (prop == "fill") {
         return withOptionalTail2(
-            Type::function({Type::number(), Type::number(), Type::number()},
-                           recv));
+            Type::function({Type::number(), idx, idx}, recv));
     }
     return ambient();
 }
 
 Type Analyzer::bufferMember(const Type& recv, const std::string& prop) {
-    if (prop == "byteLength") return Type::number();
+    if (prop == "byteLength") {
+        return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+    }
     if (prop == "slice") {
-        return withOptionalTail2(
-            Type::function({Type::number(), Type::number()}, recv));
+        const Type idx =
+            stdIntegerType(StdIntegerKind::SignedIndex, options_.typeSystem);
+        return withOptionalTail2(Type::function({idx, idx}, recv));
     }
     return ambient();
 }
 
 Type Analyzer::dataViewMember(const std::string& prop) {
     if (prop == "buffer") return Type::named(TypeKind::Class, "ArrayBuffer");
-    if (prop == "byteOffset" || prop == "byteLength") return Type::number();
+    // `byteOffset` is a non-negative offset (the std index width) and
+    // `byteLength` a length; the `get*`/`set*` offset stays signed so a
+    // negative still reaches the runtime RangeError. The accessed values
+    // stay `number` (the data width, not a std integer).
+    if (prop == "byteOffset") {
+        return stdIntegerType(StdIntegerKind::Index, options_.typeSystem);
+    }
+    if (prop == "byteLength") {
+        return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+    }
+    const Type idx =
+        stdIntegerType(StdIntegerKind::SignedIndex, options_.typeSystem);
     if (prop.rfind("get", 0) == 0) {
         return withOptionalTail(
-            Type::function({Type::number(), Type::boolean()}, Type::number()));
+            Type::function({idx, Type::boolean()}, Type::number()));
     }
     if (prop.rfind("set", 0) == 0) {
         return withOptionalTail(
-            Type::function({Type::number(), Type::number(), Type::boolean()},
+            Type::function({idx, Type::number(), Type::boolean()},
                            Type::voidType()));
     }
     return ambient();

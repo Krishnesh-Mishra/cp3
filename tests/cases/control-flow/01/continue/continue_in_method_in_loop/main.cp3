@@ -2,5 +2,5 @@ import console from "std/console";
 // A method is a function of its own: a `continue` in it does not reach a
 // loop around the class declaration.
 for (let i = 0; i < 3; i = i + 1) {
-  class Counter { function step(): void { continue; } }
+  class Counter { function step(): undefined { continue; } }
 }

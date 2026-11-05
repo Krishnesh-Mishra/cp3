@@ -310,7 +310,9 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     const std::string moduleName = moduleNameFor(entryPath, projectRoot);
     // `exec` builds one of a package's `bin` programs: the manifest is a
     // package, but this entry is a runnable application, not pack input.
-    const bool packageProject = isPackageProject(projectRoot) && !opt.execTool;
+    // `test` does the same for test files inside a package project.
+    const bool packageProject = isPackageProject(projectRoot) && !opt.execTool &&
+                                !opt.testMode;
     if (packageProject && execute) return runOnPackageError(opt.file);
 
     // The project's type-system vocabulary (spec 03) joins the CLI options.
@@ -415,6 +417,91 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     reportRunProgress(execute, effective.verbose,
                       "preparing native build...");
     return detail::buildWithToolchain(request);
+}
+
+// ---------------------------------------------------------------------------
+// `cp3 test [file.cp3 ...]`
+// ---------------------------------------------------------------------------
+// Runs every test file as a program (build + execute) and reports a
+// summary. Explicit files come from the positionals; with no arguments the
+// test files are discovered under the project root: `tests/` and `test/`
+// directories (recursively, `*.cp3`), then `*.test.cp3` at the root. A
+// package project is allowed: each test file runs with `testMode` set, so
+// it builds as an application (importing the package entry) instead of
+// being rejected as a package project.
+namespace {
+
+void collectTestFiles(const fs::path& dir, std::vector<fs::path>& out) {
+    std::error_code ec;
+    if (!fs::is_directory(dir, ec)) return;
+    for (fs::recursive_directory_iterator it(dir, ec), end; it != end;
+         it.increment(ec)) {
+        if (ec) break;
+        if (it->is_regular_file(ec) && it->path().extension() == ".cp3") {
+            out.push_back(it->path());
+        }
+    }
+}
+
+}  // namespace
+
+int cmdTest(const CliOptions& opt) {
+    std::vector<std::string> files;
+    files.insert(files.end(), opt.positionals.begin(), opt.positionals.end());
+    std::error_code ec;
+    const fs::path cwd = fs::current_path(ec);
+    const fs::path projectRoot = findProjectRoot(cwd / "placeholder.cp3");
+    if (files.empty()) {
+        std::vector<fs::path> discovered;
+        collectTestFiles(projectRoot / "tests", discovered);
+        collectTestFiles(projectRoot / "test", discovered);
+        if (discovered.empty() && fs::is_directory(projectRoot, ec)) {
+            for (const auto& item :
+                 fs::directory_iterator(projectRoot, ec)) {
+                if (ec) break;
+                const fs::path path = item.path();
+                const std::string name = path.filename().string();
+                if (path.extension() == ".cp3" &&
+                    name.size() > 9 &&
+                    name.compare(name.size() - 9, 9, ".test.cp3") == 0) {
+                    discovered.push_back(path);
+                }
+            }
+        }
+        std::sort(discovered.begin(), discovered.end());
+        discovered.erase(
+            std::unique(discovered.begin(), discovered.end()),
+            discovered.end());
+        for (const fs::path& path : discovered) {
+            files.push_back(path.string());
+        }
+    }
+    if (files.empty()) {
+        std::fprintf(stderr,
+                     "cp3c: no test files found (looked in 'tests/', "
+                     "'test/' and '*.test.cp3'; pass files explicitly: "
+                     "'cp3c test tests/example.cp3')\n");
+        return kExitUsageError;
+    }
+    int passed = 0;
+    int failed = 0;
+    for (const std::string& file : files) {
+        CliOptions one = opt;
+        one.file = file;
+        one.positionals.clear();
+        one.testMode = true;
+        const int rc = cmdBuildOrRun(one, true);
+        if (rc == kExitSuccess) {
+            ++passed;
+        } else {
+            ++failed;
+            std::fprintf(stderr, "cp3c: test failed: %s (exit %d)\n",
+                         file.c_str(), rc);
+        }
+    }
+    std::fprintf(stderr, "cp3c: %d passed, %d failed (%zu total)\n", passed,
+                 failed, files.size());
+    return failed == 0 ? kExitSuccess : kExitCompileError;
 }
 
 }  // namespace cp3::cli

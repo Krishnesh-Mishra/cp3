@@ -1,5 +1,5 @@
 import console from "std/console";
-function f(a: number): void {
+function f(a: number): undefined {
   console.log(`${arguments.length}`);
 }
 f(1);

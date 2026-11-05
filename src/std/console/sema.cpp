@@ -34,8 +34,8 @@ namespace {
 // The documented members (docs/standard-library/04-imported-std-modules.md
 // §console): log, info, warn, error, input, readKey, clear, assert, on, off,
 // hide, show - plus the v0.2 debug helpers dir, trace, count, countReset,
-// group, groupEnd, table. All are real, so all are candidate suggestions for
-// a typo.
+// group, groupEnd, table, time, timeEnd. All are real, so all are candidate
+// suggestions for a typo.
 //
 // The members type as ambient (permissive signatures, like the other std
 // families' surface members): the documented signature below is the precise
@@ -98,6 +98,20 @@ const MemberRow kConsoleRows[] = {
     {"table", ambient, "table(rows: unknown[]): void",
      "Prints an `(index) (value)` header then one `i value` line per array "
      "element, or one `key value` line per field of an object literal."},
+    {"time", ambient, "time(label?: string): void",
+     "Starts a per-label monotonic timer (default label `default`); "
+     "`timeEnd` with the same label prints the elapsed milliseconds. Restarting "
+     "an existing label discards its previous start."},
+    {"timeEnd", ambient, "timeEnd(label?: string): void",
+     "Prints `label: <ms>ms` for the timer `time` started under that label "
+     "(default label `default`) and removes it. A label that was never "
+     "started prints a warning to stderr instead."},
+    {"time", ambient, "time(label?: string): void",
+     "Starts a per-label monotonic timer (default label `default`). "
+     "`console.timeEnd` with the same label prints the elapsed milliseconds."},
+    {"timeEnd", ambient, "timeEnd(label?: string): void",
+     "Prints `label: <ms>ms` for a `console.time` label and removes it. An "
+     "unknown label prints `label: 0ms`."},
     {"input", ambient, "input(prompt?: string): Promise<string>",
      "Reads one line from stdin and resolves with it; on EOF it resolves with "
      "an empty string instead of rejecting.\n\n"

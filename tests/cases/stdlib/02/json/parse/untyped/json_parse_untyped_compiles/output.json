@@ -1,5 +1,10 @@
 {
   "mode": "check",
   "stdout": "",
-  "exitCode": 0
+  "exitCode": 1,
+  "error": {
+    "code": "CP3208",
+    "line": 2,
+    "contains": "JSON.parse"
+  }
 }

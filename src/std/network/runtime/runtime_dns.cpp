@@ -36,17 +36,25 @@ inline void onDnsResolved(uv_getaddrinfo_t* req, int status,
             Thrown::make("dns.lookup: could not resolve '" + op->host + "'"));
     } else {
         char text[80]{};
-        if (res->ai_family == AF_INET) {
+        int nameRc = -1;
+        if (res->ai_addr != nullptr && res->ai_family == AF_INET) {
             const auto* addr =
                 reinterpret_cast<const struct sockaddr_in*>(res->ai_addr);
-            uv_ip4_name(addr, text, sizeof(text));
-        } else if (res->ai_family == AF_INET6) {
+            nameRc = uv_ip4_name(addr, text, sizeof(text));
+        } else if (res->ai_addr != nullptr && res->ai_family == AF_INET6) {
             const auto* addr =
                 reinterpret_cast<const struct sockaddr_in6*>(res->ai_addr);
-            uv_ip6_name(addr, text, sizeof(text));
+            nameRc = uv_ip6_name(addr, text, sizeof(text));
         }
         uv_freeaddrinfo(res);
-        op->promise.fulfill(std::string(text));
+        // Name it only when libuv actually rendered an address: an unknown
+        // family (or a failed uv_ip*_name) must reject, not fulfil with "".
+        if (nameRc != 0 || text[0] == '\0') {
+            op->promise.rejectWith(
+                Thrown::make("dns.lookup: could not resolve '" + op->host + "'"));
+        } else {
+            op->promise.fulfill(std::string(text));
+        }
     }
     // The retain in dnsResolve() keeps the event loop alive for this callback;
     // release it once the promise has settled, exactly like fetch's releaseOp.

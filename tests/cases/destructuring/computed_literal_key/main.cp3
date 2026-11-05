@@ -4,7 +4,7 @@ let o = { x: 1, y: 2 };
 let { ["x"]: a } = o;
 console.log(`${a}`);
 
-function local(): void {
+function local(): undefined {
   let { ["y"]: b } = o;
   console.log(`${b}`);
 }

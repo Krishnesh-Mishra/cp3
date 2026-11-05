@@ -33,6 +33,7 @@
 
 #include "cp3/core/source.hpp"
 #include "cp3/core/types.hpp"
+#include "cp3/core/utility_types.hpp"
 
 namespace cp3 {
 
@@ -117,6 +118,14 @@ struct SemaResult {
     // together with cycleCapableClasses to compute the manual-weak share.
     std::vector<std::string> cycleEscapeSites;
 
+    // The resolved values (and numeric reverse map) of every enum
+    // declaration of this unit, keyed by the declaration's nodeId. This is
+    // the formerly deferred `enumInfo` table: sema fills it for regular and
+    // `const enum` declarations alike, and codegen inlines `const enum`
+    // member accesses from it (a `const enum` emits no runtime object, so
+    // there is no runtime metadata - only this compile-time table).
+    std::unordered_map<std::uint32_t, ConstEnumInfo> constEnums;
+
     // The inferred type of `nodeId`, or nullptr when there is none.
     const Type* typeOf(std::uint32_t nodeId) const {
         const auto it = nodeTypes.find(nodeId);
@@ -131,6 +140,7 @@ struct SemaResult {
         symbols.clear();
         functions.clear();
         docs.clear();
+        constEnums.clear();
         ok = false;
         networkScaleMode = false;
     }

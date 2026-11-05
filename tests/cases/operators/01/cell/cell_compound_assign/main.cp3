@@ -3,9 +3,9 @@ import console from "std/console";
 // A captured, reassigned binding is the shared-cell representation: the
 // enclosing frame and the closure share one value. Every compound operator
 // has a cell form (the cell's value is read, combined and written back).
-function run(): void {
+function run(): undefined {
     let value = 1;
-    const bump = (): void => {
+    const bump = (): undefined => {
         value |= 2;   // 1 -> 3
         value &&= 8;  // 3 is truthy -> 8
         value ??= 1;  // 8 is not nullish -> 8

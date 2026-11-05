@@ -5,7 +5,7 @@ import { fetch, createServer } from "std/network";
 // Middleware auth, docs-faithful (docs/standard-library/04-imported-std-
 // modules.md, `network` -> HTTP server): req.headers.get("authorization")
 // gates the route; answering stops the chain, next() continues it. Middleware
-// may be sync (the documented Middleware type is `void | Promise<void>`);
+// may be sync (the documented Middleware type is `void | Promise<undefined>`);
 // async handlers are separately tracked as pending in the suite.
 const app = createServer();
 
