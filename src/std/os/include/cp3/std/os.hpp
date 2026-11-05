@@ -31,6 +31,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <map>
 #include <string>
@@ -84,18 +85,19 @@ inline std::string hostname() {
     return value.empty() ? std::string("localhost") : value;
 }
 
-inline double cpus() {
+inline std::uint64_t cpus() {
     const unsigned count = std::thread::hardware_concurrency();
-    return static_cast<double>(count == 0 ? 1 : count);
+    return static_cast<std::uint64_t>(count == 0 ? 1 : count);
 }
 
 // The libuv probes (src/std/os/runtime.cpp). Implementations are kept out of
 // this header so generated programs do not pull <uv.h> into the C++ TU; the
-// declarations live here for the ABI.
-double totalMemory();
-double freeMemory();
-double totalmem();
-double freemem();
+// declarations live here for the ABI. The exact std width is `u64` (a byte
+// count), cast to `double` only at a TypeScript project's read site.
+std::uint64_t totalMemory();
+std::uint64_t freeMemory();
+std::uint64_t totalmem();
+std::uint64_t freemem();
 
 std::tuple<double, double, double> loadavg();
 

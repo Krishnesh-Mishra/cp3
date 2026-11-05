@@ -18,10 +18,14 @@
 
 namespace cp3::runtime::os {
 
-double totalMemory() { return static_cast<double>(uv_get_total_memory()); }
-double freeMemory() { return static_cast<double>(uv_get_free_memory()); }
-double totalmem() { return totalMemory(); }
-double freemem() { return freeMemory(); }
+std::uint64_t totalMemory() {
+    return static_cast<std::uint64_t>(uv_get_total_memory());
+}
+std::uint64_t freeMemory() {
+    return static_cast<std::uint64_t>(uv_get_free_memory());
+}
+std::uint64_t totalmem() { return totalMemory(); }
+std::uint64_t freemem() { return freeMemory(); }
 
 std::tuple<double, double, double> loadavg() {
     double avg[3] = {0.0, 0.0, 0.0};

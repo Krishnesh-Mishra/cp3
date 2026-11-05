@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "cp3/host/std_integer.hpp"
 #include "detail/std_tables.hpp"
 
 namespace cp3 {
@@ -67,6 +68,18 @@ const MemberRow kOsRows[] = {
 }  // namespace
 
 std::optional<Type> Analyzer::osMember(const std::string& prop) {
+    // The numeric probes take the exact std width: a CPU count is `usize`
+    // (a count) and a memory reading is a byte count (`u64`); a TypeScript
+    // project keeps `number`.
+    if (prop == "cpus") {
+        return Type::function(
+            {}, stdIntegerType(StdIntegerKind::Count, options_.typeSystem));
+    }
+    if (prop == "totalMemory" || prop == "freeMemory" ||
+        prop == "totalmem" || prop == "freemem") {
+        return Type::function(
+            {}, stdIntegerType(StdIntegerKind::FileSize, options_.typeSystem));
+    }
     if (prop == "loadavg") {
         const Type t = makeObjectType({}, false, true,
                                       {Type::number(), Type::number(),

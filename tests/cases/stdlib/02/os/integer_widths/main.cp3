@@ -1,0 +1,16 @@
+import console from "std/console";
+import os from "std/os";
+
+// A Rust project sees exact os widths: a CPU count is usize and a memory
+// reading is u64, so neither passes through a floating-point value.
+const count: usize = os.cpus();
+const total: u64 = os.totalMemory();
+const free: u64 = os.freeMemory();
+const totalAlias: u64 = os.totalmem();
+const freeAlias: u64 = os.freemem();
+
+console.log(count > 0 ? "cpus" : "bad");
+console.log(total > 0 ? "total" : "bad");
+console.log(total === totalAlias ? "totalalias" : "bad");
+console.log(free === freeAlias ? "freealias" : "bad");
+console.log(free <= total ? "free" : "bad");

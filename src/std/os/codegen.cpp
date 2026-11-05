@@ -33,8 +33,17 @@ std::string Generator::emitOsCall(const CallExpr& c, const MemberExpr& m) {
     if (m.property == "loadavg" || m.property == "networkInterfaces") {
         needsTuple_ = true;
     }
-    return "::cp3::runtime::os::" + m.property + "(" +
-           joinStrings(emitPlainArgs(c), ", ") + ")";
+    const std::string call = "::cp3::runtime::os::" + m.property + "(" +
+                             joinStrings(emitPlainArgs(c), ", ") + ")";
+    // `cpus()` and the memory probes carry the exact std width (`usize` /
+    // `u64`); a TypeScript project keeps `number`, so the read widens here.
+    if (options_.typeSystem == TypeSystem::TypeScript &&
+        (m.property == "cpus" || m.property == "totalMemory" ||
+         m.property == "freeMemory" || m.property == "totalmem" ||
+         m.property == "freemem")) {
+        return "static_cast<double>(" + call + ")";
+    }
+    return call;
 }
 
 }  // namespace cp3
