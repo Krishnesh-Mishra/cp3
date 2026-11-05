@@ -1,5 +1,5 @@
 .cache/
-dotnet/bin/
-dotnet/obj/
-dotnet/publish/
+**/bin/
+**/obj/
+**/publish/
 
