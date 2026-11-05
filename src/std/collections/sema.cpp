@@ -66,6 +66,8 @@ const DocRow kMapDocRows[] = {
      "Returns the values of the map, in insertion order."},
     {"entries", "entries(): [K, V][]",
      "Returns the `[key, value]` pairs of the map, in insertion order."},
+    {"groupBy", "groupBy(list: T[], callback: (item: T, index: number) => K): Map<K, T[]>",
+     "The static `Map.groupBy`: groups the items by the callback's key."},
     {"forEach", "forEach(callback: (value: V, key: K) => void): void",
      "Calls `callback` for every entry, with the value first and the key "
      "second, in insertion order."},
@@ -251,6 +253,75 @@ std::vector<std::string> collectionsMemberNames(const std::string& family) {
     if (family == "Set") return docRowNames(kSetDocRows);
     if (family == "LRUCache") return docRowNames(kLruDocRows);
     return {};
+}
+
+// `Map.groupBy(list, callback)`: static; the result `Map<K, T[]>` follows
+// the callback's return type, and the callback gets the item/index/array
+// context exactly like the array callback methods (the signature is
+// published so codegen lowers the arrow with matching parameter types).
+bool Analyzer::tryInferCollectionsStaticCall(CallExpr& call, MemberExpr& m,
+                                             Type& out) {
+    if (!m.object || m.object->kind != NodeKind::Identifier ||
+        static_cast<Identifier&>(*m.object).name != "Map" ||
+        m.property != "groupBy") {
+        return false;
+    }
+    Binding mapBinding;
+    if (lookup("Map", mapBinding) && !mapBinding.isAmbient) {
+        return false;  // a user `Map` shadows the std family
+    }
+    if (call.arguments.size() != 2) {
+        report(diagcode::kArityMismatch, call.span,
+               "arity mismatch: Map.groupBy expects exactly 2 arguments (the "
+               "list and the key callback), got " +
+                   std::to_string(call.arguments.size()));
+        inferArgs(call);
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    Type items = call.arguments.front() ? inferExpr(*call.arguments.front())
+                                        : Type::unknown();
+    if (items.kind != TypeKind::Array) {
+        report(diagcode::kTypeMismatch, call.arguments.front()->span,
+               "type mismatch: Map.groupBy's first argument must be an array");
+        inferArgs(call);
+        out = withType(call, Type::unknown());
+        return true;
+    }
+    const Type elem = elemOf(items);
+    Type key = Type::unknown();
+    const Expr* cb = call.arguments[1] ? call.arguments[1].get() : nullptr;
+    if (cb != nullptr && cb->kind == NodeKind::ArrowFunction) {
+        auto& arrow = static_cast<ArrowFunction&>(*cb);
+        const std::vector<Type> context = {elem, Type::number(),
+                                           Type::array(elem)};
+        key = widen(inferArrowReturn(arrow, context));
+        // Publish the inferred signature for codegen's parameter types.
+        if (arrow.nodeId != 0) {
+            FuncSig as;
+            as.ret = key;
+            as.declNodeId = arrow.nodeId;
+            for (std::size_t i = 0; i < arrow.params.size(); ++i) {
+                const Parameter* p = arrow.params[i].get();
+                as.params.push_back(i < context.size() ? context[i]
+                                                       : Type::unknown());
+                as.optional.push_back(p != nullptr &&
+                                      (p->optional || p->defaultValue != nullptr));
+            }
+            publishFunction(as, "");
+            arrowSigs_[arrow.nodeId] = std::move(as);
+        }
+    } else if (cb != nullptr) {
+        const Type fnType = inferExpr(*cb);
+        if (fnType.kind == TypeKind::Function && !fnType.parts.empty()) {
+            key = widen(fnType.parts.back());
+        }
+    }
+    inferArgs(call);
+    Type result(TypeKind::Class, "Map");
+    result.parts = {key, Type::array(elem)};
+    out = withType(call, result);
+    return true;
 }
 
 }  // namespace cp3

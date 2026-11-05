@@ -1,0 +1,7 @@
+import console from "std/console";
+import { Map } from "std/collections";
+const words = ["apple", "avocado", "banana", "berry"];
+const byFirst = Map.groupBy(words, (w) => w[0]);
+console.log(byFirst.get("a").length);
+console.log(byFirst.get("b").join(","));
+console.log(`${byFirst.size}`);

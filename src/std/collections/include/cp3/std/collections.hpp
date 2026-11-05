@@ -485,4 +485,21 @@ Map<K, V> makeMapFromEntries(const Array<std::pair<K, V>>& entries) {
     return out;
 }
 
+// `Map.groupBy(list, keyFn)`: groups the list items by the callback's key
+// (insertion-ordered keys, like every other collection here). The grouping
+// result is a `Map<K, Array<T>>`, matching the JS static's shape.
+template <class K, class T, class F>
+Map<K, Array<T>> groupBy(const Array<T>& list, F fn) {
+    Map<K, Array<T>> out = makeMap<K, Array<T>>();
+    for (std::size_t i = 0; i < list->size(); ++i) {
+        const T& item = (*list)[i];
+        K key = fn(item, static_cast<double>(i));
+        Array<T> group = makeArray<T>(std::vector<T>{});
+        if (auto existing = out->get(key)) group = *existing;
+        group->push_back(item);
+        out->set(key, group);
+    }
+    return out;
+}
+
 }  // namespace cp3::runtime::collections

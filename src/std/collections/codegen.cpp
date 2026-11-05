@@ -280,6 +280,42 @@ std::string Generator::emitCollectionsNew(const NewExpr& n) {
 std::string Generator::emitCollectionsMemberCall(const CallExpr& c,
                                                  const MemberExpr& m) {
     if (!m.object) return std::string();
+    // The `Map.groupBy(list, callback)` static: the receiver is the class
+    // name itself, so it is dispatched before the instance surface.
+    if (m.property == "groupBy" && m.object->kind == NodeKind::Identifier &&
+        static_cast<Identifier&>(*m.object).name == "Map" &&
+        !lookup("Map")) {
+        needsCollections_ = true;
+        const Type ret = effectiveType(c);
+        if (!isMapType(ret) || ret.parts.size() < 2) {
+            reportTypeError(c, "type mismatch: Map.groupBy needs an array and "
+                               "a key callback");
+            return "0.0";
+        }
+        const Type itemsType = ret.parts[1].kind == TypeKind::Array
+                                   ? ret.parts[1]
+                                   : Type::unknown();
+        const Type elem = arrayElemOf(itemsType);
+        const CppInfo ec = classify(elem);
+        const CppInfo kc =
+            ret.parts.empty() ? CppInfo{} : classify(ret.parts.front());
+        if (!ec.representable || !kc.representable ||
+            c.arguments.size() != 2 || !c.arguments.front() ||
+            !c.arguments[1]) {
+            reportTypeError(c, "type mismatch: Map.groupBy needs an array and "
+                               "a key callback");
+            return "0.0";
+        }
+        const Expr& items = *c.arguments.front();
+        const Expr& cb = *c.arguments[1];
+        const std::string callback =
+            cb.kind == NodeKind::ArrowFunction
+                ? emitArrow(static_cast<const ArrowFunction&>(cb),
+                            {ec.cpp, "double"})
+                : expr(cb);
+        return "::cp3::runtime::collections::groupBy<" + kc.cpp + ", " +
+               ec.cpp + ">(" + expr(items) + ", " + callback + ")";
+    }
     const Type recv = effectiveType(*m.object);
     const bool isMap = isMapType(recv);
     const bool isLru = isLruType(recv);
