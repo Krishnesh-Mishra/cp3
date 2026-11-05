@@ -322,6 +322,7 @@ Methods listed in section 13 first table.
 
 ### `typed-arrays` — `import "std/typed-arrays"` (built-in types)
 `ArrayBuffer` · `DataView` · `Int8Array` `Uint8Array` `Uint8ClampedArray` `Int16Array` `Uint16Array` `Int32Array` `Uint32Array` `Float32Array` `Float64Array` `BigInt64Array` `BigUint64Array`. Fixed-width, raw buffer.
+`Array` statics: `Array.of(...)` · `Array.from(arr)` · `Array.isArray(x)` (compile-time constant).
 
 ### `regular expressions` — built-in `RegExp`
 Literal `/pat/imsuyv` or `new RegExp("pat", "i")`.

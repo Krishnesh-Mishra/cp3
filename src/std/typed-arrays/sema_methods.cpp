@@ -44,6 +44,13 @@ bool Analyzer::tryInferArrayStaticCall(CallExpr& call, MemberExpr& m,
         out = withType(call, Type::array(elem));
         return true;
     }
+    if (m.property == "isArray") {
+        // `Array.isArray(x)` — a compile-time-constant `boolean`: true when
+        // the argument's static type is an array (typed views return false,
+        // matching the runtime's separate typed-array classes).
+        out = withType(call, Type::boolean());
+        return true;
+    }
     if (m.property == "from") {
         if (call.arguments.size() != 1 || !call.arguments.front()) {
             report(diagcode::kArityMismatch, call.span,

@@ -1,0 +1,9 @@
+import console from "std/console";
+console.log(`${Array.isArray([1, 2])}`);
+console.log(`${Array.isArray("x")}`);
+console.log(`${Array.isArray(5)}`);
+console.log(`${Array.isArray(null)}`);
+const a = Array.of(1, 2, 3);
+console.log(a.join(","));
+const b = Array.from([10, 20]);
+console.log(b.join(","));

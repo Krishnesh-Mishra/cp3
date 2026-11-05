@@ -178,6 +178,15 @@ std::string Generator::arrayStaticCallText(const CallExpr& c,
                            "type mismatch: Array.from needs an array or a typed array");
         return "0.0";
     }
+    if (prop == "isArray" && c.arguments.size() == 1 && c.arguments.front()) {
+        // An array literal (or any Array-typed expression) is an array; every
+        // other static type is not. Typed views are distinct classes at
+        // runtime, so they correctly report false here too.
+        const Expr& arg = *c.arguments.front();
+        if (arg.kind == NodeKind::ArrayLiteral) return "true";
+        const Type st = effectiveType(arg);
+        return st.kind == TypeKind::Array ? "true" : "false";
+    }
     return std::string();  // not a form this unit lowers
 }
 

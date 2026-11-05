@@ -133,7 +133,7 @@ The remaining JavaScript and TypeScript surface needed so ordinary application c
 
 | Feature | Why | Size | Status |
 | --- | --- | --- | --- |
-| Array/Object/String catalog gaps: `reduce`, `reduceRight`, `splice`, `concat`, `reverse`, `lastIndexOf`, `keys`/`values`/`entries`, `Array.from`/`isArray`/`of`, `Object.fromEntries`, `parseInt` | The `llm.md` catalog does not list them; `reduce`, `splice` and `concat` are everywhere in TS code, so the TS-compatibility theme fails without them. | Small | Planned |
+| Array/Object/String catalog gaps: `reduce`, `reduceRight`, `splice`, `concat`, `reverse`, `lastIndexOf`, `keys`/`values`/`entries`, `Array.from`/`isArray`/`of`, `Object.fromEntries`, `parseInt` | The `llm.md` catalog does not list them; `reduce`, `splice` and `concat` are everywhere in TS code, so the TS-compatibility theme fails without them. | Small | In progress (all done except Array `entries` and `Object.fromEntries`, the latter blocked on `Record<string,V>`) |
 | Timers, if missing: `setTimeout`, `setInterval`, `clearTimeout`, `sleep` | Every service waits; a 100 ms timer regression test needs them. | Small | Planned |
 | Process lifecycle: `process.on("SIGINT" \| "SIGTERM" \| "exit" \| "unhandledRejection")`, `server.close()` | Servers need graceful shutdown; libuv signal handles are already available. | Small | Planned |
 | Built-in utility types: `Partial`, `Required`, `Readonly`, `Pick`, `Omit`, `Record` | Very common in real TS. The compiler resolves them natively instead of user-written mapped types. | Medium | Planned |
