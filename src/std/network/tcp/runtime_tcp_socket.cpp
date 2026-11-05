@@ -382,9 +382,13 @@ void failSocket(const std::shared_ptr<TcpSocketImpl>& impl, const std::string& c
     finishSocket(impl);
 }
 
+}  // namespace detail
+
 // =============================================================================
 // TcpSocket public surface
 // =============================================================================
+namespace cp3::runtime::network::tcp {
+
 TcpSocket::TcpSocket() : impl_(std::make_shared<detail::TcpSocketImpl>()) {}
 
 TcpSocket::TcpSocket(std::string host, double port, double timeoutMs)
@@ -479,4 +483,4 @@ std::string TcpSocket::localAddress() const { return impl_ ? impl_->local : std:
 double TcpSocket::remotePort() const { return impl_ ? impl_->remotePort : 0.0; }
 double TcpSocket::localPort() const { return impl_ ? impl_->localPort : 0.0; }
 
-}  // namespace cp3::runtime::network::tcp::detail
+}  // namespace cp3::runtime::network::tcp

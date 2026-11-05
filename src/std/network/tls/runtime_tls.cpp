@@ -438,9 +438,6 @@ void closeTcpWithImpl(uv_tcp_t* tcp) {
     impl->tcpClosing = true;
     impl->stopHandshakeTimer();
     impl->stopIdleTimer();
-    // The impl is kept alive by the close callback holder until uv_close runs.
-    auto* holder = new std::shared_ptr<TlsSocketImpl>(impl->engine ? nullptr : nullptr);
-    (void)holder;
     uv_close(reinterpret_cast<uv_handle_t*>(tcp), [](uv_handle_t* h) {
         auto* self = static_cast<TlsSocketImpl*>(h->data);
         h->data = nullptr;
@@ -543,7 +540,9 @@ void TlsSocketImpl::flushCiphertext() {
     ciphertextOut.clear();
     uv_buf_t uvbuf{data->data(), static_cast<unsigned int>(data->size())};
     writePending = true;
-    uv_write(new uv_write_t, reinterpret_cast<uv_stream_t*>(&tcp), &uvbuf, 1,
+    auto* req = new uv_write_t;
+    req->data = this;
+    uv_write(req, reinterpret_cast<uv_stream_t*>(&tcp), &uvbuf, 1,
              [](uv_write_t* req, int /*status*/) {
                  auto* payload = static_cast<std::string*>(req->buf.base);
                  auto* self = static_cast<TlsSocketImpl*>(req->data);

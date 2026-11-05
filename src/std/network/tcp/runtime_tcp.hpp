@@ -175,6 +175,8 @@ struct TcpServerImpl {
 /// Drops `impl` from its owning server's live set (no-op for client sockets,
 /// which have no server). Defined in runtime_tcp_server.cpp.
 void tcpServerForget(TcpSocketImpl* raw);
+/// uv_listen connection callback for every REUSEPORT listener.
+void tcpServerAccept(uv_stream_t* listener, int status);
 
 // REUSEPORT helpers (runtime_tcp_reuseport.cpp). `threads` becomes this many
 // listener handles on the same loop; no OS threads are created anywhere.

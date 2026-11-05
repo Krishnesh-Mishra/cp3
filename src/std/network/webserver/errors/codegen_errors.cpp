@@ -2,7 +2,7 @@
 // src/std/network/webserver/errors/codegen_errors.cpp - codegen emission helpers.
 // STANDALONE: pure string builders (no Generator dependency). The lead calls
 // these from codegen.cpp / codegen_methods.cpp (wiring in README.md). The
-// emit* callbacks are the Generator::expr() spelling for one sub-webserverion.
+// emit* callbacks are the Generator::expr() spelling for one sub-expression.
 // =============================================================================
 #include "codegen_errors.hpp"
 

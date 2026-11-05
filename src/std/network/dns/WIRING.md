@@ -114,6 +114,11 @@ Runtime surface (`cp3/std/network/dns.hpp`, `cp3::runtime::network::dns`):
      ```cpp
      if (std::string dns = emitDnsCall(c, m); !dns.empty()) return dns;
      ```
+     (This hook is what lowers the `dns.` / `network.` member spellings.
+     Previously only the `network.` spelling reached `emitNetworkCall`
+     through that `isNamespaceObject("network")` arm; `dns.lookup` was
+     typed by sema but had no codegen arm — no test covers it, both
+     existing cases use the named import.)
    - in `emitUnresolvedCall` (src/std/network/codegen/codegen.cpp,
      line ~510), immediately BEFORE `std::string net = emitNetworkIdentifier(c, name);`:
      ```cpp
