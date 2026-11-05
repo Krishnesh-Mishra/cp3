@@ -1,5 +1,9 @@
 // =============================================================================
-// src/std/collections/sema.cpp - `std/collections` `Map`/`Set` typing.
+// src/std/collections/sema.cpp - `std/collections` `Map`/`Set` typing,
+// plus the folded-in `Queue`/`Stack`/`PriorityQueue`/`RingBuffer`/`BitSet`/
+// `MultiMap`/`ConcurrentMap` (from the former queue/stack/priority-queue/
+// ring-buffer/bitset/multimap/concurrent-map modules). ROADMAP ledger A: all
+// live in `std/collections`.
 //
 // OWNERSHIP: the std/collections family (src/std/collections/**). `Map<K, V>`
 // and `Set<T>` are nominal `TypeKind::Class` types carrying their type
@@ -41,7 +45,7 @@ Type mapEntryType(const Type& key, const Type& value) {
 // The docs/04 surface, in table order; the names drive the CP3305 candidates.
 const char* const kMapMemberNames[] = {"set",     "get",     "has",     "delete",
                                        "clear",   "keys",    "values",  "entries",
-                                       "forEach", "size"};
+                                       "groupBy", "forEach", "size"};
 const char* const kSetMemberNames[] = {"add",   "has",   "delete",  "clear",
                                        "values", "forEach", "size",
                                        "union", "intersection", "difference",
@@ -120,6 +124,134 @@ const DocRow kLruDocRows[] = {
      "Returns the keys of the cache, most recently used first."},
 };
 
+// The documented members of a `Queue` (folded in from the former queue module).
+const DocRow kQueueDocRows[] = {
+    {"enqueue", "enqueue(value: T): void",
+     "Appends `value` to the back of the queue."},
+    {"dequeue", "dequeue(): T | undefined",
+     "Removes and returns the front value of the queue, or `undefined` when "
+     "the queue is empty."},
+    {"peek", "peek(): T | undefined",
+     "Returns the front value of the queue without removing it, or "
+     "`undefined` when the queue is empty."},
+    {"clear", "clear(): void", "Removes every value from the queue."},
+    {"isEmpty", "isEmpty(): boolean", "True when the queue holds no values."},
+    {"size", "size: number", "The number of values in the queue."},
+};
+
+// The documented members of a `Stack` (folded in from the former stack module).
+const DocRow kStackDocRows[] = {
+    {"push", "push(value: T): void",
+     "Pushes `value` onto the top of the stack."},
+    {"pop", "pop(): T | undefined",
+     "Removes and returns the top value of the stack, or `undefined` when "
+     "the stack is empty."},
+    {"peek", "peek(): T | undefined",
+     "Returns the top value of the stack without removing it, or "
+     "`undefined` when the stack is empty."},
+    {"clear", "clear(): void", "Removes every value from the stack."},
+    {"isEmpty", "isEmpty(): boolean", "True when the stack holds no values."},
+    {"size", "size: number", "The number of values in the stack."},
+};
+
+// The documented members of a `PriorityQueue` (folded in from the former
+// priority-queue module; ROADMAP ledger A). Default (no comparator) = min-heap on
+// `<`; a custom comparator is `(a: T, b: T) => boolean`, true when `a` has
+// higher priority than `b`.
+const DocRow kPriorityQueueDocRows[] = {
+    {"push", "push(value: T): void",
+     "Inserts `value` into the queue, keeping the highest-priority element "
+     "at the front."},
+    {"pop", "pop(): T",
+     "Removes and returns the highest-priority element. Throws an `Error` "
+     "when the queue is empty. Among elements neither of which outranks the "
+     "other, the pop order is unspecified (a heap, not a stable sort)."},
+    {"peek", "peek(): T",
+     "Returns the highest-priority element without removing it. Throws an "
+     "`Error` when the queue is empty."},
+};
+
+// The documented members of a `RingBuffer` (folded in from the former
+// ring-buffer module; fixed capacity, overwrite mode). `size`/`capacity`/
+// reads, mirroring `Map`/`Set` `.size`.
+const DocRow kRingBufferDocRows[] = {
+    {"push", "push(value: T): void",
+     "Appends `value` as the newest element. When the ring is full the oldest "
+     "element is overwritten; the ring never grows."},
+    {"pop", "pop(): T | undefined",
+     "Removes and returns the oldest element, or `undefined` when the ring is "
+     "empty."},
+    {"peek", "peek(): T | undefined",
+     "Returns the oldest element without removing it, or `undefined` when the "
+     "ring is empty."},
+    {"clear", "clear(): void", "Removes every element from the ring."},
+    {"size", "size: number", "The number of elements in the ring."},
+    {"capacity", "capacity: number",
+     "The fixed maximum number of elements. Set by the constructor."},
+    {"isFull", "isFull: boolean",
+     "True when the ring holds `capacity` elements and the next `push` will "
+     "overwrite the oldest one."},
+};
+
+// The documented members of a `BitSet` (folded in from the former bitset
+// module; 64 flags per word with word-parallel bulk operations).
+const DocRow kBitSetDocRows[] = {
+    {"set", "set(index: number): void",
+     "Sets the flag at `index`, growing the set when needed."},
+    {"get", "get(index: number): boolean",
+     "True when the flag at `index` is set; false beyond the size."},
+    {"clear", "clear(index: number): void",
+     "Clears the flag at `index`; beyond the size it is a no-op."},
+    {"count", "count(): number",
+     "The number of set flags (a word-parallel popcount)."},
+    {"and", "and(other: BitSet): BitSet",
+     "A fresh set with the flags set in both sets; neither operand changes."},
+    {"or", "or(other: BitSet): BitSet",
+     "A fresh set with the flags set in either set; neither operand changes."},
+    {"xor", "xor(other: BitSet): BitSet",
+     "A fresh set with the flags set in exactly one set; neither operand "
+     "changes."},
+};
+
+// The documented members of a `MultiMap` (folded in from the former multimap module).
+// `get` returns an array (empty when absent), never `undefined`; `size` is
+// a distinct-key count.
+const DocRow kMultiMapDocRows[] = {
+    {"add", "add(key: K, value: V): void",
+     "Appends `value` to the list stored under `key`."},
+    {"get", "get(key: K): V[]",
+     "Returns all values stored under `key`, in add order, or an empty array "
+     "when the key is not in the map."},
+    {"has", "has(key: K): boolean", "True when `key` is in the map."},
+    {"delete", "delete(key: K): boolean",
+     "Removes `key` and all its values, returning whether a key was actually "
+     "removed."},
+    {"clear", "clear(): void", "Removes every entry from the map."},
+    {"size", "size: number", "The number of distinct keys in the map."},
+};
+
+// The documented members of a `ConcurrentMap` (folded in from the former
+// concurrent-map module). Every member is atomic with respect to the others on
+// the same instance (mutex-guarded); there is no cross-thread ordering
+// guarantee.
+const DocRow kConcurrentMapDocRows[] = {
+    {"set", "set(key: K, value: V): void",
+     "Stores `value` under `key`, replacing an earlier value. Thread-safe."},
+    {"get", "get(key: K): V | undefined",
+     "Returns a copy of the value stored under `key`, or `undefined` when "
+     "the key is not in the map. Thread-safe."},
+    {"has", "has(key: K): boolean",
+     "True when `key` is in the map. Thread-safe (not atomic with a "
+     "following `get`)."},
+    {"delete", "delete(key: K): boolean",
+     "Removes `key` from the map and returns whether a key was actually "
+     "removed. Thread-safe."},
+    {"size", "size: number",
+     "The number of entries in the map. Thread-safe (point-in-time)."},
+};
+
+Type bitSetType() { return Type(TypeKind::Class, "BitSet"); }
+
 template <std::size_t N>
 std::vector<std::string> candidateNames(const char* const (&names)[N]) {
     std::vector<std::string> out;
@@ -135,7 +267,11 @@ std::vector<std::string> candidateNames(const char* const (&names)[N]) {
 // =============================================================================
 bool isCollectionsClass(const Type& t) {
     return t.kind == TypeKind::Class &&
-           (t.name == "Map" || t.name == "Set" || t.name == "LRUCache");
+           (t.name == "Map" || t.name == "Set" || t.name == "LRUCache" ||
+            t.name == "Queue" || t.name == "Stack" ||
+            t.name == "PriorityQueue" || t.name == "RingBuffer" ||
+            t.name == "BitSet" || t.name == "MultiMap" ||
+            t.name == "ConcurrentMap");
 }
 
 // =============================================================================
@@ -143,12 +279,27 @@ bool isCollectionsClass(const Type& t) {
 // =============================================================================
 Type Analyzer::inferCollectionsConstruct(const std::string& name,
                                          TypeList& typeArgs) {
-    if (name != "Map" && name != "Set" && name != "LRUCache")
-        return Type::unknown();
-    // Map/LRUCache carry { K, V }; Set carries { T }. Missing annotations
-    // stay unknown; codegen reports CP3401 when the constructor has no
-    // complete type argument list to lower.
-    const std::size_t want = name == "Set" ? 1 : 2;
+    // The one-part family: `Set<T>`, `Queue<T>`, `Stack<T>`,
+    // `PriorityQueue<T>`, `RingBuffer<T>`. The two-part family: `Map<K, V>`,
+    // `MultiMap<K, V>`, `ConcurrentMap<K, V>`, `LRUCache<K, V>`. `BitSet`
+    // carries no type arguments (parts == {}). The optional constructor
+    // arguments (LRUCache capacity, PriorityQueue comparator, RingBuffer
+    // capacity, BitSet size) are value arguments, never type arguments, so
+    // they cannot ride in parts. Missing annotations stay unknown; codegen
+    // reports CP3401 when the constructor has no complete type argument
+    // list to lower.
+    const bool isOnePart = name == "Set" || name == "Queue" ||
+                           name == "Stack" || name == "PriorityQueue" ||
+                           name == "RingBuffer";
+    const bool isTwoPart = name == "Map" || name == "MultiMap" ||
+                           name == "ConcurrentMap" || name == "LRUCache";
+    if (name == "BitSet") {
+        return bitSetType();
+    }
+    if (!isOnePart && !isTwoPart) return Type::unknown();
+    // Map/LRUCache/MultiMap/ConcurrentMap carry { K, V }; Set/Queue/Stack/
+    // PriorityQueue/RingBuffer carry { T }.
+    const std::size_t want = isOnePart ? 1 : 2;
     std::vector<Type> parts;
     parts.reserve(want);
     for (std::size_t i = 0; i < want; ++i) {
@@ -192,6 +343,125 @@ Type Analyzer::collectionsMember(const Type& recv, const std::string& prop,
         if (prop == "keys") return Type::function({}, Type::array(first));
         reportMemberMiss("LRUCache", prop, span,
                          candidateNames(kLruMemberNames));
+        return Type::unknown();
+    }
+    if (recv.name == "Queue") {
+        const Type elem =
+            recv.parts.empty() ? Type::unknown() : recv.parts.front();
+        if (prop == "size") {
+            return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+        }
+        if (prop == "enqueue") {
+            return Type::function({elem}, Type::voidType());
+        }
+        if (prop == "dequeue" || prop == "peek") {
+            return Type::function({}, Type::unionOf({elem, Type::undefined()}));
+        }
+        if (prop == "clear") return Type::function({}, Type::voidType());
+        if (prop == "isEmpty") return Type::function({}, Type::boolean());
+        reportMemberMiss("Queue", prop, span, docRowNames(kQueueDocRows));
+        return Type::unknown();
+    }
+    if (recv.name == "Stack") {
+        const Type elem =
+            recv.parts.empty() ? Type::unknown() : recv.parts.front();
+        if (prop == "size") {
+            return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+        }
+        if (prop == "push") {
+            return Type::function({elem}, Type::voidType());
+        }
+        if (prop == "pop" || prop == "peek") {
+            return Type::function({}, Type::unionOf({elem, Type::undefined()}));
+        }
+        if (prop == "clear") return Type::function({}, Type::voidType());
+        if (prop == "isEmpty") return Type::function({}, Type::boolean());
+        reportMemberMiss("Stack", prop, span, docRowNames(kStackDocRows));
+        return Type::unknown();
+    }
+    if (recv.name == "PriorityQueue") {
+        const Type elem =
+            recv.parts.empty() ? Type::unknown() : recv.parts.front();
+        if (prop == "push") return Type::function({elem}, Type::voidType());
+        if (prop == "pop" || prop == "peek") {
+            return Type::function({}, elem);
+        }
+        reportMemberMiss("PriorityQueue", prop, span,
+                         docRowNames(kPriorityQueueDocRows));
+        return Type::unknown();
+    }
+    if (recv.name == "RingBuffer") {
+        const Type elem =
+            recv.parts.empty() ? Type::unknown() : recv.parts.front();
+        if (prop == "size" || prop == "capacity") {
+            return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+        }
+        if (prop == "isFull") return Type::boolean();
+        if (prop == "push") return Type::function({elem}, Type::voidType());
+        if (prop == "pop" || prop == "peek") {
+            return Type::function({}, Type::unionOf({elem, Type::undefined()}));
+        }
+        if (prop == "clear") return Type::function({}, Type::voidType());
+        reportMemberMiss("RingBuffer", prop, span,
+                         docRowNames(kRingBufferDocRows));
+        return Type::unknown();
+    }
+    if (recv.name == "BitSet") {
+        // The index/count surface is the std count width: `usize` in a Rust
+        // project (`size_t` in a C++ one; number in TypeScript).
+        const Type index =
+            stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+        if (prop == "set" || prop == "clear") {
+            return Type::function({index}, Type::voidType());
+        }
+        if (prop == "get") return Type::function({index}, Type::boolean());
+        if (prop == "count") return Type::function({}, index);
+        if (prop == "and" || prop == "or" || prop == "xor") {
+            return Type::function({bitSetType()}, bitSetType());
+        }
+        reportMemberMiss("BitSet", prop, span, docRowNames(kBitSetDocRows));
+        return Type::unknown();
+    }
+    if (recv.name == "MultiMap") {
+        const Type key =
+            recv.parts.empty() ? Type::unknown() : recv.parts.front();
+        const Type value =
+            recv.parts.size() >= 2 ? recv.parts[1] : Type::unknown();
+        if (prop == "size") {
+            return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+        }
+        if (prop == "add") {
+            return Type::function({key, value}, Type::voidType());
+        }
+        if (prop == "get") return Type::function({key}, Type::array(value));
+        if (prop == "has" || prop == "delete") {
+            return Type::function({key}, Type::boolean());
+        }
+        if (prop == "clear") return Type::function({}, Type::voidType());
+        reportMemberMiss("MultiMap", prop, span,
+                         docRowNames(kMultiMapDocRows));
+        return Type::unknown();
+    }
+    if (recv.name == "ConcurrentMap") {
+        const Type first =
+            recv.parts.empty() ? Type::unknown() : recv.parts.front();
+        const Type second =
+            recv.parts.size() >= 2 ? recv.parts[1] : Type::unknown();
+        if (prop == "size") {
+            return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+        }
+        if (prop == "set") {
+            return Type::function({first, second}, Type::voidType());
+        }
+        if (prop == "get") {
+            return Type::function(
+                {first}, Type::unionOf({second, Type::undefined()}));
+        }
+        if (prop == "has" || prop == "delete") {
+            return Type::function({first}, Type::boolean());
+        }
+        reportMemberMiss("ConcurrentMap", prop, span,
+                         docRowNames(kConcurrentMapDocRows));
         return Type::unknown();
     }
     const bool isMap = recv.name == "Map";
@@ -253,6 +523,17 @@ StdMemberDoc collectionsMemberDoc(const std::string& family,
     if (family == "Map") return memberDoc(kMapDocRows, prop);
     if (family == "Set") return memberDoc(kSetDocRows, prop);
     if (family == "LRUCache") return memberDoc(kLruDocRows, prop);
+    if (family == "Queue") return memberDoc(kQueueDocRows, prop);
+    if (family == "Stack") return memberDoc(kStackDocRows, prop);
+    if (family == "PriorityQueue") {
+        return memberDoc(kPriorityQueueDocRows, prop);
+    }
+    if (family == "RingBuffer") return memberDoc(kRingBufferDocRows, prop);
+    if (family == "BitSet") return memberDoc(kBitSetDocRows, prop);
+    if (family == "MultiMap") return memberDoc(kMultiMapDocRows, prop);
+    if (family == "ConcurrentMap") {
+        return memberDoc(kConcurrentMapDocRows, prop);
+    }
     return StdMemberDoc{};
 }
 
@@ -260,6 +541,13 @@ std::vector<std::string> collectionsMemberNames(const std::string& family) {
     if (family == "Map") return docRowNames(kMapDocRows);
     if (family == "Set") return docRowNames(kSetDocRows);
     if (family == "LRUCache") return docRowNames(kLruDocRows);
+    if (family == "Queue") return docRowNames(kQueueDocRows);
+    if (family == "Stack") return docRowNames(kStackDocRows);
+    if (family == "PriorityQueue") return docRowNames(kPriorityQueueDocRows);
+    if (family == "RingBuffer") return docRowNames(kRingBufferDocRows);
+    if (family == "BitSet") return docRowNames(kBitSetDocRows);
+    if (family == "MultiMap") return docRowNames(kMultiMapDocRows);
+    if (family == "ConcurrentMap") return docRowNames(kConcurrentMapDocRows);
     return {};
 }
 
@@ -325,7 +613,28 @@ bool Analyzer::tryInferCollectionsStaticCall(CallExpr& call, MemberExpr& m,
             key = widen(fnType.parts.back());
         }
     }
-    inferArgs(call);
+    // Do NOT call inferArgs(call) here: it re-infers the callback arrow via
+    // inferArrow with ambient (untyped) parameters, overwriting the signature
+    // published above (out_.functions / arrowSigs_) with
+    // `(ambient) => ambient` and re-checking the body (e.g. `w[0]` /
+    // `w.charAt(0)`) against the wrong parameter type. The first argument
+    // was already inferred above and a non-arrow callback was inferred in
+    // the branch above, so only the arrow's own node type remains to set.
+    // (The array callback methods in src/std/arrays/sema_methods.cpp follow
+    // the same pattern: inferArrowReturn + publish, then return.)
+    if (cb != nullptr && cb->kind == NodeKind::ArrowFunction) {
+        const std::vector<Type> context = {elem, Type::number(),
+                                           Type::array(elem)};
+        withType(*cb, Type::function(context, key));
+    }
+    if (key.isVoid()) {
+        report(diagcode::kTypeMismatch,
+               call.arguments[1] ? call.arguments[1]->span : call.span,
+               "type mismatch: Map.groupBy callback must return a key, "
+               "got 'void'");
+        out = withType(call, Type::unknown());
+        return true;
+    }
     Type result(TypeKind::Class, "Map");
     result.parts = {key, Type::array(elem)};
     out = withType(call, result);
