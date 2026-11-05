@@ -233,6 +233,17 @@ std::string Generator::emitNetworkFetch(const CallExpr& c, const ExprList& args)
 /// the identifier is not part of the documented surface.
 std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::string& name) {
     if (name == "fetch") return emitNetworkFetch(c, c.arguments);
+    if (name == "lookup") {
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        if (c.arguments.empty() || !c.arguments.front()) {
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "dns.lookup(hostname) takes exactly one argument");
+            return "0.0";
+        }
+        return std::string(kRuntimeNs) + "dnsResolve(" +
+               expr(*c.arguments.front()) + ")";
+    }
     if (name == "createServer") {
         needsNetwork_ = true;
         needsEventLoop_ = true;
@@ -347,6 +358,7 @@ std::string Generator::emitNetworkNew(const NewExpr& n) {
 
 std::string Generator::emitNetworkCall(const CallExpr& c, const MemberExpr& m) {
     if (m.property == "fetch") return emitNetworkFetch(c, c.arguments);
+    if (m.property == "lookup") return emitNetworkIdentifier(c, "lookup");
     if (m.property == "createServer") return emitNetworkIdentifier(c, "createServer");
     if (m.property == "WebSocket" || m.property == "WebSocketServer") {
         // The class-shaped namespace member: `network.WebSocket(url)`.

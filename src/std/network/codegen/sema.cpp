@@ -373,6 +373,16 @@ bool Analyzer::tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& o
         out = networkObjectType(kHttpServer);
         return true;
     }
+    if (id.name == "lookup") {
+        // `dns.lookup(hostname)`: resolves with the first address.
+        inferArgs(call);
+        if (call.arguments.size() != 1 || !call.arguments.front()) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "dns.lookup(hostname) takes exactly one argument");
+        }
+        out = promiseOf(Type::string());
+        return true;
+    }
     return false;
 }
 
@@ -474,6 +484,21 @@ bool Analyzer::tryInferNetworkMemberCall(CallExpr& call, MemberExpr& m, Type& ou
         if (id.name == "network" && lookup(id.name, binding) && binding.isAmbient) {
             if (checkCreateServerOptions(call)) out_.networkScaleMode = true;
             out = networkObjectType(kHttpServer);
+            return true;
+        }
+    }
+    // `dns.lookup(hostname)`: resolves with the first address.
+    if (m.property == "lookup" && m.object &&
+        m.object->kind == NodeKind::Identifier) {
+        const auto& id = static_cast<const Identifier&>(*m.object);
+        Binding binding;
+        if (id.name == "dns" && lookup(id.name, binding) && binding.isAmbient) {
+            inferArgs(call);
+            if (call.arguments.size() != 1 || !call.arguments.front()) {
+                report(diagcode::kArityMismatch, anchorSpan(call.span),
+                       "dns.lookup(hostname) takes exactly one argument");
+            }
+            out = promiseOf(Type::string());
             return true;
         }
     }
