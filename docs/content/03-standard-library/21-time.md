@@ -72,12 +72,12 @@ console.timeEnd("load"); // prints: load: 12.345ms
 | Member | Signature (exact types) | Semantics |
 | --- | --- | --- |
 | `time.stopwatch` | `stopwatch(): Stopwatch` | Creates a new stopped `Stopwatch` whose `elapsed()` is `0`. Construction is through this factory; `new Stopwatch()` is not part of the v0.2 surface. |
-| `sw.start` | `start(): void` | (Re)starts the interval from now, discarding any previously accumulated time. Calling `start()` on a running watch restarts it. |
-| `sw.stop` | `stop(): void` | Freezes the interval: afterwards `elapsed()` returns the same value every time. Stopping a stopped watch does nothing. |
+| `sw.start` | `start(): undefined` | (Re)starts the interval from now, discarding any previously accumulated time. Calling `start()` on a running watch restarts it. |
+| `sw.stop` | `stop(): undefined` | Freezes the interval: afterwards `elapsed()` returns the same value every time. Stopping a stopped watch does nothing. |
 | `sw.elapsed` | `elapsed(): number` | Milliseconds since `start()` as a fractional `number` (`f64`); the live interval while running, the frozen value after `stop()`, and `0` before the first `start()`. Monotonic, so never negative. There is no exact integer width for a duration. |
-| `sw.reset` | `reset(): void` | Stops the watch and zeroes the elapsed time. |
-| `console.time` | `time(label?: string): void` | Records the start instant for `label` (default `default`); calling again with the same label restarts that timer. |
-| `console.timeEnd` | `timeEnd(label?: string): void` | Prints `label: <ms>ms` (three decimals) to stdout and removes the label. For a label never started, prints nothing to stdout and writes `Timer "label" does not exist` to stderr. |
+| `sw.reset` | `reset(): undefined` | Stops the watch and zeroes the elapsed time. |
+| `console.time` | `time(label?: string): undefined` | Records the start instant for `label` (default `default`); calling again with the same label restarts that timer. |
+| `console.timeEnd` | `timeEnd(label?: string): undefined` | Prints `label: <ms>ms` (three decimals) to stdout and removes the label. For a label never started, prints nothing to stdout and writes `Timer "label" does not exist` to stderr. |
 
 The namespace object (`time.stopwatch`) and `Stopwatch` values are closed: a member outside the tables is a compile-time error with the documented names as candidates.
 

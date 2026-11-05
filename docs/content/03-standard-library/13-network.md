@@ -36,7 +36,7 @@ A timeout of zero means no timeout. A request that never settles remains pending
 
 ```ts
 const socket = new WebSocket("ws://127.0.0.1:9000/events");
-socket.on("open", (): void => socket.send("hello"));
+socket.on("open", (): undefined => socket.send("hello"));
 ```
 
 Wait for the `"open"` event before sending application messages. `"message"` receives text frames as strings and binary frames as Buffer values. `"close"` receives a code and reason; `"error"` receives an error value. There is one handler slot per event, so registering a later listener for the same event replaces the previous listener. Close the socket when the exchange is complete; an open socket keeps event-loop work alive.
@@ -47,15 +47,15 @@ Wait for the `"open"` event before sending application messages. `"message"` rec
 
 ## HTTP server with `createServer`
 
-`createServer()` constructs an HTTP server with route registration and middleware support. The options object currently supports `threads`, an integer of at least one. Each route handler can be synchronous or return `Promise<void>`. Routes and middleware execute in registration order. Calling `next()` from middleware continues the chain; it returns `Promise<void>`, so async middleware may use `await next()`. A chain that completes without sending a response returns 404.
+`createServer()` constructs an HTTP server with route registration and middleware support. The options object currently supports `threads`, an integer of at least one. Each route handler can be synchronous or return `Promise<undefined>`. Routes and middleware execute in registration order. Calling `next()` from middleware continues the chain; it returns `Promise<undefined>`, so async middleware may use `await next()`. A chain that completes without sending a response returns 404.
 
 ```ts
 const server = createServer();
-server.get("/health", (request, response): void => {
+server.get("/health", (request, response): undefined => {
   response.status(200).header("content-type", "text/plain");
   response.text("ok");
 });
-server.listen(8080, (): void => console.log("ready"));
+server.listen(8080, (): undefined => console.log("ready"));
 ```
 
 The server supports `get`, `post`, `put`, `delete`, `patch`, `head`, `options`, `any`, and `use`. `listen(port, callback?)` begins accepting requests; `close()` shuts down the listener and connections. Request values include method, path, route `params`, query Map, and headers Map. Request bodies are buffered before dispatch; `text()` and `json<T>()` read that body. The `port` and status-code parameters are `number` in a `typescript` project and `u16` in a `rust`/`cpp` project, matching the values returned by `res.status`.

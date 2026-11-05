@@ -11,7 +11,7 @@ import console from "std/console";
 //  * the process stays alive while the event loop still has pending work, so
 //    the countdown always finishes before the program exits.
 
-async function countdown(from: number): Promise<void> {
+async function countdown(from: number): Promise<undefined> {
   let n = from;
   while (n > 0) {
     console.log(`tick ${n}`);

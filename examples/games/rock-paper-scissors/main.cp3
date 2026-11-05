@@ -31,7 +31,7 @@ function moveName(pick: number): string {
   return "rock";
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<undefined> {
   let wins = 0;
   let losses = 0;
   let draws = 0;

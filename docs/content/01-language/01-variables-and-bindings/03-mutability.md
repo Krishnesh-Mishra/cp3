@@ -80,7 +80,7 @@ A closure capturing a mutable `let` observes the binding's current value accordi
 
 ```ts
 let total = 0;
-const add = (value: number): void => {
+const add = (value: number): undefined => {
   total = total + value;
 };
 add(5);

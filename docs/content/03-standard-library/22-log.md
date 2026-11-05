@@ -91,13 +91,13 @@ INFO server ready
 | `new Logger()` | `Logger(name?: string): Logger` | Unnamed logger, level `info`. The constructor takes at most one argument (the name, must be a `string`); extra arguments are an arity error. |
 | `name` | `string` | The constructor name (`""` when unnamed). |
 | `level` | `string` | Current minimum level: `"debug"`, `"info"`, `"warn"`, or `"error"`. Default is `"info"`. |
-| `setLevel` | `setLevel(level: "debug" \| "info" \| "warn" \| "error"): void` | Sets the minimum emitted level. Accepts the four names case-insensitively; an unknown name leaves the level unchanged. |
-| `debug` | `debug(msg: string, ...args: unknown[]): void` | Emits one `DEBUG` line only when level is `debug`; otherwise silent. |
-| `info` | `info(msg: string, ...args: unknown[]): void` | Emits one `INFO` line when level is `info` or `debug`. |
-| `warn` | `warn(msg: string, ...args: unknown[]): void` | Emits one `WARN` line when level is `warn` or more verbose. |
-| `error` | `error(msg: string, ...args: unknown[]): void` | Emits one `ERROR` line (always emitted). |
-| `setSink` | `setSink(sink: (line: string) => void): void` | Replaces stdout: the callback receives each emitted line with no trailing newline. A sink that throws is not caught; it propagates to the logging call site, so sinks should be total. |
-| `resetSink` | `resetSink(): void` | Restores the default stdout sink. |
+| `setLevel` | `setLevel(level: "debug" \| "info" \| "warn" \| "error"): undefined` | Sets the minimum emitted level. Accepts the four names case-insensitively; an unknown name leaves the level unchanged. |
+| `debug` | `debug(msg: string, ...args: object[]): undefined` | Emits one `DEBUG` line only when level is `debug`; otherwise silent. |
+| `info` | `info(msg: string, ...args: object[]): undefined` | Emits one `INFO` line when level is `info` or `debug`. |
+| `warn` | `warn(msg: string, ...args: object[]): undefined` | Emits one `WARN` line when level is `warn` or more verbose. |
+| `error` | `error(msg: string, ...args: object[]): undefined` | Emits one `ERROR` line (always emitted). |
+| `setSink` | `setSink(sink: (line: string) => undefined): undefined` | Replaces stdout: the callback receives each emitted line with no trailing newline. A sink that throws is not caught; it propagates to the logging call site, so sinks should be total. |
+| `resetSink` | `resetSink(): undefined` | Restores the default stdout sink. |
 
 ## Limits
 

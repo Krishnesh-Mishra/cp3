@@ -15,8 +15,8 @@ CP3 checks values before it generates C++. A type describes which values a bindi
 | `boolean` | `true` or `false` | `let ready: boolean = false;` |
 | `undefined` | The absent-value sentinel | `let x: number | undefined = undefined;` |
 | `null` | A separate null value, distinct from `undefined` | `let x: string | null = null;` |
-| `void` | A function result that carries no useful value | `function log(): void { ... }` |
-| `unknown` | A value whose operations need a supported checked path | `let data: unknown = 5;` |
+| `void` | A function result that carries no useful value | `function log(): undefined { ... }` |
+| `unknown` | A value whose operations need a supported checked path | `let data: object = 5;` |
 
 The distinction between `null` and `undefined` is intentional. A union such as `number | undefined` does not accept `null`, and a union such as `number | null` does not accept `undefined`.
 
@@ -269,7 +269,7 @@ Do not mark a value optional simply to avoid fixing a missing initialization. Op
 A function returning `void` does not return a useful value. It can still perform effects such as writing output or updating state. A void result should not be used as if it were a number, string, or boolean.
 
 ```ts
-function announce(message: string): void {
+function announce(message: string): undefined {
   console.log(message);
 }
 ```

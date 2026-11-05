@@ -63,7 +63,7 @@ dec.encoding; // "utf-8"
 | `decoder.decode` | `decode(bytes: Uint8Array): string` | Decodes `bytes` as UTF-8. Each invalid maximal subpart (overlong form, encoded surrogate, code point above U+10FFFF, stray continuation byte, truncated end sequence) is replaced with U+FFFD; a leading BOM is stripped. Never throws on malformed bytes. |
 | `decoder.encoding` | `encoding: string` | The canonical encoding label, always `"utf-8"`. |
 
-Width note: `string` is a UTF-8 byte string (`length` counts bytes); `Uint8Array` is the byte-array type from [Typed arrays](16-typed-arrays.md). Instances are stateless apart from the validated label and may be reused. The surface is closed: unknown members are compile-time errors.
+Width note: `string` is a UTF-8 byte string (`length` counts bytes); `Uint8Array` is the byte-array type from [Typed arrays](16-typed-arrays.md). Instances are stateless apart from the validated label and may be reused. The surface is closed: object members are compile-time errors.
 
 ## Validation and failures
 

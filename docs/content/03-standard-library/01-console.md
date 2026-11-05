@@ -77,7 +77,7 @@ console.log("Pressed", key);
 Registers a listener for `"keypress"`, `"line"`, or `"close"`:
 
 ```ts
-const reportLine = (line: string): void => {
+const reportLine = (line: string): undefined => {
   console.log("input:", line);
 };
 

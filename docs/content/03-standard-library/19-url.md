@@ -68,7 +68,7 @@ Pairs use the `application/x-www-form-urlencoded` rules: `+` is a space on parse
 | `URL.href`, `.protocol`, `.host`, `.hostname`, `.port`, `.pathname`, `.search`, `.hash`, `.origin`, `.username`, `.password` | `string` | Construction-time snapshot components |
 | `URL.searchParams` | `URLSearchParams` | Query handle for this URL |
 | `URLSearchParams(query?)` | constructor | Parses a query string |
-| `append` / `set` | `(name, value) => void` | Append, or replace-first/drop-rest |
+| `append` / `set` | `(name, value) => undefined` | Append, or replace-first/drop-rest |
 | `get` | `(name) => string \| undefined` | First value |
 | `getAll` | `(name) => string[]` | All values |
 | `has` | `(name) => boolean` | Presence |

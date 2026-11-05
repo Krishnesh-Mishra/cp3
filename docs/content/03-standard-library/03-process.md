@@ -154,15 +154,15 @@ Use `process.spawn(cmd, args)` when output should be observed while the child is
 ```ts
 const child = process.spawn("tool", ["--watch"]);
 
-child.on("data", (chunk: string): void => {
+child.on("data", (chunk: string): undefined => {
   console.log("out:", chunk);
 });
 
-child.on("stderr", (chunk: string): void => {
+child.on("stderr", (chunk: string): undefined => {
   console.error("err:", chunk);
 });
 
-child.on("exit", (code: number): void => {
+child.on("exit", (code: number): undefined => {
   console.log("finished with", code);
 });
 ```

@@ -23,8 +23,10 @@
 #include <cstddef>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -205,6 +207,53 @@ template <typename T, std::enable_if_t<std::is_integral<T>::value, int> = 0>
 std::string toString(T value) {
     return std::to_string(value);
 }
+
+// --- native scalar string form -------------------------------------------------
+//
+// `v.toString()` on a native scalar (codegen src/emit/std/common.cpp): every
+// supported width formats through the exact overloads above, never through
+// `double`, so u64/i64 above 2^53 keep their exact digits. `char` prints its
+// numeric value (the `std::to_string` promotion), not a glyph, which matches
+// printing a native integer of any other width.
+namespace scalar {
+
+// One `String.fromCharCode` byte: JS truncates the code and reduces it modulo
+// 256; a non-finite code contributes a zero byte. A negative code reduces to
+// its low byte (`-1` -> 255), exactly as the double overload below does with
+// `fmod` + the sign correction. Native integer codes never pass through
+// `double`: `static_cast<unsigned char>` is itself the modulo-256 reduction,
+// so 256 -> 0, 257 -> 1 and -1 -> 255 without any precision loss at u64.
+inline unsigned char byteOf(double code) {
+    double byte = 0.0;
+    if (std::isfinite(code)) {
+        byte = std::fmod(std::trunc(code), 256.0);
+        if (byte < 0.0) byte += 256.0;
+    }
+    return static_cast<unsigned char>(byte);
+}
+
+template <typename T,
+          std::enable_if_t<std::is_integral<T>::value &&
+                               !std::is_same<T, bool>::value,
+                           int> = 0>
+inline unsigned char byteOf(T value) {
+    // The unsigned-char conversion is modulo 256 by definition, so signed
+    // negatives reduce to their low byte (-1 -> 255) at every width.
+    return static_cast<unsigned char>(value);
+}
+
+// The `String.fromCharCode(...)` byte surface for argument lists that carry
+// native integers (plain `number` arguments keep the std string path): each
+// code was already reduced by `byteOf`, so this is a straight byte copy.
+inline std::string fromCharCodeBytes(
+    std::initializer_list<unsigned char> bytes) {
+    std::string out;
+    out.reserve(bytes.size());
+    for (unsigned char byte : bytes) out.push_back(static_cast<char>(byte));
+    return out;
+}
+
+}  // namespace scalar
 
 // --- coercion: Number(x) / Boolean(x) / isNaN / isFinite --------------------
 // ECMAScript conversion semantics for the global constructors (STDLIB docs §03):

@@ -17,7 +17,7 @@ function add(left: number, right: number): number {
 The function returns `number`. Every return path must satisfy that result type. A function declared with `void` is used for work that does not return a value:
 
 ```ts
-function report(message: string): void {
+function report(message: string): undefined {
   console.log(message);
 }
 ```

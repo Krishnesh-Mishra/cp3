@@ -106,7 +106,7 @@ function formatCount(count: number): string {
 ```
 
 The analyzer checks call arity, argument types, and the result expected by the function's callers. Every required return path in a non-void function
-must produce a compatible value. Use `: void` when a function intentionally returns no useful value. Optional parameters use `?` after the parameter
+must produce a compatible value. Use `: undefined` when a function intentionally returns no useful value. Optional parameters use `?` after the parameter
 name.
 
 ```ts

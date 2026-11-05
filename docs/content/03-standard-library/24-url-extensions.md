@@ -33,11 +33,11 @@ Both the named bindings (for the classes) and the default namespace (for the per
 | `URL.searchParams` | `searchParams: URLSearchParams` | Live handle for this URL's query. Mutations do not rewrite `search` / `href` automatically. |
 | `new URLSearchParams()` | `URLSearchParams(): URLSearchParams` | Empty pair list. |
 | `new URLSearchParams(query)` | `URLSearchParams(query: string): URLSearchParams` | Parses `name=value&...`; a leading `?` is skipped. A part without `=` yields `name` with empty value; `+` decodes as space. |
-| `sp.append` | `append(name: string, value: string): void` | Appends a pair to the end, preserving duplicates and order. |
+| `sp.append` | `append(name: string, value: string): undefined` | Appends a pair to the end, preserving duplicates and order. |
 | `sp.get` | `get(name: string): string \| undefined` | First value for `name`, or `undefined` when absent. |
 | `sp.getAll` | `getAll(name: string): string[]` | Every value for `name`, in order. |
 | `sp.has` | `has(name: string): boolean` | True when `name` appears at least once. |
-| `sp.set` | `set(name: string, value: string): void` | Replaces the first occurrence and drops later duplicates; appends when absent. |
+| `sp.set` | `set(name: string, value: string): undefined` | Replaces the first occurrence and drops later duplicates; appends when absent. |
 | `sp.delete` | `delete(name: string): boolean` | Removes every pair with `name`; returns whether any were removed. |
 | `sp.toString` | `toString(): string` | Serializes as `name=value&...` (`application/x-www-form-urlencoded`): `A-Z a-z 0-9 * - . _` stay, space encodes as `+`, everything else as uppercase `%HH`. No leading `?`. |
 | `sp.entries` | `entries(): [string, string][]` | Pairs as `[name, value]` tuples, in order. |

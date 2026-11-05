@@ -47,7 +47,7 @@ export function connect(conninfo: string): number {
 }
 
 // The native shim exposes socket(handle) and progress(handle) as scalar calls.
-export async function waitForReady(handle: number): Promise<void> {
+export async function waitForReady(handle: number): Promise<undefined> {
   await io.pollUntilDone(
     () => native.socket(handle),
     () => native.progress(handle), // io.POLL_READING / WRITING / DONE / FAILED

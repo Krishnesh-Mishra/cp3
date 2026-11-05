@@ -97,7 +97,7 @@ interface Person {
   age?: number;
 }
 
-function show({ name, ...rest }: Person): void {
+function show({ name, ...rest }: Person): undefined {
   console.log(name);
   console.log(rest.age);
 }

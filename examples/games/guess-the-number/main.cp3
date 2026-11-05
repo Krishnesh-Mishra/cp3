@@ -14,7 +14,7 @@ import Math from "std/math";
 // Needs async/await + std/math, which the current compiler build does not
 // implement yet (CP3002), so this one does not compile today.
 
-async function main(): Promise<void> {
+async function main(): Promise<undefined> {
   const secret = Math.floor(Math.random() * 100) + 1;
   let attempts = 0;
 

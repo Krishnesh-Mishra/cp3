@@ -126,8 +126,33 @@ void renderDiagnostics(const std::vector<Diagnostic>& diagnostics,
             }
         }
         if (opts.pretty) {
+            // Std import hints (sema stdImportHint, embedded by
+            // Analyzer::reportUndefinedName into the message AND offered as
+            // a suggestion) must stay visible on the CLI path, not only in
+            // the LSP. The machine line above already carries the exact
+            // import line inside the message (D2 contract, unchanged), so
+            // non-TTY runs get it too; this pretty-only fallback re-surfaces
+            // it as `help:` if a diagnostic producer ever sets the message
+            // without the matching suggestion. It never adds a machine
+            // line and never rewrites the message.
+            std::string importHint;
+            const std::size_t importAt = d.message.find("import ");
+            if (importAt != std::string::npos) {
+                const std::size_t endAt = d.message.find(';', importAt);
+                if (endAt != std::string::npos) {
+                    importHint = d.message.substr(importAt, endAt - importAt + 1);
+                }
+            }
+            bool hintAlreadyShown = false;
             for (const std::string& suggestion : d.suggestions) {
+                if (!importHint.empty() &&
+                    suggestion.find(importHint) != std::string::npos) {
+                    hintAlreadyShown = true;
+                }
                 std::fprintf(out, "  help: %s\n", suggestion.c_str());
+            }
+            if (!importHint.empty() && !hintAlreadyShown) {
+                std::fprintf(out, "  help: Add `%s`\n", importHint.c_str());
             }
         }
     }

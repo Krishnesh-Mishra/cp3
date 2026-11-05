@@ -1,16 +1,24 @@
 ---
-title: Map and Set collections
+title: Collections
 chapter: Chapter 3 · Standard library
 ---
-# Map and Set collections
+# Collections
 
-`std/collections` provides generic `Map` and `Set` classes as named imports:
+`std/collections` is the single module for every collection type. Import all
+of them from `"std/collections"`; there are no per-type module specifiers:
 
 ```ts
-import { Map, Set } from "std/collections";
+import { Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap } from "std/collections";
 
 const counts = new Map<string, number>();
 const seen = new Set<string>();
+const queue = new Queue<number>();
+const stack = new Stack<number>();
+const heap = new PriorityQueue<number>();
+const ring = new RingBuffer<number>(16);
+const flags = new BitSet();
+const grouped = new MultiMap<string, number>();
+const cache = new LRUCache<string, number>(128);
 ```
 
 Both preserve insertion order when iterating. They are reference values managed by the runtime; see [Values and references](../02-runtime/01-value-model.md).
@@ -115,6 +123,183 @@ A Map or Set is mutable shared state when multiple bindings hold its reference. 
 
 For large traversals, call `keys()`/`entries()` only when the returned array is needed; each creates a result collection. For one-pass side effects, `forEach` avoids explicitly constructing that array. Measure hot paths rather than assuming collection operation costs from a different runtime.
 
+## LRUCache
+
+`LRUCache<K, V>` is a capacity-bounded map. `new LRUCache<K, V>(capacity)`
+fixes the maximum entry count. `set` and `get` mark a key most recently used;
+inserting past `capacity` evicts the least recently used entry. `has` does
+not affect eviction order. `size` and `capacity` are read-only properties, and
+`keys()` returns keys most-recently-used first.
+
+```ts
+const cache = new LRUCache<string, number>(2);
+cache.set("a", 1);
+cache.set("b", 2);
+cache.get("a"); // refresh "a"
+cache.set("c", 3); // evicts "b"
+```
+
+## Queue
+
+`Queue<T>` is a first-in-first-out queue: `new Queue<T>()`. `enqueue(value)`
+appends to the back, `dequeue()` removes and returns the front value (or
+`undefined` when empty), `peek()` reads the front without removing it (or
+`undefined` when empty), `clear()` empties the queue, `isEmpty()` reports
+whether it holds no values, and `size` is the value count.
+
+```ts
+const q = new Queue<number>();
+q.enqueue(1);
+q.enqueue(2);
+q.dequeue(); // 1
+```
+
+## Stack
+
+`Stack<T>` is a last-in-first-out stack: `new Stack<T>()`. `push(value)` adds
+to the top, `pop()` removes and returns the top value (or `undefined` when
+empty), `peek()` reads the top without removing it (or `undefined` when
+empty), `clear()` empties the stack, `isEmpty()` reports whether it holds no
+values, and `size` is the value count.
+
+```ts
+const s = new Stack<number>();
+s.push(1);
+s.push(2);
+s.pop(); // 2
+```
+
+## PriorityQueue
+
+`PriorityQueue<T>` is a binary heap: `new PriorityQueue<T>()` or
+`new PriorityQueue<T>(comparator)`. The default is a min-heap on `<`: the
+smallest element pops first. A comparator is `(a: T, b: T) => boolean`, true
+when `a` has higher priority than `b` (pops first); a max-heap is
+`(a, b) => a > b`. `push(value)` inserts, `pop()` removes and returns the
+highest-priority element, and `peek()` returns it without removing it. Both
+`pop()` and `peek()` throw an `Error` when the queue is empty. Among elements
+neither of which outranks the other, pop order is unspecified (a heap, not a
+stable sort).
+
+```ts
+const heap = new PriorityQueue<number>();
+heap.push(5);
+heap.push(1);
+heap.pop(); // 1
+
+const maxHeap = new PriorityQueue<number>((a, b) => a > b);
+maxHeap.push(5);
+maxHeap.push(1);
+maxHeap.pop(); // 5
+```
+
+## RingBuffer
+
+`RingBuffer<T>` is a fixed-capacity ring with overwrite mode:
+`new RingBuffer<T>(capacity)` takes exactly one argument. `push(value)`
+appends as the newest element; when the ring is full the oldest element is
+overwritten and the ring never grows. `pop()` removes and returns the oldest
+element (or `undefined` when empty), `peek()` reads the oldest value without
+removing it (or `undefined` when empty), `clear()` empties the ring, and
+`size`, `capacity`, and `isFull` are read-only properties. `isFull` is true
+when the ring holds `capacity` elements and the next `push` will overwrite
+the oldest one.
+
+```ts
+const ring = new RingBuffer<number>(3);
+ring.push(1);
+ring.push(2);
+ring.push(3);
+ring.push(4); // overwrites 1
+ring.pop(); // 2
+```
+
+## BitSet
+
+`BitSet` has no type arguments, and its constructor is `new BitSet()` or
+`new BitSet(size)` with an optional size in bits. Flags are addressed by
+`number` index: `set(index)` sets a flag (growing the set when needed),
+`get(index)` reports a flag (false beyond the size), `clear(index)` clears a
+flag (a no-op beyond the size), and `count()` returns the number of set flags.
+`and(other)`, `or(other)`, and `xor(other)` each return a fresh `BitSet` and
+leave both operands unchanged.
+
+```ts
+const flags = new BitSet();
+flags.set(0);
+flags.set(2);
+flags.count(); // 2
+flags.and(other);
+```
+
+## MultiMap
+
+`MultiMap<K, V>` maps each key to a list of values: `new MultiMap<K, V>()`.
+`add(key, value)` appends a value to the list under `key`, `get(key)` returns
+all values under `key` in add order (an empty array when the key is absent),
+`has(key)` reports whether the key exists, `delete(key)` removes the key and
+all its values and reports whether a key was removed, `clear()` removes every
+entry, and `size` is the number of distinct keys.
+
+```ts
+const grouped = new MultiMap<string, number>();
+grouped.add("a", 1);
+grouped.add("a", 2);
+grouped.get("a"); // [1, 2]
+```
+
+## Full API table
+
+| Type | Constructor | Member | Signature |
+| --- | --- | --- | --- |
+| Map | `new Map<K, V>()` | `set` | `set(key: K, value: V): void` |
+| Map | | `get` | `get(key: K): V \| undefined` |
+| Map | | `has`, `delete` | `(key: K): boolean` |
+| Map | | `clear` | `clear(): void` |
+| Map | | `keys`, `values`, `entries` | `K[]`, `V[]`, `[K, V][]` |
+| Map | | `forEach` | `(value: V, key: K) => void` callback, in that argument order |
+| Map | | `size` | Read-only count property |
+| Set | `new Set<T>()` | `add` | `add(value: T): void` |
+| Set | | `has`, `delete` | `(value: T): boolean` |
+| Set | | `clear` | `clear(): void` |
+| Set | | `values` | `values(): T[]` |
+| Set | | `forEach` | `(value: T) => void` callback |
+| Set | | `size` | Read-only count property |
+| LRUCache | `new LRUCache<K, V>(capacity)` | `set` | `set(key: K, value: V): void` |
+| LRUCache | | `get` | `get(key: K): V \| undefined` |
+| LRUCache | | `has`, `delete` | `(key: K): boolean` |
+| LRUCache | | `clear` | `clear(): void` |
+| LRUCache | | `keys` | `keys(): K[]`, most-recently-used first |
+| LRUCache | | `size`, `capacity` | Read-only count properties |
+| Queue | `new Queue<T>()` | `enqueue` | `enqueue(value: T): void` |
+| Queue | | `dequeue`, `peek` | `(): T \| undefined` |
+| Queue | | `clear` | `clear(): void` |
+| Queue | | `isEmpty` | `isEmpty(): boolean` |
+| Queue | | `size` | Read-only count property |
+| Stack | `new Stack<T>()` | `push` | `push(value: T): void` |
+| Stack | | `pop`, `peek` | `(): T \| undefined` |
+| Stack | | `clear` | `clear(): void` |
+| Stack | | `isEmpty` | `isEmpty(): boolean` |
+| Stack | | `size` | Read-only count property |
+| PriorityQueue | `new PriorityQueue<T>()` or `new PriorityQueue<T>(comparator)` | `push` | `push(value: T): void` |
+| PriorityQueue | | `pop`, `peek` | `(): T` (throws an `Error` when empty) |
+| RingBuffer | `new RingBuffer<T>(capacity)` | `push` | `push(value: T): void` |
+| RingBuffer | | `pop`, `peek` | `(): T \| undefined` |
+| RingBuffer | | `clear` | `clear(): void` |
+| RingBuffer | | `size`, `capacity`, `isFull` | Read-only properties |
+| BitSet | `new BitSet()` or `new BitSet(size)` | `set`, `clear` | `(index: number): void` |
+| BitSet | | `get` | `(index: number): boolean` |
+| BitSet | | `count` | `count(): number` |
+| BitSet | | `and`, `or`, `xor` | `(other: BitSet): BitSet` (fresh set) |
+| MultiMap | `new MultiMap<K, V>()` | `add` | `add(key: K, value: V): void` |
+| MultiMap | | `get` | `get(key: K): V[]` |
+| MultiMap | | `has`, `delete` | `(key: K): boolean` |
+| MultiMap | | `clear` | `clear(): void` |
+| MultiMap | | `size` | Read-only count property (distinct keys) |
+
+All types are imported from `"std/collections"`:
+`import { Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap } from "std/collections";`
+
 ## Tests and implementation
 
-The standard-library collection tests cover generic construction, missing Map lookups, insertion order, replacement, deletion, clear, and iteration. Semantic checks and the closed member tables are in `src/std/collections/sema.cpp`; runtime storage and equality behavior are in the same module family. Unknown members are diagnosed at compile time.
+The standard-library collection tests cover generic construction, missing Map lookups, insertion order, replacement, deletion, clear, and iteration, plus deterministic Queue FIFO, Stack LIFO, PriorityQueue min/max order, RingBuffer overwrite, BitSet `set`/`get`/`count`/`and`/`or`/`xor`, MultiMap `add`/`get`, and LRU eviction cases — all importing from `"std/collections"`. Unknown members are diagnosed at compile time.
