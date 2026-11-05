@@ -1,0 +1,7 @@
+import console from "std/console";
+import { Map, Set } from "std/collections";
+const s = new Set<number>([3, 1, 2]);
+console.log([...s].join(","));
+const m = new Map<string, number>([["x", 1]]);
+console.log([...m].length);
+console.log([...m].length === 1 ? "map-ok" : "map-bad");

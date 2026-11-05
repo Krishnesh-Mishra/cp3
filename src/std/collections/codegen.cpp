@@ -253,6 +253,23 @@ std::string Generator::emitCollectionsNew(const NewExpr& n) {
         return "::cp3::runtime::collections::makeLRU<" + elems + ">(" +
                expr(*n.arguments.front()) + ")";
     }
+    if (!n.arguments.empty() && n.arguments.front()) {
+        // The from-iterable form: `new Set<T>(elements)` / `new
+        // Map<K, V>(entries)`. `std::get` reads a pair (the runtime's
+        // `entries()` spelling) and a tuple (an array-literal of entry
+        // pairs) alike, so one loop covers both sources.
+        needsCollections_ = true;
+        needsTuple_ = true;
+        const std::string arg = expr(*n.arguments.front());
+        if (isMapType(t)) {
+            return "([&]{ auto cp3_m = ::cp3::runtime::collections::makeMap<" +
+                   elems + ">(); for (const auto& cp3_e : *(" + arg + ")) " +
+                   "cp3_m->set(std::get<0>(cp3_e), std::get<1>(cp3_e)); "
+                   "return cp3_m; }())";
+        }
+        return "::cp3::runtime::collections::makeSetFromArray<" +
+               classify(t.parts.front()).cpp + ">(" + arg + ")";
+    }
     return "::cp3::runtime::collections::" +
            std::string(isMapType(t) ? "makeMap" : "makeSet") + "<" + elems +
            ">()";
@@ -310,6 +327,10 @@ std::string Generator::emitCollectionsMemberCall(const CallExpr& c,
     if (prop == "delete") return obj + "->remove(" + args() + ")";
     if (prop == "clear") return obj + "->clear()";
     if (prop == "values") return obj + "->values()";
+    if (prop == "union") return obj + "->unionSet(" + args() + ")";
+    if (prop == "intersection") return obj + "->intersectionSet(" + args() + ")";
+    if (prop == "difference") return obj + "->differenceSet(" + args() + ")";
+    if (prop == "isSubsetOf") return obj + "->isSubsetOf(" + args() + ")";
     if (prop == "forEach") {
         const CppInfo t =
             recv.parts.empty() ? CppInfo{} : classify(recv.parts.front());

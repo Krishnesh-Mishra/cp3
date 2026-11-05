@@ -188,6 +188,14 @@ void Analyzer::checkArrayLiteral(ArrayLiteral& lit, const Type& target) {
     const bool nativeElement =
         target.kind == TypeKind::Array && !target.parts.empty() &&
         isNativeType(target.parts.front());
+    // A tuple element (`[["a", 1]]` for `[string, number][]`): the inner
+    // literal is checked slot by slot against the tuple's types and gets the
+    // tuple type itself (a bare inner literal would widen to a variant
+    // array and never match).
+    const Type elemTarget =
+        target.kind == TypeKind::Array && !target.parts.empty()
+            ? target.parts.front()
+            : Type::unknown();
     std::vector<Type> elems;
     bool hasSpread = false;
     for (auto& e : lit.elements) {
@@ -199,9 +207,38 @@ void Analyzer::checkArrayLiteral(ArrayLiteral& lit, const Type& target) {
             hasSpread = true;
             auto& sp = static_cast<SpreadElement&>(*e);
             Type at = sp.argument ? inferExpr(*sp.argument) : Type::unknown();
-            elems.push_back(at.kind == TypeKind::Array ? elemOf(at)
-                                                       : Type::unknown());
+            if (at.kind == TypeKind::Array) {
+                elems.push_back(elemOf(at));
+            } else if (at.kind == TypeKind::Class && at.name == "Set" &&
+                       !at.parts.empty()) {
+                // `[...set]`: the elements are the set's values.
+                elems.push_back(at.parts.front());
+            } else if (at.kind == TypeKind::Class && at.name == "Map" &&
+                       at.parts.size() >= 2) {
+                // `[...map]`: the elements are the `[key, value]` entries.
+                elems.push_back(makeObjectType({}, false, true,
+                                               {at.parts[0], at.parts[1]}));
+            } else {
+                elems.push_back(Type::unknown());
+            }
             continue;
+        }
+        if (isTupleType(elemTarget) && e->kind == NodeKind::ArrayLiteral) {
+            auto& inner = static_cast<ArrayLiteral&>(*e);
+            Shape* sh = shapeOf(elemTarget);
+            const std::vector<Type>* ts =
+                sh ? &sh->tupleElems : nullptr;
+            if (ts && inner.elements.size() == ts->size()) {
+                for (std::size_t i = 0; i < ts->size(); ++i) {
+                    if (inner.elements[i]) {
+                        checkAssign(inferExpr(*inner.elements[i]),
+                                    (*ts)[i], inner.span, false);
+                    }
+                }
+                withType(inner, elemTarget);
+                elems.push_back(elemTarget);
+                continue;
+            }
         }
         const Type inferred = inferExpr(*e);
         elems.push_back(nativeElement ? inferred : widen(inferred));
@@ -226,12 +263,16 @@ void Analyzer::checkArrayLiteral(ArrayLiteral& lit, const Type& target) {
         for (std::size_t i = 0; i < elems.size(); ++i) {
             checkAssign(elems[i], (*ts)[i], lit.span, false);
         }
+        withType(lit, target);
         return;
     }
     Type et = target.parts.empty() ? Type::unknown() : target.parts.front();
     for (const Type& e : elems) {
         checkAssign(e, et, lit.span, false);
     }
+    // The contextual type is the literal's type from here on (codegen reads
+    // the exact array spelling instead of the widened inference).
+    withType(lit, target);
 }
 
 void Analyzer::declarePattern(Node* id, const Type& type, bool isConst,

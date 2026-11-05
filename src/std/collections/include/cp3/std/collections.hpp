@@ -255,6 +255,11 @@ Map<K, V> makeMap() {
 // The backing store of `Set<T>`: insertion-ordered values, deduplicated with
 // `==` on insertion.
 template <class T>
+class SetData;
+template <class T>
+using Set = Ref<SetData<T>>;
+
+template <class T>
 class SetData {
 public:
     void add(const T& value) {
@@ -285,6 +290,41 @@ public:
 
     Array<T> values() const { return makeArray<T>(items_); }
 
+    // Set algebra (ES2025): each returns a fresh set; `isSubsetOf` reports
+    // whether every element appears in the other set. Order follows JS:
+    // union keeps receiver order then new elements; intersection/difference
+    // keep receiver order.
+    Set<T> unionSet(const Set<T>& other) const {
+        Set<T> out = makeRef<SetData<T>>();
+        for (const auto& item : items_) out->add(item);
+        for (const auto& item : other->items_) out->add(item);
+        return out;
+    }
+    Set<T> intersectionSet(const Set<T>& other) const {
+        Set<T> out = makeRef<SetData<T>>();
+        for (const auto& item : items_) {
+            if (other->has(item)) out->add(item);
+        }
+        return out;
+    }
+    Set<T> differenceSet(const Set<T>& other) const {
+        Set<T> out = makeRef<SetData<T>>();
+        for (const auto& item : items_) {
+            if (!other->has(item)) out->add(item);
+        }
+        return out;
+    }
+    bool isSubsetOf(const Set<T>& other) const {
+        for (const auto& item : items_) {
+            if (!other->has(item)) return false;
+        }
+        return true;
+    }
+    // The constructor-from-iterable form: add every element (deduplicated).
+    void addAll(const Array<T>& elements) {
+        for (const auto& item : *elements) add(item);
+    }
+
     // JS order: (value) per element; codegen matches the callback type.
     template <class F>
     void forEach(F fn) const {
@@ -294,9 +334,6 @@ public:
 private:
     std::vector<T> items_;
 };
-
-template <class T>
-using Set = Ref<SetData<T>>;
 
 // -----------------------------------------------------------------------------
 // LRUCache
@@ -428,6 +465,24 @@ LRUCache<K, V> makeLRU(double capacity) {
 template <class T>
 Set<T> makeSet() {
     return makeRef<SetData<T>>();
+}
+
+// `new Set<T>(elements)`: a set with every array element added (deduplicated).
+template <class T>
+Set<T> makeSetFromArray(const Array<T>& elements) {
+    Set<T> out = makeRef<SetData<T>>();
+    out->addAll(elements);
+    return out;
+}
+
+// `new Map<K, V>(entries)`: a map with every `[key, value]` pair set.
+// `entries()` returns `Array<std::pair<K, V>>`; array literals of entry
+// tuples lower to the same pair spelling at this ABI boundary.
+template <class K, class V>
+Map<K, V> makeMapFromEntries(const Array<std::pair<K, V>>& entries) {
+    Map<K, V> out = makeMap<K, V>();
+    for (const auto& e : *entries) out->set(e.first, e.second);
+    return out;
 }
 
 }  // namespace cp3::runtime::collections

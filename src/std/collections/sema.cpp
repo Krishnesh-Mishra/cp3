@@ -41,7 +41,9 @@ const char* const kMapMemberNames[] = {"set",     "get",     "has",     "delete"
                                        "clear",   "keys",    "values",  "entries",
                                        "forEach", "size"};
 const char* const kSetMemberNames[] = {"add",   "has",   "delete",  "clear",
-                                       "values", "forEach", "size"};
+                                       "values", "forEach", "size",
+                                       "union", "intersection", "difference",
+                                       "isSubsetOf"};
 const char* const kLruMemberNames[] = {"set",     "get",    "has",    "delete",
                                        "clear",   "size",   "capacity", "keys"};
 
@@ -82,6 +84,14 @@ const DocRow kSetDocRows[] = {
     {"clear", "clear(): void", "Removes every value from the set."},
     {"values", "values(): T[]",
      "Returns the values of the set, in insertion order."},
+    {"union", "union(other: Set<T>): Set<T>",
+     "Returns a fresh set with every value of both sets."},
+    {"intersection", "intersection(other: Set<T>): Set<T>",
+     "Returns a fresh set with the values present in both sets."},
+    {"difference", "difference(other: Set<T>): Set<T>",
+     "Returns a fresh set with the values not present in `other`."},
+    {"isSubsetOf", "isSubsetOf(other: Set<T>): boolean",
+     "True when every value of this set is in `other`."},
     {"forEach", "forEach(callback: (value: T) => void): void",
      "Calls `callback` for every value, in insertion order."},
     {"size", "size: number", "The number of values in the set."},
@@ -213,6 +223,12 @@ Type Analyzer::collectionsMember(const Type& recv, const std::string& prop,
         return Type::function({first}, Type::boolean());
     }
     if (prop == "values") return Type::function({}, Type::array(first));
+    if (prop == "union" || prop == "intersection" || prop == "difference") {
+        return Type::function({recv}, recv);
+    }
+    if (prop == "isSubsetOf") {
+        return Type::function({recv}, Type::boolean());
+    }
     if (prop == "forEach") {
         const Type cb = Type::function({first}, Type::voidType());
         return Type::function({cb}, Type::voidType());

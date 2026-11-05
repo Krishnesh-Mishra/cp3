@@ -142,8 +142,18 @@ Type Analyzer::inferArray(ArrayLiteral& al) {
         if (e->kind == NodeKind::SpreadElement) {
             auto& sp = static_cast<SpreadElement&>(*e);
             Type at = sp.argument ? inferExpr(*sp.argument) : Type::unknown();
-            elems.push_back(at.kind == TypeKind::Array ? widen(elemOf(at))
-                                                       : Type::unknown());
+            if (at.kind == TypeKind::Array) {
+                elems.push_back(widen(elemOf(at)));
+            } else if (at.kind == TypeKind::Class && at.name == "Set" &&
+                       !at.parts.empty()) {
+                elems.push_back(widen(at.parts.front()));
+            } else if (at.kind == TypeKind::Class && at.name == "Map" &&
+                       at.parts.size() >= 2) {
+                elems.push_back(widen(makeObjectType(
+                    {}, false, true, {at.parts[0], at.parts[1]})));
+            } else {
+                elems.push_back(Type::unknown());
+            }
             continue;
         }
         elems.push_back(widen(inferExpr(*e)));
@@ -262,7 +272,32 @@ Type Analyzer::inferNew(NewExpr& n) {
             // std/collections family (src/std/collections/sema.cpp).
             setType(id, b.type);
             Type coll = inferCollectionsConstruct(ctor, n.typeArgs);
-            if (!coll.isUnknown()) return withType(n, coll);
+            if (!coll.isUnknown()) {
+                for (auto& a : n.arguments) {
+                    if (a) inferExpr(*a);
+                }
+                // The from-iterable forms (`new Set<T>(elements)`,
+                // `new Map<K, V>(entries)`) are contextually typed: a
+                // literal's elements are checked against the constructor's
+                // type arguments and the literal gets the exact array type
+                // (a bare literal would otherwise widen to a variant array).
+                // They run after plain inference so the exact types survive.
+                if (!n.arguments.empty() && n.arguments.front() &&
+                    n.arguments.front()->kind == NodeKind::ArrayLiteral &&
+                    coll.kind == TypeKind::Class && !coll.parts.empty()) {
+                    auto& lit =
+                        static_cast<ArrayLiteral&>(*n.arguments.front());
+                    const Type key = coll.parts.front();
+                    if (coll.name == "Set") {
+                        checkArrayLiteral(lit, Type::array(key));
+                    } else if (coll.parts.size() >= 2) {
+                        Type entry = makeObjectType({}, false, true,
+                                                    {key, coll.parts[1]});
+                        checkArrayLiteral(lit, Type::array(entry));
+                    }
+                }
+                return withType(n, coll);
+            }
         }
         // User classes (spec 15): `new C(args)` checks the constructor and
         // yields the nominal instance type; abstract classes are CP3413

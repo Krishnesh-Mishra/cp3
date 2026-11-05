@@ -145,7 +145,7 @@ The remaining JavaScript and TypeScript surface needed so ordinary application c
 | Scheduling primitives: `queueMicrotask`, `setImmediate`, `process.nextTick` | What libraries expect alongside timers. | Small | Done |
 | Generic constraints and defaults: `<T extends X = Y>` | Required for real generic APIs. | Medium | Planned |
 | `const enum` and enum reverse mapping | Common enum use. | Small | Planned |
-| Map/Set constructors from iterables and spread (`[...set]`, `new Map(entries)`) | Everyday code. | Small | Planned |
+| Map/Set constructors from iterables and spread (`[...set]`, `new Map(entries)`) | Everyday code. | Small | Done (constructors done; `[...set]` spread in array literals via for-of/values below — see note) |
 | Set algebra: `union`, `intersection`, `difference`, `isSubsetOf` | ES2025 methods; simple on the flat hash set. | Small | Planned |
 | `Object.groupBy` / `Map.groupBy` | Common in reporting code. | Small | Planned |
 | `toSpliced`, `with`, `flat(depth)`, `copyWithin` | Rest of the ES2023 non-mutating array methods. | Small | Done |

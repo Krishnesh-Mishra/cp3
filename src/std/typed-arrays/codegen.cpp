@@ -241,6 +241,19 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
                         v + ".insert(" + v + ".end(), cp3_src->begin(), cp3_src->end()); }";
                 continue;
             }
+            if (si.shape == Shape::Collections) {
+                // `[...set]` spreads the values, `[...map]` the entries.
+                const Type recv = effectiveType(*sp.argument);
+                const bool isMapCol =
+                    recv.kind == TypeKind::Class && recv.name == "Map";
+                body += " { const auto& cp3_src = " + expr(*sp.argument) + "; " +
+                        "const auto cp3_spread = cp3_src->" +
+                        (isMapCol ? std::string("entries()")
+                                  : std::string("values()")) +
+                        "; " + v + ".insert(" + v + ".end(), " +
+                        "cp3_spread->begin(), cp3_spread->end()); }";
+                continue;
+            }
             if (si.shape == Shape::TypedArray && ec.cpp == "double") {
                 // A typed view spreads as its numbers (JS parity: the elements
                 // of an Int8Array are numbers).
@@ -295,6 +308,23 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
         if (isNativeType(elem)) {
             if (const auto k = integralLiteralValue(*el)) {
                 out += std::to_string(*k);
+                continue;
+            }
+        }
+        // A tuple element (`[["a", 1]]` for `[string, number][]`): the inner
+        // literal is a std::tuple value, not a nested array (spec 03).
+        if (el->kind == NodeKind::ArrayLiteral &&
+            isTupleType(effectiveType(*el))) {
+            const Type et = effectiveType(*el);
+            const auto& inner = static_cast<const ArrayLiteral&>(*el);
+            std::string cpp;
+            if (tupleCpp(et, cpp) && inner.elements.size() == et.parts.size()) {
+                needsTuple_ = true;
+                out += cpp + "{";
+                for (std::size_t j = 0; j < inner.elements.size(); ++j) {
+                    out += (j == 0 ? "" : ", ") + expr(*inner.elements[j]);
+                }
+                out += "}";
                 continue;
             }
         }

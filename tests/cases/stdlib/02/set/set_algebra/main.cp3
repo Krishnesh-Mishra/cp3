@@ -1,0 +1,17 @@
+import console from "std/console";
+import { Map, Set } from "std/collections";
+const a = new Set<number>([1, 2, 3]);
+const b = new Set<number>([3, 4]);
+console.log(a.union(b).values().join(","));
+console.log(a.intersection(b).values().join(","));
+console.log(a.difference(b).values().join(","));
+console.log(`${new Set<number>([1, 2]).isSubsetOf(a)}`);
+console.log(`${a.isSubsetOf(b)}`);
+const m = new Map<string, number>([["x", 1], ["y", 2]]);
+console.log(`${m.get("y")}`);
+console.log(`${m.size}`);
+const m2 = new Map<string, number>(m.entries());
+console.log(`${m2.get("x")}`);
+const s = new Set<string>(["a", "a", "b"]);
+console.log(`${s.size}`);
+console.log(s.values().join(","));
