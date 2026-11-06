@@ -726,7 +726,12 @@ inline std::vector<std::string> splitForwarded(const std::string& header) {
 inline std::string headerValue(const network::StringMap& headers,
                                const std::string& name) {
     if (!headers) return "";  // a hand-built request may carry no header map
+    // Direct lookup first (the server lowercases names, and the internal
+    // slots are lowercase): a single probe, no iteration. The iterate-and-
+    // copy fallback below is only for hand-built mixed-case maps - and it
+    // must not run on server-built maps (iterating them crashed).
     const std::string wanted = toLowerAscii(name);
+    if (auto direct = headers->get(wanted)) return *direct;
     for (const auto& entry : *headers->entries()) {
         if (toLowerAscii(entry.first) == wanted) return entry.second;
     }
@@ -809,6 +814,10 @@ inline void applyTrustProxy(network::HttpRequest& req,
         detail::headerValue(req.headers, "x-forwarded-proto");
     req.setRemoteAddress(
         resolveClientIp(req.ip, forwardedFor, config));
+    // Keep the plain `protocol` field authoritative as well: readers that do
+    // not go through the slot (`req.protocol` on a plain HttpServer) see the
+    // resolved value.
+    req.setProtocol(resolveProtocol("http", forwardedProto, config));
     if (!req.headers) {
         req.headers = collections::makeMap<std::string, std::string>();
     }
@@ -1028,9 +1037,13 @@ inline void renderResponse(network::HttpResponse& res,
                            const Locals& options = Locals()) {
     const webserverApp* app = currentApp();
     if (app == nullptr) {
-        throw Error("res.render(\"" + view +
-                    "\") with no webserver app in scope (the request did not "
-                    "run through webserver::RequestScope)");
+        // No webserver app in scope (a plain HttpServer): render through the
+        // response family's view layer (`views` config / `g_viewDir`).
+        // Locals options only exist with an app, so the fallback renders the
+        // view without them.
+        (void)options;
+        res.render(view);
+        return;
     }
     app->render(res, view, options);
 }

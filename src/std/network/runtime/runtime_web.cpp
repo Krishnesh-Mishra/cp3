@@ -139,10 +139,18 @@ MiddlewareFn makeStaticMiddleware(std::string dir) {
         std::error_code ec;
         fs::path base = fs::weakly_canonical(fs::path(dir), ec);
         if (ec) { next(); return Promise<void>::resolve(); }
-        fs::path candidate = fs::weakly_canonical(base / fs::path(req.path).lexically_normal(), ec);
+        // `req.path` is absolute (`/hello.txt`): joining it directly would
+        // discard `base` (a rooted path replaces the accumulator). Strip the
+        // leading slashes so the file resolves under the static directory.
+        std::string relText = req.path;
+        while (!relText.empty() &&
+               (relText.front() == '/' || relText.front() == '\\')) {
+            relText.erase(relText.begin());
+        }
+        fs::path candidate = fs::weakly_canonical(base / fs::path(relText), ec);
         if (ec) { next(); return Promise<void>::resolve(); }
         const std::string b = base.string(), c = candidate.string();
-        const bool inside = c == b || (c.size() > b.size() && c.compare(0, b.size(), b) == 0 && c[b.size()] == '/');
+        const bool inside = c == b || (c.size() > b.size() && c.compare(0, b.size(), b) == 0 && (c[b.size()] == '/' || c[b.size()] == '\\'));
         if (!inside || !fs::is_regular_file(candidate, ec)) { next(); return Promise<void>::resolve(); }
         res.sendFile(candidate.string());
         return Promise<void>::resolve();
@@ -171,6 +179,38 @@ MiddlewareFn makeBodyLimitMiddleware(double limit) {
         next();
         return Promise<void>::resolve();
     };
+}
+
+HttpServer createServerWithConfig(const CreateServerConfig& config) {
+    if (config.tls) {
+        // Fail closed: no SSL backend is linked into this program, so TLS
+        // must never silently degrade to plaintext (same rule as
+        // std/network/tls).
+        throw Thrown::make("[ERR_TLS_BACKEND_UNAVAILABLE] TLS backend "
+                           "unavailable: vendor OpenSSL and rebuild with an "
+                           "SSL backend (createServer tls option)");
+    }
+    HttpServer server = config.threads > 0.0 ? HttpServer(config.threads)
+                                             : HttpServer();
+    if (config.hasBodyLimit) {
+        server.use(makeBodyLimitMiddleware(config.bodyLimit));
+    }
+    if (config.hasCors) {
+        server.use(makeCorsMiddleware(config.cors));
+    }
+    if (config.hasStatic) {
+        server.use(makeStaticMiddleware(config.staticDir));
+    }
+    if (config.trustProxy) {
+        server.setTrustProxy(true);
+    }
+    if (config.hasViews) {
+        setwebserverResponseViewDir(config.viewsDir);
+    }
+    if (config.hasOnError && config.onError) {
+        server.onError(config.onError);
+    }
+    return server;
 }
 
 }  // namespace cp3::runtime::network

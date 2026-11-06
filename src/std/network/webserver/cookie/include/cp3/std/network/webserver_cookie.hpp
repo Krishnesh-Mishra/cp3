@@ -218,7 +218,7 @@ inline std::string buildSetCookie(std::string_view name, std::string_view value,
 inline std::string httpDateFromEpochMs(double epochMs) {
     const std::time_t t = static_cast<std::time_t>(epochMs / 1000.0);
     std::tm tm{};
-#if defined(_MSC_VER)
+#if defined(_WIN32) || defined(_MSC_VER)
     gmtime_s(&tm, &t);
 #else
     gmtime_r(&t, &tm);

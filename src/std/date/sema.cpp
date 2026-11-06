@@ -28,6 +28,8 @@
 #include <string>
 #include <vector>
 
+#include "cp3/diag/diagnostic_codes.hpp"
+
 #include "cp3/host/std_integer.hpp"
 #include "detail/std_tables.hpp"
 
@@ -170,7 +172,56 @@ std::optional<Type> Analyzer::dateInstanceMember(const Type& recv,
             {Type::number()},
             stdIntegerType(kTimestamp, options_.typeSystem));
     }
+    // Zero-arg getters are property reads as well as calls
+    // (`d.getTime` and `d.getTime()` both yield the value): the member read
+    // returns the value type, the call form is typed by
+    // tryInferDateMemberCall (call_check.cpp).
+    static const char* const kGetters[] = {
+        "toISOString", "toString", "getFullYear", "getMonth", "getDate",
+        "getHours", "getMinutes", "getSeconds", "getTime", "getDay",
+        "getUTCFullYear", "getUTCMonth", "getUTCDate", "getUTCDay",
+        "getUTCHours", "getUTCMinutes", "getUTCSeconds"};
+    for (const char* g : kGetters) {
+        if (prop == g) {
+            auto fn = lookupMember(kDateInstanceRows, prop);
+            if (fn && fn->kind == TypeKind::Function && !fn->parts.empty()) {
+                return fn->parts.back();
+            }
+            return Type::number();
+        }
+    }
     return lookupMember(kDateInstanceRows, prop);
+}
+
+bool Analyzer::tryInferDateMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
+    if (!m.object) return false;
+    const Type recv = typeOfExpr(*m.object);
+    if (!isDateClass(recv)) return false;
+    // Zero-arg getters called as methods: arity is checked, the result is
+    // the value type the member read returns.
+    static const char* const kGetters[] = {
+        "toISOString", "toString", "getFullYear", "getMonth", "getDate",
+        "getHours", "getMinutes", "getSeconds", "getTime", "getDay",
+        "getUTCFullYear", "getUTCMonth", "getUTCDate", "getUTCDay",
+        "getUTCHours", "getUTCMinutes", "getUTCSeconds"};
+    bool isGetter = false;
+    for (const char* g : kGetters) if (m.property == g) isGetter = true;
+    if (!isGetter) return false;
+    inferArgs(call);
+    if (!call.arguments.empty()) {
+        report(diagcode::kArityMismatch, call.span,
+               "arity mismatch: Date." + m.property +
+                   "() takes no arguments");
+    }
+    auto fn = lookupMember(kDateInstanceRows, m.property);
+    Type ret = Type::number();
+    if (m.property == "getTime") {
+        ret = stdIntegerType(StdIntegerKind::Timestamp, options_.typeSystem);
+    } else if (fn && fn->kind == TypeKind::Function && !fn->parts.empty()) {
+        ret = fn->parts.back();
+    }
+    out = withType(call, ret);
+    return true;
 }
 
 // A Date value's nominal type (TypeKind::Class, name "Date").

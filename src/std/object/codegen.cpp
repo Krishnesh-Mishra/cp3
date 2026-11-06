@@ -214,9 +214,12 @@ std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
                 return rooted && root == "freeze" ? "true" : "false";
             }
             if (m.property == "isSealed") {
-                // Frozen implies sealed; a nested value of a frozen root
-                // is sealed as well.
-                return rooted ? "true" : "false";
+                // Frozen implies sealed, and sealed implies non-extensible,
+                // but `preventExtensions` alone is neither frozen nor sealed
+                // (the object can still gain properties through its
+                // prototype). Only `freeze` and `seal` roots count.
+                return rooted && root != "preventExtensions" ? "true"
+                                                           : "false";
             }
             return rooted ? "false" : "true";
         }

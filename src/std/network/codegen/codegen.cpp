@@ -287,7 +287,7 @@ std::string Generator::fetchInitText(const Expr& init) {
             timeout = expr(*p->value);
         } else if (key == "headers") {
             // RequestInit.headers is `Map<string, string>` (docs 04 §network,
-            // D77): the Map webserverion reaches FetchInit.headers and
+            // D77): the Map expression reaches FetchInit.headers and
             // buildRequest (runtime_fetch.cpp) writes one `Name: value` line
             // per entry. A plain object literal in that position is off the
             // documented surface, so it is a type error at the use site (the
@@ -364,20 +364,90 @@ std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::strin
         needsEventLoop_ = true;
         // D79: `createServer({ threads: n })` lowers to the runtime's scaled
         // constructor. No argument (and an object without `threads`) keeps the
-        // exact no-arg lowering.
+        // exact no-arg lowering. The merged v0.2 config surface
+        // (tls/cors/static/bodyLimit/trustProxy/views/onError) lowers into
+        // `CreateServerConfig` + `createServerWithConfig` (same TU as the
+        // middleware factories, selected by its marker).
         std::string threads;
+        std::vector<std::pair<std::string, const ObjectProperty*>> configProps;
         if (!c.arguments.empty() && c.arguments.front()) {
             const Expr* options = c.arguments.front().get();
             if (options->kind == NodeKind::ObjectLiteral) {
                 const auto& literal = static_cast<const ObjectLiteral&>(*options);
                 for (const auto& prop : literal.properties) {
                     if (!prop || !prop->value) continue;
-                    if (objectKey(*prop) == "threads") threads = expr(*prop->value);
+                    const std::string key = objectKey(*prop);
+                    if (key == "threads") threads = expr(*prop->value);
+                    else configProps.emplace_back(key, prop.get());
                 }
             }
         }
-        if (threads.empty()) return std::string(kRuntimeNs) + "HttpServer()";
-        return std::string(kRuntimeNs) + "HttpServer(" + threads + ")";
+        if (configProps.empty()) {
+            if (threads.empty()) return std::string(kRuntimeNs) + "HttpServer()";
+            return std::string(kRuntimeNs) + "HttpServer(" + threads + ")";
+        }
+        const Type serverReceiver(TypeKind::Class, "$network:HttpServer");
+        std::string body = "{ " + std::string(kRuntimeNs) + "CreateServerConfig cfg;";
+        if (!threads.empty()) body += " cfg.threads = " + threads + ";";
+        for (const auto& [key, prop] : configProps) {
+            const Expr& value = *prop->value;
+            if (key == "tls") {
+                body += " cfg.tls = " + expr(value) + ";";
+            } else if (key == "cors") {
+                body += " cfg.hasCors = true;";
+                if (value.kind == NodeKind::ObjectLiteral) {
+                    const auto& corsLit = static_cast<const ObjectLiteral&>(value);
+                    for (const auto& cp : corsLit.properties) {
+                        if (!cp || !cp->value) continue;
+                        const std::string ckey = objectKey(*cp);
+                        if (ckey == "origin") body += " cfg.cors.origin = " + expr(*cp->value) + ";";
+                        else if (ckey == "methods") body += " cfg.cors.methods = " + expr(*cp->value) + ";";
+                        else if (ckey == "headers") body += " cfg.cors.headers = " + expr(*cp->value) + ";";
+                        else if (ckey == "credentials") body += " cfg.cors.credentials = " + expr(*cp->value) + ";";
+                        else if (ckey == "maxAge") body += " cfg.cors.maxAge = " + expr(*cp->value) + ";";
+                    }
+                }
+            } else if (key == "static") {
+                body += " cfg.hasStatic = true;";
+                if (value.kind == NodeKind::ObjectLiteral) {
+                    const auto& staticLit = static_cast<const ObjectLiteral&>(value);
+                    for (const auto& cp : staticLit.properties) {
+                        if (!cp || !cp->value) continue;
+                        if (objectKey(*cp) == "dir") body += " cfg.staticDir = " + expr(*cp->value) + ";";
+                    }
+                } else {
+                    body += " cfg.staticDir = " + expr(value) + ";";
+                }
+            } else if (key == "bodyLimit") {
+                body += " cfg.hasBodyLimit = true; cfg.bodyLimit = " + expr(value) + ";";
+            } else if (key == "trustProxy") {
+                body += " cfg.trustProxy = " + expr(value) + ";";
+            } else if (key == "views") {
+                body += " cfg.hasViews = true;";
+                if (value.kind == NodeKind::ObjectLiteral) {
+                    const auto& viewsLit = static_cast<const ObjectLiteral&>(value);
+                    for (const auto& cp : viewsLit.properties) {
+                        if (!cp || !cp->value) continue;
+                        if (objectKey(*cp) == "dir") body += " cfg.viewsDir = " + expr(*cp->value) + ";";
+                    }
+                } else {
+                    body += " cfg.viewsDir = " + expr(value) + ";";
+                }
+            } else if (key == "onError") {
+                // `cfg.onError` is the dispatcher's uniform ErrorFn
+                // (Promise-returning); `makeErrorHandler` wraps a sync or
+                // async user handler into it, exactly as the `app.onError`
+                // template member does.
+                body += " cfg.hasOnError = true; cfg.onError = " +
+                        std::string(kRuntimeNs) + "detail::makeErrorHandler(" +
+                        networkArg(serverReceiver, "onError", c, value, 0) +
+                        ");";
+            }
+            // Reserved limit keys (maxConnections/idleTimeout/maxWriteBuffer/
+            // timeout/json/urlencoded/timeouts): accepted by sema, ignored.
+        }
+        body += " return " + std::string(kRuntimeNs) + "createServerWithConfig(cfg); }";
+        return "[&] " + body + "()";
     }
     // Ledger L (appended): middleware factories + bare class constructions.
     if (name == "static") {

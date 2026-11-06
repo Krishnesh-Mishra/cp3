@@ -303,7 +303,7 @@ Promise<void> MiddlewareEngine::dispatch(HttpRequest& req, HttpResponse& res) {
     return *finish;
 }
 
-detail::RouteFn MiddlewareEngine::asRouteFn() {
+::cp3::runtime::network::detail::RouteFn MiddlewareEngine::asRouteFn() {
     // The engine is captured by `this`; it must outlive the HttpServer.
     // The underlying server route should be app.use ("*"), so the engine
     // sees every request and its own mounts do the filtering.

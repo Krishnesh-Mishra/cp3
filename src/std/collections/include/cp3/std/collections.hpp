@@ -1051,7 +1051,7 @@ inline BitSet makeBitSet(std::uint64_t size = 0) {
 
 // Codegen lowers `b.and(other)` / `b.or(other)` / `b.xor(other)` onto these
 // member spellings (C++ alternative tokens cannot name a member, exactly
-// like `delete` -> `remove` in Map/Set above). The webserverion-level return
+// like `delete` -> `remove` in Map/Set above). The expression-level return
 // is a `BitSet` handle; the value-level ops above return `BitSetData` by
 // value, and the `->` on the handle unwraps to the same call. Codegen emits
 // the value-level spelling through the handle (see emitCollectionsMemberCall).
@@ -1091,7 +1091,8 @@ public:
             first_ = value;
             return;
         }
-        if (rest_.empty()) rest_.push_back(*first_);
+        // `first_` is emitted by toVector itself; `rest_` holds only the
+        // 2nd..nth values, so the second push appends just the new value.
         rest_.push_back(value);
     }
 
@@ -1100,7 +1101,6 @@ public:
             first_ = std::move(value);
             return;
         }
-        if (rest_.empty()) rest_.push_back(*first_);
         rest_.push_back(std::move(value));
     }
 

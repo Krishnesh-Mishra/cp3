@@ -167,7 +167,7 @@ Regex Regex::compile(const std::string& pattern, const std::string& flags) {
         PCRE2_UCHAR message[256];
         pcre2_get_error_message(errorCode, message, sizeof(message));
         std::fprintf(stderr,
-                     "cp3: error: invalid regular webserverion /%s/%s: %s\n",
+                     "cp3: error: invalid regular expression /%s/%s: %s\n",
                      pattern.c_str(), flags.c_str(),
                      reinterpret_cast<const char*>(message));
         std::fflush(stderr);

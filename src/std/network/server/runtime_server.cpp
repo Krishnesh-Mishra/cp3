@@ -476,6 +476,17 @@ void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
         parseCookies(std::string(req->getHeader("cookie"))));
     pending->context.request.setRemoteAddress(
         remoteAddressText(res->getRemoteAddressAsText()));
+    // `req.protocol`: the connection scheme ("http"; TLS is unavailable in
+    // this build). With trustProxy, the left-most `x-forwarded-proto` hop
+    // decides instead.
+    {
+        std::string scheme = "http";
+        if (server && server->trustProxy) {
+            const std::string fwd(req->getHeader("x-forwarded-proto"));
+            if (!fwd.empty()) scheme = fwd.substr(0, fwd.find(','));
+        }
+        pending->context.request.setProtocol(scheme);
+    }
     pending->context.response.bindNative(res);
     res->onAborted([pending] {
         // The native response is gone: drop the pointer so a handler that
@@ -551,6 +562,11 @@ bool HttpServer::getRoutingSetting(const std::string& key) const {
 void HttpServer::setErrorHandlerImpl(detail::ErrorFn handler) const {
     if (!impl_) return;
     impl_->errorHandler = std::move(handler);
+}
+
+void HttpServer::setTrustProxy(bool on) const {
+    if (!impl_) return;
+    impl_->trustProxy = on;
 }
 
 void HttpServer::listen(double port, std::function<void()> callback) const {

@@ -32,7 +32,7 @@ namespace cp3 {
 namespace {
 
 /// A numeric `threads` literal, including a negated one (`-1` parses as a
-/// unary webserverion, not a NumberLiteral).
+/// unary expression, not a NumberLiteral).
 bool literalThreadCount(const Expr& e, double& out) {
     if (e.kind == NodeKind::NumberLiteral) {
         out = static_cast<const NumberLiteral&>(e).value;
@@ -162,6 +162,9 @@ std::vector<Field> httpRequestFields() {
         Field{"originalUrl", Type::string(), false},
         // The remote address as text.
         Field{"ip", Type::string(), false},
+        // Settings family: trust-proxy protocol ("http" unless a trusted
+        // X-Forwarded-Proto was applied by the config trustProxy glue).
+        Field{"protocol", Type::string(), false},
         // SEAM(readstream/fs): `body: ReadStream`; the runtime buffers the
         // body before the chain runs, and the landed fs ReadStream is
         // file-backed, so nothing stream-shaped exists yet.
@@ -830,18 +833,40 @@ bool Analyzer::tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& o
     return false;
 }
 
-/// D79: `createServer(options?)`. The only accepted shape is one object
-/// literal with an optional `threads` property. Literal thread counts are
-/// checked here (0, negative, fractional and non-number literals become
-/// CP3401); a computed value is validated by the runtime constructor, and the
-/// literal 1 keeps the single-loop path.
+/// D79: `createServer(options?)` — merged config wiring (config/config-static/
+/// config-apps union). One object literal with optional keys:
+/// threads/tls/cors/static/bodyLimit/trustProxy/views/onError (the case
+/// spelling) plus config/ maxConnections/idleTimeout/maxWriteBuffer/timeout
+/// and config-static json/urlencoded/timeouts for forward compat. Literal
+/// thread counts are checked here (0, negative, fractional and non-number
+/// literals become CP3401); a computed value is validated by the runtime
+/// constructor, and the literal 1 keeps the single-loop path.
 bool Analyzer::checkCreateServerOptions(CallExpr& call) {
+    // Type the `onError` arrow with its request/response handler context
+    // before the options object is inferred (its params need the typed
+    // req/res for the member calls in the body, exactly like app.onError).
+    if (!call.arguments.empty() && call.arguments.front() &&
+        call.arguments.front()->kind == NodeKind::ObjectLiteral) {
+        const auto& optLiteral =
+            static_cast<const ObjectLiteral&>(*call.arguments.front());
+        for (const auto& propPtr : optLiteral.properties) {
+            const ObjectProperty* prop = propPtr.get();
+            if (prop == nullptr || prop->value == nullptr) continue;
+            const Expr& value = *prop->value;
+            if (value.kind != NodeKind::ArrowFunction) continue;
+            if (prop->key != nullptr &&
+                keyName(prop->key.get()) == "onError" && value.nodeId != 0) {
+                contextualArrowTypes_[value.nodeId] = httpErrorHandler();
+            }
+        }
+    }
     inferArgs(call);
     if (call.arguments.empty()) return false;
     if (call.arguments.size() > 1 || !call.arguments.front()) {
         report(diagcode::kTypeMismatch, anchorSpan(call.span),
                "createServer() takes at most one argument (an options object: "
-               "{ threads?: number })");
+               "{ threads?, tls?, cors?, static?, bodyLimit?, trustProxy?, "
+               "views?, onError? })");
         return false;
     }
     const Expr& options = *call.arguments.front();
@@ -853,22 +878,84 @@ bool Analyzer::checkCreateServerOptions(CallExpr& call) {
     }
     bool scale = false;
     const auto& literal = static_cast<const ObjectLiteral&>(options);
+    // The merged v0.2 config surface (config/ + config-static/ +
+    // config-apps, one entry point). Keys are validated by shape here;
+    // codegen lowers them into `CreateServerConfig` (tls/cors/static/
+    // bodyLimit/trustProxy/views/onError) — the reserved limit keys
+    // (maxConnections/idleTimeout/maxWriteBuffer/timeout/json/urlencoded/
+    // timeouts) are accepted and currently inert.
+    static const char* const kConfigKeys[] = {
+        "threads", "tls", "cors", "static", "bodyLimit", "trustProxy", "views",
+        "onError", "maxConnections", "idleTimeout", "maxWriteBuffer", "timeout",
+        "json", "urlencoded", "timeouts"};
+    auto isKnownKey = [&](const std::string& k) {
+        for (const char* known : kConfigKeys) {
+            if (k == known) return true;
+        }
+        return false;
+    };
     for (const auto& propPtr : literal.properties) {
         const ObjectProperty* prop = propPtr.get();
         if (prop == nullptr) continue;
         if (prop->computed || prop->key == nullptr) {
             report(diagcode::kTypeMismatch, anchorSpan(prop->span),
-                   "createServer() options only support the 'threads' property");
+                   "createServer() options only support literal keys");
             continue;
         }
         const std::string key = keyName(prop->key.get());
-        if (key != "threads") {
+        if (!isKnownKey(key)) {
             report(diagcode::kTypeMismatch, anchorSpan(prop->span),
                    "unknown createServer() option '" + key +
-                       "' (only 'threads' is supported)");
+                       "' (supported: threads, tls, cors, static, bodyLimit, "
+                       "trustProxy, views, onError)");
             continue;
         }
         if (prop->value == nullptr) continue;
+        if (key != "threads") {
+            // Type-shape checks for the non-threads keys (loose on purpose:
+            // computed values are runtime-checked by the factory).
+            const Expr& value = *prop->value;
+            const Type valueType = typeOfExpr(const_cast<Expr&>(value));
+            auto badShape = [&](const char* what) {
+                report(diagcode::kTypeMismatch, anchorSpan(value.span),
+                       std::string("createServer() '") + key + "' must be " + what);
+            };
+            if (key == "tls" || key == "trustProxy") {
+                if (valueType.kind == TypeKind::String ||
+                    valueType.kind == TypeKind::Class || valueType.kind == TypeKind::Object) {
+                    badShape("a boolean");
+                }
+            } else if (key == "static" || key == "views") {
+                if (valueType.kind == TypeKind::Number ||
+                    valueType.kind == TypeKind::Boolean) {
+                    badShape("a string or an object");
+                }
+            } else if (key == "bodyLimit" || key == "maxConnections" ||
+                       key == "idleTimeout" || key == "maxWriteBuffer" ||
+                       key == "timeout") {
+                if (valueType.kind == TypeKind::Boolean ||
+                    valueType.kind == TypeKind::Class) {
+                    badShape("a number of bytes");
+                }
+            } else if (key == "cors" || key == "json" || key == "urlencoded" ||
+                       key == "timeouts") {
+                if (value.kind != NodeKind::ObjectLiteral &&
+                    valueType.kind != TypeKind::Unknown &&
+                    valueType.kind != TypeKind::Error &&
+                    valueType.kind != TypeKind::Object &&
+                    valueType.kind != TypeKind::Class) {
+                    badShape("an object");
+                }
+            } else if (key == "onError") {
+                if (valueType.kind != TypeKind::Function &&
+                    valueType.kind != TypeKind::Unknown &&
+                    valueType.kind != TypeKind::Error &&
+                    valueType.kind != TypeKind::Class) {
+                    badShape("a handler function");
+                }
+            }
+            continue;
+        }
         double literalCount = 0.0;
         if (literalThreadCount(*prop->value, literalCount)) {
             if (!std::isfinite(literalCount) || literalCount < 1.0 ||

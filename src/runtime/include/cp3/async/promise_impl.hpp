@@ -191,10 +191,13 @@ void invokeFulfilled(const std::shared_ptr<PromiseState<T>>& st, Promise<D> deri
 template <class D, class F>
 void invokeRejected(Promise<D> derived, const Thrown& reason, F& onRejected) {
     using RR = handler_result_t<Thrown, F>;
-    if constexpr (std::is_void_v<RR>) {
-        // A void rejection handler fulfills the derived promise. For a void
-        // derived that is a plain fulfilment; for a non-void derived JS parity
-        // says "undefined", which cp3 approximates with a value-initialised D.
+    // A handler that yields no value (C++ `void`, or cp3 `Undefined` - the
+    // spelling codegen gives an arrow with no return) fulfills the derived
+    // promise. For a void derived that is a plain fulfilment; for a non-void
+    // derived JS parity says "undefined", which cp3 approximates with a
+    // value-initialised D.
+    if constexpr (std::is_void_v<RR> ||
+                  std::is_same_v<std::remove_cvref_t<RR>, Undefined>) {
         (void)invokeHandler(onRejected, reason);
         if constexpr (std::is_void_v<D>) {
             derived.fulfill();

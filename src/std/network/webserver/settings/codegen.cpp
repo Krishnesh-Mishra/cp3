@@ -196,10 +196,10 @@ std::string Generator::emitwebserverSettingsMemberCall(const CallExpr& c,
                                                       const MemberExpr& m) {
     if (!m.object) return std::string();
     const Type receiver = effectiveType(*m.object);
-    const std::string recv = expr(*m.object);
 
     if (receiver.name == kwebserverApp) {
         needswebserverSettings_ = true;
+        const std::string recv = expr(*m.object);
         if (m.property == "get") {
             if (c.arguments.size() != 1 || !c.arguments[0]) {
                 reportCodegenError(
@@ -254,6 +254,7 @@ std::string Generator::emitwebserverSettingsMemberCall(const CallExpr& c,
 
     if (receiver.name == kHttpResponse && m.property == "render") {
         needswebserverSettings_ = true;
+        const std::string recv = expr(*m.object);
         if (c.arguments.empty() || !c.arguments[0]) {
             reportCodegenError(
                 c, diagcode::kArityMismatch,
@@ -267,6 +268,7 @@ std::string Generator::emitwebserverSettingsMemberCall(const CallExpr& c,
 
     if (receiver.name == kwebserverLocals) {
         needswebserverSettings_ = true;
+        const std::string recv = expr(*m.object);
         if (m.property == "get") {
             return "(" + recv + ").getOr(" + webserverSettingsArgs(c) + ")";
         }
@@ -308,9 +310,14 @@ std::string Generator::emitwebserverSettingsMemberRead(const MemberExpr& m) {
                ")";
     }
     if (receiver.name == kHttpRequest && m.property == "protocol") {
+        // The `protocol` field is maintained by the server dispatch
+        // (runtime_server.cpp resolves trust-proxy before storing it), so a
+        // plain HttpServer reads it directly; `applyTrustProxy` refreshes it
+        // for webserver-app requests as well. (Reading the webserver slot
+        // via `requestProtocol` here crashed on plain dispatch: the slot
+        // header lookup iterates the header map.)
         needswebserverSettings_ = true;
-        return std::string(kwebserverNs) + "requestProtocol(" +
-               expr(*m.object) + ")";
+        return "(" + expr(*m.object) + ").protocol";
     }
     if (receiver.name == kwebserverLocals) {
         // `app.locals.title` / `res.locals.title`: a missing key reads as

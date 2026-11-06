@@ -32,6 +32,10 @@ inline const NativePackage kNetworkNativePackage{
     {"src/std/network/include", "src/std/json/include",
      "src/std/buffer/include", "src/std/collections/include",
      "src/std/url/include",
+     "src/std/network/dns/include",
+     "src/std/network/tcp/include",
+     "src/std/network/udp/include",
+     "src/std/network/tls/include",
      "src/std/network/webserver/body-parse/include",
      "src/std/network/webserver/cookie/include",
      "src/std/network/webserver/middleware/include",
@@ -41,7 +45,9 @@ inline const NativePackage kNetworkNativePackage{
      "src/std/network/webserver/routing",
      "src/std/network/webserver/settings/include",
      "src/std/network/webserver/regex-routing",
-     "third_party/uWebSockets/include", "third_party/libuv/include"},
+     "third_party/uWebSockets/include", "third_party/libuv/include",
+     "third_party/unordered_dense/include", "third_party/fast_float/include",
+     "third_party/libsodium/include", "third_party/xxhash/include"},
     {"-DUWS_NO_ZLIB"},
     {"src/std/network/runtime/runtime.cpp",
      "src/std/network/runtime/runtime_fetch.cpp",
@@ -61,28 +67,59 @@ inline const NativePackage kNetworkNativePackage{
      "src/std/network/webserver/regex-routing/runtime_regex_routing.cpp",
      "src/std/network/webserver/router/runtime_router.cpp",
      "src/std/network/webserver/routing/runtime_routing.cpp",
-     "src/std/network/webserver/response/runtime/runtime_webserver_response.cpp"},
+     "src/std/network/webserver/response/runtime/runtime_webserver_response.cpp",
+     "src/std/network/dns/runtime/runtime_dns_lookup.cpp",
+     "src/std/network/tcp/runtime_tcp_socket.cpp",
+     "src/std/network/tcp/runtime_tcp_client.cpp",
+     "src/std/network/tcp/runtime_tcp_server.cpp",
+     "src/std/network/tcp/runtime_tcp_reuseport.cpp",
+     "src/std/network/udp/runtime_udp.cpp",
+     "src/std/network/tls/runtime_tls.cpp",
+     // cp3/std/network.hpp includes cp3/std/collections.hpp (headers/params/
+     // query are Map<string,string>), so instantiating the Map references
+     // bucketHashBytes; the seeded bucket-hash TU rides along (the collections
+     // row's backend).
+     "src/runtime/src/core/bucket_hash.cpp"},
     {},
-    {},
+    {"-lsodium", "-lxxhash"},
     // Parallel to runtimeSources. A program that imports std/network only for
     // fetch should not link the HTTP server or WebSocket runtime, and a
-    // WebSocket program should not link the server. The dispatch TU and the
-    // scaled server TU are selected by the same HttpServer marker as
-    // runtime_server.cpp: listen/close reference the scaled entry points, and
-    // the request glue references the dispatcher.
-    {"", "fetch(", "fetch(", "dnsResolve(", "makeStaticMiddleware(|makeCorsMiddleware(|makeBodyLimitMiddleware(|Headers(|Request(|Response(|FormData(|AbortSignal::", "HttpServer(", "HttpServer(",
-     "HttpServer(", "WebSocket", "WebSocket", "WebSocket",
-     "makeJsonMiddleware(|makeUrlEncodedMiddleware(|body_parse::", "webserver::errors::", "MiddlewareEngine(|webserver::", "matchPath(|PathSpec", "Router(|webserverApp|dispatchRouter", "Router(|RouteChain|webserverApp", "emitwebserverResponseCall|res.set(|setwebserverResponse", "addRegexRoute("},
+    // WebSocket program should not link the server. The dispatch and scaled
+    // server TUs ride with runtime_server.cpp (listen/close reference the
+    // scaled entry points, and the request glue references the dispatcher).
+    // The regex-routing pair (runtime_webserver_regex.cpp +
+    // runtime_regex_routing.cpp) is selected together by `addRegexRoute(` /
+    // `PathSpec` in the generated text: a plain HTTP server without regex
+    // routes links neither. bucket_hash rides along unconditionally because
+    // the fetch, server and regex TUs all instantiate the std Map, which
+    // references `bucketHashBytes` (this row only applies to network programs
+    // anyway).
+    {"", "fetch(", "fetch(", "dnsResolve(|dns::lookup(",
+     "makeStaticMiddleware(|makeCorsMiddleware(|makeBodyLimitMiddleware(|Headers(|Request(|Response(|FormData(|AbortSignal::|createServerWithConfig(",
+     "addRegexRoute(", "HttpServer(|createServerWithConfig(",
+     "HttpServer(|createServerWithConfig(", "HttpServer(|createServerWithConfig(",
+     "WebSocket", "WebSocket", "WebSocket",
+     "makeJsonMiddleware(|makeUrlEncodedMiddleware(|body_parse::", "webserver::errors::", "MiddlewareEngine(|webserver::",
+     "addRegexRoute(|matchPath(|PathSpec", "Router(|webserverApp|dispatchRouter", "Router(|RouteChain|webserverApp",
+     "emitwebserverResponseCall|res.set(|setwebserverResponse|createServerWithConfig(|res.render(", "dns::lookup(|dnsResolve(",
+     "TcpSocket|TcpServer|createTcpServer(|connectTcp(", "connectTcp(", "TcpServer|createTcpServer(", "TcpServer|createTcpServer(",
+     "createUdpSocket(|UdpSocket", "createTlsServer(|connectTls(|TlsSocket|TlsServer", ""},
     {{"windows-x64", {"third_party/uWebSockets/lib/windows-x64",
-                       "third_party/libuv/lib/windows-x64"},
-      {"-luSockets", "-luv", "-lws2_32", "-luserenv", "-liphlpapi", "-lole32",
-       "-ldbghelp", "-lsynchronization"}},
+                       "third_party/libuv/lib/windows-x64",
+                       "third_party/libsodium/lib/windows-x64",
+                       "third_party/xxhash/lib/windows-x64"},
+      {"-luSockets", "-luv", "-lsodium", "-lxxhash", "-lws2_32", "-luserenv",
+       "-liphlpapi", "-lole32", "-ldbghelp", "-lsynchronization"}},
      {"linux-x64",
-      {"third_party/uWebSockets/lib/linux-x64", "third_party/libuv/lib/linux-x64"},
-      {"-luSockets", "-luv", "-pthread", "-ldl", "-lrt"}},
+      {"third_party/uWebSockets/lib/linux-x64",
+       "third_party/libuv/lib/linux-x64",
+       "third_party/libsodium/lib/linux-x64"},
+      {"-luSockets", "-luv", "-lsodium", "-pthread", "-ldl", "-lrt"}},
      {"linux-arm64",
-      {"third_party/uWebSockets/lib/linux-arm64", "third_party/libuv/lib/linux-arm64"},
-      {"-luSockets", "-luv", "-pthread", "-ldl", "-lrt"}}},
+      {"third_party/uWebSockets/lib/linux-arm64",
+       "third_party/libuv/lib/linux-arm64",
+       "third_party/libsodium/lib/linux-arm64"},
+      {"-luSockets", "-luv", "-lsodium", "-pthread", "-ldl", "-lrt"}}},
 };
 
 }  // namespace cp3::cli::detail

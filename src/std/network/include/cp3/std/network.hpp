@@ -231,6 +231,11 @@ public:
     std::string originalUrl;
     /// `req.ip`: the remote address as text (IPv4/IPv6, as the OS reports).
     std::string ip;
+    /// `req.protocol`: the scheme text ("http" or "https"). The server fills
+    /// it with the scheme the connection uses; when the server trusts the
+    /// proxy (`createServer({ trustProxy: true })`), a non-empty
+    /// `x-forwarded-proto` header decides instead.
+    std::string protocol = "http";
 
     /// `await req.text()`; the body is buffered before the handler chain runs.
     Promise<std::string> text() const { return Promise<std::string>::resolve(body_); }
@@ -267,6 +272,9 @@ public:
     /// Internal: the parsed `Cookie` header and the remote address.
     void setCookies(StringMap map) { cookies = std::move(map); }
     void setRemoteAddress(std::string address) { ip = std::move(address); }
+    /// Internal: the scheme text (`req.protocol`); the server resolves the
+    /// trust-proxy header before storing it.
+    void setProtocol(std::string scheme) { protocol = std::move(scheme); }
     /// Internal: the matched route's `:name` parameters (one Map per match, so
     /// a chain that runs through several routes never sees stale params).
     void setParams(StringMap map) { params = std::move(map); }
@@ -636,6 +644,10 @@ public:
     void listen(double port, std::function<void()> callback = {}) const;
     /// `app.close()`: closes listen sockets and connections.
     void close() const;
+    /// `createServer({ trustProxy })`: when on, `req.protocol` reads the
+    /// `x-forwarded-proto` header (the left-most hop) instead of always
+    /// reporting the connection scheme.
+    void setTrustProxy(bool on) const;
 
 private:
     void addRouteImpl(const char* method, const std::string& path,
@@ -893,6 +905,32 @@ void addRegexRouteWithOptions(const HttpServer& server, const char* method,
                               const regex_routing::RoutingOptions& options,
                               detail::RouteFn handler);
 
+/// Merged `createServer({...})` configuration (the v0.2 config surface:
+/// config/ + config-static/ + config-apps, one entry point). Every flag is
+/// opt-in: an absent key leaves the plain `createServer()` behaviour.
+struct CreateServerConfig {
+    double threads = 0.0;            // 0 = single loop (D79 scaling)
+    bool tls = false;                // true fails closed until OpenSSL lands
+    bool hasCors = false;
+    CorsOptions cors;
+    bool hasStatic = false;
+    std::string staticDir;
+    bool hasBodyLimit = false;
+    double bodyLimit = 0.0;          // bytes, 413 over the limit
+    bool trustProxy = false;
+    bool hasViews = false;
+    std::string viewsDir;
+    bool hasOnError = false;
+    detail::ErrorFn onError;
+    // Reserved schema keys (validated, not yet enforced): maxConnections,
+    // idleTimeout, maxWriteBuffer, timeout, json, urlencoded, timeouts.
+};
+/// `createServer(options)`: builds the server from the merged config. Middleware
+/// is installed bodyLimit -> cors -> static (preflights and the 413 gate run
+/// before static); `tls: true` throws ERR_TLS_BACKEND_UNAVAILABLE (fail
+/// closed, never a silent plaintext downgrade).
+HttpServer createServerWithConfig(const CreateServerConfig& config);
+
 /// View-layer config for res.render (webserver/response).
 void setwebserverResponseViewDir(std::string dir);
 void setwebserverResponseViewRenderer(
@@ -999,7 +1037,7 @@ public:
     detail::RouteFn handler() const {
         auto self = stack_; auto params = params_; auto opts = options_;
         return [self, params, opts](HttpRequest& req, HttpResponse& res, Next& next) mutable -> Promise<void> {
-            return dispatchStack(self, params, opts, req, res, next);
+            return dispatchStack(*self, params, opts, req, res, next);
         };
     }
     detail::RouteFn mountMiddleware(const std::string& mount) const {
@@ -1012,7 +1050,7 @@ public:
             if (!mount.empty() && mount != "/") req.baseUrl = savedBase + mount;
             req.path = req.path.size() <= mount.size() ? std::string("/") : req.path.substr(mount.size());
             Next restoreNext([&saved, &savedBase, &req, &next] { req.path = saved; req.baseUrl = savedBase; next(); });
-            return dispatchStack(self, params, opts, req, res, restoreNext).then([&saved, &savedBase, &req]() { req.path = saved; req.baseUrl = savedBase; return Promise<void>::resolve(); }, [&saved, &savedBase, &req](Thrown e) -> Promise<void> { req.path = saved; req.baseUrl = savedBase; throw e; });
+            return dispatchStack(*self, params, opts, req, res, restoreNext).then([&saved, &savedBase, &req]() { req.path = saved; req.baseUrl = savedBase; return Promise<void>::resolve(); }, [&saved, &savedBase, &req](Thrown e) -> Promise<void> { req.path = saved; req.baseUrl = savedBase; throw e; });
         };
     }
     const RouterOptions& options() const { return options_; }

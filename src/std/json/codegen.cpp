@@ -186,7 +186,7 @@ std::string builderText(const std::string& name,
     return out;
 }
 
-// The dynamic JSON value webserverion for `text`, whose static type is `t`.
+// The dynamic JSON value expression for `text`, whose static type is `t`.
 // `depth` uniquifies the temporaries of nested array loops. Returns false when
 // the type has no spelling in the value tree (a class/interface handle, an
 // `undefined`-flavored optional, a function, ...).

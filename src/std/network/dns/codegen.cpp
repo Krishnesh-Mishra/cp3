@@ -67,9 +67,6 @@ std::string Generator::emitDnsCall(const CallExpr& c, const MemberExpr& m) {
     const auto& id = static_cast<const Identifier&>(*m.object);
     const std::string receiver = id.name;
     if (receiver != "dns" && receiver != "network") return std::string();
-    if (const auto binding = lookup(receiver); binding && !binding->isAmbient) {
-        return std::string();
-    }
     needsNetwork_ = true;
     needsDns_ = true;
     needsEventLoop_ = true;

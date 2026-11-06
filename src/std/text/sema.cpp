@@ -132,9 +132,9 @@ bool Analyzer::checkTextEncoding(const Expr* arg, const std::string& cls) {
     if (arg == nullptr || arg->kind != NodeKind::StringLiteral) return true;
     const std::string& enc = static_cast<const StringLiteral&>(*arg).value;
     if (isUtf8Label(enc)) return true;
-    report(diagcode::kTypeMismatch, arg->span,
-           "type mismatch: encoding \"" + enc + "\" is not supported by " +
-               cls + " (only \"utf-8\")");
+    reportAt(diagcode::kTypeMismatch, arg->span,
+             "type mismatch: encoding \"" + enc + "\" is not supported by " +
+                 cls + " (only \"utf-8\")");
     return false;
 }
 

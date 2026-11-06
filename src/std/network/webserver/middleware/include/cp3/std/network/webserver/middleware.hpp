@@ -229,7 +229,9 @@ public:
     /// single `app.use(...)` middleware. The engine must outlive the server.
     /// Mounted layers inside the engine still filter by path; the underlying
     /// server route that runs this adapter should be "*" (app.use).
-    detail::RouteFn asRouteFn();
+    // The server's uniform handler type (network::detail), not this
+    // engine's own detail namespace (which carries only Cursor).
+    ::cp3::runtime::network::detail::RouteFn asRouteFn();
 
     std::size_t size() const { return layers_.size(); }
     const std::vector<Layer>& layers() const { return layers_; }

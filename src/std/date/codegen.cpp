@@ -131,8 +131,16 @@ std::string Generator::emitDateCall(const CallExpr& c, const MemberExpr& m) {
         args[0] =
             "static_cast<std::int64_t>(" + std::move(args[0]) + ")";
     }
+    // CP3 `const` is a binding constness (JS semantics: the object stays
+    // mutable), so a CP3 `const` Date binds to a C++ `const Date` and a
+    // mutating setter would drop the qualifier. const_cast back: Date is
+    // never actually a genuinely-const object here.
+    const bool mutating = std::string(fn).rfind("set", 0) == 0;
+    const std::string receiver =
+        mutating ? "const_cast<::cp3::runtime::date::Date&>(" + expr(*m.object) + ")"
+                 : expr(*m.object);
     std::string out = "::cp3::runtime::date::" + std::string(fn) + "(" +
-                      expr(*m.object);
+                      receiver;
     for (const std::string& arg : args) {
         out += ", " + arg;
     }
@@ -141,6 +149,48 @@ std::string Generator::emitDateCall(const CallExpr& c, const MemberExpr& m) {
     // TypeScript project keeps `number`, so the read widens here.
     if (options_.typeSystem == TypeSystem::TypeScript &&
         isTimestampResult(fn)) {
+        return "static_cast<double>(" + out + ")";
+    }
+    return out;
+}
+
+// `new Date()` -> now, `new Date(ms)` -> epoch-ms Date.
+std::string Generator::emitDateNew(const NewExpr& n) {
+    if (!n.callee || n.callee->kind != NodeKind::Identifier) return std::string();
+    if (static_cast<const Identifier&>(*n.callee).name != "Date") return std::string();
+    const Type t = effectiveType(n);
+    if (!(t.kind == TypeKind::Class && t.name == "Date")) return std::string();
+    needsDate_ = true;
+    if (n.arguments.empty() || !n.arguments.front()) {
+        return "::cp3::runtime::date::now()";
+    }
+    return "::cp3::runtime::date::Date{static_cast<std::int64_t>(" +
+           expr(*n.arguments.front()) + ")}";
+}
+
+// Property-style getter reads (`d.getTime`, `d.getDay`, ...): the JS spelling
+// used by the date_gaps corpus case. Zero-arg getters lower to the same free
+// function as the call form.
+std::string Generator::emitDateMember(const MemberExpr& m) {
+    if (!m.object) return std::string();
+    const Type recv = effectiveType(*m.object);
+    if (!isDateValue(recv)) return std::string();
+    const char* fn = dateRuntimeFn(m.property);
+    if (fn == nullptr) return std::string();
+    // Only zero-arg getters are property reads; setters/adders/isBefore etc.
+    // require a call and keep the member-call path.
+    static const char* const kGetters[] = {
+        "toISOString", "toString", "getFullYear", "getMonth", "getDate",
+        "getHours", "getMinutes", "getSeconds", "getTime", "getDay",
+        "getUTCFullYear", "getUTCMonth", "getUTCDate", "getUTCDay",
+        "getUTCHours", "getUTCMinutes", "getUTCSeconds"};
+    bool isGetter = false;
+    for (const char* g : kGetters) if (m.property == g) isGetter = true;
+    if (!isGetter) return std::string();
+    needsDate_ = true;
+    std::string out = "::cp3::runtime::date::" + std::string(fn) + "(" +
+                      expr(*m.object) + ")";
+    if (options_.typeSystem == TypeSystem::TypeScript && isTimestampResult(fn)) {
         return "static_cast<double>(" + out + ")";
     }
     return out;

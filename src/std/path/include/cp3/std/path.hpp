@@ -194,7 +194,7 @@ inline std::string resolveParts(std::initializer_list<std::string> parts) {
 }
 
 // `path.join(...)`: variadic, arguments converted to strings at the call site
-// (the emitter always produces std::string webserverions).
+// (the emitter always produces std::string expressions).
 template <class... Parts>
 inline std::string join(const Parts&... parts) {
     return joinParts({std::string(parts)...});

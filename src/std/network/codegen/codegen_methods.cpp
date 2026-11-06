@@ -175,7 +175,7 @@ bool isRegexRoutingVerb(const std::string& property) {
 
 }  // namespace
 
-/// The documented field read behind an webserverion (`res.headers`,
+/// The documented field read behind an expression (`res.headers`,
 /// `req.params`, `req.query`, `req.headers`, `req.method`, `req.path`,
 /// `res.ok`, `res.status`, `res.statusText`), with the Map fields as
 /// `Map<string, string>` (docs 04 §network), or nullopt. The `get(k)` result
@@ -493,7 +493,8 @@ std::string Generator::emitNetworkMemberCall(const CallExpr& c, const MemberExpr
         }
         if ((m.property == "get" || m.property == "enabled" ||
              m.property == "disabled") &&
-            c.arguments.size() == 1 && c.arguments[0]) {
+            c.arguments.size() == 1 && c.arguments[0] &&
+            c.arguments[0]->kind != NodeKind::SpreadElement) {
             std::string read = "(" + expr(*m.object) +
                                ").getRoutingSetting(" + expr(*c.arguments[0]) + ")";
             return m.property == "disabled" ? "(!" + read + ")" : read;
@@ -774,7 +775,9 @@ std::string Generator::emitNetworkMemberCall(const CallExpr& c, const MemberExpr
                 const std::string field = static_cast<Identifier&>(*p->key).name;
                 const Expr& v = *p->value;
                 if (field == "maxAge") {
-                    opts += " o.hasMaxAge=true; o.maxAge=(" + expr(v) + ")/1000.0;";
+                    // Seconds (the documented surface); the Max-Age header
+                    // attribute is also seconds, so no unit conversion.
+                    opts += " o.hasMaxAge=true; o.maxAge=(" + expr(v) + ");";
                 } else if (field == "expires") {
                     if (v.kind == NodeKind::NumberLiteral)
                         opts += " o.expires=::cp3::runtime::network::webserver::httpDateFromEpochMs(" + expr(v) + ");";
@@ -792,7 +795,7 @@ std::string Generator::emitNetworkMemberCall(const CallExpr& c, const MemberExpr
                     opts += " o.signed_= (" + expr(v) + ")!=0;";
                 } else if (field == "sameSite") {
                     if (v.kind == NodeKind::StringLiteral) {
-                        const std::string s = static_cast<StringLiteral&>(v).value;
+                        const std::string s = static_cast<const StringLiteral&>(v).value;
                         if (s == "strict") opts += " o.sameSite=::cp3::runtime::network::webserver::SameSite::kStrict;";
                         else if (s == "lax") opts += " o.sameSite=::cp3::runtime::network::webserver::SameSite::kLax;";
                         else if (s == "none") opts += " o.sameSite=::cp3::runtime::network::webserver::SameSite::kNone;";
@@ -1002,7 +1005,7 @@ std::string Generator::networkFieldRead(const std::string& recv, const Type& typ
 /// The json value tree text of a response payload literal (docs 04
 /// §network). The json family's jsonValueText carries the plain literal
 /// forms; a payload also accepts a computed key (`{ [k]: 1 }`, whose key is a
-/// runtime webserverion) and a spread element (`{ ...base, b: 2 }`, whose source
+/// runtime expression) and a spread element (`{ ...base, b: 2 }`, whose source
 /// fields become members). "" when the payload holds a form the tree cannot
 /// carry (a method property, a computed key that is not a string, a nested
 /// spread).
@@ -1024,7 +1027,7 @@ std::string Generator::networkJsonValueText(const Expr& e) {
     if (e.kind == NodeKind::ObjectLiteral) {
         const auto& literal = static_cast<const ObjectLiteral&>(e);
         // The members in source order: the key's C++ text (a literal name or
-        // a computed webserverion), the value's text, and the key the dedupe
+        // a computed expression), the value's text, and the key the dedupe
         // compares (a later member with the same key wins, the JS object
         // semantics, so an earlier one is dropped).
         struct Member {
@@ -1070,7 +1073,7 @@ std::string Generator::networkJsonValueText(const Expr& e) {
                 continue;
             }
             if (property->computed) {
-                // A computed key: the key is a runtime webserverion and must be
+                // A computed key: the key is a runtime expression and must be
                 // a string.
                 if (!property->key) return std::string();
                 const CppInfo ci = info(*property->key);

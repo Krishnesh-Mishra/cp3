@@ -69,6 +69,9 @@ struct ServerImpl {
     // Ledger L (appended): `app.onError(...)` handler, or null for the
     // default 500 response.
     ErrorFn errorHandler;
+    // `createServer({ trustProxy })`: `req.protocol` then reads the
+    // `x-forwarded-proto` header instead of the connection scheme.
+    bool trustProxy = false;
     // webserver routing agent: `app.param(name, fn)` callbacks.
     std::vector<std::pair<std::string, ParamFn>> paramHandlers;
     // Regex-routing agent: app settings ("case sensitive routing", etc).

@@ -397,7 +397,7 @@ std::string Generator::consoleObjectText(const ObjectLiteral& literal) {
         std::string key;
         if (p->computed) {
             // A computed key names the property at runtime, so the key text is
-            // the key webserverion's own value.
+            // the key expression's own value.
             if (!p->key) continue;
             const CppInfo ci = info(*p->key);
             if (ci.shape == Shape::String) {
