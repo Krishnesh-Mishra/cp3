@@ -410,6 +410,7 @@ LinkedName LinkBuilder::functionBinding(const CompilationUnit& unit,
     out.cpp = qualified(unit.id, fd.name);
     out.fn = &fd;
     out.isAsync = fd.isAsync;
+    out.isGeneric = !fd.typeParams.empty();
     if (const SemaResult* sema = semaOf(unit.id)) {
         const auto it = sema->functions.find(fd.nodeId);
         if (it != sema->functions.end()) out.type = it->second.returnType;

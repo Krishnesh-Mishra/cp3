@@ -1,5 +1,5 @@
 // =============================================================================
-// src/sema/src/checks/ops_check.cpp - operator webserverion inference.
+// src/sema/src/checks/ops_check.cpp - operator expression inference.
 //
 // Owns unary/update, binary (arithmetic + comparison), logical, conditional and
 // assignment inference, including the compound-assignment result rules and the
@@ -76,7 +76,7 @@ Type Analyzer::arithmeticUnaryResult(UnaryExpr& u, const Type& ot) {
     if (isNativeType(ot)) {
         // C++ allows `-`, `+` and `~` on every integer, and `-`/`+` on floats.
         // The declared type keeps its native width; the C++ compiler applies
-        // any integral promotion in the generated webserverion.
+        // any integral promotion in the generated expression.
         if (u.op == UnaryOp::BitNot && !isNativeInteger(ot)) {
             report(diagcode::kInvalidOperandTypes, u.span,
                    "invalid operand type '" + pretty(ot) +
@@ -186,7 +186,7 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
     const bool permissive = isPermissive(l) || isPermissive(r);
     // Native numeric operands (spec 03 / D65): C++ usual arithmetic
     // conversions. An integral literal that fits adopts the native type, so
-    // `n % 2` and `n + 1` stay native; any other number widens the webserverion
+    // `n % 2` and `n + 1` stay native; any other number widens the expression
     // to `number` unless strictNumericCasts refuses the mix.
     Type ln = l;
     Type rn = r;
@@ -437,7 +437,10 @@ Type Analyzer::targetTypeOf(Expr& target) {
                 return Type::error();
             }
             setType(id, b.type);
-            return b.type;
+            // Compound assignment reads the current value but writes the
+            // declared slot: use the declared type (see
+            // checkAssignToTarget).
+            return b.declaredType.isUnknown() ? b.type : b.declaredType;
         }
         case NodeKind::MemberExpr: {
             auto& m = static_cast<MemberExpr&>(target);
@@ -477,7 +480,12 @@ void Analyzer::checkAssignToTarget(Expr& target, const Type& valType,
                        "cannot reassign to const '" + id.name + "'");
                 return;
             }
-            checkAssign(valType, b.type, span, false);
+            // Assignment is checked against the declared type: the current
+            // `b.type` may be a narrowed view (`cur` is `Node` inside
+            // `while (cur !== null)`), which would reject `cur = cur.next`.
+            const Type& declared =
+                b.declaredType.isUnknown() ? b.type : b.declaredType;
+            checkAssign(valType, declared, span, false);
             return;
         }
         case NodeKind::MemberExpr: {

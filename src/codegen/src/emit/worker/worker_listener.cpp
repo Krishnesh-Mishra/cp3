@@ -151,10 +151,10 @@ std::string Generator::workerListenerLambda(const ArrowFunction& arrow,
             declare(raw, Type::undefined());
         } else if (p != nullptr) {
             // A pattern parameter with no payload to bind: the channel
-            // direction is void, so there is nothing to destructure.
+            // direction is empty, so there is nothing to destructure.
             reportWorkerCode(*p, diagcode::kWorkerListenerParameter,
                              "this worker listener has no message payload (the "
-                             "channel direction is void), so its parameter "
+                             "channel direction is empty), so its parameter "
                              "cannot bind anything");
         }
     } else {
@@ -177,7 +177,7 @@ std::string Generator::workerListenerLambda(const ArrowFunction& arrow,
         }
         paramList = paramType + " " + name;
     }
-    if (arrow.body && arrow.webserverionBody) {
+    if (arrow.body && arrow.expressionBody) {
         body += expr(*static_cast<const Expr*>(arrow.body.get())) + ";";
     } else if (arrow.body) {
         stmt(*static_cast<const Stmt*>(arrow.body.get()), body, 1);

@@ -128,7 +128,7 @@ bool isDefaultInitializable(const Type& t) {
     return false;
 }
 
-// The statically evident element count of a typed-array webserverion: a literal
+// The statically evident element count of a typed-array expression: a literal
 // length, a literal element list, a copy of another known view, or the result
 // of a length-preserving method on one. Anything else has no known length, so
 // a literal index is not provably in range.

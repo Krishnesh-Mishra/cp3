@@ -246,7 +246,7 @@ std::string Generator::emitNativeCall(const CallExpr& c, const MemberExpr& m) {
                                        return !name.empty();
                                    });
     if (!bound) return nativeResultText(*fn, call);
-    // The temporaries live in a lambda, so the whole call is one webserverion.
+    // The temporaries live in a lambda, so the whole call is one expression.
     std::string prologue;
     for (std::size_t i = 0; i < temporaries.size(); ++i) {
         if (temporaries[i].empty()) continue;

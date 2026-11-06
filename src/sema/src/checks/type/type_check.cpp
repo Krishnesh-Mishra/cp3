@@ -586,10 +586,17 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
     // `Thread<In, Out>` types the worker entry's parameter; `Worker<In, Out>`
     // is the main side's handle type. Both are nominal Class types whose parts
     // are the resolved direction types, in order - the single source of truth
-    // codegen reads back through the type-node side table.
+    // codegen reads back through the type-node side table. `undefined` in a
+    // direction spells an empty direction: the direction can never carry a
+    // value, so sends into it are a compile error and its listener is nullary.
+    // Codegen keys the empty direction off the void sentinel (`ThreadHandle<T,
+    // void>` -> `VoidSlot`), which the retired `void` spelling used to supply.
     if (nt.name == "Thread" || nt.name == "Worker") {
         Type channel(TypeKind::Class, nt.name);
-        channel.parts = args;
+        channel.parts.reserve(args.size());
+        for (const Type& arg : args) {
+            channel.parts.push_back(arg.isUndefined() ? Type::voidType() : arg);
+        }
         return channel;
     }
     if (nt.name == "any") {
@@ -646,11 +653,7 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
         if (lookup(nt.name, b) && b.isAmbient)
             return Type::named(TypeKind::Class, nt.name);
     }
-    if (nt.name == "Logger") {
-        Binding b;
-        if (lookup(nt.name, b) && b.isAmbient)
-            return Type::named(TypeKind::Class, "Logger");
-    }
+
     // A type alias names a type: a generic alias substitutes its type
     // arguments into the aliased type (`Pair<number>` is `[number, number]`).
     // Instantiation is checked here: arity (CP3418), then constraints

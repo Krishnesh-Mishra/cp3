@@ -1,7 +1,7 @@
 // =============================================================================
-// src/codegen/src/emit/expr.cpp - codegen webserverion lowering (STYLE.md §8).
+// src/codegen/src/emit/expr.cpp - codegen expression lowering (STYLE.md §8).
 //
-// The webserverion emitter: literals, identifiers, templates, the `tsCall`/
+// The expression emitter: literals, identifiers, templates, the `tsCall`/
 // `cond` value-vs-condition adapters, and the operator forms. Logical
 // operators use JS truthiness (`cp3_truthy` lambdas); `??` uses a real
 // nullish (not truthiness) test. A node with no C++ spelling reports a codegen
@@ -34,7 +34,7 @@ namespace {
 // An integer literal written directly into a native-integer context. The
 // literal's `number` value is a double, so the 64-bit boundaries must come
 // from the source spelling; `nativeCanRepresentLiteral` applies the same fit
-// rule sema used, and the explicit cast gives the C++ webserverion the target's
+// rule sema used, and the explicit cast gives the C++ expression the target's
 // type (a bare `ULL`/`LL` token has the literal's own promoted type).
 std::string nativeIntegerLiteralText(const std::string& raw,
                                      const Type& target) {
@@ -86,10 +86,10 @@ void Generator::noteFamilyUse(const Expr& e) {
     }
 }
 
-// The webserverion entry point: inside an int64 fast-path attempt a node whose
+// The expression entry point: inside an int64 fast-path attempt a node whose
 // type is `number` is lowered by the fast path (int_mode.cpp); everything else
 // uses the ordinary emitter below, whose operands still route through here, so
-// a `number` operand of a non-number webserverion (a truthiness test, a
+// a `number` operand of a non-number expression (a truthiness test, a
 // comparison, a template hole) is the int64 value.
 std::string Generator::expr(const Expr& e) {
     // A call/construction/await/delete or a write outside a statement position
@@ -100,7 +100,7 @@ std::string Generator::expr(const Expr& e) {
     return exprPlain(e);
 }
 
-// A comparison operand. `x % y` is the one webserverion whose zero-sign bail is
+// A comparison operand. `x % y` is the one expression whose zero-sign bail is
 // droppable here: `imod` exists to reproduce `-0.0`, and a comparison cannot
 // tell `-0` from `+0`, so the exact integer remainder is observed identically.
 std::string Generator::exprCmp(const Expr& e) {
@@ -139,9 +139,27 @@ std::string Generator::exprPlain(const Expr& e) {
         case NodeKind::BoolLiteral:
             return static_cast<const BoolLiteral&>(e).value ? "true" : "false";
         case NodeKind::NullLiteral:
-            return "nullptr";
-        case NodeKind::UndefinedLiteral:
-            return "cp3::runtime::undefined";
+        case NodeKind::UndefinedLiteral: {
+            // A nullish literal for an optional slot must lower to
+            // `std::nullopt`: a bare `nullptr` would construct an
+            // `optional<Ref<T>>` *containing* a null pointer (has_value()
+            // true), so `return null` from a `T | null` function would
+            // never compare equal to null. Mirrors the constructor-argument
+            // rule in emit/class/class_expr.cpp; `expected_` carries the
+            // slot's type (return / initializer / argument).
+            // `Maybe<T>` (`T | null | undefined`) is NOT an optional: each
+            // flavor has its own constructor, so the literals keep their
+            // flavored spellings there.
+            if (expected_) {
+                const CppInfo ec = classify(*expected_);
+                if (ec.shape == Shape::Optional) {
+                    return "std::nullopt";
+                }
+            }
+            return e.kind == NodeKind::NullLiteral
+                       ? "nullptr"
+                       : "cp3::runtime::undefined";
+        }
         case NodeKind::RegExpLiteral: return emitRegexLiteral(static_cast<const RegExpLiteral&>(e));
         case NodeKind::Identifier:
             return emitIdentifier(static_cast<const Identifier&>(e));
@@ -204,14 +222,14 @@ std::string Generator::exprPlain(const Expr& e) {
         case NodeKind::AsExpr:
         case NodeKind::NonNullExpr:
         default:
-            // The webserverion forms the ordinary table does not own: the weak
+            // The expression forms the ordinary table does not own: the weak
             // link wrapper, a range used as a value, a spread outside its
             // legal position.
             return emitExtendedExpr(e);
     }
 }
 
-// The webserverion forms the ordinary table does not own.
+// The expression forms the ordinary table does not own.
 std::string Generator::emitExtendedExpr(const Expr& e) {
     switch (e.kind) {
         case NodeKind::WeakExpr:
@@ -223,8 +241,8 @@ std::string Generator::emitExtendedExpr(const Expr& e) {
             // reinterpreted (static_pointer_cast); for numeric conversions
             // the value is converted.
             const auto& asExpr = static_cast<const AsExpr&>(e);
-            if (!asExpr.webserverion) return "0.0";
-            const std::string value = expr(*asExpr.webserverion);
+            if (!asExpr.expression) return "0.0";
+            const std::string value = expr(*asExpr.expression);
             const Type targetType = effectiveType(e);
             const CppInfo targetInfo = classify(targetType);
             if (targetInfo.shape == Shape::ClassRef) {
@@ -234,7 +252,7 @@ std::string Generator::emitExtendedExpr(const Expr& e) {
                 return "std::static_pointer_cast<" + element + ">(" +
                        value + ")";
             }
-            const CppInfo sourceInfo = info(*asExpr.webserverion);
+            const CppInfo sourceInfo = info(*asExpr.expression);
             // A native target is an explicit, checked narrowing (widening
             // passes through the same helper). A native source targeting
             // `number` is the one explicit precision-losing direction.
@@ -252,9 +270,9 @@ std::string Generator::emitExtendedExpr(const Expr& e) {
         case NodeKind::NonNullExpr: {
             // `expr!` - a null check that throws an Error on null.
             const auto& nonNull = static_cast<const NonNullExpr&>(e);
-            if (!nonNull.webserverion) return "0.0";
-            const std::string value = expr(*nonNull.webserverion);
-            const CppInfo ci = nonNull.webserverion ? info(*nonNull.webserverion) : CppInfo{};
+            if (!nonNull.expression) return "0.0";
+            const std::string value = expr(*nonNull.expression);
+            const CppInfo ci = nonNull.expression ? info(*nonNull.expression) : CppInfo{};
             const bool isOptional =
                 ci.shape == Shape::Optional || ci.shape == Shape::Maybe;
             const std::string unwrap =
@@ -267,13 +285,13 @@ std::string Generator::emitExtendedExpr(const Expr& e) {
         case NodeKind::SpreadElement:
             // A spread is only meaningful in an argument list or an array /
             // object literal; every one of those forms handles it before the
-            // webserverion emitter sees it, so reaching this point is a program
+            // expression emitter sees it, so reaching this point is a program
             // error.
             reportTypeError(e, "a spread element is only valid in an argument "
                                "list or an array/object literal");
             return "0.0";
         default:
-            reportTypeError(e, "unsupported webserverion");
+            reportTypeError(e, "unsupported expression");
             return "0.0";
     }
 }
@@ -343,7 +361,9 @@ std::string Generator::emitNewExprValue(const NewExpr& n) {
     }
     if (std::string coll = emitCollectionsNew(n); !coll.empty()) return coll;
     if (std::string text = emitTextNew(n); !text.empty()) return text;
-    if (std::string lg = emitLogNew(n); !lg.empty()) return lg;
+    if (std::string url = emitUrlNew(n); !url.empty()) return url;
+    if (std::string date = emitDateNew(n); !date.empty()) return date;
+
     if (std::string em = emitEventEmitterNew(n); !em.empty()) return em;
     return emitFamilyNew(n);
 }
@@ -580,10 +600,10 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
     const CppInfo R = info(*b.right);
     std::string lhs = cmp ? exprCmp(*b.left) : expr(*b.left);
     std::string rhs = cmp ? exprCmp(*b.right) : expr(*b.right);
-    // In a native webserverion an in-range integral literal is an integer
+    // In a native expression an in-range integral literal is an integer
     // token, not a double: `n / 2` must stay integer division, `n % 2` must
     // compile, and `n < 1e15` must compare at full width. A fractional
-    // literal keeps its double spelling (the webserverion is then `number`).
+    // literal keeps its double spelling (the expression is then `number`).
     if (L.shape == Shape::Native || R.shape == Shape::Native) {
         if (const auto k = integralLiteralValue(*b.left); k && !L.type.isNative()) {
             lhs = std::to_string(*k);
@@ -954,7 +974,7 @@ std::string Generator::emitUnary(const UnaryExpr& u) {
         case UnaryOp::Negate: {
             // `-9223372036854775808` as an i64: the positive magnitude does
             // not fit the target, so the exact spelling belongs to the unary
-            // webserverion, not to its operand.
+            // expression, not to its operand.
             if (u.operand && u.operand->kind == NodeKind::NumberLiteral &&
                 expected_ && isNativeInteger(*expected_)) {
                 const auto& literal =
@@ -1063,7 +1083,7 @@ bool Generator::memberFieldTarget(const MemberExpr& m, std::string& lvalue,
     return true;
 }
 
-// `o.a++`, `a[i]++`: the target's value changes by one. The webserverion yields
+// `o.a++`, `a[i]++`: the target's value changes by one. The expression yields
 // the old value (postfix) or the new one (prefix), and the target is read and
 // written exactly once.
 std::string Generator::emitUpdateTarget(const UpdateExpr& u) {
@@ -1074,7 +1094,7 @@ std::string Generator::emitUpdateTarget(const UpdateExpr& u) {
     if (operand.kind == NodeKind::IndexExpr) {
         return emitUpdateIndex(u, static_cast<const IndexExpr&>(operand));
     }
-    // A call result or a `new` webserverion: not a value a program can write to
+    // A call result or a `new` expression: not a value a program can write to
     // (the same rule the assignment target check states).
     reportTypeError(u, "invalid update target: assign to a name, a property "
                        "or an index");

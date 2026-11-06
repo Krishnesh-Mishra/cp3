@@ -1,12 +1,12 @@
 // =============================================================================
 // src/sema/src/checks/call_check.cpp - call inference and overload resolution.
 //
-// Owns `inferCall` (the call-webserverion dispatcher), argument arity/type
+// Owns `inferCall` (the call-expression dispatcher), argument arity/type
 // checking (`checkArgs`), the per-callable special cases (`JSON.parse`/
 // `stringify`, the timer builtins) and overload resolution
 // (spec §17). The Promise statics live in the sibling promise_call.cpp;
 // member/index inference lives in member_check.cpp; primary
-// webserverions live in expr_check.cpp (STYLE.md §8).
+// expressions live in expr_check.cpp (STYLE.md §8).
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -102,6 +102,17 @@ Type Analyzer::inferCall(CallExpr& call) {
     if (sig == nullptr && ct.kind == TypeKind::Function) {
         sig = callSig(call, ct, localSig);
     }
+    // A union callee (`Map.get(k).join(...)`: `T[] | undefined` member is
+    // `function | undefined`): strip nullish parts; a single remaining
+    // function type is the callable.
+    if (sig == nullptr && (ct.isUnion() || ct.isNullable())) {
+        Type stripped = ct;
+        std::vector<Type> parts;
+        for (const Type& p : ct.parts) if (!p.isNullish()) parts.push_back(p);
+        if (parts.size() == 1 && parts.front().kind == TypeKind::Function) {
+            sig = callSig(call, parts.front(), localSig);
+        }
+    }
 
     if (sig != nullptr) {
         // A generic function substitutes its type arguments first (spec §16).
@@ -135,6 +146,7 @@ bool Analyzer::tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
     if (tryInferJsonCall(call, m, out)) return true;
     if (tryInferPromiseStaticCall(call, m, out)) return true;
     if (tryInferCollectionsStaticCall(call, m, out)) return true;
+    if (tryInferDateMemberCall(call, m, out)) return true;
     if (tryInferErrorStaticCall(call, m, out)) return true;
     if (tryInferMathCall(call, m, out)) return true;
     if (tryInferEnvCall(call, m, out)) return true;
@@ -448,7 +460,7 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
         sig.name = "JSON." + m.property;
         // JSON.parse<T>(...) returns T (explicit). Bare JSON.parse(...)
         // is a compile error (CP3208, docs/design/remove-void-unknown.md
-        // �6.2): the result type is only known with a type argument.
+        // �6.2): the result type is only known with a type argument.
         Type t = Type::unknown();
         bool parseMissingTypeArg = false;
         if (m.property == "stringify") {
@@ -560,12 +572,25 @@ void Analyzer::checkSpreadArg(const FuncSig& sig, Expr* a, std::size_t index) {
                 element->kind == NodeKind::SpreadElement) {
                 continue;
             }
+            const std::size_t j = index + k;
+            const bool isArrow = element->kind == NodeKind::ArrowFunction;
+            const Type* contextual = nullptr;
+            Type pt;
+            if (!sig.rest || sig.params.empty()) {
+                if (j < sig.params.size()) pt = sig.params[j];
+            } else {
+                pt = sig.params.back();
+            }
+            if (isArrow && pt.kind == TypeKind::Function && element->nodeId != 0) {
+                contextualArrowTypes_[element->nodeId] = pt;
+                contextual = &pt;
+            }
             const Type et = inferExpr(*element);
+            if (contextual) contextualArrowTypes_.erase(element->nodeId);
             if (sig.rest && !sig.params.empty()) {
                 checkAssign(et, sig.params.back(), element->span, false);
                 continue;
             }
-            const std::size_t j = index + k;
             if (j < sig.params.size() && sig.params[j].kind != TypeKind::Array) {
                 checkAssign(et, sig.params[j], element->span, false);
             }
@@ -686,7 +711,9 @@ void Analyzer::checkArgs(const FuncSig& sig, CallExpr& call) {
         Type at = inferExpr(*a);
         if (contextualArrow) contextualArrowTypes_.erase(a->nodeId);
         if (contextualArrow && at.kind == TypeKind::Function &&
-            pt.parts.size() >= 1) {
+            pt.parts.size() >= 1 &&
+            pt.name != kVariadicLabel &&
+            pt.name != kVariadicOptionalTailLabel) {
             const auto& arrow = static_cast<const ArrowFunction&>(*a);
             const std::size_t supplied = pt.parts.size() - 1;
             // A callback may ignore parameters the caller supplies, but it

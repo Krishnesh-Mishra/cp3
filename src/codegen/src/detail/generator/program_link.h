@@ -40,6 +40,11 @@ struct LinkedName {
     std::string cpp;                          // "cp3_mod_mathx::triple"
     const FunctionDeclaration* fn = nullptr;  // non-null when it is a function
     bool isAsync = false;
+    // Whether the target declares type parameters (`export function f<T>`),
+    // as seen by the target unit's sema. The call site needs this to accept
+    // an explicit type-argument list; the AST declaration alone is not
+    // always the object sema resolved the import through.
+    bool isGeneric = false;
     Type type;
     std::string miss;
 };

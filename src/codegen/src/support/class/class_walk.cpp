@@ -2,7 +2,7 @@
 // src/codegen/src/support/class_walk.cpp - model-registration walkers
 // (detail/class_walk.h).
 //
-// One recursive walk over the unit's statements and webserverions, run before
+// One recursive walk over the unit's statements and expressions, run before
 // the emit walk: every non-generic class declaration becomes a ClassModel and
 // every structural object shape (an object literal, a `{ ... }` annotation)
 // becomes an ObjectModel, keyed so that the type map can resolve a sema type
@@ -22,7 +22,7 @@ namespace detail {
 
 namespace {
 
-// An arrow function: its signature annotations and its body (an webserverion or
+// An arrow function: its signature annotations and its body (an expression or
 // a block, whose local classes and object shapes must be registered too).
 void walkArrowModels(const ArrowFunction& a, const SemaResult& sema);
 
@@ -319,8 +319,8 @@ void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local) {
         case NodeKind::BlockStatement:
             walkStmtList(static_cast<const BlockStatement&>(s).body, sema, true);
             return;
-        case NodeKind::webserverionStatement:
-            walkExprPtr(static_cast<const webserverionStatement&>(s).webserverion,
+        case NodeKind::expressionstatement:
+            walkExprPtr(static_cast<const expressionstatement&>(s).expression,
                         sema);
             return;
         case NodeKind::VariableDeclaration:
@@ -395,13 +395,13 @@ void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local) {
     }
 }
 
-// ---- the webserverion walker ---------------------------------------------------
+// ---- the expression walker ---------------------------------------------------
 
 void walkExprModels(const Expr* e, const SemaResult& sema) {
     if (e == nullptr) return;
     switch (e->kind) {
         case NodeKind::TemplateLiteral:
-            walkExprList(static_cast<const TemplateLiteral&>(*e).webserverions, sema);
+            walkExprList(static_cast<const TemplateLiteral&>(*e).expressions, sema);
             return;
         case NodeKind::ArrayLiteral:
             walkExprList(static_cast<const ArrayLiteral&>(*e).elements, sema);
@@ -484,7 +484,7 @@ void walkArrowModels(const ArrowFunction& a, const SemaResult& sema) {
     walkParams(a.params, sema);
     if (a.returnType) (void)modelTypeFromTypeNode(*a.returnType);
     if (a.body == nullptr) return;
-    if (a.webserverionBody) {
+    if (a.expressionBody) {
         walkExprModels(dynamic_cast<const Expr*>(a.body.get()), sema);
     } else {
         walkStmtModels(static_cast<const Stmt&>(*a.body), sema, true);

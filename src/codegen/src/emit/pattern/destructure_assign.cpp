@@ -63,7 +63,7 @@ const ObjectField* shapeField(const std::vector<ObjectField>& fields,
 }  // namespace
 
 // A destructuring *assignment*: the right side is evaluated once into a
-// local, then every target of the pattern is written. The webserverion's value
+// local, then every target of the pattern is written. The expression's value
 // is the right side, so the whole thing lowers to a lambda that returns it.
 // An empty result means the target form is not one this write covers (a
 // compound write to a pattern); the caller reports it.

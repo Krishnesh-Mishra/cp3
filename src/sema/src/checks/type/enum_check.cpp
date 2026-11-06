@@ -28,8 +28,8 @@ namespace {
 // The backing kind of one member initializer.
 enum class MemberInit { Missing, Number, String, Other };
 
-// The kind of a constant webserverion: a number, a string, or neither (the
-// webserverion is not a compile-time constant).
+// The kind of a constant expression: a number, a string, or neither (the
+// expression is not a compile-time constant).
 enum class ConstKind { None, Number, String };
 
 // The member of `members` with this name, or nullptr. A linked member
@@ -58,7 +58,7 @@ const EnumMemberInfo* linkedTarget(const Expr* e,
     return linkedMember(members, m.property);
 }
 
-// The kind of a constant webserverion in the context of one enum declaration.
+// The kind of a constant expression in the context of one enum declaration.
 ConstKind constKind(const Expr* e, const std::vector<EnumMemberInfo>& members,
                     const std::string& enumName);
 
@@ -101,7 +101,7 @@ ConstKind binaryConstKind(const BinaryExpr& b,
                : ConstKind::None;
 }
 
-// The kind of a constant webserverion in the context of one enum declaration.
+// The kind of a constant expression in the context of one enum declaration.
 // `members` are the members of the same enum resolved so far; a linked member
 // initializer takes the kind of the member it names.
 //
@@ -149,7 +149,7 @@ MemberInit classifyMemberInit(const Expr* init,
 // Constant evaluation: the member values + reverse map (const enum support)
 // -----------------------------------------------------------------------------
 // `registerEnum` classifies every member above; the helpers below *evaluate*
-// the same constant webserverions into the compile-time values published in
+// the same constant expressions into the compile-time values published in
 // `SemaResult::constEnums` (cp3/core/utility_types.hpp). The accepted forms
 // deliberately mirror `constKind` (a literal, a unary sign / bit-not, an
 // arithmetic operator over constants, a link to an earlier member) so the
@@ -186,7 +186,7 @@ const ConstEnumValue* resolvedTarget(
     return resolvedMember(values, m.property);
 }
 
-// Evaluates a constant *number* webserverion. False when the webserverion is
+// Evaluates a constant *number* expression. False when the expression is
 // not a numeric constant (the caller keeps the member valueless; the
 // classification pass already reported non-constants).
 bool evalConstNumber(const Expr* e,
@@ -254,7 +254,7 @@ bool evalConstNumber(const Expr* e,
     return true;
 }
 
-// Evaluates a constant *string* webserverion: a literal, `+` over two string
+// Evaluates a constant *string* expression: a literal, `+` over two string
 // constants, or a link to an earlier string member.
 bool evalConstString(const Expr* e,
                      const std::vector<ConstEnumValue>& values,
@@ -321,12 +321,12 @@ void Analyzer::registerEnum(EnumDeclaration& e) {
                 break;
             case MemberInit::Other:
                 // An enum member carries a compile-time constant: a literal, a
-                // constant webserverion over literals, or a link to an earlier
+                // constant expression over literals, or a link to an earlier
                 // member of the same enum.
                 report(diagcode::kTypeMismatch, m->span,
                        "type mismatch: enum member '" + m->name +
                            "' must be initialized with a constant number or "
-                           "string webserverion");
+                           "string expression");
                 break;
         }
 

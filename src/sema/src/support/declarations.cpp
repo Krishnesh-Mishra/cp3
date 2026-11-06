@@ -508,6 +508,25 @@ void Analyzer::visitDeclStmt(Stmt& s) {
 }
 
 void Analyzer::visitClassDecl(ClassDeclaration& c) {
+    // Decorators are compile-time macros; CP3 emits no runtime metadata and does
+    // not run code while a class is being defined. A decorator must name a
+    // `comptime function` that rewrites the AST before native codegen, and
+    // this version has no comptime macro resolution, so any attached decorator
+    // is rejected here rather than silently ignored.
+    auto rejectDecorator = [this](const ExprPtr& d) {
+        report(diagcode::kDecoratorsUnsupported, d ? d->span : SourceSpan{},
+               "TypeScript allows runtime decorators on classes and members; "
+               "CP3 does not run code while a class is being defined and "
+               "emits no runtime metadata. A decorator must name a "
+               "compile-time macro (a `comptime function`) that rewrites the "
+               "AST before native codegen; without one, the decorator cannot "
+               "be applied");
+    };
+    for (const ExprPtr& d : c.decorators) rejectDecorator(d);
+    for (const ClassMemberPtr& mp : c.members) {
+        if (!mp) continue;
+        for (const ExprPtr& d : mp->decorators) rejectDecorator(d);
+    }
     // resolveClasses (checkStmts) already built the member table; an exported
     // class visited without that pre-pass is resolved here instead.
     if (classResolved_.insert(c.nodeId).second) resolveClass(c);

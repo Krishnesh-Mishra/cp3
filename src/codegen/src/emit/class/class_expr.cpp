@@ -1,13 +1,13 @@
 // =============================================================================
-// src/codegen/src/emit/class_expr.cpp - class / interface / object webserverions
+// src/codegen/src/emit/class_expr.cpp - class / interface / object expressions
 // for the spec §15 object surface (STYLE.md §8).
 //
-// The webserverion side of the object surface, hooked from the generic emitters
+// The expression side of the object surface, hooked from the generic emitters
 // (emit/expr.cpp, emit/call.cpp, emit/stmt.cpp, emit/decl.cpp). Each entry point
 // recognizes one model form and returns its C++ spelling; "" means "not a model
 // form", so the caller keeps its own path (usually its unsupported-form
 // diagnostic). The
-// structs these webserverions name are emitted by emit/class_decl.cpp (classes)
+// structs these expressions name are emitted by emit/class_decl.cpp (classes)
 // and emit/class_shape.cpp (object / interface shapes).
 // =============================================================================
 #include "detail/generator/generator.h"
@@ -31,7 +31,7 @@ using namespace detail;
 
 namespace {
 
-// A setter store (`c.value = v`, D21) as an webserverion: evaluates to the
+// A setter store (`c.value = v`, D21) as an expression: evaluates to the
 // assigned value, like an assignment does.
 std::string setterStoreText(const std::string& setter,
                             const std::string& value) {
@@ -318,7 +318,9 @@ std::string Generator::emitModelNew(const NewExpr& n) {
             rewriteTypeParams(pt, cm->typeParams);
             if (ctorOwner != nullptr) rewriteTypeParams(pt, ctorOwner->typeParams);
             const CppInfo pc = classify(pt);
-            if (pc.shape == Shape::Optional || pc.shape == Shape::Maybe) {
+            // `Maybe<T>` (`T | null | undefined`) keeps its flavored
+            // spellings instead (see emit/expr/expr.cpp).
+            if (pc.shape == Shape::Optional) {
                 nullopt = true;
             }
         }

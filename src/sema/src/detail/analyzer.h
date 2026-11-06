@@ -15,11 +15,11 @@
 //   support/symbols.cpp     SymbolInfo/FunctionInfo/nodeTypes publishing
 //   checks/type_check.cpp   type resolution, widening, shapes
 //   checks/assignability.cpp assignability + object-diff diagnostics
-//   checks/expr_check.cpp   primary webserverion inference
+//   checks/expr_check.cpp   primary expression inference
 //   checks/member_check.cpp member/index/call inference
 //   checks/call_check.cpp   call inference + overload resolution
 //   checks/generic_check.cpp generic function substitution/inference
-//   checks/ops_check.cpp    operator webserverion inference
+//   checks/ops_check.cpp    operator expression inference
 //   checks/stmt_check.cpp   statements, control flow, return analysis
 //   checks/banned.cpp       banned-pattern diagnostics (delete/arguments/for-in/any)
 //   checks/std_check.cpp    std-namespace dispatch + `String(x)`
@@ -29,7 +29,7 @@
 //                           process / console / JSON)
 //   src/language/typed-arrays/sema.cpp the JS-compat typed-array family (D69)
 //   checks/parallel_check.cpp      parallel.* capture safety: statements + hook
-//   checks/parallel_expr_check.cpp parallel.* capture safety: webserverions + scopes
+//   checks/parallel_expr_check.cpp parallel.* capture safety: expressions + scopes
 //
 // This header is implementation detail: it lives under `src/sema/src/detail/` and is
 // never included by another module (STYLE.md §3).
@@ -90,7 +90,7 @@ private:
     SourceSpan anchorSpan(const SourceSpan& s) const;
     void report(const char* code, const SourceSpan& span, std::string message);
     // Reports at the exact span (columns preserved). Reserved for diagnostics
-    // that name a sub-webserverion whose column is part of the contract, such
+    // that name a sub-expression whose column is part of the contract, such
     // as the `parseTo` callee in a literal-source fit check.
     void reportAt(const char* code, const SourceSpan& span, std::string message);
     // Like report(), plus `help:` entries for the pretty renderer.
@@ -291,7 +291,7 @@ private:
     bool emitObjectDiff(const Type& from, const Type& to, const SourceSpan& span,
                         bool fresh);
 
-    // --- primary webserverions (expr_check.cpp) --------------------------------
+    // --- primary expressions (expr_check.cpp) --------------------------------
     Type typeOfExpr(Expr& e);
     Type inferExpr(Expr& e);
     Type inferTemplate(TemplateLiteral& tl);
@@ -312,7 +312,7 @@ private:
                               const Type* contextualType = nullptr);
     void declareArrowParams(ArrowFunction& arrow, const std::vector<Type>& params);
     Type inferArrowReturn(ArrowFunction& arrow, const std::vector<Type>& params);
-    // --- member / index / call webserverions (member_check.cpp) ----------------
+    // --- member / index / call expressions (member_check.cpp) ----------------
     Type inferMember(MemberExpr& m);
     Type memberOf(const Type& ot, const std::string& prop, const SourceSpan& span,
                   bool optional);
@@ -364,6 +364,9 @@ private:
                                            const std::string& prop);
     std::optional<Type> hashMember(const std::string& prop);
     std::optional<Type> readlineMember(const std::string& prop);
+    std::optional<Type> dnsMember(const std::string& prop);
+    bool tryInferDnsCall(CallExpr& call, const Identifier& id, Type& out);
+    bool tryInferDnsMemberCall(CallExpr& call, MemberExpr& m, Type& out);
     Type webserverObjectType(const std::string& name);
     std::optional<Type> webserverObjectMember(const Type& recv,
                                             const std::string& prop);
@@ -426,6 +429,8 @@ private:
     bool tryInferPromiseStaticCall(CallExpr& call, MemberExpr& m, Type& out);
     // `Map.groupBy(list, callback)` (src/std/collections/sema.cpp).
     bool tryInferCollectionsStaticCall(CallExpr& call, MemberExpr& m, Type& out);
+    // Date zero-arg getters called as methods (src/std/date/sema.cpp).
+    bool tryInferDateMemberCall(CallExpr& call, MemberExpr& m, Type& out);
     // `Math.<fn>(args)` with native-argument result typing (src/std/math/sema.cpp).
     bool tryInferMathCall(CallExpr& call, MemberExpr& m, Type& out);
     // `Error.captureStackTrace(error, fn?)` (src/std/object/sema.cpp).
@@ -526,16 +531,12 @@ private:
     // Map/Set member surface; a miss is CP3305.
     Type collectionsMember(const Type& recv, const std::string& prop,
                            const SourceSpan& span);
-    // --- std/text, std/log (class families) ---------------------------------
+    // --- std/text (class family) ----------------------------------------------
     Type inferTextConstruct(const std::string& name, ExprList& args,
                             const SourceSpan& span);
     Type textMember(const Type& recv, const std::string& prop,
                     const SourceSpan& span);
     bool checkTextEncoding(const Expr* arg, const std::string& cls);
-    Type inferLogConstruct(const std::string& name, ExprList& args,
-                           const SourceSpan& span);
-    Type logMember(const Type& recv, const std::string& prop,
-                   const SourceSpan& span);
     // --- std/readline --------------------------------------------------------
     Type readlineObjectType(const std::string& name);
 
@@ -572,7 +573,7 @@ private:
     std::string unaryText(UnaryOp op) const;
     Type inferUpdate(UpdateExpr& up);
     Type inferBinary(BinaryExpr& be);
-    // `x instanceof C`, where C is a class name (not an webserverion value).
+    // `x instanceof C`, where C is a class name (not an expression value).
     Type inferInstanceof(BinaryExpr& be);
     Type evalBinary(BinaryOp op, const Type& l, const Type& r,
                     const SourceSpan& span);
@@ -623,7 +624,7 @@ private:
     bool detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
                                bool& negated);
     // `x !== null` / `x != null` / `x === null` narrowing for member
-    // webserverions (`n.next !== null`): returns the member node ID and the
+    // expressions (`n.next !== null`): returns the member node ID and the
     // non-null type.
     bool detectNullNarrowing(Expr& cond, std::uint32_t& nodeId, Type& type,
                              bool& negated);
@@ -720,7 +721,7 @@ private:
     std::unordered_set<std::uint32_t> weakReads_;
     bool weakFieldHit_ = false;
     bool assignTarget_ = false;
-    // Control-flow narrowing for member webserverions (`n.next`): node IDs of
+    // Control-flow narrowing for member expressions (`n.next`): node IDs of
     // MemberExpr nodes whose type is narrowed by a null check, mapped to the
     // narrowed (non-null) type. Scoped like `scopes_` (save/restore on
     // pushScope/popScope).
@@ -839,8 +840,7 @@ StdMemberDoc collectionsMemberDoc(const std::string& family,
 std::vector<std::string> collectionsMemberNames(const std::string& family);
 StdMemberDoc textMemberDoc(const std::string& family, const std::string& prop);
 std::vector<std::string> textMemberNames(const std::string& family);
-StdMemberDoc logMemberDoc(const std::string& prop);
-std::vector<std::string> logMemberNames();
+
 // The array and string method surfaces.
 StdMemberDoc arrayMemberDoc(const std::string& prop);
 std::vector<std::string> arrayMemberNames();
@@ -855,7 +855,7 @@ bool isUrlClass(const Type& t);
 bool isStopwatchClass(const Type& t);
 bool isTextClass(const Type& t);
 bool isTextTypeName(const std::string& name);
-bool isLogClass(const Type& t);
+
 
 // The nominal RegExp value type (core regex literals, D48;
 // src/sema/src/checks/regex_check.cpp). expr_check types a RegExpLiteral as

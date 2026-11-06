@@ -185,8 +185,9 @@ bool classifyDate(const Type& t, CppInfo& info);
 bool classifyStopwatch(const Type& t, CppInfo& info);
 // TextEncoder/TextDecoder (std/text).
 bool classifyText(const Type& t, CppInfo& info);
-// Logger (std/log).
-bool classifyLogger(const Type& t, CppInfo& info);
+// URL/URLSearchParams (std/url).
+bool classifyUrl(const Type& t, CppInfo& info);
+
 
 // The core regex value type (D48; src/emit/regex.cpp): a nominal class named
 // "RegExp" lowering to `::cp3::runtime::regex::Regex`. Returns false for every
@@ -219,7 +220,7 @@ bool isNullishLiteral(const Expr& e);
 // The exact value of an integral number literal (`5`, `-2`), if it has one:
 // finite, integral, and within 2^53, so it is exact in both the int64 and the
 // double domain. Anything else (a fractional literal, an out-of-range literal,
-// a non-literal webserverion) has no value, which keeps the caller on the
+// a non-literal expression) has no value, which keeps the caller on the
 // `std::fmod` path. Used by the `%` lowering (`modConst<K>`) and the int64 fast
 // path (`imulConst<K>`).
 std::optional<std::int64_t> integralLiteralValue(const Expr& e);

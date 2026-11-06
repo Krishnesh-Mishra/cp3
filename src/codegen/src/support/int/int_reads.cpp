@@ -41,7 +41,7 @@ bool walkExpr(const Expr& e, std::unordered_set<std::string>& out) {
             return true;
         case NodeKind::TemplateLiteral: {
             const auto& tl = static_cast<const TemplateLiteral&>(e);
-            for (const auto& part : tl.webserverions) {
+            for (const auto& part : tl.expressions) {
                 if (!part || !walkExpr(*part, out)) return false;
             }
             return true;
@@ -121,9 +121,9 @@ bool walkStmt(const Stmt& s, std::unordered_set<std::string>& out) {
     switch (s.kind) {
         case NodeKind::EmptyStatement:
             return true;
-        case NodeKind::webserverionStatement: {
-            const auto& es = static_cast<const webserverionStatement&>(s);
-            return es.webserverion && walkExpr(*es.webserverion, out);
+        case NodeKind::expressionstatement: {
+            const auto& es = static_cast<const expressionstatement&>(s);
+            return es.expression && walkExpr(*es.expression, out);
         }
         case NodeKind::BlockStatement: {
             const auto& b = static_cast<const BlockStatement&>(s);

@@ -369,7 +369,7 @@ std::string AssignEmitter::int64WriteText(const AssignmentExpr& a) {
     if (it == g.int64Writes_.end()) return std::string();
     // The one proven R2 write, in the int64 register (the product and
     // remainder are exact because the value stays below 2^53). The cast keeps
-    // the webserverion's C++ type the `double` the original assignment had, so
+    // the expression's C++ type the `double` the original assignment had, so
     // a nested write hands back the same value in the same type as before: the
     // formatter and the numeric operators see a `number`, not an int64.
     const TopInt64Binding& b = *it->second;
@@ -393,7 +393,7 @@ std::string AssignEmitter::identifier(const AssignmentExpr& a,
     g.expected_ = savedExpected;
     if (binding && binding->cell) {
         // A shared cell: `x = v` is `(x.set(v), x.get())`, so the assignment
-        // webserverion still evaluates to the assigned value. Every compound
+        // expression still evaluates to the assigned value. Every compound
         // operator has a cell form.
         return cell(a.op, T, target, value, *a.value);
     }

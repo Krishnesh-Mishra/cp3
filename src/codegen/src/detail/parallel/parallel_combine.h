@@ -6,7 +6,7 @@
 // lowering unless the body is one of the associative shapes and the compiler
 // can prove the reduction is pure and integer exact. The runtime schedules
 // chunks in an unordered order and combines the per-chunk partials in index
-// order, so an impure webserverion or a floating-point addition order would
+// order, so an impure expression or a floating-point addition order would
 // change the observable result.
 //
 // This header exposes the whole decision so emit/parallel.cpp stays a thin

@@ -8,7 +8,7 @@
 // boundaries (function/arrow entry and exit).
 //
 // The walk descends into an arrow's parameter defaults BEFORE entering the
-// arrow's frame, so a default webserverion belongs to the enclosing frame; the
+// arrow's frame, so a default expression belongs to the enclosing frame; the
 // same holds for function declarations. A `for` header binding is reported
 // with `declaresLocals == false` (a per-iteration copy, never a cell).
 // =============================================================================
@@ -95,7 +95,7 @@ void StructuralWalk::visit(const Node& n) {
         case NodeKind::AssignmentExpr:
             visitBranchExpr(n);
             return;
-        case NodeKind::webserverionStatement:
+        case NodeKind::expressionstatement:
         case NodeKind::BlockStatement:
         case NodeKind::VariableDeclaration:
         case NodeKind::IfStatement:
@@ -153,7 +153,7 @@ void StructuralWalk::visitValueExpr(const Node& n) {
     switch (n.kind) {
         case NodeKind::TemplateLiteral: {
             const auto& tl = static_cast<const TemplateLiteral&>(n);
-            for (const auto& e : tl.webserverions) {
+            for (const auto& e : tl.expressions) {
                 if (e) visit(*e);
             }
             return;
@@ -283,9 +283,9 @@ void StructuralWalk::visitBranchExpr(const Node& n) {
 
 void StructuralWalk::visitStatement(const Node& n) {
     switch (n.kind) {
-        case NodeKind::webserverionStatement: {
-            const auto& es = static_cast<const webserverionStatement&>(n);
-            if (es.webserverion) visit(*es.webserverion);
+        case NodeKind::expressionstatement: {
+            const auto& es = static_cast<const expressionstatement&>(n);
+            if (es.expression) visit(*es.expression);
             return;
         }
         case NodeKind::BlockStatement: {

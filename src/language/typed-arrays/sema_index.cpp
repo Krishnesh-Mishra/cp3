@@ -5,7 +5,7 @@
 //   * `constantNumber` resolves a compile-time constant number (literal,
 //     negated literal, or a const reference to another const number).
 //   * `knownTypedLength` computes the known element count of a typed-array
-//     webserverion, including from a const binding's recorded length.
+//     expression, including from a const binding's recorded length.
 //   * `typedIndexProvedInRange` proves an index is in range: either a
 //     literal index smaller than the known length, or the induction variable
 //     of a recognized for-loop whose bound does not exceed the array's known
@@ -206,7 +206,7 @@ std::optional<double> Analyzer::knownTypedLength(const Expr& e) const {
 // ----------------------------------------------------------------------------
 bool Analyzer::typedIndexProvedInRange(const IndexExpr& ix) const {
     if (!ix.index || !ix.object) return false;
-    // We need a statically known length: literal webserverions, and const
+    // We need a statically known length: literal expressions, and const
     // typed-array bindings.
     const std::optional<double> len = knownTypedLength(*ix.object);
     if (!len) return false;

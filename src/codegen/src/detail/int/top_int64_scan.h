@@ -60,9 +60,9 @@ void noteTopInt64Ref(const Node& n, const std::string& name,
 void scanTopInt64Name(const Node* id, TopInt64Scan& scan);
 // The parameters of a function / arrow.
 void scanTopInt64Params(const ParamList& params, TopInt64Scan& scan);
-// A list of webserverions.
+// A list of expressions.
 void scanTopInt64ExprList(const ExprList& list, TopInt64Scan& scan);
-// One webserverion.
+// One expression.
 void scanTopInt64Expr(const Expr& e, TopInt64Scan& scan);
 // One statement.
 void scanTopInt64Stmt(const Stmt& st, TopInt64Scan& scan);

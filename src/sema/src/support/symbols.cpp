@@ -40,6 +40,7 @@ void Analyzer::publishSymbol(const Binding& b) {
 void Analyzer::publishFunction(const FuncSig& sig, const std::string& name) {
     FunctionInfo fi;
     fi.name = name;
+    fi.typeParams = sig.typeParams;
     fi.paramTypes = sig.params;
     fi.paramOptional = sig.optional;
     fi.hasRest = sig.rest;

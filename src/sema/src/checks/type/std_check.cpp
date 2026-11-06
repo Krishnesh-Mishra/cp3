@@ -155,7 +155,7 @@ StdMemberDoc stdInstanceMemberDoc(const std::string& family,
     if (family == "ConcurrentMap") return collectionsMemberDoc("ConcurrentMap", member);
     if (family == "TextEncoder") return textMemberDoc("TextEncoder", member);
     if (family == "TextDecoder") return textMemberDoc("TextDecoder", member);
-    if (family == "Logger") return logMemberDoc(member);
+
     if (family == "URL") return urlClassMemberDoc("URL", member);
     if (family == "URLSearchParams") return urlClassMemberDoc("URLSearchParams", member);
     if (family == "$readline:LineReader") return readlineLineReaderDoc(member);
@@ -182,7 +182,7 @@ std::vector<std::string> stdInstanceMemberNames(const std::string& family) {
     if (family == "ConcurrentMap") return collectionsMemberNames("ConcurrentMap");
     if (family == "TextEncoder") return textMemberNames("TextEncoder");
     if (family == "TextDecoder") return textMemberNames("TextDecoder");
-    if (family == "Logger") return logMemberNames();
+
     if (family == "URL") return urlClassMemberNames("URL");
     if (family == "URLSearchParams") return urlClassMemberNames("URLSearchParams");
     if (family == "$readline:LineReader") return readlineLineReaderMemberNames();
@@ -274,7 +274,7 @@ std::string stdImportHint(const std::string& name) {
         {"URLSearchParams", "std/url"},
         {"TextEncoder", "std/text"},
         {"TextDecoder", "std/text"},
-        {"Logger", "std/log"},
+
     };
     for (const NamedHint& hint : kNamedHints) {
         if (name == hint.binding) {

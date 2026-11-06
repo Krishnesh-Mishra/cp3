@@ -62,11 +62,12 @@ set(cp3_sema_sources
     ../std/url/sema.cpp
     ../std/time/sema.cpp
     ../std/hash/sema.cpp
-    ../std/log/sema.cpp
+
     ../std/text/sema.cpp
     ../std/readline/sema.cpp
     ../std/network/webserver/settings/sema.cpp
     ../std/network/webserver/request/sema.cpp
+    ../std/network/dns/sema.cpp
     ../language/arrays/sema_docs.cpp
     ../std/string/sema_docs.cpp
 )

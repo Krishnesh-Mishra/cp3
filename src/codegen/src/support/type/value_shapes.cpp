@@ -236,7 +236,7 @@ std::unordered_set<std::string>& excludedLabels() {
     return labels;
 }
 
-// The rendering webserverion for one struct member in `cp3ToText`. Composite
+// The rendering expression for one struct member in `cp3ToText`. Composite
 // fields cannot go through the primitive `toString` family: a nested record
 // renders itself, an array renders its elements, and a value-union renders the
 // alternative it currently holds.

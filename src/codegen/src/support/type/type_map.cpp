@@ -4,7 +4,7 @@
 //
 // Implements type_map.h. Communication with sema is through the frozen
 // `SemaResult` side tables (DECISIONS D1/D6/D14):
-//   * webserverion/declared types        -> sema.nodeTypes (keyed by nodeId)
+//   * expression/declared types        -> sema.nodeTypes (keyed by nodeId)
 //   * resolved function signatures     -> sema.functions
 //
 // Type -> C++ representation (cp3/core/runtime.hpp):

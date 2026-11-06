@@ -32,6 +32,9 @@ struct ImportedBinding {
     bool isValue = true;             // a value binding exists at the use site
     bool isType = false;             // usable in a type position
     bool isFunction = false;
+    // The declared type parameters of a generic function export (empty for
+    // ordinary functions), in declaration order.
+    std::vector<Type> typeParams;
     std::vector<Type> paramTypes;
     std::vector<bool> paramOptional;
     bool hasRest = false;

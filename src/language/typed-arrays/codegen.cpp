@@ -71,7 +71,7 @@ using namespace detail;
 // has to name the element type.
 void Generator::reportArrayElementType(const Type& elem, const Node& site,
                                         const std::string& what) {
-    if (elem.isUnknown()) {
+    if (elem.isUnknown() || elem.isUndefined()) {
         reportTypeError(site, "cannot infer the element type of " + what +
                               "; annotate the binding");
         return;
@@ -179,7 +179,7 @@ std::string Generator::arrayStaticCallText(const CallExpr& c,
         return "0.0";
     }
     if (prop == "isArray" && c.arguments.size() == 1 && c.arguments.front()) {
-        // An array literal (or any Array-typed webserverion) is an array; every
+        // An array literal (or any Array-typed expression) is an array; every
         // other static type is not. Typed views are distinct classes at
         // runtime, so they correctly report false here too.
         const Expr& arg = *c.arguments.front();
@@ -197,6 +197,21 @@ std::string Generator::familyReceiverText(const Expr& obj, const Type& elem,
     }
     if (obj.kind == NodeKind::ArrayLiteral) {
         return arrayLiteralText(static_cast<const ArrayLiteral&>(obj), elem);
+    }
+    // A nullish receiver (`g.get("b")` on `Record<string, E[]>` has type
+    // `E[] | undefined`) carries its value in an optional: unwrap it, the
+    // same type-level check the `.length` read uses (the C++ shape of
+    // `E[] | undefined` is not Optional - arrays are handles - so a shape
+    // check alone would miss the unwrap and emit the optional itself).
+    {
+        const Type raw = effectiveType(obj);
+        if (raw.isUnion() || raw.isNullable()) {
+            return "(" + expr(obj) + ").value()";
+        }
+        const CppInfo ci = info(obj);
+        if (ci.shape == Shape::Optional || ci.shape == Shape::Maybe) {
+            return "(" + expr(obj) + ").value()";
+        }
     }
     return expr(obj);
 }
@@ -342,24 +357,9 @@ std::string Generator::declaratorInitText(const VariableDeclarator& d,
     // `let t: [string, number] = ["a", 1]`: the tuple annotation fixes the
     // element types, so brace-initialize the std::tuple directly instead of
     // lowering the literal as an Array (spec 03).
-    if (d.init && isTupleType(declared) &&
-        d.init->kind == NodeKind::ArrayLiteral) {
-        const auto& lit = static_cast<const ArrayLiteral&>(*d.init);
-        std::string cpp;
-        if (lit.elements.size() != declared.parts.size() ||
-            !tupleCpp(declared, cpp)) {
-            return std::string();
-        }
-        needsTuple_ = true;
-        std::string out = cpp + "{";
-        for (std::size_t i = 0; i < lit.elements.size(); ++i) {
-            const Expr* element = lit.elements[i].get();
-            if (element == nullptr || element->kind == NodeKind::SpreadElement) {
-                return std::string();
-            }
-            out += (i == 0 ? "" : ", ") + expr(*element);
-        }
-        return out + "}";
+    if (std::string tuple = tupleDeclaratorInitText(d, declared);
+        !tuple.empty()) {
+        return tuple;
     }
     if (!d.init || declared.kind != TypeKind::Array) return std::string();
     if (const ExprList* args = arrayCtorArgs(*d.init)) {

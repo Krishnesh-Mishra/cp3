@@ -322,7 +322,8 @@ std::string Generator::emitFamilyMemberCall(const CallExpr& c,
         !lookup("Array")) {
         return arrayStaticCallText(c, m.property);
     }
-    const Type recv = effectiveType(*m.object);
+    const Type recvRaw = effectiveType(*m.object);
+    const Type recv = stripNullish(recvRaw);
     if (m.property == "fill") return arrayFillCallText(c, m, recv);
     if (recv.kind == TypeKind::Array) {
         if (m.property == "join") return arrayJoinCallText(c, m, recv);
@@ -368,7 +369,12 @@ std::string Generator::emitFamilyMember(const MemberExpr& m) {
             }
         }
     }
-    const Type recv = effectiveType(*m.object);
+    const Type recvRaw = effectiveType(*m.object);
+    const Type recv = stripNullish(recvRaw);
+    const std::string recvText =
+        (recvRaw.isUnion() || recvRaw.isNullable())
+            ? "(" + expr(*m.object) + ").value()"
+            : expr(*m.object);
     if (m.property == "length") {
         if (isParallelRunType(recv)) {
             // A `$parallelRun` result is a fixed-extent `std::array` (the
@@ -377,9 +383,9 @@ std::string Generator::emitFamilyMember(const MemberExpr& m) {
             needsTypedArray_ = true;
             return "static_cast<double>((" + expr(*m.object) + ").size())";
         }
-        if (recv.kind == TypeKind::Array && info(*m.object).representable) {
+        if (recv.kind == TypeKind::Array) {
             needsTypedArray_ = true;
-            return "static_cast<double>((" + expr(*m.object) + ")->size())";
+            return "static_cast<double>((" + recvText + ")->size())";
         }
         if (recv.kind == TypeKind::Class && familyTag(recv.name) != nullptr) {
             needsTypedArray_ = true;
@@ -542,7 +548,7 @@ std::string Generator::emitIndexExpr(const IndexExpr& ix) {
     if (recv.isLiteral()) recv = recv.literalBaseType();
     if (recv.isError()) {
         // Sema already reported the ill-typed receiver; a second diagnostic
-        // for the same webserverion would only duplicate it.
+        // for the same expression would only duplicate it.
         return "0.0";
     }
     if (recv.isUnknown()) {

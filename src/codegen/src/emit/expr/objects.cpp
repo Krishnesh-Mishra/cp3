@@ -2,7 +2,7 @@
 // src/codegen/src/emit/objects.cpp - object value shapes: member reads and
 // literal construction (STYLE.md §8).
 //
-// The two webserverion forms of a `$o{...}` shape (Shape::Object, a generated
+// The two expression forms of a `$o{...}` shape (Shape::Object, a generated
 // struct `cp3_obj_*` held through the reference model `Ref<struct>`, spec 10):
 //
 //   * a member read `o.a` - or the optional read `o?.a` on a `{...} | null`
@@ -39,7 +39,7 @@ std::string fieldName(const ObjectProperty& p) {
     return classMemberName(p.key.get(), p.computed);
 }
 
-// The value webserverion of a property (a shorthand `{ a }` reads its key).
+// The value expression of a property (a shorthand `{ a }` reads its key).
 const Expr* propertyValue(const ObjectProperty& p) {
     if (p.value) return p.value.get();
     if (p.shorthand && p.key) return p.key.get();
@@ -228,7 +228,7 @@ std::string Generator::emitMemberAssign(const AssignmentExpr& a,
     }
 }
 
-// The object-literal webserverion form: a `$o{...}` value shape lowers to the
+// The object-literal expression form: a `$o{...}` value shape lowers to the
 // generated value struct (emitObject above); a checked record literal is
 // assembled field by field (recordLiteralText); a literal with an enum-typed
 // field lowers to a std::tuple (emit/enum.cpp); anything else is a type error.

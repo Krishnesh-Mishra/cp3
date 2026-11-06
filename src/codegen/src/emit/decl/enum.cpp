@@ -169,7 +169,7 @@ void Generator::collectEnum(const EnumDeclaration* e) {
         sink_.error(diagcode::kTypeMismatch, member->span,
                     "type mismatch: enum member '" + member->name +
                         "' must be initialized with a constant number or "
-                        "string webserverion");
+                        "string expression");
     }
     enumDecls_ += enumDeclText(info) + "\n";
     enums_.emplace(e->name, std::move(info));
@@ -187,7 +187,7 @@ void Generator::collectEnums(const Program& program) {
             sink_.error(diagcode::kTypeMismatch, member->span,
                         "type mismatch: enum member '" + member->name +
                             "' must be initialized with a constant number or "
-                            "string webserverion");
+                            "string expression");
         }
         enumDecls_ += enumDeclText(info) + "\n";
         enums_.emplace(e->name, std::move(info));

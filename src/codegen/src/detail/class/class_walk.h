@@ -5,7 +5,7 @@
 // `Generator::collectModels` drives these before the emit walk: `walkClasses`
 // registers every class declaration (top-level and nested, so a class used
 // above its declaration already has a C++ spelling), and the statement /
-// webserverion walkers register the structural object shapes (object literals,
+// expression walkers register the structural object shapes (object literals,
 // `{ ... }` type annotations) reachable from a body. The registry itself is
 // detail/class_model.h.
 // =============================================================================

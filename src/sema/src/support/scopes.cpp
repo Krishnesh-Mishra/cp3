@@ -89,6 +89,7 @@ void Analyzer::declareBinding(const std::string& name, const Type& type,
     Binding b;
     b.name = name;
     b.type = type;
+    b.declaredType = type;
     b.isConst = spec.isConst;
     b.isFunction = spec.isFunction;
     b.isVar = spec.isVar;
@@ -140,6 +141,7 @@ void Analyzer::declareImported(const std::string& name,
 
     FuncSig sig;
     sig.name = name;
+    sig.typeParams = binding.typeParams;
     sig.params = binding.paramTypes;
     sig.optional = binding.paramOptional;
     sig.rest = binding.hasRest;
@@ -155,9 +157,20 @@ void Analyzer::declareImported(const std::string& name,
 
 void Analyzer::overrideBinding(const std::string& name, const Type& type,
                                const SourceSpan& span) {
+    // Narrowing reads see `type`, but the binding keeps its declared type
+    // (and constness) so assignment targets are checked against what was
+    // declared, not the narrowed view.
+    Binding existing;
+    const bool had = lookup(name, existing);
     Binding b;
     b.name = name;
     b.type = type;
+    b.declaredType = had ? (existing.declaredType.isUnknown()
+                               ? existing.type
+                               : existing.declaredType)
+                         : type;
+    b.isConst = had && existing.isConst;
+    b.declNodeId = had ? existing.declNodeId : 0;
     b.isAmbient = isAmbientType(type);
     b.publish = false;
     b.span = span;
@@ -222,6 +235,22 @@ void Analyzer::declareBuiltins() {
         };
     declareErrorClass("Error", "",
                       {Type::string(), ambient()}, {true, true});
+    {
+        // `Error.captureStackTrace(error, fn?)`: the one static surface the
+        // Error class documents; sema resolves it like an ordinary static
+        // method (call_check does the argument checking), codegen lowers it
+        // to cp3::Error::captureStackTrace.
+        ClassMemberInfo capture;
+        capture.name = "captureStackTrace";
+        capture.isStatic = true;
+        capture.isMethod = true;
+        capture.type = Type::function({errorType, ambient()}, Type::voidType());
+        capture.sig.name = "captureStackTrace";
+        capture.sig.params = {errorType, ambient()};
+        capture.sig.optional = {false, true};
+        capture.sig.ret = Type::voidType();
+        classes_["Error"].members.push_back(std::move(capture));
+    }
     declareErrorClass("TypeError", "Error",
                       {Type::string(), ambient()}, {true, true});
     declareErrorClass("RangeError", "Error",
@@ -257,6 +286,14 @@ void Analyzer::declareBuiltins() {
         // Core-language builtins tied to the event loop (spec §20, std/03):
         // no import required.
         "setTimeout", "setInterval", "clearTimeout", "clearInterval", "sleep",
+        "queueMicrotask", "setImmediate",
+        // Encoding/clone globals (stdlib §03): sema in call_check.cpp
+        // (tryInferBase64Builtin / tryInferCloneBuiltin), codegen in
+        // emit/call (emitBase64Builtin / emitCloneBuiltin).
+        "atob", "btoa", "structuredClone",
+        // `Date` as a global namespace/construct (stdlib §03): sema in
+        // std/date, codegen emitDateNew/emitDateCall.
+        "Date",
         // The JS-compat typed-array family (D69): ambient constructors, no
         // import required. The constructors themselves are checked in
         // src/language/typed-arrays/sema.cpp; codegen maps them to cp3/typed_array.hpp.
@@ -477,7 +514,7 @@ void Analyzer::hoistVarsIn(Stmt& s) {
         case NodeKind::LabeledStatement:
             return hoistVarBody(static_cast<LabeledStatement&>(s).body);
         default:
-            return;  // webserverion/return/etc. have no nested statements
+            return;  // expression/return/etc. have no nested statements
     }
 }
 

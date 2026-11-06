@@ -151,7 +151,7 @@ std::string Generator::sourceIncludes() const {
     if (needsUrl_) out += "#include \"cp3/std/url.hpp\"\n";
     if (needsTime_) out += "#include \"cp3/std/time.hpp\"\n";
     if (needsHash_) out += "#include \"cp3/std/hash.hpp\"\n";
-    if (needsLog_) out += "#include \"cp3/std/log.hpp\"\n";
+
     if (needsText_) out += "#include \"cp3/std/text.hpp\"\n";
     if (needsReadline_) out += "#include \"cp3/std/readline.hpp\"\n";
     if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";

@@ -38,7 +38,8 @@ CppInfo classifyClassValue(const Type& t) {
     if (classifyDate(t, info)) return info;
     if (classifyStopwatch(t, info)) return info;
     if (classifyText(t, info)) return info;
-    if (classifyLogger(t, info)) return info;
+    if (classifyUrl(t, info)) return info;
+
     if (classifyRegex(t, info)) return info;  // core regex (src/emit/regex.cpp)
     // The builtin EventEmitter (D74): a reference type, so its C++
     // spelling is `Ref<EventEmitter>` (cp3/async/emitter.hpp).

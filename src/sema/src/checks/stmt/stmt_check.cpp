@@ -46,7 +46,7 @@ void Analyzer::checkStmts(StmtList& body) {
 void Analyzer::visitStmt(Stmt& s) {
     switch (s.kind) {
         case NodeKind::EmptyStatement:
-        case NodeKind::webserverionStatement:
+        case NodeKind::expressionstatement:
         case NodeKind::BlockStatement:
         case NodeKind::VariableDeclaration:
         case NodeKind::FunctionDeclaration:
@@ -82,9 +82,9 @@ void Analyzer::visitExecStmt(Stmt& s) {
     switch (s.kind) {
         case NodeKind::EmptyStatement:
             return;
-        case NodeKind::webserverionStatement: {
-            auto& es = static_cast<webserverionStatement&>(s);
-            if (es.webserverion) inferExpr(*es.webserverion);
+        case NodeKind::expressionstatement: {
+            auto& es = static_cast<expressionstatement&>(s);
+            if (es.expression) inferExpr(*es.expression);
             return;
         }
         case NodeKind::BlockStatement: {
@@ -252,7 +252,7 @@ void Analyzer::visitLabeled(LabeledStatement& l) {
 void Analyzer::checkCondition(const Type& t, const SourceSpan& span) {
     if (t.isVoid()) {
         report(diagcode::kInvalidCondition, span,
-               "invalid condition: a void webserverion is not a valid condition");
+               "invalid condition: a void expression is not a valid condition");
     }
 }
 
@@ -487,7 +487,7 @@ bool Analyzer::detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
     return true;
 }
 
-// `member !== null` / `member != null` for member webserverions
+// `member !== null` / `member != null` for member expressions
 // (`n.next !== null`): narrowed by node ID. Only the non-null branch is
 // narrowed (the null branch keeps the declared type).
 bool Analyzer::detectNullNarrowing(Expr& cond, std::uint32_t& memberId,
@@ -560,11 +560,11 @@ void Analyzer::analyzeFor(ForStatement& stmt) {
         if (stmt.init->kind == NodeKind::VariableDeclaration) {
             declareVariableDeclaration(
                 static_cast<VariableDeclaration&>(*stmt.init));
-        } else if (stmt.init->kind == NodeKind::webserverionStatement) {
-            auto& es = static_cast<webserverionStatement&>(*stmt.init);
-            if (es.webserverion) inferExpr(*es.webserverion);
+        } else if (stmt.init->kind == NodeKind::expressionstatement) {
+            auto& es = static_cast<expressionstatement&>(*stmt.init);
+            if (es.expression) inferExpr(*es.expression);
         } else {
-            // init may be a bare webserverion node.
+            // init may be a bare expression node.
             if (auto* e = dynamicExpr(*stmt.init)) inferExpr(*e);
         }
     }

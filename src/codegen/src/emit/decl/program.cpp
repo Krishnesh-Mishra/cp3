@@ -205,7 +205,7 @@ std::string programSource(const ProgramAssembly& assembly,
     if (n.url) out += "#include \"cp3/std/url.hpp\"\n";
     if (n.time) out += "#include \"cp3/std/time.hpp\"\n";
     if (n.hash) out += "#include \"cp3/std/hash.hpp\"\n";
-    if (n.log) out += "#include \"cp3/std/log.hpp\"\n";
+
     if (n.text) out += "#include \"cp3/std/text.hpp\"\n";
     if (n.readline) out += "#include \"cp3/std/readline.hpp\"\n";
     if (n.network) out += "#include \"cp3/std/network.hpp\"\n";
@@ -333,7 +333,7 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     n.url |= inner.needsUrl_;
     n.time |= inner.needsTime_;
     n.hash |= inner.needsHash_;
-    n.log |= inner.needsLog_;
+
     n.text |= inner.needsText_;
     n.readline |= inner.needsReadline_;
     n.network |= inner.needsNetwork_;

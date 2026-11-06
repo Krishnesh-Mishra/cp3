@@ -117,13 +117,15 @@ static CppInfo classifyFunctionValue(const Type& t) {
         info.shape = Shape::Function;
         return info;
     }
-    // A void-returning function whose parameters have no value shape
-    // (an event handler's `unknown` payload) is the boxed `Listener`
+    // A void-returning (the retired `void` spelling resolves to `undefined`,
+    // so both spellings count here) function whose parameters have no value
+    // shape (an event handler's `object` payload) is the boxed `Listener`
     // (D74): every copy shares one identity. A value-returning (or
     // representable-parameter) function is a plain `std::function`
     // built from the recursive shapes of its parts. A zero-parameter
     // function is not a Listener either: it carries no erased arguments.
-    bool listener = t.parts.size() > 1 && t.parts.back().isVoid();
+    bool listener = t.parts.size() > 1 &&
+                    (t.parts.back().isVoid() || t.parts.back().isUndefined());
     for (std::size_t i = 0; i + 1 < t.parts.size(); ++i) {
         if (classify(t.parts[i]).representable) {
             listener = false;

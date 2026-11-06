@@ -15,9 +15,9 @@
 //     the generated entry function can call them;
 //   * appends the valid sites for the emitter (src/emit/worker.cpp).
 //
-// This unit owns the scan state, the binding patterns and the webserverion
+// This unit owns the scan state, the binding patterns and the expression
 // visits; the statement walk lives in emit/worker_scan_stmt.cpp (file budget,
-// STYLE.md sec.2). The webserverion visit is split by node family so each
+// STYLE.md sec.2). The expression visit is split by node family so each
 // function stays within the budget.
 // =============================================================================
 #include <cstdint>
@@ -133,7 +133,7 @@ void walkArrow(const ArrowFunction& arrow, SiteScan& scan, bool workerEntry) {
     }
     const bool saved = scan.inInline;
     if (workerEntry) scan.inInline = true;
-    if (arrow.body && arrow.webserverionBody) {
+    if (arrow.body && arrow.expressionBody) {
         walkExpr(*static_cast<const Expr*>(arrow.body.get()), scan);
     } else if (arrow.body) {
         walkStmt(*static_cast<const Stmt*>(arrow.body.get()), scan);
@@ -141,7 +141,7 @@ void walkArrow(const ArrowFunction& arrow, SiteScan& scan, bool workerEntry) {
     scan.inInline = saved;
 }
 
-// A `new Worker(...)` webserverion: an inline arrow becomes one site (or a
+// A `new Worker(...)` expression: an inline arrow becomes one site (or a
 // CP3905/CP3914 report), and its body is always walked for captures.
 void walkWorkerNew(const NewExpr& n, SiteScan& scan) {
     const Expr* arg = n.arguments.size() == 1 ? n.arguments.front().get() : nullptr;
@@ -209,11 +209,11 @@ void walkRef(const Identifier& id, SiteScan& scan) {
                scan);
 }
 
-// Literal, container and arrow webserverions.
+// Literal, container and arrow expressions.
 void walkContainer(const Expr& e, SiteScan& scan) {
     switch (e.kind) {
         case NodeKind::TemplateLiteral:
-            walkList(static_cast<const TemplateLiteral&>(e).webserverions, scan);
+            walkList(static_cast<const TemplateLiteral&>(e).expressions, scan);
             return;
         case NodeKind::ArrayLiteral:
             walkList(static_cast<const ArrayLiteral&>(e).elements, scan);
@@ -274,7 +274,7 @@ void walkAccess(const Expr& e, SiteScan& scan) {
     }
 }
 
-// Operators and control webserverions.
+// Operators and control expressions.
 void walkOperators(const Expr& e, SiteScan& scan) {
     switch (e.kind) {
         case NodeKind::UnaryExpr: {

@@ -112,14 +112,26 @@ std::string Generator::arrowBodyText(const ArrowFunction& a, bool isAsync,
                                 pt.value_or(Type::unknown()), false};
         unpackPattern(*p->name, src, body, 1);
     }
-    if (a.body && a.webserverionBody) {
+    if (a.body && a.expressionBody) {
         body += (isAsync ? "co_return " : "return ") +
                 expr(*static_cast<const Expr*>(a.body.get())) + ";";
     } else if (a.body) {
         stmt(*static_cast<const Stmt*>(a.body.get()), body, 1);
     }
-    if (isAsync && !(a.body && a.webserverionBody)) {
+    if (isAsync && !(a.body && a.expressionBody)) {
         line(body, 1, bodyRet == "void" ? "co_return;" : "co_return {};");
+    } else if (!isAsync && !(a.body && a.expressionBody) &&
+               bodyRet != "void") {
+        // A block body (or an empty one) with a non-void return type - a
+        // `() => { count++; }` callback, whose return type is `undefined`
+        // (`-> Undefined`) - must not fall off its end. In C++ that is
+        // undefined behavior, and clang at -O2 exploits it: an inlined
+        // callback's effects vanish from the loop that inlines it (the
+        // counter prints 0), and a stored/erased callback (a listener box,
+        // a timer) traps with int3 (0x80000003) on invocation. The async
+        // path above already guards with `co_return {}`; a sync body
+        // returns the return type's default the same way.
+        line(body, 1, "return {};");
     }
 
     expected_ = savedExpected;

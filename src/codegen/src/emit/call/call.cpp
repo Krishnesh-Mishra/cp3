@@ -58,7 +58,7 @@ std::string Generator::emitParseBuiltin(const CallExpr& c,
     return "0.0";
 }
 
-// The runtime call for one coercion global applied to a value webserverion.
+// The runtime call for one coercion global applied to a value expression.
 // `Number` coerces via toNumber; `Boolean` via toBoolean; `isNaN`/`isFinite`
 // coerce via toNumber first, then test (JS semantics).
 std::string coercionText(const std::string& name, const std::string& value,
@@ -134,9 +134,17 @@ std::string Generator::emitParseToBuiltin(const CallExpr& c) {
         return "0.0";
     }
     const Type source = effectiveType(arg).literalBaseType();
-    const bool nativeSource = source.kind == TypeKind::Native;
+    // Every numeric-ish source is cast down to `double` before the runtime
+    // overload set sees it: an 8/16/32-bit integer expression (or a native
+    // literal, e.g. `parseTo<r_'i32'>(42)`'s `static_cast<std::int32_t>(...)`)
+    // otherwise lands on neither the `double` nor the `bool` overload and the
+    // call fails to compile. A string source keeps its spelling (the overload
+    // set parses it); `undefined` and `null` have their own overloads.
+    const bool passThrough =
+        source.kind == TypeKind::String || source.kind == TypeKind::Undefined ||
+        source.kind == TypeKind::Null;
     const std::string asDouble =
-        nativeSource ? "static_cast<double>(" + value + ")" : value;
+        passThrough ? value : "static_cast<double>(" + value + ")";
     if (target.kind == TypeKind::Native) {
         // An explicit conversion is range-checked: narrowing a computed value
         // throws instead of truncating. Widening passes through unchanged.

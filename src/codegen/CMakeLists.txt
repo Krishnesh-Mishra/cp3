@@ -91,7 +91,6 @@ set(cp3_codegen_sources
     ../language/typed-arrays/codegen.cpp
     ../language/typed-arrays/codegen_constructors.cpp
     ../language/typed-arrays/codegen_methods.cpp
-    ../language/arrays/codegen.cpp
     ../language/arrays/codegen_methods.cpp
     ../language/number/codegen.cpp
     src/emit/std/common.cpp
@@ -113,11 +112,12 @@ set(cp3_codegen_sources
     ../std/url/codegen.cpp
     ../std/time/codegen.cpp
     ../std/hash/codegen.cpp
-    ../std/log/codegen.cpp
+
     ../std/text/codegen.cpp
     ../std/readline/codegen.cpp
     ../std/network/webserver/settings/codegen.cpp
     ../std/network/webserver/request/codegen.cpp
+    ../std/network/dns/codegen.cpp
     ../std/console/codegen.cpp
     ../std/fs/codegen.cpp
     ../std/io/codegen.cpp

@@ -33,7 +33,7 @@ namespace cp3 {
 using namespace detail;
 
 namespace detail {
-// default webserverion, or is declared optional (`a?: T` lowers to
+// default expression, or is declared optional (`a?: T` lowers to
 // `std::optional<T> = std::nullopt`).
 bool optionalParamAt(const ParamList& params, std::size_t i) {
     if (i >= params.size()) return false;
@@ -766,11 +766,20 @@ std::string CallBuilder::emitIdentifierCall(const CallExpr& c) {
     const FunctionDeclaration* decl =
         declIt != g.functionDecls_.end() ? declIt->second : nullptr;
     // A `let f = <T>(x: T) => x` binding: the arrow owns the type parameters,
-    // so an explicit type-argument list names them (spec §16) exactly like a
+    // so an explicit type-argument list names them (spec ï¿½16) exactly like a
     // declared generic function's.
     const bool genericArrow = g.isGenericArrowBinding(name);
-    const bool generic =
+    bool generic =
         genericArrow || (decl != nullptr && !decl->typeParams.empty());
+    if (!generic) {
+        // An imported generic function: the declaring unit's AST is not in
+        // this unit's function table, but the link table recorded whether
+        // the target declares type parameters.
+        if (const auto linked = g.linkedNames_.find(name);
+            linked != g.linkedNames_.end() && linked->second.isGeneric) {
+            generic = true;
+        }
+    }
     if (!c.typeArgs.empty() && !generic) {
         // A type argument list on a function that declares no type parameters
         // is a type error (sema reports it first; the codegen repeats it so a
@@ -970,7 +979,7 @@ std::string Generator::emitLinkedCall(const CallExpr& c,
     // site, exactly like a call inside the unit itself.
     std::string callee = ln.cpp;
     if (!c.typeArgs.empty()) {
-        if (ln.fn->typeParams.empty()) {
+        if (ln.fn->typeParams.empty() && !ln.isGeneric) {
             reportUnsupported(c, diagcode::kTypeArgsOnNonGeneric,
                               "type arguments are not allowed here: '" + name +
                                   "' is not a generic function");
@@ -1015,7 +1024,7 @@ std::string Generator::linkedMemberMiss(const MemberExpr& m) const {
 
 std::string Generator::emitCall(const CallExpr& c) {
     // `super(...)` is lowered into the constructor's C++ base-initializer
-    // (ctorBaseInitText); the webserverion statement itself has no C++ body.
+    // (ctorBaseInitText); the expression statement itself has no C++ body.
     if (c.callee && c.callee->kind == NodeKind::Identifier &&
         static_cast<const Identifier&>(*c.callee).name == "super") {
         return std::string();
@@ -1038,14 +1047,14 @@ std::string Generator::emitCall(const CallExpr& c) {
         return calls.emitMemberCall(c, static_cast<const MemberExpr&>(*c.callee));
     }
     // A call through an indexed function value (`closures[i](x)`): the element
-    // webserverion is the callee.
+    // expression is the callee.
     if (c.callee->kind == NodeKind::IndexExpr) {
         const Type fnType = effectiveType(*c.callee);
         if (fnType.kind == TypeKind::Function) {
             return calls.emitFunctionCall(c, expr(*c.callee), fnType, nullptr);
         }
     }
-    // A call through any other webserverion (`f()(x)`, an immediately invoked
+    // A call through any other expression (`f()(x)`, an immediately invoked
     // arrow, a conditional function value): the callee is a function value.
     const Type fnType = effectiveType(*c.callee);
     if (fnType.kind == TypeKind::Function) {

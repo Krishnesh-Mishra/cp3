@@ -58,12 +58,12 @@ bool isUnitIncrement(const Expr& e, const std::string& counter) {
     return static_cast<const NumberLiteral&>(*sum.right).value == 1.0;
 }
 
-// One `a.push(value)` webserverion statement. `array` receives a's identifier.
+// One `a.push(value)` expression statement. `array` receives a's identifier.
 bool isPushStatement(const Stmt& s, const Identifier*& array) {
-    if (s.kind != NodeKind::webserverionStatement) return false;
-    const auto& es = static_cast<const webserverionStatement&>(s);
-    if (!es.webserverion || es.webserverion->kind != NodeKind::CallExpr) return false;
-    const auto& call = static_cast<const CallExpr&>(*es.webserverion);
+    if (s.kind != NodeKind::expressionstatement) return false;
+    const auto& es = static_cast<const expressionstatement&>(s);
+    if (!es.expression || es.expression->kind != NodeKind::CallExpr) return false;
+    const auto& call = static_cast<const CallExpr&>(*es.expression);
     if (!call.callee || call.callee->kind != NodeKind::MemberExpr) return false;
     const auto& member = static_cast<const MemberExpr&>(*call.callee);
     if (member.property != "push" || call.arguments.size() != 1) return false;
@@ -75,12 +75,12 @@ bool isPushStatement(const Stmt& s, const Identifier*& array) {
 }
 
 bool isIncrementStatement(const Stmt& s, const std::string& counter) {
-    if (s.kind != NodeKind::webserverionStatement) return false;
-    const auto& es = static_cast<const webserverionStatement&>(s);
-    return es.webserverion && isUnitIncrement(*es.webserverion, counter);
+    if (s.kind != NodeKind::expressionstatement) return false;
+    const auto& es = static_cast<const expressionstatement&>(s);
+    return es.expression && isUnitIncrement(*es.expression, counter);
 }
 
-// A value webserverion with no calls, allocations, member/index access or
+// A value expression with no calls, allocations, member/index access or
 // nested assignment. These are the only extra statements allowed in a counted
 // push body: they cannot change the counter, the bound, or the array binding.
 bool isSimpleValue(const Expr& e) {
@@ -153,11 +153,11 @@ bool isSafeNew(const Expr& e) {
     if (constructor->body->kind != NodeKind::BlockStatement) return false;
     const auto& body = static_cast<const BlockStatement&>(*constructor->body);
     for (const StmtPtr& statement : body.body) {
-        if (!statement || statement->kind != NodeKind::webserverionStatement) return false;
-        const auto& webserverion = static_cast<const webserverionStatement&>(*statement);
-        if (!webserverion.webserverion ||
-            webserverion.webserverion->kind != NodeKind::AssignmentExpr) return false;
-        const auto& assignment = static_cast<const AssignmentExpr&>(*webserverion.webserverion);
+        if (!statement || statement->kind != NodeKind::expressionstatement) return false;
+        const auto& expression = static_cast<const expressionstatement&>(*statement);
+        if (!expression.expression ||
+            expression.expression->kind != NodeKind::AssignmentExpr) return false;
+        const auto& assignment = static_cast<const AssignmentExpr&>(*expression.expression);
         if (assignment.op != AssignOp::Assign || !assignment.target ||
             assignment.target->kind != NodeKind::MemberExpr || !assignment.value ||
             !isSimpleValue(*assignment.value)) return false;
@@ -178,14 +178,14 @@ bool isSafeNew(const Expr& e) {
 bool isSafePush(const Stmt& statement, const Identifier*& array) {
     if (!isPushStatement(statement, array)) return false;
     const auto& call = static_cast<const CallExpr&>(
-        *static_cast<const webserverionStatement&>(statement).webserverion);
+        *static_cast<const expressionstatement&>(statement).expression);
     const Expr& value = *call.arguments.front();
     return isSimpleValue(value) || isSafeNew(value);
 }
 
 bool isSinglePushBranch(const Stmt* statement, const Identifier*& array) {
     if (!statement) return false;
-    if (statement->kind == NodeKind::webserverionStatement) {
+    if (statement->kind == NodeKind::expressionstatement) {
         return isSafePush(*statement, array);
     }
     if (statement->kind != NodeKind::BlockStatement) return false;
@@ -248,9 +248,9 @@ bool matchBody(const WhileStatement& ws, const std::string& counter,
             ++pushSites;
             continue;
         }
-        if (stmt->kind == NodeKind::webserverionStatement) {
-            const auto& es = static_cast<const webserverionStatement&>(*stmt);
-            if (!es.webserverion) return false;
+        if (stmt->kind == NodeKind::expressionstatement) {
+            const auto& es = static_cast<const expressionstatement&>(*stmt);
+            if (!es.expression) return false;
             const Identifier* receiver = nullptr;
             if (isSafePush(*stmt, receiver)) {
                 if ((pushed && pushed->name != receiver->name) || ++pushSites > 1) {
@@ -264,7 +264,7 @@ bool matchBody(const WhileStatement& ws, const std::string& counter,
                 sawIncrement = true;
                 continue;
             }
-            extras.push_back(es.webserverion.get());
+            extras.push_back(es.expression.get());
             continue;
         }
         if (stmt->kind == NodeKind::VariableDeclaration) {

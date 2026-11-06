@@ -1,7 +1,7 @@
 // =============================================================================
-// src/sema/src/checks/expr_check.cpp - primary webserverion inference.
+// src/sema/src/checks/expr_check.cpp - primary expression inference.
 //
-// Owns `inferExpr` (the webserverion dispatch), the literal/identifier/template/
+// Owns `inferExpr` (the expression dispatch), the literal/identifier/template/
 // array/object cases, arrow-function inference and the `new` / `await` /
 // range / weak / spread cases, plus `typeOfExpr` and `dynamicExpr`. Member,
 // index and call inference live in member_check.cpp; operators in ops_check.cpp
@@ -102,7 +102,7 @@ Type Analyzer::inferTemplate(TemplateLiteral& tl) {
     for (auto& q : tl.quasis) {
         if (q) setType(*q, Type::string());
     }
-    for (auto& ex : tl.webserverions) {
+    for (auto& ex : tl.expressions) {
         if (ex) inferExpr(*ex);
     }
     return withType(tl, Type::string());
@@ -164,6 +164,18 @@ Type Analyzer::inferArray(ArrayLiteral& al) {
         elem = elems.front();
         for (std::size_t i = 1; i < elems.size(); ++i) {
             elem = unify(elem, elems[i]);
+        }
+        // A nested-array mix (`[1, 2, [3, 4]]`): the element union has no
+        // single C++ spelling, so the literal is a heterogeneous container
+        // (`unknown[]`, the JS shape) instead of an error.
+        if (elem.isUnion()) {
+            bool hasArray = false, hasScalar = false;
+            for (const Type& m : elem.parts) {
+                if (m.isNullish()) continue;
+                if (m.kind == TypeKind::Array) hasArray = true;
+                else hasScalar = true;
+            }
+            if (hasArray && hasScalar) elem = Type::unknown();
         }
     }
     return withType(al, Type::array(elem));
@@ -306,17 +318,24 @@ Type Analyzer::inferNew(NewExpr& n) {
             Type txt = inferTextConstruct(ctor, n.arguments, n.span);
             if (!txt.isUnknown()) return withType(n, txt);
         }
-        if (lookup(id.name, b) && isAmbientType(b.type)) {
-            // `new Logger(...)`: std/log.
-            setType(id, b.type);
-            Type lg = inferLogConstruct(ctor, n.arguments, n.span);
-            if (!lg.isUnknown()) return withType(n, lg);
-        }
+
         if (lookup(id.name, b) && isAmbientType(b.type)) {
             // `new URL(...)` / `new URLSearchParams(...)`: std/url.
             setType(id, b.type);
             Type u = inferUrlConstruct(ctor, n.arguments, n.span);
             if (!u.isUnknown()) return withType(n, u);
+        }
+        if (ctor == "Date" && lookup(id.name, b) && isAmbientType(b.type)) {
+            // `new Date()` / `new Date(ms)`: std/date global.
+            setType(id, b.type);
+            for (auto& a : n.arguments) if (a) inferExpr(*a);
+            if (n.arguments.size() > 1) {
+                report(diagcode::kArityMismatch, n.span,
+                       "arity mismatch: Date's constructor takes 0 or 1 "
+                       "arguments (optional milliseconds), got " +
+                           std::to_string(n.arguments.size()));
+            }
+            return withType(n, Type::named(TypeKind::Class, "Date"));
         }
         // User classes (spec 15): `new C(args)` checks the constructor and
         // yields the nominal instance type; abstract classes are CP3413
@@ -353,7 +372,7 @@ Type Analyzer::inferAwait(AwaitExpr& a) {
     if (isPromiseType(arg)) {
         Type value = promiseValue(arg);
         // Awaiting a `Promise<void>` yields `undefined` in JS; a binding
-        // cannot hold a `void` webserverion, so surface it as the value.
+        // cannot hold a `void` expression, so surface it as the value.
         if (value.isVoid()) return withType(a, Type::undefined());
         return withType(a, value);
     }
@@ -376,7 +395,7 @@ Type Analyzer::inferWeak(WeakExpr& w) {
 // and numeric conversions are legal; anything else is CP3401 (TS-only
 // diagnostics rule §7 - no generic cast syntax).
 Type Analyzer::inferAs(AsExpr& a) {
-    const Type operand = a.webserverion ? inferExpr(*a.webserverion) : Type::unknown();
+    const Type operand = a.expression ? inferExpr(*a.expression) : Type::unknown();
     Type target = Type::unknown();
     if (a.type) {
         target = resolveType(*a.type);
@@ -405,7 +424,7 @@ Type Analyzer::inferAs(AsExpr& a) {
 // `expr!` - a non-null assertion: emits a null check that throws an `Error`
 // on null. Nothing else.
 Type Analyzer::inferNonNull(NonNullExpr& n) {
-    Type operand = n.webserverion ? inferExpr(*n.webserverion) : Type::unknown();
+    Type operand = n.expression ? inferExpr(*n.expression) : Type::unknown();
     if (operand.isNullable() && !operand.parts.empty()) {
         operand = operand.parts.front();
     } else if (operand.isUnion()) {
@@ -431,7 +450,7 @@ Type Analyzer::inferSpread(SpreadElement& sp) {
 }
 
 Expr* Analyzer::dynamicExpr(Node& n) {
-    // Best-effort: treat the node as an webserverion if it is one.
+    // Best-effort: treat the node as an expression if it is one.
     switch (n.kind) {
         case NodeKind::Identifier:
         case NodeKind::NumberLiteral:
@@ -573,7 +592,7 @@ Type Analyzer::inferArrowReturn(ArrowFunction& arrow,
     // binds to its own loops, never to a loop of the enclosing function.
     const FunctionContext outer = enterFunctionBody();
     if (arrow.body) {
-        if (arrow.webserverionBody) {
+        if (arrow.expressionBody) {
             ret = widen(inferExpr(*static_cast<Expr*>(arrow.body.get())));
         } else {
             visitStmt(*static_cast<Stmt*>(arrow.body.get()));
@@ -583,7 +602,7 @@ Type Analyzer::inferArrowReturn(ArrowFunction& arrow,
     FuncCtx finalCtx = funcStack_.back();
     funcStack_.pop_back();
     popScope();
-    if (!arrow.webserverionBody) {
+    if (!arrow.expressionBody) {
         // `void` is removed (docs/design/remove-void-unknown.md): a
         // no-return body infers `undefined`, not `voidType`. Async arrows
         // get `Promise<undefined>` via the existing `promiseOf` wrap in

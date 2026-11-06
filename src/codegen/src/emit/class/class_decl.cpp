@@ -491,7 +491,7 @@ std::string Generator::methodReturnType(const MethodDeclaration& md,
             const CppInfo ci = info(*returned);
             if (ci.representable && ci.shape != Shape::Void) return ci.cpp;
             // An inferred return whose value has no type spelling is deduced
-            // by C++ from the returned webserverion, like an unannotated
+            // by C++ from the returned expression, like an unannotated
             // function's return (emit/decl.cpp).
             if (!ci.representable) return "auto";
         }
@@ -636,6 +636,11 @@ std::string Generator::accessorBodyText(const AccessorDeclaration& ad,
     }
     std::string body;
     if (ad.body) stmt(*ad.body, body, indent);
+    if (ad.body && currentReturn_ != "void" && currentReturn_ != "auto") {
+        // As in emit/decl.cpp's plainBody: a non-void getter must not fall
+        // off its end (undefined behavior, exploited by clang at -O2).
+        line(body, indent, "return {};");
+    }
     classStack_.pop_back();
     popScope();
     --nestingDepth_;
@@ -685,6 +690,11 @@ std::string Generator::methodBodyText(const MethodDeclaration& md,
     }
     std::string body;
     if (md.body) stmt(*md.body, body, indent);
+    if (md.body && currentReturn_ != "void" && currentReturn_ != "auto") {
+        // As in emit/decl.cpp's plainBody: a non-void method must not fall
+        // off its end (undefined behavior, exploited by clang at -O2).
+        line(body, indent, "return {};");
+    }
     classStack_.pop_back();
     popScope();
     --nestingDepth_;

@@ -2,7 +2,7 @@
 // src/codegen/src/detail/worker_scan_internal.h - inline worker pre-scan state.
 //
 // OWNERSHIP: codegen module. PRIVATE header shared by emit/worker_scan.cpp
-// (state, binding patterns, webserverion captures) and emit/worker_scan_stmt.cpp
+// (state, binding patterns, expression captures) and emit/worker_scan_stmt.cpp
 // (the statement walk), split for the file budget (STYLE.md sec.2).
 // =============================================================================
 #pragma once
@@ -39,7 +39,7 @@ void declare(const std::string& name, SiteScan& scan);
 void reportOnce(const Node& node, const std::string& code,
                 const std::string& message, SiteScan& scan);
 
-// One binding pattern's declared names, and one arrow body's webserverions.
+// One binding pattern's declared names, and one arrow body's expressions.
 void walkPattern(const NodePtr& node, SiteScan& scan);
 void walkExpr(const Expr& e, SiteScan& scan);
 void walkStmt(const Stmt& s, SiteScan& scan);

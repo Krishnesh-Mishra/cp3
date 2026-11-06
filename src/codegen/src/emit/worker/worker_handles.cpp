@@ -118,12 +118,12 @@ std::string Generator::workerSendText(const CallExpr& c, const std::string& recv
     const Type& opposite = workerSide ? channel.in : channel.out;
     const std::string method =
         surface == WorkerSendSurface::MainRequest ? "request" : "postMessage";
-    // `request` needs a reply: a `Worker<In, void>` has no Out channel to carry
-    // one, so the member is a compile error even though the In direction is a
-    // valid payload.
+    // `request` needs a reply: a `Worker<In, undefined>` has no Out channel to
+    // carry one, so the member is a compile error even though the In direction
+    // is a valid payload.
     if (surface == WorkerSendSurface::MainRequest && opposite.isVoid()) {
         reportWorkerCode(c, diagcode::kWorkerVoidSend,
-                         "this worker's Out direction is void: the main side "
+                         "this worker's Out direction is empty: the main side "
                          "cannot request a reply");
         return "0.0";
     }
@@ -136,9 +136,9 @@ std::string Generator::workerSendText(const CallExpr& c, const std::string& recv
     if (direction.isVoid()) {
         reportWorkerCode(c, diagcode::kWorkerVoidSend,
                          workerSide
-                             ? "this worker's Out direction is void: the worker "
+                             ? "this worker's Out direction is empty: the worker "
                                "cannot send messages"
-                             : "this worker's In direction is void: the main "
+                             : "this worker's In direction is empty: the main "
                                "side cannot send messages");
         return "0.0";
     }

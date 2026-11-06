@@ -6,8 +6,8 @@
 // identifier read, every identifier write, every binding-pattern name and every
 // frame boundary to the subclass. A subclass can stop the walk from `onNode`.
 //
-// The descenders are grouped by AST shape (frames, value webserverions, access
-// webserverions, operator webserverions, branch webserverions, statements, loops,
+// The descenders are grouped by AST shape (frames, value expressions, access
+// expressions, operator expressions, branch expressions, statements, loops,
 // iterations, try statements) so each stays inside the layout budget; `visit`
 // is the dispatcher that routes a node to its group.
 // =============================================================================
@@ -51,7 +51,7 @@ private:
     static bool isPatternNode(const Node& n);
 
     // A binding pattern in a binding position (`write == false`) declares its
-    // names; in an assignment position it writes them. Default webserverions,
+    // names; in an assignment position it writes them. Default expressions,
     // computed keys and nested patterns are walked either way.
     void visitPattern(const Node& n, bool write);
     void visitVarDecl(const VariableDeclaration& vd, bool declaresLocals);

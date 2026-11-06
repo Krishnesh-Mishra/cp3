@@ -2,7 +2,7 @@
 // src/codegen/src/emit/async_promise.cpp - the Promise combinators
 // (`Promise.all` / `Promise.race` / `Promise.allSettled`), spec 14.
 //
-// The operand is an array of promises: an array literal or any webserverion of
+// The operand is an array of promises: an array literal or any expression of
 // an array type (`Promise.all(promises)`). A plain value counts as an
 // already-resolved promise, exactly like JS, so the operand's element type
 // decides the promise's value type:

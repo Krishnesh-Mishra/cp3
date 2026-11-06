@@ -105,7 +105,7 @@ bool pureArrow(const SemaResult& sema,
                const std::unordered_map<std::uint32_t, double>& constants,
                const ArrowFunction& arrow,
                std::size_t arity) {
-    if (arrow.isAsync || !arrow.webserverionBody || !arrow.body ||
+    if (arrow.isAsync || !arrow.expressionBody || !arrow.body ||
         arrow.body->kind == NodeKind::BlockStatement ||
         arrow.params.size() != arity) return false;
     std::unordered_set<std::uint32_t> parameters;
@@ -611,7 +611,7 @@ std::string detail::ArrayEmitter::forOfTargetAssign(Generator& g,
 // `for (const x of a)`: over a regular array or a string; the binding takes
 // the element type. The source handle is bound to a named local before the
 // range-for: iterating `*(temporary Ref)` lets the backing vector die at the
-// end of the range-init full-webserverion (a use-after-free seen as
+// end of the range-init full-expression (a use-after-free seen as
 // std::bad_alloc).
 //
 // `awaitValues` is the `for await` form: every bound value is awaited, so
@@ -655,7 +655,7 @@ void detail::ArrayEmitter::forOfImpl(Generator& g, const ForOfStatement& f,
     const std::string range = "cp3_range" + std::to_string(g.uniqueCounter_++);
     const std::string breakLabel = g.freshLabel("forof_end_");
     const std::string continueLabel = g.freshLabel("forof_next_");
-    // The range webserverion can itself be a temporary array handle (an array
+    // The range expression can itself be a temporary array handle (an array
     // literal builds a fresh `makeArray(...)`): keep the handle in the C++20
     // init-statement so its storage outlives the loop. Iterating the handle
     // directly would read freed storage under `/std:c++20` (the P2718R0

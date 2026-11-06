@@ -48,10 +48,10 @@ const CallExpr* superCtorCall(const Stmt* body) {
     if (body == nullptr || body->kind != NodeKind::BlockStatement) return nullptr;
     const auto& block = static_cast<const BlockStatement&>(*body);
     for (const StmtPtr& stmt : block.body) {
-        if (!stmt || stmt->kind != NodeKind::webserverionStatement) continue;
-        const auto& es = static_cast<const webserverionStatement&>(*stmt);
-        if (!es.webserverion || es.webserverion->kind != NodeKind::CallExpr) continue;
-        const auto& call = static_cast<const CallExpr&>(*es.webserverion);
+        if (!stmt || stmt->kind != NodeKind::expressionstatement) continue;
+        const auto& es = static_cast<const expressionstatement&>(*stmt);
+        if (!es.expression || es.expression->kind != NodeKind::CallExpr) continue;
+        const auto& call = static_cast<const CallExpr&>(*es.expression);
         if (call.callee && call.callee->kind == NodeKind::Identifier &&
             static_cast<const Identifier&>(*call.callee).name == "super") {
             return &call;

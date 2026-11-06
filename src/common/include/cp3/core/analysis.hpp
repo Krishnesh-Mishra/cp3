@@ -5,7 +5,7 @@
 //
 // Sema does NOT mutate the AST (see ast.hpp design rules). It publishes every
 // result it computes into a `SemaResult`, keyed by `Node::nodeId`:
-//   * nodeTypes  - inferred type of an webserverion / declared type of a binding;
+//   * nodeTypes  - inferred type of an expression / declared type of a binding;
 //   * symbols    - the binding table (one entry per declaration site);
 //   * functions  - resolved signature of every function-like declaration;
 //   * docs       - the doc comment of a declaration (one entry per documented
@@ -75,6 +75,11 @@ struct DocComment {
 // method). `returnType` is `void` for a body that yields nothing.
 struct FunctionInfo {
     std::string name;
+    // The declared type parameters of a generic function (empty for ordinary
+    // functions); each entry is a TypeParam whose parts[0], when present, is
+    // its resolved constraint. Importers need this to accept explicit
+    // type-argument lists at call sites.
+    std::vector<Type> typeParams;
     std::vector<Type> paramTypes;
     std::vector<bool> paramOptional;  // parallel to paramTypes
     bool hasRest = false;             // trailing `...rest`

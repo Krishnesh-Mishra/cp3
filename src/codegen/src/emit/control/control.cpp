@@ -310,7 +310,7 @@ void Generator::emitForIn(const ForInStatement& f, const std::string& jsLabel,
     const std::string breakLabel = freshLabel("forin_end_");
     const std::string continueLabel = freshLabel("forin_next_");
     // The source handle is bound to a named local before the loop: the
-    // webserverion may build a fresh array (a literal) and the loop must not
+    // expression may build a fresh array (a literal) and the loop must not
     // rebuild it on every iteration.
     const std::string source = freshLabel("forin_src_");
     const std::string recv = expr(*f.right);
@@ -393,8 +393,8 @@ std::string optionalValueText(Shape shape, const std::string& text) {
 // compares with `===` (JS): two different primitive kinds never match (D15), a
 // union matches when it holds the test's alternative, and an optional matches
 // when it holds the value. A test that cannot match the discriminant is dead
-// code, but its webserverion is still evaluated (JS evaluates the case
-// webserverions in order, until one matches).
+// code, but its expression is still evaluated (JS evaluates the case
+// expressions in order, until one matches).
 std::string Generator::switchCaseCompare(const std::string& disc,
                                          const CppInfo& discInfo,
                                          const std::string& test,

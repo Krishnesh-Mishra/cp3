@@ -341,6 +341,17 @@ std::string Generator::plainBody(const FunctionDeclaration& fd, const std::strin
     } else {
         line(body, 1, "// declaration without a body");
     }
+    if (fd.body && !fd.isAsync && ret != "void" && ret != "auto") {
+        // The sync twin of the coroutine guard above: a body with a non-void
+        // return type must not fall off its end (a function declared
+        // `: undefined` with no `return` reaches the end). In C++ that is
+        // undefined behavior, which clang at -O2 exploits (an inlined
+        // callback's effects vanish; a stored callback traps with int3 on
+        // invocation). `auto` is excluded: a deduced return cannot be
+        // deduced from a braced list, and such a body (a `firstReturnedExpr`
+        // exists) returns on every path.
+        line(body, 1, "return {};");
+    }
     popScope();
 
     --nestingDepth_;
@@ -399,7 +410,7 @@ std::string Generator::functionReturnType(const FunctionDeclaration& fd) {
     }
     // A tuple return type has a `std::tuple` spelling regardless of whether its
     // elements are primitive, so resolve it before the general value-type
-    // fallback (which may otherwise pick a narrower returned webserverion type).
+    // fallback (which may otherwise pick a narrower returned expression type).
     if (fd.returnType) {
         if (auto t = typeOfNode(*fd.returnType)) {
             if (const auto tuple = tupleSpelling(*t)) return *tuple;
@@ -463,7 +474,7 @@ Type Generator::asyncValueType(const FunctionDeclaration& fd) const {
         if (!value.isUnknown() && !value.isError()) return value;
     }
     // An `unknown` annotation has no C++ spelling, but the first returned
-    // webserverion still fixes the promise's carried value (the same concrete
+    // expression still fixes the promise's carried value (the same concrete
     // deduction an unannotated synchronous function gets).
     if (fd.body) {
         if (const Expr* returned = firstReturnedExpr(*fd.body)) {

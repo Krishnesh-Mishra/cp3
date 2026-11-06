@@ -7,7 +7,7 @@
 // integers and floats report "number" (D65).
 //
 // D16 fixes the answer for every value: `typeof <expr>` is allowed on any
-// webserverion and yields one of "number" | "string" | "boolean" | "undefined" |
+// expression and yields one of "number" | "string" | "boolean" | "undefined" |
 // "object" | "function". A reference-like value (an object shape, an array, a
 // typed view, a class instance, a Map/Set, a promise) is "object"; a callable
 // is "function"; an enum answers by its backing kind (D19). A value whose type

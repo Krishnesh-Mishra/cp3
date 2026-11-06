@@ -286,10 +286,10 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     // `std/readline` (src/std/readline/codegen.cpp).
     if (std::string rl = emitReadlineCall(c, m); !rl.empty()) return rl;
     if (isReadlineObject(m.object.get())) return emitReadlineObjectCall(c, m);
-    // `std/text` + `std/log` value members (src/std/text/codegen.cpp,
-    // src/std/log/codegen.cpp).
+    // `std/text` value members (src/std/text/codegen.cpp).
     if (std::string text = emitTextMemberCall(c, m); !text.empty()) return text;
-    if (std::string lg = emitLogMemberCall(c, m); !lg.empty()) return lg;
+    // `std/url` value members (src/std/url/codegen.cpp).
+    if (std::string url = emitUrlMemberCall(c, m); !url.empty()) return url;
     // Core regex literals (D48; src/emit/regex.cpp): `r.test(s)`, `r.match(s)`,
     // `r.exec(s)` on a RegExp value.
     if (std::string regex = emitRegexCall(c, m); !regex.empty()) return regex;
@@ -356,7 +356,7 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     if (m.property == "length" && m.object) {
         if (info(*m.object).shape == Shape::String) {
             // D63: `.length` is the UTF-8 byte count; a double keeps the
-            // generated webserverion numeric (the template `cp3_ts` overloads
+            // generated expression numeric (the template `cp3_ts` overloads
             // would be ambiguous for size_t).
             return "static_cast<double>((" + expr(*m.object) + ").size())";
         }
@@ -385,7 +385,9 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
     // The nominal std/buffer `Buffer` (src/std/buffer/codegen.cpp): `.length`.
     if (std::string buf = emitByteBufferMember(m); !buf.empty()) return buf;
     if (std::string text = emitTextMember(m); !text.empty()) return text;
-    if (std::string lg = emitLogMember(m); !lg.empty()) return lg;
+    if (std::string url = emitUrlMember(m); !url.empty()) return url;
+    if (std::string date = emitDateMember(m); !date.empty()) return date;
+
     if (std::string rl = emitReadlineMember(m); !rl.empty()) return rl;
     if (std::string ex = emitwebserverSettingsMemberRead(m); !ex.empty()) return ex;
     if (std::string er = emitwebserverRequestMember(m); !er.empty()) return er;

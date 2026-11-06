@@ -156,7 +156,7 @@ const Identifier* rootIdentifier(const Expr& e) {
     return nullptr;
 }
 
-// Visit the index webserverions inside a member/index write target; the object
+// Visit the index expressions inside a member/index write target; the object
 // chain itself is handled by `rootIdentifier`.
 void scanTargetParts(const Expr& e, Facts& f) {
     if (e.kind == NodeKind::IndexExpr) {
@@ -194,7 +194,7 @@ void writeTarget(const Expr& e, Facts& f) {
     f.complete = false;
 }
 
-// A binding-pattern declaration: names introduced plus default webserverions.
+// A binding-pattern declaration: names introduced plus default expressions.
 void scanPatternDecl(const Node& n, Facts& f) {
     switch (n.kind) {
         case NodeKind::Identifier: {
@@ -490,7 +490,7 @@ void scanExpr(const Expr& e, Facts& f) {
             return;
         }
         case NodeKind::TemplateLiteral:
-            scanExprList(static_cast<const TemplateLiteral&>(e).webserverions, f);
+            scanExprList(static_cast<const TemplateLiteral&>(e).expressions, f);
             return;
         case NodeKind::ArrayLiteral:
             scanExprList(static_cast<const ArrayLiteral&>(e).elements, f);
@@ -702,8 +702,8 @@ void scanForEachStmtNode(const Stmt& st, Facts& f) {
     scanForEachStatement(left, right, body, f);
 }
 
-void scanwebserverionStatement(const webserverionStatement& es, Facts& f) {
-    if (es.webserverion) scanExpr(*es.webserverion, f);
+void scanexpressionstatement(const expressionstatement& es, Facts& f) {
+    if (es.expression) scanExpr(*es.expression, f);
 }
 
 void scanJumpArgument(const ExprPtr& arg, Facts& f) {
@@ -716,9 +716,9 @@ void scanStmt(const Stmt& st, Facts& f) {
         case NodeKind::BreakStatement:
         case NodeKind::ContinueStatement:
             return;
-        case NodeKind::webserverionStatement:
-            scanwebserverionStatement(
-                static_cast<const webserverionStatement&>(st), f);
+        case NodeKind::expressionstatement:
+            scanexpressionstatement(
+                static_cast<const expressionstatement&>(st), f);
             return;
         case NodeKind::BlockStatement:
             scanBlock(static_cast<const BlockStatement&>(st), f);

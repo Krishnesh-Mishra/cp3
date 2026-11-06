@@ -411,7 +411,7 @@ Type unify(const Type& a, const Type& b) {
         if (other.kind == TypeKind::Number) return Type::number();
     }
 
-    // A literal webserverion widens to its base primitive when unified.
+    // A literal expression widens to its base primitive when unified.
     if (a.isLiteral()) {
         return unify(a.literalBaseType(), b);
     }

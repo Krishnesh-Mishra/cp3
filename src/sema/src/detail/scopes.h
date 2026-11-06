@@ -112,6 +112,12 @@ struct FuncSig {
 struct Binding {
     std::string name;
     Type type;
+    // The type as declared (`let cur: Node | null`). Condition narrowing
+    // (`overrideBinding`) replaces `type` with the narrowed type for reads;
+    // assignment targets must still be checked against this declared type,
+    // otherwise `cur = cur.next` inside `while (cur !== null)` is rejected
+    // for assigning `Node | null` to the narrowed `Node`.
+    Type declaredType;
     bool isConst = false;
     bool isFunction = false;
     bool isAmbient = false;
@@ -261,7 +267,7 @@ bool isDataViewClass(const Type& t);
 // type arguments (parts == { K, V } / { T }); the member table and the CP3305
 // candidates live in the family unit.
 bool isCollectionsClass(const Type& t);
-bool isLogClass(const Type& t);
+
 bool isTextClass(const Type& t);
 bool isTextTypeName(const std::string& name);
 

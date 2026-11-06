@@ -186,16 +186,16 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
         case NodeKind::EmptyStatement:
             line(out, indent, ";");
             return;
-        case NodeKind::webserverionStatement: {
-            const auto& es = static_cast<const webserverionStatement&>(s);
-            if (!es.webserverion) {
+        case NodeKind::expressionstatement: {
+            const auto& es = static_cast<const expressionstatement&>(s);
+            if (!es.expression) {
                 line(out, indent, ";");
                 return;
             }
-            // A statement's webserverion may defer its bound check (intAssignText).
+            // A statement's expression may defer its bound check (intAssignText).
             const bool wasStmt = intOn() && intMode_->stmtExpr;
             if (intOn()) intMode_->stmtExpr = true;
-            const std::string text = expr(*es.webserverion);
+            const std::string text = expr(*es.expression);
             if (intOn()) intMode_->stmtExpr = wasStmt;
             line(out, indent, text + ";");
             return;
@@ -573,7 +573,7 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
         // A `number` function's fast body returns std::int64_t, so the
         // returned value must be a region value.
         if (intOn() && !numberTyped(*r.argument)) intFail();
-        // Always lower the returned webserverion so its own unsupported parts
+        // Always lower the returned expression so its own unsupported parts
         // report their own diagnostics instead of being silently dropped.
         const std::string value =
             currentReturnTuple_ && r.argument->kind == NodeKind::ArrayLiteral

@@ -1,10 +1,10 @@
 // =============================================================================
-// src/sema/src/checks/member_check.cpp - member / index webserverion inference.
+// src/sema/src/checks/member_check.cpp - member / index expression inference.
 //
 // Owns property access (`inferMember` / `memberOf` / `memberOfProbe`) and
 // subscript access (`inferIndex` / `indexOf` / `indexOfObject` /
 // `tupleIndexAt`). Call inference (`inferCall` + argument arity/type
-// checking) lives in call_check.cpp; primary webserverions live in
+// checking) lives in call_check.cpp; primary expressions live in
 // expr_check.cpp (STYLE.md §8).
 // =============================================================================
 #include "detail/analyzer.h"
@@ -24,7 +24,7 @@ namespace cp3 {
 // Member access
 // =============================================================================
 Type Analyzer::inferMember(MemberExpr& m) {
-    // Control-flow narrowing for member webserverions (`n.next` inside
+    // Control-flow narrowing for member expressions (`n.next` inside
     // `if (n.next !== null)`): the narrowed (non-null) type wins.
     if (m.object && m.object->kind == NodeKind::Identifier) {
         const std::string key = static_cast<Identifier&>(*m.object).name +
@@ -261,7 +261,7 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             // `std/collections` Map/Set (src/std/collections/sema.cpp).
             if (isCollectionsClass(ot)) return collectionsMember(ot, prop, span);
             if (isTextClass(ot)) return textMember(ot, prop, span);
-            if (isLogClass(ot)) return logMember(ot, prop, span);
+
             if (isUrlClass(ot)) return urlClassMember(ot, prop, span);
             // `std/date` values: a closed surface (miss -> CP3305 below).
             if (isDateClass(ot)) {

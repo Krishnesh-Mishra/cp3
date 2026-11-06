@@ -1,15 +1,15 @@
 // =============================================================================
-// src/codegen/src/emit/expr_mixed.cpp - the mixed-type webserverion lowerings
+// src/codegen/src/emit/expr_mixed.cpp - the mixed-type expression lowerings
 // (STYLE.md section 8).
 //
-// The webserverion sides of the value model: a logical operator or a ternary
+// The expression sides of the value model: a logical operator or a ternary
 // whose two sides have different C++ types. The choice of the result type and
 // the wrapping of each side live in detail/expr_mixed.h's contract; this unit
 // spells them out.
 //
 //   * a primitive union (`0 || "x"`, `c ? 1 : "x"`) lowers to the canonical
 //     `std::variant` (cp3/core/union.hpp): each side is wrapped into it, so
-//     the webserverion has the variant's type and the value model keeps the
+//     the expression has the variant's type and the value model keeps the
 //     alternative it holds;
 //   * a nullish side (`x || null`, `c ? 1 : null`) lowers to the optional /
 //     `Maybe<T>` the nullish union lowers to: the value side is wrapped, the

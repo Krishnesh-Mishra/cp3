@@ -15,10 +15,10 @@
 // lower through `emitParallelClosure`, which declares the closure's parameters
 // with the cp3 types the callee hands them (a number index; the accumulator's
 // type for a reduce) before lowering the arrow itself. A reduce body that is one
-// of the associative shapes (`acc + <expr>` from 0 where the webserverion never
+// of the associative shapes (`acc + <expr>` from 0 where the expression never
 // reads the accumulator, `acc * <expr>` from 1, the max/min conditional) gets
 // the chunked 5-argument lowering with a synthesized combine op, but only when
-// support/parallel_combine.cpp proves the webserverion pure and integer exact;
+// support/parallel_combine.cpp proves the expression pure and integer exact;
 // every other reduce keeps the sequential 4-argument form, which is still
 // exact.
 //
@@ -176,7 +176,7 @@ std::optional<Type> Generator::parallelCallType(const CallExpr& c) const {
     return std::nullopt;
 }
 
-// `range` -> the two `std::int64_t` bound webserverions; false when the argument
+// `range` -> the two `std::int64_t` bound expressions; false when the argument
 // is not a `start..end` range (the caller reports).
 bool Generator::parallelRange(const Expr& range, std::string& begin,
                               std::string& end) {

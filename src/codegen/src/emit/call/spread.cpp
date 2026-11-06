@@ -7,7 +7,7 @@
 // shapes the lowering needs:
 //
 //   * `spreadListText` - a runtime-built `std::vector<E>`: the parts in
-//     order, each either an element webserverion or a spread of an array. The
+//     order, each either an element expression or a spread of an array. The
 //     callers wrap the vector (a cp3 array, a typed view, a promise list).
 //   * `spreadFirstText` - the first element of a spread source: `f(...values)`
 //     in a one-parameter call takes the first element, and the extra elements

@@ -26,9 +26,9 @@ std::string Generator::emitTemplate(const TemplateLiteral& tl) {
     // With two or more interpolations the parts cannot stay a chain of `+`:
     // C++ leaves an operator's operand order unspecified (`${c()} ${c()} ${c()}`
     // could run right-to-left). A chain of `append` calls is ordered by the
-    // language - each call's postfix-webserverion is sequenced before its
+    // language - each call's postfix-expression is sequenced before its
     // argument - so every part evaluates in source order.
-    if (tl.webserverions.size() >= 2) {
+    if (tl.expressions.size() >= 2) {
         std::string out;
         for (std::size_t i = 0; i < tl.quasis.size(); ++i) {
             const std::string cooked =
@@ -36,8 +36,8 @@ std::string Generator::emitTemplate(const TemplateLiteral& tl) {
             const std::string part =
                 "std::string(" + cppStringLiteral(cooked) + ")";
             out += out.empty() ? part : ".append(" + part + ")";
-            if (i < tl.webserverions.size()) {
-                out += ".append(" + tsCall(*tl.webserverions[i]) + ")";
+            if (i < tl.expressions.size()) {
+                out += ".append(" + tsCall(*tl.expressions[i]) + ")";
             }
         }
         return out.empty() ? "std::string()" : "(" + out + ")";
@@ -47,8 +47,8 @@ std::string Generator::emitTemplate(const TemplateLiteral& tl) {
         const std::string cooked = tl.quasis[i] ? tl.quasis[i]->cooked : std::string();
         out += (out.empty() ? "" : " + ");
         out += "std::string(" + cppStringLiteral(cooked) + ")";
-        if (i < tl.webserverions.size()) {
-            out += " + " + tsCall(*tl.webserverions[i]);
+        if (i < tl.expressions.size()) {
+            out += " + " + tsCall(*tl.expressions[i]);
         }
     }
     if (out.empty()) {
