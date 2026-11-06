@@ -129,9 +129,9 @@ selection. Every row follows Rule 0 and the verification rules in §8.
 | `void` type | Removed. A function with no `return` infers `undefined` as its return type. | Every `: void` annotation is a compile error whose diagnostic names the fix (`undefined`); TypeScript permits `void`, CP3 does not. A trivial `fmt`-style rewrite updates existing source. |
 | `unknown` type | Removed. `JSON.parse` requires a type argument: `JSON.parse<T>(text)`. | Omitting `T` is a compile error. The internal permissive callback placeholder used by the compiler is not a user type and is never printed as `unknown`; std members receive precise types. |
 | `null`, `undefined` | Kept as the only two nullish primitives. | `===`/`!==` flavor rules, `??` and `== null` semantics are unchanged. |
-| Migration & verification | Corpus, spec, docs and diagnostics referencing `void`/`unknown` are updated; the corpus is grep-rewritten (`: void` → `undefined`, bare `JSON.parse(` → `JSON.parse<T>(`). | Diagnostics explain why (static native output; `catch` binds `Error`; `unknown` forced narrowings) and what to write; llm.md and `docs/content/01-language/01-variables-and-bindings/02-types.md` are updated in the same change. |
+| Migration & verification | Corpus, spec, docs and diagnostics referencing `void`/`unknown` are updated; the corpus is grep-rewritten (`: void` → `undefined`, bare `JSON.parse(` → `JSON.parse<T>(`). | Diagnostics explain why (static native output; `catch` binds `Error`; `unknown` forced narrowings) and what to write; the JS/TS developers guide (`03-javascript-typescript-developers.md`) and `docs/content/01-language/01-variables-and-bindings/02-types.md` are updated in the same change. |
 
-**Status: Partial** (src ban implemented — `void`/`unknown` annotations and bare `JSON.parse` rejected; doc-string/corpus sweep still open — see `docs/design/verified-gaps.md` #6).
+**Status: Done** (src ban implemented; `void`/`unknown` annotations and bare `JSON.parse` rejected; guide documents the removal, Error-only `throw`, and the `undefined`/`object` replacements — see `03-javascript-typescript-developers.md` §1, §4.4, §4.11).
 
 #### L. JavaScript/TypeScript compatibility backlog (v0.2, highest value first)
 
@@ -139,7 +139,7 @@ The remaining JavaScript and TypeScript surface needed so ordinary application c
 
 | Feature | Why | Size | Status |
 | --- | --- | --- | --- |
-| Array/Object/String catalog gaps: `reduce`, `reduceRight`, `splice`, `concat`, `reverse`, `lastIndexOf`, `keys`/`values`/`entries`, `Array.from`/`isArray`/`of`, `Object.fromEntries`, `parseInt` | The `llm.md` catalog does not list them; `reduce`, `splice` and `concat` are everywhere in TS code, so the TS-compatibility theme fails without them. | Small | Done (verified in `docs/design/verified-gaps.md` #18; `Record<string,V>` now canonicalizes to `Map<string,V>`, unblocking `Object.fromEntries`) |
+| Array/Object/String catalog gaps: `reduce`, `reduceRight`, `splice`, `concat`, `reverse`, `lastIndexOf`, `keys`/`values`/`entries`, `Array.from`/`isArray`/`of`, `Object.fromEntries`, `parseInt` | The surface catalog did not list them; `reduce`, `splice` and `concat` are everywhere in TS code, so the TS-compatibility theme fails without them. | Small | Done (verified in `docs/design/verified-gaps.md` #18; `Record<string,V>` now canonicalizes to `Map<string,V>`, unblocking `Object.fromEntries`) |
 | Timers, if missing: `setTimeout`, `setInterval`, `clearTimeout`, `sleep` | Every service waits; a 100 ms timer regression test needs them. | Small | Done |
 | Process lifecycle: `process.on("SIGINT" \| "SIGTERM" \| "exit" \| "unhandledRejection")`, `server.close()` | Servers need graceful shutdown; libuv signal handles are already available. | Small | Done (verified in `docs/design/verified-gaps.md` #7) |
 | Built-in utility types: `Partial`, `Required`, `Readonly`, `Pick`, `Omit`, `Record` | Very common in real TS. The compiler resolves them natively instead of user-written mapped types. | Medium | Done (verified in `docs/design/verified-gaps.md` #8) |

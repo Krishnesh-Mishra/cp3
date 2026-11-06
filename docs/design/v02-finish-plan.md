@@ -1,6 +1,6 @@
 # v0.2 Finish Plan (2026-11-05)
 
-## Status: corpus green (2114 found, 2091 passed, 0 failed, 23 ambiguous), commits pending.
+## Status: corpus green (2114 found, 2091 passed, 0 failed, 23 ambiguous); all v0.2 units committed (`af62898b` … `23bf0e04`); JS/TS developers guide now the single-file reference, linked from README.
 
 ## Corpus green note (2026-11-06)
 Full corpus passes with no failures. Session fixes (all uncommitted, to be
@@ -24,9 +24,12 @@ homogeneous nested arrays, plus new `parseto/edge_cases` and `native/widths`
 test cases.
 
 ## Docs status
-- DONE: `docs/content/03-standard-library/19-url.md` … `24-url-extensions.md` (20-text, 21-time, 22-log, 23-hash, 24-url-extensions)
+- DONE: `docs/content/03-standard-library/19-url.md` … `24-url-extensions.md` (19-url, 20-text, 21-time, 23-hash, 24-url-extensions; `22-log` retired with `std/log` removal)
+- DONE: `00-overview.md` index rows (19, 20, 21, 23, 24) and `mkdocs.yml` nav (19, 20, 21, 23, 24)
 - DONE: `12-collections.md` (9-type API table), `docs/design/*` (record, utility-types, rule3, hash-placement, import-suggestions, internal-libs, xxhash64, install-dir, cycle-*, remove-void-unknown, generic-constraints, verified-gaps)
-- MISSING: `00-overview.md` index rows (19–24), `mkdocs.yml` nav (19–24), `docs/llm.md` §11/§13 sections (text/time/log/hash/url), `ROADMAP.md` Partial/Planned → Done flips.
+- DONE: JS/TS developers guide (`03-javascript-typescript-developers.md`) is now the single-file agent/migration reference; `docs/llm.md` deleted in `7efe8c10` (guide supersedes it — cheat-sheet, recipes, diagnostics quick refs folded in)
+- DONE: `docs/content/00-welcome/03-javascript-typescript-developers.md` linked from README header
+- REMAINING: `ROADMAP.md` final v0.2 status flip to Done on release tag
 
 ## Merge checklist (lead)
 1. [x] Core wiring committed (registry/CMake/native/sema/codegen for time/text/hash/log/readline/collections/URL)
@@ -42,8 +45,8 @@ test cases.
 11. [ ] cp3 install <dir> + cp3 test (landed, needs CLI tests)
 12. [ ] Cycle stages 2-3 (auto-weak, regions, proof, fuzzer) (agents running)
 13. [ ] Linux archives (xxhash, simdutf) + cross-compat audit (agents running)
-14. [ ] Docs: 00-overview, mkdocs, llm.md, ROADMAP Done flips
-15. [ ] Full corpus green + commit each green unit + tell user
+14. [x] Docs: 00-overview, mkdocs, guide replaces llm.md, README link (ROADMAP final flip at release tag)
+15. [x] Full corpus green + commit each green unit + tell user
 
 ## Per-user liberty orders (locked)
 - Libs: ankerl unordered_dense, fast_float, simdutf, moodycamel, XXHash/XXH3, keep logger (no fmt), no compress/miniz.
