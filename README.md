@@ -4,7 +4,7 @@
 
 CP3 is a statically typed language with TypeScript-shaped syntax. It compiles your `.cp3` program ahead of time to a native executable, while managing object lifetimes for you.
 
-[Get started](#quick-start) · [Why CP3](#why-cp3) · [Benchmarks](#http-server-benchmarks) · [Examples](examples/README.md) · [Language guide](docs/content/00-welcome/00-welcome.md)
+[Get started](#quick-start) · [Why CP3](#why-cp3) · [Benchmarks](#http-server-benchmarks) · [Examples](examples/README.md) · [Language guide](docs/content/00-welcome/00-welcome.md) · [JavaScript/TypeScript → CP3 guide](docs/content/00-welcome/03-javascript-typescript-developers.md)
 
 > **Project status: beta.** CP3 and its standard library are under active development. The benchmark results below are a dated snapshot from one machine; see the [benchmark results and methodology](benchmarks/README.md) for the full data and measurement details.
 

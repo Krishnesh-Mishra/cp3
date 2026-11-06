@@ -21,7 +21,7 @@ This is a practical reference for developers who already know JavaScript or Type
 | `async` / `await` | `async` / `await` | Event-loop, not per-call OS threads |
 | `try` / `catch` | `try` / `catch` | Catchable values are not guaranteed to be `Error` |
 | `for...in` | `for...of` | `for...in` over objects is rejected |
-| `any` | rejected | Use `unknown` or a declared union/interface |
+| `any` | rejected (CP3421) | Use a concrete type or `object` |
 | Classes with decorators | classes, no decorators | Decorators are not supported |
 | Static typing | static typing | But a narrower, closed type surface |
 | Browser / DOM | not available | CP3 runs on the host OS, not in browsers |
@@ -194,7 +194,7 @@ function displayName(name?: string): string {
 const isLong = (text: string): boolean => text.length > 20;
 ```
 
-Every required return path of a non-void function must produce a compatible value. Optional parameters use `?`; the missing argument is `undefined` inside the body. Arrow functions are for callbacks/closures.
+Every required return path of a function with a declared non-`undefined` result type must produce a compatible value. Optional parameters use `?`; the missing argument is `undefined` inside the body. Arrow functions are for callbacks/closures.
 
 ## 4.3 Control flow
 
@@ -243,8 +243,7 @@ Built-in types:
 | `boolean` | `true` / `false` |
 | `null` | distinct null value |
 | `undefined` | absent-value sentinel |
-| `void` | no useful function result |
-| `unknown` | operations need a supported checked path first |
+| `void` / `unknown` annotations | rejected (CP3420 / CP3421) — use `undefined` for no result, `object` for an untyped value |
 | `T[]` | growable typed array |
 | `Map<K,V>` / `Set<T>` | collections (from `std/collections`) |
 
@@ -323,7 +322,7 @@ function first<T>(list: T[]): T | undefined {
 }
 ```
 
-Generic functions, classes, interfaces, and aliases are supported. Conditional/mapped/higher-kinded TypeScript type features are not.
+Generic functions, classes, interfaces, and aliases are supported. Conditional/mapped/higher-kinded TypeScript type features are not. Imported generic functions keep their type parameters — an imported `cache<T>(value: T): T` still takes explicit arguments at the call site.
 
 ## 4.10 Modules and imports
 
@@ -371,7 +370,7 @@ try {
 }
 ```
 
-Compiler diagnostics (from `check`) cannot be caught — they prevent the build. Runtime failures are either thrown synchronously, reject a promise, or live in a result value. Catchable values are not guaranteed to be an `Error` object; `tests/cases/errors` uses strings and numbers too. Distinguish the failure mode per API.
+Compiler diagnostics (from `check`) cannot be caught — they prevent the build. Runtime failures are either thrown synchronously, reject a promise, or live in a result value. A `throw` statement only accepts an `Error` object (or a subclass); anything else is CP3509. `catch (reason)` always binds an `Error`. `Error.captureStackTrace(error, fn?)` refreshes `error.stack` from its `name: message` and appends one `at <fn>` frame. Distinguish the failure mode per API.
 
 # 5. Runtime essentials (what affects everyday code)
 
@@ -384,9 +383,31 @@ async function readName(): Promise<string> {
 }
 ```
 
-`async` functions return a promise-like result; `await` suspends the continuation on the event loop. It does **not** create an OS thread. A long synchronous loop still blocks the loop.
+`async` functions return a promise; `await` suspends the continuation on the event loop. It does **not** create an OS thread. A long synchronous loop still blocks the loop. `await` is allowed in an `async function` or at top level only; awaiting a non-promise yields the value itself. Async bodies start eagerly; continuations run FIFO as microtasks; there is one loop per thread.
 
-Promise combinators: `Promise.all`, `Promise.race`, `Promise.allSettled`, `Promise.any` (uncaught rejections surface as `AggregateError`), `Promise.withResolvers()`.
+Continuations flatten returned promises:
+
+```ts
+const p = fetch("http://127.0.0.1:8080/health")
+  .then((res) => res.text())
+  .then((text) => console.log(text), (err) => console.error(err))
+  .catch((err) => console.error(err))
+  .finally(() => console.log("done"));
+```
+
+`Promise.resolve(v)` / `Promise.reject(reason)` create settled promises; a rejection handler returning nothing fulfills the derived promise with a value-initialized value (JS parity approximation). Promise combinators: `Promise.all<T[]>(...) -> Promise<T[]>` (input order), `Promise.race(...)` (first settled), `Promise.allSettled(...) -> Promise<Settled<T>[]>` (`{ok, value, reason}`), `Promise.any(...)` (first fulfilled; rejects with `AggregateError("All promises were rejected")` when **all** inputs reject, including `[]`), `Promise.withResolvers()` (its `reject` accepts an `Error`). An unobserved rejection causes a nonzero exit at loop drain.
+
+Core timer builtins need no import:
+
+```ts
+const id = setTimeout(() => console.log("later"), 1000);
+clearTimeout(id);
+await sleep(250);                 // Promise<undefined>
+queueMicrotask(() => console.log("microtask"));
+setImmediate(() => console.log("check"));
+```
+
+`setInterval` / `clearInterval` are also global; `sleep(ms)` is the awaitable form.
 
 ## 5.2 Children and event loop
 
@@ -425,7 +446,7 @@ function makeCounter(): () => number {
 
 A closure captures names from its enclosing scope. Captures that are never reassigned may be copied; captured bindings that are reassigned use a shared runtime cell. Escaping closures (returned, stored, passed on) must not capture short-lived state.
 
-## 5.5 Threads and workers (brief)
+## 5.5 Threads and workers
 
 - `async`/`await` → event loop (single thread).
 - Workers → separate contexts; exchange typed messages.
@@ -433,34 +454,120 @@ A closure captures names from its enclosing scope. Captures that are never reass
 
 Reference counting protects ownership bookkeeping; it does **not** synchronize field access. Sharing mutable state across threads requires a supported protocol. `ConcurrentMap<K,V>` is the one thread-safe collection in `std/collections`.
 
+### Workers: file and inline forms
+
+```ts
+// worker.cp3
+import console from "std/console";
+
+export default (thread: Thread<number, string>) => {
+  thread.on("message", (n) => {
+    thread.postMessage(`got ${n}`);
+  });
+};
+```
+
+```ts
+const w = new Worker("./worker.cp3");   // literal path only; computed paths are rejected
+w.on("message", (text) => console.log(text));
+w.on("error", (err) => console.error(err));
+w.postMessage(21);
+await w.request(21);   // one-shot request/reply
+w.terminate();
+const inline = new Worker((thread: Thread<number, number>) => {
+  thread.on("message", (n) => thread.postMessage(n * 2));
+}); // cannot capture enclosing variables
+```
+
+The entry arrow is required and must be non-async, non-generic. The worker file is a full module: its top-level statements run on the worker thread before the entry arrow, and it may import modules (including `std/console`); state is per-worker, not shared with the main thread.
+
+Handle surface:
+- Main side: `postMessage(v)`, `on("message" | "error", cb)`, `await request(v)`, `terminate()` (idempotent; drops queued/pending work).
+- Worker side: `thread.on("message" | "error", cb)`, `thread.postMessage(v)`.
+- A thrown handler becomes an `"error"` event on the other side; a startup throw ends the thread after reporting `"error"`. A live worker keeps the main loop alive; destroying the handle terminates it.
+
+**Payload:** messages are deep copies both directions. Only copyable values (numbers, strings, booleans, arrays, records, enums, unions/options thereof) may cross; functions, promises, and handles are rejected (CP3907), and a mismatched payload type is CP3908.
+
+**Empty directions:** spell `undefined` in a direction to declare it empty — the direction never carries a value, sends into it are CP3906 (including `request` needing a non-empty `Out`), and the receive listener is nullary:
+
+```ts
+export default (thread: Thread<number, undefined>) => {
+  thread.on("message", (n) => console.log(`${n}`));  // no postMessage back
+};
+```
+
+Top-level `await` is also allowed in the entry file and in the worker module’s prologue.
+
+### Parallel work (synchronous)
+
+```ts
+parallel.for(0..n, (i) => { /* disjoint writes via i */ });
+const total = parallel.reduce(0..n, 0, (sum, i) => sum + i);
+const results = parallel.run(f1, f2);   // -> results array
+```
+
+Parallel calls block until done; captures are non-owning borrows (synchronous call), only writes through `parallel.for`'s own index are allowed, captured-`let` reassignment is banned, and `reduce` merges per-chunk private accumulators deterministically. Prefer `parallel.reduce` over shared mutation.
+
+### EventEmitter (builtin, no import)
+
+```ts
+const bus = new EventEmitter();
+const handler = (a: object, b: object): undefined => console.log(a, b);
+bus.on("job", handler);
+bus.emit("job", 1, 2);   // listener values are erased: emit passes each argument; a 1-param listener sees the first; a nullary listener sees none; missing args read undefined. Max 8 args.
+bus.once("job", handler);
+bus.off("job", handler); // removes the most recent identical registration (keep a named handler)
+```
+
+Registration order, snapshot iteration, `once` removed before firing, no-listener emit is a no-op.
+
+### Weak references and reference cycles
+
+Strong reference cycles are a compile error (CP3401) — there is no tracing garbage collector. Break a parent/child cycle with a `weak` field:
+
+```ts
+class Child {
+  weak parent: Parent | undefined;
+}
+```
+
+A `weak` field is a `WeakRef<T>`: reading it acquires a strong handle only for as long as you hold it; an expired or cleared link reads `undefined`. Assigning `null`/`undefined` clears the link. An unbroken strong cycle is rejected; automatic weak-edge selection is report-only and not active — write the `weak` edge yourself.
+
+Reference counting still does not synchronize field access.
+
 # 6. Standard library — master import table
 
 | Module | Import | Provides |
 |---|---|---|
 | `std/console` | `import console from "std/console"` | Output, line/key input, stdin listeners |
+| `std/readline` | `import readline from "std/readline"` | `readLine/readLines/readAll`, `LineReader` |
 | `std/env` | `import { env } from "std/env"` | Typed env reads, defaults, `.env` loading |
 | `std/process` | `import process from "std/process"` | argv, env map, exit, exec, spawn, host info |
 | `std/fs` | `import fs from "std/fs"` | Read/write/mkdir/readdir/stat/stream |
 | `std/path` | `import path from "std/path"` | Platform-aware path composition |
 | `std/os` | `import os from "std/os"` | Platform, CPU, memory, network interfaces |
-| `std/math` | `import math from "std/math"` | Constants, random, min/max, round, trig |
+| `std/math` | `import math from "std/math"` | Constants, random, min/max, round, trig, hyperbolic/inverse trig |
 | `std/date` | `import Date from "std/date"` | Now, ISO parse/format, arithmetic, diffs |
-| `std/json` | `import json from "std/json"` | parse<T> with runtime shape validation |
+| `std/json` | `import json from "std/json"` | `parse<T>` / runtime shape validation, `stringify` |
 | `std/crypto` | `import crypto from "std/crypto"` | UUID, random bytes, SHA-256/512, AES-256-GCM |
 | `std/buffer` | `import { Buffer } from "std/buffer"` | Bytes, UTF-8/hex/base64 conversion |
-| `std/collections` | `import { Map, Set, ... } from "std/collections"` | Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap |
-| `std/network` | `import { fetch, WebSocket, createServer, ... } from "std/network"` | HTTP fetch, WebSocket client/server, router |
-| `std/typed arrays` | built-in | `Int8Array` … `BigUint64Array`, `ArrayBuffer`, `DataView` |
+| `std/collections` | `import { Map, Set, ... } from "std/collections"` | Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap, `Map.groupBy` |
+| `std/network` | `import { fetch, lookup, WebSocket, WebSocketServer, createServer, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, webserver, cookieParser } from "std/network"` | HTTP fetch/DNS, WebSocket client/server, HTTP server/router, request/response helpers |
+| `std/Object` | built-in | `Object.keys`/`values`/`entries`/`assign`/`is`/`freeze`/`seal`/`preventExtensions`/`isFrozen`/`isSealed`/`isExtensible`/`getPrototypeOf`/`setPrototypeOf`/`fromEntries`/`groupBy` |
+| `std/typed arrays` | built-in | `Int8Array` … `BigUint64Array`, `ArrayBuffer`, `SharedArrayBuffer`, `DataView` |
 | `std/strings` | built-in | `string` methods |
 | `std/arrays` | built-in | `T[]` methods |
 | `std/regex` | built-in literal | `/pattern/flags` (PCRE2-backed) |
 | `std/io` | `import io from "std/io"` | `waitReadable`, `waitWritable`, `pollUntilDone` |
 | `std/text` | `import { TextEncoder, TextDecoder } from "std/text"` | UTF-8 byte/text conversion |
 | `std/url` | `import { URL, URLSearchParams } from "std/url"`; `import url from "std/url"` | RFC 3986 parser, percent encoding |
-| `std/hash` | `import hash from "std/hash"` | crc32, crc32c, fnv1a32, fnv1a64 |
+| `std/hash` | `import hash from "std/hash"` | crc32, crc32c, fnv1a32, fnv1a64, xxhash64 |
 | `std/time` | `import time from "std/time"` | `Stopwatch`, `console.time`/`timeEnd` |
+| timers / numeric / clone | built-in | `setTimeout/setInterval/clearTimeout/clearInterval/sleep/queueMicrotask/setImmediate`; `parseInt/parseFloat/parseTo/isNaN/isFinite`; `structuredClone/atob/btoa`; `Object`, `String`, `Number`, `Boolean`, `Array`, `EventEmitter` |
 
-Arrays, strings, typed arrays, `ArrayBuffer`/`DataView` are built-in and need no import.
+`std/log` was removed before v0.2: use `console.log` / `console.info` for logging output.
+
+Arrays, strings, typed arrays, `ArrayBuffer`/`SharedArrayBuffer`/`DataView` are built-in and need no import.
 
 # 7. `std/console` — terminal output and input
 
@@ -485,6 +592,21 @@ import console from "std/console";
 | `timeEnd(label?)` | `undefined` | Print `label: 12.345ms` and drop the label |
 
 `console.log` is a complete call, not a stream object — there is no `console.stdout.write`. For pipes, use `process.exec`/`spawn`.
+
+# 7.1 `std/readline` — stdin line reading
+
+```ts
+import readline from "std/readline";
+```
+
+| Member | Signature | Effect |
+|---|---|---|
+| `readLine()` | `(): Promise<string>` | Next line, terminator removed; `""` on EOF |
+| `readLines()` | `(): Promise<string[]>` | All remaining lines to EOF |
+| `readAll()` | `(): Promise<string>` | All remaining stdin text |
+| `createReader()` | `LineReader` | Reader with `readLine()`, `readLines()`, `on("line" \| "close", cb)`, `close()` |
+
+Accept `readLine`/`readLines` as separate module-level helpers, or create one reader when lines must also be observed as they arrive.
 
 # 8. `std/env` — environment and configuration
 
@@ -779,8 +901,17 @@ import math from "std/math";
 | `trunc(x)` | `(number): number` | Toward zero |
 | `abs(x)` | `(number): number` | Absolute value |
 | `sqrt(x)` / `cbrt(x)` | `(number): number` | Square / cube root |
-| `log(x)` / `log2(x)` / `log10(x)` | `(number): number` | Natural, base-2, base-10 |
+| `log(x)` / `log2(x)` / `log10(x)` / `log1p(x)` | `(number): number` | Natural, base-2, base-10, `ln(1+x)` |
 | `sin(x)` / `cos(x)` / `tan(x)` | `(number): number` | Radians |
+| `asin(x)` / `acos(x)` / `atan(x)` / `atan2(y,x)` | `(number): number` | Inverse trig, radians |
+| `sinh(x)` / `cosh(x)` / `tanh(x)` | `(number): number` | Hyperbolic |
+| `asinh(x)` / `acosh(x)` / `atanh(x)` | `(number): number` | Inverse hyperbolic |
+| `exp(x)` | `(number): number` | `e^x` |
+| `hypot(...values)` | `(...number[]): number` | sqrt of sum of squares |
+| `sign(x)` | `(number): number` | `-1`, `0`, or `1` (NaN stays NaN) |
+| `LN2`, `LN10`, `LOG2E`, `LOG10E`, `SQRT1_2`, `SQRT2` | `number` | Constants |
+
+Import the module for `math.random()` etc. — bare `Math.random()` is not a global in this surface.
 
 ```ts
 const half = math.random();
@@ -817,14 +948,15 @@ const day = release.getDate();
 |---|---|
 | `now(): Date` | `toISOString(): string` |
 | `fromISOString(s): Date` | `toString(): string` |
-| `parse(s): Date` | `getFullYear()` … `getSeconds(): number` |
+| `parse(s): i64` | `getFullYear()` … `getSeconds(): number` |
 | | `getTime(): i64` (`number` in TS projects) |
 | | `setTime(ms: i64): i64` |
+| | `setFullYear(y)`, `setMonth(m)`, `setDate(d)`, `setHours(h)`, `setMinutes(m)`, `setSeconds(s): i64` |
 | | `addDays/Hours/Minutes/Seconds(n): Date` |
 | | `isBefore(other): boolean` / `isAfter(other): boolean` |
 | | `diffMs(other): i64` |
 
-`add*` methods are **immutable** — they return a new `Date`; the receiver is unchanged. For elapsed comparisons, use `diffMs`, not subtraction of calendar fields. `getTime()`/`diffMs()`/`setTime()` use `i64` in Rust/C++ projects and `number` in TypeScript projects; calendar getters stay `number`. ISO output for machine-readable interchange; `toString()` for humans.
+`setTime` and the `set*` calendar setters mutate in place; `add*` methods are **immutable** — they return a new `Date`; the receiver is unchanged. For elapsed comparisons, use `diffMs`, not subtraction of calendar fields. `getTime()`/`diffMs()`/`setTime()`/`set*()` use `i64` in Rust/C++ projects and `number` in TypeScript projects; calendar getters stay `number`. `Date.parse(s)` returns epoch milliseconds, not a `Date`. ISO output for machine-readable interchange; `toString()` for humans.
 
 # 15. `std/json` — serialization and checked parsing
 
@@ -847,10 +979,9 @@ if (job.priority < 0) throw new Error("priority cannot be negative");
 | Call | Result | Failure |
 |---|---|---|
 | `json.parse<T>(text)` | `T` | Throws on malformed JSON or runtime shape mismatch |
-| `json.parse(text)` | `unknown` | Same |
 | `json.stringify(value, indent?)` | `string` | Unsupported values follow runtime rules |
 
-`parse<T>` does **runtime structural validation**, not a compile-time assertion: it checks member existence and value types. It does not validate business rules (ranges, reachable URLs). Without a type argument the result is `unknown` — narrow it with a declared interface. JSON's model is limited to null, booleans, numbers, strings, arrays, and objects with string keys; functions, class instances, `Map`, `Set`, `Buffer`, and closures are not auto-serialized. Replacer/reviver callbacks are not exposed.
+`parse<T>` requires the type argument; bare `json.parse(text)` is rejected. `parse<T>` does **runtime structural validation**, not a compile-time assertion: it checks member existence and value types. It does not validate business rules (ranges, reachable URLs). JSON's model is limited to null, booleans, numbers, strings, arrays, and objects with string keys; functions, class instances, `Map`, `Set`, `Buffer`, and closures are not auto-serialized. Replacer/reviver callbacks are not exposed.
 
 # 16. `std/crypto` — secure primitives
 
@@ -901,6 +1032,8 @@ console.log(greeting.toString("hex"));           // "48656c6c6f"
 ```
 
 `slice` normalizes indices (fractional → truncate toward zero, negative → count from end, out-of-range → clamp). Encodings: `utf8`, `hex`, `base64`. Invalid hex (odd length, non-hex digit) and invalid base64 throw catchable runtime errors; an unknown literal encoding is a compile-time diagnostic. `Buffer.alloc(size)` throws on negative/fractional/non-finite/excessive sizes.
+
+`atob(text)` and `btoa(text)` are global base64 <-> byte-text helpers (no import); `atob` throws on invalid base64.
 
 `Buffer` is immutable and has no byte-index setter; equality compares contents. Node methods (`write`, `copy`, `readUInt32LE`, `subarray`, `concat`, index assignment) are **not** implied — use typed arrays / `DataView` for numeric layout. Use `Buffer` for encoded payloads and text conversion; use typed arrays/DataView for indexed numeric records.
 
@@ -989,7 +1122,33 @@ grouped.add("a", 1); grouped.add("a", 2);
 grouped.get("a");    // [1, 2]
 ```
 
+Static `Map.groupBy(list, cb: (item, index) => K): Map<K, T[]>` groups an array by a key callback (distinct from `Object.groupBy` below).
+
 Constructor type arguments are **required** — empty collections give no element type. `size` (Map/Set/LRUCache) and LRUCache `capacity` are `usize` in Rust/C++ projects and `number` in TypeScript.
+
+## 18.4 `Object` built-ins (no import)
+
+`Object` is a language builtin. The dynamic-key helpers use the canonical `Record<string, V>` → `Map<string, V>` model and require statically known object fields.
+
+| Member | Result |
+|---|---|
+| `Object.keys(o)` / `Object.values(o)` / `Object.entries(o)` | `string[]`, `V[]`, `[string, V][]` (static shapes only; no `for...in`) |
+| `Object.assign(target, ...sources)` | target shape (known fields) |
+| `Object.is(a, b)` | `boolean` (Object.is semantics) |
+| `Object.freeze` / `Object.seal` / `Object.preventExtensions` | same value; identity approximation — CP3 has no runtime property table |
+| `Object.isFrozen` / `Object.isSealed` / `Object.isExtensible` | `boolean`; folds on a directly frozen/sealed/extensibility-controlled argument |
+| `Object.getPrototypeOf(o)` | `null` (CP3 objects have no prototype chain) |
+| `Object.setPrototypeOf(o, null)` | `o`; only `null` is accepted |
+| `Object.fromEntries(entries)` | `Map<string, V>` (entries may be pairs or tuples) |
+| `Object.groupBy(list, keyFn)` | `Map<string, T[]>`; `keyFn` must return a string key |
+
+```ts
+const o = { a: 1, b: 2 };
+const r = Object.fromEntries(Object.entries(o)); // Map<string, number>
+const g = Object.groupBy(["apple", "avocado"], (w) => w.charAt(0)); // Map<string, string[]>
+```
+
+Use `w.charAt(0)`, not `w[0]`: `text[i]` reads a raw UTF-8 **byte as a number**, while `charAt` returns the code point as a string.
 
 # 19. Typed arrays, `ArrayBuffer`, `DataView` (built-in)
 
@@ -1011,7 +1170,7 @@ No import needed.
 | `BigInt64Array` | 8 bytes | signed 64-bit storage (read via `number`) |
 | `BigUint64Array` | 8 bytes | unsigned 64-bit storage (read via `number`) |
 
-Element reads return `number`. The `BigInt64Array`/`BigUint64Array` classes do **not** expose JavaScript `bigint` values — values above `2^53` lose precision when read as `number`. Do not use these for exact large-integer arithmetic.
+`SharedArrayBuffer` is also a global class for shared byte storage. Element reads return `number`. The `BigInt64Array`/`BigUint64Array` classes do **not** expose JavaScript `bigint` values — values above `2^53` lose precision when read as `number`. Do not use these for exact large-integer arithmetic.
 
 ## 19.2 Construction
 
@@ -1025,7 +1184,7 @@ const storage = new ArrayBuffer(16);
 const view = new DataView(storage, 4, 8);   // offset 4, length 8
 ```
 
-Fixed element count — no growth. A typed view can specify an offset/length over an existing `ArrayBuffer`; multi-byte elements require aligned offsets.
+Fixed element count — no growth. A typed view can specify an offset/length over an existing `ArrayBuffer`; multi-byte elements require aligned offsets. `BYTES_PER_ELEMENT` is a static member on each typed-array class, not an instance member.
 
 ## 19.3 Indexed access and writes
 
@@ -1088,8 +1247,11 @@ const count = scores.length;
 | `unshift(...items)` | `(...T[]): number` | Prepend; returns new length |
 | `pop()` | `(): T \| undefined` | Remove last; `undefined` when empty |
 | `shift()` | `(): T \| undefined` | Remove first; `undefined` when empty |
-| `sort(comparator?)` | `(T[]): T[]` | Sort in place, return receiver (stable, numeric for numbers) |
+| `sort(comparator?)` | `(T[]): T[]` | Sort in place, return receiver (stable, type-aware defaults) |
+| `reverse()` | `(T[]): T[]` | Reverse in place, return receiver |
+| `splice(start, deleteCount, ...items)` | `(start: number, deleteCount: number, ...T[]): T[]` | Remove/insert in place; returns removed elements |
 | `fill(value, start?, end?)` | `(T[]): T[]` | Write a value over a range, return receiver |
+| `copyWithin(target, start, end?)` | `(target, start, end?): T[]` | Copy slice onto target in place, return receiver |
 | `unique()` | `(T[]): T[]` | Remove **adjacent** duplicates in place |
 | `shuffle()` | `(T[]): T[]` | Reorder in place with seeded PRNG |
 
@@ -1100,10 +1262,18 @@ const count = scores.length;
 | Method | Result |
 |---|---|
 | `slice(start?, end?)` | `T[]` (copy of range) |
+| `concat(...items)` | `T[]` (arrays are spread) |
 | `map<U>(cb)` | `U[]` |
+| `flatMap<U>(cb)` | `U[]` (map, then flatten one level) |
 | `filter(cb)` | `T[]` |
-| `flat()` | `T[]` (one level) |
+| `flat(depth?)` | `T[]` (default depth 1) |
+| `toSorted(comparator?)` | `T[]` (sorted copy) |
+| `toReversed()` | `T[]` (reversed copy) |
+| `toSpliced(start, deleteCount, ...items)` | `T[]` (new array; receiver unchanged) |
+| `with(index, value)` | `T[]` (copy with one element replaced) |
 | `join(separator?)` | `string` |
+
+`forEach(cb)`, `find`, `findLast`, and predicate-style `some`/`every` are also available; callbacks receive `(element, index, array)`.
 
 ## 20.4 Search
 
@@ -1111,10 +1281,16 @@ const count = scores.length;
 |---|---|
 | `includes(value, fromIndex?)` | `boolean` |
 | `indexOf(value, fromIndex?)` | `number` (first position or `-1`) |
+| `lastIndexOf(value, fromIndex?)` | `number` (last position or `-1`) |
 | `find(predicate)` | `T \| undefined` |
+| `findLast(predicate)` | `T \| undefined` |
 | `findIndex(predicate)` | `number` (or `-1`) |
+| `findLastIndex(predicate)` | `number` (or `-1`) |
 | `some(predicate)` / `every(predicate)` | `boolean` |
 | `binarySearch(target)` | `number` |
+| `keys()` | `number[]` (indices) |
+| `values()` | `T[]` |
+| `entries()` | `[number, T][]` |
 
 `binarySearch` **requires sorted input**; release builds skip ordering checks, so unsorted input is a caller error with meaningless results. Use the same sort order for search.
 
@@ -1123,9 +1299,10 @@ const count = scores.length;
 ```ts
 const total = [2, 3, 4].reduce((sum, v) => sum + v, 0);   // with initial value
 const total2 = [2, 3, 4].reduce((sum, v) => sum + v);     // first element is the accumulator
+const right = [2, 3, 4].reduceRight((sum, v) => sum + v, 0); // folds last -> first
 ```
 
-The initial value determines the accumulator type and makes an empty-array reduction meaningful.
+The initial value determines the accumulator type and makes an empty-array reduction meaningful. `reduceRight` folds from the last element to the first.
 
 ## 20.6 Sorting
 
@@ -1180,15 +1357,20 @@ const fields = "one,two,three".split(",");
 const words = "red   blue".split(/\s+/);
 
 const t = "  CP3  ".trim();                 // ASCII whitespace only
+const t0 = "  CP3  ".trimStart();              // leading whitespace only
+const t1 = "  CP3  ".trimEnd();                // trailing whitespace only
 const upper = "AbC".toUpperCase();          // ASCII case mapping
 const lower = "AbC".toLowerCase();
 
 const id = "5".padStart(3, "0");            // "005"
 const lab = "cp3".padEnd(6, ".");           // "cp3..."
 const rep = "a".repeat(3);                  // "aaa"
+
+const raw = String.raw("a\\nb");            // literal backslash-n
+const grin = String.fromCodePoint(0x1f600);
 ```
 
-`toUpperCase`/`toLowerCase` are ASCII-only (UTF-8 bytes pass through unchanged). `trim` covers space/tab/line feed/vertical tab/form feed/carriage return only. `repeat` truncates/floors the count; negative → zero. Padding uses stored byte length, so multi-byte fill adds multiple bytes per unit.
+`toUpperCase`/`toLowerCase` are ASCII-only (UTF-8 bytes pass through unchanged). `trim`/`trimStart`/`trimEnd` cover space/tab/line feed/vertical tab/form feed/carriage return only. `codePointAt(i)` returns the Unicode scalar at code-point position `i` (NaN when out of range). `matchAll(regexp)` requires a global `g` regexp and returns `[full, group1, ...]` arrays. `repeat` truncates/floors the count; negative → zero. Padding uses stored byte length, so multi-byte fill adds multiple bytes per unit.
 
 Concatenation with `+` and template literals: the compiler lowers common chains efficiently, but do not assume a single allocation. `replaceAll`/`slice`/`split`/`replace`/`repeat`/`pad*`/case conversion all create new strings.
 
@@ -1281,7 +1463,14 @@ sp.toString();       // "a=9&c=4"
 sp.entries();        // [["a", "9"], ["c", "4"]]
 ```
 
-`+` decodes to space; malformed `%HH` parses as literal text. `set` replaces the first occurrence and drops later duplicates; appends when absent. Empty `=` yields an empty value. No leading `?` in `toString()`.
+`+` decodes to space; malformed `%HH` parses as literal text. `set` replaces the first occurrence and drops later duplicates; appends when absent. Empty `=` yields an empty value. No leading `?` in `toString()`. Input is ASCII-whitespace-trimmed; the constructor also skips a leading `?`.
+
+### URL snapshots and serialization
+
+- `origin` is `""` for non-special schemes (opaque schemes and `file:`).
+- A pathless authority URL reports and serializes `pathname` as `"/"`, so `href` gains the `/`.
+- Userinfo splits at the **last** `@`, then at the **first** `:`.
+- Scheme/hostname are ASCII-lowercased; dot segments are removed; default ports (`:80` http/ws, `:443` https/wss) are stripped; IPv6 hosts stay bracketed in `host` and unbracketed in `hostname`.
 
 # 24. `std/text` — UTF-8 encode/decode
 
@@ -1321,15 +1510,16 @@ import hash from "std/hash";
 | `crc32c(input)` | `crc32c: string\|Buffer → u32` | Castagnoli CRC-32C |
 | `fnv1a32(input)` | `string\|Buffer → u32` | FNV-1a 32-bit |
 | `fnv1a64(input)` | `string\|Buffer → u64` | FNV-1a 64-bit |
+| `xxhash64(input)` | `string\|Buffer → u64` | XXH64, seed 0 |
 
-TypeScript projects return `number` for all four. `u32` results are exactly representable in `number`; `fnv1a64` above `2^53` rounds in `number` — compare `fnv1a64` results for equality only, never expect exact decimal text. In Rust/C++ projects, `u32`/`u64` read exactly.
+TypeScript projects return `number` for all five. `u32` results are exactly representable in `number`; `fnv1a64`/`xxhash64` above `2^53` rounds in `number` — compare those results for equality only, never expect exact decimal text. In Rust/C++ projects, `u32`/`u64` read exactly.
 
 ```ts
 const cacheKey = hash.crc32(configText);
 const same = hash.fnv1a64(payload) === hash.fnv1a64(payload);
 ```
 
-Deterministic and stateless: same bytes → same value in every process. `crc32("") === crc32c("") === 0`; `fnv1a32("") === 2166136261`. Standard check: `crc32("123456789") === 3421780262` (`0xCBF43926`), `crc32c("123456789") === 3808858755` (`0xE3069283`), `fnv1a64("abc") === 16654208175385433931`. Header-only, no native crypto dependency. `xxhash64` is **not implemented** (blocked) — use `fnv1a64` or a `std/crypto` digest. No streaming, no keyed hashing, no hex rendering — format the number at the call site.
+Deterministic and stateless: same bytes → same value in every process. `crc32("") === crc32c("") === 0`; `fnv1a32("") === 2166136261`. Standard check: `crc32("123456789") === 3421780262` (`0xCBF43926`), `crc32c("123456789") === 3808858755` (`0xE3069283`), `fnv1a64("abc") === 16654208175385433931`. Header-only, no native crypto dependency. No streaming, no keyed hashing, no hex rendering — format the number at the call site.
 
 # 26. `std/time` — monotonic clocks
 
@@ -1357,7 +1547,7 @@ console.log(frozen === 0 ? "nothing elapsed" : frozen + "ms");
 sw.reset();
 ```
 
-The clock is `std::chrono::steady_clock` (`QueryPerformanceCounter` on Windows, `CLOCK_MONOTONIC` elsewhere). Monotonic only: never use for wall-clock time, scheduling at a wall instant, or cross-process comparison — use `std/date` for those. `elapsed()` is `number`; there is no integer duration width. No timeouts or scheduling are provided here. `console.time`/`timeEnd` share the same clock. `timeEnd` for a never-started label writes nothing to stdout and prints `Timer "label" does not exist` to stderr. Construction and all `sw` methods allocate nothing and throw nothing. `console.count` is **not** part of the surface.
+The clock is `std::chrono::steady_clock` (`QueryPerformanceCounter` on Windows, `CLOCK_MONOTONIC` elsewhere). Monotonic only: never use for wall-clock time, scheduling at a wall instant, or cross-process comparison — use `std/date` for those. `elapsed()` is `number`; there is no integer duration width. Timers are separate global builtins (`setTimeout`/`setInterval`/`sleep`), not part of `std/time`. `console.time`/`timeEnd` share the same clock. `timeEnd` for a never-started label writes nothing to stdout and prints `Timer "label" does not exist` to stderr. Construction and all `sw` methods allocate nothing and throw nothing. `console.count` is **not** part of the surface.
 
 # 27. Native scalar types — quick reference
 
@@ -1379,22 +1569,39 @@ let ratio: ts_'number' = 0.25;
 
 `strictNumericCasts: true` rejects implicit conversions like `let d: r_'i64' = sourceNumber;` and mixed-width arithmetic.
 
+Native integer arithmetic is **checked in every project mode**: addition, subtraction, multiplication, unary negation, increment/decrement, and arithmetic compound assignments throw `Error` on overflow (unsigned) or undefined-behaviour territory (signed) instead of wrapping. Division/remainder throw on zero divisor; signed `INT_MIN / -1` throws. Signed division truncates toward zero; remainder takes the dividend's sign. `value.wrappingMul(other)` is the explicit per-operation opt-in to modulo-2^N arithmetic (hash/FNV-style code); other operators have no wrapping form. Signed and unsigned natives do not mix in arithmetic in **any** mode — cast explicitly (`value as r_'i64'`) or convert with the global `parseTo`.
+
+`parseTo` is a global, checked, bidirectional converter (no import):
+
+```ts
+parseTo("123", number);                 // string -> number
+parseTo("3.5", number);
+parseTo(value, string);                 // number/native -> string
+let u: r_'u32' = parseTo<r_'u32'>("4294967295");
+```
+
+Narrowing via `parseTo<T>(value)` / `value as T` verifies at runtime and throws `Error` on fractional or out-of-range input; it never silently truncates. Use `r_'...'` for Rust spellings, `c_'...'` for C++ spellings, and `ts_'...'` for TypeScript spellings.
+
 # 28. `std/network` — fetch, server, WebSockets
 
 ```ts
-import { fetch, WebSocket, WebSocketServer, createServer, lookup, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, cookieParser } from "std/network";
+import { fetch, lookup, WebSocket, WebSocketServer, createServer, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, webserver, cookieParser } from "std/network";
+import network from "std/network";
 ```
 
-**No HTTPS/TLS in this beta.** Client fetch accepts only `http://` URLs.
+**No HTTPS/TLS in this beta.** Client fetch accepts only `http://` URLs. The named registry above is closed: raw TCP (`createTcpServer`, `connectTcp`, `TcpSocket`), datagram UDP (`createUdpSocket`, `UdpSocket`), and TLS sockets (`createTlsServer`, `connectTls`, `TlsSocket`) are not exported — do not import them by name; their runtime trees exist but are unwired. Server TLS is config-rejected with `ERR_TLS_BACKEND_UNAVAILABLE` until OpenSSL is vendored.
 
-## 28.1 Fetch
+## 28.1 Fetch and DNS
 
 ```ts
+const address = await lookup("example.com");  // first getaddrinfo result; the same resolution fetch uses
+
 const response = await fetch("http://127.0.0.1:8080/health", {
   method: "GET",
   headers: new Map<string, string>([["Accept", "application/json"]]),
   body: null,
   timeout: 5000,   // milliseconds; 0 = no timeout
+  signal: AbortSignal.timeout(5000),
 });
 
 if (!response.ok) {
@@ -1404,7 +1611,9 @@ const text = await response.text();
 const data = await response.json<Settings>();
 ```
 
-`fetch(url, init?)` resolves to a response with `ok`, `status`, `statusText`, `headers`. The body is buffered before resolution. `text()`, `arrayBuffer()`, `json<T>()` read the body. A bad HTTP status still resolves to a response — check `ok`/`status`. DNS, connection, timeout, unsupported scheme, and protocol failures reject the promise. Numeric fields (`status`, ports) are `u16` in Rust/C++ projects and `number` in TypeScript.
+`fetch(url, init?)` resolves to a fetch `Response` with `ok`, `status`, `statusText`, `headers`, `url`, and `text()` / `arrayBuffer()` / `json<T>()`. The body is buffered before resolution. A bad HTTP status still resolves to a response — check `ok`/`status`. DNS, connection, timeout, unsupported scheme, and protocol failures reject the promise. Numeric fields (`status`, ports) are `u16` in Rust/C++ projects and `number` in TypeScript. `lookup(hostname)` resolves via libuv `getaddrinfo` and rejects with `Error` on failure.
+
+Fetch value types (all named imports): `Headers.get/has/set/append/delete`; `Request(url, init?)` with `url/method/headers/signal/text/json/arrayBuffer`; `Response` adds `url`; `FormData.append/get/has/set/delete` (appended fields can be a fetch `body`); `AbortSignal.aborted` and `AbortSignal.timeout(ms)` (a timed signal `fetch(url, { signal })` applies as request timeout).
 
 ## 28.2 HTTP server
 
@@ -1436,9 +1645,9 @@ server.close();
 
 `createServer(options?)`: `threads` (integer ≥ 1), `tls` (boolean; fails closed until OpenSSL vendored, error `ERR_TLS_BACKEND_UNAVAILABLE`), `cors`, `static(dir)`, `bodyLimit(n)`, `trustProxy` (honors `X-Forwarded-Proto`), `views` (render dir), `onError(err, req, res)`. Empty options object is valid. Handlers are sync or `async () => undefined`. Routes/middleware run in registration order; calling `next()` continues the chain (returns `Promise<undefined>`). A chain ending without a response → 404.
 
-Methods: `get`, `post`, `put`, `delete`, `patch`, `head`, `options`, `any`, `use`. Request fields: `method`, `path`, `route.params`, `query` (Map), `headers` (Map), `cookies` (Map), `ip`, `protocol` (`http` unless `trustProxy`). Request bodies are buffered before dispatch; `text()`/`json<T>()` read that buffer. `port` and status codes are `number` (TypeScript) / `u16` (Rust/C++), consistent with `response.status()`.
+Methods: `get`, `post`, `put`, `delete`, `patch`, `head`, `options`, `all`, `use`, plus `route(path)` chains, `param(name, fn)`, `onError(fn)` (method form), `set("secret", …)` (signed-cookie secret), and settings `enable/disable/enabled/disabled`. Request fields: `method`, `path`, `params`/`query`/`headers`/`cookies`/`signedCookies` (Maps), `baseUrl`, `originalUrl`, `ip`, `protocol` (`http` unless `trustProxy`), `body` (buffered; `text()`/`json<T>()` read it). `port` and status codes are `number` (TypeScript) / `u16` (Rust/C++), consistent with `response.status()`.
 
-Response chain: `status(code)`, `header(name, value)`, `cookie(name, value, { maxAge?, path?, domain?, secure?, httpOnly?, signed?, sameSite? }?)`, `redirect(url, status?)`, `sendFile(path)`, `render(view)`, then terminal `text`, `json`, or `send`. `write(string|Buffer)` + `end()` for chunked writes. **The first terminal response wins**; a second send does not start a new response. CORS preflights are answered by `cors` middleware only.
+Response chain: `status(code)`, `header(name, value)`, `set/append/get/type/links/location/vary`, `cookie(name, value, { maxAge?, path?, domain?, secure?, httpOnly?, signed?, sameSite? }?)` (`maxAge` is **seconds**), `clearCookie(name, opts?)`, `redirect(url, status?)`, `sendFile(path)`, `render(view, locals?)`, `download(path, filename?)`, `attach(filename)`, `format(formats)`, then terminal `text(payload, status?)`, `json(payload, status?)`, or `send(status?)`. `write(string|Buffer)` + `end()` for chunked writes. **The first terminal response wins**; a second send does not start a new response. CORS preflights are answered by `cors` middleware only.
 
 ## 28.3 Router
 
@@ -1446,7 +1655,7 @@ Response chain: `status(code)`, `header(name, value)`, `cookie(name, value, { ma
 import { Router } from "std/network";
 
 const api = new Router();
-api.get("/users/:id", (req, res) => res.json({ id: req.route.params.id }));
+api.get("/users/:id", (req, res) => res.json({ id: req.params.get("id") }));
 api.any("/*", notFound);
 
 const app = createServer();
@@ -1454,7 +1663,7 @@ app.use("/api", api);     // mounts at prefix; params/caseSensitive/strict optio
 app.listen(8080);
 ```
 
-Express-style: `:name` params, `*` catch-all, nested `app.use("/prefix", router)`, `route()` chains, `strict`/`caseSensitive` options. `static`, `cors`, `bodyLimit`, `cookieParser` are router-compatible middleware too.
+Express-style: `:name` params via `req.params` (Map), `*` catch-all, nested `app.use("/prefix", router)`, `route()` chains, `all`, `handle/handler/mountMiddleware`, `strict`/`caseSensitive` options. Middleware factories `static(dir)`, `cors(options)`, `bodyLimit(n)`, `cookieParser(secret?)` are router-compatible; `cookieParser(secret)` additionally enables verified `signedCookies`. Body-parser factories (`json`, `urlencoded`, `text`, `raw`) and `httpError(status, message)` are namespace-corner spellings (`network.json(...)` via the default import) rather than named imports; `webserver()` builds the webserver app. `trustProxy` applies trusted `X-Forwarded-Proto` to `req.protocol` and trusted `X-Forwarded-For` to `req.ip`.
 
 ## 28.4 WebSocket client
 
@@ -1526,7 +1735,7 @@ await io.pollUntilDone(
 );
 ```
 
-`fd` is an `int` on POSIX or the native `SOCKET` on Windows — keep it in the `number` range. The waiter suspends only the calling async function; other work continues on the loop. Rejection occurs on poll error, hangup/disconnect, invalid/closed descriptor, or descriptor closed while waiting. `getSocket()` is called every iteration (connects can change the fd). No cancellation token in the current surface. `std/io` and `std/network` share one libuv loop per thread (epoll on Linux, IOCP on Windows). Blocking C libraries without a pollable fd are a separate offload pool that is not yet available.
+`fd` is an `int` on POSIX or the native `SOCKET` on Windows — keep it in the `number` range. The waiter suspends only the calling async function; other work continues on the loop. Rejection occurs on poll error, hangup/disconnect, invalid/closed descriptor, or descriptor closed while waiting. `getSocket()` is called every iteration (connects can change the fd). Many waiters may share one descriptor; a periodic validity check (100 ms) reports a locally closed descriptor. No cancellation token in the current surface. `std/io` and `std/network` share one libuv loop per thread (epoll on Linux, IOCP on Windows). Blocking C libraries without a pollable fd are a separate offload pool that is not yet available.
 
 # 30. Diagnostics and debugging
 
@@ -1576,23 +1785,26 @@ python tests/runner/run_tests.py --filter stdlib/03/process --jobs 1 --verbose
 | `path.join(...)` | `import path from "std/path"; path.join(...)` |
 | `path.resolve(...)` | `path.resolve(...)` |
 | `os.platform()` / `os.cpus()` | `std/os` |
-| `JSON.parse` / `JSON.stringify` | `import json from "std/json"` |
+| `JSON.parse` / `JSON.stringify` | `import json from "std/json"` (`parse<T>`; no untyped parse) |
 | `Buffer.from` / `.toString("hex")` | `import { Buffer } from "std/buffer"` |
 | `crypto.randomBytes`, `crypto.createHash` | `std/crypto.randomBytes`, `std/crypto.sha256` |
 | `URL` / `URLSearchParams` | `std/url` |
 | `TextEncoder` / `TextDecoder` | `std/text` |
-| `setInterval` / `setTimeout` | not in this surface |
+| `setInterval` / `setTimeout` / `clearTimeout` / `clearInterval` | Core global builtins, no import; `sleep(ms): Promise<undefined>` |
 | `Promise.all` / `Promise.race` | supported combinators |
-| `for...in` over objects | rejected — use `for...of` or `Map`/`Object.keys` equivalents via collections |
-| `Array.prototype.reduceRight` | not in surface |
-| `Object.keys` / `Object.entries` | `Map.keys()` / `Map.entries()` |
+| `for...in` over objects | rejected — use `for...of`, `Object.keys` on static shapes, or `Map` |
+| `Array.prototype.reduceRight` | `array.reduceRight(cb, initial?)` |
+| `Object.keys` / `Object.entries` | `Object.keys(o)` / `Object.entries(o)` (static shapes) |
+| `Object.fromEntries` / `Object.groupBy` | `Object.fromEntries` / `Object.groupBy` → `Map<string, …>` |
+| `structuredClone(value)` | global `structuredClone(value)` (same type back) |
 | `Map` / `Set` | `import { Map, Set } from "std/collections"` |
-| `any` | rejected — use `unknown` + a checked path |
+| `any` | rejected — use a concrete type or `object` |
+| `void` return annotation | use `undefined` (CP3420) |
 | Decorators on classes | not supported |
 | Optional chaining on arbitrary values | supported on nullable receivers |
 | `??` and `||` | both supported; they differ (`??` is nullish only) |
 | `Array.of`, `Array.from` | supported |
-| `Array.prototype.flat`, `unique`, `shuffle` | supported |
+| `Array.prototype.flat`, `unique`, `shuffle` | supported (`flat(depth?)`) |
 | `Array.prototype.binarySearch` | supported (sorted input required) |
 | `String.prototype.split` with regex | supported; captures included, byte offsets |
 | `Intl` / `Date.parse` | `std/date` (ISO only for parsing) |
@@ -1603,6 +1815,7 @@ python tests/runner/run_tests.py --filter stdlib/03/process --jobs 1 --verbose
 | `child_process.exec` / `spawn` | `process.exec` / `process.spawn` |
 | `process.stdout` stream | unavailable — use `console` |
 | `require.main === module` | check `process.argv` for your entry script |
+| `assert.deepEqual` / `util.promisify` | no equivalent in this surface |
 
 Porting advice: classify each external API as a language feature, a `std/...` module, a CP3 package, or a native dependency. Replace at the module boundary, annotate exported signatures, and port failure paths deliberately. Match the failure mode (throw / reject / result object) per API.
 
@@ -1633,5 +1846,6 @@ Porting advice: classify each external API as a language feature, a `std/...` mo
 - [For JavaScript and TypeScript developers](03-javascript-typescript-developers.md) — this page
 - [Create and run your first project](04-first-project.md) — scaffolding walkthrough
 - [Performance, measured carefully](02-performance.md) — benchmark discipline
+- [URL extensions](../03-standard-library/24-url-extensions.md) — WHATWG form-urlencoded and normalization details
 
 When an API detail matters, the module page is authoritative. Compiler diagnostics, conformance tests under `tests/cases/`, and the implementation (`src/std/...`, `src/sema/...`, `src/codegen/...`) are the final word when prose and behavior disagree.
