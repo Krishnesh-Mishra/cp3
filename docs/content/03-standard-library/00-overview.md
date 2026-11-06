@@ -42,13 +42,18 @@ Imports are resolved by the compiler's standard module registry. Unknown module 
 | [JSON](09-json.md) | Serialization and checked parsing |
 | [Cryptography](10-crypto.md) | Random bytes, hashes, UUIDs, and authenticated encryption |
 | [Buffer](11-buffer.md) | Byte buffers and text encodings |
-| [Collections](12-collections.md) | Insertion-ordered Map and Set |
+| [Collections](12-collections.md) | Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap |
 | [Network](13-network.md) | Fetch, WebSockets, and HTTP server APIs |
 | [Arrays](14-arrays.md) | Built-in array operations |
 | [Strings](15-strings.md) | Built-in UTF-8 string operations |
 | [Typed arrays](16-typed-arrays.md) | Fixed-width numeric arrays, buffers, and DataView |
 | [Regular expressions](17-regular-expressions.md) | Core regex literals, flags, match results, and string splitting |
 | [I/O readiness](18-io.md) | Non-blocking fd readiness and `pollUntilDone` for native socket libraries |
+| [URL and query strings](19-url.md) | Percent-encoding, `URL`, `URLSearchParams` |
+| [Text encoding](20-text.md) | UTF-8 `TextEncoder`/`TextDecoder` |
+| [Time and stopwatches](21-time.md) | Monotonic `Stopwatch`, `console.time`/`timeEnd` |
+| [Checksums](23-hash.md) | Non-crypto `crc32`/`crc32c`/`fnv1a32`/`fnv1a64`/`xxhash64` |
+| [URL extensions](24-url-extensions.md) | Base resolution, normalization, form-urlencoded details |
 
 ## Error and asynchronous behavior
 

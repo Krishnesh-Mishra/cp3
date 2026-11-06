@@ -1,6 +1,27 @@
 # v0.2 Finish Plan (2026-11-05)
 
-## Status: code written, merge in progress, docs partially updated.
+## Status: corpus green (2114 found, 2091 passed, 0 failed, 23 ambiguous), commits pending.
+
+## Corpus green note (2026-11-06)
+Full corpus passes with no failures. Session fixes (all uncommitted, to be
+committed per unit): worker empty directions via `undefined` (CP3906
+"direction is empty"), worker-unit std imports now select their native
+backends, `Object.fromEntries`/`groupBy` select the collections backend
+content-driven, `Object.groupBy` test now uses `charAt(0)`, `isSealed` for
+`preventExtensions`-only objects, narrowing-vs-assignment (`declaredType`),
+`return null` for `T | null` via `std::nullopt` (Optional only, not Maybe),
+imported generic functions now carry type parameters through
+`FunctionInfo`/`ImportedBinding`, `.join` unwraps `E[] | undefined` receivers,
+network config-server link markers + `onError` `Promise` wrapping, spread
+member calls no longer intercepted by the 1-arg settings getter, cookie
+`maxAge` in seconds, `req.protocol` field read (fixed a SIGSEGV in the
+webserver slot lookup) + `applyTrustProxy` field refresh, `res.render`
+fallback to the response-family renderer, static-file middleware path joins
+(windows separators), `.catch` handlers returning `Undefined` fulfill with
+default `T`, stale baselines (`nullable_bst_search`, `unbroken_cycle_rejected`,
+`native_i64_precision` now pins checked arithmetic), `structuredClone` test on
+homogeneous nested arrays, plus new `parseto/edge_cases` and `native/widths`
+test cases.
 
 ## Docs status
 - DONE: `docs/content/03-standard-library/19-url.md` … `24-url-extensions.md` (20-text, 21-time, 22-log, 23-hash, 24-url-extensions)

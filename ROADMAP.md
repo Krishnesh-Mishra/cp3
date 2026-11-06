@@ -42,7 +42,7 @@ No new approved items in this revision. Add only with lead approval.
 | `URL` + `URLSearchParams` | `std/url`, `new` | hand-written RFC 3986 parser over `string_view`, zero-copy slices; reuse `percentDecode` from the network runtime | no regex in the parser |
 | `TextEncoder` / `TextDecoder` | `std/text`, new | `simdutf` for UTF-8/UTF-16 validate + convert; hand-written fallback | library internal, API stable |
 | `stopwatch` + `console.time` / `console.timeEnd` | `std/time`, new | `QueryPerformanceCounter` / `CLOCK_MONOTONIC`; monotonic only, zero allocation: `const sw = stopwatch(); sw.start(); sw.elapsed(); sw.stop();` | never wall clock |
-| `Logger` | `std/log`, new | bundled `fmt`, level filter, synchronous by default, optional async sink over `Channel` | — |
+| ~~`Logger` | `std/log`, new~~ | removed before v0.2: use `console.log`/`console.info` | — |
 | Checksums | `std/hash`, new; named **checksums, not security** | `crc32`, `crc32c`, `xxhash64`, `fnv1a` via bundled XXHash/CRC32C | documented non-crypto |
 
 #### D. Extensions to existing modules (no new module)

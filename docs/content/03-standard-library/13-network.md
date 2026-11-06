@@ -4,10 +4,10 @@ chapter: Chapter 3 · Standard library
 ---
 # Networking
 
-`std/network` exports `fetch`, `WebSocket`, `WebSocketServer`, and `createServer` as named imports:
+`std/network` exports `fetch`, `WebSocket`, `WebSocketServer`, `createServer`, `lookup`, `Headers`, `Request`, `Response`, `FormData`, `AbortSignal`, `Router`, `static`, `cors`, `bodyLimit`, `cookieParser`, and the `webserver` namespace as named imports:
 
 ```ts
-import { fetch, WebSocket, WebSocketServer, createServer } from "std/network";
+import { fetch, WebSocket, WebSocketServer, createServer, lookup, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, cookieParser } from "std/network";
 ```
 
 Network APIs are asynchronous and depend on DNS, remote hosts, ports, and operating-system resources. Handle rejection and close resources when finished.
@@ -47,7 +47,7 @@ Wait for the `"open"` event before sending application messages. `"message"` rec
 
 ## HTTP server with `createServer`
 
-`createServer()` constructs an HTTP server with route registration and middleware support. The options object currently supports `threads`, an integer of at least one. Each route handler can be synchronous or return `Promise<undefined>`. Routes and middleware execute in registration order. Calling `next()` from middleware continues the chain; it returns `Promise<undefined>`, so async middleware may use `await next()`. A chain that completes without sending a response returns 404.
+`createServer(options?)` constructs an HTTP server with route registration and middleware support. The options object supports `threads`, an integer of at least one, and the full config surface: `tls` (boolean; TLS fails closed with `ERR_TLS_BACKEND_UNAVAILABLE` until OpenSSL is vendored), `cors` (`{ origin?, methods?, headers?, credentials?, maxAge? }`), `static` (a directory path), `bodyLimit` (maximum request-body bytes), `trustProxy` (honors `X-Forwarded-Proto`), `views` (a template directory for `res.render`), and `onError` (`(err, req, res) => ...`). An empty options object is valid. Each route handler can be synchronous or return `Promise<undefined>`. Routes and middleware execute in registration order. Calling `next()` from middleware continues the chain; it returns `Promise<undefined>`, so async middleware may use `await next()`. A chain that completes without sending a response returns 404. Requests over `bodyLimit` are rejected with 413 before the handler runs; CORS preflights are answered by the cors middleware alone.
 
 ```ts
 const server = createServer();
@@ -58,9 +58,13 @@ server.get("/health", (request, response): undefined => {
 server.listen(8080, (): undefined => console.log("ready"));
 ```
 
-The server supports `get`, `post`, `put`, `delete`, `patch`, `head`, `options`, `any`, and `use`. `listen(port, callback?)` begins accepting requests; `close()` shuts down the listener and connections. Request values include method, path, route `params`, query Map, and headers Map. Request bodies are buffered before dispatch; `text()` and `json<T>()` read that body. The `port` and status-code parameters are `number` in a `typescript` project and `u16` in a `rust`/`cpp` project, matching the values returned by `res.status`.
+The server supports `get`, `post`, `put`, `delete`, `patch`, `head`, `options`, `any`, and `use`. `listen(port, callback?)` begins accepting requests; `close()` shuts down the listener and connections. Request values include method, path, route `params`, query Map, headers Map, `cookies` Map, `ip`, and `protocol` (`http` unless `trustProxy` sees `X-Forwarded-Proto`). Request bodies are buffered before dispatch; `text()` and `json<T>()` read that body. The `port` and status-code parameters are `number` in a `typescript` project and `u16` in a `rust`/`cpp` project, matching the values returned by `res.status`.
 
-Responses support chainable `status(code)` and `header(name, value)`, plus terminal `text`, `json`, and `send` operations. `write(string | Buffer)` and `end()` provide chunked response writes. The first terminal response operation wins; code that tries to send a second response does not start a new response.
+Responses support chainable `status(code)` and `header(name, value)`, `cookie(name, value, { maxAge?, path?, domain?, secure?, httpOnly?, signed?, sameSite? }?)` (`maxAge` is in seconds), `redirect(url, status?)`, `sendFile(path)`, and `render(view)` (serves from the configured `views` directory), plus terminal `text`, `json`, and `send` operations. `write(string | Buffer)` and `end()` provide chunked response writes. The first terminal response operation wins; code that tries to send a second response does not start a new response.
+
+## Router and middleware helpers
+
+`new Router(options?)` builds a mountable route set with the same `get`/`post`/`put`/`delete`/`patch`/`head`/`options`/`all` methods, plus `use`/middleware, `route(path)` chains, and nested routers. Mount with `app.use("/prefix", router)`; params, cases where `strict` or `caseSensitive` constrain matching, and custom path patterns (`:name`, `*`) follow Express-style semantics. `static(dir)` serves files, `cors(options)` answers `OPTIONS` preflights and stamps CORS headers, `bodyLimit(n)` rejects oversize bodies with 413, and `cookieParser()` fills `req.cookies`.
 
 Use editor completion for the precise callback types in the compiler version you target. CP3's HTTP API is not a full Express or Node compatibility layer.
 

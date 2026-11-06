@@ -57,6 +57,21 @@ The parallel API splits suitable work across native threads and combines results
 
 Workers communicate through typed messages and handles. Values sent across the boundary must satisfy the worker payload rules. The compiler rejects unsupported captures, payload mismatches, and module forms instead of treating a `shared_ptr` as permission to share arbitrary state.
 
+A worker's channel is typed by the entry arrow's `Thread<In, Out>` annotation. Use `undefined` in a direction to declare it empty — the direction can never carry a value: sends into it are a compile error (CP3906), and the receive side's listener is nullary. `request` also needs a non-empty `Out` direction to carry its reply.
+
+```ts
+export default (thread: Thread<number, undefined>) => {
+  thread.on("message", (n) => {
+    console.log(`${n}`); // receives; cannot postMessage back
+  });
+};
+```
+
+```ts
+const w = new Worker("./worker.cp3");
+w.postMessage(21); // worker side of an empty In direction: CP3906
+```
+
 ## Reference counts are not locks
 
 `std::shared_ptr` uses an atomic ownership count so its control block can track references safely. It does not synchronize field accesses or prevent two threads from racing on the same object. Only use a shared value concurrently when the API and type rules provide a safe protocol.

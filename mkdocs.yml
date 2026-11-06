@@ -148,6 +148,12 @@ nav:
       - "Typed arrays, buffers, and DataView": 03-standard-library/16-typed-arrays.md
       - Regular expressions: 03-standard-library/17-regular-expressions.md
       - I/O readiness: 03-standard-library/18-io.md
+      - URL and query strings: 03-standard-library/19-url.md
+      - Text encoding: 03-standard-library/20-text.md
+      - Time and stopwatches: 03-standard-library/21-time.md
+
+      - Checksums: 03-standard-library/23-hash.md
+      - URL extensions: 03-standard-library/24-url-extensions.md
   - Compiler and tools:
       - "Chapter 4 · Compiler and tools": 04-compiler-cli/00-overview.md
       - CLI commands: 04-compiler-cli/01-cli-commands.md

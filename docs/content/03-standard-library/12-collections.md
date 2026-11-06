@@ -8,7 +8,7 @@ chapter: Chapter 3 · Standard library
 of them from `"std/collections"`; there are no per-type module specifiers:
 
 ```ts
-import { Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap } from "std/collections";
+import { Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap } from "std/collections";
 
 const counts = new Map<string, number>();
 const seen = new Set<string>();
@@ -18,6 +18,7 @@ const heap = new PriorityQueue<number>();
 const ring = new RingBuffer<number>(16);
 const flags = new BitSet();
 const grouped = new MultiMap<string, number>();
+const shared = new ConcurrentMap<string, number>();
 const cache = new LRUCache<string, number>(128);
 ```
 
@@ -71,7 +72,7 @@ Map and Set key equality follows the runtime's equality semantics for their supp
 
 ## Concurrency
 
-These collections are ordinary values, not synchronization primitives. Do not mutate one concurrently from worker threads without a supported synchronization protocol. The `std/collections` module exports Map and Set; concurrency primitives are separate language/runtime features.
+Except for `ConcurrentMap`, these collections are ordinary values, not synchronization primitives. Do not mutate one concurrently from worker threads without a supported synchronization protocol. `ConcurrentMap` (below) is mutex-guarded and thread-safe; every other concurrency primitive is a separate language/runtime feature.
 
 ## Constructor types are required
 
@@ -248,6 +249,21 @@ grouped.add("a", 2);
 grouped.get("a"); // [1, 2]
 ```
 
+## ConcurrentMap
+
+`ConcurrentMap<K, V>` is a thread-safe map: `new ConcurrentMap<K, V>()`. Every
+member is atomic with respect to the others on the same instance (mutex-guarded).
+`set(key, value)` inserts or replaces, `get(key)` returns `V | undefined`, `has(key)`
+reports presence, `delete(key)` removes and reports whether a key was removed, and
+`size` is the entry count. There is no cross-thread ordering guarantee, and `has`
+is not atomic with a following `get`.
+
+```ts
+const shared = new ConcurrentMap<string, number>();
+shared.set("hits", 1);
+shared.get("hits"); // 1
+```
+
 ## Full API table
 
 | Type | Constructor | Member | Signature |
@@ -296,10 +312,14 @@ grouped.get("a"); // [1, 2]
 | MultiMap | | `has`, `delete` | `(key: K): boolean` |
 | MultiMap | | `clear` | `clear(): void` |
 | MultiMap | | `size` | Read-only count property (distinct keys) |
+| ConcurrentMap | `new ConcurrentMap<K, V>()` | `set` | `set(key: K, value: V): void` (thread-safe) |
+| ConcurrentMap | | `get` | `get(key: K): V \| undefined` (thread-safe) |
+| ConcurrentMap | | `has`, `delete` | `(key: K): boolean` (thread-safe) |
+| ConcurrentMap | | `size` | Read-only count property (thread-safe, point-in-time) |
 
 All types are imported from `"std/collections"`:
-`import { Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap } from "std/collections";`
+`import { Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap } from "std/collections";`
 
 ## Tests and implementation
 
-The standard-library collection tests cover generic construction, missing Map lookups, insertion order, replacement, deletion, clear, and iteration, plus deterministic Queue FIFO, Stack LIFO, PriorityQueue min/max order, RingBuffer overwrite, BitSet `set`/`get`/`count`/`and`/`or`/`xor`, MultiMap `add`/`get`, and LRU eviction cases — all importing from `"std/collections"`. Unknown members are diagnosed at compile time.
+The standard-library collection tests cover generic construction, missing Map lookups, insertion order, replacement, deletion, clear, and iteration, plus deterministic Queue FIFO, Stack LIFO, PriorityQueue min/max order, RingBuffer overwrite, BitSet `set`/`get`/`count`/`and`/`or`/`xor`, MultiMap `add`/`get`, ConcurrentMap `set`/`get`, and LRU eviction cases — all importing from `"std/collections"`. Unknown members are diagnosed at compile time.
