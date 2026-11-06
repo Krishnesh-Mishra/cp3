@@ -87,6 +87,7 @@ ImportedBinding functionBinding(const SemaResult& sema,
     out.isFunction = true;
     if (const FunctionInfo* fi = functionInfoOf(sema, fn.nodeId)) {
         out.type = Type::function(fi->paramTypes, fi->returnType);
+        out.typeParams = fi->typeParams;
         out.paramTypes = fi->paramTypes;
         out.paramOptional = fi->paramOptional;
         out.hasRest = fi->hasRest;
@@ -221,6 +222,7 @@ std::optional<ImportedBinding> localBinding(const CompilationUnit& unit,
         if (si->isFunction) {
             if (const FunctionInfo* fi = functionInfoOf(sema, si->declNodeId)) {
                 b.type = Type::function(fi->paramTypes, fi->returnType);
+                b.typeParams = fi->typeParams;
                 b.paramTypes = fi->paramTypes;
                 b.paramOptional = fi->paramOptional;
                 b.hasRest = fi->hasRest;

@@ -15,8 +15,8 @@
 //
 // The walker is split by node family (`walkContainer` / `walkOperator` /
 // `walkStmt` plus the statement helpers) to keep each function within the
-// style budget; the two webserverion dispatchers handle disjoint node kinds, so
-// every webserverion visits each at most once.
+// style budget; the two expression dispatchers handle disjoint node kinds, so
+// every expression visits each at most once.
 // =============================================================================
 #include "detail/core/worker_module.hpp"
 
@@ -68,11 +68,11 @@ void addSite(const NewExpr& n, PathScan& scan) {
     scan.sites.push_back(WorkerPathSite{n.nodeId, literal.value, literal.span});
 }
 
-// Literal, container and arrow webserverions.
+// Literal, container and arrow expressions.
 void walkContainer(const Expr& e, PathScan& scan) {
     switch (e.kind) {
         case NodeKind::TemplateLiteral:
-            walkList(static_cast<const TemplateLiteral&>(e).webserverions, scan);
+            walkList(static_cast<const TemplateLiteral&>(e).expressions, scan);
             return;
         case NodeKind::ArrayLiteral:
             walkList(static_cast<const ArrayLiteral&>(e).elements, scan);
@@ -106,7 +106,7 @@ void walkContainer(const Expr& e, PathScan& scan) {
                 if (p && p->defaultValue) walkExpr(*p->defaultValue, scan);
             }
             if (!a.body) return;
-            if (a.webserverionBody) {
+            if (a.expressionBody) {
                 walkExpr(*static_cast<const Expr*>(a.body.get()), scan);
             } else {
                 walkStmt(*static_cast<const Stmt*>(a.body.get()), scan);
@@ -118,7 +118,7 @@ void walkContainer(const Expr& e, PathScan& scan) {
     }
 }
 
-// Operator, call and access webserverions.
+// Operator, call and access expressions.
 void walkOperator(const Expr& e, PathScan& scan) {
     switch (e.kind) {
         case NodeKind::MemberExpr: {
@@ -207,7 +207,7 @@ void walkVarDecl(const VariableDeclaration& vd, PathScan& scan) {
     }
 }
 
-// A for/for-of/for-in header: the init may be a declaration or an webserverion.
+// A for/for-of/for-in header: the init may be a declaration or an expression.
 void walkForHeader(const NodePtr& left, const ExprPtr& condition,
                    const ExprPtr& update, PathScan& scan) {
     if (left) {
@@ -247,9 +247,9 @@ void walkWhile(const WhileStatement& w, PathScan& scan) {
 
 void walkStmt(const Stmt& s, PathScan& scan) {
     switch (s.kind) {
-        case NodeKind::webserverionStatement: {
-            const auto& e = static_cast<const webserverionStatement&>(s);
-            if (e.webserverion) walkExpr(*e.webserverion, scan);
+        case NodeKind::expressionstatement: {
+            const auto& e = static_cast<const expressionstatement&>(s);
+            if (e.expression) walkExpr(*e.expression, scan);
             return;
         }
         case NodeKind::BlockStatement: {

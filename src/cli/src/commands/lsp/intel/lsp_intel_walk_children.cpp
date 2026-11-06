@@ -5,7 +5,7 @@
 // detail/lsp_intel_walk.hpp.
 //
 // One switch per family, split so no function exceeds the layout budget: the
-// webserverion family is grouped into shape, call-like and operator nodes; the
+// expression family is grouped into shape, call-like and operator nodes; the
 // control family into loops and the rest. A family visitor only visits
 // children; the recursion itself is visitSubtree (lsp_intel_walk.cpp).
 // =============================================================================
@@ -14,7 +14,7 @@
 namespace cp3::cli {
 namespace {
 
-// --- webserverion family, grouped by shape -------------------------------------
+// --- expression family, grouped by shape -------------------------------------
 
 void visitShapeChildren(const Node& node, const Visit& visit) {
     switch (node.kind) {
@@ -23,7 +23,7 @@ void visitShapeChildren(const Node& node, const Visit& visit) {
             for (const TemplateElementPtr& quasi : literal.quasis) {
                 visitSubtree(quasi.get(), visit);
             }
-            visitExprs(literal.webserverions, visit);
+            visitExprs(literal.expressions, visit);
             return;
         }
         case NodeKind::ArrayLiteral:
@@ -299,8 +299,8 @@ void visitControlStmtChildren(const Node& node, const Visit& visit) {
         case NodeKind::ForInStatement:
             visitLoopChildren(node, visit);
             return;
-        case NodeKind::webserverionStatement:
-            visitSubtree(static_cast<const webserverionStatement&>(node).webserverion.get(),
+        case NodeKind::expressionstatement:
+            visitSubtree(static_cast<const expressionstatement&>(node).expression.get(),
                          visit);
             return;
         case NodeKind::BlockStatement:

@@ -7,7 +7,7 @@
 // detail/lsp_intel_walk.hpp.
 //
 // Node kinds are aggregated into contiguous enum ranges (patterns,
-// webserverions, statements, class members, signatures, types); the dispatcher
+// expressions, statements, class members, signatures, types); the dispatcher
 // tests those ranges in order, and leaves are simply not recursed. Every node
 // in a parsed program is visited exactly once.
 // =============================================================================
@@ -28,7 +28,7 @@ bool isExprKind(NodeKind kind) {
     return inRange(kind, NodeKind::NumberLiteral, NodeKind::RangeExpr);
 }
 bool isStmtKind(NodeKind kind) {
-    return inRange(kind, NodeKind::webserverionStatement, NodeKind::ExportDeclaration);
+    return inRange(kind, NodeKind::expressionstatement, NodeKind::ExportDeclaration);
 }
 bool isDeclStmtKind(NodeKind kind) {
     switch (kind) {

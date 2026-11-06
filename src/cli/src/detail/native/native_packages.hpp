@@ -70,7 +70,12 @@ std::vector<const NativePackage*> selectNativePackages(
 // Core-language backends (D48; detail/native_regex.hpp). These are not
 // import-driven: `usesRegex` is true when the generated C++ includes
 // cp3/core/regex.hpp, i.e. exactly when the program uses a regex literal or a
-// regex value. Returns the selected rows in a stable order (empty when none).
-std::vector<const NativePackage*> selectCoreNativePackages(bool usesRegex);
+// regex value. `usesCollections` is true when the generated C++ includes
+// cp3/std/collections.hpp without the program importing "std/collections"
+// (the global `Object.fromEntries` / `Object.groupBy` builtins lower onto
+// the collections runtime). Returns the selected rows in a stable order
+// (empty when none).
+std::vector<const NativePackage*> selectCoreNativePackages(
+    bool usesRegex, bool usesCollections);
 
 }  // namespace cp3::cli::detail

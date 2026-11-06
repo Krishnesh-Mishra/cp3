@@ -420,9 +420,29 @@ std::optional<NativeBuildFlags> applyNativePackages(
     std::vector<const NativePackage*> natives =
         selectNativePackages(importedStdModules);
     // Core-language backends (D48) join the same list; selected from the
-    // generated module's content, not the import graph.
-    const std::vector<const NativePackage*> core = selectCoreNativePackages(
-        programText.find("cp3/core/regex.hpp") != std::string::npos);
+    // generated module's content, not the import graph. The network
+    // regex-routing TUs call `Regex::compile`/`exec` too; a regex-routed
+    // program names `addRegexRoute(` / `PathSpec` instead of the header, so
+    // both spellings select the regex backend.
+    const bool usesRegex =
+        programText.find("cp3/core/regex.hpp") != std::string::npos ||
+        programText.find("addRegexRoute(") != std::string::npos ||
+        programText.find("PathSpec") != std::string::npos;
+    // `Object.fromEntries` / `Object.groupBy` (global builtins, no import)
+    // lower onto the collections runtime, so the generated text names
+    // cp3/std/collections.hpp even when the program never imports
+    // "std/collections"; select that row's backend (include roots for the
+    // vendored unordered_dense/sodium/xxhash, the bucket_hash TU and its
+    // link) the same content-driven way as the regex row.
+    const bool usesCollections =
+        programText.find("cp3/std/collections.hpp") != std::string::npos;
+    const std::vector<const NativePackage*> core =
+        selectCoreNativePackages(usesRegex, usesCollections);
+    for (const NativePackage* row : core) {
+        if (std::find(natives.begin(), natives.end(), row) == natives.end()) {
+            natives.push_back(row);
+        }
+    }
     natives.insert(natives.end(), core.begin(), core.end());
     if (natives.empty()) return flags;
 

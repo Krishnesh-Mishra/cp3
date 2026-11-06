@@ -174,7 +174,8 @@ struct WorkerInputs {
 // they are the user's compile errors too.
 int prepareWorkers(const WorkerInputs& in, CodegenOptions& options,
                    std::vector<detail::BuildRequest::ExtraModule>& extras,
-                   std::vector<GeneratedModule>& modules) {
+                   std::vector<GeneratedModule>& modules,
+                   std::vector<std::string>& workerStdModules) {
     const std::vector<WorkerPathSite> sites = collectWorkerPathSites(*in.entry.ast);
     if (sites.empty()) return kExitSuccess;
     const bool lineDirectives =
@@ -189,6 +190,7 @@ int prepareWorkers(const WorkerInputs& in, CodegenOptions& options,
     }
     options.workers = std::move(workers.sites);
     modules = std::move(workers.modules);
+    workerStdModules = std::move(workers.stdModules);
     for (std::size_t i = 0; i < modules.size(); ++i) {
         extras.push_back(detail::BuildRequest::ExtraModule{
             workers.moduleNames[i], &modules[i], workers.sourceKeys[i]});
@@ -367,10 +369,11 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     options.nativeBindings = effective.compile.nativeBindings;
     std::vector<GeneratedModule> workerModules;
     std::vector<detail::BuildRequest::ExtraModule> extras;
+    std::vector<std::string> workerStdModules;
     const int workerExit = prepareWorkers(
         WorkerInputs{*entry, fs::path(file->path).parent_path(), moduleName, sm,
                      ctx},
-        options, extras, workerModules);
+        options, extras, workerModules, workerStdModules);
     if (workerExit != kExitSuccess) return workerExit;
 
     GeneratedModule mod;
@@ -400,9 +403,20 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     }
 
     // Every resolved "std/..." specifier in the whole graph (any unit, not just
-    // the entry) selects that module's native backend for this build (D68).
-    const std::vector<std::string> importedStdModules =
+    // the entry) selects that module's native backend for this build (D68), and
+    // so do the worker units' (they live in their own graphs, so the resolver
+    // recorded them separately).
+    std::vector<std::string> importedStdModules =
         cp3::cli::importedStdModules(*frontend.graph);
+    {
+        std::unordered_set<std::string> seen(importedStdModules.begin(),
+                                             importedStdModules.end());
+        for (const std::string& specifier : workerStdModules) {
+            if (seen.insert(specifier).second) {
+                importedStdModules.push_back(specifier);
+            }
+        }
+    }
     const std::vector<detail::BuildRequest::PackageImplementation>
         packageImplementations = collectPackageImplementations(*frontend.graph);
     detail::BuildRequest request;

@@ -146,7 +146,7 @@ void appendBuiltinValues(std::vector<lsp::CompletionCandidate>& out) {
         candidate.detail = value.detail;
         candidate.documentation = value.documentation;
         if (std::string(value.name) == "String") {
-            // Complete a usable string webserverion rather than a bare
+            // Complete a usable string expression rather than a bare
             // conversion function value in an argument position.
             candidate.insertText = "String(${1:value})";
             candidate.insertTextFormat = 2;
@@ -196,7 +196,7 @@ const char* keywordDocumentation(const std::string& keyword) {
     if (keyword == "while") return "Repeats a statement while its condition is truthy.";
     if (keyword == "do") return "Starts a loop whose body runs before its condition is checked.";
     if (keyword == "for") return "Starts a `for`, `for...of`, or `for...in` loop.";
-    if (keyword == "switch") return "Selects a matching `case` branch from one webserverion.";
+    if (keyword == "switch") return "Selects a matching `case` branch from one expression.";
     if (keyword == "case") return "Labels a branch in a `switch` statement.";
     if (keyword == "default") return "Labels the fallback branch in a `switch` statement.";
     if (keyword == "try") return "Starts a block whose thrown errors can be handled by `catch` and `finally`.";
@@ -212,8 +212,8 @@ const char* keywordDocumentation(const std::string& keyword) {
     if (keyword == "extends") return "Names a base class in a class declaration.";
     if (keyword == "implements") return "Names an interface a class promises to implement.";
     if (keyword == "weak") return "Declares a weak class reference field, which does not keep the referenced object alive.";
-    if (keyword == "of") return "Introduces the iterable webserverion in a `for...of` loop.";
-    if (keyword == "in") return "Introduces the key-iteration webserverion in a `for...in` loop.";
+    if (keyword == "of") return "Introduces the iterable expression in a `for...of` loop.";
+    if (keyword == "in") return "Introduces the key-iteration expression in a `for...in` loop.";
     if (keyword == "void") return "The return type for a function that produces no value.";
     if (keyword == "unknown") return "A type-safe top type that must be narrowed before use.";
     if (keyword == "typeof") return "Returns the runtime type-name string for a value.";
@@ -430,8 +430,8 @@ const char* const kStatementKeywords[] = {
     "return", "throw", "break", "continue", "async", "abstract",
 };
 
-// The keywords an webserverion may start with.
-const char* const kwebserverionKeywords[] = {
+// The keywords an expression may start with.
+const char* const kexpressionKeywords[] = {
     "new", "this", "await", "typeof", "async", "true", "false", "null",
     "undefined",
 };
@@ -500,8 +500,8 @@ std::vector<std::string> legalKeywords(CompletionPosition position,
             out.push_back("case");
             out.push_back("default");
             break;
-        case CompletionPosition::webserverionStart:
-            for (const char* word : kwebserverionKeywords) {
+        case CompletionPosition::expressionstart:
+            for (const char* word : kexpressionKeywords) {
                 if (!awaitAllowed && std::string(word) == "await") continue;
                 out.push_back(word);
             }
@@ -670,11 +670,11 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
     if (!typesOnly) appendImportedCandidates(document, candidates);
     // 3. The module-level declarations.
     appendDeclarationCandidates(document, candidates, typesOnly);
-    // 4. Compiler globals are real webserverion names, but they are not
+    // 4. Compiler globals are real expression names, but they are not
     // published as source declarations in SemaResult. Add them explicitly
     // after nearer user bindings so they never outrank a local shadow.
     if (!typesOnly &&
-        (position == CompletionPosition::webserverionStart ||
+        (position == CompletionPosition::expressionstart ||
          position == CompletionPosition::StatementStart ||
          position == CompletionPosition::Unknown)) {
         appendBuiltinValues(candidates);

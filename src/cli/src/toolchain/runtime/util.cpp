@@ -280,6 +280,10 @@ std::vector<fs::path> compilerIncludeRoots() {
     // native row when the program imports it (native_packages.cpp).
     for (const char* rel : {"src/runtime/include", "src/common/include",
                             "src/std/string/include",
+                            "src/std/buffer/include",
+                            "src/std/date/include",
+                            "src/std/object/include",
+                            "src/std/collections/include",
                             "src/language/typed-arrays/include"}) {
         const fs::path candidate = resolveIncludeRoot(repo, rel);
         std::error_code ec;
@@ -331,7 +335,7 @@ constexpr RuntimeUnit kRuntimeUnits[] = {
     {"promise.cpp",
      "cp3/async/|cp3/parallel/|runEventLoop|cp3/std/console.hpp|"
      "cp3/std/network.hpp|cp3/std/io.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},
-    {"uv_loop.cpp", "cp3/std/network.hpp|cp3/std/io.hpp"},
+    {"uv_loop.cpp", "cp3/std/network.hpp|cp3/std/io.hpp|cp3/std/fs.hpp|cp3/std/process.hpp"},
     {"parallel.cpp", "cp3/parallel/parallel.hpp|parallelRunAll|ThreadPool"},
 };
 

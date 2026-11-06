@@ -33,7 +33,7 @@
 #include "../../../../std/url/native.hpp"
 #include "../../../../std/time/native.hpp"
 #include "../../../../std/hash/native.hpp"
-#include "../../../../std/log/native.hpp"
+
 #include "../../../../std/text/native.hpp"
 #include "../../../../std/readline/native.hpp"
 
@@ -60,7 +60,7 @@ const std::vector<const NativePackage*>& nativePackages() {
         &kUrlNativePackage,
         &kTimeNativePackage,
         &kHashNativePackage,
-        &kLogNativePackage,
+
         &kTextNativePackage,
         &kReadlineNativePackage,
     };
@@ -79,9 +79,11 @@ std::vector<const NativePackage*> selectNativePackages(
     return selected;
 }
 
-std::vector<const NativePackage*> selectCoreNativePackages(bool usesRegex) {
+std::vector<const NativePackage*> selectCoreNativePackages(
+    bool usesRegex, bool usesCollections) {
     std::vector<const NativePackage*> selected;
     if (usesRegex) selected.push_back(&kRegexCoreNativePackage);
+    if (usesCollections) selected.push_back(&kCollectionsNativePackage);
     return selected;
 }
 

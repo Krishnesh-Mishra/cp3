@@ -22,6 +22,7 @@
 // =============================================================================
 #include "detail/core/worker_module.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <map>
@@ -147,6 +148,15 @@ bool WorkerResolver::generateUnit(const fs::path& resolved,
         sink.error(diagcode::kModuleNotFound, site.span,
                    "cannot load worker module '" + site.literal + "'");
         return false;
+    }
+    // The worker unit's std imports select the D68 native backends for this
+    // build alongside the entry's; record them before the unit's graph is
+    // dropped.
+    for (const std::string& specifier : importedStdModules(*graph)) {
+        if (std::find(out.stdModules.begin(), out.stdModules.end(),
+                      specifier) == out.stdModules.end()) {
+            out.stdModules.push_back(specifier);
+        }
     }
     // The worker unit's own native bindings (an `import native` in the
     // worker): they are type-checked and lowered like the entry's.

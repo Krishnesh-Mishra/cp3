@@ -11,7 +11,7 @@
 // single trailing newline, and re-indents code lines by brace depth (2 spaces
 // per level). Interiors of multi-line comments, template literals, and lines
 // that begin inside one of those are left byte-for-byte untouched. Known
-// imprecision: braces inside regular-webserverion literals or inside a template
+// imprecision: braces inside regular-expression literals or inside a template
 // interpolation that spans lines can throw off the indentation depth.
 // =============================================================================
 #include "detail/editor/format.hpp"

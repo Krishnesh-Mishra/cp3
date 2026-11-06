@@ -29,7 +29,7 @@ namespace cp3::cli {
 enum class CompletionPosition {
     Unknown,         // the cursor is nowhere the parser could place it
     StatementStart,  // a statement may begin here
-    webserverionStart, // an webserverion may begin here
+    expressionstart, // an expression may begin here
     TypePosition,    // a type name is expected
     MemberPosition,  // after a `receiver.`
     ImportClause,    // inside an import clause

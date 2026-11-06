@@ -96,7 +96,7 @@ std::vector<std::string> parameterDocs(const AnalyzedDocument& document,
                                        const SymbolInfo* symbol,
                                        std::size_t count);
 
-// The type of the webserverion that ends at `offset` (the receiver of a member
+// The type of the expression that ends at `offset` (the receiver of a member
 // access), or nullptr when there is none.
 const Type* receiverTypeEndingAt(const AnalyzedDocument& document,
                                  std::uint32_t offset);

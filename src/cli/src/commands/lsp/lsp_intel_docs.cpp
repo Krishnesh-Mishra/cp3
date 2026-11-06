@@ -87,7 +87,7 @@ const DocComment* memberDocOf(const AnalyzedDocument& document,
 }
 
 // The doc comment of the class member whose KEY is the node `nodeId`: the
-// cursor sits on the member's name, which is a key webserverion rather than
+// cursor sits on the member's name, which is a key expression rather than
 // the member node itself.
 const DocComment* memberDocByKey(const AnalyzedDocument& document,
                                  std::uint32_t nodeId) {
@@ -396,7 +396,7 @@ DocAnswer documentationAt(const AnalyzedDocument& document, const Node& node,
         if (found != document.sema.docs.end()) doc = &found->second;
     }
     if (doc == nullptr) {
-        // The cursor is on a class member's name: its key webserverion.
+        // The cursor is on a class member's name: its key expression.
         doc = memberDocByKey(document, node.nodeId);
     }
     if (doc == nullptr && !name.empty() && document.file != nullptr) {

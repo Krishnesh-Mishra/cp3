@@ -46,12 +46,16 @@ std::vector<WorkerPathSite> collectWorkerPathSites(const Program& program);
 
 // The resolved worker units of one entry compile: `sites` feed
 // `CodegenOptions::workers`; `modules[i]` is the generated TU for
-// `moduleNames[i]`, keyed incrementally by `sourceKeys[i]`.
+// `moduleNames[i]`, keyed incrementally by `sourceKeys[i]`. `stdModules` is
+// every `std/...` specifier the worker units import (deduped): the worker
+// units live in their own module graphs, so the entry's D68 native-package
+// selection cannot see them unless the resolver records them here.
 struct ResolvedWorkers {
     std::vector<WorkerSite> sites;
     std::vector<std::string> moduleNames;
     std::vector<std::string> sourceKeys;
     std::vector<GeneratedModule> modules;
+    std::vector<std::string> stdModules;
     std::vector<Diagnostic> diagnostics;
     bool failed = false;
 };
