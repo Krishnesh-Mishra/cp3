@@ -1,4 +1,4 @@
-export default (thread: Thread<number, void>) => {
+export default (thread: Thread<number, undefined>) => {
   thread.on("message", (data) => {
     thread.postMessage(7);
   });

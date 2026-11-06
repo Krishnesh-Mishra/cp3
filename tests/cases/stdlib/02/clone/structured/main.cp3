@@ -1,10 +1,10 @@
 import console from "std/console";
 import { Map } from "std/collections";
-const a = [1, 2, [3, 4]];
+const a: number[][] = [[1, 2], [3, 4]];
 const b = structuredClone(a);
-b[2][0] = 99;
-console.log(a[2][0]);
-console.log(b[2][0]);
+b[1][0] = 99;
+console.log(a[1][0]);
+console.log(b[1][0]);
 const o = { x: 1 };
 const p = structuredClone(o);
 p.x = 7;

@@ -4,7 +4,7 @@
   "exitCode": 1,
   "error": {
     "code": "CP3401",
-    "line": 5,
+    "line": 2,
     "contains": "mark one edge weak"
   }
 }

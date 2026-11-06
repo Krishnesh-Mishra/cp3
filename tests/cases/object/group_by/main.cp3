@@ -1,6 +1,6 @@
 import console from "std/console";
 const words = ["apple", "avocado", "banana", "berry"];
-let g: Record<string, string[]> = Object.groupBy(words, (w) => w[0]);
+let g: Record<string, string[]> = Object.groupBy(words, (w) => w.charAt(0));
 console.log(g.get("a").length);
 console.log(g.get("b").join(","));
 console.log(`${g.size}`);

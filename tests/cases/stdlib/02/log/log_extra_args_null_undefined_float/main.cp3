@@ -1,7 +1,0 @@
-import { Logger } from "std/log";
-
-// Extra args render like console.*: null/undefined spell as JS, numbers use
-// the shortest round-trip spelling, booleans as true/false, all joined with
-// single spaces after the message.
-const log = new Logger("app");
-log.info("vals", null, undefined, 1.5, false, "end");

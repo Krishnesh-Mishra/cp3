@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "listening\ncors 200 * hello\npreflight 204 *\nstatic 200 static-body\nmiss 404 not found\nsmall 200 ok\nbig 413 payload too large\nproto https\nplain http\nboom 500 {\"error\":\"internal\"}\nview 200 <h1>view:hello</h1>\n",
+  "exitCode": 0
+}

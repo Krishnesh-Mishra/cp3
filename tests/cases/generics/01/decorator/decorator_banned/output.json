@@ -3,7 +3,7 @@
   "stdout": "",
   "exitCode": 1,
   "error": {
-    "code": "CP3xxxx",
+    "code": "CP3808",
     "line": 1,
     "col": 1,
     "contains": "decorator"

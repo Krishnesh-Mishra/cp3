@@ -9,7 +9,7 @@ let n = 0;
 while (c < 3) {
   try {
     if (c === 1) {
-      throw 7;
+      throw new Error("7");
     }
     n = n + 10;
   } catch (e) {

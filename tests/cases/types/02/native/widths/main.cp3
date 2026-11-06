@@ -1,0 +1,34 @@
+import console from "std/console";
+
+// Widening keeps the native width; narrowing back is an explicit checked
+// conversion (`parseTo` / `as`), never silent truncation.
+let small: r_'i16' = -300;
+let wide: r_'i32' = small;
+console.log(wide);
+let widest: r_'i64' = wide;
+console.log(widest);
+
+let u: r_'u16' = 65535;
+let uWide: r_'u32' = u;
+console.log(uWide);
+let uWidest: r_'u64' = uWide;
+console.log(uWidest);
+
+let f: r_'f32' = 1.25;
+console.log(f);
+let d: r_'f64' = 1.25;
+console.log(d);
+
+let asNumber: number = widest as number;
+console.log(asNumber + 0.5);
+
+let narrowed: r_'f32' = parseTo<r_'f32'>(d);
+console.log(narrowed);
+
+// An i8/i64 pair and a u8/u32 pair widen through the whole family.
+let a: r_'i8' = -100;
+let b: r_'i64' = a;
+console.log(b);
+let c: r_'u8' = 200;
+let e: r_'u64' = c;
+console.log(e);

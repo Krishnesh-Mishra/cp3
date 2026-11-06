@@ -1,5 +1,0 @@
-import { Logger } from "std/log";
-import console from "std/console";
-const log = new Logger();
-console.log(log.name === "" ? "empty" : "named");
-log.info("count", 42, "ok", true);

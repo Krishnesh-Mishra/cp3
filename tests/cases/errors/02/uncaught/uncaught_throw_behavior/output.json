@@ -1,5 +1,5 @@
 {
   "mode": "run",
-  "stdout": "",
+  "stdout": "before\n",
   "exitCode": 1
 }

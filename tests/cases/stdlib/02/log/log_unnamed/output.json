@@ -1,5 +1,0 @@
-{
-  "mode": "run",
-  "stdout": "INFO hello\ninfo\ndebug\n",
-  "exitCode": 0
-}

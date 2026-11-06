@@ -1,2 +1,2 @@
 import console from "std/console";
-try { throw "x"; } catch { console.log("caught"); }
+try { throw new Error("x"); } catch { console.log("caught"); }

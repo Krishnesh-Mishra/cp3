@@ -1,0 +1,51 @@
+import console from "std/console";
+
+// JS `Number()` trims surrounding whitespace.
+console.log(parseTo("  42  ", number));
+// Exponent notation parses as a number.
+console.log(parseTo("1e3", number));
+console.log(parseTo("1.5e2", number));
+// An unparseable string becomes NaN (as a variable source; a literal is a
+// compile-time error, see bad_number).
+const nope: string = "not a number";
+console.log(parseTo(nope, number));
+// Infinity round-trips through the same conversion.
+console.log(parseTo("Infinity", number));
+console.log(parseTo("-Infinity", number));
+
+// Widening a native to a number is exact within the f64 range.
+const big: r_'i32' = 67;
+console.log(parseTo(big, number));
+
+// Bounds: 255 fits a u8; a variable 256 does not (the range check throws).
+const text: string = "256";
+let u: r_'u8' = parseTo<r_'u8'>("255");
+console.log(u);
+try {
+  let over: r_'u8' = parseTo<r_'u8'>(text);
+  console.log("no-throw");
+} catch (e) {
+  console.log("threw:" + e.message);
+}
+
+// A fractional value never becomes an integer.
+const fraction: string = "3.5";
+try {
+  let f: r_'i32' = parseTo<r_'i32'>(fraction);
+  console.log("no-throw");
+} catch (e) {
+  console.log("threw:" + e.message);
+}
+
+// A negative value never becomes a u8.
+const negSrc: number = -1;
+try {
+  let neg: r_'u8' = parseTo<r_'u8'>(negSrc);
+  console.log("no-throw");
+} catch (e) {
+  console.log("threw:" + e.message);
+}
+
+// 64-bit values round-trip exactly beyond 2^53.
+let precise: r_'i64' = 9007199254740993;
+console.log(parseTo(precise, string));

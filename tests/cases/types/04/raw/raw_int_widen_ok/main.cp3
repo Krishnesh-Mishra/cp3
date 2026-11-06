@@ -1,3 +1,3 @@
 let a: r_'u32' = 5;
 let b: c_'long long' = 10;
-let c = a + b;
+let c = (a as r_'i64') + b;

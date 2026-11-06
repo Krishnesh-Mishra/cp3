@@ -1,5 +1,0 @@
-{
-  "mode": "run",
-  "stdout": "svc\nERROR svc boom\n",
-  "exitCode": 0
-}

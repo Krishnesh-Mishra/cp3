@@ -1,11 +1,5 @@
 {
-  "mode": "check",
-  "stdout": "",
-  "exitCode": 1,
-  "error": {
-    "code": "CP3305",
-    "line": 3,
-    "col": 1,
-    "contains": "'hash' has no member 'xxhash64'"
-  }
+  "mode": "run",
+  "stdout": "xxh64empty\nxxh64differs\nxxh64stable\nxxh64hello\n",
+  "exitCode": 0
 }

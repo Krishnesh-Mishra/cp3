@@ -6,7 +6,7 @@ import { fetch, createServer } from "std/network";
 const app = createServer();
 app.get("/boom", async (req, res) => {
   await Promise.resolve(0);
-  throw "async boom";
+  throw new Error("async boom");
 });
 app.get("/ok", (req, res) => {
   res.text("still ok");

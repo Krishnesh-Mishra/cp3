@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "42\n1000\n150\nNaN\nInfinity\n-Infinity\n67\n255\nthrew:value 256 is out of range for u8\nthrew:value 3.5 is out of range for i32\nthrew:value -1 is out of range for u8\n9007199254740993\n",
+  "exitCode": 0
+}

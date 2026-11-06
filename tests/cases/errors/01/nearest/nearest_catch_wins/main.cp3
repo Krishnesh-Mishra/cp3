@@ -1,4 +1,4 @@
 import console from "std/console";
 try {
-  try { throw "x"; } catch (e) { console.log("inner"); }
+  try { throw new Error("x"); } catch (e) { console.log("inner"); }
 } catch (e) { console.log("outer"); }

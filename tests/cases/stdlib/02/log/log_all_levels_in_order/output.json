@@ -1,5 +1,0 @@
-{
-  "mode": "run",
-  "stdout": "DEBUG svc d\nINFO svc i\nWARN svc w\nERROR svc e\n",
-  "exitCode": 0
-}

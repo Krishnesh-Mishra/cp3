@@ -1,6 +1,6 @@
 import console from "std/console";
 try {
-  throw "x";
+  throw new Error("x");
 } catch (e) {
   console.log("catch");
 } finally {

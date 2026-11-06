@@ -1,11 +1,5 @@
 {
-  "mode": "check",
-  "stdout": "",
-  "exitCode": 1,
-  "error": {
-    "code": "CP3301",
-    "line": 2,
-    "col": 1,
-    "contains": "cannot find name 'Error'"
-  }
+  "mode": "run",
+  "stdout": "Error: boom\n",
+  "exitCode": 0
 }

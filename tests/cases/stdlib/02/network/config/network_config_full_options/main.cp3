@@ -1,0 +1,86 @@
+import console from "std/console";
+import fs from "std/fs";
+import { Map } from "std/collections";
+import { fetch, createServer } from "std/network";
+
+// Full-options createServer() config: one server exercising every config
+// surface together. TLS stays off (there are no certs in the test
+// environment, so the server is plain HTTP); trustProxy is therefore
+// exercised over loopback with X-Forwarded-Proto. The static dir and the
+// views dir are literal paths written by this case itself.
+fs.mkdirSync("public", true);
+fs.writeFileSync("public/hello.txt", "static-body");
+fs.mkdirSync("views", true);
+fs.writeFileSync("views/hello.html", "<h1>view:hello</h1>");
+
+const app = createServer({
+  tls: false,
+  cors: {
+    origin: "*",
+    methods: "GET,POST,OPTIONS",
+    headers: "content-type",
+    credentials: true,
+    maxAge: 600,
+  },
+  static: "public",
+  bodyLimit: 64,
+  trustProxy: true,
+  views: "views",
+  onError: (err, req, res) => {
+    res.status(500).json({ error: "internal" });
+  },
+});
+
+app.get("/hello", (req, res) => { res.text("hello"); });
+app.post("/submit", async (req, res) => { res.text(await req.text()); });
+app.get("/protocol", (req, res) => { res.text(req.protocol); });
+app.get("/boom", (req, res) => { throw new Error("handler failed"); });
+app.get("/view", (req, res) => { res.render("hello"); });
+app.listen(48310, () => { console.log("listening"); });
+
+// CORS headers on a plain cross-origin GET.
+let cors = await fetch("http://127.0.0.1:48310/hello");
+console.log(`cors ${cors.status} ${cors.headers.get("access-control-allow-origin") ?? "?"} ${await cors.text()}`);
+
+// CORS preflight: OPTIONS is answered by the cors middleware alone.
+let pre = await fetch("http://127.0.0.1:48310/hello", { method: "OPTIONS" });
+console.log(`preflight ${pre.status} ${pre.headers.get("access-control-allow-origin") ?? "?"}`);
+
+// Static file hit serves the file bytes with 200.
+let file = await fetch("http://127.0.0.1:48310/hello.txt");
+console.log(`static ${file.status} ${await file.text()}`);
+
+// Static miss falls through the chain to the dispatcher's 404.
+let miss = await fetch("http://127.0.0.1:48310/missing.txt");
+console.log(`miss ${miss.status} ${await miss.text()}`);
+
+// A body under the 64-byte limit is echoed back.
+let small = await fetch("http://127.0.0.1:48310/submit", { method: "POST", body: "ok" });
+console.log(`small ${small.status} ${await small.text()}`);
+
+// A body over the limit is rejected with 413 before the handler runs.
+let big = await fetch("http://127.0.0.1:48310/submit", {
+  method: "POST",
+  body: "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",
+});
+console.log(`big ${big.status} ${await big.text()}`);
+
+// trustProxy: X-Forwarded-Proto decides req.protocol.
+let fwd = new Map<string, string>();
+fwd.set("x-forwarded-proto", "https");
+let proto = await fetch("http://127.0.0.1:48310/protocol", { headers: fwd });
+console.log(`proto ${await proto.text()}`);
+
+// Without the header, the plain-HTTP (tls off) server still answers http.
+let plain = await fetch("http://127.0.0.1:48310/protocol");
+console.log(`plain ${await plain.text()}`);
+
+// onError turns a throwing handler into a 500 JSON response.
+let boom = await fetch("http://127.0.0.1:48310/boom");
+console.log(`boom ${boom.status} ${await boom.text()}`);
+
+// A rendered view is served verbatim from the literal views directory.
+let view = await fetch("http://127.0.0.1:48310/view");
+console.log(`view ${view.status} ${await view.text()}`);
+
+app.close();
