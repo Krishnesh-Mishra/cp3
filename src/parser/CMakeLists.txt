@@ -5,7 +5,7 @@
 # `include/cp3/parser.hpp`.
 #
 # ADDING A SOURCE FILE: append one line to `cp3_parser_sources` below (STYLE.md §8
-# lists the target decomposition: parser.cpp, statements.cpp, webserverions.cpp,
+# lists the target decomposition: parser.cpp, statements.cpp, expressions.cpp,
 # declarations.cpp, types.cpp, patterns.cpp, ...).
 # =============================================================================
 
@@ -17,7 +17,7 @@ set(cp3_parser_sources
     src/decl/members.cpp
     src/decl/patterns.cpp
     src/decl/types.cpp
-    src/expr/webserverions.cpp
+    src/expr/expressions.cpp
     src/expr/primary.cpp
     src/expr/literals.cpp
     src/core/node_ids.cpp

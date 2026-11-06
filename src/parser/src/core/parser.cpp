@@ -105,7 +105,7 @@ StmtPtr ParserImpl::parseStatement() {
         return parseLabeledStatement();
     }
 
-    return parsewebserverionStatement();
+    return parseexpressionstatement();
 }
 
 StmtPtr ParserImpl::parseDeclaration(bool isExported) {
@@ -153,7 +153,7 @@ StmtPtr ParserImpl::parseBlock() {
 }
 
 // `@Name class ...`: decorators are compile-time macros. The parser keeps the
-// decorator webserverions on the class node; sema resolves each name to a
+// decorator expressions on the class node; sema resolves each name to a
 // `comptime function` and the C++ output never carries decorator metadata.
 StmtPtr ParserImpl::parseDecoratedStatement() {
     const Token start = peek();

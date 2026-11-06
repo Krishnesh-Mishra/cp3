@@ -1,6 +1,6 @@
 // =============================================================================
 // src/parser/tests/test_scanner_literals.cpp - scanner literal/trivia lexing:
-// numbers, strings, template chunks, and regular webserverions. Test-only.
+// numbers, strings, template chunks, and regular expressions. Test-only.
 // =============================================================================
 #include "test_scanner.h"
 

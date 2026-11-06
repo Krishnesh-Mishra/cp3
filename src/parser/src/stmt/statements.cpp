@@ -3,7 +3,7 @@
 //
 // Implements the statement forms dispatched by ParserImpl::parseStatement()
 // (parser.cpp): if/while/do-while/for/for-of/for-in/switch, break/continue/
-// return/throw, try/catch/finally, labeled and webserverion statements.
+// return/throw, try/catch/finally, labeled and expression statements.
 // =============================================================================
 #include "detail/tokens.h"
 
@@ -19,7 +19,7 @@ StmtPtr ParserImpl::parseIfStatement() {
     (void)advance();
     (void)expect(TokenKind::LParen, "expected '(' after 'if'");
     auto stmt = std::make_unique<IfStatement>(start.span);
-    stmt->condition = parsewebserverion();
+    stmt->condition = parseexpression();
     (void)expect(TokenKind::RParen, "expected ')' after if condition");
     stmt->thenBranch = parseStatement();
     if (!stmt->thenBranch) {
@@ -40,7 +40,7 @@ StmtPtr ParserImpl::parseWhileStatement() {
     (void)advance();
     (void)expect(TokenKind::LParen, "expected '(' after 'while'");
     auto stmt = std::make_unique<WhileStatement>(start.span);
-    stmt->condition = parsewebserverion();
+    stmt->condition = parseexpression();
     (void)expect(TokenKind::RParen, "expected ')' after while condition");
     stmt->body = parseStatement();
     if (!stmt->body) stmt->body = std::make_unique<EmptyStatement>(prev().span);
@@ -58,7 +58,7 @@ StmtPtr ParserImpl::parseDoWhileStatement() {
         report(diagcode::kExpectedToken, "expected 'while' after 'do' body");
     }
     (void)expect(TokenKind::LParen, "expected '(' after 'while'");
-    stmt->condition = parsewebserverion();
+    stmt->condition = parseexpression();
     (void)expect(TokenKind::RParen, "expected ')' after do..while condition");
     consumeSemicolon();
     stmt->span = spanFrom(start);
@@ -83,16 +83,16 @@ StmtPtr ParserImpl::parseForStatement() {
         } else {
             bool savedNoIn = noIn_;
             noIn_ = true;
-            ExprPtr expr = parsewebserverion();
+            ExprPtr expr = parseexpression();
             noIn_ = savedNoIn;
             init = std::move(expr);
         }
         if (match(TokenKind::KwOf)) {
             isForOf = true;
-            right = parsewebserverion();
+            right = parseexpression();
         } else if (match(TokenKind::KwIn)) {
             isForIn = true;
-            right = parsewebserverion();
+            right = parseexpression();
         }
     }
 
@@ -128,9 +128,9 @@ StmtPtr ParserImpl::parseClassicFor(const Token& start, NodePtr init) {
     auto s = std::make_unique<ForStatement>(start.span);
     s->init = std::move(init);
     (void)expect(TokenKind::Semicolon, "expected ';' in for header");
-    if (!check(TokenKind::Semicolon)) s->condition = parsewebserverion();
+    if (!check(TokenKind::Semicolon)) s->condition = parseexpression();
     (void)expect(TokenKind::Semicolon, "expected ';' in for header");
-    if (!check(TokenKind::RParen)) s->update = parsewebserverion();
+    if (!check(TokenKind::RParen)) s->update = parseexpression();
     (void)expect(TokenKind::RParen, "expected ')' after for header");
     s->body = parseStatement();
     if (!s->body) s->body = std::make_unique<EmptyStatement>(prev().span);
@@ -143,7 +143,7 @@ StmtPtr ParserImpl::parseSwitchStatement() {
     (void)advance();
     (void)expect(TokenKind::LParen, "expected '(' after 'switch'");
     auto stmt = std::make_unique<SwitchStatement>(start.span);
-    stmt->discriminant = parsewebserverion();
+    stmt->discriminant = parseexpression();
     (void)expect(TokenKind::RParen, "expected ')' after switch discriminant");
     (void)expect(TokenKind::LBrace, "expected '{' to open switch body");
 
@@ -152,7 +152,7 @@ StmtPtr ParserImpl::parseSwitchStatement() {
         bool isDefault = false;
         ExprPtr test;
         if (match(TokenKind::KwCase)) {
-            test = parsewebserverion();
+            test = parseexpression();
         } else if (match(TokenKind::KwDefault)) {
             isDefault = true;
         } else {
@@ -219,7 +219,7 @@ StmtPtr ParserImpl::parseReturnStatement() {
     auto stmt = std::make_unique<ReturnStatement>(start.span);
     if (!check(TokenKind::Semicolon) && !check(TokenKind::RBrace) && !atEnd() &&
         !peek().precededByNewline) {
-        stmt->argument = parsewebserverion();
+        stmt->argument = parseexpression();
     }
     consumeSemicolon();
     stmt->span = spanFrom(start);
@@ -232,9 +232,9 @@ StmtPtr ParserImpl::parseThrowStatement() {
     auto stmt = std::make_unique<ThrowStatement>(start.span);
     if (!peek().precededByNewline && !check(TokenKind::Semicolon) &&
         !check(TokenKind::RBrace) && !atEnd()) {
-        stmt->argument = parsewebserverion();
+        stmt->argument = parseexpression();
     } else {
-        report(diagcode::kUnexpectedToken, "expected an webserverion after 'throw'");
+        report(diagcode::kUnexpectedToken, "expected an expression after 'throw'");
     }
     consumeSemicolon();
     stmt->span = spanFrom(start);
@@ -279,13 +279,13 @@ StmtPtr ParserImpl::parseLabeledStatement() {
     return stmt;
 }
 
-StmtPtr ParserImpl::parsewebserverionStatement() {
+StmtPtr ParserImpl::parseexpressionstatement() {
     const Token start = peek();
-    ExprPtr expr = parsewebserverion();
+    ExprPtr expr = parseexpression();
     if (!expr) return nullptr;
     consumeSemicolon();
-    auto stmt = std::make_unique<webserverionStatement>(start.span);
-    stmt->webserverion = std::move(expr);
+    auto stmt = std::make_unique<expressionstatement>(start.span);
+    stmt->expression = std::move(expr);
     stmt->span = spanFrom(start);
     return stmt;
 }

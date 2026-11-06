@@ -1,1 +1,1 @@
-https://github.com/martinus/unordered_dense.git v4.3.1 7c58a8b7a48e790fe72f6508eb3b46317cbba9d5 2026-11-05
+https://github.com/martinus/unordered_dense.git v5.3.3 7c58a8b7a48e790fe72f6508eb3b46317cbba9d5 2026-11-05

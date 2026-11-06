@@ -106,7 +106,7 @@ private:
         enum class Kind { Locals, Arguments, Variable };
         Kind kind = Kind::Locals;
         int frame = 0;
-        std::string expr;    // Variable: webserverion to create a varobj for
+        std::string expr;    // Variable: expression to create a varobj for
         std::string varobj;  // Variable: gdb's varobj name once created
     };
 

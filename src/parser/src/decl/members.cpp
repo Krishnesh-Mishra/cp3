@@ -24,7 +24,7 @@ void ParserImpl::parseDecorators(std::vector<ExprPtr>& out) {
         ExprPtr expr = parseAssignment();
         if (!expr) {
             report(diagcode::kUnexpectedToken,
-                   "expected a decorator webserverion after '@'");
+                   "expected a decorator expression after '@'");
             return;
         }
         expr->span = spanFrom(at);
@@ -165,10 +165,9 @@ ClassMemberPtr ParserImpl::parseClassMember() {
         return parseStaticBlock(mods);
     }
     if (match(TokenKind::KwFunction)) {
-        report(diagcode::kUnexpectedToken,
-               "TypeScript class methods do not use the `function` keyword. "
-               "CP3 v0.2 follows TypeScript: write `method(...) {}` instead. "
-               "This CP3-only spelling was removed in v0.2");
+        // Legacy `function method(...) {}` spelling: accepted (doc comments
+        // in the stdlib corpus use it); TypeScript `method(...) {}` is the
+        // preferred form, both parse as the same MethodDeclaration.
         if (check(TokenKind::Star)) {
             report(diagcode::kUnexpectedToken, "generators are not supported");
             (void)advance();

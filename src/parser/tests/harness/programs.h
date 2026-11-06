@@ -13,7 +13,7 @@ namespace cp3test {
 using Case = std::pair<std::string, std::string>;
 
 // Appends the built-in representative programs (module items, declarations,
-// classes, statements, webserverions, types, error cases, edge cases).
+// classes, statements, expressions, types, error cases, edge cases).
 void builtinCases(std::vector<Case>& out);
 
 }  // namespace cp3test

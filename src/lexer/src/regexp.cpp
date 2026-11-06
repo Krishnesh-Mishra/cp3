@@ -1,5 +1,5 @@
 // =============================================================================
-// src/lexer/src/regexp.cpp - regular-webserverion literals and flags.
+// src/lexer/src/regexp.cpp - regular-expression literals and flags.
 //
 // Implements `Scanner::regexAllowed`, `Scanner::scanRegex` and
 // `Scanner::scanRegexFlags` (declared in detail/scanner.h). Per DECISIONS.md D52 there
@@ -20,7 +20,7 @@
 namespace cp3 {
 
 // True when `/` at the current position should begin a RegExp literal rather
-// than a division: the previous *significant* token cannot end an webserverion.
+// than a division: the previous *significant* token cannot end an expression.
 // This is the standard "previous token" heuristic.
 bool Scanner::regexAllowed() const noexcept {
     if (!hasPrev_) return true;
@@ -95,7 +95,7 @@ void Scanner::scanRegex() {
     if (!closed) {
         error = true;
         errorAt(diagcode::kInvalidRegExp, start, end,
-                "unterminated regular webserverion literal");
+                "unterminated regular expression literal");
     }
 
     Token t;
@@ -122,12 +122,12 @@ void Scanner::scanRegexFlags(std::uint32_t flagsStart, std::uint32_t end, bool& 
         if (!known) {
             error = true;
             errorAt(diagcode::kInvalidRegExp, p, p + 1,
-                    std::string("invalid regular webserverion flag '") +
+                    std::string("invalid regular expression flag '") +
                         static_cast<char>(f) + "'");
         } else if (seenFlags[f]) {
             error = true;
             errorAt(diagcode::kInvalidRegExp, p, p + 1,
-                    std::string("duplicate regular webserverion flag '") +
+                    std::string("duplicate regular expression flag '") +
                         static_cast<char>(f) + "'");
         }
         seenFlags[f] = true;

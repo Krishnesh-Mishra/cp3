@@ -67,7 +67,7 @@ TypePtr ParserImpl::parseParenOrFunctionType() {
                 auto fn = std::make_unique<FunctionType>(start.span);
                 fn->params = std::move(params);
                 // In type syntax the return type follows `=>` (e.g.
-                // `(a: number) => void`); a pre-arrow `: T` is webserverion
+                // `(a: number) => void`); a pre-arrow `: T` is expression
                 // arrow-function syntax and is handled by parseParenOrArrow.
                 fn->returnType = ret ? std::move(ret) : parseType();
                 fn->span = spanFrom(start);

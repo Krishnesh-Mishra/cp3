@@ -11,7 +11,7 @@
 //   numbers.cpp    numeric literals
 //   strings.cpp    string literals and escape sequences
 //   templates.cpp  template literals (lexed flat - DECISIONS.md D7)
-//   regexp.cpp     regular-webserverion literals and flags (DECISIONS.md D52)
+//   regexp.cpp     regular-expression literals and flags (DECISIONS.md D52)
 //   keywords.cpp   keyword / operator tables
 //
 // The frozen public boundary is cp3/lexer.hpp (class `Lexer`); everything here
@@ -90,7 +90,7 @@ private:
     // --- templates (templates.cpp) -------------------------------------------
     void scanTemplateChunk(bool continuing);
 
-    // --- regular webserverions (regexp.cpp) ------------------------------------
+    // --- regular expressions (regexp.cpp) ------------------------------------
     bool regexAllowed() const noexcept;
     void scanRegex();
     void scanRegexFlags(std::uint32_t flagsStart, std::uint32_t end, bool& error);

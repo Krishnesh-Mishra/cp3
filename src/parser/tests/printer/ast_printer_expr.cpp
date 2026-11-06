@@ -1,5 +1,5 @@
 // =============================================================================
-// src/parser/tests/ast_printer_expr.cpp - webserverion, pattern, and type node
+// src/parser/tests/ast_printer_expr.cpp - expression, pattern, and type node
 // printers. Test-only.
 // =============================================================================
 #include "ast_printer.h"
@@ -102,7 +102,7 @@ bool printClosureExpr(const Node* n, int ind) {
         case NodeKind::ArrowFunction: {
             const auto& x = *static_cast<const ArrowFunction*>(n);
             std::printf("  isAsync=%d exprBody=%d typeParams=%zu params=%zu\n",
-                        x.isAsync ? 1 : 0, x.webserverionBody ? 1 : 0, x.typeParams.size(),
+                        x.isAsync ? 1 : 0, x.expressionBody ? 1 : 0, x.typeParams.size(),
                         x.params.size());
             printTypeParams(x.typeParams, ind + 2);
             printParams(x.params, ind + 2);

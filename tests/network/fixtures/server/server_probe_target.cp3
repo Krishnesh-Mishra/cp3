@@ -31,7 +31,7 @@ app.post("/echo", (req, res) => {
   res.text("echo-ok");
 });
 app.get("/boom", (req, res) => {
-  throw "probe-boom";
+  throw new Error("probe-boom");
 });
 app.get("/hdr", (req, res) => {
   res.header("x-probe", "clean").text("hdr");

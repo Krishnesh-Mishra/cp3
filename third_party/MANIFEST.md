@@ -329,10 +329,10 @@ Notes:
 
 | library | upstream (candidate) | kind | internal hot path (current stand-in) | status |
 | --- | --- | --- | --- | --- |
-| ankerl::unordered_dense | https://github.com/martinus/unordered_dense.git v4.3.1 7c58a8b7a48e790fe72f6508eb3b46317cbba9d5 | header-only (MIT) | `std/collections` Map/Set, `std/io` fd table | VENDORED (headers) |
+| ankerl::unordered_dense | https://github.com/martinus/unordered_dense.git v5.3.3 7c58a8b7a48e790fe72f6508eb3b46317cbba9d5 | header-only (MIT) | `std/collections` Map/Set, `std/io` fd table | VENDORED (headers) |
 | fast_float | https://github.com/lemire/fast_float.git master 6a3fabc342d4d149722fc2316babdcf24fdf8fb9 | header-only (Apache-2.0) | `std/json`/`std/env`/`std/url` number parse | VENDORED (headers) |
 | simdutf | https://github.com/simdutf/simdutf.git v6.1.0 7852150e454ebacbf7e65cbf2c5e3feac5e660ec | compiled static (Apache-2.0) | `std/text` decode, `std/string` `charAt` | VENDORED (windows-x64 .a) |
-| moodycamel concurrentqueue | https://github.com/cameron314/concurrentqueue.git v1.0.4 6dd38b8a1dbaa7863aa907045f32308a56a6ff5d | header-only (BSD-2-Clause) | `Channel`, async log sink | VENDORED (headers) |
+| moodycamel concurrentqueue | https://github.com/cameron314/concurrentqueue.git v1.0.4 6dd38b8a1dbaa7863aa907045f32308a56a6ff5d | header-only (BSD-2-Clause) | no consumer yet (`Channel` deferred; `std/log` removed) | VENDORED (headers) |
 | XXHash (XXH32/64/3) | https://github.com/Cyan4973/xxHash.git v0.8.3 e626a72bc2321cd320e953a0ccf1584cad60f363 | compiled static (BSD-2-Clause) | `std/hash` xxhash64, Map/Set bucket (XXH3) | VENDORED (windows-x64 .a) |
 | miniz / fmt / Boost.Lockfree / wyhash / CRC32C | — | — | — | DEFERRED per lead (no compress, logger stays, moodycamel over Boost, XXH3 over wyhash, CRC32C hand-rolled) |
 | libsodium seed / CSPRNG | already vendored (see Pins) | compiled static (ISC) | `std/crypto` `randombytes_buf`/`sodium_init` — PRESENT, nothing to add | PRESENT |

@@ -125,8 +125,8 @@ ExprPtr ParserImpl::parseTemplateLiteral() {
         tl->quasis.push_back(std::move(quasi));
     }
     for (;;) {
-        ExprPtr e = parsewebserverion();
-        if (e) tl->webserverions.push_back(std::move(e));
+        ExprPtr e = parseexpression();
+        if (e) tl->expressions.push_back(std::move(e));
 
         if (check(TokenKind::TemplateMiddle)) {
             Token mid = advance();

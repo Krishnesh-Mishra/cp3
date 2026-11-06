@@ -48,7 +48,7 @@ const StdModuleDef kStdModules[] = {
     {"std/url", true, {"URL", "URLSearchParams"}},
     {"std/time", true, {}},
     {"std/hash", true, {}},
-    {"std/log", false, {"Logger"}},
+
     {"std/text", false, {"TextEncoder", "TextDecoder"}},
     {"std/readline", true, {}},
 };
@@ -65,6 +65,9 @@ const RemovedModuleDef kRemovedModules[] = {
     {"std/events",
      "std/events is not a module: EventEmitter is a language builtin, no "
      "import is needed (see language-spec 14)"},
+    {"std/log",
+     "std/log was removed before v0.2: use console.log/console.info for "
+     "logging output"},
 };
 
 const std::map<std::string, ExportSurface>& stdTable() {

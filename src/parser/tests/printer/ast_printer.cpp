@@ -221,10 +221,10 @@ bool printLiteralNode(const Node* n, int ind) {
             return true;
         case NodeKind::TemplateLiteral: {
             const auto& x = *static_cast<const TemplateLiteral*>(n);
-            std::printf("  quasis=%zu exprs=%zu\n", x.quasis.size(), x.webserverions.size());
+            std::printf("  quasis=%zu exprs=%zu\n", x.quasis.size(), x.expressions.size());
             for (std::size_t i = 0; i < x.quasis.size(); ++i) {
                 printNode(x.quasis[i].get(), ind + 2);
-                if (i < x.webserverions.size()) printNode(x.webserverions[i].get(), ind + 2);
+                if (i < x.expressions.size()) printNode(x.expressions[i].get(), ind + 2);
             }
             return true;
         }

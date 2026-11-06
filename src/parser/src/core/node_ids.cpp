@@ -2,7 +2,7 @@
 // src/parser/src/node_ids.cpp - nodeId assignment (DECISIONS.md D6).
 //
 // Every node (including `Program`) receives a 1-based id in pre-order: a node
-// is numbered before its children, and template-literal quasis/webserverions are
+// is numbered before its children, and template-literal quasis/expressions are
 // interleaved. Ids start at 1; 0 means "unassigned".
 //
 // NodeKind is grouped by category in CP3_AST_NODE_LIST (ast.hpp); the category
@@ -17,10 +17,10 @@ namespace {
 
 constexpr int kOf(NodeKind k) noexcept { return static_cast<int>(k); }
 
-// CP3_AST_NODE_LIST groups kinds as: webserverions, patterns, statements
+// CP3_AST_NODE_LIST groups kinds as: expressions, patterns, statements
 // (incl. modules), members/params, types - in that order.
 static_assert(kOf(NodeKind::RangeExpr) < kOf(NodeKind::ArrayPattern));
-static_assert(kOf(NodeKind::AssignmentPattern) < kOf(NodeKind::webserverionStatement));
+static_assert(kOf(NodeKind::AssignmentPattern) < kOf(NodeKind::expressionstatement));
 static_assert(kOf(NodeKind::ExportSpecifier) < kOf(NodeKind::PropertyDeclaration));
 static_assert(kOf(NodeKind::TypeParameter) < kOf(NodeKind::NamedType));
 
@@ -31,7 +31,7 @@ bool isPatternKind(NodeKind k) noexcept {
     return kOf(k) >= kOf(NodeKind::ArrayPattern) && kOf(k) <= kOf(NodeKind::AssignmentPattern);
 }
 bool isStmtKind(NodeKind k) noexcept {
-    return kOf(k) >= kOf(NodeKind::webserverionStatement) &&
+    return kOf(k) >= kOf(NodeKind::expressionstatement) &&
            kOf(k) <= kOf(NodeKind::ExportSpecifier);
 }
 bool isMemberKind(NodeKind k) noexcept {
@@ -71,8 +71,8 @@ void ParserImpl::assignExprChildren(Node& node) {
             std::size_t n = tl.quasis.size();
             for (std::size_t i = 0; i < n; ++i) {
                 if (tl.quasis[i]) assignIds(*tl.quasis[i]);
-                if (i < tl.webserverions.size() && tl.webserverions[i]) {
-                    assignIds(*tl.webserverions[i]);
+                if (i < tl.expressions.size() && tl.expressions[i]) {
+                    assignIds(*tl.expressions[i]);
                 }
             }
             break;
@@ -217,8 +217,8 @@ void ParserImpl::assignPatternChildren(Node& node) {
 
 void ParserImpl::assignStmtChildren(Node& node) {
     switch (node.kind) {
-        case NodeKind::webserverionStatement:
-            assignOpt(static_cast<webserverionStatement&>(node).webserverion.get());
+        case NodeKind::expressionstatement:
+            assignOpt(static_cast<expressionstatement&>(node).expression.get());
             break;
         case NodeKind::BlockStatement:
             assignAll(static_cast<BlockStatement&>(node).body);
