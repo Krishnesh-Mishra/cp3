@@ -3,7 +3,7 @@
 # Builds the self-contained VSIX for the cp3 VS Code extension:
 #   1. npm install (unless node_modules already exists or -SkipInstall)
 #   2. esbuild production bundle -> dist/extension.js
-#   3. vsce package -> dist/cp3-vscode-0.1.0.vsix
+#   3. vsce package -> dist/cp3-vscode-0.2.0.vsix
 #
 # The bundle is self-contained (vscode-languageclient is bundled in), so vsce
 # runs with --no-dependencies and .vscodeignore keeps node_modules and the
@@ -21,7 +21,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$vsixName = 'cp3-vscode-0.1.0.vsix'
+$vsixName = 'cp3-vscode-0.2.0.vsix'
 
 Push-Location $root
 try {
