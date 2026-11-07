@@ -386,6 +386,27 @@ miniz -> new `src/std/compress/**` (family does not exist yet);
 moodycamel/Boost.Lockfree -> new Channel + async log sink (neither exists yet).
 libsodium: no change.
 
+## Ledger G — TLS stack (VENDORED 2026-11-07, per lead decisions)
+
+> Status: 2 vendored (OpenSSL static base + uSockets rebuilt with SSL).
+> v0.2 scope: fetch('https://'), createServer({tls}), wss://
+> Windows x64 ships prebuilt MSYS2 archives; the Linux x64 archive is built
+> from the pinned source. Both are wired into the native rows.
+> Mozilla's CA bundle (cacert.pem) is planned for cacert.pem support in
+> v0.3.0; for v0.2 the OS trust stores on each triple are used by default
+> (Linux: /etc/ssl/certs via SSL_CTX_set_default_verify_paths; Windows:
+> the CA bundle ships with the vendor archive and SSL_CERT_FILE can
+> override; native Windows store access via CryptoAPI is deferred to
+> v0.3.0 to avoid an extra dependency).
+
+| library | upstream | kind | internal hot path | status |
+| --- | --- | --- | --- | --- |
+| OpenSSL (libssl/libcrypto) | https://github.com/openssl/openssl.git **openssl-3.5.5** 67b5686b4419b4cb8caa502711c41815f5279751 (linux), static prebuilt mingw-w64-x86_64-openssl-3.5.4-1-any.pkg.tar.zst (windows) | compiled static (Apache-2.0) | `std/network` fetch/TlsSocket/`createServer{tls}`, `std/network/std/tls` CAs | VENDORED (windows-x64 + linux-x64 .a) |
+| uSockets (+uWebSockets) | https://github.com/uNetworking/uWebSockets.git v20.80.0 3ffd6f44c9c3c92c96345d9f96bd01ba9c025ab5 / uSockets 86097c490263ab662d62e8e7b541390bdec7d149 | rebuilt with `WITH_OPENSSL=1` | `std/network/webserver` HttpServer/WebSocket TLS backend | VENDORED (windows-x64 + linux-x64 .a, replaces the LIBUS_NO_SSL builds) |
+
+The exact recipes and the SHAs live in `third_party/openssl/VERSION.txt`
+and `third_party/uWebSockets/lib/*/VERSION.txt` / SHA256SUMS files.
+
 ## Reproducing
 
 Run third_party/build.ps1. It clones the pinned sources into

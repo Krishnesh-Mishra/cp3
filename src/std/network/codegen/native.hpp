@@ -6,9 +6,10 @@
 //
 // Backend: libuv v1.53.0 (client side / event loop) plus uWebSockets v20.80.0
 // with its in-tree uSockets (server + WebSocket side), pinned static builds -
-// DECISIONS D70 + third_party/MANIFEST.md. TLS and per-message deflate are off
-// by design (LIBUS_NO_SSL, UWS_NO_ZLIB): beta-one `fetch` handles `http://`
-// only, and the define must be on every TU that sees the uWS headers.
+// DECISIONS D70 + third_party/MANIFEST.md. TLS is linked from the vendored
+// OpenSSL archives (third_party/openssl) and is lit when the generated program
+// names the TLS surface (CP3_TLS_OPENSSL); per-message deflate is off by
+// design, so `UWS_NO_ZLIB` is on every TU that sees the uWS headers.
 // =============================================================================
 #pragma once
 
@@ -16,13 +17,13 @@
 
 namespace cp3::cli::detail {
 
-// Verified against third_party/MANIFEST.md "Verified consumer flags":
-//   compile: -DUWS_NO_ZLIB -I third_party/uWebSockets/include
+//   compile: -DUWS_NO_ZLIB -DCP3_TLS_OPENSSL -I third_party/uWebSockets/include
 //            -I third_party/libuv/include (uSockets headers include <uv.h>)
+//            -I third_party/openssl/include (the OpenSSL TLS backend for
+//            createTlsServer/connectTls, selected via CP3_TLS_OPENSSL).
 //   link (Windows): -L third_party/uWebSockets/lib -luSockets
-//                   -L third_party/libuv/lib -luv plus libuv's Windows system
-//                   libraries. Linux uses architecture-specific archives and
-//                   pthread/dl/rt instead.
+//                   -L third_party/libuv/lib -luv -L third_party/openssl/lib -lssl -lcrypto
+//                   plus libuv's Windows system libraries; linux uses arch-specific paths.
 inline const NativePackage kNetworkNativePackage{
     "std/network",
     // The family ABI tree (D72) first; src/std/json/include serves
@@ -47,8 +48,9 @@ inline const NativePackage kNetworkNativePackage{
      "src/std/network/webserver/regex-routing",
      "third_party/uWebSockets/include", "third_party/libuv/include",
      "third_party/unordered_dense/include", "third_party/fast_float/include",
-     "third_party/libsodium/include", "third_party/xxhash/include"},
-    {"-DUWS_NO_ZLIB"},
+     "third_party/libsodium/include", "third_party/xxhash/include",
+     "third_party/openssl/include"},
+    {"-DUWS_NO_ZLIB", "-DCP3_TLS_OPENSSL", "-DCP3_UWS_SSL"},
     {"src/std/network/runtime/runtime.cpp",
      "src/std/network/runtime/runtime_fetch.cpp",
      "src/std/network/runtime/runtime_fetch_io.cpp",
@@ -103,20 +105,23 @@ inline const NativePackage kNetworkNativePackage{
      "addRegexRoute(|matchPath(|PathSpec", "Router(|webserverApp|dispatchRouter", "Router(|RouteChain|webserverApp",
      "emitwebserverResponseCall|res.set(|setwebserverResponse|createServerWithConfig(|res.render(", "dns::lookup(|dnsResolve(",
      "TcpSocket|TcpServer|createTcpServer(|connectTcp(", "connectTcp(", "TcpServer|createTcpServer(", "TcpServer|createTcpServer(",
-     "createUdpSocket(|UdpSocket", "createTlsServer(|connectTls(|TlsSocket|TlsServer", ""},
+     "createUdpSocket(|UdpSocket", "createTlsServer(|connectTls(|TlsSocket|TlsServer|https://|wss://", ""},
     {{"windows-x64", {"third_party/uWebSockets/lib/windows-x64",
                        "third_party/libuv/lib/windows-x64",
                        "third_party/libsodium/lib/windows-x64",
-                       "third_party/xxhash/lib/windows-x64"},
-      {"-luSockets", "-luv", "-lsodium", "-lxxhash", "-lws2_32", "-luserenv",
+                       "third_party/xxhash/lib/windows-x64",
+                       "third_party/openssl/lib/windows-x64"},
+      {"-luSockets", "-luv", "-lsodium", "-lxxhash", "-lssl", "-lcrypto",
+       "-lws2_32", "-luserenv",
        "-liphlpapi", "-lole32", "-ldbghelp", "-lsynchronization"}},
      {"linux-x64",
       {"third_party/uWebSockets/lib/linux-x64",
        "third_party/libuv/lib/linux-x64",
        "third_party/libsodium/lib/linux-x64",
-       "third_party/xxhash/lib/linux-x64"},
-      {"-luSockets", "-luv", "-lsodium", "-lxxhash", "-pthread", "-ldl",
-       "-lrt"}},
+       "third_party/xxhash/lib/linux-x64",
+       "third_party/openssl/lib/linux-x64"},
+      {"-luSockets", "-luv", "-lsodium", "-lxxhash", "-lssl", "-lcrypto",
+       "-pthread", "-ldl", "-lrt"}},
      {"linux-arm64",
       {"third_party/uWebSockets/lib/linux-arm64",
        "third_party/libuv/lib/linux-arm64",

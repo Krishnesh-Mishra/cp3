@@ -94,7 +94,7 @@ if (Test-Path -LiteralPath $stage) {
     Info "removing previous stage $stage"
     Remove-Item -LiteralPath $stage -Recurse -Force
 }
-foreach ($dir in @("bin", "include", "src", "third_party", "share\vscode")) {
+foreach ($dir in @("bin", "include", "src", "third_party", "share\vscode", "share\openssl")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $stage $dir) | Out-Null
 }
 
@@ -258,13 +258,22 @@ foreach ($tree in $thirdPartyTrees) {
 foreach ($relative in @(
     'third_party\uWebSockets\include\App.h',
     'third_party\libuv\include\uv.h',
-    'third_party\pcre2\include\pcre2.h'
+    'third_party\pcre2\include\pcre2.h',
+    'third_party\openssl\include\openssl\ssl.h',
+    'third_party\openssl\cacert.pem'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $stage $relative) -PathType Leaf)) {
-        Fail "staged native backend header is missing: '$relative'"
+        Fail "staged native backend header/file is missing: '$relative'"
     }
 }
-foreach ($vendor in @("libsodium", "libuv", "uWebSockets", "xxhash", "simdutf", "pcre2")) {
+# Ship the Mozilla CA bundle so the Windows-fallback CA lookup finds it at
+# <install>/share/openssl/cacert.pem (cp3 sets no Windows store access).
+$caSrc = Join-Path $stage "third_party\openssl\cacert.pem"
+if (Test-Path -LiteralPath $caSrc) {
+    Copy-Item -LiteralPath $caSrc -Destination (Join-Path $stage "share\openssl\cacert.pem") -Force
+    Info "CA bundle -> share\openssl\cacert.pem"
+}
+foreach ($vendor in @("libsodium", "libuv", "uWebSockets", "xxhash", "simdutf", "pcre2", "openssl")) {
     $libDir = Join-Path $stage "third_party\$vendor\lib"
     if (Test-Path -LiteralPath $libDir) {
         Get-ChildItem -LiteralPath $libDir -Directory -ErrorAction SilentlyContinue |

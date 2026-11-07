@@ -408,6 +408,11 @@ void Analyzer::registerTypeParams(TypeParamList& typeParams) {
     for (auto& tp : typeParams) {
         if (!tp) continue;
         Type t = Type::named(TypeKind::TypeParam, tp->name);
+        // Canonical slot layout everywhere: parts[0] = constraint-or-unknown,
+        // parts[1] = default-or-unknown (`isUnknown()` spells "unset", so the
+        // two slots are always distinguishable by index).
+        Type constraintSlot = Type::unknown();
+        Type defaultSlot = Type::unknown();
         if (tp->constraint) {
             Type constraint = resolveType(*tp->constraint);
             // Remember a named constraint's spelling so a violation diagnostic
@@ -416,8 +421,13 @@ void Analyzer::registerTypeParams(TypeParamList& typeParams) {
                 typeParamConstraintNames_[typeKey(constraint)] =
                     static_cast<NamedType&>(*tp->constraint).name;
             }
-            t.parts.push_back(std::move(constraint));
+            constraintSlot = std::move(constraint);
         }
+        if (tp->defaultType) {
+            defaultSlot = resolveType(*tp->defaultType);
+        }
+        t.parts.push_back(std::move(constraintSlot));
+        t.parts.push_back(std::move(defaultSlot));
         // Bind the name to the type parameter unless a real declared type
         // already owns it (a type parameter must never shadow `Point`, say).
         auto it = typeNames_.find(tp->name);

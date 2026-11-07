@@ -335,7 +335,26 @@ void Analyzer::enterClassTypeParams(const TypeParamList& typeParams,
         std::optional<Type> old;
         if (it != typeNames_.end()) old = it->second;
         saved.push_back(std::make_pair(name, old));
-        typeNames_[name] = Type::named(TypeKind::TypeParam, name);
+        Type param = Type::named(TypeKind::TypeParam, name);
+        // Canonical slot layout everywhere: parts[0] = constraint-or-unknown,
+        // parts[1] = default-or-unknown (`isUnknown()` spells "unset", so the
+        // two slots are always distinguishable by index).
+        Type constraintSlot = Type::unknown();
+        Type defaultSlot = Type::unknown();
+        if (tp->constraint) {
+            Type constraint = resolveType(*tp->constraint);
+            if (tp->constraint->kind == NodeKind::NamedType) {
+                typeParamConstraintNames_[typeKey(constraint)] =
+                    static_cast<NamedType&>(*tp->constraint).name;
+            }
+            constraintSlot = std::move(constraint);
+        }
+        if (tp->defaultType) {
+            defaultSlot = resolveType(*tp->defaultType);
+        }
+        param.parts.push_back(std::move(constraintSlot));
+        param.parts.push_back(std::move(defaultSlot));
+        typeNames_[name] = std::move(param);
     }
 }
 

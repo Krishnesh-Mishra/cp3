@@ -236,7 +236,9 @@ for archive in \
     "$THIRD_PARTY/uWebSockets/lib/linux-$ARCH/libuSockets.a" \
     "$THIRD_PARTY/xxhash/lib/linux-$ARCH/libxxhash.a" \
     "$THIRD_PARTY/simdutf/lib/linux-$ARCH/libsimdutf.a" \
-    "$THIRD_PARTY/pcre2/lib/linux-$ARCH/libpcre2-8.a"; do
+    "$THIRD_PARTY/pcre2/lib/linux-$ARCH/libpcre2-8.a" \
+    "$THIRD_PARTY/openssl/lib/linux-$ARCH/libssl.a" \
+    "$THIRD_PARTY/openssl/lib/linux-$ARCH/libcrypto.a"; do
     if [ ! -f "$archive" ]; then
         warn "missing Linux $ARCH native archive: $archive"
         missing_vendor=1
@@ -244,7 +246,7 @@ for archive in \
 done
 # Drop every other platform's archives (and the Windows COFF archives kept at
 # the vendor lib root for Windows builds): the package is for linux-$ARCH only.
-for vendor in libsodium libuv uWebSockets xxhash simdutf pcre2; do
+for vendor in libsodium libuv uWebSockets xxhash simdutf pcre2 openssl; do
     libdir="$STAGE/third_party/$vendor/lib"
     [ -d "$libdir" ] || continue
     find "$libdir" -mindepth 1 -maxdepth 1 -type d \
@@ -273,6 +275,12 @@ else
     fi
 fi
 
+mkdir -p "$STAGE/share/openssl"
+if [ -f "$THIRD_PARTY/openssl/cacert.pem" ]; then
+    cp -p "$THIRD_PARTY/openssl/cacert.pem" "$STAGE/share/openssl/cacert.pem"
+    info "CA bundle -> share/openssl/cacert.pem"
+fi
+
 # --- README ------------------------------------------------------------------
 cat > "$STAGE/README.txt" <<EOF
 cp3 $VERSION - C+++ compiler, runtime and tooling
@@ -284,6 +292,7 @@ Layout
   include/        header trees the compiler passes to Clang
   src/            runtime units compiled into every cp3 program
   third_party/    vendored static libraries (std/network, std/crypto, std/hash, std/text, regex)
+  share/openssl/  Mozilla CA bundle (curl) used for TLS verification on Windows
   share/vscode/   bundled VS Code extension, when present
   manifest.json   every component with its SHA-256
 

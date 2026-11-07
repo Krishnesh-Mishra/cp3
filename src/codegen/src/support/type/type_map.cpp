@@ -107,11 +107,27 @@ std::optional<Type> instantiateGenericInterface(const TypeNode& tn) {
     ModelRegistry& reg = ModelRegistry::get();
     const GenericInterfaceModel* generic = reg.genericInterface(nt.name);
     if (generic == nullptr || generic->decl == nullptr) return std::nullopt;
-    // The type arguments of the use site.
+    // The type arguments of the use site. A bare `Id` fills from the declared
+    // parameter defaults (`<T = U>`), so the wrapper and the literal struct
+    // spell one stable shape instead of the bare parameter name.
     std::vector<Type> args;
-    for (const auto& ta : nt.typeArgs) {
-        if (!ta) continue;
-        args.push_back(modelTypeFromTypeNode(*ta));
+    if (generic->decl) {
+        for (const TypePtr& ta : nt.typeArgs) {
+            if (!ta) continue;
+            args.push_back(modelTypeFromTypeNode(*ta));
+        }
+        for (std::size_t i = args.size(); i < generic->decl->typeParams.size();
+             ++i) {
+            const auto& tp = generic->decl->typeParams[i];
+            if (tp && tp->defaultType) {
+                args.push_back(modelTypeFromTypeNode(*tp->defaultType));
+            }
+        }
+    } else {
+        for (const TypePtr& ta : nt.typeArgs) {
+            if (!ta) continue;
+            args.push_back(modelTypeFromTypeNode(*ta));
+        }
     }
     // The interface's members, with the type arguments substituted in.
     std::vector<ObjectFieldModel> fields;

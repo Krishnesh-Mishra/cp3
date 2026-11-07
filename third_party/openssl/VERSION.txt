@@ -1,0 +1,11 @@
+openssl 3.5.x
+linux-x64: openssl 3.5.5 built from pinned source (openssl-3.5.5 tag,
+        commit 67b5686b4419b4cb8caa502711c41815f5279751, build 2026-11-07
+        WSL2 Ubuntu, gcc 15.2.0, configure linux-x86_64 no-shared no-tests no-apps)
+windows-x64: libssl.a/libcrypto.a extracted from the official MSYS2 mingw64
+        package mingw-w64-x86_64-openssl-3.5.4-1-any.pkg.tar.zst (package
+        SHA-256 in ossl-3.5.4-package.sha256; msys2 is the reference mingw64
+        distribution that WinLibs mirrors; static archives against utime/
+        default mingw64 libstdc++/libgcc).
+headers: carried over from the linux 3.5.5 build; API-compatible with 3.5.4.
+release: v0.2.0 (first TLS-enabled release).

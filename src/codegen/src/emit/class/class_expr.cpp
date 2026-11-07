@@ -264,8 +264,23 @@ std::string Generator::emitModelNew(const NewExpr& n) {
     needsRef_ = true;
     if (cm->builtin) return emitErrorCtor(n.arguments, *cm, n.span);
     std::vector<Type> instArgs;
-    for (const auto& ta : n.typeArgs) {
-        if (ta) instArgs.push_back(modelTypeFromTypeNode(*ta));
+    if (cm->decl) {
+        for (const auto& ta : n.typeArgs) {
+            if (ta) instArgs.push_back(modelTypeFromTypeNode(*ta));
+        }
+        // A bare `new Box(...)` fills from the declared parameter defaults
+        // (`<T = U>`), so the struct spelling is stable instead of rejected.
+        for (std::size_t i = instArgs.size(); i < cm->decl->typeParams.size();
+             ++i) {
+            const auto& tp = cm->decl->typeParams[i];
+            if (tp && tp->defaultType) {
+                instArgs.push_back(modelTypeFromTypeNode(*tp->defaultType));
+            }
+        }
+    } else {
+        for (const auto& ta : n.typeArgs) {
+            if (ta) instArgs.push_back(modelTypeFromTypeNode(*ta));
+        }
     }
     std::string error;
     const std::string self = instanceSpelling(*cm, instArgs, error);

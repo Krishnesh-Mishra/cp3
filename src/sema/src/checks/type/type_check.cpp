@@ -471,11 +471,13 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
             if (t.kind == TypeKind::TypeParam) {
                 for (std::size_t i = 0; i < names.size(); ++i) {
                     if (names[i] != t.name) continue;
-                    if (!t.parts.empty() && !specs[i].hasConstraint) {
+                    if (!t.parts.empty() && !t.parts.front().isUnknown() &&
+                        !specs[i].hasConstraint) {
                         specs[i].constraint = t.parts.front();
                         specs[i].hasConstraint = true;
                     }
-                    if (t.parts.size() >= 2 && !specs[i].hasDefault) {
+                    if (t.parts.size() >= 2 && !t.parts[1].isUnknown() &&
+                        !specs[i].hasDefault) {
                         specs[i].defaultType = t.parts[1];
                         specs[i].hasDefault = true;
                     }

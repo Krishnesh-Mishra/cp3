@@ -14,7 +14,9 @@
 #include "detail/analyzer.h"
 
 #include <cstddef>
+#include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
@@ -213,10 +215,65 @@ Type Analyzer::inferUserConstruct(Identifier& id, Binding& b, NewExpr& n) {
         if (isSpread) hasSpread = true;
     }
     if (!ci) return withType(n, ambient());
-    // `new Box<number>()`: resolve the instantiation arguments once.
+    // `new Box<number>()`: resolve the instantiation arguments once. A
+    // missing argument whose parameter declares `= Y` fills from that default
+    // (mirroring the use-site default-fill in resolveNamedType); a missing
+    // argument with no default keeps the declaration-site error below.
     std::vector<Type> instArgs;
     for (const TypePtr& ta : n.typeArgs) {
         if (ta) instArgs.push_back(resolveType(*ta));
+    }
+    if (!ci->typeParamNames.empty() &&
+        instArgs.size() < ci->typeParamNames.size()) {
+        // Collect TypeParam leaves from the member bodies (slots landed with
+        // the declaration-site producer): parts[1] is the resolved default.
+        std::vector<Type> bodies;
+        for (const ClassMemberInfo& m : ci->members) {
+            bodies.push_back(m.type);
+            for (const Type& p : m.sig.params) bodies.push_back(p);
+            bodies.push_back(m.sig.ret);
+        }
+        for (const Type& p : ci->ctorSig.params) bodies.push_back(p);
+        bodies.push_back(ci->ctorSig.ret);
+        std::vector<Type> defaults;  // per-parameter slot, Type::unknown() when none
+        defaults.assign(ci->typeParamNames.size(), Type::unknown());
+        std::unordered_map<std::string, std::size_t> paramIndex;
+        for (std::size_t i = 0; i < ci->typeParamNames.size(); ++i) {
+            paramIndex[ci->typeParamNames[i]] = i;
+        }
+        std::function<void(const Type&)> walkLeaves = [&](const Type& t) {
+            if (t.kind == TypeKind::TypeParam) {
+                const auto it = paramIndex.find(t.name);
+                if (it != paramIndex.end() && t.parts.size() >= 2 &&
+                    !t.parts[1].isUnknown() && defaults[it->second].isUnknown()) {
+                    defaults[it->second] = t.parts[1];
+                }
+            }
+            if (t.kind == TypeKind::Object) {
+                Shape* sh = shapeOf(t);
+                if (sh != nullptr) {
+                    if (sh->tuple) {
+                        for (const Type& e : sh->tupleElems) walkLeaves(e);
+                    } else {
+                        for (const Field& f : sh->fields) walkLeaves(f.type);
+                    }
+                }
+            }
+            for (const Type& part : t.parts) walkLeaves(part);
+        };
+        for (const Type& body : bodies) walkLeaves(body);
+        std::unordered_map<std::string, Type> known;
+        for (std::size_t i = 0; i < instArgs.size(); ++i) {
+            known[ci->typeParamNames[i]] = instArgs[i];
+        }
+        for (std::size_t i = instArgs.size(); i < ci->typeParamNames.size(); ++i) {
+            const Type d = defaults[i].isUnknown()
+                               ? Type::unknown()
+                               : substituteType(defaults[i], known);
+            if (d.isUnknown() && defaults[i].isUnknown()) continue;
+            instArgs.push_back(d);
+            known[ci->typeParamNames[i]] = d;
+        }
     }
     auto instantiated = [&](const Type& t) {
         if (ci->typeParamNames.empty() || instArgs.empty()) return t;
