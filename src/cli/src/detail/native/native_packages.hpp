@@ -34,6 +34,11 @@ struct NativePackagePlatform {
     const char* id;
     std::vector<std::string> libDirs;
     std::vector<std::string> linkFlags;
+    // When non-empty, these flags REPLACE the row's compileFlags for this
+    // platform. For targets whose vendored archives lack a feature (e.g.
+    // linux-arm64 has no OpenSSL archives and no SSL-enabled uSockets, so it
+    // compiles the TLS stub, which fails closed at runtime).
+    std::vector<std::string> compileFlagsOverride = {};
 };
 
 // One std module's native backend.

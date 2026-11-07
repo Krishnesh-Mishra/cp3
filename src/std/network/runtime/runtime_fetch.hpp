@@ -33,10 +33,11 @@ struct UrlParts {
     std::string host;
     int port = 80;
     std::string target = "/";  // path + query, exactly as sent on the request line
+    bool isTls = false;
 };
 
-/// Parses `http://host[:port][/path]`; empty result string = success, else the
-/// rejection message (https:// gets its own, TLS-off message).
+/// Parses `http://host[:port][/path]` or `https://host[:port][/path]`;
+/// empty result string = success, else the rejection message.
 std::string parseHttpUrl(const std::string& url, UrlParts& out);
 
 // =============================================================================
@@ -57,6 +58,9 @@ struct FetchOp {
     bool tcpReady = false;
     bool timerReady = false;
     bool done = false;
+    // https:// only: owns the `tls::TlsSocket` until the op settles (weak
+    // captures in its slot lambdas keep the op ↔ socket cycle breakable).
+    std::shared_ptr<void> tls;
 
     std::string raw;         // every byte received so far
     std::size_t cursor = 0;  // parse cursor into `raw`

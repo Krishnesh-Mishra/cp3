@@ -4,16 +4,20 @@
 // OWNERSHIP: the std/network family (src/std/network/**). Same selection rule as
 // runtime.cpp (the std/network native package row, D68): compiled + linked only
 // for a program that imports "std/network".
-// One request, one TCP connection, `Connection: close`: beta-one fetch is a
-// plain HTTP/1.1 client - no connection reuse, no redirects, no TLS. The
-// request headers option is the documented `Map<string, string>`, the response
-// header block comes back as the documented `res.headers` Map, and the body is
-// fully buffered (Content-Length, chunked and close-delimited), so
-// `res.text()` / `res.json<T>()` never suspend. A FetchOp stays alive through
-// shared_ptr holders in `handle->data` (tcp, timer, DNS request, in-flight
-// write) and counts as pending work until it settles; the libuv transport
-// (handle attachment, callbacks, beginFetch) lives in the sibling
-// runtime_fetch_io.cpp.
+// One request, one connection, `Connection: close`: fetch is an HTTP/1.1
+// client - no connection reuse and no redirects. Plain http:// goes over its
+// own libuv TCP pump (runtime_fetch_io.cpp); https:// rides the same OpenSSL
+// `TlsSocket` pump as `connectTls` / `createTlsServer` (beginTlsFetch there),
+// with SNI + hostname verification on and the embedded Mozilla CA bundle (or
+// $SSL_CERT_FILE) for trust anchors. The request headers option is the
+// documented `Map<string, string>`, the response header block comes back as
+// the documented `res.headers` Map, and the body is fully buffered
+// (Content-Length, chunked and close-delimited), so `res.text()` /
+// `res.json<T>()` never suspend. A FetchOp stays alive through shared_ptr
+// holders in `handle->data` (tcp, timer, DNS request, in-flight write) and
+// counts as pending work until it settles; the
+// libuv transport (handle attachment, callbacks, beginFetch) lives in the
+// sibling runtime_fetch_io.cpp.
 // =============================================================================
 #include "cp3/std/network.hpp"
 
@@ -247,13 +251,11 @@ void parseBody(const std::shared_ptr<FetchOp>& op) {
 }  // namespace
 
 std::string parseHttpUrl(const std::string& url, UrlParts& out) {
-    if (url.rfind("https://", 0) == 0) {
-        return "std/network: https:// is not supported in this build (TLS is off)";
+    const bool isHttps = url.rfind("https://", 0) == 0;
+    if (!isHttps && url.rfind("http://", 0) != 0) {
+        return "std/network: fetch() needs an http:// or https:// URL, got: " + url;
     }
-    const std::string prefix = "http://";
-    if (url.rfind(prefix, 0) != 0) {
-        return "std/network: fetch() needs an http:// URL, got: " + url;
-    }
+    const std::string prefix = isHttps ? "https://" : "http://";
     const std::string rest = url.substr(prefix.size());
     const std::size_t slash = rest.find('/');
     const std::string authority = slash == std::string::npos ? rest : rest.substr(0, slash);
@@ -263,12 +265,14 @@ std::string parseHttpUrl(const std::string& url, UrlParts& out) {
     const std::size_t colon = authority.rfind(':');
     if (colon == std::string::npos) {
         out.host = authority;
+        if (isHttps) out.port = 443;
     } else {
         out.host = authority.substr(0, colon);
         if (!parsePort(authority.substr(colon + 1), out.port)) {
             return "std/network: bad port in URL: " + url;
         }
     }
+    if (isHttps) out.isTls = true;
     if (out.host.empty()) {
         return "std/network: missing host in URL: " + url;
     }

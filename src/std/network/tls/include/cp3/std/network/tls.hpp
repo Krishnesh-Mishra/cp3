@@ -213,8 +213,9 @@ public:
     /// TCP_NODELAY / SO_KEEPALIVE on the underlying uv_tcp_t.
     void setNoDelay(bool enabled) const;
     void setKeepAlive(bool enabled, double delayMs = 0.0) const;
-    /// `socket.connect(port, host?)`: re-connect a detached socket.
-    void connect(double port, const std::string& host = "") const;
+    /// `socket.connect(port, host?)`: re-connect a detached socket. Mutates
+    /// the handle, so it is not const (TcpSocket has no reconnect parity here).
+    void connect(double port, const std::string& host = "");
 
     // --- TCP properties (readable state) ---
     bool connecting() const;
@@ -254,6 +255,9 @@ public:
 
     TlsServer(const TlsServer&) = delete;
     TlsServer& operator=(const TlsServer&) = delete;
+    /// Move operations (the impl is shared_ptr-held; moves never throw).
+    TlsServer(TlsServer&& other) noexcept;
+    TlsServer& operator=(TlsServer&& other) noexcept;
 
     /// `server.on("secureConnection", (socket) => void)` / "error" / "close".
     void on(const std::string& event, std::function<void(TlsSocket&)> handler) const;

@@ -105,7 +105,7 @@ inline const NativePackage kNetworkNativePackage{
      "addRegexRoute(|matchPath(|PathSpec", "Router(|webserverApp|dispatchRouter", "Router(|RouteChain|webserverApp",
      "emitwebserverResponseCall|res.set(|setwebserverResponse|createServerWithConfig(|res.render(", "dns::lookup(|dnsResolve(",
      "TcpSocket|TcpServer|createTcpServer(|connectTcp(", "connectTcp(", "TcpServer|createTcpServer(", "TcpServer|createTcpServer(",
-     "createUdpSocket(|UdpSocket", "createTlsServer(|connectTls(|TlsSocket|TlsServer|https://|wss://", ""},
+     "createUdpSocket(|UdpSocket", "createTlsServer(|connectTls(|TlsSocket|TlsServer|https://|wss://|fetch(", ""},
     {{"windows-x64", {"third_party/uWebSockets/lib/windows-x64",
                        "third_party/libuv/lib/windows-x64",
                        "third_party/libsodium/lib/windows-x64",
@@ -126,7 +126,10 @@ inline const NativePackage kNetworkNativePackage{
       {"third_party/uWebSockets/lib/linux-arm64",
        "third_party/libuv/lib/linux-arm64",
        "third_party/libsodium/lib/linux-arm64"},
-      {"-luSockets", "-luv", "-lsodium", "-pthread", "-ldl", "-lrt"}}},
+      {"-luSockets", "-luv", "-lsodium", "-pthread", "-ldl", "-lrt"},
+      // No OpenSSL / SSL uSockets for linux-arm64 in v0.2: compile the
+      // TLS stub (fails closed with ERR_TLS_BACKEND_UNAVAILABLE), ZLIB off.
+      {"-DUWS_NO_ZLIB"}}},
 };
 
 }  // namespace cp3::cli::detail

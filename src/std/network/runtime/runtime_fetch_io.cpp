@@ -7,7 +7,8 @@
 //
 // The libuv side of the HTTP client: the shared_ptr holder behind
 // `handle->data`, the connect / DNS / timeout / write callbacks and `beginFetch`
-// (tcp + optional timeout + IPv4/DNS connect). The URL parsing, request head
+// (tcp + optional timeout + IPv4/DNS connect for http://, or the shared OpenSSL
+// pump in ./cp3/std/network/tls.hpp for https://). The URL parsing, request head
 // and response readers live in runtime_fetch.cpp; both files share FetchOp
 // through runtime_fetch.hpp.
 // =============================================================================
@@ -23,6 +24,7 @@
 
 #include "runtime_fetch.hpp"
 #include "runtime_loop.hpp"
+#include "cp3/std/network/tls.hpp"
 
 namespace cp3::runtime::network::detail {
 namespace {
@@ -129,14 +131,85 @@ void onResolved(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
 
 }  // namespace
 
-}  // namespace cp3::runtime::network::detail
-
-namespace cp3::runtime::network::detail {
+// =============================================================================
+// https:// - ride the shared TLS pump (one engine: TlsSocket / OpenSSL)
+// =============================================================================
+// The HTTPS fetch uses the same pump that drives `TlsSocket` for `connectTls`
+// and `createTlsServer`: TlsOptions (host/port, SNI = host) go to
+// tls::connectTls, the request head goes out when secureConnect fires, every
+// data chunk feeds the SAME consume() state machine the plain-text path uses,
+// and the "end" event settles the op exactly like EOF on a plain connection.
+// The fetch idle-timeout timer rides FetchOp exactly as in the http:// path
+// (AbortSignal.timeout), and the TLS pump enforces handshakeTimeoutMs on top
+// of it. The socket is kept alive through FetchOp::tls (weak captures in the
+// slot lambdas break the op ↔ slots cycle once the op settles). The stub
+// backend in non-OpenSSL builds throws Thrown (ERR_TLS_BACKEND_UNAVAILABLE)
+// which the catch turns into the same rejection the caller would get from the
+// http:// path's argument errors.
+// =============================================================================
+std::shared_ptr<FetchOp> beginTlsFetch(const UrlParts& url, const FetchInit& init) {
+    auto op = std::make_shared<FetchOp>();
+    op->url = url;
+    op->init = init;
+    op->authority = url.host + ":" + std::to_string(url.port);
+    retainNetwork();
+    uv_loop_t* loop = static_cast<uv_loop_t*>(loopHandle());
+    if (loop == nullptr) {
+        failOp(op, "std/network: could not create the libuv loop");
+        return op;
+    }
+    if (init.timeoutMs > 0) {
+        uv_timer_init(loop, &op->timeout);
+        attachOp(reinterpret_cast<uv_handle_t*>(&op->timeout), op);
+        op->timerReady = true;
+        uv_timer_start(&op->timeout, onTimeout,
+                       static_cast<std::uint64_t>(init.timeoutMs), 0);
+    }
+    tls::TlsOptions opts;
+    opts.host = url.host;
+    opts.port = static_cast<double>(url.port);
+    if (init.timeoutMs > 0) {
+        opts.handshakeTimeoutMs = static_cast<double>(init.timeoutMs);
+    }
+    try {
+        auto socket = std::make_shared<tls::TlsSocket>(tls::connectTls(opts));
+        op->tls = socket;
+        std::weak_ptr<FetchOp> weak = op;
+        socket->on("secureConnect", [weak]() {
+            const std::shared_ptr<FetchOp> current = weak.lock();
+            if (current == nullptr || current->done) return;
+            auto* sock = static_cast<tls::TlsSocket*>(current->tls.get());
+            if (sock == nullptr) return;
+            sock->write(buildRequest(*current));
+        });
+        socket->on("data", [weak](const std::string& chunk) {
+            const std::shared_ptr<FetchOp> current = weak.lock();
+            if (current == nullptr || current->done) return;
+            current->raw.append(chunk);
+            consume(current);
+        });
+        socket->on("end", [weak]() {
+            const std::shared_ptr<FetchOp> current = weak.lock();
+            if (current == nullptr) return;
+            finishOnEof(current);
+        });
+        socket->on("error", [weak](const Thrown& err) {
+            const std::shared_ptr<FetchOp> current = weak.lock();
+            if (current == nullptr) return;
+            failOp(current, err.toString());
+        });
+        return op;
+    } catch (const Thrown& err) {
+        failOp(op, err.toString());
+        return op;
+    }
+}
 
 // =============================================================================
 // Entry point
 // =============================================================================
 std::shared_ptr<FetchOp> beginFetch(const UrlParts& url, const FetchInit& init) {
+    if (url.isTls) return beginTlsFetch(url, init);
     auto op = std::make_shared<FetchOp>();
     op->url = url;
     op->init = init;

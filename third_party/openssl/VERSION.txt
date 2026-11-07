@@ -1,11 +1,24 @@
-openssl 3.5.x
+openssl 3.5.5 (one pinned source for both platforms)
+
+windows-x64: openssl 3.5.5 built from pinned source (openssl-3.5.5 tag,
+        commit 67b5686b4419b4cb8caa502711c41815f5279751; annotated tag
+        85a9a2ee19845d6a68a2c68255271068935f57f4).
+        Build 2026-11-07 in MSYS2 (msys2.exe mingw64 environment; gcc 16.2.0
+        Rev6 built by MSYS2 project, perl 5.42.3, GNU make 4.4.1; configure
+        `./Configure mingw64 no-tests no-apps -O3`, repository clone at C:\ossl).
+        No MSYS2 distribution ships in any package; the toolchain is the
+        local build host only. The superseded mingw-w64-x86_64-openssl-3.5.4-1
+        package checksums are retained in ossl-3.5.4-package.sha256 for the
+        audit trail.
+openssl-headers: carried over from the linux 3.5.5 build; identical
+        source for both platforms (headers are platform-independent).
 linux-x64: openssl 3.5.5 built from pinned source (openssl-3.5.5 tag,
         commit 67b5686b4419b4cb8caa502711c41815f5279751, build 2026-11-07
         WSL2 Ubuntu, gcc 15.2.0, configure linux-x86_64 no-shared no-tests no-apps)
-windows-x64: libssl.a/libcrypto.a extracted from the official MSYS2 mingw64
-        package mingw-w64-x86_64-openssl-3.5.4-1-any.pkg.tar.zst (package
-        SHA-256 in ossl-3.5.4-package.sha256; msys2 is the reference mingw64
-        distribution that WinLibs mirrors; static archives against utime/
-        default mingw64 libstdc++/libgcc).
-headers: carried over from the linux 3.5.5 build; API-compatible with 3.5.4.
+linux-arm64: NOT BUILT in v0.2 (no archives; the native row compiles the TLS
+        stub, which fails closed with ERR_TLS_BACKEND_UNAVAILABLE).
 release: v0.2.0 (first TLS-enabled release).
+Source tag: https://github.com/openssl/openssl (openssl-3.5.5)
+CA bundle: Mozilla, third_party/openssl/cacert.pem (see cacert-source-url.txt),
+embedded into TLS-linked binaries at compile time (no runtime file lookup,
+no source-tree dependency).

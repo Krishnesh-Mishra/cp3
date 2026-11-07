@@ -627,7 +627,11 @@ std::optional<NativeBuildFlags> applyNativePackages(
             }
             layout.runtimeSources.push_back(src);
         }
-        for (const std::string& flag : pkg->compileFlags) {
+        const std::vector<std::string>& compileFlags =
+            (platform != nullptr && !platform->compileFlagsOverride.empty())
+                ? platform->compileFlagsOverride
+                : pkg->compileFlags;
+        for (const std::string& flag : compileFlags) {
             flags.compile.push_back(flag);
         }
         const std::vector<std::string>& libDirs =
