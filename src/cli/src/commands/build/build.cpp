@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -146,6 +147,74 @@ std::string buildProfileKey(const CliOptions& opt,
     return key;
 }
 
+// Object files come in the formats our targets produce (COFF, ELF, Mach-O,
+// wasm). The incremental cache reuses same-path objects across runs, including
+// runs of a *different* toolchain that shares the .cp3 directory - a Linux
+// build leaves ELF objects where a Windows build expects COFF, and lld refuses
+// to link them ("unknown file type"). Sniff the object before trusting it.
+enum class ObjFamily { Unknown, Coff, Elf, MachO, Wasm };
+
+// The target family implied by the toolchain's target flags, or the platform
+// default when no target is named (POSIX clang targets the host).
+ObjFamily expectedObjFamily(const Toolchain& tc) {
+    for (const std::string& flag : tc.targetFlags) {
+        std::string target = flag;
+        std::transform(target.begin(), target.end(), target.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (target.rfind("--target=", 0) == 0) target = target.substr(9);
+        const auto has = [&target](const char* needle) {
+            return target.find(needle) != std::string::npos;
+        };
+        if (has("windows") || has("mingw") || has("msvc") || has("win32")) return ObjFamily::Coff;
+        if (has("darwin") || has("macos") || has("apple") || has("ios") ||
+            has("tvos") || has("watchos") || has("visionos")) return ObjFamily::MachO;
+        if (has("wasm") || has("wasi")) return ObjFamily::Wasm;
+        if (has("linux") || has("android") || has("freebsd") || has("openbsd") ||
+            has("netbsd") || has("solaris") || has("haiku")) return ObjFamily::Elf;
+    }
+#if defined(_WIN32)
+    return ObjFamily::Coff;
+#elif defined(__APPLE__)
+    return ObjFamily::MachO;
+#else
+    return ObjFamily::Elf;
+#endif
+}
+
+// True when the object's first bytes match the family the toolchain produces.
+// An unrecognised or truncated object is not reusable either.
+bool objectMatchesFamily(const fs::path& obj, ObjFamily family) {
+    if (family == ObjFamily::Unknown) return true;
+    std::ifstream in(obj, std::ios::binary);
+    unsigned char head[4] = {0, 0, 0, 0};
+    in.read(reinterpret_cast<char*>(head), sizeof(head));
+    if (in.gcount() < static_cast<std::streamsize>(sizeof(head))) return false;
+    const bool elf = head[0] == 0x7F && head[1] == 'E' && head[2] == 'L' && head[3] == 'F';
+    const bool macho =
+        (head[0] == 0xFE && head[1] == 0xED && head[2] == 0xFA) ||  // big-endian 32/64
+        (head[0] == 0xCE && head[1] == 0xFA && head[2] == 0xED) ||  // little-endian 32
+        (head[0] == 0xCF && head[1] == 0xFA && head[2] == 0xED) ||  // little-endian 64
+        (head[0] == 0xCA && head[1] == 0xFE && head[2] == 0xBA) ||  // fat binary
+        (head[0] == 0xBE && head[1] == 0xBA && head[2] == 0xFE);
+    const bool wasm = head[0] == 0x00 && head[1] == 0x61 && head[2] == 0x73 && head[3] == 0x6D;
+    const unsigned machine = static_cast<unsigned>(head[0]) |
+                             (static_cast<unsigned>(head[1]) << 8);
+    const bool coff = machine == 0x014C ||  // i386
+                      machine == 0x8664 ||  // AMD64
+                      machine == 0xAA64 ||  // ARM64
+                      machine == 0x01C2 ||  // ARM Thumb-2
+                      machine == 0x01C4 ||  // ARMNT
+                      machine == 0x0200;    // IA64
+    switch (family) {
+        case ObjFamily::Coff: return coff;
+        case ObjFamily::Elf: return elf;
+        case ObjFamily::MachO: return macho;
+        case ObjFamily::Wasm: return wasm;
+        case ObjFamily::Unknown:
+        default: return true;
+    }
+}
+
 CacheEntry* findEntry(std::vector<CacheEntry>& manifest, const std::string& obj) {
     for (CacheEntry& e : manifest) {
         if (e.obj == obj) return &e;
@@ -168,6 +237,11 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
     std::error_code ec;
     const std::string hash = std::to_string(fnv1a64(content));
     CacheEntry* existing = findEntry(st.manifest, obj.string());
+    // The object on disk must also match what this toolchain produces - the
+    // .cp3 directory can be shared with a different OS's toolchain, whose
+    // objects are not linkable here (see objectMatchesFamily).
+    const bool objReusable = fs::exists(obj, ec) &&
+                             objectMatchesFamily(obj, expectedObjFamily(st.tc));
     // The entry also carries the include-tree fingerprint it was built under:
     // the manifest does not track which headers a TU includes, so an include
     // change retires every entry on its next build (detail/cache.hpp).
@@ -176,7 +250,7 @@ bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp
                           existing->profile == st.profile &&
                           existing->header == st.headerFingerprint &&
                           existing->compiler == st.compilerKey &&
-                          fs::exists(obj, ec);
+                          objReusable;
     if (upToDate) {
         existing->source = sourceKey;
         st.objects.push_back(obj);
