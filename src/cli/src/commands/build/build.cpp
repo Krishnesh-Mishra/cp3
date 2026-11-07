@@ -517,7 +517,6 @@ std::optional<NativeBuildFlags> applyNativePackages(
             natives.push_back(row);
         }
     }
-    natives.insert(natives.end(), core.begin(), core.end());
     if (natives.empty()) return flags;
 
     auto reportBroken = [](const char* spec, const char* what,
