@@ -5,7 +5,7 @@ included, and why. It is the public checklist for the current release.
 
 ## v0.2.0 - TypeScript compatibility
 
-Status: **in progress**
+Status: **Done**
 
 Theme: ordinary TypeScript class and error code should work in CP3, while the
 compiler keeps emitting plain native C++ with no hidden runtime machinery.
@@ -385,6 +385,14 @@ Decorators are compile-time macros, not runtime decorators:
 
 Known defects fixed in v0.2.0:
 
+- A generated program that named the regex or collections backend linked the
+  same runtime translation unit twice: the core-backend rows were added both
+  by the deduplicating loop and by an unconditional `insert`. Strict linkers
+  (GNU ld) reject the program; the driver now inserts them exactly once.
+- `Object.fromEntries` and `new Map(entries)` iterated the entries array
+  through a dangling `Ref<vector<E>>` temporary, so reads inside the loop
+  used freed heap storage (a heap-use-after-free). The generated loops now
+  bind the temporary to a named `Ref` before iterating.
 - Cross-module exported values and types must propagate into the importing
   unit, so type checking and code generation use the real declaration.
 - Package imports must resolve and link, not fall through to codegen as an

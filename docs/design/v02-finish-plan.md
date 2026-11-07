@@ -1,6 +1,6 @@
 # v0.2 Finish Plan (2026-11-05)
 
-## Status: corpus green (2114 found, 2091 passed, 0 failed, 23 ambiguous); all v0.2 units committed (`af62898b` … `23bf0e04`); JS/TS developers guide now the single-file reference, linked from README.
+## Status: corpus green on Windows and Linux (clang, final release binaries; 2115 found, 2092 passed, 0 failed, 23 ambiguous on both); all v0.2 release commits landed (`af62898b` … `23bf0e04`, `4dfc342f`, `535d08a1`, `2e9c659f`, `058f963e`, `8d193370`, `af72c7d9`, `7141ea8c`); JS/TS developers guide is the single-file reference, linked from README; release tag pending (packaging + SHA256SUMS).
 
 ## Corpus green note (2026-11-06)
 Full corpus passes with no failures. Session fixes (all uncommitted, to be
@@ -29,24 +29,24 @@ test cases.
 - DONE: `12-collections.md` (9-type API table), `docs/design/*` (record, utility-types, rule3, hash-placement, import-suggestions, internal-libs, xxhash64, install-dir, cycle-*, remove-void-unknown, generic-constraints, verified-gaps)
 - DONE: JS/TS developers guide (`03-javascript-typescript-developers.md`) is now the single-file agent/migration reference; `docs/llm.md` deleted in `7efe8c10` (guide supersedes it — cheat-sheet, recipes, diagnostics quick refs folded in)
 - DONE: `docs/content/00-welcome/03-javascript-typescript-developers.md` linked from README header
-- REMAINING: `ROADMAP.md` final v0.2 status flip to Done on release tag
+- DONE: `ROADMAP.md` v0.2 section flipped to **Done** (2026-11-07)
 
 ## Merge checklist (lead)
 1. [x] Core wiring committed (registry/CMake/native/sema/codegen for time/text/hash/log/readline/collections/URL)
-2. [x] Vendoring committed (unordered_dense, fast_float, moodycamel, XXHash, simdutf; windows-x64 .a for xxhash/simdutf)
-3. [ ] Express paste-ins build (cookie/response/router/routing/errors/body-parse/middleware/regex-routing in network codegen)
-4. [ ] Vendored-lib wiring (unordered_dense→collections, fast_float→json, simdutf→text, XXH3 bucket + xxhash64)
-5. [ ] Record indexOfProbe + codegen r[k] read/write (landed, needs build)
-6. [ ] Hash Checksum32/64 swap + xxhash64 (landed, needs XXH64 vector check)
-7. [ ] String/JSON sema wiring (stringMember/fromCodePoint/raw, tryInferJsonCall) (landed)
-8. [ ] void/unknown finish (no-return→undefined, JSON.parse sema move, parser helper delete, corpus re-baseline)
-9. [ ] Generic constraints producer (enterClassTypeParams) + CP3412 at instantiation
-10. [ ] Object freeze completion + Object.fromEntries/groupBy (landed, needs suite)
-11. [ ] cp3 install <dir> + cp3 test (landed, needs CLI tests)
-12. [ ] Cycle stages 2-3 (auto-weak, regions, proof, fuzzer) (agents running)
-13. [ ] Linux archives (xxhash, simdutf) + cross-compat audit (agents running)
-14. [x] Docs: 00-overview, mkdocs, guide replaces llm.md, README link (ROADMAP final flip at release tag)
-15. [x] Full corpus green + commit each green unit + tell user
+2. [x] Vendoring committed (unordered_dense, fast_float, moodycamel, XXHash, simdutf; windows-x64 and linux-x64 .a for xxhash/simdutf/pcre2)
+3. [x] Express paste-ins build (cookie/response/router/routing/errors/body-parse/middleware/regex-routing in network codegen; network corpus green on Windows and Linux)
+4. [x] Vendored-lib wiring (unordered_dense→collections, fast_float→json, simdutf→text, XXH3 bucket + xxhash64)
+5. [x] Record indexOfProbe + codegen r[k] read/write (landed; corpus green)
+6. [x] Hash Checksum32/64 swap + xxhash64 (landed; hash corpus green on both OS)
+7. [x] String/JSON sema wiring (stringMember/fromCodePoint/raw, tryInferJsonCall) (landed)
+8. [x] void/unknown finish (no-return→undefined, JSON.parse sema move, parser helper delete, corpus re-baseline)
+9. [x] Generic constraints producer (enterClassTypeParams) + CP3412 at instantiation
+10. [x] Object freeze completion + Object.fromEntries/groupBy (pinned by `stdlib/02/map/from_entries_ctor`; UAF fixed in `af72c7d9`)
+11. [ ] cp3 install <dir> + cp3 test (landed; CLI harness runs before the tag)
+12. [x] Cycle stages 2-3 (analysis/fuzzer tooling: `tools/cycle_stats.py`, `tools/fuzz_graphs.py`, `docs/design/cycle-proof.md`)
+13. [x] Linux archives (xxhash, simdutf, pcre2 linux-x64 built, committed, staged in the Linux package; linux-arm64 xxhash/simdutf still placeholders)
+14. [x] Docs: 00-overview, mkdocs, guide replaces llm.md, README link, ROADMAP flip (Done)
+15. [x] Full corpus green + commit each green unit + tell user (Windows 2115/2092 green; Linux green on the final build)
 
 ## Per-user liberty orders (locked)
 - Libs: ankerl unordered_dense, fast_float, simdutf, moodycamel, XXHash/XXH3, keep logger (no fmt), no compress/miniz.
