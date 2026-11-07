@@ -4,7 +4,7 @@ chapter: Chapter 3 · Standard library
 ---
 # Networking
 
-`std/network` exports `fetch`, `WebSocket`, `WebSocketServer`, `createServer`, `lookup`, `Headers`, `Request`, `Response`, `FormData`, `AbortSignal`, `Router`, `static`, `cors`, `bodyLimit`, `cookieParser`, and the `webserver` namespace as named imports:
+`std/network` exports `fetch`, `WebSocket`, `WebSocketServer`, `createServer`, `lookup`, `Headers`, `Request`, `Response`, `FormData`, `AbortSignal`, `Router`, `static`, `cors`, `bodyLimit`, and `cookieParser` as named imports:
 
 ```ts
 import { fetch, WebSocket, WebSocketServer, createServer, lookup, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, cookieParser } from "std/network";

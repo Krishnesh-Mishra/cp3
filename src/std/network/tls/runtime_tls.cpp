@@ -172,44 +172,40 @@ public:
 #include <cstdlib>
 #include <string>
 
+#include "cacert.hpp"
+
 namespace {
 
-// The CA bundle paths we use when the system trust store is not present (or
-// absent on this host): the bundled Mozilla cacert.pem ships under
-// `share/openssl/` in installed layouts and in `third_party/openssl/` for
-// source builds; the installed location is discovered through CP3_ROOT (set
-// by the installed `cp3` shim), the source-build location through __FILE__.
-// Lookup order: explicit ca option -> $SSL_CERT_FILE -> CP3_ROOT install ->
-// source-tree bundle -> the Linux system default paths.
-namespace {
-std::string findSourceTreeBundle() {
-    std::string start(__FILE__);
-    std::size_t slash = start.find('/');
-    while (slash != std::string::npos) {
-        const std::string up = start.substr(0, slash);
-        const std::string candidate = up + "/third_party/openssl/cacert.pem";
-        if (FILE* f = std::fopen(candidate.c_str(), "rb")) {
-            std::fclose(f);
-            return candidate;
-        }
-        slash = start.find('/', slash + 1);
-    }
-    return std::string();
-}
-std::string bundledCaPath() {
+// The CA bundle lookup that a TLS-linked program uses: $SSL_CERT_FILE if
+// set (operator override), else the Mozilla bundle embedded in this
+// binary (no filesystem dependency, no source-tree reliance). Failing
+// to load both means no trust anchors at all; the caller reports
+// ERR_TLS_INVALID_OPTIONS and refuses to proceed rather than fall back
+// to an unknown-network OS store.
+std::string caPathOverride() {
     if (const char* env = std::getenv("SSL_CERT_FILE")) {
         if (*env) return std::string(env);
     }
-    if (const char* root = std::getenv("CP3_ROOT")) {
-        const std::string installed = std::string(root) + "/share/openssl/cacert.pem";
-        if (FILE* f = std::fopen(installed.c_str(), "rb")) {
-            std::fclose(f);
-            return installed;
-        }
-    }
-    return findSourceTreeBundle();  // "" -> rely on system defaults
+    return std::string();  // "" means: use the embedded bundle
 }
-}  // namespace
+
+// Walk the embedded Mozilla bundle, stuff each cert into the ctx store.
+// Returns how many certs were added (== 0 is a hard error for the caller).
+int loadEmbeddedCa(SSL_CTX* ctx) {
+    BIO* bio = BIO_new_mem_buf(cacert_hpp_bytes(),
+                               static_cast<int>(cacert_hpp_length()));
+    if (!bio) return 0;
+    X509_STORE* store = SSL_CTX_get_cert_store(ctx);
+    int added = 0;
+    for (;;) {
+        X509* cert = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
+        if (!cert) break;
+        if (X509_STORE_add_cert(store, cert) == 1) ++added;
+        X509_free(cert);
+    }
+    BIO_free(bio);
+    return added;
+}
 
 class OpensslContext : public ITlsContext {
 public:
@@ -333,10 +329,21 @@ std::shared_ptr<ITlsContext> createTlsContext(const TlsOptions& options, bool is
     SSL_CTX_set_min_proto_version(ctx->ctx, TLS1_2_VERSION);   // the TLS1.2+ floor
     SSL_CTX_set_max_proto_version(ctx->ctx, TLS1_3_VERSION);
     SSL_CTX_set_verify(ctx->ctx, SSL_VERIFY_PEER, nullptr);    // verification ON
-    SSL_CTX_set_default_verify_paths(ctx->ctx);                // Linux: /etc/ssl/certs
-    const std::string bundled = bundledCaPath();               // Windows / portable bundle
-    if (!bundled.empty())
-        SSL_CTX_load_verify_locations(ctx->ctx, bundled.c_str(), nullptr);
+    SSL_CTX_set_default_verify_paths(ctx->ctx);                // Linux: /etc/ssl/certs (ignored when embedded loads)
+    // BN: load the embedded Mozilla bundle; SSL_CERT_FILE wins for operators.
+    const std::string override = caPathOverride();
+    bool loaded = false;
+    if (!override.empty()) {
+        if (SSL_CTX_load_verify_locations(ctx->ctx, override.c_str(), nullptr) == 1) {
+            loaded = true;
+        } /* else: honor operator error - continue; the bundle fallback applies */
+    }
+    if (!loaded) {
+        const int n = loadEmbeddedCa(ctx->ctx);
+        if (n == 0) {
+            backendUnavailable();  // throws ERR_TLS_BACKEND_UNAVAILABLE – no CA anchors at all
+        }
+    }
     if (!options.ca.empty())
         SSL_CTX_load_verify_locations(ctx->ctx, options.ca.c_str(), nullptr);
     if (isServer) {

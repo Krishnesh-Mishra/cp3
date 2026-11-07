@@ -552,7 +552,7 @@ Reference counting still does not synchronize field access.
 | `std/crypto` | `import crypto from "std/crypto"` | UUID, random bytes, SHA-256/512, AES-256-GCM |
 | `std/buffer` | `import { Buffer } from "std/buffer"` | Bytes, UTF-8/hex/base64 conversion |
 | `std/collections` | `import { Map, Set, ... } from "std/collections"` | Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap, `Map.groupBy` |
-| `std/network` | `import { fetch, lookup, WebSocket, WebSocketServer, createServer, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, webserver, cookieParser } from "std/network"` | HTTP fetch/DNS, WebSocket client/server, HTTP server/router, request/response helpers |
+| `std/network` | `import { fetch, lookup, WebSocket, WebSocketServer, createServer, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, cookieParser } from "std/network"` | HTTP fetch/DNS, WebSocket client/server, HTTP server/router, request/response helpers |
 | `std/Object` | built-in | `Object.keys`/`values`/`entries`/`assign`/`is`/`freeze`/`seal`/`preventExtensions`/`isFrozen`/`isSealed`/`isExtensible`/`getPrototypeOf`/`setPrototypeOf`/`fromEntries`/`groupBy` |
 | `std/typed arrays` | built-in | `Int8Array` … `BigUint64Array`, `ArrayBuffer`, `SharedArrayBuffer`, `DataView` |
 | `std/strings` | built-in | `string` methods |
@@ -1585,7 +1585,7 @@ Narrowing via `parseTo<T>(value)` / `value as T` verifies at runtime and throws 
 # 28. `std/network` — fetch, server, WebSockets
 
 ```ts
-import { fetch, lookup, WebSocket, WebSocketServer, createServer, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, webserver, cookieParser } from "std/network";
+import { fetch, lookup, WebSocket, WebSocketServer, createServer, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, cookieParser } from "std/network";
 import network from "std/network";
 ```
 
@@ -1663,7 +1663,7 @@ app.use("/api", api);     // mounts at prefix; params/caseSensitive/strict optio
 app.listen(8080);
 ```
 
-Express-style: `:name` params via `req.params` (Map), `*` catch-all, nested `app.use("/prefix", router)`, `route()` chains, `all`, `handle/handler/mountMiddleware`, `strict`/`caseSensitive` options. Middleware factories `static(dir)`, `cors(options)`, `bodyLimit(n)`, `cookieParser(secret?)` are router-compatible; `cookieParser(secret)` additionally enables verified `signedCookies`. Body-parser factories (`json`, `urlencoded`, `text`, `raw`) and `httpError(status, message)` are namespace-corner spellings (`network.json(...)` via the default import) rather than named imports; `webserver()` builds the webserver app. `trustProxy` applies trusted `X-Forwarded-Proto` to `req.protocol` and trusted `X-Forwarded-For` to `req.ip`.
+Express-style: `:name` params via `req.params` (Map), `*` catch-all, nested `app.use("/prefix", router)`, `route()` chains, `all`, `handle/handler/mountMiddleware`, `strict`/`caseSensitive` options. Middleware factories `static(dir)`, `cors(options)`, `bodyLimit(n)`, `cookieParser(secret?)` are router-compatible; `cookieParser(secret)` additionally enables verified `signedCookies`. Body-parser factories (`json`, `urlencoded`, `text`, `raw`) and `httpError(status, message)` are namespace-corner spellings (`network.json(...)` via the default import) rather than named imports. `trustProxy` applies trusted `X-Forwarded-Proto` to `req.protocol` and trusted `X-Forwarded-For` to `req.ip`.
 
 ## 28.4 WebSocket client
 
