@@ -69,6 +69,7 @@ constexpr const char* kHttpResponse = "$network:HttpResponse";
 constexpr const char* kHttpServer = "$network:HttpServer";
 constexpr const char* kWebSocket = "$network:WebSocket";
 constexpr const char* kWebSocketServer = "$network:WebSocketServer";
+constexpr const char* kTlsOptions = "$network:TlsOptions";
 constexpr const char* kHeaders = "$network:Headers";  // Ledger L (appended)
 constexpr const char* kRequest = "$network:Request";
 constexpr const char* kResponse = "$network:Response";
@@ -347,6 +348,32 @@ std::string Generator::emitNetworkFetch(const CallExpr& c, const ExprList& args)
 /// The named-import call sites: `fetch(...)` / `createServer()`. Returns "" when
 /// the identifier is not part of the documented surface.
 std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::string& name) {
+    if (name == "tls") {
+        // `tls({ cert, key, ca?, passphrase?, minProtocol? })` ->
+        // ::cp3::runtime::network::makeTlsOptions(...) (arguments in the fixed
+        // order; missing entries are "").
+        needsNetwork_ = true;
+        std::string cert = "std::string()", key = "std::string()", ca = "std::string()",
+                    pass = "std::string()", minp = "std::string()";
+        if (c.arguments.size() == 1 && c.arguments.front()) {
+            const Expr* arg = c.arguments.front().get();
+            if (arg->kind == NodeKind::ObjectLiteral) {
+                const auto& lit = static_cast<const ObjectLiteral&>(*arg);
+                for (const auto& p : lit.properties) {
+                    if (!p || !p->value) continue;
+                    const std::string keyName_ = objectKey(*p);
+                    const std::string valueText = expr(*p->value);
+                    if (keyName_ == "cert") cert = valueText;
+                    else if (keyName_ == "key") key = valueText;
+                    else if (keyName_ == "ca") ca = valueText;
+                    else if (keyName_ == "passphrase") pass = valueText;
+                    else if (keyName_ == "minProtocol") minp = valueText;
+                }
+            }
+        }
+        return std::string(kRuntimeNs) + "makeTlsOptions(" + cert + ", " + key + ", " +
+               ca + ", " + pass + ", " + minp + ")";
+    }
     if (name == "fetch") return emitNetworkFetch(c, c.arguments);
     if (name == "lookup") {
         needsNetwork_ = true;
@@ -392,7 +419,36 @@ std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::strin
         for (const auto& [key, prop] : configProps) {
             const Expr& value = *prop->value;
             if (key == "tls") {
-                body += " cfg.tls = " + expr(value) + ";";
+                // `tls` accepts: `true`/`false` (defaults; cert/key required at
+                // runtime), an inline options object, any value of the
+                // `$network:TlsOptions` type (the `tls({...})` factory) - the
+                // last two lower into cfg.tlsOptions.
+                const std::string valueType = effectiveType(value).name;
+                if (value.kind == NodeKind::ObjectLiteral) {
+                    body += " cfg.tls = true; cfg.tlsOptionsSet = true;";
+                    const auto& tlsLit = static_cast<const ObjectLiteral&>(value);
+                    std::string cert = "std::string()", keyText = "std::string()",
+                                ca = "std::string()", pass = "std::string()",
+                                minp = "std::string()";
+                    for (const auto& tp : tlsLit.properties) {
+                        if (!tp || !tp->value) continue;
+                        const std::string tkey = objectKey(*tp);
+                        const std::string tval = expr(*tp->value);
+                        if (tkey == "cert") cert = tval;
+                        else if (tkey == "key") keyText = tval;
+                        else if (tkey == "ca") ca = tval;
+                        else if (tkey == "passphrase") pass = tval;
+                        else if (tkey == "minProtocol") minp = tval;
+                    }
+                    body += " cfg.tlsOptions = " + std::string(kRuntimeNs) +
+                            "makeTlsOptions(" + cert + ", " + keyText + ", " + ca +
+                            ", " + pass + ", " + minp + ");";
+                } else if (valueType == kTlsOptions) {
+                    body += " cfg.tls = true; cfg.tlsOptionsSet = true; cfg.tlsOptions = " +
+                            expr(value) + ";";
+                } else {
+                    body += " cfg.tls = " + expr(value) + ";";
+                }
             } else if (key == "cors") {
                 body += " cfg.hasCors = true;";
                 if (value.kind == NodeKind::ObjectLiteral) {
@@ -680,6 +736,7 @@ std::string Generator::emitNetworkNew(const NewExpr& n) {
     const auto& literal = static_cast<const ObjectLiteral&>(*first);
     std::string port = "0.0";
     std::string path;
+    std::string tlsText;
     for (const auto& p : literal.properties) {
         if (!p || !p->value) continue;
         const std::string key = objectKey(*p);
@@ -687,10 +744,40 @@ std::string Generator::emitNetworkNew(const NewExpr& n) {
             port = expr(*p->value);
         } else if (key == "path") {
             path = expr(*p->value);
+        } else if (key == "tls") {
+            const Expr& v = *p->value;
+            if (v.kind == NodeKind::ObjectLiteral) {
+                const auto& tlsLit = static_cast<const ObjectLiteral&>(v);
+                std::string cert = "std::string()", keyText = "std::string()",
+                            ca = "std::string()", pass = "std::string()",
+                            minp = "std::string()";
+                for (const auto& tp : tlsLit.properties) {
+                    if (!tp || !tp->value) continue;
+                    const std::string tkey = objectKey(*tp);
+                    const std::string tval = expr(*tp->value);
+                    if (tkey == "cert") cert = tval;
+                    else if (tkey == "key") keyText = tval;
+                    else if (tkey == "ca") ca = tval;
+                    else if (tkey == "passphrase") pass = tval;
+                    else if (tkey == "minProtocol") minp = tval;
+                }
+                tlsText = std::string(kRuntimeNs) + "makeTlsOptions(" + cert + ", " + keyText +
+                          ", " + ca + ", " + pass + ", " + minp + ")";
+            } else if (effectiveType(v).name == kTlsOptions) {
+                tlsText = expr(v);
+            } else if (v.kind == NodeKind::BoolLiteral &&
+                       static_cast<const BoolLiteral&>(v).value) {
+                tlsText = std::string(kRuntimeNs) +
+                          "makeTlsOptions(std::string(), std::string())";
+            }
         }
     }
     std::string text = std::string(kRuntimeNs) + "WebSocketServer(" + port;
     if (!path.empty()) text += ", " + path;
+    if (!tlsText.empty()) {
+        if (path.empty()) text += ", std::string(\"*\")";  // keep path positional
+        text += ", " + tlsText;
+    }
     return text + ")";
 }
 

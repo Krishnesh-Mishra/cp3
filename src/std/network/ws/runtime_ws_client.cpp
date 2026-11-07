@@ -24,6 +24,7 @@
 
 #include "../runtime/runtime_loop.hpp"
 #include "runtime_ws.hpp"
+#include "cp3/std/network/tls.hpp"
 
 namespace cp3::runtime::network::detail {
 
@@ -49,6 +50,9 @@ struct WsClient {
     bool writeActive = false;
     std::uint8_t fragmentOpcode = 0;
     std::string fragment;
+    // wss:// only: the TLS socket (SNI = host; verification against host on
+    // by default). Null for plain ws://.
+    std::shared_ptr<void> tls;
 };
 
 namespace {
@@ -151,6 +155,14 @@ void onWriteDone(uv_write_t* req, int status) {
 
 void flushWrites(const std::shared_ptr<WsClient>& client) {
     if (client->finished || client->writeActive || client->outbox.empty()) return;
+    if (client->tls) {
+        // TLS frames go out through the TlsSocket pump synchronously into its
+        // engine; no external write-completion tracking (close finishes via
+        // the peer's EOF like the plain path).
+        static_cast<network::tls::TlsSocket*>(client->tls.get())->write(std::move(client->outbox));
+        client->outbox.clear();
+        return;
+    }
     auto* write = new WriteRequest;
     write->client = client;
     write->data = std::move(client->outbox);
@@ -368,16 +380,70 @@ void onResolved(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
     }
 }
 
+// =============================================================================
+// wss:// - ride the shared TLS pump (one engine: TlsSocket / OpenSSL)
+// =============================================================================
+// Same WS handshake/framing state machine as ws://, over the TlsSocket that
+// connectTls creates (SNI = host, peer verification on, embedded Mozilla CA
+// or $SSL_CERT_FILE). The HTTP upgrade request is written when secureConnect
+// fires; every decrypted data chunk goes through the SAME
+// tryFinishHandshake/parseFrames pair the plain pump uses; the socket's
+// close_notify/EOF ends the connection exactly like UV_EOF on TCP.
+// =============================================================================
+void beginTlsWsClient(const std::shared_ptr<WsClient>& client) {
+    network::tls::TlsOptions opts;
+    opts.host = client->host;
+    opts.port = static_cast<double>(client->port);
+    std::weak_ptr<WsClient> weak = client;
+    try {
+        auto socket = std::make_shared<network::tls::TlsSocket>(network::tls::connectTls(opts));
+        client->tls = socket;
+        socket->on("secureConnect", [weak]() {
+            const std::shared_ptr<WsClient> c = weak.lock();
+            if (c == nullptr || c->finished) return;
+            auto* sock = static_cast<network::tls::TlsSocket*>(c->tls.get());
+            if (sock == nullptr) return;
+            sock->write("GET " + c->target + " HTTP/1.1\r\nHost: " + c->host + ":" +
+                        std::to_string(c->port) +
+                        "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " +
+                        c->key + "\r\nSec-WebSocket-Version: 13\r\n\r\n");
+        });
+        socket->on("data", [weak](const std::string& chunk) {
+            const std::shared_ptr<WsClient> c = weak.lock();
+            if (c == nullptr || c->finished) return;
+            c->buffer.append(chunk);
+            if (!c->impl->opened) {
+                tryFinishHandshake(c);
+                if (!c->impl->opened || c->finished) return;
+            }
+            parseFrames(c);
+        });
+        socket->on("end", [weak]() {
+            const std::shared_ptr<WsClient> c = weak.lock();
+            if (c == nullptr) return;
+            closeClient(c, 1006.0, "");
+        });
+        socket->on("error", [weak](const Thrown& err) {
+            const std::shared_ptr<WsClient> c = weak.lock();
+            if (c == nullptr) return;
+            failClient(c, err.toString());
+        });
+    } catch (const Thrown& err) {
+        failClient(client, err.toString());
+    }
+}
+
 }  // namespace
 
-std::string parseWsUrl(const std::string& url, std::string& host, int& port, std::string& target) {
-    if (url.rfind("wss://", 0) == 0) {
-        return "std/network: wss:// is not supported in this build (TLS is off)";
+std::string parseWsUrl(const std::string& url, std::string& host, int& port, std::string& target,
+                       bool& isTls) {
+    isTls = false;
+    const bool isWss = url.rfind("wss://", 0) == 0;
+    if (!isWss && url.rfind("ws://", 0) != 0) {
+        return "std/network: WebSocket needs a ws:// or wss:// URL, got: " + url;
     }
-    const std::string prefix = "ws://";
-    if (url.rfind(prefix, 0) != 0) {
-        return "std/network: WebSocket needs a ws:// URL, got: " + url;
-    }
+    const std::string prefix = isWss ? "wss://" : "ws://";
+    if (isWss) isTls = true;
     const std::string rest = url.substr(prefix.size());
     const std::size_t slash = rest.find('/');
     const std::string authority = slash == std::string::npos ? rest : rest.substr(0, slash);
@@ -387,6 +453,7 @@ std::string parseWsUrl(const std::string& url, std::string& host, int& port, std
     const std::size_t colon = authority.rfind(':');
     if (colon == std::string::npos) {
         host = authority;
+        if (isTls) port = 443;
     } else {
         host = authority.substr(0, colon);
         const std::string error = parsePortText(authority.substr(colon + 1), port);
@@ -401,7 +468,7 @@ std::string parseWsUrl(const std::string& url, std::string& host, int& port, std
 }
 
 void wsClientStart(const std::shared_ptr<WsImpl>& impl, const std::string& host, int port,
-                   const std::string& target) {
+                   const std::string& target, bool isTls) {
     auto client = std::make_shared<WsClient>();
     client->impl = impl;
     client->host = host;
@@ -412,6 +479,10 @@ void wsClientStart(const std::shared_ptr<WsImpl>& impl, const std::string& host,
     client->key = base64Encode(keyBytes, sizeof(keyBytes));
     impl->client = client;
     retainNetwork();
+    if (isTls) {
+        beginTlsWsClient(client);
+        return;
+    }
     uv_loop_t* loop = static_cast<uv_loop_t*>(loopHandle());
     if (loop == nullptr) {
         failClient(client, "std/network: could not create the libuv loop");

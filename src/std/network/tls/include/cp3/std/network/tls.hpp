@@ -11,7 +11,7 @@
 // LIBRARY PICK (see README.md for the full rationale)
 // -----------------------------------------------------------------------------
 //   OpenSSL (libssl/libcrypto), memory-BIO engine. No TLS library is vendored
-//   in third_party/ today (uSockets is built LIBUS_NO_SSL, MANIFEST caveat 3),
+//   in vendor/third_party/ today (uSockets is built LIBUS_NO_SSL, MANIFEST caveat 3),
 //   so the full surface is implemented against the documented backend boundary
 //   in tls_backend.hpp and ships with a stub backend that FAILS CLOSED:
 //   connectTls()/createTlsServer() throw a TLSError

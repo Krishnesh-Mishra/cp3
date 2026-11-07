@@ -400,6 +400,10 @@ private:
     // invalid shape/value and returns true when the call opts into scale mode
     // (a `threads` value that is not the literal 1).
     bool checkCreateServerOptions(CallExpr& call);
+    // `tls({...})` / `createServer({tls: {...}})` options validation: walks
+    // the literal, checks the key set and the string shapes, reports the
+    // first problem (see validateTlsOptionsLiteral in src/std/network).
+    void validateTlsOptionsLiteral(const ObjectLiteral& options, const SourceSpan& span);
     // The generic instance member (`res.json<T>()` / `req.json<T>()`): the
     // explicit T substitutes into Promise<T>, matching `JSON.parse<T>`.
     bool tryInferNetworkMemberCall(CallExpr& call, MemberExpr& m, Type& out);

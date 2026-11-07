@@ -47,7 +47,8 @@ struct WsImpl {
     Kind kind = Kind::Client;
     bool opened = false;
     bool closed = false;
-    void* native = nullptr;  // server side: uWS::WebSocket<false, true, WsUserData>*
+    bool ssl = false;  // server-side native is uWS::WebSocket<true, true, WsUserData>*
+    void* native = nullptr;  // server side: uWS::WebSocket<false|true, true, WsUserData>*
     std::shared_ptr<WsClient> client;
     std::map<std::string, WsSlots> slots;
 
@@ -71,14 +72,15 @@ std::string wsMakeFrame(std::uint8_t opcode, const std::string& payload);
 /// Case-insensitive `name:` header lookup over a raw HTTP head block.
 std::string wsHeaderValue(const std::string& head, const std::string& name);
 
-/// Parses `ws://host[:port][/path]` (`wss://` reports the TLS-off message).
-/// Returns an empty string on success, else the reason to throw.
-std::string parseWsUrl(const std::string& url, std::string& host, int& port, std::string& target);
+/// Parses `ws://host[:port][/path]` or `wss://host[:port][/path]`; sets
+/// `isTls` for the `wss://` form (default port 443). Returns an empty string
+/// on success, else the reason to throw.
+std::string parseWsUrl(const std::string& url, std::string& host, int& port, std::string& target, bool& isTls);
 
 /// Client transport entry points (runtime_ws_client.cpp). `host`/`port`/
 /// `target` are already parsed; `start` retains the runtime loop.
 void wsClientStart(const std::shared_ptr<WsImpl>& impl, const std::string& host, int port,
-                   const std::string& target);
+                   const std::string& target, bool isTls);
 void wsClientSend(const std::shared_ptr<WsImpl>& impl, const std::string& data);
 /// Sends a binary frame (opcode 0x2) carrying `data` bytes.
 void wsClientSendBinary(const std::shared_ptr<WsImpl>& impl, const std::string& data);

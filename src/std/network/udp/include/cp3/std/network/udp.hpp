@@ -22,7 +22,7 @@
 //   from.address / from.port / from.family -> UdpRemoteInfo members
 //
 // Named import: `import { createUdpSocket } from "std/network";`
-// Backend: libuv uv_udp_t (third_party/libuv, D70). Implementation TU:
+// Backend: libuv uv_udp_t (vendor/third_party/libuv, D70). Implementation TU:
 // src/std/network/udp/runtime_udp.cpp (selected via the std/network native
 // package row; see native_udp.inc / WIRING.md).
 //

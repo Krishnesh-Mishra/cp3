@@ -13,7 +13,7 @@
 //   Named imports only:
 //     import { fetch, createServer, WebSocket, WebSocketServer } from "std/network";
 //
-// Backend: libuv v1.53.0 + uWebSockets v20.80.0 (third_party/**, D70). The
+// Backend: libuv v1.53.0 + uWebSockets v20.80.0 (vendor/third_party/**, D70). The
 // implementation TUs live in src/std/network/ and are compiled + linked
 // only when a program imports "std/network"
 // (src/std/network/native.hpp, D68).
@@ -51,6 +51,7 @@
 #include "cp3/std/buffer.hpp"
 #include "cp3/std/collections.hpp"
 #include "cp3/std/json.hpp"
+#include "cp3/std/network/tls.hpp"
 
 namespace cp3::runtime::network {
 
@@ -343,7 +344,7 @@ public:
     void end();
 
     /// Internal: the server binds the native response for this request.
-    void bindNative(void* native);
+    void bindNative(void* native, bool ssl = false);
     /// True once a terminal write happened (the chain stops on it).
     bool sent() const;
 
@@ -648,6 +649,11 @@ public:
     /// `x-forwarded-proto` header (the left-most hop) instead of always
     /// reporting the connection scheme.
     void setTrustProxy(bool on) const;
+    /// INTERNAL (not generated): enable TLS for this server; `listen()` then
+    /// creates a uWS SSLApp. `cert`/`key` are PEM file paths; `ca` is ignored
+    /// in v0.2 (client-cert mTLS is not supported) and the passphrase only
+    /// decrypts an encrypted `key`. `minProtocol` must be TLSv1.2 or TLSv1.3.
+    void setTlsOptions(const tls::TlsOptions& options) const;
 
 private:
     void addRouteImpl(const char* method, const std::string& path,
@@ -721,10 +727,12 @@ private:
 // =============================================================================
 // WebSocketServer
 // =============================================================================
-/// `new WebSocketServer({ port, path? })`.
+/// `new WebSocketServer({ port, path?, tls? })`. With `tls` (a `TlsOptions`
+/// value from `tls({...})` or an inline literal) the server serves TLS
+/// (PEM file `cert`/`key` required); without it, plain ws://.
 class WebSocketServer {
 public:
-    WebSocketServer(double port, std::string path = "*");
+    WebSocketServer(double port, std::string path = "*", tls::TlsOptions tlsOptions = {});
 
     /// `wss.on("connection", (ws, req?) => void)`.
     void on(const std::string& event, std::function<void(WebSocket&)> handler) const;
@@ -910,7 +918,9 @@ void addRegexRouteWithOptions(const HttpServer& server, const char* method,
 /// opt-in: an absent key leaves the plain `createServer()` behaviour.
 struct CreateServerConfig {
     double threads = 0.0;            // 0 = single loop (D79 scaling)
-    bool tls = false;                // true fails closed until OpenSSL lands
+    bool tls = false;                // enabled; cert/key REQUIRED (fails closed)
+    tls::TlsOptions tlsOptions{};    // populated when `tls` carried an object
+    bool tlsOptionsSet = false;      // true when the object form was passed
     bool hasCors = false;
     CorsOptions cors;
     bool hasStatic = false;
@@ -925,10 +935,19 @@ struct CreateServerConfig {
     // Reserved schema keys (validated, not yet enforced): maxConnections,
     // idleTimeout, maxWriteBuffer, timeout, json, urlencoded, timeouts.
 };
+/// `tls({...})`: builds server TLS options for `createServer({ tls })`.
+/// `cert`/`key` are PEM file paths; `ca` is ignored in v0.2; `passphrase`
+/// decrypts an encrypted `key`; `minProtocol` is "TLSv1.2" (default) or
+/// "TLSv1.3". Throws a TLSError for anything else or for an unknown key.
+tls::TlsOptions makeTlsOptions(const std::string& cert, const std::string& key,
+                               const std::string& ca = "",
+                               const std::string& passphrase = "",
+                               const std::string& minProtocol = "TLSv1.2");
+
 /// `createServer(options)`: builds the server from the merged config. Middleware
 /// is installed bodyLimit -> cors -> static (preflights and the 413 gate run
-/// before static); `tls: true` throws ERR_TLS_BACKEND_UNAVAILABLE (fail
-/// closed, never a silent plaintext downgrade).
+/// before static); `tls` enables an SSLApp server (PEM file cert/key required);
+/// an empty or unloadable TLS material throws before any socket exists.
 HttpServer createServerWithConfig(const CreateServerConfig& config);
 
 /// View-layer config for res.render (webserver/response).

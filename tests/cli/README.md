@@ -16,7 +16,7 @@ Successful case directories are deleted after the run; failing ones and
 
 - Python 3.9 or newer. No third-party packages.
 - A built `build/bin/cp3c.exe` (or `build/bin/cp3c` on POSIX).
-- On Windows, `packaging/windows/cp3.cmd` is assembled into temporary shim
+- On Windows, `dist/packaging/windows/cp3.cmd` is assembled into temporary shim
   layouts once per run. The `cp3c` binary is hardlinked when possible, so the
   shim never copies the full compiler per case.
 - Full mode needs Clang on `PATH` or in a standard LLVM location (`clang++`).

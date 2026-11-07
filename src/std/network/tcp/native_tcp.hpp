@@ -14,7 +14,7 @@
 //   includeDirs:  += "src/std/network/tcp/include",
 //                 (serves the generated-code include
 //                  "cp3/std/network/tcp.hpp"; the TUs need no uWS headers,
-//                  only <uv.h> from third_party/libuv/include, already in
+//                  only <uv.h> from vendor/third_party/libuv/include, already in
 //                  the row, and cp3/std/buffer.hpp from the buffer include
 //                  root, also already in the row.)
 //   runtimeSources +=

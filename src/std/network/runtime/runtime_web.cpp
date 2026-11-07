@@ -13,7 +13,9 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,6 +26,24 @@ namespace {
 std::string lowerAscii(std::string text) {
     for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     return text;
+}
+
+/// uWS consumes TLS material SYNCHRONOUSLY at context creation and only
+/// supports FILE paths (never inline PEM), so cert/key must exist and carry
+/// PEM markers - fail closed with a precise message before any socket exists.
+void readTlsPemFile(const std::string& path, const char* field, const char* marker) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw Thrown::make(std::string("[ERR_TLS_INVALID_OPTIONS] tls.") + field +
+                           " file not found or unreadable: " + path);
+    }
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    const std::string content = ss.str();
+    if (content.find(marker) == std::string::npos) {
+        throw Thrown::make(std::string("[ERR_TLS_INVALID_OPTIONS] tls.") + field +
+                           " file does not contain '" + marker + "': " + path);
+    }
 }
 
 }  // namespace
@@ -186,17 +206,49 @@ MiddlewareFn makeBodyLimitMiddleware(double limit) {
     };
 }
 
+/// `tls({...})` factory body; validation lives here so the error points at
+/// the options object, not the server call.
+tls::TlsOptions makeTlsOptions(const std::string& cert, const std::string& key,
+                               const std::string& ca, const std::string& passphrase,
+                               const std::string& minProtocol) {
+    tls::TlsOptions opts;
+    opts.cert = cert;
+    opts.key = key;
+    opts.ca = ca;  // ignored by the v0.2 server (createServerWithConfig refuses it)
+    opts.keyPassphrase = passphrase;
+    const std::string v = minProtocol.empty() ? "TLSv1.2" : minProtocol;
+    if (v == "TLSv1.2" || v == "1.2") opts.minProtocol = "TLSv1.2";
+    else if (v == "TLSv1.3" || v == "1.3") opts.minProtocol = "TLSv1.3";
+    else {
+        throw Thrown::make("[ERR_TLS_INVALID_OPTIONS] tls minProtocol must be \"TLSv1.2\" or \"TLSv1.3\" (got \"" +
+                           minProtocol + "\")");
+    }
+    return opts;
+}
+
 HttpServer createServerWithConfig(const CreateServerConfig& config) {
+    // Fail closed BEFORE any HttpServer exists: a TLS request must never
+    // produce a plaintext server (uWS cannot take inline PEM, only files).
+    tls::TlsOptions tlsOptions;
+    bool tlsEnabled = false;
     if (config.tls) {
-        // Fail closed: no SSL backend is linked into this program, so TLS
-        // must never silently degrade to plaintext (same rule as
-        // std/network/tls).
-        throw Thrown::make("[ERR_TLS_BACKEND_UNAVAILABLE] TLS backend "
-                           "unavailable: vendor OpenSSL and rebuild with an "
-                           "SSL backend (createServer tls option)");
+        const tls::TlsOptions& opts = config.tlsOptionsSet ? config.tlsOptions : tls::TlsOptions{};
+        if (opts.cert.empty() || opts.key.empty()) {
+            throw Thrown::make(
+                "[ERR_TLS_INVALID_OPTIONS] createServer({tls}) requires tls.cert and tls.key (PEM file paths)");
+        }
+        if (!opts.ca.empty()) {
+            throw Thrown::make(
+                "[ERR_TLS_INVALID_OPTIONS] tls.ca (client-cert mTLS) is not supported in v0.2");
+        }
+        readTlsPemFile(opts.cert, "cert", "-----BEGIN CERTIFICATE-----");
+        readTlsPemFile(opts.key, "key", "PRIVATE KEY-----");
+        tlsOptions = opts;
+        tlsEnabled = true;
     }
     HttpServer server = config.threads > 0.0 ? HttpServer(config.threads)
                                              : HttpServer();
+    if (tlsEnabled) server.setTlsOptions(tlsOptions);
     if (config.hasBodyLimit) {
         server.use(makeBodyLimitMiddleware(config.bodyLimit));
     }

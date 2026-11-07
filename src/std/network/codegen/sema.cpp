@@ -56,6 +56,7 @@ const char* const kHttpServer = "$network:HttpServer";
 const char* const kHttpNext = "$network:Next";
 const char* const kWebSocket = "$network:WebSocket";
 const char* const kWebSocketServer = "$network:WebSocketServer";
+const char* const kTlsOptions = "$network:TlsOptions";
 // Ledger L (appended): Headers/Request/Response/FormData/AbortSignal markers.
 const char* const kHeaders = "$network:Headers";
 const char* const kRequest = "$network:Request";
@@ -424,6 +425,20 @@ std::vector<Field> webSocketFields() {
     };
 }
 
+/// `$network:TlsOptions` fields (`tls({...})` produces this type).
+std::vector<Field> tlsOptionsFields() {
+    return {
+        Field{"cert", Type::string(), false},
+        Field{"key", Type::string(), false},
+        Field{"ca", Type::string(), false},
+        Field{"passphrase", Type::string(), false},
+        Field{"minProtocol", Type::string(), false},
+        Field{"servername", Type::string(), false},
+        Field{"rejectUnauthorized", Type::boolean(), false},
+        Field{"checkServerIdentity", Type::boolean(), false},
+    };
+}
+
 std::vector<Field> webSocketServerFields() {
     return {
         Field{"on", Type::function({Type::string(), eventListener()}, Type::voidType()),
@@ -503,6 +518,7 @@ std::vector<Field> networkFieldsFor(const std::string& name, TypeSystem ts) {
     if (name == kRouteChain) return routeChainFields();
     if (name == kwebserverApp) return routerFields(ts);
     if (name == kHttpError) return httpErrorFields();
+    if (name == kTlsOptions) return tlsOptionsFields();
     return {};
 }
 
@@ -719,6 +735,9 @@ std::optional<Type> Analyzer::networkMember(const std::string& prop) {
     if (prop == "WebSocketServer") {
         return Type::function({ambient()}, networkObjectType(kWebSocketServer));
     }
+    if (prop == "tls") {
+        return Type::function({ambient()}, networkObjectType(kTlsOptions));
+    }
     if (prop == "lookup") {
         // `dns.lookup(hostname)`: resolves with the first address.
         return Type::function({Type::string()}, promiseOf(Type::string()));
@@ -779,6 +798,26 @@ bool Analyzer::tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& o
         out = promiseOf(Type::string());
         return true;
     }
+    // `tls({...})`: the server-TLS options factory. One object literal
+    // argument with the documented keys; validated by validateTlsOptionsLiteral.
+    if (id.name == "tls") {
+        inferArgs(call);
+        if (call.arguments.size() != 1 || !call.arguments.front()) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "tls(options) takes exactly one argument (an object literal: "
+                   "{ cert, key, ca?, passphrase?, minProtocol? })");
+        } else if (call.arguments.front()->kind == NodeKind::ObjectLiteral) {
+            validateTlsOptionsLiteral(
+                static_cast<const ObjectLiteral&>(*call.arguments.front()),
+                call.span);
+        } else {
+            report(diagcode::kTypeMismatch, anchorSpan(call.arguments.front()->span),
+                   "tls(options) takes an object literal argument: "
+                   "{ cert, key, ca?, passphrase?, minProtocol? }");
+        }
+        out = networkObjectType(kTlsOptions);
+        return true;
+    }
     // Ledger L (appended): middleware factories + bare class constructions.
     // `fetch(Request)` is already typed by the `fetch` arm above.
     if (id.name == "static" || id.name == "cors" || id.name == "bodyLimit") {
@@ -831,6 +870,54 @@ bool Analyzer::tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& o
         return true;
     }
     return false;
+}
+
+/// Validates the keys + value shapes of a `tls({...})` options literal:
+/// `cert`/`key`/`ca`/`passphrase`/`minProtocol` are strings; anything else is
+/// an unknown key (with the supported set named). Values typed `unknown` are
+/// passed through; garbage literals are caught here, computed values at the
+/// runtime boundary.
+void Analyzer::validateTlsOptionsLiteral(const ObjectLiteral& options, const SourceSpan& span) {
+    static const char* const kTlsKeys[] = {"cert", "key", "ca", "passphrase",
+                                           "minProtocol"};
+    for (const auto& propPtr : options.properties) {
+        const ObjectProperty* prop = propPtr.get();
+        if (prop == nullptr || prop->key == nullptr) {
+            report(diagcode::kTypeMismatch, anchorSpan(span),
+                   "tls() options only support literal keys "
+                   "(cert, key, ca, passphrase, minProtocol)");
+            continue;
+        }
+        const std::string key = keyName(prop->key.get());
+        bool known = false;
+        for (const char* k : kTlsKeys) {
+            if (key == k) { known = true; break; }
+        }
+        if (!known) {
+            report(diagcode::kTypeMismatch, anchorSpan(prop->span),
+                   "unknown tls() option '" + key +
+                       "' (supported: cert, key, ca, passphrase, minProtocol)");
+            continue;
+        }
+        const Expr* value = prop->value.get();
+        if (value == nullptr) continue;
+        const Type valueType = typeOfExpr(const_cast<Expr&>(*value));
+        if (valueType.kind == TypeKind::Number || valueType.kind == TypeKind::Boolean ||
+            valueType.kind == TypeKind::Class || valueType.kind == TypeKind::Function) {
+            report(diagcode::kTypeMismatch, anchorSpan(value->span),
+                   "tls() '" + key + "' must be a string");
+        }
+        if (key == "minProtocol" && value->kind == NodeKind::StringLiteral) {
+            const std::string spelling =
+                static_cast<const StringLiteral&>(*value).value;
+            if (spelling != "TLSv1.2" && spelling != "1.2" &&
+                spelling != "TLSv1.3" && spelling != "1.3") {
+                report(diagcode::kTypeMismatch, anchorSpan(value->span),
+                       "tls() minProtocol must be \"TLSv1.2\" or \"TLSv1.3\" (got \"" +
+                           spelling + "\")");
+            }
+        }
+    }
 }
 
 /// D79: `createServer(options?)` — merged config wiring (config/config-static/
@@ -920,7 +1007,21 @@ bool Analyzer::checkCreateServerOptions(CallExpr& call) {
                 report(diagcode::kTypeMismatch, anchorSpan(value.span),
                        std::string("createServer() '") + key + "' must be " + what);
             };
-            if (key == "tls" || key == "trustProxy") {
+            if (key == "tls") {
+                const bool isFactoryValue =
+                    valueType.kind == TypeKind::Object && valueType.name == kTlsOptions;
+                const bool isLiteral = value.kind == NodeKind::ObjectLiteral;
+                if (!isLiteral && !isFactoryValue &&
+                    valueType.kind != TypeKind::Boolean &&
+                    valueType.kind != TypeKind::Unknown &&
+                    valueType.kind != TypeKind::Error) {
+                    badShape("a boolean or a tls({...}) object");
+                }
+                if (isLiteral) {
+                    validateTlsOptionsLiteral(
+                        static_cast<const ObjectLiteral&>(value), value.span);
+                }
+            } else if (key == "trustProxy") {
                 if (valueType.kind == TypeKind::String ||
                     valueType.kind == TypeKind::Class || valueType.kind == TypeKind::Object) {
                     badShape("a boolean");
@@ -1013,7 +1114,7 @@ Type Analyzer::inferNetworkConstruct(const std::string& name, ExprList& args,
     for (auto& arg : args) {
         if (arg) inferExpr(*arg);
     }
-    // `new WebSocket(url)` and `new WebSocketServer({ port, path? })`
+    // `new WebSocket(url)` and `new WebSocketServer({ port, path?, tls? })`
     // (docs 04 §network): both take exactly one argument. A call without it
     // is a program error here (the runtime has no URL / no port to bind), not
     // a codegen skip.
@@ -1022,6 +1123,39 @@ Type Analyzer::inferNetworkConstruct(const std::string& name, ExprList& args,
                name == "WebSocket" ? "new WebSocket(url) takes one argument"
                                    : "new WebSocketServer(options) takes one "
                                      "argument");
+    } else if (name == "WebSocketServer" && args.front() &&
+               args.front()->kind == NodeKind::ObjectLiteral) {
+        const auto& lit = static_cast<const ObjectLiteral&>(*args.front());
+        for (const auto& propPtr : lit.properties) {
+            const ObjectProperty* prop = propPtr.get();
+            if (prop == nullptr || prop->key == nullptr) continue;
+            const std::string key = keyName(prop->key.get());
+            if (key == "port") continue;  // runtime-validated number
+            if (key == "path") continue;  // path check happens at listen time
+            if (key == "tls" && prop->value) {
+                const Expr& value = *prop->value;
+                const Type valueType = typeOfExpr(const_cast<Expr&>(value));
+                const bool isFactoryValue =
+                    valueType.kind == TypeKind::Object && valueType.name == kTlsOptions;
+                if (value.kind == NodeKind::ObjectLiteral) {
+                    validateTlsOptionsLiteral(
+                        static_cast<const ObjectLiteral&>(value), value.span);
+                } else if (value.kind == NodeKind::BoolLiteral ||
+                           valueType.kind == TypeKind::Boolean || isFactoryValue ||
+                           valueType.kind == TypeKind::Unknown ||
+                           valueType.kind == TypeKind::Error) {
+                    // boolean or a tls({...}) value: OK.
+                } else {
+                    report(diagcode::kTypeMismatch, anchorSpan(value.span),
+                           "new WebSocketServer({ tls }) must be a boolean or a "
+                           "tls({...}) object");
+                }
+                continue;
+            }
+            report(diagcode::kTypeMismatch, anchorSpan(prop->span),
+                   "unknown new WebSocketServer() option '" + key +
+                       "' (supported: port, path, tls)");
+        }
     }
     return name == "WebSocket" ? networkObjectType(kWebSocket)
                                : networkObjectType(kWebSocketServer);

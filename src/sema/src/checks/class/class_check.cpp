@@ -57,7 +57,7 @@ namespace {
 // edge (in SemaResult::cycleEscapeSites, consumed by `cp3 check --report`)
 // but never marks it `proven`, never suppresses CP3401, and codegen never
 // weakens the field. Flipping the gate requires P5 (body escape analysis)
-// and P7 (tools/fuzz_graphs.py differential + ASan) to be met first.
+// and P7 (vendor/tools/fuzz_graphs.py differential + ASan) to be met first.
 // -----------------------------------------------------------------------------
 constexpr bool kAutoWeakGateEnabled = false;
 

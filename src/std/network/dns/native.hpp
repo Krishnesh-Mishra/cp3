@@ -24,7 +24,7 @@
 //
 //        "dns::lookup("
 //
-// Backend: libuv, already linked by the std/network row (third_party/libuv,
+// Backend: libuv, already linked by the std/network row (vendor/third_party/libuv,
 // -luv on Windows with ws2_32/userenv/iphlpapi/ole32/dbghelp/synchronization,
 // -pthread/-ldl/-lrt on Linux). No new vendored library, no new link flag.
 //

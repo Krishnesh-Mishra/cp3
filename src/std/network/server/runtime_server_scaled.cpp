@@ -98,8 +98,9 @@ bool waitForChildren(const std::shared_ptr<ServerImpl>& impl) {
 
 /// One child loop: create its loop, replay module state, build its App, bind
 /// (POSIX), retain the loop for the server, then run until close stops it.
+template <bool Ssl>
 void childLoop(const std::shared_ptr<ServerImpl>& impl, int index) {
-    uWS::App* app = nullptr;
+    uWS::TemplatedApp<Ssl>* app = nullptr;
     bool retained = false;
     try {
         ensureLoop();
@@ -114,12 +115,23 @@ void childLoop(const std::shared_ptr<ServerImpl>& impl, int index) {
         // on this thread before its uWS App exists.
         if (g_moduleInitHook != nullptr) g_moduleInitHook();
 
-        app = new uWS::App();
+        const uWS::SocketContextOptions opts = Ssl ? detail::sslAppOptions(*impl)
+                                                  : uWS::SocketContextOptions{};
+        app = new uWS::TemplatedApp<Ssl>(opts);
+        if constexpr (Ssl) {
+            if (app->constructorFailed()) {
+                recordStartupFailure(
+                    impl,
+                    "std/network: could not create the TLS context (check tls.cert / tls.key)");
+                return;
+            }
+        }
         {
             std::lock_guard<std::mutex> lock(impl->startupMutex);
-            impl->apps[index] = app;
+            if constexpr (Ssl) impl->sslApps[index] = app;
+            else impl->apps[index] = app;
         }
-        detail::installWildcardRoute(impl, app);
+        detail::installWildcardRoute<Ssl>(impl, app);
         if (isStopping(impl)) {
             app->close();
             return;
@@ -166,7 +178,11 @@ void postStopToChild(const std::shared_ptr<ServerImpl>& impl, int index) {
     }
     if (loop == nullptr) return;
     loop->postFromThread([impl, index] {
-        if (impl->apps[index] != nullptr) impl->apps[index]->close();
+        if (impl->ssl) {
+            if (impl->sslApps[index] != nullptr) impl->sslApps[index]->close();
+        } else if (impl->apps[index] != nullptr) {
+            impl->apps[index]->close();
+        }
         currentLoop().stop();
     });
 }
@@ -192,6 +208,7 @@ void shutdownOnMain(const std::shared_ptr<ServerImpl>& impl) {
     const bool wasListening = impl->listening;
     impl->listening = false;
     if (impl->app != nullptr) impl->app->close();
+    if (impl->sslApp != nullptr) impl->sslApp->close();
     stopChildren(impl);
     if (wasListening) releaseNetwork();
 }
@@ -206,17 +223,16 @@ void setModuleInitHook(void (*hook)()) { g_moduleInitHook = hook; }
 HttpServer::HttpServer(double threads) : impl_(std::make_shared<detail::ServerImpl>()) {
     const int count = resolveThreadCount(threads);
     if (count == 1) {
-        // `threads: 1` is exactly today's single-loop server.
+        // `threads: 1` is exactly the single-loop server. The uWS App flavor
+        // is chosen at listen() time, once TLS material is known.
         ensureLoop();
-        if (loopHandle() != nullptr) {
-            impl_->app = new uWS::App();  // leaked on purpose (process lifetime)
-        }
         return;
     }
     impl_->scaled = true;
     impl_->loopCount = count;
     impl_->mainThread = std::this_thread::get_id();
     impl_->apps.assign(static_cast<std::size_t>(count), nullptr);
+    impl_->sslApps.assign(static_cast<std::size_t>(count), nullptr);
     impl_->loops.assign(static_cast<std::size_t>(count), nullptr);
 }
 
@@ -263,12 +279,24 @@ void startScaledLoops(const std::shared_ptr<ServerImpl>& impl) {
     impl->mainLoop = &currentLoop();
     impl->mainThread = std::this_thread::get_id();
     retainNetwork();
-    impl->app = new uWS::App();
-    installWildcardRoute(impl, impl->app);
+    if (impl->ssl) {
+        impl->sslApp = new uWS::SSLApp(detail::sslAppOptions(*impl));
+        if (impl->sslApp->constructorFailed()) {
+            releaseNetwork();
+            throw Thrown::make(
+                "std/network: could not create the TLS context (check tls.cert / tls.key)");
+        }
+        detail::installWildcardRoute<true>(impl, impl->sslApp);
+    } else {
+        impl->app = new uWS::App();
+        detail::installWildcardRoute<false>(impl, impl->app);
+    }
 
     impl->apps.assign(static_cast<std::size_t>(impl->loopCount), nullptr);
+    impl->sslApps.assign(static_cast<std::size_t>(impl->loopCount), nullptr);
     impl->loops.assign(static_cast<std::size_t>(impl->loopCount), nullptr);
-    impl->apps[0] = impl->app;
+    if (impl->ssl) impl->sslApps[0] = impl->sslApp;
+    else impl->apps[0] = impl->app;
     impl->loops[0] = impl->mainLoop;
 
 #if !defined(_WIN32)
@@ -279,7 +307,8 @@ void startScaledLoops(const std::shared_ptr<ServerImpl>& impl) {
 
     try {
         for (int i = 1; i < impl->loopCount; ++i) {
-            impl->workers.emplace_back(childLoop, impl, i);
+            if (impl->ssl) impl->workers.emplace_back(childLoop<true>, impl, i);
+            else impl->workers.emplace_back(childLoop<false>, impl, i);
         }
     } catch (const std::exception& error) {
         recordStartupFailure(
@@ -297,14 +326,24 @@ void listenScaledWindows(const std::shared_ptr<ServerImpl>& impl, int port) {
     // One shared listener. uWS's addChildApp preOpen hook round-robins each
     // accepted socket into the owning app's loop, where adoptSocket builds
     // the connection. Loop 0 is in the rotation too, so all n loops serve.
-    impl->app->addChildApp(impl->app);
-    for (int i = 1; i < impl->loopCount; ++i) {
-        if (impl->apps[i] != nullptr) impl->app->addChildApp(impl->apps[i]);
-    }
     us_listen_socket_t* token = nullptr;
-    impl->app->listen(port, [&token](us_listen_socket_t* socket) {
-        token = socket;
-    });
+    if (impl->ssl) {
+        impl->sslApp->addChildApp(impl->sslApp);
+        for (int i = 1; i < impl->loopCount; ++i) {
+            if (impl->sslApps[i] != nullptr) impl->sslApp->addChildApp(impl->sslApps[i]);
+        }
+        impl->sslApp->listen(port, [&token](us_listen_socket_t* socket) {
+            token = socket;
+        });
+    } else {
+        impl->app->addChildApp(impl->app);
+        for (int i = 1; i < impl->loopCount; ++i) {
+            if (impl->apps[i] != nullptr) impl->app->addChildApp(impl->apps[i]);
+        }
+        impl->app->listen(port, [&token](us_listen_socket_t* socket) {
+            token = socket;
+        });
+    }
     if (token == nullptr) {
         throw Thrown::make(
             "std/network: could not listen (port already in use?)");
@@ -313,10 +352,17 @@ void listenScaledWindows(const std::shared_ptr<ServerImpl>& impl, int port) {
 #else
 void listenScaledPosix(const std::shared_ptr<ServerImpl>& impl) {
     us_listen_socket_t* token = nullptr;
-    impl->app->listen(impl->requestedPort,
-                      [&token](us_listen_socket_t* socket) {
-                          token = socket;
-                      });
+    if (impl->ssl) {
+        impl->sslApp->listen(impl->requestedPort,
+                             [&token](us_listen_socket_t* socket) {
+                                 token = socket;
+                             });
+    } else {
+        impl->app->listen(impl->requestedPort,
+                          [&token](us_listen_socket_t* socket) {
+                              token = socket;
+                          });
+    }
     if (token == nullptr) {
         throw Thrown::make(
             "std/network: could not listen (port already in use?)");
@@ -343,6 +389,7 @@ void scaledListen(const std::shared_ptr<ServerImpl>& impl, double portValue,
         if (callback) callback();
     } catch (...) {
         if (impl->app != nullptr) impl->app->close();
+        if (impl->sslApp != nullptr) impl->sslApp->close();
         stopChildren(impl);
         if (impl->listening) {
             impl->listening = false;

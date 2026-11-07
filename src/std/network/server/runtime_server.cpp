@@ -274,6 +274,8 @@ namespace detail {
 namespace {
 
 using ResponseImpl = detail::ResponseImpl;
+using detail::withNativeResponse;
+using detail::NativeRes;
 
 bool hasHeader(const ResponseImpl& impl, const char* name) {
     for (const auto& [key, value] : impl.headers) {
@@ -283,17 +285,17 @@ bool hasHeader(const ResponseImpl& impl, const char* name) {
 }
 
 /// Writes the status line and the buffered headers exactly once.
-NativeResponse* startHead(ResponseImpl& impl) {
-    auto* res = static_cast<NativeResponse*>(impl.native);
-    if (res == nullptr || impl.headStarted) return res;
+void startHead(ResponseImpl& impl) {
+    if (impl.native == nullptr || impl.headStarted) return;
     impl.headStarted = true;
-    res->writeStatus(std::to_string(static_cast<long long>(impl.status)) + " " +
-                     reasonPhrase(impl.status));
-    for (const auto& [name, value] : impl.headers) {
-        if (lowerAscii(name) == "content-length") continue;  // `end()` owns it
-        res->writeHeader(name, value);
-    }
-    return res;
+    withNativeResponse(impl.native, impl.ssl, [&](auto* res) {
+        res->writeStatus(std::to_string(static_cast<long long>(impl.status)) + " " +
+                         reasonPhrase(impl.status));
+        for (const auto& [name, value] : impl.headers) {
+            if (lowerAscii(name) == "content-length") continue;  // `end()` owns it
+            res->writeHeader(name, value);
+        }
+    });
 }
 
 /// A static-site content type by file extension (`res.sendFile`); unknown
@@ -325,22 +327,24 @@ void sendBuffered(ResponseImpl& impl, const std::string& contentType, bool chunk
     if (!contentType.empty() && !hasHeader(impl, "content-type")) {
         impl.headers.emplace_back("Content-Type", contentType);
     }
-    NativeResponse* res = startHead(impl);
-    if (res == nullptr) return;
-    if (chunked) {
-        if (!impl.body.empty()) res->write(impl.body);
-        res->end();
-        return;
-    }
-    res->end(impl.body);
+    startHead(impl);
+    if (impl.native == nullptr) return;
+    withNativeResponse(impl.native, impl.ssl, [&](auto* res) {
+        if (chunked) {
+            if (!impl.body.empty()) res->write(impl.body);
+            res->end();
+            return;
+        }
+        res->end(impl.body);
+    });
 }
 
 }  // namespace
 
 HttpResponse::HttpResponse() : impl_(std::make_shared<detail::ResponseImpl>()) {}
 
-void HttpResponse::bindNative(void* native) {
-    if (impl_) impl_->native = native;
+void HttpResponse::bindNative(void* native, bool ssl) {
+    if (impl_) { impl_->native = native; impl_->ssl = ssl; }
 }
 
 bool HttpResponse::sent() const { return impl_ != nullptr && impl_->finished; }
@@ -398,9 +402,11 @@ void HttpResponse::send(double code) {
 
 void HttpResponse::write(const std::string& chunk) {
     if (!impl_ || impl_->finished) return;
-    NativeResponse* res = startHead(*impl_);
-    if (res == nullptr) return;
-    res->write(chunk);  // no content-length written: uWS switches to chunked
+    startHead(*impl_);
+    if (impl_->native == nullptr) return;
+    withNativeResponse(impl_->native, impl_->ssl, [chunk](auto* res) {
+        res->write(chunk);  // no content-length written: uWS switches to chunked
+    });
 }
 
 void HttpResponse::write(const buffer::Buffer& chunk) {
@@ -461,7 +467,10 @@ void onRequestData(const std::shared_ptr<PendingRequest>& pending, std::string_v
     dispatch(pending);
 }
 
-void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
+/// The request entry. Templated on the app flavor so the uWS response is the
+/// concrete `uWS::HttpResponse<false|true>` (no virtuals on the hot path).
+template <bool Ssl>
+void onRequest(const std::shared_ptr<ServerImpl>& server, NativeRes<Ssl>* res,
                NativeRequest* req) {
     auto pending = std::make_shared<PendingRequest>();
     pending->server = server;
@@ -476,18 +485,18 @@ void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
         parseCookies(std::string(req->getHeader("cookie"))));
     pending->context.request.setRemoteAddress(
         remoteAddressText(res->getRemoteAddressAsText()));
-    // `req.protocol`: the connection scheme ("http"; TLS is unavailable in
-    // this build). With trustProxy, the left-most `x-forwarded-proto` hop
+    // `req.protocol`: the connection scheme ("http"/"https"; the SSL flavor
+    // serves "https"). With trustProxy, the left-most `x-forwarded-proto` hop
     // decides instead.
     {
-        std::string scheme = "http";
+        std::string scheme = server && server->ssl ? "https" : "http";
         if (server && server->trustProxy) {
             const std::string fwd(req->getHeader("x-forwarded-proto"));
             if (!fwd.empty()) scheme = fwd.substr(0, fwd.find(','));
         }
         pending->context.request.setProtocol(scheme);
     }
-    pending->context.response.bindNative(res);
+    pending->context.response.bindNative(res, server && server->ssl);
     res->onAborted([pending] {
         // The native response is gone: drop the pointer so a handler that
         // resumes later cannot write through it, and stop the chain.
@@ -504,12 +513,18 @@ void onRequest(const std::shared_ptr<ServerImpl>& server, NativeResponse* res,
 
 namespace detail {
 
-void installWildcardRoute(const std::shared_ptr<ServerImpl>& impl, uWS::App* app) {
+template <bool Ssl>
+void installWildcardRoute(const std::shared_ptr<ServerImpl>& impl, uWS::TemplatedApp<Ssl>* app) {
     if (!impl || app == nullptr) return;
-    app->any("/*", [impl](NativeResponse* res, NativeRequest* req) {
+    app->any("/*", [impl](NativeRes<Ssl>* res, NativeRequest* req) {
         onRequest(impl, res, req);
     });
 }
+
+template void installWildcardRoute<false>(const std::shared_ptr<ServerImpl>&,
+                                          uWS::TemplatedApp<false>*);
+template void installWildcardRoute<true>(const std::shared_ptr<ServerImpl>&,
+                                         uWS::TemplatedApp<true>*);
 
 }  // namespace detail
 
@@ -518,9 +533,8 @@ void installWildcardRoute(const std::shared_ptr<ServerImpl>& impl, uWS::App* app
 // =============================================================================
 HttpServer::HttpServer() : impl_(std::make_shared<detail::ServerImpl>()) {
     ensureLoop();
-    if (loopHandle() != nullptr) {
-        impl_->app = new uWS::App();  // leaked on purpose (process lifetime)
-    }
+    // The uWS App flavor (App vs SSLApp) is chosen at listen() time, once
+    // createServer({tls}) has had a chance to set TLS material.
 }
 
 void HttpServer::addRouteImpl(const char* method, const std::string& path,
@@ -569,25 +583,59 @@ void HttpServer::setTrustProxy(bool on) const {
     impl_->trustProxy = on;
 }
 
+void HttpServer::setTlsOptions(const tls::TlsOptions& options) const {
+    if (!impl_) return;
+    impl_->ssl = true;
+    impl_->sslKeyFile = options.key;
+    impl_->sslCertFile = options.cert;
+    impl_->sslCaFile = options.ca;
+    impl_->sslPassphrase = options.keyPassphrase;
+}
+
 void HttpServer::listen(double port, std::function<void()> callback) const {
     if (!impl_ || impl_->listening) return;
     if (impl_->scaled) {
         detail::scaledListen(impl_, port, callback);
         return;
     }
-    if (impl_->app == nullptr) return;
+    if (impl_->ssl) {
+        if (impl_->sslApp == nullptr) {
+            ensureLoop();
+            impl_->sslApp = new uWS::SSLApp(detail::sslAppOptions(*impl_));
+            if (impl_->sslApp->constructorFailed()) {
+                impl_->sslApp = nullptr;
+                throw Thrown::make(
+                    "std/network: could not create the TLS context (check tls.cert / tls.key)");
+            }
+        }
+    } else if (impl_->app == nullptr) {
+        ensureLoop();
+        impl_->app = new uWS::App();  // leaked on purpose (process lifetime)
+    }
     impl_->listening = true;
     retainNetwork();
     std::shared_ptr<detail::ServerImpl> impl = impl_;
-    detail::installWildcardRoute(impl, impl->app);
+    uWS::TemplatedApp<true>* sslApp = impl_->sslApp;
+    uWS::TemplatedApp<false>* plainApp = impl_->app;
+    if (impl->ssl) detail::installWildcardRoute<true>(impl, sslApp);
+    else detail::installWildcardRoute<false>(impl, plainApp);
     const int bound = static_cast<int>(port);
     try {
-        impl->app->listen(bound, [callback](us_listen_socket_t* socket) {
-            if (socket == nullptr) {
-                throw Thrown::make("std/network: could not listen (port already in use?)");
-            }
-            if (callback) callback();
-        });
+        if (impl->ssl) {
+            sslApp->listen(bound, [callback](us_listen_socket_t* socket) {
+                if (socket == nullptr) {
+                    throw Thrown::make("std/network: could not listen (port already in use?)");
+                }
+                if (callback) callback();
+            });
+        } else {
+            plainApp->listen(bound, [callback](us_listen_socket_t* socket) {
+                if (socket == nullptr) {
+                    throw Thrown::make("std/network: could not listen (port already in use?)");
+                }
+                if (callback) callback();
+            });
+        }
     } catch (...) {
         // Binding failed: undo the pending-work retain before rethrowing.
         impl->listening = false;
@@ -602,9 +650,14 @@ void HttpServer::close() const {
         detail::scaledClose(impl_);
         return;
     }
-    if (impl_->app == nullptr) return;
     impl_->closed = true;
-    impl_->app->close();  // closes the listen sockets and every connection
+    if (impl_->ssl && impl_->sslApp != nullptr) {
+        impl_->sslApp->close();  // closes the listen sockets and every connection
+    } else if (impl_->app != nullptr) {
+        impl_->app->close();
+    } else {
+        return;
+    }
     if (impl_->listening) {
         impl_->listening = false;
         releaseNetwork();

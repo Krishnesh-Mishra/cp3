@@ -552,7 +552,7 @@ Reference counting still does not synchronize field access.
 | `std/crypto` | `import crypto from "std/crypto"` | UUID, random bytes, SHA-256/512, AES-256-GCM |
 | `std/buffer` | `import { Buffer } from "std/buffer"` | Bytes, UTF-8/hex/base64 conversion |
 | `std/collections` | `import { Map, Set, ... } from "std/collections"` | Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap, `Map.groupBy` |
-| `std/network` | `import { fetch, lookup, WebSocket, WebSocketServer, createServer, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, cookieParser } from "std/network"` | HTTP fetch/DNS, WebSocket client/server, HTTP server/router, request/response helpers |
+| `std/network` | `import { fetch, lookup, WebSocket, WebSocketServer, createServer, tls, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, cookieParser } from "std/network"` | HTTP fetch/DNS, WebSocket client/server, HTTP server/router, request/response helpers, TLS (fetch https, wss://, TLS servers) |
 | `std/Object` | built-in | `Object.keys`/`values`/`entries`/`assign`/`is`/`freeze`/`seal`/`preventExtensions`/`isFrozen`/`isSealed`/`isExtensible`/`getPrototypeOf`/`setPrototypeOf`/`fromEntries`/`groupBy` |
 | `std/typed arrays` | built-in | `Int8Array` … `BigUint64Array`, `ArrayBuffer`, `SharedArrayBuffer`, `DataView` |
 | `std/strings` | built-in | `string` methods |
@@ -1589,7 +1589,7 @@ import { fetch, lookup, WebSocket, WebSocketServer, createServer, Headers, Reque
 import network from "std/network";
 ```
 
-**No HTTPS/TLS in this beta.** Client fetch accepts only `http://` URLs. The named registry above is closed: raw TCP (`createTcpServer`, `connectTcp`, `TcpSocket`), datagram UDP (`createUdpSocket`, `UdpSocket`), and TLS sockets (`createTlsServer`, `connectTls`, `TlsSocket`) are not exported — do not import them by name; their runtime trees exist but are unwired. Server TLS is config-rejected with `ERR_TLS_BACKEND_UNAVAILABLE` until OpenSSL is vendored.
+**HTTPS runs over the same engine as `fetch` itself.** Client fetch accepts `http://` and `https://` URLs, with certificate verification on by default (embedded Mozilla CA bundle; `SSL_CERT_FILE=/path/to/bundle.pem` overrides it; TLS1.2 floor). The named registry above is closed: raw TCP (`createTcpServer`, `connectTcp`, `TcpSocket`), datagram UDP (`createUdpSocket`, `UdpSocket`), and the TLS sockets themselves (`createTlsServer`, `connectTls`, `TlsSocket`) are not exported — do not import them by name. Server-side TLS goes through `createServer({ tls })` and `new WebSocketServer({ port, tls })` with PEM **file paths** for `cert`/`key`, or through the `tls({...})` factory for reusable options objects. TLS applications never silently downgrade to plaintext: misconfiguration throws `ERR_TLS_INVALID_OPTIONS`, verification failures surface as a `TLSError` (`[CODE] message`, e.g. `[CERT_UNTRUSTED] ...`), and builds without a TLS backend fail with `ERR_TLS_BACKEND_UNAVAILABLE`.
 
 ## 28.1 Fetch and DNS
 
@@ -1611,7 +1611,7 @@ const text = await response.text();
 const data = await response.json<Settings>();
 ```
 
-`fetch(url, init?)` resolves to a fetch `Response` with `ok`, `status`, `statusText`, `headers`, `url`, and `text()` / `arrayBuffer()` / `json<T>()`. The body is buffered before resolution. A bad HTTP status still resolves to a response — check `ok`/`status`. DNS, connection, timeout, unsupported scheme, and protocol failures reject the promise. Numeric fields (`status`, ports) are `u16` in Rust/C++ projects and `number` in TypeScript. `lookup(hostname)` resolves via libuv `getaddrinfo` and rejects with `Error` on failure.
+`fetch(url, init?)` resolves to a fetch `Response` with `ok`, `status`, `statusText`, `headers`, `url`, and `text()` / `arrayBuffer()` / `json<T>()`. The body is buffered before resolution. A bad HTTP status still resolves to a response — check `ok`/`status`. DNS, connection, timeout, unsupported scheme, certificate-verification, and protocol failures reject the promise. HTTPS works out of the box: the server certificate chain is verified by default against the embedded Mozilla CA bundle (TLS1.2 floor, hostname/SNI checked against the URL host); set `SSL_CERT_FILE=/path/to/bundle.pem` to use your own CA (e.g. a corporate PKI) instead of the embedded one. Numeric fields (`status`, ports) are `u16` in Rust/C++ projects and `number` in TypeScript. `lookup(hostname)` resolves via libuv `getaddrinfo` and rejects with `Error` on failure.
 
 Fetch value types (all named imports): `Headers.get/has/set/append/delete`; `Request(url, init?)` with `url/method/headers/signal/text/json/arrayBuffer`; `Response` adds `url`; `FormData.append/get/has/set/delete` (appended fields can be a fetch `body`); `AbortSignal.aborted` and `AbortSignal.timeout(ms)` (a timed signal `fetch(url, { signal })` applies as request timeout).
 
@@ -1643,7 +1643,16 @@ server.listen(8080, () => console.log("ready"));
 server.close();
 ```
 
-`createServer(options?)`: `threads` (integer ≥ 1), `tls` (boolean; fails closed until OpenSSL vendored, error `ERR_TLS_BACKEND_UNAVAILABLE`), `cors`, `static(dir)`, `bodyLimit(n)`, `trustProxy` (honors `X-Forwarded-Proto`), `views` (render dir), `onError(err, req, res)`. Empty options object is valid. Handlers are sync or `async () => undefined`. Routes/middleware run in registration order; calling `next()` continues the chain (returns `Promise<undefined>`). A chain ending without a response → 404.
+`createServer(options?)`: `threads` (integer ≥ 1), `tls` — a boolean (`true` enables TLS with default options and requires `cert`/`key` at runtime), an inline options object, or a value from the `tls({...})` factory; server-side TLS options are `{ cert, key, ca?, passphrase?, minProtocol? }` where `cert`/`key` are **PEM file paths** — inline PEM text is rejected — `cors`, `static(dir)`, `bodyLimit(n)`, `trustProxy` (honors `X-Forwarded-Proto`), `views` (render dir), `onError(err, req, res)`. Empty options object is valid. With `tls`, the server is an uWS `SSLApp` and `listen` serves HTTPS; verification floor is TLS1.2. Handlers are sync or `async () => undefined`. Routes/middleware run in registration order; calling `next()` continues the chain (returns `Promise<undefined>`). A chain ending without a response → 404.
+
+```ts
+const app = createServer({ tls: { cert: "cert.pem", key: "key.pem" } });
+// or reusable options:
+const creds = tls({ cert: "cert.pem", key: "key.pem" });
+const app2 = createServer({ tls: creds });
+```
+
+`tls` is a named import: `import { tls, createServer } from "std/network"`.
 
 Methods: `get`, `post`, `put`, `delete`, `patch`, `head`, `options`, `all`, `use`, plus `route(path)` chains, `param(name, fn)`, `onError(fn)` (method form), `set("secret", …)` (signed-cookie secret), and settings `enable/disable/enabled/disabled`. Request fields: `method`, `path`, `params`/`query`/`headers`/`cookies`/`signedCookies` (Maps), `baseUrl`, `originalUrl`, `ip`, `protocol` (`http` unless `trustProxy`), `body` (buffered; `text()`/`json<T>()` read it). `port` and status codes are `number` (TypeScript) / `u16` (Rust/C++), consistent with `response.status()`.
 
@@ -1685,14 +1694,14 @@ socket.send("ping");
 socket.close(1000, "going away");
 ```
 
-Wait for `"open"` before sending. Event callbacks: `open`, `message`, `close(code, reason)`, `error(err)`. One handler per event (later replaces earlier). Close when done — an open socket keeps event-loop work alive. Text frames → `string`; binary frames → `Buffer`. Only `ws://`; TLS is unsupported.
+Wait for `"open"` before sending. Event callbacks: `open`, `message`, `close(code, reason)`, `error(err)`. One handler per event (later replaces earlier). Close when done — an open socket keeps event-loop work alive. Text frames → `string`; binary frames → `Buffer`. `ws://` and `wss://` are both supported; `wss://` verifies the server certificate like HTTPS.
 
 ## 28.5 WebSocket server
 
 ```ts
 import { WebSocketServer } from "std/network";
 
-const wss = new WebSocketServer({ port: 9000, path: "*" });
+const wss = new WebSocketServer({ port: 9000, path: "*", tls: { cert: "cert.pem", key: "key.pem" } });
 
 wss.on("connection", (ws, request): undefined => {
   ws.on("message", (msg): undefined => {
@@ -1704,7 +1713,7 @@ wss.on("connection", (ws, request): undefined => {
 wss.close();
 ```
 
-`new WebSocketServer({ port, path? })`, default path `"*"`. Same WebSocket handle surface as the client. Only `ws://` is supported.
+`new WebSocketServer({ port, path?, tls? })`, default path `"*"`. Same WebSocket handle surface as the client. Pass `tls` (an inline `{ cert, key, ... }` object or a `tls({...})` value with PEM file paths) to serve `wss://`; without it, plain `ws://`.
 
 ## 28.6 Resource and error discipline
 

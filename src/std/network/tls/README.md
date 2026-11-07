@@ -5,11 +5,11 @@ was built or run. The integrator (lead) applies the WIRING lines below.
 
 ## Library pick: OpenSSL (memory-BIO engine), stub until vendored
 
-**No TLS library is vendored in `third_party/` today.** `third_party/MANIFEST.md`
+**No TLS library is vendored in `vendor/third_party/` today.** `vendor/third_party/MANIFEST.md`
 (caveat 3, "Verified consumer flags") records uSockets built `LIBUS_NO_SSL` and
 states that wss/TLS would need the archives rebuilt with an SSL backend. There
 is no OpenSSL, mbedTLS or BoringSSL tree, archive or `VERSION.txt` anywhere in
-the tree (checked: `third_party/**` carries only libsodium, libuv, uWebSockets,
+the tree (checked: `vendor/third_party/**` carries only libsodium, libuv, uWebSockets,
 oneTBB, PCRE2 and the Ledger-F header/compilable libs).
 
 Pick: **OpenSSL** (`libssl`/`libcrypto`, static, same pin-and-build recipe as
@@ -126,10 +126,10 @@ unchanged against `TlsSocket`. `TlsSocket` only *adds* the TLS members
 
 ### 1. Vendor OpenSSL (third_party, follow MANIFEST.md recipe)
 
-Pin OpenSSL (record repo/tag/SHA in `third_party/MANIFEST.md` + `VERSION.txt`),
+Pin OpenSSL (record repo/tag/SHA in `vendor/third_party/MANIFEST.md` + `VERSION.txt`),
 build static `libssl.a`/`libcrypto.a` per triple (`windows-x64`, `linux-x64`,
 `linux-arm64`), copy `include/` + `lib/<triple>/` + `LICENSE` into
-`third_party/openssl/`. Nothing in this subtree changes when that lands.
+`vendor/third_party/openssl/`. Nothing in this subtree changes when that lands.
 
 ### 2. `src/std/network/codegen/native.hpp` (the runtime TU selection row)
 
@@ -142,8 +142,8 @@ build static `libssl.a`/`libcrypto.a` per triple (`windows-x64`, `linux-x64`,
 // defines: append "-DCP3_TLS_OPENSSL" ONLY once OpenSSL is vendored
 //          (before that, the stub compiles and fails closed at runtime).
 // link (per triple, next to the libuv libs): add
-//   windows-x64: {"third_party/openssl/lib/windows-x64"}, {"-lssl", "-lcrypto", "-lws2_32", ...}
-//   linux-x64/arm64: {"third_party/openssl/lib/linux-x64"}, {"-lssl", "-lcrypto", "-ldl", "-pthread"}
+//   windows-x64: {"vendor/third_party/openssl/lib/windows-x64"}, {"-lssl", "-lcrypto", "-lws2_32", ...}
+//   linux-x64/arm64: {"vendor/third_party/openssl/lib/linux-x64"}, {"-lssl", "-lcrypto", "-ldl", "-pthread"}
 ```
 
 ### 3. `src/modules/src/support/std_registry.cpp` (import surface)

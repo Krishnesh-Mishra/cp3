@@ -5,7 +5,7 @@
 // linked, with uSockets + libuv) only when a program imports "std/network" -
 // see src/std/network/native.hpp.
 //
-// Backend notes: libuv v1.53.0 + uWebSockets v20.80.0 static (third_party/**,
+// Backend notes: libuv v1.53.0 + uWebSockets v20.80.0 static (vendor/third_party/**,
 // D70). Every TU that sees the uWS headers is compiled with -DUWS_NO_ZLIB
 // (D68 wires it); TLS is off, so beta-one fetch is http:// only.
 //

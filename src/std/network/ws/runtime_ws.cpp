@@ -19,9 +19,11 @@
 #include "cp3/std/network.hpp"
 
 #include <cstdint>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -32,7 +34,11 @@
 #include "runtime_ws.hpp"
 
 namespace cp3::runtime::network {
-namespace {
+
+// =============================================================================
+// WsImpl event emission (shared by both directions)
+// =============================================================================
+namespace detail {
 
 /// Per-connection user data for the uWS websocket context. uWS requires the
 /// type to fit its socket extension; the actual handle state lives in the
@@ -40,15 +46,6 @@ namespace {
 struct WsUserData {
     std::uint32_t reserved = 0;
 };
-
-using NativeWs = uWS::WebSocket<false, true, WsUserData>;
-
-}  // namespace
-
-// =============================================================================
-// WsImpl event emission (shared by both directions)
-// =============================================================================
-namespace detail {
 
 void WsImpl::emitOpen() {
     if (closed) return;
@@ -117,12 +114,13 @@ WebSocket::WebSocket(const std::string& url) : impl_(std::make_shared<detail::Ws
     std::string host;
     int port = 80;
     std::string target;
-    const std::string error = detail::parseWsUrl(url, host, port, target);
+    bool isTls = false;
+    const std::string error = detail::parseWsUrl(url, host, port, target, isTls);
     if (!error.empty()) {
         throw Thrown::make(error);
     }
     ensureLoop();
-    detail::wsClientStart(impl_, host, port, target);
+    detail::wsClientStart(impl_, host, port, target, isTls);
 }
 
 WebSocket WebSocket::adopt(void* native) {
@@ -159,9 +157,7 @@ void WebSocket::on(const std::string& event, std::function<void(Thrown)> handler
 void WebSocket::send(const std::string& data) const {
     if (!impl_ || impl_->closed) return;
     if (impl_->kind == detail::WsImpl::Kind::Server) {
-        if (impl_->native != nullptr) {
-            static_cast<NativeWs*>(impl_->native)->send(data, uWS::OpCode::TEXT);
-        }
+        detail::serverSend(*impl_, data, uWS::OpCode::TEXT);
         return;
     }
     detail::wsClientSend(impl_, data);
@@ -170,9 +166,7 @@ void WebSocket::send(const std::string& data) const {
 void WebSocket::send(const buffer::Buffer& data) const {
     if (!impl_ || impl_->closed) return;
     if (impl_->kind == detail::WsImpl::Kind::Server) {
-        if (impl_->native != nullptr) {
-            static_cast<NativeWs*>(impl_->native)->send(data.bytes(), uWS::OpCode::BINARY);
-        }
+        detail::serverSend(*impl_, data.bytes(), uWS::OpCode::BINARY);
         return;
     }
     detail::wsClientSendBinary(impl_, data.bytes());
@@ -181,9 +175,7 @@ void WebSocket::send(const buffer::Buffer& data) const {
 void WebSocket::close(double code, const std::string& reason) const {
     if (!impl_ || impl_->closed) return;
     if (impl_->kind == detail::WsImpl::Kind::Server) {
-        if (impl_->native != nullptr) {
-            static_cast<NativeWs*>(impl_->native)->end(static_cast<int>(code), reason);
-        }
+        detail::serverEnd(*impl_, static_cast<int>(code), reason);
         return;
     }
     detail::wsClientClose(impl_, code, reason);
@@ -198,22 +190,51 @@ namespace detail {
 /// on purpose (process lifetime); live connections are tracked so the close
 /// callback can retire the right handle.
 struct WssImpl {
-    uWS::App* app = nullptr;
+    uWS::App* app = nullptr;       // plain flavor
+    uWS::SSLApp* sslApp = nullptr; // TLS flavor (only when tls options were passed)
+    bool ssl = false;
     bool listening = false;
     bool closed = false;
     std::function<void(WebSocket&)> connection0;              // (ws)
     std::function<void(WebSocket&, HttpRequest)> connection1; // (ws, req)
     std::map<void*, std::unique_ptr<WebSocket>> connections;
+    // TLS material (outlives uWS context creation; the uWS app is leaked).
+    std::string sslCertFile;
+    std::string sslKeyFile;
+    std::string sslCaFile;
+    std::string sslPassphrase;
 };
 
 }  // namespace detail
 
-namespace {
+namespace detail {
 
-using WssImpl = detail::WssImpl;
+template <bool Ssl>
+using NativeServerWs = uWS::WebSocket<Ssl, true, WsUserData>;
 
-void onServerOpen(const std::shared_ptr<WssImpl>& impl, NativeWs* native) {
+void serverSend(detail::WsImpl& impl, const std::string& data, uWS::OpCode op) {
+    if (impl.native == nullptr) return;
+    if (impl.ssl) {
+        static_cast<uWS::WebSocket<true, true, WsUserData>*>(impl.native)->send(data, op);
+    } else {
+        static_cast<uWS::WebSocket<false, true, WsUserData>*>(impl.native)->send(data, op);
+    }
+}
+
+void serverEnd(detail::WsImpl& impl, int code, const std::string& reason) {
+    if (impl.native == nullptr) return;
+    if (impl.ssl) {
+        static_cast<uWS::WebSocket<true, true, WsUserData>*>(impl.native)->end(code, reason);
+    } else {
+        static_cast<uWS::WebSocket<false, true, WsUserData>*>(impl.native)->end(code, reason);
+    }
+}
+
+void onServerOpenImpl(const std::shared_ptr<WssImpl>& impl, bool ssl, void* native) {
     const WebSocket handle = WebSocket::adopt(native);
+    if (const std::shared_ptr<detail::WsImpl> adopted = WebSocket::sharedImpl(handle)) {
+        adopted->ssl = ssl;
+    }
     if (WebSocket::sharedImpl(handle) == nullptr) return;
     // The stored handle is what the connection listener receives: a `[&]`
     // capture of it in a nested handler stays valid for the life of the
@@ -229,11 +250,15 @@ void onServerOpen(const std::shared_ptr<WssImpl>& impl, NativeWs* native) {
         }
     } catch (...) {
         // A connection handler threw: close just this socket.
-        native->end(1011, "handler error");
+        if (ssl) {
+            static_cast<uWS::WebSocket<true, true, WsUserData>*>(native)->end(1011, "handler error");
+        } else {
+            static_cast<uWS::WebSocket<false, true, WsUserData>*>(native)->end(1011, "handler error");
+        }
     }
 }
 
-void onServerMessage(const std::shared_ptr<WssImpl>& impl, NativeWs* native,
+void onServerMessage(const std::shared_ptr<WssImpl>& impl, void* native,
                      std::string_view message, uWS::OpCode opCode) {
     if (opCode != uWS::OpCode::TEXT && opCode != uWS::OpCode::BINARY) return;
     const auto it = impl->connections.find(native);
@@ -244,7 +269,7 @@ void onServerMessage(const std::shared_ptr<WssImpl>& impl, NativeWs* native,
     }
 }
 
-void onServerClose(const std::shared_ptr<WssImpl>& impl, NativeWs* native, int code,
+void onServerClose(const std::shared_ptr<WssImpl>& impl, void* native, int code,
                    std::string_view message) {
     const auto it = impl->connections.find(native);
     if (it == impl->connections.end() || it->second == nullptr) return;
@@ -258,31 +283,89 @@ void onServerClose(const std::shared_ptr<WssImpl>& impl, NativeWs* native, int c
     impl->connections.erase(it);
 }
 
-}  // namespace
+/// uWS takes FILE paths for TLS, never inline PEM: validate the pair exists
+/// and carries PEM markers (same rule as the HTTP server path).
+void readTlsPemFile(const std::string& path, const char* field, const char* marker) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw Thrown::make(std::string("[ERR_TLS_INVALID_OPTIONS] tls.") + field +
+                           " file not found or unreadable: " + path);
+    }
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    const std::string content = ss.str();
+    if (content.find(marker) == std::string::npos) {
+        throw Thrown::make(std::string("[ERR_TLS_INVALID_OPTIONS] tls.") + field +
+                           " file does not contain '" + marker + "': " + path);
+    }
+}
 
-WebSocketServer::WebSocketServer(double port, std::string path)
-    : impl_(std::make_shared<detail::WssImpl>()) {
-    ensureLoop();
-    if (loopHandle() == nullptr) return;
-    impl_->app = new uWS::App();  // leaked on purpose (process lifetime)
-    const std::shared_ptr<detail::WssImpl> impl = impl_;
-    uWS::App::WebSocketBehavior<WsUserData> behavior;
+/// One WebSocketServer app (plain App or TLS SSLApp) with the full RFC 6455
+/// behavior registered; the flavor is a template parameter so the handlers
+/// see the concrete uWS::WebSocket<false|true, ...> type.
+template <bool Ssl>
+void startWss(const std::shared_ptr<WssImpl>& impl, const std::string& path, double port) {
+    using A = uWS::TemplatedApp<Ssl>;
+    uWS::SocketContextOptions options{};
+    if constexpr (Ssl) {
+        options.key_file_name = impl->sslKeyFile.c_str();
+        options.cert_file_name = impl->sslCertFile.c_str();
+        if (!impl->sslPassphrase.empty()) options.passphrase = impl->sslPassphrase.c_str();
+    }
+    A* app = new A(options);  // leaked on purpose (process lifetime)
+    if constexpr (Ssl) {
+        if (app->constructorFailed()) {
+            throw Thrown::make(
+                "[ERR_TLS_INVALID_OPTIONS] could not create the TLS context (check tls.cert / tls.key)");
+        }
+    }
+    typename A::template WebSocketBehavior<WsUserData> behavior;
     behavior.compression = uWS::DISABLED;
-    behavior.open = [impl](NativeWs* native) { onServerOpen(impl, native); };
-    behavior.message = [impl](NativeWs* native, std::string_view message, uWS::OpCode opCode) {
+    behavior.open = [impl](uWS::WebSocket<Ssl, true, WsUserData>* native) {
+        onServerOpenImpl(impl, Ssl, native);
+    };
+    behavior.message = [impl](uWS::WebSocket<Ssl, true, WsUserData>* native, std::string_view message,
+                              uWS::OpCode opCode) {
         onServerMessage(impl, native, message, opCode);
     };
-    behavior.close = [impl](NativeWs* native, int code, std::string_view message) {
+    behavior.close = [impl](uWS::WebSocket<Ssl, true, WsUserData>* native, int code,
+                            std::string_view message) {
         onServerClose(impl, native, code, message);
     };
-    impl_->app->ws<WsUserData>(path, std::move(behavior));
-    impl_->app->listen(static_cast<int>(port), [](us_listen_socket_t* socket) {
+    app->template ws<WsUserData>(path, std::move(behavior));
+    app->listen(static_cast<int>(port), [](us_listen_socket_t* socket) {
         if (socket == nullptr) {
             throw Thrown::make("std/network: could not listen (port already in use?)");
         }
     });
-    impl_->listening = true;
+    if constexpr (Ssl) impl->sslApp = app;
+    else impl->app = app;
+    impl->listening = true;
     retainNetwork();
+}
+
+}  // namespace detail
+
+WebSocketServer::WebSocketServer(double port, std::string path, tls::TlsOptions tlsOptions)
+    : impl_(std::make_shared<detail::WssImpl>()) {
+    ensureLoop();
+    if (loopHandle() == nullptr) return;
+    if (!tlsOptions.cert.empty() || !tlsOptions.key.empty()) {
+        // TLS requested: validate, then serve TLS only (fail closed).
+        if (tlsOptions.cert.empty() || tlsOptions.key.empty()) {
+            throw Thrown::make(
+                "[ERR_TLS_INVALID_OPTIONS] WebSocketServer({tls}) requires tls.cert and tls.key (PEM file paths)");
+        }
+        detail::readTlsPemFile(tlsOptions.cert, "cert", "-----BEGIN CERTIFICATE-----");
+        detail::readTlsPemFile(tlsOptions.key, "key", "PRIVATE KEY-----");
+        impl_->ssl = true;
+        impl_->sslCertFile = tlsOptions.cert;
+        impl_->sslKeyFile = tlsOptions.key;
+        impl_->sslPassphrase = tlsOptions.keyPassphrase;
+        detail::startWss<true>(impl_, path, port);
+        return;
+    }
+    detail::startWss<false>(impl_, path, port);
 }
 
 void WebSocketServer::on(const std::string& event, std::function<void(WebSocket&)> handler) const {
@@ -297,9 +380,15 @@ void WebSocketServer::on(const std::string& event,
 }
 
 void WebSocketServer::close() const {
-    if (!impl_ || impl_->app == nullptr || impl_->closed) return;
+    if (!impl_ || impl_->closed) return;
     impl_->closed = true;
-    impl_->app->close();
+    if (impl_->ssl && impl_->sslApp != nullptr) {
+        impl_->sslApp->close();
+    } else if (impl_->app != nullptr) {
+        impl_->app->close();
+    } else {
+        return;
+    }
     impl_->connections.clear();
     if (impl_->listening) {
         impl_->listening = false;

@@ -91,7 +91,7 @@ user routes never see it; a non-preflight `OPTIONS` passes through.
 ## Wiring lines (integrator — NOT applied, shared files untouched)
 
 1. **Vendor/define (TLS only).** Rebuild uSockets with an SSL backend per
-   `third_party/MANIFEST.md` caveat 3, then define `CP3_UWS_SSL` in the
+   `vendor/third_party/MANIFEST.md` caveat 3, then define `CP3_UWS_SSL` in the
    native row. Until then every `tls:` program fails closed with
    `ERR_TLS_BACKEND_UNAVAILABLE` — by design, same as `std/network/tls`
    (`CP3_TLS_OPENSSL` stub).

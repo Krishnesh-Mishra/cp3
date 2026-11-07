@@ -18,7 +18,7 @@ inline const NativePackage kNetworkwebserverRequestNativePackage{
     "std/network/webserver/request",
     {"src/std/network/webserver/request/include", "src/std/network/include",
      "src/std/json/include", "src/std/buffer/include",
-     "src/std/collections/include", "third_party/unordered_dense/include"},
+     "src/std/collections/include", "vendor/third_party/unordered_dense/include"},
     {},
     {},
     {},
