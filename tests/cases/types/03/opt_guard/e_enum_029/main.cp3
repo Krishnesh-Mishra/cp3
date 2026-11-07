@@ -1,0 +1,4 @@
+import console from "std/console";
+enum Big { Top = 9007199254740991, Same = 9007199254740991, Bottom = 0 }
+console.log(`${Big.Top === Big.Same}`);
+console.log(`${Big.Top === Big.Bottom}`);

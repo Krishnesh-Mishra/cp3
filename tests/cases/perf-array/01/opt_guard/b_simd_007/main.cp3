@@ -1,0 +1,4 @@
+import console from "std/console";
+const a: number[] = [0, 0, 0, 0, 0];
+for (let i = 0; i < a.length; i++) { a[i] = 5; }
+console.log(a.join(","));

@@ -1,0 +1,6 @@
+import console from "std/console";
+let order = "";
+function mark(s: string): number { order = order + s; return 1; }
+function combine(x: number, y: number): number { return x + y; }
+const r = combine(mark("x"), mark("y"));
+console.log(`${order}:${r}`);

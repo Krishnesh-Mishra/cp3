@@ -1,0 +1,4 @@
+import console from "std/console";
+let n = 7;
+const m = n > 10 ? "big" : n > 5 ? "mid" : "small";
+console.log(m);

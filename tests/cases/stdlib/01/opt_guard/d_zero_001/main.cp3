@@ -1,0 +1,7 @@
+import console from "std/console";
+import { Buffer } from "std/buffer";
+const b = Buffer.from("hello world");
+const head = b.slice(0, 5);
+const tail = b.slice(6);
+console.log(head.toString());
+console.log(tail.toString());

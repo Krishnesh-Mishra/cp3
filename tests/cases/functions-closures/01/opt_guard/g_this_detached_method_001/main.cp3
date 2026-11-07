@@ -1,0 +1,9 @@
+import console from "std/console";
+class Counter {
+  n: number = 10;
+  read(): number { return this.n; }
+}
+const c = new Counter();
+const f = c.read;
+console.log(`${f()}`);
+console.log(`${f()}`);

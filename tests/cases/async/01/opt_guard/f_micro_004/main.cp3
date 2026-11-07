@@ -1,0 +1,4 @@
+import console from "std/console";
+const p = Promise.resolve(9);
+p.then(() => console.log("t1"));
+p.then(() => console.log("t2"));

@@ -1,0 +1,10 @@
+import console from "std/console";
+class Particle {
+  x: number;
+  y: number;
+  z: number;
+  m: number;
+  constructor(x: number, y: number, z: number, m: number) { this.x = x; this.y = y; this.z = z; this.m = m; }
+}
+const p = new Particle(1, 2, 3, 4);
+console.log(`${p.x + p.y + p.z + p.m}`);

@@ -1,0 +1,7 @@
+import console from "std/console";
+const a: number = 3;
+const b: number = 7;
+const m = a < b ? a : b;
+console.log(`${m}`);
+const M = a > b ? a : b;
+console.log(`${M}`);

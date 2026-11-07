@@ -1,0 +1,4 @@
+import console from "std/console";
+const x: number | null = null;
+console.log(`${x ?? 5}`);
+console.log(`${0 ?? 9}`);

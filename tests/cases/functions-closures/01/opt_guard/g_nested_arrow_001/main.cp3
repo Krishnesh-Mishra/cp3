@@ -1,0 +1,5 @@
+import console from "std/console";
+const make = (base: number) => (n: number): number => base * n + base;
+const add = make(2);
+console.log(`${add(5)}`);
+console.log(`${add(9)}`);

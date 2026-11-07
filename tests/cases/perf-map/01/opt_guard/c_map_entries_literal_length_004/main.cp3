@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: entries of a three-field literal shape number 3.
+console.log(`${Object.entries({ a: 1, b: 2, c: 3 }).length}`);

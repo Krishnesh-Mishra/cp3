@@ -1,0 +1,4 @@
+import console from "std/console";
+const name: string = "Ada";
+const n: number = 42;
+console.log(`${name}-${n}`);

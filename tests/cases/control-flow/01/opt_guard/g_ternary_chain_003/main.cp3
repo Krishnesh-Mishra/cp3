@@ -1,0 +1,6 @@
+import console from "std/console";
+let a = 3;
+let b = 8;
+const max = a > b ? a : b;
+const min = a < b ? a : b;
+console.log(`${max},${min}`);

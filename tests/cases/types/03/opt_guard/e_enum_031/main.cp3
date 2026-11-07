@@ -1,0 +1,3 @@
+import console from "std/console";
+enum E { Red, Green, Blue }
+console.log(`${E.Red} ${E.Green} ${E.Blue}`);

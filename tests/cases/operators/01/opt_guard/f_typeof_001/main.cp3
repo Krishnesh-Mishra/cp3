@@ -1,0 +1,4 @@
+import console from "std/console";
+console.log(typeof 1);
+console.log(typeof "s");
+console.log(typeof true);

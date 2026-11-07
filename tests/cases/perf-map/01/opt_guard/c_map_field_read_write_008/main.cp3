@@ -1,0 +1,6 @@
+import console from "std/console";
+
+// Oracle: a literal-known field can be read, updated, and read again.
+const o: { x: number } = { x: 1 };
+o.x = o.x + 5;
+console.log(`${o.x}`);

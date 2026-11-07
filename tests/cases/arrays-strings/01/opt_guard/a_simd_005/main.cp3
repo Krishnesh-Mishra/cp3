@@ -1,0 +1,5 @@
+import console from "std/console";
+const a = [1, 2, 3, 4];
+let total = 0;
+for (const x of a) { total += x; }
+console.log(`${total}`);

@@ -1,0 +1,7 @@
+import console from "std/console";
+function drops(): number {
+  let n = 0;
+  for (let i = 0; i < 3; i++) { const t: string[] = []; t.push("a"); n += t.length; }
+  return n;
+}
+console.log(`${drops()}`);

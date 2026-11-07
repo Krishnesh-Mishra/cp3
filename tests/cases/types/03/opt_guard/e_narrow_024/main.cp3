@@ -1,0 +1,8 @@
+import console from "std/console";
+let f: number = 1.5;
+try {
+  let x: i32 = f as i32;
+  console.log("frac:no");
+} catch (e) {
+  console.log("frac:" + e.message);
+}

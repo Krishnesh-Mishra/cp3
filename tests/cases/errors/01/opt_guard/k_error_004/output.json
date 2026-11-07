@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "MyError\nMyError: bad thing\n",
+  "exitCode": 0
+}

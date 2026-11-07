@@ -1,0 +1,4 @@
+import console from "std/console";
+let flag = true;
+if (flag) { console.log("on"); } else { console.log("off"); }
+console.log(`${flag}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+const out: number[] = [];
+for (let i = 0; i < 10000; i++) { out.push(i % 7); }
+console.log(`${out.length}`);

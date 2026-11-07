@@ -1,0 +1,12 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: counting a bag of words with a get-or-init map: a appears 3
+// times, b 2, c 1.
+const counts = new Map<string, number>();
+for (const w of ["a", "b", "a", "c", "b", "a"]) {
+  counts.set(w, (counts.get(w) ?? 0) + 1);
+}
+console.log(`${counts.get("a")}`);
+console.log(`${counts.get("b")}`);
+console.log(`${counts.get("c")}`);

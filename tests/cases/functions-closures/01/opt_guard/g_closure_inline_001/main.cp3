@@ -1,0 +1,5 @@
+import console from "std/console";
+const bump = (n: number): number => n + 1;
+let total = 0;
+for (let i = 0; i < 4; i++) { total = total + bump(i); }
+console.log(`${total}`);

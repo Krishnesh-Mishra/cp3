@@ -1,0 +1,4 @@
+import console from "std/console";
+const o = { x: 1 };
+const s = Object.seal(o);
+console.log(`${s === o},${Object.isSealed(s)}`);

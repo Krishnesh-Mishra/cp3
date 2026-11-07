@@ -1,0 +1,9 @@
+import console from "std/console";
+
+// Oracle: entries of a literal shape round-trip through fromEntries; the
+// map keeps both keys.
+let o = { a: 1, b: 2 };
+let r: Record<string, number> = Object.fromEntries(Object.entries(o));
+console.log(`${r.get("a")}`);
+console.log(`${r.get("b")}`);
+console.log(`${r.size}`);

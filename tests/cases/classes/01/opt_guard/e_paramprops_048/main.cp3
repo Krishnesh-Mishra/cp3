@@ -1,0 +1,7 @@
+import console from "std/console";
+class Entry {
+  constructor(public key: number, private secret: number, readonly tag: string) {}
+  total(): number { return this.key + this.secret; }
+}
+const e = new Entry(2, 3, "t");
+console.log(`${e.total()} ${e.key} ${e.tag}`);

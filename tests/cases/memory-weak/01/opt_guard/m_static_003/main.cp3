@@ -1,0 +1,4 @@
+import console from "std/console";
+const PREFIX: string = "id-";
+const id: string = PREFIX + "42";
+console.log(id);

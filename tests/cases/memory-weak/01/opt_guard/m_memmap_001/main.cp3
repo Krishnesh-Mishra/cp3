@@ -1,0 +1,5 @@
+import console from "std/console";
+const N: number = 4;
+let total = 0;
+for (let i = 0; i < N; i++) { total += i; }
+console.log(`${total}`);

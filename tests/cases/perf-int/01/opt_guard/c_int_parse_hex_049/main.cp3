@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: parseInt understands a hex prefix: 0xff is 255.
+console.log(parseInt("0xff"));

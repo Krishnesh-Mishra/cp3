@@ -1,0 +1,8 @@
+import console from "std/console";
+class Stats {
+  static total: number = 1;
+  static {
+    Stats.total = Stats.total + 41;
+  }
+}
+console.log(`${Stats.total}`);

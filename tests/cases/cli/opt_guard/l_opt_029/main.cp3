@@ -1,0 +1,4 @@
+import console from "std/console";
+const z = 5;
+z += 1;
+console.log(z);

@@ -1,0 +1,8 @@
+import console from "std/console";
+class Box<T> { value: T; }
+class Outer<T> { inner: Box<T>; }
+let o = new Outer<number>();
+let inner = new Box<number>();
+inner.value = 5;
+o.inner = inner;
+console.log(`${o.inner.value}`);

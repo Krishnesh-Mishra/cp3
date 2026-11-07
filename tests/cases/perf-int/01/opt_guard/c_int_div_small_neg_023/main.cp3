@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: negative even dividend divides exactly: -84 / 2 = -42.
+console.log(-84 / 2);

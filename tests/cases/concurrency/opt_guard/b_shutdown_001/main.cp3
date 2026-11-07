@@ -1,0 +1,4 @@
+import console from "std/console";
+let r = parallel.run(() => "task-a", () => "task-b");
+console.log(r.join(","));
+console.log("shutdown complete");

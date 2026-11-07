@@ -1,0 +1,5 @@
+import console from "std/console";
+let out = [0, 0, 0, 0, 0, 0];
+parallel.for(0..3, (i) => { out[i] = i; });
+parallel.for(3..6, (i) => { out[i] = i * 10; });
+console.log(out.join(","));

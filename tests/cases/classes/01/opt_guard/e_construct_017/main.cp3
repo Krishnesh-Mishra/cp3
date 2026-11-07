@@ -1,0 +1,7 @@
+import console from "std/console";
+class Builder {
+  seed: number;
+  constructor(seed: number) { this.seed = seed; }
+  result(): number { return this.seed * this.seed; }
+}
+console.log(`${new Builder(9).result()}`);

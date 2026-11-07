@@ -1,0 +1,5 @@
+import console from "std/console";
+let o = { v: 1 };
+let p = o;
+p.v = 2;
+console.log(`${o.v}`);

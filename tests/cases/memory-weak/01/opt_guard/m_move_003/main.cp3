@@ -1,0 +1,4 @@
+import console from "std/console";
+function id(o: { v: number }): number { return o.v; }
+const o = { v: 42 };
+console.log(`${id(o)}`);

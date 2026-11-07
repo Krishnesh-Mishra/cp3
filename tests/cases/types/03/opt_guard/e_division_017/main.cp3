@@ -1,0 +1,6 @@
+import console from "std/console";
+let neg: i64 = -17;
+let pos: i64 = 17;
+let five: i64 = 5;
+let nfive: i64 = -5;
+console.log(`${neg / five} ${neg % five} ${pos / nfive} ${pos % nfive}`);

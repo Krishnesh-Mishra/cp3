@@ -1,0 +1,4 @@
+import console from "std/console";
+const a: number[] = [10, 20, 30, 40];
+const copy = a.slice(0, 2);
+console.log(copy.join(","));

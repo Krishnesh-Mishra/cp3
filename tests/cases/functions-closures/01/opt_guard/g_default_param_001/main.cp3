@@ -1,0 +1,4 @@
+import console from "std/console";
+function greet(name: string = "friend"): string { return "Hi " + name; }
+console.log(greet());
+console.log(greet("cp3"));

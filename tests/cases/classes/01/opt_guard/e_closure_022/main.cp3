@@ -1,0 +1,6 @@
+import console from "std/console";
+function applyTwice(k: number): number {
+  const add = (n: number): number => n + k;
+  return add(add(1));
+}
+console.log(`${applyTwice(10)}`);

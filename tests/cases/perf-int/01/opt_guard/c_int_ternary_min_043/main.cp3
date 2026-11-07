@@ -1,0 +1,8 @@
+import console from "std/console";
+
+// Oracle: branchless min via ternary picks the smaller operand.
+function minOf(a: number, b: number): number {
+  return a < b ? a : b;
+}
+console.log(minOf(9, 4));
+console.log(minOf(2, 7));

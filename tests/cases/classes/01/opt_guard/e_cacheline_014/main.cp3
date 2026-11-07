@@ -1,0 +1,10 @@
+import console from "std/console";
+class Hot {
+  a: number = 0;
+  b: number = 0;
+  c: number = 0;
+  tick(): undefined { this.a += 1; this.b += 2; this.c += 3; }
+}
+const h = new Hot();
+for (let i = 0; i < 3; i++) { h.tick(); }
+console.log(`${h.a} ${h.b} ${h.c}`);

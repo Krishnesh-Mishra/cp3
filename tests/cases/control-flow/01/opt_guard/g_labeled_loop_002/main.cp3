@@ -1,0 +1,9 @@
+import console from "std/console";
+let found: number = -1;
+search:
+for (let i = 0; i < 5; i++) {
+  for (let j = 0; j < 5; j++) {
+    if (i * j === 6) { found = i * 10 + j; break search; }
+  }
+}
+console.log(`${found}`);

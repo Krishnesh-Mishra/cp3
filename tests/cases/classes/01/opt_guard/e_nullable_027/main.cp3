@@ -1,0 +1,9 @@
+import console from "std/console";
+class Item {
+  name: string;
+  note?: string;
+  constructor(name: string) { this.name = name; }
+}
+const a = new Item("a");
+a.note = "hi";
+console.log(`${a.name} ${a.note}`);

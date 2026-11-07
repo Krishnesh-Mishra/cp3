@@ -1,0 +1,4 @@
+import console from "std/console";
+function build(): number[] { return [4, 5, 6]; }
+const b = build();
+console.log(b.join(","));

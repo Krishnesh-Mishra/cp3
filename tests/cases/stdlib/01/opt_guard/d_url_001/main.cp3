@@ -1,0 +1,10 @@
+import console from "std/console";
+import { URL } from "std/url";
+const u = new URL("https://example.org:8081/docs/page.html?id=7&lang=en#sec");
+console.log(u.protocol);
+console.log(u.host);
+console.log(u.hostname);
+console.log(u.port);
+console.log(u.pathname);
+console.log(u.search);
+console.log(u.hash);

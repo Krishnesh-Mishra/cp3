@@ -1,0 +1,4 @@
+import console from "std/console";
+const m = { one: { n: 1 }, two: { n: 2 } };
+console.log(Object.keys(m).join(","));
+console.log(`${m.one.n + m.two.n}`);

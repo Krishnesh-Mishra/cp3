@@ -1,0 +1,4 @@
+import console from "std/console";
+let a: u64 = 11;
+let b: u64 = 11;
+console.log(`${a === b} ${a <= b} ${a >= b}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+const z = 5;
+z = 6;
+console.log(`${z}`);

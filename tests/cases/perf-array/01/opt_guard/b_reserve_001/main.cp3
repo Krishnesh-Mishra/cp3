@@ -1,0 +1,4 @@
+import console from "std/console";
+const out: number[] = [];
+for (let i = 0; i < 5; i++) { out.push(i * 2); }
+console.log(out.join(","));

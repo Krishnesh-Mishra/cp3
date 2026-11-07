@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: zero modulo any non-zero constant is zero: 0 % 8 = 0.
+console.log(0 % 8);

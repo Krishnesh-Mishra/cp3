@@ -1,0 +1,2 @@
+let counter = 0;
+parallel.for(0..7, (i) => { counter = counter + 1; });

@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: integer comparison with a negative left operand: -3 < 2 is true.
+console.log(-3 < 2);

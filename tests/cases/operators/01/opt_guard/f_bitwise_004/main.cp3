@@ -1,0 +1,4 @@
+import console from "std/console";
+console.log(`${-1 >>> 30}`);
+console.log(`${16 >>> 2}`);
+console.log(`${-8 >> 1}`);

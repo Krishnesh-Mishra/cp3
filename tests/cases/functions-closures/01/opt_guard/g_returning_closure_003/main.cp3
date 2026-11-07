@@ -1,0 +1,8 @@
+import console from "std/console";
+let total = 0;
+function makeCounter(): () => number {
+  return () => { total = total + 1; return total; };
+}
+const next = makeCounter();
+console.log(`${next()}`);
+console.log(`${next()}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+enum Color { Red, Green, Blue }
+console.log(`${Color.Green + 1}`);
+console.log(`${Color.Blue * 2}`);

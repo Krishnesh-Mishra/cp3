@@ -1,0 +1,2 @@
+import console from "std/console";
+Promise.all([1, Promise.resolve(2), 3]).then((values) => console.log(values.join(",")));

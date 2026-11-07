@@ -1,0 +1,5 @@
+import console from "std/console";
+const a: string = "foo";
+const b: string = "bar";
+console.log(a + b);
+console.log([a, b].join(","));

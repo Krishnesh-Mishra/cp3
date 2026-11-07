@@ -1,0 +1,5 @@
+import console from "std/console";
+interface Person { name: string; age?: number; }
+const person: Person = { name: "Ada" };
+const { name: n, age: a = 18 } = person;
+console.log(`${n} ${a}`);

@@ -1,0 +1,5 @@
+import console from "std/console";
+const add = (a: number) => (b: number) => (c: number): number => a + b + c;
+const add1 = add(1);
+const add1_2 = add1(2);
+console.log(`${add1_2(3)}`);

@@ -1,0 +1,5 @@
+import console from "std/console";
+class Base { greet(): string { return "base"; } }
+class Derived extends Base { override greet(): string { return "derived"; } }
+const d = new Derived();
+console.log(d.greet());

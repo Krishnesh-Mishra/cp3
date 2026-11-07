@@ -1,0 +1,2 @@
+let stop = false;
+parallel.run(() => { stop = true; });

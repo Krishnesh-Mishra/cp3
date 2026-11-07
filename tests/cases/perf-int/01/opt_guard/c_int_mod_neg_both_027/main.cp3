@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: both operands negative: truncated modulo is -1, not 2.
+console.log(-7 % -3);

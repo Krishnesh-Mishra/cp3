@@ -1,0 +1,6 @@
+import console from "std/console";
+function scale(factor: number): (x: number) => number { return (x) => x * factor; }
+const double = scale(2);
+const triple = scale(3);
+console.log(`${double(5)}`);
+console.log(`${triple(5)}`);

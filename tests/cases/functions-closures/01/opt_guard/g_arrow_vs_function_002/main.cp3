@@ -1,0 +1,6 @@
+import console from "std/console";
+function twice(n: number): number { return n + n; }
+const same = (n: number): number => n + n;
+console.log(`${twice(6)}`);
+console.log(`${same(6)}`);
+console.log(`${twice(6) === same(6)}`);

@@ -1,0 +1,4 @@
+let total = 0;
+parallel.for(0..100, (i) => {
+  total = total + 1;
+});

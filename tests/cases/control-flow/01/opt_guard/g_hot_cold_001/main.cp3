@@ -1,0 +1,8 @@
+import console from "std/console";
+function handle(n: number): string {
+  if (n === -1) { return "error"; }
+  return "ok";
+}
+let ok = 0;
+for (let i = 0; i < 5; i++) { if (handle(i) === "ok") { ok = ok + 1; } }
+console.log(`${ok}`);

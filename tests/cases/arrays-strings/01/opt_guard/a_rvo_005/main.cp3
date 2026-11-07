@@ -1,0 +1,7 @@
+import console from "std/console";
+function range(): number[] {
+  const out: number[] = [];
+  for (let i = 1; i <= 3; i++) { out.push(i); }
+  return out;
+}
+console.log(range().join(","));

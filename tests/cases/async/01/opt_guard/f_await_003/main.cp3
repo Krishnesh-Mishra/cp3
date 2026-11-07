@@ -1,0 +1,4 @@
+import console from "std/console";
+const v = await Promise.resolve(5);
+console.log(`${v + 1}`);
+console.log(`${v * 2}`);

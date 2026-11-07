@@ -1,0 +1,6 @@
+import console from "std/console";
+import { URLSearchParams } from "std/url";
+const sp = new URLSearchParams("k=1&j=2&k=3");
+console.log(`${sp.get("k")}`);
+console.log(sp.getAll("k").join(","));
+console.log(sp.has("j") ? "yes" : "no");

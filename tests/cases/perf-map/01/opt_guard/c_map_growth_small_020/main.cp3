@@ -1,0 +1,14 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: growing a tiny map one key at a time; after deleting c and e
+// the survivors keep insertion order a,b,d,f,g,h.
+const m = new Map<string, number>();
+const names = ["a", "b", "c", "d", "e", "f", "g", "h"];
+for (let i = 0; i < names.length; i++) { m.set(names[i], i + 1); }
+console.log(`${m.size}`);
+console.log(m.keys().join(","));
+m.delete("c");
+m.delete("e");
+console.log(m.keys().join(","));
+console.log(`${m.size}`);

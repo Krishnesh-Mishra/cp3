@@ -1,0 +1,5 @@
+import console from "std/console";
+
+// Oracle: negative zero compares equal to zero and prints as 0.
+console.log(-0 === 0);
+console.log(-0);

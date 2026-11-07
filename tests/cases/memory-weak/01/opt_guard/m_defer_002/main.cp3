@@ -1,0 +1,7 @@
+import console from "std/console";
+function strings(): number {
+  let total = 0;
+  for (let i = 0; i < 10; i++) { const s = `item${i}`; total += s.length; }
+  return total;
+}
+console.log(`${strings()}`);

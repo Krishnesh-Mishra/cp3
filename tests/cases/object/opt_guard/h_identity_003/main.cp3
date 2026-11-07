@@ -1,0 +1,4 @@
+import console from "std/console";
+const o = { x: 1, y: 2 };
+const alias = o;
+console.log(`${alias === o}`);

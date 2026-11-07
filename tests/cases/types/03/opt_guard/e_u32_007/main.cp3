@@ -1,0 +1,4 @@
+import console from "std/console";
+let a: u32 = 5000;
+let b: u32 = 6000;
+console.log(`${a + b}`);

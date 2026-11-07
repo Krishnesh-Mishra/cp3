@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: mask isolates the low nibble: 255 & 15 = 15.
+console.log(255 & 15);

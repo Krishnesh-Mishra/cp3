@@ -1,0 +1,4 @@
+import console from "std/console";
+function inner(x: number): number { return x + 1; }
+function outer(x: number): number { return inner(inner(x)); }
+console.log(`${outer(1)}`);

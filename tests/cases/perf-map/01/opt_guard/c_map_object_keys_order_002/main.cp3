@@ -1,0 +1,6 @@
+import console from "std/console";
+
+// Oracle: object keys of a literal shape keep declaration order.
+const o = { alpha: 1, beta: 2, gamma: 3 };
+console.log(Object.keys(o).join(","));
+console.log(Object.values(o).join(","));

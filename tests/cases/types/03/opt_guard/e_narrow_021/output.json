@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "as:value 70000 is out of range for u16\n",
+  "exitCode": 0
+}

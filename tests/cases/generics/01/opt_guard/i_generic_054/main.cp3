@@ -1,0 +1,5 @@
+import console from "std/console";
+class Box<T> { value: T; }
+let b = new Box<boolean>();
+b.value = true;
+console.log(`${b.value}`);

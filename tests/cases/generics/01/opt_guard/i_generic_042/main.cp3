@@ -1,0 +1,4 @@
+import console from "std/console";
+function first<T>(xs: T[]): T { return xs[0]; }
+let n: number = first<number>([10, 20, 30]);
+console.log(`${n}`);

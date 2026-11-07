@@ -1,0 +1,9 @@
+import console from "std/console";
+class Rect {
+  w: number;
+  h: number;
+  d: number;
+  constructor(d: number, h: number, w: number) { this.w = w; this.h = h; this.d = d; }
+}
+const r = new Rect(3, 2, 1);
+console.log(`${r.w} ${r.h} ${r.d}`);

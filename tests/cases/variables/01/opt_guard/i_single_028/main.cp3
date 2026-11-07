@@ -1,0 +1,4 @@
+import console from "std/console";
+const width = 6;
+const height = 7;
+console.log(`${width * height}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: constant folding honours parens: (2 + 3) * (4 + 6) = 50.
+console.log((2 + 3) * (4 + 6));

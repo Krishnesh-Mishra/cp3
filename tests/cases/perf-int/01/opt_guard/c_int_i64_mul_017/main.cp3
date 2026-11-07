@@ -1,0 +1,8 @@
+import console from "std/console";
+
+// Oracle: i64 multiplication of small exact values prints plainly:
+// 6 * 7 = 42.
+let a: i64 = 6;
+let b: i64 = 7;
+const p: i64 = a * b;
+console.log(p.toString());

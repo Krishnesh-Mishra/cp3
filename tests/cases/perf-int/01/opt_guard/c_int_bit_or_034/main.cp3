@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: bitwise or chain: 8 | 4 | 2 = 14.
+console.log(8 | 4 | 2);

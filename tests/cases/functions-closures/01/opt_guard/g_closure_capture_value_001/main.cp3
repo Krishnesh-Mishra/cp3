@@ -1,0 +1,4 @@
+import console from "std/console";
+const base = 10;
+const f = (): number => base;
+console.log(`${f()}`);

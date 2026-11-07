@@ -1,0 +1,4 @@
+import console from "std/console";
+const a: number[] = [1, 2, 3];
+a.fill(7);
+console.log(a.join(","));

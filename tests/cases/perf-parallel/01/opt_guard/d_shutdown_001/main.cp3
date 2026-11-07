@@ -1,0 +1,8 @@
+import console from "std/console";
+let nums = [1, 10, 100];
+parallel.for(0..nums.length, (i) => { nums[i] = nums[i] + 1; });
+let total = 0;
+for (const v of nums) {
+  total = total + v;
+}
+console.log(`${total}`);

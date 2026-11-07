@@ -1,0 +1,15 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: literal-only keys sum: 2 + 3 + 5 + 7 = 17.
+const m = new Map<string, number>();
+m.set("a", 2);
+m.set("b", 3);
+m.set("c", 5);
+m.set("d", 7);
+let total = 0;
+const keys = ["a", "b", "c", "d"];
+for (const k of keys) {
+  total = total + (m.get(k) ?? 0);
+}
+console.log(`${total}`);

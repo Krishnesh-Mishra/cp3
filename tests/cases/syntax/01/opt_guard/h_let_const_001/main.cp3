@@ -1,0 +1,4 @@
+import console from "std/console";
+const k = 3;
+let v = 4;
+console.log(`${k + v}`);

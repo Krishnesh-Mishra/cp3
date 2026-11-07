@@ -1,0 +1,4 @@
+import console from "std/console";
+const a = [0, 0, 0];
+for (let i = 0; i < a.length; i++) { a[i] = i + 7; }
+console.log(a.join(","));

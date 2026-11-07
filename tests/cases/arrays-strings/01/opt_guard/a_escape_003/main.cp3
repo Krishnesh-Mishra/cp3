@@ -1,0 +1,4 @@
+import console from "std/console";
+function sum(o: { x: number; y: number }): number { return o.x + o.y; }
+const t = { x: 2, y: 4 };
+console.log(`${sum(t)}`);

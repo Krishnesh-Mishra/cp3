@@ -1,0 +1,6 @@
+import console from "std/console";
+function a(): number { console.log("a"); return 1; }
+function b(): number { console.log("b"); return 2; }
+function c(): number { console.log("c"); return 3; }
+function add3(x: number, y: number, z: number): number { return x + y + z; }
+console.log(`${add3(a(), b(), c())}`);

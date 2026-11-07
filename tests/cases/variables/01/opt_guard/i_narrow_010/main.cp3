@@ -1,0 +1,4 @@
+import console from "std/console";
+let x: number;
+x = 42;
+console.log(`${x}`);

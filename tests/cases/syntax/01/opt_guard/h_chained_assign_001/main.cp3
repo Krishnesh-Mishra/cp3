@@ -1,0 +1,5 @@
+import console from "std/console";
+let a = 1;
+let b = 0;
+b = a = 5;
+console.log(`${a},${b}`);

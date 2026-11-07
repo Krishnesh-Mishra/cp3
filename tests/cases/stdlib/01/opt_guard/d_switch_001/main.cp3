@@ -1,0 +1,13 @@
+import console from "std/console";
+let s = "b";
+switch (s) {
+  case "a":
+    console.log("A");
+    break;
+  case "b":
+    console.log("B");
+    break;
+  default:
+    console.log("?");
+    break;
+}

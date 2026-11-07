@@ -1,0 +1,5 @@
+import console from "std/console";
+const o = { x: 1, y: 2 };
+const o2 = { ...o, y: 9 };
+console.log(`${o2.y}`);
+console.log(Object.keys(o2).join(","));

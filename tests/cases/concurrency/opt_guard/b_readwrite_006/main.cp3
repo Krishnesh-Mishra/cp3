@@ -1,0 +1,2 @@
+let flag = false;
+parallel.for(0..3, (i) => { flag = true; });

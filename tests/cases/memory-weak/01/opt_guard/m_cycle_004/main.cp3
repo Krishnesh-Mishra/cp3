@@ -1,0 +1,8 @@
+import console from "std/console";
+class Node {
+  next: Node | null;
+  constructor(next: Node | null) { this.next = next; }
+}
+const a = new Node(null);
+const b = new Node(a);
+console.log(b.next === a);

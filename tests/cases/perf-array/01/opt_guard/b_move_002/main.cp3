@@ -1,0 +1,9 @@
+import console from "std/console";
+function sumAll(data: number[]): number {
+  let s = 0;
+  for (const x of data) { s = s + x; }
+  return s;
+}
+const a: number[] = [1, 2, 3, 4];
+console.log(`${sumAll(a)}`);
+console.log(`${a.length}`);

@@ -1,0 +1,7 @@
+import console from "std/console";
+function make(): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < 4; i++) { out.push(i); }
+  return out;
+}
+console.log(make().join(","));

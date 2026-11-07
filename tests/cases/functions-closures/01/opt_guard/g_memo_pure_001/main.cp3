@@ -1,0 +1,4 @@
+import console from "std/console";
+function pure(n: number): number { return n * 3 + 1; }
+console.log(`${pure(4)}`);
+console.log(`${pure(4)}`);

@@ -1,0 +1,9 @@
+import console from "std/console";
+class Counter {
+  n: number;
+  constructor() { this.n = 0; }
+}
+const c = new Counter();
+c.n = c.n + 1;
+c.n = c.n + 1;
+console.log(`${c.n}`);

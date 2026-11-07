@@ -1,0 +1,3 @@
+import console from "std/console";
+import hash from "std/hash";
+console.log(hash.fnv1a64("abc") === hash.fnv1a64("abc") ? "fnv1a64stable" : "bad");

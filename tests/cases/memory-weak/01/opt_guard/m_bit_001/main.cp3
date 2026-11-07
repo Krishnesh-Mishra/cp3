@@ -1,0 +1,4 @@
+import console from "std/console";
+const n: number = 7;
+const tag: number = n * 8 + 1;
+console.log(`${tag}`);

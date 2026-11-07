@@ -1,0 +1,4 @@
+import console from "std/console";
+function apply<T>(f: (x: T) => T, x: T): T { return f(x); }
+const r = apply<number>((n: number): number => n + 1, 41);
+console.log(`${r}`);

@@ -1,0 +1,9 @@
+import console from "std/console";
+function scratch(): number {
+  const tmp: number[] = [];
+  for (let i = 0; i < 5; i++) { tmp.push(i); }
+  let sum = 0;
+  for (const n of tmp) { sum += n; }
+  return sum;
+}
+console.log(`${scratch()}`);

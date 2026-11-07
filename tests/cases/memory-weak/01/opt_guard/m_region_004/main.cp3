@@ -1,0 +1,6 @@
+import console from "std/console";
+function pick(xs: number[]): number {
+  const scored = xs.map((x) => x * 2);
+  return scored[1];
+}
+console.log(`${pick([3, 4, 5])}`);

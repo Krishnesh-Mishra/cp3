@@ -1,0 +1,4 @@
+import console from "std/console";
+function wrap(xs: number[]): number { return xs.length + xs[0]; }
+const a = [3, 4];
+console.log(`${wrap(a)} ${a.length}`);

@@ -1,0 +1,2 @@
+let total = 100;
+parallel.reduce(0..3, 0, (acc, i) => { total = total + i; return acc; });

@@ -1,0 +1,5 @@
+import console from "std/console";
+let p = { x: 0, y: 0 };
+p.x = 5;
+p.y = 6;
+console.log(`${p.x + p.y}`);

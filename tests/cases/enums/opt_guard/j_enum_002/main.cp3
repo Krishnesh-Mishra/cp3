@@ -1,0 +1,5 @@
+import console from "std/console";
+enum Level { Low = 10, Mid, High }
+console.log(`${Level.Low}`);
+console.log(`${Level.Mid}`);
+console.log(`${Level.High}`);

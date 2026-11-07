@@ -1,0 +1,7 @@
+import console from "std/console";
+function grade(n: number): string {
+  if (n < 0) { return "negative"; }
+  return "ok";
+}
+console.log(grade(-1));
+console.log(grade(5));

@@ -1,0 +1,6 @@
+import console from "std/console";
+
+// Oracle: variable arithmetic folds the same as literals: 6 * 6 - 11 = 25.
+const a: number = 6;
+const b: number = a * a - 11;
+console.log(b);

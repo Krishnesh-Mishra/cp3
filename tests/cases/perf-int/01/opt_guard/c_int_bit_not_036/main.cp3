@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: bitwise not on small integers: ~5 = -6.
+console.log(~5);

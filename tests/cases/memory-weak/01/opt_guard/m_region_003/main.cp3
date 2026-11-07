@@ -1,0 +1,10 @@
+import console from "std/console";
+function loopTmp(): number {
+  let total = 0;
+  for (let i = 0; i < 4; i++) {
+    const probe: number[] = [i, i + 1];
+    total += probe[0] + probe[1];
+  }
+  return total;
+}
+console.log(`${loopTmp()}`);

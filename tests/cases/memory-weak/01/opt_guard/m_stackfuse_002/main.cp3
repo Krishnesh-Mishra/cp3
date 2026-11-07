@@ -1,0 +1,4 @@
+import console from "std/console";
+const f = (n: number): number => n * 3;
+function run(v: number): number { return f(f(v)); }
+console.log(`${run(2)}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+function id<T>(x: T): T { return x; }
+const n = id(6 * 7);
+console.log(`${n}`);

@@ -1,0 +1,7 @@
+import console from "std/console";
+function fill(n: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) { out.push(i * 10); }
+  return out;
+}
+console.log(fill(4).join(","));

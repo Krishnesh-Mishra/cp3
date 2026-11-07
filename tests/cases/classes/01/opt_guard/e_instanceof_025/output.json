@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "dog\ncat\nother\n",
+  "exitCode": 0
+}

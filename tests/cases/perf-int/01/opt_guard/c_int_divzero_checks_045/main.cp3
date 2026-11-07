@@ -1,0 +1,6 @@
+import console from "std/console";
+
+// Oracle: number division by zero yields Infinity / NaN, tested through
+// comparisons so no non-integer is printed.
+console.log(1 / 0 > 0);
+console.log(0 / 0 !== 0 / 0);

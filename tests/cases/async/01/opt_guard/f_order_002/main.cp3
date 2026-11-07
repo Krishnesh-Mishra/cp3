@@ -1,0 +1,2 @@
+import console from "std/console";
+Promise.resolve(1).then((v) => v + 1).then((v) => console.log(`${v}`));

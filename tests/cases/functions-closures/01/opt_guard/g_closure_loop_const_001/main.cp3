@@ -1,0 +1,7 @@
+import console from "std/console";
+const fns: (() => number)[] = [];
+for (const x of [10, 20, 30]) {
+  const y = x + 1;
+  fns.push(() => y);
+}
+fns.forEach((f) => { console.log(`${f()}`); });

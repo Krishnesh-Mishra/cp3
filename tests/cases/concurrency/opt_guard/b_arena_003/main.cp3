@@ -1,0 +1,4 @@
+import console from "std/console";
+function alloc(): number[] { return [10, 20]; }
+let arena = alloc();
+console.log(`${arena[0]},${arena[1]}`);

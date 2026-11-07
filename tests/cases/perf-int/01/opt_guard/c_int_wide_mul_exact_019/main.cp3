@@ -1,0 +1,5 @@
+import console from "std/console";
+
+// Oracle: 1000000 * 1000000 is exactly representable below 2^53 and prints
+// as the plain integer 1000000000000.
+console.log(1000000 * 1000000);

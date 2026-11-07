@@ -1,0 +1,6 @@
+import console from "std/console";
+function compute(): number {
+  const data = [2, 4, 6];
+  return data.reduce((acc, x) => acc + x, 0);
+}
+console.log(`${compute()}`);

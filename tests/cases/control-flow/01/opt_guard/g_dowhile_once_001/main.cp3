@@ -1,0 +1,4 @@
+import console from "std/console";
+let i = 100;
+do { console.log("once"); i = i + 1; } while (i < 10);
+console.log(`${i}`);

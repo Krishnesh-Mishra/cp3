@@ -1,0 +1,6 @@
+import console from "std/console";
+class Box {
+  private amount: number = 21;
+  get value(): number { return this.amount; }
+}
+console.log(`${new Box().value} ${new Box().value + 1}`);

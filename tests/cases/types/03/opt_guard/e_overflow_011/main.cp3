@@ -1,0 +1,8 @@
+import console from "std/console";
+try {
+  let x: u8 = 255;
+  x++;
+  console.log("inc:no");
+} catch (e) {
+  console.log("inc:overflow");
+}

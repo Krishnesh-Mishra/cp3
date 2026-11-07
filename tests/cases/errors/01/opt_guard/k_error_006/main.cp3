@@ -1,0 +1,6 @@
+import console from "std/console";
+try {
+  try { throw new Error("x"); } catch (e) { throw e; }
+} catch (e) {
+  console.log("outer");
+}

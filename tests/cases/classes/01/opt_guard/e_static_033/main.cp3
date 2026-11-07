@@ -1,0 +1,7 @@
+import console from "std/console";
+class Counted {
+  static total: number = 0;
+  constructor() { Counted.total += 1; }
+}
+const all: Counted[] = [new Counted(), new Counted(), new Counted()];
+console.log(`${Counted.total} ${all.length}`);

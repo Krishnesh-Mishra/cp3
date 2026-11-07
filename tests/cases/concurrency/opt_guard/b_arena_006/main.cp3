@@ -1,0 +1,5 @@
+import console from "std/console";
+const a: string[] = ["a1"];
+const b: string[] = ["b1"];
+console.log(a.join(","));
+console.log(b.join(","));

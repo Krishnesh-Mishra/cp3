@@ -1,0 +1,4 @@
+import console from "std/console";
+const p = new Promise<number>((resolve) => { resolve(42); });
+const v = await p;
+console.log(`${v}`);

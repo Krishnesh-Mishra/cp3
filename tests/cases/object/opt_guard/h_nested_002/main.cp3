@@ -1,0 +1,5 @@
+import console from "std/console";
+const o = { a: { b: 1 } };
+const alias = o.a;
+alias.b = 9;
+console.log(`${o.a.b}`);

@@ -1,0 +1,5 @@
+import console from "std/console";
+import { TextEncoder, TextDecoder } from "std/text";
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+console.log(dec.decode(enc.encode("abc")));

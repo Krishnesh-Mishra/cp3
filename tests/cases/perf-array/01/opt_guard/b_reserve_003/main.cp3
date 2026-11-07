@@ -1,0 +1,4 @@
+import console from "std/console";
+const out: string[] = [];
+for (let i = 0; i < 3; i++) { out.push("x"); }
+console.log(out.join(","));

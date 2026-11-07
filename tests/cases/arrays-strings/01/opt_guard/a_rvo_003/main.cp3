@@ -1,0 +1,4 @@
+import console from "std/console";
+function point(): { x: number; y: number } { return { x: 3, y: 4 }; }
+const p = point();
+console.log(`${p.x + p.y}`);

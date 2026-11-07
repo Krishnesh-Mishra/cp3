@@ -1,0 +1,8 @@
+import console from "std/console";
+import { Map } from "std/collections";
+let m = new Map<string, number>();
+m.set("b", 2);
+m.set("a", 1);
+const out: number[] = [];
+m.forEach((v) => { out.push(v); });
+console.log(out.join(","));

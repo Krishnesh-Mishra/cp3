@@ -1,0 +1,2 @@
+import console from "std/console";
+Promise.resolve(5).then(() => { console.log("a"); }).then(() => console.log("b"));

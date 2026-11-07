@@ -1,0 +1,9 @@
+import console from "std/console";
+try {
+  let x: i32 = 1;
+  let y: i32 = 0;
+  let z: i32 = x / y;
+  console.log("div-zero:no");
+} catch (e) {
+  console.log("div-zero:" + e.message);
+}

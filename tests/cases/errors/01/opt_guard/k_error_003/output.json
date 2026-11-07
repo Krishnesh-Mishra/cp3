@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "Error: boom\n",
+  "exitCode": 0
+}

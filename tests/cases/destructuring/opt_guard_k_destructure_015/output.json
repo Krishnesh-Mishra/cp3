@@ -1,0 +1,9 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "contains": "array pattern needs an array or tuple source"
+  }
+}

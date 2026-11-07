@@ -1,0 +1,5 @@
+import console from "std/console";
+interface Box<T> { value: T; }
+class StrBox { value: string = "ok"; }
+let b: Box<string> = new StrBox();
+console.log(`${b.value}`);

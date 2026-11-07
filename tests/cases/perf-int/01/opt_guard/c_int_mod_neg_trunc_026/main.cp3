@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: truncated modulo keeps the sign of the dividend: -7 % 3 = -1.
+console.log(-7 % 3);

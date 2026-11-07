@@ -1,0 +1,6 @@
+import console from "std/console";
+class Animal { speak(): string { return "..."; } }
+class Dog extends Animal { speak(): string { return "woof"; } }
+class Cat extends Animal { speak(): string { return "meow"; } }
+const animals: Animal[] = [new Dog(), new Cat(), new Dog()];
+for (const a of animals) { console.log(a.speak()); }

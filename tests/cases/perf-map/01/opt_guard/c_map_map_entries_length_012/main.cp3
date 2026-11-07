@@ -1,0 +1,12 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: entries length is 3 after three inserts; it is 2 after one
+// delete.
+const m = new Map<string, number>();
+m.set("a", 1);
+m.set("b", 2);
+m.set("c", 3);
+console.log(`${m.entries().length}`);
+m.delete("b");
+console.log(`${m.entries().length}`);

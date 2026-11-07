@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: parseInt of a plain decimal string: 42.
+console.log(parseInt("42"));

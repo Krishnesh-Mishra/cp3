@@ -1,0 +1,4 @@
+import console from "std/console";
+const s = "last";
+const up = s + "!";
+console.log(up);

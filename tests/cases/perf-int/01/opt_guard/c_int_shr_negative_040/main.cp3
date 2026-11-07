@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: arithmetic right shift on a negative number: -8 >> 1 = -4.
+console.log(-8 >> 1);

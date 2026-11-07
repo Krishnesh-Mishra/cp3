@@ -1,0 +1,4 @@
+import console from "std/console";
+const a = [1, 2, 3, 4, 5];
+const sum = a.reduce((s, x) => s + x, 0);
+console.log(`${sum}`);

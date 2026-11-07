@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "frac:value 1.5 is out of range for i32\n",
+  "exitCode": 0
+}

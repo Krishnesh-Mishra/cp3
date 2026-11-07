@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// Oracle: checked i32 add of the max literal with 1 traps; the catch prints.
+try {
+  let x: i32 = 2147483647;
+  x = x + 1;
+  console.log("add:no");
+} catch (e) {
+  console.log("overflow");
+}

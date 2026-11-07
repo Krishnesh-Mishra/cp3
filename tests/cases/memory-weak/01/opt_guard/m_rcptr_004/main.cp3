@@ -1,0 +1,6 @@
+import console from "std/console";
+function pick(useFirst: boolean): number[] {
+  if (useFirst) { return [1, 2]; }
+  return [3];
+}
+console.log(pick(true).join(","));

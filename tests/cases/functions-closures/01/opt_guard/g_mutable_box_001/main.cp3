@@ -1,0 +1,7 @@
+import console from "std/console";
+const box = { v: 0 };
+const fill = () => { box.v = box.v + 1; };
+fill();
+fill();
+fill();
+console.log(`${box.v}`);

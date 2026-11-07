@@ -1,0 +1,3 @@
+import console from "std/console";
+Promise.resolve(1).then(() => { console.log("a"); }).then(() => { console.log("b"); });
+Promise.resolve(2).then(() => { console.log("c"); }).then(() => { console.log("d"); });

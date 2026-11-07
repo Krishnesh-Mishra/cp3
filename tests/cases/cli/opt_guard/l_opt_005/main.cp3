@@ -1,0 +1,6 @@
+import console from "std/console";
+const s: string = "abcdef";
+console.log(s.slice(1, 4));
+console.log(s.substring(4, 1));
+console.log(s.charAt(0));
+console.log(s.charAt(5));

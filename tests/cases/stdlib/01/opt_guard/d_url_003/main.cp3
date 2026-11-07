@@ -1,0 +1,4 @@
+import console from "std/console";
+import { URL } from "std/url";
+const u = new URL("https://example.com/one/two/../../three");
+console.log(u.pathname);

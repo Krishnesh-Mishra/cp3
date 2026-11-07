@@ -1,0 +1,4 @@
+import console from "std/console";
+let n: number = 1000;
+let x: i32 = parseTo<i32>(n);
+console.log(`${x}`);

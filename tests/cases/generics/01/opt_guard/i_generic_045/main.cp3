@@ -1,0 +1,4 @@
+import console from "std/console";
+function doubleAll<T>(xs: T[], f: (x: T) => T): T[] { return xs.map(f); }
+const r = doubleAll<number>([1, 2, 3], (n: number): number => n * 2);
+console.log(r.join(","));

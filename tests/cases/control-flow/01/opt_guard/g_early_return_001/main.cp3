@@ -1,0 +1,9 @@
+import console from "std/console";
+function find(n: number): number {
+  for (let i = 0; i < 5; i++) {
+    if (i === n) { return i * 3; }
+  }
+  return -1;
+}
+console.log(`${find(2)}`);
+console.log(`${find(9)}`);

@@ -1,0 +1,14 @@
+import console from "std/console";
+class Parent {
+  child: Child;
+  constructor(child: Child) { this.child = child; }
+}
+class Child {
+  weak parent: Parent | null;
+  value: number;
+  constructor(value: number) { this.value = value; this.parent = null; }
+}
+const c = new Child(6);
+const p = new Parent(c);
+c.parent = p;
+if (c.parent !== null) { console.log(`${c.parent.child.value}`); }

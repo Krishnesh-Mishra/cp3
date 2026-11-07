@@ -1,0 +1,6 @@
+import console from "std/console";
+let a = true;
+let b = true;
+if (a) {
+  if (b) { console.log("both"); } else { console.log("only-a"); }
+} else { console.log("neither"); }

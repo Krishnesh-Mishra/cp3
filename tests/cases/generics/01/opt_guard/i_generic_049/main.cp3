@@ -1,0 +1,6 @@
+import console from "std/console";
+class Pair<K, V> { key: K; value: V; }
+let p = new Pair<string, number>();
+p.key = "a";
+p.value = 2;
+console.log(`${p.key}${p.value}`);

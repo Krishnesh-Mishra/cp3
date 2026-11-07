@@ -1,0 +1,6 @@
+import console from "std/console";
+class Dog { tag: number = 1; }
+let value: Dog | null = new Dog();
+console.log(`${value instanceof Dog}`);
+value = null;
+console.log(`${value instanceof Dog}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+enum Color { Red, Green, Blue }
+const n: number = Color.Blue;
+console.log(`${n}`);

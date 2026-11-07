@@ -1,0 +1,4 @@
+import console from "std/console";
+const frozen = 41;
+const read = (): number => frozen + 1;
+console.log(`${read()}`);

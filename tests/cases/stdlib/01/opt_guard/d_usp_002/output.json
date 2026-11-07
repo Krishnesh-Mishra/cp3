@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "greeting=hello+cp3&tag=a%26b\n",
+  "exitCode": 0
+}

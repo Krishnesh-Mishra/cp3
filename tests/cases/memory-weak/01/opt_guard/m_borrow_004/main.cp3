@@ -1,0 +1,4 @@
+import console from "std/console";
+function head(xs: number[]): number { return xs[0]; }
+const a = [9, 8];
+console.log(`${head(a)} ${a[1]}`);

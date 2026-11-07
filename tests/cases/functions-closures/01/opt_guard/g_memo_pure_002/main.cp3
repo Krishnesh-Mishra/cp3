@@ -1,0 +1,5 @@
+import console from "std/console";
+function cube(n: number): number { return n * n * n; }
+const a = cube(3);
+const b = cube(3);
+console.log(`${a},${b}`);

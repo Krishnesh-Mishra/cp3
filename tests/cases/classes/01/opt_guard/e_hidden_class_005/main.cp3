@@ -1,0 +1,8 @@
+import console from "std/console";
+class Tally {
+  count: number = 10;
+  step: number = 5;
+  total(): number { return this.count + this.step; }
+}
+const t = new Tally();
+console.log(`${t.total()}`);

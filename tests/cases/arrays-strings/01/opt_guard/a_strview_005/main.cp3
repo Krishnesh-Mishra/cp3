@@ -1,0 +1,5 @@
+import console from "std/console";
+const a = "foo";
+const b = "bar";
+console.log(a + b);
+console.log(a === b);

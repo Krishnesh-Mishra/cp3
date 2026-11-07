@@ -1,0 +1,12 @@
+import console from "std/console";
+function inner(): undefined {
+  throw new Error("deep");
+}
+function outer(): undefined {
+  try {
+    inner();
+  } catch (e) {
+    console.log(`${e.message}`);
+  }
+}
+outer();

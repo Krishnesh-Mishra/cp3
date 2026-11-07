@@ -1,0 +1,5 @@
+import console from "std/console";
+let base = [1, 2, 3];
+let out = [0, 0, 0];
+parallel.for(0..3, (i) => { out[i] = base[i] > 1 ? 10 : 0; });
+console.log(out.join(","));

@@ -1,0 +1,3 @@
+class Cell { v: number; constructor() { this.v = 0; } }
+let cell = new Cell();
+parallel.run(() => { cell.v = 1; });

@@ -1,0 +1,5 @@
+import console from "std/console";
+const arr: number[] = [];
+for (let i = 0; i < 3; i++) { arr.push(i); }
+arr.push(9);
+console.log(arr.join(","));

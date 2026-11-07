@@ -1,0 +1,7 @@
+import console from "std/console";
+function churn(): number {
+  let acc = 0;
+  for (let i = 0; i < 100; i++) { const tmp: number[] = [i]; acc += tmp[0]; }
+  return acc;
+}
+console.log(`${churn()}`);

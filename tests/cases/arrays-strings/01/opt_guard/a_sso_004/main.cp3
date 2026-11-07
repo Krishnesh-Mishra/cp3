@@ -1,0 +1,4 @@
+import console from "std/console";
+class Tag { label: string; constructor(label: string) { this.label = label; } }
+const t = new Tag("hi");
+console.log(t.label);

@@ -1,0 +1,4 @@
+import console from "std/console";
+let big: number = 500;
+let x: u16 = big as u16;
+console.log(`${x}`);

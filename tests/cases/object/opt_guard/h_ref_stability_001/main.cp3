@@ -1,0 +1,6 @@
+import console from "std/console";
+const o = { inner: { n: 1 } };
+const first = o.inner;
+const second = o.inner;
+console.log(`${first === second}`);
+console.log(`${o.inner === o.inner}`);

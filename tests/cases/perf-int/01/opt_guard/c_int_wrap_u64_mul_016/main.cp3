@@ -1,0 +1,7 @@
+import console from "std/console";
+
+// Oracle: u64 wrappingMul is modulo 2^64; small operands stay small:
+// 6 * 7 = 42.
+let a: u64 = 6;
+let b: u64 = 7;
+console.log(a.wrappingMul(b).toString());

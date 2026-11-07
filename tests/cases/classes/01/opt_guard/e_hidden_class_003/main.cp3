@@ -1,0 +1,10 @@
+import console from "std/console";
+class Vec {
+  a: number;
+  b: number;
+  c: number;
+  constructor(a: number, b: number, c: number) { this.a = a; this.b = b; this.c = c; }
+  sum(): number { return this.a + this.b + this.c; }
+}
+const v = new Vec(1, 2, 3);
+console.log(`${v.sum()}`);

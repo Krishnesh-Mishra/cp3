@@ -1,0 +1,5 @@
+import console from "std/console";
+let v = 1;
+console.log(`${v}`);
+v = v + 10;
+console.log(`${v}`);

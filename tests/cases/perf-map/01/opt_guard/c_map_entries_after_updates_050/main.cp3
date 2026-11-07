@@ -1,0 +1,15 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: after inserting four keys and deleting two, entries length is
+// 2 and surviving keys keep insertion order a,d.
+const m = new Map<string, number>();
+m.set("a", 1);
+m.set("b", 2);
+m.set("c", 3);
+m.set("d", 4);
+console.log(`${m.entries().length}`);
+m.delete("b");
+m.delete("c");
+console.log(`${m.entries().length}`);
+console.log(m.keys().join(","));

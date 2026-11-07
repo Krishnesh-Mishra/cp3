@@ -1,0 +1,6 @@
+import console from "std/console";
+const a: number[] = [5, 6, 7];
+const i = 2;
+if (i < a.length) {
+  console.log(`${a[i]}`);
+}

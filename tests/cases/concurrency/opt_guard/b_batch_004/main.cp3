@@ -1,0 +1,6 @@
+import console from "std/console";
+let out = [0, 0, 0, 0, 0];
+parallel.for(0..5, (i) => { out[i] = i * i; });
+let sum = 0;
+for (const x of out) { sum = sum + x; }
+console.log(`${sum}`);

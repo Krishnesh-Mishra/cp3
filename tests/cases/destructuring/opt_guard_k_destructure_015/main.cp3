@@ -1,0 +1,2 @@
+let text = "hi";
+let [first] = text;

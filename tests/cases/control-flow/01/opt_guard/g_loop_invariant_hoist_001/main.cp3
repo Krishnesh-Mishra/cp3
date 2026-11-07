@@ -1,0 +1,7 @@
+import console from "std/console";
+const LIMIT = 105;
+let sum = 0;
+for (let i = 0; i < LIMIT * 2; i++) {
+  sum = sum + LIMIT % 10;
+}
+console.log(`${sum}`);

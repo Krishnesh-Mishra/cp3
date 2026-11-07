@@ -1,0 +1,7 @@
+import console from "std/console";
+const n: number = 7;
+if (n > 5) {
+  console.log("big");
+} else {
+  console.log("small");
+}

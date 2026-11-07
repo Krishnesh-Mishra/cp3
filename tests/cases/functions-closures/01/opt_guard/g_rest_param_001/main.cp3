@@ -1,0 +1,4 @@
+import console from "std/console";
+function count(...xs: number[]): number { return xs.length; }
+console.log(`${count(1, 2, 3)}`);
+console.log(`${count()}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: the i32 max literal round-trips exactly.
+console.log(2147483647);

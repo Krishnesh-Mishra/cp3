@@ -1,0 +1,4 @@
+import console from "std/console";
+enum Color { Red, Green, Blue }
+console.log(`${Color.Green === Color.Green}`);
+console.log(`${Color.Green !== Color.Blue}`);

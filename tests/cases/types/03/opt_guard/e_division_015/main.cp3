@@ -1,0 +1,6 @@
+import console from "std/console";
+let a: i64 = -9;
+let b: i64 = 2;
+let c: i64 = 9;
+let d: i64 = -2;
+console.log(`${a / b} ${a % b} ${c / d} ${c % d}`);

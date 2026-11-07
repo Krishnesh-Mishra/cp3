@@ -1,0 +1,4 @@
+import console from "std/console";
+const PAIRS: number = 3;
+const xs: number[] = [1, 2, 3];
+console.log(`${xs.length * PAIRS}`);

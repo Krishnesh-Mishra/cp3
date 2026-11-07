@@ -1,0 +1,9 @@
+import console from "std/console";
+class Item {
+  v: number;
+  constructor(v: number) { this.v = v; }
+}
+const items: Item[] = [new Item(1), new Item(2), new Item(3), new Item(4)];
+let total: number = 0;
+for (const it of items) { total += it.v; }
+console.log(`${total}`);

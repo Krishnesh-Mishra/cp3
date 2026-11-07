@@ -1,0 +1,8 @@
+import console from "std/console";
+try {
+  let x: i32 = 100000;
+  x = x * 100000;
+  console.log("mul:no");
+} catch (e) {
+  console.log("mul:overflow");
+}

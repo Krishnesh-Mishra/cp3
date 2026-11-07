@@ -1,0 +1,8 @@
+import console from "std/console";
+
+// Oracle: two objects with the same literal shape enumerate the same
+// key order and values.
+const o = { x: 1, y: 2 };
+const p = { x: 3, y: 4 };
+console.log(Object.keys(o).join(","));
+console.log(Object.keys(p).join(","));

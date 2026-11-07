@@ -1,0 +1,6 @@
+import console from "std/console";
+import { URLSearchParams } from "std/url";
+const sp = new URLSearchParams();
+sp.append("greeting", "hello cp3");
+sp.append("tag", "a&b");
+console.log(sp.toString());

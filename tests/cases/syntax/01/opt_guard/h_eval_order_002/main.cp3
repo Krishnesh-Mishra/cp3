@@ -1,0 +1,7 @@
+import console from "std/console";
+let n = 0;
+function bump(): number {
+  n = n + 1;
+  return n;
+}
+console.log(`${bump()},${bump()}`);

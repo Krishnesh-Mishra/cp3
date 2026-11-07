@@ -1,0 +1,8 @@
+import console from "std/console";
+import { Set } from "std/collections";
+
+// Oracle: union keeps this set's order, then appends new elements from
+// the argument: 2,4,6,5.
+const a = new Set<number>([2, 4, 6]);
+const b = new Set<number>([4, 5]);
+console.log(a.union(b).values().join(","));

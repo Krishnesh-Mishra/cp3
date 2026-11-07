@@ -1,0 +1,4 @@
+import console from "std/console";
+import JSON from "std/json";
+const o = JSON.parse<{ x: number }>("{\"x\": 5}");
+console.log(`${o.x}`);

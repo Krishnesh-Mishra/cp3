@@ -1,0 +1,4 @@
+import console from "std/console";
+function n(s: string): number { return s.length; }
+const t = "hello";
+console.log(`${n(t)} ${t.length}`);

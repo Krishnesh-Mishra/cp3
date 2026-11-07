@@ -1,0 +1,9 @@
+import console from "std/console";
+function swapEnds<T>(xs: T[]): T[] {
+  const t = xs[0];
+  xs[0] = xs[xs.length - 1];
+  xs[xs.length - 1] = t;
+  return xs;
+}
+const r = swapEnds<number>([1, 2, 3]);
+console.log(`${r[0]} ${r[r.length - 1]}`);

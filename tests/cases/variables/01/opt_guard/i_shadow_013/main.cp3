@@ -1,0 +1,7 @@
+import console from "std/console";
+let v = 100;
+if (1 < 2) {
+  let v = 7;
+  console.log(`${v}`);
+}
+console.log(`${v}`);

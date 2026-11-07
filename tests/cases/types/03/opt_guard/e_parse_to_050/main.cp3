@@ -1,0 +1,4 @@
+import console from "std/console";
+let n: number = 123;
+let x: u64 = parseTo<u64>(n);
+console.log(`${x}`);

@@ -1,0 +1,6 @@
+import console from "std/console";
+function double(n: number): number {
+  if (n < 0) { throw new Error("neg"); }
+  return n * 2;
+}
+try { console.log(`${double(21)}`); } catch (e) { console.log("caught"); }

@@ -1,0 +1,7 @@
+import console from "std/console";
+let acc = 0;
+const s = [1, 2, 3].map((n: number): number => {
+  acc += n;
+  return n;
+}).join(",");
+console.log(`${acc} ${s}`);

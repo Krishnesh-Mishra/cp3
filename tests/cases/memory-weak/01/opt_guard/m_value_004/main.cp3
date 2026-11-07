@@ -1,0 +1,4 @@
+import console from "std/console";
+const n: number = 21;
+const d = n * 2;
+console.log(`${d}`);

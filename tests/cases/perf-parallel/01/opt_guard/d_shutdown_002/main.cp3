@@ -1,0 +1,4 @@
+import console from "std/console";
+let first = parallel.run(() => 10, () => 20);
+let second = parallel.run(() => 1, () => 2);
+console.log(`${first[0] + first[1]} ${second[0] + second[1]}`);

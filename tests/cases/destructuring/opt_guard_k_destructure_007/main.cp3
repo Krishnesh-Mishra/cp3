@@ -1,0 +1,4 @@
+import console from "std/console";
+let [p, q] = [11, 22];
+[p, q] = [q, p];
+console.log(`${p} ${q}`);

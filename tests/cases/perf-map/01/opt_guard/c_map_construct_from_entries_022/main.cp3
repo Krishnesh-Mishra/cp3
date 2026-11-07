@@ -1,0 +1,9 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: a map built from another map's entries() keeps both pairs.
+const m = new Map<string, number>([["x", 1], ["y", 2]]);
+const m2 = new Map<string, number>(m.entries());
+console.log(`${m2.get("x")}`);
+console.log(`${m2.get("y")}`);
+console.log(`${m2.size}`);

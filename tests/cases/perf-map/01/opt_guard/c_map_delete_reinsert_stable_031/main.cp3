@@ -1,0 +1,13 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: delete plus re-add in the middle keeps a stable surviving
+// order: x,z,y after y is re-added.
+const m = new Map<string, number>();
+m.set("x", 1);
+m.set("y", 2);
+m.set("z", 3);
+m.delete("y");
+m.set("y", 5);
+console.log(m.keys().join(","));
+console.log(m.values().join(","));

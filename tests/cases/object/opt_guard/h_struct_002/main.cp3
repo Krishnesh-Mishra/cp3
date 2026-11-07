@@ -1,0 +1,7 @@
+import console from "std/console";
+const pts = [{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }];
+let s = 0;
+for (const p of pts) {
+  s = s + p.x + p.y;
+}
+console.log(`${s}`);

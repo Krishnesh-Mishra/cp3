@@ -1,0 +1,4 @@
+import console from "std/console";
+let one: u64 = 1;
+let n: u64 = 65535;
+console.log(`${one.wrappingMul(n)}`);

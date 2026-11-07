@@ -1,0 +1,5 @@
+import console from "std/console";
+import { URLSearchParams } from "std/url";
+const sp = new URLSearchParams("a=1&b=2&c=3");
+sp.set("b", "9");
+console.log(sp.toString());

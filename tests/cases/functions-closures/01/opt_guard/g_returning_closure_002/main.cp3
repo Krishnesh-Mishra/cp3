@@ -1,0 +1,6 @@
+import console from "std/console";
+const mul = (a: number) => (b: number): number => a * b;
+const by7 = mul(7);
+const by3 = mul(3);
+console.log(`${by7(6)}`);
+console.log(`${by3(4)}`);

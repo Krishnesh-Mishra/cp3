@@ -1,0 +1,8 @@
+import console from "std/console";
+let shared = 100;
+const addTen = () => { shared = shared + 10; };
+const subTwenty = () => { shared = shared - 20; };
+addTen();
+subTwenty();
+addTen();
+console.log(`${shared}`);

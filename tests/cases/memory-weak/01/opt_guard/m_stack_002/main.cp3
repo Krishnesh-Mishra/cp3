@@ -1,0 +1,4 @@
+import console from "std/console";
+function mk(): { v: number } { return { v: 7 }; }
+const o = mk();
+console.log(`${o.v}`);

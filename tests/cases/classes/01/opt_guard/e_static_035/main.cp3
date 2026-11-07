@@ -1,0 +1,9 @@
+import console from "std/console";
+class Config {
+  static limit: number = 100;
+  static rebump(): undefined { Config.limit = Config.limit * 2; }
+  static getLimit(): number { return Config.limit; }
+}
+console.log(`${Config.getLimit()}`);
+Config.rebump();
+console.log(`${Config.getLimit()}`);

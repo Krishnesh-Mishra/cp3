@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: values of a literal-shaped object print in key order.
+console.log(Object.values({ a: 1, b: 2 }).join(","));

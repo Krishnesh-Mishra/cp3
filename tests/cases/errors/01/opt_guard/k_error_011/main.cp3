@@ -1,0 +1,6 @@
+import console from "std/console";
+try {
+  try { throw new Error("a"); } catch (e) { throw new Error("b"); }
+} catch (e) {
+  console.log(`${e.message}`);
+}

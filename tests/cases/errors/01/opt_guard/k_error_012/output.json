@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "inner\ninner-finally\nouter-finally\n",
+  "exitCode": 0
+}

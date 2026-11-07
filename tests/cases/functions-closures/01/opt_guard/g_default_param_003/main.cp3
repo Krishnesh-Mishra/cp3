@@ -1,0 +1,5 @@
+import console from "std/console";
+function combine(a: number = 1, b: number = 2): number { return a + b; }
+console.log(`${combine()}`);
+console.log(`${combine(10)}`);
+console.log(`${combine(10, 20)}`);

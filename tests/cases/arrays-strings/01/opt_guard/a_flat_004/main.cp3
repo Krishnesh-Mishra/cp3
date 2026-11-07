@@ -1,0 +1,6 @@
+import console from "std/console";
+const a: number[] = [];
+a.push(5);
+a.push(6);
+a.push(7);
+console.log(a.join(","));

@@ -1,0 +1,7 @@
+import console from "std/console";
+
+function body(i: number): number {
+  return i;
+}
+
+parallel.for(0..10, body);

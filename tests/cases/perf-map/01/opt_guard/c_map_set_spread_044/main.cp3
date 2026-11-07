@@ -1,0 +1,6 @@
+import console from "std/console";
+import { Set } from "std/collections";
+
+// Oracle: spreading a set into an array keeps insertion order: 3,1,2.
+const s = new Set<number>([3, 1, 2]);
+console.log([...s].join(","));

@@ -1,0 +1,5 @@
+import console from "std/console";
+let factor = 3;
+function apply(g: (n: number) => number, v: number): number { return g(v); }
+console.log(`${apply((n) => n * factor, 6)}`);
+console.log(`${apply((n) => n + factor, 6)}`);

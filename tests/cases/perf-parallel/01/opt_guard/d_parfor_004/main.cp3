@@ -1,0 +1,5 @@
+import console from "std/console";
+let base = [10, 20, 30];
+let out = [0, 0, 0];
+parallel.for(0..out.length, (i) => { out[i] = base[i] + 1; });
+console.log(out.join(","));

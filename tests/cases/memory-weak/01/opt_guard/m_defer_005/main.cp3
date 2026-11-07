@@ -1,0 +1,10 @@
+import console from "std/console";
+function early(): number {
+  const keep: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const scratch: number[] = [i * i];
+    if (i % 2 === 0) { keep.push(scratch[0]); }
+  }
+  return keep.length;
+}
+console.log(`${early()}`);

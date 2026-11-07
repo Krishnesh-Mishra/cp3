@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "ant,ape,armadillo\nbee,bat\n2\n",
+  "exitCode": 0
+}

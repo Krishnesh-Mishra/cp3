@@ -1,0 +1,4 @@
+import console from "std/console";
+const a = [1, 2, 3, 4];
+const total = a.map((x) => x * x).reduce((acc, x) => acc + x, 0);
+console.log(`${total}`);

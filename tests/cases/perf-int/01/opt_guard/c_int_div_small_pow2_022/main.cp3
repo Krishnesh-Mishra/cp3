@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: division by a power-of-two constant: 512 / 8 = 64.
+console.log(512 / 8);

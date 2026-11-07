@@ -1,0 +1,7 @@
+import console from "std/console";
+let x = 10;
+const inc = () => { x = x + 1; };
+inc();
+inc();
+inc();
+console.log(`${x}`);

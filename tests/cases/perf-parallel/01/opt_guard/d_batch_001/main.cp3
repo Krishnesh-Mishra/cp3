@@ -1,0 +1,4 @@
+import console from "std/console";
+let a = parallel.reduce(1..101, 0, (s, i) => s + i);
+let b = parallel.reduce(1..5, 1, (s, i) => s * i);
+console.log(`${a + b}`);

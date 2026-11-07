@@ -1,0 +1,9 @@
+import console from "std/console";
+function maxBy<T>(a: T, b: T, pick: (x: T) => number): T {
+  if (pick(a) >= pick(b)) {
+    return a;
+  }
+  return b;
+}
+const m = maxBy<number>(3, 7, (n: number): number => n);
+console.log(`${m}`);

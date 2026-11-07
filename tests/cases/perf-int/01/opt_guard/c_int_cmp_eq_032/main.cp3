@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: strict equality on small integers: 42 === 42 is true.
+console.log(42 === 42);

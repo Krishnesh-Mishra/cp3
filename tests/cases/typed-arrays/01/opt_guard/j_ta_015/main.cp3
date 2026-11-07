@@ -1,0 +1,6 @@
+import console from "std/console";
+function last(a: readonly number[]): number {
+  return a[a.length - 1];
+}
+const nums: number[] = [10, 20, 30];
+console.log(`${last(nums)}`);

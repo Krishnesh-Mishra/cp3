@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "8\na,b,c,d,e,f,g,h\na,b,d,f,g,h\n6\n",
+  "exitCode": 0
+}

@@ -1,0 +1,4 @@
+import console from "std/console";
+const s = "world";
+console.log(s.charAt(0));
+console.log(s.charAt(4));

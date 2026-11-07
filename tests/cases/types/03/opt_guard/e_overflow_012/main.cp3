@@ -1,0 +1,10 @@
+import console from "std/console";
+try {
+  let x: i32 = -2147483647;
+  x = x - 1;
+  let y: i32 = -1;
+  let z: i32 = x / y;
+  console.log("min-div:no");
+} catch (e) {
+  console.log("min-div:overflow");
+}

@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "apple,avocado\nbanana,berry\n2\n",
+  "exitCode": 0
+}

@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "inc:overflow\n",
+  "exitCode": 0
+}

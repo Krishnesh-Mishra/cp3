@@ -1,0 +1,2 @@
+import console from "std/console";
+Promise.race([Promise.resolve("a"), Promise.resolve("b")]).then((v) => console.log(v));

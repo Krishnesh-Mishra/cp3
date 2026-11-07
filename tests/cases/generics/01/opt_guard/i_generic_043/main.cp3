@@ -1,0 +1,3 @@
+import console from "std/console";
+function last<T>(xs: T[]): T { return xs[xs.length - 1]; }
+console.log(`${last<number>([5, 6, 7])}`);

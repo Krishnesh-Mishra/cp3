@@ -1,0 +1,13 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: deleting the first key then re-adding it appends it at the
+// end: b,c,a.
+const m = new Map<string, number>();
+m.set("a", 1);
+m.set("b", 2);
+m.set("c", 3);
+m.delete("a");
+m.set("a", 4);
+console.log(m.keys().join(","));
+console.log(m.values().join(","));

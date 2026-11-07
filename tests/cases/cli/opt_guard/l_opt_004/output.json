@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "foobar\nfoo,bar\n",
+  "exitCode": 0
+}

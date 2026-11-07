@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: bitwise and on small integers: 12 & 10 = 8.
+console.log(12 & 10);

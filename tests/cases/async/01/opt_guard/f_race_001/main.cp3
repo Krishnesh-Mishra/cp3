@@ -1,0 +1,2 @@
+import console from "std/console";
+Promise.race([Promise.resolve(1), Promise.resolve(2)]).then((v) => console.log(`${v}`));

@@ -1,0 +1,7 @@
+import console from "std/console";
+function sum(...xs: number[]): number {
+  let t = 0;
+  for (const x of xs) { t = t + x; }
+  return t;
+}
+console.log(`${sum(1, 2, 3, 4)}`);

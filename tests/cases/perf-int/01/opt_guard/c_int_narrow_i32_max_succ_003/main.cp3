@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: i32 max literal minus one, plus one, is the i32 max again.
+console.log(2147483646 + 1);

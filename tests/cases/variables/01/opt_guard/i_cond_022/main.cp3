@@ -1,0 +1,6 @@
+import console from "std/console";
+let label = "none";
+if (1 < 2) {
+  label = "yes";
+}
+console.log(`${label}`);

@@ -1,0 +1,6 @@
+import console from "std/console";
+function mark(s: string): boolean { console.log(s); return true; }
+let a = false;
+if (a && mark("and-right")) { console.log("and-branch"); } else { console.log("and-else"); }
+let b = true;
+if (b || mark("or-right")) { console.log("or-branch"); } else { console.log("or-else"); }

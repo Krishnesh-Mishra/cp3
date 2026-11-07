@@ -1,0 +1,12 @@
+import console from "std/console";
+class Animal { name(): string { return "animal"; } }
+class Dog extends Animal { bark(): string { return "woof"; } }
+class Cat extends Animal { meow(): number { return 1; } }
+function label(a: Animal): string {
+  if (a instanceof Dog) { return "dog"; }
+  if (a instanceof Cat) { return "cat"; }
+  return "other";
+}
+console.log(label(new Dog()));
+console.log(label(new Cat()));
+console.log(label(new Animal()));

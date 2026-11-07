@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: mixed bitwise operators with parentheses: (5 | 2) & 3 = 3.
+console.log((5 | 2) & 3);

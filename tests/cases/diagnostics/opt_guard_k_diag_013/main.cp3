@@ -1,0 +1,2 @@
+import console from "std/console";
+try { throw 42; } catch (e) { console.log("caught"); }

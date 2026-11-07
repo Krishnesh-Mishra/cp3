@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: bitwise xor: 12 ^ 10 = 6.
+console.log(12 ^ 10);

@@ -1,0 +1,7 @@
+import console from "std/console";
+let x: number = 37;
+x %= 10;
+console.log(`${x}`);
+let y: number = 5;
+y **= 2;
+console.log(`${y}`);

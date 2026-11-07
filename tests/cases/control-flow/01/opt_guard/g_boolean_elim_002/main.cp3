@@ -1,0 +1,6 @@
+import console from "std/console";
+let a = 7;
+let b = 3;
+const bigger = a > b;
+console.log(`${bigger}`);
+console.log(`${a < b}`);

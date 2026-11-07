@@ -1,0 +1,6 @@
+import console from "std/console";
+enum Color { Red, Green, Blue }
+enum Size { Small, Large }
+console.log(`${Color.Green}`);
+console.log(`${Size.Large}`);
+console.log(`${Color.Blue + Size.Large}`);

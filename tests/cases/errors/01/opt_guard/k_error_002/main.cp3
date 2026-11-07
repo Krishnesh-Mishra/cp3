@@ -1,0 +1,6 @@
+import console from "std/console";
+try {
+  throw new Error("boom");
+} catch (e) {
+  console.log(`${e.name}`);
+}

@@ -1,0 +1,4 @@
+import console from "std/console";
+const parts = "one,two,three".split(",");
+console.log(`${parts.length}`);
+console.log(parts.join("-"));

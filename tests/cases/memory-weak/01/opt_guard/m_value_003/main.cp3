@@ -1,0 +1,5 @@
+import console from "std/console";
+let b: boolean = true;
+let c = b;
+b = false;
+console.log(`${c} ${b}`);

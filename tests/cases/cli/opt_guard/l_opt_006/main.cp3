@@ -1,0 +1,7 @@
+import console from "std/console";
+const s: string = "hello world hello";
+console.log(`${s.indexOf("world")}`);
+console.log(`${s.indexOf("o")}`);
+console.log(`${s.lastIndexOf("o")}`);
+console.log(`${s.includes("world")}`);
+console.log(`${s.includes("nope")}`);

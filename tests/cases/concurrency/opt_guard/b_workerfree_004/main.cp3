@@ -1,0 +1,2 @@
+var total = 0;
+parallel.for(0..3, (i) => { total = total + 1; });

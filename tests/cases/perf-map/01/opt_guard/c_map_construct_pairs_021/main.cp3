@@ -1,0 +1,9 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: constructing a map from literal entry pairs: get a is 1,
+// get c is 3, size is 3.
+const m = new Map<string, number>([["a", 1], ["b", 2], ["c", 3]]);
+console.log(`${m.get("a")}`);
+console.log(`${m.get("c")}`);
+console.log(`${m.size}`);

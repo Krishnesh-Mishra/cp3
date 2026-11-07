@@ -1,0 +1,2 @@
+let total = 0;
+parallel.for(0..10, (i) => { total = total + 1; });

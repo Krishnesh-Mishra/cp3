@@ -1,0 +1,4 @@
+import console from "std/console";
+import { TextEncoder } from "std/text";
+const encoder = new TextEncoder();
+console.log(encoder.encoding);

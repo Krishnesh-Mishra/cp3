@@ -1,0 +1,4 @@
+import console from "std/console";
+let [a, b] = [1, 2];
+[a, b] = [3, 4];
+console.log(`${a + b}`);

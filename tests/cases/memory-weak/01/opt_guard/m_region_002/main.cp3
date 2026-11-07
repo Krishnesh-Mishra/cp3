@@ -1,0 +1,6 @@
+import console from "std/console";
+function parse(): number {
+  const parts = [10, 20, 30];
+  return parts.reduce((acc, x) => acc + x, 0);
+}
+console.log(`${parse()}`);

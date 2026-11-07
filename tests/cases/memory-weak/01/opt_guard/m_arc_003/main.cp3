@@ -1,0 +1,5 @@
+import console from "std/console";
+const a = ["x", "y"];
+const b = a;
+b.push("z");
+console.log(a.join(","));

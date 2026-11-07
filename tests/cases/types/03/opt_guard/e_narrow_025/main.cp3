@@ -1,0 +1,5 @@
+import console from "std/console";
+let small: i32 = 42;
+let wide: i64 = small as i64;
+let back: number = wide as number;
+console.log(`${small} ${wide} ${back}`);

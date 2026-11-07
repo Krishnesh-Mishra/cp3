@@ -1,0 +1,9 @@
+import console from "std/console";
+let i = 0;
+let s = 0;
+while (true) {
+  if (i >= 4) { break; }
+  s = s + i;
+  i = i + 1;
+}
+console.log(`${s}`);

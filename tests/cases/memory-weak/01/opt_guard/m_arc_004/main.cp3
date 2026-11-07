@@ -1,0 +1,6 @@
+import console from "std/console";
+function share(xs: number[]): number[] { return xs; }
+const a = [1];
+const b = share(a);
+b.push(2);
+console.log(`${a.length}`);

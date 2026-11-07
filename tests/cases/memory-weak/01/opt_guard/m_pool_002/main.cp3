@@ -1,0 +1,8 @@
+import console from "std/console";
+function reuse(): number {
+  const box = { n: 0 };
+  box.n = box.n + 1;
+  box.n = box.n + 1;
+  return box.n;
+}
+console.log(`${reuse()}`);

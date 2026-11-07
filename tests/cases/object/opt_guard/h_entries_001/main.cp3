@@ -1,0 +1,6 @@
+import console from "std/console";
+const o = { b: 2, a: 1 };
+const es = Object.entries(o);
+console.log(`${es.length}`);
+console.log(`${es[0][0]}=${es[0][1]}`);
+console.log(`${es[1][0]}=${es[1][1]}`);

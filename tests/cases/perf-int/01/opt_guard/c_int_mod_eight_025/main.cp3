@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: modulo by a small power-of-two constant: 29 % 8 = 5.
+console.log(29 % 8);

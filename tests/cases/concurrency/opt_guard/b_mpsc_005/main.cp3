@@ -1,0 +1,7 @@
+import console from "std/console";
+
+let queue: string[] = [];
+parallel.run(
+  () => { queue.push("a"); },
+  () => { queue.push("b"); }
+);

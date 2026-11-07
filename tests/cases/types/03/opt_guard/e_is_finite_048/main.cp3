@@ -1,0 +1,2 @@
+import console from "std/console";
+console.log(`${Number.isFinite(1)} ${Number.isFinite(Infinity)} ${Number.isFinite(NaN)}`);

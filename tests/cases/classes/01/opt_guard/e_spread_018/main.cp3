@@ -1,0 +1,8 @@
+import console from "std/console";
+class Sq { side: number; constructor(side: number) { this.side = side; } }
+function makeBox(): { x: number, s: Sq } {
+  return { x: 1, s: new Sq(4) };
+}
+const a = makeBox();
+const b = { ...a };
+console.log(`${b.x} ${b.s.side}`);

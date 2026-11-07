@@ -1,0 +1,8 @@
+import console from "std/console";
+abstract class Base {
+  abstract weight(): number;
+  label(): string { return "box"; }
+}
+class Crate extends Base { weight(): number { return 7; } }
+const b: Base = new Crate();
+console.log(`${b.weight()} ${b.label()}`);

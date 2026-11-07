@@ -1,0 +1,4 @@
+import console from "std/console";
+const arrow = (n: number): number => n * 2;
+function decl(n: number): number { return n * 2; }
+console.log(`${arrow(8)},${decl(8)}`);

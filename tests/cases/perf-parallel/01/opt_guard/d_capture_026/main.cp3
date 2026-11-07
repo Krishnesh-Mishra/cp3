@@ -1,0 +1,5 @@
+let shared = [1, 2, 3];
+parallel.run(
+  () => { shared.push(1); },
+  () => { shared.push(2); }
+);

@@ -1,0 +1,7 @@
+import console from "std/console";
+interface Person { name: string; age: number; }
+function show({ name, age }: Person): undefined {
+  console.log(`${name} ${age}`);
+}
+const person: Person = { name: "Ada", age: 36 };
+show(person);

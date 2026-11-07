@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: unsigned right shift of -1 as a uint32: -1 >>> 0 = 4294967295.
+console.log(-1 >>> 0);

@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: division is left associative: 64 / 4 / 2 = 8.
+console.log(64 / 4 / 2);

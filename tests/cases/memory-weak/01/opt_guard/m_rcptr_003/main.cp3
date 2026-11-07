@@ -1,0 +1,5 @@
+import console from "std/console";
+const a = [7];
+const alias = a;
+const deep = a.slice(0, 1);
+console.log(`${alias.length} ${deep.length}`);

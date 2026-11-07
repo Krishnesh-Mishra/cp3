@@ -1,0 +1,6 @@
+import console from "std/console";
+let numbers = [1, 2, 3, 4, 5];
+parallel.for(0..numbers.length, (i) => {
+  numbers[i] = numbers[i] * 2;
+});
+console.log(numbers.join(","));

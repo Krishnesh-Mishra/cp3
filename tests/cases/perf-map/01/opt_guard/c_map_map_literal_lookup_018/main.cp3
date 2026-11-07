@@ -1,0 +1,10 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: four literal-key lookups on a fixed map: 1,2,3,4.
+const m = new Map<string, number>();
+m.set("one", 1);
+m.set("two", 2);
+m.set("three", 3);
+m.set("four", 4);
+console.log(`${m.get("one")},${m.get("two")},${m.get("three")},${m.get("four")}`);

@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3305",
+    "line": 2,
+    "col": 1,
+    "contains": "did you mean"
+  }
+}

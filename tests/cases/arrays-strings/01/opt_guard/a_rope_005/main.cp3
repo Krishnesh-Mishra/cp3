@@ -1,0 +1,5 @@
+import console from "std/console";
+const head = "head-";
+const tail = "tail";
+const body = "middle";
+console.log(head + body + tail);

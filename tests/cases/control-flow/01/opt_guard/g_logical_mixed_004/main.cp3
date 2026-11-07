@@ -1,0 +1,4 @@
+import console from "std/console";
+let admin = true;
+let level = 3;
+if (admin && level >= 3 || level >= 9) { console.log("granted"); } else { console.log("denied"); }

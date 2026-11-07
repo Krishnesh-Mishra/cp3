@@ -1,0 +1,7 @@
+import console from "std/console";
+let n = 2;
+switch (n) {
+  case 1:
+  case 2: console.log("small"); break;
+  default: console.log("big");
+}

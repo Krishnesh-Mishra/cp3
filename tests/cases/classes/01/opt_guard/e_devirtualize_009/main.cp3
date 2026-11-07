@@ -1,0 +1,8 @@
+import console from "std/console";
+class Animal {
+  name(): string { return "animal"; }
+  greet(): string { return `hi-${this.name()}`; }
+}
+class Dog extends Animal { name(): string { return "dog"; } }
+const d: Animal = new Dog();
+console.log(d.greet());

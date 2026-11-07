@@ -1,0 +1,8 @@
+import console from "std/console";
+class Rect {
+  w: number = 3;
+  h: number = 4;
+  get area(): number { return this.w * this.h; }
+}
+const r = new Rect();
+console.log(`${r.area} ${r.area + 10}`);

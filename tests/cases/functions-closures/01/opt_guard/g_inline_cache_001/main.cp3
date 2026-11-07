@@ -1,0 +1,5 @@
+import console from "std/console";
+const square = (n: number): number => n * n;
+let last = 0;
+for (let i = 1; i <= 5; i++) { last = square(i); }
+console.log(`${last}`);

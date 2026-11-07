@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "https:\nexample.org:8081\nexample.org\n8081\n/docs/page.html\n?id=7&lang=en\n#sec\n",
+  "exitCode": 0
+}

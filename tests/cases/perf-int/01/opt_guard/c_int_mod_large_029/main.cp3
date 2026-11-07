@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: 1000000 % 7 = 1 (7 * 142857 = 999999).
+console.log(1000000 % 7);

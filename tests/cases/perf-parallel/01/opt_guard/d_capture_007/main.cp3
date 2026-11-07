@@ -1,0 +1,5 @@
+import console from "std/console";
+
+parallel.for(0..8, (i, j) => {
+  console.log(`${i}`);
+});

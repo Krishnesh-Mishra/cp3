@@ -1,0 +1,4 @@
+import console from "std/console";
+import JSON from "std/json";
+const a = JSON.parse<number[]>("[1, 2, 3]");
+console.log(`${a.length}`);

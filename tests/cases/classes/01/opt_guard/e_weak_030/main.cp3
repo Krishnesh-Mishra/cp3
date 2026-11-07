@@ -1,0 +1,11 @@
+import console from "std/console";
+class Node {
+  label: string;
+  weak prev: Node | null;
+  constructor(label: string) { this.label = label; this.prev = null; }
+}
+const a = new Node("a");
+const b = new Node("b");
+a.prev = b;
+b.prev = a;
+if (a.prev !== null) { console.log(`${a.prev.label}`); }

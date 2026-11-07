@@ -1,0 +1,4 @@
+import console from "std/console";
+const s = "abc";
+const t = "def";
+console.log(s + t);

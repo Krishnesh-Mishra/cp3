@@ -1,0 +1,9 @@
+import console from "std/console";
+function classify(n: number | null): string {
+  if (n === null) { return "null"; }
+  if (n < 0) { return "negative"; }
+  return "non-negative";
+}
+console.log(classify(null));
+console.log(classify(-5));
+console.log(classify(5));

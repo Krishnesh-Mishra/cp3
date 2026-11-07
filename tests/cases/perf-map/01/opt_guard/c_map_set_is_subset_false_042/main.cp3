@@ -1,0 +1,7 @@
+import console from "std/console";
+import { Set } from "std/collections";
+
+// Oracle: a larger set is not a subset of a smaller one: false.
+const a = new Set<number>([1, 2, 3, 4]);
+const b = new Set<number>([1, 2]);
+console.log(`${a.isSubsetOf(b)}`);

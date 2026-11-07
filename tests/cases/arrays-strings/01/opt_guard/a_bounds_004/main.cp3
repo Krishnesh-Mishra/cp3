@@ -1,0 +1,5 @@
+import console from "std/console";
+const grid: number[][] = [[1, 2], [3, 4]];
+let total = 0;
+for (let i = 0; i < grid.length; i++) { for (let j = 0; j < grid[i].length; j++) { total += grid[i][j]; } }
+console.log(`${total}`);

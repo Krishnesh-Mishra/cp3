@@ -1,0 +1,7 @@
+import console from "std/console";
+function objects(): number {
+  let sum = 0;
+  for (let i = 0; i < 5; i++) { const o = { v: i }; sum += o.v; }
+  return sum;
+}
+console.log(`${objects()}`);

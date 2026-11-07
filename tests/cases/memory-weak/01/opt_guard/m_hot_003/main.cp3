@@ -1,0 +1,4 @@
+import console from "std/console";
+const parts: string[] = [];
+for (let i = 0; i < 4; i++) { parts.push("ab"); }
+console.log(parts.join(""));

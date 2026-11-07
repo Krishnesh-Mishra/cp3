@@ -1,0 +1,6 @@
+import console from "std/console";
+function makeAdder(step: number): (n: number) => number { return (n) => n + step; }
+const add3 = makeAdder(3);
+console.log(`${add3(1)}`);
+console.log(`${add3(2)}`);
+console.log(`${add3(3)}`);

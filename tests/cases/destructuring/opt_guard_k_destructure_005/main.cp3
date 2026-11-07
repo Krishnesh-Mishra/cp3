@@ -1,0 +1,4 @@
+import console from "std/console";
+const obj = { x: 9, y: 8 };
+const { x: n, y } = obj;
+console.log(`${n + y}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+let n = 9;
+const r = n > 100 ? "huge" : n > 50 ? "large" : n > 10 ? "medium" : n > 0 ? "tiny" : "nonpositive";
+console.log(r);

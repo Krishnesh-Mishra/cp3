@@ -1,0 +1,7 @@
+import console from "std/console";
+const a = [7, 8, 9];
+let total = 0;
+for (let i = 0; i < a.length; i++) {
+  total = total + a[i];
+}
+console.log(`${total}`);

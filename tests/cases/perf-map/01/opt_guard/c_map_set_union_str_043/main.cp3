@@ -1,0 +1,8 @@
+import console from "std/console";
+import { Set } from "std/collections";
+
+// Oracle: string sets union then difference: a,b,c and a.
+const a = new Set<string>(["a", "b"]);
+const b = new Set<string>(["b", "c"]);
+console.log(a.union(b).values().join(","));
+console.log(a.difference(b).values().join(","));

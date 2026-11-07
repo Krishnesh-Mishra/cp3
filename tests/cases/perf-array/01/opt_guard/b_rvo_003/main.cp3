@@ -1,0 +1,4 @@
+import console from "std/console";
+function passthrough(data: number[]): number[] { return data; }
+const a: number[] = [7, 8];
+console.log(passthrough(a).join(","));

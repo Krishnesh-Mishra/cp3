@@ -1,0 +1,9 @@
+import console from "std/console";
+function make(): () => number {
+  let box = { v: 0 };
+  const bump = () => { box.v = box.v + 2; return box.v; };
+  return bump;
+}
+const f = make();
+console.log(`${f()}`);
+console.log(`${f()}`);

@@ -1,0 +1,4 @@
+import console from "std/console";
+class Calc { add(a: number, b: number): number { return a + b; } }
+let c = new Calc();
+console.log(`${c.add(2, 3)}`);

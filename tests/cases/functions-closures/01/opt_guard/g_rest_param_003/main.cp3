@@ -1,0 +1,8 @@
+import console from "std/console";
+function sqsum(...xs: number[]): number {
+  let t = 0;
+  for (const x of xs) { t = t + x * x; }
+  return t;
+}
+console.log(`${sqsum(2, 3)}`);
+console.log(`${sqsum()}`);

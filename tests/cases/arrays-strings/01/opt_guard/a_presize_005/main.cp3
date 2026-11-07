@@ -1,0 +1,7 @@
+import console from "std/console";
+const xs: string[] = [];
+xs.push("a");
+xs.push("b");
+const ys: string[] = [];
+ys.push("c");
+console.log(xs.join("") + ys.join(""));

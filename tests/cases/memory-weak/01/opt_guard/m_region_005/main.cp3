@@ -1,0 +1,8 @@
+import console from "std/console";
+function depth(): string {
+  const a: string[] = [];
+  a.push("x");
+  a.push("y");
+  return a.join("");
+}
+console.log(depth());

@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "task-a,task-b\nshutdown complete\n",
+  "exitCode": 0
+}

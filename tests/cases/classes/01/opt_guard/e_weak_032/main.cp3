@@ -1,0 +1,8 @@
+import console from "std/console";
+class A { weak b: B | null; constructor() { this.b = null; } }
+class B { weak a: A | null; constructor() { this.a = null; } }
+const a = new A();
+const b = new B();
+a.b = b;
+b.a = a;
+console.log(`${a.b !== null && b.a !== null}`);

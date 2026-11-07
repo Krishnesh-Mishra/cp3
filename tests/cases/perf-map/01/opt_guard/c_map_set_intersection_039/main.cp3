@@ -1,0 +1,7 @@
+import console from "std/console";
+import { Set } from "std/collections";
+
+// Oracle: intersection keeps common elements in this set's order: 4,6.
+const a = new Set<number>([2, 4, 6]);
+const b = new Set<number>([4, 6, 8]);
+console.log(a.intersection(b).values().join(","));

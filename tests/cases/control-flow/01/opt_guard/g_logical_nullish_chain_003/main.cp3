@@ -1,0 +1,5 @@
+import console from "std/console";
+let a: number | null = null;
+let b: number | undefined;
+const v = a ?? b ?? 42;
+console.log(`${v}`);

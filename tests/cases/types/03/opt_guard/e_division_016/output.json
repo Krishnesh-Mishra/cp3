@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "div-zero:integer division by zero\n",
+  "exitCode": 0
+}

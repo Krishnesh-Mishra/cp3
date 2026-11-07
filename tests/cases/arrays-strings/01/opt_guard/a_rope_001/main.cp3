@@ -1,0 +1,4 @@
+import console from "std/console";
+let s = "";
+for (let i = 0; i < 4; i++) { s += "ab"; }
+console.log(s);

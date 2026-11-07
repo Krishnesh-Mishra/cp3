@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: subtraction folds left to right: 10 - 4 - 3 = 3.
+console.log(10 - 4 - 3);

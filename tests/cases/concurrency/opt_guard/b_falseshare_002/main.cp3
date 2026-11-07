@@ -1,0 +1,4 @@
+import console from "std/console";
+class Pair { a: number; b: number; constructor() { this.a = 3; this.b = 4; } }
+let p = new Pair();
+console.log(`${p.a},${p.b}`);

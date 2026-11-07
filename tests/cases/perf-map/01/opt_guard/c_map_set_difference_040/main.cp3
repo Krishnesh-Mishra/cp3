@@ -1,0 +1,7 @@
+import console from "std/console";
+import { Set } from "std/collections";
+
+// Oracle: difference removes members of the argument: 2,6.
+const a = new Set<number>([2, 4, 6]);
+const b = new Set<number>([4]);
+console.log(a.difference(b).values().join(","));

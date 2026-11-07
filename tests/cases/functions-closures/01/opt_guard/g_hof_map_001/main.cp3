@@ -1,0 +1,4 @@
+import console from "std/console";
+const a = [1, 2, 3, 4];
+const b = a.map((x) => x * x);
+console.log(b.join(","));

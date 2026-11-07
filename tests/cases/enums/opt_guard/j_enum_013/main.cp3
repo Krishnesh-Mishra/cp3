@@ -1,0 +1,14 @@
+import console from "std/console";
+enum Color { Red, Green, Blue }
+function label(c: Color): string {
+  switch (c) {
+    case Color.Red:
+      return "red";
+    case Color.Green:
+      return "green";
+    default:
+      return "blue";
+  }
+}
+console.log(`${label(Color.Green)}`);
+console.log(`${label(Color.Blue)}`);

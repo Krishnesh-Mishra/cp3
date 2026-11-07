@@ -1,0 +1,6 @@
+import console from "std/console";
+
+// Oracle: branchless absolute value via ternary.
+const abs = (n: number): number => n < 0 ? -n : n;
+console.log(abs(-42));
+console.log(abs(17));

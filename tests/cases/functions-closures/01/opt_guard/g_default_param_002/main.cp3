@@ -1,0 +1,4 @@
+import console from "std/console";
+function scale(n: number, factor: number = 3): number { return n * factor; }
+console.log(`${scale(5)}`);
+console.log(`${scale(5, 2)}`);

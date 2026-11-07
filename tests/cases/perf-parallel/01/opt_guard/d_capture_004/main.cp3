@@ -1,0 +1,3 @@
+class Box { v: number; }
+let box = new Box();
+parallel.for(0..4, (i) => { box.v = i; });

@@ -1,0 +1,5 @@
+import console from "std/console";
+let person = { name: "Ada", age: 36 };
+let { name, age } = person;
+({ name, age } = { name: "Grace", age: 45 });
+console.log(`${name} ${age}`);

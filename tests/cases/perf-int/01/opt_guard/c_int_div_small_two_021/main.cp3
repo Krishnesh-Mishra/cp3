@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: division by the small constant 2: 84 / 2 = 42.
+console.log(84 / 2);

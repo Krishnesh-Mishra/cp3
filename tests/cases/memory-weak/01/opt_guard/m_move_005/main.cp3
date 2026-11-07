@@ -1,0 +1,4 @@
+import console from "std/console";
+const o = { v: 1 };
+o = { v: 2 };
+console.log(`${o.v}`);

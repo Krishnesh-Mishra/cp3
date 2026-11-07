@@ -1,0 +1,5 @@
+import console from "std/console";
+
+// Oracle: Number() converts booleans and null to integers.
+console.log(Number(true));
+console.log(Number(null));

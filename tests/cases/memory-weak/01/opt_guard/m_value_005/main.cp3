@@ -1,0 +1,5 @@
+import console from "std/console";
+let i: number = 1;
+let j = i;
+i = i + 10;
+console.log(`${j} ${i}`);

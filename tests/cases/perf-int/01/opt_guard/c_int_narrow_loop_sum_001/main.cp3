@@ -1,0 +1,8 @@
+import console from "std/console";
+
+// Oracle: sum of 1..10 narrowed to integer arithmetic is 55.
+let sum = 0;
+for (let i = 1; i < 11; i++) {
+  sum = sum + i;
+}
+console.log(sum);

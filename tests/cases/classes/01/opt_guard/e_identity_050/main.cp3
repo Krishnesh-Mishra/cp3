@@ -1,0 +1,5 @@
+import console from "std/console";
+const lit = { v: 1 };
+console.log(`${lit === lit}`);
+const other = { v: 1 };
+console.log(`${lit === other}`);

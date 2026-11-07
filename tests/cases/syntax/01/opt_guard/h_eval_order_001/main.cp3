@@ -1,0 +1,10 @@
+import console from "std/console";
+function g(): number {
+  console.log("g");
+  return 1;
+}
+function h(): number {
+  console.log("h");
+  return 2;
+}
+console.log(`${g() + h()}`);

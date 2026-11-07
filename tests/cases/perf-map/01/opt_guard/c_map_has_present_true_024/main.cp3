@@ -1,0 +1,8 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: has reports yes for a present key and no for an absent one.
+const m = new Map<string, number>();
+m.set("a", 1);
+console.log(m.has("a") ? "yes" : "no");
+console.log(m.has("zz") ? "yes" : "no");

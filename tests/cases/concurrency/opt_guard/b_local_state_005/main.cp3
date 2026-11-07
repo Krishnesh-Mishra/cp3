@@ -1,0 +1,2 @@
+let mode = "idle";
+parallel.for(0..3, (i) => { mode = "running"; });

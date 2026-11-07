@@ -1,0 +1,5 @@
+import console from "std/console";
+
+// Oracle: INT_MIN literal plus one is -2147483647; plain number arithmetic
+// keeps it exact.
+console.log(-2147483648 + 1);

@@ -1,0 +1,7 @@
+import console from "std/console";
+let first = [0, 0, 0, 0];
+let second = [0, 0, 0, 0];
+parallel.for(0..4, (i) => { first[i] = i * i; });
+parallel.for(0..4, (i) => { second[i] = first[i] * 10; });
+console.log(first.join(","));
+console.log(second.join(","));

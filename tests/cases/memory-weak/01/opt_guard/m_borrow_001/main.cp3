@@ -1,0 +1,4 @@
+import console from "std/console";
+function len(xs: number[]): number { return xs.length; }
+const a = [5, 6, 7];
+console.log(`${len(a)} ${a.length}`);

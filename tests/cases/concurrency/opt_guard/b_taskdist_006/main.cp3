@@ -1,0 +1,4 @@
+import console from "std/console";
+let out = [0, 0, 0, 0, 0, 0];
+parallel.for(0..6, (i) => { out[i] = i % 2 == 0 ? 1 : 0; });
+console.log(out.join(","));

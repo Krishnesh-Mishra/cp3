@@ -1,0 +1,6 @@
+import console from "std/console";
+const parts: string[] = [];
+parts.push("co");
+parts.push("mm");
+parts.push("it");
+console.log(parts.join(""));

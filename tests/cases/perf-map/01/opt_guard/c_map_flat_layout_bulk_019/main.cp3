@@ -1,0 +1,14 @@
+import console from "std/console";
+import { Map } from "std/collections";
+
+// Oracle: a flat 12-key map sums to 78; deleting every second key leaves
+// a,c,e,g,i,k in insertion order; size is 6.
+const m = new Map<string, number>();
+const names = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"];
+for (let i = 0; i < names.length; i++) { m.set(names[i], i + 1); }
+let sum = 0;
+m.forEach((v, k) => { sum = sum + v; });
+console.log(`${sum}`);
+for (const d of ["b", "d", "f", "h", "j", "l"]) { m.delete(d); }
+console.log(m.keys().join(","));
+console.log(`${m.size}`);

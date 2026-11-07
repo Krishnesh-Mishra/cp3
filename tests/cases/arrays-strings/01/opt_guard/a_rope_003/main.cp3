@@ -1,0 +1,8 @@
+import console from "std/console";
+function build(): string {
+  let s = "";
+  const parts: string[] = ["re", "port"];
+  for (const p of parts) { s += p; }
+  return s;
+}
+console.log(build());

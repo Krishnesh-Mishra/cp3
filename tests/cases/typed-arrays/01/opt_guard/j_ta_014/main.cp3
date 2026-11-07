@@ -1,0 +1,6 @@
+import console from "std/console";
+function second(a: number[]): number {
+  return a[1];
+}
+const nums: number[] = [10, 20, 30];
+console.log(`${second(nums)}`);

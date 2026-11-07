@@ -1,0 +1,11 @@
+{
+  "mode": "run",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3904",
+    "line": 2,
+    "col": 9,
+    "contains": "must all return the same type"
+  }
+}

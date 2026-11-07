@@ -1,0 +1,5 @@
+import console from "std/console";
+const a = ["a", "b", "c"];
+let out = "";
+for (const s of a) { out += s; }
+console.log(out);

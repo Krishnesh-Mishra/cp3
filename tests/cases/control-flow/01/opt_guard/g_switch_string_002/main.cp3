@@ -1,0 +1,6 @@
+import console from "std/console";
+let cmd = "reset";
+switch (cmd) {
+  case "open": console.log("opening"); break;
+  default: console.log("fallback");
+}

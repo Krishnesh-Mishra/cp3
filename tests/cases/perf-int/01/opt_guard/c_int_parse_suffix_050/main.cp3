@@ -1,0 +1,4 @@
+import console from "std/console";
+
+// Oracle: parseInt stops at the first non-digit: "42px" is 42.
+console.log(parseInt("42px"));

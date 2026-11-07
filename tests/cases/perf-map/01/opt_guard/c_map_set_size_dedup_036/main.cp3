@@ -1,0 +1,8 @@
+import console from "std/console";
+import { Set } from "std/collections";
+
+// Oracle: set construction drops duplicates; order is first insertion:
+// 1,2,3 with size 3.
+const s = new Set<number>([1, 1, 2, 3, 3]);
+console.log(`${s.size}`);
+console.log(s.values().join(","));
