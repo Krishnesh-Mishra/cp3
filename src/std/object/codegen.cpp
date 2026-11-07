@@ -312,8 +312,10 @@ std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
         // overwrite earlier ones, in place (Map.set semantics).
         return "([&]{ auto cp3_m = ::cp3::runtime::collections::makeMap<std::"
                "string, " +
-               vc.cpp + ">(); for (const auto& cp3_e : *(" +
-               expr(*c.arguments.front()) + ")) " +
+               vc.cpp +
+               ">(); const auto cp3_entries = (" +
+               expr(*c.arguments.front()) +
+               "); for (const auto& cp3_e : *cp3_entries) " +
                "cp3_m->set(std::get<0>(cp3_e), std::get<1>(cp3_e)); "
                "return cp3_m; }())";
     }

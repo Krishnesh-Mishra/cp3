@@ -566,7 +566,8 @@ std::string Generator::emitCollectionsNew(const NewExpr& n) {
         const std::string arg = expr(*n.arguments.front());
         if (isMapType(t)) {
             return "([&]{ auto cp3_m = ::cp3::runtime::collections::makeMap<" +
-                   elems + ">(); for (const auto& cp3_e : *(" + arg + ")) " +
+                   elems + ">(); const auto cp3_entries = (" + arg +
+                   "); for (const auto& cp3_e : *cp3_entries) " +
                    "cp3_m->set(std::get<0>(cp3_e), std::get<1>(cp3_e)); "
                    "return cp3_m; }())";
         }
