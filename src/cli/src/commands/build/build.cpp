@@ -691,6 +691,22 @@ void selectRuntimeSources(const CliOptions& opt, BuildLayout& layout,
     layout.runtimeSources = runtimeSourcePaths(markers);
     layout.runtimeSources.insert(layout.runtimeSources.end(),
                                  nativeSources.begin(), nativeSources.end());
+    // A TU named by two native rows (for example bucket_hash.cpp via the
+    // std/collections and std/process rows) would be compiled into the same
+    // object twice and fail the link with a duplicate definition. Keep the
+    // first occurrence; order is otherwise preserved.
+    {
+        std::vector<fs::path> unique;
+        unique.reserve(layout.runtimeSources.size());
+        for (const fs::path& src : layout.runtimeSources) {
+            bool seen = false;
+            for (const fs::path& kept : unique) {
+                if (kept == src) { seen = true; break; }
+            }
+            if (!seen) unique.push_back(src);
+        }
+        layout.runtimeSources = std::move(unique);
+    }
     if (opt.verbose) {
         for (const fs::path& src : layout.runtimeSources) {
             std::fprintf(stderr, "cp3c: runtime TU: %s\n",
