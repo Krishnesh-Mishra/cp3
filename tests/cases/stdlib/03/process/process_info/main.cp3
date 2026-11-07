@@ -1,6 +1,14 @@
+// The corpus runner pins an exact stdout baseline on both platforms, so the
+// platform line itself is asserted structurally (win32 / linux / darwin);
+// arch, version, and exitCode are identical on every supported target.
 import console from "std/console";
 import process from "std/process";
-console.log(`${process.platform}`);
+
+console.log(
+  process.platform === "win32" || process.platform === "linux" ||
+  process.platform === "darwin"
+    ? "platform-ok"
+    : process.platform);
 console.log(`${process.arch}`);
 console.log(`${process.version}`);
 console.log(`${process.exitCode}`);
