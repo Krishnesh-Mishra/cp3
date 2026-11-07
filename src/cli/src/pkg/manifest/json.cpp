@@ -103,7 +103,8 @@ struct Parser {
             ++pos;
             JsonValue value;
             if (!parseValue(value, depth + 1)) return false;
-            out.object.emplace_back(std::move(key), std::move(value));
+            out.keys.push_back(std::move(key));
+            out.values.push_back(std::move(value));
             skipWs();
             if (atEnd()) return fail("unterminated object");
             if (peek() == ',') {
@@ -298,8 +299,8 @@ void writeQuoted(std::string_view s, std::string& out) {
 
 const JsonValue* JsonValue::find(std::string_view key) const noexcept {
     if (type != Type::Object) return nullptr;
-    for (const auto& field : object) {
-        if (field.first == key) return &field.second;
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        if (keys[i] == key) return &values[i];
     }
     return nullptr;
 }

@@ -26,8 +26,9 @@ struct MiValue {
     Kind kind = Kind::Scalar;
     std::string text;  // Scalar: the value, unescaped when it arrived quoted
     std::string name;  // list element tag, e.g. "frame"
-    std::vector<std::pair<std::string, MiValue>> fields;  // Tuple, in order
-    std::vector<MiValue> items;                           // List, in order
+    std::vector<std::string> fieldNames;   // Tuple field tags, in order
+    std::vector<MiValue> fieldValues;      // Tuple field values, in order
+    std::vector<MiValue> items;            // List, in order
 };
 
 // Parses one value at `pos` and advances `pos` past it. False on malformed

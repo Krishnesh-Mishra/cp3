@@ -30,7 +30,8 @@ struct JsonValue {
     double number = 0.0;
     std::string text;
     std::vector<JsonValue> items;
-    std::vector<std::pair<std::string, JsonValue>> members;
+    std::vector<std::string> keys;
+    std::vector<JsonValue> values;
 
     bool isObject() const { return kind == Kind::Object; }
     bool isArray() const { return kind == Kind::Array; }

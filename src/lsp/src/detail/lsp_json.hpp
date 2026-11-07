@@ -33,7 +33,12 @@ public:
     std::string number;   // raw lexeme, echoed verbatim (request ids)
     std::string string;
     std::vector<Json> items;
-    std::vector<std::pair<std::string, Json>> members;
+    // Object members, kept as parallel arrays: `keys[i]` names `values[i]`.
+    // Insertion order is preserved. A vector of pair<string, Json> cannot be
+    // declared here: instantiating std::pair with the still-incomplete Json
+    // trips a type-trait static_assert in libstdc++ 15 under clang.
+    std::vector<std::string> keys;
+    std::vector<Json> values;
 
     bool isNull() const noexcept { return kind == Kind::Null; }
     bool isBool() const noexcept { return kind == Kind::Bool; }

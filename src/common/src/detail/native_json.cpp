@@ -16,8 +16,8 @@ namespace cp3::detail {
 
 const JsonValue* JsonValue::find(std::string_view key) const {
     if (!isObject()) return nullptr;
-    for (const auto& member : members) {
-        if (member.first == key) return &member.second;
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        if (keys[i] == key) return &values[i];
     }
     return nullptr;
 }
@@ -225,7 +225,8 @@ private:
             skipSpace();
             JsonValue value;
             if (!parseValue(value, err)) return false;
-            out.members.emplace_back(std::move(key), std::move(value));
+            out.keys.push_back(std::move(key));
+            out.values.push_back(std::move(value));
             skipSpace();
             if (pos_ < text_.size() && text_[pos_] == ',') {
                 ++pos_;

@@ -85,7 +85,8 @@ bool parseSequence(const std::string& in, std::size_t& pos, MiValue& out,
         MiValue element;
         if (!parseElement(in, pos, element)) return false;
         if (close == '}') {
-            out.fields.emplace_back(element.name, std::move(element));
+            out.fieldNames.push_back(std::move(element.name));
+            out.fieldValues.push_back(std::move(element));
         } else {
             out.items.push_back(std::move(element));
         }
@@ -127,7 +128,8 @@ bool parseMiBody(const std::string& in, std::size_t pos, MiValue& out) {
     for (;;) {
         MiValue field;
         if (!parseElement(in, pos, field)) return false;
-        out.fields.emplace_back(field.name, std::move(field));
+        out.fieldNames.push_back(std::move(field.name));
+        out.fieldValues.push_back(std::move(field));
         if (pos >= in.size()) return true;
         if (in[pos] != ',') return false;
         ++pos;
@@ -135,8 +137,8 @@ bool parseMiBody(const std::string& in, std::size_t pos, MiValue& out) {
 }
 
 const MiValue* miField(const MiValue& value, const std::string& name) {
-    for (const auto& field : value.fields) {
-        if (field.first == name) return &field.second;
+    for (std::size_t i = 0; i < value.fieldNames.size(); ++i) {
+        if (value.fieldNames[i] == name) return &value.fieldValues[i];
     }
     return nullptr;
 }

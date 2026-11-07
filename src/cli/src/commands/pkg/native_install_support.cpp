@@ -23,7 +23,6 @@
 namespace cp3::cli {
 
 namespace fs = std::filesystem;
-namespace native = cp3::cli::native;
 
 namespace {
 

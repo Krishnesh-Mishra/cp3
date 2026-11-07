@@ -152,35 +152,37 @@ bool readLockfile(const fs::path& projectRoot, std::vector<LockEntry>& out,
         err = path.string() + ": missing \"packages\" object";
         return false;
     }
-    for (const auto& field : packages->object) {
-        if (!field.second.isObject()) continue;
+    for (std::size_t i = 0; i < packages->keys.size(); ++i) {
+        const std::string& name = packages->keys[i];
+        const JsonValue& field = packages->values[i];
+        if (!field.isObject()) continue;
         LockEntry entry;
-        entry.name = field.first;
-        if (const std::string* value = field.second.stringField("version")) {
+        entry.name = name;
+        if (const std::string* value = field.stringField("version")) {
             entry.version = *value;
         }
-        if (const std::string* value = field.second.stringField("resolved")) {
+        if (const std::string* value = field.stringField("resolved")) {
             entry.resolved = *value;
         }
-        if (const std::string* value = field.second.stringField("integrity")) {
+        if (const std::string* value = field.stringField("integrity")) {
             entry.integrity = *value;
         }
-        if (const std::string* value = field.second.stringField("repo")) {
+        if (const std::string* value = field.stringField("repo")) {
             entry.repo = *value;
         }
-        if (const std::string* value = field.second.stringField("tag")) {
+        if (const std::string* value = field.stringField("tag")) {
             entry.tag = *value;
         }
-        if (const std::string* value = field.second.stringField("asset")) {
+        if (const std::string* value = field.stringField("asset")) {
             entry.asset = *value;
         }
-        if (const std::string* value = field.second.stringField("source")) {
+        if (const std::string* value = field.stringField("source")) {
             entry.source = *value;
         }
-        if (const std::string* value = field.second.stringField("kind")) {
+        if (const std::string* value = field.stringField("kind")) {
             entry.kind = *value;
         }
-        if (const std::string* value = field.second.stringField("target")) {
+        if (const std::string* value = field.stringField("target")) {
             entry.target = *value;
         }
         out.push_back(std::move(entry));

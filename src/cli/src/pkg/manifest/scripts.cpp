@@ -108,15 +108,16 @@ PackageScript findPackageScript(const std::string& name) {
         return result;
     }
 
-    for (const auto& entry : scripts->object) {
-        if (entry.first != name) continue;
-        if (!entry.second.isString() || entry.second.string.empty()) {
+    for (std::size_t i = 0; i < scripts->keys.size(); ++i) {
+        if (scripts->keys[i] != name) continue;
+        const JsonValue& value = scripts->values[i];
+        if (!value.isString() || value.string.empty()) {
             result.error = (result.root / "package.json").string() +
                            ": 'scripts." + name +
                            "' must be a non-empty command string";
             return result;
         }
-        result.command = entry.second.string;
+        result.command = value.string;
         result.found = true;
         return result;
     }

@@ -228,7 +228,7 @@ int installDependencies(const CliOptions& opt, const fs::path& projectRoot,
         return kExitCompileError;
     }
     const JsonValue* deps = manifest.find("dependencies");
-    if (deps == nullptr || !deps->isObject() || deps->object.empty()) {
+    if (deps == nullptr || !deps->isObject() || deps->keys.empty()) {
         std::fprintf(stderr, "cp3c: nothing to install (no dependencies in %s)\n",
                      (projectRoot / "package.json").string().c_str());
         return kExitSuccess;
@@ -238,27 +238,29 @@ int installDependencies(const CliOptions& opt, const fs::path& projectRoot,
     DependencyContext context{opt, projectRoot, lock};
     int linked = 0;
     int failures = 0;
-    for (const auto& dep : deps->object) {
-        const LockEntry* existing = findLockEntry(lock, dep.first);
+    for (std::size_t i = 0; i < deps->keys.size(); ++i) {
+        const std::string& depName = deps->keys[i];
+        const JsonValue& depValue = deps->values[i];
+        const LockEntry* existing = findLockEntry(lock, depName);
         if (existing != nullptr && isLinkEntry(*existing)) {
             if (!opt.json) {
                 std::fprintf(stderr,
                              "cp3c: '%s' is linked; leaving the link in place\n",
-                             dep.first.c_str());
+                             depName.c_str());
             }
             ++linked;
             continue;
         }
-        if (dep.second.type != JsonValue::Type::String) {
+        if (depValue.type != JsonValue::Type::String) {
             std::fprintf(stderr,
                          "cp3c: cannot install '%s': dependency values must be "
                          "a file: path or a GitHub URL in this build\n",
-                         dep.first.c_str());
+                         depName.c_str());
             ++failures;
             continue;
         }
         LockEntry entry;
-        if (installDependency(dep.first, dep.second.string, context, entry)) {
+        if (installDependency(depName, depValue.string, context, entry)) {
             if (!opt.json) reportInstalled(entry, false);
             installed.push_back(entry);
         } else {
@@ -283,7 +285,7 @@ int installDependencies(const CliOptions& opt, const fs::path& projectRoot,
     }
     if (failures > 0) {
         std::fprintf(stderr, "cp3c: %d of %zu dependencies could not be installed\n",
-                     failures, deps->object.size());
+                     failures, deps->keys.size());
         return kExitCompileError;
     }
     return kExitSuccess;

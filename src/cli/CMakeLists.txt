@@ -124,7 +124,9 @@ set(CP3_DOCS_HEADER_TMP "${CP3_DOCS_HEADER}.tmp")
 file(WRITE "${CP3_DOCS_HEADER_TMP}"
     "#pragma once\n#include <string_view>\nnamespace cp3::cli::docs {\n"
     "struct Entry { std::string_view slug, title, chapter, markdown; };\n"
-    "inline constexpr Entry kEntries[] = {\n")
+    # The tables are `const`, not `constexpr`: clang 21's constexpr step limit
+    # is hit while constructing string_view from the large embedded literals.
+    "inline const Entry kEntries[] = {\n")
 foreach(CP3_DOC IN LISTS CP3_DOCS_MARKDOWN)
     file(READ "${CP3_DOC}" CP3_DOC_TEXT)
     string(REGEX MATCH "^---[\r\n]+title: *([^\r\n]+)[\r\n]+chapter: *([^\r\n]+)[\r\n]+---[\r\n]+"
@@ -153,7 +155,7 @@ string(SHA256 CP3_VIEWER_HASH "${CP3_DOCS_VIEWER_HTML}")
 string(SUBSTRING "${CP3_VIEWER_HASH}" 0 12 CP3_VIEWER_HASH)
 set(CP3_VIEWER_DELIM "CP3V${CP3_VIEWER_HASH}")
 file(APPEND "${CP3_DOCS_HEADER_TMP}"
-    "};\ninline constexpr std::string_view kViewerHtml = R\"${CP3_VIEWER_DELIM}(${CP3_DOCS_VIEWER_HTML})${CP3_VIEWER_DELIM}\";\n"
+    "};\ninline const std::string_view kViewerHtml = R\"${CP3_VIEWER_DELIM}(${CP3_DOCS_VIEWER_HTML})${CP3_VIEWER_DELIM}\";\n"
     "}  // namespace cp3::cli::docs\n")
 execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_if_different
     "${CP3_DOCS_HEADER_TMP}" "${CP3_DOCS_HEADER}"

@@ -13,6 +13,7 @@
 // =============================================================================
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -28,7 +29,12 @@ struct JsonValue {
     double number = 0.0;
     std::string string;
     std::vector<JsonValue> array;
-    std::vector<std::pair<std::string, JsonValue>> object;
+    // Object members, kept as parallel arrays: `keys[i]` names `values[i]`.
+    // Insertion order is preserved. A vector of pair<string, JsonValue> cannot
+    // be declared here - instantiating std::pair with the still-incomplete
+    // JsonValue trips a type-trait static_assert in libstdc++ 15 under clang.
+    std::vector<std::string> keys;
+    std::vector<JsonValue> values;
 
     bool isNull() const noexcept { return type == Type::Null; }
     bool isObject() const noexcept { return type == Type::Object; }

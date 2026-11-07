@@ -310,11 +310,11 @@ void writeValue(const Json& value, std::string& out) {
             break;
         case Json::Kind::Object:
             out.push_back('{');
-            for (std::size_t i = 0; i < value.members.size(); ++i) {
+            for (std::size_t i = 0; i < value.keys.size(); ++i) {
                 if (i != 0) out.push_back(',');
-                writeString(value.members[i].first, out);
+                writeString(value.keys[i], out);
                 out.push_back(':');
-                writeValue(value.members[i].second, out);
+                writeValue(value.values[i], out);
             }
             out.push_back('}');
             return;
@@ -330,20 +330,21 @@ void writeValue(const Json& value, std::string& out) {
 }  // namespace
 
 const Json* Json::find(std::string_view key) const {
-    for (const auto& member : members) {
-        if (member.first == key) return &member.second;
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        if (keys[i] == key) return &values[i];
     }
     return nullptr;
 }
 
 Json& Json::set(std::string key, Json value) {
-    for (auto& member : members) {
-        if (member.first == key) {
-            member.second = std::move(value);
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        if (keys[i] == key) {
+            values[i] = std::move(value);
             return *this;
         }
     }
-    members.emplace_back(std::move(key), std::move(value));
+    keys.push_back(std::move(key));
+    values.push_back(std::move(value));
     return *this;
 }
 
