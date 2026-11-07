@@ -246,7 +246,11 @@ Promise<void> Router::dispatch(HttpRequest& req, HttpResponse& res, Next& next) 
         }
         StringMap merged = ::cp3::runtime::collections::makeMap<std::string, std::string>();
         if (options_.mergeParams && parent) {
-            for (const auto& entry : *parent->entries()) merged->set(entry.first, entry.second);
+            // `entries()` returns an owning `Array` (a `Ref`); keep it in a
+            // named local so the vector outlives the loop (no deref of a
+            // prvalue Ref).
+            const auto entries = parent->entries();
+            for (const auto& entry : *entries) merged->set(entry.first, entry.second);
         }
         for (auto& [name, value] : captures) merged->set(name, value);
         req.setParams(merged);

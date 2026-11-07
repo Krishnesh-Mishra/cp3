@@ -290,7 +290,10 @@ std::string buildRequest(const FetchOp& op) {
     // `Name: value` line per entry. The framing-owned names stay ours: a user
     // override of host/content-length/connection would malform the request.
     if (op.init.headers) {
-        for (const auto& [name, value] : *op.init.headers->entries()) {
+        // `entries()` returns an owning `Array` (a `Ref`); keep it in a named
+        // local so the vector outlives the loop (no deref of a prvalue Ref).
+        const auto entries = op.init.headers->entries();
+        for (const auto& [name, value] : *entries) {
             const std::string lowered = lowerAscii(name);
             if (lowered == "host" || lowered == "content-length" ||
                 lowered == "connection") {

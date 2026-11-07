@@ -203,7 +203,10 @@ inline std::string requestHeader(const HttpRequest& req, const std::string& name
     if (!req.headers) return "";
     std::string wanted = name;
     for (char& c : wanted) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    for (const auto& entry : *req.headers->entries()) {
+    // `entries()` returns an owning `Array` (a `Ref`); keep it in a named
+    // local so the vector outlives the loop (no deref of a prvalue Ref).
+    const auto entries = req.headers->entries();
+    for (const auto& entry : *entries) {
         std::string key = entry.first;
         for (char& c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (key == wanted) return entry.second;

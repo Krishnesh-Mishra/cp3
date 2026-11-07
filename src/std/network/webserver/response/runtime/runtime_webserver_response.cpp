@@ -167,7 +167,10 @@ HttpResponse& HttpResponse::set(
 
 HttpResponse& HttpResponse::set(const StringMap& headers) {
     if (impl_ && !impl_->finished && headers) {
-        for (const auto& [k, v] : *headers->entries()) setHeader(*impl_, k, v);
+        // `entries()` returns an owning `Array` (a `Ref`); keep it in a named
+        // local so the vector outlives the loop (no deref of a prvalue Ref).
+        const auto entries = headers->entries();
+        for (const auto& [k, v] : *entries) setHeader(*impl_, k, v);
     }
     return *this;
 }

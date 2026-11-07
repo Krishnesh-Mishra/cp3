@@ -236,14 +236,18 @@ bool jsonValueForType(const Type& t, const std::string& text, std::string& out,
             const std::string suffix = std::to_string(depth);
             const std::string item = "cp3_e" + suffix;
             const std::string items = "cp3_items" + suffix;
+            const std::string src = "cp3_src" + suffix;
             std::string converted;
             if (!jsonValueForType(elem, item, converted, depth + 1)) {
                 return false;
             }
+            // Bind the array handle to a name: `*(<Ref>)` in a range-for would
+            // bind the loop to storage owned by a temporary Ref (dangling).
             out = "([&]{ std::vector<::cp3::runtime::json::Value> " + items +
-                  "; if (" + text + ") { " + items + ".reserve((" + text +
-                  ")->size()); for (const auto& " + item + " : *(" + text +
-                  ")) " + items + ".push_back(" + converted + "); } return "
+                  "; const auto " + src + " = (" + text +
+                  "); if (" + src + ") { " + items + ".reserve(" + src +
+                  "->size()); for (const auto& " + item + " : *" + src +
+                  ") " + items + ".push_back(" + converted + "); } return "
                   "::cp3::runtime::json::arrayValue(std::move(" + items +
                   ")); }())";
             return true;

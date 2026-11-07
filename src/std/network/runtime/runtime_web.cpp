@@ -30,7 +30,12 @@ std::string lowerAscii(std::string text) {
 
 // --- Headers -----------------------------------------------------------------
 Headers::Headers(const StringMap& map) {
-    if (map) for (const auto& [k, v] : *map->entries()) entries_.emplace_back(k, v);
+    if (map) {
+        // `entries()` returns an owning `Array` (a `Ref`); keep it in a named
+        // local so the vector outlives the loop (no deref of a prvalue Ref).
+        const auto entries = map->entries();
+        for (const auto& [k, v] : *entries) entries_.emplace_back(k, v);
+    }
 }
 Headers::Headers(std::vector<std::pair<std::string, std::string>> pairs)
     : entries_(std::move(pairs)) {}

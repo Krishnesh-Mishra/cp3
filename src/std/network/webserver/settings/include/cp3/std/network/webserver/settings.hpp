@@ -732,7 +732,10 @@ inline std::string headerValue(const network::StringMap& headers,
     // must not run on server-built maps (iterating them crashed).
     const std::string wanted = toLowerAscii(name);
     if (auto direct = headers->get(wanted)) return *direct;
-    for (const auto& entry : *headers->entries()) {
+    // `entries()` returns an owning `Array` (a `Ref`); keep it in a named
+    // local so the vector outlives the loop (no deref of a prvalue Ref).
+    const auto entries = headers->entries();
+    for (const auto& entry : *entries) {
         if (toLowerAscii(entry.first) == wanted) return entry.second;
     }
     return "";

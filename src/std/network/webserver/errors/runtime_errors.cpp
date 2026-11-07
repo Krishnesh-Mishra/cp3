@@ -121,7 +121,10 @@ std::string fileContentType(const std::string& path) {
 
 void applyExtraHeaders(HttpResponse& res, StringMap const& headers) {
     if (!headers) return;
-    for (auto const& [k, v] : *headers->entries()) res.header(k, v);
+    // `entries()` returns an owning `Array` (a `Ref`); keep it in a named
+    // local so the vector outlives the loop (no deref of a prvalue Ref).
+    const auto entries = headers->entries();
+    for (auto const& [k, v] : *entries) res.header(k, v);
 }
 
 }  // namespace

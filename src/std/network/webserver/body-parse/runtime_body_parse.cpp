@@ -333,7 +333,10 @@ bool isUrlEncodedContentType(const std::string& contentTypeHeader) {
 std::string headerValue(const HttpRequest& req, const std::string& name) {
     if (!req.headers) return std::string();
     const std::string wanted = lowerAscii(name);
-    for (const auto& entry : *req.headers->entries()) {
+    // `entries()` returns an owning `Array` (a `Ref`); keep it in a named
+    // local so the vector outlives the loop (no deref of a prvalue Ref).
+    const auto entries = req.headers->entries();
+    for (const auto& entry : *entries) {
         if (lowerAscii(entry.first) == wanted) return entry.second;
     }
     return std::string();

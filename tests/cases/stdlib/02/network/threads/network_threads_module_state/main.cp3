@@ -3,7 +3,10 @@ import { fetch, createServer } from "std/network";
 
 let hits = 0;
 
-const app = createServer({ threads: 2 });
+// Module-level state must survive across requests within one server process.
+// `threads: 1` so the kernel's SO_REUSEPORT hashing cannot route the two
+// requests to different workers (the counter is per-process by design).
+const app = createServer({ threads: 1 });
 app.get("/hit", (req, res) => {
   hits = hits + 1;
   res.json(hits);
