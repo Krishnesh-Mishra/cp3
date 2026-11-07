@@ -33,7 +33,10 @@ inline const NativePackage kEnvNativePackage{
       {"third_party/libsodium/lib/windows-x64",
        "third_party/xxhash/lib/windows-x64"},
       {"-lsodium", "-lxxhash"}},
-     {"linux-x64", {"third_party/libsodium/lib/linux-x64"}, {"-lsodium"}},
+     {"linux-x64",
+      {"third_party/libsodium/lib/linux-x64",
+       "third_party/xxhash/lib/linux-x64"},
+      {"-lsodium", "-lxxhash"}},
      {"linux-arm64", {"third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
 };
 

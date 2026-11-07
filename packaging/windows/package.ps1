@@ -242,19 +242,29 @@ foreach ($family in (Get-ChildItem -LiteralPath $stdDir -Directory | Sort-Object
     }
 }
 if ($thirdPartyTrees.Count -eq 0) { Fail "no third_party tree referenced by any native row; the rows were probably not read" }
+# Core-language backends live in the CLI tree, not src/std: native_regex.hpp
+# selects PCRE2. Its runtime unit (src/runtime/src/core/regex.cpp) is already
+# staged with src\runtime above; only the vendored tree needs collecting.
+$coreRow = Join-Path $RepoRoot "src\cli\src\detail\native\native_regex.hpp"
+if (-not (Test-Path -LiteralPath $coreRow)) { Fail "core native row missing: $coreRow" }
+$coreText = Get-Content -LiteralPath $coreRow -Raw
+foreach ($match in [regex]::Matches($coreText, '"third_party/([^"/]+)[^"]*"')) {
+    $thirdPartyTrees.Add("third_party\" + $match.Groups[1].Value) | Out-Null
+}
 foreach ($tree in $thirdPartyTrees) {
     Copy-Tree (Join-Path $RepoRoot $tree) (Join-Path $stage $tree) ("vendored tree " + $tree)
     Info "vendored: $tree"
 }
 foreach ($relative in @(
     'third_party\uWebSockets\include\App.h',
-    'third_party\libuv\include\uv.h'
+    'third_party\libuv\include\uv.h',
+    'third_party\pcre2\include\pcre2.h'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $stage $relative) -PathType Leaf)) {
         Fail "staged native backend header is missing: '$relative'"
     }
 }
-foreach ($vendor in @("libsodium", "libuv", "uWebSockets")) {
+foreach ($vendor in @("libsodium", "libuv", "uWebSockets", "xxhash", "simdutf", "pcre2")) {
     $libDir = Join-Path $stage "third_party\$vendor\lib"
     if (Test-Path -LiteralPath $libDir) {
         Get-ChildItem -LiteralPath $libDir -Directory -ErrorAction SilentlyContinue |
@@ -322,7 +332,7 @@ Layout
   bin\*.dll        MinGW runtime DLLs the compiler needs to start
   include\         header trees the compiler passes to Clang
   src\             runtime units compiled into every cp3 program
-  third_party\     vendored static libraries (std/network, std/crypto)
+  third_party\     vendored static libraries (std/network, std/crypto, std/hash, std/text, regex)
   share\vscode\    bundled VS Code extension, when built
   manifest.json    every component with its SHA-256
 

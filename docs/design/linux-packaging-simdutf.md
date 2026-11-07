@@ -7,6 +7,13 @@ change). What lands now is the reproducible recipe, the script that
 runs it on a Linux host, the placeholder layout, and the exact
 MANIFEST / `native.hpp` rows to apply once the archives exist.
 
+> **Update 2026-11-07:** the `linux-x64` archive now exists.
+> `libsimdutf.a` was built in WSL2 Ubuntu (783928 bytes, SHA-256
+> `27B5E746...042FE11`; full value in MANIFEST.md), the
+> `src/std/text/native.hpp` `linux-x64` row is wired, and the package
+> script stages the linux-x64 archive. `linux-arm64` remains pending and
+> keeps its placeholder README with no platform row.
+
 Scope of this change (only these paths were touched):
 
 - `third_party/simdutf/build-linux-simdutf.sh` (new) — Linux build

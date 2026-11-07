@@ -202,6 +202,21 @@ for family in "$ROOT"/src/std/*; do
 done
 info "std runtime units: $family_source_count files"
 
+# Core-language backends live in the CLI tree, not src/std: native_regex.hpp
+# selects PCRE2. Its runtime unit (src/runtime/src/core/regex.cpp) is already
+# staged with src/runtime/src above; collect the vendored tree it links.
+core_row="$ROOT/src/cli/src/detail/native/native_regex.hpp"
+[ -f "$core_row" ] || fail "missing core native row '$core_row'"
+while IFS= read -r ref; do
+    case "$ref" in
+        third_party/*)
+            lib=${ref#third_party/}
+            lib=${lib%%/*}
+            third_party_trees="$third_party_trees $lib"
+            ;;
+    esac
+done < <(grep -oE '"third_party/[^"]+"' "$core_row" | tr -d '"' | sort -u)
+
 # --- third_party -------------------------------------------------------------
 if [ -z "$third_party_trees" ]; then
     fail "no third_party tree referenced by any native row; the rows were probably not read"
@@ -218,13 +233,18 @@ missing_vendor=0
 for archive in \
     "$THIRD_PARTY/libsodium/lib/linux-$ARCH/libsodium.a" \
     "$THIRD_PARTY/libuv/lib/linux-$ARCH/libuv.a" \
-    "$THIRD_PARTY/uWebSockets/lib/linux-$ARCH/libuSockets.a"; do
+    "$THIRD_PARTY/uWebSockets/lib/linux-$ARCH/libuSockets.a" \
+    "$THIRD_PARTY/xxhash/lib/linux-$ARCH/libxxhash.a" \
+    "$THIRD_PARTY/simdutf/lib/linux-$ARCH/libsimdutf.a" \
+    "$THIRD_PARTY/pcre2/lib/linux-$ARCH/libpcre2-8.a"; do
     if [ ! -f "$archive" ]; then
         warn "missing Linux $ARCH native archive: $archive"
         missing_vendor=1
     fi
 done
-for vendor in libsodium libuv uWebSockets; do
+# Drop every other platform's archives (and the Windows COFF archives kept at
+# the vendor lib root for Windows builds): the package is for linux-$ARCH only.
+for vendor in libsodium libuv uWebSockets xxhash simdutf pcre2; do
     libdir="$STAGE/third_party/$vendor/lib"
     [ -d "$libdir" ] || continue
     find "$libdir" -mindepth 1 -maxdepth 1 -type d \
@@ -232,8 +252,9 @@ for vendor in libsodium libuv uWebSockets; do
     find "$libdir" -mindepth 1 -maxdepth 1 -type f -name '*.a' -delete
 done
 if [ "$missing_vendor" -ne 0 ]; then
-    warn "std/crypto and std/network will not link in this package."
-    warn "Build them with: bash third_party/build-linux.sh --arch $ARCH"
+    warn "programs using the affected std modules will not link in this package."
+    warn "Build the archives with: bash third_party/build-linux.sh --arch $ARCH"
+    warn "(PCRE2: see third_party/pcre2/build-linux.sh once added)"
 fi
 
 # --- optional VS Code extension ----------------------------------------------
@@ -262,7 +283,7 @@ Layout
   bin/cp3         the cp3 command: run, build, check, init, doctor, ...
   include/        header trees the compiler passes to Clang
   src/            runtime units compiled into every cp3 program
-  third_party/    vendored static libraries (std/network, std/crypto)
+  third_party/    vendored static libraries (std/network, std/crypto, std/hash, std/text, regex)
   share/vscode/   bundled VS Code extension, when present
   manifest.json   every component with its SHA-256
 

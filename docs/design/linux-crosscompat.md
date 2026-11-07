@@ -9,6 +9,16 @@ Method: read every `src/std/**/native.hpp`, listed `third_party/*/lib/**`
 on disk, and cross-checked `third_party/MANIFEST.md` (Pins / Delivered
 artifacts / Ledger F). No archive was built or copied.
 
+> **Update 2026-11-07:** the follow-up this audit called for has landed.
+> `third_party/xxhash/lib/linux-x64/libxxhash.a` and
+> `third_party/simdutf/lib/linux-x64/libsimdutf.a` now exist (ELF x64; byte
+> counts and SHA-256 in MANIFEST.md), the `linux-x64` rows are wired in
+> `std/hash`, `std/text` and `std/collections`, and PCRE2 gained a
+> `linux-x64` archive and row alongside the existing Windows one. The
+> tables and verdicts below describe the audit's original state; only the
+> `linux-arm64` xxhash/simdutf archives remain missing (their rows stay
+> absent so those targets fail loudly).
+
 ## Missing-triples table (per library)
 
 | Library (pin) | windows-x64 archive | linux-x64 archive | linux-arm64 archive | Missing triples |

@@ -14,6 +14,14 @@ without it).
 Every command below was actually run; the verbatim step scripts live in
 build/scratch/vend/scripts/ and third_party/build.ps1 re-runs the whole flow.
 
+Linux x64 archives are recorded below next to the Windows originals. The
+xxhash, simdutf and PCRE2 linux-x64 archives were built on 2026-11-07 in WSL2
+Ubuntu (GCC 15.2.0, cmake 4.2.3, GNU ar) with the vendored build scripts; the
+libsodium/libuv/uSockets linux-x64 archives were built earlier with the same
+toolchain family. linux-arm64 archives exist for libsodium/libuv/uSockets only;
+the xxhash/simdutf linux-arm64 directories still carry placeholders and their
+platform rows deliberately do not exist, so an arm64 target fails loudly.
+
 ## Pins
 
 | library | repo URL | tag | commit (full SHA) |
@@ -56,6 +64,11 @@ stored by target architecture under each vendor's `lib/linux-*/` directory.
 | uWebSockets/lib/linux-arm64/libuSockets.a | 63024 | 51ED1EB61035C09F3D525A30019928169DAEF5B32B830EFFF625617DEE9A93BA |
 | uWebSockets/lib/libuWebSockets.a | 1438 | EB0D1543E48D0F3077BE44104532502AA5C65E8E632564F24973B9384F9ECBF5 |
 | pcre2/lib/libpcre2-8.a | 574408 | 79EF3EBB2F088D5FEC2B96035F2EFB173A18109C47523EF7976113ED7AC2E7E4 |
+| pcre2/lib/linux-x64/libpcre2-8.a | 635630 | AA643CEEB27B1B5550A6147EF0AB54E58DC33E951491570E8A6D1C6F645A86F6 |
+| simdutf/lib/windows-x64/libsimdutf.a | 821310 | 56050F12DCC7A07F627F36101A4213F2404CB6F4E708586201AA217E55D52741 |
+| simdutf/lib/linux-x64/libsimdutf.a | 783928 | 27B5E7465DB60E146EC1B037E78F9A78711B44AB840D666AEEE8C3FA2042FE11 |
+| xxhash/lib/windows-x64/libxxhash.a | 66088 | 473DA47FD46228A7A2E166078096493AA581B45E46BE9B43E371ED51F7C229DD |
+| xxhash/lib/linux-x64/libxxhash.a | 67096 | 3DA25C3EDB7660788D0DE4E6905CD04EFBABFC1F0D6FD57AE6FF19535CB15B83 |
 
 Rebuilds are not guaranteed byte-identical (ar archives record object file
 timestamps); the SHA-256 values above identify exactly the delivered bytes.
@@ -323,17 +336,17 @@ Notes:
 > Status: 5 vendored (unordered_dense, fast_float, simdutf, moodycamel, XXHash).
 > No compress/miniz (lead: no std/compress lib), no fmt (logger stays hand-written),
 > no Boost.Lockfree (moodycamel chosen), no wyhash (XXH3 chosen), CRC32C hand-rolled stays.
-> Pins below are real (cloned at tags); VERSION.txt written; windows-x64 archives built
-> for compiled libs (xxhash, simdutf); linux-x64/arm64 archives follow the same single-TU
-> pattern (documented in build.ps1 pins). Detail: docs/design/internal-libs.md.
+> Pins below are real (cloned at tags); VERSION.txt written; windows-x64 and
+> linux-x64 archives built for compiled libs (xxhash, simdutf); linux-arm64
+> archives remain pending and fail loudly at native-package resolution.
 
 | library | upstream (candidate) | kind | internal hot path (current stand-in) | status |
 | --- | --- | --- | --- | --- |
 | ankerl::unordered_dense | https://github.com/martinus/unordered_dense.git v5.3.3 7c58a8b7a48e790fe72f6508eb3b46317cbba9d5 | header-only (MIT) | `std/collections` Map/Set, `std/io` fd table | VENDORED (headers) |
 | fast_float | https://github.com/lemire/fast_float.git master 6a3fabc342d4d149722fc2316babdcf24fdf8fb9 | header-only (Apache-2.0) | `std/json`/`std/env`/`std/url` number parse | VENDORED (headers) |
-| simdutf | https://github.com/simdutf/simdutf.git v6.1.0 7852150e454ebacbf7e65cbf2c5e3feac5e660ec | compiled static (Apache-2.0) | `std/text` decode, `std/string` `charAt` | VENDORED (windows-x64 .a) |
+| simdutf | https://github.com/simdutf/simdutf.git v6.1.0 7852150e454ebacbf7e65cbf2c5e3feac5e660ec | compiled static (Apache-2.0) | `std/text` decode, `std/string` `charAt` | VENDORED (windows-x64 + linux-x64 .a) |
 | moodycamel concurrentqueue | https://github.com/cameron314/concurrentqueue.git v1.0.4 6dd38b8a1dbaa7863aa907045f32308a56a6ff5d | header-only (BSD-2-Clause) | no consumer yet (`Channel` deferred; `std/log` removed) | VENDORED (headers) |
-| XXHash (XXH32/64/3) | https://github.com/Cyan4973/xxHash.git v0.8.3 e626a72bc2321cd320e953a0ccf1584cad60f363 | compiled static (BSD-2-Clause) | `std/hash` xxhash64, Map/Set bucket (XXH3) | VENDORED (windows-x64 .a) |
+| XXHash (XXH32/64/3) | https://github.com/Cyan4973/xxHash.git v0.8.3 e626a72bc2321cd320e953a0ccf1584cad60f363 | compiled static (BSD-2-Clause) | `std/hash` xxhash64, Map/Set bucket (XXH3) | VENDORED (windows-x64 + linux-x64 .a) |
 | miniz / fmt / Boost.Lockfree / wyhash / CRC32C | — | — | — | DEFERRED per lead (no compress, logger stays, moodycamel over Boost, XXH3 over wyhash, CRC32C hand-rolled) |
 | libsodium seed / CSPRNG | already vendored (see Pins) | compiled static (ISC) | `std/crypto` `randombytes_buf`/`sodium_init` — PRESENT, nothing to add | PRESENT |
 

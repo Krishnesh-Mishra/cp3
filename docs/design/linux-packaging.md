@@ -7,6 +7,13 @@ doc plus the files below are the complete deliverable; the archives,
 their bytes/SHA-256, and the `native.hpp` wiring are follow-up steps
 that must happen on (or cross-compiling for) Linux.
 
+> **Update 2026-11-07:** the follow-up landed. `libxxhash.a` for
+> `linux-x64` was built in WSL2 Ubuntu (67096 bytes, SHA-256
+> `3DA25C3E...5CB15B83`; full value in MANIFEST.md), the placeholder
+> README now records the real archive, and the `linux-x64` rows are wired
+> in `src/std/hash/native.hpp` and `src/std/collections/native.hpp`.
+> `linux-arm64` still has no archive and no row.
+
 ## Files created / edited in this change
 
 | file | action |
