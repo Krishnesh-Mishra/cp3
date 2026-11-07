@@ -55,7 +55,17 @@ inline double random() {
 }
 
 inline double sqrt(double x) { return std::sqrt(x); }
-inline double cbrt(double x) { return std::cbrt(x); }
+inline double cbrt(double x) {
+    // Toolchains differ by an ulp on exact integer roots (LLVM expands
+    // llvm.cbrt to a polynomial that lands cbrt(27) on 3.0000000000000004
+    // where glibc/MSVC libm return exactly 3). JavaScript promises the exact
+    // root; when the cube of the nearest integer equals the input exactly,
+    // snap to it.
+    const double root = std::cbrt(x);
+    const double nearest = std::nearbyint(root);
+    if (nearest * nearest * nearest == x) return nearest;
+    return root;
+}
 inline double pow(double base, double exponent) {
     // Squaring is exactly the same IEEE-754 operation as the integral power
     // case and avoids dispatching to the general-purpose libm pow routine in
