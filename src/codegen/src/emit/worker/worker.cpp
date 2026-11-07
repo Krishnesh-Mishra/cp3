@@ -273,8 +273,13 @@ void Generator::emitWorkerEntryBody(const ArrowFunction& arrow, const Type& in,
     pushScope();
     const std::string savedReturn = currentReturn_;
     const bool savedInAsync = inAsyncBody_;
+    const std::uint32_t savedFrame = currentFrameId_;
     currentReturn_ = "void";
     inAsyncBody_ = false;
+    // Match the closure/arrow emitters (closures.cpp sets currentFrameId_ to
+    // the arrow's frame), so `let` bindings in the worker entry promote to
+    // `Cell<T>` when they are captured and reassigned by a nested listener.
+    currentFrameId_ = arrow.nodeId;
     const std::string threadName = entryParamName(arrow);
     if (!threadName.empty()) {
         declare(threadName, channelHandleType(true, in, outType, namesp_));
@@ -286,6 +291,7 @@ void Generator::emitWorkerEntryBody(const ArrowFunction& arrow, const Type& in,
     }
     inAsyncBody_ = savedInAsync;
     currentReturn_ = savedReturn;
+    currentFrameId_ = savedFrame;
     popScope();
     --nestingDepth_;
 }

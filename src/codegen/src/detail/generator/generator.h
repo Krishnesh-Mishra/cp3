@@ -460,9 +460,11 @@ private:
                                detail::WorkerSendSurface surface);
     std::string workerTerminateText(const CallExpr& c, const std::string& recv);
     std::string workerListenerText(const ArrowFunction& arrow, const Type& direction,
-                                   const std::string& ownerNS, bool error);
+                                   const std::string& ownerNS, bool error,
+                                   bool workerSide);
     std::string workerListenerLambda(const ArrowFunction& arrow,
-                                     const std::string& paramType, const Type& bound);
+                                     const std::string& paramType,
+                                     const Type& bound, bool workerSide);
     std::string workerPayloadText(const Type& t, const std::string& ownerNS) const;
     std::optional<Type> workerSendArgumentType(const Expr& arg) const;
     bool workerPayloadAccepts(const Type& expected, const Type& actual,

@@ -87,7 +87,6 @@ std::string Generator::workerOnText(const CallExpr& c, const std::string& recv,
                                     const Type& direction,
                                     const std::string& ownerNS,
                                     bool workerSide) {
-    (void)workerSide;
     if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1] ||
         c.arguments[0]->kind != NodeKind::StringLiteral ||
         c.arguments[1]->kind != NodeKind::ArrowFunction) {
@@ -104,7 +103,7 @@ std::string Generator::workerOnText(const CallExpr& c, const std::string& recv,
     }
     const auto& arrow = static_cast<const ArrowFunction&>(*c.arguments[1]);
     const std::string listener =
-        workerListenerText(arrow, direction, ownerNS, event == "error");
+        workerListenerText(arrow, direction, ownerNS, event == "error", workerSide);
     return "(" + recv + ")." + (event == "error" ? "onError" : "onMessage") +
            "(" + listener + ")";
 }

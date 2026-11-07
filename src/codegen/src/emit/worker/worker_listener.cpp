@@ -101,7 +101,8 @@ void Generator::workerListenerPattern(const Parameter& p, const Type& payload,
 std::string Generator::workerListenerText(const ArrowFunction& arrow,
                                           const Type& direction,
                                           const std::string& ownerNS,
-                                          bool error) {
+                                          bool error,
+                                          bool workerSide) {
     if (arrow.params.size() > 1) {
         reportWorkerCode(arrow, diagcode::kWorkerHandleMember,
                          "a worker listener takes at most one parameter");
@@ -109,10 +110,10 @@ std::string Generator::workerListenerText(const ArrowFunction& arrow,
     }
     if (error) {
         return workerListenerLambda(arrow, "::cp3::runtime::Thrown",
-                                    Type::unknown());
+                                    Type::unknown(), workerSide);
     }
     if (direction.isVoid()) {
-        return workerListenerLambda(arrow, std::string(), Type::undefined());
+        return workerListenerLambda(arrow, std::string(), Type::undefined(), workerSide);
     }
     const std::string cpp = workerPayloadText(direction, ownerNS);
     if (cpp.empty()) {
@@ -121,12 +122,13 @@ std::string Generator::workerListenerText(const ArrowFunction& arrow,
                          "value type");
         return "0.0";
     }
-    return workerListenerLambda(arrow, cpp, direction);
+    return workerListenerLambda(arrow, cpp, direction, workerSide);
 }
 
 std::string Generator::workerListenerLambda(const ArrowFunction& arrow,
                                             const std::string& paramType,
-                                            const Type& bound) {
+                                            const Type& bound,
+                                            bool workerSide) {
     ++nestingDepth_;
     pushScope();
     const std::string savedReturn = currentReturn_;
@@ -186,7 +188,17 @@ std::string Generator::workerListenerLambda(const ArrowFunction& arrow,
     currentReturn_ = savedReturn;
     popScope();
     --nestingDepth_;
-    return "[&](" + paramList + ") {\n" + body + "}";
+    // A listener lives in the channel's listener vector until terminate.
+    // The worker-side entry returns immediately, so its captures must be
+    // copied (`[=] mutable`): a reference capture would dangle; `thread`
+    // captures fine because the facade is copyable. The main-side handle is
+    // non-copyable, and its lifetime already outlives the invocations (the
+    // listener's lifetime is the handle's; `terminate()` closes the ports
+    // before the handle dies), so capture by reference there.
+    if (workerSide) {
+        return "[=] (" + paramList + ") mutable {\n" + body + "}";
+    }
+    return "[&] (" + paramList + ") {\n" + body + "}";
 }
 
 }  // namespace cp3

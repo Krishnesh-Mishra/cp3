@@ -96,8 +96,11 @@ public:
     explicit ThreadHandle(std::shared_ptr<WorkerChannel<In, Out>> channel)
         : channel_(std::move(channel)) {}
 
-    ThreadHandle(const ThreadHandle&) = delete;
-    ThreadHandle& operator=(const ThreadHandle&) = delete;
+    // Copyable: the facade holds only the channel handle, so listener boxes
+    // that capture `thread` share the channel and keep its data alive,
+    // exactly as the channel's own semantics require (spec §13).
+    ThreadHandle(const ThreadHandle&) = default;
+    ThreadHandle& operator=(const ThreadHandle&) = default;
 
     void onMessage(MessageListener listener) {
         channel_->toWorker().onMessage(std::move(listener));
