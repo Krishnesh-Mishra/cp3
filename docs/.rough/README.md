@@ -10,7 +10,7 @@ exception, D66), and **new rough work, notes and plans go here too**.
 | --- | --- |
 | `DECISIONS.md` | Binding numbered decisions (`D1…`); wins over the roadmap on any conflict. |
 | `M2-PLAN.md` | The living wave roadmap, open-bug ledger and parked ambiguities. |
-| `STYLE.md` | Code layout, naming and budget rules (enforced by `tools/lint_layout.py`). |
+| `STYLE.md` | Code layout, naming and budget rules (enforced by `vendor/tools/lint_layout.py`). |
 | `ARCHITECTURE.md` | Module map, directory ownership, build rules. |
 | `README (6).md` | The original single-file **language spec** source. |
 | `CLI-README (5).md` | The original **CLI & tooling** spec source. |

@@ -81,7 +81,7 @@ bool tryReadEditorExtension(const fs::path& extensionsDir,
                             EditorExtension& out);
 
 // Bundled VSIX: CP3_ROOT/share/vscode, findCp3Root()/share/vscode, then the
-// checkout's extensions/cp3-vscode/dist. Highest version wins.
+// checkout's dist/extensions/cp3-vscode/dist. Highest version wins.
 VsixInfo findBundledVsix();
 
 // Validates + hashes an explicit --vsix path.

@@ -4,7 +4,7 @@
 // OWNERSHIP: the std/text family (src/std/text/**). Additive to the
 // generated-code ABI (D14): everything is `inline`, header-only, and mirrors
 // the STDLIB docs `TextEncoder` / `TextDecoder` surface one-to-one. The
-// only compiled dependency is simdutf (third_party/simdutf): the generated
+// only compiled dependency is simdutf (vendor/third_party/simdutf): the generated
 // program links `libsimdutf.a` for `windows-x64` via the `std/text` native
 // row (src/std/text/native.hpp), which also adds its include root. When
 // `simdutf.h` is not on the include path the header still compiles and the
@@ -39,7 +39,7 @@
 //     bytes verbatim into a fresh `Uint8Array`: no transcoding, no
 //     normalization, no BOM is added.
 //   * `decode` validates the byte stream with the simdutf fast path
-//     (`simdutf::validate_utf8`, vendored in third_party/simdutf and linked
+//     (`simdutf::validate_utf8`, vendored in vendor/third_party/simdutf and linked
 //     for `windows-x64` by this module's native row) and returns a valid
 //     stream verbatim. A stream simdutf rejects (or a build without
 //     `simdutf.h`) falls back to the hand-written decoder below, which
@@ -68,7 +68,7 @@
 #include "cp3/typed_array.hpp"
 
 // simdutf fast path for `decode` validation. The `std/text` native row
-// (src/std/text/native.hpp) adds `third_party/simdutf/include` and, for
+// (src/std/text/native.hpp) adds `vendor/third_party/simdutf/include` and, for
 // `windows-x64`, links `libsimdutf.a`; programs importing `std/text` get it
 // automatically. `__has_include` keeps this header self-contained when the
 // row's include root is absent: the hand-written loop in `decodeUtf8` is

@@ -12,8 +12,8 @@
 // without regexes keeps compiling the same runtime TUs as before and links no
 // PCRE2 archive (D68 "no cost when unused").
 //
-// Backend: PCRE2 10.49 (third_party/pcre2), pinned static 8-bit build -
-// DECISIONS D70 + third_party/MANIFEST.md "Verified consumer flags".
+// Backend: PCRE2 10.49 (vendor/third_party/pcre2), pinned static 8-bit build -
+// DECISIONS D70 + vendor/third_party/MANIFEST.md "Verified consumer flags".
 // =============================================================================
 #pragma once
 
@@ -21,11 +21,11 @@
 
 namespace cp3::cli::detail {
 
-// Verified against third_party/MANIFEST.md "Verified consumer flags":
-//   compile: -DPCRE2_STATIC=1 -DPCRE2_CODE_UNIT_WIDTH=8 -I third_party/pcre2/include
+// Verified against vendor/third_party/MANIFEST.md "Verified consumer flags":
+//   compile: -DPCRE2_STATIC=1 -DPCRE2_CODE_UNIT_WIDTH=8 -I vendor/third_party/pcre2/include
 //   link:    -L <archive dir> -lpcre2-8
 // The archive directory is per-target: windows-x64 keeps the original
-// third_party/pcre2/lib root, linux-x64 uses third_party/pcre2/lib/linux-x64.
+// vendor/third_party/pcre2/lib root, linux-x64 uses vendor/third_party/pcre2/lib/linux-x64.
 // Keeping the root out of the platform table stops a Linux build from ever
 // picking up the Windows COFF archive. The runtime include root
 // (src/runtime/include, which owns cp3/core/regex.hpp) is always in
@@ -33,14 +33,14 @@ namespace cp3::cli::detail {
 // and the two defines pcre2.h requires at its own include site.
 inline const NativePackage kRegexCoreNativePackage{
     "core/regex",
-    {"third_party/pcre2/include"},
+    {"vendor/third_party/pcre2/include"},
     {"-DPCRE2_STATIC=1", "-DPCRE2_CODE_UNIT_WIDTH=8"},
     {"src/runtime/src/core/regex.cpp"},
     {},
     {},
     {},
-    {{"windows-x64", {"third_party/pcre2/lib"}, {"-lpcre2-8"}},
-     {"linux-x64", {"third_party/pcre2/lib/linux-x64"}, {"-lpcre2-8"}}},
+    {{"windows-x64", {"vendor/third_party/pcre2/lib"}, {"-lpcre2-8"}},
+     {"linux-x64", {"vendor/third_party/pcre2/lib/linux-x64"}, {"-lpcre2-8"}}},
 };
 
 }  // namespace cp3::cli::detail

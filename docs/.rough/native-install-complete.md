@@ -249,7 +249,7 @@ Result: `modules` 41 passed / 0 failed, `types` 124 passed / 0 failed,
 ### 5.5 Diagnostics catalog
 
 ```
-python tools/check_diagnostics.py
+python vendor/tools/check_diagnostics.py
 ```
 
 Result: **0 findings** (77 codes defined, 77 documented). Five codes were
@@ -260,13 +260,13 @@ CP3607 (`kNativeBindingInvalid`), CP3608 (`kNativeBindingStale`), CP3609
 ### 5.6 Layout lint
 
 ```
-python tools/lint_layout.py
+python vendor/tools/lint_layout.py
 ```
 
 Result: **16 errors, 227 warnings** - exactly the base commit's numbers
 (measured on a worktree at `bfcf761`). The errors are all pre-existing
 (`analyzer.h`, `generator.h`, `type_check.cpp`, `cmdCheck`, `runUnit`, ...);
-this branch adds none and removes none. `tools/lint.py` still exits 1 because
+this branch adds none and removes none. `vendor/tools/lint.py` still exits 1 because
 of the pre-existing zero-placeholder gate, as it did before.
 
 ### 5.7 The pre-existing network failures

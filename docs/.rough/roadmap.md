@@ -184,7 +184,7 @@ argument conversions, ABI, content hash and link metadata. Unsupported shapes
 are rejected with named diagnostics - never dropped silently - and are listed
 in both files.
 
-The libclang **headers** are vendored (`third_party/clang-c`, pinned
+The libclang **headers** are vendored (`vendor/third_party/clang-c`, pinned
 `llvmorg-23.1.0`, Apache-2.0 WITH LLVM-exception), so cp3c still compiles with
 no LLVM installed; the libclang **library** is loaded dynamically at runtime
 and `CP3_LIBCLANG` is honoured. 10/10 CLI cases pass, including the live
@@ -244,12 +244,12 @@ inputs when the cache matches.
 ### Build and static gates
 
 - Main build: green.
-- `python tools/check_diagnostics.py`: 72 codes defined, 72 documented, 435
+- `python vendor/tools/check_diagnostics.py`: 72 codes defined, 72 documented, 435
   source files scanned, 0 findings.
 - The zero-placeholder gate: 391 hits at this snapshot, unchanged by the
   cleanup and the perf array/closure lane. It was pre-existing red on `master`,
   not a regression; it now reports zero (section 6b).
-- `python tools/lint.py`: no new error from any lane.
+- `python vendor/tools/lint.py`: no new error from any lane.
 
 ### Corpus
 
@@ -496,7 +496,7 @@ owners, and both are now fixed.
 
 ### 6a.1 The colour scheme now matches the JavaScript conventions - FIXED
 
-The grammar (`extensions/cp3-vscode/syntaxes/cp3.tmLanguage.json`) used its own
+The grammar (`dist/extensions/cp3-vscode/syntaxes/cp3.tmLanguage.json`) used its own
 TextMate scopes, so a cp3 file did not read like the JavaScript next to it.
 The fix maps cp3 onto the scope names VS Code's built-in themes already
 colour, verified against the real `dark_plus.json` and `light_plus.json`
@@ -515,7 +515,7 @@ shipped with VS Code:
 | `=>` | plain operator | `storage.type.function.arrow` (the TypeScript convention) |
 | Control flow, storage, `this`, numbers, strings, comments | already correct | unchanged |
 
-The mapping is documented in `extensions/cp3-vscode/README.md` and
+The mapping is documented in `dist/extensions/cp3-vscode/README.md` and
 **machine-checked**: `scripts/grammar-smoke.mjs` grew from 51 to **76 scope
 assertions** driven through the real TextMate engine, so a scope that stops
 matching a theme is a test failure, not a visual surprise.

@@ -367,7 +367,7 @@ historical labeled runs are kept there verbatim.
 
 ## CP3002 status
 
-CP3002 placeholders are fully retired. `python tools/check_cp3002.py` reports
+CP3002 placeholders are fully retired. `python vendor/tools/check_cp3002.py` reports
 zero markers, and every benchmark row now builds and produces a number; the
 gate never prints `CP3002 BLOCKER`. A complete default-scale run reports only
 performance warnings, if any.

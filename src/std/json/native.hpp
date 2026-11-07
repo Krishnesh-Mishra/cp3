@@ -16,10 +16,10 @@
 namespace cp3::cli::detail {
 
 // Verified consumer flags (header-only backend):
-//   compile: -I src/std/json/include -I third_party/fast_float/include
+//   compile: -I src/std/json/include -I vendor/third_party/fast_float/include
 inline const NativePackage kJsonNativePackage{
     "std/json",
-    {"src/std/json/include", "third_party/fast_float/include"},
+    {"src/std/json/include", "vendor/third_party/fast_float/include"},
     {},
     {},
     {},

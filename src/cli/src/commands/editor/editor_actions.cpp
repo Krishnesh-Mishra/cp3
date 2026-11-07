@@ -217,7 +217,7 @@ bool prepareEditorVsix(EditorSession& session, bool required, std::string& err) 
     }
     if (required && !session.vsix.found) {
         err = "no bundled cp3 extension package found; this build was packaged "
-              "without one (build the VSIX in extensions/cp3-vscode first)";
+              "without one (build the VSIX in dist/extensions/cp3-vscode first)";
         return false;
     }
     return true;

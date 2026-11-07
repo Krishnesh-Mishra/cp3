@@ -18,19 +18,19 @@ that must happen on (or cross-compiling for) Linux.
 
 | file | action |
 | --- | --- |
-| `third_party/xxhash/build-linux.sh` | created — the build recipe (below) |
-| `third_party/xxhash/lib/linux-x64/README.md` | created — placeholder (no `libxxhash.a` yet) |
-| `third_party/xxhash/lib/linux-arm64/README.md` | created — placeholder (no `libxxhash.a` yet) |
-| `third_party/build.ps1` | edited — header + commented Linux-xxHash section only (no logic change; see §5) |
+| `vendor/third_party/xxhash/build-linux.sh` | created — the build recipe (below) |
+| `vendor/third_party/xxhash/lib/linux-x64/README.md` | created — placeholder (no `libxxhash.a` yet) |
+| `vendor/third_party/xxhash/lib/linux-arm64/README.md` | created — placeholder (no `libxxhash.a` yet) |
+| `vendor/third_party/build.ps1` | edited — header + commented Linux-xxHash section only (no logic change; see §5) |
 | `docs/design/linux-packaging.md` | created — this file |
 
-Not touched (out of scope, listed as wiring instead): `third_party/MANIFEST.md`
-(§3 gives the exact rows to add), `third_party/build-linux.sh` (§5),
+Not touched (out of scope, listed as wiring instead): `vendor/third_party/MANIFEST.md`
+(§3 gives the exact rows to add), `vendor/third_party/build-linux.sh` (§5),
 `src/std/hash/native.hpp` and `src/std/collections/native.hpp` (§4).
 
 ## Pin (already vendored, unchanged)
 
-From `third_party/xxhash/VERSION.txt` (Ledger F, MANIFEST.md §"Ledger F"):
+From `vendor/third_party/xxhash/VERSION.txt` (Ledger F, MANIFEST.md §"Ledger F"):
 
 ```
 https://github.com/Cyan4973/xxHash.git v0.8.3 e626a72bc2321cd320e953a0ccf1584cad60f363 2026-11-05
@@ -40,7 +40,7 @@ https://github.com/Cyan4973/xxHash.git v0.8.3 e626a72bc2321cd320e953a0ccf1584cad
 | --- | --- | --- | --- |
 | XXHash (XXH32/64/3) | https://github.com/Cyan4973/xxHash.git | v0.8.3 | e626a72bc2321cd320e953a0ccf1584cad60f363 |
 
-License: BSD-2-Clause (`third_party/xxhash/LICENSE`, already present).
+License: BSD-2-Clause (`vendor/third_party/xxhash/LICENSE`, already present).
 Already delivered: `include/{xxhash.h,xxh3.h,xxhash.c,xxh_x86dispatch.h,xxh_x86dispatch.c}`
 and `lib/windows-x64/{libxxhash.a,xxhash.o}`. The vendored
 `include/xxhash.c` is the single TU (`XXH_IMPLEMENTATION` +
@@ -50,40 +50,40 @@ to the one the windows-x64 archive was built from.
 
 ## 1. Build recipe (Linux gcc -O3, single-TU)
 
-Script: `third_party/xxhash/build-linux.sh` (run from the repo root;
+Script: `vendor/third_party/xxhash/build-linux.sh` (run from the repo root;
 `--arch` defaults to the host `uname -m`, `x86_64→x64`, `aarch64→arm64`).
 
 ### linux-x64 (native x64 Linux host)
 
 ```sh
-third_party/xxhash/build-linux.sh --arch x64
+vendor/third_party/xxhash/build-linux.sh --arch x64
 # i.e. CC=/usr/bin/gcc AR=/usr/bin/ar RANLIB=/usr/bin/ranlib:
-gcc -O3 -std=c99 -Wall -c third_party/xxhash/include/xxhash.c -o xxhash.o
+gcc -O3 -std=c99 -Wall -c vendor/third_party/xxhash/include/xxhash.c -o xxhash.o
 ar rcs libxxhash.a xxhash.o
 ranlib libxxhash.a
-cp libxxhash.a third_party/xxhash/lib/linux-x64/libxxhash.a
-cp third_party/xxhash/VERSION.txt third_party/xxhash/lib/linux-x64/VERSION.txt
+cp libxxhash.a vendor/third_party/xxhash/lib/linux-x64/libxxhash.a
+cp vendor/third_party/xxhash/VERSION.txt vendor/third_party/xxhash/lib/linux-x64/VERSION.txt
 ```
 
 ### linux-arm64 (native aarch64 host, or x64 + cross toolchain)
 
 Prerequisite on x64: an `aarch64-linux-gnu` cross toolchain
 (e.g. `apt install gcc-aarch64-linux-gnu`), mirroring
-`third_party/build-linux.sh`'s arm64 handling.
+`vendor/third_party/build-linux.sh`'s arm64 handling.
 
 ```sh
-third_party/xxhash/build-linux.sh --arch arm64
+vendor/third_party/xxhash/build-linux.sh --arch arm64
 # i.e. CC=/usr/bin/aarch64-linux-gnu-gcc AR=/usr/bin/aarch64-linux-gnu-ar
 #      RANLIB=/usr/bin/aarch64-linux-gnu-ranlib:
-aarch64-linux-gnu-gcc -O3 -std=c99 -Wall -c third_party/xxhash/include/xxhash.c -o xxhash.o
+aarch64-linux-gnu-gcc -O3 -std=c99 -Wall -c vendor/third_party/xxhash/include/xxhash.c -o xxhash.o
 aarch64-linux-gnu-ar rcs libxxhash.a xxhash.o
 aarch64-linux-gnu-ranlib libxxhash.a
-cp libxxhash.a third_party/xxhash/lib/linux-arm64/libxxhash.a
-cp third_party/xxhash/VERSION.txt third_party/xxhash/lib/linux-arm64/VERSION.txt
+cp libxxhash.a vendor/third_party/xxhash/lib/linux-arm64/libxxhash.a
+cp vendor/third_party/xxhash/VERSION.txt vendor/third_party/xxhash/lib/linux-arm64/VERSION.txt
 ```
 
 Flag notes (all deliberate, matching the libsodium/libuv Linux pattern
-in `third_party/build-linux.sh`):
+in `vendor/third_party/build-linux.sh`):
 
 - `-O3` as specified; `-std=c99 -Wall` (xxHash is C99; this is the
   upstream-supported dialect for `xxhash.c`).
@@ -95,7 +95,7 @@ in `third_party/build-linux.sh`):
   linked into executables). If cp3 ever links these into a shared
   object, rebuild with `-fPIC` and re-record the MANIFEST rows.
 - The script rejects Windows-mounted (`/mnt/c/...`) `CC`/`AR`/`RANLIB`
-  inherited from WSL, exactly like `third_party/build-linux.sh`
+  inherited from WSL, exactly like `vendor/third_party/build-linux.sh`
   (§"WSL can import Windows environment variables"), and overrides them
   with the per-arch defaults.
 - Rebuilds are not byte-identical (`ar` records object timestamps), so
@@ -104,7 +104,7 @@ in `third_party/build-linux.sh`):
 ### Vendor tree after building
 
 ```
-third_party/xxhash/
+vendor/third_party/xxhash/
   VERSION.txt                                  # existing pin line
   LICENSE                                      # existing (BSD-2-Clause)
   build-linux.sh                               # recipe (this change)
@@ -116,7 +116,7 @@ third_party/xxhash/
 
 ## 2. MANIFEST rows (proposed — do not land until bytes exist)
 
-Scope note: `third_party/MANIFEST.md` was outside this change's file
+Scope note: `vendor/third_party/MANIFEST.md` was outside this change's file
 scope, so the rows below are **proposed text for the lead to merge**,
 following the exact three-table shape used by libsodium (Pins /
 Delivered artifacts / Licenses). Fill `<bytes>`/`<SHA-256>` from the
@@ -155,15 +155,15 @@ libsodium, xxhash has no legacy flat path, and the rows in
 with the §1 commands verbatim. Also update the Ledger F status line
 that currently says "linux-x64/arm64 archives follow the same
 single-TU pattern (documented in build.ps1 pins)" to point at
-`third_party/xxhash/build-linux.sh` + this doc once the archives land.
+`vendor/third_party/xxhash/build-linux.sh` + this doc once the archives land.
 Ledger F's compiled-static wiring note already names the consumer
 flags; no change needed there beyond the rows above.
 
 ## 3. Verified consumer flags (same as windows, per triple)
 
 ```
-compile: -I third_party/xxhash/include
-link:    -L third_party/xxhash/lib/<triple> -lxxhash     # <triple> ∈ {windows-x64, linux-x64, linux-arm64}
+compile: -I vendor/third_party/xxhash/include
+link:    -L vendor/third_party/xxhash/lib/<triple> -lxxhash     # <triple> ∈ {windows-x64, linux-x64, linux-arm64}
 ```
 
 Consumers must not define `XXH_STATIC_LINKING_ONLY`, `XXH_PRIVATE_API`,
@@ -184,18 +184,18 @@ Replace the platform list and the header comment:
 
 ```cpp
 // was:
-    {{"windows-x64", {"third_party/xxhash/lib/windows-x64"}, {"-lxxhash"}}},
+    {{"windows-x64", {"vendor/third_party/xxhash/lib/windows-x64"}, {"-lxxhash"}}},
 // becomes:
-    {{"windows-x64", {"third_party/xxhash/lib/windows-x64"}, {"-lxxhash"}},
-     {"linux-x64", {"third_party/xxhash/lib/linux-x64"}, {"-lxxhash"}},
-     {"linux-arm64", {"third_party/xxhash/lib/linux-arm64"}, {"-lxxhash"}}},
+    {{"windows-x64", {"vendor/third_party/xxhash/lib/windows-x64"}, {"-lxxhash"}},
+     {"linux-x64", {"vendor/third_party/xxhash/lib/linux-x64"}, {"-lxxhash"}},
+     {"linux-arm64", {"vendor/third_party/xxhash/lib/linux-arm64"}, {"-lxxhash"}}},
 ```
 
 and replace the comment paragraph "Only the windows-x64 archive is
 vendored so far … Do not add linux platform rows pointing at the
 windows archive." with: "All three archives are vendored
 (windows-x64 COFF, linux-x64 / linux-arm64 ELF; see
-third_party/MANIFEST.md and docs/design/linux-packaging.md). Do not
+vendor/third_party/MANIFEST.md and docs/design/linux-packaging.md). Do not
 add platform rows pointing at another triple's archive."
 
 ### src/std/collections/native.hpp (linux rows currently libsodium-only)
@@ -204,13 +204,13 @@ Replace the two linux rows:
 
 ```cpp
 // was:
-     {"linux-x64", {"third_party/libsodium/lib/linux-x64"}, {"-lsodium"}},
-     {"linux-arm64", {"third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
+     {"linux-x64", {"vendor/third_party/libsodium/lib/linux-x64"}, {"-lsodium"}},
+     {"linux-arm64", {"vendor/third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
 // becomes:
-     {"linux-x64", {"third_party/libsodium/lib/linux-x64",
-                    "third_party/xxhash/lib/linux-x64"}, {"-lsodium", "-lxxhash"}},
-     {"linux-arm64", {"third_party/libsodium/lib/linux-arm64",
-                      "third_party/xxhash/lib/linux-arm64"}, {"-lsodium", "-lxxhash"}}},
+     {"linux-x64", {"vendor/third_party/libsodium/lib/linux-x64",
+                    "vendor/third_party/xxhash/lib/linux-x64"}, {"-lsodium", "-lxxhash"}},
+     {"linux-arm64", {"vendor/third_party/libsodium/lib/linux-arm64",
+                      "vendor/third_party/xxhash/lib/linux-arm64"}, {"-lsodium", "-lxxhash"}}},
 ```
 
 and update the comment ("The linux-x64 / linux-arm64 rows stay
@@ -221,16 +221,16 @@ This closes the documented failure mode (undefined reference to
 
 ## 5. What build.ps1 does and does not do
 
-- `third_party/build.ps1` is the **Windows** rebuild. It already pins
+- `vendor/third_party/build.ps1` is the **Windows** rebuild. It already pins
   xxHash (v0.8.3 / `e626a72…`) and builds the windows-x64 archive;
   this change adds only a commented Linux-xxHash section to it
   (recipe pointer + "not built by this script" note) — no PowerShell
   logic changed.
-- `third_party/build-linux.sh` (the Linux libsodium/libuv/uSockets
+- `vendor/third_party/build-linux.sh` (the Linux libsodium/libuv/uSockets
   builder) was **not** extended here — it sits outside this change's
-  file scope. The standalone `third_party/xxhash/build-linux.sh`
+  file scope. The standalone `vendor/third_party/xxhash/build-linux.sh`
   covers xxHash alone. Follow-up (lead call): either fold a `[4/4]
-  xxHash` step into `third_party/build-linux.sh` reusing its
+  xxHash` step into `vendor/third_party/build-linux.sh` reusing its
   `clone_pin`/toolchain guards, or keep the per-vendor script.
   If folded in, the xxHash step needs no clone step (vendored
   `include/xxhash.c` is the source) but should copy `VERSION.txt`

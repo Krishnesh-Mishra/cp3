@@ -1,0 +1,263 @@
+# vendor/third_party/build.ps1
+#
+# Rebuilds every vendored static library in vendor/third_party/ from its pinned
+# upstream source and re-runs the smoke matrix.
+#
+# This script contains only commands that were actually run when the delivered
+# artifacts were produced (2026-10-18; PCRE2 was added 2026-10-19). The step
+# scripts under
+# build/scratch/vend/scripts/ are the verbatim record and are driven from here.
+#
+# Requirements (all must be on PATH):
+#   git, gcc, g++, cmake, ninja, mingw32-make, ar
+#   and Git Bash at C:\Program Files\Git\bin\bash.exe
+#   (C:\Windows\system32\bash.exe is WSL and is deliberately NOT used).
+#
+# Toolchain used for the delivered artifacts: MinGW-W64 x86_64 ucrt posix-seh
+# GCC 16.1.0 (WinLibs), cmake 4.3.2, ninja, GNU ar. No project needed
+# -DCMAKE_POLICY_VERSION_MINIMUM=3.5 with this cmake.
+#
+# Layout:
+#   build/scratch/vend/src/<lib>      upstream clones, detached at the pin
+#   build/scratch/vend/build/<lib>    build trees
+#   build/scratch/vend/install/<lib>  install prefixes
+#   build/scratch/vend/scripts        recorded step scripts
+#   build/scratch/vend/smoke          smoke sources/exes, SMOKE-RUNS.txt
+#   third_party                       deliverable tree (this directory)
+#
+# Note: a full rebuild is not guaranteed to reproduce byte-identical archives
+# (ar records object file timestamps); see vendor/third_party/MANIFEST.md.
+#
+# Ledger F (internal-only libs: unordered_dense, fast_float, simdutf, miniz,
+# moodycamel/Boost.Lockfree, fmt, XXHash/wyhash/XXH3): XXHash and simdutf
+# are now vendored (windows-x64 archives; see the $pins rows and the
+# Linux-xxHash note in section 9b below). The rest remain PLANNED ONLY.
+# Add a $pins row + build/vendor steps here only when the lead vendors
+# them; see MANIFEST.md "Ledger F" and docs/design/internal-libs.md. (simdutf was vendored 2026-11-05 — its
+# windows-x64 archive is delivered; the linux-x64/arm64 archives follow the
+# single-TU pattern in vendor/third_party/simdutf/build-linux-simdutf.sh, §11 below
+# and docs/design/linux-packaging-simdutf.md.)
+
+[CmdletBinding()]
+param(
+    # stop after populating vendor/third_party/, before the smoke matrix
+    [switch]$SkipSmokes
+)
+
+$ErrorActionPreference = 'Stop'
+
+$Root    = Split-Path -Parent $PSScriptRoot
+$Vend    = Join-Path $Root 'build\scratch\vend'
+$SrcDir  = Join-Path $Vend 'src'
+$BldDir  = Join-Path $Vend 'build'
+$InsDir  = Join-Path $Vend 'install'
+$Tp      = Join-Path $Root 'third_party'
+$Scripts = Join-Path $Vend 'scripts'
+$Bash    = 'C:\Program Files\Git\bin\bash.exe'
+
+function Invoke-Line {
+    param([string]$Line)
+    Write-Host ("> " + $Line)
+    & cmd.exe /c $Line
+    if ($LASTEXITCODE -ne 0) { throw ("command failed with exit code {0}: {1}" -f $LASTEXITCODE, $Line) }
+}
+
+function Require-Path {
+    param([string]$Path, [string]$What)
+    if (-not (Test-Path $Path)) { throw ("missing {0}: {1}" -f $What, $Path) }
+}
+
+function Assert-Pin {
+    param([string]$Dir, [string]$Sha)
+    $head = (& git -C $Dir rev-parse HEAD).Trim()
+    if ($head -ne $Sha) { throw ("{0} is at {1}, expected pin {2}" -f $Dir, $head, $Sha) }
+    Write-Host ("pin ok: {0} at {1}" -f $Dir, $Sha)
+}
+
+# ---------------------------------------------------------------------------
+# 0. sanity checks
+# ---------------------------------------------------------------------------
+if ((Split-Path -Leaf $PSScriptRoot) -ne 'third_party') {
+    throw ('run this script from vendor/third_party/build.ps1; PSScriptRoot is ' + $PSScriptRoot)
+}
+foreach ($tool in 'git','gcc','g++','cmake','ninja','mingw32-make','ar') {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        throw ('required tool not on PATH: ' + $tool)
+    }
+}
+Require-Path $Bash 'Git Bash (C:\Program Files\Git\bin\bash.exe)'
+foreach ($s in 'libsodium_build.sh','libsodium_make.sh','usockets_build.sh','uwebsockets_lib_build.sh',
+               'pcre2_build.ps1','pcre2_vendor_copy.ps1','vendor_copy.ps1','run_smokes.ps1') {
+    Require-Path (Join-Path $Scripts $s) 'recorded step script'
+}
+
+New-Item -ItemType Directory -Force -Path $SrcDir,$BldDir,$InsDir | Out-Null
+
+# ---------------------------------------------------------------------------
+# 1. clone pinned sources (shallow tag clone; each pin verified against SHA)
+# ---------------------------------------------------------------------------
+$pins = @(
+    [pscustomobject]@{ Name='libsodium';   Url='https://github.com/jedisct1/libsodium.git';     Tag='1.0.22-RELEASE'; Sha='77e1ce5d6dee871c49ef211222ba18ef0c486bda' },
+    [pscustomobject]@{ Name='libuv';       Url='https://github.com/libuv/libuv.git';            Tag='v1.53.0';        Sha='840404ce8ba7cc0204be52389a6cfff9f2c90fb6' },
+    [pscustomobject]@{ Name='uWebSockets'; Url='https://github.com/uNetworking/uWebSockets.git';Tag='v20.80.0';       Sha='3ffd6f44c9c3c92c96345d9f96bd01ba9c025ab5' },
+    [pscustomobject]@{ Name='oneTBB';      Url='https://github.com/uxlfoundation/oneTBB.git';   Tag='v2023.1.0';      Sha='3046c8b0c29df995980003ea24f4d78c80ec0c8d' },
+    [pscustomobject]@{ Name='pcre2';       Url='https://github.com/PCRE2Project/pcre2.git';     Tag='pcre2-10.49';    Sha='6f9d7c1373262c541324a16a358785b33ef116cf' },
+    [pscustomobject]@{ Name='unordered_dense'; Url='https://github.com/martinus/unordered_dense.git'; Tag='v5.3.3'; Sha='7c58a8b7a48e790fe72f6508eb3b46317cbba9d5' },
+    [pscustomobject]@{ Name='fast_float'; Url='https://github.com/lemire/fast_float.git'; Tag='master'; Sha='6a3fabc342d4d149722fc2316babdcf24fdf8fb9' },
+    [pscustomobject]@{ Name='moodycamel'; Url='https://github.com/cameron314/concurrentqueue.git'; Tag='v1.0.4'; Sha='6dd38b8a1dbaa7863aa907045f32308a56a6ff5d' },
+    [pscustomobject]@{ Name='xxhash'; Url='https://github.com/Cyan4973/xxHash.git'; Tag='v0.8.3'; Sha='e626a72bc2321cd320e953a0ccf1584cad60f363' },
+    [pscustomobject]@{ Name='simdutf'; Url='https://github.com/simdutf/simdutf.git'; Tag='v6.1.0'; Sha='7852150e454ebacbf7e65cbf2c5e3feac5e660ec' }
+)
+foreach ($p in $pins) {
+    $dir = Join-Path $SrcDir $p.Name
+    if (-not (Test-Path $dir)) {
+        Invoke-Line ('git clone --depth 1 --branch {0} {1} {2}' -f $p.Tag, $p.Url, $dir)
+    }
+    Invoke-Line ('git -C {0} checkout --detach {1}' -f $dir, $p.Sha)
+    Assert-Pin $dir $p.Sha
+}
+
+# ---------------------------------------------------------------------------
+# 2. libsodium 1.0.22 (autotools; 1.0.22 has no CMake build)
+#    libsodium_build.sh: mtime reordering, relative srcdir, Windows prefix
+#    libsodium_make.sh : build + install, SHELL override for native mingw32-make
+# ---------------------------------------------------------------------------
+Invoke-Line ('"{0}" {1}' -f $Bash, (Join-Path $Scripts 'libsodium_build.sh'))
+Invoke-Line ('"{0}" {1}' -f $Bash, (Join-Path $Scripts 'libsodium_make.sh'))
+
+# ---------------------------------------------------------------------------
+# 3. libuv v1.53.0 (CMake + Ninja, static)
+# ---------------------------------------------------------------------------
+$uvBld = (Join-Path $BldDir 'libuv') -replace '\\','/'
+Remove-Item -Recurse -Force (Join-Path $BldDir 'libuv') -ErrorAction SilentlyContinue
+Invoke-Line ('cmake -G Ninja -S {0} -B {1} -DCMAKE_BUILD_TYPE=Release -DLIBUV_BUILD_SHARED=OFF -DLIBUV_BUILD_TESTS=OFF -DLIBUV_BUILD_BENCH=OFF -DCMAKE_INSTALL_PREFIX={2}' -f ((Join-Path $SrcDir 'libuv') -replace '\\','/'), $uvBld, ((Join-Path $InsDir 'libuv') -replace '\\','/'))
+Invoke-Line ('cmake --build {0} --parallel 8' -f $uvBld)
+Invoke-Line ('cmake --install {0}' -f $uvBld)
+
+# ---------------------------------------------------------------------------
+# 4. oneTBB v2023.1.0 (CMake + Ninja, static, tests off; upstream emits
+#    "static is not supported" warnings - expected, see MANIFEST.md)
+# ---------------------------------------------------------------------------
+$tbbBld = (Join-Path $BldDir 'oneTBB') -replace '\\','/'
+Remove-Item -Recurse -Force (Join-Path $BldDir 'oneTBB') -ErrorAction SilentlyContinue
+Invoke-Line ('cmake -G Ninja -S {0} -B {1} -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DTBB_TEST=OFF -DCMAKE_INSTALL_PREFIX={2}' -f ((Join-Path $SrcDir 'oneTBB') -replace '\\','/'), $tbbBld, ((Join-Path $InsDir 'oneTBB') -replace '\\','/'))
+Invoke-Line ('cmake --build {0} --parallel 8' -f $tbbBld)
+Invoke-Line ('cmake --install {0}' -f $tbbBld)
+
+# ---------------------------------------------------------------------------
+# 5. uSockets (uWebSockets v20.80.0 has no CMakeLists; its own Makefile is the
+#    supported build: WITH_LIBUV=1, WITH_LTO=0, TLS off via LIBUS_NO_SSL)
+# ---------------------------------------------------------------------------
+Invoke-Line ('"{0}" {1}' -f $Bash, (Join-Path $Scripts 'usockets_build.sh'))
+
+# ---------------------------------------------------------------------------
+# 6. populate vendor/third_party/ (reset include/lib dirs; copy headers, archives,
+#    licenses from the install prefixes / source trees)
+# ---------------------------------------------------------------------------
+Invoke-Line ('powershell.exe -NoProfile -ExecutionPolicy Bypass -File {0}' -f (Join-Path $Scripts 'vendor_copy.ps1'))
+
+# The std/crypto and std/network rows select archives by the target triple.
+# Preserve the original paths while adding the explicit Windows x64 layout;
+# oneTBB and PCRE2 retain their existing paths until their rows get per-target
+# archives as well.
+$winX64 = Join-Path $Tp 'libsodium\lib\windows-x64'
+New-Item -ItemType Directory -Force -Path $winX64 | Out-Null
+Copy-Item (Join-Path $Tp 'libsodium\lib\libsodium.a') (Join-Path $winX64 'libsodium.a') -Force
+Copy-Item (Join-Path $Tp 'libsodium\VERSION.txt') (Join-Path $winX64 'VERSION.txt') -Force
+$winX64 = Join-Path $Tp 'libuv\lib\windows-x64'
+New-Item -ItemType Directory -Force -Path $winX64 | Out-Null
+Copy-Item (Join-Path $Tp 'libuv\lib\libuv.a') (Join-Path $winX64 'libuv.a') -Force
+Copy-Item (Join-Path $Tp 'libuv\VERSION.txt') (Join-Path $winX64 'VERSION.txt') -Force
+$winX64 = Join-Path $Tp 'uWebSockets\lib\windows-x64'
+New-Item -ItemType Directory -Force -Path $winX64 | Out-Null
+Copy-Item (Join-Path $Tp 'uWebSockets\lib\libuSockets.a') (Join-Path $winX64 'libuSockets.a') -Force
+Copy-Item (Join-Path $Tp 'uWebSockets\lib\libuWebSockets.a') (Join-Path $winX64 'libuWebSockets.a') -Force
+Copy-Item (Join-Path $Tp 'uWebSockets\VERSION.txt') (Join-Path $winX64 'VERSION.txt') -Force
+
+# ---------------------------------------------------------------------------
+# 7. PCRE2 10.49 (core regex backend, DECISIONS D70; CMake + Ninja, static
+#    8-bit only, tests/grep/JIT off - see MANIFEST.md for the exact flags).
+#    pcre2_build.ps1 builds/installs into the vend prefix; pcre2_vendor_copy.ps1
+#    copies include/ + lib/libpcre2-8.a + LICENCE.md into vendor/third_party/pcre2/
+#    and writes its VERSION.txt ("<repo URL> <tag> <full SHA> <date built>").
+# ---------------------------------------------------------------------------
+Invoke-Line ('powershell.exe -NoProfile -ExecutionPolicy Bypass -File {0}' -f (Join-Path $Scripts 'pcre2_build.ps1'))
+Invoke-Line ('powershell.exe -NoProfile -ExecutionPolicy Bypass -File {0}' -f (Join-Path $Scripts 'pcre2_vendor_copy.ps1'))
+
+# ---------------------------------------------------------------------------
+# 8. libuWebSockets.a (header-only upstream; built from one documented TU
+#    against the vendored third_party headers, then copied into place)
+# ---------------------------------------------------------------------------
+Invoke-Line ('"{0}" {1}' -f $Bash, (Join-Path $Scripts 'uwebsockets_lib_build.sh'))
+
+# ---------------------------------------------------------------------------
+# 9. VERSION.txt pins ("<repo URL> <tag> <full SHA> <date built>"). The date is
+#    the date the delivered artifacts were built; update it if you regenerate.
+#    (pcre2/VERSION.txt is written by pcre2_vendor_copy.ps1 in step 7.)
+# ---------------------------------------------------------------------------
+Set-Content -Path (Join-Path $Tp 'libsodium\VERSION.txt')   -Value 'https://github.com/jedisct1/libsodium.git 1.0.22-RELEASE 77e1ce5d6dee871c49ef211222ba18ef0c486bda 2026-10-18' -Encoding ASCII
+Set-Content -Path (Join-Path $Tp 'libuv\VERSION.txt')       -Value 'https://github.com/libuv/libuv.git v1.53.0 840404ce8ba7cc0204be52389a6cfff9f2c90fb6 2026-10-18' -Encoding ASCII
+Set-Content -Path (Join-Path $Tp 'uWebSockets\VERSION.txt') -Value 'https://github.com/uNetworking/uWebSockets.git v20.80.0 3ffd6f44c9c3c92c96345d9f96bd01ba9c025ab5 2026-10-18' -Encoding ASCII
+Set-Content -Path (Join-Path $Tp 'oneTBB\VERSION.txt')      -Value 'https://github.com/uxlfoundation/oneTBB.git v2023.1.0 3046c8b0c29df995980003ea24f4d78c80ec0c8d 2026-10-18' -Encoding ASCII
+
+# ---------------------------------------------------------------------------
+# 9b. xxHash Linux archives (linux-x64 / linux-arm64) - NOT built by this
+#     script. build.ps1 is the Windows rebuild; the Linux archives are
+#     built on a Linux host (or with an aarch64 cross toolchain) by the
+#     vendored single-TU recipe in vendor/third_party/xxhash/build-linux.sh:
+#
+#       vendor/third_party/xxhash/build-linux.sh --arch x64    # gcc -O3, native
+#       vendor/third_party/xxhash/build-linux.sh --arch arm64  # aarch64-linux-gnu-gcc -O3
+#
+#     which compiles vendor/third_party/xxhash/include/xxhash.c (pinned
+#     v0.8.3, e626a72bc2321cd320e953a0ccf1584cad60f363) with
+#     "gcc -O3 -std=c99 -Wall -c", archives it with ar/ranlib, and writes
+#     libxxhash.a + a VERSION.txt copy to
+#     vendor/third_party/xxhash/lib/linux-<arch>/ (libsodium pattern).
+#     lib/linux-x64 and lib/linux-arm64 currently hold README
+#     placeholders only. Full recipe, proposed MANIFEST.md rows, and the
+#     src/std/hash + src/std/collections native.hpp wiring lines (do not
+#     land until the archives exist): docs/design/linux-packaging.md.
+#     No logic below this comment needs to change for the Linux archives.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# 10. smoke matrix (each program is compiled from a clean directory using ONLY
+#    third_party includes and archives, linked, and run to exit code 0):
+#    3 link variants per program: dynamic, -static-libgcc -static-libstdc++,
+#    and fully static -static -static-libgcc -static-libstdc++.
+#    Evidence is written to build/scratch/vend/smoke/SMOKE-RUNS.txt.
+# ---------------------------------------------------------------------------
+if (-not $SkipSmokes) {
+    Invoke-Line ('powershell.exe -NoProfile -ExecutionPolicy Bypass -File {0}' -f (Join-Path $Scripts 'run_smokes.ps1'))
+}
+
+Write-Host ''
+Write-Host 'third_party rebuild complete.'
+
+# ---------------------------------------------------------------------------
+# 11. simdutf Linux archives (linux-x64 / linux-arm64)
+#
+# simdutf is built from its single amalgamated translation unit
+# (src/simdutf.cpp) with plain g++ -O3 -- no CMake file list to invoke
+# here. The Windows flow above deliberately does NOT cross-compile ELF
+# archives from this host. The authoritative producer is
+# vendor/third_party/simdutf/build-linux-simdutf.sh, run on a Linux host:
+#
+#   g++ -O3 -std=c++17 -I <src>/include -I <src>/src -c <src>/src/simdutf.cpp -o simdutf.o
+#   ar rcs libsimdutf.a simdutf.o
+#
+# for --arch x64 natively and --arch arm64 natively or via an
+# aarch64-linux-gnu cross toolchain, pin v6.1.0 7852150e454ebacbf7e65cbf2c5e3feac5e660ec.
+# Recipe, MANIFEST rows and native.hpp wiring:
+# docs/design/linux-packaging-simdutf.md. This section only ensures the
+# deliverable dirs exist and warns when an archive is still pending, so
+# a Windows rebuild never silently produces (or claims) Linux archives.
+# ---------------------------------------------------------------------------
+foreach ($triple in 'linux-x64','linux-arm64') {
+    $linuxLib = Join-Path $Tp "simdutf\lib\$triple"
+    New-Item -ItemType Directory -Force -Path $linuxLib | Out-Null
+    if (-not (Test-Path (Join-Path $linuxLib 'libsimdutf.a'))) {
+        Write-Host ("simdutf {0} archive pending: run vendor/third_party/simdutf/build-linux-simdutf.sh on a Linux host (see docs/design/linux-packaging-simdutf.md)" -f $triple)
+    }
+}

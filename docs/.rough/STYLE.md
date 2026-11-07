@@ -1,7 +1,7 @@
 # cp3c engineering standards
 
 **Status: binding for everything under `src/**`.** Enforced by
-`tools/lint_layout.py` (run via the CMake `lint` target). This is a compiler
+`vendor/tools/lint_layout.py` (run via the CMake `lint` target). This is a compiler
 meant to be maintained for years by many engineers; it must read like a
 professional C++ codebase, not a generated blob. Small, single-purpose units are
 how defects stay findable - **structure is part of correctness.**
@@ -160,10 +160,10 @@ subdirectory (`emit/`, `checks/`, `support/`, `commands/`, `pkg/`, `archive/`,
 The developer lint path runs two checks:
 
 ```
-python tools/lint.py                   # layout checks + zero-placeholder gate
-python tools/lint_layout.py            # report; exit 1 on hard violations
-python tools/lint_layout.py --warn-only
-python tools/check_cp3002.py           # zero-placeholder gate; exit 1 on any hit
+python vendor/tools/lint.py                   # layout checks + zero-placeholder gate
+python vendor/tools/lint_layout.py            # report; exit 1 on hard violations
+python vendor/tools/lint_layout.py --warn-only
+python vendor/tools/check_cp3002.py           # zero-placeholder gate; exit 1 on any hit
 cmake --build <build> --target lint
 cmake --build <build> --target lint-cp3002
 ```
@@ -172,15 +172,15 @@ The layout pass is advisory because module authors run in parallel and a warning
 from one module must never block another; **hard violations must be fixed before
 a module is considered done.**
 
-The zero-placeholder gate is hard. `tools/check_cp3002.py` scans `src/`,
-`tests/`, `docs/` and `packaging/` for the retired placeholder code and its
+The zero-placeholder gate is hard. `vendor/tools/check_cp3002.py` scans `src/`,
+`tests/`, `docs/` and `dist/packaging/` for the retired placeholder code and its
 source spellings, prints every hit as `path:line`, and exits 1 while any remain.
 `--report` groups the hits by marker; `--baseline FILE` is a temporary
 comparison mode for a wave that is still removing existing hits, and the
 baseline must be empty before the final landing:
 
 ```
-python tools/check_cp3002.py --report
-python tools/check_cp3002.py --write-baseline tools/cp3002_baseline.txt
-python tools/check_cp3002.py --baseline tools/cp3002_baseline.txt
+python vendor/tools/check_cp3002.py --report
+python vendor/tools/check_cp3002.py --write-baseline vendor/tools/cp3002_baseline.txt
+python vendor/tools/check_cp3002.py --baseline vendor/tools/cp3002_baseline.txt
 ```

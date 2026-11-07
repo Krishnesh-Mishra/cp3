@@ -348,7 +348,7 @@ real pass/fail. Anything in the AST beyond that must produce a clean
 - **D59.** `examples/` is **showcase-only for humans**: readable programs a
   person can open and run manually (`cp3c run main.cp3` from the example's
   folder). Examples are **never run automatically** - `expect.json` files,
-  active/pending statuses, the promotion workflow, `tools/run_examples.py`,
+  active/pending statuses, the promotion workflow, `vendor/tools/run_examples.py`,
   and the `example-checks` CMake target are all removed. Automated
   verification of program behavior lives **only** in `tests/cases/` (the
   corpus oracle). The earlier "living end-to-end checks" framing is
@@ -591,19 +591,19 @@ SS13). Rulings and staging:
 
 1. **Downloaded once, packed with cp3c, never user-installed** (user directive).
    Each library is built as a pinned static archive with the same MinGW-w64 GCC
-   toolchain cp3c drives and committed under `third_party/<lib>/` with headers,
+   toolchain cp3c drives and committed under `vendor/third_party/<lib>/` with headers,
    upstream LICENSE (and NOTICE where present), and a pinned VERSION file,
    shipped alongside cp3c exactly like a bundled binary.
-2. **Reproducible manifest.** `third_party/MANIFEST.md` records upstream URL,
+2. **Reproducible manifest.** `vendor/third_party/MANIFEST.md` records upstream URL,
    pinned tag or commit, verbatim build commands, artifact SHA-256 hashes, and
-   the verified link flag list; `third_party/build.ps1` recreates every
+   the verified link flag list; `vendor/third_party/build.ps1` recreates every
    artifact from the pinned source.
 3. **Beta-one scope.** uSockets/uWebSockets build without TLS (HTTPS/TLS stays
    out of scope, SS20) and without compression. First target: Windows x64
    MinGW-W64 (ucrt, posix threads). libuv is the one event-loop library
    (SS14/SS20); on Windows uSockets rides libuv as well.
 4. **Placement and linking.** Generated programs link the vendored archives
-   statically; cp3c locates `third_party/` relative to its own executable (the
+   statically; cp3c locates `vendor/third_party/` relative to its own executable (the
    D56 materialization pattern) rather than any system or environment path.
 5. **std surface staging unchanged (D68).** Module behavior stays in the
    runtime behind the three mechanical tables for now; the README SS20 end
@@ -621,7 +621,7 @@ SS13). Rulings and staging:
    D62 corpus semantics are preserved.
 
 Evidence: `build/scratch/vend/WAVE-VEND-REPORT.md` and
-`third_party/MANIFEST.md` (artifact SHA-256s, exact build commands, verified
+`vendor/third_party/MANIFEST.md` (artifact SHA-256s, exact build commands, verified
 consumer link flags). Pins as delivered: libsodium 1.0.22 (tag 1.0.22-RELEASE),
 libuv v1.53.0, uWebSockets v20.80.0 including its in-tree uSockets, oneTBB
 v2023.1.0.
@@ -713,7 +713,7 @@ Rules:
    does not move; the corpus categories stay exactly as pinned.
 4. **Mechanics.** `git mv` plus include-path fixes; CMake source lists;
    `src/cli/src/toolchain/util.cpp` include roots and runtime discovery;
-   `tools/lint_layout.py`, `ARCHITECTURE.md`, `STYLE.md` and every doc path
+   `vendor/tools/lint_layout.py`, `ARCHITECTURE.md`, `STYLE.md` and every doc path
    reference in the same sweep. No behavior change, no new libraries.
 5. **Timing.** Executed after the running feature waves land and are committed
    (never move files under a running agent), before the nothing-missing audit

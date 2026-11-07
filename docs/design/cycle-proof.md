@@ -6,8 +6,8 @@ deferred stages in `ROADMAP.md` ("Regions, compiler-injected non-owning
 edges and group counting (stages 2–3) are deferred: they need the
 whole-program ownership proof plus the fuzzer/ASan gate") may be implemented.
 Companion tooling, also design/measurement only, lives in
-`tools/fuzz_graphs.py` (differential strong-edge fuzzer) and
-`tools/cycle_stats.py` (auto-weak coverage %), which model the proof
+`vendor/tools/fuzz_graphs.py` (differential strong-edge fuzzer) and
+`vendor/tools/cycle_stats.py` (auto-weak coverage %), which model the proof
 obligations below without changing shipped behavior.
 
 ## 1. Baseline this proof replaces (Stage 1, shipped)
@@ -159,7 +159,7 @@ imports included — a per-unit proof is unsound, see P8):
 
 ## 5. Fuzzer / measurement gate (before any stage-2 code)
 
-- `tools/fuzz_graphs.py --mode graph`: generates random class graphs
+- `vendor/tools/fuzz_graphs.py --mode graph`: generates random class graphs
   (strong/weak/`unknown`/container/union edges), computes the reference
   strong-edge graph in Python (Tarjan SCCs, cycle-capable, CP3401
   prediction — an independent implementation of §1), and diffs it
@@ -167,7 +167,7 @@ imports included — a per-unit proof is unsound, see P8):
   cycle-capable set, CP3401 presence, or store/escape sites fails the
   case. This is the differential test that the graph construction —
   the input to every proof obligation — is correct.
-- `tools/cycle_stats.py`: reports auto-weak coverage % (classes in
+- `vendor/tools/cycle_stats.py`: reports auto-weak coverage % (classes in
   auto-weak-eligible SCCs vs classes still needing manual `weak`),
   an **upper bound**: the Python model cannot prove P2/P3 (narrowing,
   independent strong paths), so the compiler's real coverage will be

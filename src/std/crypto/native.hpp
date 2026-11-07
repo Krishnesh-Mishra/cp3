@@ -4,8 +4,8 @@
 // OWNERSHIP: the std/crypto family (src/std/crypto/**). One row of the D68
 // native-package table; the rest of the table never needs to change for this module.
 //
-// Backend: libsodium 1.0.22 (third_party/libsodium), pinned static build -
-// DECISIONS D70 + third_party/MANIFEST.md. Authored (non-public-domain) AES-GCM
+// Backend: libsodium 1.0.22 (vendor/third_party/libsodium), pinned static build -
+// DECISIONS D70 + vendor/third_party/MANIFEST.md. Authored (non-public-domain) AES-GCM
 // paths are provided by the library itself; cp3c never bundles crypto code of
 // its own outside this module's runtime TU.
 // =============================================================================
@@ -15,9 +15,9 @@
 
 namespace cp3::cli::detail {
 
-// Verified against third_party/MANIFEST.md "Verified consumer flags":
-//   compile: -I third_party/libsodium/include
-//   link:    -L third_party/libsodium/lib -lsodium
+// Verified against vendor/third_party/MANIFEST.md "Verified consumer flags":
+//   compile: -I vendor/third_party/libsodium/include
+//   link:    -L vendor/third_party/libsodium/lib -lsodium
 // The row also adds the family ABI tree (src/std/crypto/include, D72) first,
 // plus the std/buffer tree: the crypto surface types `randomBytes` as the
 // nominal Buffer and accepts Buffers in sha256/sha512, so generated code can
@@ -26,15 +26,15 @@ namespace cp3::cli::detail {
 inline const NativePackage kCryptoNativePackage{
     "std/crypto",
     {"src/std/crypto/include", "src/std/buffer/include",
-     "third_party/libsodium/include"},
+     "vendor/third_party/libsodium/include"},
     {},
     {"src/std/crypto/runtime.cpp"},
     {},
     {"-lsodium"},
     {},
-    {{"windows-x64", {"third_party/libsodium/lib/windows-x64"}, {"-lsodium"}},
-     {"linux-x64", {"third_party/libsodium/lib/linux-x64"}, {"-lsodium"}},
-     {"linux-arm64", {"third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
+    {{"windows-x64", {"vendor/third_party/libsodium/lib/windows-x64"}, {"-lsodium"}},
+     {"linux-x64", {"vendor/third_party/libsodium/lib/linux-x64"}, {"-lsodium"}},
+     {"linux-arm64", {"vendor/third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
 };
 
 }  // namespace cp3::cli::detail

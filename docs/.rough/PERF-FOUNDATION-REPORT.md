@@ -211,8 +211,8 @@ families (they are identical on the base commit).
 Guards:
 
 ```
-python tools/check_diagnostics.py   -> 0 findings, OK
-python tools/lint_layout.py         -> 16 errors, 211 warnings
+python vendor/tools/check_diagnostics.py   -> 0 findings, OK
+python vendor/tools/lint_layout.py         -> 16 errors, 211 warnings
 ```
 
 The base commit `0876540` scores **16 errors, 208 warnings** on the same

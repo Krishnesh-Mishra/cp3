@@ -3,7 +3,7 @@
 //
 // OWNERSHIP: the std/os family (src/std/os/**). Implements the libuv calls that
 // cp3/std/os.hpp declares. Linked only for programs that import "std/os";
-// libuv is shared with std/io and std/network through third_party/libuv.
+// libuv is shared with std/io and std/network through vendor/third_party/libuv.
 // =============================================================================
 #include "cp3/std/os.hpp"
 

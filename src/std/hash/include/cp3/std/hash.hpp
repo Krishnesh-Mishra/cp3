@@ -34,7 +34,7 @@
 //     0xFFFFFFFF and are table-driven (256-entry tables built constexpr).
 //   * fnv1a32 / fnv1a64 are FNV-1a (offset basis, xor-then-multiply) at
 //     32 and 64 bits.
-//   * xxhash64 is the XXH64 checksum (third_party/xxhash, v0.8.3) with the
+//   * xxhash64 is the XXH64 checksum (vendor/third_party/xxhash, v0.8.3) with the
 //     seed fixed to 0: deterministic across runs, hence safe for persisted
 //     cache keys. It takes no seed parameter by design (a caller-chosen
 //     seed would invite HashDoS-style seed games); only this exact wrapper
@@ -44,7 +44,7 @@
 //     user-facing.
 //   * Header-only for crc32/crc32c/fnv stays header-only; xxhash64 is
 //     declared here and defined in src/std/hash/runtime.cpp, which is
-//     compiled + linked (against third_party/xxhash/lib/windows-x64/
+//     compiled + linked (against vendor/third_party/xxhash/lib/windows-x64/
 //     libxxhash.a) only when a program imports "std/hash"
 //     (src/std/hash/native.hpp, D68). A program that imports std/hash but
 //     never calls xxhash64 still links the archive (harmless); only
@@ -131,7 +131,7 @@ inline std::uint64_t fnv1a64(std::string_view data) {
     return h;
 }
 
-/// `hash.xxhash64(data)`: XXH64 (third_party/xxhash v0.8.3) with seed 0 as
+/// `hash.xxhash64(data)`: XXH64 (vendor/third_party/xxhash v0.8.3) with seed 0 as
 /// an unsigned 64-bit value. Deterministic across runs (safe for persisted
 /// cache keys); a fast non-crypto checksum, not security - use std/crypto
 /// for authentication or adversarial integrity. The seed is fixed to 0 and

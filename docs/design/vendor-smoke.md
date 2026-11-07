@@ -2,9 +2,9 @@
 
 Solo, code-only design (no builds, no tests run, no commit). It adds smoke
 programs for the five libraries vendored 2026-11-05 under "Ledger F"
-(`third_party/MANIFEST.md`): **XXHash, simdutf, unordered_dense, fast_float,
+(`vendor/third_party/MANIFEST.md`): **XXHash, simdutf, unordered_dense, fast_float,
 moodycamel (ConcurrentQueue)**. The smokes follow the existing uWS/libuv
-smoke pattern in `third_party/build.ps1` §10 verbatim: compile from a clean
+smoke pattern in `vendor/third_party/build.ps1` §10 verbatim: compile from a clean
 directory using **only** `third_party` includes/archives, link, run to exit
 code 0, in **3 link variants**, evidence to
 `build/scratch/vend/smoke/SMOKE-RUNS.txt`.
@@ -13,15 +13,15 @@ code 0, in **3 link variants**, evidence to
 
 | file | kind |
 | --- | --- |
-| `third_party/smokes/xxhash_smoke.cpp` | smoke source |
-| `third_party/smokes/simdutf_smoke.cpp` | smoke source |
-| `third_party/smokes/unordered_dense_smoke.cpp` | smoke source |
-| `third_party/smokes/fast_float_smoke.cpp` | smoke source |
-| `third_party/smokes/concurrentqueue_smoke.cpp` | smoke source |
-| `third_party/smokes/run_smokes.ps1` | smoke runner (3-variant matrix + `SMOKE-RUNS.txt` evidence) |
+| `vendor/third_party/smokes/xxhash_smoke.cpp` | smoke source |
+| `vendor/third_party/smokes/simdutf_smoke.cpp` | smoke source |
+| `vendor/third_party/smokes/unordered_dense_smoke.cpp` | smoke source |
+| `vendor/third_party/smokes/fast_float_smoke.cpp` | smoke source |
+| `vendor/third_party/smokes/concurrentqueue_smoke.cpp` | smoke source |
+| `vendor/third_party/smokes/run_smokes.ps1` | smoke runner (3-variant matrix + `SMOKE-RUNS.txt` evidence) |
 | `docs/design/vendor-smoke.md` | this document |
 
-No other file is touched: `third_party/build.ps1`, `third_party/MANIFEST.md`,
+No other file is touched: `vendor/third_party/build.ps1`, `vendor/third_party/MANIFEST.md`,
 `src/**` CMake, and the existing scratch smoke evidence are unchanged.
 Wiring the new matrix into `build.ps1` is a lead step (see §Wiring).
 
@@ -57,28 +57,28 @@ program, in this order (`build.ps1` lines 200–204):
 2. `static-lib` — add `-static-libgcc -static-libstdc++`;
 3. `static` — add `-static -static-libgcc -static-libstdc++`.
 
-The runner, `third_party/smokes/run_smokes.ps1`, implements exactly that
+The runner, `vendor/third_party/smokes/run_smokes.ps1`, implements exactly that
 and appends every command line, toolchain version, and exit code to
 `build/scratch/vend/smoke/SMOKE-RUNS.txt`. Dynamic-variant commands (the
 other two only add the flags above):
 
 ```powershell
-g++ -std=c++20 -O2 -Wall -Wextra -I third_party/xxhash/include `
-    third_party/smokes/xxhash_smoke.cpp -L third_party/xxhash/lib/windows-x64 -lxxhash `
+g++ -std=c++20 -O2 -Wall -Wextra -I vendor/third_party/xxhash/include `
+    vendor/third_party/smokes/xxhash_smoke.cpp -L vendor/third_party/xxhash/lib/windows-x64 -lxxhash `
     -o build/scratch/vend/smoke/xxhash_dynamic.exe
 
-g++ -std=c++20 -O2 -Wall -Wextra -I third_party/simdutf/include `
-    third_party/smokes/simdutf_smoke.cpp -L third_party/simdutf/lib/windows-x64 -lsimdutf `
+g++ -std=c++20 -O2 -Wall -Wextra -I vendor/third_party/simdutf/include `
+    vendor/third_party/smokes/simdutf_smoke.cpp -L vendor/third_party/simdutf/lib/windows-x64 -lsimdutf `
     -o build/scratch/vend/smoke/simdutf_dynamic.exe
 
-g++ -std=c++20 -O2 -Wall -Wextra -I third_party/unordered_dense/include `
-    third_party/smokes/unordered_dense_smoke.cpp -o build/scratch/vend/smoke/unordered_dense_dynamic.exe
+g++ -std=c++20 -O2 -Wall -Wextra -I vendor/third_party/unordered_dense/include `
+    vendor/third_party/smokes/unordered_dense_smoke.cpp -o build/scratch/vend/smoke/unordered_dense_dynamic.exe
 
-g++ -std=c++20 -O2 -Wall -Wextra -I third_party/fast_float/include `
-    third_party/smokes/fast_float_smoke.cpp -o build/scratch/vend/smoke/fast_float_dynamic.exe
+g++ -std=c++20 -O2 -Wall -Wextra -I vendor/third_party/fast_float/include `
+    vendor/third_party/smokes/fast_float_smoke.cpp -o build/scratch/vend/smoke/fast_float_dynamic.exe
 
-g++ -std=c++20 -O2 -Wall -Wextra -pthread -I third_party/moodycamel/include `
-    third_party/smokes/concurrentqueue_smoke.cpp -o build/scratch/vend/smoke/concurrentqueue_dynamic.exe
+g++ -std=c++20 -O2 -Wall -Wextra -pthread -I vendor/third_party/moodycamel/include `
+    vendor/third_party/smokes/concurrentqueue_smoke.cpp -o build/scratch/vend/smoke/concurrentqueue_dynamic.exe
 ```
 
 Header-only libraries have no archive, so for them the three variants vary
@@ -92,7 +92,7 @@ redirect the clean work dir + evidence file (default
 
 1. Merge, don't replace: the scratch `build/scratch/vend/scripts/run_smokes.ps1`
    that `build.ps1` calls today is the uWS/libuv (etc.) matrix. Append the
-   five `Invoke-Smoke` blocks from `third_party/smokes/run_smokes.ps1` to it,
+   five `Invoke-Smoke` blocks from `vendor/third_party/smokes/run_smokes.ps1` to it,
    or keep this file as `run_smokes_ledgerf.ps1` and call both from
    `build.ps1` §10. Overwriting the existing script would silently drop the
    older smokes' evidence.
@@ -103,7 +103,7 @@ redirect the clean work dir + evidence file (default
 3. `build.ps1` also needs Ledger F build/vendor steps before the smokes can
    pass in a full rebuild: currently `$pins` (lines 101–105) clone the five
    sources but nothing builds xxhash/simdutf archives or copies
-   unordered_dense/fast_float/moodycamel headers into `third_party/` —
+   unordered_dense/fast_float/moodycamel headers into `vendor/third_party/` —
    those trees already exist in the repo from the 2026-11-05 vendoring, but
    `build.ps1`'s vendor-copy step would not reproduce them today.
 
@@ -119,15 +119,15 @@ redirect the clean work dir + evidence file (default
   `-Wall -Wextra` noise and the fully-static concurrentqueue link.
 - **Windows x64 only.** `libxxhash.a`/`libsimdutf.a` exist only under
   `lib/windows-x64/`; there are no `linux-x64`/`linux-arm64` archives yet,
-  and `third_party/build-linux.sh` builds only libsodium/libuv/uSockets.
+  and `vendor/third_party/build-linux.sh` builds only libsodium/libuv/uSockets.
   A Linux smoke matrix needs those archives first (same single-TU pattern).
-- **Stray objects.** `third_party/xxhash/lib/windows-x64/xxhash.o` and
-  `third_party/simdutf/lib/windows-x64/simdutf.o` sit next to the `.a`
+- **Stray objects.** `vendor/third_party/xxhash/lib/windows-x64/xxhash.o` and
+  `vendor/third_party/simdutf/lib/windows-x64/simdutf.o` sit next to the `.a`
   files; the smokes link the archives only. The `.o` files are dead weight
   (or a future single-TU fallback) and should be confirmed as such.
 - **Name drift vs `internal-libs.md`.** That design guessed a
-  `third_party/concurrentqueue/include` path; the actual vendored tree is
-  `third_party/moodycamel/include`. The smoke (and any CMake wiring) must
+  `vendor/third_party/concurrentqueue/include` path; the actual vendored tree is
+  `vendor/third_party/moodycamel/include`. The smoke (and any CMake wiring) must
   use `moodycamel`.
 - **Coverage is deliberately thin** (smoke ≠ test suite): XXH64 only — no
   XXH32/XXH3 (the chosen bucket hash), no multi-block streaming; simdutf

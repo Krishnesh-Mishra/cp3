@@ -8,7 +8,7 @@ a non-crypto bucket hash, never a security primitive, never exposed.
 
 | Surface | Allowed | Forbidden |
 | --- | --- | --- |
-| `std/crypto` | libsodium-safe only: SHA-256/512, AES-256-GCM, ChaCha20-Poly1305, `randomBytes`/`randomUUID` (libsodium 1.0.22, `third_party/libsodium`, D70) | `wyhash`, `xxhash`/`xxh3` names of any form under `cp3::runtime::crypto::` / `hash.wyhash` / `crypto.xxhash` |
+| `std/crypto` | libsodium-safe only: SHA-256/512, AES-256-GCM, ChaCha20-Poly1305, `randomBytes`/`randomUUID` (libsodium 1.0.22, `vendor/third_party/libsodium`, D70) | `wyhash`, `xxhash`/`xxh3` names of any form under `cp3::runtime::crypto::` / `hash.wyhash` / `crypto.xxhash` |
 | `std/hash` | Non-crypto checksums only: `crc32`, `crc32c`, `fnv1a32`, `fnv1a64` (header-only, `src/std/hash/include/cp3/std/hash.hpp`) | `wyhash`, `xxhash`, `xxh3`, `siphash` user-facing names; no seeded behavior |
 | Internal buckets | wyhash (final4) via `cp3::runtime::detail::bucketHash*` with per-process seed (`src/runtime/include/cp3/core/bucket_hash.hpp`) | Any exposure: seed, raw bucket value, or algorithm name to cp3 user code, serialized output, logs, or cross-process comparison |
 
@@ -20,7 +20,7 @@ Rules enforced by this placement:
   not security — use `std/crypto` for that".
 * `wyhash`/`xxhash` never under crypto names, never under `std/hash` names.
   xxhash64 stays BLOCKED as a user name (no vendored xxhash row exists in
-  `third_party/MANIFEST.md`); a future switch from wyhash to xxh3 requires
+  `vendor/third_party/MANIFEST.md`); a future switch from wyhash to xxh3 requires
   vendoring xxhash and stays internal.
 
 ## What shipped
@@ -66,11 +66,11 @@ generated program that uses `Map`/`Set`/`LRUCache` must link libsodium.
 1. **Runtime build** — `src/runtime/CMakeLists.txt`, add
    `src/core/bucket_hash.cpp` to `cp3_runtime_sources` (after
    `src/core/runtime.cpp`). Include path for `<sodium.h>` is already wired
-   (`third_party/libsodium/include` is a PRIVATE include of `cp3_runtime`).
+   (`vendor/third_party/libsodium/include` is a PRIVATE include of `cp3_runtime`).
 2. **Generated-program link** — mirror the `std/crypto` row in
    `src/cli/src/detail/native_packages.hpp` for `std/collections`: add
-   `third_party/libsodium/include` to compile dirs and `-lsodium`
-   (plus per-platform `lib` dirs: `third_party/libsodium/lib/{windows-x64,
+   `vendor/third_party/libsodium/include` to compile dirs and `-lsodium`
+   (plus per-platform `lib` dirs: `vendor/third_party/libsodium/lib/{windows-x64,
    linux-x64,linux-arm64}`) whenever the program imports `std/collections`.
    Merge with the existing `std/crypto` entry when a program imports both
    (do not duplicate `-lsodium`).

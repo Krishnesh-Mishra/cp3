@@ -81,7 +81,7 @@ whole-program obligations and keep the gate off.
 | P4 one-per-SCC | Exactly one edge is injected per cycle group, deterministically (lexicographic order), so the group's strong-edge count drops by exactly one and the cycle is broken, not over-weakened. | Yes (`selectAutoWeak`) |
 | P5 body escapes | The target `B` does not escape the cycle through any *body* site: no return of `this`/the target, no store to a global/static, no closure capture that outlives the owner, no native/worker crossing, no `unknown` sink. | **No — outstanding.** The Stage 1 escape sites cover field types, not bodies. This is the main missing proof. |
 | P6 instance | `A.f` is an instance field. Static fields are program-lifetime roots and are excluded from the graph entirely (they can never be the injected edge). | Yes (by construction) |
-| P7 gate | `tools/fuzz_graphs.py` differential fuzzing (auto-weak vs manual-weak binaries agree) and ASan runs pass on the cycle corpus. | **No — outstanding.** |
+| P7 gate | `vendor/tools/fuzz_graphs.py` differential fuzzing (auto-weak vs manual-weak binaries agree) and ASan runs pass on the cycle corpus. | **No — outstanding.** |
 
 `kAutoWeakGateEnabled` (in `class_check.cpp`) is the P5∧P7 gate. Flipping it
 is a one-line change that must not happen until P5 (body-level escape
@@ -165,7 +165,7 @@ the report prints.
 - [ ] P5: body-level escape analysis publishes return/global/closure/native
       escape sites into `cycleEscapeSites`; selection requires
       `escape: none` across all of them for the target.
-- [ ] P7: `tools/fuzz_graphs.py` differential runs (proven auto-weak vs
+- [ ] P7: `vendor/tools/fuzz_graphs.py` differential runs (proven auto-weak vs
       manual `weak` generated C++ agree) clean; ASan cycle corpus passes.
 - [ ] Corpus: existing CP3401 cycle tests updated to expect the proven
       lowering (struct member is `WeakRef`, reads narrow) and re-run.

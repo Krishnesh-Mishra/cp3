@@ -178,20 +178,20 @@ target_include_directories(cp3_cli PRIVATE "${CP3_DOCS_GENERATED_DIR}")
 # dynamically at runtime from the user's LLVM installation (CP3_LIBCLANG may
 # override the search), so building cp3c never requires LLVM to be present.
 #
-# The public clang-c headers are vendored under third_party/clang-c/include
-# (Apache-2.0 WITH LLVM-exception, pinned in third_party/clang-c/VERSION.txt),
+# The public clang-c headers are vendored under vendor/third_party/clang-c/include
+# (Apache-2.0 WITH LLVM-exception, pinned in vendor/third_party/clang-c/VERSION.txt),
 # which keeps `cmake -S . -B build` working on a machine without LLVM. Point
 # -DCP3_LIBCLANG_INCLUDE_DIR=<dir> at a system LLVM include directory to build
 # against that copy instead.
 # -----------------------------------------------------------------------------
 if(NOT CP3_LIBCLANG_INCLUDE_DIR)
     set(CP3_LIBCLANG_INCLUDE_DIR
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/clang-c/include")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/clang-c/include")
 endif()
 if(NOT EXISTS "${CP3_LIBCLANG_INCLUDE_DIR}/clang-c/Index.h")
     message(FATAL_ERROR
         "clang-c/Index.h was not found under '${CP3_LIBCLANG_INCLUDE_DIR}'. "
-        "The vendored copy in third_party/clang-c/include is missing, or "
+        "The vendored copy in vendor/third_party/clang-c/include is missing, or "
         "-DCP3_LIBCLANG_INCLUDE_DIR points at a directory without the libclang "
         "C API headers (for example 'C:/Program Files/LLVM/include').")
 endif()

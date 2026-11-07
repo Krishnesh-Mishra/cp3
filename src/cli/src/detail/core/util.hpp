@@ -91,7 +91,7 @@ std::uint64_t totalPhysicalMemoryMb() noexcept;
 // The generated C++ includes the frozen runtime header (cp3/core/runtime.hpp) and
 // may include common headers, so a program build needs the shipped header trees
 // and the runtime translation units. The installer ships those trees next to
-// bin/cp3c.exe (packaging/windows), so the root is discovered relocatably: from
+// bin/cp3c.exe (dist/packaging/windows), so the root is discovered relocatably: from
 // CP3_ROOT (set by the cp3.cmd shim), from the running executable's ancestors,
 // and finally from this module's compile-time path (`__FILE__`) for an
 // in-checkout compiler. Since D72 the always-available std families (string,
@@ -117,7 +117,7 @@ std::vector<fs::path> runtimeSourcePaths(const std::string& programText);
 
 // Cp3 root: the ancestor directory that owns the shared trees (`src/runtime`
 // plus `src/std`; a source checkout also has `src/cli`), normally also
-// `third_party/`. Empty when the layout cannot be recognised. The std modules'
+// `vendor/third_party/`. Empty when the layout cannot be recognised. The std modules'
 // native backends (detail/native_packages.hpp, DECISIONS D68/D70) resolve their
 // vendored paths against this root.
 fs::path repositoryRoot();
@@ -125,7 +125,7 @@ fs::path repositoryRoot();
 // Maps a repository-relative include root ("src/<x>/include", for example
 // "src/runtime/include" or "src/std/console/include") onto the installed
 // layout, where the same header tree lives at "<root>/include/<x>"
-// (packaging/windows/package.ps1 stages every header tree there). Returns
+// (dist/packaging/windows/package.ps1 stages every header tree there). Returns
 // "<root>/<rel>" unchanged when that directory exists, so a source checkout is
 // unaffected; falls back to "<root>/<rel>" when the mapped directory does not
 // exist either, so callers report the path a checkout would have to provide.

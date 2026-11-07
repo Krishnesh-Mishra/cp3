@@ -182,7 +182,7 @@ block another's build. (See §11 for the one known warning.)
 
 ### 3.4 Layout lint and zero-placeholder gate
 
-The `lint` target runs `python tools/lint.py`, which runs the STYLE.md
+The `lint` target runs `python vendor/tools/lint.py`, which runs the STYLE.md
 §2 hard budgets (file, function, type, line length, parameters, nesting) and the
 §4 naming spot-checks (file names, macro names) over `src/**`. It is **advisory
 by design**: it is not part of the default build (not in `ALL`), never depends
@@ -192,22 +192,22 @@ budget is exceeded and prints a per-file report with line numbers; run it
 directly for the same result, or `--warn-only` to report without failing:
 
 ```bash
-python tools/lint_layout.py
-python tools/lint_layout.py --warn-only
+python vendor/tools/lint_layout.py
+python vendor/tools/lint_layout.py --warn-only
 ```
 
 Hard violations must be fixed before a module is considered done; the
 suppression marker and the documented allow-list are described in the script
 header.
 
-The wrapper then runs `python tools/check_cp3002.py`, a hard gate over `src/`, `tests/`,
-`docs/` and `packaging/`. The gate prints every retired placeholder marker as
+The wrapper then runs `python vendor/tools/check_cp3002.py`, a hard gate over `src/`, `tests/`,
+`docs/` and `dist/packaging/`. The gate prints every retired placeholder marker as
 `path:line` and exits 1 while any remain. Run it on its own with
 `cmake --build build --target lint-cp3002` or directly:
 
 ```bash
-python tools/check_cp3002.py
-python tools/check_cp3002.py --report
+python vendor/tools/check_cp3002.py
+python vendor/tools/check_cp3002.py --report
 ```
 
 The full usage and the temporary baseline mode are documented in STYLE.md

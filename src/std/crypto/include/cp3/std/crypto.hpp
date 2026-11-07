@@ -37,7 +37,7 @@
 //     on malformed input, wrong key or tag mismatch - never silently-wrong
 //     plaintext (docs 04).
 //
-// Backend: libsodium (third_party/libsodium, D70). The implementation TU is
+// Backend: libsodium (vendor/third_party/libsodium, D70). The implementation TU is
 // src/std/crypto/runtime.cpp and is compiled + linked only when a program
 // imports "std/crypto" (src/std/crypto/native.hpp, D68).
 // =============================================================================

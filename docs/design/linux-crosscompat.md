@@ -3,15 +3,15 @@
 Solo audit (code only: no cmake/build/tests run, no commit). Scope of this
 audit: every `NativePackage` platform row under `src/std/**/native.hpp`,
 checked for `linux-x64` / `linux-arm64` coverage against the archives
-actually present under `third_party/*/lib/<triple>/`.
+actually present under `vendor/third_party/*/lib/<triple>/`.
 
-Method: read every `src/std/**/native.hpp`, listed `third_party/*/lib/**`
-on disk, and cross-checked `third_party/MANIFEST.md` (Pins / Delivered
+Method: read every `src/std/**/native.hpp`, listed `vendor/third_party/*/lib/**`
+on disk, and cross-checked `vendor/third_party/MANIFEST.md` (Pins / Delivered
 artifacts / Ledger F). No archive was built or copied.
 
 > **Update 2026-11-07:** the follow-up this audit called for has landed.
-> `third_party/xxhash/lib/linux-x64/libxxhash.a` and
-> `third_party/simdutf/lib/linux-x64/libsimdutf.a` now exist (ELF x64; byte
+> `vendor/third_party/xxhash/lib/linux-x64/libxxhash.a` and
+> `vendor/third_party/simdutf/lib/linux-x64/libsimdutf.a` now exist (ELF x64; byte
 > counts and SHA-256 in MANIFEST.md), the `linux-x64` rows are wired in
 > `std/hash`, `std/text` and `std/collections`, and PCRE2 gained a
 > `linux-x64` archive and row alongside the existing Windows one. The
@@ -23,15 +23,15 @@ artifacts / Ledger F). No archive was built or copied.
 
 | Library (pin) | windows-x64 archive | linux-x64 archive | linux-arm64 archive | Missing triples |
 | --- | --- | --- | --- | --- |
-| libsodium 1.0.22 | `third_party/libsodium/lib/windows-x64/libsodium.a` | `.../lib/linux-x64/libsodium.a` | `.../lib/linux-arm64/libsodium.a` | — (none) |
-| libuv v1.53.0 | `third_party/libuv/lib/windows-x64/libuv.a` | `.../lib/linux-x64/libuv.a` | `.../lib/linux-arm64/libuv.a` | — (none) |
-| uSockets (uWebSockets v20.80.0) | `third_party/uWebSockets/lib/windows-x64/libuSockets.a` | `.../lib/linux-x64/libuSockets.a` | `.../lib/linux-arm64/libuSockets.a` | — (none for the linked lib; see uWebSockets note) |
+| libsodium 1.0.22 | `vendor/third_party/libsodium/lib/windows-x64/libsodium.a` | `.../lib/linux-x64/libsodium.a` | `.../lib/linux-arm64/libsodium.a` | — (none) |
+| libuv v1.53.0 | `vendor/third_party/libuv/lib/windows-x64/libuv.a` | `.../lib/linux-x64/libuv.a` | `.../lib/linux-arm64/libuv.a` | — (none) |
+| uSockets (uWebSockets v20.80.0) | `vendor/third_party/uWebSockets/lib/windows-x64/libuSockets.a` | `.../lib/linux-x64/libuSockets.a` | `.../lib/linux-arm64/libuSockets.a` | — (none for the linked lib; see uWebSockets note) |
 | uWebSockets (header-only) | `libuWebSockets.a` present (optional, never pulled) | **absent** | **absent** | linux-x64, linux-arm64 — **not missing in practice**: header-only, `-luWebSockets` is optional per MANIFEST; no NativePackage row links it on any triple |
-| XXHash v0.8.3 | `third_party/xxhash/lib/windows-x64/libxxhash.a` | **absent** (no `lib/linux-*` dir) | **absent** | **linux-x64, linux-arm64** |
-| simdutf v6.1.0 | `third_party/simdutf/lib/windows-x64/libsimdutf.a` | **absent** (no `lib/linux-*` dir) | **absent** | **linux-x64, linux-arm64** |
+| XXHash v0.8.3 | `vendor/third_party/xxhash/lib/windows-x64/libxxhash.a` | **absent** (no `lib/linux-*` dir) | **absent** | **linux-x64, linux-arm64** |
+| simdutf v6.1.0 | `vendor/third_party/simdutf/lib/windows-x64/libsimdutf.a` | **absent** (no `lib/linux-*` dir) | **absent** | **linux-x64, linux-arm64** |
 
-Un-tripled legacy copies (`third_party/libsodium/lib/libsodium.a`,
-`third_party/libuv/lib/libuv.a`, `third_party/uWebSockets/lib/lib*.a`) are
+Un-tripled legacy copies (`vendor/third_party/libsodium/lib/libsodium.a`,
+`vendor/third_party/libuv/lib/libuv.a`, `vendor/third_party/uWebSockets/lib/lib*.a`) are
 the original Windows builds kept for compatibility (MANIFEST "Delivered
 artifacts"); they are not Linux archives and must not be pointed at by a
 linux row.
@@ -53,7 +53,7 @@ linux row.
 
 No linux platform row was added for xxhash or simdutf, because **no linux
 archive exists to point it at**. Adding a row such as
-`{"linux-x64", {"third_party/xxhash/lib/linux-x64"}, {"-lxxhash"}}` today
+`{"linux-x64", {"vendor/third_party/xxhash/lib/linux-x64"}, {"-lxxhash"}}` today
 would point `-L` at a non-existent directory and turn the current explicit
 "no vendor archives for target" error into a confusing `-lxxhash not found`
 link error; pointing at the windows-x64 COFF archive would be worse
@@ -74,14 +74,14 @@ already exist for libsodium and must gain the xxhash lib dir + `-lxxhash`
 The task asks for a placeholder README where an archive is missing. This
 solo audit's file scope is limited to this doc plus the three `native.hpp`
 platform rows, so the READMEs below are **specified here ready-to-drop,
-not created** under `third_party/` — creating them (plus the empty
+not created** under `vendor/third_party/` — creating them (plus the empty
 `lib/linux-*` dirs) is a one-step follow-up for whoever vendors the
 archives. Each README should sit next to the future archive:
 
-- `third_party/xxhash/lib/linux-x64/README.md` and
-  `third_party/xxhash/lib/linux-arm64/README.md`
-- `third_party/simdutf/lib/linux-x64/README.md` and
-  `third_party/simdutf/lib/linux-arm64/README.md`
+- `vendor/third_party/xxhash/lib/linux-x64/README.md` and
+  `vendor/third_party/xxhash/lib/linux-arm64/README.md`
+- `vendor/third_party/simdutf/lib/linux-x64/README.md` and
+  `vendor/third_party/simdutf/lib/linux-arm64/README.md`
 
 Ready-to-drop content (xxhash; simdutf analogous with its names/sources):
 
@@ -89,23 +89,23 @@ Ready-to-drop content (xxhash; simdutf analogous with its names/sources):
 # Placeholder — no linux-<arch> archive vendored yet
 
 Expected: `libxxhash.a` (XXHash v0.8.3, pinned in
-`third_party/xxhash/VERSION.txt`), built from the vendored single TU
-`third_party/xxhash/include/xxhash.c` (`XXH_IMPLEMENTATION`) with a native
+`vendor/third_party/xxhash/VERSION.txt`), built from the vendored single TU
+`vendor/third_party/xxhash/include/xxhash.c` (`XXH_IMPLEMENTATION`) with a native
 <arch> `gcc -O3 -std=c99` + `ar`/`ranlib` — see
-`third_party/xxhash/build-linux.sh` (code only; not yet run on Linux).
+`vendor/third_party/xxhash/build-linux.sh` (code only; not yet run on Linux).
 
 Do NOT point a NativePackage linux row at this dir until `libxxhash.a`
 exists here; do NOT reuse `lib/windows-x64/libxxhash.a` (COFF).
-Once built: record bytes + SHA-256 in `third_party/MANIFEST.md`, then add
+Once built: record bytes + SHA-256 in `vendor/third_party/MANIFEST.md`, then add
 the linux row to `src/std/hash/native.hpp` / `src/std/collections/native.hpp`.
 Audit: `docs/design/linux-crosscompat.md`.
 ```
 
 For simdutf the expected artefact is `libsimdutf.a` (v6.1.0,
-`third_party/simdutf/VERSION.txt`); note simdutf is **not** single-TU
+`vendor/third_party/simdutf/VERSION.txt`); note simdutf is **not** single-TU
 (`lib/windows-x64/` carries `simdutf.o` built from the full upstream
 CMake build — there is no vendored `.c` amalgamation under
-`third_party/simdutf/include/`), so its linux build needs the upstream
+`vendor/third_party/simdutf/include/`), so its linux build needs the upstream
 CMake recipe (or a system `libsimdutf-dev` cross-check) rather than the
 xxhash one-liner, plus a SIMD-baseline decision (generic vs arch-specific;
 see `docs/design/internal-libs.md` limitations). Same row target:
@@ -116,11 +116,11 @@ actually needs them (verify from real link errors, per MANIFEST practice).
 
 ```cpp
 // std/hash + std/collections (xxhash), per triple <triple> = linux-x64 | linux-arm64:
-{"linux-x64",   {"third_party/xxhash/lib/linux-x64"},   {"-lxxhash"}},   // + libsodium dir/-lsodium in collections
-{"linux-arm64", {"third_party/xxhash/lib/linux-arm64"}, {"-lxxhash"}},
+{"linux-x64",   {"vendor/third_party/xxhash/lib/linux-x64"},   {"-lxxhash"}},   // + libsodium dir/-lsodium in collections
+{"linux-arm64", {"vendor/third_party/xxhash/lib/linux-arm64"}, {"-lxxhash"}},
 // std/text (simdutf):
-{"linux-x64",   {"third_party/simdutf/lib/linux-x64"},   {"-lsimdutf"}},
-{"linux-arm64", {"third_party/simdutf/lib/linux-arm64"}, {"-lsimdutf"}},
+{"linux-x64",   {"vendor/third_party/simdutf/lib/linux-x64"},   {"-lsimdutf"}},
+{"linux-arm64", {"vendor/third_party/simdutf/lib/linux-arm64"}, {"-lsimdutf"}},
 ```
 
 ## Limitations
@@ -129,7 +129,7 @@ actually needs them (verify from real link errors, per MANIFEST practice).
   file listing + MANIFEST SHA table only; the linux libsodium/libuv/uSockets
   archives were not re-verified (no `file`/`ar` inspection, no smoke link)
   in this audit.
-- `third_party/xxhash/build-linux.sh` exists in the working tree (untracked,
+- `vendor/third_party/xxhash/build-linux.sh` exists in the working tree (untracked,
   another wave's work) and documents the xxhash linux recipe; it has not
   been run, so no `lib/linux-*` dir/archive exists yet. No equivalent
   script was found for simdutf.

@@ -1,6 +1,6 @@
 # `std/hash` xxhash64 — vendoring prep (ROADMAP C)
 
-Solo prep, code only. No `cmake`/build/test ran, no `third_party/` tree touched,
+Solo prep, code only. No `cmake`/build/test ran, no `vendor/third_party/` tree touched,
 no shared files edited. After this change `hash.xxhash64` is still BLOCKED
 (CP3305) — the doc below is the unblock plan.
 
@@ -39,7 +39,7 @@ stay internal — see Limitations).
 ## MANIFEST row format (proposed, not landed)
 
 When the archive is delivered, add XXHash following the existing three-table
-shape in `third_party/MANIFEST.md` (do not land these rows until bytes exist):
+shape in `vendor/third_party/MANIFEST.md` (do not land these rows until bytes exist):
 
 **Pins** (fill `tag`/`commit` at vend time; candidate: upstream release
 `v0.8.3`, the first 0.8.x with CMake install support used by libsodium recipes
@@ -64,13 +64,13 @@ shape in `third_party/MANIFEST.md` (do not land these rows until bytes exist):
 | xxhash/LICENSE | BSD-2-Clause |
 ```
 
-Plus `third_party/xxhash/VERSION.txt` in the existing one-line format:
+Plus `vendor/third_party/xxhash/VERSION.txt` in the existing one-line format:
 `"<repo URL> <tag> <full SHA> <date built>"`.
 
 **Vendor tree** (populate at vend time only):
 
 ```
-third_party/xxhash/
+vendor/third_party/xxhash/
   VERSION.txt
   LICENSE
   include/  { xxhash.h, xxh3.h, xxhash_v32.h, xxhsum.h }
@@ -84,7 +84,7 @@ defined either (it is incompatible with linking `libxxhash.a` for `XXH64`).
 
 ## Wiring for lead (not landed)
 
-1. **Build recipe** — extend `third_party/build.ps1` following the libuv/PCRE2
+1. **Build recipe** — extend `vendor/third_party/build.ps1` following the libuv/PCRE2
    CMake+Ninja pattern: `BUILD_SHARED_LIBS=OFF`, `XXHASH_BUILD_XXH32=ON`,
    `XXHASH_BUILD_XXH64=ON`, `XXHASH_BUILD_XXH3=ON`, `XXHASH_BUILD_TESTS=OFF`,
    `XXHASH_BUILD_BENCH=OFF`, Release, install prefix. Record the exact commands
@@ -105,8 +105,8 @@ defined either (it is incompatible with linking `libxxhash.a` for `XXH64`).
    becomes the `std/crypto` pattern:
 
    ```
-   compile: -I third_party/xxhash/include
-   link:    -L third_party/xxhash/lib/<triple> -lxxhash
+   compile: -I vendor/third_party/xxhash/include
+   link:    -L vendor/third_party/xxhash/lib/<triple> -lxxhash
    ```
 
    per-triple rows for `windows-x64`, `linux-x64`, `linux-arm64`; the compile
@@ -131,7 +131,7 @@ defined either (it is incompatible with linking `libxxhash.a` for `XXH64`).
 5. **Bucket hash (optional, separate step)** — replace the body of
    `bucketHashBytes` in `src/runtime/include/cp3/core/bucket_hash.hpp` with
    `XXH3_64bits_withSeed(data, len, seed ^ domainTag)` and add
-   `third_party/xxhash/include` to `cp3_runtime`'s PRIVATE includes in
+   `vendor/third_party/xxhash/include` to `cp3_runtime`'s PRIVATE includes in
    `src/runtime/CMakeLists.txt` plus the corresponding archive link. Keep
    `bucketSeed()` semantics identical (libsodium seed, domain tags) — only the
    mix function changes. Land only after `std/hash` is already linking

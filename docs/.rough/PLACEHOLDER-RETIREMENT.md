@@ -34,7 +34,7 @@ Promise, and worker/parallel modules.
 
 - The zero-placeholder gate: zero marker hits across `src`, `tests`, `docs` and
   `packaging`.
-- `python tools/check_diagnostics.py`: every header code is documented and every
+- `python vendor/tools/check_diagnostics.py`: every header code is documented and every
   `src/**` reference is defined.
 - Full corpus: 1923 found, 1896 passed, 0 failed, 0 skipped, 27 ambiguous.
 - `tests/network` phase B: the async-handler, typed-JSON and unannotated

@@ -1,7 +1,7 @@
 # Ledger F — internal-only libraries
 
 Solo inventory (no downloads, no builds, no `src/**` CMake edits). Sources:
-`third_party/MANIFEST.md`, `third_party/build.ps1`, `CMakeLists.txt`,
+`vendor/third_party/MANIFEST.md`, `vendor/third_party/build.ps1`, `CMakeLists.txt`,
 `src/CMakeLists.txt`, `src/runtime/CMakeLists.txt`, and the `src/std/**`
 headers. MANIFEST.md got a "Ledger F" section with the rows below; `build.ps1`
 got a header note only.
@@ -10,7 +10,7 @@ got a header note only.
 
 | Library | Present in third_party | Evidence | Current stand-in in tree |
 | --- | --- | --- | --- |
-| libsodium (seed / CSPRNG) | PRESENT | `third_party/libsodium/` + MANIFEST pin 1.0.22; `src/std/crypto/runtime.cpp` uses `sodium_init`/`randombytes_buf` | — (done) |
+| libsodium (seed / CSPRNG) | PRESENT | `vendor/third_party/libsodium/` + MANIFEST pin 1.0.22; `src/std/crypto/runtime.cpp` uses `sodium_init`/`randombytes_buf` | — (done) |
 | ankerl::unordered_dense | MISSING | no dir, no MANIFEST row, no CMake ref | `std::unordered_map` in `collections.hpp` (Map/Set), `std/io/runtime.cpp` |
 | fast_float | MISSING | no dir/row | `std::strtod` in `json_parse.hpp`, typed-arrays, `std/network/runtime.cpp` |
 | simdutf | MISSING | no dir/row; `std/text` header comment says "no simdutf dependency" | hand-validated UTF-8 decode; O(n) code-point scan in `string.hpp` `charAt` |
@@ -25,10 +25,10 @@ got a header note only.
 ## MANIFEST changes
 
 Added "Ledger F — internal-only libraries (PLANNED, not yet vendored)" section
-to `third_party/MANIFEST.md`: one row per lib above (candidate upstream URL,
+to `vendor/third_party/MANIFEST.md`: one row per lib above (candidate upstream URL,
 kind, hot path, status), plus wiring-note blocks (CMake include dirs for
 header-only libs; `-I`/`-L`/`-l` per-triple rows for compiled libs). Rows are
-explicitly **not pins** — no SHA/tag/`VERSION.txt` claimed. `third_party/build.ps1`
+explicitly **not pins** — no SHA/tag/`VERSION.txt` claimed. `vendor/third_party/build.ps1`
 got a matching header comment; `$pins` unchanged so a re-run is unaffected.
 
 ## Wiring lines for the lead (land in src/** after vendoring)
@@ -36,20 +36,20 @@ got a matching header comment; `$pins` unchanged so a re-run is unaffected.
 Header-only — add to `cp3_runtime` PRIVATE includes in `src/runtime/CMakeLists.txt`:
 
 ```cmake
-"${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/unordered_dense/include"
-"${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/fast_float/include"
-"${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/concurrentqueue/include"  # or boost/include
-"${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/wyhash/include"           # if chosen
+"${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/unordered_dense/include"
+"${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/fast_float/include"
+"${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/concurrentqueue/include"  # or boost/include
+"${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/wyhash/include"           # if chosen
 ```
 
 Compiled — add rows to each family's `native.hpp` (pattern: `std/crypto`,
 `std/network`) with per-triple `lib/<triple>` dirs:
 
 ```
-fmt:     -I third_party/fmt/include     -L third_party/fmt/lib/<triple>     -lfmt
-simdutf: -I third_party/simdutf/include -L third_party/simdutf/lib/<triple> -lsimdutf
-miniz:   -I third_party/miniz/include   -L third_party/miniz/lib/<triple>   -lminiz
-xxhash:  -I third_party/xxhash/include  -L third_party/xxhash/lib/<triple>  -lxxhash
+fmt:     -I vendor/third_party/fmt/include     -L vendor/third_party/fmt/lib/<triple>     -lfmt
+simdutf: -I vendor/third_party/simdutf/include -L vendor/third_party/simdutf/lib/<triple> -lsimdutf
+miniz:   -I vendor/third_party/miniz/include   -L vendor/third_party/miniz/lib/<triple>   -lminiz
+xxhash:  -I vendor/third_party/xxhash/include  -L vendor/third_party/xxhash/lib/<triple>  -lxxhash
 ```
 
 Order of first consumers: unordered_dense -> `collections.hpp` Map/Set index;

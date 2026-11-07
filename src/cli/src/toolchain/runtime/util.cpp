@@ -250,7 +250,7 @@ fs::path findCp3Root() {
 }  // namespace
 
 // Public to the cli module because the native-backend rows
-// (detail/native_packages.hpp) resolve third_party/** against it.
+// (detail/native_packages.hpp) resolve vendor/third_party/** against it.
 fs::path repositoryRoot() { return findCp3Root(); }
 
 fs::path resolveIncludeRoot(const fs::path& root, const std::string& rel) {

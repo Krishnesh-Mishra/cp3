@@ -5,7 +5,7 @@
 // linked, with -lsodium) only when a program imports "std/crypto" - see
 // src/std/crypto/native.hpp.
 //
-// Backend notes: libsodium 1.0.22 static (third_party/libsodium, D70). Do not
+// Backend notes: libsodium 1.0.22 static (vendor/third_party/libsodium, D70). Do not
 // gate AES-256-GCM on crypto_aead_aes256gcm_is_available(): in this pinned
 // build it returns 0 while the round-trip works (known-answer covered by
 // tests/cases/stdlib/crypto_*), so this TU never consults it.

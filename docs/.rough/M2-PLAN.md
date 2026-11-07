@@ -91,7 +91,7 @@ the post-perf std waves, so the new module families land in the final layout
 as runtime units behind per-module tables. The spec-named native backends
 (libsodium for crypto; libuv + uWebSockets for network; oneTBB for
 `parallel.*`) are vendored as pinned static builds packed with cp3c (D70,
-landed `b7c8883`; record below), so the std waves link `third_party/`
+landed `b7c8883`; record below), so the std waves link `vendor/third_party/`
 directly. Post-perf runtime waves: the roadmap was revised by the user
 directive of 2026-10-18 (latest): (1) the **structure sweep** landed
 (2026-10-18); (2) the **three parallel implementation waves** run next, each
@@ -362,17 +362,17 @@ three D64 deliverables.
 
 ## VEND landing record (2026-10-18)
 
-Committed `b7c8883` (306 files: `third_party/**`, `.gitignore`, D70). All
+Committed `b7c8883` (306 files: `vendor/third_party/**`, `.gitignore`, D70). All
 four spec-named backends vendored as pinned, static MinGW-W64 x64 builds:
 libsodium 1.0.22 (crypto), libuv v1.53.0 + uWebSockets v20.80.0 including its
 in-tree uSockets (network), oneTBB v2023.1.0 (`parallel.*`). Smoke matrix
 15/15 across dynamic, static-libgcc/stdc++ and fully static links; static exes
-re-run with a scrubbed PATH. `third_party/MANIFEST.md` carries pins, exact
+re-run with a scrubbed PATH. `vendor/third_party/MANIFEST.md` carries pins, exact
 build commands, artifact SHA-256s and the verified consumer flag lists;
-`third_party/build.ps1` reproduces every artifact from the pinned source.
+`vendor/third_party/build.ps1` reproduces every artifact from the pinned source.
 Lead re-verification: all six archive SHA-256s recomputed (match); the uWS and
 sodium smokes re-linked and re-run from a clean directory against
-`third_party/` only (exit 0). Caveats: do not gate AES-256-GCM on
+`vendor/third_party/` only (exit 0). Caveats: do not gate AES-256-GCM on
 `is_available()` (returns 0 on this build while the round-trip works); oneTBB
 static is upstream-unsupported but builds and passes; TLS/compression off by
 design (SS20). Report: `build/scratch/vend/WAVE-VEND-REPORT.md`.
@@ -524,7 +524,7 @@ because docs/standard-library/04 requires the explicit import; a bare use is
 CP3301 with the statement. Console is surface-aware: log/info/warn/error are
 implemented and suggested; assert/clear/input/readKey stay out of the candidate
 list with their explicit unsupported diagnostics. `docs/cli-tooling/07-diagnostic-catalog.md`
-documents all 65 live codes plus 19 reserved; `tools/check_diagnostics.py`
+documents all 65 live codes plus 19 reserved; `vendor/tools/check_diagnostics.py`
 cross-checks the header, the catalog and `src/**` (0 findings). 8 new pins in
 `tests/cases/diagnostics/` (7 pass, 1 skip marker);
 `variables/undeclared_property` re-pinned to CP3305.
@@ -667,7 +667,7 @@ Steps and checks:
    the native row table learn the per-family include roots; generated code
    still says `#include "cp3/std/<name>.hpp"`. A program only gets the roots
    of the families it imports.
-4. Same-sweep updates: `tools/lint_layout.py`, `ARCHITECTURE.md`, `STYLE.md`,
+4. Same-sweep updates: `vendor/tools/lint_layout.py`, `ARCHITECTURE.md`, `STYLE.md`,
    M2-PLAN and DECISIONS path references, native rows' repo-relative paths.
 5. Corpus untouched: `tests/cases/**` stays as pinned.
 6. Acceptance: canonical rebuild, lint 0 errors, cold full corpus

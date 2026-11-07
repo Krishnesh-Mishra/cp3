@@ -19,8 +19,8 @@ namespace cp3::cli::detail {
 inline const NativePackage kEnvNativePackage{
     "std/env",
     {"src/std/env/include", "src/std/process/include",
-     "src/std/collections/include", "third_party/unordered_dense/include",
-     "third_party/libsodium/include", "third_party/xxhash/include"},
+     "src/std/collections/include", "vendor/third_party/unordered_dense/include",
+     "vendor/third_party/libsodium/include", "vendor/third_party/xxhash/include"},
     {},
     // cp3/std/env.hpp composes the process family, whose header includes the
     // collections Map; instantiating it references bucketHashBytes, so the
@@ -30,14 +30,14 @@ inline const NativePackage kEnvNativePackage{
     {"-lsodium", "-lxxhash"},
     {},
     {{"windows-x64",
-      {"third_party/libsodium/lib/windows-x64",
-       "third_party/xxhash/lib/windows-x64"},
+      {"vendor/third_party/libsodium/lib/windows-x64",
+       "vendor/third_party/xxhash/lib/windows-x64"},
       {"-lsodium", "-lxxhash"}},
      {"linux-x64",
-      {"third_party/libsodium/lib/linux-x64",
-       "third_party/xxhash/lib/linux-x64"},
+      {"vendor/third_party/libsodium/lib/linux-x64",
+       "vendor/third_party/xxhash/lib/linux-x64"},
       {"-lsodium", "-lxxhash"}},
-     {"linux-arm64", {"third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
+     {"linux-arm64", {"vendor/third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
 };
 
 }  // namespace cp3::cli::detail

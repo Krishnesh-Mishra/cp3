@@ -22,8 +22,8 @@
 // not be surfaced to cp3 user code, serialized, logged, or compared across
 // processes/hosts. Bucket values are per-process, per-run only.
 //
-// Backend: the vendored XXHash static archive (third_party/xxhash, v0.8.3,
-// BSD-2-Clause; third_party/MANIFEST.md Ledger F). The archive is linked at
+// Backend: the vendored XXHash static archive (vendor/third_party/xxhash, v0.8.3,
+// BSD-2-Clause; vendor/third_party/MANIFEST.md Ledger F). The archive is linked at
 // generated-program link time by the std/collections native row
 // (src/std/collections/native.hpp) alongside the libsodium archive; the
 // xxhash64 path links the same archive via the std/hash native row - one

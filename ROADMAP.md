@@ -327,7 +327,7 @@ escape hatch for reference cycles: a weak field does not count toward the
 refcount and reads as `T | null`.
 
 Automatic cycle handling (memory item), no GC and no cycle collector:
-- Stage 0 (`tools/cycle_stats.py`, `docs/cycle-stage0.md`): 61 classes, 5
+- Stage 0 (`vendor/tools/cycle_stats.py`, `docs/cycle-stage0.md`): 61 classes, 5
   cycle-capable in 3 groups (A/B mutual, BST self-recursive, Child/Parent
   already weak), 56 acyclic (92%). 2 of 3 groups have no `weak` edge.
 - Stage 1 + shared analysis: strong-edge class graph (weak excluded,
@@ -338,7 +338,7 @@ Automatic cycle handling (memory item), no GC and no cycle collector:
   edge `weak`. Single self-referencing fields (`next: Node | null`) are
   exempt (recursive types, not runtime cycles).
 - `cp3 check --report` lists cycle-capable classes, store/escape sites and
-  the manual-weak share. `tools/fuzz_graphs.py` differential fuzzer is clean.
+  the manual-weak share. `vendor/tools/fuzz_graphs.py` differential fuzzer is clean.
 - Regions, compiler-injected non-owning edges and group counting (stages
   2-3) are deferred: they need the whole-program ownership proof plus the
   fuzzer/ASan gate, which is not yet met. Cycles resolve today by an

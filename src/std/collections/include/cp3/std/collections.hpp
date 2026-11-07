@@ -171,7 +171,7 @@ struct KeyEqual {
 // iteration order, D44) plus a hash index that owns the values. A lookup is one
 // probe; keeping the values behind a key -> row index instead would put a
 // dependent load on every update (measured: 25% on word-frequency). The index
-// is ankerl::unordered_dense::map (v5.3.3, vendored under third_party/): a
+// is ankerl::unordered_dense::map (v5.3.3, vendored under vendor/third_party/): a
 // dense open-addressing table that stores values inline in a vector instead
 // of per-node allocations, while the side `order_` vector still pins D44
 // iteration order. NOTE the deliberate tradeoff versus the old node-based

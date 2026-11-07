@@ -16,15 +16,15 @@ MANIFEST / `native.hpp` rows to apply once the archives exist.
 
 Scope of this change (only these paths were touched):
 
-- `third_party/simdutf/build-linux-simdutf.sh` (new) — Linux build
-- `third_party/simdutf/lib/linux-x64/README.md` (new) — placeholder
-- `third_party/simdutf/lib/linux-arm64/README.md` (new) — placeholder
-- `third_party/build.ps1` — new §11 (dirs + recipe pointer; see below)
+- `vendor/third_party/simdutf/build-linux-simdutf.sh` (new) — Linux build
+- `vendor/third_party/simdutf/lib/linux-x64/README.md` (new) — placeholder
+- `vendor/third_party/simdutf/lib/linux-arm64/README.md` (new) — placeholder
+- `vendor/third_party/build.ps1` — new §11 (dirs + recipe pointer; see below)
 - `docs/design/linux-packaging-simdutf.md` (new) — this document
 
 Explicitly **not** touched (out of scope, wiring listed verbatim
-below): `third_party/MANIFEST.md`, `src/std/text/native.hpp`,
-`third_party/build-linux.sh`.
+below): `vendor/third_party/MANIFEST.md`, `src/std/text/native.hpp`,
+`vendor/third_party/build-linux.sh`.
 
 ## Pin
 
@@ -32,15 +32,15 @@ below): `third_party/MANIFEST.md`, `src/std/text/native.hpp`,
 | --- | --- | --- | --- |
 | simdutf | https://github.com/simdutf/simdutf.git | v6.1.0 | 7852150e454ebacbf7e65cbf2c5e3feac5e660ec |
 
-Same pin as `third_party/simdutf/VERSION.txt`, the `$pins` table in
-`third_party/build.ps1`, and `third_party/MANIFEST.md` Ledger F.
+Same pin as `vendor/third_party/simdutf/VERSION.txt`, the `$pins` table in
+`vendor/third_party/build.ps1`, and `vendor/third_party/MANIFEST.md` Ledger F.
 License: Apache-2.0 (files already vendored:
-`third_party/simdutf/LICENSE-APACHE`, `LICENSE-MIT`).
+`vendor/third_party/simdutf/LICENSE-APACHE`, `LICENSE-MIT`).
 
 ## Layout
 
 ```
-third_party/simdutf/
+vendor/third_party/simdutf/
   include/                       public headers (shared by all triples, already vendored)
   lib/windows-x64/libsimdutf.a   existing (COFF, MinGW — do not link on Linux)
   lib/linux-x64/libsimdutf.a     <-- produced by build-linux-simdutf.sh --arch x64
@@ -62,13 +62,13 @@ simdutf v6.1.0 ships an amalgamated single translation unit,
 
 ```sh
 # from the repo root, on a Linux x86_64 host (or native arm64 for arm64):
-third_party/simdutf/build-linux-simdutf.sh --arch x64     # or --arch arm64
+vendor/third_party/simdutf/build-linux-simdutf.sh --arch x64     # or --arch arm64
 
 # equivalent manual form (what the script runs, after checkout at the pin):
 g++ -O3 -std=c++17 -I <src>/include -I <src>/src -c <src>/src/simdutf.cpp -o simdutf.o
 ar rcs libsimdutf.a simdutf.o
 ranlib libsimdutf.a
-cp libsimdutf.a third_party/simdutf/lib/linux-x64/   # (or linux-arm64/)
+cp libsimdutf.a vendor/third_party/simdutf/lib/linux-x64/   # (or linux-arm64/)
 ```
 
 Details that matter:
@@ -83,16 +83,16 @@ Details that matter:
 - **arm64 cross from x64** needs `aarch64-linux-gnu-g++` /
   `aarch64-linux-gnu-ar` / `aarch64-linux-gnu-ranlib` (override
   `CXX`/`AR`/`RANLIB`). The script refuses `/mnt/c/...` Windows
-  tools imported by WSL, mirroring `third_party/build-linux.sh`.
+  tools imported by WSL, mirroring `vendor/third_party/build-linux.sh`.
 - **No extra link flags** for consumers beyond `-lsimdutf`: no
   `-pthread`, no `-ldl` (only `validate_utf8` is wired — see
   Limitations). Consumer line is unchanged apart from the `<triple>`
-  segment: `-I third_party/simdutf/include -L third_party/simdutf/lib/<triple> -lsimdutf`.
+  segment: `-I vendor/third_party/simdutf/include -L vendor/third_party/simdutf/lib/<triple> -lsimdutf`.
 - The script deletes the per-dir `README.md` placeholder on success
   and writes `VERSION.txt` in the same `key=value` shape as the other
   Linux vendor dirs: `simdutf=<SHA> arch=<x64|arm64> built=<UTC ISO>`.
 
-## MANIFEST rows (apply to `third_party/MANIFEST.md`, not done here)
+## MANIFEST rows (apply to `vendor/third_party/MANIFEST.md`, not done here)
 
 Once the two archives exist, fill in bytes + SHA-256 (never guess)
 and apply these rows:
@@ -121,7 +121,7 @@ and apply these rows:
 4. Verified consumer flags table — add:
 
 ```markdown
-| std/text (simdutf) | -I third_party/simdutf/include | -L third_party/simdutf/lib/<triple> -lsimdutf |
+| std/text (simdutf) | -I vendor/third_party/simdutf/include | -L vendor/third_party/simdutf/lib/<triple> -lsimdutf |
 ```
 
 5. Ledger F — update the simdutf row status from
@@ -133,22 +133,22 @@ and apply these rows:
 Current platform map (line 44):
 
 ```cpp
-{{{"windows-x64", {"third_party/simdutf/lib/windows-x64"}, {"-lsimdutf"}}}},
+{{{"windows-x64", {"vendor/third_party/simdutf/lib/windows-x64"}, {"-lsimdutf"}}}},
 ```
 
 Target platform map — add the two Linux rows next to the Windows one:
 
 ```cpp
-{{{"windows-x64", {"third_party/simdutf/lib/windows-x64"}, {"-lsimdutf"}}},
- {"linux-x64",   {"third_party/simdutf/lib/linux-x64"},   {"-lsimdutf"}},
- {"linux-arm64", {"third_party/simdutf/lib/linux-arm64"}, {"-lsimdutf"}}}},
+{{{"windows-x64", {"vendor/third_party/simdutf/lib/windows-x64"}, {"-lsimdutf"}}},
+ {"linux-x64",   {"vendor/third_party/simdutf/lib/linux-x64"},   {"-lsimdutf"}},
+ {"linux-arm64", {"vendor/third_party/simdutf/lib/linux-arm64"}, {"-lsimdutf"}}}},
 ```
 
 Also update the `// LIMITATIONS` comment block (lines 47–59): the
 "only `windows-x64` ships an archive today" paragraph no longer
 holds; replace it with the new constraint set (see Limitations
 below). Nothing else in `native.hpp` changes: include dirs already
-carry `third_party/simdutf/include`, and per-platform `libDirs` /
+carry `vendor/third_party/simdutf/include`, and per-platform `libDirs` /
 `linkFlags` is exactly where new triples belong (the crypto/fs
 pattern). Until the archives land, `applyNativePackages` keeps
 failing Linux `std/text` programs fast with "no vendor archives for
@@ -156,11 +156,11 @@ target" — the intended behaviour, not a silent COFF mislink.
 
 ## build.ps1 (§11, landed)
 
-`third_party/build.ps1` gains a new trailing section that creates
-`third_party/simdutf/lib/linux-x64` and `.../linux-arm64` and warns
+`vendor/third_party/build.ps1` gains a new trailing section that creates
+`vendor/third_party/simdutf/lib/linux-x64` and `.../linux-arm64` and warns
 when `libsimdutf.a` is absent for a triple. It deliberately does
 **not** cross-compile ELF archives from the Windows host — the
-authoritative producer is `third_party/simdutf/build-linux-simdutf.sh`
+authoritative producer is `vendor/third_party/simdutf/build-linux-simdutf.sh`
 run on a Linux host (or from the Linux step of the pipeline). The
 existing `$pins` row for simdutf (v6.1.0 / `7852150e…`) already
 exists and was left as-is.
@@ -175,9 +175,9 @@ exists and was left as-is.
 2. **No smoke evidence yet.** When built, verify with a program that
    includes `<simdutf.h>`, calls `simdutf::validate_utf8` on valid +
    invalid UTF-8, and links with ONLY
-   `third_party/simdutf/include` + the per-arch archive (dynamic,
+   `vendor/third_party/simdutf/include` + the per-arch archive (dynamic,
    `-static-libgcc -static-libstdc++`, and `-static` variants, same
-   matrix as `third_party/build.ps1` §10), then record bytes +
+   matrix as `vendor/third_party/build.ps1` §10), then record bytes +
    SHA-256 into the MANIFEST rows above.
 3. **Baseline, not tuned.** `-O3` only; no `-march=native`. If
    `std/text` throughput ever matters, the knob is a `-march=`
@@ -188,7 +188,7 @@ exists and was left as-is.
    hand-written decoder via `__has_include(<simdutf.h>)`.
 5. **No `-pthread`/`-ldl` rows** — simdutf needs neither for
    validation. Do not add them when wiring the Linux rows.
-6. **NOT covered here:** `third_party/build-linux.sh` (still builds
+6. **NOT covered here:** `vendor/third_party/build-linux.sh` (still builds
    only libsodium/libuv/uSockets) — wiring simdutf into it is a
    one-line addition later, or it stays as the standalone
    `build-linux-simdutf.sh`. `oneTBB`/`PCRE2` Linux archives are

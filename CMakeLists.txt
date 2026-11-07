@@ -91,7 +91,7 @@ else()
 endif()
 
 # -----------------------------------------------------------------------------
-# Developer lint path: tools/lint.py runs the STYLE.md layout checks plus the
+# Developer lint path: vendor/tools/lint.py runs the STYLE.md layout checks plus the
 # zero-placeholder gate. The layout pass is advisory by design: never in ALL,
 # never depends on cp3c, and must never block any other target - a warning in
 # one module must not stop another module's build (STYLE.md §9). The gate is
@@ -102,14 +102,14 @@ endif()
 #   cmake --build <build> --target lint-cp3002
 # =============================================================================
 add_custom_target(lint
-    COMMAND "${CP3_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/lint.py"
+    COMMAND "${CP3_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/tools/lint.py"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     USES_TERMINAL
     COMMENT "Running layout checks and the zero-placeholder gate"
 )
 
 add_custom_target(lint-cp3002
-    COMMAND "${CP3_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_cp3002.py"
+    COMMAND "${CP3_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/tools/check_cp3002.py"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     USES_TERMINAL
     COMMENT "Checking for retired placeholder markers"

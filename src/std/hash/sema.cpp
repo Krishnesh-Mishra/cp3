@@ -20,7 +20,7 @@
 // id itself and typing/docs cannot drift when the table moves.
 //
 // xxhash64 IS in the table: the vendored XXHash static archive
-// (third_party/xxhash, v0.8.3) is wired through the std/hash native row
+// (vendor/third_party/xxhash, v0.8.3) is wired through the std/hash native row
 // (src/std/hash/native.hpp) and implemented in src/std/hash/runtime.cpp as
 // XXH64(data, len, seed 0). Only this wrapper may implement the name - a
 // hand-rolled replica is forbidden exactly as before. The internal bucket

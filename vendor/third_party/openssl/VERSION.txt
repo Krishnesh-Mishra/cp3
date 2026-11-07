@@ -1,0 +1,26 @@
+openssl 3.5.5 (one pinned source for both platforms)
+
+windows-x64: openssl 3.5.5 built from pinned source (openssl-3.5.5 tag,
+        commit 67b5686b4419b4cb8caa502711c41815f5279751).
+        Build 2026-11-07 in MSYS2 (ucrt64 environment - matches the UCRT CRT
+        the cp3c Windows toolchain uses; mingw64/msvcrt archives were found
+        incompatible): gcc 16.2.0 Rev6 (Built by MSYS2 project, x86_64-w64-mingw32),
+        perl 5.42.3, GNU make 4.4.1; configure `./Configure mingw64
+        no-tests no-apps -O3`.
+        No MSYS2 distribution ships in any package; the toolchain is the
+        local build host only. The superseded mingw-w64-x86_64-openssl-3.5.4-1
+        package checksums are retained in ossl-3.5.4-package.sha256 for the
+        audit trail.
+openssl-headers: carried over from the linux 3.5.5 build; identical
+        source for both platforms (headers are platform-independent); both
+        platform archives are built from the same pinned tree (C:\ossl-ucrt).
+linux-x64: openssl 3.5.5 built from pinned source (openssl-3.5.5 tag,
+        commit 67b5686b4419b4cb8caa502711c41815f5279751, build 2026-11-07
+        WSL2 Ubuntu, gcc 15.2.0, configure linux-x86_64 no-shared no-tests no-apps)
+linux-arm64: NOT BUILT in v0.2 (no archives; the native row compiles the TLS
+        stub, which fails closed with ERR_TLS_BACKEND_UNAVAILABLE).
+release: v0.2.0 (first TLS-enabled release).
+Source tag: https://github.com/openssl/openssl (openssl-3.5.5)
+CA bundle: Mozilla, vendor/third_party/openssl/cacert.pem (see cacert-source-url.txt),
+embedded into TLS-linked binaries at compile time (no runtime file lookup,
+no source-tree dependency).

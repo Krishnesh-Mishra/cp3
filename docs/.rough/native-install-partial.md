@@ -32,7 +32,7 @@ aspirational: every "supported" row below is exercised by a test in
 | `native.json` renderer | `src/cli/src/native/metadata.{hpp,cpp}` |
 | `index.cp3` renderer | `src/cli/src/native/bindgen_index.cpp` |
 | Declaration model (shared with the future compiler half) | `src/common/include/cp3/native_bindings.hpp`, `src/common/src/native_bindings.cpp` |
-| Vendored libclang C API headers | `third_party/clang-c/` (Apache-2.0 WITH LLVM-exception) |
+| Vendored libclang C API headers | `vendor/third_party/clang-c/` (Apache-2.0 WITH LLVM-exception) |
 | CLI wiring (`cp3c help`, dispatch) | `src/cli/src/cli.cpp` |
 | `clean` keeps `.cp3/native`; `clean --all` removes it | `src/cli/src/commands/clean.cpp` |
 | Tests | `tests/cli/cases/native-install.json`, `tests/cli/cases/clean.json`, `tests/cli/fixtures/native-sdk/` |
@@ -107,7 +107,7 @@ for headers outside every root.
 * Missing libclang exits 2 and prints the platform install command
   (`winget install --id LLVM.LLVM -e` / `apt install libclang-dev` /
   `dnf install clang-devel` / `brew install llvm`) and every searched path.
-* The **declarations** are vendored (`third_party/clang-c/`, pinned to
+* The **declarations** are vendored (`vendor/third_party/clang-c/`, pinned to
   `llvmorg-23.1.0`) so that *building* cp3c never requires LLVM. Only the
   runtime library is needed to run `native-install`.
 
@@ -194,7 +194,7 @@ cmake --build build --target cp3c --parallel 2
 Result: **green**, from a clean `build/` (the cache and `CMakeFiles/` were
 deleted first, so all 97 targets were rebuilt). The build no longer needs an
 LLVM installation: the libclang C API headers are vendored under
-`third_party/clang-c/include` (pinned to `llvmorg-23.1.0`,
+`vendor/third_party/clang-c/include` (pinned to `llvmorg-23.1.0`,
 commit `ea7d852a70e8bdfaf601d6626a760f9771b2c4b4`, Apache-2.0 WITH
 LLVM-exception). `-DCP3_LIBCLANG_INCLUDE_DIR=<dir>` builds against a system
 LLVM include directory instead.
@@ -234,7 +234,7 @@ existing, deliberately marked known issues.
 
 ### 4.4 Layout lint
 
-`python tools/lint.py` reports **0 errors** in every file this branch adds or
+`python vendor/tools/lint.py` reports **0 errors** in every file this branch adds or
 touches. (The repository-wide run still exits 1 because of the pre-existing
 zero-placeholder gate - 391 markers in `src/std/typed-arrays` and elsewhere -
 which is unrelated to this branch. `src/cli/src/cli.cpp` was brought back

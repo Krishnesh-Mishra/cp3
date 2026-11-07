@@ -5,10 +5,10 @@
 // native-package table; the rest of the table never needs to change for this
 // module. The runtime is header-only (no runtime TU); the compiled dependency
 // is simdutf for `TextDecoder.decode` validation: the vendored headers
-// (third_party/simdutf/include) supply `simdutf::validate_utf8` and the
-// vendored static archive `third_party/simdutf/lib/windows-x64/libsimdutf.a`
-// is linked for `windows-x64` (third_party/MANIFEST.md "Verified consumer
-// flags": `-I third_party/simdutf/include -L third_party/simdutf/lib/<triple>
+// (vendor/third_party/simdutf/include) supply `simdutf::validate_utf8` and the
+// vendored static archive `vendor/third_party/simdutf/lib/windows-x64/libsimdutf.a`
+// is linked for `windows-x64` (vendor/third_party/MANIFEST.md "Verified consumer
+// flags": `-I vendor/third_party/simdutf/include -L vendor/third_party/simdutf/lib/<triple>
 // -lsimdutf`). A program that imports "std/text" gets the include root and
 // the archive; other programs link nothing extra. No extra compile flags are
 // needed (simdutf v6.1.0 requires only C++11); no `-pthread`/`-ldl` row is
@@ -31,7 +31,7 @@ namespace cp3::cli::detail {
 inline const NativePackage kTextNativePackage{
     "std/text",
     {"src/std/text/include", "src/language/typed-arrays/include",
-     "third_party/simdutf/include"},
+     "vendor/third_party/simdutf/include"},
     {},
     {},
     // libDirs / linkFlags are supplied per-platform below (the crypto/fs
@@ -44,12 +44,12 @@ inline const NativePackage kTextNativePackage{
     // Linux audit: docs/design/linux-crosscompat.md — the linux-x64 archive is
     // vendored now; linux-arm64 has none yet, so that target still fails
     // loudly, never mislinks a foreign archive.
-    {{"windows-x64", {"third_party/simdutf/lib/windows-x64"}, {"-lsimdutf"}},
-     {"linux-x64", {"third_party/simdutf/lib/linux-x64"}, {"-lsimdutf"}}},
+    {{"windows-x64", {"vendor/third_party/simdutf/lib/windows-x64"}, {"-lsimdutf"}},
+     {"linux-x64", {"vendor/third_party/simdutf/lib/linux-x64"}, {"-lsimdutf"}}},
 };
 
 // LIMITATIONS (simdutf wiring): only `windows-x64` and `linux-x64` ship an
-// archive today (third_party/simdutf/lib/<triple>/libsimdutf.a).
+// archive today (vendor/third_party/simdutf/lib/<triple>/libsimdutf.a).
 // `applyNativePackages` rejects a selected row with no matching platform row,
 // so a program that imports "std/text" for a `linux-arm64` target fails with
 // "native backend for 'std/text' has no vendor archives for target ..." until

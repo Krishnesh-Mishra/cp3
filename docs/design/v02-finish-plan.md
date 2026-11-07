@@ -43,7 +43,7 @@ test cases.
 9. [x] Generic constraints producer (enterClassTypeParams) + CP3412 at instantiation
 10. [x] Object freeze completion + Object.fromEntries/groupBy (pinned by `stdlib/02/map/from_entries_ctor`; UAF fixed in `af72c7d9`)
 11. [ ] cp3 install <dir> + cp3 test (landed; CLI harness runs before the tag)
-12. [x] Cycle stages 2-3 (analysis/fuzzer tooling: `tools/cycle_stats.py`, `tools/fuzz_graphs.py`, `docs/design/cycle-proof.md`)
+12. [x] Cycle stages 2-3 (analysis/fuzzer tooling: `vendor/tools/cycle_stats.py`, `vendor/tools/fuzz_graphs.py`, `docs/design/cycle-proof.md`)
 13. [x] Linux archives (xxhash, simdutf, pcre2 linux-x64 built, committed, staged in the Linux package; linux-arm64 xxhash/simdutf still placeholders)
 14. [x] Docs: 00-overview, mkdocs, guide replaces llm.md, README link, ROADMAP flip (Done)
 15. [x] Full corpus green + commit each green unit + tell user (Windows 2115/2092 green; Linux green on the final build)

@@ -6,9 +6,9 @@
 // randombytes_buf(). std/crypto and std/hash never reach this file, and this
 // seed is never returned to user code.
 //
-// Backend: libsodium 1.0.22 static (third_party/libsodium, D70), the same
+// Backend: libsodium 1.0.22 static (vendor/third_party/libsodium, D70), the same
 // backend std/crypto uses, plus the vendored XXHash static archive
-// (third_party/xxhash, v0.8.3). The mix function is XXH3_64bits_withSeed
+// (vendor/third_party/xxhash, v0.8.3). The mix function is XXH3_64bits_withSeed
 // (XXH3, NOT the XXH64 that std/hash exposes as hash.xxhash64); XXH3 is the
 // faster of the two and its algorithmic instability across upstream minor
 // versions is safe here because bucket values are per-process only. The
@@ -24,12 +24,12 @@
 // the symbol is referenced.
 //
 // XXH3_64bits_withSeed is declared below with a signature identical to
-// third_party/xxhash/include/xxhash.h (uint64_t(const void*, size_t,
+// vendor/third_party/xxhash/include/xxhash.h (uint64_t(const void*, size_t,
 // uint64_t); XXH64_hash_t IS uint64_t and xxhash.h wraps its declarations in
 // extern "C", so this declaration is compatible if <xxhash.h> is ever
 // included alongside it). Declaring it directly keeps the cp3_runtime unit
 // build compiling without a new include root; if the runtime CMake gains
-// third_party/xxhash/include (the lead follow-up noted in bucket_hash.hpp),
+// vendor/third_party/xxhash/include (the lead follow-up noted in bucket_hash.hpp),
 // replace this declaration with `#include <xxhash.h>`.
 // =============================================================================
 #include "cp3/core/bucket_hash.hpp"

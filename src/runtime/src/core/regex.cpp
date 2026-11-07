@@ -3,7 +3,7 @@
 //
 // OWNERSHIP: runtime module. Implements cp3/core/regex.hpp. This is the only
 // file in the tree that includes pcre2.h; the vendored build it is compiled
-// against is pinned in third_party/MANIFEST.md ("Verified consumer flags"):
+// against is pinned in vendor/third_party/MANIFEST.md ("Verified consumer flags"):
 // PCRE2 10.49, static 8-bit library. The PCRE2_STATIC and
 // PCRE2_CODE_UNIT_WIDTH=8 the header needs come from src/runtime/CMakeLists.txt.
 //

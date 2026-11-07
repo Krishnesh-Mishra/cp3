@@ -3,7 +3,7 @@
 //
 // OWNERSHIP: the std/hash family (src/std/hash/**). The xxhash64 slice of the
 // family is backed by the vendored XXHash static archive
-// (third_party/xxhash, v0.8.3, BSD-2-Clause; third_party/MANIFEST.md Ledger F)
+// (vendor/third_party/xxhash, v0.8.3, BSD-2-Clause; vendor/third_party/MANIFEST.md Ledger F)
 // instead of inline code: the crc32/crc32c/fnv1a32/fnv1a64 surface above stays
 // header-only in cp3/std/hash.hpp. This TU is compiled + linked only when a
 // program imports "std/hash" (src/std/hash/native.hpp, D68) and the archive is

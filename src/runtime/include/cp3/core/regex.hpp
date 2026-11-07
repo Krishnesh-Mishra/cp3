@@ -8,7 +8,7 @@
 // the string-side `s.split(r)` lowering (`Regex::split`).
 // The engine is PCRE2 (docs/cli-tooling/03 - chosen for JS feature parity:
 // lookarounds, backreferences; not std::regex, not RE2), vendored as a pinned
-// static archive (third_party/pcre2, MANIFEST "Verified consumer flags"). The
+// static archive (vendor/third_party/pcre2, MANIFEST "Verified consumer flags"). The
 // engine itself stays behind a pimpl so generated code (and this header) never
 // includes pcre2.h; only src/runtime/src/core/regex.cpp does.
 //

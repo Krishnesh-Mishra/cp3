@@ -8,7 +8,7 @@
 // Backend: the C++ standard library only (`std::filesystem` + `std::fstream`,
 // see src/std/fs/runtime.cpp) PLUS libuv for `fs.watch` (src/std/fs/runtime_watch.cpp,
 // ledger H): the libuv include root and the libuv archive/link rows are the
-// network row's libuv half (third_party/MANIFEST.md "Verified consumer flags").
+// network row's libuv half (vendor/third_party/MANIFEST.md "Verified consumer flags").
 // No extra compile flags. The two runtime TUs are selected when a program
 // imports "std/fs".
 //
@@ -25,7 +25,7 @@ namespace cp3::cli::detail {
 inline const NativePackage kFsNativePackage{
     "std/fs",
     {"src/std/fs/include", "src/std/buffer/include", "src/std/date/include",
-     "third_party/libuv/include"},
+     "vendor/third_party/libuv/include"},
     {},
     {"src/std/fs/runtime.cpp", "src/std/fs/runtime_watch.cpp"},
     {},
@@ -33,14 +33,14 @@ inline const NativePackage kFsNativePackage{
     // Parallel to runtimeSources: both TUs compile whenever the row is selected.
     {"", ""},
     // The libuv archive rows (the network row's libuv half; the fs row needs no
-    // uSockets). Filled from third_party/MANIFEST.md.
-    {{"windows-x64", {"third_party/libuv/lib/windows-x64"},
+    // uSockets). Filled from vendor/third_party/MANIFEST.md.
+    {{"windows-x64", {"vendor/third_party/libuv/lib/windows-x64"},
       {"-luv", "-lws2_32", "-luserenv", "-liphlpapi", "-lole32",
        "-ldbghelp", "-lsynchronization"}},
      {"linux-x64",
-      {"third_party/libuv/lib/linux-x64"}, {"-luv", "-pthread", "-ldl", "-lrt"}},
+      {"vendor/third_party/libuv/lib/linux-x64"}, {"-luv", "-pthread", "-ldl", "-lrt"}},
      {"linux-arm64",
-      {"third_party/libuv/lib/linux-arm64"}, {"-luv", "-pthread", "-ldl", "-lrt"}}},
+      {"vendor/third_party/libuv/lib/linux-arm64"}, {"-luv", "-pthread", "-ldl", "-lrt"}}},
 };
 
 }  // namespace cp3::cli::detail

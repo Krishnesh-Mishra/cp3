@@ -18,7 +18,7 @@
 //     fingerprint, native link flags - changed, so a runtime TU rebuilt for an
 //     earlier program still invalidates every executable that contains it.
 //
-// DECISIONS D68: std modules with a vendored native backend (third_party/**)
+// DECISIONS D68: std modules with a vendored native backend (vendor/third_party/**)
 // add include roots, compile flags, runtime TUs and link libraries, selected by
 // the program's `std/...` imports (applyNativePackages below).
 // =============================================================================
@@ -478,7 +478,7 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
 }
 
 // D68: every std module the program imports that has a vendored native backend
-// (third_party/**, D70) contributes include roots and runtime TUs to `layout`
+// (vendor/third_party/**, D70) contributes include roots and runtime TUs to `layout`
 // plus compile/link flags, so a program that never imports std/network pays
 // nothing for uWebSockets. Returns nullopt after reporting on a missing packed
 // path, or on a native backend that is incomplete.

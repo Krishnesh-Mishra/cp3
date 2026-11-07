@@ -4,7 +4,7 @@
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //
 // DECISIONS D68: every std module whose implementation is backed by a vendored
-// native library (third_party/**, DECISIONS D70) owns exactly one row of build
+// native library (vendor/third_party/**, DECISIONS D70) owns exactly one row of build
 // wiring: extra include roots, extra compile flags, one or more runtime
 // translation units, extra link library directories and link flags. A row is
 // selected when the program's import graph mentions the module's specifier
@@ -18,7 +18,7 @@
 // `repositoryRoot()` at build time.
 //
 // Verified flags per backend (include roots, defines, archives and the system
-// libraries each archive actually needs) are recorded in third_party/MANIFEST.md
+// libraries each archive actually needs) are recorded in vendor/third_party/MANIFEST.md
 // under "Verified consumer flags"; keep the rows in sync with it.
 // =============================================================================
 #pragma once
