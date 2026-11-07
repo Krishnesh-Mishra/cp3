@@ -1,0 +1,16 @@
+// `new Map(entries)` from a literal array-of-pairs: the temporaries are
+// bound the same way as `Object.fromEntries` (the entries array outlives
+// the loop, so this is deterministic, not heap-address dependent).
+import console from "std/console";
+import { Map } from "std/collections";
+
+const entries: [string, number][] = [["a", 1], ["b", 2]];
+const m = new Map<string, number>(entries);
+console.log(`${m.get("a")}`);
+console.log(`${m.get("b")}`);
+console.log(m.get("missing") !== undefined ? "has" : "missing");
+
+const literal = new Map<string, number>([["x", 10], ["y", 20]]);
+console.log(`${literal.get("x")}`);
+console.log(`${literal.get("y")}`);
+console.log(literal.size);
