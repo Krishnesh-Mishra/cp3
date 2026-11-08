@@ -32,6 +32,15 @@ using namespace detail;
 
 namespace {
 
+// Local twin of decl.cpp's `tupleSpelling` (which is file-local there): the
+// C++ `std::tuple<...>` spelling for a tuple value, so an async method whose
+// promise carries a tuple can spell `Promise<std::tuple<...>>(`.
+std::optional<std::string> tupleSpelling(const Type& t) {
+    std::string cpp;
+    if (!isTupleType(t) || !tupleCpp(t, cpp)) return std::nullopt;
+    return cpp;
+}
+
 // Sema's permissive "not statically known" marker (see
 // support/type/type_resolve.cpp): an untyped parameter carries `$ambient`, not
 // `unknown`, but on the C++ side both mean "let the call site deduce it".
@@ -461,6 +470,20 @@ std::string Generator::memberFieldText(const ClassMemberModel& m) {
 std::string Generator::methodReturnType(const MethodDeclaration& md,
                                         const ClassModel* cm,
                                         const std::vector<std::string>& methodTypeParams) {
+    if (md.isAsync) {
+        // spec 14: the C++ signature is the coroutine's promise type. A cp3
+        // `return` inside the body yields the promise's VALUE type.
+        const Type value = asyncValueType(md);
+        if (const auto tuple = tupleSpelling(value)) {
+            return "::cp3::runtime::Promise<" + *tuple + ">";
+        }
+        const CppInfo ci = classify(detail::promiseOf(value));
+        if (ci.representable) return ci.cpp;
+        reportUnsupported(md, diagcode::kTypeMismatch,
+                          "type mismatch: this async method's value type has "
+                          "no C++ spelling");
+        return "void";
+    }
     if (md.returnType) {
         // Sema's resolved type carries aliases, enum kinds and generic
         // arguments the structural re-parse cannot see (D1).
@@ -652,7 +675,28 @@ std::string Generator::methodBodyText(const MethodDeclaration& md,
                                       const ClassModel& cm, int indent,
                                       const std::vector<std::string>& methodTypeParams) {
     const std::string savedReturn = currentReturn_;
-    currentReturn_ = methodReturnType(md, &cm, methodTypeParams);
+    const std::optional<Type> savedReturnType = currentReturnType_;
+    const bool savedInAsync = inAsyncBody_;
+    if (md.isAsync) {
+        // spec 14: `async m(): T` is a coroutine returning `Promise<T>`;
+        // the loop must be driven before the process exits.
+        needsEventLoop_ = true;
+        const Type value = asyncValueType(md);
+        const CppInfo ci = classify(value);
+        if (const auto tuple = tupleSpelling(value)) {
+            currentReturn_ = *tuple;
+        } else {
+            currentReturn_ = (ci.representable && ci.shape != Shape::Void)
+                                 ? ci.cpp
+                                 : "void";
+        }
+        // Inside the coroutine `return expr` yields the promise's VALUE
+        // type (`co_return expr`); the `return` site reads currentReturn_.
+        currentReturnType_ = value;
+        inAsyncBody_ = true;
+    } else {
+        currentReturn_ = methodReturnType(md, &cm, methodTypeParams);
+    }
     ++nestingDepth_;
     pushScope();
     classStack_.push_back(&cm);
@@ -693,11 +737,13 @@ std::string Generator::methodBodyText(const MethodDeclaration& md,
     if (md.body && currentReturn_ != "void" && currentReturn_ != "auto") {
         // As in emit/decl.cpp's plainBody: a non-void method must not fall
         // off its end (undefined behavior, exploited by clang at -O2).
-        line(body, indent, "return {};");
+        line(body, indent, inAsyncBody_ ? "co_return {};" : "return {};");
     }
     classStack_.pop_back();
     popScope();
     --nestingDepth_;
+    inAsyncBody_ = savedInAsync;
+    currentReturnType_ = savedReturnType;
     currentReturn_ = savedReturn;
     return body;
 }

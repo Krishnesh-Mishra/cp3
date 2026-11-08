@@ -272,6 +272,7 @@ private:
     // first `return`): it fixes `expected_` and the literal shape.
     std::optional<Type> returnValueType(const FunctionDeclaration& fd) const;
     Type asyncValueType(const FunctionDeclaration& fd) const;
+Type asyncValueType(const MethodDeclaration& md) const;
     const Expr* firstReturnedExpr(const Stmt& s) const;
 
     // --- declaration-type environment + type resolution (type_resolve.cpp) ---
@@ -844,6 +845,10 @@ private:
     std::string emitPromiseStatic(const CallExpr& c, const MemberExpr& m);
     std::string emitPromiseResolve(const CallExpr& c);
     std::string emitPromiseReject(const CallExpr& c);
+    // `new Promise<T>(executor)` (spec §14): a pending promise shared with two
+    // resolver lambdas, handed to the executor synchronously. "" outside the
+    // builtin.
+    std::string emitPromiseNew(const NewExpr& n);
     // The Promise combinators (`Promise.all` / `race` / `allSettled` / `any`):
     // the operand is an array of promises (or of plain values, which are
     // already resolved), in emit/async_promise.cpp.

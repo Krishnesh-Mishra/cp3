@@ -485,6 +485,32 @@ Type Generator::asyncValueType(const FunctionDeclaration& fd) const {
     return Type::unknown();
 }
 
+// The value type an `async method` yields (spec 14). The annotation may name
+// `Promise<T>` (the promise is what the call yields) or a plain `T` (the
+// permissive spelling); an unannotated method deduces from its first return.
+Type Generator::asyncValueType(const MethodDeclaration& md) const {
+    if (md.returnType) {
+        if (auto t = typeOfNode(*md.returnType)) {
+            if (detail::isPromiseType(*t)) {
+                const Type v = detail::promiseValue(*t);
+                if (!v.isUnknown() && !v.isError()) return v;
+            } else if (!t->isUnknown() && !t->isError()) {
+                return *t;
+            }
+        }
+    }
+    // An `unknown` annotation has no C++ spelling, but the first returned
+    // expression still fixes the promise's carried value (the same concrete
+    // deduction an unannotated synchronous method gets).
+    if (md.body) {
+        if (const Expr* returned = firstReturnedExpr(*md.body)) {
+            const Type t = effectiveType(*returned);
+            if (!t.isUnknown() && !t.isError()) return t;
+        }
+    }
+    return Type::unknown();
+}
+
 const Expr* Generator::firstReturnedExpr(const Stmt& s) const {
     if (s.kind == NodeKind::ReturnStatement) {
         const auto& r = static_cast<const ReturnStatement&>(s);

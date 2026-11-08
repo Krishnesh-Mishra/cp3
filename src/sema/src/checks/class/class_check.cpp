@@ -486,6 +486,23 @@ void Analyzer::collectClassMethod(MethodDeclaration& md, ClassInfo& info) {
     FuncSig sig = buildSig(name, md.params, md.returnType, &md.span);
     leaveClassTypeParams(saved);
     sig.declNodeId = md.nodeId;
+    if (md.isAsync) {
+        // spec 14: calling an async method yields a Promise of its
+        // annotation (mirrors hoistFunction for function declarations).
+        sig.isAsync = true;
+        if (sig.annotatedReturn && isPromiseType(sig.ret)) {
+            sig.asyncValueRet = promiseValue(sig.ret);
+        } else if (sig.annotatedReturn && !sig.ret.isUnknown() &&
+                   !sig.ret.isError()) {
+            // Permissive: sync m(): T behaves like Promise<T>.
+            sig.asyncValueRet = sig.ret;
+            sig.ret = promiseOf(sig.ret);
+        } else {
+            sig.annotatedReturn = false;
+            sig.ret = promiseOf(Type::unknown());
+            sig.asyncValueRet = Type::unknown();
+        }
+    }
     sigs_[md.nodeId] = sig;
     ClassMemberInfo* prev = nullptr;
     for (ClassMemberInfo& cm : info.members) {
@@ -718,7 +735,9 @@ void Analyzer::analyzeMethodBody(MethodDeclaration& md) {
     declareBinding("this", thisType(), md.span, BindingSpec{.publish = false});
     FuncCtx ctx;
     ctx.annotated = sig.annotatedReturn;
-    ctx.ret = sig.ret;
+    // An async method's `return` yields the Promise's value type (spec 14).
+    ctx.ret = sig.isAsync ? sig.asyncValueRet : sig.ret;
+    ctx.isAsync = sig.isAsync;
     funcStack_.push_back(ctx);
     // A method is a function of its own: a `break`/`continue` inside it binds
     // to its own loops, never to a loop around the class declaration.
