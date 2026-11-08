@@ -5,21 +5,23 @@
 <!-- latest-by-test:start -->
 <!-- test:health-server:start -->
 ### health-server
-_Updated 2026-11-04T20:22:33 by `python benchmarks/runner/run_benchmark.py --only health-server --reps 1 --latency 5 --seconds 3 --concurrency 2`._
+_Updated 2026-11-08T12:34:32 by `python benchmarks/runner/run_benchmark.py --only health-server --reps 3`._
 
 ```text
-  * health-server  median boot/req/s; pooled latency p50/p95; CV = run-to-run variation %
-  lang        ok/run  boot ms  p50 ms  p95 ms   req/s  RPS CV%  errors         vs cp3  RSS MiB  bin KiB
-  -----------------------------------------------------------------------------------------------------
-  cpp            1/1    514.5    0.11    0.13  25,585        -       0   1.02x faster      5.3       60
-  cp3            1/1    523.0    0.07    0.07  25,200        -       0       baseline      9.5     1622
-  rust           1/1    531.1    0.07    0.07  24,686        -       0   1.02x slower      6.3     1098
-  go             1/1    511.6    0.09    0.09  22,365        -       0   1.13x slower     20.6    15630
-  js-fastify     1/1    517.9    0.13    0.19  21,706        -       0   1.16x slower     67.8        -
-  java           1/1    587.6    0.27    0.31  21,328        -       0   1.18x slower    177.2        4
-  dotnet         1/1    528.4    0.14    0.18  20,295        -       0   1.24x slower    193.5        8
-  js             1/1    519.2    0.28    0.30  16,869        -       0   1.49x slower     62.3        -
-  python         1/1   1056.2    0.42    0.54   1,819        -       0  13.86x slower      4.0        -
+  ◆ health-server  median boot/req/s; pooled latency p50/p95; CV = run-to-run variation %
+  lang        ok/run  boot ms  p50 ms  p95 ms   req/s  RPS CV%  errors  vs cp3  RSS MiB  bin KiB
+  ──────────────────────────────────────────────────────────────────────────────────────────────
+  cpp            1/1     32.9    0.19    0.41  19,336        -       0       -      5.8       60
+  rust           1/1    510.3    0.09    0.18  18,862        -       0       -      7.1     2154
+  go             1/1    541.7    0.14    0.22  16,728        -       0       -     21.5    15630
+  js-fastify     1/1    537.5    0.13    0.25  14,390        -       0       -     69.4        -
+  js             1/1    549.3    0.21    0.36  12,276        -       0       -     62.5        -
+  dotnet         1/1    550.1    0.27    0.41  10,055        -       0       -    284.9        8
+  java           1/1    579.6    0.32    0.58   7,443        -       0       -    183.8        4
+  python         1/1   1053.5    0.67    0.99     923        -       0       -      4.0        -
+  cp3            0/1        -       -       -  no run        -       0       -        -        -
+  goose          0/1        -       -       -  no run        -       0       -        -        -
+    ▲ cp3  not runnable yet: ld.lld: error: undefined symbol: __local_stdio_printf_options
 ```
 <!-- test:health-server:end -->
 

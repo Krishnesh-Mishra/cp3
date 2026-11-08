@@ -557,6 +557,26 @@ Candidate optimization backlog:
 | Sanitized debug builds | Run ASan and UBSan in debug mode; strip them in release mode. | Catches unsafe analysis bugs. |
 | Optimization report | `cp3 build --report` lists allocations, refcounts and bounds checks left in each function. | Shows where to fix next. |
 | Benchmark regression gate | Fail CI when a benchmark gets slower. | Keeps gains from eroding. |
+| Compile-time function memoization | Prove purity, then insert a result cache for any pure function called repeatedly with overlapping arguments. `fibonacci(n)` becomes O(n) instead of O(φⁿ). | 100x on exponential-recursive functions. |
+| Refcount-in-pointer | Store the refcount in the unused high bits of the 64-bit pointer instead of a separate atomic field. `retain` becomes `++(ptr >> 48)`. | Removes the object header and the separate atomic increment. |
+| Object-as-bit-pattern | Encode small objects as single integers when all fields are bounded integers. `Point{x: 1, y: 2}` becomes one `uint64_t`. | Removes the struct allocation and field loads. |
+| Whole-program stack fusion | When the call graph is a tree (no recursion, no shared functions), emit one function with one stack frame instead of N frames. | Per-call overhead drops to zero. |
+| Compile-time memory map | Compute the exact memory layout of the entire program at compile time and emit a static memory plan. | Hot path becomes allocation-free by construction. |
+| Zero-copy string interning | Intern computed strings at compile time, not just literals. Runtime strings matching an interned string get a pointer to the interned copy. | String allocation drops to near-zero for the common case. |
+| Method-table elimination | If a class is never subclassed (closed world), remove its method table entirely and emit direct calls. | Removes the indirection on every method call. |
+| Dead-module elimination | If a module is imported but none of its exports are used, remove the entire module's codegen including runtime TUs (libsodium, libuv, etc.). | Binary size drops by the size of unused modules. |
+| Field-cache-line packing | Reorder object fields by access frequency so hot fields share a cache line and cold fields are moved elsewhere. | Hot-path object access goes from 2 cache lines to 1. |
+| Allocation-free by construction | Prove an object's lifetime is bounded by a known scope, then never emit a heap allocation for it. The object becomes a stack local or a register. | The hot path has no allocation by design. |
+| `__builtin_expect` / branch prediction hints | Tell the compiler which branch is hot so it lays out code accordingly. | 5-15% on hot loops with predictable branches. |
+| `__builtin_prefetch` with hint types | Explicitly request hardware prefetch with a hint (0=READ, 1=WRITE, 2=NTA). | Can turn a memory-bound loop from bandwidth-limited to compute-bound. |
+| `-fno-math-errno` | Tell the compiler math functions don't set `errno`, so `sqrt`, `sin`, `cos` can be inlined and vectorized. | `sqrt` goes from a library call (20-50 cycles) to a single CPU instruction (3-10 cycles). |
+| `__builtin_assume_aligned` | Tell the compiler a pointer is aligned to a known boundary, enabling SIMD vectorization. | 2-4x on SIMD loops that Clang refuses to vectorize due to alignment uncertainty. |
+| `__int128` for 64-bit multiplication | Multiply two 64-bit numbers and get the full 128-bit result without a library call. | Avoids a function call on every 64-bit multiply. |
+| `std::to_chars` / `std::from_chars` | Integer-to-string and string-to-integer without allocation, without locale, without `sprintf`. | 5-10x faster than `std::to_string` for integer formatting. |
+| `_BitScanForward` / `__builtin_ctz` | Count trailing zeros in one CPU instruction. | 10-100x on bit-twiddling code. |
+| `__builtin_unreachable` in error paths | Mark a code path as impossible when CP3 has *proved* it unreachable, enabling more optimizations. | Removes error-path code from hot paths. |
+| `-ffast-math` (surgical) | Disable IEEE 754 compliance on specific functions, not globally. | 2-10x on numeric kernels. |
+| `__builtin_panic` | Mark a compile-time-proved panic path so the compiler can eliminate it from hot paths. | Improves I-cache usage. |
 
 The per-request arena item appears once here; it belongs to the memory-allocation
 workstream and will be evaluated together with object pooling, bump allocation
