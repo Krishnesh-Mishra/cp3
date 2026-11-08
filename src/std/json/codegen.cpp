@@ -96,6 +96,11 @@ RecordField recordField(const std::string& name, Type type, std::string cppType,
 // (`?:`, `| undefined`, `T?` over a single payload) may be absent, in which
 // case the field keeps its empty state (undefined); any other missing key
 // throws `json::ParseError` (catchable). A mistyped key always throws.
+//
+// The same rules/builders back `JSON.parse<T>` and the file-oriented
+// `JSON.parseFile(Sync)<T>` and `JSON.verify<T>` — the builder text is one
+// shared function of the resolved record plan, so the four forms can never
+// drift apart.
 // ---------------------------------------------------------------------------
 
 // One field of an inline record, resolved to its C++ extraction.
@@ -405,18 +410,45 @@ std::optional<std::string> emitInlineRecordBody(const InlineRecordPlan& plan,
 // build; the caller then keeps the unsupported-argument diagnostic. The
 // struct is the value-shape/object-model struct the unit already spells,
 // named here, so the globals/decls emission picks it up from the text.
-std::optional<std::string> jsonInlineRecordParse(const Type& t,
-                                                 const std::string& text) {
+// One inline record build: the struct spelling and the complete builder body
+// (the `<name> cp3_out{}; ...; return cp3_out;` suffix the generated lambda
+// spells verbatim). Interface-record builders carry the same shape, so every
+// call site wraps it identically.
+struct RecordBuild {
+    std::string structName;
+    std::string bodyEnd;
+};
+
+std::optional<RecordBuild> inlineRecordBuild(const Type& t) {
     const std::optional<InlineRecordPlan> plan = planInlineRecord(t, 0);
     if (!plan) return std::nullopt;
     const std::optional<std::string> body =
         emitInlineRecordBody(*plan, "cp3_out", "cp3_f", 0);
     if (!body) return std::nullopt;
-    return "::cp3::runtime::makeRef<" + plan->structName +
+    RecordBuild out;
+    out.structName = plan->structName;
+    out.bodyEnd = plan->structName + " cp3_out{}; " + *body + "return cp3_out;";
+    return out;
+}
+
+// The `[](const Fields& cp3_f) { ... }` suffix for a record build: the
+// builder lambda that parses the fields into the plain field struct.
+std::string recordBuilderLambdaText(const std::string& builderText) {
+    return "[](const ::cp3::runtime::json::Fields& cp3_f) { " + builderText +
+           " }";
+}
+
+std::string recordBuilderLambda(const RecordBuild& build) {
+    return recordBuilderLambdaText(build.bodyEnd);
+}
+
+std::optional<std::string> jsonInlineRecordParse(const Type& t,
+                                                 const std::string& text) {
+    const std::optional<RecordBuild> build = inlineRecordBuild(t);
+    if (!build) return std::nullopt;
+    return "::cp3::runtime::makeRef<" + build->structName +
            ">(::cp3::runtime::json::parseRecord(" + text +
-           ", [](const ::cp3::runtime::json::Fields& cp3_f) { " +
-           plan->structName + " cp3_out{}; " + *body +
-           "return cp3_out; }))";
+           ", " + recordBuilderLambda(*build) + "))";
 }
 
 // sema's type key (type_check.cpp: typeKey), replicated so a receiver's Object
@@ -724,6 +756,121 @@ std::string Generator::emitJsonCall(const CallExpr& c, const MemberExpr& m) {
         }
         return "0.0";
     }
+    if (m.property == "parseFileSync" || m.property == "parseFile") {
+        const bool sync = m.property == "parseFileSync";
+        if (std::string out = emitJsonParseFile(c, sync); !out.empty()) {
+            return out;
+        }
+        const char* name = sync ? "parseFileSync" : "parseFile";
+        if (c.arguments.size() != 1 || !c.arguments.front() ||
+            c.arguments.front()->kind == NodeKind::SpreadElement) {
+            reportCodegenError(
+                c, diagcode::kArityMismatch,
+                std::string("arity mismatch: JSON.") + name +
+                    " expects one string argument");
+        } else if (c.typeArgs.empty() || !c.typeArgs.front()) {
+            reportUnsupported(
+                c, diagcode::kTypeMismatch,
+                std::string("type mismatch: untyped JSON.") + name +
+                    " has no runtime representation; use JSON." + name + "<T>");
+        } else {
+            reportUnsupported(
+                c, diagcode::kTypeMismatch,
+                std::string("type mismatch: JSON.") + name +
+                    "<T> does not support this type argument; only "
+                    "primitives, primitive arrays, and plain interface "
+                    "records are supported");
+        }
+        return "0.0";
+    }
+    if (m.property == "stringifyToFileSync" || m.property == "stringifyToFile") {
+        const bool sync = m.property == "stringifyToFileSync";
+        if (std::string out = emitJsonStringifyToFile(c, sync); !out.empty()) {
+            return out;
+        }
+        const char* name = sync ? "stringifyToFileSync" : "stringifyToFile";
+        if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1] ||
+            c.arguments[0]->kind == NodeKind::SpreadElement ||
+            c.arguments[1]->kind == NodeKind::SpreadElement) {
+            reportCodegenError(
+                c, diagcode::kArityMismatch,
+                std::string("arity mismatch: JSON.") + name +
+                    " expects a path and a value argument");
+        } else {
+            reportUnsupported(
+                c, diagcode::kTypeMismatch,
+                std::string("type mismatch: JSON.") + name +
+                    " cannot serialize this value; only primitives, arrays, "
+                    "and object values with statically known fields are "
+                    "supported");
+        }
+        return "0.0";
+    }
+    if (m.property == "verify") {
+        if (std::string out = emitJsonVerify(c); !out.empty()) return out;
+        if (c.arguments.size() != 1 || !c.arguments.front() ||
+            c.arguments.front()->kind == NodeKind::SpreadElement) {
+            reportCodegenError(
+                c, diagcode::kArityMismatch,
+                "arity mismatch: JSON.verify expects one string argument");
+        } else if (c.typeArgs.empty() || !c.typeArgs.front()) {
+            reportUnsupported(
+                c, diagcode::kTypeMismatch,
+                "type mismatch: untyped JSON.verify has no runtime "
+                "representation; use JSON.verify<T>");
+        } else {
+            reportUnsupported(
+                c, diagcode::kTypeMismatch,
+                "type mismatch: JSON.verify<T> does not support this type "
+                "argument; only primitives, primitive arrays, and plain "
+                "interface records are supported");
+        }
+        return "0.0";
+    }
+    return std::string();
+}
+
+// The legacy fast paths shared by `JSON.stringify(value)`'s no-replacer call
+// and the file-oriented stringify forms (`JSON.stringifyToFile(Sync)`):
+// scalars, primitive arrays, composite literals, the dynamic value tree.
+// `indent` is the trailing `, N` suffix the value-tree spelling carries
+// (`""` when absent). Returns the serialized-text expression, or "" when the
+// value has no spelling.
+std::string Generator::stringifyFastValue(const Expr& arg,
+                                          const std::string& indent) {
+    // A composite literal serializes through the dynamic value tree.
+    if (arg.kind == NodeKind::ArrayLiteral ||
+        arg.kind == NodeKind::ObjectLiteral) {
+        const std::string built = jsonValueText(arg);
+        if (built.empty()) return std::string();
+        needsJson_ = true;
+        return "::cp3::runtime::json::stringify(" + built + indent + ")";
+    }
+    const Type argType = effectiveType(arg);
+    const Shape shape = info(arg).shape;
+    if (shape == Shape::Number || shape == Shape::String ||
+        shape == Shape::Bool || shape == Shape::Null) {
+        needsJson_ = true;
+        return "::cp3::runtime::json::stringify(" + expr(arg) + ")";
+    }
+    // A primitive (or nested primitive) array keeps the direct Array<E>
+    // overload; every other array goes through the value tree.
+    if (shape == Shape::Array && argType.kind == TypeKind::Array &&
+        !argType.parts.empty()) {
+        const CppInfo elem = classify(argType.parts.front());
+        if (elem.shape == Shape::Number || elem.shape == Shape::String ||
+            elem.shape == Shape::Bool || elem.shape == Shape::Array) {
+            needsJson_ = true;
+            return "::cp3::runtime::json::stringify(" + expr(arg) + ")";
+        }
+    }
+    std::string value;
+    if (jsonValueForType(argType, "cp3_json_v", value, 0)) {
+        needsJson_ = true;
+        return "([&]{ const auto& cp3_json_v = (" + expr(arg) +
+               "); return ::cp3::runtime::json::stringify(" + value +
+               indent + "); }())";
+    }
     return std::string();
 }
 
@@ -793,40 +940,7 @@ std::string Generator::emitJsonStringify(const CallExpr& c) {
         if (second == Second::Indent) {
             indent = ", static_cast<int>(" + expr(*c.arguments[1]) + ")";
         }
-        // A composite literal serializes through the dynamic value tree.
-        if (arg->kind == NodeKind::ArrayLiteral ||
-            arg->kind == NodeKind::ObjectLiteral) {
-            const std::string built = jsonValueText(*arg);
-            if (built.empty()) return std::string();
-            needsJson_ = true;
-            return "::cp3::runtime::json::stringify(" + built + indent + ")";
-        }
-        const Type argType = effectiveType(*arg);
-        const Shape shape = info(*arg).shape;
-        if (shape == Shape::Number || shape == Shape::String ||
-            shape == Shape::Bool || shape == Shape::Null) {
-            needsJson_ = true;
-            return "::cp3::runtime::json::stringify(" + expr(*arg) + ")";
-        }
-        // A primitive (or nested primitive) array keeps the direct Array<E>
-        // overload; every other array goes through the value tree.
-        if (shape == Shape::Array && argType.kind == TypeKind::Array &&
-            !argType.parts.empty()) {
-            const CppInfo elem = classify(argType.parts.front());
-            if (elem.shape == Shape::Number || elem.shape == Shape::String ||
-                elem.shape == Shape::Bool || elem.shape == Shape::Array) {
-                needsJson_ = true;
-                return "::cp3::runtime::json::stringify(" + expr(*arg) + ")";
-            }
-        }
-        std::string value;
-        if (jsonValueForType(argType, "cp3_json_v", value, 0)) {
-            needsJson_ = true;
-            return "([&]{ const auto& cp3_json_v = (" + expr(*arg) +
-                   "); return ::cp3::runtime::json::stringify(" + value +
-                   indent + "); }())";
-        }
-        return std::string();
+        return stringifyFastValue(*arg, indent);
     }
     // The replacer/space path: always through the dynamic value tree.
     std::string gap = "std::string()";
@@ -1057,6 +1171,153 @@ std::string Generator::jsonRecordParse(const std::string& shape,
            ">(::cp3::runtime::json::parseRecord(" + text +
            ", [](const ::cp3::runtime::json::Fields& cp3_f) { " +
            jsonShapeBuilders_[shape] + " }))";
+}
+
+// The record build shared by the parse-file family and `verify<T>`: the
+// registered interface's own struct text and builder body, else the inline
+// object shape's shared plan. Returns the construction pieces, or nullopt
+// when `T` denotes no record this unit can lower (the call site then keeps
+// the unsupported-argument diagnostic).
+std::optional<std::pair<std::string, std::string>>
+Generator::jsonRecordBuildFor(const TypeNode& tn) {
+    if (tn.kind == NodeKind::NamedType) {
+        const std::string& name = static_cast<const NamedType&>(tn).name;
+        if (jsonShapeStructs_.count(name) != 0 && jsonShapeBuilders_.count(name) != 0) {
+            if (jsonShapeUsed_.insert(name).second) {
+                jsonShapeDecls_ += jsonShapeStructs_[name] + "\n";
+            }
+            return std::make_pair(mapIdent(name), jsonShapeBuilders_[name]);
+        }
+    }
+    std::optional<Type> objType;
+    if (const Type* published = sema_.typeOf(tn.nodeId);
+        published && published->kind == TypeKind::Object &&
+        !published->isError()) {
+        objType = *published;
+    } else if (tn.kind == NodeKind::ObjectType) {
+        if (std::optional<Type> mapped = typeFromTypeNode(tn);
+            mapped && mapped->kind == TypeKind::Object) {
+            objType = *mapped;
+        }
+    }
+    if (!objType) return std::nullopt;
+    if (std::optional<RecordBuild> build = inlineRecordBuild(*objType)) {
+        return std::make_pair(std::move(build->structName),
+                              std::move(build->bodyEnd));
+    }
+    return std::nullopt;
+}
+
+// JSON.parseFile(Sync)<T>(path). The builder for a primitive T is the direct
+// reader (parseFileSync's read is `readFileText`-wrapped into `json::ParseError`);
+// the record forms share the parseRecord builder with verify<T>.
+std::string Generator::emitJsonParseFile(const CallExpr& c, bool sync) {
+    if (c.arguments.size() != 1 || !c.arguments.front() || c.typeArgs.empty() ||
+        !c.typeArgs.front()) {
+        return std::string();
+    }
+    const Expr& pathArg = *c.arguments.front();
+    if (pathArg.kind == NodeKind::SpreadElement) return std::string();
+    const std::string helper = sync ? "parseFileSync" : "parseFile";
+    const std::string path = expr(pathArg);
+    const TypeNode& tn = *c.typeArgs.front();
+    needsFs_ = true;
+    needsJsonFile_ = true;
+    if (!sync) needsEventLoop_ = true;
+    // Record T (a registered interface, or an inline object shape).
+    if (std::optional<std::pair<std::string, std::string>> record =
+            jsonRecordBuildFor(tn)) {
+        needsJson_ = true;
+        return "::cp3::runtime::json::" + helper + "(" + path +
+               ", [](const std::string& cp3_t) { return "
+               "::cp3::runtime::makeRef<" + record->first +
+               ">(::cp3::runtime::json::parseRecord(cp3_t, " +
+               recordBuilderLambdaText(record->second) + ")); })";
+    }
+    // Primitive / primitive-array T.
+    const std::optional<Type> mapped = typeFromTypeNode(tn);
+    if (!mapped) return std::string();
+    needsJson_ = true;
+    const auto callSync = [this, &path](const std::string& reader) {
+        return "::cp3::runtime::json::" + reader +
+               "(::cp3::runtime::json::readFileText(" + path + "))";
+    };
+    const auto callAsync = [this, &path, &helper](const std::string& reader) {
+        return "::cp3::runtime::json::" + helper + "(" + path +
+               ", [](const std::string& cp3_t) { return "
+               "::cp3::runtime::json::" + reader + "(cp3_t); })";
+    };
+    const auto emitReader = [sync, &callSync, &callAsync](const std::string& reader) {
+        return sync ? callSync(reader) : callAsync(reader);
+    };
+    if (mapped->kind == TypeKind::Number) return emitReader("parseNumber");
+    if (mapped->kind == TypeKind::String) return emitReader("parseString");
+    if (mapped->kind == TypeKind::Boolean) return emitReader("parseBoolean");
+    if (mapped->kind != TypeKind::Array || mapped->parts.empty()) {
+        return std::string();
+    }
+    const TypeKind element = mapped->parts.front().kind;
+    if (element == TypeKind::Number) return emitReader("parseArray<double>");
+    if (element == TypeKind::String) return emitReader("parseArray<std::string>");
+    if (element == TypeKind::Boolean) return emitReader("parseArray<bool>");
+    return std::string();
+}
+
+// JSON.verify<T>(text). The record forms tunnel the parse<T> checker into
+// `verifyRecord` (`false` instead of a throw); the primitive forms call the
+// matching `verify*` readers. Never throws.
+std::string Generator::emitJsonVerify(const CallExpr& c) {
+    if (c.arguments.size() != 1 || !c.arguments.front() || c.typeArgs.empty() ||
+        !c.typeArgs.front()) {
+        return std::string();
+    }
+    const Expr& textArg = *c.arguments.front();
+    if (textArg.kind == NodeKind::SpreadElement) return std::string();
+    const std::string text = expr(textArg);
+    const TypeNode& tn = *c.typeArgs.front();
+    // Record T (a registered interface, or an inline object shape).
+    if (std::optional<std::pair<std::string, std::string>> record =
+            jsonRecordBuildFor(tn)) {
+        needsJson_ = true;
+        return "::cp3::runtime::json::verifyRecord(" + text +
+               ", " + recordBuilderLambdaText(record->second) +
+               ").has_value()";
+    }
+    // Primitive / primitive-array T.
+    const std::optional<Type> mapped = typeFromTypeNode(tn);
+    if (!mapped) return std::string();
+    needsJson_ = true;
+    if (mapped->kind == TypeKind::Number) return "::cp3::runtime::json::verifyNumber(" + text + ")";
+    if (mapped->kind == TypeKind::String) return "::cp3::runtime::json::verifyString(" + text + ")";
+    if (mapped->kind == TypeKind::Boolean) return "::cp3::runtime::json::verifyBoolean(" + text + ")";
+    if (mapped->kind != TypeKind::Array || mapped->parts.empty()) {
+        return std::string();
+    }
+    const TypeKind element = mapped->parts.front().kind;
+    if (element == TypeKind::Number) return "::cp3::runtime::json::verifyArray<double>(" + text + ")";
+    if (element == TypeKind::String) return "::cp3::runtime::json::verifyArray<std::string>(" + text + ")";
+    if (element == TypeKind::Boolean) return "::cp3::runtime::json::verifyArray<bool>(" + text + ")";
+    return std::string();
+}
+
+// JSON.stringifyToFile(Sync)<T>(path, value): the existing stringify fast
+// paths serialize `value`, then the fs raw write replaces the destination
+// (or the async fs write via a Promise, for the async form).
+std::string Generator::emitJsonStringifyToFile(const CallExpr& c, bool sync) {
+    if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1]) {
+        return std::string();
+    }
+    const Expr* valueArg = c.arguments[1].get();
+    if (valueArg->kind == NodeKind::SpreadElement) return std::string();
+    if (c.arguments[0]->kind == NodeKind::SpreadElement) return std::string();
+    const std::string text = stringifyFastValue(*valueArg, std::string());
+    if (text.empty()) return std::string();
+    needsFs_ = true;
+    needsJsonFile_ = true;
+    if (!sync) needsEventLoop_ = true;
+    const std::string path = expr(*c.arguments[0]);
+    const std::string helper = sync ? "stringifyToFileSync" : "stringifyToFile";
+    return "::cp3::runtime::json::" + helper + "(" + path + ", " + text + ")";
 }
 
 }  // namespace cp3

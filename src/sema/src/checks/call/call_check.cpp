@@ -465,7 +465,15 @@ void Analyzer::reportUndefinedCall(CallExpr& call, Identifier& id) {
 }
 
 bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
-    if ((m.property == "parse" || m.property == "stringify") && m.object &&
+    const bool fileSyncJson =
+        m.property == "parseFileSync" || m.property == "stringifyToFileSync";
+    const bool fileAsyncJson =
+        m.property == "parseFile" || m.property == "stringifyToFile";
+    const bool parseFileJson =
+        m.property == "parseFileSync" || m.property == "parseFile";
+    const bool verifyJson = m.property == "verify";
+    if ((m.property == "parse" || m.property == "stringify" ||
+         fileSyncJson || fileAsyncJson || verifyJson) && m.object &&
         m.object->kind == NodeKind::Identifier &&
         static_cast<Identifier&>(*m.object).name == "JSON") {
         // JSON.stringify(value, replacer?, space?): `unknown` accepts any
@@ -480,11 +488,13 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
         FuncSig sig;
         sig.annotatedReturn = true;
         sig.name = "JSON." + m.property;
-        // JSON.parse<T>(...) returns T (explicit). Bare JSON.parse(...)
-        // is a compile error (CP3208, docs/design/remove-void-unknown.md
-        // �6.2): the result type is only known with a type argument.
+        // JSON.parse<T>(...), JSON.parseFileSync<T> / parseFile<T>,
+        // JSON.stringifyToFile(Sync)<T>, JSON.verify<T> all carry the explicit
+        // type argument (docs/design/remove-void-unknown.md pattern): the
+        // result type is only known with it; a bare call is a compile error
+        // (CP3208). Bare JSON.stringify(...) is legal.
         Type t = Type::unknown();
-        bool parseMissingTypeArg = false;
+        bool tArgMissing = false;
         if (m.property == "stringify") {
             const Type replacer = Type::function(
                 {Type::string(), Type::unknown()}, Type::unknown());
@@ -496,6 +506,45 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
             sig.optional = {false, true, true};
             sig.ret = Type::string();
             t = Type::string();
+        } else if (verifyJson) {
+            // verify<T>(text): a missing type argument is the same CP3208 the
+            // parse family reports; the checker needs `T`'s shape to model
+            // the verdict (its own diagnostics at the resolution site).
+            sig.params = {Type::string()};
+            sig.optional = {false};
+            if (call.typeArgs.empty() || !call.typeArgs.front()) {
+                tArgMissing = true;
+                t = Type::undefined();
+            } else {
+                (void)resolveType(*call.typeArgs.front());
+                t = Type::boolean();
+            }
+            sig.ret = Type::boolean();
+        } else if (fileSyncJson || fileAsyncJson) {
+            // parseFileSync<T> / parseFile<T>(path): `T` resolves exactly
+            // like parse<T>. stringifyToFile(Sync)<T>(path, value): any
+            // value is *candidate-serializable*; `T` is required for surface
+            // uniformity but carries no runtime consequence beyond the typing
+            // of the value argument (unknown in the signature).
+            if (parseFileJson) {
+                sig.params = {Type::string()};
+                sig.optional = {false};
+            } else {
+                sig.params = {Type::string(), Type::unknown()};
+                sig.optional = {false, false};
+            }
+            if (call.typeArgs.empty() || !call.typeArgs.front()) {
+                tArgMissing = true;
+                t = Type::undefined();
+            } else if (parseFileJson) {
+                t = resolveType(*call.typeArgs.front());
+            } else {
+                (void)resolveType(*call.typeArgs.front());
+                t = Type::voidType();
+            }
+            if (m.property == "parseFile") t = promiseOf(t);
+            if (m.property == "stringifyToFile") t = promiseOf(Type::voidType());
+            sig.ret = t;
         } else {
             sig.params = {Type::string()};
             sig.optional = {false};
@@ -507,15 +556,24 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
                 // JSON.parse<T>(x)). The check lives here so imports are
                 // resolved, unlike the token-level spelling check the
                 // parser used to do.
-                parseMissingTypeArg = true;
+                tArgMissing = true;
                 t = Type::undefined();
             }
             sig.ret = t;
         }
-        if (parseMissingTypeArg) {
+        // JSON.parse(file)<T> / JSON.verify<T> / JSON.stringifyToFile(Sync)<T>
+        //: a missing type argument is CP3208 (docs/design/remove-void-unknown.md
+        // pattern): the value type is only known with it.
+        if (tArgMissing) {
+            std::string message = "JSON." + m.property +
+                                  " requires a type argument; use JSON." +
+                                  m.property + "<T>(...)";
+            if (m.property == "parse") {
+                message = "JSON.parse requires a type argument; use "
+                          "JSON.parse<T>(x)";
+            }
             report(diagcode::kJsonParseMissingTypeArgument, call.span,
-                   "JSON.parse requires a type argument; use "
-                   "JSON.parse<T>(x)");
+                   message);
         }
         checkArgs(sig, call);
         out = withType(call, t);

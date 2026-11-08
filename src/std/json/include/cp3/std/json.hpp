@@ -34,6 +34,22 @@
 //     of primitives, one-level primitive arrays, or nested plain records);
 //     the struct materializes like an object-shape literal. Other object
 //     shapes keep the unsupported-argument diagnostic.
+//   `JSON.parseFileSync<T>(path)` / `JSON.parseFile<T>(path)` -> `parseFileSync` /
+//     `parseFile` in cp3/std/json_file.hpp: the file read happens through
+//     `std/fs` (`readFileSync` / `readFile`), then the text is parsed and
+//     checked against T exactly like `parse<T>` (the same builder, the same
+//     shape rules; duplicate keys throw). Read failure, invalid JSON and a
+//     shape mismatch are one class: `json::ParseError` (thrown here, rejected
+//     there).
+//   `JSON.stringifyToFileSync<T>(path, value)` / `JSON.stringifyToFile<T>(path, value)`
+//     -> `stringifyToFileSync` / `stringifyToFile` in cp3/std/json_file.hpp:
+//     the `stringify(value)` lowering unchanged, then a raw overwrite through
+//     `std/fs` (`writeFileSync` / `writeFile`). A write failure is
+//     `json::ParseError` (thrown here, rejected there).
+//   `JSON.verify<T>(text)`        -> `verifyRecord` / `verify*` in cp3/std/json_parse.hpp:
+//     the same checker as `parse<T>`, folded into `bool`; any failure
+//     (invalid JSON, missing/mistyped required field, duplicate key) is
+//     `false`. Never throws.
 //
 //   NOT covered here: untyped `JSON.parse(text)` in run mode (the result is
 //   `unknown`, which has no runtime representation; codegen reports a type
@@ -65,6 +81,10 @@
 #include "cp3/core/runtime.hpp"
 #include "cp3/std/json_parse.hpp"
 #include "cp3/std/json_value.hpp"
+// NOT included unconditionally: cp3/std/json_file.hpp pulls cp3/std/fs.hpp,
+// which only exists under src/std/fs/include. The five file API members add
+// the include through the module-writer when a program names them.
+//#include "cp3/std/json_file.hpp"
 
 namespace cp3::runtime::json {
 

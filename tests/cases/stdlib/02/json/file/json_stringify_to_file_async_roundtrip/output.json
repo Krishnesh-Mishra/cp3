@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "true\n{\"id\":1,\"name\":\"lovelace\",\"tags\":[\"a\"]}\n1 lovelace 1\n",
+  "exitCode": 0
+}

@@ -15,13 +15,17 @@
 //     contract one level down;
 //   * `recordValue(v, build)` / `findField(fields, name)` for a nested record
 //     value the builder already holds (a present optional field) and for a
-//     non-throwing presence probe, respectively.
+//     non-throwing presence probe, respectively;
+//   * `verifyRecord` and the primitive `verify*` readers for `JSON.verify<T>`:
+//     the same checker, folded into `bool` — `false` on any failure, never a
+//     throw;
 //   * A duplicate key in an object throws `ParseError` (never first/last-
 //     writer-wins); keys are matched case-sensitively.
 // =============================================================================
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -389,6 +393,62 @@ inline Array<bool> boolArrayField(const Fields& fields, const char* name) {
     out.reserve(v.items.size());
     for (const Value& item : v.items) out.push_back(convertElement<bool>(item));
     return makeArray<bool>(std::move(out));
+}
+
+// =============================================================================
+// `JSON.verify<T>(text)` — the boolean sibling of parseRecord (and of the
+// primitive readers). The same text requirements and the same generated
+// builder, folded into `bool`: any failure (invalid JSON, missing or
+// mistyped field, duplicate key) is `false`, never a throw.
+template <class F>
+auto verifyRecord(const std::string& text, F build)
+    -> std::optional<decltype(build(std::declval<const Fields&>()))> {
+    try {
+        const Value root = parseText(text);
+        requireKind(root, Value::Kind::Object, "an object");
+        return build(root.fields);
+    } catch (const std::exception&) {
+        return std::nullopt;
+    } catch (...) {
+        return std::nullopt;  // verify never throws
+    }
+}
+
+inline bool verifyNumber(const std::string& text) {
+    try {
+        (void)parseNumber(text);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+inline bool verifyString(const std::string& text) {
+    try {
+        (void)parseString(text);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+inline bool verifyBoolean(const std::string& text) {
+    try {
+        (void)parseBoolean(text);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+template <class T>
+inline bool verifyArray(const std::string& text) {
+    try {
+        (void)parseArray<T>(text);
+        return true;
+    } catch (...) {
+        return false;
+    }
 }
 
 // One nested record field: the value must be an object; the generated

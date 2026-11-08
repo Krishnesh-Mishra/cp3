@@ -1,0 +1,8 @@
+import console from "std/console";
+import JSON from "std/json";
+try {
+  const o = await JSON.parseFile<{ x: number }>("__cp3_json_fileapi_missing_async__.json");
+  console.log("no-throw");
+} catch (e) {
+  console.log("bad");
+}

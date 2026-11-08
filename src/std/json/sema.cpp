@@ -13,7 +13,7 @@
 // table is CP3305 with these names as candidates, never an untyped fallthrough.
 //
 // The signatures and the descriptions are the documented ones
-// (docs/standard-library/04-imported-std-modules.md, JSON section).
+// (docs/content/03-standard-library/09-json.md).
 // =============================================================================
 #include "detail/analyzer.h"
 
@@ -28,9 +28,10 @@ namespace cp3 {
 namespace {
 
 // `(text: string) => unknown` / `(value: unknown, replacer?: ..., space?:
-// number | string) => string`. The real call typing stays in tryInferJsonCall
-// (call_check.cpp); these rows only mark the surface closed and give member
-// reads a type. The second parameter's union keeps the CP3 indent form
+// number | string) => string` and the file-oriented async/sync forms below.
+// The real call typing stays in tryInferJsonCall (call_check.cpp); these
+// rows only mark the surface closed and give member reads a type. The second
+// parameter's union keeps the CP3 indent form
 // (`stringify(v, 2)`: a number) alongside the ECMAScript replacer form.
 Type jsonParseSignature() {
     return Type::function({Type::string()}, Type::unknown());
@@ -47,6 +48,29 @@ Type jsonStringifySignature() {
                        Type::string()));
 }
 
+// `(path: string) => unknown` — the `T` of `parseFile<T>` rides the explicit
+// type argument exactly like `parse<T>`; the result type is bound in
+// `tryInferJsonCall` (std/json namespace call inference).
+Type jsonParseFileSignature() {
+    return Type::function({Type::string()}, Type::unknown());
+}
+// `(path: string) => Promise<unknown>`
+Type jsonParseFilePromiseSignature() {
+    return promiseOf(Type::unknown());
+}
+// `(path: string, value: unknown) => void`
+Type jsonStringifyToFileSignature() {
+    return Type::function({Type::string(), Type::unknown()}, Type::voidType());
+}
+// `(path: string, value: unknown) => Promise<void>`
+Type jsonStringifyToFilePromiseSignature() {
+    return promiseOf(Type::voidType());
+}
+// `(text: string) => boolean`
+Type jsonVerifySignature() {
+    return Type::function({Type::string()}, Type::boolean());
+}
+
 const MemberRow kJsonRows[] = {
     {"parse", jsonParseSignature, "parse<T>(text: string): T",
      "Parses `text` as JSON.\n\n"
@@ -61,6 +85,34 @@ const MemberRow kJsonRows[] = {
      "or string) controls pretty-print indentation. For back-compat, "
      "`stringify(value, indentNumber)` is still accepted as the second "
      "argument."},
+    {"parseFileSync", jsonParseFileSignature,
+     "parseFileSync<T>(path: string): T",
+     "Reads the file at `path` and parses it as JSON.\n\n"
+     "Behaves like `parse<T>` on the file's text: the value is validated "
+     "against `T`'s shape, and a mismatch throws an ordinary catchable "
+     "error. A missing or unreadable file throws the same class of error "
+     "(`json::ParseError`)."},
+    {"parseFile", jsonParseFilePromiseSignature,
+     "parseFile<T>(path: string): Promise<T>",
+     "Reads the file at `path` and parses it as JSON on the async fs path.\n\n"
+     "The promise resolves to the value validated against `T` (exactly like "
+     "`parseFileSync<T>`) and rejects with the same error class on a read or "
+     "shape failure."},
+    {"stringifyToFileSync", jsonStringifyToFileSignature,
+     "stringifyToFileSync<T>(path: string, value: T): void",
+     "Serializes `value` as JSON text and overwrites the file at `path` "
+     "(like `stringify(value)` followed by `fs.writeFileSync`). Throws on a "
+     "write error."},
+    {"stringifyToFile", jsonStringifyToFilePromiseSignature,
+     "stringifyToFile<T>(path: string, value: T): Promise<void>",
+     "Serializes `value` as JSON text and overwrites the file at `path` "
+     "(like `stringify(value)` followed by `fs.writeFile`). The promise "
+     "rejects on a write error."},
+    {"verify", jsonVerifySignature,
+     "verify<T>(text: string): boolean",
+     "Returns whether `text` parses as JSON and conforms to `T`, with the "
+     "same rules as `parse<T>` (extra keys are ignored; a missing or "
+     "mistyped required field makes it return `false`). Never throws."},
 };
 
 }  // namespace

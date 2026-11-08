@@ -198,6 +198,7 @@ std::string programSource(const ProgramAssembly& assembly,
     if (n.path) out += "#include \"cp3/std/path.hpp\"\n";
     if (n.os) out += "#include \"cp3/std/os.hpp\"\n";
     if (n.json) out += "#include \"cp3/std/json.hpp\"\n";
+    if (n.jsonFile) out += "#include \"cp3/std/json_file.hpp\"\n";
     if (n.process) out += "#include \"cp3/std/process.hpp\"\n";
     if (n.env) out += "#include \"cp3/std/env.hpp\"\n";
     if (n.crypto) out += "#include \"cp3/std/crypto.hpp\"\n";
@@ -326,6 +327,7 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     n.path |= inner.needsPath_;
     n.os |= inner.needsOs_;
     n.json |= inner.needsJson_;
+    n.jsonFile |= inner.needsJsonFile_;
     n.process |= inner.needsProcess_;
     n.env |= inner.needsEnv_;
     n.crypto |= inner.needsCrypto_;

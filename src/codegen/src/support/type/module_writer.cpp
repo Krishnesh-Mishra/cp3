@@ -144,6 +144,7 @@ std::string Generator::sourceIncludes() const {
     if (needsPath_) out += "#include \"cp3/std/path.hpp\"\n";
     if (needsOs_) out += "#include \"cp3/std/os.hpp\"\n";
     if (needsJson_) out += "#include \"cp3/std/json.hpp\"\n";
+    if (needsJsonFile_) out += "#include \"cp3/std/json_file.hpp\"\n";
     if (needsProcess_) out += "#include \"cp3/std/process.hpp\"\n";
     if (needsEnv_) out += "#include \"cp3/std/env.hpp\"\n";
     if (needsCrypto_) out += "#include \"cp3/std/crypto.hpp\"\n";

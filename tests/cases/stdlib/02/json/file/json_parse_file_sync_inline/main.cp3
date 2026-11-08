@@ -1,0 +1,8 @@
+import console from "std/console";
+import fs from "std/fs";
+import JSON from "std/json";
+const path = "__cp3_json_fileapi_sync_inline__.json";
+fs.writeFileSync(path, "{\"x\": 42, \"y\": \"ok\"}");
+const o = JSON.parseFileSync<{ x: number, y: string }>(path);
+console.log(`${o.x} ${o.y}`);
+fs.unlinkSync(path);

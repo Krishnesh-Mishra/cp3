@@ -22,6 +22,22 @@ const text = json.stringify({ name: "Ada", active: true });
 
 The result can be written as text or sent over a network. Handle values that cannot be represented in JSON explicitly; do not assume that arbitrary class instances serialize every field automatically.
 
+## File-oriented helpers
+
+```ts
+const settings = JSON.parseFileSync<Settings>("./settings.json");
+const settingsAsync = await JSON.parseFile<Settings>("./settings.json");
+JSON.stringifyToFileSync("./out.json", result);
+await JSON.stringifyToFile("./out.json", result);
+const ok = JSON.verify<Settings>(text);
+```
+
+`parseFileSync` / `parseFile` read and parse exactly like `parse<T>` on the file's text — the same type-argument rules (inline objects, interfaces, primitives and primitive arrays), the same runtime shape validation, the same duplicate-key and missing/extra-key semantics. A missing or unreadable file, invalid JSON, or a shape mismatch all throw the same error class `JSON.parse<T>` uses (the `fs` read error is boxed into it as well). `parseFile` rejects the promise on the same class; await or try/catch it as usual.
+
+`stringifyToFileSync` / `stringifyToFile` serialize with the same rules as `stringify(value)` and then **overwrite** the destination file (raw write, no append); they throw on a write error.
+
+`verify<T>(text)` runs the exact same checker as `parse<T>` — same inline-`T` and interface rules, same required/optional and extra-key semantics, duplicate keys and malformed text included — but never throws: it returns `boolean`.
+
 ## `json.parse<T>(text)`
 
 Parses JSON text and may validate the decoded shape against the requested type:
@@ -58,7 +74,12 @@ The module exposes `parse<T>(text)` and `stringify(value)`. It is not a complete
 | Call | Result | Failure behavior |
 | --- | --- | --- |
 | `json.parse<T>(text)` | `T` when a type argument is supplied; otherwise `unknown` | Malformed JSON or runtime shape mismatch throws a catchable error |
+| `json.parseFileSync<T>(path)` | `T` | Throws a catchable error on read failure, malformed JSON, or a shape mismatch |
+| `json.parseFile<T>(path)` | `Promise<T>` | Rejects with the same class of error on read/parse/shape failure |
 | `json.stringify(value, indent?)` | JSON text as `string` | Unsupported values follow the serializer's runtime rules |
+| `json.stringifyToFileSync<T>(path, value)` | `void` | Overwrites the file; throws on a write error |
+| `json.stringifyToFile<T>(path, value)` | `Promise<void>` | Overwrites the file; rejects on a write error |
+| `json.verify<T>(text)` | `boolean` | Never throws; `false` on malformed JSON, a duplicate key, or a shape mismatch |
 
 The optional `indent` is a number controlling pretty-print indentation. Keep it absent for compact JSON. The API does not expose JavaScript replacer or reviver callbacks.
 

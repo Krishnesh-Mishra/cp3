@@ -681,10 +681,23 @@ private:
     void collectJsonShapes(const Program& program);
     void emitJsonInterface(const InterfaceDeclaration& i);
     std::string emitJsonStringify(const CallExpr& c);
+    // The legacy fast paths shared by `stringify(value)` and the file-oriented
+    // stringify forms.
+    std::string stringifyFastValue(const Expr& arg, const std::string& indent);
     std::string emitJsonParse(const CallExpr& c);
     std::string jsonRecordParse(const std::string& shape, const std::string& text);
     std::string jsonValueText(const Expr& e);
     std::string emitJsonMember(const MemberExpr& m);
+    // The `JSON.*File` family (`JSON.parseFile[Sync]<T>`,
+    // `JSON.stringifyToFile(Sync)<T>`, `JSON.verify<T>`): the record builder
+    // text shared by the parse/verify/file wrapper sites. nullopt when T
+    // denotes no record this unit can lower. The pair is
+    // (struct spelling, builder body incl. the final `return cp3_out;`).
+    std::optional<std::pair<std::string, std::string>> jsonRecordBuildFor(
+        const TypeNode& tn);
+    std::string emitJsonParseFile(const CallExpr& c, bool sync);
+    std::string emitJsonStringifyToFile(const CallExpr& c, bool sync);
+    std::string emitJsonVerify(const CallExpr& c);
     std::string emitProcessCall(const CallExpr& c, const MemberExpr& m);
     std::string emitProcessMember(const MemberExpr& m);
     // `std/process` marker receivers: SpawnHandle members and argv lowering.

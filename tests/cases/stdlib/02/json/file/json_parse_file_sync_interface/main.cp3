@@ -1,0 +1,9 @@
+import console from "std/console";
+import fs from "std/fs";
+import JSON from "std/json";
+interface User { id: number; name: string; }
+const path = "__cp3_json_fileapi_sync_iface__.json";
+fs.writeFileSync(path, "{\"id\":7,\"name\":\"ada\"}");
+const u = JSON.parseFileSync<User>(path);
+console.log(`${u.id} ${u.name}`);
+fs.unlinkSync(path);

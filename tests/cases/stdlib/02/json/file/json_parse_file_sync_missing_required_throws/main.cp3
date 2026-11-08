@@ -1,0 +1,12 @@
+import console from "std/console";
+import fs from "std/fs";
+import JSON from "std/json";
+const path = "__cp3_json_fileapi_sync_mishap__.json";
+fs.writeFileSync(path, "{\"x\": 5}");
+try {
+  const o = JSON.parseFileSync<{ x: number, y: string }>(path);
+  console.log("no-throw");
+} catch (e) {
+  console.log("bad");
+}
+fs.unlinkSync(path);

@@ -1,0 +1,8 @@
+import console from "std/console";
+import JSON from "std/json";
+try {
+  const o = JSON.parseFileSync<{ x: number }>("__cp3_json_fileapi_missing__.json");
+  console.log("no-throw");
+} catch (e) {
+  console.log("bad");
+}

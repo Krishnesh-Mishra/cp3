@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "true\n{\"id\":7,\"name\":\"ada\",\"tags\":[\"x\",\"y\"]}\n7 ada 2\n",
+  "exitCode": 0
+}

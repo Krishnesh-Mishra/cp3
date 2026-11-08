@@ -29,6 +29,7 @@ struct ProgramNeeds {
     bool path = false;
     bool os = false;
     bool json = false;
+    bool jsonFile = false;     // std/json FILE API (parseFile/stringifyToFile)
     bool process = false;
     bool env = false;
     bool crypto = false;

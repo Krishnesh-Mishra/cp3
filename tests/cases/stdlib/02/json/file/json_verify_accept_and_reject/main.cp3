@@ -1,0 +1,24 @@
+import console from "std/console";
+import JSON from "std/json";
+interface User { id: number; name: string; }
+console.log(`${JSON.verify<{ x: number }>("{\"x\": 5}")}`);
+console.log(`${JSON.verify<{ x: number }>("{\"y\": 5}")}`);
+console.log(`${JSON.verify<{ x: number }>("{\"x\": 5, \"y\": 1}")}`);
+console.log(`${JSON.verify<{ x: number }>("{\"x\": 5, \"x\": 6}")}`);
+console.log(`${JSON.verify<{ x: number }>("{\"x\": \"s\"}")}`);
+console.log(`${JSON.verify<{ x: number, y?: string }>("{\"x\": 1}")}`);
+console.log(`${JSON.verify<{ x: number, y: string }>("{\"x\": 1}")}`);
+console.log(`${JSON.verify<{ x: number, y: string | undefined }>("{\"x\": 1}")}`);
+console.log(`${JSON.verify<{ x: number, a: { b: number } }>("{\"x\": 1, \"a\": {\"b\": 7}}")}`);
+console.log(`${JSON.verify<{ x: number, a: { b: number } }>("{\"x\": 1, \"a\": {}}")}`);
+console.log(`${JSON.verify<{ x: number, a: { b: number } }>("{\"x\": 1, \"a\": {\"b\": 7, \"b\": 8}}")}`);
+console.log(`${JSON.verify<{ x: number }>("not json")}`);
+console.log(`${JSON.verify<{ x: number }>("{\"x\": 5")}`);
+console.log(`${JSON.verify<number>("5")}`);
+console.log(`${JSON.verify<number>("\"5\"")}`);
+console.log(`${JSON.verify<string[]>("[1, 2]")}`);
+console.log(`${JSON.verify<string[]>("[\"a\", \"b\"]")}`);
+console.log(`${JSON.verify<boolean>("true")}`);
+console.log(`${JSON.verify<User>("{\"id\":7,\"name\":\"ada\"}")}`);
+console.log(`${JSON.verify<User>("{\"id\":7}")}`);
+console.log(`${JSON.verify<User>("{\"id\":7,\"id\":8,\"name\":\"ada\"}")}`);

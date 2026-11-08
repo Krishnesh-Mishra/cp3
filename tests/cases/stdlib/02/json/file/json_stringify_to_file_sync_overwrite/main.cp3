@@ -1,0 +1,8 @@
+import console from "std/console";
+import fs from "std/fs";
+import JSON from "std/json";
+const path = "__cp3_json_fileapi_overwrite__.json";
+fs.writeFileSync(path, "PREVIOUS CONTENT");
+JSON.stringifyToFileSync(path, { b: 2 });
+console.log(fs.readFileSync(path));
+fs.unlinkSync(path);

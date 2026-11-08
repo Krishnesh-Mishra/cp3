@@ -140,6 +140,9 @@ protected:
     bool needsPath_ = false;       // path.* -> cp3/std/path.hpp include
     bool needsOs_ = false;         // os.* -> cp3/std/os.hpp include
     bool needsJson_ = false;       // JSON.stringify/parse -> cp3/std/json.hpp include
+bool needsJsonFile_ = false;   // JSON parseFile/stringifyToFile -> cp3/std/json_file.hpp
+                             // (which pulls cp3/std/fs.hpp; the fs row loads the
+                             // fs include tree)
     // The registered JSON record shapes (usage-based reification): per
     // interface name the C++ struct text, the generated builder body and the
     // declared field names, plus the sema shape label -> interface name. The
