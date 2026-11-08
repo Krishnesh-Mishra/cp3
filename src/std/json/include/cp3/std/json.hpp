@@ -29,6 +29,11 @@
 //     and throws `ParseError` on a missing field or a field type mismatch. The
 //     C++ struct and builder exist only for the interfaces actually used as
 //     `JSON.parse<T>` (usage-based reification, STDLIB docs §04).
+//   `JSON.parse<{ x: number }>(text)` -> the same `parseRecord(text, builder)`
+//     over the annotation's `$o{...}` value-shape struct (a plain object shape
+//     of primitives, one-level primitive arrays, or nested plain records);
+//     the struct materializes like an object-shape literal. Other object
+//     shapes keep the unsupported-argument diagnostic.
 //
 //   NOT covered here: untyped `JSON.parse(text)` in run mode (the result is
 //   `unknown`, which has no runtime representation; codegen reports a type

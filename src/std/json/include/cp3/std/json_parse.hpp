@@ -10,7 +10,14 @@
 //   * `parseArray<T>` for `T[]` (the element conversion via `convertElement`),
 //   * `parseRecord(text, builder)` for a record shape: the generated builder
 //     reads every declared field through `numberField`/`stringField`/... and
-//     throws `ParseError` on a missing or mistyped one.
+//     throws `ParseError` on a missing or mistyped one,
+//   * `recordField(fields, name, build)` for a nested record field: the same
+//     contract one level down;
+//   * `recordValue(v, build)` / `findField(fields, name)` for a nested record
+//     value the builder already holds (a present optional field) and for a
+//     non-throwing presence probe, respectively.
+//   * A duplicate key in an object throws `ParseError` (never first/last-
+//     writer-wins); keys are matched case-sensitively.
 // =============================================================================
 #pragma once
 
@@ -72,6 +79,11 @@ private:
                          std::to_string(pos_));
     }
 
+    [[noreturn]] void fail(const std::string& what) const {
+        throw ParseError(std::string("invalid JSON: ") + what + " at offset " +
+                         std::to_string(pos_));
+    }
+
     void skipSpace() {
         while (pos_ < text_.size()) {
             const char c = text_[pos_];
@@ -114,6 +126,10 @@ private:
             skipSpace();
             if (peek() != '"') fail("expected a string key");
             std::string key = parseStringLiteral();
+            // A duplicate key throws (STDLIB spec): never first/last-writer-wins.
+            for (const Value::Field& entry : out.fields) {
+                if (entry.key == key) fail("duplicate key '" + key + "'");
+            }
             skipSpace();
             if (peek() != ':') fail("expected ':'");
             ++pos_;
@@ -373,6 +389,34 @@ inline Array<bool> boolArrayField(const Fields& fields, const char* name) {
     out.reserve(v.items.size());
     for (const Value& item : v.items) out.push_back(convertElement<bool>(item));
     return makeArray<bool>(std::move(out));
+}
+
+// One nested record field: the value must be an object; the generated
+// builder reads it with the same surface as parseRecord. The builder
+// receives the object's fields and returns the constructed value.
+template <class F>
+auto recordField(const Fields& fields, const char* name, F build) {
+    const Value& v = requireField(fields, name);
+    requireKind(v, Value::Kind::Object, "an object");
+    return build(v.fields);
+}
+
+// One nested record value: the same contract as recordField, for a value the
+// generated builder already holds (an optional field that is present).
+template <class F>
+auto recordValue(const Value& v, F build) {
+    requireKind(v, Value::Kind::Object, "an object");
+    return build(v.fields);
+}
+
+// The named field of an object, or nullptr when absent. An absent declared
+// optional field is represented as `undefined`; a present one still runs
+// through the ordinary kind check (a kind mismatch throws).
+inline const Value* findField(const Fields& fields, const char* name) {
+    for (const auto& entry : fields) {
+        if (entry.key == name) return &entry.value;
+    }
+    return nullptr;
 }
 
 // The validated parse: the text must be an object; the generated builder then

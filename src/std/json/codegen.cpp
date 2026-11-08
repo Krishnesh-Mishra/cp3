@@ -8,8 +8,18 @@
 //
 // `JSON.parse<T>(text)`: `number`, `string` and `boolean` lower to the
 // primitive readers and `number[]`/`string[]`/`boolean[]` to `parseArray<T>`;
-// an interface T takes the record path. The unit's interface declarations are
-// registered up front (collectJsonShapes) and a record shape is reified only
+// an interface T takes the record path; an inline object annotation
+// (`parse<{ x: number }>`) takes the same record path over a generated
+// struct for the annotation's shape: a plain object shape of primitives,
+// one-level primitive arrays, or nested plain records lowers through the
+// value-shape machinery (a `$o{...}` struct, exactly like an object-shape
+// literal); a shape with `?:` members is spelled by the object model's field
+// struct instead. Optional members (`?:`, `| undefined`, `T?`) that the JSON
+// text omits are absent with no error; every other missing member throws.
+// Extra keys in the JSON text are ignored, keys match case-sensitively, and
+// a duplicate key anywhere throws (as the shared reader enforces). The
+// unit's interface declarations are registered up front (collectJsonShapes)
+// and a record shape is reified only
 // when some `JSON.parse<T>` names it (usage-based reification, STDLIB docs
 // §04): the C++ struct materializes into the decls section on first use, and
 // the generated builder extracts every declared field at run time, throwing
@@ -64,6 +74,349 @@ RecordField recordField(const std::string& name, Type type, std::string cppType,
     out.cppType = std::move(cppType);
     out.extract = std::move(extract);
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// Inline object type arguments (`JSON.parse<{ x: number }>`)
+//
+// sema resolves the annotation to the `$o{...}` object shape (makeObjectType),
+// so the plainness of the shape decides the C++ spelling of the struct the
+// parse builds:
+//   * a plain shape of primitives, one-level primitive arrays or nested
+//     plain records: the value-shape machinery spells it (the same struct
+//     object literals use, support/value_shapes.cpp);
+//   * a shape with `?:` members (no value-shape spelling): the object
+//     model's plain field struct spells it (objectStructsText skips it while
+//     the value-shape path owns it, so exactly one path claims it).
+// Either way the builder is the same `parseRecord` builder the interface
+// path emits; nested plain records recurse with the same rules.
+//
+// Missing vs. extra keys follow the STDLIB spec (see the header comment):
+// an extra key is ignored; a declared key whose field is optional
+// (`?:`, `| undefined`, `T?` over a single payload) may be absent, in which
+// case the field keeps its empty state (undefined); any other missing key
+// throws `json::ParseError` (catchable). A mistyped key always throws.
+// ---------------------------------------------------------------------------
+
+// One field of an inline record, resolved to its C++ extraction.
+struct InlineField {
+    std::string name;      // the JSON key (matched case-sensitively)
+    Type inner;            // the payload type (a `T | undefined` field keeps T)
+    std::string innerCpp;  // the payload's C++ spelling
+    std::string memberCpp;  // the member's full spelling (wrapper included)
+    bool optional = false;  // an absent key is `undefined`, not an error
+    bool maybe = false;     // the member is `Maybe<...>` rather than `std::optional<...>`
+    NullishKind nullKind = NullishKind::None;  // flavor of the empty state
+};
+
+// One inline record shape, resolved to its generated struct.
+struct InlineRecordPlan {
+    std::string structName;
+    std::vector<InlineField> fields;
+};
+
+std::optional<InlineRecordPlan> planInlineRecord(const Type& t, int depth);
+
+// The payload kinds a field may carry: a primitive, a one-level primitive
+// array or a nested plain record. Resolving a nested record registers its
+// struct (same as the top level), so no second representation is minted.
+bool payloadInlineSupported(const Type& t, int depth) {
+    switch (t.kind) {
+        case TypeKind::Number:
+        case TypeKind::String:
+        case TypeKind::Boolean:
+            return true;
+        case TypeKind::Array: {
+            if (t.parts.size() != 1) return false;
+            const TypeKind e = t.parts.front().kind;
+            return e == TypeKind::Number || e == TypeKind::String ||
+                   e == TypeKind::Boolean;
+        }
+        case TypeKind::Object:
+            return planInlineRecord(t, depth + 1).has_value();
+        default:
+            return false;
+    }
+}
+
+// Plans one field. `memberCpp` is the member's full spelling in the struct
+// (the same string classify spells for it), so the generated wrapper around
+// a present payload always matches the declaration. A union over one payload
+// and a nullish member (`X | undefined`, `X | null`, `T?`) is an absent-
+// allowed field; a union with more than one payload is not supported.
+// `valueShapeSpelling` selects the member's inline-struct restrictions: the
+// generated value-shape `cp3ToText()` can render a single-flavor primitive
+// option, but no `Maybe<>` / object-valued optional (no overload exists),
+// so those shapes fall to the object model instead.
+bool planInlineField(const std::string& name, const std::string& memberCpp,
+                     const Type& t, bool modifierOptional,
+                     InlineField& out, int depth,
+                     bool valueShapeSpelling) {
+    Type inner = t;
+    bool optional = modifierOptional;
+    NullishKind flavor = NullishKind::None;
+    if (t.isUnion() || t.isNullable()) {
+        std::vector<Type> keep;
+        for (const Type& part : t.parts) {
+            if (!part.isNullish()) keep.push_back(part);
+        }
+        if (keep.size() != 1 || keep.front().isNullish()) return false;
+        inner = keep.front();
+        optional = true;
+        flavor = nullishKindOf(t);
+        if (valueShapeSpelling) {
+            const bool primitive = inner.kind == TypeKind::Number ||
+                                   inner.kind == TypeKind::String ||
+                                   inner.kind == TypeKind::Boolean;
+            if (!primitive) return false;
+            if (flavor == NullishKind::Mixed) return false;  // Maybe member
+        }
+    } else if (t.isNullish()) {
+        return false;  // `undefined`/`null` alone carries no JSON value
+    }
+    // classify spells the two-flavor union as `cp3::runtime::Maybe<...>`
+    // (no leading `::`), everything else empty-flavored as `std::optional<`.
+    const bool maybe =
+        memberCpp.rfind("cp3::runtime::Maybe<", 0) == 0 ||
+        memberCpp.rfind("::cp3::runtime::Maybe<", 0) == 0;
+    if (optional && !maybe && memberCpp.rfind("std::optional<", 0) != 0) {
+        // The struct's member would not carry the wrapper the builder assigns.
+        return false;
+    }
+    if (!payloadInlineSupported(inner, depth)) return false;
+    const CppInfo innerCpp = classify(inner);
+    if (!innerCpp.representable) return false;
+    out.name = name;
+    out.inner = inner;
+    out.innerCpp = innerCpp.cpp;
+    out.memberCpp = memberCpp;
+    out.optional = optional;
+    out.maybe = maybe;
+    out.nullKind = flavor;
+    return true;
+}
+
+// Plans one inline record shape: the value-shape struct when every member
+// carries a value-shape spelling, else the object model's plain field
+// struct (which owns the `?:` shapes). False when any member has no JSON
+// extraction (a method, a function field, an unspellable type).
+std::optional<InlineRecordPlan> planInlineRecord(const Type& t, int depth) {
+    if (t.kind != TypeKind::Object || depth > 32) return std::nullopt;
+    std::string structName;
+    std::vector<ObjectField> valueFields;
+    if (objectShapeOf(t, structName, valueFields)) {
+        std::vector<InlineField> fields;
+        bool ok = true;
+        for (const ObjectField& field : valueFields) {
+            InlineField planned;
+            if (!planInlineField(field.name, field.cpp, field.type,
+                                 /*modifierOptional=*/false, planned,
+                                 depth, /*valueShapeSpelling=*/true)) {
+                ok = false;
+                break;
+            }
+            fields.push_back(std::move(planned));
+        }
+        if (ok) return InlineRecordPlan{std::move(structName), std::move(fields)};
+    }
+    // The object model owns shapes the value-shape path cannot spell; its
+    // plain field struct (emitted by objectStructsText) is the struct.
+    const ObjectModel* om = ModelRegistry::get().objectByLabel(t.name);
+    if (om == nullptr || om->isInterface) return std::nullopt;
+    if (!ModelRegistry::get().objectUsable(t.name)) return std::nullopt;
+    std::vector<InlineField> fields;
+    for (const ObjectFieldModel& field : om->fields) {
+        if (field.isMethod || field.isFunction) return std::nullopt;
+        const std::string memberCpp = objectFieldCpp(field);
+        if (memberCpp.empty()) return std::nullopt;
+        InlineField planned;
+        if (!planInlineField(field.name, memberCpp, field.type,
+                             /*modifierOptional=*/field.optional, planned,
+                             depth, /*valueShapeSpelling=*/false)) {
+            return std::nullopt;
+        }
+        fields.push_back(std::move(planned));
+    }
+    return InlineRecordPlan{om->structName, std::move(fields)};
+}
+
+std::optional<std::string> emitInlineRecordBody(const InlineRecordPlan& plan,
+                                                const std::string& target,
+                                                const std::string& fvar,
+                                                int depth);
+
+// The wrapper around a present payload's value: the member's optional
+// flavor decides between `std::optional` and `Maybe<>`.
+std::string wrapPresent(const InlineField& field, const std::string& value) {
+    return field.maybe ? "cp3::runtime::Maybe<" + field.innerCpp +
+                             ">(" + value + ")"
+                       : "std::optional<" + field.innerCpp +
+                             ">(" + value + ")";
+}
+
+// The empty state a `null` fills for a null-flavored optional member.
+std::string emptyPresent(const InlineField& field) {
+    return field.maybe
+               ? "cp3::runtime::Maybe<" + field.innerCpp + ">(nullptr)"
+               : std::string("std::nullopt");
+}
+
+// The extraction call for an Object payload: `makeRef<S>` around the nested
+// builder, wrapped in the member's optional flavor when one was passed.
+// A required field reads through the enclosing Fields vector via recordField
+// (`var`); a present optional field holds the value itself via recordValue.
+std::string emitNestedRecord(const Type& nestedType, int fdepth,
+                             const std::string& fvar, const std::string& name,
+                             const InlineField* member) {
+    const std::optional<InlineRecordPlan> nested =
+        planInlineRecord(nestedType, fdepth + 1);
+    if (!nested) return std::string();
+    const std::string inner = "cp3_f" + std::to_string(fdepth);
+    const std::optional<std::string> body =
+        emitInlineRecordBody(*nested, "cp3_in", inner, fdepth + 1);
+    if (!body) return std::string();
+    std::string read = "::cp3::runtime::json::";
+    if (member) {
+        read += "recordValue(*" + fvar + ", ";
+    } else {
+        read += "recordField(" + fvar + ", " + name + ", ";
+    }
+    read += "[](const ::cp3::runtime::json::Fields& " + inner +
+            ") { " + nested->structName + " cp3_in{}; " + *body +
+            "return cp3_in; })";
+    std::string call =
+        "::cp3::runtime::makeRef<" + nested->structName + ">(" + read + ")";
+    if (member) call = wrapPresent(*member, call);
+    return call;
+}
+
+// The extraction for one field. `member` is its full `target.member` path.
+std::optional<std::string> emitInlineField(const InlineField& field,
+                                           const std::string& member,
+                                           const std::string& fvar,
+                                           int depth) {
+    const std::string name = cppStringLiteral(field.name);
+    std::string out;
+    if (!field.optional) {
+        // Required: the reader throws on a missing or mistyped key.
+        switch (field.inner.kind) {
+            case TypeKind::Number:
+                return member + " = ::cp3::runtime::json::numberField(" +
+                       fvar + ", " + name + "); ";
+            case TypeKind::String:
+                return member + " = ::cp3::runtime::json::stringField(" +
+                       fvar + ", " + name + "); ";
+            case TypeKind::Boolean:
+                return member + " = ::cp3::runtime::json::boolField(" + fvar +
+                       ", " + name + "); ";
+            case TypeKind::Array: {
+                const TypeKind e = field.inner.parts.front().kind;
+                const char* reader = e == TypeKind::Number
+                                         ? "numberArrayField"
+                                     : e == TypeKind::String
+                                         ? "stringArrayField"
+                                         : "boolArrayField";
+                std::string call = "::cp3::runtime::json::" +
+                                   std::string(reader) + "(" + fvar + ", " +
+                                   name + ")";
+                return member + " = " + call + "; ";
+            }
+            case TypeKind::Object: {
+                const std::string call =
+                    emitNestedRecord(field.inner, depth + 1, fvar, name,
+                                     /*member=*/nullptr);
+                if (call.empty()) return std::nullopt;
+                return member + " = " + call + "; ";
+            }
+            default:
+                return std::nullopt;
+        }
+    }
+    // Optional: absent means `undefined`; present means the ordinary kind
+    // check, and `null` is a mismatch unless the payload's flavor is null.
+    const std::string var = "cp3_v" + std::to_string(depth);
+    out += "if (const ::cp3::runtime::json::Value* " + var +
+           " = ::cp3::runtime::json::findField(" + fvar + ", " + name +
+           ")) { ";
+    const bool jsonNull = field.nullKind == NullishKind::Null ||
+                          field.nullKind == NullishKind::Mixed;
+    if (jsonNull) {
+        out += "if (" + var +
+               "->kind == ::cp3::runtime::json::Value::Kind::Null) { ";
+        out += member + " = " + emptyPresent(field) + "; } else { ";
+    }
+    switch (field.inner.kind) {
+        case TypeKind::Number:
+            out += "::cp3::runtime::json::requireKind(*" + var +
+                   ", ::cp3::runtime::json::Value::Kind::Number, "
+                   "\"a number\"); ";
+            out += member + " = " + wrapPresent(field, var + "->number") +
+                   "; ";
+            break;
+        case TypeKind::String:
+            out += "::cp3::runtime::json::requireKind(*" + var +
+                   ", ::cp3::runtime::json::Value::Kind::String, "
+                   "\"a string\"); ";
+            out += member + " = " + wrapPresent(field, var + "->text") +
+                   "; ";
+            break;
+        case TypeKind::Boolean:
+            out += "::cp3::runtime::json::requireKind(*" + var +
+                   ", ::cp3::runtime::json::Value::Kind::Bool, "
+                   "\"a boolean\"); ";
+            out += member + " = " + wrapPresent(field, var + "->boolean") +
+                   "; ";
+            break;
+        case TypeKind::Object: {
+            out += "::cp3::runtime::json::requireKind(*" + var +
+                   ", ::cp3::runtime::json::Value::Kind::Object, "
+                   "\"an object\"); ";
+            const std::string call =
+                emitNestedRecord(field.inner, depth + 1, var, name, &field);
+            if (call.empty()) return std::nullopt;
+            out += member + " = " + call + "; ";
+            break;
+        }
+        default:
+            return std::nullopt;
+    }
+    if (jsonNull) out += "} ";
+    out += "} ";
+    return out;
+}
+
+std::optional<std::string> emitInlineRecordBody(const InlineRecordPlan& plan,
+                                                const std::string& target,
+                                                const std::string& fvar,
+                                                int depth) {
+    std::string out;
+    for (const InlineField& field : plan.fields) {
+        const std::string member = target + "." + mapIdent(field.name);
+        const std::optional<std::string> stmt =
+            emitInlineField(field, member, fvar, depth);
+        if (!stmt) return std::nullopt;
+        out += *stmt;
+    }
+    return out;
+}
+
+// The whole `JSON.parse<{...}>(text)` expression for a resolved object
+// shape. nullopt when the shape is not a plain record this lowering can
+// build; the caller then keeps the unsupported-argument diagnostic. The
+// struct is the value-shape/object-model struct the unit already spells,
+// named here, so the globals/decls emission picks it up from the text.
+std::optional<std::string> jsonInlineRecordParse(const Type& t,
+                                                 const std::string& text) {
+    const std::optional<InlineRecordPlan> plan = planInlineRecord(t, 0);
+    if (!plan) return std::nullopt;
+    const std::optional<std::string> body =
+        emitInlineRecordBody(*plan, "cp3_out", "cp3_f", 0);
+    if (!body) return std::nullopt;
+    return "::cp3::runtime::makeRef<" + plan->structName +
+           ">(::cp3::runtime::json::parseRecord(" + text +
+           ", [](const ::cp3::runtime::json::Fields& cp3_f) { " +
+           plan->structName + " cp3_out{}; " + *body +
+           "return cp3_out; }))";
 }
 
 // sema's type key (type_check.cpp: typeKey), replicated so a receiver's Object
@@ -647,9 +1000,33 @@ std::string Generator::emitJsonParse(const CallExpr& c) {
             return jsonRecordParse(name, expr(textArg));
         }
     }
+    const std::string text = expr(textArg);
+    // An inline object annotation (`JSON.parse<{ x: number }>`): sema resolved
+    // it to the `$o{...}` object shape. A plain record of primitives (and
+    // nested plain records) lowers through the generated record builder;
+    // anything else keeps the unsupported-argument diagnostic below (the
+    // interface path above is untouched by this branch).
+    std::optional<Type> objType;
+    if (const Type* published = sema_.typeOf(tn.nodeId);
+        published && published->kind == TypeKind::Object &&
+        !published->isError()) {
+        objType = *published;
+    } else if (tn.kind == NodeKind::ObjectType) {
+        if (std::optional<Type> mapped = typeFromTypeNode(tn);
+            mapped && mapped->kind == TypeKind::Object) {
+            objType = *mapped;
+        }
+    }
+    if (objType) {
+        if (std::optional<std::string> out =
+                jsonInlineRecordParse(*objType, text)) {
+            needsJson_ = true;
+            return *out;
+        }
+        return std::string();  // an unsupported object shape: CP3401
+    }
     const std::optional<Type> mapped = typeFromTypeNode(tn);
     if (!mapped) return std::string();
-    const std::string text = expr(textArg);
     const auto call = [this, &text](const std::string& reader) {
         needsJson_ = true;
         return "::cp3::runtime::json::" + reader + "(" + text + ")";
