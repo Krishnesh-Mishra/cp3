@@ -687,7 +687,7 @@ def evaluate(case: Case, compiler: Path, timeout: float) -> Outcome:
     if not case.cp3_path.is_file():
         return Outcome(case, "failed", f"missing source file: {case.cp3_path}")
 
-    cmd = [str(compiler), mode, str(case.cp3_path)]
+    cmd = [str(compiler), mode, str(case.cp3_path.resolve())]
     try:
         proc = subprocess.run(
             cmd,
