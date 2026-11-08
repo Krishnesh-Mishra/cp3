@@ -34,13 +34,35 @@ Type Analyzer::combinatorOperandValue(CallExpr& call, const std::string& prop) {
         return Type::unknown();
     }
     const Type elem = operand.parts.front();
-    // A mixed array of promises can't be lowered without per-element runtime
-    // conversion: reject it with a clear diagnostic instead.
+    // Mixed arrays: plain values count as already-resolved promises (JS
+    // parity), exactly like the literal-path codegen. Each arm is folded in
+    // turn - a promise arm unwraps to its value, a plain arm stays itself -
+    // so `[1, Promise.resolve(2), 3]` carries `Promise<number>`.
     if (elem.kind == TypeKind::Union) {
-        report(diagcode::kTypeMismatch, call.span,
-               "Promise." + prop +
-                   " needs an array of promises with the same value type");
-        return Type::unknown();
+        Type acc;
+        int seen = 0;
+        bool sawVoid = false;
+        for (const Type& m : elem.parts) {
+            if (isPromiseType(m)) {
+                const Type v = promiseValue(m);
+                if (v.isVoid()) {
+                    sawVoid = true;
+                    continue;
+                }
+                acc = seen == 0 ? widen(v) : unify(acc, widen(v));
+                ++seen;
+                continue;
+            }
+            if (m.isVoid()) {
+                sawVoid = true;
+                continue;
+            }
+            acc = seen == 0 ? widen(m) : unify(acc, widen(m));
+            ++seen;
+        }
+        if (seen == 0) return sawVoid ? Type::voidType() : Type::unknown();
+        if (sawVoid) acc = unify(acc, Type::undefined());
+        return acc;
     }
     return isPromiseType(elem) ? promiseValue(elem) : elem;
 }

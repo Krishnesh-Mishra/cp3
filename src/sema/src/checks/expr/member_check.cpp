@@ -165,13 +165,25 @@ Type Analyzer::memberOf(const Type& ot, const std::string& prop,
 Type Analyzer::promiseMemberOf(const Type& ot, const std::string& prop) {
     const Type value = promiseValue(ot);
     if (prop == "then") {
-        return Type::function({ambient()}, promiseOf(Type::unknown()));
+        // The handler's own parameter carries the promise's value type, so
+        // an unannotated arrow argument gets its parameter type contextually.
+        // A `Promise<void>` hands over no value: the handler is nullary,
+        // mirroring the codegen (no handler context for a void value).
+        const Type handler = value.isVoid()
+            ? Type::function({}, promiseOf(Type::unknown()))
+            : Type::function({value}, promiseOf(Type::unknown()));
+        return Type::function({handler}, promiseOf(Type::unknown()));
     }
     if (prop == "catch" || prop == "catchError") {
-        return Type::function({ambient()}, promiseOf(value));
+        // The reason is JS `any`; the handler observes it but keeps the
+        // rejection type of the promise it forwards to.
+        return Type::function({Type::function({ambient()}, promiseOf(value))},
+                              promiseOf(value));
     }
     if (prop == "finally") {
-        return Type::function({ambient()}, promiseOf(value));
+        // `finally` hands the handler no arguments.
+        return Type::function({Type::function({}, promiseOf(value))},
+                              promiseOf(value));
     }
     return ambient();
 }

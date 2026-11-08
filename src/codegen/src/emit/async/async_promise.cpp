@@ -38,22 +38,33 @@ Type operandElementType(const Type& operand) {
     }
     const Type elem = operand.parts.front();
     if (elem.kind == TypeKind::Union) {
-        // A mixed array of promises: unify their value types exactly like the
-        // sema does, so the codegen and the sema agree.
-        Type acc = Type::unknown();
-        bool sawNonVoid = false;
+        // A mixed array of promises and plain values: each promise arm unwraps
+        // to its value, each plain arm stays itself (JS parity - a plain value
+        // counts as an already-resolved promise). Mirrors sema's fold so the two
+        // agree on the value type.
+        Type acc;
+        int seen = 0;
         bool sawVoid = false;
         for (const Type& m : elem.parts) {
-            if (!isPromiseType(m)) return Type::unknown();
-            const Type v = promiseValue(m);
-            if (v.isVoid()) {
-                sawVoid = true;
-                continue;
+            Type v;
+            if (isPromiseType(m)) {
+                const Type pv = promiseValue(m);
+                if (pv.isVoid()) {
+                    sawVoid = true;
+                    continue;
+                }
+                v = pv;
+            } else {
+                if (m.isVoid()) {
+                    sawVoid = true;
+                    continue;
+                }
+                v = m;
             }
-            sawNonVoid = true;
-            acc = unify(acc, v);
+            acc = seen == 0 ? v : unify(acc, v);
+            ++seen;
         }
-        if (!sawNonVoid) return sawVoid ? Type::voidType() : Type::unknown();
+        if (seen == 0) return sawVoid ? Type::voidType() : Type::unknown();
         if (sawVoid) acc = unify(acc, Type::undefined());
         return acc;
     }
@@ -72,11 +83,31 @@ std::string Generator::emitPromiseCombinator(const CallExpr& c,
     }
     const Expr& operand = *c.arguments.front();
     const bool literal = operand.kind == NodeKind::ArrayLiteral;
-    const Type elem = operandElementType(effectiveType(operand));
+    // The RAW element type (the operand's element type before unwrapping):
+    // a literal's elements are each emitted through their own semantics, so
+    // the wrap decision must be per element, not global.
+    const Type operandType = effectiveType(operand);
+    const Type rawElem = operandType.kind == TypeKind::Array &&
+                                 !operandType.parts.empty()
+                             ? operandType.parts.front()
+                             : Type::unknown();
+    const Type elem = operandElementType(operandType);
     if (elem.isUnknown() && !literal) {
         reportCodegenError(c, diagcode::kTypeMismatch,
                            "type mismatch: Promise." + prop +
                                " expects an array of promises");
+        return "0.0";
+    }
+    // A non-literal mixed operand (`[1, p]`) cannot be discriminated per
+    // element without a runtime visitor; the type the operand shares must
+    // carry the promise for `Promise.all` to recognize it. The literal path
+    // handles mixed operands element-wise below.
+    if (!literal && rawElem.kind == TypeKind::Union && !elem.isUnknown()) {
+        reportCodegenError(c, diagcode::kTypeMismatch,
+                           "type mismatch: Promise." + prop +
+                               " expects an array of promises (or plain "
+                               "values) of one type; a mixed source cannot "
+                               "be spread element-wise");
         return "0.0";
     }
     // The promise's value type: the operand's element type, unwrapped when it
@@ -97,12 +128,20 @@ std::string Generator::emitPromiseCombinator(const CallExpr& c,
     // `undefined` value shape, which is kept distinct.
     const bool voidValue = valueInfo.shape == Shape::Void;
 
-    // A plain value is an already-resolved promise (JS parity).
-    const bool wrap = !isPromiseType(elem);
+    // A plain value is an already-resolved promise (JS parity); a promise
+    // element passes through. `wrapped` takes the element too, so a mixed
+    // literal decides per element instead of by the array's joint type.
     const std::string resolve =
         "::cp3::runtime::Promise<" + (voidValue ? std::string("void") : valueInfo.cpp) + ">::resolve(";
     // A `void` value resolves with no argument: `Promise<void>::resolve()`.
-    const auto wrapped = [&](const std::string& text) -> std::string {
+    const auto wrapped = [&](const Expr& e, const std::string& text) -> std::string {
+        if (isPromiseType(effectiveType(e))) return text;
+        return voidValue ? resolve + ")" : resolve + text + ")";
+    };
+    // Homogeneous non-literal operands decide by the operand's element type;
+    // mixed non-literal operands were rejected above.
+    const bool wrap = !isPromiseType(rawElem);
+    const auto wrapHomogeneous = [&](const std::string& text) -> std::string {
         if (!wrap) return text;
         return voidValue ? resolve + ")" : resolve + text + ")";
     };
@@ -126,28 +165,45 @@ std::string Generator::emitPromiseCombinator(const CallExpr& c,
                 if (element->kind != NodeKind::SpreadElement) {
                     const std::string text = expr(*element);
                     body += " " + v + ".push_back(" +
-                            (wrap ? resolve + text + ")" : text) + ");";
+                            wrapped(*element, text) + ");";
                     continue;
                 }
                 const auto& sp = static_cast<const SpreadElement&>(*element);
                 // The spread source holds the promises, or - when a plain
                 // value counts as an already-resolved promise - the values
                 // that resolve.
-                const std::string src =
-                    spreadArrayText(sp, wrap ? valueInfo.cpp : promiseInfo.cpp);
+                const Type srcType = sp.argument ? effectiveType(*sp.argument)
+                                                 : Type::unknown();
+                const Type srcElem =
+                    srcType.kind == TypeKind::Array &&
+                            !srcType.parts.empty()
+                        ? srcType.parts.front()
+                        : Type::unknown();
+                if (srcElem.kind == TypeKind::Union) {
+                    reportTypeError(*element,
+                                    "type mismatch: a spread element of "
+                                    "Promise." + prop +
+                                        " must be an array of promises or of "
+                                        "plain values of one type");
+                    return "0.0";
+                }
+                const bool spreadWrap = !isPromiseType(srcElem);
+                const std::string src = spreadArrayText(sp, spreadWrap ? valueInfo.cpp : promiseInfo.cpp);
                 if (src.empty()) {
                     reportTypeError(*element,
                                     "type mismatch: a spread element of Promise." +
                                         prop + " must be an array of " +
-                                        (wrap ? describe(value)
-                                              : describe(promiseOf(value))));
+                                        (spreadWrap ? describe(value)
+                                                    : describe(promiseOf(value))));
                     return "0.0";
                 }
-                if (wrap) {
+                if (spreadWrap) {
                     body += " { const auto& cp3_src = " + src +
                             "; for (auto cp3_it = cp3_src->begin(); "
                             "cp3_it != cp3_src->end(); ++cp3_it) { " +
-                            v + ".push_back(" + wrapped("*cp3_it") + "); } }";
+                            v + ".push_back(" +
+                            (voidValue ? resolve + ")"
+                                       : resolve + "*cp3_it)") + "); } }";
                 } else {
                     body += " { const auto& cp3_src = " + src + "; " + v +
                             ".insert(" + v + ".end(), cp3_src->begin(), "
@@ -160,7 +216,7 @@ std::string Generator::emitPromiseCombinator(const CallExpr& c,
             for (const auto& element : array.elements) {
                 if (!element) continue;
                 const std::string text = expr(*element);
-                elements.push_back(wrapped(text));
+                elements.push_back(wrapped(*element, text));
             }
             vector = "std::vector<" + promiseInfo.cpp + ">{" +
                      joinStrings(elements, ", ") + "}";
@@ -172,7 +228,7 @@ std::string Generator::emitPromiseCombinator(const CallExpr& c,
         vector = "[&]{ std::vector<" + promiseInfo.cpp +
                  "> cp3_promises; for (const auto& " + item + " : *" +
                  expr(operand) + ") { cp3_promises.push_back(" +
-                 wrapped(item) +
+                 wrapHomogeneous(item) +
                  "); } return cp3_promises; }()";
     }
     return "::cp3::runtime::" + prop + "(" + vector + ")";
