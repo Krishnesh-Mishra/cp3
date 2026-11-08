@@ -1,0 +1,33 @@
+// Router: a mounted sub-router matches its own :id route params and passes
+// through to the app's fallback for paths outside the mount prefix.
+// (NOTE: `app.use("/api", router)` shorthand is not accepted by the current
+// analyzer; the mountSpelling is router.mountMiddleware(path) passed to
+// app.use(...), which lowers to the same dispatch.)
+import console from "std/console";
+import { createServer, fetch, Router } from "std/network";
+
+const app = createServer();
+const router = new Router();
+
+router.get("/item/:id", (req, res) => {
+  const id: string = req.params.get("id") ?? "missing";
+  res.text(`item:${id}`);
+});
+router.get("/plain", (req, res) => {
+  res.text("plain");
+});
+
+app.use(router.mountMiddleware("/api"));
+
+app.listen(48233, () => {});
+
+const one = await fetch("http://127.0.0.1:48233/api/item/42");
+console.log(`RT1|${one.status}|${await one.text()}`);
+
+const two = await fetch("http://127.0.0.1:48233/api/plain");
+console.log(`RT2|${two.status}|${await two.text()}`);
+
+const outside = await fetch("http://127.0.0.1:48233/outside");
+console.log(`RT3|${outside.status}`);
+
+app.close();

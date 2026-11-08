@@ -1,0 +1,60 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-release",
+      "displayName": "Windows Release (Ninja, auto-detected C++)",
+      "description": "The canonical Windows build tree (build/windows-release). Compiler is whatever cmake finds on PATH (cmake 4.x auto-detects the WinLibs UCRT g++ in the current environment); pass -DCMAKE_CXX_COMPILER=... to force clang. Note: the clang invoked for the programs cp3c itself compiles is cp3c's own detection (C:/Program Files/LLVM/bin/clang++.exe), independent of the binary's compiler.",
+      "binaryDir": "${sourceDir}/build/windows-release",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-debug",
+      "displayName": "Windows Debug (Ninja, auto-detected C++)",
+      "description": "Debug variant of the canonical Windows tree (build/windows-debug).",
+      "binaryDir": "${sourceDir}/build/windows-debug",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux Release (Ninja)",
+      "description": "The Linux build tree (build/linux-release), normally built under WSL.",
+      "binaryDir": "${sourceDir}/build/linux-release",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-release",
+      "displayName": "Build build/windows-release (20 jobs)",
+      "configurePreset": "windows-release",
+      "jobs": 20
+    },
+    {
+      "name": "windows-debug",
+      "displayName": "Build build/windows-debug (20 jobs)",
+      "configurePreset": "windows-debug",
+      "jobs": 20
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Build build/linux-release (20 jobs)",
+      "configurePreset": "linux-release",
+      "jobs": 20
+    }
+  ]
+}

@@ -23,7 +23,7 @@
 # observed evidence, never weakened.
 #
 # Usage:
-#   python tests/network/run_network_suite.py --cp3c <path> [--only A,B,S]
+#   python tests/network/run_network_suite.py --cp3c <path> [--only A,B,C,D,S,G,T]
 #          [--json] [--results DIR] [--skip-pending]
 #   python tests/network/run_network_suite.py --cp3c <path> --smoke-bench-server
 #
@@ -58,6 +58,7 @@ sys.path.insert(0, str(HERE))
 import http_referee  # noqa: E402
 import security_probes  # noqa: E402
 import ws_rfc6455  # noqa: E402
+import ws_rfc6455_tls  # noqa: E402
 
 # ---- port map (README.md documents every allocation) ------------------------
 PORT_REFEREE = 48201     # phase A python HTTP referee
@@ -66,6 +67,8 @@ PORT_SERVER_OWN = 48204  # phase B cp3 server
 PORT_WS_PY = 48205       # phase C python WebSocket server
 PORT_WS_CP3 = 48206      # phase D cp3 WebSocketServer
 PORT_PROBE = 48207       # phase S cp3 probe target
+PORT_TLS_HTTPS = 48235   # phase T cp3 HTTPS server -> python urllib
+PORT_TLS_WSS = 48236     # phase T cp3 WebSocketServer({tls}) -> python RFC6455-TLS client
 PORT_SMOKE = 48209       # --smoke-bench-server
 NEW_SURFACE_PORTS = {          # phase B new-surface fixture ports; each binds only
     48216: "server_next_chain",       # when its fixture gets that far
@@ -77,7 +80,7 @@ NEW_SURFACE_PORTS = {          # phase B new-surface fixture ports; each binds o
 }
 
 TARGET_SECONDS = 90.0
-PHASES = ["A", "B", "C", "D", "S"]
+PHASES = ["A", "B", "C", "D", "S", "G", "T"]
 
 
 # =============================================================================
@@ -116,8 +119,8 @@ PHASE_A_SPEC = {
     "A7": ("timeout rejects with the documented message",
            rejected_with("timed out after 300 ms")),
     "A8": ("connection refused rejects", rejected_with("could not connect")),
-    "A9": ("https:// rejects clearly with TLS off",
-           rejected_with("https:// is not supported")),
+    "A9": ("https:// against a closed port rejects deterministically",
+           rejected_with("tcp connect failed")),
     "A10": ("redirect behavior (docs silent; recorded)",
             one_of(("302", "redirecting"), ("200", "ok-body"))),
     "A11": ("binary payload via arrayBuffer() as Buffer",
@@ -151,6 +154,63 @@ PHASE_B_SPEC = {
     "B14": ("server still serving after the whole run", exact("200", "hello")),
 }
 
+# phase G: cp3 server hardening/surface not otherwise covered in-process
+# (bodyLimit, cors, static, cookieParser, trustProxy, onError, verbs, Router,
+# FormData). AbortSignal is not supported in this build (see README).
+PHASE_G_BODY_LIMIT = {
+    "SB1": ("bodyLimit: small body passes through to the handler",
+            exact("200", "got:tiny")),
+    "SB2": ("bodyLimit: oversized body rejected with 413 before the handler",
+            exact("413")),
+}
+
+PHASE_G_CORS = {
+    "SC1": ("cors: preflight answered with the configured origin/methods/headers/credentials",
+            exact("204", "https://example.com", "GET,POST", "x-a,x-b", "true")),
+    "SC2": ("cors: simple request stamped with allow-origin",
+            exact("200", "https://example.com")),
+}
+
+PHASE_G_STATIC = {
+    "ST1": ("static: file served below the root", exact("200", "static-ok")),
+    "ST2": ("static: missing path falls back to 404", exact("404")),
+}
+
+PHASE_G_COOKIE_PARSER = {
+    "SC3": ("cookieParser: Cookie header parsed into req.cookies",
+            exact("abc123")),
+}
+
+PHASE_G_TRUST_PROXY = {
+    "TP1": ("trustProxy: X-Forwarded-Proto https observed", exact("https")),
+    "TP2": ("trustProxy: no forwarded header means http", exact("http")),
+}
+
+PHASE_G_ONERROR = {
+    "OE1": ("onError: throwing handler routed to the configured handler",
+            exact("599", "onerror-caught")),
+    "OE2": ("onError: healthy handler unaffected", exact("200", "still ok")),
+}
+
+PHASE_G_METHODS = {
+    "M1": ("PATCH verb dispatched", exact("200", "PATCH")),
+    "M2": ("HEAD verb dispatches and carries response headers", exact("200", "yes")),
+    "M3": ("OPTIONS verb dispatched", exact("204")),
+}
+
+PHASE_G_ROUTER = {
+    "RT1": ("Router: mounted :id param matches", exact("200", "item:42")),
+    "RT2": ("Router: second mounted route matches", exact("200", "plain")),
+    "RT3": ("Router: path outside the mount prefix 404s", exact("404")),
+}
+
+PHASE_G_FORMDATA = {
+    "SF1": ("FormData: multipart/form-data encoded body round-trips",
+            exact("200", "payload-ok", "multipart")),
+}
+
+PHASE_G_ABORT = None  # AbortSignal: not supported in this build (see README)
+
 # phase C: python ws server -> cp3 WebSocket client (exact stdout sequence)
 PHASE_C_SEQUENCE = [
     ("C1", "client open event prints", exact("open")),
@@ -159,6 +219,29 @@ PHASE_C_SEQUENCE = [
     ("C2c", "server binary frame delivered byte-exact", exact("000102ff62696e")),
     ("C3", "close handshake reports code and reason", exact("1000", "done")),
     ("C5", "message count and closed flag", exact("3", "true")),
+]
+
+# phase T: TLS end-to-end. T1/T2/W_T run in-process (cp3 TLS client against
+# cp3 TLS server); T3a/T3b drive the cp3 HTTPS server with python urllib
+# (independent); T4 drives the cp3 TLS WebSocketServer with a python
+# RFC6455-over-TLS client (independent). T2 and T3b require the caller NOT to
+# set SSL_CERT_FILE: they pin the fail-closed behavior.
+PHASE_T_FETCH = {
+    "F_T1": ("fetch https:// resolves against the in-process TLS server",
+             exact("200", "tls-ok")),
+    "F_T2": ("fetch https:// fail-closed: embedded CA rejects the loopback cert",
+             exact("rejected")),
+}
+PHASE_T_WSS_INPROCESS = {
+    "W_T": ("wss:// round trip over the real TLS pump", exact("echo:hello-tls")),
+}
+PHASE_T_WSS_SEQUENCE = [
+    ("D0", "TLS WebSocketServer constructed", exact("ready")),
+    ("D1", "connection event", exact("connection")),
+    ("D21", "first message delivered", exact("hello")),
+    ("D22", "second message delivered", exact("second")),
+    ("D3", "close event with code and reason", exact("1000", "bye")),
+    ("D4", "server closed and finished", exact("done")),
 ]
 
 # phase D: cp3 WebSocketServer -> python ws client (exact stdout sequence)
@@ -269,12 +352,19 @@ class Suite:
                 text, encoding="utf-8", newline="")
 
     # ------------------------------------------------------------ processes
-    def run_cp3(self, fixture: str, timeout: float, log_name: str):
+    def run_cp3(self, fixture: str, timeout: float, log_name: str,
+                env_overrides: dict | None = None,
+                env_remove: tuple[str, ...] = ()):
+        env = dict(os.environ)
+        for key in env_remove:
+            env.pop(key, None)
+        if env_overrides:
+            env.update(env_overrides)
         try:
             proc = subprocess.run(
                 [str(self.cp3c), "run", fixture],
                 cwd=str(FIXTURES), capture_output=True, timeout=timeout,
-                encoding="utf-8", errors="replace")
+                encoding="utf-8", errors="replace", env=env)
         except subprocess.TimeoutExpired:
             self.write_log(log_name, f"[suite] {fixture}: timed out after {timeout:g}s")
             return None
@@ -366,8 +456,11 @@ class Suite:
             self.add(cid, f"unexpected output line ({log_name})", "FAIL",
                      f"observed {'|'.join([cid] + fields)}")
 
-    def run_and_assert(self, fixture: str, spec: dict, log_name: str) -> None:
-        proc = self.run_cp3(fixture, self.budget(), log_name)
+    def run_and_assert(self, fixture: str, spec: dict, log_name: str,
+                       env_overrides: dict | None = None,
+                       env_remove: tuple[str, ...] = ()) -> None:
+        proc = self.run_cp3(fixture, self.budget(), log_name,
+                            env_overrides=env_overrides, env_remove=env_remove)
         if proc is None:
             for cid, (name, _c) in spec.items():
                 self.add(cid, name, "FAIL", f"{fixture} timed out or could not start")
@@ -550,6 +643,99 @@ class Suite:
                  "PASS" if ok else "FAIL", json.dumps(observations))
         self.add("D7", "plain HTTP request to the ws port (docs silent; recorded)",
                  "PASS", f"observed {plain}")
+
+    def phase_g(self) -> None:
+        self.phase = "G"
+        self.emit("[phase G] cp3 server surface not otherwise covered (bodyLimit/cors/static/cookies/trustProxy/onError/verbs/Router/FormData)")
+        self.run_and_assert("server/server_body_limit.cp3", PHASE_G_BODY_LIMIT,
+                            "g_body_limit")
+        self.run_and_assert("server/server_cors.cp3", PHASE_G_CORS, "g_cors")
+        self.run_and_assert("server/server_static.cp3", PHASE_G_STATIC, "g_static")
+        self.run_and_assert("server/server_cookie_parser.cp3", PHASE_G_COOKIE_PARSER,
+                            "g_cookie_parser")
+        self.run_and_assert("server/server_trust_proxy.cp3", PHASE_G_TRUST_PROXY,
+                            "g_trust_proxy")
+        self.run_and_assert("server/server_onerror.cp3", PHASE_G_ONERROR, "g_onerror")
+        self.run_and_assert("server/server_methods.cp3", PHASE_G_METHODS, "g_methods")
+        self.run_and_assert("server/server_router.cp3", PHASE_G_ROUTER, "g_router")
+        self.run_and_assert("client/fetch_formdata.cp3", PHASE_G_FORMDATA, "g_formdata")
+
+    def phase_t(self) -> None:
+        import ssl
+        import urllib.request
+
+        self.phase = "T"
+        self.emit("[phase T] TLS end-to-end (fetch https / wss / cp3 HTTPS server vs python urllib)")
+        ca_pem = FIXTURES / "tls" / "cert.pem"
+        tls_env = {"SSL_CERT_FILE": str(ca_pem)}
+        # T1/W_T: cp3 TLS client against an in-process cp3 TLS server. The
+        # fetch and wss sides verify the loopback cert via SSL_CERT_FILE.
+        self.run_and_assert("client/fetch_tls_ok.cp3", PHASE_T_FETCH, "t_fetch_ok",
+                            env_overrides=tls_env)
+        # T2: no SSL_CERT_FILE on this run: the embedded Mozilla CA bundle
+        # must reject the self-signed loopback cert.
+        self.run_and_assert("client/fetch_tls_rejected.cp3", PHASE_T_FETCH,
+                            "t_fetch_rejected", env_remove=("SSL_CERT_FILE",))
+        self.run_and_assert("client/wss_tls_inprocess.cp3", PHASE_T_WSS_INPROCESS,
+                            "t_wss_inprocess", env_overrides=tls_env)
+        # T3a/T3b: python urllib is the independent client against the cp3
+        # HTTPS server (createServer({ tls }), uWS SSLApp). T3a verifies
+        # against the loopback CA and expects 200/ok; T3b uses the default
+        # trust store and must reject the self-signed cert.
+        proc = self.start_server("server/server_tls.cp3", "server_tls")
+        if proc is None or not wait_port(PORT_TLS_HTTPS, 20):
+            self.add("T3a", "python urllib over verified TLS (cp3 HTTPS server)",
+                     "FAIL", "cp3 HTTPS server never became ready")
+            self.add("T3b", "python urllib without the CA rejects the self-signed cert",
+                     "FAIL", "cp3 HTTPS server never became ready")
+            if proc is not None:
+                self.stop_server(proc, "server_tls")
+            return
+        url = f"https://127.0.0.1:{PORT_TLS_HTTPS}/health"
+        try:
+            ctx = ssl.create_default_context(cafile=str(ca_pem))
+            with urllib.request.urlopen(url, context=ctx, timeout=8) as r:
+                body = r.read().decode("utf-8", "replace")
+                ok = r.status == 200 and body == "ok"
+                detail = f"{r.status} {body!r}"
+        except Exception as exc:  # noqa: BLE001 - report what the client saw
+            ok, detail = False, str(exc)
+        self.add("T3a", "python urllib over verified TLS (cp3 HTTPS server)",
+                 "PASS" if ok else "FAIL", detail)
+        try:
+            urllib.request.urlopen(url, timeout=8)
+            ok, detail = False, "cert unexpectedly verified"
+        except ssl.SSLError as exc:
+            ok = "CERTIFICATE_VERIFY_FAILED" in str(exc)
+            detail = str(exc)
+        except Exception as exc:  # noqa: BLE001
+            ok, detail = False, str(exc)
+        self.add("T3b", "python urllib without the CA rejects the self-signed cert",
+                 "PASS" if ok else "FAIL", detail)
+        self.stop_server(proc, "server_tls")
+        # T4: python RFC6455-over-TLS client against the cp3 TLS WebSocketServer.
+        proc = self.start_server("client/wss_server_own.cp3", "wss_server_own")
+        if proc is None or not wait_port(PORT_TLS_WSS, 20):
+            for cid, name, _check in PHASE_T_WSS_SEQUENCE:
+                self.add(cid, name, "FAIL", "cp3 WSS server never became ready")
+            self.add("T4", "python RFC6455-over-TLS client observations (echo/binary/pong/close)",
+                     "FAIL", "cp3 WSS server never became ready")
+            if proc is not None:
+                self.stop_server(proc, "wss_server_own")
+            return
+        client = ws_rfc6455_tls.client_check_tls(PORT_TLS_WSS)
+        output = self.stop_server(proc, "wss_server_own")
+        got = parse_fixture_lines(output)
+        self.assert_sequence(PHASE_T_WSS_SEQUENCE, got, "wss_server_own")
+        observations = dict(client)
+        observations["binary"] = [list(payload) for payload in client["binary"]]
+        self.write_log("wss_tls_observations", json.dumps(observations, indent=2))
+        ok = (client["messages"] == ["echo:hello", "echo:second"]
+              and client["binary"] == [b"\xde\xad\xbe\xef"]
+              and client["pong"] == "p1" and client["close_code"] == 1000
+              and client["close_reason"] == "bye" and client["error"] is None)
+        self.add("T4", "python RFC6455-over-TLS client observations (echo/binary/pong/close)",
+                 "PASS" if ok else "FAIL", json.dumps(observations))
 
     def phase_s(self) -> None:
         self.phase = "S"
@@ -763,7 +949,8 @@ def main(argv=None) -> int:
                               "overall budget exhausted")
                     continue
                 {"A": suite.phase_a, "B": suite.phase_b, "C": suite.phase_c,
-                 "D": suite.phase_d, "S": suite.phase_s}[phase]()
+                 "D": suite.phase_d, "S": suite.phase_s, "G": suite.phase_g,
+                 "T": suite.phase_t}[phase]()
     finally:
         suite.cleanup()
 

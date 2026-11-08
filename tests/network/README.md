@@ -1,10 +1,10 @@
 # tests/network - the `std/network` verification suite
 
 Permanent verification harness for the `network` standard module, by project-owner
-directive. It proves the documented HTTP/WebSocket surface over real sockets with
-dual verification: every wire-level claim is checked from both ends, with python
-(stdlib only) as the independent referee in phases A and C and a cp3 program as
-the independent half in phases B and D.
+directive. It proves the documented HTTP/WebSocket/TLS surface over real sockets
+with dual verification: every wire-level claim is checked from both ends, with
+python (stdlib only) as the independent referee in phases A, C and T and a cp3
+program as the independent half in phases B, D, G and T.
 
 Docs oracle: `docs/standard-library/04-imported-std-modules.md`, section
 `network`, "Included in beta one" only. Checks are written docs-faithfully; a
@@ -14,9 +14,9 @@ pending-surface checks.
 
 ## Running
 
-The suite (phases A, B, C, D, S; default cp3c `build/bin/cp3c.exe`):
+The suite (phases A, B, C, D, S, G, T; default cp3c `build/bin/cp3c.exe`):
 
-    python tests/network/run_network_suite.py --cp3c <cp3c> [--only A,B,S]
+    python tests/network/run_network_suite.py --cp3c <cp3c> [--only A,B,S,G,T]
            [--json] [--results DIR] [--skip-pending]
 
 The benchmark pre-flight smoke (compiles, boots and contract-checks
@@ -72,7 +72,7 @@ Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite targe
 | query string passes through untouched | A6 | `200|GET|/echo?x=1&y=2|` |
 | `timeout` (ms) rejects: `timed out after 300 ms` | A7 | rejection with the documented message |
 | network-level failure rejects (`could not connect`) | A8 | rejection |
-| `https://` with TLS off: `https:// is not supported` | A9 | clear rejection (D70) |
+| `https://` against a closed port rejects deterministically | A9 | rejection: `tcp connect failed` |
 | redirect behavior (docs silent) | A10 | recorded: `302|redirecting` (no auto-follow) |
 | `arrayBuffer()` -> Buffer hex | A11 | 64 bytes `000102...3f` |
 | `RequestInit.headers` Map sent, `res.headers` Map read | A13 | `200|yes|net` |
@@ -130,6 +130,32 @@ Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite targe
 | python-side observations: echoes, binary echo, pong, close ack | D6 | exact payload list |
 | plain HTTP request to the ws port (docs silent) | D7 | recorded: `404 File Not Found` |
 
+### additional server surface - phase G (cp3 cp3 in-process loopback)
+
+| docs surface | check | expected |
+| --- | --- | --- |
+| `bodyLimit` (`{bodyLimit: n}`) rejects oversize with 413 | G SB1/SB2 | `200|got:small` / `413` |
+| `cors` (`{cors: {...}}`) answers preflight alone | G SC1/SC2 | `204|https://example.com|GET,POST|x-a,x-b|true` / `200|https://example.com` |
+| `static` (`{static: dir}`) serves files below the root | G ST1/ST2 | `200|static-ok` / `404` |
+| `cookieParser()` fills `req.cookies` | G SC3 | `abc123` (cookie header honored) |
+| `trustProxy` (`{trustProxy: true}`) honors `X-Forwarded-Proto` | G TP1/TP2 | `https` / `http` |
+| `onError` (`{onError: (err, req, res) => ...}`) replaces the default 500 | G OE1/OE2 | `599|onerror-caught` / `200|still ok` |
+| `patch`/`head`/`options` route verbs | G M1/M2/M3 | `200|PATCH` / `200|yes` / `204` |
+| `Router` mounted at `/api` with `:id` params | G RT1/RT2/RT3 | `200|item:42` / `200|plain` / `404` |
+| `fetch` with a `FormData` body (multipart/form-data) | G SF1 | `200|payload-ok|multipart` |
+| ~~`AbortSignal` mid-flight abort~~ | — | **Not supported in this build**: the named-import path (`import { AbortSignal }`, `AbortSignal.timeout(ms)`, `fetch(url, { signal })`) is accepted by sema but has no codegen lowering; it never reaches the runtime. Pinned as a known docs/compiler gap. |
+
+### TLS - phase T (in-process and python-independent-client checks)
+
+| docs surface | check | expected |
+| --- | --- | --- |
+| `fetch` over `https://` against an in-process `createServer({tls})` | T1 | `200|tls-ok` |
+| `fetch` fail-closed: embedded Mozilla CA rejects the loopback cert | T2 | `rejected` |
+| `wss://` round trip (WebSocketServer({tls}) + WebSocket client, in-process) | T3 | `echo:hello-tls` |
+| `createServer({tls})` serves HTTPS; python urllib gets 200/ok over verified TLS | T4a | `200 ok` |
+| python urllib without the CA rejects the self-signed cert | T4b | `CERTIFICATE_VERIFY_FAILED` |
+| `WebSocketServer({port, tls})` serves wss; python RFC6455-over-TLS client | T5 | echoes/binary/pong/close 1000 |
+
 ### security - phase S (python probes against cp3 server on 48207)
 
 | probe | check | assertion |
@@ -173,6 +199,18 @@ Per-check timeout defaults to 120 s, hard overall bound 300 s, whole-suite targe
 | 48207 | phase S cp3 probe target |
 | 48209 | `--smoke-bench-server` |
 | 48216-48221 | phase B new-surface fixtures (one per fixture, see the port table in `run_network_suite.py`) |
+| 48226 | phase G `server_body_limit.cp3` |
+| 48227 | phase G `server_cors.cp3` |
+| 48228 | phase G `server_static.cp3` |
+| 48229 | phase G `server_cookie_parser.cp3` |
+| 48230 | phase G `server_trust_proxy.cp3` |
+| 48231 | phase G `server_onerror.cp3` |
+| 48232 | phase G `server_methods.cp3` |
+| 48233 | phase G `server_router.cp3` |
+| 48234 | phase G `fetch_formdata.cp3` |
+| 48235 | phase T `server_tls.cp3` (python urllib -> cp3 HTTPS) |
+| 48236 | phase T `wss_server_own.cp3` (python RFC6455-over-TLS client) |
+| 48208-48210 | phase T in-process TLS fetch/wss fixtures |
 
 The rest of 48201-48299 is reserved but unused. The suite never binds 8080
 (benchmarks) and never 48101-48104 (the pre-existing stdlib/network cases).
@@ -209,13 +247,25 @@ fixed, the check flips to `PASS` without edits.
   at the time this check was written. The suite works around it with the
   unannotated slot plus `Buffer.from(msg)` (still byte-exact, C2c/D2c).
 
+## Now covered (TLS landed in v0.2)
+
+Balanced against the original scope: TLS is no longer "out of scope". Phase T
+covers `fetch` over `https://` (resolve against in-process `createServer({tls})`
+and fail-closed against the embedded Mozilla CA), `wss://` in-process round
+trips, a python urllib check against the cp3 HTTPS server, and a python
+RFC6455-over-TLS client against the cp3 `WebSocketServer({tls})`. The network
+row links the TLS TU from sema/import knowledge
+(`fetch(`/`WebSocket`/`makeTlsOptions(` markers), never from user-source
+scanning. The embedded Mozilla CA bundle needs no filesystem at runtime;
+`SSL_CERT_FILE` overrides it. A `wss://` target whose server presents a cert
+the embedded CA (or the override) does not trust rejects with `CERT_UNTRUSTED`.
+
 ## Deliberately not covered (docs "Explicitly out of scope for beta one")
 
-Nested/sub-routers, regex path matching, HTTPS/TLS (the suite asserts the clear
-`https:// is not supported` rejection instead), server-side template engines,
-`multipart/form-data` upload parsing, response compression. Also not covered:
+Regex path matching, server-side template engines, `multipart/form-data`
+upload parsing (body-side `FormData` encoding for `fetch` IS covered, phase G),
+response compression. Also not covered:
 
-- `wss://` WebSocket client URLs (TLS off; same D70 rule as `https://`).
 - `req.body` ReadStream consumption (server-side upload streaming): the
   documented consumer surface needs the request-body stream, which is not
   lowered yet; S2 covers the 1 MiB-body survival half only.
@@ -223,6 +273,7 @@ Nested/sub-routers, regex path matching, HTTPS/TLS (the suite asserts the clear
   non-following behavior instead of asserting one.
 - Status codes where docs are silent (S4, S5, S10, D7): recorded observations,
   asserted only for survival, isolation and no-injection.
+- Router nesting beyond one mount level; regex route patterns.
 
 ## Notes
 

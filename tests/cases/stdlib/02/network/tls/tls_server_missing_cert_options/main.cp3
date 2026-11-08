@@ -1,0 +1,13 @@
+import console from "std/console";
+import { createServer } from "std/network";
+
+// createServer({ tls }) with unreadable cert/key files must throw at
+// construction time with ERR_TLS_INVALID_OPTIONS, never start a server.
+try {
+  const app = createServer({
+    tls: { cert: "no-such-cert.pem", key: "no-such-key.pem" },
+  });
+  console.log("unexpected-listening");
+} catch (e) {
+  console.log("Error:tls-invalid-options");
+}

@@ -1,0 +1,29 @@
+// PATCH / HEAD / OPTIONS verb registration.
+import console from "std/console";
+import { createServer, fetch } from "std/network";
+
+const app = createServer();
+
+app.patch("/thing", (req, res) => {
+  res.status(200).text(req.method);
+});
+app.head("/thing", (req, res) => {
+  res.status(200).header("x-head-route", "yes");
+  res.text("");
+});
+app.options("/thing", (req, res) => {
+  res.status(204).text("");
+});
+
+app.listen(48232, () => {});
+
+const patch = await fetch("http://127.0.0.1:48232/thing", { method: "PATCH", body: "x" });
+console.log(`M1|${patch.status}|${await patch.text()}`);
+
+const head = await fetch("http://127.0.0.1:48232/thing", { method: "HEAD" });
+console.log(`M2|${head.status}|${head.headers.get("x-head-route") ?? "missing"}`);
+
+const options = await fetch("http://127.0.0.1:48232/thing", { method: "OPTIONS" });
+console.log(`M3|${options.status}`);
+
+app.close();

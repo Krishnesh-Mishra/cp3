@@ -2204,6 +2204,95 @@ def positive_int(text: str) -> int:
     return value
 
 
+def _default_build_dir() -> Path:
+    """The canonical build tree for this host platform (Windows vs POSIX)."""
+    if os.name == "nt":
+        return ROOT / "build" / "windows-release"
+    return ROOT / "build" / "linux-release"
+
+
+def _candidate_cp3c() -> Path | None:
+    exe = "cp3c.exe" if os.name == "nt" else "cp3c"
+    cands = [_default_build_dir() / "bin" / exe, ROOT / "build" / "bin" / exe]
+    for cand in cands:
+        if cand.is_file():
+            return cand.resolve()
+    return None
+
+
+def resolve_cp3c(path_arg: Path | None = None) -> Path | None:
+    """The cp3c to benchmark against.
+
+    Explicit --cp3c is honored exactly as given (never rebuilt silently).
+    Without one, the platform's canonical build tree is searched; if nothing
+    is found there the compiler is configured and built first (Ninja when
+    available, $CP3C_BUILD_PARALLEL jobs or 20).
+    """
+    if path_arg is not None:
+        return Path(path_arg)
+    found = _candidate_cp3c()
+    if found is not None:
+        return found
+    import shutil
+    import subprocess
+    build_dir = _default_build_dir()
+    parallel = os.environ.get("CP3C_BUILD_PARALLEL", "20")
+    generator = ["-G", "Ninja"] if shutil.which("ninja") else []
+    configure = ["cmake", "-S", str(ROOT), "-B", str(build_dir),
+                 *generator, "-DCMAKE_BUILD_TYPE=Release"]
+    print(f"[runner] cp3c not found; configuring and building in {build_dir}")
+    print(f"[runner]   {' '.join(configure)}")
+    if subprocess.run(configure, cwd=str(ROOT)).returncode != 0:
+        print("[runner] error: cmake configure failed")
+        return None
+    build = ["cmake", "--build", str(build_dir), "--parallel", parallel]
+    print(f"[runner]   {' '.join(build)}")
+    if subprocess.run(build, cwd=str(ROOT)).returncode != 0:
+        print("[runner] error: cmake build failed")
+        return None
+    return _candidate_cp3c()
+
+
+def preflight_cp3c(path: Path | None) -> tuple[bool, str]:
+    """Compile and run a probe program to prove the compiler works.
+
+    Mirrors tests/runner/run_tests.py's preflight: before any benchmark rows
+    run, the compiler must compile and run a trivial console.log('Hello
+    World') program. Returns (ok, detail)."""
+    if path is None:
+        return False, "not found"
+    if not Path(path).is_file():
+        return False, f"not found at {path}"
+    import tempfile
+    tmpdir = Path(tempfile.mkdtemp(prefix="cp3-bench-preflight-"))
+    probe = tmpdir / "preflight.cp3"
+    try:
+        probe.write_text(
+            'import console from "std/console";\nconsole.log("Hello World");\n',
+            encoding="utf-8")
+    except OSError as exc:
+        return False, f"could not write probe ({exc})"
+    try:
+        import subprocess
+        proc = subprocess.run(
+            [str(path), "run", str(probe)],
+            capture_output=True,
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "probe timed out after 300s"
+    except OSError as exc:
+        return False, f"probe failed to start ({exc})"
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or b"").decode("utf-8", "replace").strip()
+        tail = tail.splitlines()[-1] if tail else "no output"
+        return False, f"probe exited {proc.returncode} ({tail})"
+    out = proc.stdout.decode("utf-8", "replace")
+    if out.strip() != "Hello World":
+        return False, f"probe printed {out.strip()!r} instead of 'Hello World'"
+    return True, ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="benchmarks comparison suite (single entry point: benchmarks/runner/run_benchmark.py)")
@@ -2225,8 +2314,10 @@ def main() -> int:
                         help="also show raw repetitions, variants and build details")
     parser.add_argument("--churn-scale", default="default",
                         help="string-churn scale: default, stress or a positive integer")
-    parser.add_argument("--cp3c", default=str(ROOT / "build" / "bin" / f"cp3c{EXE}"),
-                        help="path to cp3c (default: build/bin/cp3c.exe)")
+    parser.add_argument("--cp3c", default=None,
+                        help="path to cp3c (default: the platform's canonical build "
+                             "tree — build/windows-release/bin/cp3c.exe on Windows, "
+                             "build/linux-release/bin/cp3c elsewhere; auto-built if missing)")
     parser.add_argument("--strict", action="store_true",
                         help="exit 1 when the performance gate prints any WARN or BIG WARN")
     parser.add_argument("--results", default="",
@@ -2234,8 +2325,19 @@ def main() -> int:
     args = parser.parse_args()
 
     global CP3C
-    CP3C = Path(args.cp3c)
+    CP3C = resolve_cp3c(args.cp3c)
     cp3c = CP3C
+    CP3C_OK, CP3C_DETAIL = preflight_cp3c(CP3C)
+
+    # Print the resolved compiler + preflight verdict up front, so a
+    # misconfigured box is obvious before the suite starts.
+    if CP3C is None:
+        print("[runner] cp3c: MISSING (not found and could not be built)")
+    elif CP3C_OK:
+        print(f"[runner] cp3c: {CP3C} (preflight ok: compiled and ran "
+              f"console.log('Hello World'))")
+    else:
+        print(f"[runner] cp3c: {CP3C} (preflight FAILED: {CP3C_DETAIL})")
     BUILD.mkdir(parents=True, exist_ok=True)
 
     if args.only.strip():
@@ -2293,7 +2395,9 @@ def main() -> int:
             ("go", ["go", "version"]), ("node", ["node", "--version"]),
             ("python", [sys.executable, "--version"]),
             ("java", ["java", "-version"]), ("javac", ["javac", "-version"]),
-            ("cmake", ["cmake", "--version"]), ("cp3c", [str(cp3c), "version"]),
+            ("cmake", ["cmake", "--version"]),
+            *([("cp3c", [str(cp3c), "version"])] if CP3C_OK
+              else [("cp3c", ["python", "-c", "import sys; sys.exit(1)"])]),
             ("dotnet", ["dotnet", "--version"]), ("goose", [str(GOOSE_VENDORED), "--help"]),
         ]
         print_header(platform.processor() or platform.machine(), probes, args.reps)
@@ -2303,7 +2407,7 @@ def main() -> int:
 
         def present(language: str, server: bool = False) -> bool:
             if language == "cp3":
-                return cp3c.exists()
+                return CP3C_OK and cp3c is not None and cp3c.exists()
             if language in ("goose", "dotnet"):
                 return have(language)
             if language == "js":

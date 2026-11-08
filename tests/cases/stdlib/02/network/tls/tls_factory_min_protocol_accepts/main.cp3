@@ -1,0 +1,8 @@
+import console from "std/console";
+import { tls } from "std/network";
+
+// The tls({ minProtocol }) factory accepts TLSv1.2 and TLSv1.3 (and
+// defaults to TLSv1.2); constructing the options object never touches the
+// filesystem, so this is deterministic without any cert files.
+const creds = tls({ cert: "cert.pem", key: "key.pem", minProtocol: "TLSv1.2" });
+console.log("ok-tls-factory");

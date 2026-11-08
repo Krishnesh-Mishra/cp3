@@ -1,0 +1,38 @@
+// CORS: the preflight OPTIONS is answered by the cors middleware alone (no
+// route handler involved), and simple requests get the allow-origin header
+// stamped on the response.
+import console from "std/console";
+import { Map } from "std/collections";
+import { createServer, fetch } from "std/network";
+
+const app = createServer({
+  cors: {
+    origin: "https://example.com",
+    methods: "GET,POST",
+    headers: "x-a,x-b",
+    credentials: true,
+    maxAge: 600,
+  },
+});
+
+app.get("/stamped", (req, res) => {
+  res.text("ok");
+});
+
+app.listen(48227, () => {});
+
+let preflightHeaders = new Map<string, string>();
+preflightHeaders.set("origin", "https://example.com");
+const preflight = await fetch("http://127.0.0.1:48227/stamped", {
+  method: "OPTIONS",
+  headers: preflightHeaders,
+});
+console.log(`SC1|${preflight.status}|${preflight.headers.get("access-control-allow-origin") ?? ""}|${
+  preflight.headers.get("access-control-allow-methods") ?? ""}|${
+  preflight.headers.get("access-control-allow-headers") ?? ""}|${
+  preflight.headers.get("access-control-allow-credentials") ?? ""}`);
+
+const stamped = await fetch("http://127.0.0.1:48227/stamped");
+console.log(`SC2|${stamped.status}|${stamped.headers.get("access-control-allow-origin") ?? ""}`);
+
+app.close();

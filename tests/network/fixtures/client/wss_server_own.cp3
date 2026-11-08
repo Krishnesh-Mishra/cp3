@@ -1,0 +1,28 @@
+// The cp3 `WebSocketServer` over TLS (uWS SSLApp), driven by the python
+// RFC6455-over-TLS client (ws_rfc6455_tls.py) in phase T of the network
+// suite - the independent-client check for the SSLApp path.
+import console from "std/console";
+import { WebSocketServer } from "std/network";
+
+const wss = new WebSocketServer({
+  port: 48236,
+  tls: { cert: "tls/cert.pem", key: "tls/key.pem" },
+});
+
+console.log("D0|ready");
+let messages = 0;
+wss.on("connection", (ws) => {
+  console.log("D1|connection");
+  ws.on("message", (msg) => {
+    messages = messages + 1;
+    console.log(`D2${messages}|${msg}`);
+    ws.send("echo:" + msg);
+  });
+  ws.on("close", (code, reason) => {
+    console.log(`D3|${code}|${reason}`);
+  });
+});
+
+await sleep(4000);
+wss.close();
+console.log("D4|done");

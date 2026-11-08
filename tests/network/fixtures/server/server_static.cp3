@@ -1,0 +1,20 @@
+// Static file serving: files below the configured directory are served with
+// their bytes; missing paths fall through to the normal 404 handling.
+import fs from "std/fs";
+import console from "std/console";
+import { createServer, fetch } from "std/network";
+
+fs.writeFileSync("static-root-check.txt", "static-ok");
+
+const app = createServer({ static: "." });
+
+app.listen(48228, () => {});
+
+const found = await fetch("http://127.0.0.1:48228/static-root-check.txt");
+console.log(`ST1|${found.status}|${await found.text()}`);
+
+const missing = await fetch("http://127.0.0.1:48228/definitely-not-here.txt");
+console.log(`ST2|${missing.status}`);
+
+app.close();
+fs.unlinkSync("static-root-check.txt");

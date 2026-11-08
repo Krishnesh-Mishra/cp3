@@ -1,0 +1,23 @@
+// fetch with a FormData body: the runtime encodes it as multipart/form-data
+// with a boundary; the server echoes the request's own content-type and the
+// raw body so the test can see both pieces of the encoding.
+import console from "std/console";
+import { createServer, fetch, FormData } from "std/network";
+
+const app = createServer();
+
+app.post("/upload", async (req, res) => {
+  const body = await req.text();
+  res.text("ct=" + (req.headers.get("content-type") ?? "missing") + "|body=" + body);
+});
+
+app.listen(48234, () => {});
+
+const form = new FormData();
+form.append("greeting", "hello-form");
+const res = await fetch("http://127.0.0.1:48234/upload", { method: "POST", body: form });
+const echo = await res.text();
+console.log(`SF1|${res.status}|${echo.includes("hello-form") ? "payload-ok" : "payload-missing"}|${
+  echo.includes("multipart/form-data") ? "multipart" : "not-multipart"}`);
+
+app.close();

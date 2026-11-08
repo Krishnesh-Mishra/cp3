@@ -12,7 +12,10 @@ documented entry point.
 Useful flags (documented in benchmarks/README.md):
     --only <task[,task...]>   run a subset of tasks
     --reps N                  compute repetitions per entry (best is reported)
-    --cp3c PATH               cp3 compiler binary (default build/bin/cp3c.exe)
+    --cp3c PATH               cp3 compiler binary (default: the platform's canonical
+                            build tree — build/windows-release/bin/cp3c.exe on
+                            Windows, build/linux-release/bin/cp3c elsewhere;
+                            auto-built if missing)
     --strict                  exit 1 when the gate prints any WARN or BIG WARN
     --hello-reps N            hello-world runs (default 15; best and median)
     --churn-scale VALUE       string-churn scale: default, stress or an integer
@@ -22,7 +25,7 @@ Examples:
     python benchmarks/runner/run_benchmark.py
     python benchmarks/runner/run_benchmark.py --only hello-world,string-churn
     python benchmarks/runner/run_benchmark.py --churn-scale stress
-    python benchmarks/runner/run_benchmark.py --reps 3 --cp3c build/bin/cp3c.exe --strict
+    python benchmarks/runner/run_benchmark.py --reps 3 --cp3c build/windows-release/bin/cp3c.exe --strict
 """
 from __future__ import annotations
 

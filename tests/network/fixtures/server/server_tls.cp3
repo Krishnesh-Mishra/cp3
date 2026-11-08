@@ -1,0 +1,24 @@
+// The cp3 HTTPS server (createServer({ tls }), uWS SSLApp) that phase T of
+// the network suite drives with a python urllib client (verifying against
+// fixtures/tls/cert.pem). Not run through `cp3c run` by the suite's own
+// subprocess harness: started in the background, probed for the port,
+// checked over TLS, then stopped.
+import console from "std/console";
+import { createServer } from "std/network";
+
+const server = createServer({
+  tls: { cert: "tls/cert.pem", key: "tls/key.pem" },
+});
+
+server.get("/health", (request, response): undefined => {
+  response.status(200).header("content-type", "text/plain");
+  response.text("ok");
+});
+
+server.listen(48235, (): undefined => {
+  console.log("T_D0|ready");
+});
+
+await sleep(8000);
+server.close();
+console.log("T_D1|done");

@@ -1,0 +1,23 @@
+// trustProxy: with the flag on, X-Forwarded-Proto drives req.protocol
+// (http only without the header or without the flag).
+import console from "std/console";
+import { Map } from "std/collections";
+import { createServer, fetch } from "std/network";
+
+const app = createServer({ trustProxy: true });
+
+app.get("/proto", (req, res) => {
+  res.text(req.protocol);
+});
+
+app.listen(48230, () => {});
+
+let headers = new Map<string, string>();
+headers.set("x-forwarded-proto", "https");
+const proxied = await fetch("http://127.0.0.1:48230/proto", { headers });
+console.log(`TP1|${await proxied.text()}`);
+
+const direct = await fetch("http://127.0.0.1:48230/proto");
+console.log(`TP2|${await direct.text()}`);
+
+app.close();

@@ -1,0 +1,28 @@
+// wss:// in-process round trip over the real TLS pump: WebSocketServer with
+// { tls } (uWS SSLApp) + WebSocket({ wss:// }) client. Run with
+// SSL_CERT_FILE=<fixtures>/tls/cert.pem. Prints exactly `W_T|echo:hello-tls`.
+import console from "std/console";
+import { WebSocket, WebSocketServer } from "std/network";
+
+const wss = new WebSocketServer({
+  port: 48210,
+  tls: { cert: "tls/cert.pem", key: "tls/key.pem" },
+});
+
+wss.on("connection", (ws) => {
+  ws.on("message", (message) => {
+    ws.send("echo:" + message);
+  });
+});
+
+const ws = new WebSocket("wss://127.0.0.1:48210/");
+ws.on("open", () => {
+  ws.send("hello-tls");
+});
+ws.on("message", (message) => {
+  console.log(`W_T|${message}`);
+  ws.close();
+  wss.close();
+});
+
+await sleep(500);

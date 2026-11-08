@@ -1,0 +1,22 @@
+// bodyLimit middleware rejects oversized bodies with 413 before the handler,
+// and lets small bodies through. The 16-byte limit differs from the handler's
+// echo to make both arms print distinct tokens.
+import console from "std/console";
+import { createServer, fetch } from "std/network";
+
+const app = createServer({ bodyLimit: 16 });
+
+app.post("/echo", async (req, res) => {
+  const body = await req.text();
+  res.status(200).text("got:" + body);
+});
+
+app.listen(48226, () => {});
+
+const small = await fetch("http://127.0.0.1:48226/echo", { method: "POST", body: "tiny" });
+console.log(`SB1|${small.status}|${await small.text()}`);
+
+const big = await fetch("http://127.0.0.1:48226/echo", { method: "POST", body: "this body is definitely over sixteen bytes" });
+console.log(`SB2|${big.status}`);
+
+app.close();

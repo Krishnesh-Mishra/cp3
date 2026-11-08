@@ -1,0 +1,21 @@
+// Fetch over HTTPS through the cp3 stack against an in-process TLS server
+// (createServer({ tls }) + fetch https://). Run with
+// SSL_CERT_FILE=<fixtures>/tls/cert.pem so verification passes for the
+// loopback self-signed cert. Prints exactly `F_T1|200|tls-ok`.
+import console from "std/console";
+import { createServer, fetch } from "std/network";
+
+const server = createServer({
+  tls: { cert: "tls/cert.pem", key: "tls/key.pem" },
+});
+
+server.get("/hello", (req, res) => {
+  res.status(200).header("content-type", "text/plain");
+  res.text("tls-ok");
+});
+
+server.listen(48208, () => {});
+
+const res = await fetch("https://127.0.0.1:48208/hello");
+console.log(`F_T1|${res.status}|${await res.text()}`);
+server.close();

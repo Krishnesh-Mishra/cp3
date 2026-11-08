@@ -1,0 +1,24 @@
+// HTTPS fetch must FAIL CLOSED against a loopback cert the embedded Mozilla
+// CA bundle does not trust (no SSL_CERT_FILE on this run). The fetch rejects,
+// the catch arm prints exactly `F_T2|rejected`, and the program exits 0.
+import console from "std/console";
+import { createServer, fetch } from "std/network";
+
+const server = createServer({
+  tls: { cert: "tls/cert.pem", key: "tls/key.pem" },
+});
+
+server.get("/hello", (req, res) => {
+  res.status(200);
+  res.text("tls-ok");
+});
+
+server.listen(48209, () => {});
+
+try {
+  const res = await fetch("https://127.0.0.1:48209/hello");
+  console.log(`F_T2|unexpected-ok|${res.status}`);
+} catch (e) {
+  console.log("F_T2|rejected");
+}
+server.close();

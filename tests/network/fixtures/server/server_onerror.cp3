@@ -1,0 +1,28 @@
+// onError: the app-level error handler replaces the default 500 response
+// for a throwing route handler. The default path (500 internal server error)
+// is corpus-pinned separately; this pins the configured path.
+import console from "std/console";
+import { createServer, fetch } from "std/network";
+
+const app = createServer({
+  onError: (err, req, res) => {
+    res.status(599).text("onerror-caught");
+  },
+});
+
+app.get("/boom", (req, res) => {
+  throw new Error("handler failed");
+});
+app.get("/ok", (req, res) => {
+  res.text("still ok");
+});
+
+app.listen(48231, () => {});
+
+const boom = await fetch("http://127.0.0.1:48231/boom");
+console.log(`OE1|${boom.status}|${await boom.text()}`);
+
+const ok = await fetch("http://127.0.0.1:48231/ok");
+console.log(`OE2|${ok.status}|${await ok.text()}`);
+
+app.close();

@@ -25,6 +25,18 @@
 #                                    [--no-bench] [--bench-args "ARGS"]
 #                                    [--jobs N] [--progress | --no-progress]
 #
+# --cp3c is optional: the platform's canonical build tree is searched
+# (build/windows-release/bin/cp3c.exe on Windows, build/linux-release/bin/cp3c
+# elsewhere, plus the legacy build/bin layout). If no compiler is found, the
+# runner configures and builds one into that tree (Ninja when available, jobs
+# = $CP3C_BUILD_PARALLEL or 20) before running the corpus. An explicit --cp3c
+# is honored exactly as given and is never silently rebuilt.
+#
+# Before the corpus scan starts, the runner resolves the compiler, compiles
+# and runs a console.log("Hello World") probe, and prints the result
+# ("preflight: ok (...)"). A failing probe aborts with exit code 2 before any
+# case runs.
+#
 # Beta one is Clang-only. The corpus runs once against the Clang that cp3c
 # resolves (the saved choice, or auto-detected newest usable install); there is
 # no compiler matrix.
@@ -71,6 +83,7 @@ import argparse
 import fnmatch
 import json
 import os
+import platform
 import re
 import shlex
 import shutil
@@ -549,15 +562,67 @@ def discover_cases(cases_dir: Path, filter_substr: Optional[str]) -> tuple[list[
     return cases, warnings
 
 
-def _resolve_compiler(path_arg: Optional[str]) -> Optional[Path]:
-    candidates: list[Path] = []
-    if path_arg:
-        candidates.append(Path(path_arg))
-    else:
-        for name in ("cp3c.exe", "cp3c"):
-            candidates.append(REPO_ROOT / "build" / "bin" / name)
+def _default_compiler_build_dir() -> Path:
+    """The canonical build tree for this host platform (Windows vs POSIX)."""
+    if os.name == "nt":
+        return REPO_ROOT / "build" / "windows-release"
+    return REPO_ROOT / "build" / "linux-release"
 
-    for candidate in candidates:
+
+def _default_compiler_candidates() -> list[Path]:
+    """Per-platform candidates, plus the legacy build/bin layout."""
+    exe = "cp3c.exe" if os.name == "nt" else "cp3c"
+    candidates = [_default_compiler_build_dir() / "bin" / exe]
+    candidates.append(REPO_ROOT / "build" / "bin" / exe)  # legacy layout
+    return candidates
+
+
+def _find_compiler() -> Optional[Path]:
+    for candidate in _default_compiler_candidates():
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
+def _try_build_compiler() -> Optional[Path]:
+    """Configure and build the compiler into the canonical tree.
+
+    Invoked only when no cp3c can be found and the user did not pin one with
+    --cp3c. Prints progress to stderr so --json stdout stays parseable.
+    """
+    build_dir = _default_compiler_build_dir()
+    generator = ["-G", "Ninja"] if shutil.which("ninja") else []
+    parallel = os.environ.get("CP3C_BUILD_PARALLEL", "20")
+    configure = ["cmake", "-S", str(REPO_ROOT), "-B", str(build_dir),
+                 *generator, "-DCMAKE_BUILD_TYPE=Release"]
+    print(f"cp3c not found; configuring and building it in {build_dir}",
+          file=sys.stderr, flush=True)
+    print(f"  {' '.join(configure)}", file=sys.stderr, flush=True)
+    proc = subprocess.run(configure, cwd=str(REPO_ROOT))
+    if proc.returncode != 0:
+        print(f"error: cmake configure failed (exit {proc.returncode}); "
+              f"no cp3c to run the corpus", file=sys.stderr, flush=True)
+        return None
+    build = ["cmake", "--build", str(build_dir), "--parallel", parallel]
+    print(f"  {' '.join(build)}", file=sys.stderr, flush=True)
+    proc = subprocess.run(build, cwd=str(REPO_ROOT))
+    if proc.returncode != 0:
+        print(f"error: cmake build failed (exit {proc.returncode}); "
+              f"no cp3c to run the corpus", file=sys.stderr, flush=True)
+        return None
+    return _find_compiler()
+
+
+def _resolve_compiler(path_arg: Optional[str]) -> Optional[Path]:
+    """The cp3c to run the corpus against.
+
+    Explicit --cp3c is honored exactly as given (with a `.exe` fallback on
+    Windows); a missing explicit path is reported, never silently rebuilt.
+    With no --cp3c, the platform's canonical build tree is searched, and if
+    nothing is found there the compiler is configured and built on the spot.
+    """
+    if path_arg:
+        candidate = Path(path_arg)
         if candidate.is_file():
             return candidate.resolve()
         # Allow "--cp3c build/bin/cp3c" without the extension on Windows.
@@ -569,7 +634,49 @@ def _resolve_compiler(path_arg: Optional[str]) -> Optional[Path]:
             )
             if with_exe.is_file():
                 return with_exe.resolve()
-    return candidates[0] if candidates else None
+        return None
+    found = _find_compiler()
+    if found is not None:
+        return found
+    return _try_build_compiler()
+
+
+def preflight(compiler: Path, timeout: float = 90.0) -> tuple[bool, str]:
+    """Compile and run a minimal probe program before the corpus scan.
+
+    Returns (ok, detail). The probe exercises exactly what the corpus will
+    rely on: parse + typecheck + codegen + link + run. A cold incremental
+    cache makes the first preflight slow; that is expected.
+    """
+    import tempfile
+
+    tmpdir = Path(tempfile.mkdtemp(prefix="cp3-preflight-"))
+    probe = tmpdir / "preflight.cp3"
+    try:
+        probe.write_text(
+            'import console from "std/console";\nconsole.log("Hello World");\n',
+            encoding="utf-8")
+    except OSError as exc:
+        return False, f"could not write probe to {tmpdir} ({exc})"
+    try:
+        proc = subprocess.run(
+            [str(compiler), "run", str(probe)],
+            capture_output=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"probe timed out after {timeout:g}s"
+    except OSError as exc:
+        return False, f"probe failed to start ({exc})"
+    stdout = _decode(proc.stdout)
+    stderr = _decode(proc.stderr)
+    if proc.returncode != 0:
+        tail = (stderr.strip() or stdout.strip()).splitlines()
+        return False, f"probe exited {proc.returncode}" + (
+            f" ({tail[-1].strip()})" if tail else "")
+    if stdout != "Hello World\n" and stdout.rstrip("\r\n") != "Hello World":
+        return False, f"probe printed {stdout!r} instead of 'Hello World'"
+    return True, ""
 
 
 def evaluate(case: Case, compiler: Path, timeout: float) -> Outcome:
@@ -777,7 +884,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     cases_dir = Path(args.cases)
     cases, warnings = discover_cases(cases_dir, args.filter_substr)
 
-    # --- registry generation (opt-in side effect, then exit) ------------------
+    # --- registry generation (opt-in side effect, then exit; needs no compiler)
     if args.write_registry is not None:
         markers = [c for c in cases if c.ambiguous]
         dest = Path(args.write_registry) if args.write_registry else cases_dir / DEFAULT_REGISTRY
@@ -789,9 +896,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"wrote {len(markers)} ambiguity marker(s) to {dest}")
         return 0
 
+    # --- platform + compiler probe --------------------------------------------
+    # Detect the host platform, resolve the compiler for it, then prove it
+    # compiles and runs a trivial program. A failure aborts before the corpus
+    # scan rather than 3000 skipped/failing cases later.
     compiler = _resolve_compiler(args.cp3c)
     compiler_missing = compiler is None or not compiler.is_file()
-    missing_reason = "cp3c executable not found"
+    preflight_ok = False
+    preflight_detail = "cp3c executable not found"
+    if not compiler_missing:
+        preflight_ok, preflight_detail = preflight(compiler, max(args.timeout, 300.0))
+
     ordinary_cases = (
         cases if args.strict_ambiguous else [c for c in cases if not c.ambiguous]
     )
@@ -970,7 +1085,16 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if not args.json:
         print("cp3 test harness")
+        print(f"  platform : {platform.system().lower()} ({os.name})")
         print(f"  compiler : {compiler if compiler else '(not found)'}")
+        if compiler_missing:
+            print("  preflight: FAILED - cp3c executable not found")
+        elif preflight_ok:
+            print("  preflight: ok (compiled and ran a console.log('Hello World') probe)")
+        else:
+            print(f"  preflight: FAILED - {preflight_detail}")
+        if compiler_missing or not preflight_ok:
+            print()
         print(f"  cases dir: {cases_dir}")
         print(f"  found    : {len(cases)} case(s)")
         if ambiguous_cases:
@@ -980,12 +1104,20 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(f"  warning  : {warning}")
         print()
 
+    if compiler_missing or not preflight_ok:
+        print("error: the compiler failed the preflight probe; no cases were run.",
+              file=sys.stderr)
+        print("  build it: cmake --preset windows-release (or linux-release) "
+              "&& cmake --build <preset>", file=sys.stderr)
+        return 2
+
     outcomes = evaluate_suite()
     summary_counts = counts(outcomes)
 
     if args.json:
         payload = {
             "compiler": str(compiler) if compiler else None,
+            "preflight": preflight_ok,
             "casesDir": str(cases_dir),
             "strictAmbiguous": args.strict_ambiguous,
             "found": len(cases),

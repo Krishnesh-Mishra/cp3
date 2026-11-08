@@ -1,5 +1,5 @@
 {
   "mode": "run",
-  "stdout": "Error:tls-cert-verify\n",
+  "stdout": "Error:wss-connect-refused\n",
   "exitCode": 0
 }

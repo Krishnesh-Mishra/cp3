@@ -1,0 +1,11 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3401",
+    "line": 9,
+    "col": 1,
+    "contains": "tls() minProtocol must be \"TLSv1.2\" or \"TLSv1.3\""
+  }
+}

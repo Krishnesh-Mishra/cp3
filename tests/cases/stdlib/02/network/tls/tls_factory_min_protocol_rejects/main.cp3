@@ -1,0 +1,9 @@
+import console from "std/console";
+import { tls } from "std/network";
+
+// The tls({ minProtocol }) factory rejects anything below TLSv1.2. This is
+// a compile-time diagnostic in the current build (the analyzer rejects the
+// literal before codegen), so this case pins the diagnostic, not a runtime
+// throw. (The runtime fail-closed path for server construction is covered by
+// tls_server_missing_cert_options.)
+const creds = tls({ cert: "cert.pem", key: "key.pem", minProtocol: "TLSv1.0" });

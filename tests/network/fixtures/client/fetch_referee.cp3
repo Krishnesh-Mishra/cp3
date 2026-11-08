@@ -9,8 +9,8 @@
 // docs/standard-library/04-imported-std-modules.md, section `network`:
 // fetch(url, init?), init.headers as Map<string, string>, res.ok/status/
 // statusText/headers, text()/json<T>()/arrayBuffer(), "only a network-level
-// failure (DNS, timeout, connection refused) rejects the promise", and the
-// D70 clear rejection for https:// with TLS off.
+// failure (DNS, timeout, connection refused) rejects the promise".
+// >= the fetch_tls suite phase (phase T) covers TLS trust behavior.
 // =============================================================================
 import console from "std/console";
 import { Buffer } from "std/buffer";
@@ -58,9 +58,10 @@ try {
   console.log(`A8|rejected|${e}`);
 }
 
-// https:// must reject clearly with TLS off (D70) and never touch the network.
+// https:// against a closed port must reject (network-level failure),
+// deterministically, and never hang.
 try {
-  await fetch("https://example.com/");
+  await fetch("https://127.0.0.1:48202/nope");
   console.log("A9|resolved");
 } catch (e) {
   console.log(`A9|rejected|${e}`);
