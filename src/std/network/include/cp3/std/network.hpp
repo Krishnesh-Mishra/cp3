@@ -1090,7 +1090,11 @@ private:
             const std::string& seg = pSegs[pi]; bool last = pi + 1 == pSegs.size();
             if (seg == "*") {
                 if (last) { if (si >= sSegs.size()) return false; if (caps) { std::string rest = sSegs[si]; for (std::size_t k = si + 1; k < sSegs.size(); ++k) { rest += "/"; rest += sSegs[k]; } caps->emplace_back("*", rest); } return true; }
-                if (si >= sSegs.size()) return false; if (caps) caps->emplace_back("*", sSegs[si]); ++pi; ++si; continue;
+                if (si >= sSegs.size()) return false;
+                if (caps) caps->emplace_back("*", sSegs[si]);
+                ++pi;
+                ++si;
+                continue;
             }
             if (si >= sSegs.size()) return false;
             if (!seg.empty() && seg.front() == ':') { std::string name = seg.substr(1); bool opt = !name.empty() && name.back() == '?'; if (opt && name.back() == '?') name.pop_back(); if (opt) { /* greedy only */ } if (caps) caps->emplace_back(name, sSegs[si]); ++pi; ++si; continue; }

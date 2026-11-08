@@ -247,7 +247,7 @@ void Analyzer::declareBuiltins() {
         capture.type = Type::function({errorType, ambient()}, Type::voidType());
         capture.sig.name = "captureStackTrace";
         capture.sig.params = {errorType, ambient()};
-        capture.sig.optional = {false, true};
+        capture.sig.optional = std::vector<bool>{false, true};
         capture.sig.ret = Type::voidType();
         classes_["Error"].members.push_back(std::move(capture));
     }

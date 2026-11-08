@@ -16,6 +16,7 @@
 // see LIMITATIONS below. The header (cp3/std/text.hpp) keeps its hand-written
 // decoder as the fallback, so a build without `simdutf.h` on the include path
 // still links and behaves identically (slower).
+// The shipped archives cover windows-x64, windows-arm64, linux-x64 and linux-arm64.
 //
 // The header (cp3/std/text.hpp) spells the `Uint8Array` value type from
 // cp3/typed_array.hpp, so the typed-arrays include tree rides along - the
@@ -41,20 +42,19 @@ inline const NativePackage kTextNativePackage{
     {},
     // Parallel to runtimeSources (none): no runtime TU, so no markers.
     {},
-    // Linux audit: docs/design/linux-crosscompat.md — the linux-x64 archive is
-    // vendored now; linux-arm64 has none yet, so that target still fails
-    // loudly, never mislinks a foreign archive.
+    // Linux audit: docs/design/linux-packaging-simdutf.md — the linux-arm64
+    // archive is vendored now (vendor/third_party/simdutf/lib/linux-arm64/libsimdutf.a).
     {{"windows-x64", {"vendor/third_party/simdutf/lib/windows-x64"}, {"-lsimdutf"}},
-     {"linux-x64", {"vendor/third_party/simdutf/lib/linux-x64"}, {"-lsimdutf"}}},
+     {"windows-arm64", {"vendor/third_party/simdutf/lib/windows-arm64"}, {"-lsimdutf"}},
+     {"linux-x64", {"vendor/third_party/simdutf/lib/linux-x64"}, {"-lsimdutf"}},
+     {"linux-arm64", {"vendor/third_party/simdutf/lib/linux-arm64"}, {"-lsimdutf"}}},
 };
 
-// LIMITATIONS (simdutf wiring): only `windows-x64` and `linux-x64` ship an
-// archive today (vendor/third_party/simdutf/lib/<triple>/libsimdutf.a).
-// `applyNativePackages` rejects a selected row with no matching platform row,
-// so a program that imports "std/text" for a `linux-arm64` target fails with
-// "native backend for 'std/text' has no vendor archives for target ..." until
-// the arm64 archive is vendored and added here. That is an explicit build
-// error, never a silent mislink or a quiet slow-path fallback. Header-only
+// NOTE (simdutf wiring): `windows-x64`, `windows-arm64`, `linux-x64` and
+// `linux-arm64` ship an archive (vendor/third_party/simdutf/lib/<triple>/libsimdutf.a).
+// `applyNativePackages` rejects a selected row with no matching platform row;
+// a target without an archive is an explicit build error, never a silent
+// mislink or a quiet slow-path fallback. Header-only
 // consumers (a TU that includes cp3/std/text.hpp without this row) degrade to
 // the hand-written decoder via `__has_include(<simdutf.h>)` instead. Only UTF-8
 // validation is wired (validate_utf8); UTF-16/UTF-32/convert APIs are

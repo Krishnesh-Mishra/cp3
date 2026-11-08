@@ -11,14 +11,10 @@
 // Link backends: libsodium (seed) AND XXHash (XXH3 mix). Both archives are
 // pinned static builds: vendor/third_party/libsodium and vendor/third_party/xxhash (v0.8.3,
 // BSD-2-Clause; vendor/third_party/MANIFEST.md Ledger F). The xxhash members are
-// added to the windows-x64 and linux-x64 platform rows with the libsodium
-// members. linux-arm64 has no libxxhash.a yet, so that row stays
-// libsodium-only; a linux-arm64 Map/Set program then fails the final link
-// with an undefined reference to XXH3_64bits_withSeed (a visible error, never
-// a silent fallback). Do not add platform rows pointing at another target's
-// archive. The vendor/third_party/xxhash/include root is listed for completeness (the
-// verified consumer flag) although bucket_hash.cpp currently declares the XXH3
-// symbol directly so the cp3_runtime unit build needs no new include root.
+// added to the windows-x64, linux-x64 and linux-arm64 platform rows with the
+// libsodium members. The vendor/third_party/xxhash/include root is listed for completeness
+// (the verified consumer flag) although bucket_hash.cpp currently declares the
+// XXH3 symbol directly so the cp3_runtime unit build needs no new include root.
 // =============================================================================
 #pragma once
 
@@ -35,18 +31,24 @@ inline const NativePackage kCollectionsNativePackage{
     {},
     {"-lsodium", "-lxxhash"},
     {},
-    // Linux audit: docs/design/linux-crosscompat.md — libsodium covers
-    // linux-x64/linux-arm64; xxhash is vendored for windows-x64 and linux-x64,
-    // so linux-arm64 stays libsodium-only until that archive lands.
+    // Linux audit: docs/design/linux-crosscompat.md — libsodium and xxhash are
+    // vendored for linux-x64 and linux-arm64 (vendor/third_party/xxhash/lib/linux-<arch>/).
     {{"windows-x64",
       {"vendor/third_party/libsodium/lib/windows-x64",
        "vendor/third_party/xxhash/lib/windows-x64"},
+      {"-lsodium", "-lxxhash"}},
+     {"windows-arm64",
+      {"vendor/third_party/libsodium/lib/windows-arm64",
+       "vendor/third_party/xxhash/lib/windows-arm64"},
       {"-lsodium", "-lxxhash"}},
      {"linux-x64",
       {"vendor/third_party/libsodium/lib/linux-x64",
        "vendor/third_party/xxhash/lib/linux-x64"},
       {"-lsodium", "-lxxhash"}},
-     {"linux-arm64", {"vendor/third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
+     {"linux-arm64",
+      {"vendor/third_party/libsodium/lib/linux-arm64",
+       "vendor/third_party/xxhash/lib/linux-arm64"},
+      {"-lsodium", "-lxxhash"}}},
 };
 
 }  // namespace cp3::cli::detail

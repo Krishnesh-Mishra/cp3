@@ -38,9 +38,11 @@ std::string todayIso() {
 #else
     localtime_r(&now, &local);
 #endif
-    char buffer[16] = {};
+    char buffer[64] = {};
     std::snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d",
-                  local.tm_year + 1900, local.tm_mon + 1, local.tm_mday);
+                  static_cast<int>(local.tm_year) + 1900,
+                  static_cast<int>(local.tm_mon) + 1,
+                  static_cast<int>(local.tm_mday));
     return buffer;
 }
 

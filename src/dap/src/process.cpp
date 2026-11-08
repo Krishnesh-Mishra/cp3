@@ -25,6 +25,7 @@
 #  include <sys/types.h>
 #  include <sys/wait.h>
 #  include <unistd.h>
+#  include <cstdio>
 #endif
 
 namespace cp3::dap {
@@ -288,7 +289,10 @@ bool ChildProcess::spawn(const std::string& exe,
         ::close(outPipe[0]);
         ::close(outPipe[1]);
         setpgid(0, 0);  // gdb and the debuggee share one killable group
-        if (!cwd.empty()) chdir(cwd.c_str());
+        if (!cwd.empty() && chdir(cwd.c_str()) != 0) {
+            fprintf(stderr, "cp3-dap: cannot chdir to '%s'\n", cwd.c_str());
+            _exit(127);
+        }
         std::vector<char*> argv;
         argv.push_back(const_cast<char*>(exe.c_str()));
         for (const std::string& arg : args) {

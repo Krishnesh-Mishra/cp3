@@ -549,6 +549,9 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
         }
         return text;
     }
+    // Not a method this unit lowers: return "" and let the caller keep its
+    // own lowering path (also the path every unhandled prop takes).
+    return std::string();
 }
 
 // The `for...of` source: the element type the loop binds and the C++ type of

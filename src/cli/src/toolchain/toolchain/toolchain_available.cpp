@@ -45,6 +45,7 @@ void sortAvailable(std::vector<AvailableToolchainVersion>& versions) {
               });
 }
 
+#if defined(_WIN32)
 std::vector<AvailableToolchainVersion> wingetVersions(const char* id) {
     std::vector<AvailableToolchainVersion> versions;
     std::string out;
@@ -67,7 +68,10 @@ std::vector<AvailableToolchainVersion> wingetVersions(const char* id) {
     }
     sortAvailable(versions);
     return versions;
+    sortAvailable(versions);
+    return versions;
 }
+#endif  // _WIN32
 
 #if !defined(_WIN32) && !defined(__APPLE__)
 std::vector<AvailableToolchainVersion> aptVersions(const char* package) {

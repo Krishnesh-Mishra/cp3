@@ -490,7 +490,7 @@ bool Analyzer::detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
 // `member !== null` / `member != null` for member expressions
 // (`n.next !== null`): narrowed by node ID. Only the non-null branch is
 // narrowed (the null branch keeps the declared type).
-bool Analyzer::detectNullNarrowing(Expr& cond, std::uint32_t& memberId,
+bool Analyzer::detectNullNarrowing(Expr& cond, std::uint32_t& /*memberId*/,
                                    Type& memberType, bool& negated) {
     if (cond.kind != NodeKind::BinaryExpr) return false;
     auto& be = static_cast<BinaryExpr&>(cond);

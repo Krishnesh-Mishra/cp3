@@ -176,22 +176,6 @@ void Generator::collectEnum(const EnumDeclaration* e) {
 }
 
 void Generator::collectEnums(const Program& program) {
-    const auto collect = [this](const EnumDeclaration* e) {
-        if (e == nullptr || e->name.empty() || enums_.count(e->name) != 0) return;
-        std::vector<const EnumMember*> failed;
-        EnumCppInfo info = buildEnumInfo(*e, failed);
-        // A member whose initializer is not a constant the evaluator can read
-        // is an error the sema reports first; the codegen repeats it so a
-        // unit that reached codegen without the sema gate still fails.
-        for (const EnumMember* member : failed) {
-            sink_.error(diagcode::kTypeMismatch, member->span,
-                        "type mismatch: enum member '" + member->name +
-                            "' must be initialized with a constant number or "
-                            "string expression");
-        }
-        enumDecls_ += enumDeclText(info) + "\n";
-        enums_.emplace(e->name, std::move(info));
-    };
     for (const auto& stmtPtr : program.body) {
         if (!stmtPtr) continue;
         collectEnum(topLevelEnum(*stmtPtr));

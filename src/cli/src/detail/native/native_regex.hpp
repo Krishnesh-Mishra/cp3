@@ -25,7 +25,8 @@ namespace cp3::cli::detail {
 //   compile: -DPCRE2_STATIC=1 -DPCRE2_CODE_UNIT_WIDTH=8 -I vendor/third_party/pcre2/include
 //   link:    -L <archive dir> -lpcre2-8
 // The archive directory is per-target: windows-x64 keeps the original
-// vendor/third_party/pcre2/lib root, linux-x64 uses vendor/third_party/pcre2/lib/linux-x64.
+// vendor/third_party/pcre2/lib root, linux-x64 uses vendor/third_party/pcre2/lib/linux-x64,
+// linux-arm64 uses vendor/third_party/pcre2/lib/linux-arm64.
 // Keeping the root out of the platform table stops a Linux build from ever
 // picking up the Windows COFF archive. The runtime include root
 // (src/runtime/include, which owns cp3/core/regex.hpp) is always in
@@ -40,7 +41,9 @@ inline const NativePackage kRegexCoreNativePackage{
     {},
     {},
     {{"windows-x64", {"vendor/third_party/pcre2/lib"}, {"-lpcre2-8"}},
-     {"linux-x64", {"vendor/third_party/pcre2/lib/linux-x64"}, {"-lpcre2-8"}}},
+     {"windows-arm64", {"vendor/third_party/pcre2/lib/windows-arm64"}, {"-lpcre2-8"}},
+     {"linux-x64", {"vendor/third_party/pcre2/lib/linux-x64"}, {"-lpcre2-8"}},
+     {"linux-arm64", {"vendor/third_party/pcre2/lib/linux-arm64"}, {"-lpcre2-8"}}},
 };
 
 }  // namespace cp3::cli::detail

@@ -58,15 +58,12 @@ std::vector<std::string> optimizationFlags(
 // links against MinGW's libstdc++, whose thread support lives in
 // libwinpthread. Clang does not add that library itself, so a fully static
 // link names it explicitly.
-bool usesMingwTarget(const Toolchain& tc) {
 #if defined(_WIN32)
+bool usesMingwTarget(const Toolchain& tc) {
     (void)tc;
     return true;
-#else
-    (void)tc;
-    return false;
-#endif
 }
+#endif
 
 }  // namespace
 

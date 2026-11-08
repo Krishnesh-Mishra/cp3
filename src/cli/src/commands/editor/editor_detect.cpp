@@ -77,6 +77,7 @@ EditorSpec makeSpec(const char* id, const char* name, const char* cli) {
     return spec;
 }
 
+#if defined(_WIN32)
 void addIfFile(std::vector<fs::path>& out, const fs::path& path) {
     if (path.empty()) return;
     std::error_code ec;
@@ -88,9 +89,11 @@ void addIfDir(std::vector<fs::path>& out, const fs::path& path) {
     std::error_code ec;
     if (fs::is_directory(path, ec)) out.push_back(path);
 }
+#endif  // _WIN32
 
 // Bounded scan of %LOCALAPPDATA%\Programs: one directory level whose name
 // contains "antigravity". The app directory itself is the detection marker.
+#if defined(_WIN32)
 void scanAntigravity(const fs::path& programs, EditorSpec& spec) {
     std::error_code ec;
     fs::directory_iterator it(programs, ec);
@@ -107,7 +110,9 @@ void scanAntigravity(const fs::path& programs, EditorSpec& spec) {
         }
     }
 }
+#endif  // _WIN32
 
+#if defined(_WIN32)
 void addWindowsCandidates(EditorSpec& spec) {
     const fs::path local = envPath("LOCALAPPDATA");
     const fs::path programs = envPath("ProgramFiles");
@@ -170,6 +175,7 @@ void addWindowsCandidates(EditorSpec& spec) {
         }
     }
 }
+#endif  // _WIN32
 
 #if !defined(_WIN32)
 void addUnixCandidates(EditorSpec& spec) {

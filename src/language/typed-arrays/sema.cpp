@@ -98,14 +98,6 @@ bool literalLengthValue(const Expr& e, double& out) {
     return false;
 }
 
-// A literal index written as a plain non-negative integer (`a[-1]` is a unary
-// minus node and never refines).
-bool literalIndexValue(const Expr& e, double& out) {
-    if (e.kind != NodeKind::NumberLiteral) return false;
-    out = static_cast<const NumberLiteral&>(e).value;
-    return out >= 0.0 && std::trunc(out) == out;
-}
-
 // `Array(n)` default-initializes every element; only value-like types have a
 // default in cp3, so reference element types (arrays, classes, objects) must
 // be filled instead.

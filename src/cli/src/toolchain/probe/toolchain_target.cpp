@@ -30,6 +30,7 @@ namespace cp3::cli {
 
 namespace {
 
+#if defined(_WIN32)
 std::string trimCopy(const std::string& s) {
     const std::size_t first = s.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return {};
@@ -72,6 +73,7 @@ std::string architectureOf(const std::string& triple) {
     if (dash == std::string::npos || dash == 0) return {};
     return triple.substr(0, dash);
 }
+#endif  // _WIN32 - triple helpers
 
 #if defined(_WIN32)
 std::vector<fs::path> pathDirectories() {

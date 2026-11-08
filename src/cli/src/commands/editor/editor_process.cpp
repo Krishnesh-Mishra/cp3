@@ -24,6 +24,7 @@ namespace cp3::cli {
 
 namespace {
 
+#if defined(_WIN32)
 bool endsWithNoCase(const std::string& text, const char* suffix) {
     const std::size_t length = std::strlen(suffix);
     if (text.size() < length) return false;
@@ -36,6 +37,7 @@ bool endsWithNoCase(const std::string& text, const char* suffix) {
     }
     return true;
 }
+#endif  // _WIN32
 
 bool needsCommandShell(const std::string& cli) {
 #if defined(_WIN32)

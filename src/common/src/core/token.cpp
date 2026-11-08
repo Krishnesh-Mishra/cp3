@@ -119,7 +119,7 @@ constexpr const char* kTokenKindNames[] = {
     ">>>=",  // UnsignedShiftRightAssign
     "&&=",  // AndAndAssign
     "||=",  // OrOrAssign
-    "??=",  // QuestionQuestionAssign
+    "\?\?=",  // QuestionQuestionAssign
     "==",  // Equal
     "!=",  // NotEqual
     "===",  // StrictEqual

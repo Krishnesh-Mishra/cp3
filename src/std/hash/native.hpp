@@ -13,13 +13,9 @@
 //
 // Verified consumer flags (vendor/third_party/MANIFEST.md, "Verified consumer
 // flags"): compile -I vendor/third_party/xxhash/include; link
-// -L vendor/third_party/xxhash/lib/<triple> -lxxhash. The windows-x64 and linux-x64
-// archives are vendored (vendor/third_party/xxhash/lib/{windows,linux}-x64/
-// libxxhash.a); linux-arm64 has no archive yet, so only those two platform
-// rows exist. A target without a row fails the build loudly via
-// NativePackage::platforms ("has no vendor archives") instead of silently
-// linking the wrong object format. Do not add platform rows pointing at
-// another target's archive.
+// -L vendor/third_party/xxhash/lib/<triple> -lxxhash. The windows-x64, linux-x64
+// and linux-arm64 archives are vendored
+// (vendor/third_party/xxhash/lib/{windows,linux}-{x64,arm64}/libxxhash.a).
 // =============================================================================
 #pragma once
 
@@ -36,11 +32,12 @@ inline const NativePackage kHashNativePackage{
     {},
     {"-lxxhash"},
     {},
-    // Linux audit: docs/design/linux-crosscompat.md — the linux-x64 archive is
-    // vendored now; linux-arm64 has none yet, so that target still fails
-    // loudly, never mislinks a foreign archive.
+    // Linux audit: docs/design/linux-crosscompat.md — the linux-x64 and
+    // linux-arm64 archives are vendored now (vendor/third_party/xxhash/lib/linux-<arch>/).
     {{"windows-x64", {"vendor/third_party/xxhash/lib/windows-x64"}, {"-lxxhash"}},
-     {"linux-x64", {"vendor/third_party/xxhash/lib/linux-x64"}, {"-lxxhash"}}},
+     {"windows-arm64", {"vendor/third_party/xxhash/lib/windows-arm64"}, {"-lxxhash"}},
+     {"linux-x64", {"vendor/third_party/xxhash/lib/linux-x64"}, {"-lxxhash"}},
+     {"linux-arm64", {"vendor/third_party/xxhash/lib/linux-arm64"}, {"-lxxhash"}}},
 };
 
 }  // namespace cp3::cli::detail

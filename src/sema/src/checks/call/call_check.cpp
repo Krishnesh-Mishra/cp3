@@ -305,13 +305,30 @@ bool Analyzer::tryInferParseToBuiltin(CallExpr& call, const Identifier& id,
         else if (keyword == "string") target = Type::string();
         else if (keyword == "boolean") target = Type::boolean();
         else {
-            report(diagcode::kTypeMismatch, call.arguments[1]->span,
-                   "type mismatch: parseTo's second argument must be a static "
-                   "type (number, string, boolean) or use the type-argument "
-                   "form parseTo<T>(value)");
-            if (value != nullptr) inferExpr(*value);
-            out = withType(call, Type::unknown());
-            return true;
+            // Also allow a bare native scalar type name (`u16`, `long long` is
+            // spelled c_'long long'): `parseTo(PORT, u16)` is the same thing
+            // as `parseTo<u16>(PORT)`. A name that is neither keyword nor a
+            // recognised native type produces the same diagnostic as before.
+            NativeNameResult native =
+                resolvePlainNativeTypeName(options_.typeSystem, keyword);
+            if (native.type) {
+                target = *native.type;
+            } else if (native.status == NativeNameStatus::Unsupported) {
+                report(diagcode::kTypeMismatch, call.arguments[1]->span,
+                       native.error);
+                if (value != nullptr) inferExpr(*value);
+                out = withType(call, Type::unknown());
+                return true;
+            } else {
+                report(diagcode::kTypeMismatch, call.arguments[1]->span,
+                       "type mismatch: parseTo's second argument must be a static "
+                       "type (number, string, boolean — or, in a rust/cpp project, "
+                       "a plain native scalar like u16/i64); otherwise use the "
+                       "type-argument form parseTo<T>(value)");
+                if (value != nullptr) inferExpr(*value);
+                out = withType(call, Type::unknown());
+                return true;
+            }
         }
     } else {
         report(diagcode::kTypeMismatch, call.span,

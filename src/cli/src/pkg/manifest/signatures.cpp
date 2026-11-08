@@ -729,11 +729,6 @@ std::string stripStatement(const SourceFile& file, const Stmt& stmt,
                            const Normalizer& norm,
                            const std::vector<std::string>& forceExports);
 
-std::string stripStatement(const SourceFile& file, const Stmt& stmt,
-                           const Normalizer& norm) {
-    return stripStatement(file, stmt, norm, {});
-}
-
 bool isForceExported(const std::vector<std::string>& forceExports,
                      const std::string& name) {
     return std::find(forceExports.begin(), forceExports.end(), name) !=

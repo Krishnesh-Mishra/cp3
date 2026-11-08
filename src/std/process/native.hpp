@@ -35,6 +35,12 @@ inline const NativePackage kProcessNativePackage{
        "vendor/third_party/xxhash/lib/windows-x64"},
       {"-luv", "-lsodium", "-lxxhash", "-lws2_32", "-luserenv", "-liphlpapi",
        "-lole32", "-ldbghelp", "-lsynchronization"}},
+     {"windows-arm64",
+      {"vendor/third_party/libuv/lib/windows-arm64",
+       "vendor/third_party/libsodium/lib/windows-arm64",
+       "vendor/third_party/xxhash/lib/windows-arm64"},
+      {"-luv", "-lsodium", "-lxxhash", "-lws2_32", "-luserenv", "-liphlpapi",
+       "-lole32", "-ldbghelp", "-lsynchronization"}},
      {"linux-x64",
       {"vendor/third_party/libuv/lib/linux-x64",
        "vendor/third_party/libsodium/lib/linux-x64",
@@ -42,8 +48,9 @@ inline const NativePackage kProcessNativePackage{
       {"-luv", "-lsodium", "-lxxhash", "-pthread", "-ldl", "-lrt"}},
      {"linux-arm64",
       {"vendor/third_party/libuv/lib/linux-arm64",
-       "vendor/third_party/libsodium/lib/linux-arm64"},
-      {"-luv", "-lsodium", "-pthread", "-ldl", "-lrt"}}},
+       "vendor/third_party/libsodium/lib/linux-arm64",
+       "vendor/third_party/xxhash/lib/linux-arm64"},
+      {"-luv", "-lsodium", "-lxxhash", "-pthread", "-ldl", "-lrt"}}},
 };
 
 }  // namespace cp3::cli::detail

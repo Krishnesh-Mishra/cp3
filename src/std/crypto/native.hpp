@@ -33,6 +33,7 @@ inline const NativePackage kCryptoNativePackage{
     {"-lsodium"},
     {},
     {{"windows-x64", {"vendor/third_party/libsodium/lib/windows-x64"}, {"-lsodium"}},
+     {"windows-arm64", {"vendor/third_party/libsodium/lib/windows-arm64"}, {"-lsodium"}},
      {"linux-x64", {"vendor/third_party/libsodium/lib/linux-x64"}, {"-lsodium"}},
      {"linux-arm64", {"vendor/third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
 };

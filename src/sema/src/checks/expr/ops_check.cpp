@@ -515,6 +515,19 @@ void Analyzer::checkAssignToTarget(Expr& target, const Type& valType,
         case NodeKind::IndexExpr: {
             auto& ix = static_cast<IndexExpr&>(target);
             Type ot = ix.object ? inferExpr(*ix.object) : Type::unknown();
+            if (!isTypedArrayClass(ot) && ot.kind == TypeKind::String) {
+                // JavaScript does `s[0] = 'x'` silently (strings are
+                // immutable there too, writes are ignored). cp3 rejects it,
+                // but not with the generic "cannot assign X to number"
+                // mismatch that reading an index into a string would
+                // otherwise produce.
+                if (ix.index) inferExpr(*ix.index);
+                report(diagcode::kInvalidAssignmentTarget, span,
+                       "cannot assign to the index of a string; strings are "
+                       "immutable (use string methods like replace / substring / "
+                       "slice)");
+                return;
+            }
             if (isTypedArrayClass(ot)) {
                 // A typed-array element target is `number`: out-of-range
                 // stores are ignored at runtime (JS semantics), and a

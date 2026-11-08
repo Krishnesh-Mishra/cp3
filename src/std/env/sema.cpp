@@ -104,7 +104,7 @@ bool Analyzer::tryInferEnvCall(CallExpr& call, MemberExpr& m, Type& out) {
     sig.annotatedReturn = true;
     sig.name = "env.get";
     sig.params = {Type::string(), ambient()};
-    sig.optional = {false, true};
+    sig.optional = std::vector<bool>{false, true};
     sig.ret = ambient();
     checkArgs(sig, call);
     Type value = Type::string();

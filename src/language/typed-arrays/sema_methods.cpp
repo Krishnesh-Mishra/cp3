@@ -104,7 +104,7 @@ bool Analyzer::tryInferFillCall(CallExpr& call, MemberExpr& m, Type& out) {
     FuncSig sig;
     sig.name = "fill";
     sig.params = {elem, idx, idx};
-    sig.optional = {false, true, true};
+    sig.optional = std::vector<bool>{false, true, true};
     sig.ret = ot;
     checkArgs(sig, call);
     if (ot.kind == TypeKind::Array && elem.isUnknown()) {

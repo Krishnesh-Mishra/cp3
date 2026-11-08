@@ -37,7 +37,14 @@ inline const NativePackage kEnvNativePackage{
       {"vendor/third_party/libsodium/lib/linux-x64",
        "vendor/third_party/xxhash/lib/linux-x64"},
       {"-lsodium", "-lxxhash"}},
-     {"linux-arm64", {"vendor/third_party/libsodium/lib/linux-arm64"}, {"-lsodium"}}},
+     {"linux-arm64",
+      {"vendor/third_party/libsodium/lib/linux-arm64",
+       "vendor/third_party/xxhash/lib/linux-arm64"},
+      {"-lsodium", "-lxxhash"}},
+     {"windows-arm64",
+      {"vendor/third_party/libsodium/lib/windows-arm64",
+       "vendor/third_party/xxhash/lib/windows-arm64"},
+      {"-lsodium", "-lxxhash"}}},
 };
 
 }  // namespace cp3::cli::detail

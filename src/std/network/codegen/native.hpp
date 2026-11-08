@@ -119,6 +119,14 @@ inline const NativePackage kNetworkNativePackage{
       {"-luSockets", "-luv", "-lsodium", "-lxxhash", "-lssl", "-lcrypto",
        "-lws2_32", "-luserenv",
        "-liphlpapi", "-lole32", "-ldbghelp", "-lsynchronization", "-lcrypt32"}},
+     {"windows-arm64", {"vendor/third_party/uWebSockets/lib/windows-arm64",
+                       "vendor/third_party/libuv/lib/windows-arm64",
+                       "vendor/third_party/libsodium/lib/windows-arm64",
+                       "vendor/third_party/xxhash/lib/windows-arm64",
+                       "vendor/third_party/openssl/lib/windows-arm64"},
+      {"-luSockets", "-luv", "-lsodium", "-lxxhash", "-lssl", "-lcrypto",
+       "-lws2_32", "-luserenv",
+       "-liphlpapi", "-lole32", "-ldbghelp", "-lsynchronization", "-lcrypt32"}},
      {"linux-x64",
       {"vendor/third_party/uWebSockets/lib/linux-x64",
        "vendor/third_party/libuv/lib/linux-x64",
@@ -130,11 +138,11 @@ inline const NativePackage kNetworkNativePackage{
      {"linux-arm64",
       {"vendor/third_party/uWebSockets/lib/linux-arm64",
        "vendor/third_party/libuv/lib/linux-arm64",
-       "vendor/third_party/libsodium/lib/linux-arm64"},
-      {"-luSockets", "-luv", "-lsodium", "-pthread", "-ldl", "-lrt"},
-      // No OpenSSL / SSL uSockets for linux-arm64 in v0.2: compile the
-      // TLS stub (fails closed with ERR_TLS_BACKEND_UNAVAILABLE), ZLIB off.
-      {"-DUWS_NO_ZLIB"}}},
+       "vendor/third_party/libsodium/lib/linux-arm64",
+       "vendor/third_party/xxhash/lib/linux-arm64",
+       "vendor/third_party/openssl/lib/linux-arm64"},
+      {"-luSockets", "-luv", "-lsodium", "-lxxhash", "-lssl", "-lcrypto",
+       "-pthread", "-ldl", "-lrt"}}},
 };
 
 }  // namespace cp3::cli::detail
