@@ -74,3 +74,7 @@ docs/.venv-docs/
 
 # ---- local scratch (build/corpus logs, probe fixtures; never committed) ----
 .log/
+
+# ---- network_config_full_options server fixture output dirs ----
+tests/cases/stdlib/02/network/config/network_config_full_options/public/
+tests/cases/stdlib/02/network/config/network_config_full_options/views/
