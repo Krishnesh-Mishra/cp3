@@ -110,7 +110,7 @@ extension. The resulting MSI is self-contained.
   `major.minor.patch` prefix of `version.txt`; prerelease suffixes are not valid
   MSI versions.
 - **Real license text.** The installer’s license page is generated from the
-  repository’s `LICENSE` file (Apache License 2.0).
+  repository’s LICENSE file (Apache License 2.0).
 
 `CP3_ROOT` is not written to the user environment. The `cp3.cmd` shim exports
 it for each child process, and `cp3c.exe` also resolves its install root from
@@ -147,7 +147,7 @@ performs the major upgrade without showing a prompt.
 | `bin\*.dll` | MinGW runtime DLLs the compiler links against |
 | `include\` | header trees handed to Clang: `runtime\`, `common\`, `std\<family>\` |
 | `src\` | runtime translation units compiled into every cp3 program (`src\runtime\src\`, `src\std\<family>\`) |
-| `third_party\` | vendored static libraries (`libsodium`, `libuv`, `uWebSockets`, `oneTBB`, `pcre2`) |
+| `vendor\third_party\` | vendored static libraries (`libsodium`, `libuv`, `uWebSockets`, `oneTBB`, `pcre2`) |
 | `share\vscode\` | the bundled extension, when built (`-NoVsix` stages without it) |
 | `manifest.json` | name, version, compiler version, `built_at`, `components[]` with size + SHA-256 |
 | `README.txt` | end-user quick start, written into the stage |
@@ -159,7 +159,7 @@ truth; adding a runtime unit to a row is picked up automatically.
 Two deltas against the frozen layout in `PKG-CONTRACTS.md` section 4 are
 deliberate and reported in `build\scratch\packaging\INSTALLER-REPORT.md`:
 `bin\` also carries the MinGW runtime DLLs (the compiler does not start
-without them), and `<dist>\src\` plus `<dist>\third_party\` carry the runtime
+without them), and `<dist>\src\` plus `<dist>\vendor\third_party\` carry the runtime
 sources and the vendored libraries the compiler compiles and links per
 program.
 

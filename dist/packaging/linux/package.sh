@@ -31,10 +31,16 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 VERSION=""
 BUILD_DIR="$ROOT/build"
 OUT_DIR=""
-THIRD_PARTY="$ROOT/third_party"
+THIRD_PARTY="$ROOT/vendor/third_party"
 NO_VSIX=0
 SKIP_SMOKE=0
 CLEAN=0
+NO_RUN=0
+UNTESTED=0
+# Command prefix used to run the staged compiler when it is not for this host's
+# architecture (e.g. "qemu-aarch64-static -L /usr/aarch64-linux-gnu"). Empty =
+# run it directly. Word splitting on purpose: the user passes a prefix.
+RUNNER="${CP3_PACKAGE_RUNNER:-}"
 
 ARCH=$(uname -m)
 case "$ARCH" in
@@ -49,13 +55,24 @@ Usage: dist/packaging/linux/package.sh [options]
 
   --build-dir <dir>       build tree containing bin/cp3c (default: build)
   --out-dir <dir>         output directory (default: build/out/linux-<arch>)
-  --third-party-dir <dir> vendored trees to stage (default: third_party)
+  --third-party-dir <dir> vendored trees to stage (default: vendor/third_party)
   --version <version>     product version (default: version.txt)
   --arch <arch>           package architecture label (default: uname -m)
   --no-vsix               do not stage dist/extensions/cp3-vscode/dist/*.vsix
   --skip-smoke            do not compile/run a hello-world with the stage
+  --no-run                do not execute the staged compiler at all (foreign
+                          architecture with no emulator): the manifest records
+                          compiler_version as unverified and the smoke is skipped
+  --untested              mark this package UNTESTED: stage UNTESTED.txt, record
+                          compiler_version as unverified, add "untested": true to
+                          manifest.json, and rename the archive with a -untested
+                          suffix
   --clean                 remove the output directory before staging
   -h, --help              show this help
+
+Environment:
+  CP3_PACKAGE_RUNNER      prefix used to run the staged compiler, e.g.
+                          "qemu-aarch64-static -L /usr/aarch64-linux-gnu"
 EOF
 }
 
@@ -68,6 +85,8 @@ while [ "$#" -gt 0 ]; do
         --arch)            ARCH=$2; shift 2 ;;
         --no-vsix)         NO_VSIX=1; shift ;;
         --skip-smoke)      SKIP_SMOKE=1; shift ;;
+        --no-run)          NO_RUN=1; SKIP_SMOKE=1; shift ;;
+        --untested)        UNTESTED=1; shift ;;
         --clean)           CLEAN=1; shift ;;
         -h|--help)         usage; exit 0 ;;
         *) echo "package.sh: unknown option '$1'" >&2; usage >&2; exit 2 ;;
@@ -116,14 +135,26 @@ if [ -d "$STAGE" ]; then
     info "removing previous stage $STAGE"
     rm -rf "$STAGE"
 fi
-mkdir -p "$STAGE"/bin "$STAGE"/include "$STAGE"/src "$STAGE"/third_party "$STAGE"/share/vscode
+mkdir -p "$STAGE"/bin "$STAGE"/include "$STAGE"/src "$STAGE"/vendor/third_party "$STAGE"/share/vscode
 
 # --- bin ---------------------------------------------------------------------
+run_staged() {
+    if [ "$NO_RUN" -eq 1 ]; then
+        return 0
+    fi
+    # shellcheck disable=SC2086
+    $RUNNER "$@"
+}
+
 cp -p "$CP3C" "$STAGE/bin/cp3c"
 chmod +x "$STAGE/bin/cp3c"
 cp -p "$ROOT/dist/packaging/linux/cp3.sh" "$STAGE/bin/cp3"
 chmod +x "$STAGE/bin/cp3"
-info "compiler: $("$STAGE/bin/cp3c" --version 2>/dev/null | head -n 1 || echo unknown)"
+if [ "$NO_RUN" -eq 1 ]; then
+    info "compiler: <not executed - foreign arch> (--no-run)"
+else
+    info "compiler: $(run_staged "$STAGE/bin/cp3c" --version 2>/dev/null | head -n 1 || echo unknown)"
+fi
 
 # --- include: every header tree user programs need ---------------------------
 copy_tree() {
@@ -161,7 +192,7 @@ for family in "$ROOT"/src/std/*; do
     [ "${#rows[@]}" -gt 0 ] || continue
 
     for row in "${rows[@]}"; do
-        refs=$(grep -oE '"(src|third_party)/[^"]+"' "$row" | tr -d '"' | sort -u || true)
+        refs=$(grep -oE '"(src|vendor/third_party)/[^"]+"' "$row" | tr -d '"' | sort -u || true)
         for ref in $refs; do
             case "$ref" in
                 vendor/third_party/linux-*)
@@ -313,11 +344,29 @@ Install (no root)
 EOF
 
 # --- manifest.json -----------------------------------------------------------
-compiler_version=$("$STAGE/bin/cp3c" --version 2>/dev/null | head -n 1 || true)
-[ -n "$compiler_version" ] || fail "the staged bin/cp3c does not run"
+compiler_version=""
 expected_compiler_version="cp3c $VERSION"
-[ "$compiler_version" = "$expected_compiler_version" ] || \
-    fail "the staged compiler reports '$compiler_version' but version.txt is '$VERSION'; run vendor/tools/update-version.sh and rebuild cp3c"
+if [ "$NO_RUN" -eq 1 ]; then
+    compiler_version="$expected_compiler_version (unverified - foreign arch)"
+    info "compiler version: unverified on this host (--no-run); recording as such"
+else
+    compiler_version=$(run_staged "$STAGE/bin/cp3c" --version 2>/dev/null | head -n 1 || true)
+    [ -n "$compiler_version" ] || fail "the staged bin/cp3c does not run (set CP3_PACKAGE_RUNNER to an emulator prefix, or pass --no-run)"
+    [ "$compiler_version" = "$expected_compiler_version" ] || \
+        fail "the staged compiler reports '$compiler_version' but version.txt is '$VERSION'; run vendor/tools/update-version.sh and rebuild cp3c"
+fi
+if [ "$UNTESTED" -eq 1 ]; then
+    cat > "$STAGE/UNTESTED.txt" <<'EOF'
+cp3 for this target was NOT verified on this build host.
+
+The artifacts in this archive are built for the target architecture, but the
+build host cannot execute them (no emulator/device/native runtime for the
+arch). Expect compile issues and reduced functionality until someone runs the
+test corpus on the target hardware.
+EOF
+    info "untested: UNTESTED.txt staged"
+fi
+
 built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 json_escape() {
@@ -329,6 +378,9 @@ manifest="$STAGE/manifest.json"
     printf '{\n'
     printf '  "name": "cp3",\n'
     printf '  "version": "%s",\n' "$(json_escape "$VERSION")"
+    if [ "$UNTESTED" -eq 1 ]; then
+        printf '  "untested": true,\n'
+    fi
     printf '  "compiler_version": "%s",\n' "$(json_escape "$compiler_version")"
     printf '  "built_at": "%s",\n' "$built_at"
     printf '  "components": [\n'
@@ -350,7 +402,11 @@ manifest="$STAGE/manifest.json"
 
 # --- smoke -------------------------------------------------------------------
 if [ "$SKIP_SMOKE" -eq 1 ]; then
-    info "smoke: skipped (--skip-smoke)"
+    if [ "$NO_RUN" -eq 1 ]; then
+        info "smoke: skipped (--no-run; staged compiler not executed)"
+    else
+        info "smoke: skipped (--skip-smoke)"
+    fi
 else
     smoke=$(mktemp -d "${TMPDIR:-/tmp}/cp3-package-smoke-XXXXXX")
     trap 'rm -rf "$smoke"' EXIT
@@ -361,7 +417,12 @@ console.log("package smoke ok");
 EOF
     output=""
     status=0
-    output=$(CP3_ROOT="$STAGE" "$STAGE/bin/cp3c" run "$smoke/main.cp3" 2>&1) || status=$?
+    if [ -n "$RUNNER" ]; then
+        # shellcheck disable=SC2086
+        output=$(CP3_ROOT="$STAGE" $RUNNER "$STAGE/bin/cp3c" run "$smoke/main.cp3" 2>&1) || status=$?
+    else
+        output=$(CP3_ROOT="$STAGE" "$STAGE/bin/cp3c" run "$smoke/main.cp3" 2>&1) || status=$?
+    fi
     if [ "$status" -ne 0 ] || ! printf '%s' "$output" | grep -q "package smoke ok"; then
         printf '%s\n' "$output" >&2
         fail "staged smoke build failed (exit $status)"
@@ -375,7 +436,12 @@ fi
 cp -p "$ROOT/dist/packaging/linux/install.sh" "$OUT_DIR/install.sh"
 chmod +x "$OUT_DIR/install.sh"
 
-archive="$OUT_DIR/cp3-$VERSION-linux-$ARCH.tar.gz"
+suffix=""
+if [ "$UNTESTED" -eq 1 ]; then
+    suffix="-untested"
+fi
+
+archive="$OUT_DIR/cp3-$VERSION-linux-$ARCH$suffix.tar.gz"
 rm -f "$archive"
 tar -C "$OUT_DIR" -czf "$archive" cp3 install.sh
 archive_hash=$(sha256sum "$archive" | cut -d' ' -f1)

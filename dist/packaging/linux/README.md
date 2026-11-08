@@ -34,9 +34,10 @@ dist/packaging/linux/package.sh --build-dir build --out-dir build/out/linux-x64
 # skip the hello-world smoke test (no Clang on the build machine)
 dist/packaging/linux/package.sh --skip-smoke
 
-# package using the Linux-built vendor archives (build them first)
+# package using the Linux-built vendor archives (build them first; the
+# default third-party tree is vendor/third_party, no flag needed)
 bash vendor/third_party/build-linux.sh --arch x64
-dist/packaging/linux/package.sh --third-party-dir third_party
+dist/packaging/linux/package.sh
 ```
 
 ## Stage layout

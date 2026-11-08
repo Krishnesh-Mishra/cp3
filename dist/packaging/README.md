@@ -153,10 +153,11 @@ from the default `vendor/third_party/` tree is complete for the compiler and the
 stdlib families that do not need vendor archives, but `std/network` and
 `std/crypto` need Linux-built archives.
 
-Rebuild the vendor tree on Linux, then point the packager at it:
+Rebuild the vendor tree for Linux, then package with the default third-party
+tree (vendor/third_party); the packager keeps only the matching architecture:
 
 ```sh
-dist/packaging/linux/package.sh --third-party-dir /path/to/linux/third_party
+bash dist/packaging/linux/package.sh
 ```
 
 The packager detects COFF archives and prints a warning instead of silently

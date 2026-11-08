@@ -2,7 +2,7 @@
 # dist/packaging/windows/build-msi.ps1 - build a single per-user Windows MSI.
 #
 # Input: the relocatable tree staged by package.ps1 (<StageDir>\bin\cp3c.exe,
-# include\, src\, third_party\, share\, manifest.json, README.txt).
+# include\, src\, vendor\third_party\, share\, manifest.json, README.txt).
 # Output: <OutDir>\cp3-<version>-windows-<arch>.msi.
 #
 # The MSI is intentionally self-contained:
@@ -44,7 +44,9 @@ param(
     [string]$WixPath,
 
     # Build without the WixUI extension (no wizard, silent/basic MSI only).
-    [switch]$NoUi
+    [switch]$NoUi,
+    # Mark this MSI as an untested target: file name gets a -untested suffix.
+    [switch]$Untested
 )
 
 $ErrorActionPreference = 'Stop'
@@ -82,8 +84,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $StageDir 'bin\cp3c.exe'))) {
     Fail "no staged compiler at '$StageDir\bin\cp3c.exe'; run package.ps1 first"
 }
 foreach ($relative in @(
-    'third_party\uWebSockets\include\App.h',
-    'third_party\libuv\include\uv.h'
+    'vendor\third_party\uWebSockets\include\App.h',
+    'vendor\third_party\libuv\include\uv.h'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $StageDir $relative) -PathType Leaf)) {
         Fail "staged native backend header is missing: '$relative'; rebuild the distribution with package.ps1"
@@ -96,8 +98,9 @@ New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
 $scratch = Join-Path $RepoRoot 'build\scratch\packaging\msi'
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-$wxs = Join-Path $scratch ("cp3-" + $Arch + ".wxs")
-$msi = Join-Path $OutDir ("cp3-" + $Version + "-windows-" + $Arch + ".msi")
+$suffix = if ($Untested) { "-untested" } else { "" }
+$wxs = Join-Path $scratch ("cp3-" + $Arch + $suffix + ".wxs")
+$msi = Join-Path $OutDir ("cp3-" + $Version + "-windows-" + $Arch + $suffix + ".msi")
 if (Test-Path -LiteralPath $msi) { Remove-Item -LiteralPath $msi -Force }
 
 # WixUI contains placeholder license text unless this variable points to the

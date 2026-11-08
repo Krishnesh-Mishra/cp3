@@ -17,7 +17,7 @@
 #   bin\cp3c.exe  bin\cp3.cmd  bin\<mingw runtime dlls>
 #   include\<runtime|common|std\family>\**   header trees for user programs
 #   src\runtime\src\**  src\std\<family>\**  runtime units compiled per program
-#   third_party\<lib>\**                     vendored static libraries
+#   vendor\third_party\<lib>\**              vendored static libraries
 #   share\vscode\cp3-vscode-<version>.vsix    when built (unless -NoVsix)
 #   manifest.json  README.txt
 #
@@ -41,6 +41,19 @@ param(
     [switch] $NoVsix,
     # Stage without the MinGW runtime DLLs beside cp3c.exe (not recommended).
     [switch] $NoRuntimeDlls,
+    # Target architecture of the staged compiler's vendored archives (the
+    # compiler itself must come from -BuildDir; this only picks which vendored
+    # archives are shipped). Windows packages are always per-arch.
+    [ValidateSet('x64', 'arm64')]
+    [string] $Arch = 'x64',
+    # Mark this package UNTESTED: stage UNTESTED.txt, record compiler_version as
+    # unverified, add "untested": true to manifest.json, and rename the MSI with
+    # a -untested suffix (done in build-msi.ps1).
+    [switch] $Untested,
+    # Do not run the staged compiler (foreign architecture on this host:
+    # windows-arm64 packaged from an x64 machine). The manifest records
+    # compiler_version as unverified.
+    [switch] $NoRun,
     # Do not run the staged compiler against a hello-world program.
     [switch] $SkipSmoke,
     # Also wipe the whole output directory (old installers) before staging.
@@ -94,7 +107,7 @@ if (Test-Path -LiteralPath $stage) {
     Info "removing previous stage $stage"
     Remove-Item -LiteralPath $stage -Recurse -Force
 }
-foreach ($dir in @("bin", "include", "src", "third_party", "share\vscode", "share\openssl")) {
+foreach ($dir in @("bin", "include", "src", "vendor\third_party", "share\vscode", "share\openssl")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $stage $dir) | Out-Null
 }
 
@@ -205,15 +218,14 @@ foreach ($family in (Get-ChildItem -LiteralPath $stdDir -Directory | Sort-Object
     if ($rows.Count -eq 0) { continue }
     foreach ($row in $rows) {
         $rowText = Get-Content -LiteralPath $row.FullName -Raw
-        $refs = [regex]::Matches($rowText, '"((?:src|third_party)/[^"]+)"') |
+        $refs = [regex]::Matches($rowText, '"((?:src|vendor/third_party)/[^"]+)"') |
             ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
         foreach ($ref in $refs) {
             $normalized = $ref.Replace("/", "\")
-            if ($normalized -like "third_party\linux-*") { continue }
-            if ($normalized -like "third_party\*") {
+            if ($normalized -like "vendor\third_party\*") {
                 $parts = $normalized.Split("\")
-                if ($parts.Length -lt 2) { Fail "malformed third_party reference '$ref' in $($row.FullName)" }
-                $thirdPartyTrees.Add("third_party\" + $parts[1]) | Out-Null
+                if ($parts.Length -lt 3) { Fail "malformed third_party reference '$ref' in $($row.FullName)" }
+                $thirdPartyTrees.Add("vendor\third_party\" + $parts[2]) | Out-Null
                 continue
             }
             if ($normalized -like "*\include") { continue }  # staged under include\
@@ -249,18 +261,18 @@ $coreRow = Join-Path $RepoRoot "src\cli\src\detail\native\native_regex.hpp"
 if (-not (Test-Path -LiteralPath $coreRow)) { Fail "core native row missing: $coreRow" }
 $coreText = Get-Content -LiteralPath $coreRow -Raw
 foreach ($match in [regex]::Matches($coreText, '"vendor/third_party/([^"/]+)[^"]*"')) {
-    $thirdPartyTrees.Add("third_party\" + $match.Groups[1].Value) | Out-Null
+    $thirdPartyTrees.Add("vendor\third_party\" + $match.Groups[1].Value) | Out-Null
 }
 foreach ($tree in $thirdPartyTrees) {
     Copy-Tree (Join-Path $RepoRoot $tree) (Join-Path $stage $tree) ("vendored tree " + $tree)
     Info "vendored: $tree"
 }
 foreach ($relative in @(
-    'third_party\uWebSockets\include\App.h',
-    'third_party\libuv\include\uv.h',
-    'third_party\pcre2\include\pcre2.h',
-    'third_party\openssl\include\openssl\ssl.h',
-    'third_party\openssl\cacert.pem'
+    'vendor\third_party\uWebSockets\include\App.h',
+    'vendor\third_party\libuv\include\uv.h',
+    'vendor\third_party\pcre2\include\pcre2.h',
+    'vendor\third_party\openssl\include\openssl\ssl.h',
+    'vendor\third_party\openssl\cacert.pem'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $stage $relative) -PathType Leaf)) {
         Fail "staged native backend header/file is missing: '$relative'"
@@ -268,17 +280,27 @@ foreach ($relative in @(
 }
 # Ship the Mozilla CA bundle so the Windows-fallback CA lookup finds it at
 # <install>/share/openssl/cacert.pem (cp3 sets no Windows store access).
-$caSrc = Join-Path $stage "third_party\openssl\cacert.pem"
+$caSrc = Join-Path $stage "vendor\third_party\openssl\cacert.pem"
 if (Test-Path -LiteralPath $caSrc) {
     Copy-Item -LiteralPath $caSrc -Destination (Join-Path $stage "share\openssl\cacert.pem") -Force
     Info "CA bundle -> share\openssl\cacert.pem"
 }
 foreach ($vendor in @("libsodium", "libuv", "uWebSockets", "xxhash", "simdutf", "pcre2", "openssl")) {
-    $libDir = Join-Path $stage "third_party\$vendor\lib"
+    $libDir = Join-Path $stage "vendor\third_party\$vendor\lib"
     if (Test-Path -LiteralPath $libDir) {
+        # Keep only this package's windows-<Arch> archives; drop other platforms.
+        $archDir = "windows-" + $Arch
+        $hasArch = Test-Path -LiteralPath (Join-Path $libDir $archDir) -PathType Container
         Get-ChildItem -LiteralPath $libDir -Directory -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -like "linux-*" } |
+            Where-Object { $_.Name -ne $archDir } |
             Remove-Item -Recurse -Force
+        if ($hasArch) {
+            # With a per-arch subdir present the root-level archive (if any) belongs
+            # to another lane (e.g. the linux one); the package keeps only windows-<Arch>.
+            Get-ChildItem -LiteralPath $libDir -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Extension -in ".a", ".lib" } |
+                Remove-Item -Force
+        }
     }
 }
 Info ("std runtime units: " + $familySourceCount + " files")
@@ -312,27 +334,33 @@ if ($NoVsix) {
 }
 
 # --- compiler version (also proves the staged exe starts) --------------------
-$compilerVersion = ""
-try {
-    $compilerVersion = ((& (Join-Path $stage "bin\cp3c.exe") --version 2>$null) | Select-Object -First 1)
-} catch {
+if ($NoRun -or $Untested) {
+    $compilerVersion = ("cp3c " + $Version + " (unverified - untested target)")
+    Info "compiler: unverified on this host (-NoRun/-Untested); recording as such"
+} else {
     $compilerVersion = ""
+    try {
+        $compilerVersion = ((& (Join-Path $stage "bin\cp3c.exe") --version 2>$null) | Select-Object -First 1)
+    } catch {
+        $compilerVersion = ""
+    }
+    if (-not $compilerVersion -or ($LASTEXITCODE -ne 0)) {
+        Fail "the staged bin\cp3c.exe does not run; check the build and the runtime DLLs (or pass -NoRun for a foreign-arch stage)"
+    }
+    $compilerVersion = $compilerVersion.Trim()
+    $expectedCompilerVersion = "cp3c " + $Version
+    if ($compilerVersion -ne $expectedCompilerVersion) {
+        Fail ("the staged compiler reports '$compilerVersion' but version.txt is '$Version'. " +
+              "Run vendor/tools/update-version.ps1 and rebuild cp3c.")
+    }
+    Info "compiler: $compilerVersion"
 }
-if (-not $compilerVersion -or ($LASTEXITCODE -ne 0)) {
-    Fail "the staged bin\cp3c.exe does not run; check the build and the runtime DLLs"
-}
-$compilerVersion = $compilerVersion.Trim()
-$expectedCompilerVersion = "cp3c " + $Version
-if ($compilerVersion -ne $expectedCompilerVersion) {
-    Fail ("the staged compiler reports '$compilerVersion' but version.txt is '$Version'. " +
-          "Run vendor/tools/update-version.ps1 and rebuild cp3c.")
-}
-Info "compiler: $compilerVersion"
 
 # --- README.txt ---------------------------------------------------------------
 $readme = @"
 cp3 $Version - C+++ compiler, runtime and tooling
 =================================================
+$(if ($Untested) { "*** UNTESTED BUILD - verification status: UNVERIFIED on the build host ***" })
 
 Layout
   bin\cp3c.exe     the compiler (also serves the editor LSP via `"cp3c lsp`")
@@ -341,7 +369,7 @@ Layout
   bin\*.dll        MinGW runtime DLLs the compiler needs to start
   include\         header trees the compiler passes to Clang
   src\             runtime units compiled into every cp3 program
-  third_party\     vendored static libraries (std/network, std/crypto, std/hash, std/text, regex)
+  vendor\third_party\  vendored static libraries (std/network, std/crypto, std/hash, std/text, regex)
   share\vscode\    bundled VS Code extension, when built
   manifest.json    every component with its SHA-256
 
@@ -366,6 +394,20 @@ Uninstall
 [System.IO.File]::WriteAllText((Join-Path $stage "README.txt"), $readme,
     (New-Object System.Text.UTF8Encoding($false)))
 
+# --- staged UNTESTED marker ---------------------------------------------------
+if ($Untested) {
+    Set-Content -LiteralPath (Join-Path $stage "UNTESTED.txt") -Encoding ASCII `
+        -Value @"
+cp3 for this target was NOT verified on this build host.
+
+The artifacts in this archive are built for the target architecture, but the
+build host cannot execute them (no emulator/device/native runtime for the
+arch). Expect compile issues and reduced functionality until someone runs the
+test corpus on the target hardware.
+"@
+    Info "untested: UNTESTED.txt staged"
+}
+
 # --- manifest.json ------------------------------------------------------------
 $builtAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 $manifestPath = Join-Path $stage "manifest.json"
@@ -384,14 +426,15 @@ $manifest = [ordered]@{
     version          = $Version
     compiler_version = $compilerVersion
     built_at         = $builtAt
-    components       = $components
 }
+if ($Untested) { $manifest["untested"] = $true }
+$manifest["components"] = $components
 $manifestJson = $manifest | ConvertTo-Json -Depth 6
 [System.IO.File]::WriteAllText($manifestPath, ($manifestJson + "`r`n"),
     (New-Object System.Text.UTF8Encoding($false)))
 
 # --- smoke: the staged compiler builds and runs a hello program ---------------
-if (-not $SkipSmoke) {
+if (-not $SkipSmoke -and -not $NoRun) {
     $smokeDir = Join-Path ([System.IO.Path]::GetTempPath()) ("cp3-package-smoke-" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Force -Path $smokeDir | Out-Null
     $previousRoot = $null
@@ -411,6 +454,8 @@ if (-not $SkipSmoke) {
         else { $env:CP3_ROOT = $previousRoot }
         Remove-Item -LiteralPath $smokeDir -Recurse -Force -ErrorAction SilentlyContinue
     }
+} elseif ($NoRun) {
+    Info "smoke: skipped (-NoRun; staged compiler not executed)"
 } else {
     Info "smoke: skipped (-SkipSmoke)"
 }

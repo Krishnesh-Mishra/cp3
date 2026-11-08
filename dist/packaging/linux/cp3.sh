@@ -106,8 +106,8 @@ case "$1" in
         fi
         if [ -d "$CP3_ROOT/include" ]; then inc=yes; else inc=no; fi
         if [ -d "$CP3_ROOT/src" ]; then src=yes; else src=no; fi
-        if [ -d "$CP3_ROOT/third_party" ]; then tp=yes; else tp=no; fi
-        echo "  shipped trees: include=$inc src=$src third_party=$tp"
+        if [ -d "$CP3_ROOT/vendor/third_party" ]; then tp=yes; else tp=no; fi
+        echo "  shipped trees: include=$inc src=$src vendor_third_party=$tp"
         echo "  note         : Clang (clang++) is required to build cp3 programs."
         if [ -x "$CP3C" ]; then exit 0; fi
         exit 1

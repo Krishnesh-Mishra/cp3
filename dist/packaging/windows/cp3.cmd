@@ -140,7 +140,7 @@ if exist "%CP3_ROOT%\include" set "TREE_INCLUDE=yes"
 set "TREE_SRC=no"
 if exist "%CP3_ROOT%\src" set "TREE_SRC=yes"
 set "TREE_TP=no"
-if exist "%CP3_ROOT%\third_party" set "TREE_TP=yes"
+if exist "%CP3_ROOT%\vendor\third_party" set "TREE_TP=yes"
 echo cp3 doctor
 echo   install root : %CP3_ROOT%
 echo   shim         : %~f0
@@ -151,7 +151,7 @@ echo   toolchain    : %TC%
 echo   ccache       : %CCACHE%
 echo   VS Code CLI  : %CODE_STATUS%
 echo   bundled vsix : %VSIX_STATUS%
-echo   shipped trees: include=%TREE_INCLUDE% src=%TREE_SRC% third_party=%TREE_TP%
+echo   shipped trees: include=%TREE_INCLUDE% src=%TREE_SRC% vendor_third_party=%TREE_TP%
 echo   note         : Clang (clang++) on PATH is required to build cp3 programs;
 echo                  VS Code is optional.
 echo                  Install/open the bundled extension with: cp3 editor-plugin

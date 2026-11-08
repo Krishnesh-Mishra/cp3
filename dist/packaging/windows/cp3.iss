@@ -64,7 +64,7 @@ Source: "{#StageDir}\bin\cp3.cmd"; DestDir: "{app}\bin"; Flags: ignoreversion
 Source: "{#StageDir}\bin\*.dll"; DestDir: "{app}\bin"; Flags: ignoreversion
 Source: "{#StageDir}\include\*"; DestDir: "{app}\include"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#StageDir}\src\*"; DestDir: "{app}\src"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#StageDir}\third_party\*"; DestDir: "{app}\third_party"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#StageDir}\vendor\third_party\*"; DestDir: "{app}\vendor\third_party"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#StageDir}\manifest.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\README.txt"; DestDir: "{app}"; Flags: ignoreversion
 #ifdef VsixName
