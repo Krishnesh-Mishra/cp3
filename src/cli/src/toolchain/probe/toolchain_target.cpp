@@ -209,14 +209,26 @@ bool compilesWith(const std::string& program,
                   const std::vector<std::string>& targetFlags) {
     ProbePaths paths = makeProbePaths();
     if (paths.dir.empty()) return false;
-    const std::string source =
+    // The probe must reference, at LINK time only, a symbol that lives in the
+    // newer UCRT import library that cp3's generated programs (and the
+    // vendored libuv.a / uSockets.a objects built against it) require for
+    // stdio-wide conversion routines. Taking its address forces the linker to
+    // resolve it; nothing calls it and it is never executed. Sysroots whose
+    // UCRT predates this export (older Strawberry MinGW) fail to resolve or
+    // even declare the symbol here, and the caller then falls back to an
+    // explicit --sysroot (WinLibs / MinGW ucrt64) instead of reporting a
+    // clean "it builds" that only trivial programs could honour.
+    std::string source =
         "#include <cmath>\n"
         "#include <cstdint>\n"
         "#include <cstdio>\n"
         "#include <vector>\n"
-        "int main() { std::vector<double> v{4.0}; "
-        "std::printf(\"%d\\n\", static_cast<int>(std::sqrt(v[0]))); "
-        "return 0; }\n";
+        "#include <wchar.h>\n"
+        "volatile const void* kUcrtLinkMarker =\n"
+        "    (const void*)&__local_stdio_printf_options;\n"
+        "int main() { std::vector<double> v{4.0};"
+        " std::printf(\"%d\", static_cast<int>(std::sqrt(v[0]) + (kUcrtLinkMarker != nullptr)));"
+        " return 0; }\n";
     if (!writeTextFile(paths.cpp, source, nullptr)) return false;
     std::vector<std::string> args{program};
     for (const std::string& flag : targetFlags) args.push_back(flag);
@@ -283,8 +295,12 @@ std::vector<std::string> toolchainTargetFlags(const std::string& program) {
         return flags;
     }
     for (const std::string& prefix : mingwPrefixes(program)) {
+        // Clang's MinGW driver ignores --gcc-toolchain (treated as an unused
+        // argument with a warning); the active mechanism for re-pointing it at
+        // a non-default MinGW root is --sysroot. The root is what
+        // mingwPrefixes validates (include/c++ or <triplet>/include).
         const std::vector<std::string> explicitFlags{
-            "--target=" + target, "--gcc-toolchain=" + prefix};
+            "--target=" + target, "--sysroot=" + prefix};
         if (compilesWith(program, explicitFlags)) {
             flags = explicitFlags;
             break;
