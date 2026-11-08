@@ -20,6 +20,7 @@
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/family.h"
 #include "detail/generator/mangle.h"
+#include "detail/parallel/parallel.h"
 #include "detail/expr/pattern_emitter.h"
 #include "detail/generator/type_map.h"
 #include "cp3/diag/diagnostic_codes.hpp"
@@ -579,6 +580,7 @@ bool detail::ArrayEmitter::forOfSource(Generator& g, const ForOfStatement& f,
                              "type '" + describe(elem) + "'");
         return false;
     }
+
     g.reportTypeError(f, "type mismatch: for-of needs an array or a string");
     return false;
 }
@@ -654,6 +656,12 @@ void detail::ArrayEmitter::forOfImpl(Generator& g, const ForOfStatement& f,
     }
     if (!isString) g.needsTypedArray_ = true;
     const std::string recv = g.familyReceiverText(*f.right, elem, f);
+    const Type srcType =
+        f.right ? g.effectiveType(*f.right) : Type::unknown();
+    // A parallel.run result is a by-value `std::array<R, N>`: ranging over it
+    // directly is what the marker walk needs (the regular Array handle needs
+    // the pointer dereference below instead).
+    const bool isParallelRun = detail::isParallelRunType(srcType);
     const std::string item = "cp3_item" + std::to_string(g.uniqueCounter_++);
     const std::string range = "cp3_range" + std::to_string(g.uniqueCounter_++);
     const std::string breakLabel = g.freshLabel("forof_end_");
@@ -674,7 +682,7 @@ void detail::ArrayEmitter::forOfImpl(Generator& g, const ForOfStatement& f,
     if (isString) g.needsString_ = true;
     line(out, indent,
          "for (" + rangeInit + "; " + ec.cpp + " " + item + " : " +
-             (isString ? range : "*" + range) + ") {");
+             (isString ? range : (isParallelRun ? range : "*" + range)) + ") {");
     // The bound value: the element itself, or its awaited form.
     const std::string valueText =
         awaitValues ? "(co_await ::cp3::runtime::awaitValue(" + item + "))"

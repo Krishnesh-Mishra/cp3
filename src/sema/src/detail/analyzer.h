@@ -508,6 +508,11 @@ private:
     bool tryInferFillCall(CallExpr& call, MemberExpr& m, Type& out);
     // Array `map`/`reduce` result types.
     bool tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out);
+    // The typed `parallel.for` / `parallel.reduce` call forms: the closure's
+    // parameter types come from the range (induction = `number`) and the
+    // initial accumulator's value type.
+    bool tryInferParallelMemberCall(CallExpr& call, MemberExpr& member,
+                                    Type& out);
     Type typedArrayMember(const Type& recv, const std::string& prop);
     Type bufferMember(const Type& recv, const std::string& prop);
     Type dataViewMember(const std::string& prop);

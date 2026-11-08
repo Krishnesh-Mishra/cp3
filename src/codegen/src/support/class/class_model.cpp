@@ -321,11 +321,11 @@ bool valueFormattable(const Type& raw) {
         if (all.shape != Shape::Optional && all.shape != Shape::Maybe) {
             return true;
         }
-        // The inner type's own formatter decides. Only the primitive inner
-        // types have an `std::optional`/`Maybe` formatter: the optional
-        // template cannot reach the `Ref` formatter (the helper block that
-        // owns it comes later), so an object handle stays unformattable.
-        return isPrimitiveShape(classify(parts.front()).shape);
+        // The inner type's own formatter decides. The primitives have an
+        // `std::optional`/`Maybe` formatter; Shape::Enum gets its own per-enum
+        // formatter emitted by the enum declaration in the same TU.
+        const Shape inner = classify(parts.front()).shape;
+        return isPrimitiveShape(inner) || inner == Shape::Enum;
     }
     const CppInfo ci = classify(t);
     if (isModelShape(ci.shape)) return refValueFormattable(t);

@@ -179,19 +179,28 @@ std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
         }
         if (m.property == "freeze" || m.property == "seal" ||
             m.property == "preventExtensions") {
-            const std::string recv = expr(*c.arguments.front());
-            // cp3 objects are shared by reference handle with a statically
-            // known shape and no runtime property table, so immutability
-            // cannot be stored on the object itself. The v0.2 approximation
-            // (matching the pre-existing `freeze` lowering) is identity:
-            // the same handle is returned, so aliases keep working and
-            // `Object.is(freeze(o), o)` holds. The freeze queries below fold
-            // on a directly frozen argument, which covers the deep-freeze
-            // reading for nested values reached through a frozen root.
-            // The canonical runtime registry for a future wiring step lives
-            // in object.hpp (`cp3::runtime::object::freeze/seal/...`).
-            (void)recv;
-            return recv;
+            if (c.arguments.size() != 1 || !c.arguments.front()) {
+                reportCodegenError(c, diagcode::kArityMismatch,
+                                   "arity mismatch: Object." + m.property +
+                                       " expects one argument");
+                return "0.0";
+            }
+            const Type recvType = effectiveType(*c.arguments.front());
+            if (isPrimitiveValue(recvType)) {
+                // Primitives are already frozen/sealed/non-extensible (JS);
+                // sealing them changes nothing, so freezing is identity.
+                return expr(*c.arguments.front());
+            }
+            // Route non-primitive receivers through the canonical runtime
+            // registry (`std/object.hpp`): freeze(o) actually marks `o` in a
+            // process-wide registry, and the isFrozen/isSealed/isExtensible
+            // queries read it back. This keeps `isFrozen(o)` correct when the
+            // sealed binding passes through a variable instead of spelling the
+            // call inline (previously an "identity" no-op, so every query
+            // through an aliased variable folded to the JS default).
+            needsCollections_ = true;
+            return "::cp3::runtime::object::" + m.property + "(" +
+                   expr(*c.arguments.front()) + ")";
         }
         if (m.property == "isFrozen" || m.property == "isSealed" ||
             m.property == "isExtensible") {
@@ -207,21 +216,26 @@ std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
             if (isPrimitiveValue(recvType)) {
                 return m.property == "isExtensible" ? "false" : "true";
             }
+            // Registry (through an aliased binding, set at the freeze/seal/
+            // preventExtensions call sites) OR the syntactic fold (rooted in
+            // a direct freeze/seal/preventExtensions call, including a nested
+            // access like `Object.freeze(outer).inner`, which the registry
+            // cannot see because nested objects are never marked).
+            needsCollections_ = true;
+            const std::string registry = "::cp3::runtime::object::" + m.property + "(" +
+                                         expr(arg) + ")";
             const std::string root = freezeRootMethod(arg);
             const bool rooted = !root.empty();
             if (m.property == "isFrozen") {
-                // Deep-freeze: a nested value of a frozen root is frozen.
-                return rooted && root == "freeze" ? "true" : "false";
+                return "(" + registry + " || " +
+                       (rooted && root == "freeze" ? "true" : "false") + ")";
             }
             if (m.property == "isSealed") {
-                // Frozen implies sealed, and sealed implies non-extensible,
-                // but `preventExtensions` alone is neither frozen nor sealed
-                // (the object can still gain properties through its
-                // prototype). Only `freeze` and `seal` roots count.
-                return rooted && root != "preventExtensions" ? "true"
-                                                           : "false";
+                return "(" + registry + " || " +
+                       (rooted && root != "preventExtensions" ? "true"
+                                                           : "false") + ")";
             }
-            return rooted ? "false" : "true";
+            return "(" + registry + " && " + (rooted ? "false" : "true") + ")";
         }
         if (m.property == "getPrototypeOf") {
             if (c.arguments.size() != 1 || !c.arguments.front()) {

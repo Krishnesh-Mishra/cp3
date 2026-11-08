@@ -310,6 +310,20 @@ void Analyzer::checkParallelCall(CallExpr& call) {
 
     const bool isFor = m.property == "for";
     const bool isRun = m.property == "run";
+    const bool isReduce = m.property == "reduce";
+    // `parallel.reduce` requires a `0..n` range as its first argument; the
+    // diagnostic used to exist only in codegen (run mode). Expose it in the
+    // frontend so check mode (the fixture corpus) reports it too: the
+    // corpus's own diagnostic-location minimization pins line col to the
+    // call's span.
+    if (isReduce && !call.arguments.empty()) {
+        const Expr* first = call.arguments.front().get();
+        if (!first || first->kind != NodeKind::RangeExpr) {
+            report(diagcode::kTypeMismatch, call.span,
+                   "type mismatch: parallel.reduce's first argument must be a "
+                   "range: parallel.reduce(0..n, init, (acc, i) => ...)");
+        }
+    }
     for (auto& a : call.arguments) {
         if (!a || a->kind != NodeKind::ArrowFunction) continue;
         auto& arrow = static_cast<ArrowFunction&>(*a);

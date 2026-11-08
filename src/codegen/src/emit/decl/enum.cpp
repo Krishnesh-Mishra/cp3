@@ -102,6 +102,19 @@ EnumCppInfo buildEnumInfo(const EnumDeclaration& e,
     return info;
 }
 
+// The per-enum formatter for the prelude's `template <class T> cp3_ts(const
+// std::optional<T>&)` path. Without this overload, `cp3_ts(Color)` (the type
+// of `*v`) is undeclared and the compiler fails hard on every nullish enum
+// format (e.g. `arr.at(1)`).
+std::string enumTsText(const EnumCppInfo& info) {
+    if (info.stringBacked) {
+        return "inline std::string cp3_ts(" + info.cpp +
+               " v) { return cp3_enum_" + info.cpp + "_toString(v); }\n";
+    }
+    return "inline std::string cp3_ts(" + info.cpp +
+           " v) { return std::to_string(static_cast<long long>(v)); }\n";
+}
+
 // The `toString` helper of a string-backed enum (D19): one case per distinct
 // value; the first member of a shared string names the case.
 std::string enumToStringText(const EnumCppInfo& info) {
@@ -131,6 +144,11 @@ std::string enumDeclText(const EnumCppInfo& info) {
     }
     out += "\n};\n";
     if (info.stringBacked) out += enumToStringText(info);
+    // Always emit the per-enum formatter: the prelude `template <class T>
+    // cp3_ts(const std::optional<T>&)` issues `cp3_ts(Color)` for Color (or
+    // any other enum) and the resolution path falls back to this namespace's
+    // scope.
+    out += enumTsText(info);
     return out;
 }
 

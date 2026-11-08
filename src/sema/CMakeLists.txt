@@ -46,6 +46,7 @@ set(cp3_sema_sources
     ../language/typed-arrays/sema_index.cpp
     ../language/typed-arrays/sema_methods.cpp
     ../language/arrays/sema_methods.cpp
+    ../language/parallel/sema_methods.cpp
     ../language/number/sema.cpp
     ../language/number/sema_docs.cpp
     ../std/math/sema.cpp

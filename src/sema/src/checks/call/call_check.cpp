@@ -146,6 +146,11 @@ bool Analyzer::tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out) {
     if (tryInferJsonCall(call, m, out)) return true;
     if (tryInferPromiseStaticCall(call, m, out)) return true;
     if (tryInferCollectionsStaticCall(call, m, out)) return true;
+    // `parallel.for` / `parallel.reduce`: the closure's parameter types come
+    // from the range induction variable / accumulator initializer (the same
+    // job the array family does for `.reduce` / `.map`). Placed before the
+    // family hooks so the bare `parallel` surface works without an import.
+    if (tryInferParallelMemberCall(call, m, out)) return true;
     if (tryInferDateMemberCall(call, m, out)) return true;
     if (tryInferErrorStaticCall(call, m, out)) return true;
     if (tryInferMathCall(call, m, out)) return true;

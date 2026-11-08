@@ -419,6 +419,11 @@ void classifyValueUnion(const Type& t, CppInfo& info) {
 // shape -> `std::optional<T>`; the two-flavor `T | null | undefined` keeps
 // the flavored `Maybe<T>` (primitives only: a value struct has no JS
 // `null`/`undefined` distinction to preserve).
+// Number-backed enums erase to `long long` at the source level, so they are
+// trivial to represent once a declaration exists. Accepting Shape::Enum as a
+// valid inner shape for `T | null` / `T | undefined` lets Optional<Enum> /
+// Maybe<Enum> keep working (e.g. Array<T>.at() element output).
+// Array element reads over an enum array arrive here as Optional<Enum>.
 void classifyNullishUnion(const Type& t, CppInfo& info) {
     std::vector<Type> nonNullish;
     for (const Type& part : t.parts) {
@@ -427,7 +432,8 @@ void classifyNullishUnion(const Type& t, CppInfo& info) {
     if (nonNullish.size() != 1) return;
     const CppInfo inner = classify(nonNullish.front());
     if (!inner.representable) return;
-    const bool primitive = isPrimitiveShape(inner.shape);
+    const bool primitive =
+        isPrimitiveShape(inner.shape) || inner.shape == Shape::Enum;
     const bool object =
         inner.shape == Shape::Object || inner.shape == Shape::ClassRef;
     if (!primitive && !object) return;

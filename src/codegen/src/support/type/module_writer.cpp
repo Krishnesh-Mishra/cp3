@@ -158,6 +158,7 @@ std::string Generator::sourceIncludes() const {
     if (needswebserverSettings_) out += "#include \"cp3/std/network/webserver/settings.hpp\"\n";
     if (needsCollections_) {
         out += "#include \"cp3/std/collections.hpp\"\n";  // Map/Set (D44)
+        out += "#include \"cp3/std/object.hpp\"\n";  // freeze registry (`std/object.hpp`)
     }
     if (needsBuffer_) out += "#include \"cp3/std/buffer.hpp\"\n";
     if (needsFs_) out += "#include \"cp3/std/fs.hpp\"\n";

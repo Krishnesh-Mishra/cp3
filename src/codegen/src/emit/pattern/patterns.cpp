@@ -302,6 +302,7 @@ std::string Generator::recordModelText(const ObjectLiteral& lit,
 // source order, and a spread source is evaluated once into a local.
 std::string Generator::recordLiteralText(const ObjectLiteral& lit,
                                          const Type& expected) {
+    // (debug probe removed)
     // The context's expected type may name a structural object model: the
     // model owns the struct the literal fills (the plain value shape cannot
     // spell a field the model has).
