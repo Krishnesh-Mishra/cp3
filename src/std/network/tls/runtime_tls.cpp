@@ -43,6 +43,7 @@
 #include <uv.h>
 
 #include "../runtime/runtime_loop.hpp"
+#include "cp3/async/eventloop.hpp"
 #include "tls_backend.hpp"
 
 #ifdef CP3_TLS_OPENSSL
@@ -566,55 +567,88 @@ struct WritePayload {
 void retainOnce(bool& flag) { if (!flag) { flag = true; retainNetwork(); } }
 void releaseOnce(bool& flag) { if (flag) { flag = false; releaseNetwork(); } }
 
+// Libuv handles embedded in TlsSocketImpl borrow it back through
+// `handle->data`: each handle holds one strong reference to the impl,
+// released (and the holder deleted) once the handle has closed. The impl
+// therefore cannot die while the loop still references the embedded handle —
+// the same discipline the fetch path uses for FetchOp. The deferred drop
+// keeps the impl (embedded handle memory) alive past libuv's close dispatch.
+std::shared_ptr<TlsSocketImpl> implFromHandle(const uv_handle_t* handle);
+void attachImplToHandle(uv_handle_t* handle, const std::shared_ptr<TlsSocketImpl>& impl) {
+    handle->data = new std::shared_ptr<TlsSocketImpl>(impl);
+}
+std::shared_ptr<TlsSocketImpl> implFromHandle(const uv_handle_t* handle) {
+    auto* holder = static_cast<std::shared_ptr<TlsSocketImpl>*>(handle->data);
+    return holder == nullptr ? nullptr : *holder;
+}
+void releaseImplHolder(uv_handle_t* handle) {
+    auto* holder = static_cast<std::shared_ptr<TlsSocketImpl>*>(handle->data);
+    handle->data = nullptr;
+    if (holder == nullptr) return;
+    // Deleting the holder inside libuv's close dispatch could free the
+    // embedded handle before uv__finish_* returns; drop it one drain later.
+    EventLoop& loopRef = currentLoop();
+    auto* h = holder;
+    loopRef.post([h]() { delete h; });
+}
+
 void closeTcpWithImpl(uv_tcp_t* tcp) {
     if (!tcp || uv_is_closing(reinterpret_cast<const uv_handle_t*>(tcp))) return;
-    auto* impl = static_cast<TlsSocketImpl*>(tcp->data);
-    impl->tcpClosing = true;
-    impl->stopHandshakeTimer();
-    impl->stopIdleTimer();
+    const std::shared_ptr<TlsSocketImpl> impl = implFromHandle(reinterpret_cast<const uv_handle_t*>(tcp));
+    if (impl) { impl->tcpClosing = true; impl->stopHandshakeTimer(); impl->stopIdleTimer(); }
     uv_close(reinterpret_cast<uv_handle_t*>(tcp), [](uv_handle_t* h) {
-        auto* self = static_cast<TlsSocketImpl*>(h->data);
-        h->data = nullptr;
-        if (self) releaseOnce(self->retained);
-        // `self` is owned by the TlsSocket handle / server socket list;
-        // dropping the last reference here is safe because uv_close ran.
+        const std::shared_ptr<TlsSocketImpl> closing = implFromHandle(h);
+        if (closing) releaseOnce(closing->retained);
+        releaseImplHolder(h);
     });
 }
 
 void TlsSocketImpl::startHandshakeTimer(uv_loop_t* loop) {
     const double ms = options.handshakeTimeoutMs > 0 ? options.handshakeTimeoutMs : 10000.0;
     uv_timer_init(loop, &handshakeTimer);
-    handshakeTimer.data = this;
+    handshakeTimer.data = new std::shared_ptr<TlsSocketImpl>(shared_from_this());
     uv_timer_start(&handshakeTimer,
                    [](uv_timer_t* t) {
-                       auto* self = static_cast<TlsSocketImpl*>(t->data);
-                       self->fail(TlsError::thrown(TlsErrorCode::kHandshakeTimeout,
-                                                   "tls handshake timed out"));
+                       const std::shared_ptr<TlsSocketImpl> self = implFromHandle(reinterpret_cast<const uv_handle_t*>(t));
+                       if (self) self->fail(TlsError::thrown(TlsErrorCode::kHandshakeTimeout,
+                                                             "tls handshake timed out"));
                    },
                    static_cast<std::uint64_t>(ms), 0);
     handshakeTimerOn = true;
 }
 
 void TlsSocketImpl::stopHandshakeTimer() {
-    if (handshakeTimerOn) { uv_timer_stop(&handshakeTimer); handshakeTimerOn = false; }
+    if (handshakeTimerOn) {
+        uv_timer_stop(&handshakeTimer);
+        handshakeTimerOn = false;
+        uv_close(reinterpret_cast<uv_handle_t*>(&handshakeTimer),
+                 [](uv_handle_t* h) { releaseImplHolder(h); });
+    }
 }
 
 void TlsSocketImpl::startIdleTimer(uv_loop_t* loop) {
     if (idleTimeoutMs <= 0) return;
     uv_timer_init(loop, &idleTimer);
-    idleTimer.data = this;
+    idleTimer.data = new std::shared_ptr<TlsSocketImpl>(shared_from_this());
     uv_timer_start(&idleTimer,
                    [](uv_timer_t* t) {
-                       auto* self = static_cast<TlsSocketImpl*>(t->data);
-                       self->emitEvent("timeout");
-                       if (self->idleCallback) self->idleCallback();
+                       const std::shared_ptr<TlsSocketImpl> self = implFromHandle(reinterpret_cast<const uv_handle_t*>(t));
+                       if (self) {
+                           self->emitEvent("timeout");
+                           if (self->idleCallback) self->idleCallback();
+                       }
                    },
                    static_cast<std::uint64_t>(idleTimeoutMs), 0);
     idleTimerOn = true;
 }
 
 void TlsSocketImpl::stopIdleTimer() {
-    if (idleTimerOn) { uv_timer_stop(&idleTimer); idleTimerOn = false; }
+    if (idleTimerOn) {
+        uv_timer_stop(&idleTimer);
+        idleTimerOn = false;
+        uv_close(reinterpret_cast<uv_handle_t*>(&idleTimer),
+                 [](uv_handle_t* h) { releaseImplHolder(h); });
+    }
 }
 
 void TlsSocketImpl::emitData(const std::string& plaintext) {
@@ -663,14 +697,19 @@ void TlsSocketImpl::beginClose() {
 }
 
 void TlsSocketImpl::flushCiphertext() {
-    if (destroyed || writePending || ciphertextOut.empty() || !engine) { writePending = false; return; }
-    std::uint8_t buf[16384];
-    std::size_t produced = 0;
-    while (engine->drainCiphertext(buf, sizeof(buf), produced) == EngineStatus::Ok && produced > 0) {
-        ciphertextOut.append(reinterpret_cast<char*>(buf), produced);
-        produced = 0;
+    if (destroyed || !engine) return;
+    // Drain whatever OpenSSL produced (ClientHello, close_notify, ...) into
+    // the pending queue FIRST. (Previously the early return on an empty
+    // ciphertextOut dropped the ClientHello before it was ever drained.)
+    {
+        std::uint8_t buf[16384];
+        std::size_t produced = 0;
+        while (engine->drainCiphertext(buf, sizeof(buf), produced) == EngineStatus::Ok && produced > 0) {
+            ciphertextOut.append(reinterpret_cast<char*>(buf), produced);
+            produced = 0;
+        }
     }
-    if (ciphertextOut.empty()) return;
+    if (writePending || ciphertextOut.empty()) return;  // hold until the current write finishes
     // uv_write borrows the buffer until the callback; hand the bytes to the loop.
     auto* payload = new WritePayload{shared_from_this(), std::move(ciphertextOut)};
     ciphertextOut.clear();
@@ -713,6 +752,7 @@ void TlsSocketImpl::pumpWrite() {
 
 void TlsSocketImpl::pumpHandshake() {
     if (!engine || secure) return;
+    auto keepAlive = shared_from_this();  // emitEvent handlers may tear us down
     EngineStatus st = EngineStatus::WantRead;
     // Feed-then-handshake loop bounded so one read burst cannot starve the loop.
     for (int i = 0; i < 16; ++i) {
@@ -752,6 +792,7 @@ void TlsSocketImpl::pumpHandshake() {
 
 void TlsSocketImpl::pumpReadPlaintext() {
     if (!secure || !engine) return;
+    auto keepAlive = shared_from_this();  // emitData/“end” handlers may settle the op, which drops the socket
     std::uint8_t buf[16384];
     for (int i = 0; i < 64; ++i) {
         std::size_t produced = 0;
@@ -799,7 +840,7 @@ void TlsServerImpl::onAccept() {
         impl->fail(err);
         return;
     }
-    impl->tcp.data = impl.get();
+    attachImplToHandle(reinterpret_cast<uv_handle_t*>(&impl->tcp), impl);
     uv_tcp_init(reinterpret_cast<uv_loop_t*>(loopHandle()), &impl->tcp);
     impl->tcpInit = true;
     retainOnce(impl->retained);
@@ -827,7 +868,9 @@ void TlsServerImpl::onAccept() {
                       buf->base = new char[suggested]; buf->len = static_cast<unsigned int>(suggested);
                   },
                   [](uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
-                      auto* self = static_cast<TlsSocketImpl*>(stream->data);
+                      const std::shared_ptr<TlsSocketImpl> implRef = implFromHandle(reinterpret_cast<const uv_handle_t*>(stream));
+                      if (!implRef) { delete[] buf->base; return; }
+                      auto* self = implRef.get();
                       std::unique_ptr<char[]> owned(buf->base);
                       if (nread < 0) {
                           if (nread != UV_EOF)
@@ -864,7 +907,7 @@ TlsSocket::TlsSocket(void* tcpSocket, const TlsOptions& options)
     impl->engine = detail::createTlsEngine(impl->ctx, options, false);
     auto* adopted = static_cast<uv_tcp_t*>(tcpSocket);
     impl->tcp = *adopted;  // adopt the underlying handle (libuv still owns the fd)
-    impl->tcp.data = impl.get();
+    attachImplToHandle(reinterpret_cast<uv_handle_t*>(&impl->tcp), impl);
     impl->tcpInit = true;
     detail::retainOnce(impl->retained);
     impl->connecting = true;
@@ -1011,7 +1054,7 @@ void TlsServer::listen(double port, const std::string& host, std::function<void(
     ensureLoop();
     auto* loop = reinterpret_cast<uv_loop_t*>(loopHandle());
     uv_tcp_init(loop, &impl_->listener);
-    impl_->listener.data = impl_.get();
+    impl_->listener.data = new std::shared_ptr<detail::TlsServerImpl>(impl_);  // closed with the listener; released in its close callback
     detail::retainOnce(impl_->retained);
     sockaddr_storage addr{};
     int family = AF_INET;
@@ -1043,7 +1086,9 @@ void TlsServer::listen(double port, const std::string& host, std::function<void(
                     family == AF_INET6 ? sizeof(sockaddr_in6) : sizeof(sockaddr_in)) != 0 ||
         uv_listen(reinterpret_cast<uv_stream_t*>(&impl_->listener), 128,
                   [](uv_stream_t* stream, int /*status*/) {
-                      auto* self = static_cast<detail::TlsServerImpl*>(stream->data);
+                      auto* selfHolder = static_cast<std::shared_ptr<detail::TlsServerImpl>*>(stream->data);
+                      auto self = selfHolder == nullptr ? std::shared_ptr<detail::TlsServerImpl>{} : *selfHolder;
+                      if (!self) return;
                       self->onAccept();
                   }) != 0) {
         for (auto& [name, h] : impl_->errSlots)
@@ -1060,10 +1105,17 @@ void TlsServer::close(std::function<void()> callback) const {
     impl_->closeCallback = std::move(callback);
     for (auto& socket : impl_->sockets) socket->destroy();  // in-flight handshakes die here
     uv_close(reinterpret_cast<uv_handle_t*>(&impl_->listener), [](uv_handle_t* h) {
-        auto* self = static_cast<detail::TlsServerImpl*>(h->data);
-        detail::releaseOnce(self->retained);
-        if (self->closeSlots) self->closeSlots();
-        if (self->closeCallback) self->closeCallback();
+        auto* holder = static_cast<std::shared_ptr<detail::TlsServerImpl>*>(h->data);
+        auto self = holder == nullptr ? std::shared_ptr<detail::TlsServerImpl>{} : *holder;
+        h->data = nullptr;
+        if (self) {
+            detail::releaseOnce(self->retained);
+            if (self->closeSlots) self->closeSlots();
+            if (self->closeCallback) self->closeCallback();
+        }
+        // The TlsServerImpl is embedded-handle memory: dropping the last
+        // reference inside libuv's close dispatch frees it early; defer.
+        cp3::runtime::currentLoop().post([holder]() { delete holder; });
     });
 }
 
@@ -1094,7 +1146,6 @@ struct ConnectState {
 
 void connectWithAddr(ConnectState* state, struct sockaddr* addr, int addrLen) {
     (void)addrLen;  // family comes from the sockaddr itself; libuv reads it
-    auto* loop = reinterpret_cast<uv_loop_t*>(loopHandle());
     auto* req = new uv_connect_t{};
     req->data = state;
     uv_tcp_connect(req, &state->impl->tcp, addr, [](uv_connect_t* req, int status) {
@@ -1115,7 +1166,9 @@ void connectWithAddr(ConnectState* state, struct sockaddr* addr, int addrLen) {
                           buf->base = new char[suggested]; buf->len = static_cast<unsigned int>(suggested);
                       },
                       [](uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
-                          auto* self = static_cast<detail::TlsSocketImpl*>(stream->data);
+                          const std::shared_ptr<detail::TlsSocketImpl> implRef = detail::implFromHandle(reinterpret_cast<const uv_handle_t*>(stream));
+                          if (!implRef) { delete[] buf->base; return; }
+                          auto* self = implRef.get();
                           std::unique_ptr<char[]> owned(buf->base);
                           if (nread < 0) {
                               if (nread != UV_EOF)
@@ -1153,7 +1206,7 @@ TlsSocket connectTls(const TlsOptions& options) {
 
     auto state = new ConnectState();
     state->impl = std::move(impl);
-    state->impl->tcp.data = state->impl.get();
+    attachImplToHandle(reinterpret_cast<uv_handle_t*>(&state->impl->tcp), state->impl);
     uv_tcp_init(loop, &state->impl->tcp);
     state->impl->tcpInit = true;
     detail::retainOnce(state->impl->retained);
@@ -1165,6 +1218,9 @@ TlsSocket connectTls(const TlsOptions& options) {
     // blocking getaddrinfo on the event loop.
     state->req.data = state;
     const std::string portText = std::to_string(static_cast<int>(options.port));
+    // Stream hint only: family-agnostic so IPv6-only hosts still resolve.
+    struct addrinfo hints{};
+    hints.ai_socktype = SOCK_STREAM;
     uv_getaddrinfo(loop, &state->req,
                    [](uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
                        auto* state = static_cast<ConnectState*>(req->data);
@@ -1180,7 +1236,7 @@ TlsSocket connectTls(const TlsOptions& options) {
                        connectWithAddr(state, res->ai_addr, res->ai_addrlen);
                        uv_freeaddrinfo(res);
                    },
-                   options.host.c_str(), portText.c_str(), nullptr);
+                   options.host.c_str(), portText.c_str(), &hints);
     return std::move(socket);
 }
 
@@ -1192,3 +1248,29 @@ TlsSocket connectTls(const std::string& host, double port, const TlsOptions& ext
 }
 
 }  // namespace cp3::runtime::network::tls
+
+namespace cp3::runtime::network {
+
+/// The `tls({...})` factory: builds server/client TLS options from the
+/// public shape. Lives here (not runtime_web.cpp) so that any program whose
+/// text calls `makeTlsOptions(` links exactly the TUs that implement TLS.
+tls::TlsOptions makeTlsOptions(const std::string& cert, const std::string& key,
+                               const std::string& ca, const std::string& passphrase,
+                               const std::string& minProtocol) {
+    tls::TlsOptions opts;
+    opts.cert = cert;
+    opts.key = key;
+    opts.ca = ca;  // ignored by the v0.2 server (createServerWithConfig refuses it)
+    opts.keyPassphrase = passphrase;
+    const std::string v = minProtocol.empty() ? "TLSv1.2" : minProtocol;
+    if (v == "TLSv1.2" || v == "1.2") opts.minProtocol = "TLSv1.2";
+    else if (v == "TLSv1.3" || v == "1.3") opts.minProtocol = "TLSv1.3";
+    else {
+        throw tls::TlsError::thrown(tls::TlsErrorCode::kInvalidOptions,
+                               std::string("[ERR_TLS_INVALID_OPTIONS] tls minProtocol must be \"TLSv1.2\" or \"TLSv1.3\" (got \"") +
+                               minProtocol + "\")");
+    }
+    return opts;
+}
+
+}  // namespace cp3::runtime::network

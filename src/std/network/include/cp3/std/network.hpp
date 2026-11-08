@@ -770,16 +770,16 @@ private:
 class FormData {
 public:
     FormData() = default;
-    void append(const std::string& name, const std::string& value);
-    void append(const std::string& name, const buffer::Buffer& value);
+    void append(const std::string& name, const std::string& value) const;
+    void append(const std::string& name, const buffer::Buffer& value) const;
     std::string get(const std::string& name) const;
     bool has(const std::string& name) const;
-    void set(const std::string& name, const std::string& value);
-    void remove(const std::string& name);  // JS `delete`
+    void set(const std::string& name, const std::string& value) const;
+    void remove(const std::string& name) const;  // JS `delete`
     std::string encode(const std::string& boundary) const;
     const std::vector<std::pair<std::string, std::string>>& entries() const { return entries_; }
 private:
-    std::vector<std::pair<std::string, std::string>> entries_;
+    mutable std::vector<std::pair<std::string, std::string>> entries_;
 };
 
 /// `AbortSignal.timeout(ms)`: carries the timeout a `fetch` should apply.

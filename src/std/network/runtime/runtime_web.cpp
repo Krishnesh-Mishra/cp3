@@ -83,15 +83,10 @@ void Headers::remove(const std::string& name) {
     entries_.erase(std::remove_if(entries_.begin(), entries_.end(),
         [&](const auto& p) { return lowerAscii(p.first) == want; }), entries_.end());
 }
-StringMap Headers::toMap() const {
-    StringMap map = collections::makeMap<std::string, std::string>();
-    for (const auto& [k, v] : entries_) map->set(lowerAscii(k), v);
-    return map;
-}
 
 // --- FormData ----------------------------------------------------------------
-void FormData::append(const std::string& name, const std::string& value) { entries_.emplace_back(name, value); }
-void FormData::append(const std::string& name, const buffer::Buffer& value) { entries_.emplace_back(name, value.bytes()); }
+void FormData::append(const std::string& name, const std::string& value) const { entries_.emplace_back(name, value); }
+void FormData::append(const std::string& name, const buffer::Buffer& value) const { entries_.emplace_back(name, value.bytes()); }
 std::string FormData::get(const std::string& name) const {
     for (const auto& [k, v] : entries_) if (k == name) return v;
     return {};
@@ -100,31 +95,14 @@ bool FormData::has(const std::string& name) const {
     for (const auto& [k, v] : entries_) if (k == name) return true;
     return false;
 }
-void FormData::set(const std::string& name, const std::string& value) {
+void FormData::set(const std::string& name, const std::string& value) const {
     bool found = false;
     for (auto& [k, v] : entries_) if (k == name) { v = value; found = true; }
     if (!found) entries_.emplace_back(name, value);
 }
-void FormData::remove(const std::string& name) {
+void FormData::remove(const std::string& name) const {
     entries_.erase(std::remove_if(entries_.begin(), entries_.end(),
         [&](const auto& p) { return p.first == name; }), entries_.end());
-}
-std::string FormData::encode(const std::string& boundary) const {
-    std::string out;
-    for (const auto& [k, v] : entries_) {
-        out += "--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + k + "\"\r\n\r\n" + v + "\r\n";
-    }
-    out += "--" + boundary + "--\r\n";
-    return out;
-}
-
-FetchInit withFormData(FetchInit init, const FormData& form) {
-    const std::string boundary = "----cp3formboundary7c1a";
-    init.body = form.encode(boundary);
-    init.hasBody = true;
-    if (!init.headers) init.headers = collections::makeMap<std::string, std::string>();
-    init.headers->set("content-type", "multipart/form-data; boundary=" + boundary);
-    return init;
 }
 
 // --- Request / Response --------------------------------------------------------
@@ -139,21 +117,6 @@ Response::Response(std::string body_) : body(std::move(body_)) { ok = status >= 
 Response::Response(std::string body_, double code, Headers h)
     : status(static_cast<std::uint16_t>(code)), headers(std::move(h)), body(std::move(body_)) {
     ok = status >= 200 && status < 300;
-}
-
-Promise<FetchResponse> fetch(const Request& request) {
-    FetchInit init;
-    init.method = request.method;
-    init.body = request.body;
-    init.hasBody = request.hasBody;
-    init.headers = request.headers.toMap();
-    init.signal = request.signal;
-    if (request.form) {
-        init = withFormData(init, *request.form);
-        init.method = request.method;
-        init.signal = request.signal;
-    }
-    return fetch(request.url, init);
 }
 
 // --- Middleware factories ------------------------------------------------------
@@ -206,25 +169,9 @@ MiddlewareFn makeBodyLimitMiddleware(double limit) {
     };
 }
 
-/// `tls({...})` factory body; validation lives here so the error points at
-/// the options object, not the server call.
-tls::TlsOptions makeTlsOptions(const std::string& cert, const std::string& key,
-                               const std::string& ca, const std::string& passphrase,
-                               const std::string& minProtocol) {
-    tls::TlsOptions opts;
-    opts.cert = cert;
-    opts.key = key;
-    opts.ca = ca;  // ignored by the v0.2 server (createServerWithConfig refuses it)
-    opts.keyPassphrase = passphrase;
-    const std::string v = minProtocol.empty() ? "TLSv1.2" : minProtocol;
-    if (v == "TLSv1.2" || v == "1.2") opts.minProtocol = "TLSv1.2";
-    else if (v == "TLSv1.3" || v == "1.3") opts.minProtocol = "TLSv1.3";
-    else {
-        throw Thrown::make("[ERR_TLS_INVALID_OPTIONS] tls minProtocol must be \"TLSv1.2\" or \"TLSv1.3\" (got \"" +
-                           minProtocol + "\")");
-    }
-    return opts;
-}
+/// The `tls({...})` factory lives in the TLS TU (runtime_tls.cpp) so any
+/// program that constructs TLS options (createServer/WebSocketServer with a
+/// `tls` key) links exactly the TUs that implement TLS.
 
 HttpServer createServerWithConfig(const CreateServerConfig& config) {
     // Fail closed BEFORE any HttpServer exists: a TLS request must never

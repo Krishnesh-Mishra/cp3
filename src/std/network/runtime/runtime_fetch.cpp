@@ -31,6 +31,7 @@
 
 #include "runtime_fetch.hpp"
 #include "runtime_loop.hpp"
+#include "cp3/async/eventloop.hpp"
 
 namespace cp3::runtime::network::detail {
 namespace {
@@ -78,6 +79,17 @@ void closeOpHandle(uv_handle_t* handle) {
 
 void releaseOp(const std::shared_ptr<FetchOp>& op) {
     releaseNetwork();
+    // Break the op -> socket -> slot -> op cycle introduced by the TLS
+    // fetch's strong captures. The socket is NOT destroyed inline: settle
+    // usually happens inside a libuv callback (the socket's own read pump),
+    // and ~TlsSocket -> destroy() frees the impl that the pump is still
+    // using. Defer the drop to the next drain point; the libuv handles are
+    // closed inside it, after the current callback stack unwinds.
+    if (op->tls) {
+        std::shared_ptr<void> tls = std::move(op->tls);
+        op->tls.reset();
+        currentLoop().post([tls = std::move(tls)]() {});
+    }
     if (op->timerReady) {
         uv_timer_stop(&op->timeout);
         closeOpHandle(reinterpret_cast<uv_handle_t*>(&op->timeout));
@@ -352,6 +364,45 @@ void finishOnEof(const std::shared_ptr<FetchOp>& op) {
 // Entry point
 // =============================================================================
 namespace cp3::runtime::network {
+
+StringMap Headers::toMap() const {
+    StringMap map = collections::makeMap<std::string, std::string>();
+    for (const auto& [k, v] : entries_) map->set(detail::lowerAscii(k), v);
+    return map;
+}
+
+std::string FormData::encode(const std::string& boundary) const {
+    std::string out;
+    for (const auto& [k, v] : entries_) {
+        out += "--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + k + "\"\r\n\r\n" + v + "\r\n";
+    }
+    out += "--" + boundary + "--\r\n";
+    return out;
+}
+
+FetchInit withFormData(FetchInit init, const FormData& form) {
+    const std::string boundary = "----cp3formboundary7c1a";
+    init.body = form.encode(boundary);
+    init.hasBody = true;
+    if (!init.headers) init.headers = collections::makeMap<std::string, std::string>();
+    init.headers->set("content-type", "multipart/form-data; boundary=" + boundary);
+    return init;
+}
+
+Promise<FetchResponse> fetch(const Request& request) {
+    FetchInit init;
+    init.method = request.method;
+    init.body = request.body;
+    init.hasBody = request.hasBody;
+    init.headers = request.headers.toMap();
+    init.signal = request.signal;
+    if (request.form) {
+        init = withFormData(init, *request.form);
+        init.method = request.method;
+        init.signal = request.signal;
+    }
+    return fetch(request.url, init);
+}
 
 Promise<FetchResponse> fetch(const std::string& url, const FetchInit& init) {
     detail::UrlParts parts;

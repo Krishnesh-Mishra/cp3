@@ -47,6 +47,24 @@ struct WsUserData {
     std::uint32_t reserved = 0;
 };
 
+void serverSend(WsImpl& impl, const std::string& data, uWS::OpCode op) {
+    if (impl.native == nullptr) return;
+    if (impl.ssl) {
+        static_cast<uWS::WebSocket<true, true, WsUserData>*>(impl.native)->send(data, op);
+    } else {
+        static_cast<uWS::WebSocket<false, true, WsUserData>*>(impl.native)->send(data, op);
+    }
+}
+
+void serverEnd(WsImpl& impl, int code, const std::string& reason) {
+    if (impl.native == nullptr) return;
+    if (impl.ssl) {
+        static_cast<uWS::WebSocket<true, true, WsUserData>*>(impl.native)->end(code, reason);
+    } else {
+        static_cast<uWS::WebSocket<false, true, WsUserData>*>(impl.native)->end(code, reason);
+    }
+}
+
 void WsImpl::emitOpen() {
     if (closed) return;
     opened = true;
@@ -211,24 +229,6 @@ namespace detail {
 
 template <bool Ssl>
 using NativeServerWs = uWS::WebSocket<Ssl, true, WsUserData>;
-
-void serverSend(detail::WsImpl& impl, const std::string& data, uWS::OpCode op) {
-    if (impl.native == nullptr) return;
-    if (impl.ssl) {
-        static_cast<uWS::WebSocket<true, true, WsUserData>*>(impl.native)->send(data, op);
-    } else {
-        static_cast<uWS::WebSocket<false, true, WsUserData>*>(impl.native)->send(data, op);
-    }
-}
-
-void serverEnd(detail::WsImpl& impl, int code, const std::string& reason) {
-    if (impl.native == nullptr) return;
-    if (impl.ssl) {
-        static_cast<uWS::WebSocket<true, true, WsUserData>*>(impl.native)->end(code, reason);
-    } else {
-        static_cast<uWS::WebSocket<false, true, WsUserData>*>(impl.native)->end(code, reason);
-    }
-}
 
 void onServerOpenImpl(const std::shared_ptr<WssImpl>& impl, bool ssl, void* native) {
     const WebSocket handle = WebSocket::adopt(native);

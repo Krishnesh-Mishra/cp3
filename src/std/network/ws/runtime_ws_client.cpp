@@ -105,6 +105,10 @@ void finishClient(const std::shared_ptr<WsClient>& client) {
     if (client->finished) return;
     client->finished = true;
     releaseNetwork();
+    // Release the TLS socket (no-op for ws://): settling drops the
+    // client <-> socket <-> slot cycle. The TLS pump pins its impl across
+    // callbacks, so dropping the socket here cannot free it mid-flight.
+    client->tls.reset();
     closeClientSocket(client);
 }
 
@@ -394,39 +398,37 @@ void beginTlsWsClient(const std::shared_ptr<WsClient>& client) {
     network::tls::TlsOptions opts;
     opts.host = client->host;
     opts.port = static_cast<double>(client->port);
-    std::weak_ptr<WsClient> weak = client;
     try {
         auto socket = std::make_shared<network::tls::TlsSocket>(network::tls::connectTls(opts));
         client->tls = socket;
-        socket->on("secureConnect", [weak]() {
-            const std::shared_ptr<WsClient> c = weak.lock();
-            if (c == nullptr || c->finished) return;
-            auto* sock = static_cast<network::tls::TlsSocket*>(c->tls.get());
+        // Strong captures keep the client (and its promise machinery) alive
+        // until the connection settles; client <-> socket <-> slot cycle is
+        // broken by finishClient(), which resets client->tls.
+        socket->on("secureConnect", [client]() {
+            if (client->finished) return;
+            auto* sock = static_cast<network::tls::TlsSocket*>(client->tls.get());
             if (sock == nullptr) return;
-            sock->write("GET " + c->target + " HTTP/1.1\r\nHost: " + c->host + ":" +
-                        std::to_string(c->port) +
+            sock->write("GET " + client->target + " HTTP/1.1\r\nHost: " + client->host + ":" +
+                        std::to_string(client->port) +
                         "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " +
-                        c->key + "\r\nSec-WebSocket-Version: 13\r\n\r\n");
+                        client->key + "\r\nSec-WebSocket-Version: 13\r\n\r\n");
         });
-        socket->on("data", [weak](const std::string& chunk) {
-            const std::shared_ptr<WsClient> c = weak.lock();
-            if (c == nullptr || c->finished) return;
-            c->buffer.append(chunk);
-            if (!c->impl->opened) {
-                tryFinishHandshake(c);
-                if (!c->impl->opened || c->finished) return;
+        socket->on("data", [client](const std::string& chunk) {
+            if (client->finished) return;
+            client->buffer.append(chunk);
+            if (!client->impl->opened) {
+                tryFinishHandshake(client);
+                if (!client->impl->opened || client->finished) return;
             }
-            parseFrames(c);
+            parseFrames(client);
         });
-        socket->on("end", [weak]() {
-            const std::shared_ptr<WsClient> c = weak.lock();
-            if (c == nullptr) return;
-            closeClient(c, 1006.0, "");
+        socket->on("end", [client]() {
+            if (client->finished) return;
+            closeClient(client, 1006.0, "");
         });
-        socket->on("error", [weak](const Thrown& err) {
-            const std::shared_ptr<WsClient> c = weak.lock();
-            if (c == nullptr) return;
-            failClient(c, err.toString());
+        socket->on("error", [client](const Thrown& err) {
+            if (client->finished) return;
+            failClient(client, err.toString());
         });
     } catch (const Thrown& err) {
         failClient(client, err.toString());

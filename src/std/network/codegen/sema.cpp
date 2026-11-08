@@ -1003,6 +1003,10 @@ bool Analyzer::checkCreateServerOptions(CallExpr& call) {
             // computed values are runtime-checked by the factory).
             const Expr& value = *prop->value;
             const Type valueType = typeOfExpr(const_cast<Expr&>(value));
+            const auto isBoolish = [](const Type& t) {
+                return t.kind == TypeKind::Boolean ||
+                       (t.isLiteral() && t.literalBaseType().kind == TypeKind::Boolean);
+            };
             auto badShape = [&](const char* what) {
                 report(diagcode::kTypeMismatch, anchorSpan(value.span),
                        std::string("createServer() '") + key + "' must be " + what);
@@ -1011,8 +1015,9 @@ bool Analyzer::checkCreateServerOptions(CallExpr& call) {
                 const bool isFactoryValue =
                     valueType.kind == TypeKind::Object && valueType.name == kTlsOptions;
                 const bool isLiteral = value.kind == NodeKind::ObjectLiteral;
-                if (!isLiteral && !isFactoryValue &&
-                    valueType.kind != TypeKind::Boolean &&
+                // Boolean literals type as TypeKind::Literal (not Boolean).
+                const bool isBool = isBoolish(valueType);
+                if (!isLiteral && !isFactoryValue && !isBool &&
                     valueType.kind != TypeKind::Unknown &&
                     valueType.kind != TypeKind::Error) {
                     badShape("a boolean or a tls({...}) object");

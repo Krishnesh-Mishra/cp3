@@ -67,8 +67,13 @@ inline const NativePackage kNetworkNativePackage{
      "src/std/network/webserver/errors/runtime_errors.cpp",
      "src/std/network/webserver/middleware/runtime/middleware_engine.cpp",
      "src/std/network/webserver/regex-routing/runtime_regex_routing.cpp",
-     "src/std/network/webserver/router/runtime_router.cpp",
-     "src/std/network/webserver/routing/runtime_routing.cpp",
+     // webserver/router/runtime_router.cpp + webserver/routing/runtime_routing.cpp
+     // are intentionally NOT linked: they are a stale duplicate of the
+     // header-inline webserver::Router in cp3/std/network.hpp (their
+     // RouterOptions clashed with the public header and matchMount had no
+     // matching declaration - the files cannot compile). The generated code
+     // uses the inline Router, so these TUs contributed only compile/link
+     // failures for any program whose text mentioned Router(/dispatchRouter.
      "src/std/network/webserver/response/runtime/runtime_webserver_response.cpp",
      "src/std/network/dns/runtime/runtime_dns_lookup.cpp",
      "src/std/network/tcp/runtime_tcp_socket.cpp",
@@ -102,10 +107,10 @@ inline const NativePackage kNetworkNativePackage{
      "HttpServer(|createServerWithConfig(", "HttpServer(|createServerWithConfig(",
      "WebSocket", "WebSocket", "WebSocket",
      "makeJsonMiddleware(|makeUrlEncodedMiddleware(|body_parse::", "webserver::errors::", "MiddlewareEngine(|webserver::",
-     "addRegexRoute(|matchPath(|PathSpec", "Router(|webserverApp|dispatchRouter", "Router(|RouteChain|webserverApp",
+     "addRegexRoute(|matchPath(|PathSpec",
      "emitwebserverResponseCall|res.set(|setwebserverResponse|createServerWithConfig(|res.render(", "dns::lookup(|dnsResolve(",
      "TcpSocket|TcpServer|createTcpServer(|connectTcp(", "connectTcp(", "TcpServer|createTcpServer(", "TcpServer|createTcpServer(",
-     "createUdpSocket(|UdpSocket", "createTlsServer(|connectTls(|TlsSocket|TlsServer|fetch(|WebSocket", ""},
+     "createUdpSocket(|UdpSocket", "createTlsServer(|connectTls(|TlsSocket|TlsServer|fetch(|WebSocket|makeTlsOptions(", ""},
     {{"windows-x64", {"vendor/third_party/uWebSockets/lib/windows-x64",
                        "vendor/third_party/libuv/lib/windows-x64",
                        "vendor/third_party/libsodium/lib/windows-x64",

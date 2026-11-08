@@ -174,29 +174,26 @@ std::shared_ptr<FetchOp> beginTlsFetch(const UrlParts& url, const FetchInit& ini
     try {
         auto socket = std::make_shared<tls::TlsSocket>(tls::connectTls(opts));
         op->tls = socket;
-        std::weak_ptr<FetchOp> weak = op;
-        socket->on("secureConnect", [weak]() {
-            const std::shared_ptr<FetchOp> current = weak.lock();
-            if (current == nullptr || current->done) return;
-            auto* sock = static_cast<tls::TlsSocket*>(current->tls.get());
+        // Strong captures: the libuv loop owns the socket's handles, but only
+        // the slot lambdas keep the FetchOp (and its promise) alive until the
+        // op settles. The cycle op -> socket -> slot -> op is broken by
+        // releaseOp(), which resets op->tls on settle.
+        socket->on("secureConnect", [op]() {
+            if (op->done) return;
+            auto* sock = static_cast<tls::TlsSocket*>(op->tls.get());
             if (sock == nullptr) return;
-            sock->write(buildRequest(*current));
+            sock->write(buildRequest(*op));
         });
-        socket->on("data", [weak](const std::string& chunk) {
-            const std::shared_ptr<FetchOp> current = weak.lock();
-            if (current == nullptr || current->done) return;
-            current->raw.append(chunk);
-            consume(current);
+        socket->on("data", [op](const std::string& chunk) {
+            if (op->done) return;
+            op->raw.append(chunk);
+            consume(op);
         });
-        socket->on("end", [weak]() {
-            const std::shared_ptr<FetchOp> current = weak.lock();
-            if (current == nullptr) return;
-            finishOnEof(current);
+        socket->on("end", [op]() {
+            finishOnEof(op);
         });
-        socket->on("error", [weak](const Thrown& err) {
-            const std::shared_ptr<FetchOp> current = weak.lock();
-            if (current == nullptr) return;
-            failOp(current, err.toString());
+        socket->on("error", [op](const Thrown& err) {
+            failOp(op, err.toString());
         });
         return op;
     } catch (const Thrown& err) {
