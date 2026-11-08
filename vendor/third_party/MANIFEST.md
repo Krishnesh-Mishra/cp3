@@ -34,6 +34,7 @@ like the windows-x64 and linux-x64 builds).
 | uWebSockets (incl. uSockets) | https://github.com/uNetworking/uWebSockets.git | v20.80.0 | 3ffd6f44c9c3c92c96345d9f96bd01ba9c025ab5 |
 | oneTBB | https://github.com/uxlfoundation/oneTBB.git | v2023.1.0 | 3046c8b0c29df995980003ea24f4d78c80ec0c8d |
 | PCRE2 | https://github.com/PCRE2Project/pcre2.git | pcre2-10.49 | 6f9d7c1373262c541324a16a358785b33ef116cf |
+| simdjson | https://github.com/simdjson/simdjson.git | v5.1.1 | 40a686ab89dc5ee58ec10d0514dd5c99abbc472b |
 
 Each library directory carries VERSION.txt with
 "<repo URL> <tag> <full SHA> <date built>". All five checkout trees are
@@ -445,6 +446,45 @@ libsodium: no change.
 
 The exact recipes and the SHAs live in `vendor/third_party/openssl/VERSION.txt`
 and `vendor/third_party/uWebSockets/lib/*/VERSION.txt` / SHA256SUMS files.
+
+## Ledger H — JSON speed tier (VENDORED 2026-11-08, per lead decisions)
+
+> Status: 1 vendored (simdjson, single-TU). The std/json family's `parse`
+> backend is proposed to route through this; the public API
+> (`JSON.parse`/`stringify`/`verify<T>`) stays the same as the current
+> hand-written reader.
+> Exact behavior contract (current implementation, to be preserved by the
+> engine swap):
+>   * Extra fields in the JSON input are ignored silently.
+>   * Missing REQUIRED field -> throw (catchable via try/catch).
+>   * Missing optional / `| undefined` field -> silent, binding is undefined.
+>   * Field type mismatch -> throw.
+>   * Nested objects recursively use the same rules.
+>   * DUPLICATE KEYS -> throw (never last-writer-wins, never first-writer-wins).
+>   * Keys are CASE-SENSITIVE; lowering or collapsing them is a bug.
+
+| library | upstream | kind | status |
+| --- | --- | --- | --- |
+| simdjson v5.1.1 | https://github.com/simdjson/simdjson/releases/download/v5.1.1 | single-TU vendored (`vendor/third_party/simdjson/{include/simdjson.h,src/simdjson.cpp}`; amalgamated pair from the release, Apache-2.0). SHA-256: simdjson.h `f3e5ee...c5fd`, simdjson.cpp `3ea5f5...f4`. Commit `40a686ab89dc5ee58ec10d0514dd5c99abbc472b`. | VENDORED (headers+source); not built into an archive yet (proposed as a single TU in the generated code, like the hand-written parser but in-C++17, or behind a build flag). No API change to the std/json public surface. |
+
+Wiring notes (do NOT land until the builder contract is chosen):
+
+```cmake
+# cp3_common or cp3_runtime — include path only for the headers;
+# the .cpp is compiled as one translation unit by the *runtime* row
+# or by the std/json row (decide when wiring transforms land).
+target_include_directories(cp3_runtime PRIVATE
+    "../../vendor/third_party/simdjson/include"
+)
+# vendor/third_party/simdjson/src/simdjson.cpp goes into the runtime snapshot
+# as one TU (needs no archive and no per-target multiplication).
+```
+
+Constraints recorded for the future engine swap:
+   * Public API shape unchanged (`JSON.parse<T>`, `stringify`, `verify<T>`).
+   * Apache-2.0 source only; no GPL-only simdjson derivatives.
+   * `parseNumber` / `parseRecord` stay hand-written support; the
+     engine only decides the scanner's cursor and the bytes of each scalar.
 
 ## Reproducing
 

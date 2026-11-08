@@ -1,0 +1,9 @@
+simdjson=v5.1.1
+repo=https://github.com/simdjson/simdjson
+commit=40a686ab89dc5ee58ec10d0514dd5c99abbc472b
+singleheader=https://github.com/simdjson/simdjson/releases/download/v5.1.1/singleheader.zip
+license=Apache-2.0
+sha256_simdjson.h=F3E5EE5F39051960B5CE65762EE4B6919CAF270675EB52240EBD92F21A5BCEFD
+sha256_simdjson.cpp=3EA5F501CEF6C2E16E28095B566FEEB56021CA473AAF50AAD32102F45D734195
+built=2026-11-08 (single-header distribution, not built from source)
+notes=Vendored as the amalgamated single-TU simdjson.cpp + simdjson.h pair shipped with the v5.1.1 release. The vendored pair is unchanged from the release. The std/json backend links this single translation unit to power the fast JSON parser used by std/json and benchmarks.
