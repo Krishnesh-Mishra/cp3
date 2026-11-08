@@ -595,6 +595,12 @@ private:
     void reportExcessProperty(const Node& site, const std::string& name);
     bool emitDestructureDecl(const VariableDeclarator& d, VarKind kind,
                              std::string& out, int indent);
+    // The element-type hint an array binding pattern lends an empty array
+    // literal initializer (`const [x = 7] = []`): the unified types of the
+    // pattern's defaults, recursing into nested array patterns; nullopt when
+    // no default carries a known, element-representable type, so the empty
+    // literal stays the "annotate the binding" diagnostic it was.
+    std::optional<Type> arrayDestructureHint(const Node& pattern) const;
     void emitPatternParams(const FunctionDeclaration& fd, std::string& out, int indent);
     void unpackPattern(const Node& pattern, const PatternSource& src, std::string& out, int indent);
     void unpackArrayPattern(const ArrayPattern& p, const PatternSource& src,

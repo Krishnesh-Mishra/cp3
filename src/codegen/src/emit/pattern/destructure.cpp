@@ -282,10 +282,17 @@ void PatternEmitter::walkArrayPattern(const ArrayPattern& ap, const Site& site,
                        ec.cpp + ">{" + joinStrings(values, ", ") + "})";
         } else {
             g.needsTypedArray_ = true;
+            // The tail slice begins at `index`, but a short or empty source
+            // has no element there: clamp to the source's size (JS
+            // `src.slice`), which is an empty rest array - `begin() + index`
+            // past the end is out of bounds.
+            const std::string at = "(*(" + site.access + "))";
             restText =
                 "::cp3::runtime::makeArray<" + ec.cpp + ">(std::vector<" +
-                ec.cpp + ">((*(" + site.access + ")).begin() + " +
-                std::to_string(index) + ", (*(" + site.access + ")).end()))";
+                ec.cpp + ">(" + at +
+                ".begin() + (std::size_t(" + std::to_string(index) + ") < " +
+                at + ".size() ? std::size_t(" + std::to_string(index) +
+                ") : " + at + ".size()), " + at + ".end()))";
         }
         walkPattern(*re.argument, Site{restText, Type::array(restElem)}, out,
                     indent);

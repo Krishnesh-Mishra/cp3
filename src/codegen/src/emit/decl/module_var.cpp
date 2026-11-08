@@ -22,6 +22,7 @@
 
 #include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/generator/cpp_writer.h"
+#include "detail/generator/family.h"
 #include "detail/generator/mangle.h"
 #include "detail/expr/pattern_emitter.h"
 #include "detail/generator/type_map.h"
@@ -151,10 +152,25 @@ void ModuleVarEmitter::pattern(const VariableDeclarator& d, std::string& decls,
         // plain `let x;` gets (the module-variable unit's `noInit`).
         emitter.emitUndefinedBindings(*d.id, bindings, 1);
     } else {
-        const std::optional<Type> srcType = g.resolvedBindingType(d);
+        std::optional<Type> srcType = g.resolvedBindingType(d);
+        // An empty array literal whose element type sema could not pin
+        // (`const [x = 7] = []`): the pattern's defaults carry it. The hint
+        // feeds both the literal lowering and the source type the walk reads.
+        std::optional<Type> hinted;
+        if (d.init->kind == NodeKind::ArrayLiteral) {
+            const auto& lit = static_cast<const ArrayLiteral&>(*d.init);
+            if (lit.elements.empty() &&
+                arrayElemOf(g.effectiveType(lit)).isUnknown()) {
+                hinted = g.arrayDestructureHint(*d.id);
+            }
+        }
+        if (hinted) srcType = Type::array(*hinted);
         const std::optional<Type> savedExpected = g.expected_;
         g.expected_ = srcType;
-        const std::string initText = g.expr(*d.init);
+        const std::string initText =
+            hinted ? g.arrayLiteralText(static_cast<const ArrayLiteral&>(*d.init),
+                                        *hinted)
+                   : g.expr(*d.init);
         g.expected_ = savedExpected;
         const std::string tmp = "cp3_d" + std::to_string(g.uniqueCounter_++);
         line(bindings, 1, "auto " + tmp + " = " + initText + ";");

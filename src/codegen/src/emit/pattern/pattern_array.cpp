@@ -145,9 +145,15 @@ void Generator::unpackArrayPattern(const ArrayPattern& p, const PatternSource& s
                ec.cpp + ">{" + joinStrings(values, ", ") + "})";
     } else {
         needsTypedArray_ = true;
+        // The tail slice begins at `index`, but a short or empty source has
+        // no element there: clamp to the source's size (JS `src.slice`),
+        // which is an empty rest array - `begin() + index` past the end is
+        // out of bounds.
         rest = "::cp3::runtime::makeArray<" + ec.cpp + ">(std::vector<" +
                ec.cpp + ">(" + src.text + "->begin() + " +
-               std::to_string(index) + ", " + src.text + "->end()))";
+               "(std::size_t(" + std::to_string(index) + ") < " + src.text +
+               "->size() ? std::size_t(" + std::to_string(index) + ") : " +
+               src.text + "->size()), " + src.text + "->end()))";
     }
     bindPatternTarget(*p.rest, PatternSource{rest, Type::array(elem), src.isConst},
                       out, indent);

@@ -374,11 +374,89 @@ bool Generator::emitDestructureDecl(const VariableDeclarator& d, VarKind kind,
                           "a destructuring declaration needs an initializer");
         return true;
     }
+    // An empty array literal initializer whose element type sema could not
+    // pin (`const [x = 7] = []`): the pattern's defaults carry it. The hint
+    // feeds both the literal lowering and the source type the pattern walks.
+    std::optional<Type> hinted;
+    if (d.init->kind == NodeKind::ArrayLiteral) {
+        const auto& lit = static_cast<const ArrayLiteral&>(*d.init);
+        if (lit.elements.empty() &&
+            arrayElemOf(effectiveType(lit)).isUnknown()) {
+            hinted = arrayDestructureHint(*d.id);
+        }
+    }
+    const std::string initText =
+        hinted ? arrayLiteralText(static_cast<const ArrayLiteral&>(*d.init),
+                                  *hinted)
+               : expr(*d.init);
+    const Type initType =
+        hinted ? Type::array(*hinted) : effectiveType(*d.init);
     const std::string temp = freshLabel("src_");
-    line(out, indent, "auto " + temp + " = " + expr(*d.init) + ";");
-    const PatternSource src{temp, effectiveType(*d.init), kind == VarKind::Const};
+    line(out, indent, "auto " + temp + " = " + initText + ";");
+    const PatternSource src{temp, initType, kind == VarKind::Const};
     unpackPattern(*d.id, src, out, indent);
     return true;
+}
+
+// The element-type hint an array binding pattern lends an empty array literal
+// initializer (`const [x = 7] = []`): the unified types of the pattern's
+// defaults, recursing into nested array patterns (a nested empty literal is
+// consumed by its own pattern's defaults). nullopt when no default carries a
+// known, element-representable type - the empty literal stays the
+// "annotate the binding" diagnostic in that case.
+std::optional<Type> Generator::arrayDestructureHint(const Node& pattern) const {
+    if (pattern.kind != NodeKind::ArrayPattern) return std::nullopt;
+    const auto elementsHint = [&](const auto& self, const ArrayPattern& p)
+        -> std::optional<Type> {
+        const auto elementHint = [&](const Node& el)
+            -> std::optional<Type> {
+            if (el.kind == NodeKind::AssignmentPattern) {
+                const auto& ap = static_cast<const AssignmentPattern&>(el);
+                if (!ap.right) return std::nullopt;
+                if (ap.right->kind == NodeKind::ArrayLiteral) {
+                    const auto& lit =
+                        static_cast<const ArrayLiteral&>(*ap.right);
+                    if (lit.elements.empty() && ap.left &&
+                        ap.left->kind == NodeKind::ArrayPattern) {
+                        // An empty literal default is consumed by the pattern
+                        // to its left (`[[a = 7] = []] = []`): its element type
+                        // comes from that pattern's own defaults.
+                        if (auto inner =
+                                self(self, static_cast<const ArrayPattern&>(
+                                               *ap.left))) {
+                            return Type::array(*inner);
+                        }
+                        return std::nullopt;
+                    }
+                }
+                const Type t = effectiveType(*ap.right);
+                if (t.isUnknown() || t.isError()) return std::nullopt;
+                return t;
+            }
+            if (el.kind == NodeKind::ArrayPattern) {
+                if (auto inner = self(self,
+                                      static_cast<const ArrayPattern&>(el))) {
+                    return Type::array(*inner);
+                }
+            }
+            // A hole, a plain identifier or a rest element: nothing pins the
+            // element type.
+            return std::nullopt;
+        };
+        std::optional<Type> acc;
+        for (const auto& elPtr : p.elements) {
+            if (!elPtr) continue;
+            std::optional<Type> candidate = elementHint(*elPtr);
+            if (!candidate) continue;
+            acc = acc ? unify(*acc, *candidate) : std::move(*candidate);
+        }
+        if (!acc) return std::nullopt;
+        CppInfo ec;
+        if (!arrayElementInfo(*acc, ec)) return std::nullopt;
+        return acc;
+    };
+    return elementsHint(elementsHint,
+                        static_cast<const ArrayPattern&>(pattern));
 }
 
 void Generator::emitPatternParams(const FunctionDeclaration& fd, std::string& out,
