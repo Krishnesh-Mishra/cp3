@@ -373,6 +373,7 @@ std::string Generator::emitNewExprValue(const NewExpr& n) {
     if (std::string date = emitDateNew(n); !date.empty()) return date;
 
     if (std::string em = emitEventEmitterNew(n); !em.empty()) return em;
+    if (std::string promise = emitPromiseNew(n); !promise.empty()) return promise;
     return emitFamilyNew(n);
 }
 

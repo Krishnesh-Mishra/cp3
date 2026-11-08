@@ -310,6 +310,127 @@ std::string Generator::emitPromiseReject(const CallExpr& c) {
            reason + "))";
 }
 
+// `new Promise<T>(executor)` (spec §14): the one core-language generic class
+// whose construction is in every unit. The runtime owns the semantics already:
+// `Promise<T>::pending()` makes the unsettled state, `fulfill(U)` /
+// `rejectWith(Thrown)` settle it, and a shared_ptr carries the state, so two
+// resolver lambdas can settle the same promise. The emitted shape is one
+// self-contained expression:
+//
+//   [&]{
+//       auto cp3_pending = ::cp3::runtime::Promise<double>::pending();
+//       auto cp3_resolve = [cp3_pending](double cp3_v) {
+//           cp3_pending.fulfill(std::move(cp3_v));
+//       };
+//       auto cp3_reject = [cp3_pending](auto cp3_r) {
+//           cp3_pending.rejectWith(::cp3::runtime::Thrown::make(std::move(cp3_r)));
+//       };
+//       <executor lambda>(cp3_resolve, cp3_reject);
+//       return cp3_pending;
+//   }()
+//
+// The executor runs synchronously inside this expression (exactly like JS,
+// where the executor runs during construction), and the resolver lambdas
+// capture the promise BY VALUE, so the state lives as long as either one. The
+// rejection reason is boxed with `Thrown::make` (the same shape
+// `Promise.reject` lowers to): whatever the emitted arrow passes — an Error
+// handle, a string, a number — is representable. The `resolve` parameter
+// lowers through the ordinary arrow machinery (annotation, sema, then the
+// value's own C++ spelling); a `reject` parameter likewise (sema contextually
+// types it `(reason: Error) => void`, which classifies to a plain
+// `std::function<void(Ref<Error>)>`, the runtime's own `WithResolvers` ABI),
+// falling back to `auto` only if the classification ever yields nothing.
+std::string Generator::emitPromiseNew(const NewExpr& n) {
+    if (!n.callee || n.callee->kind != NodeKind::Identifier) {
+        return std::string();
+    }
+    if (static_cast<const Identifier&>(*n.callee).name != "Promise") {
+        return std::string();
+    }
+    // A declared/imported/user-bound `Promise` is not the ambient builtin:
+    // leave the construction to the ordinary lowering (which reports).
+    if (functions_.count("Promise") != 0 || importBindings_.count("Promise") != 0 ||
+        hasValueBinding("Promise")) {
+        return std::string();
+    }
+    needsEventLoop_ = true;
+    if (n.arguments.size() != 1 || !n.arguments.front()) {
+        reportCodegenError(n, diagcode::kArityMismatch,
+                           "arity mismatch: the Promise constructor takes exactly "
+                           "1 argument (the executor), got " +
+                               std::to_string(n.arguments.size()));
+        return "0.0";
+    }
+    const Expr* executor = n.arguments.front().get();
+    if (executor->kind != NodeKind::ArrowFunction) {
+        reportCodegenError(n, diagcode::kTypeMismatch,
+                           "type mismatch: the Promise constructor's argument "
+                           "must be the executor arrow");
+        return "0.0";
+    }
+    const ArrowFunction& arrow = static_cast<const ArrowFunction&>(*executor);
+    // Sema typed the whole expression `Promise<T>`; the value type drives the
+    // C++ spelling (`Promise<void>` when there is no value). A value with no
+    // C++ spelling cannot be created here either.
+    const Type constructed = effectiveType(n);
+    const Type value = detail::isPromiseType(constructed)
+                           ? detail::promiseValue(constructed)
+                           : Type::unknown();
+    std::string valueCpp;
+    if (value.isVoid()) {
+        valueCpp = "void";
+    } else {
+        const CppInfo vi = classify(value);
+        if (!vi.representable) {
+            reportCodegenError(n, diagcode::kTypeMismatch,
+                               "type mismatch: cannot construct a promise over a "
+                               "value with no C++ spelling");
+            return "0.0";
+        }
+        valueCpp = vi.cpp;
+    }
+    const bool withResolve = arrow.params.size() >= 1;
+    const bool withReject = arrow.params.size() >= 2;
+    // The executor's own parameters: an annotation, or sema's contextually
+    // typed signature, wins; an unannotated parameter whose sema type has no
+    // classify spelling (a `$ambient` value) takes the context spelling,
+    // `auto` (a generic lambda parameter), here.
+    std::vector<std::string> contextParams;
+    contextParams.push_back("");  // the value's C++ spelling when sema has none
+    contextParams.push_back("auto");
+    std::string out;
+    out += "[&]{\n";
+    out += "auto cp3_pending = ::cp3::runtime::Promise<" + valueCpp +
+           ">::pending();\n";
+    if (withResolve) {
+        if (value.isVoid()) {
+            out += "auto cp3_resolve = [cp3_pending]() mutable { cp3_pending.fulfill(); };\n";
+        } else {
+            out += "auto cp3_resolve = [cp3_pending](" + valueCpp +
+                   " cp3_v) mutable { cp3_pending.fulfill(std::move(cp3_v)); };\n";
+        }
+    }
+    if (withReject) {
+        out += "auto cp3_reject = [cp3_pending](auto cp3_r) mutable { "
+               "cp3_pending.rejectWith(::cp3::runtime::Thrown::make("
+               "std::move(cp3_r))); };\n";
+    }
+    const std::optional<Type> savedExpected = expected_;
+    expected_.reset();
+    // The executor lambda is created inside the IIFE and called synchronously;
+    // whatever it captures it gets from its own parameter list (the two
+    // resolvers) and the enclosing scope.
+    out += emitArrow(arrow, contextParams);
+    out += "(";
+    if (withResolve) out += "cp3_resolve";
+    if (withResolve && withReject) out += ", ";
+    if (withReject) out += "cp3_reject";
+    out += ");\n";
+    expected_ = savedExpected;
+    out += "return cp3_pending;\n}()";
+    return out;
+}
+
 std::string Generator::emitPromiseMemberCall(const CallExpr& c, const MemberExpr& m) {
     needsEventLoop_ = true;
     std::string method;

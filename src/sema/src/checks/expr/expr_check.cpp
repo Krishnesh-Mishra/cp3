@@ -337,6 +337,79 @@ Type Analyzer::inferNew(NewExpr& n) {
             }
             return withType(n, Type::named(TypeKind::Class, "Date"));
         }
+        // `new Promise<T>(executor)` (spec §14, DECISIONS D40): the one
+        // core-language generic class whose construction is in every unit, no
+        // import required. The executor is checked against the signature the
+        // runtime ABI hands it: `resolve(value: T): void` and
+        // `reject(reason: Error): void` for a non-`void` value, and a nullary
+        // resolver for `Promise<void>`.
+        if (lookup(id.name, b) && isAmbientType(b.type) && ctor == "Promise") {
+            setType(id, b.type);
+            if (n.typeArgs.size() > 1) {
+                report(diagcode::kTypeMismatch, n.span,
+                       "type mismatch: Promise takes a single type argument "
+                       "(Promise<T>), got " +
+                           std::to_string(n.typeArgs.size()));
+            }
+            Type value = Type::unknown();
+            if (!n.typeArgs.empty() && n.typeArgs.front()) {
+                value = resolveType(*n.typeArgs.front());
+            }
+            const Type resolveFn = value.isVoid()
+                ? Type::function({}, Type::voidType())
+                : Type::function({value}, Type::voidType());
+            // The reason is an Error handle: cp3's one throw law is "only
+            // `Error` and its subclasses may be thrown" (the `throw` lowering
+            // boxes those handles), and the runtime ABI types the rejection
+            // resolver the same way (`WithResolvers::reject` takes a
+            // `Ref<::cp3::Error>`). An `$ambient` reason cannot work: a
+            // void-returning function over unrepresentable parameters is the
+            // D74 `Listener` shape (cp3/async/emitter.hpp), which boxes its
+            // argument into an `EventValue` - no `EventValue(Ref<Error>)`
+            // constructor exists, so `reject(new Error("x"))` would not
+            // compile. The `.catch` handler keeps reading the reason as
+            // `any`: it observes rejections, it does not create them.
+            const Type rejectFn =
+                Type::function({Type::named(TypeKind::Class, "Error")},
+                               Type::voidType());
+            const Type expected =
+                Type::function({resolveFn, rejectFn}, Type::voidType());
+            Expr* executor = nullptr;
+            if (n.arguments.size() == 1 && n.arguments.front()) {
+                executor = n.arguments.front().get();
+            } else {
+                report(diagcode::kArityMismatch, n.span,
+                       "arity mismatch: the Promise constructor takes exactly "
+                       "1 argument (the executor), got " +
+                           std::to_string(n.arguments.size()));
+            }
+            if (executor && executor->kind != NodeKind::ArrowFunction) {
+                report(diagcode::kTypeMismatch, executor->span,
+                       "type mismatch: the Promise constructor's argument "
+                       "must be the executor arrow");
+                executor = nullptr;
+            }
+            if (executor) {
+                auto& arrow = static_cast<ArrowFunction&>(*executor);
+                if (arrow.params.size() > 2) {
+                    report(diagcode::kArityMismatch, arrow.span,
+                           "arity mismatch: the Promise executor takes at "
+                           "most (resolve, reject), got " +
+                               std::to_string(arrow.params.size()) +
+                               " parameters");
+                }
+                if (arrow.nodeId != 0) {
+                    contextualArrowTypes_[arrow.nodeId] = expected;
+                    inferExpr(*executor);
+                    contextualArrowTypes_.erase(arrow.nodeId);
+                    return withType(n, promiseOf(value));
+                }
+            }
+            for (auto& a : n.arguments) {
+                if (a) inferExpr(*a);
+            }
+            return withType(n, promiseOf(value));
+        }
         // User classes (spec 15): `new C(args)` checks the constructor and
         // yields the nominal instance type; abstract classes are CP3413
         // (class_conform_check.cpp).
