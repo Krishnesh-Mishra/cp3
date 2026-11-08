@@ -198,7 +198,20 @@ std::string Generator::emitMemberAssign(const AssignmentExpr& a,
     if (!fieldCppText(fields, m.property, field)) return std::string();
     const std::string target =
         "(" + expr(*m.object) + ")->" + mapIdent(m.property);
+    // The write target's type is the field's: a number-backed enum flowing
+    // into an ordinary number field (spec 04 / TS parity) converts at the
+    // boundary through the expected-type rule.
+    Type fieldType = Type::unknown();
+    for (const ObjectField& f : fields) {
+        if (f.name == m.property) {
+            fieldType = f.type;
+            break;
+        }
+    }
+    const std::optional<Type> savedExpected = expected_;
+    if (!fieldType.isUnknown() && !fieldType.isError()) expected_ = fieldType;
     const std::string value = expr(*a.value);
+    expected_ = savedExpected;
     switch (a.op) {
         case AssignOp::Assign:
             if (field.rfind("std::optional<", 0) == 0 &&

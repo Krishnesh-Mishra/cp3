@@ -50,6 +50,14 @@ bool Analyzer::wouldAccept(const Type& from, const Type& to, bool freshLiteral) 
         }
         return false;
     }
+    // A number-backed enum is an integer under the hood: assignable to
+    // `number` (spec 04 / TS parity). A string-backed enum has no numeric
+    // reading and stays unassignable to `number`, and `number` does not flow
+    // back into any enum implicitly (CP3401).
+    if (from.kind == TypeKind::Enum && to.kind == TypeKind::Number) {
+        const auto found = enums_.find(from.name);
+        return found != enums_.end() && !found->second.stringBacked;
+    }
     if (isAssignable(from, to)) return true;
     // User classes (spec 15): structural conformance to an
     // interface/object shape, literal-to-class, and derived-to-base.

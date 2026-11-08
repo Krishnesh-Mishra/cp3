@@ -304,7 +304,14 @@ std::string Generator::tupleDeclaratorInitText(const VariableDeclarator& d,
         if (element == nullptr || element->kind == NodeKind::SpreadElement) {
             return std::string();
         }
+        // A `number` slot reads an enum element's underlying value
+        // (spec 04 / TS parity).
+        const std::optional<Type> savedExpected = expected_;
+        if (!declared.parts[i].isUnknown() && !declared.parts[i].isError()) {
+            expected_ = declared.parts[i];
+        }
         out += (i == 0 ? "" : ", ") + expr(*element);
+        expected_ = savedExpected;
     }
     return out + "}";
 }
@@ -324,7 +331,16 @@ std::string Generator::emitTupleLiteral(const ArrayLiteral& lit) {
                               "position in a tuple literal");
             continue;
         }
+        // A `number` slot reads an enum element's underlying value
+        // (spec 04 / TS parity).
+        const std::optional<Type> savedExpected = expected_;
+        if (currentReturnType_ && i < currentReturnType_->parts.size() &&
+            !currentReturnType_->parts[i].isUnknown() &&
+            !currentReturnType_->parts[i].isError()) {
+            expected_ = currentReturnType_->parts[i];
+        }
         out += expr(*el);
+        expected_ = savedExpected;
     }
     return out + ")";
 }

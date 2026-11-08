@@ -97,7 +97,15 @@ std::string Generator::expr(const Expr& e) {
     // re-runs the double body after a bail, so it would happen twice).
     if (intOn()) intGuardExpr(e);
     if (intOn() && numberTyped(e)) return intNumberExpr(e);
-    return exprPlain(e);
+    std::string text = exprPlain(e);
+    // Spec 04 / TS parity: an enum value is a C++ `enum class` and does not
+    // promote to `double` implicitly. When the context wants a `number`,
+    // the conversion happens here at the boundary.
+    if (expected_ && expected_->kind == TypeKind::Number && !text.empty() &&
+        info(e).shape == Shape::Enum) {
+        text = "static_cast<double>(" + text + ")";
+    }
+    return text;
 }
 
 // A comparison operand. `x % y` is the one expression whose zero-sign bail is
@@ -589,6 +597,11 @@ std::string Generator::cond(const Expr& e) {
     // tests in cp3_truthy(), which can hide their induction pattern from the
     // C++ optimizer and block loop transformations.
     if (effectiveType(e).isBoolean()) return expr(e);
+    // A number-backed enum value does not promote to a number in C++, so
+    // the truthiness test reads the underlying value.
+    if (info(e).shape == Shape::Enum) {
+        return "cp3_truthy(static_cast<double>(" + expr(e) + "))";
+    }
     return "cp3_truthy(" + expr(e) + ")";
 }
 
@@ -600,6 +613,14 @@ std::string Generator::emitBinary(const BinaryExpr& b) {
     const CppInfo R = info(*b.right);
     std::string lhs = cmp ? exprCmp(*b.left) : expr(*b.left);
     std::string rhs = cmp ? exprCmp(*b.right) : expr(*b.right);
+    // A bare `enum class` does not participate in arithmetic (spec 04).
+    // A non-relational operand of enum shape lowers through its underlying
+    // value; the relational ops compare two one-typed enums directly and
+    // keep the native C++ form.
+    if (!cmp) {
+        if (L.shape == Shape::Enum) lhs = "static_cast<double>(" + lhs + ")";
+        if (R.shape == Shape::Enum) rhs = "static_cast<double>(" + rhs + ")";
+    }
     // In a native expression an in-range integral literal is an integer
     // token, not a double: `n / 2` must stay integer division, `n % 2` must
     // compile, and `n < 1e15` must compare at full width. A fractional
@@ -933,11 +954,16 @@ std::string Generator::emitLogical(const LogicalExpr& l) {
     }
     const std::string lhs = expr(*l.left);
     const std::string rhs = expr(*l.right);
+    // A bare `enum class` does not promote in C++: the truthiness test reads
+    // the underlying value, and the arm keeps the enum itself.
+    const std::string truthy =
+        L.shape == Shape::Enum ? "cp3_truthy(static_cast<double>(cp3_l))"
+                               : "cp3_truthy(cp3_l)";
     if (l.op == LogicalOp::And) {
-        return "([&]{ auto cp3_l = (" + lhs + "); return cp3_truthy(cp3_l) ? (" + rhs +
+        return "([&]{ auto cp3_l = (" + lhs + "); return " + truthy + " ? (" + rhs +
                ") : cp3_l; }())";
     }
-    return "([&]{ auto cp3_l = (" + lhs + "); return cp3_truthy(cp3_l) ? cp3_l : (" + rhs +
+    return "([&]{ auto cp3_l = (" + lhs + "); return " + truthy + " ? cp3_l : (" + rhs +
            "); }())";
 }
 

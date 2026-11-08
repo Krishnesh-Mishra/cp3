@@ -75,6 +75,7 @@ target_include_directories(cp3_runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/console/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/crypto/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/json/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../std/fs/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/io/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/network/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/network/tls/include"

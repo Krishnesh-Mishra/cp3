@@ -138,6 +138,14 @@ std::string Generator::storeText(const ClassMemberModel& m,
         if (auto resolved = typeOfNode(*m.field->type)) memberType = *resolved;
     }
     const bool nullish = isNullishLiteral(*a.value);
+    // Spec 04 (TS parity): a number-backed enum flowing into an ordinary
+    // number field is read through `static_cast<double>` at the boundary.
+    // `value` is a const reference; `stored` is the local mutable text.
+    std::string stored = value;
+    if (classify(memberType).shape == Shape::Number && a.value != nullptr &&
+        classify(effectiveType(*a.value)).shape == Shape::Enum) {
+        stored = "static_cast<double>(" + stored + ")";
+    }
     // A proven auto-weak field stores through WeakRef exactly like a
     // manual `weak` field (see memberFieldText in class_decl.cpp).
     if ((m.isWeak || storeIsAutoWeak(sema_, m)) &&
@@ -153,12 +161,12 @@ std::string Generator::storeText(const ClassMemberModel& m,
             const bool maybe = vci.shape == Shape::Maybe;
             const std::string has = maybe ? ".hasValue()" : ".has_value()";
             const std::string held = maybe ? "cp3_w.value()" : "(*cp3_w)";
-            return "([&]{ const auto& cp3_w = (" + value + "); return (" +
+            return "([&]{ const auto& cp3_w = (" + stored + "); return (" +
                    lvalue + " = cp3_w" + has +
                    " ? ::cp3::runtime::WeakRef<" + pointee + ">(" + held +
                    ") : ::cp3::runtime::WeakRef<" + pointee + ">()); }())";
         }
-        return "(" + lvalue + " = " + value + ")";
+        return "(" + lvalue + " = " + stored + ")";
     }
     switch (a.op) {
         case AssignOp::Assign: {
@@ -167,16 +175,16 @@ std::string Generator::storeText(const ClassMemberModel& m,
                             ci.shape == Shape::Maybe)) {
                 return "(" + lvalue + " = std::nullopt)";
             }
-            return "(" + lvalue + " = " + value + ")";
+            return "(" + lvalue + " = " + stored + ")";
         }
-        case AssignOp::Add: return "(" + lvalue + " += " + value + ")";
-        case AssignOp::Subtract: return "(" + lvalue + " -= " + value + ")";
-        case AssignOp::Multiply: return "(" + lvalue + " *= " + value + ")";
-        case AssignOp::Divide: return "(" + lvalue + " /= " + value + ")";
+        case AssignOp::Add: return "(" + lvalue + " += " + stored + ")";
+        case AssignOp::Subtract: return "(" + lvalue + " -= " + stored + ")";
+        case AssignOp::Multiply: return "(" + lvalue + " *= " + stored + ")";
+        case AssignOp::Divide: return "(" + lvalue + " /= " + stored + ")";
         case AssignOp::Modulo:
-            return "(" + lvalue + " = " + modCall(lvalue, *a.value, value) + ")";
+            return "(" + lvalue + " = " + modCall(lvalue, *a.value, stored) + ")";
         case AssignOp::Power:
-            return "(" + lvalue + " = std::pow(" + lvalue + ", " + value + "))";
+            return "(" + lvalue + " = std::pow(" + lvalue + ", " + stored + "))";
         default:
             return std::string();
     }

@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #include "cp3/diag/diagnostic_codes.hpp"
@@ -27,6 +28,32 @@ bool isNumberLiteralValue(const Type& t) {
 // or an ordinary cp3 number (a number literal included).
 bool isNumericOperand(const Type& t) {
     return isNativeType(t) || isNumberish(t);
+}
+
+// An enum with an integral backing (spec 04): its value has a numeric
+// reading, so the operator table can treat it like a number. A
+// string-backed enum has none, and an enum name the table does not know
+// stays rejected.
+bool isNumberBackedEnum(const std::unordered_map<std::string, EnumInfo>& table,
+                        const Type& t) {
+    if (t.kind != TypeKind::Enum) return false;
+    const auto found = table.find(t.name);
+    return found != table.end() && !found->second.stringBacked;
+}
+
+// Both operands carry a numeric reading for one operator: a number / number
+// pair, or a number-backed enum against the same enum or a numeric operand
+// (spec 04 / TS parity). Distinct enums and string-backed enums have no
+// common numeric reading and stay errors.
+bool hasEnumNumberPair(const std::unordered_map<std::string, EnumInfo>& table,
+                       const Type& l, const Type& r) {
+    if (isNumericOperand(l) && isNumericOperand(r)) return true;
+    const bool lEnum = isNumberBackedEnum(table, l);
+    const bool rEnum = isNumberBackedEnum(table, r);
+    if (lEnum && rEnum) return l.name == r.name;
+    if (lEnum) return isNumericOperand(r);
+    if (rEnum) return isNumericOperand(l);
+    return false;
 }
 
 }  // namespace
@@ -200,11 +227,11 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
     if (!permissive && (isNativeType(ln) || isNativeType(rn))) {
         if (auto native = evalNativeBinary(op, ln, rn, span)) return *native;
     }
-    const bool numericPair = isNumericOperand(ln) && isNumericOperand(rn);
+    const bool numericPair = hasEnumNumberPair(enums_, ln, rn);
     switch (op) {
         case BinaryOp::Add:
             if (permissive) return ambient();
-            if (isNumberish(ln) && isNumberish(rn)) return Type::number();
+            if (hasEnumNumberPair(enums_, ln, rn)) return Type::number();
             if (isStringish(l) && isStringish(r)) return Type::string();
             report(diagcode::kMixedTypeArithmetic, span,
                    "type mismatch: mixed-type arithmetic with '+' on '" +
@@ -223,7 +250,7 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
         case BinaryOp::ShiftRight:
         case BinaryOp::UnsignedShiftRight:
             if (permissive) return ambient();
-            if (isNumberish(ln) && isNumberish(rn)) return Type::number();
+            if (hasEnumNumberPair(enums_, ln, rn)) return Type::number();
             report(diagcode::kMixedTypeArithmetic, span,
                    "type mismatch: mixed-type arithmetic with '" +
                        binaryText(op) + "' on '" + pretty(l) + "' and '" +

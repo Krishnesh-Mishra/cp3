@@ -496,8 +496,12 @@ std::string Generator::emitAssignment(const AssignmentExpr& a) {
                         const CppInfo ec = classify(tuple.parts[*index]);
                         if (ec.representable) {
                             needsTuple_ = true;
+                            const std::optional<Type> savedExpected = expected_;
+                            expected_ = tuple.parts[*index];
+                            const std::string elementValue = expr(*a.value);
+                            expected_ = savedExpected;
                             return "(std::get<" + std::to_string(*index) + ">(" +
-                                   expr(*ix.object) + ") = " + expr(*a.value) +
+                                   expr(*ix.object) + ") = " + elementValue +
                                    ")";
                         }
                     }

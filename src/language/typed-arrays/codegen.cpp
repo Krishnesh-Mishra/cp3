@@ -15,6 +15,7 @@
 #include "detail/generator/generator.h"
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -240,7 +241,12 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
         for (const auto& el : lit.elements) {
             if (!el) continue;
             if (el->kind != NodeKind::SpreadElement) {
+                // An enum element reads its underlying number against a
+                // `number` element type (spec 04 / TS parity).
+                const std::optional<Type> savedExpected = expected_;
+                expected_ = elem;
                 body += " " + v + ".push_back(" + expr(*el) + ");";
+                expected_ = savedExpected;
                 continue;
             }
             const auto& sp = static_cast<const SpreadElement&>(*el);
@@ -337,13 +343,23 @@ std::string Generator::arrayLiteralText(const ArrayLiteral& lit,
                 needsTuple_ = true;
                 out += cpp + "{";
                 for (std::size_t j = 0; j < inner.elements.size(); ++j) {
+                    const std::optional<Type> savedExpected = expected_;
+                    expected_ = et.parts[j];
                     out += (j == 0 ? "" : ", ") + expr(*inner.elements[j]);
+                    expected_ = savedExpected;
                 }
                 out += "}";
                 continue;
             }
         }
-        out += expr(*el);
+        // A `number` element type reads an enum element's underlying value
+        // (spec 04 / TS parity).
+        {
+            const std::optional<Type> savedExpected = expected_;
+            expected_ = elem;
+            out += expr(*el);
+            expected_ = savedExpected;
+        }
     }
     return out + "})";
 }
