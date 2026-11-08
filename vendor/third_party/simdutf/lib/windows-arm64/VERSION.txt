@@ -1,0 +1,5 @@
+simdutf=7852150e454ebacbf7e65cbf2c5e3feac5e660ec
+arch=windows-arm64
+built=2026-11-08T05:14:04Z
+sha256=d2f19f4c5d658427e2fe59ed768a585537cb89800ae039374f2c70dcc1bad1dc
+toolchain=llvm-mingw-20261104-ucrt-x86_64

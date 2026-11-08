@@ -17,8 +17,17 @@ openssl-headers: carried over from the linux 3.5.5 build; identical
 linux-x64: openssl 3.5.5 built from pinned source (openssl-3.5.5 tag,
         commit 67b5686b4419b4cb8caa502711c41815f5279751, build 2026-11-07
         WSL2 Ubuntu, gcc 15.2.0, configure linux-x86_64 no-shared no-tests no-apps)
-linux-arm64: NOT BUILT in v0.2 (no archives; the native row compiles the TLS
-        stub, which fails closed with ERR_TLS_BACKEND_UNAVAILABLE).
+windows-arm64: openssl 3.5.5 built from pinned source (openssl-3.5.5 tag,
+        commit 67b5686b4419b4cb8caa502711c41815f5279751, build 2026-11-08
+        on Windows with llvm-mingw 20261104 (LLVM 23.1.5, ucrt, x86_64 host),
+        configure `mingw-arm64 no-shared no-tests no-apps no-module -O3`
+        (custom no-asm target, vendor/third_party/openssl/mingw-arm64.conf,
+        inherited via OPENSSL_LOCAL_CONFIG_DIR), providers linked statically).
+linux-arm64: openssl 3.5.5 built from pinned source (openssl-3.5.5 tag,
+        commit 67b5686b4419b4cb8caa502711c41815f5279751, build 2026-11-08
+        WSL2 Ubuntu, aarch64-linux-gnu-gcc 15.2.0, Configure linux-aarch64
+        no-shared no-tests no-apps). The native row now selects this archive and
+        TLS is available for linux-arm64 programs.
 release: v0.2.0 (first TLS-enabled release).
 Source tag: https://github.com/openssl/openssl (openssl-3.5.5)
 CA bundle: Mozilla, vendor/third_party/openssl/cacert.pem (see cacert-source-url.txt),

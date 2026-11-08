@@ -21,14 +21,13 @@
 # on the authoring host); see docs/design/linux-packaging-simdutf.md.
 set -euo pipefail
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 ARCH="$(uname -m)"
 case "$ARCH" in
     x86_64|amd64) ARCH=x64 ;;
     aarch64|arm64) ARCH=arm64 ;;
 esac
-WORK="$ROOT/build/scratch/vendor-linux-simdutf-$ARCH"
-OUT="$ROOT/third_party"
+OUT="$ROOT/vendor/third_party"
 
 usage() {
     cat <<'EOF'
@@ -88,6 +87,9 @@ for tool in git "$CXX" "$AR"; do
         exit 1
     }
 done
+
+# Computed after --arch parsing: the work dir follows the requested arch.
+WORK="$ROOT/build/scratch/vendor-linux-simdutf-$ARCH"
 
 SRC="$WORK/src"
 BUILD="$WORK/build"

@@ -1,0 +1,6 @@
+openssl=67b5686b4419b4cb8caa502711c41815f5279751
+arch=windows-arm64
+built=2026-11-08T06:34:58Z
+sha256=fa2b17f26ef9ec662ff4efdefb1a839ade9c5e33e430ffa8bcc8475aafcf8f7c (libssl.a)
+sha256=49f108e46728b423ff2cd6a0b8bf73a996c0b0fb91ac374dd771232e0353687e (libcrypto.a)
+toolchain=llvm-mingw-20261104-ucrt-x86_64

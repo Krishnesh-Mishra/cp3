@@ -1,0 +1,5 @@
+uWebSockets=3ffd6f44c9c3c92c96345d9f96bd01ba9c025ab5
+arch=windows-arm64
+built=2026-11-08T06:31:54Z
+sha256=3f460e5f342ff2eaf3511926c4364b3b09258b783a0fb4e9956022742d10a972
+toolchain=llvm-mingw-20261104-ucrt-x86_64

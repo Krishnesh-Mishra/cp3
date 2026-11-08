@@ -32,7 +32,6 @@ case "$ARCH" in
     x86_64|amd64) ARCH=x64 ;;
     aarch64|arm64) ARCH=arm64 ;;
 esac
-OUT="$ROOT/xxhash/lib/linux-$ARCH"
 
 usage() {
     cat <<'EOF'
@@ -55,6 +54,11 @@ while (($#)); do
     esac
 done
 case "$ARCH" in x64|arm64) ;; *) echo "unsupported Linux arch '$ARCH'" >&2; exit 2 ;; esac
+
+# Computed after --arch parsing: the output lane follows the requested arch.
+if [[ -z "${OUT:-}" ]]; then
+    OUT="$ROOT/xxhash/lib/linux-$ARCH"
+fi
 
 if [[ "$ARCH" == arm64 ]]; then
     CC=${CC:-/usr/bin/aarch64-linux-gnu-gcc}

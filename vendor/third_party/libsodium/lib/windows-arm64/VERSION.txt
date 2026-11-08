@@ -1,0 +1,5 @@
+libsodium=77e1ce5d6dee871c49ef211222ba18ef0c486bda
+arch=windows-arm64
+built=2026-11-08T06:31:26Z
+sha256=8b6a80f521cbcc7ea98f6a7c75722379fa64f7d0667c5ae77d25bd6c3c0e983b
+toolchain=llvm-mingw-20261104-ucrt-x86_64

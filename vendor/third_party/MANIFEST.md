@@ -18,9 +18,12 @@ Linux x64 archives are recorded below next to the Windows originals. The
 xxhash, simdutf and PCRE2 linux-x64 archives were built on 2026-11-07 in WSL2
 Ubuntu (GCC 15.2.0, cmake 4.2.3, GNU ar) with the vendored build scripts; the
 libsodium/libuv/uSockets linux-x64 archives were built earlier with the same
-toolchain family. linux-arm64 archives exist for libsodium/libuv/uSockets only;
-the xxhash/simdutf linux-arm64 directories still carry placeholders and their
-platform rows deliberately do not exist, so an arm64 target fails loudly.
+toolchain family. linux-arm64 and windows-arm64 archives exist for all seven
+vendored libraries (all built 2026-11-08): libsodium, libuv, xxhash, simdutf,
+PCRE2 and OpenSSL 3.5.5 for both arm64 targets (windows-arm64 via pinned
+llvm-mingw 20261104, linux-arm64 with aarch64-linux-gnu GCC 15.2.0);
+uSockets was rebuilt WITH_OPENSSL=1 for all four platforms (TLS-capable
+like the windows-x64 and linux-x64 builds).
 
 ## Pins
 
@@ -61,7 +64,20 @@ stored by target architecture under each vendor's `lib/linux-*/` directory.
 | uWebSockets/lib/libuSockets.a | 87038 | 74C01266147AEF7670A0EB88123570CFDEBB434508D9C2988734229724F00293 |
 | uWebSockets/lib/windows-x64/libuSockets.a | 87038 | 74C01266147AEF7670A0EB88123570CFDEBB434508D9C2988734229724F00293 |
 | uWebSockets/lib/linux-x64/libuSockets.a | 154860 | 9BE832A5FE8CF6405234CFC35250B54891820C1C17E63A1782AD9A9A7DD2996C |
-| uWebSockets/lib/linux-arm64/libuSockets.a | 63024 | 51ED1EB61035C09F3D525A30019928169DAEF5B32B830EFFF625617DEE9A93BA |
+| uWebSockets/lib/linux-arm64/libuSockets.a | 129758 | 11E13DEF4009B831E64C92CDFD74F6F359E399D75F828E7766932950627A099D |
+| simdutf/lib/linux-arm64/libsimdutf.a | 347304 | E9DB567C5C85A037EB4A5D6DD15AB2258C7EEBEA0A173457B12F5CB12B6E2461 |
+| xxhash/lib/linux-arm64/libxxhash.a | 75368 | 55FDCE25D000E049CAC4DF8C2E0DFB8F098E8F397F2E5CE0DA1F6797230E113E |
+| pcre2/lib/linux-arm64/libpcre2-8.a | 556894 | C1989D9429C61AA614A942FCA483AAE93C9FA918FE20033EB5BA1960990ED6FE |
+| openssl/lib/linux-arm64/libssl.a | 2253444 | EDEF2CBB103B2946C6F81A76EB48383EEAAB1272BF4AB9ACB3DC5F0E4CA34D48 |
+| openssl/lib/linux-arm64/libcrypto.a | 12382582 | CC9774428E47BFC12C3B36C1021FC60C329D192CE25F4C2F753467B54AB27CD8 |
+| libsodium/lib/windows-arm64/libsodium.a | 656564 | 8B6A80F521CBCC7EA98F6A7C75722379FA64F7D0667C5AE77D25BD6C3C0E983B |
+| libuv/lib/windows-arm64/libuv.a | 378234 | 5C42DEBD6011EC6EACD410E5756DED1CF41AEF6C7203830EA23753CC673F44FC |
+| uWebSockets/lib/windows-arm64/libuSockets.a | 76908 | 3F460E5F342FF2EAF3511926C4364B3B09258B783A0FB4E9956022742D10A972 |
+| xxhash/lib/windows-arm64/libxxhash.a | 38050 | 04D2E0134C4028E019DE9E7A567DA0E10945ABC85C9EBF2CD19E8D4590B04793 |
+| simdutf/lib/windows-arm64/libsimdutf.a | 268912 | D2F19F4C5D658427E2FE59ED768A585537CB89800AE039374F2C70DCC1BAD1DC |
+| pcre2/lib/windows-arm64/libpcre2-8.a | 461700 | F76B342A145F46C6548E6055CC61A5572A37B95E5CF333DE1AB08C8E67E9CAB4 |
+| openssl/lib/windows-arm64/libssl.a | 1472650 | FA2B17F26EF9EC662FF4EFDEFB1A839ADE9C5E33E430FFA8BCC8475AAFCF8F7C |
+| openssl/lib/windows-arm64/libcrypto.a | 7564256 | 49F108E46728B423FF2CD6A0B8BF73A996C0B0FB91AC374DD771232E0353687E |
 | uWebSockets/lib/libuWebSockets.a | 1438 | EB0D1543E48D0F3077BE44104532502AA5C65E8E632564F24973B9384F9ECBF5 |
 | pcre2/lib/libpcre2-8.a | 574408 | 79EF3EBB2F088D5FEC2B96035F2EFB173A18109C47523EF7976113ED7AC2E7E4 |
 | pcre2/lib/linux-x64/libpcre2-8.a | 635630 | AA643CEEB27B1B5550A6147EF0AB54E58DC33E951491570E8A6D1C6F645A86F6 |
@@ -189,8 +205,8 @@ Also: "TBBBind build targets are disabled due to unsupported environment"
 
 uWebSockets v20.80.0 ships no CMakeLists anywhere; the project's own Makefile
 is the only supported build. The v0.2 TLS bring-up rebuilt the Windows and
-linux-x64 archives WITH OpenSSL support (WITH_OPENSSL=1); linux-arm64 keeps
-the prebuilt LIBUS_NO_SSL archive below.
+linux-x64 archives WITH OpenSSL support (WITH_OPENSSL=1), and linux-arm64 was
+rebuilt the same way on 2026-11-08 (aarch64 cross GCC, WITH_OPENSSL=1).
 
 Windows (ucrt64 gcc 16.2.0 Rev6, 2026-11-07):
 
@@ -216,8 +232,13 @@ was built against (verified end-to-end: https fetch links and runs).
 linux-x64 (gcc 15.2.0, WSL2 Ubuntu, 2026-11-07): same configure line with
 WITH_OPENSSL=1 WITH_LIBUV=1 WITH_LTO=0; no -flto defect on fat-LTO targets.
 
-linux-arm64: the prebuilt archive (LIBUS_NO_SSL) is kept; the v0.2 native
-row compiles the TLS stub there (no OpenSSL archives exist for arm64).
+linux-arm64 (aarch64 cross GCC 15.2.0, WSL2 Ubuntu, 2026-11-08): same recipe,
+`CC=/usr/bin/aarch64-linux-gnu-gcc CXX=/usr/bin/aarch64-linux-gnu-g++
+AR=/usr/bin/aarch64-linux-gnu-ar WITH_OPENSSL=1 WITH_LIBUV=1 WITH_LTO=0
+CFLAGS="-Ivendor/third_party/libuv/include -Ivendor/third_party/openssl/include"`;
+the Makefile's hardcoded -flto was stripped first (windows-x64 parity). The
+prebuilt LIBUS_NO_SSL archive was replaced; the linux-arm64 native row now
+links OpenSSL and compiles the TLS backend, like the other two targets.
 
 Original LIBUS_NO_SSL recipe (for reference / linux-arm64):
 
@@ -337,9 +358,9 @@ Notes:
    such configuration is not supported" (warning at CMakeLists.txt:160). It
    built and the parallel_for smoke passes, but treat it as a known risk.
    TBBBind (NUMA binding, needs hwloc) is disabled on this platform.
-3. linux-x64 and windows-x64 uSockets are rebuilt WITH OpenSSL support
-   (WITH_OPENSSL=1, see the uSockets section); linux-arm64 remains
-   LIBUS_NO_SSL and compiles the TLS stub. Compression (per-message
+3. The uSockets archives (all three targets) are rebuilt WITH OpenSSL support
+   (WITH_OPENSSL=1, see the uSockets section); linux-arm64 was switched over
+   on 2026-11-08. Compression (per-message
    deflate) is still off by design; consumers define UWS_NO_ZLIB.
 4. libtbb12.a is copied as libtbb.a purely so consumers write -ltbb; the
    archive bytes are upstream's.
@@ -355,9 +376,8 @@ Notes:
 > Status: 5 vendored (unordered_dense, fast_float, simdutf, moodycamel, XXHash).
 > No compress/miniz (lead: no std/compress lib), no fmt (logger stays hand-written),
 > no Boost.Lockfree (moodycamel chosen), no wyhash (XXH3 chosen), CRC32C hand-rolled stays.
-> Pins below are real (cloned at tags); VERSION.txt written; windows-x64 and
-> linux-x64 archives built for compiled libs (xxhash, simdutf); linux-arm64
-> archives remain pending and fail loudly at native-package resolution.
+> Pins below are real (cloned at tags); VERSION.txt written; archives built
+> for compiled libs (xxhash, simdutf) on windows-x64, linux-x64 and linux-arm64.
 
 | library | upstream (candidate) | kind | internal hot path (current stand-in) | status |
 | --- | --- | --- | --- | --- |

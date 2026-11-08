@@ -1,0 +1,5 @@
+xxhash=e626a72bc2321cd320e953a0ccf1584cad60f363
+arch=windows-arm64
+built=2026-11-08T05:13:55Z
+sha256=04d2e0134c4028e019de9e7a567da0e10945abc85c9ebf2cd19e8d4590b04793
+toolchain=llvm-mingw-20261104-ucrt-x86_64

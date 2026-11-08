@@ -26,11 +26,13 @@ package at vendor/third_party/<vendor>/lib/linux-<arch>/.
 EOF
 }
 
+WITH_OPENSSL=0
 while (($#)); do
     case "$1" in
         --arch) ARCH=$2; shift 2 ;;
         --work-dir) WORK=$2; shift 2 ;;
         --out-dir) OUT=$2; shift 2 ;;
+        --with-openssl) WITH_OPENSSL=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "build-linux.sh: unknown option '$1'" >&2; usage >&2; exit 2 ;;
     esac
@@ -99,7 +101,13 @@ clone_pin() {
 clone_pin libsodium https://github.com/jedisct1/libsodium.git 1.0.22-RELEASE 77e1ce5d6dee871c49ef211222ba18ef0c486bda
 clone_pin libuv https://github.com/libuv/libuv.git v1.53.0 840404ce8ba7cc0204be52389a6cfff9f2c90fb6
 clone_pin uWebSockets https://github.com/uNetworking/uWebSockets.git v20.80.0 3ffd6f44c9c3c92c96345d9f96bd01ba9c025ab5
+clone_pin uWebSockets https://github.com/uNetworking/uWebSockets.git v20.80.0 3ffd6f44c9c3c92c96345d9f96bd01ba9c025ab5
 git -C "$SRC/uWebSockets" submodule update --init --depth 1 uSockets
+git -C "$SRC/uWebSockets/uSockets" checkout --detach 86097c490263ab662d62e8e7b541390bdec7d149
+[[ "$(git -C "$SRC/uWebSockets/uSockets" rev-parse HEAD)" == "86097c490263ab662d62e8e7b541390bdec7d149" ]] || {
+    echo "build-linux.sh: uSockets checkout does not match pinned SHA 86097c490263ab662d62e8e7b541390bdec7d149" >&2
+    exit 1
+}
 
 echo "[1/3] libsodium ($ARCH)"
 mkdir -p "$BUILD/libsodium"
@@ -136,9 +144,20 @@ else
 fi
 
 echo "[3/3] uSockets ($ARCH)"
-make -C "$SRC/uWebSockets/uSockets" \
-    CC="$CC" AR="$AR" WITH_LIBUV=1 WITH_LTO=0 \
-    CFLAGS="-I$PREFIX/libuv/include" -j"$JOBS"
+if [[ "$WITH_OPENSSL" == 1 ]]; then
+    OPENSSL_ARGS=(WITH_OPENSSL=1)
+    OPENSSL_CFLAGS="-I$ROOT/vendor/third_party/openssl/include"
+    if [[ "$ARCH" == arm64 ]]; then
+        OPENSSL_CFLAGS="$OPENSSL_CFLAGS -I$ROOT/vendor/third_party/openssl/include"
+    fi
+    make -C "$SRC/uWebSockets/uSockets" \
+        CC="$CC" CXX="$CXX" AR="$AR" WITH_LIBUV=1 WITH_LTO=0 WITH_OPENSSL=1 \
+        CFLAGS="-I$PREFIX/libuv/include -I$ROOT/vendor/third_party/openssl/include" -j"$JOBS"
+else
+    make -C "$SRC/uWebSockets/uSockets" \
+        CC="$CC" AR="$AR" WITH_LIBUV=1 WITH_LTO=0 \
+        CFLAGS="-I$PREFIX/libuv/include" -j"$JOBS"
+fi
 
 mkdir -p "$OUT/libsodium/lib/linux-$ARCH" "$OUT/libuv/lib/linux-$ARCH" \
     "$OUT/uWebSockets/lib/linux-$ARCH"

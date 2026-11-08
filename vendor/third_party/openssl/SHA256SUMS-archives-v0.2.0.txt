@@ -2,3 +2,7 @@
 609e1fae1ef83a6093c0ae788a942198a4f299496e5336d3ac0b5d2dd2763a11  vendor/third_party/openssl/lib/linux-x64/libcrypto.a
 1c5b600b747b8b8cf6887e29f0b09c46aef2eb9435bf1b83f8aab244d6848bfd  vendor/third_party/openssl/lib/windows-x64/libssl.a
 b9f27c0ec3b0f2d8c3ce3ca379639dc26f73841ab4bab5c85fbb2e51fcc72ffd  vendor/third_party/openssl/lib/windows-x64/libcrypto.a
+edef2cbb103b2946c6f81a76eb48383eeaab1272bf4ab9acb3dc5f0e4ca34d48  vendor/third_party/openssl/lib/linux-arm64/libssl.a
+cc9774428e47bfc12c3b36c1021fc60c329d192ce25f4c2f753467b54ab27cd8  vendor/third_party/openssl/lib/linux-arm64/libcrypto.a
+fa2b17f26ef9ec662ff4efdefb1a839ade9c5e33e430ffa8bcc8475aafcf8f7c  vendor/third_party/openssl/lib/windows-arm64/libssl.a
+49f108e46728b423ff2cd6a0b8bf73a996c0b0fb91ac374dd771232e0353687e  vendor/third_party/openssl/lib/windows-arm64/libcrypto.a

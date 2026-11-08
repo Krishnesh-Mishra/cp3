@@ -1,0 +1,5 @@
+libuv=840404ce8ba7cc0204be52389a6cfff9f2c90fb6
+arch=windows-arm64
+built=2026-11-08T06:31:41Z
+sha256=5c42debd6011ec6eacd410e5756ded1cf41aef6c7203830ea23753cc673f44fc
+toolchain=llvm-mingw-20261104-ucrt-x86_64
