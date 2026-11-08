@@ -1121,14 +1121,17 @@ std::string Generator::emitJsonParse(const CallExpr& c) {
     // anything else keeps the unsupported-argument diagnostic below (the
     // interface path above is untouched by this branch).
     std::optional<Type> objType;
-    if (const Type* published = sema_.typeOf(tn.nodeId);
-        published && published->kind == TypeKind::Object &&
-        !published->isError()) {
-        objType = *published;
-    } else if (tn.kind == NodeKind::ObjectType) {
+    if (tn.kind == NodeKind::ObjectType) {
         if (std::optional<Type> mapped = typeFromTypeNode(tn);
             mapped && mapped->kind == TypeKind::Object) {
             objType = *mapped;
+        }
+    }
+    if (!objType) {
+        if (const Type* published = sema_.typeOf(tn.nodeId);
+            published && published->kind == TypeKind::Object &&
+            !published->isError()) {
+            objType = *published;
         }
     }
     if (objType) {
@@ -1190,14 +1193,17 @@ Generator::jsonRecordBuildFor(const TypeNode& tn) {
         }
     }
     std::optional<Type> objType;
-    if (const Type* published = sema_.typeOf(tn.nodeId);
-        published && published->kind == TypeKind::Object &&
-        !published->isError()) {
-        objType = *published;
-    } else if (tn.kind == NodeKind::ObjectType) {
+    if (tn.kind == NodeKind::ObjectType) {
         if (std::optional<Type> mapped = typeFromTypeNode(tn);
             mapped && mapped->kind == TypeKind::Object) {
             objType = *mapped;
+        }
+    }
+    if (!objType) {
+        if (const Type* published = sema_.typeOf(tn.nodeId);
+            published && published->kind == TypeKind::Object &&
+            !published->isError()) {
+            objType = *published;
         }
     }
     if (!objType) return std::nullopt;

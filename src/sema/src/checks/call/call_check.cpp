@@ -489,10 +489,11 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
         sig.annotatedReturn = true;
         sig.name = "JSON." + m.property;
         // JSON.parse<T>(...), JSON.parseFileSync<T> / parseFile<T>,
-        // JSON.stringifyToFile(Sync)<T>, JSON.verify<T> all carry the explicit
-        // type argument (docs/design/remove-void-unknown.md pattern): the
-        // result type is only known with it; a bare call is a compile error
-        // (CP3208). Bare JSON.stringify(...) is legal.
+        // JSON.verify<T> all carry the explicit type argument
+        // (docs/design/remove-void-unknown.md pattern): the result type is
+        // only known with it; a bare call is a compile error (CP3208).
+        // Bare JSON.stringify(...) and the stringifyToFile(Sync) family
+        // (whose value type is known from the argument) are legal.
         Type t = Type::unknown();
         bool tArgMissing = false;
         if (m.property == "stringify") {
@@ -522,10 +523,10 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
             sig.ret = Type::boolean();
         } else if (fileSyncJson || fileAsyncJson) {
             // parseFileSync<T> / parseFile<T>(path): `T` resolves exactly
-            // like parse<T>. stringifyToFile(Sync)<T>(path, value): any
-            // value is *candidate-serializable*; `T` is required for surface
-            // uniformity but carries no runtime consequence beyond the typing
-            // of the value argument (unknown in the signature).
+            // like parse<T>. stringifyToFile(Sync)(path, value) takes no
+            // type argument: the value's own type is all the serializer
+            // needs, so the fixture surface is `JSON.stringifyToFileSync(path,
+            // value)` (spec: the write family is type-argument free).
             if (parseFileJson) {
                 sig.params = {Type::string()};
                 sig.optional = {false};
@@ -533,17 +534,18 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
                 sig.params = {Type::string(), Type::unknown()};
                 sig.optional = {false, false};
             }
-            if (call.typeArgs.empty() || !call.typeArgs.front()) {
-                tArgMissing = true;
-                t = Type::undefined();
-            } else if (parseFileJson) {
-                t = resolveType(*call.typeArgs.front());
+            if (parseFileJson) {
+                if (call.typeArgs.empty() || !call.typeArgs.front()) {
+                    tArgMissing = true;
+                    t = Type::undefined();
+                } else {
+                    t = resolveType(*call.typeArgs.front());
+                }
+                if (m.property == "parseFile") t = promiseOf(t);
             } else {
-                (void)resolveType(*call.typeArgs.front());
                 t = Type::voidType();
+                if (m.property == "stringifyToFile") t = promiseOf(t);
             }
-            if (m.property == "parseFile") t = promiseOf(t);
-            if (m.property == "stringifyToFile") t = promiseOf(Type::voidType());
             sig.ret = t;
         } else {
             sig.params = {Type::string()};
@@ -561,9 +563,9 @@ bool Analyzer::tryInferJsonCall(CallExpr& call, MemberExpr& m, Type& out) {
             }
             sig.ret = t;
         }
-        // JSON.parse(file)<T> / JSON.verify<T> / JSON.stringifyToFile(Sync)<T>
-        //: a missing type argument is CP3208 (docs/design/remove-void-unknown.md
-        // pattern): the value type is only known with it.
+        // JSON.parse(file)<T> / JSON.verify<T>: a missing type argument
+        // is CP3208 (docs/design/remove-void-unknown.md pattern): the
+        // value type is only known with it.
         if (tArgMissing) {
             std::string message = "JSON." + m.property +
                                   " requires a type argument; use JSON." +
