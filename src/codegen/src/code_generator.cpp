@@ -17,9 +17,11 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "cp3/codegen.hpp"
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "detail/class/virtual_set.h"
 #include "detail/generator/cpp_writer.h"
 #include "detail/generator/helper_blocks.h"
 #include "detail/generator/mangle.h"
@@ -82,6 +84,13 @@ void Generator::reportUnsupported(const Node& node, const char* code,
 }
 
 GeneratedModule Generator::run(const Program& program) {
+    // The program-wide override analysis (spec: virtual dispatch): a
+    // single-unit program IS its whole program, so the set is built from the
+    // one unit before any class is emitted. The whole-program path installs
+    // its own set (emit/program.cpp).
+    const std::unordered_set<std::string> virtualSet =
+        detail::buildVirtualMethodSet({&program});
+    virtualMethodSet_ = &virtualSet;
     // The worker unit lowers only its default-export arrow (spec 13); the
     // entry unit's ordinary walk follows.
     if (options_.workerModule) {

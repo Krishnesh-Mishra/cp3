@@ -31,6 +31,7 @@ set(cp3_codegen_sources
     src/support/class/class_collect.cpp
     src/support/core/enum_values.cpp
     src/support/class/class_walk.cpp
+    src/support/class/virtual_set.cpp
     src/support/core/helper_blocks.cpp
     src/support/int/int_mode.cpp
     src/support/int/int_mode_body.cpp

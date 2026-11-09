@@ -139,7 +139,13 @@ public:
                  std::string& mainBody, std::string& globals);
     void emitProgramUnit(const detail::ProgramLink& link,
                          const CompilationUnit& unit,
-                         detail::ProgramAssembly& assembly);
+                         detail::ProgramAssembly& assembly,
+                         const std::unordered_set<std::string>* virtualSet);
+    // The program-wide override analysis (support/class/virtual_set.cpp): the
+    // `<className>::<methodName>` pairs that lower as C++ `virtual` members.
+    // Non-owning; null when the program has no classes. Set by the entry
+    // points (run/runProgram/runWorkerModule) before any unit is emitted.
+    const std::unordered_set<std::string>* virtualMethodSet_ = nullptr;
 
 private:
     friend struct detail::ArrayEmitter;  // src/language/arrays/codegen_methods.cpp

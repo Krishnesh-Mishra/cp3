@@ -79,6 +79,11 @@ struct ClassMemberModel {
     bool isWeak = false;
     bool isMethod = false;
     bool isAbstract = false;
+    // Lowers as a C++ `virtual` member: the program-wide override analysis
+    // (support/class/virtual_set.cpp) found an override of this member
+    // somewhere in the whole program. Set at model-collection time; read by
+    // emitClassMethodMember.
+    bool isVirtual = false;
     bool hasInitializer = false;
     const PropertyDeclaration* field = nullptr;
     const MethodDeclaration* method = nullptr;

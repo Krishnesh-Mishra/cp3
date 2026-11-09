@@ -252,6 +252,13 @@ void Generator::collectClassMethodModel(ClassModel& cm,
     m.type = Type::function(std::move(params), ret);
     rewriteTypeParams(m.type, cm.typeParams);
     rewriteTypeParams(m.type, m.typeParams);
+    if (!m.isStatic && virtualMethodSet_ != nullptr &&
+        virtualMethodSet_->find(cm.name + "::" + name) !=
+            virtualMethodSet_->end()) {
+        // The program-wide override analysis found an override of this
+        // member somewhere in the whole program.
+        m.isVirtual = true;
+    }
     cm.members.push_back(std::move(m));
 }
 

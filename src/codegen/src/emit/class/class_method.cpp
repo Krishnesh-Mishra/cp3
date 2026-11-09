@@ -2,10 +2,15 @@
 // src/codegen/src/emit/class_method.cpp - the class method member emission.
 //
 // A method member of a class (spec §15): the declaration inside the class and,
-// for a namespace-scope class, the out-of-line definition. A generic method
-// (spec §16) lowers to a C++ member function template: inside the class the
-// template head names the method's own type parameters, the out-of-line
-// definition names the class's parameters first and the method's second.
+// for a namespace-scope class, the out-of-line definition. A method the
+// program-wide override analysis (support/class/virtual_set.cpp) marks
+// `isVirtual` is emitted as a C++ `virtual` declaration (the out-of-line
+// definition never repeats the keyword); an abstract member marked `virtual`
+// is emitted with the pure specifier `= 0` (its vtable must not reference an
+// undefined symbol). A generic method (spec §16) lowers to a C++ member
+// function template: inside the class the template head names the method's own
+// type parameters, the out-of-line definition names the class's parameters
+// first and the method's second.
 // =============================================================================
 #include "detail/generator/generator.h"
 
@@ -35,12 +40,20 @@ void Generator::emitClassMethodMember(const ClassModel& cm,
     // The template head of a generic method ("" for an ordinary one).
     const std::string memberHead =
         m.typeParams.empty() ? "" : templateHeadOf(m.typeParams);
-    const std::string declText = (md.isStatic ? "static " : "") + ret + " " +
+    // A method that has an override somewhere in the program is a C++
+    // `virtual` member; the out-of-line definition must not repeat the
+    // keyword (a `virtual` on a member out of line is a compile error).
+    // `isVirtual` is never set for a static member (virtual and static are
+    // mutually exclusive in C++).
+    const std::string virtualPrefix =
+        (m.isVirtual && !md.isStatic) ? "virtual " : "";
+    const std::string declText = virtualPrefix +
+                                 (md.isStatic ? "static " : "") + ret + " " +
                                  name + "(" + joinStrings(params, ", ") + ")";
     // An abstract method (or a signature without a body) stays a declaration.
     if (md.body == nullptr) {
         if (!memberHead.empty()) line(out, indent, memberHead);
-        line(out, indent, declText + ";");
+        line(out, indent, declText + (m.isVirtual ? " = 0;" : ";"));
         return;
     }
     if (defs == nullptr) {

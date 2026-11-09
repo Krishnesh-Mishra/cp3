@@ -19,10 +19,12 @@
 // the union of the units' needs; the R"( strings of the helper blocks are the
 // same objects (detail/helper_blocks.h), so both paths splice the same bytes.
 // =============================================================================
+#include "detail/class/virtual_set.h"
 #include "detail/generator/generator.h"
 
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -278,19 +280,35 @@ GeneratedModule assembleProgram(const ProgramAssembly& assembly,
 GeneratedModule Generator::runProgram(
     const ModuleGraph& graph, const std::vector<CheckedModuleUnit>& units) {
     const ProgramLink link = buildProgramLink(graph, units);
+    // One pass over every unit's AST, BEFORE any class is emitted: the
+    // program-wide set of members that must lower as `virtual`. An override
+    // can be declared in a unit other than the one emitting the base's
+    // struct, so this runs across all units at once; an empty set means no
+    // unit's class overridden anywhere in the program.
+    std::vector<const Program*> asts;
+    asts.reserve(units.size());
+    std::unordered_set<const Program*> seen;
+    for (const CheckedModuleUnit& checked : units) {
+        if (!checked.unit || !checked.unit->ast) continue;
+        const Program* ast = checked.unit->ast.get();
+        if (seen.insert(ast).second) asts.push_back(ast);
+    }
+    const std::unordered_set<std::string> virtualSet =
+        detail::buildVirtualMethodSet(asts);
     ProgramAssembly assembly;
     for (CompilationUnit* unit : graph.compilationOrder()) {
         if (unit == nullptr || unit->ast == nullptr) continue;
         if (unit->isPrelude && !unit->isEntry) continue;
         if (link.semas.find(unit->id) == link.semas.end()) continue;
-        emitProgramUnit(link, *unit, assembly);
+        emitProgramUnit(link, *unit, assembly, &virtualSet);
     }
     return assembleProgram(assembly, moduleName_);
 }
 
 void Generator::emitProgramUnit(const ProgramLink& link,
                                 const CompilationUnit& unit,
-                                ProgramAssembly& assembly) {
+                                ProgramAssembly& assembly,
+                                const std::unordered_set<std::string>* virtualSet) {
     const auto semaIt = link.semas.find(unit.id);
     if (semaIt == link.semas.end() || semaIt->second == nullptr || !unit.ast) {
         return;
@@ -304,6 +322,7 @@ void Generator::emitProgramUnit(const ProgramLink& link,
                     options);
     inner.programMode_ = true;
     inner.packageSurfaceOnly_ = unit.isPackage;
+    inner.virtualMethodSet_ = virtualSet;
     const auto importsIt = link.imports.find(unit.id);
     if (importsIt != link.imports.end()) inner.linkedNames_ = importsIt->second;
     ProgramUnitText text;
