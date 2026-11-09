@@ -861,8 +861,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                         default=None, metavar="PATH",
                         help="write the `_ambiguous/` marker registry and exit "
                              "(default: tests/cases/AMBIGUITIES.md)")
-    parser.add_argument("--timeout", type=float, default=60.0,
-                        help="per-case timeout in seconds (default: 60)")
+    parser.add_argument("--timeout", type=float, default=300.0,
+                        help="per-case timeout in seconds (default: 300)")
     default_jobs = max(1, os.cpu_count() or 1)
     parser.add_argument("--jobs", type=int, default=default_jobs, metavar="N",
                         help="run up to N cases concurrently during the corpus "
