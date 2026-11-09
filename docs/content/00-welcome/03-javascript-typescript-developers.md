@@ -4,6 +4,18 @@ chapter: Welcome
 ---
 This is a practical reference for developers who already know JavaScript or TypeScript. It covers the command line, project setup, CP3 source syntax, the standard library, async and concurrency, native types, diagnostics, and a JavaScript/TypeScript → CP3 porting map. Every API entry names its import form, signature, and behavior. Examples use syntax that type-checks in CP3.
 
+## cp3 0.2 highlights
+
+What landed in the v0.2 line that changes everyday code:
+
+- **Checked JSON everywhere** — `JSON.parse<T>` requires the type argument and validates the value at runtime; `T` may be an inline object annotation (`{ x: number }`) as well as a registered interface. The file-oriented family (`JSON.parseFileSync<T>` / `parseFile<T>` / `stringifyToFile(Sync)` / `verify<T>`) reads, writes and validates JSON files — see §15 `std/json`.
+- **Fresh-literal `Object.assign` merge** — `Object.assign({ ...fresh }, ...sources)` produces a new object with the union of fields in JS key order (later sources win a duplicate key, any number of sources); a reused binding keeps its fixed shape and source keys not on it are rejected — see §18.4 `Object` built-ins.
+- **Virtual member dispatch** — a method overridden anywhere in the program dispatches dynamically through the vtable, fail-closed (an unmodelable base marks every method virtual; non-overridden members stay direct) — see §4.7 Classes and interfaces.
+- **Parallel call diagnostics** — `parallel.for` / `parallel.reduce` / `parallel.run` report unknown members, misplaced or wrong-shaped closures, and a missing range first argument at check time — see §5 Runtime essentials.
+- **Typed promise handlers** — `.then` / `.catch` / `.finally` handlers take typed parameters, and `Promise` combinators accept plain values as already-resolved promises (wrapped per element) — see §5.1 `async` / `await` and promises.
+
+Full notes: [`docs/release/v0.2.md`](../../release/v0.2.md). Build from source and run the suite: [`docs/BUILD.md`](../../BUILD.md).
+
 # 1. One-file summary: what transfers and what does not
 
 | JavaScript / TypeScript concept | CP3 equivalent | Note |
@@ -1133,7 +1145,7 @@ Constructor type arguments are **required** — empty collections give no elemen
 | Member | Result |
 |---|---|
 | `Object.keys(o)` / `Object.values(o)` / `Object.entries(o)` | `string[]`, `V[]`, `[string, V][]` (static shapes only; no `for...in`) |
-| `Object.assign(target, ...sources)` | target shape (known fields) |
+| `Object.assign(target, ...sources)` | target shape (known fields) | source fields not on the target are rejected; use `{ ...target, ...source }` for a merged object |
 | `Object.is(a, b)` | `boolean` (Object.is semantics) |
 | `Object.freeze` / `Object.seal` / `Object.preventExtensions` | same value; identity approximation — CP3 has no runtime property table |
 | `Object.isFrozen` / `Object.isSealed` / `Object.isExtensible` | `boolean`; folds on a directly frozen/sealed/extensibility-controlled argument |

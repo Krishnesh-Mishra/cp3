@@ -510,7 +510,9 @@ class LiveProgress:
         self._last_len = len(text)
 
 
-def discover_cases(cases_dir: Path, filter_substr: Optional[str]) -> tuple[list[Case], list[str]]:
+def discover_cases(cases_dir: Path, filter_substr: Optional[str],
+                   progress: Optional[callable] = None,
+                   ) -> tuple[list[Case], list[str]]:
     """Returns (cases, discovery_warnings). Never raises.
 
     A case is a folder that holds `main.cp3` (the program) and `output.json`
@@ -523,14 +525,24 @@ def discover_cases(cases_dir: Path, filter_substr: Optional[str]) -> tuple[list[
         warnings.append(f"cases directory not found: {cases_dir}")
         return cases, warnings
 
+    def _p(msg: str) -> None:
+        if progress is not None:
+            progress(msg)
+
     # Two layouts are understood while the corpus migrates:
     #   <case>/main.cp3 + <case>/output.json            (the fixed-name layout)
     #   <name>.cp3 + <name>.expect.json                 (the flat layout)
+    _p("scanning for output.json files...")
+    expect_paths = list(cases_dir.rglob("output.json"))
+    _p(f"  {len(expect_paths)} found")
+    _p("scanning for *.expect.json files...")
+    expect_paths2 = list(cases_dir.rglob("*.expect.json"))
+    _p(f"  {len(expect_paths2)} found")
     discovered: list[tuple[Path, str, Path]] = []
-    for expect_path in sorted(cases_dir.rglob("output.json")):
+    for expect_path in expect_paths:
         discovered.append((expect_path, expect_path.parent.name,
                            expect_path.parent / "main.cp3"))
-    for expect_path in sorted(cases_dir.rglob("*.expect.json")):
+    for expect_path in expect_paths2:
         stem = expect_path.name[: -len(".expect.json")]
         discovered.append((expect_path, stem, expect_path.parent / (stem + ".cp3")))
     discovered.sort(key=lambda item: item[0].as_posix())
@@ -886,13 +898,48 @@ def main(argv: Optional[list[str]] = None) -> int:
     cases_dir = Path(args.cases)
     if not args.json:
         print(f"scanning {cases_dir}...", flush=True)
-    cases, warnings = discover_cases(cases_dir, args.filter_substr)
+    def _scan_progress(msg: str) -> None:
+        if not args.json:
+            print(msg, flush=True)
+    # Kick off a preflight probe in a background thread so discovery and
+    # the Hello-World build overlap. It's only an indicator that the
+    # compiler is correctly built — the prompt prints it quickly enough
+    # to look near-instant on warm caches.
+    _pf_holder: dict = {}
+    def _do_preflight():
+        _pf_holder["compiler"] = _resolve_compiler(args.cp3c)
+        _compiler = _pf_holder["compiler"]
+        _compiler_missing = _compiler is None or not _compiler.is_file()
+        _pf_holder["compiler_missing"] = _compiler_missing
+        if not _compiler_missing:
+            _pf_holder["preflight_ok"], _pf_holder["preflight_detail"] = preflight(
+                _compiler, max(args.timeout, 300.0))
+        else:
+            _pf_holder["preflight_ok"] = False
+            _pf_holder["preflight_detail"] = "cp3c executable not found"
+    import concurrent.futures
+    preflight_future = concurrent.futures.ThreadPoolExecutor(max_workers=1).submit(_do_preflight)
+    cases, warnings = discover_cases(cases_dir, args.filter_substr, _scan_progress)
     if not args.json:
         amb = sum(1 for c in cases if c.ambiguous)
         if args.strict_ambiguous:
             print(f"  found {len(cases)} case(s)", flush=True)
         else:
             print(f"  found {len(cases)} case(s) ({len(cases) - amb} to assert, {amb} ambiguous markers)", flush=True)
+    if not args.json:
+        if compiler_missing := _pf_holder["compiler_missing"]:
+            print(f"  locating cp3c...", flush=True)
+            print(f"  preflight: cp3c not found "
+                  f"(expected at build/windows-release or build/linux-release)",
+                  flush=True)
+        else:
+            print(f"  preflight: building + running Hello-World probe ({_pf_holder['compiler']})...",
+                  flush=True)
+    preflight_future.result()
+    compiler = _pf_holder["compiler"]
+    compiler_missing = _pf_holder["compiler_missing"]
+    preflight_ok = _pf_holder["preflight_ok"]
+    preflight_detail = _pf_holder["preflight_detail"]
 
     # --- registry generation (opt-in side effect, then exit; needs no compiler)
     if args.write_registry is not None:
@@ -906,24 +953,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"wrote {len(markers)} ambiguity marker(s) to {dest}")
         return 0
 
-    # --- platform + compiler probe --------------------------------------------
-    # Detect the host platform, resolve the compiler for it, then prove it
-    # compiles and runs a trivial program. A failure aborts before the corpus
-    # scan rather than 3000 skipped/failing cases later.
-    compiler = _resolve_compiler(args.cp3c)
-    compiler_missing = compiler is None or not compiler.is_file()
-    preflight_ok = False
-    preflight_detail = "cp3c executable not found"
-    if not compiler_missing:
-        if not args.json:
-            print(f"  preflight: building + running Hello-World probe ({compiler})...", flush=True)
-        preflight_ok, preflight_detail = preflight(compiler, max(args.timeout, 300.0))
-
     ordinary_cases = (
         cases if args.strict_ambiguous else [c for c in cases if not c.ambiguous]
     )
     ambiguous_cases = [] if args.strict_ambiguous else [c for c in cases if c.ambiguous]
     progress = LiveProgress(enabled=False if args.json else args.progress)
+    partial_outcomes: list[Outcome] = []
 
     def run_as_ordinary_serial(
         selected: list[Case],
@@ -938,6 +973,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             else:
                 outcome = evaluate(case, compiler, args.timeout)
             sink.append(outcome)
+            partial_outcomes.append(outcome)
             if progress is not None:
                 progress.advance(outcome.status)
                 progress.set_inflight(0)
@@ -946,6 +982,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     def run_as_ordinary_parallel(
         selected: list[Case],
         progress: Optional[LiveProgress] = None,
+        jobs: Optional[int] = None,
     ) -> list[Outcome]:
         # Bounded pool, one cp3c subprocess per case - the same command, cwd
         # and timeout the sequential path uses. Cases are parallelised across
@@ -959,8 +996,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         # print), and outcomes are collected per submission index, so the
         # emitted lines are byte-identical to a sequential run no matter which
         # case finishes first.
+        thread_count = jobs if jobs is not None else args.jobs
         count = len(selected)
-        if compiler_missing or args.jobs <= 1 or count <= 1:
+        if compiler_missing or thread_count <= 1 or count <= 1:
             return run_as_ordinary_serial(selected, progress)
         timeout = args.timeout
         # Only `run` cases involve the toolchain and the shared `<root>/.cp3/`
@@ -987,7 +1025,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         def start_more(pool: ThreadPoolExecutor) -> None:
             scan = 0
-            while len(inflight) < args.jobs and scan < len(pending):
+            while len(inflight) < thread_count and scan < len(pending):
                 index = pending[scan]
                 root = roots[index]
                 if root is not None and root in busy_roots:
@@ -999,7 +1037,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 future = pool.submit(evaluate, selected[index], compiler, timeout)
                 inflight[future] = index
 
-        with ThreadPoolExecutor(max_workers=min(args.jobs, count)) as pool:
+        with ThreadPoolExecutor(max_workers=min(thread_count, count)) as pool:
             start_more(pool)
             if progress is not None:
                 progress.set_inflight(len(inflight))
@@ -1012,6 +1050,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                         busy_roots.discard(root)
                     outcome = future.result()
                     collected[index] = outcome
+                    partial_outcomes.append(outcome)
                     if progress is not None:
                         progress.advance(outcome.status)
                 start_more(pool)
@@ -1029,39 +1068,55 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     def retry_transient_failures(outcomes: list[Outcome]) -> list[Outcome]:
         # A parallel run can fail a case because the C++ compiler hit memory or
-        # process pressure, not because the generated code is wrong. Rerun only
-        # those failures serially; a real compile error fails again, while a
-        # pressure failure recovers. Non-transient mismatches (wrong output or
+        # process pressure, not because the real codegen output is wrong. Rerun
+        # only those failures, in three tiers of decreasing parallelism:
+        #   1. the same --jobs the corpus pass used;
+        #   2. ceil(--jobs / 4) — covers cold-cache build timeouts under load;
+        #   3. pure serial — covers anything that only fails under any load.
+        # A real compile error fails again in every tier; a pressure failure
+        # recovers in a lower tier. Non-transient mismatches (wrong output or
         # exit code) are not retried: they are deterministic.
-        transient = [
-            o for o in outcomes
+        transient_indices = [
+            i for i, o in enumerate(outcomes)
             if o.status == "failed" and
                ("C++ compilation failed" in o.detail or "timed out" in o.detail)
         ]
-        if not transient:
+        if not transient_indices:
             return outcomes
-        transient_names = {o.case.display for o in transient}
-        if not args.json:
-            progress.message(
-                f"  retry  : {len(transient)} transient failure(s) rerun serially"
-            )
-        retry_progress = LiveProgress(enabled=progress.enabled)
-        retry_progress.begin("retry", len(transient))
-        try:
-            retried = run_as_ordinary_serial(
-                [o.case for o in transient], retry_progress
-            )
-        finally:
-            retry_progress.finish()
-        recovered = sum(1 for o in retried if o.status == "passed")
-        if not args.json:
-            progress.message(f"  retry  : {recovered}/{len(transient)} recovered")
-        by_case = {o.case.display: o for o in retried}
-        return [
-            by_case.get(o.case.display, o)
-            if o.case.display in transient_names else o
-            for o in outcomes
+
+        tiers = [
+            (f"{args.jobs} parallel", args.jobs),
+            (f"{max(1, args.jobs // 4)} parallel", max(1, args.jobs // 4)),
+            ("serial", 1),
         ]
+        for tier_label, tier_jobs in tiers:
+            failing_indices = [
+                i for i in transient_indices
+                if outcomes[i].status == "failed"
+            ]
+            if not failing_indices:
+                break
+            if not args.json:
+                progress.message(
+                    f"  retry  : {len(failing_indices)} transient failure(s) rerun with {tier_label}"
+                )
+            retry_progress = LiveProgress(enabled=progress.enabled)
+            retry_progress.begin(f"retry-{tier_jobs}", len(failing_indices))
+            select = [outcomes[i].case for i in failing_indices]
+            try:
+                if tier_jobs <= 1 or len(select) <= 1:
+                    retried = run_as_ordinary_serial(select, retry_progress)
+                else:
+                    retried = run_as_ordinary_parallel(
+                        select, retry_progress, jobs=tier_jobs)
+            finally:
+                retry_progress.finish()
+            recovered = sum(1 for o in retried if o.status == "passed")
+            if not args.json:
+                progress.message(f"  retry  : {recovered}/{len(failing_indices)} recovered")
+            for target, fresh in zip(failing_indices, retried):
+                outcomes[target] = fresh
+        return outcomes
 
     def evaluate_suite() -> list[Outcome]:
         progress.begin("corpus", len(ordinary_cases))
@@ -1123,7 +1178,28 @@ def main(argv: Optional[list[str]] = None) -> int:
               "&& cmake --build <preset>", file=sys.stderr)
         return 2
 
-    outcomes = evaluate_suite()
+    try:
+        outcomes = evaluate_suite()
+    except KeyboardInterrupt:
+        # Flush whatever outcomes already collected, so a user who Ctrl+C-s
+        # mid-run can see which cases failed (and why) without waiting for the
+        # rest. This intentionally bypasses the retry pass (there is no time
+        # for it in a Ctrl+C path).
+        latest: dict[str, Outcome] = {}
+        for o in partial_outcomes:
+            latest[o.case.display] = o
+        fails = [o for o in latest.values() if o.status == "failed"]
+        skips = [o for o in latest.values() if o.status == "skipped"]
+        amb = [o for o in latest.values() if o.status == "ambiguous"]
+        passes = [o for o in latest.values() if o.status == "passed"]
+        print()
+        print(f"interrupted: {len(latest)} case(s) evaluated; {len(passes)} passed, "
+              f"{len(fails)} failed, {len(skips)} skipped, {len(amb)} ambiguous")
+        if fails:
+            print()
+            for o in fails:
+                print(f"  FAIL {o.case.display}: {o.detail}")
+        return 130
     summary_counts = counts(outcomes)
 
     if args.json:
