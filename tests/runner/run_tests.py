@@ -621,6 +621,7 @@ def _resolve_compiler(path_arg: Optional[str]) -> Optional[Path]:
     With no --cp3c, the platform's canonical build tree is searched, and if
     nothing is found there the compiler is configured and built on the spot.
     """
+    print("  locating cp3c...", flush=True)
     if path_arg:
         candidate = Path(path_arg)
         if candidate.is_file():
@@ -637,6 +638,7 @@ def _resolve_compiler(path_arg: Optional[str]) -> Optional[Path]:
         return None
     found = _find_compiler()
     if found is not None:
+        print(f"  found {found}", flush=True)
         return found
     return _try_build_compiler()
 
