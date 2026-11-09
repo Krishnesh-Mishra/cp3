@@ -41,16 +41,15 @@ bool isNumberBackedEnum(const std::unordered_map<std::string, EnumInfo>& table,
     return found != table.end() && !found->second.stringBacked;
 }
 
-// Both operands carry a numeric reading for one operator: a number / number
-// pair, or a number-backed enum against the same enum or a numeric operand
-// (spec 04 / TS parity). Distinct enums and string-backed enums have no
-// common numeric reading and stay errors.
+// spec 04 / TS parity: any pair of number-backed enums reads as numbers for
+// arithmetic and relational operators. String-backed enums have no numeric
+// reading and cannot take part.
 bool hasEnumNumberPair(const std::unordered_map<std::string, EnumInfo>& table,
                        const Type& l, const Type& r) {
     if (isNumericOperand(l) && isNumericOperand(r)) return true;
     const bool lEnum = isNumberBackedEnum(table, l);
     const bool rEnum = isNumberBackedEnum(table, r);
-    if (lEnum && rEnum) return l.name == r.name;
+    if (lEnum && rEnum) return true;
     if (lEnum) return isNumericOperand(r);
     if (rEnum) return isNumericOperand(l);
     return false;
