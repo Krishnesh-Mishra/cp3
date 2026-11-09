@@ -16,7 +16,26 @@
 
 namespace cp3 {
 
-TypePtr ParserImpl::parseType() { return parseUnionType(); }
+TypePtr ParserImpl::parseType() {
+    // `readonly T[]` / `readonly [A, B]`: a read-through view of an array or
+    // tuple. `readonly` is a contextual marker (a regular-class member modifier
+    // too); TypeScript's mutability rule is compile-time only and cp3 has no
+    // const-tracking, so the qualifier is accepted and dropped. Applying it to
+    // a non-array is a type error.
+    if (check(TokenKind::Identifier) && textOf(peek()) == "readonly") {
+        const Token start = advance();
+        const Token qualifier = start;
+        TypePtr t = parsePostfixType();
+        if (!t) return nullptr;
+        if (t->kind != NodeKind::ArrayType && t->kind != NodeKind::TupleType) {
+            report(diagcode::kTypeMismatch,
+                   "readonly may only qualify an array or tuple type");
+        }
+        t->span = spanFrom(qualifier);
+        return t;
+    }
+    return parseUnionType();
+}
 
 TypePtr ParserImpl::parseUnionType() {
     const Token start = peek();
