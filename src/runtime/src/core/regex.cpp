@@ -271,6 +271,61 @@ Array<std::string> Regex::split(const std::string& subject) const {
     return makeArray<std::string>(std::move(out));
 }
 
+// The `replace`/`replaceAll(r)` scan, mirroring `split`'s left-to-right
+// walk: an empty match advances one byte (never re-replaces), the g/y state
+// is untouched, and the replacement text is spliced in literally. A fresh
+// scan from 0 matches the `split()` precedent; `stopAfterFirst` implements
+// `replace`'s one-shot behavior for non-global regexes; `requireGlobal` is
+// `replaceAll`'s JS `TypeError` for non-global regexes (cp3 fatally reports
+// it, like matchAll).
+std::string replaceScan(const std::string& subject,
+                        Engine& engine,
+                        const std::string& replacement,
+                        bool stopAfterFirst,
+                        bool requireGlobal) {
+    if (engine.code == nullptr) return subject;
+    if (requireGlobal && !engine.global) {
+        std::fputs("cp3c: String.prototype.replaceAll requires a global "
+                   "regular expression\n", stderr);
+        std::fflush(stderr);
+        std::exit(1);
+    }
+    const bool single = stopAfterFirst && !engine.global;
+    std::string out;
+    std::size_t piece = 0;
+    for (std::size_t pos = 0; pos <= subject.size();) {
+        const MatchResult found = attemptFrom(engine, subject, pos);
+        if (!found.matched) {
+            if (engine.sticky) {
+                ++pos;
+                continue;
+            }
+            break;
+        }
+        out.append(subject, piece, found.begin - piece);
+        out.append(replacement);
+        piece = found.end;
+        if (single) break;
+        // An empty match must advance one byte so the same zero-width match
+        // cannot be replaced forever (JS's AdvanceStringIndex).
+        pos = found.end == pos ? pos + 1 : found.end;
+    }
+    out.append(subject, piece, std::string::npos);
+    return out;
+}
+
+std::string Regex::replace(const std::string& subject,
+                           const std::string& replacement) const {
+    if (engine_ == nullptr) return subject;
+    return replaceScan(subject, *engine_, replacement, true, false);
+}
+
+std::string Regex::replaceAll(const std::string& subject,
+                              const std::string& replacement) const {
+    if (engine_ == nullptr) return subject;
+    return replaceScan(subject, *engine_, replacement, false, true);
+}
+
 std::string Regex::source() const {
     return engine_ == nullptr ? std::string() : engine_->pattern;
 }

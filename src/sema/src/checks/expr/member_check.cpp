@@ -488,7 +488,16 @@ Type Analyzer::stringMember(const std::string& prop) {
             Type::function({Type::number(), Type::number()}, Type::string()));
     }
     if (prop == "replace" || prop == "replaceAll") {
-        return Type::function({Type::string(), Type::string()}, Type::string());
+        // `search` may be a plain string or a `RegExp` (the day-2 corpus pins
+        // `s.replace(/a/, "b")`): a global regex replaces every occurrence, a
+        // non-global regex replaces only the first for `replace` (and is a
+        // runtime TypeError for `replaceAll`, like matchAll). The bound is the
+        // same union `split` accepts.
+        return Type::function(
+            {Type::unionOf(
+                {Type::string(), Type::named(TypeKind::Class, "RegExp")}),
+             Type::string()},
+            Type::string());
     }
     if (prop == "split") {
         // `s.split(sep)`: the separator is required and may be a string or a

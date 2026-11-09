@@ -132,6 +132,21 @@ std::string Generator::emitStringMethodCall(const CallExpr& c, const MemberExpr&
         return "::cp3::runtime::strings::matchAll(" + expr(*m.object) + ", " +
                expr(*c.arguments.front()) + ")";
     }
+    if (m.property == "replace" || m.property == "replaceAll") {
+        // `s.replace(regexp, replacement)` (JS special-case vs the string
+        // overload): the runtime Regex does its own scan. Replacement is a
+        // literal (no `$`-substitution; the string form behaves the same).
+        if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1]) {
+            return std::string();
+        }
+        const Type search = effectiveType(*c.arguments[0]);
+        if (search.kind == TypeKind::Class && search.name == "RegExp") {
+            needsRegex_ = true;
+            return "(" + expr(*c.arguments[0]) + ")." + m.property + "(" +
+                   expr(*m.object) + ", " + expr(*c.arguments[1]) + ")";
+        }
+        // fall through: a string search key uses the string runtime helper.
+    }
     if (!fn && m.property == "split") {
         // `s.split(sep)`: a string separator splits through the string runtime
         // (the array extras' `makeArray` wraps the pieces;

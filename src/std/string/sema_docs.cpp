@@ -99,11 +99,10 @@ const DocRow kStringDocRows[] = {
     {"substring", "substring(start?: number, end?: number): string",
      "Returns the part of the string between `start` and `end`. Backed by "
      "`std::string::substr`."},
-    {"replace", "replace(search: string, replacement: string): string",
-     "Returns the string with the first occurrence of `search` replaced."},
-    {"replaceAll", "replaceAll(search: string, replacement: string): string",
-     "Returns the string with every occurrence of `search` replaced. Backed "
-     "by `absl::StrReplaceAll`."},
+    {"replace", "replace(search: string | RegExp, replacement: string): string",
+     "Returns the string with the first match (or all, when `search` is a global RegExp) replaced. A plain string matches literally; a RegExp performs a regex search."},
+    {"replaceAll", "replaceAll(search: string | RegExp, replacement: string): string",
+     "Returns the string with every occurrence replaced. `search` may be a literal string or a global RegExp (a non-global RegExp is a runtime TypeError)."},
     {"split", "split(separator: string | RegExp): string[]",
      "Splits the string at every occurrence of `separator` and returns the "
      "parts as an array."},

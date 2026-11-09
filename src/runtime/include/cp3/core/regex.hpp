@@ -73,6 +73,17 @@ public:
     Array<std::string> match(const std::string& subject) const;
     Array<std::string> exec(const std::string& subject) const;
 
+    // `s.replace(r)` / `s.replaceAll(r)`: a fresh left-to-right scan like
+    // `split()`; the g flag decides replace-vs-replaceAll for `replace`, and
+    // `replaceAll` requires it (JS `TypeError` otherwise; cp3 terminates with
+    // the same guidance as matchAll). Replacement text is LITERAL (no
+    // `$`-substitution — matching the string-search form). The g/y state is
+    // neither read nor written.
+    std::string replace(const std::string& subject,
+                        const std::string& replacement) const;
+    std::string replaceAll(const std::string& subject,
+                           const std::string& replacement) const;
+
     // `s.split(r)`, the string-side lowering of a regex separator (the
     // day-2 docs example and the stdlib/string_split_regex corpus case): the
     // substrings between matches, with every participating capture group

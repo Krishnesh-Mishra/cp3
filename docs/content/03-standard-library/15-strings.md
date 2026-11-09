@@ -65,7 +65,7 @@ On multibyte strings, a byte boundary can fall inside an encoded code point. The
 
 ## Replacing and splitting
 
-`replace(search, replacement)` replaces the first matching occurrence. `replaceAll(search, replacement)` replaces all occurrences. Both return new strings and leave the source value unchanged.
+`replace(search, replacement)` replaces the first matching occurrence. `replaceAll(search, replacement)` replaces all occurrences. Both return new strings and leave the source value unchanged. `search` may be a plain string (matched literally) or a `RegExp` (a global regex replaces every occurrence for `replace` and is required for `replaceAll`; a non-global regex passed to `replaceAll` is a runtime TypeError). Replacement text is inserted literally — `$` is not a group-reference marker.
 
 `split(separator)` accepts a string separator or a `RegExp` according to the checker and code generator. A string separator is matched literally. A regular expression uses CP3's regular-expression runtime. Splitting constructs an array containing the pieces, so account for its memory cost on large inputs; see [Regular expressions](17-regular-expressions.md) for captures, state, and Unicode differences.
 
