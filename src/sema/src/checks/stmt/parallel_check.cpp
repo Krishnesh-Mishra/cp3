@@ -311,6 +311,61 @@ void Analyzer::checkParallelCall(CallExpr& call) {
     const bool isFor = m.property == "for";
     const bool isRun = m.property == "run";
     const bool isReduce = m.property == "reduce";
+    const auto& args = call.arguments;
+    const Expr* firstArg = args.empty() ? nullptr : args.front().get();
+    const bool firstIsRange =
+        firstArg != nullptr && firstArg->kind == NodeKind::RangeExpr;
+    const auto arrowAt = [&](std::size_t i) -> ArrowFunction* {
+        if (i >= args.size() || !args[i]) return nullptr;
+        Expr* a = args[i].get();
+        if (!a || a->kind != NodeKind::ArrowFunction) return nullptr;
+        return static_cast<ArrowFunction*>(a);
+    };
+    if (!isFor && !isRun && !isReduce) {
+        // `parallel.wait` / `parallel.join` / `parallel.all` /
+        // `parallel.spawn`: no such member in spec §13.
+        report(diagcode::kMemberNotFound, call.span,
+               "parallel has no member '" + m.property + "'");
+        return;
+    }
+    if (isFor || isReduce) {
+        const std::size_t minArgs = isFor ? 2 : 3;
+        if (args.size() != minArgs) {
+            report(diagcode::kArityMismatch, call.span,
+                   "arity mismatch: parallel." + m.property +
+                       (isFor ? " takes a range and a closure"
+                              : " takes a range, an initializer and a closure"));
+            return;
+        }
+        if (!firstIsRange) {
+            report(diagcode::kTypeMismatch, call.span,
+                   "type mismatch: parallel." + m.property +
+                       "'s first argument must be a range");
+            return;
+        }
+        const std::size_t closureIndex = isFor ? 1 : 2;
+        const std::size_t expectedParams = isFor ? 1 : 2;
+        ArrowFunction* arrow = arrowAt(closureIndex);
+        if (arrow != nullptr && arrow->params.size() != expectedParams) {
+            const char* hint = isFor ? " (the index)" : " (the accumulator and the index)";
+            report(diagcode::kArityMismatch, call.span,
+                   "arity mismatch: parallel." + m.property +
+                       "'s closure must take " +
+                       std::to_string(expectedParams) + " parameter" +
+                       (expectedParams == 1 ? "" : "s") + hint);
+            return;
+        }
+    } else if (isRun) {
+        for (const auto& a : args) {
+            if (!a) continue;
+            const Expr* e = a.get();
+            if (e->kind != NodeKind::ArrowFunction) {
+                report(diagcode::kTypeMismatch, call.span,
+                       "type mismatch: parallel.run's arguments must be closures");
+                return;
+            }
+        }
+    }
     // `parallel.reduce` requires a `0..n` range as its first argument; the
     // diagnostic used to exist only in codegen (run mode). Expose it in the
     // frontend so check mode (the fixture corpus) reports it too: the
