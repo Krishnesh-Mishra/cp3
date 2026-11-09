@@ -882,7 +882,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         parser.error("--jobs must be at least 1")
 
     cases_dir = Path(args.cases)
+    if not args.json:
+        print(f"scanning {cases_dir}...", flush=True)
     cases, warnings = discover_cases(cases_dir, args.filter_substr)
+    if not args.json:
+        amb = sum(1 for c in cases if c.ambiguous)
+        if args.strict_ambiguous:
+            print(f"  found {len(cases)} case(s)", flush=True)
+        else:
+            print(f"  found {len(cases)} case(s) ({len(cases) - amb} to assert, {amb} ambiguous markers)", flush=True)
 
     # --- registry generation (opt-in side effect, then exit; needs no compiler)
     if args.write_registry is not None:
@@ -905,6 +913,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     preflight_ok = False
     preflight_detail = "cp3c executable not found"
     if not compiler_missing:
+        if not args.json:
+            print(f"  preflight: building + running Hello-World probe ({compiler})...", flush=True)
         preflight_ok, preflight_detail = preflight(compiler, max(args.timeout, 300.0))
 
     ordinary_cases = (
