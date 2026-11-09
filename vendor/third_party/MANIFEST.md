@@ -64,7 +64,7 @@ stored by target architecture under each vendor's `lib/linux-*/` directory.
 | oneTBB/lib/libtbbmalloc.a | 245472 | 53AC7AAE285488384808E339854F795454046BD345D8B46AAA15AAE0016D08A0 |
 | uWebSockets/lib/libuSockets.a | 87038 | 74C01266147AEF7670A0EB88123570CFDEBB434508D9C2988734229724F00293 |
 | uWebSockets/lib/windows-x64/libuSockets.a | 87038 | 74C01266147AEF7670A0EB88123570CFDEBB434508D9C2988734229724F00293 |
-| uWebSockets/lib/linux-x64/libuSockets.a | 154860 | 9BE832A5FE8CF6405234CFC35250B54891820C1C17E63A1782AD9A9A7DD2996C |
+| uWebSockets/lib/linux-x64/libuSockets.a | 122710 | 06B3144E93C19B3323A931D09FFDFC1134FFEA2A07BD29896AFDF139EA7C60DC |
 | uWebSockets/lib/linux-arm64/libuSockets.a | 129758 | 11E13DEF4009B831E64C92CDFD74F6F359E399D75F828E7766932950627A099D |
 | simdutf/lib/linux-arm64/libsimdutf.a | 347304 | E9DB567C5C85A037EB4A5D6DD15AB2258C7EEBEA0A173457B12F5CB12B6E2461 |
 | xxhash/lib/linux-arm64/libxxhash.a | 75368 | 55FDCE25D000E049CAC4DF8C2E0DFB8F098E8F397F2E5CE0DA1F6797230E113E |
@@ -207,7 +207,9 @@ Also: "TBBBind build targets are disabled due to unsupported environment"
 uWebSockets v20.80.0 ships no CMakeLists anywhere; the project's own Makefile
 is the only supported build. The v0.2 TLS bring-up rebuilt the Windows and
 linux-x64 archives WITH OpenSSL support (WITH_OPENSSL=1), and linux-arm64 was
-rebuilt the same way on 2026-11-08 (aarch64 cross GCC, WITH_OPENSSL=1).
+rebuilt the same way on 2026-11-08 (aarch64 cross GCC, WITH_OPENSSL=1). The
+linux-x64 archive was rebuilt again on 2026-11-09 after the 2026-10-31 build
+was found to link-fail with slim-LTO members (see the linux-x64 block).
 
 Windows (ucrt64 gcc 16.2.0 Rev6, 2026-11-07):
 
@@ -230,8 +232,14 @@ sni_tree.cpp drags in libstdc++ <map>/<memory> symbols; the consumer link
 must therefore use the mingw-w64 UCRT C++ runtime that the uSockets archive
 was built against (verified end-to-end: https fetch links and runs).
 
-linux-x64 (gcc 15.2.0, WSL2 Ubuntu, 2026-11-07): same configure line with
-WITH_OPENSSL=1 WITH_LIBUV=1 WITH_LTO=0; no -flto defect on fat-LTO targets.
+linux-x64 (gcc 15.2.0, WSL2 Ubuntu, archive rebuilt 2026-11-09): the same
+configure line with WITH_OPENSSL=1 WITH_LIBUV=1 WITH_LTO=0, with the
+Makefile's hardcoded -flto stripped first (parity with the windows-x64 and
+linux-arm64 recipes). The 2026-10-31 archive shipped slim-LTO `sni_tree.o`
+(.text == 0) that plain GNU ld cannot read: every Linux link of a std/network
+program failed with "plugin needed to handle lto object" and undefined
+sni_find/sni_add/sni_new/... The rebuilt archive carries regular code
+sections in every member and links.
 
 linux-arm64 (aarch64 cross GCC 15.2.0, WSL2 Ubuntu, 2026-11-08): same recipe,
 `CC=/usr/bin/aarch64-linux-gnu-gcc CXX=/usr/bin/aarch64-linux-gnu-g++

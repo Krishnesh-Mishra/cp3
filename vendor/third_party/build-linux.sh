@@ -109,6 +109,13 @@ git -C "$SRC/uWebSockets/uSockets" checkout --detach 86097c490263ab662d62e8e7b54
     exit 1
 }
 
+# The uSockets Makefile hardcodes -flto on the src/crypto/*.cpp compile
+# (sni_tree.cpp). With GCC defaults that emit slim LTO objects (.text == 0)
+# that plain GNU ld cannot read - this is how the linux-x64 archive shipped
+# on 2026-10-31 (see MANIFEST.md). Strip it, mirroring the windows-x64 and
+# linux-arm64 recipes.
+sed -i 's/-flto//g' "$SRC/uWebSockets/uSockets/Makefile"
+
 echo "[1/3] libsodium ($ARCH)"
 mkdir -p "$BUILD/libsodium"
 if [[ ! -f "$PREFIX/libsodium/lib/libsodium.a" ]]; then
