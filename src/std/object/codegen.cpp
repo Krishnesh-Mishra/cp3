@@ -99,6 +99,92 @@ std::string freezeRootMethod(const Expr& e) {
 
 }  // namespace
 
+// A `Object.assign` call whose target is a fresh literal (`{ a: 1 }` written
+// inline as the first argument): the result is a *new* object whose shape is
+// the union of every source's fields, in JS key order, later sources winning a
+// duplicate key. This path is taken so a literal target is not pinned to the
+// target's declared closed shape; the target's keys keep their declared order
+// and sources only append new keys.
+std::string Generator::emitAssignMergedText(const CallExpr& c) {
+    const Type mergedT = effectiveType(c);
+    std::string structName;
+    std::vector<ObjectField> mergedFields;
+    if (!objectShapeOf(mergedT, structName, mergedFields)) {
+        reportCodegenError(c, diagcode::kTypeMismatch,
+                           "Object.assign of a fresh literal: the merged "
+                           "object has no C++ spelling");
+        return "nullptr";
+    }
+    std::vector<std::string> fieldNames;
+    for (const ObjectField& f : mergedFields) {
+        fieldNames.push_back(f.name);
+    }
+    std::string out = "[&]{ auto cp3_r = ::cp3::runtime::makeRef<" + structName +
+                      ">(" + structName + "{});";
+    // Evaluate every argument exactly once, in argument order.
+    std::vector<std::string> locals;
+    for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+        const ExprPtr& arg = c.arguments[i];
+        if (!arg) continue;
+        const Type srcT = effectiveType(*arg);
+        if (srcT.isNullish()) {
+            out += " (void)(" + expr(*arg) + ");";
+            locals.push_back(std::string());
+            continue;
+        }
+        const std::string local = freshLabel("assign_");
+        out += " const auto& " + local + " = " + expr(*arg) + ";";
+        locals.push_back(local);
+    }
+    for (std::size_t i = 0; i < c.arguments.size(); ++i) {
+        const ExprPtr& arg = c.arguments[i];
+        if (!arg) continue;
+        const Type srcT = effectiveType(*arg);
+        if (srcT.isNullish()) continue;
+        const bool nullableSource = srcT.isNullable() && !srcT.parts.empty();
+        Type base = srcT;
+        if (nullableSource) base = srcT.parts.front();
+        if (base.isNullish()) continue;
+        std::string sourceStructName;
+        std::vector<ObjectField> sourceFields;
+        const bool sourcePlain = objectShapeOf(base, sourceStructName,
+                                               sourceFields);
+        if (!sourcePlain) {
+            reportCodegenError(*arg, diagcode::kTypeMismatch,
+                               "Object.assign does not know every field of "
+                               "this source; use a literal target with "
+                               "statically known fields");
+            continue;
+        }
+        const std::string& src = locals[i];
+        out += " { ";
+        if (nullableSource) out += " if (" + src + ") { ";
+        for (const ObjectField& f : mergedFields) {
+            const std::string member = mapIdent(f.name);
+            bool provided = false;
+            bool optional = false;
+            for (const ObjectField& sf : sourceFields) {
+                if (sf.name == f.name) {
+                    provided = true;
+                    optional = classify(sf.type).shape == Shape::Optional;
+                    break;
+                }
+            }
+            if (!provided) continue;
+            if (optional) {
+                out += " if (" + src + "->" + member + ".has_value()) cp3_r->" +
+                       member + " = *" + src + "->" + member + ";";
+                continue;
+            }
+            out += " cp3_r->" + member + " = " + src + "->" + member + ";";
+        }
+        if (nullableSource) out += " } ";
+        out += " } ";
+    }
+    out += " return cp3_r; }()";
+    return out;
+}
+
 std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
     if (m.property == "assign" || m.property == "freeze" ||
         m.property == "seal" || m.property == "preventExtensions" ||
@@ -111,6 +197,14 @@ std::string Generator::emitObjectCall(const CallExpr& c, const MemberExpr& m) {
                                    "arity mismatch: Object.assign expects at "
                                    "least two arguments");
                 return "nullptr";
+            }
+            // A fresh-literal target (`{ ... }` directly in the call) makes
+            // the result a new merged object: the union of every source's
+            // fields in JS key order. A reused binding names a static shape,
+            // so the merge is emitted in place and the shape is preserved.
+            const Expr* frontArg = c.arguments.front().get();
+            if (frontArg && frontArg->kind == NodeKind::ObjectLiteral) {
+                return emitAssignMergedText(c);
             }
             // JS semantics: the first argument is the (shared) target, mutated
             // in place and returned; aliases of the target observe the writes.

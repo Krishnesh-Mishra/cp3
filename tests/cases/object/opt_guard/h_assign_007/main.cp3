@@ -1,0 +1,4 @@
+import console from "std/console";
+const t: { a: number } = { a: 1 };
+const r = Object.assign(t, { b: 2 });
+console.log(`${r.a}`);

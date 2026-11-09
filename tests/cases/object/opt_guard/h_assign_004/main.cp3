@@ -1,0 +1,4 @@
+import console from "std/console";
+const r = Object.assign({ b: 2, a: 1 }, { c: 3, b: 9 });
+console.log(Object.keys(r).join(","));
+console.log(`${r.a},${r.b},${r.c}`);

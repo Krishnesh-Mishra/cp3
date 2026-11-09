@@ -253,6 +253,89 @@ bool Analyzer::tryInferObjectCall(CallExpr& call, MemberExpr& m, Type& out) {
                        "known fields (or null/undefined, which are ignored)");
             }
         }
+        const Expr* frontArg = call.arguments.front().get();
+        if (frontArg && frontArg->kind == NodeKind::ObjectLiteral) {
+            // A fresh literal target: the call merges its fields with every
+            // source's (JS key order, later source wins a duplicate key,
+            // the new object is fresh). The merged shape is the result type.
+            std::vector<Field> merged;
+            const Shape* targetShape = shapeOf(target);
+            if (targetShape != nullptr) {
+                merged = targetShape->fields;
+            }
+            for (std::size_t i = 1; i < call.arguments.size(); ++i) {
+                const ExprPtr& arg = call.arguments[i];
+                if (!arg) continue;
+                const Type source = typeOfExpr(*arg);
+                if (source.isNullish()) continue;
+                Type sourceType = source;
+                if (source.isNullable() && !source.parts.empty()) {
+                    sourceType = source.parts.front();
+                    if (sourceType.isNullish()) continue;
+                } else if (source.isNullable()) {
+                    continue;
+                }
+                const Shape* sourceShape = shapeOf(sourceType);
+                if (sourceType.kind != TypeKind::Object || sourceShape == nullptr) {
+                    continue;  // already reported above; keep going for the type
+                }
+                for (const Field& f : sourceShape->fields) {
+                    bool replaced = false;
+                    for (Field& existing : merged) {
+                        if (existing.name == f.name) {
+                            existing.type = f.type;
+                            existing.optional = f.optional;
+                            replaced = true;
+                            break;
+                        }
+                    }
+                    if (!replaced) {
+                        merged.push_back(f);
+                    }
+                }
+            }
+            Type mergedType =
+                makeObjectType(std::move(merged), false, false, {});
+            out = withType(call, mergedType);
+            return true;
+        }
+        const Shape* targetShape = shapeOf(target);
+        if (targetShape != nullptr) {
+            // A reused binding has a fixed declared shape; a source with a
+            // field the target does not declare would change its shape. The
+            // merge is only allowed for a fresh literal (above). TypeScript
+            // permits extending an existing object's declared shape with
+            // Object.assign; cp3 does not — say so and point at the spread
+            // form that the language does support.
+            for (std::size_t i = 1; i < call.arguments.size(); ++i) {
+                const ExprPtr& arg = call.arguments[i];
+                if (!arg) continue;
+                const Type source = typeOfExpr(*arg);
+                if (source.isNullish()) continue;
+                Type sourceType = source;
+                if (source.isNullable() && !source.parts.empty()) {
+                    sourceType = source.parts.front();
+                    if (sourceType.isNullish()) continue;
+                }
+                const Shape* sourceShape = shapeOf(sourceType);
+                if (sourceShape == nullptr) continue;
+                for (const Field& f : sourceShape->fields) {
+                    bool present = false;
+                    for (const Field& tf : targetShape->fields) {
+                        if (tf.name == f.name) { present = true; break; }
+                    }
+                    if (!present) {
+                        report(diagcode::kTypeMismatch, arg->span,
+                               "Object.assign cannot add a new property to an "
+                               "existing object in cp3; TypeScript allows it, "
+                               "but CP3 emits statically typed native output "
+                               "with fixed object shapes — write the spread "
+                               "form `{...t, ...u}` instead");
+                        break;
+                    }
+                }
+            }
+        }
         out = withType(call, target);
         return true;
     }

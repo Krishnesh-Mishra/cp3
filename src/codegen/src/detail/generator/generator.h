@@ -671,6 +671,10 @@ Type asyncValueType(const MethodDeclaration& md) const;
     // `Object.keys` / `.values` / `.entries` over a static object shape
     // (src/std/object/codegen.cpp).
     std::string emitObjectCall(const CallExpr& c, const MemberExpr& m);
+    // A `Object.assign` call whose target is a fresh literal: the
+    // JavaScript merged-shape semantics (new object). NULL for a target that
+    // is not a fresh literal (the reused-variable in-place form handles it).
+    std::string emitAssignMergedText(const CallExpr& c);
     std::string emitBuiltinMember(const MemberExpr& m);
     std::string emitMathCall(const CallExpr& c, const MemberExpr& m);
     std::string emitMathMember(const MemberExpr& m);
