@@ -342,7 +342,7 @@ Getting started
   cp3 doctor                  check the installation
   cp3 init my-app             scaffold a project
   cd my-app
-  cp3 run src/main.cp3        build and run it
+  cp3 run                     build and run it
 
 Install (no root)
   ./install.sh                copies to \$HOME/.local/lib/cp3 and links

@@ -6,6 +6,7 @@
 // Non-interactive forms for scripts:
 //   cp3c toolchain list
 //   cp3c toolchain detect
+//   cp3c toolchain current
 //   cp3c toolchain use <clang[@version]|path> [--project|--global]
 //   cp3c toolchain clear [--project|--global]
 // Bare `cp3c toolchain` opens the Clang version -> scope wizard. A piped stdin
@@ -79,6 +80,13 @@ std::string effectiveLine() {
     const Toolchain& toolchain = detectToolchain();
     if (!toolchain.found()) return "none (no usable Clang found)";
     return describeToolchain(toolchain) + " from " + toolchainSourceDescription();
+}
+
+// Single line, no decoration: the packaging shims (`cp3 doctor`) consume this
+// verbatim instead of re-implementing the resolution order.
+int toolchainCurrent() {
+    std::printf("%s\n", effectiveLine().c_str());
+    return kExitSuccess;
 }
 
 bool parseScope(const CliOptions& opt, Scope& scope, std::string& err) {
@@ -336,10 +344,12 @@ int toolchainDetect() {
 
 void printToolchainUsage(std::FILE* out) {
     std::fputs(
-        "usage: cp3c toolchain [list|detect|use <clang[@version]|path>|clear]\n"
+        "usage: cp3c toolchain [list|detect|current|use <clang[@version]|path>|"
+        "clear]\n"
         "  cp3c toolchain                 choose a Clang version and scope\n"
         "  cp3c toolchain list            versions, paths and the effective choice\n"
         "  cp3c toolchain detect          show what auto-detection finds\n"
+        "  cp3c toolchain current         print the effective toolchain, one line\n"
         "  cp3c toolchain use <clang[@version]|path>\n"
         "                                 save a choice (--project|--global)\n"
         "  cp3c toolchain clear           remove saved choices "
@@ -377,6 +387,14 @@ int cmdToolchain(const CliOptions& opt) {
             return kExitUsageError;
         }
         return toolchainDetect();
+    }
+    if (sub == "current") {
+        if (!args.empty()) {
+            std::fputs("cp3c: 'toolchain current' takes no arguments\n",
+                       stderr);
+            return kExitUsageError;
+        }
+        return toolchainCurrent();
     }
     if (sub == "use") return toolchainUse(opt, args);
     if (sub == "clear") {

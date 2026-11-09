@@ -5,23 +5,32 @@
 //
 // Scaffolds `package.json`, `src/index.cp3` (the spec's default entry - see
 // CLI-README §5.1) and, for `"type": "package"`, a README.md listed in
-// `build.files`. Interactive prompts appear only on a TTY and only when --yes
-// is absent; the prompt order follows the spec: type -> name -> description ->
-// type-system pattern. `--type-system <value>` supplies the last answer for
-// scripts and non-TTY use.
+// `build.files`. On a TTY the questions are asked interactively and the two
+// choice fields are arrow-key menus (the same selector the toolchain wizard
+// uses); a pipe gets numbered choices. Something only a machine can drive,
+// `--yes`, skips prompts entirely. The prompt order follows the spec:
+// type -> name -> description -> author -> type-system pattern.
+// `--type-system <value>`, `--description <value>` and `--author <value>`
+// supply the third, fourth and fifth answers for scripts and non-TTY use.
 //
 // `package.json` parity with CLI-README §5.1: name, version, description,
-// type, main, typeSystem, the standard develop/compile/start/verify `scripts` block
-// (CLI-README line 124) and a `build` block (`bundleNativeDlls` for
+// author (when given), type, main, typeSystem, the start/verify/build `scripts`
+// block (CLI-README line 124) and a `build` block (`bundleNativeDlls` for
 // applications, `files` for packages).
+//
+// Existing scaffold files are left unchanged and reported, unless `--force`
+// (or `-f`) is given, in which case the three scaffold files are overwritten.
+// Unrelated files are never touched.
 // =============================================================================
 #include <cstdio>
 #include <iostream>
 #include <string>
 #include <system_error>
+#include <vector>
 
 #include "detail/core/commands.hpp"
 #include "detail/core/util.hpp"
+#include "detail/toolchain/toolchain_select.hpp"
 
 namespace cp3::cli {
 
@@ -42,22 +51,22 @@ std::string jsonEscape(const std::string& s) {
     return out;
 }
 
-// The standard scripts block, pointed at the project entry. Names avoid
-// collisions with cp3c's built-in `dev`, `build`, and `check` commands, so
-// each generated script can be invoked directly as `cp3c <script>`.
+// The standard scripts block, pointed at the project entry. npm-style
+// `scripts` names never shadow cp3c built-ins here: `start`, `verify` and
+// `build` stay script names, resolvable via `cp3c <script>`.
 std::string scriptsBlock(const std::string& entry) {
     std::string out;
     out += "  \"scripts\": {\n";
-    out += "    \"develop\": \"cp3c dev " + entry + "\",\n";
-    out += "    \"compile\": \"cp3c build " + entry + "\",\n";
     out += "    \"start\": \"cp3c run " + entry + "\",\n";
-    out += "    \"verify\": \"cp3c check " + entry + "\"\n";
+    out += "    \"verify\": \"cp3c check " + entry + "\",\n";
+    out += "    \"build\": \"cp3c build " + entry + "\"\n";
     out += "  },\n";
     return out;
 }
 
 std::string packageJsonFor(const std::string& name,
                            const std::string& description,
+                           const std::string& author,
                            const std::string& type,
                            const std::string& typeSystem) {
     const bool isPackage = (type == "package");
@@ -67,6 +76,9 @@ std::string packageJsonFor(const std::string& name,
     out += "  \"name\": \"" + jsonEscape(name) + "\",\n";
     out += "  \"version\": \"1.0.0\",\n";
     out += "  \"description\": \"" + jsonEscape(description) + "\",\n";
+    if (!author.empty()) {
+        out += "  \"author\": \"" + jsonEscape(author) + "\",\n";
+    }
     out += "  \"type\": \"" + jsonEscape(type) + "\",\n";
     out += "  \"main\": \"" + entry + "\",\n";
     out += "  \"typeSystem\": \"" + jsonEscape(typeSystem) + "\",\n";
@@ -132,18 +144,32 @@ std::string prompt(const std::string& question, const std::string& fallback) {
     return answer.substr(first, last - first + 1);
 }
 
+// Arrow-key menu on a TTY, numbered fallback on a pipe. Returns the chosen
+// row, or -1 when the user cancels with q/Esc.
+int askMenu(const std::string& title, const std::vector<std::string>& rows,
+            const std::vector<std::string>& keys, int initial,
+            bool& cancelled) {
+    return runMenu(title, rows, keys, initial, cancelled);
+}
+
 bool validTypeSystem(const std::string& value) {
     return value == "typescript" || value == "cpp" || value == "rust";
 }
 
 // Writes one scaffold file; a pre-existing file is left unchanged (and
-// reported) rather than clobbered. Returns false only on a write failure.
-bool writeScaffold(const fs::path& path, const std::string& content) {
+// reported) unless `overwrite` is given. Returns false only on a write
+// failure.
+bool writeScaffold(const fs::path& path, const std::string& content,
+                   bool overwrite) {
     std::error_code ec;
-    if (fs::exists(path, ec)) {
+    const bool exists = fs::exists(path, ec);
+    if (exists && !overwrite) {
         std::fprintf(stderr, "cp3c: %s already exists; leaving it unchanged\n",
                      path.string().c_str());
         return true;
+    }
+    if (exists) {
+        std::fprintf(stderr, "cp3c: overwriting %s\n", path.string().c_str());
     }
     if (!writeTextFile(path, content, nullptr)) {
         std::fprintf(stderr, "cp3c: could not write %s\n", path.string().c_str());
@@ -155,12 +181,21 @@ bool writeScaffold(const fs::path& path, const std::string& content) {
 }  // namespace
 
 int cmdInit(const CliOptions& opt) {
+    if (opt.positionals.size() > 1) {
+        std::fputs("cp3c: usage: cp3c init [dir] [--force|-f] [--yes] "
+                   "[--type application|package] [--type-system typescript|cpp|rust]\n"
+                   "        [--description <text>] [--author <who>]\n",
+                   stderr);
+        return kExitUsageError;
+    }
     std::error_code ec;
     fs::path target = opt.positionals.empty() ? fs::current_path(ec)
                                               : fs::path(opt.positionals[0]);
     std::string name = target.filename().string();
     if (name.empty() || name == "." || name == "..") name = "cp3-app";
-    std::string description = "a C+++ project";
+    std::string description =
+        opt.initDescription.empty() ? "a C+++ project" : opt.initDescription;
+    std::string author = opt.initAuthor;
     std::string type = opt.initType.empty() ? "application" : opt.initType;
     std::string typeSystem =
         opt.initTypeSystem.empty() ? "typescript" : opt.initTypeSystem;
@@ -173,14 +208,37 @@ int cmdInit(const CliOptions& opt) {
     }
 
     if (!opt.yes && isTty(stdin)) {
-        // Spec prompt order: type -> name -> description -> type-system
-        // (CLI-README §5.1).
-        type = prompt("Type (application/package)", type);
-        if (type != "application" && type != "package") type = "application";
+        // Spec prompt order: type -> name -> description -> author ->
+        // type-system (CLI-README §5.1). Menus with arrow keys on a TTY.
+        bool cancelled = false;
+        const int typeChoice = askMenu(
+            "Type (application/package)",
+            {"Application - a runnable binary",
+             "Package - a library consumed via `cp3c install`"},
+            {"application", "package"}, type == "package" ? 1 : 0, cancelled);
+        if (cancelled) {
+            std::fputs("cp3c: init cancelled; nothing written\n", stderr);
+            return kExitUsageError;
+        }
+        type = typeChoice == 1 ? "package" : "application";
+
         name = prompt("Project name", name);
         description = prompt("Description", description);
-        typeSystem = prompt("Type system (typescript/cpp/rust)", typeSystem);
-        if (!validTypeSystem(typeSystem)) typeSystem = "typescript";
+        author = prompt("Author (name <mail@example.com>)", author);
+        const int defaultTs =
+            typeSystem == "cpp" ? 1 : (typeSystem == "rust" ? 2 : 0);
+        cancelled = false;
+        const int tsChoice = askMenu(
+            "Type system",
+            {"typescript - number stays IEEE-754 doubles",
+             "cpp - i32/i64/u64 native defaults",
+             "rust - i32/i64/u64 native defaults"},
+            {"typescript", "cpp", "rust"}, defaultTs, cancelled);
+        if (cancelled) {
+            std::fputs("cp3c: init cancelled; nothing written\n", stderr);
+            return kExitUsageError;
+        }
+        typeSystem = tsChoice == 1 ? "cpp" : tsChoice == 2 ? "rust" : "typescript";
     }
     const bool isPackage = (type == "package");
 
@@ -191,15 +249,18 @@ int cmdInit(const CliOptions& opt) {
     }
 
     if (!writeScaffold(target / "package.json",
-                       packageJsonFor(name, description, type, typeSystem))) {
+                       packageJsonFor(name, description, author, type,
+                                      typeSystem),
+                       opt.force)) {
         return kExitCompileError;
     }
     const fs::path entryFile = target / "src" / "index.cp3";
     const std::string entry =
         isPackage ? packageEntrySource(name) : appEntrySource(name);
-    if (!writeScaffold(entryFile, entry)) return kExitCompileError;
+    if (!writeScaffold(entryFile, entry, opt.force)) return kExitCompileError;
     if (isPackage &&
-        !writeScaffold(target / "README.md", readmeSource(name, description))) {
+        !writeScaffold(target / "README.md", readmeSource(name, description),
+                       opt.force)) {
         return kExitCompileError;
     }
 

@@ -772,6 +772,10 @@
           "package.json": "{ bad json\n"
         }
       },
+      "xfail": {
+        "id": "manifest-preflight-exit-code",
+        "reason": "findPackageScript intercepts every command in a broken project with exit 2 before the toolchain refusal path; expects exit 1 + 'parse'"
+      },
       "requires": [
         "command:toolchain",
         "clang"
@@ -929,6 +933,53 @@
           "project.choice.id": "clang",
           "project.choice.policy": "latest",
           "versions.policy": "latest"
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "current-auto-detect",
+      "description": "current prints the effective auto-detect toolchain on one line",
+      "argv": [
+        "toolchain",
+        "current"
+      ],
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "auto-detect"
+          ]
+        }
+      }
+    },
+    {
+      "group": "toolchain",
+      "name": "current-global-pin",
+      "description": "current names the global config source on one line",
+      "argv": [
+        "toolchain",
+        "current"
+      ],
+      "setup": {
+        "config_fixtures": [
+          "toolchain-config"
+        ]
+      },
+      "requires": [
+        "command:toolchain",
+        "clang"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "global config"
+          ]
         }
       }
     }

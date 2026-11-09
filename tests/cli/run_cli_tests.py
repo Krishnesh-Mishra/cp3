@@ -867,7 +867,10 @@ def assemble_shim(
 ) -> None:
     bin_dir = root / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / "packaging" / "windows" / "cp3.cmd", bin_dir / "cp3.cmd")
+    shutil.copy2(
+        REPO_ROOT / "dist" / "packaging" / "windows" / "cp3.cmd",
+        bin_dir / "cp3.cmd",
+    )
     if with_cp3c:
         link_or_copy(cp3c, bin_dir / "cp3c.exe")
     if with_vsix:
@@ -878,7 +881,13 @@ def assemble_shim(
         )
     if with_trees:
         make_junction(root / "src", REPO_ROOT / "src", warnings)
-        make_junction(root / "third_party", REPO_ROOT / "third_party", warnings)
+        vendor_dir = root / "vendor"
+        vendor_dir.mkdir(parents=True, exist_ok=True)
+        make_junction(
+            vendor_dir / "third_party",
+            REPO_ROOT / "vendor" / "third_party",
+            warnings,
+        )
 
 
 def build_shims(run_root: Path, cp3c: Path, provided_cp3: Optional[Path]) -> ShimSet:

@@ -4,8 +4,8 @@
 #
 # A thin shim around bin/cp3c. It exports CP3_ROOT so the compiler finds the
 # shipped include/, src/ and vendor/third_party/ trees even when this file is reached
-# through PATH. `cp3 init` and `cp3 doctor` are owned here (cp3c does not
-# implement them); every other command is forwarded verbatim with the exit code
+# through PATH. Only `cp3 doctor` is owned here; every other command -
+# including `cp3 init` - is forwarded verbatim to bin/cp3c with the exit code
 # preserved.
 # =============================================================================
 set -eu
@@ -20,63 +20,6 @@ if [ "$#" -eq 0 ]; then
 fi
 
 case "$1" in
-    init)
-        shift
-        target=""
-        force=0
-        while [ "$#" -gt 0 ]; do
-            case "$1" in
-                --force|-f)
-                    force=1
-                    shift
-                    ;;
-                -*)
-                    echo "cp3: usage: cp3 init [target] [--force]" >&2
-                    exit 2
-                    ;;
-                *)
-                    if [ -n "$target" ]; then
-                        echo "cp3: usage: cp3 init [target] [--force]" >&2
-                        exit 2
-                    fi
-                    target=$1
-                    shift
-                    ;;
-            esac
-        done
-        if [ -z "$target" ]; then target=$PWD; fi
-        mkdir -p "$target" || exit 1
-        target=$(CDPATH= cd -- "$target" && pwd) || exit 1
-        if [ -n "$(ls -A "$target" 2>/dev/null)" ] && [ "$force" -ne 1 ]; then
-            echo "cp3: target \"$target\" is not empty; refusing to scaffold over it." >&2
-            echo "      Re-run with --force to scaffold into it anyway." >&2
-            exit 2
-        fi
-        name=$(basename -- "$target")
-        if [ -z "$name" ]; then name=cp3-app; fi
-        json_name=$(printf '%s' "$name" | tr -d '"\\')
-        mkdir -p "$target/src" || exit 1
-        {
-            printf '{\n'
-            printf '  "name": "%s",\n' "$json_name"
-            printf '  "version": "0.1.0",\n'
-            printf '  "type": "application",\n'
-            printf '  "main": "src/main.cp3"\n'
-            printf '}\n'
-        } > "$target/package.json"
-        {
-            printf 'import console from "std/console";\n\n'
-            printf 'console.log("Hello from %s!");\n' "$name"
-        } > "$target/src/main.cp3"
-        {
-            printf '# %s\n\n' "$name"
-            printf 'A cp3 project scaffolded by `cp3 init`.\n\n'
-            printf 'Build and run it with:\n\n'
-            printf '    cp3 run src/main.cp3\n'
-        } > "$target/README.md"
-        echo "cp3: initialized project \"$name\" in \"$target\""
-        echo "      Run it with:  cd \"$target\" && cp3 run src/main.cp3"
-        ;;
     doctor)
         shift
         echo "cp3 doctor"
@@ -89,11 +32,22 @@ case "$1" in
         else
             echo "  cp3c         : MISSING ($CP3C)"
         fi
-        if command -v clang++ >/dev/null 2>&1; then
-            echo "  toolchain    : $(command -v clang++)"
-        else
-            echo "  toolchain    : (none found - install Clang/LLVM and put clang++ on PATH)"
+        # Ask cp3c itself: it owns the resolution order (--toolchain >
+        # CP3_TOOLCHAIN > project package.json > global toolchain.conf >
+        # auto-detect). Fall back to PATH discovery only when cp3c is
+        # missing or cannot answer (older cp3c without `toolchain current`).
+        tc=""
+        if [ -x "$CP3C" ]; then
+            tc=$("$CP3C" toolchain current 2>/dev/null || true)
         fi
+        if [ -z "$tc" ]; then
+            if command -v clang++ >/dev/null 2>&1; then
+                tc="Clang ($(command -v clang++))"
+            else
+                tc="(none found - run 'cp3 toolchain' to select one, or put clang++ on PATH)"
+            fi
+        fi
+        echo "  toolchain    : $tc"
         if command -v ccache >/dev/null 2>&1; then
             echo "  ccache       : $(command -v ccache)"
         else
@@ -108,7 +62,9 @@ case "$1" in
         if [ -d "$CP3_ROOT/src" ]; then src=yes; else src=no; fi
         if [ -d "$CP3_ROOT/vendor/third_party" ]; then tp=yes; else tp=no; fi
         echo "  shipped trees: include=$inc src=$src vendor_third_party=$tp"
-        echo "  note         : Clang (clang++) is required to build cp3 programs."
+        echo "  note         : Clang is required to build cp3 programs. If clang++ is"
+        echo "                  not on PATH, select one with: cp3 toolchain"
+        echo "                  VS Code is optional."
         if [ -x "$CP3C" ]; then exit 0; fi
         exit 1
         ;;

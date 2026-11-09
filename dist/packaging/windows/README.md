@@ -184,7 +184,7 @@ one `include\` tree serves every case while runtime sources stay under
 2. Open a new terminal. `cp3` and `cp3c` are already on the user PATH.
 3. `cp3 doctor` reports the compiler, the Clang toolchain it will use,
    ccache, VS Code and the shipped trees.
-4. `cp3 init my-app`, then `cd my-app` and `cp3 run src/main.cp3`.
+4. `cp3 init my-app`, then `cd my-app` and `cp3 run`.
 5. `cp3 editor-plugin` installs the bundled extension if it was not already
    installed.
 
@@ -199,7 +199,7 @@ is optional: cp3 libraries and CLI work without it. LLVM is not bundled;
 | Command | Behaviour |
 | --- | --- |
 | `cp3 <anything>` | forwarded verbatim to `bin\cp3c.exe`, exit code passed through (`cp3 lsp`, `cp3 build`, `cp3 check`, ... all land here) |
-| `cp3 init [target] [--force]` | scaffolds `package.json` (`"main": "src/main.cp3"`), `src/main.cp3`, `README.md`; refuses a non-empty target unless `--force`; exit 2 on refusal |
+| `cp3 init [dir] [--force\|-f] [--yes]` | forwarded to `cp3c init`: scaffolds `package.json` (start/verify/build scripts, author/description when given), `src/index.cp3`, and `README.md` for packages; arrow-key menus for the two choice fields on a TTY; existing scaffold files are left unchanged unless `--force` |
 | `cp3 doctor` | status list; exit 1 when `cp3c.exe` is missing |
 | `cp3 editor-plugin` | interactive extension wizard; non-TTY runs `status`. Actions: `status`, `install`, `uninstall`, `export`, `path` (`--editor`, `--vsix`, `--extensions-dir`, `--out`, `--force`, `--yes`, `--dry-run`, `--json`, `--interactive`) |
 

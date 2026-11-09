@@ -298,10 +298,9 @@
         "files": {
           "app/package.json": {
             "json_paths": {
-              "scripts.develop": "cp3c dev src/index.cp3",
-              "scripts.compile": "cp3c build src/index.cp3",
               "scripts.start": "cp3c run src/index.cp3",
               "scripts.verify": "cp3c check src/index.cp3",
+              "scripts.build": "cp3c build src/index.cp3",
               "build.bundleNativeDlls": true
             }
           }
@@ -762,6 +761,94 @@
               "Built with the C+++ (`cp3`) toolchain."
             ]
           }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "author-and-description-flags",
+      "description": "--author and --description are written into package.json",
+      "argv": [
+        "init",
+        "app",
+        "--yes",
+        "--author",
+        "Ada <ada@example.com>",
+        "--description",
+        "does things"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "app/package.json": {
+            "json_paths": {
+              "author": "Ada <ada@example.com>",
+              "description": "does things"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "author-omitted-by-default",
+      "description": "no author flag or prompt means the author key is omitted",
+      "argv": [
+        "init",
+        "app",
+        "--yes"
+      ],
+      "expect": {
+        "exit": 0,
+        "files": {
+          "app/package.json": {
+            "not_contains": [
+              "\"author\""
+            ]
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "force-overwrites-existing-scaffold",
+      "description": "init --force overwrites a pre-existing package.json",
+      "argv": [
+        "init",
+        "app",
+        "--yes",
+        "--force"
+      ],
+      "setup": {
+        "files": {
+          "app/package.json": "{\n  \"name\": \"stale\",\n  \"version\": \"9.9.9\"\n}\n"
+        }
+      },
+      "expect": {
+        "exit": 0,
+        "files": {
+          "app/package.json": {
+            "json_paths": {
+              "name": "app",
+              "version": "1.0.0"
+            }
+          }
+        }
+      }
+    },
+    {
+      "group": "init",
+      "name": "two-targets-rejected",
+      "description": "init rejects two target directories",
+      "argv": [
+        "init",
+        "a",
+        "b"
+      ],
+      "expect": {
+        "exit": 2,
+        "stderr": {
+          "contains": "usage: cp3c init"
         }
       }
     }

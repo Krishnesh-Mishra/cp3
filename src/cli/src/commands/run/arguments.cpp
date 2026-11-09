@@ -81,6 +81,7 @@ bool matchFlag(const std::string& t, cp3::cli::CliOptions& opt, bool& sawRelease
     if (cp3::cli::matchEditorFlag(t, opt)) return true;
     if (t == "--strict-toolchain") { opt.strictToolchain = true; return true; }
     if (t == "--force") { opt.force = true; return true; }
+    if (t == "-f") { opt.force = true; return true; }
     if (t == "--dry-run") { opt.dryRun = true; return true; }
     if (t == "--json") { opt.json = true; return true; }
     if (t == "--list") { opt.listLinks = true; return true; }
@@ -126,6 +127,34 @@ bool parsePackageValueOption(const std::vector<std::string>& tokens,
             return true;
         }
         opt.initTypeSystem = value;
+        return true;
+    }
+    if (t == "--description" || cp3::cli::startsWith(t, "--description=")) {
+        std::string value;
+        if (t == "--description") {
+            if (i + 1 >= tokens.size()) {
+                err = "--description requires a value";
+                return true;
+            }
+            value = tokens[++i];
+        } else {
+            value = t.substr(std::strlen("--description="));
+        }
+        opt.initDescription = value;
+        return true;
+    }
+    if (t == "--author" || cp3::cli::startsWith(t, "--author=")) {
+        std::string value;
+        if (t == "--author") {
+            if (i + 1 >= tokens.size()) {
+                err = "--author requires a value";
+                return true;
+            }
+            value = tokens[++i];
+        } else {
+            value = t.substr(std::strlen("--author="));
+        }
+        opt.initAuthor = value;
         return true;
     }
     if (t == "--out" || cp3::cli::startsWith(t, "--out=")) {

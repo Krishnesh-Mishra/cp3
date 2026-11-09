@@ -51,6 +51,8 @@ struct CliOptions {
     bool listLinks = false;               // link --list
     std::string initType;                 // init --type application|package
     std::string initTypeSystem;           // init --type-system typescript|cpp|rust
+    std::string initDescription;          // init --description "one line"
+    std::string initAuthor;               // init --author "Name <mail@x>"
     std::string outDir;                   // publish --out <dir|file>
     std::string name;                     // link --name <name>
     std::string editor;                   // editor-plugin --editor <id|path>

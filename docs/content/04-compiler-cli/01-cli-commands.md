@@ -98,7 +98,9 @@ In shell scripts, preserve the command exit status and quote file paths and argu
 
 ## Project scripts
 
-`cp3 init` writes `dev`, `build`, `start`, and `check` script entries into `package.json`. These are command strings provided as project metadata; CP3's own commands can be invoked directly and do not require an npm runtime. Read the generated script before connecting it to another task runner.
+`cp3 init` writes `start`, `verify`, and `build` script entries into `package.json` (`cp3c run`, `cp3c check`, and `cp3c build` of the entry file). These are command strings provided as project metadata; CP3's own commands can be invoked directly and do not require an npm runtime. Read the generated script before connecting it to another task runner.
+
+On a terminal, `cp3 init` asks five questions (type, name, description, author, and the type-system selection) with arrow-key menus for the two choice fields; `--yes` skips the questions entirely and the flags `--type`, `--type-system`, `--description`, and `--author` pre-select the answers for scripts. Existing scaffold files are left unchanged unless `--force` is passed.
 
 ## Related pages
 

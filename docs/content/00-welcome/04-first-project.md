@@ -13,7 +13,7 @@ cp3 init hello-app --yes
 cd hello-app
 ```
 
-`--yes` accepts scaffold defaults so the command works in scripts and non-interactive shells. Without it, an interactive terminal asks for project type, name, description, and type-system vocabulary. The command creates `package.json` and `src/index.cp3`. It leaves files already present in the destination untouched.
+`--yes` accepts scaffold defaults so the command works in scripts and non-interactive shells. Without it, an interactive terminal asks for the project type, name, a description, an author, and the type-system vocabulary; the two choice questions are arrow-key menus. The command creates `package.json` and `src/index.cp3`. It leaves files already present in the destination untouched unless `--force` is passed.
 
 The generated application source is intentionally small:
 
@@ -100,7 +100,7 @@ See [Build profiles and PGO](../04-compiler-cli/11-build-profiles-and-pgo.md) fo
 
 ## 7. Understand the scaffold scripts
 
-The default manifest includes commands named `dev`, `build`, `start`, and `check`. They invoke CP3 CLI operations against the configured entry. They are convenience metadata; CP3 does not require npm to execute them. Inspect the generated command text before relying on it in a package manager or shell integration.
+The default manifest includes commands named `start`, `verify`, and `build`. They invoke `cp3c run`, `cp3c check`, and `cp3c build` against the configured entry. They are convenience metadata; CP3 does not require npm to execute them. Inspect the generated command text before relying on it in a package manager or shell integration.
 
 The application scaffold enables `bundleNativeDlls` in its build section. Package scaffolds instead list files to include in the package archive and generate a default export object. Packaging behavior is distinct from building and running an application.
 

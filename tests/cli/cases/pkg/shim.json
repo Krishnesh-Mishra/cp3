@@ -136,6 +136,36 @@
     },
     {
       "group": "shim",
+      "name": "doctor-reports-configured-toolchain",
+      "description": "doctor reports the configured toolchain, not just PATH",
+      "argv": [
+        "doctor"
+      ],
+      "setup": {
+        "config_fixtures": [
+          "toolchain-config"
+        ]
+      },
+      "requires": [
+        "windows",
+        "command:cp3",
+        "clang"
+      ],
+      "tool": "cp3",
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "global config"
+          ],
+          "not_contains": [
+            "none found"
+          ]
+        }
+      }
+    },
+    {
+      "group": "shim",
       "name": "doctor-install-root",
       "description": "doctor install root",
       "argv": [
@@ -233,17 +263,18 @@
         "exit": 0,
         "stdout": {
           "contains": [
-            "shipped trees: include=no src=yes third_party=yes"
+            "shipped trees: include=no src=yes vendor_third_party=yes"
           ]
         }
       }
     },
     {
       "group": "shim",
-      "name": "init-default-writes-main-entry",
-      "description": "init default writes main entry",
+      "name": "init-default-scaffolds-index-entry",
+      "description": "cp3 init scaffolds the repository default into the cwd",
       "argv": [
-        "init"
+        "init",
+        "--yes"
       ],
       "requires": [
         "windows",
@@ -252,34 +283,37 @@
       "tool": "cp3",
       "expect": {
         "exit": 0,
-        "stdout": {
+        "stderr": {
           "contains": [
-            "initialized project",
-            "src/main.cp3"
+            "initialized cp3 project 'work'"
           ]
         },
         "files": {
           "package.json": {
             "json_paths": {
-              "main": "src/main.cp3"
+              "main": "src/index.cp3",
+              "scripts.start": "cp3c run src/index.cp3",
+              "scripts.verify": "cp3c check src/index.cp3",
+              "scripts.build": "cp3c build src/index.cp3"
             }
           },
-          "src/main.cp3": {
-            "contains": "Hello from work"
-          },
-          "README.md": {
-            "contains": "scaffolded by `cp3 init`"
+          "src/index.cp3": {
+            "contains": "Hello from work!"
           }
-        }
+        },
+        "files_absent": [
+          "README.md"
+        ]
       }
     },
     {
       "group": "shim",
       "name": "init-named-target",
-      "description": "init named target",
+      "description": "init named target scaffolds that directory",
       "argv": [
         "init",
-        "app"
+        "app",
+        "--yes"
       ],
       "requires": [
         "windows",
@@ -292,11 +326,11 @@
           "app/package.json": {
             "json_paths": {
               "name": "app",
-              "main": "src/main.cp3"
+              "main": "src/index.cp3"
             }
           },
-          "app/src/main.cp3": {
-            "contains": "Hello from app"
+          "app/src/index.cp3": {
+            "contains": "Hello from app!"
           }
         }
       }
@@ -307,7 +341,8 @@
       "description": "init path with spaces",
       "argv": [
         "init",
-        "my app"
+        "my app",
+        "--yes"
       ],
       "requires": [
         "windows",
@@ -322,7 +357,7 @@
               "name": "my app"
             }
           },
-          "my app/src/main.cp3": {
+          "my app/src/index.cp3": {
             "exists": true
           }
         }
@@ -330,10 +365,11 @@
     },
     {
       "group": "shim",
-      "name": "init-refuses-nonempty-target",
-      "description": "init refuses nonempty target",
+      "name": "init-existing-scaffold-preserved",
+      "description": "init leaves an existing scaffold untouched",
       "argv": [
-        "init"
+        "init",
+        "--yes"
       ],
       "setup": {
         "fixtures": [
@@ -346,24 +382,20 @@
       ],
       "tool": "cp3",
       "expect": {
-        "exit": 2,
-        "stdout": {
+        "exit": 0,
+        "stderr": {
           "contains": [
-            "is not empty",
-            "Re-run with --force"
+            "already exists; leaving it unchanged"
           ]
         },
         "files": {
           "package.json": {
             "json_paths": {
-              "main": "src/index.cp3"
+              "name": "hello"
             }
           },
           "src/index.cp3": {
-            "exists": true
-          },
-          "src/main.cp3": {
-            "absent": true
+            "contains": "hello from hello"
           }
         }
       }
@@ -388,17 +420,19 @@
       "tool": "cp3",
       "expect": {
         "exit": 0,
+        "stderr": {
+          "contains": [
+            "overwriting"
+          ]
+        },
         "files": {
           "package.json": {
             "json_paths": {
-              "main": "src/main.cp3"
+              "main": "src/index.cp3"
             }
           },
-          "src/main.cp3": {
-            "exists": true
-          },
-          "README.md": {
-            "contains": "scaffolded by `cp3 init`"
+          "src/index.cp3": {
+            "contains": "Hello from work!"
           }
         }
       }
@@ -406,7 +440,7 @@
     {
       "group": "shim",
       "name": "init-short-force-alias",
-      "description": "init short force alias",
+      "description": "init -f overwrites the scaffold files",
       "argv": [
         "init",
         "-f"
@@ -424,8 +458,8 @@
       "expect": {
         "exit": 0,
         "files": {
-          "src/main.cp3": {
-            "exists": true
+          "src/index.cp3": {
+            "contains": "Hello from work!"
           }
         }
       }
@@ -433,7 +467,7 @@
     {
       "group": "shim",
       "name": "init-rejects-two-targets",
-      "description": "init rejects two targets",
+      "description": "init rejects two target arguments",
       "argv": [
         "init",
         "a",
@@ -446,23 +480,19 @@
       "tool": "cp3",
       "expect": {
         "exit": 2,
-        "stdout": {
-          "contains": "usage: cp3 init [target] [--force]"
+        "stderr": {
+          "contains": "usage: cp3c init"
         }
       }
     },
     {
       "group": "shim",
-      "name": "init-yes-is-not-a-flag",
-      "description": "init yes is not a flag",
+      "name": "init-yes-accepts-defaults",
+      "description": "init --yes scaffolds with defaults and no prompts",
       "argv": [
         "init",
         "--yes"
       ],
-      "xfail": {
-        "id": "shim-init-ignores-yes",
-        "reason": "cp3.cmd init has its own parser and treats --yes as a target directory"
-      },
       "requires": [
         "windows",
         "command:cp3"
@@ -470,9 +500,6 @@
       "tool": "cp3",
       "expect": {
         "exit": 0,
-        "stdout": {
-          "not_contains": "initialized project \"--yes\""
-        },
         "files": {
           "package.json": {
             "json_paths": {
@@ -481,43 +508,6 @@
           },
           "--yes": {
             "absent": true
-          }
-        }
-      }
-    },
-    {
-      "group": "shim",
-      "name": "init-entry-diverges-from-cp3c",
-      "description": "init entry diverges from cp3c",
-      "argv": [
-        "init",
-        "--force"
-      ],
-      "setup": {
-        "files": {
-          "package.json": "{\n  \"name\": \"app\",\n  \"version\": \"1.0.0\",\n  \"description\": \"a C+++ project\",\n  \"type\": \"application\",\n  \"main\": \"src/index.cp3\",\n  \"typeSystem\": \"typescript\",\n  \"scripts\": {\n    \"dev\": \"cp3c dev src/index.cp3\",\n    \"build\": \"cp3c build src/index.cp3\",\n    \"start\": \"cp3c run src/index.cp3\",\n    \"check\": \"cp3c check src/index.cp3\"\n  },\n  \"build\": {\n    \"bundleNativeDlls\": true\n  }\n}\n",
-          "src/index.cp3": "import console from \"std/console\";\n\nconsole.log(\"Hello from app!\");\n"
-        }
-      },
-      "xfail": {
-        "id": "shim-init-duplicate-command",
-        "reason": "cp3 init is a shim-only duplicate that writes src/main.cp3 while cp3c init writes src/index.cp3"
-      },
-      "requires": [
-        "windows",
-        "command:cp3"
-      ],
-      "tool": "cp3",
-      "expect": {
-        "exit": 0,
-        "files": {
-          "package.json": {
-            "json_paths": {
-              "main": "src/index.cp3"
-            }
-          },
-          "src/index.cp3": {
-            "equals_file": "init-application-entry.cp3"
           }
         }
       }

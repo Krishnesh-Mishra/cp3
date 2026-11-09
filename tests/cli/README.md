@@ -244,7 +244,7 @@ On Windows, the harness assembles four read-only layouts once per run:
 
 | Alias | Layout |
 | --- | --- |
-| `cp3` | `bin/cp3.cmd`, `bin/cp3c.exe`, `share/vscode` VSIX, linked `src` and `third_party` |
+| `cp3` | `bin/cp3.cmd`, `bin/cp3c.exe`, `share/vscode` VSIX, linked `src` and `vendor/third_party` |
 | `cp3-no-vsix` | same, without the VSIX |
 | `cp3-no-cp3c` | shim only, to test missing-compiler diagnostics |
 | `cp3-space` | full layout under `shim with space` |
