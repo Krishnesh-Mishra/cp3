@@ -404,6 +404,19 @@ std::string Generator::memberFieldText(const ClassMemberModel& m) {
     // cannot see type aliases or enum kinds. When it has no spelling, sema's
     // resolved type for the annotation is the authoritative one.
     Type fieldType = untypedAsUnknown(m.type);
+    // A `?` field (`x?: T`) is a nullable member: it lowers to
+    // `std::optional<T>` (null empty state) so the struct can hold the
+    // `undefined` a read of the field must report. Same rule as interface
+    // records and the class model's optional-parameter lowering.
+    if (m.field && m.field->optional && !fieldType.isNullable() &&
+        !fieldType.isUnion()) {
+        fieldType = Type::nullable(fieldType);
+    }
+    // (A `parameterProperty` carries its `?` from the ctor parameter.)
+    if (m.parameterProperty && m.parameterProperty->optional &&
+        !fieldType.isNullable() && !fieldType.isUnion()) {
+        fieldType = Type::nullable(fieldType);
+    }
     const TypeNode* annotation = nullptr;
     if (m.field && m.field->type) {
         annotation = m.field->type.get();
