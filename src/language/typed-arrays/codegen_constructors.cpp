@@ -46,11 +46,15 @@ std::string Generator::emitFamilyCtorCall(const CallExpr& c,
 // its `new` form first. A user-declared or shadowing binding wins over the
 // ambient family name.
 std::string Generator::emitCallOrFamily(const CallExpr& c) {
-    if (c.callee && c.callee->kind == NodeKind::Identifier &&
-        c.typeArgs.empty()) {
+    if (c.callee && c.callee->kind == NodeKind::Identifier) {
+        // `Array` is the one family member sema accepts explicit type
+        // arguments on (`Array<number>(n)`, TS spelling); every other family
+        // constructor takes none.
         const std::string& name =
             static_cast<const Identifier&>(*c.callee).name;
-        if (functions_.find(name) == functions_.end() && !lookup(name)) {
+        const bool familyCall = c.typeArgs.empty() || name == "Array";
+        if (familyCall && functions_.find(name) == functions_.end() &&
+            !lookup(name)) {
             std::string family = emitFamilyCtorCall(c, name);
             if (!family.empty()) return family;
         }

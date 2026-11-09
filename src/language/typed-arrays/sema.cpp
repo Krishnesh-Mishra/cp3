@@ -204,8 +204,21 @@ bool isArrayLengthForm(const Expr& init, const Type& initType) {
 // =============================================================================
 // Constructors
 // =============================================================================
-Type Analyzer::inferFamilyConstruct(const std::string& cls, ExprList& args,
+Type Analyzer::inferFamilyConstruct(const std::string& cls,
+                                    const TypeList& typeArgs,
+                                    ExprList& args,
                                     const SourceSpan& span) {
+    if (cls == "Array" && !typeArgs.empty()) {
+        // `Array<number>(3)`: an explicit element type argument — TS's own
+        // spelling — avoids the unknown-element Array(n) ambiguity. Members
+        // take at most one element type argument.
+        if (typeArgs.size() != 1 || !typeArgs.front()) {
+            report(diagcode::kArityMismatch, span,
+                   "arity mismatch: Array takes one type argument");
+            return Type::error();
+        }
+        return Type::array(resolveType(*typeArgs.front()));
+    }
     std::vector<Type> types;
     types.reserve(args.size());
     for (auto& a : args) {

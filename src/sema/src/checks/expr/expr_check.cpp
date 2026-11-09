@@ -270,8 +270,8 @@ Type Analyzer::inferNew(NewExpr& n) {
         if (lookup(id.name, b) && isAmbientType(b.type) &&
             isFamilyCtorName(ctor)) {
             setType(id, b.type);
-            return withType(n, inferFamilyConstruct(ctor, n.arguments,
-                                                    n.span));
+            return withType(n, inferFamilyConstruct(ctor, n.typeArgs,
+                                                    n.arguments, n.span));
         }
         if (lookup(id.name, b) && isAmbientType(b.type)) {
             // `new WebSocket(url)` / `new WebSocketServer({ port })`: an

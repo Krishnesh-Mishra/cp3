@@ -487,8 +487,8 @@ private:
 
     // --- the JS-compat typed-array family (src/language/typed-arrays/sema.cpp) ----
     // Family constructors and nominal types (D69); codegen owns the C++.
-    Type inferFamilyConstruct(const std::string& cls, ExprList& args,
-                              const SourceSpan& span);
+    Type inferFamilyConstruct(const std::string& cls, const TypeList& typeArgs,
+                              ExprList& args, const SourceSpan& span);
     // Family call/member typing.
     Type inferCallOrFamily(CallExpr& call);
     bool tryInferFamilyMethodCall(CallExpr& call, MemberExpr& member, Type& out);

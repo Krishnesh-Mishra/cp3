@@ -136,8 +136,9 @@ Type Analyzer::inferCallOrFamily(CallExpr& call) {
         if (isFamilyCtorName(id.name) && lookup(id.name, b) &&
             isAmbientType(b.type)) {
             setType(id, b.type);
-            return withType(call, inferFamilyConstruct(id.name, call.arguments,
-                                                       call.span));
+            return withType(call,
+                            inferFamilyConstruct(id.name, call.typeArgs,
+                                                 call.arguments, call.span));
         }
     }
     return inferCall(call);
