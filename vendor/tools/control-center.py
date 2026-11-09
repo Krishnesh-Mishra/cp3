@@ -276,6 +276,8 @@ def run_tests(args) -> int:
         cmd += ["--timeout", args.timeout]
     if args.json:
         cmd.append("--json")
+    if getattr(args, "progress", False):
+        cmd.append("--progress")
     if args.no_bench:
         cmd.append("--no-bench")
     if args.platform == "linux":
@@ -292,7 +294,8 @@ def run_tests(args) -> int:
                      + (" --jobs " + args.jobs if args.jobs else "")
                      + (" --timeout " + args.timeout if args.timeout else "")
                      + (" --json" if args.json else "")
-                     + (" --no-bench" if args.no_bench else "")]
+                     + (" --no-bench" if args.no_bench else "")
+                     + (" --progress" if getattr(args, "progress", False) else "")]
         print("  $ wsl bash -lc \"cd " + repo + " && python3 tests/runner/run_tests.py ...\"")
         return subprocess.run([prefix] + linux_cmd, cwd=str(ROOT)).returncode
     return _run(cmd)
@@ -469,6 +472,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="emit machine-readable test output")
     parser.add_argument("--no-bench", action="store_true",
                         help="skip the benchmark pass that follows the corpus pass")
+    parser.add_argument("--progress", action="store_true",
+                        help="force the live one-line test progress bar (default: on when stdout is a terminal)")
     parser.add_argument("--only", default=None,
                         help="comma-separated benchmarks to run (see --bench --help for the list)")
     parser.add_argument("--except", dest="except_", default=None,
