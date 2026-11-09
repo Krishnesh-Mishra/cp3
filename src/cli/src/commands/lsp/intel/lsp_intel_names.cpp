@@ -104,9 +104,14 @@ void appendBuiltinValues(std::vector<lsp::CompletionCandidate>& out) {
         {"Boolean", 7, "built-in global", "The CP3 Boolean global."},
         {"Array", 7, "built-in global", "The CP3 Array global."},
         {"parseInt", 3, "parseInt(text: string): number",
-         "Parses an integer from the beginning of a string."},
+         "Parses an integer from the beginning of a string. Legacy JS-compatibility "
+         "global kept for developer comfort: it always returns cp3 `number` "
+         "regardless of the project `typeSystem`; prefer `parseTo<T>` for exact native widths."},
         {"parseFloat", 3, "parseFloat(text: string): number",
-         "Parses a floating-point number from the beginning of a string."},
+         "Parses a floating-point number from the beginning of a string. Legacy "
+         "JS-compatibility global kept for developer comfort: it always returns "
+         "cp3 `number` regardless of the project `typeSystem`; prefer `parseTo<T>` "
+         "for exact native widths."},
         {"isNaN", 3, "built-in function", "Checks whether a number is NaN."},
         {"isFinite", 3, "built-in function", "Checks whether a number is finite."},
         {"print", 3, "built-in function", "Prints a value to standard output."},

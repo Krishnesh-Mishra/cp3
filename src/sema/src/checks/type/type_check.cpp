@@ -56,6 +56,37 @@ Type elemOf(const Type& arrayLike) {
 
 Type widen(const Type& t) { return t.isLiteral() ? t.literalBaseType() : t; }
 
+Type defaultLiteralType(TypeSystem ts, const Type& t) {
+    if (ts == TypeSystem::TypeScript || !t.isLiteral() ||
+        t.literalBase != TypeKind::Number) {
+        return widen(t);
+    }
+    // Exact-spelling gate: only plain integer spellings take a native default
+    // (decimal, 0x/0b/0o and `_` separators, optional sign). Fractional and
+    // exponent spellings (`2.0`, `1e3`) keep cp3 `number` - Rust's float
+    // default is f64, which is `number` here.
+    bool negative = false;
+    unsigned long long magnitude = 0;
+    if (t.numberRaw.empty() ||
+        !parseExactIntegerLiteral(t.numberRaw, negative, magnitude)) {
+        return Type::number();
+    }
+    (void)negative;
+    (void)magnitude;
+    // Exact 64-bit bounds use the source spelling: `18446744073709551615`
+    // defaults to `u64`, `-9223372036854775808` to `i64`.
+    if (nativeCanRepresentLiteral(Type::native("i32"), t)) {
+        return Type::native("i32");
+    }
+    if (nativeCanRepresentLiteral(Type::native("i64"), t)) {
+        return Type::native("i64");
+    }
+    if (nativeCanRepresentLiteral(Type::native("u64"), t)) {
+        return Type::native("u64");
+    }
+    return Type::number();
+}
+
 bool isNumberish(const Type& t) {
     return t.isNumber() || (t.isLiteral() && t.literalBase == TypeKind::Number);
 }

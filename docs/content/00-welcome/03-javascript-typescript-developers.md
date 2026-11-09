@@ -144,7 +144,7 @@ The manifest supplies the entry point, project kind, type-name vocabulary, toolc
 |---|---|
 | `type` | `"application"` (has an entry) or `"package"` (library). |
 | `main` | The source entry point used by project commands. |
-| `typeSystem` | `"typescript"` (default), `"cpp"`, or `"rust"` — vocabulary for supported unprefixed scalar names. CP3 still generates C++. |
+| `typeSystem` | `"typescript"` (default), `"cpp"`, or `"rust"` — vocabulary for supported unprefixed scalar names **and the default type of un-annotated integer literals** (`8080` → `i32` under both native modes, `number` under TypeScript). CP3 still generates C++. |
 | `strictNumericCasts` | Boolean: reject implicit mixed-width numeric conversions. |
 | `build` | Project-specific build settings such as `bundleNativeDlls`. |
 

@@ -35,10 +35,14 @@ const DocRow kNumberStaticRows[] = {
      "True when `value` is NaN."},
     {"parseInt", "parseInt(text: string): number",
      "Parses the longest integer prefix of `text` (radix 10) into a number, "
-     "or NaN when no digits are found."},
+     "or NaN when no digits are found. Legacy JS-compatibility global kept for "
+     "developer comfort: it always returns cp3 `number` regardless of the "
+     "project `typeSystem`; prefer `parseTo<T>` for exact native widths."},
     {"parseFloat", "parseFloat(text: string): number",
      "Parses the longest decimal prefix of `text` into a number, "
-     "or NaN when no digits are found."},
+     "or NaN when no digits are found. Legacy JS-compatibility global kept "
+     "for developer comfort: it always returns cp3 `number` regardless of the "
+     "project `typeSystem`; prefer `parseTo<T>` for exact native widths."},
     {"MAX_SAFE_INTEGER", "MAX_SAFE_INTEGER: number",
      "The largest integer exactly representable as a double (2^53 - 1)."},
     {"MIN_SAFE_INTEGER", "MIN_SAFE_INTEGER: number",

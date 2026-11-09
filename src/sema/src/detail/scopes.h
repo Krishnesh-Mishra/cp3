@@ -19,6 +19,7 @@
 
 #include "cp3/core/source.hpp"
 #include "cp3/core/types.hpp"
+#include "cp3/host/options.hpp"  // TypeSystem
 
 namespace cp3 {
 
@@ -206,6 +207,16 @@ bool isRestSource(const Type& t);
 Type ambient();
 Type elemOf(const Type& arrayLike);
 Type widen(const Type& t);
+// The default type an unconstrained numeric literal takes when the project
+// is not TypeScript (spec 03 / D65: package.json `typeSystem` picks the
+// native vocabulary AND the native defaults). Integral literals default to
+// the C++ `int` / Rust `i32` width (canonical id `i32` is both) and escalate
+// to `i64`/`u64` when they do not fit; fractional and exponent spellings and
+// literals outside `u64` keep cp3 `number` (f64/double is the float default,
+// which is `number` here). TypeScript projects get `number`, unchanged.
+// Only plain integer spellings take the native default; anything else widens
+// as before.
+Type defaultLiteralType(TypeSystem ts, const Type& t);
 bool isNumberish(const Type& t);
 bool isStringish(const Type& t);
 bool isPermissive(const Type& t);

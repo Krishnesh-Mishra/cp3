@@ -429,6 +429,31 @@ fallback. The source type resolver first recognizes the ordinary CP3 names; in C
 unprefixed names from that mode's closed native table. A prefixed type explicitly selects its table independent of the
 project mode.
 
+### Un-annotated literal bindings take the native default
+
+Under `cpp` or `rust`, an un-annotated binding whose initializer is a **plain integer literal** (decimal, `0x`/`0b`/`0o`,
+`_` separators, optional sign — `const port = 8080;`, `const a = -5;`) infers the native integer default instead of
+`number`:
+
+- fits `i32` → **`i32`** (C++ `int` and Rust `i32` share the canonical id);
+- does not fit `i32` but fits `i64` → **`i64`** (`long long` / `i64`);
+- exceeds `i64` but fits `u64` → **`u64`** (`unsigned long long` / `u64`);
+- exceeds `u64` → keeps **`number`**.
+
+Fractional and exponent spellings (`2.5`, `2.0`, `1e3`) keep `number` — f64/`double` is the float default, which is
+`number` here, so float literals are unchanged by the setting. TypeScript projects keep `number` for every literal,
+as before.
+
+The default applies to the **binding**, not to every expression: array elements and object properties keep `number`,
+and a ternary/`if` join that contains `number` absorbs the literal into `number` (`parseInt` is `number`, so
+`const port = cond ? parseInt(s) : 8080` is `number` too — call `parseTo<u16>(port)` at the boundary when you need the
+narrow width). Negative literals (`const a = -5;`) are included, because a negated integer literal keeps its literal
+type until the binding widens it.
+
+`parseInt`/`parseFloat` stay **legacy JS-compatibility globals**: they always return cp3 `number`, in every `typeSystem`,
+so JS developers keep the habits they arrive with. They are not wired into the native defaults; use `parseTo<T>` (and
+explicit native spellings) where exact widths matter.
+
 For compiler contributors, these behaviors are implemented across `src/cli/src/pkg/manifest/package_json.cpp`,
 `src/common/src/native/native_types.cpp`, parser type handling, and semantic checking. Add or update tests when any
 default, accepted spelling, or conversion rule changes; changing the documentation alone does not enable a type.

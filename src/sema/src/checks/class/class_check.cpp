@@ -588,7 +588,8 @@ void Analyzer::collectClassMember(ClassMember& m, ClassInfo& info) {
                 if (pp->type) {
                     field.type = resolveType(*pp->type);
                 } else if (pp->defaultValue) {
-                    field.type = widen(inferExpr(*pp->defaultValue));
+                    field.type = defaultLiteralType(options_.typeSystem,
+                                                    inferExpr(*pp->defaultValue));
                 } else {
                     report(diagcode::kTypeMismatch, pp->span,
                            "parameter property '" + id.name +

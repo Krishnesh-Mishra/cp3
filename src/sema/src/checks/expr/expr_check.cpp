@@ -634,7 +634,8 @@ void Analyzer::buildArrowParamTypes(ArrowFunction& arrow,
             // Function types store parameters followed by the return type.
             pt = contextualType->parts[i];
         } else if (p->defaultValue) {
-            pt = widen(inferExpr(*p->defaultValue));
+            pt = defaultLiteralType(options_.typeSystem,
+                                    inferExpr(*p->defaultValue));
         }
         params.push_back(pt);
         optional.push_back(p->optional || p->defaultValue != nullptr);

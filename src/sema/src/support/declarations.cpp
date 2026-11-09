@@ -50,7 +50,8 @@ FuncSig Analyzer::buildSig(const std::string& name, ParamList& params,
         if (p->type) {
             pt = resolveType(*p->type);
         } else if (p->defaultValue) {
-            pt = widen(inferExpr(*p->defaultValue));
+            pt = defaultLiteralType(options_.typeSystem,
+                                    inferExpr(*p->defaultValue));
         }
         sig.params.push_back(pt);
         sig.optional.push_back(p->optional || p->defaultValue != nullptr);
@@ -124,7 +125,9 @@ void Analyzer::declareDeclarator(VariableDeclarator& d, VarKind kind) {
         hasInit && checkArrayCtorDeclarator(d, hasAnn, annType, initType);
 
     Type varType =
-        hasAnn ? annType : (hasInit ? widen(initType) : Type::undefined());
+        hasAnn ? annType
+               : (hasInit ? defaultLiteralType(options_.typeSystem, initType)
+                          : Type::undefined());
 
     if (hasAnn && hasInit) {
         if (d.init->kind == NodeKind::ArrayLiteral &&

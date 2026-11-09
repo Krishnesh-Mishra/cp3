@@ -1,0 +1,14 @@
+import console from "std/console";
+
+// Un-annotated literal bindings take the native integer default (spec 03,
+// D65): i32 first, escalating to i64 then u64 when the literal does not fit;
+// fractional spellings keep `number` (cp3's f64).
+const small = 8080;
+const big = 9223372036854775807;
+const huge = 18446744073709551615;
+const negative = -5;
+const floaty = 2.5;
+const binary = 0b10101010;
+const hex = 0xff;
+
+console.log(`${small} ${big} ${huge} ${negative} ${floaty} ${binary} ${hex}`);
