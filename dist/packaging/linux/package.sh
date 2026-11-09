@@ -296,7 +296,14 @@ if [ "$NO_VSIX" -eq 1 ]; then
 else
     vsix=""
     if [ -d "$ROOT/dist/extensions/cp3-vscode/dist" ]; then
-        vsix=$(find "$ROOT/dist/extensions/cp3-vscode/dist" -maxdepth 1 -type f -name '*.vsix' | sort | head -n 1 || true)
+        # Prefer the extension build of the product being packaged; a stale
+        # older .vsix sits beside it in a long-lived checkout.
+        preferred="$ROOT/dist/extensions/cp3-vscode/dist/cp3-vscode-$VERSION.vsix"
+        if [ -f "$preferred" ]; then
+            vsix="$preferred"
+        else
+            vsix=$(find "$ROOT/dist/extensions/cp3-vscode/dist" -maxdepth 1 -type f -name '*.vsix' | sort | head -n 1 || true)
+        fi
     fi
     if [ -n "$vsix" ]; then
         cp -p "$vsix" "$STAGE/share/vscode/$(basename "$vsix")"

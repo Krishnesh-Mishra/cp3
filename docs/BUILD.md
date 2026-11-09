@@ -98,6 +98,16 @@ separate from the preset `build/<preset>/` trees used by the test runner.
 Don't mix the two when a stale `build/CMakeCache.txt` complains about a
 generator mismatch — use `--clean` / `-Clean` or a fresh checkout.
 
+The canonical `build/` tree is shared by both platforms on a mixed machine
+(Windows-native packaging and WSL packaging both default to it), and the last
+package to run poisons the other's CMakeCache. When releasing for Windows and
+Linux from the same checkout, run the Linux side into a dedicated tree instead
+of wiping `build/` (which also holds the staged Windows artifacts):
+
+```sh
+./vendor/tools/build.sh --build-dir build/linux-package --out-dir build/out/linux-x64
+```
+
 ### Windows: `vendor/tools/build.ps1` (PowerShell)
 
 ```powershell
