@@ -954,6 +954,12 @@ Type Analyzer::userClassMember(const Type& cls, const std::string& prop,
     if (!ci->typeParamNames.empty() && !cls.parts.empty()) {
         t = substituteClassTypeParams(t, *ci, cls.parts);
     }
+    if (m->optional && !hasNullish(t)) {
+        // A `?` member reads as `T | undefined` exactly like `weak` fields
+        // (`it.note === undefined` is then a normal comparison, not a
+        // differing-kinds tuple).
+        t = unify(t, Type::undefined());
+    }
     if (m->isWeak && !assignTarget_) {
         weakFieldHit_ = true;
         if (!hasNullish(t)) t = unify(t, Type::undefined());
