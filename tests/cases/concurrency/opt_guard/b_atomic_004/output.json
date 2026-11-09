@@ -3,8 +3,8 @@
   "stdout": "",
   "exitCode": 1,
   "error": {
-    "code": "CP3xxxx",
-    "line": 2,
+    "code": "CP3304",
+    "line": 1,
     "col": 1,
     "contains": "Mutex"
   }

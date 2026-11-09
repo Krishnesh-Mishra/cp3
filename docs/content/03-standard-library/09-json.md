@@ -77,8 +77,8 @@ The module exposes `parse<T>(text)` and `stringify(value)`. It is not a complete
 | `json.parseFileSync<T>(path)` | `T` | Throws a catchable error on read failure, malformed JSON, or a shape mismatch |
 | `json.parseFile<T>(path)` | `Promise<T>` | Rejects with the same class of error on read/parse/shape failure |
 | `json.stringify(value, indent?)` | JSON text as `string` | Unsupported values follow the serializer's runtime rules |
-| `json.stringifyToFileSync<T>(path, value)` | `void` | Overwrites the file; throws on a write error |
-| `json.stringifyToFile<T>(path, value)` | `Promise<void>` | Overwrites the file; rejects on a write error |
+| `json.stringifyToFileSync(path, value)` | `void` | Overwrites the file; throws on a write error |
+| `json.stringifyToFile(path, value)` | `Promise<void>` | Overwrites the file; rejects on a write error |
 | `json.verify<T>(text)` | `boolean` | Never throws; `false` on malformed JSON, a duplicate key, or a shape mismatch |
 
 The optional `indent` is a number controlling pretty-print indentation. Keep it absent for compact JSON. The API does not expose JavaScript replacer or reviver callbacks.
