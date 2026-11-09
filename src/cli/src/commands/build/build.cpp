@@ -346,6 +346,42 @@ std::string fileStamp(const fs::path& path) {
                time.time_since_epoch().count()));
 }
 
+// The link step's vendored-archive identity: every "-l<name>" resolved
+// against the "-L<dir>" directories in order, stamped with size plus
+// modification time. The archive file is what the linker reads, so swapping
+// one (a rebuilt uSockets with real code sections, a newly downloaded
+// OpenSSL) must relink the program even when no local TU changed - the
+// objects, profile and flags would otherwise look unchanged and a stale
+// executable would be reused. Resolution follows the driver's own rule
+// (first "-L" wins); an unresolvable -l is skipped silently, matching how
+// shared system libraries are satisfied without a static archive.
+std::string vendoredArchiveStamps(const std::vector<std::string>& linkFlags) {
+    std::string stamp;
+    std::vector<fs::path> dirs;
+    std::vector<std::string> libs;
+    for (const std::string& flag : linkFlags) {
+        if (flag.rfind("-L", 0) == 0 && flag.size() > 2) {
+            dirs.emplace_back(flag.substr(2));
+        } else if (flag.rfind("-l", 0) == 0 && flag.size() > 2) {
+            libs.push_back(flag.substr(2));
+        }
+    }
+    std::error_code ec;
+    for (const std::string& lib : libs) {
+        for (const fs::path& dir : dirs) {
+            const fs::path candidate = dir / ("lib" + lib + ".a");
+            if (fs::is_regular_file(candidate, ec)) {
+                stamp += '\n';
+                stamp += candidate.string();
+                stamp += '\t';
+                stamp += fileStamp(candidate);
+                break;
+            }
+        }
+    }
+    return stamp;
+}
+
 // Compiles the `pak/` C++ implementation of every installed package the
 // program imports, or records its cached object as a link input. The package
 // entry `index.cp3` is only a declaration surface; these objects are what its
@@ -430,6 +466,7 @@ std::string linkStampOf(const BuildState& st,
         material += '\n';
         material += flag;
     }
+    material += vendoredArchiveStamps(st.nativeFlags.link);
     for (const std::string& arg : linkCommand) {
         material += '\n';
         material += arg;
