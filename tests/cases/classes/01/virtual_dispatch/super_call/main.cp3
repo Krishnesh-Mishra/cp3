@@ -1,0 +1,12 @@
+import console from "std/console";
+class Animal {
+  greet(): string { return "base-greet"; }
+  report(): string { return `base(${this.greet()})`; }
+}
+class Dog extends Animal {
+  greet(): string { return `dog-greet(${super.greet()})`; }
+  report(): string { return `dog-report(${this.greet()}|${super.greet()})`; }
+}
+const a: Animal = new Dog();
+console.log(a.greet());
+console.log(a.report());

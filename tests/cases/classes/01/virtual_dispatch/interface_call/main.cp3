@@ -1,0 +1,7 @@
+import console from "std/console";
+interface Speaker { speak(): string; }
+class Dog implements Speaker { speak(): string { return "woof"; } }
+const plain = new Dog();
+console.log(`class:${plain.speak()}`);
+let s: Speaker = new Dog();
+console.log(`interface:${s.speak()}`);

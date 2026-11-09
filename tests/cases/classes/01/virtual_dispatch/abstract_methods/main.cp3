@@ -1,0 +1,10 @@
+import console from "std/console";
+abstract class Base {
+  abstract speak(): string;
+  concrete(): string { return `concrete(${this.speak()})`; }
+}
+class Impl extends Base {
+  speak(): string { return "impl-speak"; }
+}
+const b: Base = new Impl();
+console.log(b.concrete());

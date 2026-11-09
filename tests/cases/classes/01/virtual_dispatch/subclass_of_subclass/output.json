@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "a-c:c\na-b:b\nb-c:c\nb-b:b\n",
+  "exitCode": 0
+}

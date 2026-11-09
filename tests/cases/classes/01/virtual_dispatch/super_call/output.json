@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "dog-greet(base-greet)\ndog-report(dog-greet(base-greet)|base-greet)\n",
+  "exitCode": 0
+}

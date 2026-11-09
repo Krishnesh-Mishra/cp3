@@ -1,0 +1,12 @@
+import console from "std/console";
+class A { greet(): string { return "a"; } }
+class B extends A { greet(): string { return "b"; } }
+class C extends B { greet(): string { return "c"; } }
+const x: A = new C();
+console.log(`a-c:${x.greet()}`);
+const y: A = new B();
+console.log(`a-b:${y.greet()}`);
+const z: B = new C();
+console.log(`b-c:${z.greet()}`);
+const w: B = new B();
+console.log(`b-b:${w.greet()}`);
