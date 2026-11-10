@@ -200,6 +200,11 @@ std::string Generator::workerPayloadText(const Type& raw,
                                          const std::string& ownerNS) const {
     Type t = raw;
     if (t.isLiteral()) t = t.literalBaseType();
+    // Sema reports imported enums as Class-nominal types (the importing
+    // unit has no declaration to pin the kind), while this unit re-emits
+    // them as C++ enums. Respell them here so the payload's C++ spelling
+    // names the re-emitted enum (same rule the channel construction uses).
+    rewriteEnumTypes(t);
     if (t.isVoid()) return "void";
     if (t.kind == TypeKind::Enum) {
         if (t.name.empty()) return std::string();
