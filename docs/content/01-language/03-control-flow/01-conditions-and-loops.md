@@ -30,6 +30,34 @@ while (index < items.length) {
 
 A `while` loop reevaluates its condition before each iteration. Make the progress update visible and ensure the loop can terminate. `break` exits the nearest loop; `continue` begins the next iteration.
 
+## `do...while`
+
+```ts
+let attempts = 0;
+do {
+  attempts = attempts + 1;
+} while (!ready());
+```
+
+A `do...while` loop executes its body once before checking the condition, then re-evaluates it after each iteration. `break` exits the loop; `continue` skips to the condition check. The condition is checked in a boolean context, like `if`.
+
+## `switch`
+
+```ts
+switch (mode) {
+  case "safe":
+    console.log("safe mode");
+    break;
+  case "fast":
+    console.log("fast mode");
+    break;
+  default:
+    console.log("unknown mode");
+}
+```
+
+The discriminant is evaluated once; each `case` expression is checked against it. A clause with no statements falls through into the next clause (JavaScript fall-through). Use `break` to stop at the end of a clause. Each clause runs in its own lexical scope, so a `let` declared in one clause is not visible in another. A `switch` with a `default` whose remaining clauses all terminate every path counts as a terminating statement for return-path checking.
+
 ## Counted `for`
 
 ```ts
@@ -43,6 +71,18 @@ The initializer, condition, and update run in that order. `let` and `const` loop
 ## `for...of`
 
 `for...of` is supported for the iterable/value shapes implemented by the front end, such as arrays and supported collection iteration. Its behavior is not a blanket guarantee that every JavaScript iterable protocol is available. If the checker rejects a receiver, use the array or collection API documented for its type.
+
+### `for await`
+
+Prefixing the loop with `await` binds the awaited value instead of the raw element: a promise-typed element resolves to its value (`undefined` for `Promise<void>`), anything else is its own value. `for await` is legal only inside an `async` function (or at the top level):
+
+```ts
+for await (const line of lines) {
+  console.log(line); // line is the element type, with promises resolved
+}
+```
+
+This is not an async-iterator protocol; it is the ordinary `for...of` shape with the bound value awaited. See [Async and concurrency](../../02-runtime/07-async-and-concurrency.md) for the coroutine semantics.
 
 ## Labels and nested loops
 

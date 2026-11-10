@@ -29,7 +29,7 @@ The index expression is checked and lowered through the array family’s runtime
 
 ## Array methods
 
-CP3 implements a broad array method surface, including `push`, `pop`, `shift`, `unshift`, `map`, `filter`, `reduce`, `find`, `some`, `every`, `slice`, `sort`, `includes`, and `indexOf`. Exact callbacks and return types are defined by the compiler’s array member table. See [Array methods](../../03-standard-library/14-arrays.md) for the full reference.
+CP3 implements a broad array method surface, including `push`, `pop`, `shift`, `unshift`, `map`, `filter`, `reduce`, `find`, `some`, `every`, `slice`, `sort`, `includes`, and `indexOf`. Exact callbacks and return types are defined by the compiler’s array member table. See [Array methods](04-arrays.md) for the full reference.
 
 Some operations mutate the existing array (`push`, `pop`, `sort`, `unique`, `shuffle`); others return a new array (`map`, `filter`, `slice`). Read the individual method description before assuming JS behavior or a copy boundary.
 
@@ -54,6 +54,18 @@ const user: User = { name: "Asha", active: true };
 ```
 
 The analyzer checks missing and excess properties in the source forms covered by its structural object checks. CP3 rejects open index-signature declarations; use a supported `Map<K, V>` when keys are dynamic.
+
+## Object spread
+
+An object literal may spread a source: `{ ...base, extra: 1 }`. When the source has a statically known closed shape, its fields are contributed to the literal's shape; an unknown, computed, or open source keeps the literal open rather than inventing fields. The object is assembled by assignment in source order, so a later property overrides a key contributed by an earlier spread — `{ ...base, y: 3 }` produces an object whose `y` is `3`.
+
+```ts
+const base = { x: 1, y: 2 };
+const extended = { ...base, y: 3 }; // { x: number, y: number }
+extended.y; // 3
+```
+
+Object spread is not a runtime deep clone: the result is built field by field, so nested objects stay shared references. To build a new shape from a reused object, prefer spread; `Object.assign(target, source)` mutates the target in place instead. See [Global builtins](../99-global-builtins.md) for the full `Object.*` surface.
 
 ## Aliasing and mutation
 

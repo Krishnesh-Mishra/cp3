@@ -80,7 +80,7 @@ Encoders and decoders are stateless apart from the validated label, so one insta
 - UTF-8 only: only `"utf-8"` / `"utf8"` are accepted. UTF-16, Latin-1, and every other continuous encoding are outside this module; use `Buffer` from `std/buffer` when hex or base64 representations are needed.
 - No streaming decode: `{ stream: true }`, `decodeInto`, and incremental decoding are not part of the closed surface.
 - Decode never throws on malformed bytes: malformed input is replaced with U+FFFD, not rejected. Validate at the boundary if replacement is unacceptable.
-- No normalization or grapheme handling: encode copies the string bytes verbatim and decode validates code-point sequences. See [Strings](15-strings.md) for byte vs code-point indexing.
+- No normalization or grapheme handling: encode copies the string bytes verbatim and decode validates code-point sequences. See [Strings](../01-language/04-values-and-objects/05-strings.md) for byte vs code-point indexing.
 
 ## Import and type behavior
 

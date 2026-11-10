@@ -16,14 +16,14 @@ It represents a byte sequence. A Buffer is different from a CP3 string: strings 
 
 ### `Buffer.from(text, encoding?)`
 
-Encodes a string into bytes. Supported encodings are `"utf8"`, `"hex"`, and `"base64"`:
+Encodes a string into bytes. Supported encodings are `"utf8"`, `"hex"`, `"base64"` and `"base64url"`:
 
 ```ts
 const greeting = Buffer.from("Hello", "utf8");
 const digest = Buffer.from("4869", "hex");
 ```
 
-The default encoding is UTF-8. Hex and base64 inputs must use valid encodings; do not assume arbitrary malformed text is silently accepted.
+The default encoding is UTF-8. Hex, base64 and base64url inputs must use valid encodings; do not assume arbitrary malformed text is silently accepted.
 
 ### `Buffer.alloc(size)`
 
@@ -42,13 +42,13 @@ The exact view/copy behavior is determined by the runtime Buffer implementation.
 
 ## Converting to text
 
-`toString(encoding?)` decodes bytes using UTF-8 by default, or the selected `"hex"` / `"base64"` representation:
+`toString(encoding?)` decodes bytes using UTF-8 by default, or the selected `"hex"` / `"base64"` / `"base64url"` representation:
 
 ```ts
 console.log(bytes.toString("hex"));
 ```
 
-UTF-8 decoding is appropriate for text bytes; choose hex or base64 when the output must preserve arbitrary byte values in printable form.
+UTF-8 decoding is appropriate for text bytes; choose hex, base64 or base64url when the output must preserve arbitrary byte values in printable form.
 
 ## Buffer and typed arrays
 
@@ -64,7 +64,7 @@ Buffers and typed arrays serve related but distinct needs. Buffer is the byte-or
 | `buffer.toString(encoding?)` | Decode or represent bytes as text |
 | `buffer.slice(start, end?)` | Select a byte range |
 
-Supported encodings: UTF-8, hexadecimal, and base64. This is the current CP3 Buffer surface, not the full Node Buffer API.
+Supported encodings: UTF-8, hexadecimal, base64 and base64url. This is the current CP3 Buffer surface, not the full Node Buffer API.
 
 ## Byte semantics and equality
 
@@ -74,15 +74,16 @@ A Buffer is an immutable sequence of bytes. Its `length` counts bytes. Assigning
 
 ## Encoding rules
 
-Only `utf8`, `hex`, and `base64` are supported, with `utf8` as the default. A string literal naming a different encoding is rejected at compile time; an encoding value known only at runtime is validated then and throws a catchable error if unsupported.
+Only `utf8`, `hex`, `base64` and `base64url` are supported, with `utf8` as the default. `base64url` is the RFC 4648 §5 unpadded variant (`-` and `_` in place of `+` and `/`; encode emits no trailing `=` padding); `"base64Url"` is accepted as an alias spelling for both `from` and `toString`. A string literal naming a different encoding is rejected at compile time; an encoding value known only at runtime is validated then and throws a catchable error if unsupported.
 
 | Encoding | `Buffer.from(text, encoding)` | `buffer.toString(encoding)` |
 | --- | --- | --- |
 | `utf8` | Stores the CP3 string's UTF-8 bytes | Decodes bytes as UTF-8 text |
 | `hex` | Requires an even number of valid hex digits; accepts upper/lowercase digits | Returns lowercase hex text |
-| `base64` | Decodes base64 text; invalid input throws | Returns base64 text with padding |
+| `base64` | Decodes base64 text (padded); invalid input throws | Returns base64 text with padding |
+| `base64url` | RFC 4648 §5 unpadded decoding; `-`/`_` alphabet; `=` only at the end; `+`/`/` rejected | Returns base64url text with no padding |
 
-For binary values that are not valid text, do not use UTF-8 decoding as a reversible representation. Use hex or base64 to render them for logs or interchange.
+For binary values that are not valid text, do not use UTF-8 decoding as a reversible representation. Use hex, base64 or base64url to render them for logs or interchange (base64url for URL-safe output).
 
 ## `slice` uses normalized indices and copies
 
@@ -102,6 +103,7 @@ A zero-length result is valid. If `start` normalizes after `end`, the selected r
 | --- | --- | --- |
 | `Buffer.from(text, "hex")` | Odd digit count or non-hex character | Catchable runtime error |
 | `Buffer.from(text, "base64")` | Invalid alphabet, padding, or dangling bits | Catchable runtime error |
+| `Buffer.from(text, "base64url")` | Invalid alphabet, `=` not at the end, or dangling bits | Catchable runtime error |
 | `Buffer.from(text, encoding)` | Unsupported literal encoding | Compile-time type diagnostic |
 | `Buffer.from(text, dynamicEncoding)` | Unsupported run-time encoding | Catchable runtime error |
 | `Buffer.alloc(size)` | Negative, fractional, non-finite, or excessive size | Compile-time rejection for negative literals where recognized; otherwise catchable runtime error |
@@ -129,4 +131,4 @@ The method and encoding surface is closed. Node methods such as `write`, `copy`,
 
 ## Choosing Buffer or a typed array
 
-Use Buffer when the main abstraction is a byte string that is immutable and converted with UTF-8, hex, or base64. Use a typed array when you need indexed fixed-width numeric values over an ArrayBuffer. Use DataView when fields have byte offsets, mixed widths, or explicit endian interpretation. Do not assume a Buffer can be passed to every Node Buffer API.
+Use Buffer when the main abstraction is a byte string that is immutable and converted with UTF-8, hex, base64, or base64url. Use a typed array when you need indexed fixed-width numeric values over an ArrayBuffer. Use DataView when fields have byte offsets, mixed widths, or explicit endian interpretation. Do not assume a Buffer can be passed to every Node Buffer API.

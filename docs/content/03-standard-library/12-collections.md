@@ -35,13 +35,20 @@ Both preserve insertion order when iterating. They are reference values managed 
 - `clear()` removes all entries.
 - `keys()`, `values()`, and `entries()` expose ordered contents.
 - `forEach(callback)` visits entries in insertion order.
+- `groupBy(list, callback)` (static, called as `Map.groupBy(...)`) groups an array into a `Map<K, T[]>`.
 - `size` is the current entry count.
 
 ```ts
+const grouped = Map.groupBy(["apple", "artichoke", "banana"], (word) => word.charAt(0));
+// Map { "a" => ["apple", "artichoke"], "b" => ["banana"] }
+
+const counts = new Map<string, number>();
 counts.set("apples", 3);
 const apples = counts.get("apples"); // number | undefined
 if (counts.has("apples")) console.log(apples);
 ```
+
+`Map.groupBy(list, callback)` takes an array, not a general iterable. The callback may declare any prefix of `(item, index, array)`; the result is a fresh `Map<K, T[]>` whose keys appear in first-seen order and whose groups preserve input order. `K` follows the callback's return type — it is not restricted to strings (use `Object.groupBy` for the string-key record form).
 
 Because `get` can return `undefined`, check for absence before using a value that must exist. A key already present keeps its original insertion position when its value is replaced.
 
@@ -60,6 +67,26 @@ Because `get` can return `undefined`, check for absence before using a value tha
 ```ts
 seen.add("request-42");
 if (seen.has("request-42")) console.log("already processed");
+```
+
+### Set operations
+
+`Set` also has algebra members. Each of `union`, `intersection`, and `difference` returns a fresh `Set<T>` and leaves both operands unchanged; order follows the receiver — `union` keeps receiver order followed by values new to the other set, and `intersection`/`difference` keep receiver order:
+
+- `union(other)` — every value of both sets.
+- `intersection(other)` — the values present in both sets.
+- `difference(other)` — the values of this set not present in `other`.
+- `isSubsetOf(other)` — true when every value of this set is in `other`.
+
+```ts
+const a = new Set<number>();
+a.add(1); a.add(2); a.add(3);
+const b = new Set<number>();
+b.add(2); b.add(3); b.add(4);
+a.union(b);        // Set { 1, 2, 3, 4 }
+a.intersection(b); // Set { 2, 3 }
+a.difference(b);   // Set { 1 }
+a.isSubsetOf(b);   // false
 ```
 
 ## Iteration and ordering
@@ -100,6 +127,11 @@ A Map needs two type arguments (`K`, `V`); a Set needs one (`T`). The constructo
 | Set | `clear` | `clear(): void` |
 | Set | `values` | `values(): T[]` |
 | Set | `forEach` | `(value: T) => void` callback |
+| Map | `groupBy` | `groupBy(list: T[], callback: (item: T, index: number) => K): Map<K, T[]>` (static, array input only) |
+| Set | `union` | `union(other: Set<T>): Set<T>` (fresh set) |
+| Set | `intersection` | `intersection(other: Set<T>): Set<T>` (fresh set) |
+| Set | `difference` | `difference(other: Set<T>): Set<T>` (fresh set) |
+| Set | `isSubsetOf` | `isSubsetOf(other: Set<T>): boolean` |
 | Both | `size` | Read-only count property |
 
 `delete` reports whether an entry/value existed and was removed. `clear` always returns `void`. `get` distinguishes a missing key by returning `undefined`, so use `has` when the distinction between “missing” and a stored value matters.
@@ -274,12 +306,17 @@ shared.get("hits"); // 1
 | Map | | `clear` | `clear(): void` |
 | Map | | `keys`, `values`, `entries` | `K[]`, `V[]`, `[K, V][]` |
 | Map | | `forEach` | `(value: V, key: K) => void` callback, in that argument order |
+| Map | `Map.groupBy(...)` (static) | `groupBy` | `groupBy(list: T[], callback: (item: T, index: number) => K): Map<K, T[]>` (array input only) |
 | Map | | `size` | Read-only count property |
 | Set | `new Set<T>()` | `add` | `add(value: T): void` |
 | Set | | `has`, `delete` | `(value: T): boolean` |
 | Set | | `clear` | `clear(): void` |
 | Set | | `values` | `values(): T[]` |
 | Set | | `forEach` | `(value: T) => void` callback |
+| Set | | `union` | `union(other: Set<T>): Set<T>` (fresh set) |
+| Set | | `intersection` | `intersection(other: Set<T>): Set<T>` (fresh set) |
+| Set | | `difference` | `difference(other: Set<T>): Set<T>` (fresh set) |
+| Set | | `isSubsetOf` | `isSubsetOf(other: Set<T>): boolean` |
 | Set | | `size` | Read-only count property |
 | LRUCache | `new LRUCache<K, V>(capacity)` | `set` | `set(key: K, value: V): void` |
 | LRUCache | | `get` | `get(key: K): V \| undefined` |

@@ -16,6 +16,12 @@ The CP3 `number` type is a 64-bit floating-point value. A numeric helper may ret
 
 - `math.PI` is the ratio of a circle's circumference to its diameter.
 - `math.E` is Euler's number, the base of natural logarithms.
+- `math.LN2` is the natural logarithm of 2.
+- `math.LN10` is the natural logarithm of 10.
+- `math.LOG2E` is the base-2 logarithm of Euler's number.
+- `math.LOG10E` is the base-10 logarithm of Euler's number.
+- `math.SQRT1_2` is the square root of one half.
+- `math.SQRT2` is the square root of 2.
 - `math.random()` returns a pseudo-random number in the half-open interval `[0, 1)`.
 
 The random generator is not a cryptographic random source. Use `std/crypto.randomBytes` for cryptographic bytes.
@@ -46,26 +52,41 @@ For negative values, `floor` and `trunc` differ: `floor(-1.2)` is `-2`, while `t
 
 ## Roots, logarithms, and trigonometry
 
-`abs`, `sqrt`, and `cbrt` provide absolute value, square root, and cube root. `log`, `log2`, and `log10` compute natural, base-2, and base-10 logarithms. `sin`, `cos`, and `tan` take radians.
+`abs`, `sqrt`, and `cbrt` provide absolute value, square root, and cube root. `log`, `log2`, and `log10` compute natural, base-2, and base-10 logarithms. `sin`, `cos`, and `tan` take radians. `hypot(...values)` returns the square root of the sum of the squares of its arguments, without overflowing the intermediate squares. `sign(x)` returns `-1`, `0`, or `1` according to the sign of `x`; `NaN` stays `NaN`.
+
+## Inverse and hyperbolic functions
+
+| Function | Meaning |
+| --- | --- |
+| `asin(x)`, `acos(x)`, `atan(x)` | Arcsine, arccosine, and arctangent of `x`, in radians |
+| `atan2(y, x)` | The angle in the plane between the positive x-axis and the ray to `(x, y)`, in radians |
+| `sinh(x)`, `cosh(x)`, `tanh(x)` | Hyperbolic sine, cosine, and tangent of `x` |
+| `asinh(x)`, `acosh(x)`, `atanh(x)` | Inverse hyperbolic sine, cosine, and tangent of `x` |
+| `exp(x)` | Euler's number raised to the power `x` |
+| `log1p(x)` | The natural logarithm of `1 + x`, accurate for small `x` |
+
+`asin` and `acos` expect a `[-1, 1]` input; `atanh` expects a `(-1, 1)` input; domain behavior outside those ranges follows the runtime's floating-point math library.
 
 The runtime follows the underlying floating-point math library for special values, domain errors, and precision. If an application needs a specific validation policy, check its inputs and outputs explicitly.
 
 ## Function index
 
-`PI`, `E`, `random`, `min`, `max`, `pow`, `gcd`, `lcm`, `clamp`, `lerp`, `sqrt`, `abs`, `floor`, `ceil`, `round`, `trunc`, `cbrt`, `log`, `log2`, `log10`, `sin`, `cos`, and `tan` are the documented members. The compiler treats this namespace as closed and diagnoses unsupported names.
+`PI`, `E`, `LN2`, `LN10`, `LOG2E`, `LOG10E`, `SQRT1_2`, `SQRT2`, `random`, `min`, `max`, `pow`, `gcd`, `lcm`, `clamp`, `lerp`, `sqrt`, `abs`, `floor`, `ceil`, `round`, `trunc`, `cbrt`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `exp`, `log1p`, `hypot`, and `sign` are the documented members. The compiler treats this namespace as closed and diagnoses unsupported names.
 
 ## Full function index
 
 | Member | Signature | Notes |
 | --- | --- | --- |
-| `PI`, `E` | `number` | Numeric constants |
+| `PI`, `E`, `LN2`, `LN10`, `LOG2E`, `LOG10E`, `SQRT1_2`, `SQRT2` | `number` | Numeric constants |
 | `random` | `random(): number` | Pseudorandom value in `[0, 1)` |
 | `min`, `max` | `(...values: number[]): number` | Variadic selection |
 | `pow` | `(base: number, exponent: number): number` | Exponentiation |
 | `gcd`, `lcm` | `(a: number, b: number): number` | Integer-oriented helpers over `number` inputs |
 | `clamp` | `(x: number, min: number, max: number): number` | Restrict a value to a range |
 | `lerp` | `(start: number, end: number, t: number): number` | Linear interpolation/extrapolation |
-| `sqrt`, `abs`, `floor`, `ceil`, `round`, `trunc`, `cbrt`, `log`, `log2`, `log10`, `sin`, `cos`, `tan` | `(x: number): number` | Unary floating-point operations |
+| `hypot` | `(...values: number[]): number` | Square root of the sum of squares of the arguments |
+| `sqrt`, `abs`, `floor`, `ceil`, `round`, `trunc`, `cbrt`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `exp`, `log1p`, `sign` | `(x: number): number` | Unary floating-point operations |
+| `atan2` | `(y: number, x: number): number` | Angle of the ray from `(0, 0)` to `(x, y)`, in radians |
 
 The namespace is closed to the listed members. Use CP3 `number` for these functions; native integer values have separate arithmetic rules and should be deliberately placed at conversion boundaries.
 

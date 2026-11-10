@@ -23,6 +23,18 @@ Use cryptographic randomness for secret material and unpredictable tokens. `std/
 
 `sha256(data)` and `sha512(data)` compute the corresponding digest. A hash is one-way and is not encryption. General-purpose hashes are also not password-hashing functions: use a password-specific derivation scheme when storing passwords.
 
+## HMAC and keyed digests
+
+`hmacSha256(key, data)` and `hmacSha512(key, data)` compute the hex-encoded HMAC of `data` under `key` (libsodium `crypto_auth_hmacsha256` / `crypto_auth_hmacsha512`). The key may be any length; SHA-512 keys need no special handling beyond what these functions do for you. A truncated comparison is not a substitute for a constant-time check — verify HMACs in full or not at all.
+
+## Unkeyed BLAKE2b and raw digests
+
+`blake2b(data)` returns the hex-encoded BLAKE2b digest of `data` (libsodium `crypto_generichash`, unkeyed, 32-byte output). `sha256Raw(data)` returns the raw 32 SHA-256 digest bytes as a `Buffer` instead of lowercase hex — use it when the consumer wants bytes, not hex text.
+
+## UUID helpers
+
+`uuidValidate(uuid)` reports whether `uuid` is a canonical UUID string (8-4-4-4-12 hex, case-insensitive). The format is all it checks: the version and variant nibbles are not constrained. `uuidVersion(uuid)` returns the version nibble (`0`–`15`) of a canonical UUID string, or `0` when the input is not one. `uuidParse(uuid)` converts a canonical UUID string into its 16 raw bytes as a `Buffer`; malformed input throws a catchable error.
+
 ## AES-256 authenticated encryption
 
 `AES256(key, data)` encrypts with AES-256-GCM and returns base64 text containing the nonce, ciphertext, and authentication tag. The runtime manages the nonce for this operation. `AES256Decrypt(key, encrypted)` decrypts and verifies the authentication tag. If verification fails, it throws a catchable error rather than returning unauthenticated plaintext.
@@ -37,7 +49,7 @@ Keep encryption keys secret. The combined output carries the metadata required b
 - Treat a decryption/authentication error as invalid data.
 - Prefer established protocols and libraries over custom cryptographic constructions.
 
-The module surface currently consists of `randomUUID`, `randomBytes`, `sha256`, `sha512`, `AES256`, and `AES256Decrypt`.
+The module surface consists of `randomUUID`, `randomBytes`, `sha256`, `sha512`, `AES256`, `AES256Decrypt`, `hmacSha256`, `hmacSha512`, `blake2b`, `getRandomValues`, `uuidParse`, `uuidValidate`, `uuidVersion`, and `sha256Raw`.
 
 ## Exact signatures and results
 
@@ -45,10 +57,18 @@ The module surface currently consists of `randomUUID`, `randomBytes`, `sha256`, 
 | --- | --- | --- |
 | `randomUUID` | `randomUUID(): string` | RFC 4122 version-4 UUID text (36 characters with hyphens) |
 | `randomBytes` | `randomBytes(length: number): Buffer` | Cryptographically random bytes |
+| `getRandomValues` | `getRandomValues(length: number): Buffer` | `length` cryptographically strong random bytes; alias of `randomBytes` with the same length rules |
 | `sha256` | `sha256(data: string | Buffer): string` | Lowercase hexadecimal SHA-256 digest (64 characters) |
 | `sha512` | `sha512(data: string | Buffer): string` | Lowercase hexadecimal SHA-512 digest (128 characters) |
+| `sha256Raw` | `sha256Raw(data: string | Buffer): Buffer` | Raw 32 SHA-256 digest bytes |
+| `hmacSha256` | `hmacSha256(key: string | Buffer, data: string | Buffer): string` | Lowercase hexadecimal HMAC-SHA-256 (64 characters) |
+| `hmacSha512` | `hmacSha512(key: string | Buffer, data: string | Buffer): string` | Lowercase hexadecimal HMAC-SHA-512 (128 characters) |
+| `blake2b` | `blake2b(data: string | Buffer): string` | Lowercase hexadecimal BLAKE2b digest (64 characters) |
 | `AES256` | `AES256(key: string, data: string): string` | Base64 authenticated-encryption envelope |
 | `AES256Decrypt` | `AES256Decrypt(key: string, encrypted: string): string` | Authenticated plaintext string |
+| `uuidParse` | `uuidParse(uuid: string): Buffer` | 16 raw bytes of a canonical UUID string (`Buffer`); throws a catchable error on malformed input |
+| `uuidValidate` | `uuidValidate(uuid: string): boolean` | True iff `uuid` is a canonical UUID string (format only; version/variant nibbles not constrained) |
+| `uuidVersion` | `uuidVersion(uuid: string): number` | Version nibble (`0`–`15`) of a canonical UUID string; `0` when not canonical |
 
 The module is a closed namespace: a misspelled or unsupported member is rejected by the compiler. `randomBytes` returns the nominal `Buffer` type from `std/buffer`, so import Buffer if you annotate it directly. Hash methods accept either text or Buffer; the Buffer bytes are hashed as bytes, not as a printed representation.
 

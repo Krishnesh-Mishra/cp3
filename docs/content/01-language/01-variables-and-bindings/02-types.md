@@ -219,14 +219,16 @@ const total = 125 * (1 + taxRate);
 
 ## `string`
 
-`string` represents CP3 text. String literals use quotes or template literals. Concatenation and interpolation create string values; standard string operations are described in [Strings](../../03-standard-library/15-strings.md).
+`string` represents CP3 text. String literals use quotes or template literals. Concatenation and interpolation create string values; standard string operations are described in [Strings](../04-values-and-objects/05-strings.md).
 
-CP3 stores string data as UTF-8. Its `length` behavior is byte-oriented rather than JavaScript's UTF-16 code-unit count, while character-oriented methods have their own specified behavior. Do not port JavaScript code that assumes `text.length` counts UTF-16 code units without checking the [string guide](../../03-standard-library/15-strings.md).
+A template literal interpolates expressions with `${...}` and produces a `string`. Each interpolated expression is inferred like any other expression; there are no tagged templates, and CP3 has no template-literal types — an interpolation is not usable as a string-literal type annotation:
 
 ```ts
 const label: string = "report";
 const message = `generated: ${label}`;
 ```
+
+CP3 stores string data as UTF-8. Its `length` behavior is byte-oriented rather than JavaScript's UTF-16 code-unit count, while character-oriented methods have their own specified behavior. Do not port JavaScript code that assumes `text.length` counts UTF-16 code units without checking the [string guide](../04-values-and-objects/05-strings.md).
 
 A CP3 string is an owned CP3 value. A C++ `std::string` or Rust `String` spelling resolves to this CP3 string type in the corresponding native name vocabulary; it does not expose arbitrary foreign string storage or lifetime semantics.
 

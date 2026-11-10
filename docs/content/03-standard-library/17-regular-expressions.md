@@ -86,7 +86,7 @@ Regex splitting includes participating capture groups in the returned array. If 
 
 CP3 strings are UTF-8 byte strings. Regex offsets and the underlying engine operate on UTF-8 byte positions, not JavaScript UTF-16 code units. ASCII patterns and text generally follow the familiar behavior, but non-ASCII `.` matching and offsets can differ from JavaScript. Do not use a regex match offset as a CP3 code-point index without conversion.
 
-The `u` and `v` flags select UTF handling in the current engine (`v` is treated as `u`); this does not make CP3's offsets UTF-16-based or provide grapheme segmentation. See [Strings](15-strings.md) for the language's byte-length and code-point rules.
+The `u` and `v` flags select UTF handling in the current engine (`v` is treated as `u`); this does not make CP3's offsets UTF-16-based or provide grapheme segmentation. See [Strings](../01-language/04-values-and-objects/05-strings.md) for the language's byte-length and code-point rules.
 
 ## Engine and portability
 
@@ -104,6 +104,6 @@ The API here is synchronous. A costly regex operation runs on the calling thread
 
 The `tests/cases/regex` family covers literal flags, duplicate and unknown flags, invalid patterns, capture groups, no-match results, global cursor state, sticky state, and multiline flags. The `arrays-strings` cases cover passing a regex to `split`.
 
-- [Strings](15-strings.md)
+- [Strings](../01-language/04-values-and-objects/05-strings.md)
 - [Standard library overview](00-overview.md)
 - [Errors and exceptions](../01-language/06-modules-and-errors/02-errors.md)

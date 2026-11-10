@@ -39,7 +39,7 @@ Conversion failures depend on the target type and runtime conversion rules. Pref
 
 ## `env.has(key)`
 
-Returns whether the named variable is present in the current process environment:
+Returns whether the named variable is set in the current process environment:
 
 ```ts
 if (!env.has("DATABASE_URL")) {
@@ -47,9 +47,16 @@ if (!env.has("DATABASE_URL")) {
 }
 ```
 
-Presence is different from a non-empty string. A variable can exist with an empty value; `has` reports that it exists.
+Presence is governed by the runtime's environment map, which is seeded from the operating-system environment on first use. An OS variable that is unset — or present but empty (`KEY=`) — is treated as **absent**, so `env.has` reports `false` for it. A value written through `env.load` (even an empty one) **is** tracked by the map, so `env.has` reports `true` for it. The same rule applies to `process.env.set` writes.
 
-This distinction is useful when an empty value intentionally disables a setting. If the program requires a non-empty value, check both presence and content instead of treating `has` as full validation.
+```ts
+// OS: APP_HOST=   (empty)
+env.has("APP_HOST");   // false
+env.load(".env");      // .env contains APP_HOST= (empty)
+env.has("APP_HOST");   // true
+```
+
+This distinction matters when an empty value intentionally disables a setting: an empty OS value already looks absent to `env.has`, and a non-empty value is required to pass a presence check. To require a non-empty value, check content as well — `has` is a presence check against the map, not full validation of the value.
 
 ## `env.load(path)`
 
@@ -94,7 +101,7 @@ The example demonstrates where defaults belong; it does not make every string a 
 | --- | --- | --- |
 | `env.get<T>(key)` | `T` (string when omitted) | Throws if missing |
 | `env.get<T>(key, { default })` | `T` | Returns default if missing |
-| `env.has(key)` | `boolean` | Returns false |
+| `env.has(key)` | `boolean` | Returns false when the key is missing or the OS value is empty; true for values written via `env.load`/`process.env.set` (even empty) |
 | `env.load(path)` | `void` | Throws if file cannot be read |
 
 The compiler's supported members are exactly `get`, `has`, and `load`; unknown `env` members are diagnosed rather than treated as arbitrary properties.

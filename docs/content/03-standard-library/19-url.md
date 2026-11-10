@@ -34,6 +34,7 @@ u.origin;   // "https://example.com:8080"
 u.username; // ""
 u.password; // ""
 u.href;     // the serialized URL
+u.toString(); // the serialized URL (same as u.href)
 ```
 
 The ten string components are snapshots taken at construction. Default ports are stripped (`https://example.com:443/` serializes without `:443`); dot segments are removed from the path. `u.searchParams` is a `URLSearchParams` handle for the parsed query.
@@ -66,6 +67,7 @@ Pairs use the `application/x-www-form-urlencoded` rules: `+` is a space on parse
 | `encodeURI` / `decodeURI` | `(s: string) => string` | Whole-URI percent-encoding |
 | `URL(input, base?)` | constructor | Parses/resolves with RFC 3986 rules |
 | `URL.href`, `.protocol`, `.host`, `.hostname`, `.port`, `.pathname`, `.search`, `.hash`, `.origin`, `.username`, `.password` | `string` | Construction-time snapshot components |
+| `URL.toString()` | `() => string` | The serialized URL (same value as `URL.href`) |
 | `URL.searchParams` | `URLSearchParams` | Query handle for this URL |
 | `URLSearchParams(query?)` | constructor | Parses a query string |
 | `append` / `set` | `(name, value) => undefined` | Append, or replace-first/drop-rest |
@@ -78,4 +80,4 @@ Pairs use the `application/x-www-form-urlencoded` rules: `+` is a space on parse
 
 ## Test and implementation boundary
 
-The conformance cases live under `tests/cases/stdlib/02/url` (`url_*` and `urlsearchparams_*`). The implementation and semantic member tables are under `src/std/url`; unknown members are compile-time errors rather than dynamic property access. Together with the percent-encoding helpers, this module covers the RFC 3986 parser and the WHATWG `URL`/`URLSearchParams` surface for v0.2; setters on `URL` components, `URL.toString`, and live `search`/`href` rebinding are out of scope.
+The conformance cases live under `tests/cases/stdlib/02/url` (`url_*` and `urlsearchparams_*`). The implementation and semantic member tables are under `src/std/url`; unknown members are compile-time errors rather than dynamic property access. Together with the percent-encoding helpers, this module covers the RFC 3986 parser and the WHATWG `URL`/`URLSearchParams` surface for v0.2; setters on `URL` components and live `search`/`href` rebinding are out of scope. `URL.toString()` is implemented and returns the same serialization as `href`.

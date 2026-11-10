@@ -93,7 +93,6 @@ Use `--debug` when you want unoptimized code and debug information. Use `--incre
 
 ```sh
 cp3 help
-cp3 build --help
 ```
 
 See [Build profiles and PGO](../04-compiler-cli/11-build-profiles-and-pgo.md) for what profile names mean in this compiler.

@@ -88,7 +88,7 @@ Invalid-URL construction throws a catchable CP3 `Error` (`Thrown::make`), never 
 
 ## Limits
 
-- No setters on `URL` components and no `URL.toString` in this surface: re-serialize by constructing a new `URL`. Component assignment outside the documented snapshot reads is a compile-time error.
+- No setters on `URL` components: assignment outside the documented snapshot reads is a compile-time error. `URL.toString()` is in the surface and returns the same serialization as `href`.
 - No live `search` / `href` rebinding: `URLSearchParams` mutations do not rewrite `search` or `href` (unlike WHATWG live binding). Read `u.searchParams.get(...)` for current values, or construct a new `URL` when a fresh snapshot must reflect the query.
 - No IDNA or punycode: non-ASCII hostnames are lowercased as bytes and kept as-is; there is no internationalized-domain conversion.
 - No `atob` / `btoa` here: those globals are base64 <-> byte text (`string` to `string`, exactly one argument) and belong with the buffer codec, not with URL parsing.

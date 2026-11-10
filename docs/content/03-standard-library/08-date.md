@@ -39,9 +39,32 @@ Prefer ISO output for logs and serialized data when stable formatting matters.
 
 ## Reading components
 
-`getFullYear`, `getMonth`, `getDate`, `getHours`, `getMinutes`, and `getSeconds` return numeric components. `getMonth()` is zero-indexed: January is `0`, matching JavaScript's convention. `getDate()` is the day of the month.
+`getFullYear`, `getMonth`, `getDate`, `getHours`, `getMinutes`, and `getSeconds` return numeric components. `getMonth()` is zero-indexed: January is `0`, matching JavaScript's convention. `getDate()` is the day of the month. `getDay()` returns the day of the week, `0` = Sunday.
+
+All Dates are UTC, so the `getUTC*` family returns exactly the same values as the non-UTC getters: `getUTCFullYear()`, `getUTCMonth()`, `getUTCDate()`, `getUTCDay()`, `getUTCHours()`, `getUTCMinutes()`, and `getUTCSeconds()` are the UTC getters, provided for symmetry with runtimes that expose both families.
 
 Calendar components are not the same thing as a timestamp. Use `diffMs` for elapsed-time comparisons instead of subtracting separately read calendar fields.
+
+## Setting components
+
+The setters mutate the receiver in place and return the new timestamp (`i64` in Rust/C++ projects, `number` in TypeScript projects). `setMonth()` is zero-indexed. This is deliberately different from the `add*` family: `addDays(n)` returns a NEW Date and leaves the receiver untouched, while `setDate(n)` rewrites the same Date:
+
+```ts
+const release = Date.fromISOString("2026-10-30T08:00:00Z");
+release.setFullYear(2027);      // returns the new timestamp; release is rewritten
+const shifted = release.addDays(1); // new Date; release is also unchanged by addDays
+```
+
+| Method | Signature | Meaning |
+| --- | --- | --- |
+| `setFullYear` | `setFullYear(year: number): i64` | Set the UTC year in place; returns the new timestamp |
+| `setMonth` | `setMonth(month: number): i64` | Set the UTC month (0-indexed) in place; returns the new timestamp |
+| `setDate` | `setDate(day: number): i64` | Set the UTC day of the month in place; returns the new timestamp |
+| `setHours` | `setHours(hour: number): i64` | Set the UTC hour in place; returns the new timestamp |
+| `setMinutes` | `setMinutes(minute: number): i64` | Set the UTC minute in place; returns the new timestamp |
+| `setSeconds` | `setSeconds(second: number): i64` | Set the UTC second in place; returns the new timestamp |
+
+(Each returns `number` in TypeScript projects, and the timestamp width `i64` in Rust/C++ projects.)
 
 ## Arithmetic and comparison
 
@@ -57,7 +80,7 @@ The original `release` remains unchanged after `addDays`.
 
 ## API index
 
-Static: `now()`, `fromISOString(s)`, `parse(s)`. Instance: `toISOString()`, `toString()`, `getFullYear()`, `getMonth()`, `getDate()`, `getHours()`, `getMinutes()`, `getSeconds()`, `getTime()`, `setTime()`, `addDays(n)`, `addHours(n)`, `addMinutes(n)`, `addSeconds(n)`, `isBefore(other)`, `isAfter(other)`, `diffMs(other)`.
+Static: `now()`, `fromISOString(s)`, `parse(s)`. Instance: `toISOString()`, `toString()`, `getFullYear()`, `getMonth()`, `getDate()`, `getDay()`, `getHours()`, `getMinutes()`, `getSeconds()`, `getTime()`, `getUTCFullYear()`, `getUTCMonth()`, `getUTCDate()`, `getUTCDay()`, `getUTCHours()`, `getUTCMinutes()`, `getUTCSeconds()`, `setTime()`, `setFullYear()`, `setMonth()`, `setDate()`, `setHours()`, `setMinutes()`, `setSeconds()`, `addDays(n)`, `addHours(n)`, `addMinutes(n)`, `addSeconds(n)`, `isBefore(other)`, `isAfter(other)`, `diffMs(other)`.
 
 Numeric Date values follow the project vocabulary. A `typescript` project keeps `number`; a `rust` or `cpp` project uses the exact standard-library width: `Date.parse(s)`, `getTime()`, `diffMs(other)`, `setTime(ms)` and every mutator's returned milliseconds are `i64` (`int64_t` in C++), and `setTime` takes that same `i64`. The calendar getters and the calendar parameters of `setFullYear` through `setSeconds` stay `number`.
 
@@ -72,7 +95,10 @@ Numeric Date values follow the project vocabulary. A `typescript` project keeps 
 | `getFullYear` | `getFullYear(): number` | Calendar year |
 | `getMonth` | `getMonth(): number` | Month, zero-indexed (`0` is January) |
 | `getDate` | `getDate(): number` | Day of month |
+| `getDay` | `getDay(): number` | Day of week (`0` = Sunday) |
 | `getHours`, `getMinutes`, `getSeconds` | `(): number` | Corresponding time component |
+| `getUTCFullYear`, `getUTCMonth`, `getUTCDate`, `getUTCDay`, `getUTCHours`, `getUTCMinutes`, `getUTCSeconds` | `(): number` | UTC accessors; identical to the non-UTC getters (all CP3 Dates are UTC) |
+| `setFullYear`, `setMonth`, `setDate`, `setHours`, `setMinutes`, `setSeconds` | `(field: number): i64` | Set the component in place; returns the new timestamp (`number` in TypeScript projects) |
 | `addDays`, `addHours`, `addMinutes`, `addSeconds` | `(n: number): Date` | New Date shifted by the requested amount |
 | `isBefore`, `isAfter` | `(other: Date): boolean` | Compare date ordering |
 | `getTime` | `getTime(): i64 (`number` in TypeScript projects)` | Milliseconds since the epoch |

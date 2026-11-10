@@ -104,6 +104,8 @@ nav:
           - Arrays and object literals: 01-language/04-values-and-objects/01-arrays-and-objects.md
           - Classes and interfaces: 01-language/04-values-and-objects/02-classes-and-interfaces.md
           - Enums: 01-language/04-values-and-objects/03-enums.md
+          - Built-in array methods: 01-language/04-values-and-objects/04-arrays.md
+          - Built-in strings: 01-language/04-values-and-objects/05-strings.md
       - Generics:
           - Generics: 01-language/05-generics/01-generics.md
       - Modules and errors:
@@ -115,6 +117,7 @@ nav:
           - "Rust, C++, and TypeScript-prefixed types": 01-language/07-native-types/02-prefixed-types.md
           - Native numeric behavior and conversions: 01-language/07-native-types/03-numeric-rules.md
           - Native type limitations and diagnostics: 01-language/07-native-types/04-limitations.md
+          - Global builtins: 01-language/99-global-builtins.md
   - Runtime model:
       - "Chapter 2 · Runtime model": 02-runtime/00-overview.md
       - The CP3 value model: 02-runtime/01-value-model.md
@@ -143,14 +146,13 @@ nav:
       - Byte buffers: 03-standard-library/11-buffer.md
       - Map and Set collections: 03-standard-library/12-collections.md
       - Networking: 03-standard-library/13-network.md
-      - Arrays: 03-standard-library/14-arrays.md
-      - Strings: 03-standard-library/15-strings.md
       - "Typed arrays, buffers, and DataView": 03-standard-library/16-typed-arrays.md
       - Regular expressions: 03-standard-library/17-regular-expressions.md
       - I/O readiness: 03-standard-library/18-io.md
       - URL and query strings: 03-standard-library/19-url.md
       - Text encoding: 03-standard-library/20-text.md
       - Time and stopwatches: 03-standard-library/21-time.md
+      - Readline: 03-standard-library/22-readline.md
 
       - Checksums: 03-standard-library/23-hash.md
       - URL extensions: 03-standard-library/24-url-extensions.md

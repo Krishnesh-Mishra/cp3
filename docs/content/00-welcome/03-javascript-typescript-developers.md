@@ -14,7 +14,7 @@ What landed in the v0.2 line that changes everyday code:
 - **Parallel call diagnostics** — `parallel.for` / `parallel.reduce` / `parallel.run` report unknown members, misplaced or wrong-shaped closures, and a missing range first argument at check time — see §5 Runtime essentials.
 - **Typed promise handlers** — `.then` / `.catch` / `.finally` handlers take typed parameters, and `Promise` combinators accept plain values as already-resolved promises (wrapped per element) — see §5.1 `async` / `await` and promises.
 
-Full notes: [`docs/release/v0.2.md`](../../release/v0.2.md). Build from source and run the suite: [`docs/BUILD.md`](../../BUILD.md).
+Full notes: [`docs/release/v0.2.md`](https://github.com/Krishnesh-Mishra/cp3/blob/master/docs/release/v0.2.md). Build from source and run the suite: [`docs/BUILD.md`](https://github.com/Krishnesh-Mishra/cp3/blob/master/docs/BUILD.md).
 
 # 1. One-file summary: what transfers and what does not
 
@@ -46,7 +46,6 @@ The CLI executable may be named `cp3` or `cp3c`; use whatever is installed:
 
 ```sh
 cp3 help
-cp3 build --help
 cp3 toolchain list
 ```
 
@@ -61,7 +60,7 @@ cp3 toolchain list
 | `cp3 build [file]` | Generate C++, compile, link — no execution. Defaults to **release** profile. |
 | `cp3 fmt <file>` | Format CP3 source with the project formatter. |
 | `cp3 clean` | Remove `.cp3/build` and `.cp3/out`. |
-| `cp3 clean --all` | Also clear `.cp3/packages` and `.cp3/native` caches. |
+| `cp3 clean --all` | Also clear `.cp3/packages`, `.cp3/lock.json`, and `.cp3/native` caches. |
 
 Artsifacts: `.cp3/build` holds build intermediates; `.cp3/out` holds the built executable. `check` does not prove the native C++ compile/link will succeed — `run`/`build` do.
 
@@ -562,7 +561,7 @@ Reference counting still does not synchronize field access.
 | `std/date` | `import Date from "std/date"` | Now, ISO parse/format, arithmetic, diffs |
 | `std/json` | `import json from "std/json"` | `parse<T>` / runtime shape validation, `stringify` |
 | `std/crypto` | `import crypto from "std/crypto"` | UUID, random bytes, SHA-256/512, AES-256-GCM |
-| `std/buffer` | `import { Buffer } from "std/buffer"` | Bytes, UTF-8/hex/base64 conversion |
+| `std/buffer` | `import { Buffer } from "std/buffer"` | Bytes, UTF-8/hex/base64/base64url conversion |
 | `std/collections` | `import { Map, Set, ... } from "std/collections"` | Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap, `Map.groupBy` |
 | `std/network` | `import { fetch, lookup, WebSocket, WebSocketServer, createServer, tls, Headers, Request, Response, FormData, AbortSignal, Router, static, cors, bodyLimit, cookieParser } from "std/network"` | HTTP fetch/DNS, WebSocket client/server, HTTP server/router, request/response helpers, TLS (fetch https, wss://, TLS servers) |
 | `std/Object` | built-in | `Object.keys`/`values`/`entries`/`assign`/`is`/`freeze`/`seal`/`preventExtensions`/`isFrozen`/`isSealed`/`isExtensible`/`getPrototypeOf`/`setPrototypeOf`/`fromEntries`/`groupBy` |
@@ -632,7 +631,7 @@ Environment values arrive as strings. `env.get<T>` converts and applies defaults
 |---|---|---|
 | `env.get<T>(key)` | `T` (string if `T` omitted) | throws |
 | `env.get<T>(key, { default })` | `T` | returns the default |
-| `env.has(key)` | `boolean` | `false` |
+| `env.has(key)` | `boolean` | `false` when the key is missing or the OS value is empty; `true` for values written via `env.load`/`process.env.set` (even empty) |
 | `env.load(path)` | `void` | throws if the file cannot be read |
 
 ```ts
@@ -647,7 +646,7 @@ if (env.has("REGION")) {
 env.load(".env");   // relative to cwd; populates process.env
 ```
 
-`has` reports presence, not a non-empty value — a variable can be empty and still "have" the key. `env.load` does not encrypt secrets or write values back to the file. For typed reads with defaults, use `std/env`; `std/process` exposes a separate `Map<string,string>` on `process.env`.
+`has` reports presence in the runtime environment map, which is seeded from the OS environment on first use: an OS variable that is unset or present-but-empty (`KEY=`) is treated as **absent**, while a value written through `env.load` (even an empty one) **is** present. `env.load` does not encrypt secrets or write values back to the file. For typed reads with defaults, use `std/env`; `std/process` exposes a separate `Map<string,string>` on `process.env`.
 
 ## 8.1 Read-once configuration boundary
 
@@ -770,9 +769,10 @@ console.log(`rss: ${usage.rss} bytes`);
 |---|---|
 | `process.argv` | Supported; includes executable name |
 | `process.env.NAME` | `process.env.get("NAME")` or `std/env` |
-| `process.stdout.write(...)` | Not supported; use `console.log`/`console.error` |
-| `process.stderr.write(...)` | Not supported |
-| `process.stdin` | Not exposed |
+| `process.stdout.write(...)` | Supported; `StdioStream.write(text: string): void` (no newline, then flush) |
+| `process.stderr.write(...)` | Supported; same API on `process.stderr` |
+| `process.stdin` | Supported; `readAll`/`readLines`/`readLine` promises, `on("line" \| "close", ...)`, `close()` |
+| `process.on("SIGINT" \| "SIGTERM" \| "exit" \| "unhandledRejection", ...)` | Supported; lifecycle listeners; `onShutdown` is sugar for `on("exit", ...)` |
 | `process.exec(...)` | CP3 `exec` → `Promise<ExecResult>` |
 | `process.spawn(...)` | CP3 `spawn` → `SpawnHandle` with `on`/`write`/`kill` |
 
@@ -1030,10 +1030,10 @@ A `Buffer` is an immutable byte sequence. `string.length` counts bytes; `Buffer.
 
 | Member | Signature | Result |
 |---|---|---|
-| `Buffer.from(text, encoding?)` | `Buffer` | Encode text; default UTF-8; hex/base64 also supported |
+| `Buffer.from(text, encoding?)` | `Buffer` | Encode text; default UTF-8; hex/base64/base64url also supported |
 | `Buffer.alloc(size)` | `Buffer` | Zero-filled, up to 2,147,483,647 bytes |
 | `buffer.length` | `number` | Byte length |
-| `buffer.toString(encoding?)` | `string` | Decode UTF-8, or render hex/base64 |
+| `buffer.toString(encoding?)` | `string` | Decode UTF-8, or render hex/base64/base64url |
 | `buffer.slice(start, end?)` | `Buffer` | New buffer, range copy (indices normalized) |
 
 ```ts
@@ -1043,7 +1043,7 @@ const padded = Buffer.alloc(16);
 console.log(greeting.toString("hex"));           // "48656c6c6f"
 ```
 
-`slice` normalizes indices (fractional → truncate toward zero, negative → count from end, out-of-range → clamp). Encodings: `utf8`, `hex`, `base64`. Invalid hex (odd length, non-hex digit) and invalid base64 throw catchable runtime errors; an unknown literal encoding is a compile-time diagnostic. `Buffer.alloc(size)` throws on negative/fractional/non-finite/excessive sizes.
+`slice` normalizes indices (fractional → truncate toward zero, negative → count from end, out-of-range → clamp). Encodings: `utf8`, `hex`, `base64`, `base64url` (RFC 4648 §5 unpadded; `"base64Url"` is accepted as an alias). Invalid hex (odd length, non-hex digit), invalid base64 and invalid base64url throw catchable runtime errors; an unknown literal encoding is a compile-time diagnostic. `Buffer.alloc(size)` throws on negative/fractional/non-finite/excessive sizes.
 
 `atob(text)` and `btoa(text)` are global base64 <-> byte-text helpers (no import); `atob` throws on invalid base64.
 
@@ -1459,7 +1459,7 @@ u.href;          // serialized URL
 u.searchParams;  // URLSearchParams
 ```
 
-Components are **snapshots at construction**: dot segments removed, default ports stripped, IPv6 bracketed, lowercased scheme/hostname. `new URL(relative, base)` resolves per RFC 3986 §5.2; a missing base for relative input, or an unparseable input, throws a catchable `Error` with message `TypeError: Invalid URL`. Setter-style members and `URL.toString` are **not** in the surface; re-serialize by constructing a new `URL`. `searchParams` mutations do **not** rewrite `search`/`href` (no live binding).
+Components are **snapshots at construction**: dot segments removed, default ports stripped, IPv6 bracketed, lowercased scheme/hostname. `new URL(relative, base)` resolves per RFC 3986 §5.2; a missing base for relative input, or an unparseable input, throws a catchable `Error` with message `TypeError: Invalid URL`. Setter-style members are **not** in the surface, but `URL.toString()` is: it returns the same serialization as `href`. `searchParams` mutations do **not** rewrite `search`/`href` (no live binding).
 
 ## 23.2 `URLSearchParams`
 
@@ -1548,6 +1548,8 @@ import time from "std/time";
 | `sw.reset()` | `undefined` | Stop and zero |
 | `console.time(label?)` | `undefined` | Start per-label timer (default `default`) |
 | `console.timeEnd(label?)` | `undefined` | Print `label: 12.345ms`, drop the label |
+| `console.count(label?)` | `undefined` | Per-label counter (default `default`); prints `label: N`, increments before printing |
+| `console.countReset(label?)` | `undefined` | Reset the counter for `label` so the next `count` prints 1 again |
 
 ```ts
 const sw = time.stopwatch();
@@ -1559,7 +1561,7 @@ console.log(frozen === 0 ? "nothing elapsed" : frozen + "ms");
 sw.reset();
 ```
 
-The clock is `std::chrono::steady_clock` (`QueryPerformanceCounter` on Windows, `CLOCK_MONOTONIC` elsewhere). Monotonic only: never use for wall-clock time, scheduling at a wall instant, or cross-process comparison — use `std/date` for those. `elapsed()` is `number`; there is no integer duration width. Timers are separate global builtins (`setTimeout`/`setInterval`/`sleep`), not part of `std/time`. `console.time`/`timeEnd` share the same clock. `timeEnd` for a never-started label writes nothing to stdout and prints `Timer "label" does not exist` to stderr. Construction and all `sw` methods allocate nothing and throw nothing. `console.count` is **not** part of the surface.
+The clock is `std::chrono::steady_clock` (`QueryPerformanceCounter` on Windows, `CLOCK_MONOTONIC` elsewhere). Monotonic only: never use for wall-clock time, scheduling at a wall instant, or cross-process comparison — use `std/date` for those. `elapsed()` is `number`; there is no integer duration width. Timers are separate global builtins (`setTimeout`/`setInterval`/`sleep`), not part of `std/time`. `console.time`/`timeEnd` share the same clock. `timeEnd` for a never-started label writes nothing to stdout and prints `Timer "label" does not exist` to stderr. Construction and all `sw` methods allocate nothing and throw nothing. `console.count`/`countReset` are also part of the surface: a per-label counter printed as `label: N` (default label `default`), incremented before printing, reset by `countReset`.
 
 # 27. Native scalar types — quick reference
 
@@ -1834,7 +1836,7 @@ python tests/runner/run_tests.py --filter stdlib/03/process --jobs 1 --verbose
 | DOM APIs | unavailable |
 | npm `package` `require("x")` | not available — CP3 package or native interop |
 | `child_process.exec` / `spawn` | `process.exec` / `process.spawn` |
-| `process.stdout` stream | unavailable — use `console` |
+| `process.stdout` stream | `process.stdout.write(text)` / `process.stderr.write(text)` / `process.stdin` |
 | `require.main === module` | check `process.argv` for your entry script |
 | `assert.deepEqual` / `util.promisify` | no equivalent in this surface |
 

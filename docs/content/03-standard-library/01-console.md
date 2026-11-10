@@ -96,9 +96,61 @@ console.off("line", reportLine);
 
 Registering a different function with the same body does not remove the original callback. The listener's declared parameter may be omitted if the event value is not needed.
 
+## Counting calls
+
+### `console.count(label?)`
+
+Prints `label: N` for a per-label counter (default label `default`) to standard output. Each call increments the counter before printing:
+
+```ts
+console.count("hits"); // hits: 1
+console.count("hits"); // hits: 2
+console.count();       // default: 1
+```
+
+### `console.countReset(label?)`
+
+Resets the counter for `label` (default label `default`), so the next `count` prints `1` again:
+
+```ts
+console.count("hits");      // hits: 1
+console.countReset("hits");
+console.count("hits");      // hits: 1
+```
+
+`count` and `countReset` are real members of the `std/console` namespace (verified run-mode cases live under `tests/cases/stdlib/01/console/helpers`).
+
+## Debugging helpers
+
+### `console.dir(value)`
+
+Prints the value the way `log` does (objects in field order). Inspection depth options are ignored in v0.2.
+
+### `console.trace(...args)`
+
+Prints a `Trace:` line with the arguments. No stack trace is printed in v0.2.
+
+### `console.group(...args)` and `console.groupEnd()`
+
+`group` prints the arguments, then indents every following stdout line by two spaces. `groupEnd` closes the innermost open group and never reduces the indent below zero. Nesting works:
+
+```ts
+console.group("outer");
+console.group("inner");
+console.log("deep");
+console.groupEnd();
+console.log("less deep");
+console.groupEnd();
+console.log("back to normal");
+```
+
+### `console.table(rows)`
+
+Prints an `(index) (value)` header followed by one `i value` line per array element; given an object literal instead of an array, it prints one `key value` line per field, in insertion order. Only formattable elements are supported (the same values `log` can print).
+
 ## Output streams and compatibility limits
 
-`console.log` and its related methods are complete calls, not writable stream objects. The current API does not define `console.stdout.write`, Node's `process.stdout`, ANSI styling helpers, or a general terminal event emitter. For process pipes, see [Process and child processes](03-process.md).
+`console.log` and its related methods are complete calls, not writable stream objects. The console surface does not define `console.stdout.write`, ANSI styling helpers, or a general terminal event emitter. For writable/readable process streams (`process.stdout` / `process.stderr` / `process.stdin`), see [Process and child processes](03-process.md).
 
 ## Method summary
 
@@ -109,9 +161,17 @@ Registering a different function with the same body does not remove the original
 | `warn(...args)` | `void` | Write to stderr with newline |
 | `error(...args)` | `void` | Write to stderr with newline |
 | `assert(condition, ...args)` | `void` | Write to stderr only when false |
+| `count(label?)` | `void` | Print `label: N`, increment the per-label counter (default `default`) before printing |
+| `countReset(label?)` | `void` | Reset the counter for `label` (default `default`) |
+| `dir(value)` | `void` | Print a value like `log` (objects in field order) |
+| `trace(...args)` | `void` | Print a `Trace:` line with the arguments (no stack in v0.2) |
+| `group(...args)` | `void` | Print the arguments, then indent following stdout lines by two spaces |
+| `groupEnd()` | `void` | Close the innermost open group (never below zero indent) |
+| `table(rows)` | `void` | Print `(index) (value)` listing for an array, or `key value` lines for an object literal |
 | `input(prompt?)` | `Promise<string>` | Read one line; EOF gives empty string |
 | `readKey()` | `Promise<string>` | Read one keypress |
 | `on(event, listener)` | `void` | Register stdin listener |
 | `off(event, listener)` | `void` | Remove stdin listener |
 | `clear()` | `void` | Clear terminal |
 | `hide()` / `show()` | `void` | Hide or restore Windows console window |
+| `time(label?)` / `timeEnd(label?)` | `void` | Per-label monotonic timers — see [Time and stopwatches](21-time.md) |

@@ -24,7 +24,7 @@ A project toolchain pin can become unavailable after a machine change. Use `--st
 
 ## Build artifacts and cache
 
-Application artifacts live below `.cp3/build` and `.cp3/out`; `.cp3/native` and package caches have separate lifetimes. `cp3 clean` removes build and output products while preserving native SDK state. `cp3 clean --all` also clears package and native caches.
+Application artifacts live below `.cp3/build` and `.cp3/out`; `.cp3/native` and package caches have separate lifetimes. `cp3 clean` removes build and output products while preserving native SDK state. `cp3 clean --all` also clears the package cache (`.cp3/packages`), the package lock (`.cp3/lock.json` — removed together with the packages it describes), and the native SDK cache (`.cp3/native`).
 
 Incremental builds reuse prior outputs when the source, compiler identity, headers, options, and cache keys remain compatible. A source edit normally invalidates affected outputs and dependents; it should not require deleting every object file. If a result appears stale, inspect the build record and compiler path before clearing caches.
 
@@ -32,7 +32,7 @@ Incremental builds reuse prior outputs when the source, compiler identity, heade
 
 `cp3 build` defaults to the release profile. The CLI also exposes `--incremental` for fast cached builds without LTO/PGO and `--debug` for `-O0` plus debug information. Build profile affects compile options and generated code, so comparisons must use the same profile.
 
-Release options can include link-time optimization, target-native ISA, loop unrolling, and PGO when an applicable profile exists. Flags such as `--no-lto`, `--no-native`, `--no-unroll`, `--strict-fp`, and `--no-pgo` let the caller control parts of the profile. Consult `cp3c help` for the installed compiler's exact behavior.
+Release options can include link-time optimization, target-native ISA, loop unrolling, and PGO when an applicable profile exists. Flags such as `--no-lto`, `--no-native`, `--no-unroll`, `--strict-fp`, `--no-pgo`, `--report` (cycle decisions, acted on by `cp3 check`), and `--max-memory` (codegen-phase memory cap) let the caller control parts of the profile. Consult `cp3 help` for the installed compiler's exact behavior.
 
 ## When a clean build is appropriate
 

@@ -88,7 +88,23 @@ async function readName(): Promise<string> {
 }
 ```
 
-Async does not mean a new operating-system thread is created for every call. It means the result and continuation are scheduled through the runtime. See [Async and concurrency](../../02-runtime/07-async-and-concurrency.md).
+Async arrows work the same way: call an async arrow and you get a promise of its result.
+
+```ts
+const readName = async (): Promise<string> => {
+  return await console.input("Name: ");
+};
+
+async function main() {
+  const name = await readName();
+}
+```
+
+The body's `return` is checked against the unwrapped value type, so a promise expression is awaited before being returned — `return await somePromise`, exactly like the value coercions in ordinary functions.
+
+Async methods on classes are supported as well (`async greet(): Promise<void> { ... }`); calling one yields a promise of its annotation, and the `return` statements inside are checked against the unwrapped value type.
+
+An async annotation that is not a `Promise<T>` is tolerated as a value-annotation form: `async function f(): T` behaves like `Promise<T>`. Async does not mean a new operating-system thread is created for every call. It means the result and continuation are scheduled through the runtime. See [Async and concurrency](../../02-runtime/07-async-and-concurrency.md).
 
 ## Function errors
 

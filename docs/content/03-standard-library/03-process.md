@@ -10,9 +10,7 @@ Import `std/process` to access the running program's arguments and environment, 
 import process from "std/process";
 ```
 
-The module has a deliberately small, explicit API. It is not a Node.js compatibility layer: CP3 does not expose `process.stdout`, `process.stderr`,
-`process.stdin`, signals, or arbitrary Node process properties. Use `std/console` for terminal output and `std/env` for typed environment reads and
-`.env` file loading.
+The module has a deliberately small, explicit API. It is not a Node.js compatibility layer, but the standard process streams and lifecycle signals are exposed: `process.stdout`, `process.stderr`, `process.stdin`, and `process.on("SIGINT" | "SIGTERM" | "exit" | "unhandledRejection", ...)`. Use `std/console` for terminal output and `std/env` for typed environment reads and `.env` file loading. Arbitrary Node process properties are not exposed.
 
 ## API at a glance
 
@@ -30,6 +28,16 @@ The module has a deliberately small, explicit API. It is not a Node.js compatibi
 | `process.uptime()` | `number` | Seconds since the program started (monotonic). |
 | `process.memoryUsage()` | `MemoryUsage` | Process resident-set size; the heap fields are always `0`. |
 | `process.hrtime()` | `[number, number]` | `[seconds, nanoseconds]` since an unspecified monotonic origin. |
+| `process.platform` | `string` | The OS platform: `"win32"`, `"darwin"` or `"linux"`. |
+| `process.arch` | `string` | The CPU architecture: `"x64"` or `"arm64"`. |
+| `process.version` | `string` | The CP3 runtime version string. |
+| `process.exitCode` | `number` | The stored process exit code (default `0`); assigning it does not exit. |
+| `process.nextTick(callback)` | `void` | Queues `callback` before timers and promise continuations, in FIFO order. |
+| `process.stdout` | `StdioStream` | Writable stream for standard output; `.write(s)` emits `s` with no newline, then flushes. |
+| `process.stderr` | `StdioStream` | Writable stream for standard error; `.write(s)` emits `s` with no newline, then flushes. |
+| `process.stdin` | `StdinStream` | Readable stream for standard input: `readAll` / `readLines` / `readLine` / `on("line" \| "close", ...)` / `close()`. |
+| `process.on(event, listener)` | `void` | Registers a lifecycle listener for `"SIGINT"`, `"SIGTERM"`, `"exit"` or `"unhandledRejection"`. |
+| `process.onShutdown(listener)` | `void` | Sugar for `on("exit", ...)`; runs once, before the process ends. |
 
 The compiler treats this namespace as a closed surface. An unsupported member is a compile-time diagnostic rather than a dynamic property lookup.
 
@@ -202,6 +210,72 @@ stream API.
 assume the request terminates every descendant process that the child launched. If a child creates its own process tree, define a shutdown protocol
 for the child application.
 
+## Writing to standard output and error
+
+`process.stdout` and `process.stderr` are `StdioStream` values, one per stream:
+
+| Member | Signature | Meaning |
+| --- | --- | --- |
+| `.write(text)` | `(text: string) => void` | Writes `text` with no newline appended, then flushes. |
+
+```ts
+process.stdout.write("hello");
+process.stdout.write(" world\n");
+process.stderr.write("warning: outdated config\n");
+```
+
+`write` takes a `string`; there is no `Buffer` overload. A flush follows every `write`, so output reaches the stream without waiting for process exit. `console.log` remains the simplest way to print complete lines; reach for the streams when you need to write without a trailing newline.
+
+## Reading standard input
+
+`process.stdin` is a `StdinStream`. All of its read methods settle at EOF (never reject; EOF is the normal end):
+
+| Member | Signature | Meaning |
+| --- | --- | --- |
+| `readAll()` | `() => Promise<string>` | Resolves with every byte of stdin read to EOF. |
+| `readLines()` | `() => Promise<string[]>` | Resolves with every line read to EOF, terminators removed (`\r\n` counts as one terminator). |
+| `readLine()` | `() => Promise<string>` | Resolves with the next line, terminator removed; `""` on EOF. Successive calls never lose bytes. |
+| `on(event, listener)` | `on(event: "line" \| "close", listener: (value: string) => void) => void` | Observes every completed line (`"line"`) or stdin EOF (`"close"`, once, with `""`). A tap: it never consumes a line a pending `readLine` also sees. |
+| `close()` | `() => void` | Stops accepting new stdin reads; already-pending reads settle normally. |
+
+```ts
+const line = await process.stdin.readLine();
+console.log("got:", line);
+```
+
+One sibling reader thread pumps the OS-level standard input and posts drain tasks to the event loop; `std/readline` shares this pump and line queue (its reads delegate to it). The console family (`console.input()` / `console.readKey()` / `console.on`) runs its own separate stdin pump, so mixing the console family with `process.stdin` in one program races on fd 0.
+
+## Lifecycle events and signals
+
+`process.on(event, listener)` registers a lifecycle listener. The documented event names are `"SIGINT"`, `"SIGTERM"`, `"exit"`, and `"unhandledRejection"` (the runtime dispatches exactly these; an unknown event name is ignored). An event name must be a string literal when the listener takes a payload parameter — otherwise the compiler cannot pick the parameter type and reports a diagnostic:
+
+| Event | Listener payload | Meaning |
+| --- | --- | --- |
+| `"SIGINT"` | `string` (the signal name) | Delivered on the event-loop thread once the OS signal arrives. |
+| `"SIGTERM"` | `string` (the signal name) | Delivered like `"SIGINT"`. |
+| `"exit"` | `number` | The exit code: the stored `process.exitCode` (`0` by default), or `128+signum` (`130` / `143`) on the signal path. |
+| `"unhandledRejection"` | `string` | The rejection reason text. |
+
+In a Rust/C++ project the `"exit"` payload is `i32`; in a TypeScript project it is `number`, the same width rule as `process.exitCode`. A listener may take the payload parameter or no parameter at all. Listeners are synchronous and run in registration order.
+
+```ts
+process.on("SIGINT", (signal: string): undefined => {
+  console.error("caught", signal);
+});
+```
+
+On `"SIGINT"`/`"SIGTERM"`, the listeners run on the event-loop thread once the signal arrives; then the exit hooks run and the process ends with `128+signum` (`130` for SIGINT, `143` for SIGTERM). Listeners are synchronous: start any async cleanup before the signal, not inside the handler.
+
+`"exit"` listeners (and `process.onShutdown(listener)`, sugar for `on("exit", listener)`) run exactly once, in registration order, from an `atexit` handler. They fire on the plain `process.exit` path, on a SIGINT/SIGTERM, and on normal drain; each receives the stored exit code. A throwing hook does not stop the remaining hooks or the exit.
+
+```ts
+process.onShutdown((code: number): undefined => {
+  console.log(`leaving with ${code}`);
+});
+```
+
+`process.exitCode` stores a plain exit code (default `0`); assigning it does **not** exit. `process.exit(code)` flushes the standard output streams and terminates with `code` regardless.
+
 ## Event loop and execution model
 
 Child I/O work runs away from the calling thread and posts results or events back to the thread's CP3 event loop. `exec` does not synchronously block
@@ -237,9 +311,10 @@ console.log(`rss: ${usage.rss} bytes`);
 | --- | --- |
 | `process.argv` | Supported as `string[]`; includes the executable name in the runtime convention. |
 | `process.env.NAME` | Use `process.env.get("NAME")` or `std/env`. |
-| `process.stdout.write(...)` | Not supported; use `console.log` / `console.error` for complete terminal output. |
-| `process.stderr.write(...)` | Not supported as a process stream; use `console.error`. |
-| `process.stdin` | Not exposed. `SpawnHandle.write` targets a child process's stdin only. |
+| `process.stdout.write(...)` | Supported; `StdioStream.write(text: string): void` emits `text` with no newline, then flushes. |
+| `process.stderr.write(...)` | Supported; the stderr twin of `process.stdout.write`. |
+| `process.stdin` | Supported; `StdinStream` with `readAll()` / `readLines()` / `readLine()` promises, `on("line" \| "close", ...)` and `close()`. |
+| `process.on("SIGINT" \| "SIGTERM" \| "exit" \| "unhandledRejection", ...)` | Supported; see [Lifecycle events and signals](#lifecycle-events-and-signals). |
 | `process.exec(...)` | CP3-specific buffered child API returning `Promise<ExecResult>`. |
 | `process.spawn(...)` | CP3-specific handle with `on`, `write`, and `kill`; not Node's `ChildProcess` type. |
 

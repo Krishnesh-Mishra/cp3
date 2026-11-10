@@ -41,6 +41,6 @@ Pages use links to connect related concepts. A code example is intended to illus
 
 ## This guide is version-specific
 
-The guide is built into the compiler from Markdown under `docs/content`. Its API descriptions are maintained alongside the compiler and runtime. If your installed compiler differs from this source checkout, use that compiler's `--help`, diagnostics, and test results as the final authority for available flags and behavior.
+The guide is built into the compiler from Markdown under `docs/content`. Its API descriptions are maintained alongside the compiler and runtime. If your installed compiler differs from this source checkout, use that compiler's `help` output, diagnostics, and test results as the final authority for available flags and behavior.
 
 For performance, treat benchmark data as a dated observation rather than a language-wide ranking. The same program can change speed with the backend compiler, target architecture, release flags, host load, and measurement method. Read [Performance, measured carefully](02-performance.md) before drawing conclusions from one median.

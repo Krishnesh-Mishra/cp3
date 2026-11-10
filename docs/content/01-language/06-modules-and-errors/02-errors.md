@@ -35,15 +35,17 @@ Some calls return a promise that rejects on failure; others resolve with a resul
 
 ## Throwing and catching
 
-A `throw` transfers control to the nearest matching `catch`. The caught binding is scoped to that catch body. The conformance suite includes strings and numbers as thrown values, so do not assume the only catchable object is a JavaScript `Error` instance:
+A `throw` transfers control to the nearest matching `catch`. The caught binding is scoped to that catch body. CP3 only allows `Error` objects (Error or a subclass) to be thrown: a non-`Error` value — a string, a number, anything else — is rejected at compile time with diagnostic `CP3509`. The compiler reports this before the program is ever built, so a `throw "unavailable"` is not a legal CP3 program:
 
 ```ts
 try {
-  throw "unavailable";
+  throw new Error("unavailable");
 } catch (reason) {
-  console.log(reason);
+  console.log(reason.message);
 }
 ```
+
+The caught binding is typed `Error` directly (no narrowing or `instanceof` required); `Error` carries `message`, `name`, `stack`, and `cause`, and `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, and `AggregateError` are subclasses of it. The conformance suite pins this contract: the `catch_thrown_string` and `catch_thrown_number` cases are expected `CP3509` check errors (`throw "boom"` and `throw 42` are both rejected), while `catch_thrown_from_function` exercises the legal form.
 
 A throw from a called function propagates to an enclosing catch unless an inner handler catches it. A throw raised inside a catch can be handled by an outer catch. These cases are exercised in `tests/cases/errors`.
 
@@ -83,4 +85,4 @@ Do not write one generic catch policy for all APIs. Read whether the specific op
 - Preserve resource cleanup through `finally` when it must run on returns or throws.
 - Add tests for the nearest catch, propagation, rethrow, and cleanup paths affected by a change.
 
-The language fixtures under `tests/cases/errors` cover thrown primitives, catch scope, nested handlers, propagation, finally on return, and runtime failures such as out-of-bounds operations. Use them as the contract before changing the lowering.
+The language fixtures under `tests/cases/errors` cover thrown-`Error` programs, the expected `CP3509` rejection of thrown strings and numbers, catch scope, nested handlers, propagation, finally on return, and runtime failures such as out-of-bounds operations. Use them as the contract before changing the lowering.

@@ -33,13 +33,13 @@ The CLI exposes release controls including:
 - `--opt-level <n>` to select an optimization level from the documented range.
 - `--no-pgo` to disable automatic profile use.
 
-These options affect the native compiler invocation. Inspect `cp3c help` in the build being used; older versions can differ.
+These options affect the native compiler invocation. Inspect `cp3 help` in the build being used; older versions can differ.
 
 ## Profile-guided optimization
 
 PGO has two distinct phases. Instrumentation builds collect execution counts for a representative workload. A later optimized build consumes the resulting profile. A profile trained on a different input distribution may mislead inlining and branch decisions.
 
-The CLI exposes `--pgo <file>` to consume a Clang `.profdata` file and `--pgo-generate[=<dir>]` to request an instrumentation build. Use the same native toolchain family/version expected by the profile workflow, exercise representative cases, and record the training command and input.
+The CLI exposes `--pgo <file>` to consume a Clang `.profdata` file and `--pgo-generate[=<dir>]` to request an instrumentation build. `--pgo-generate` requires the release profile: the CLI rejects it when `--release` is not in effect (the error message is "--pgo-generate requires the release profile (use --release)"), the `--pgo` and `--pgo-generate` flags are mutually exclusive, and `--pgo-generate=<dir>` requires a non-empty directory. Use the same native toolchain family/version expected by the profile workflow, exercise representative cases, and record the training command and input.
 
 PGO cannot make an unsafe transformation correct and does not replace CP3 semantic analysis. It optimizes native decisions using observed execution data.
 

@@ -22,6 +22,18 @@ The emoji occupies multiple bytes but one code point. A displayed symbol can als
 
 `charCodeAt(index)` returns the raw UTF-8 byte at byte position `index` as a number, the same value as `text[index]`. An out-of-range or non-integer index returns `NaN`. `String.fromCharCode(...codes)` is the byte-oriented inverse: each code is reduced modulo 256 and appended as one raw UTF-8 byte, so `String.fromCharCode(text.charCodeAt(i))` reproduces the byte at `i`. With no arguments it returns the empty string.
 
+## Code points and Unicode scalars
+
+`text.codePointAt(index)` returns the Unicode scalar value of the code point at code-point position `index` — the unit `charAt` counts, not `text[index]`'s bytes and not JavaScript's UTF-16 code units. An out-of-range or non-integer position returns `NaN`. `String.fromCodePoint(...codes)` is the inverse: it UTF-8 encodes each Unicode scalar code. A code outside `0..0x10FFFF`, or a UTF-16 surrogate code point, is a hard `RangeError` — it prints `cp3: RangeError: ...` to stderr and exits the process; it is not a catchable error. Fractional codes truncate toward zero. With no arguments it returns the empty string.
+
+```ts
+"hé😀".codePointAt(1);       // 233 (é)
+String.fromCodePoint(233);   // "é"
+String.fromCodePoint(0x1F600); // "😀"
+```
+
+These do not perform grapheme segmentation or normalization; a combining mark is still its own code point.
+
 ## Iterating text
 
 String `for...of` visits complete UTF-8 code points in order:
@@ -51,6 +63,17 @@ Search results are positions in the UTF-8 string storage. For ASCII, byte positi
 
 These functions perform substring search. They do not tokenize source code, interpret locale-specific collation, normalize Unicode, or automatically treat a plain search string as a regular expression.
 
+## Matching all occurrences
+
+`text.matchAll(regexp)` returns every match of a global (`g`) regexp as an array of match arrays: each inner array is `[full, group1, ...]`, the same shape `RegExp.exec` produces. The result is an eager `string[][]` — CP3 has no lazy iterator here. A non-global regexp is a hard `TypeError` (prints to stderr and exits; not catchable). The scan runs on a fresh clone of the regexp, so a shared `g` regexp's position is not disturbed, and a sticky (`y`) regexp is honored; the scan stops after the first empty match.
+
+```ts
+const matches = "a12b34".matchAll(/[0-9]+/g);
+// [["12"], ["34"]]
+```
+
+See [Regular expressions](../../03-standard-library/17-regular-expressions.md) for flags, capture groups, and the cursor semantics of stateful patterns.
+
 ## Extracting substrings
 
 `slice(start?, end?)` and `substring(start?, end?)` select ranges using byte-oriented positions. `slice` supports negative positions relative to the end; `substring` clamps negative positions to zero and swaps the endpoints when the start exceeds the end.
@@ -65,16 +88,16 @@ On multibyte strings, a byte boundary can fall inside an encoded code point. The
 
 ## Replacing and splitting
 
-`replace(search, replacement)` replaces the first matching occurrence. `replaceAll(search, replacement)` replaces all occurrences. Both return new strings and leave the source value unchanged. `search` may be a plain string (matched literally) or a `RegExp` (a global regex replaces every occurrence for `replace` and is required for `replaceAll`; a non-global regex passed to `replaceAll` is a runtime TypeError). Replacement text is inserted literally — `$` is not a group-reference marker.
+`replace(search, replacement)` replaces the first matching occurrence. `replaceAll(search, replacement)` replaces all occurrences. Both return new strings and leave the source value unchanged. `search` may be a plain string (matched literally) or a `RegExp` (a global regex replaces every occurrence for `replace` and is required for `replaceAll`; a non-global regex passed to `replaceAll` is a runtime TypeError). Replacement text is inserted literally — `$` is not a group-reference marker. See [Regular expressions](../../03-standard-library/17-regular-expressions.md) for pattern construction and match semantics.
 
-`split(separator)` accepts a string separator or a `RegExp` according to the checker and code generator. A string separator is matched literally. A regular expression uses CP3's regular-expression runtime. Splitting constructs an array containing the pieces, so account for its memory cost on large inputs; see [Regular expressions](17-regular-expressions.md) for captures, state, and Unicode differences.
+`split(separator)` accepts a string separator or a `RegExp` according to the checker and code generator. A string separator is matched literally. A regular expression uses CP3's regular-expression runtime. Splitting constructs an array containing the pieces, so account for its memory cost on large inputs; see [Regular expressions](../../03-standard-library/17-regular-expressions.md) for captures, state, and Unicode differences.
 
 ```ts
 const fields = "one,two,three".split(",");
 const words = "red   blue".split(/\s+/);
 ```
 
-An empty or non-matching separator follows the runtime implementation and test corpus; do not assume every corner case matches a browser engine. See [Regular expressions](00-overview.md) only if the module guide lists it in the current build; regex values are also covered by the language tests.
+An empty or non-matching separator follows the runtime implementation and test corpus; do not assume every corner case matches a browser engine. See [Regular expressions](../../03-standard-library/00-overview.md) only if the module guide lists it in the current build; regex values are also covered by the language tests.
 
 ## Trimming and case conversion
 
@@ -94,6 +117,17 @@ const label = "cp3".padEnd(6, ".");
 ```
 
 If the requested target is already met, the original contents are returned unchanged. Validate target sizes when input comes from an untrusted source.
+
+## Escape-free text: `String.raw`
+
+`String.raw(chunk)` returns its one-argument chunk unchanged — no escape processing is applied. The two-parameter form `raw(parts, ...substitutions)` joins the `parts` chunks with the interpolated substitutions between them: `raw(["a", "b"], "x")` returns `axb`. CP3 has no tagged templates, so this is the spelling of the raw-string helper as an ordinary call; each form takes the arguments in the order given.
+
+```ts
+String.raw("C:\\new\\tmp");    // identity: returned unchanged
+String.raw(["a", "b"], "x");   // "axb"
+```
+
+`raw` itself performs no escape processing; the interpolated substitutions are inserted verbatim between the chunks.
 
 ## Concatenation and cost
 
@@ -116,13 +150,13 @@ Assigning a string to another binding does not create mutable shared text. Reass
 
 ## Method surface
 
-The documented checker surface includes `length`, `charAt`, `at`, `charCodeAt`, `startsWith`, `endsWith`, `includes`, `repeat`, `padStart`, `padEnd`, `toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd`, `indexOf`, `lastIndexOf`, `slice`, `substring`, `replace`, `replaceAll`, and `split`. The static `String.fromCharCode(...codes)` constructs a byte string from numeric codes. The `tests/cases/arrays-strings/02/str` corpus pins the runtime behavior.
+The documented checker surface includes `length`, `charAt`, `at`, `charCodeAt`, `codePointAt`, `matchAll`, `startsWith`, `endsWith`, `includes`, `repeat`, `padStart`, `padEnd`, `toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd`, `indexOf`, `lastIndexOf`, `slice`, `substring`, `replace`, `replaceAll`, and `split`. The static `String.fromCharCode(...codes)` constructs a byte string from numeric codes; `String.fromCodePoint(...codes)` constructs one from Unicode scalar values; `String.raw` is the ordinary-call spelling of the raw-string helper. The `tests/cases/arrays-strings/02/str` corpus pins the runtime behavior.
 
 The method names intentionally resemble JavaScript, but the byte and code-point distinctions above are CP3's current behavior. For exact support, inspect `src/std/string` and the `tests/cases/arrays-strings` family in the same checkout as your compiler.
 
 ## Related pages
 
-- [Arrays](14-arrays.md)
-- [Byte buffers](11-buffer.md)
-- [Typed arrays and DataView](16-typed-arrays.md)
-- [Functions and closures](../01-language/02-functions/01-functions-and-closures.md)
+- [Arrays](04-arrays.md)
+- [Byte buffers](../../03-standard-library/11-buffer.md)
+- [Typed arrays and DataView](../../03-standard-library/16-typed-arrays.md)
+- [Functions and closures](../02-functions/01-functions-and-closures.md)
