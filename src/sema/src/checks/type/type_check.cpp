@@ -231,16 +231,10 @@ std::string prettyFunction(const Type& t) {
 // offending operand and the conversion that restores a numeric expression.
 // =============================================================================
 static bool isArithmeticNumeric(const Type& t) {
+    if (t.isUnion()) return false;  // a union operand needs conversion, not an anchor
     if (isNumberish(t)) return true;
     if (isNativeType(t)) return true;
     if (t.isLiteral() && t.literalBase == TypeKind::Number) return true;
-    if (t.isUnion()) {
-        for (const Type& m : t.parts) {
-            if (m.isNullish()) continue;
-            if (!isArithmeticNumeric(m)) return false;
-        }
-        return true;
-    }
     return false;
 }
 
@@ -254,18 +248,16 @@ std::vector<std::string> Analyzer::mixedMathHints(const BinaryExpr* be,
     std::vector<std::string> out;
     const bool lN = isArithmeticNumeric(l);
     const bool rN = isArithmeticNumeric(r);
-    const bool lS = isStringish(l);
-    const bool rS = isStringish(r);
     const std::string lText = be && be->left ? sourceSlice(be->left.get()) : std::string{};
     const std::string rText = be && be->right ? sourceSlice(be->right.get()) : std::string{};
     const char* target = "number";
     const Expr* offender = nullptr;
 
-    if (lN && !rN && !rS) {
+    if (lN && !rN) {
         offender = be && be->right ? be->right.get() : nullptr;
         const Type& other = l;
         if (isNativeType(other)) target = other.name.c_str();
-    } else if (rN && !lN && !lS) {
+    } else if (rN && !lN) {
         offender = be && be->left ? be->left.get() : nullptr;
         const Type& other = r;
         if (isNativeType(other)) target = other.name.c_str();
