@@ -84,6 +84,7 @@ The CLI includes local and remote package workflows:
   - Linux: extracts the release tarball and runs its `install.sh --force`, replacing the per-user install;
   - ARM64 releases are not published yet, and `cp3 upgrade` says so rather than installing.
   - At most one network check per 24 h feeds the one-line reminder printed at the end of ordinary commands (`cp3: 0.2.0 -> vX.Y.Z available; run \`cp3 upgrade\``); it never blocks, and `CP3_NO_UPDATE_CHECK=1` disables it entirely.
+  - GitHub's unauthenticated API is rate-limited (60 requests/hour); if `cp3 upgrade` reports a rate limit, set `CP3_GITHUB_TOKEN` (a token with no scopes is fine) or try later.
 - `publish` builds package output and reports or copies the `.cp3pak` archive;
 - `recompile` adds a native binary for the current platform to a package archive;
 - `link` and `unlink` manage local package links;
