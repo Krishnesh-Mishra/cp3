@@ -556,6 +556,67 @@ std::vector<lsp::CompletionCandidate> incompleteCandidates(
     return candidates;
 }
 
+// The named import list at the cursor (`import { fetch, | } from "std/network"`).
+// Lexical only, text-in/text-out: finds the enclosing `{ ... }`, the `from`
+// specifier after it, and looks the module up in the std registry. Returns an
+// empty list when the cursor is not inside an import clause or the specifier
+// is not a known std module (the caller falls back to the general candidates).
+std::vector<lsp::CompletionCandidate> importNamedCandidates(
+    const std::string& text, const std::uint32_t offset) {
+    std::vector<lsp::CompletionCandidate> candidates;
+    if (offset > text.size()) return candidates;
+    // Find the enclosing open brace behind the cursor, keeping balance.
+    std::int32_t depth = 0;
+    std::size_t open = std::string::npos;
+    for (std::size_t i = offset; i-- > 0;) {
+        const char c = text[i];
+        if (c == '}') { depth -= 1; continue; }
+        if (c == '{') {
+            if (depth == 0) { open = i; break; }
+            depth += 1;
+        }
+    }
+    if (open == std::string::npos) return candidates;
+    // The `{` must belong to an `import ... from` (or `export ... from`)
+    // clause: an `import` keyword (or `from` on the same line, for the
+    // two-line form) appears before it. Keep the lookback small.
+    const std::string before = text.substr(0, open);
+    const std::size_t importAt = before.rfind("import");
+    if (importAt == std::string::npos) return candidates;
+    if (before.substr(importAt).find('\n') != std::string::npos) return candidates;
+    // A default binding may stand between `import` and the brace; that is fine.
+    // The module specifier comes after the matching `}`.
+    std::int32_t closeDepth = 0;
+    std::size_t close = std::string::npos;
+    for (std::size_t i = open + 1; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '{') closeDepth += 1;
+        else if (c == '}') {
+            if (closeDepth == 0) { close = i; break; }
+            closeDepth -= 1;
+        }
+    }
+    if (close == std::string::npos) return candidates;
+    // `from "<spec>"` after the closing brace (allowing line breaks).
+    const std::size_t from = close + 1;
+    const std::size_t fromAt = text.find("from", from);
+    if (fromAt == std::string::npos || fromAt > from + 32) return candidates;
+    std::size_t quote = text.find('"', fromAt);
+    if (quote == std::string::npos) quote = text.find('\'', fromAt);
+    if (quote == std::string::npos || quote > fromAt + 16) return candidates;
+    const std::size_t end = text.find(text[quote] == '"' ? '"' : '\'', quote + 1);
+    if (end == std::string::npos) return candidates;
+    const std::string specifier = text.substr(quote + 1, end - quote - 1);
+    for (const std::string& name : stdModuleExportNames(specifier)) {
+        lsp::CompletionCandidate candidate;
+        candidate.label = name;
+        candidate.kind = 6;  // CompletionItemKind.Variable
+        candidate.detail = "named export from " + specifier;
+        candidates.push_back(std::move(candidate));
+    }
+    return candidates;
+}
+
 std::vector<lsp::CompletionCandidate> importSpecifierCandidates(
     const std::string& text, const CompletionContext& context,
     std::uint32_t offset) {

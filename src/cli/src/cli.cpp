@@ -27,6 +27,7 @@
 #include "detail/editor/editor_plugin.hpp"
 #include "detail/archive/scripts.hpp"
 #include "detail/toolchain/toolchain.hpp"
+#include "detail/pkg/update_banner.hpp"
 #include "detail/core/util.hpp"
 
 namespace cp3 {
@@ -48,10 +49,12 @@ void printUsage(std::FILE* out) {
         "  test [file.cp3...] Discover and run test files (packages included)\n"
         "  fmt <file.cp3>     Zero-config formatter\n"
         "  clean              Remove .cp3/build and .cp3/out; keeps .cp3/native\n"
-        "                     (--all also clears .cp3/packages and .cp3/native)\n"
+        "                     (--all also clears .cp3/packages, .cp3/native and .cp3/lock.json)\n"
         "  init [dir]         Scaffold a new project (package.json + src/index.cp3)\n"
         "  toolchain          Choose the Clang compiler (list/detect/use/clear)\n"
         "  install [src]      Install a local .cp3pak/dir (dirs compile) or GitHub release\n"
+        "  update [name]      Update locked GitHub dependencies to the latest release\n"
+        "  upgrade             Upgrade cp3 itself from the latest GitHub release\n"
         "  publish [dir]      Build a package and report/copy the .cp3pak (no registry)\n"
         "  recompile <pak>    Add this platform's cached binary to a .cp3pak\n"
         "  link <path>        Link a local package directory or .cp3pak\n"
@@ -85,14 +88,14 @@ void printUsage(std::FILE* out) {
         "      --show-runtime    (build/run) copy the runtime headers/TUs used by\n"
         "                        the program into .cp3/build/core/cp3-runtime/\n"
         "      --show            Alias for --show-runtime\n"
-        "      --report          (check/build) print cycle decisions (automatic\n"
+        "      --report          (check) print cycle decisions (automatic\n"
         "                        cycle handling) with reasons and manual-weak share\n"
         "      --toolchain <clang[@version]|path>  Use this Clang for one command\n"
         "      --strict-toolchain  Fail when a saved toolchain pin is missing\n"
         "      --project         (toolchain) save the choice in package.json\n"
         "      --global          (toolchain) save the choice for all projects\n"
         "      --max-memory <MB|N%>  Cap codegen-phase memory (default: 70% of system RAM)\n"
-        "      --all             (clean) also remove .cp3/packages and .cp3/native\n"
+        "      --all             (clean) also remove .cp3/packages, .cp3/native and .cp3/lock.json\n"
         "      --yes, -y         (init) accept defaults, never prompt\n"
         "      --type <t>        (init) pre-select project type (application|package)\n"
         "      --type-system <s> (init) typescript|cpp|rust (default: typescript)\n"
@@ -127,7 +130,7 @@ bool isBuiltinCommand(const std::string& command) {
            command == "recompile" || command == "editor-plugin" ||
            command == "editor-plugins" || command == "lsp" || command == "dap" ||
            command == "toolchain" || command == "native-install" ||
-           command == "docs";
+           command == "docs" || command == "update" || command == "upgrade";
 }
 
 bool isReservedCommandWord(const std::string& command) {
@@ -318,6 +321,12 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     if (command == "install") {
         return cp3::cli::cmdInstall(opt);
     }
+    if (command == "update") {
+        return cp3::cli::cmdUpdate(opt);
+    }
+    if (command == "upgrade") {
+        return cp3::cli::cmdUpgrade(opt);
+    }
     if (command == "publish") {
         return cp3::cli::cmdPublish(opt);
     }
@@ -468,7 +477,9 @@ int runCli(int argc, char** argv) {
         cp3::cli::setToolchainProjectDirectory(start);
     }
 
-    return dispatchCommand(command, opt);
+    const int result = dispatchCommand(command, opt);
+    cp3::cli::maybeEmitUpdateReminder(command);
+    return result;
 }
 
 }  // namespace cp3

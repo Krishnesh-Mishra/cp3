@@ -65,6 +65,8 @@ set(cp3_cli_sources
     src/commands/pkg/pack.cpp
     src/commands/pkg/recompile.cpp
     src/commands/build/install.cpp
+    src/commands/pkg/upgrade.cpp
+    src/commands/pkg/update.cpp
     src/commands/pkg/publish.cpp
     src/commands/build/link.cpp
     src/commands/editor/editor_plugin.cpp
@@ -86,6 +88,8 @@ set(cp3_cli_sources
     src/pkg/remote/link.cpp
     src/pkg/remote/github.cpp
     src/pkg/remote/github_install.cpp
+    src/pkg/remote/update_check.cpp
+    src/pkg/remote/update_banner.cpp
     src/pkg/manifest/scripts.cpp
     src/pkg/manifest/json.cpp
     src/pkg/cache/checksum.cpp

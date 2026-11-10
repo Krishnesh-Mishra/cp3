@@ -205,6 +205,15 @@ std::vector<lsp::CompletionCandidate> completeAt(const std::string& path,
     if (context.importSpecifier) {
         return importSpecifierCandidates(text, context, offset);
     }
+    if (context.position == CompletionPosition::ImportClause) {
+        // The named exports of the module the import statement names win over
+        // the generic keyword list (keywords stay available as the fallback).
+        if (std::vector<lsp::CompletionCandidate> named =
+                importNamedCandidates(text, offset);
+            !named.empty()) {
+            return named;
+        }
+    }
     if (context.stringLiteral) {
         if (!analysisReady(*document)) return {};
         return stringArgumentCandidates(*document, offset);

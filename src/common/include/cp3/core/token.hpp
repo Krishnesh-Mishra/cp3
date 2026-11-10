@@ -50,7 +50,7 @@ enum class TokenKind {
 
     // -- identifiers --------------------------------------------------------
     Identifier,
-    PrivateIdentifier,  // #name  (reserved; not in Beta One surface)
+    PrivateIdentifier,  // #name  (private class members)
 
     // -- trivia (formatter only) -------------------------------------------
     LineComment,        // // ...

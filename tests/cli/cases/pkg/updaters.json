@@ -1,0 +1,150 @@
+{
+  "group": "pkg",
+  "cases": [
+    {
+      "group": "pkg",
+      "name": "help-lists-update-and-upgrade",
+      "description": "cp3c help lists the update and upgrade commands",
+      "argv": [
+        "help"
+      ],
+      "requires": [
+        "command:upgrade",
+        "command:update"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout": {
+          "contains": [
+            "update [name]",
+            "upgrade"
+          ]
+        }
+      }
+    },
+    {
+      "group": "pkg",
+      "name": "update-requires-a-project",
+      "description": "update outside a project errors with the project guidance",
+      "argv": [
+        "update"
+      ],
+      "requires": [
+        "command:update"
+      ],
+      "expect": {
+        "exit": 1,
+        "stderr": {
+          "contains": "no package.json found"
+        }
+      }
+    },
+    {
+      "group": "pkg",
+      "name": "update-no-github-deps-is-a-no-op",
+      "description": "update with no locked GitHub dependencies exits 0 silently",
+      "argv": [
+        "update"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ]
+      },
+      "requires": [
+        "command:update"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "no GitHub dependencies"
+        }
+      }
+    },
+    {
+      "group": "pkg",
+      "name": "update-dry-run-json",
+      "description": "update --dry-run --json reports the locked dependency",
+      "argv": [
+        "update",
+        "--dry-run",
+        "--json"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ],
+        "files": {
+          ".cp3/lock.json": "{\n  \"lockfileVersion\": 1,\n  \"packages\": {\n    \"self-dep\": {\n      \"version\": \"0.1.0\",\n      \"source\": \"github\",\n      \"repo\": \"Krishnesh-Mishra/cp3\",\n      \"tag\": \"v0.1.0\",\n      \"asset\": \"cp3-0.1.0.cp3pak\",\n      \"resolved\": \"https://github.com/Krishnesh-Mishra/cp3/releases/download/v0.1.0/cp3-0.1.0.cp3pak\"\n    }\n  }\n}\n"
+        }
+      },
+      "requires": [
+        "command:update"
+      ],
+      "expect": {
+        "exit": 0,
+        "stdout_json_paths": {
+          "command": "update",
+          "dryRun": true,
+          "packages.0.name": "self-dep",
+          "packages.0.from": "v0.1.0"
+        }
+      }
+    },
+    {
+      "group": "pkg",
+      "name": "update-reminder-shows-then-keeps-quiet",
+      "description": "a fresh update-check cache prints the upgrade reminder once",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "setup": {
+        "fixtures": [
+          "hello"
+        ],
+        "config_fixtures": [
+          "update-check-newer"
+        ]
+      },
+      "requires": [
+        "compiler"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "contains": "cp3: 0.2.0 -> v9.9.9 available; run `cp3 upgrade`"
+        }
+      }
+    },
+    {
+      "group": "pkg",
+      "name": "update-reminder-suppressed-when-disabled",
+      "description": "CP3_NO_UPDATE_CHECK=1 silences the reminder",
+      "argv": [
+        "check",
+        "src/index.cp3"
+      ],
+      "env": {
+        "CP3_NO_UPDATE_CHECK": "1"
+      },
+      "setup": {
+        "fixtures": [
+          "hello"
+        ],
+        "config_fixtures": [
+          "update-check-newer"
+        ]
+      },
+      "requires": [
+        "compiler"
+      ],
+      "expect": {
+        "exit": 0,
+        "stderr": {
+          "not_contains": "cp3 upgrade"
+        }
+      }
+    }
+  ]
+}

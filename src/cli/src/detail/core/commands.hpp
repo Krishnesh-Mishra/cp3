@@ -126,6 +126,8 @@ int runToolchainWizard(const CliOptions& opt);
 int toolchainListJson();
 int cmdExec(const CliOptions& opt);
 int cmdInstall(const CliOptions& opt);
+int cmdUpgrade(const CliOptions& opt);
+int cmdUpdate(const CliOptions& opt);
 int cmdPublish(const CliOptions& opt);
 int cmdLink(const CliOptions& opt);
 int cmdUnlink(const CliOptions& opt);

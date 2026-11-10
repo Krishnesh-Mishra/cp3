@@ -464,8 +464,8 @@ void onShutdown(F&& listener) {
 //
 // One sibling reader thread pumps fd 0 and posts to the loop (the exec/spawn
 // pattern); consumers share one buffered line queue, so successive readLine
-// calls never lose bytes. Mixing this with console.input()/readline in one
-// program is a race (each family owns its own stdin pump); see Limitations.
+// calls never lose bytes. `std/readline` delegates to this same pump;
+// mixing with `console.input()` (which owns its own pump) is a race.
 // -----------------------------------------------------------------------------
 
 Promise<std::string> stdinReadAll();
