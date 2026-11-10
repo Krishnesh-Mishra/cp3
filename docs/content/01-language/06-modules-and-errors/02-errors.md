@@ -63,7 +63,9 @@ function loadValue(): number {
 }
 ```
 
-Use `finally` for cleanup that must happen across both success and failure paths. Do not return a different value from cleanup unless the language contract and test make that behavior intentional.
+**A `return` inside `finally` does not override the pending completion.** The `finally` block runs, then the original completion (the `try`/`catch`'s return) proceeds; the `finally`'s value is discarded. This differs from JS/TS, where a `return` in `finally` wins. The compiler flags the pattern with **CP3510** (warning): "in TS/JS, `return` inside `finally` overrides a pending return/catch completion; in cp3 the value is ignored".
+
+Use `finally` for cleanup that must happen across both success and failure paths. Do not return a different value from cleanup; the compiler now warns on it.
 
 ## Runtime errors and catchability
 

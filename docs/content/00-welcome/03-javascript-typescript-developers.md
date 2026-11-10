@@ -271,6 +271,8 @@ const truthy = a && b;
 
 `?.` nullish optional chaining; `??` nullish coalescing (only `null`/`undefined`); `||` boolean/falsy. `??` is not a replacement for `||` on arbitrary falsey values.
 
+Loose `==` is flavor-exact against `null`/`undefined`: `null == undefined` is `false` in CP3 (JS coerces them), and the compiler warns (CP3520) when a `null`/`undefined` literal appears in a loose comparison. Use `===` (which requires the same flavor) or compare against both `null` and `undefined` explicitly.
+
 ## 4.6 Destructuring
 
 ```ts
