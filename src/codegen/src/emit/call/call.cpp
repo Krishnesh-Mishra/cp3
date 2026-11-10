@@ -356,7 +356,9 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
                         reportTypeError(
                             *arg,
                             "type mismatch: an emitted value must be a "
-                            "primitive value");
+                            "primitive value (null, number, boolean, string "
+                            "or undefined); an object payload needs an "
+                            "EventEmitter<Events> typed bus");
                         return "0.0";
                     }
                     values += " { const auto& cp3_s = " +
@@ -372,6 +374,22 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
             }
             return "[&]{ " + values + " return " + recv + "->emit(" + event +
                    ", cp3_vals); }()";
+        }
+        // The direct arguments need the same check the spread path already
+        // applies: an unemittable payload reports a diagnostic instead of a
+        // wall of \`no matching conversion to EventValue\`.
+        for (std::size_t i = 1; i < c.arguments.size(); ++i) {
+            const Expr* arg = c.arguments[i].get();
+            if (!arg) continue;
+            const CppInfo ec = classify(effectiveType(*arg));
+            if (!ec.representable || !eventValueShape(ec.shape)) {
+                reportTypeError(*arg,
+                                "type mismatch: an emitted value must be a "
+                                "primitive value (null, number, boolean, "
+                                "string or undefined); an object payload "
+                                "needs an EventEmitter<Events> typed bus");
+                return "0.0";
+            }
         }
         std::string text = recv + "->emit(" + expr(*c.arguments.front());
         std::vector<std::string> values;

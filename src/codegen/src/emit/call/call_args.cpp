@@ -683,6 +683,20 @@ std::string CallBuilder::emitFunctionCall(const CallExpr& c,
         for (const auto& argPtr : c.arguments) {
             const Expr* arg = argPtr.get();
             if (!arg) continue;
+            // The direct arguments need the same check the spread path
+            // applies (an unemittable value is a diagnostic, not a C++
+            // wall of errors).
+            if (arg->kind != NodeKind::SpreadElement) {
+                const CppInfo ec = classify(g.effectiveType(*arg));
+                if (!ec.representable || !eventValueShape(ec.shape)) {
+                    g.reportTypeError(
+                        *arg,
+                        "type mismatch: a listener argument must be a "
+                        "primitive value (null, number, boolean, string or "
+                        "undefined)");
+                    return "0.0";
+                }
+            }
             if (arg->kind == NodeKind::SpreadElement) {
                 const auto& spread = static_cast<const SpreadElement&>(*arg);
                 if (!spread.argument) continue;
@@ -695,7 +709,8 @@ std::string CallBuilder::emitFunctionCall(const CallExpr& c,
                     g.reportTypeError(
                         *arg,
                         "type mismatch: a listener argument must be a "
-                        "primitive value");
+                        "primitive value (null, number, boolean, string or "
+                        "undefined)");
                     return "0.0";
                 }
                 body += " { const auto& cp3_s = " + g.expr(*spread.argument) +
