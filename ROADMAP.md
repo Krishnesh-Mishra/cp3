@@ -1,461 +1,8 @@
 # CP3 Roadmap
 
-This file records what each release is changing, what is deliberately not
-included, and why. It is the public checklist for the current release.
-
-## v0.2.0 - TypeScript compatibility
-
-Status: **Done**
-
-Theme: ordinary TypeScript class and error code should work in CP3, while the
-compiler keeps emitting plain native C++ with no hidden runtime machinery.
-
-### CP3 v0.2 APPROVED WORK LEDGER
-
-**Lead-approved scope. Anything not listed here needs lead approval before it
-is added.** Rule 0 applies to every entry:
-
-- User-visible API stays TypeScript-like.
-- Every fast path is internal to the standard library/runtime.
-- Every proof/check fails closed.
-
-#### A. Collections (`std/collections`)
-
-| Item | User API | Internal mechanism (fixed) | Hard rule |
-| --- | --- | --- | --- |
-| `Queue<T>` | `new Queue<T>()`, `push/pop/peek/size/empty/reserve` | ring buffer over **one contiguous `std::vector<T>`**, head/tail indices, 2x growth | never `std::deque` |
-| `Stack<T>` | `push/pop/peek/size` | `std::vector` `push_back`/`pop_back` | `pop` returns a plain value, no optional wrap |
-| `PriorityQueue<T>` | `push/pop/peek` with comparator | binary heap over a contiguous vector, manual sift or `push_heap`/`pop_heap` | no tree nodes |
-| `LRUCache<K,V>` (Done) | `new LRUCache<K,V>(capacity)`, `get/set/has/delete/clear/size/capacity/keys` | flat hash map + intrusive doubly-linked list stored as **indices inside entries** | no pointer chasing, no per-node allocation |
-| `RingBuffer<T>` | fixed capacity, overwrite mode | same ring as `Queue` with an overwrite flag | — |
-| `BitSet` | `set/get/clear/count/and/or/xor` | `std::vector<uint64_t>` + `__builtin_popcountll`, word-parallel operations | 64 flags per word |
-| `MultiMap<K,V>` | `get` all, `add`, `has` | flat hash map to inline `SmallVector<V,1>` | one allocation per key, not per pair |
-
-#### B. Reserved
-
-No new approved items in this revision. Add only with lead approval.
-
-#### C. Text, web, and data modules
-
-| Item | Module / API | Internal mechanism (fixed) | Hard rule |
-| --- | --- | --- | --- |
-| `URL` + `URLSearchParams` | `std/url`, `new` | hand-written RFC 3986 parser over `string_view`, zero-copy slices; reuse `percentDecode` from the network runtime | no regex in the parser |
-| `TextEncoder` / `TextDecoder` | `std/text`, new | `simdutf` for UTF-8/UTF-16 validate + convert; hand-written fallback | library internal, API stable |
-| `stopwatch` + `console.time` / `console.timeEnd` | `std/time`, new | `QueryPerformanceCounter` / `CLOCK_MONOTONIC`; monotonic only, zero allocation: `const sw = stopwatch(); sw.start(); sw.elapsed(); sw.stop();` | never wall clock |
-| ~~`Logger` | `std/log`, new~~ | removed before v0.2: use `console.log`/`console.info` | — |
-| Checksums | `std/hash`, new; named **checksums, not security** | `crc32`, `crc32c`, `xxhash64`, `fnv1a` via bundled XXHash/CRC32C | documented non-crypto |
-
-#### D. Extensions to existing modules (no new module)
-
-| Module | Additions |
-| --- | --- |
-| `std/crypto` | `hmacSha256`/`hmacSha512` (libsodium `crypto_auth`), `blake2b` (`crypto_generichash`), `getRandomValues` (`randombytes`), `uuidParse`/`uuidValidate`/`uuidVersion`, `sha256Raw` returning `Buffer` |
-| `std/buffer` | `base64Url` variant of the existing codec |
-
-#### E. Hash placement rule (security line, non-negotiable)
-
-- `std/crypto` holds **only** libsodium crypto-safe primitives.
-- `std/hash` holds fast **non-crypto** checksums only.
-- `Map`/`Set` bucket hash = `wyhash` or `xxhash3` with a **per-process random
-  seed from libsodium** (HashDoS defense), never exposed.
-- `wyhash`/`rapidhash`/`xxhash` **never** appear under a crypto name. Fast and
-  safe in crypto = `blake2b` or HMAC.
-
-#### F. Internal-only libraries (user API unchanged, user sees nothing)
-
-- `ankerl::unordered_dense` backs `Map`/`Set` hot paths; keep the
-  insertion-order vector for D44 order.
-- `fast_float` for JSON/env/URL number parsing; keep JS number semantics.
-- `simdutf` for validation, conversion, and `charAt` walking.
-- `miniz` for `std/compress`.
-- `moodycamel` or `Boost.Lockfree` for `Channel` and the async log sink.
-
-#### G. Compiler import suggestions
-
-When a source file uses a standard-library name without importing its module,
-the compiler must fail with the normal "cannot find name" diagnostic **and**
-include the exact import line that fixes it. This applies to default modules
-(`console`, `path`, `Math`, ...) and named modules (`fetch`, `createServer`,
-...) alike. The LSP may auto-insert the same line, but the command-line
-compiler must suggest it too; LSP-only behavior is not enough.
-
-#### H. Standard Library & API implementation targets
-
-Status legend: **Done** = available today, **Partial** = a surface exists but
-the listed API is incomplete, **Planned** = not implemented, awaiting lead
-selection. Every row follows Rule 0 and the verification rules in §8.
-
-| Module / scope | Feature / API | Implementation notes / details | Status |
-| --- | --- | --- | --- |
-| Number / Math | `toFixed`, `toPrecision`, `toExponential` | Number formatting methods. | Done |
-| Number / Math | `MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `EPSILON` | Standard number constants, plus `MAX_VALUE`, `MIN_VALUE`, `POSITIVE_INFINITY`, `NEGATIVE_INFINITY` and `NaN`. | Done |
-| Number / Math | `Number.isInteger`, `Number.isFinite`, `Number.isNaN` | Number validation methods. | Done |
-| Math | Math extras | Add the remaining standard math utilities (inverse trig, hyperbolic, `exp`, `log1p`, `hypot`, `sign`, constants). Today: `PI`, `E`, `LN2`, `LN10`, `LOG2E`, `LOG10E`, `SQRT1_2`, `SQRT2`, `random`, `min`, `max`, `pow`, `gcd`, `lcm`, `clamp`, `lerp`, `sqrt`, `abs`, `floor`, `ceil`, `round`, `trunc`, `cbrt`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `exp`, `log1p`, `hypot`, `sign`. | Done |
-| Array | Callback signature `(value, index, array)` | Standardize every array iteration callback to the JS/TS shape. Callbacks may declare any prefix of `(value, index, array)`. | Done |
-| Array | `flatMap`, `findLast`, `findLastIndex`, `at` | Modern query, search, and access methods. | Done |
-| Array | `toSorted`, `toReversed` | Non-mutating array transformation methods (return new arrays). | Done |
-| Object | `assign`, `is`, `freeze` | Standard object manipulation, creation, and immutability methods. Today: `keys`, `values`, `entries`, `assign`, `is`, `freeze`. | Done (verified in `docs/design/verified-gaps.md`; `freeze` is a documented no-op approximation) |
-| String | `codePointAt`, `fromCodePoint`, `matchAll`, `raw` | Unicode-aware and modern string methods. | Planned |
-| JSON | `JSON.stringify(value, replacer?, space?)` | Extend the serializer to support pretty printing (for example 2-space indent) and a replacer. Today only a numeric indent is typed and emitted. | Done (verified in `docs/design/verified-gaps.md`: replacer fn, `string[]` allowlist, `space: number \| string`, legacy indent) |
-| Collections | `ConcurrentMap` | Thread-safe map implementation. | Done (verified in `docs/design/verified-gaps.md`: mutex-backed `set/get/has/remove/size`) |
-| Promise | Full Promise API | Complete TS-compatible Promise surface. Today: `resolve`, `reject`, `all`, `race`, `allSettled`, `any`, `withResolvers`, `then`, `catch`, `finally`. | Done |
-| Global | `structuredClone(obj)` | Deep copy without a worker. Reuse the existing worker deep-copy cloner on the main thread. | Done |
-| Global | `parseTo(value, Type)` | Typed scalar conversion between `string`, `number`, `boolean` and the native numeric types, in both directions (for example `parseTo("123", number)`, `parseTo(n, string)`, `parseTo<r_'i32'>(i64Value)`). The target is a static type keyword or type argument, never a value. A literal source is checked at compile time (CP3401 when the target cannot represent it); a variable source is converted by the runtime coercion helpers. | Done (native targets take the type-argument form `parseTo<r_'i32'>("777")` since `r_'i32'` is type syntax, not a value) |
-| Standard library | Exact integer widths | One semantic-width table (`cp3/host/std_integer.hpp`): HTTP status/ports `u16`, pids/exit codes `i32`, timestamps `i64`, file sizes `u64`, lengths/indexes/counts `usize`. A `typescript` project keeps `number`; `rust`/`cpp` projects get the exact native width, and generated docs use the project spelling. Roll out module by module: Math, network, fs, process, os, date, collections. | In progress (table + Math + network + fs + process + os + date + collections) |
-| Native types | Checked integer arithmetic and explicit conversions | `+ - * / %`, unary `-`, `++`/`--` and arithmetic compound writes throw on overflow, division by zero and `INT_MIN / -1`; signed/unsigned mixing is rejected; `as` and `parseTo` narrow with runtime range checks while widening stays implicit. Tests: `tests/cases/types/03/native_checked`. | Done |
-| Native types | Exact 64-bit literals | The literal source spelling is kept through checking and codegen, so `9223372036854775807`, `-9223372036854775808` and `18446744073709551615` initialize `i64`/`u64` without an intermediate `number` rounding step. Tests: `tests/cases/types/03/native_checked/narrowing` and `tostring`. | Done |
-| Native types | `.toString()` and `wrappingMul` | Every supported native numeric width (Rust and C++ aliases, including `char`, `long`, `unsigned long` and `f32`) formats exactly via `.toString()`; `value.wrappingMul(other)` opts into modulo-2^N multiplication for FNV-style hashing while checked `*` remains the default. Tests: `native_checked/tostring`, `native_checked/wrapping_mul`, `native_project_cpp/tostring`. | Done |
-| String | `String.fromCharCode` | Byte-oriented inverse of `charCodeAt`: each code is reduced modulo 256 and appended as one raw UTF-8 byte; no arguments yields the empty string. Tests: `tests/cases/arrays-strings/02/str/fromcharcode`. | Done |
-| `std/process` | `cwd`, `chdir`, `pid`, `ppid`, `uptime`, `memoryUsage`, `hrtime` | Thin OS calls for process information and high-resolution timing. Today: `argv`, `env`, `exit`, `exec`, `spawn`, `cwd`, `chdir`, `pid`, `ppid`, `uptime`, `memoryUsage` (rss real; heap fields `0`), `hrtime`, via vendored libuv. | Done |
-| `std/network` | HTTP Router (path params & wildcards) | For example `app.get("/users/:id", ...)`. Today `:name` params work; wildcard segments are not exposed. | Done (verified in `docs/design/verified-gaps.md`: `*` last-segment/mid-pattern wildcards, `*`/`/*` match-any) |
-| `std/network` | `dns.lookup(hostname)` | Thin wrapper over the libuv `getaddrinfo` already used by `fetch`. | Done (`network.lookup` and the named `lookup` import; resolves the first address as text) |
-| `std/fs` | `fs.watch(path, callback)` | File-system watcher using libuv `fs_event` (already linked). | Done (verified in `docs/design/verified-gaps.md`: `uv_fs_event` + `FsWatcher.close()`) |
-| `std/os` | `homedir`, `tmpdir`, `freemem`, `totalmem`, `loadavg`, `networkInterfaces` | Thin OS calls for system environment and resource info. Today: `platform`, `homedir`, `tmpdir`, `hostname`, `cpus`, `totalMemory`, `freeMemory`, `totalmem`, `freemem` (Node names), `loadavg` (1/5/15 min tuple), `networkInterfaces` (`Array<[name, address, family, internal]>`), via vendored libuv. | Done |
-| `std/io` | `waitReadable`, `waitWritable`, `pollUntilDone`, `POLL_*` | Shared-`EventLoop` fd readiness for libraries with a socket and a non-blocking step API. Phase 1 is the two wait primitives; phase 2 is the shared helper. Phase 3 (`import native async`) is deferred. | Done |
-| Packages | Exported types are vocabulary-neutral (Rule 3) | The generated `index.cp3` rewrites a Rust/C++ package's unprefixed native type spellings (`i64`, `long long`) to prefixed spellings (`r_'i64'`, `c_'long long'`), so the exported surface resolves identically in a consumer project of any `typeSystem`; TypeScript-authored packages need no rewriting. | Done |
-
-#### J. Editor and VS Code extension
-
-| Item | Module / command | Implementation notes | Status |
-| --- | --- | --- | --- |
-| `cp3.run` | `cp3.run` in `cp3-vscode` | A command contributed by the VS Code extension, surfaced as a **run button in the editor title bar** (`editor/title`) when `editorLangId == cp3`. Clicking it saves the active document, resolves `cp3.compilerPath`, runs `<cp3c> run <file>`, streams stdout/stderr into the `cp3 Run` output channel (no terminal panel is opened), and reports non-zero exits with a `Show Output` notification. The command is also in the command palette and the editor context menu. | Done |
-
-#### K. Type-system cleanup (remove `void` and `unknown`)
-
-**Rule: v0.2 has exactly two nullish types, `null` and `undefined`. The `void` and `unknown` keywords are removed from the language surface.**
-
-| Item | Rule | Notes / migration |
-| --- | --- | --- |
-| `void` type | Removed. A function with no `return` infers `undefined` as its return type. | Every `: void` annotation is a compile error whose diagnostic names the fix (`undefined`); TypeScript permits `void`, CP3 does not. A trivial `fmt`-style rewrite updates existing source. |
-| `unknown` type | Removed. `JSON.parse` requires a type argument: `JSON.parse<T>(text)`. | Omitting `T` is a compile error. The internal permissive callback placeholder used by the compiler is not a user type and is never printed as `unknown`; std members receive precise types. |
-| `null`, `undefined` | Kept as the only two nullish primitives. | `===`/`!==` flavor rules, `??` and `== null` semantics are unchanged. |
-| Migration & verification | Corpus, spec, docs and diagnostics referencing `void`/`unknown` are updated; the corpus is grep-rewritten (`: void` → `undefined`, bare `JSON.parse(` → `JSON.parse<T>(`). | Diagnostics explain why (static native output; `catch` binds `Error`; `unknown` forced narrowings) and what to write; the JS/TS developers guide (`03-javascript-typescript-developers.md`) and `docs/content/01-language/01-variables-and-bindings/02-types.md` are updated in the same change. |
-
-**Status: Done** (src ban implemented; `void`/`unknown` annotations and bare `JSON.parse` rejected; guide documents the removal, Error-only `throw`, and the `undefined`/`object` replacements — see `03-javascript-typescript-developers.md` §1, §4.4, §4.11).
-
-#### L. JavaScript/TypeScript compatibility backlog (v0.2, highest value first)
-
-The remaining JavaScript and TypeScript surface needed so ordinary application code compiles unchanged against CP3. Ordered highest value first; every row follows Rule 0 and the verification rules in §8. Nothing here is automatic: implementation is feature-by-feature, with tests and a docs update in the same commit.
-
-| Feature | Why | Size | Status |
-| --- | --- | --- | --- |
-| Array/Object/String catalog gaps: `reduce`, `reduceRight`, `splice`, `concat`, `reverse`, `lastIndexOf`, `keys`/`values`/`entries`, `Array.from`/`isArray`/`of`, `Object.fromEntries`, `parseInt` | The surface catalog did not list them; `reduce`, `splice` and `concat` are everywhere in TS code, so the TS-compatibility theme fails without them. | Small | Done (verified in `docs/design/verified-gaps.md` #18; `Record<string,V>` now canonicalizes to `Map<string,V>`, unblocking `Object.fromEntries`) |
-| Timers, if missing: `setTimeout`, `setInterval`, `clearTimeout`, `sleep` | Every service waits; a 100 ms timer regression test needs them. | Small | Done |
-| Process lifecycle: `process.on("SIGINT" \| "SIGTERM" \| "exit" \| "unhandledRejection")`, `server.close()` | Servers need graceful shutdown; libuv signal handles are already available. | Small | Done (verified in `docs/design/verified-gaps.md` #7) |
-| Built-in utility types: `Partial`, `Required`, `Readonly`, `Pick`, `Omit`, `Record` | Very common in real TS. The compiler resolves them natively instead of user-written mapped types. | Medium | Done (verified in `docs/design/verified-gaps.md` #8) |
-| Date gaps: `getTime`, `getDay`, the UTC getters, setters, `Date.parse` | The current surface is very thin. | Small | Done |
-| `cp3 install <dir>` semantics | Compile the source or reject with a clear "use a `.cp3pak`" error; accept classes via a package's default or named exports (today CP3401 blocks it); make `cp3 test` work for packages. | Small-medium | Done (verified in `docs/design/verified-gaps.md` #9) |
-| Coercion: `parseInt`, `parseFloat`, `Number(x)`, `String(x)`, `Boolean(x)`, `isNaN`, `isFinite` | Basic coercion in every TS codebase. | Small | Done |
-| Number helpers: `Number.toString(radix)`, `Number.isSafeInteger`, `Number.parseInt`/`parseFloat` | Common helpers plus hex/binary output. | Small | Done |
-| `encodeURIComponent`, `decodeURIComponent`, `encodeURI`, `decodeURI`, `atob`, `btoa` | URL building and Basic auth headers; the network runtime already carries a `percentDecode` helper to adapt. | Small | Done |
-| Scheduling primitives: `queueMicrotask`, `setImmediate`, `process.nextTick` | What libraries expect alongside timers. | Small | Done |
-| Generic constraints and defaults: `<T extends X = Y>` | Required for real generic APIs. | Medium | Partial (verified in `docs/design/verified-gaps.md` #10: parser + function-side constraint check done; default-fill/alias legs not wired) |
-| `const enum` and enum reverse mapping | Common enum use. | Small | Done (verified in `docs/design/verified-gaps.md` #11) |
-| Map/Set constructors from iterables and spread (`[...set]`, `new Map(entries)`) | Everyday code. | Small | Done |
-| Set algebra: `union`, `intersection`, `difference`, `isSubsetOf` | ES2025 methods; simple on the flat hash set. | Small | Done |
-| `Object.groupBy` / `Map.groupBy` | Common in reporting code. | Small | Done (verified in `docs/design/verified-gaps.md` #19; `Object.groupBy` returns canonical `Map<string,T[]>`; non-string keys use `Map.groupBy`) |
-| `toSpliced`, `with`, `flat(depth)`, `copyWithin` | Rest of the ES2023 non-mutating array methods. | Small | Done |
-| `process.stdout.write` / `process.stderr.write` | No newline; CLIs and progress output need it. | Small | Done |
-| `process.stdin` (read all, read lines) or `std/readline` | Piping input into CLIs; `console.input` covers prompts only. | Small-medium | Done (verified in `docs/design/verified-gaps.md` #12: `readAll/readLines/readLine`, plus separate `std/readline`) |
-| `process.exitCode`, `process.platform`, `process.arch`, `process.version` | Basic process info and a graceful exit path. | Small | Done |
-| `console.table`, `console.group`/`groupEnd`, `console.dir`, `console.count`, `console.trace` | Common debug output; `console.time`/`timeEnd` are already covered by the `std/time` ledger entry. | Small | Done |
-| `Error.captureStackTrace`, `error.toString()`, `error.name` overrides on subclasses | Custom error classes need them. | Small | Done |
-| `res.redirect`, `res.sendFile`, `res.cookie`, `req.cookies`, `req.ip` | Basic web-server features every app writes by hand today. | Small-medium | Done |
-| Built-in middleware: `static(dir)`, `cors(options)`, `bodyLimit(n)` | Production servers need these first; body limits are also a DoS defense. | Medium | Done (verified in `docs/design/verified-gaps.md` #13) |
-| Error-handling hook: `server.onError((err, req, res) => ...)` | An uncaught handler throw returns 500 instead of crashing or hanging. | Small | Done (verified in `docs/design/verified-gaps.md` #14; without it the dispatcher answers 500) |
-| `Headers`, `Request`, `Response`, `FormData` classes and `fetch(Request)` | Standard fetch shapes TS code expects. | Medium | Done (verified in `docs/design/verified-gaps.md` #15) |
-| `AbortSignal.timeout(ms)` on `fetch` | Complements the existing `timeout` init option. | Small | Done (verified in `docs/design/verified-gaps.md` #16) |
-| All other Express-compatible features which are doable (static file serving, redirect/sendFile, cookies, CORS, body limits, error hooks) | The set of Express patterns users actually write; implement those that carry no runtime metadata or wrapper machinery. | Medium | Done for the listed set (verified in `docs/design/verified-gaps.md` #17; `express()`/`Router()`, sendFile/static options, cookies, body-parse) |
-
-#### M. Nullable class types and narrowing
-
-| Feature / API | Why | Size | Status |
-| --- | --- | --- | --- |
-| `T \| null`, `T \| undefined`, optional fields (`next?: T`) on class types | Linked lists, trees and graphs cannot be written as ordinary TypeScript without them (sentinel arrays are slower and unidiomatic). Lowers to a nullable `Ref<T>` (null = `nullptr`), no extra allocation. | Small | Done |
-| Control-flow narrowing: `!== null`, `=== null`, truthiness, `&&`, `\|\|`, `??`, `?.`, early return | Makes `n.next.value` inside `if (n.next !== null)` type-check; assignment to the narrowed target invalidates it. | Small | Done |
-| Non-null assertion `x!`, definite-assignment `x!: T`, `as` assertions (class types and native numerics only) | Everyday TS code; `x!` throws a catchable `Error` on null. Unrelated `as` types are CP3401. | Small | Done |
-
-#### I. Non-blocking native I/O (v0.2 phases 1-2)
-`async` only schedules continuations on the one event loop. It does not make a
-blocking C call concurrent. v0.2 therefore separates two mechanisms and ships
-only the socket/reactor path first:
-
-| Library has... | Package author uses |
-| --- | --- |
-| A socket fd and a non-blocking step API | `std/io` `pollUntilDone` (phases 1-2) |
-| Neither (pure blocking C) | `import native async "<lib>"` (phase 3, shared pool) |
-| Neither, and calls take seconds | a larger/separate pool, or another library |
-
-Networking libraries that can be non-blocking MUST use the socket path, never
-the pool. Reference socket-path libraries: libpq (`PQconnectPoll`,
-`PQconsumeInput`, `PQisBusy`, `PQsocket`), MySQL/MariaDB non-blocking APIs plus
-`mysql_get_socket`, hiredis async mode or a Redis protocol client written in
-cp3, libcurl (`curl_multi_socket_action`), and Kafka/NATS clients exposing a
-pollable fd. Verify the exact library API when writing each shim. Reference
-pool-path libraries: sqlite, bcrypt, zlib, image libraries, `getaddrinfo`/DNS,
-and regular-file reads (epoll cannot watch regular files).
-
-Phase 1 (reactor primitive):
-
-```ts
-import io from "std/io";
-
-await io.waitReadable(fd); // Promise<void>
-await io.waitWritable(fd); // Promise<void>
-```
-
-- One waiter suspends only its async function; timers, microtasks and other fd
-  waiters keep running.
-- Many waiters are supported, including several on the same fd with different
-  directions.
-- The promise rejects on poll error, hangup/disconnect, invalid descriptor, or
-  a descriptor closed while the wait is registered.
-- Phase 1 has no cancellation token. A waiter stays pending until it settles or
-  the descriptor fails; cancellation only becomes a public surface when the
-  abort/cancellation model is specified.
-
-Phase 2 (shared helper):
-
-```ts
-await io.pollUntilDone(
-  () => pqsocket(conn),
-  () => pqProgress(conn), // io.POLL_READING | io.POLL_WRITING | io.POLL_DONE | io.POLL_FAILED
-);
-```
-
-`pollUntilDone` calls `getSocket()` again on every iteration because the fd can
-change during connect. `POLL_DONE` resolves, `POLL_FAILED` rejects,
-`POLL_READING` awaits `waitReadable`, and `POLL_WRITING` awaits `waitWritable`.
-It is implemented once in the runtime; packages do not write their own loop.
-
-Poller and wakeup (required platform statement):
-
-- One libuv loop per thread, shared by `std/network` and `std/io` through
-  `cp3/async/uv_loop.hpp`.
-- Linux: libuv uses epoll; cross-thread wakeup is libuv's async handle
-  (eventfd/pipe internally).
-- Windows: libuv uses IOCP; cross-thread wakeup is libuv's async handle
-  (PostQueuedCompletionStatus internally).
-- The runtime `EventLoop` remains authoritative: it drives libuv from its idle
-  phase and keeps the existing timer/exit contract.
-
-Phase 3 (deferred until phases 1-2 pass their tests): `import native async
-"<lib>" as x;` runs blocking calls on a fixed shared pool (default 4 threads),
-not one pool per library. Required rules before phase 3 starts:
-
-1. Fixed shared pool, configurable, shared by all libraries.
-2. Per-handle serialization: calls on one handle never overlap; different
-   handles may run in parallel.
-3. Copy strings/buffers into owned memory before dispatch.
-4. Pool threads never touch the cp3 runtime; they write plain result structs.
-5. Completion wakes the idle loop immediately.
-6. Thread-pinned handles are opt-in for libraries that require one thread.
-
-Known phase-3 limits, to document rather than hide: pool size caps concurrency
-(the (N+1)th blocking call queues), and a started blocking call cannot be
-cancelled; cancellation only discards the result.
-
-Phase 1-2 acceptance tests:
-
-1. A 100 ms timer fires roughly 20 times while a socket wait resolves after
-   about 2 seconds.
-2. 1000 concurrent waiters on distinct sockets resolve correctly with no
-   thread growth.
-3. Closing the descriptor while waiting rejects, with no hang or crash.
-4. Windows and Linux use the pollers/wakeups stated above.
-
-The A-H ledger above is part of the v0.2.0 scope and ships with the TypeScript
-compatibility work. The class/error sections below describe the language
-surface; the ledger describes the standard-library additions. Additional
-JavaScript APIs found by the compatibility audit are listed in the issue/PR
-notes and need lead selection before they are added here.
-
-### 1. Error model
-
-- Add the built-in hierarchy:
-  `Error`, `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`,
-  `EvalError`, `URIError`, `AggregateError`.
-- Every error has `message`, `name`, `stack`, and `cause`.
-- `new Error(...)` and the callable form `Error(...)` work.
-- The TypeScript/JavaScript options object is supported:
-  `new Error("boom", { cause: originalError })` and
-  `Error("boom", { cause: originalError })`.
-- `AggregateError` accepts its errors iterable plus the same options:
-  `new AggregateError(errors, "boom", { cause: originalError })`.
-- Error options are ordinary constructor arguments, not runtime metadata:
-  `cause` is stored on the error object and is available as `e.cause`.
-- **Only `Error` and its subclasses may be thrown.**
-  - `throw new Error("boom")` - allowed.
-  - `throw new TypeError("bad value")` - allowed.
-  - `throw 404`, `throw "missing"`, `throw {}` - compile error.
-  - The diagnostic must say that TypeScript allows throwing any value, but
-    CP3 does not, because CP3 has one catch model and one runtime contract.
-- `catch (e)` binds **`Error` directly**. No narrowing is required:
-  `e.message`, `e.name`, `e.stack`, and `e.cause` work.
-- Runtime and standard-library failures throw `Error` objects, never raw
-  strings, numbers, or `std::exception` values.
-- Promise rejections and worker failures use the same `Error` contract.
-
-### 2. TypeScript classes
-
-The target is practical TypeScript class behavior:
-
-- TypeScript method syntax: `greet(): string { ... }` without a `function`
-  keyword.
-- Constructor parameter properties:
-  `constructor(public name: string, private id: number) {}`.
-- `extends` with native C++ inheritance, `super(...)` constructor calls, and
-  `super.method()`.
-- `implements` conformance checks.
-- `readonly` enforcement.
-- `override` checks.
-- `abstract` classes and methods.
-- Getters and setters.
-- `public`, `private`, and `protected` access checks.
-- `static` members.
-- `#private` fields and methods.
-- `static { ... }` initialization blocks.
-- Class expressions: `const C = class { ... }`.
-- Zero-overhead `instanceof`.
-- TypeScript-compatible constructor and method behavior for the supported
-  surface.
-
-Existing CP3-only class syntax (`function greet() {}`) is **not** kept in
-v0.2.0: this release moves to the TypeScript spelling and the TypeScript
-compatibility target. The manual `weak` field modifier is retained as an
-escape hatch for reference cycles: a weak field does not count toward the
-refcount and reads as `T | null`.
-
-Automatic cycle handling (memory item), no GC and no cycle collector:
-- Stage 0 (`vendor/tools/cycle_stats.py`, `docs/cycle-stage0.md`): 61 classes, 5
-  cycle-capable in 3 groups (A/B mutual, BST self-recursive, Child/Parent
-  already weak), 56 acyclic (92%). 2 of 3 groups have no `weak` edge.
-- Stage 1 + shared analysis: strong-edge class graph (weak excluded,
-  unknown fail-closed) published as `SemaResult::cycleCapableClasses` with
-  per-field store/escape sites in `cycleEscapeSites`.
-- Step 4 diagnostics: a cycle through two or more distinct edges (SCC > 1)
-  with no `weak` edge is CP3401 naming the cycle path and asking to mark one
-  edge `weak`. Single self-referencing fields (`next: Node | null`) are
-  exempt (recursive types, not runtime cycles).
-- `cp3 check --report` lists cycle-capable classes, store/escape sites and
-  the manual-weak share. `vendor/tools/fuzz_graphs.py` differential fuzzer is clean.
-- Regions, compiler-injected non-owning edges and group counting (stages
-  2-3) are deferred: they need the whole-program ownership proof plus the
-  fuzzer/ASan gate, which is not yet met. Cycles resolve today by an
-  explicit `weak` edge.
-
-### 3. Compile-time decorators
-
-Decorators are compile-time macros, not runtime decorators:
-
-- `@Name` names a `comptime function`.
-- The function receives the decorated class or method AST.
-- It may validate the declaration and raise compile errors.
-- It may inject plain CP3 code: fields, methods, constructor checks, or static
-  registration.
-- It runs only inside `cp3c`. The emitted binary contains only the injected
-  plain CP3 code.
-- No runtime metadata tables.
-- No `Reflect` / `Reflect.metadata`.
-- No wrapper functions around decorated methods.
-- No evaluation at class-definition time.
-- A decorator that wants per-call behavior (logging, timing) must inject
-  statements into the method body at compile time.
-- Replacing a method with an indirect-call wrapper is a compile error.
-
-### 4. Compile-time `extends`
-
-- `extends Name` keeps native C++ inheritance and has zero runtime cost.
-- `extends expr` is accepted only when `expr` is comptime-evaluable:
-  constants, `comptime` calls, and conditionals over comptime values.
-- The compiler folds the expression to a concrete class and emits ordinary
-  inheritance.
-- Any other expression is a compile error:
-  `extends expression must resolve at compile time`.
-- No runtime base-class lookup, hidden class objects, or dictionary objects.
-
-### 5. Zero-overhead `instanceof`
-
-- `x instanceof ClassName` lowers to a static type-id comparison.
-- There is one static id per class, decided by the compile-time hierarchy.
-- No additional runtime type-info tables.
-- `catch (e)` does not need `instanceof`; the binding is already `Error`.
-
-### 6. Imports and packages
-
-Known defects fixed in v0.2.0:
-
-- A generated program that named the regex or collections backend linked the
-  same runtime translation unit twice: the core-backend rows were added both
-  by the deduplicating loop and by an unconditional `insert`. Strict linkers
-  (GNU ld) reject the program; the driver now inserts them exactly once.
-- `Object.fromEntries` and `new Map(entries)` iterated the entries array
-  through a dangling `Ref<vector<E>>` temporary, so reads inside the loop
-  used freed heap storage (a heap-use-after-free). The generated loops now
-  bind the temporary to a named `Ref` before iterating.
-- Cross-module exported values and types must propagate into the importing
-  unit, so type checking and code generation use the real declaration.
-- Package imports must resolve and link, not fall through to codegen as an
-  unknown ambient name.
-- `.cp3pak` archives must record a `main` path that actually exists inside the
-  archive (`index.cp3`, not `src/index.cp3`).
-- `.cp3/lock.json` must store project-relative `resolved` and `target` paths,
-  not machine-specific absolute paths.
-- A `.cp3pak` must carry every native binding its implementation imports:
-  `native.json`, the declaration index, headers, import libraries, runtime
-  DLLs and the recorded source, relocated under `.cp3/native/<id>/` with the
-  metadata rewritten to those self-contained paths. Installing the archive
-  hoists the binding to the consuming project's `.cp3/native/<id>/`; a
-  precompiled package object and `cp3 recompile` both compile against the
-  embedded include roots. A separate platform asset is now only the fallback
-  for beta-one archives that shipped source-only.
-
-### 7. TypeScript-only diagnostics
-
-Whenever CP3 rejects something that TypeScript accepts, the diagnostic must
-say all three things:
-
-1. what the TypeScript feature is,
-2. that TypeScript allows it but CP3 does not, and
-3. why CP3 rejects it (static native output, no runtime metadata, no hidden
-   wrappers, no dynamic class resolution, and so on).
-
-Examples:
-
-- Throwing a number or string: TypeScript permits any thrown value; CP3 only
-  permits `Error` objects.
-- A runtime decorator: TypeScript can evaluate decorators at runtime; CP3
-  decorators are compile-time macros only, so the binary stays metadata-free.
-- A dynamic `extends` expression: TypeScript can resolve a base class at
-  runtime; CP3 requires a compile-time class so inheritance stays native C++.
-- A TypeScript type-level keyword such as `keyof`, `infer`, `satisfies`,
-  `infer`, or `asserts`: TypeScript computes types at compile time; CP3's type
-  surface is the static native subset and rejects it with the reason.
-- Other TypeScript-only type features (conditional types, mapped types,
-  template-literal types, indexed-access types, `unique symbol`, variance
-  annotations, `const` type parameters, `namespace`/`module` declarations):
-  rejected with the same explicit explanation.
-
-The rule is: never emit a generic "syntax error" when the construct is a known
-TypeScript feature that CP3 intentionally does not support.
-
-### 8. Verification
-
-- Generate C++ for a decorated class and a comptime-`extends` class.
-- Diff against hand-written equivalent classes.
-- Output must be identical except for the injected plain CP3 code.
-- Confirm that generics monomorphisation, interface dispatch, and object-churn
-  behavior do not regress against the v0.2 option-1 baseline.
-- Run the full compiler and runtime test suites.
-
-### 9. Out of scope for v0.2.0
-
-These are rejected with the diagnostic rule above:
-
-- TypeScript runtime decorators.
-- `Reflect.metadata`.
-- Runtime-dynamic `extends`.
-- Any feature that needs runtime type metadata or wrapper functions to work.
+This file records the v0.3 performance roadmap: the memory-optimization
+section, the candidate optimization backlog, what each item would do, and its
+current status.
 
 ## v0.3.0 - Performance upgrades
 
@@ -467,6 +14,12 @@ candidate backlog, not a commitment: every item will be evaluated, measured and
 ordered before implementation begins. No v0.3 optimization is implemented as
 part of v0.2.
 
+**Hard rule for every item below: all v0.3 work is internal.** The user-facing
+language and standard-library API never change. A v0.2 program compiles
+unchanged under v0.3 and produces identical observable behavior; only the
+generated code, the runtime backing, and the toolchain configuration may
+differ. An optimization that would require an API change is not a v0.3 item.
+
 Program-level goals:
 
 - Faster compilation for large module graphs.
@@ -476,146 +29,271 @@ Program-level goals:
 - Lower-overhead class construction and object layout.
 - Faster startup and smaller native binaries.
 - More performance regression coverage in the test suite.
+- Aggressive RAM-footprint reduction, measured down the ladder (10 MB -> 1 MB
+  -> 100 KB -> as low as possible): per-object overhead in single-digit bytes,
+  empty collections at zero heap allocations, idle process RSS in the hundreds
+  of kilobytes, freed memory returned to the OS, and single-core throughput
+  plus TBB-class multicore scaling as the speed target.
 
-Candidate optimization backlog:
+Status column: **Planned** = not started, **Partial** = in progress, **Done** =
+landed and verified. All items are currently Planned.
 
-| Optimization | What CP3 would do | Expected gain |
+**LLVM boundary:** things Clang/LLVM already do automatically to the emitted
+C++ are deliberately not listed here - guaranteed copy elision and NRVO, SROA,
+constant folding, loop-invariant code motion, loop unrolling, loop
+interchange, strength reduction of division-by-constant, select/cmov lowering,
+cross-TU inlining under `-flto`, COMDAT folding of template instantiations,
+IPSCCP constant-argument specialization and function cloning, zero-cost
+Itanium exception tables, automatic loop vectorization, and hot/cold
+splitting and relayout under PGO/BOLT. cp3 does not re-implement the backend.
+The rows below are what LLVM cannot infer on its own (closed-world semantics,
+object layout, refcounting, source-level transforms, runtime/OS/library
+wiring) plus hint-emission rows that *unlock* LLVM passes (`__restrict`,
+`noexcept`, alignment, `unreachable`, coldness, prefetch, `[[likely]]`).
+
+### Memory optimisation
+
+The RAM ladder in the program goals lives or dies on this section: every
+memory-related item from the v0.3 backlog is collected here, together with the
+escape-analysis amplification that multiplies all of it. All of it is
+internal; the user-facing language and API never change.
+
+Two framing decisions recorded up front:
+
+1. **Escape analysis is the load-bearing analysis, and the classic
+   per-function version is the limited one.** The first group below upgrades
+   it from "does this object escape this function?" to a whole-program
+   lifetime and aliasing oracle: interprocedural capture summaries over cp3's
+   closed-world call graph, scalar replacement (dissolve a non-escaping object
+   into registers instead of merely stack-allocating it), containment analysis
+   (a non-escaping container stores its elements inline, so a whole object
+   graph becomes one contiguous block), and escape analysis that sees through
+   `await`. Every other row in this section fires far more often once those
+   proofs exist - they are the oracle's consumers (non-atomic refcounts, move
+   semantics, `__restrict` emission, bounds-check elimination). This is the
+   10-20k-LOC investment with the multi-times payoff.
+
+2. **Arenas and regions are flagged, not defaults.** Per-request arenas
+   recreated at high request rates inflate RSS (many concurrent arenas alive
+   at once), and one long-lived or blocked request pins its whole arena, so
+   the bulk-free benefit is held hostage by the slowest request. The
+   arena/region rows below are therefore kept only under hard evaluation:
+   size caps, fallback to pooled allocation above the cap, and a
+   benchmark-gate rule that an arena design must win on throughput *and* peak
+   RSS before adoption.
+
+#### Escape-analysis amplification
+
+| Optimization | Description | Status |
 | --- | --- | --- |
-| Escape analysis | If an object never leaves a function, put it on the stack instead of `Ref<T>` on the heap. | Removes allocation and refcounting. |
-| Ownership/move analysis | If a value has one owner, emit `std::move` and skip the refcount. | Removes atomic increments, a major cost. |
-| Integer inference | TypeScript `number` is a double; if the range is provably small, emit `int32_t`. | Faster math, vectorizable code. |
-| Bounds-check elimination | Prove that `for (i = 0; i < arr.length; i++)` needs no check inside the loop. | Removes a branch per array access. |
-| Closed-world devirtualization | Since every class is visible, avoid virtual calls where only one implementation exists. | Enables inlining. |
-| Emit `__restrict`, `const`, `noexcept` | TypeScript objects do not alias like raw pointers, so tell C++ the stronger aliasing and purity contracts. | Lets Clang vectorize more. |
-| Compile-time evaluation | Fold constants, evaluate `constexpr` configuration and precompute tables. | Zero runtime cost. |
-| Strings as views | Lower `slice`/`substring` to `string_view` when the source outlives the slice. | Removes copies. |
-| Arrays of numbers stored flat | Store `number[]` as `std::vector<int32_t>` rather than boxed elements. | Cache-friendly layout. |
-| Async without heap | If a promise never escapes, keep the state machine on the stack; fuse sequential awaits. | Cheaper async. |
-| Per-request arena | In servers, allocate everything for a request from one arena and free it at once. | No per-object free. |
-| Dead code removal | Remove unused functions, branches and fields across the whole project. | Smaller, faster binary. |
-| Small string optimization | Store short strings inline in the object. | Removes `malloc` for most strings. |
-| Interned string literals | Share one copy of each literal; equality can become a pointer compare. | Faster compares, less memory. |
-| Compile-time string switch | Lower `switch` on literals to a length check plus a hash/perfect-hash jump. | Removes chains of string compares. |
-| Perfect hashing for fixed keys | Objects with known keys become structs, not hash maps. | Field access is one load. |
-| Struct-of-arrays layout | Store hot fields of `User[]` in separate arrays when they are scanned often. | Cache-friendly, vectorizable. |
-| Hidden-class elimination | Closed-world types become fixed structs, with no dynamic property lookup. | No lookup cost. |
-| Field reordering and packing | Sort struct fields by size and pack `bool`s together. | Smaller objects, fewer cache misses. |
-| Non-atomic refcount | Use plain increments when the value is proven to stay on one thread. | Removes atomic cost. |
-| Refcount elision on borrows | Pass an object to a non-storing function as `const T&`. | No increment/decrement per call. |
-| Last-use move | At a variable's final use, emit `std::move`. | Removes copies and refcount traffic. |
-| Return value optimization | Build results directly in the caller's slot. | No copy on return. |
-| Scalar replacement | Split short-lived objects into plain locals in registers. | The object disappears entirely. |
-| Closure-to-lambda inlining | Non-escaping callbacks become templated lambdas, not `std::function`. | Inlined, no indirect call. |
-| Monomorphization of generics | Emit one specialized copy per concrete type, with no boxing. | Native speed for generic code. |
-| Map/filter/reduce fusion | Turn `a.map().filter().reduce()` into one loop with no temporary arrays. | Removes intermediate allocations. |
-| `for...of` to indexed loop | Lower array iterators to plain pointer loops. | Vectorizable code. |
-| Loop-invariant hoisting | Move `arr.length`, property reads and pure calls out of loops. | Fewer loads. |
-| Array pre-sizing | Reserve capacity when the final size is known, such as `map` or fixed pushes. | No reallocation copies. |
-| Typed arrays as raw buffers | Map `Uint8Array` and `Float64Array` to contiguous memory with SIMD-friendly code. | Fast numeric and binary work. |
-| Purity analysis | Mark functions with no side effects, enabling caching, hoisting and reordering. | Enables other passes. |
-| Exception-free fast path | Mark provably non-throwing functions `noexcept`; use result codes internally. | Smaller, faster code. |
-| Cold-path marking | Add `[[unlikely]]` and `[[gnu::cold]]` to error and throw branches. | Better branch layout. |
-| Hot/cold function splitting | Move rare code out of hot functions. | Better instruction-cache use. |
-| Tail-call and recursion to loop | Turn self-recursive tail calls into loops. | No stack growth. |
-| Inline-caching removal | Remove runtime type checks where types are statically known. | No dynamic dispatch. |
-| Async fusion | Sequential awaits on already-ready values skip the scheduler. | Fewer context switches. |
-| `Promise.all` without heap | Use an inline array for fixed-size `Promise.all([a, b, c])`. | No allocation. |
-| Allocation-free hot paths | Report allocations inside loops, then hoist or pool them. | Predictable latency. |
-| Object pooling | Reuse frequently created and destroyed objects. | Skips `malloc` and `free`. |
-| Bump allocator for startup data | Allocate program-lifetime data from a bump arena. | Faster allocation, no free. |
-| Slab allocators per type | Allocate same-size objects from fixed pools. | Less fragmentation, faster allocation. |
-| Static initialization at compile time | Build module-level constants and tables in the compiler, not at startup. | Zero startup cost. |
-| Lookup-table generation | Replace pure computation over a small domain with a precomputed table. | Constant-time math. |
-| Division by constant | Lower `x / 10` and `x % 8` to multiply and shift. | Much cheaper than division. |
-| Integer-overflow proofs | Prove a value cannot exceed 2^53, then use `int64` instead of `double`. | Integer speed. |
-| Branchless codegen | Lower simple ternaries, `min` and `max` to conditional moves. | No branch misprediction. |
-| SIMD intrinsics for known patterns | Use AVX2/NEON for `indexOf`, `includes`, `sum`, `fill` and `copy` on typed data. | 4x to 16x on bulk operations. |
-| Fast JSON | Compile typed `JSON.parse<T>` and `JSON.stringify` into schema-specific code. | Several times faster than generic JSON. |
-| Compile-time regex | Compile regex literals into a state machine at build time. | No regex setup at runtime. |
-| Compile-time validation | Compile Zod-like schemas into direct field checks. | No schema interpretation. |
-| Compile-time routing | Compile HTTP routes into a trie or perfect hash. | Constant-time dispatch. |
-| Compile-time SQL checks and prepared statements | Parse and prepare literal SQL once, with typed result structs. | Less runtime parsing. |
-| Zero-copy parsing | Keep HTTP and JSON fields as views into the receive buffer. | No string copies. |
-| Buffer reuse for I/O | Reuse read and write buffers per connection. | No allocation per request. |
-| Batched syscalls | Use `writev`, `sendmmsg`, `io_uring` or IOCP batching where supported. | Fewer kernel transitions. |
-| Pipelined DB queries | Use libpq pipeline mode for multiple queries per round trip. | Much lower latency. |
-| Connection and statement caching | Cache prepared statements per connection automatically. | Skips repeated planning. |
-| Tree shaking across modules | Drop unused exports, classes and methods across the whole program. | Smaller binary, better cache use. |
-| Cross-module inlining | Use whole-program visibility and one translation unit where practical. | Inlining across files. |
-| Identical code folding | Merge duplicate functions with `/OPT:ICF` or `--icf=all`. | Smaller binary. |
-| Link-time layout | Order functions by call frequency. | Fewer instruction-cache misses. |
-| Compiler flags | Evaluate `-O3`, `-march` per target, `-fno-plt`, `-fvisibility=hidden` and `-fno-semantic-interposition`. | Free speed. |
-| LTO and ThinLTO | Optimize across all object files. | 5% to 15% typical gain. |
-| PGO and BOLT | Profile, then rebuild and relayout using real hot paths. | 10% to 30% typical gain. |
-| Fast allocator default | Replace system `malloc` with mimalloc or snmalloc. | Faster allocation, less contention. |
-| Flat containers | Use flat hash maps and small vectors instead of `std::unordered_map` and `std::vector`. | Cache-friendly. |
-| Small-vector optimization | Keep usually-tiny arrays inline. | No heap for small arrays. |
-| Prefetch hints | Insert prefetch in list and tree traversals. | Hides memory latency. |
-| False-sharing avoidance | Align per-thread data to cache lines. | Better multithreaded scaling. |
-| Thread-local state | Use per-thread caches and counters, merged later. | No locks on hot paths. |
-| Lock-free queues for the offload pool | Use MPSC ring buffers for completions. | Lower pool overhead. |
-| Sanitized debug builds | Run ASan and UBSan in debug mode; strip them in release mode. | Catches unsafe analysis bugs. |
-| Optimization report | `cp3 build --report` lists allocations, refcounts and bounds checks left in each function. | Shows where to fix next. |
-| Benchmark regression gate | Fail CI when a benchmark gets slower. | Keeps gains from eroding. |
-| Compile-time function memoization | Prove purity, then insert a result cache for any pure function called repeatedly with overlapping arguments. `fibonacci(n)` becomes O(n) instead of O(φⁿ). | 100x on exponential-recursive functions. |
-| Refcount-in-pointer | Store the refcount in the unused high bits of the 64-bit pointer instead of a separate atomic field. `retain` becomes `++(ptr >> 48)`. | Removes the object header and the separate atomic increment. |
-| Object-as-bit-pattern | Encode small objects as single integers when all fields are bounded integers. `Point{x: 1, y: 2}` becomes one `uint64_t`. | Removes the struct allocation and field loads. |
-| Whole-program stack fusion | When the call graph is a tree (no recursion, no shared functions), emit one function with one stack frame instead of N frames. | Per-call overhead drops to zero. |
-| Compile-time memory map | Compute the exact memory layout of the entire program at compile time and emit a static memory plan. | Hot path becomes allocation-free by construction. |
-| Zero-copy string interning | Intern computed strings at compile time, not just literals. Runtime strings matching an interned string get a pointer to the interned copy. | String allocation drops to near-zero for the common case. |
-| Method-table elimination | If a class is never subclassed (closed world), remove its method table entirely and emit direct calls. | Removes the indirection on every method call. |
-| Dead-module elimination | If a module is imported but none of its exports are used, remove the entire module's codegen including runtime TUs (libsodium, libuv, etc.). | Binary size drops by the size of unused modules. |
-| Field-cache-line packing | Reorder object fields by access frequency so hot fields share a cache line and cold fields are moved elsewhere. | Hot-path object access goes from 2 cache lines to 1. |
-| Allocation-free by construction | Prove an object's lifetime is bounded by a known scope, then never emit a heap allocation for it. The object becomes a stack local or a register. | The hot path has no allocation by design. |
-| `__builtin_expect` / branch prediction hints | Tell the compiler which branch is hot so it lays out code accordingly. | 5-15% on hot loops with predictable branches. |
-| `__builtin_prefetch` with hint types | Explicitly request hardware prefetch with a hint (0=READ, 1=WRITE, 2=NTA). | Can turn a memory-bound loop from bandwidth-limited to compute-bound. |
-| `-fno-math-errno` | Tell the compiler math functions don't set `errno`, so `sqrt`, `sin`, `cos` can be inlined and vectorized. | `sqrt` goes from a library call (20-50 cycles) to a single CPU instruction (3-10 cycles). |
-| `__builtin_assume_aligned` | Tell the compiler a pointer is aligned to a known boundary, enabling SIMD vectorization. | 2-4x on SIMD loops that Clang refuses to vectorize due to alignment uncertainty. |
-| `__int128` for 64-bit multiplication | Multiply two 64-bit numbers and get the full 128-bit result without a library call. | Avoids a function call on every 64-bit multiply. |
-| `std::to_chars` / `std::from_chars` | Integer-to-string and string-to-integer without allocation, without locale, without `sprintf`. | 5-10x faster than `std::to_string` for integer formatting. |
-| `_BitScanForward` / `__builtin_ctz` | Count trailing zeros in one CPU instruction. | 10-100x on bit-twiddling code. |
-| `__builtin_unreachable` in error paths | Mark a code path as impossible when CP3 has *proved* it unreachable, enabling more optimizations. | Removes error-path code from hot paths. |
-| `-ffast-math` (surgical) | Disable IEEE 754 compliance on specific functions, not globally. | 2-10x on numeric kernels. |
-| `__builtin_panic` | Mark a compile-time-proved panic path so the compiler can eliminate it from hot paths. | Improves I-cache usage. |
+| Whole-program escape analysis | Per-function EA gives up the moment a value is passed to a callee or stored in a container - which is most real code. Build the closed-world call graph and propagate does-not-capture summaries interprocedurally, so a whole call tree (`handle()` -> `validate()` -> `parse()`) is proved local at once instead of function by function. Takes EA coverage from leaf locals to entire call trees - the prerequisite that makes every other row in this section fire on real programs. | Planned |
+| Scalar replacement of non-escaping objects | When EA proves an object never escapes, do not just stack-allocate it - dissolve it into independent locals, which LLVM's SROA then promotes to registers. `let p = new Point(1, 2); return p.x + p.y;` compiles to two locals and an add: no allocation, no field loads, no refcount, no object at all. Stack allocation saves the malloc; scalar replacement saves the object. | Planned |
+| Containment analysis (inline local object graphs) | If a container never escapes, its elements never escape either - so store them inline. A local `User[]` of 10k users becomes one contiguous block of `User` structs: 1 allocation instead of 10,001, no 16-byte control blocks, no 8-byte pointer per element, sequential cache-friendly access instead of pointer chasing. This is where per-object overhead goes to zero rather than merely shrinking - the RAM multiplier. | Planned |
+| Escape analysis through `await` (async frame fusion) | EA dies at every `await` today: captured objects escape into the heap promise frame. When the coroutine frame itself is proved non-escaping, fuse the await chain so the async callee's frame inlines into the caller's, and promise captures stay visible to EA. Extends every guarantee in this section to server handler code - the hottest path in the language. Amplifies the `Async without heap` row. | Planned |
+| Escape analysis as a shared oracle | The same never-escapes / never-aliases / single-owner proofs drive the rest of the roadmap for free: thread-confined values get non-atomic refcounts, single-owner values get move semantics, non-escaping objects get `__restrict`/noalias emission so LLVM vectorizes loops it refuses today, known-local arrays get bounds-check elimination, provable lifetimes get `noexcept`. One analysis, many consumers - the multiplier that makes the EA investment pay back several times over. | Planned |
 
-The per-request arena item appears once here; it belongs to the memory-allocation
-workstream and will be evaluated together with object pooling, bump allocation
-and slab allocation.
+#### Allocation, layout and object representation
 
-Additional deduplicated candidates:
+| Optimization | Description | Status |
+| --- | --- | --- |
+| Escape analysis | If an object never leaves a function, put it on the stack instead of `Ref<T>` on the heap. Removes allocation and refcounting. | Planned |
+| Allocation-free by construction | Prove an object's lifetime is bounded by a known scope, then never emit a heap allocation for it. The object becomes a stack local or a register. The hot path has no allocation by design. | Planned |
+| Whole-program stack fusion | When the call graph is a tree (no recursion, no shared functions), emit one function with one stack frame instead of N frames. Per-call overhead drops to zero. | Planned |
+| Compile-time memory map | Compute the exact memory layout of the entire program at compile time and emit a static memory plan. Hot path becomes allocation-free by construction. | Planned |
+| Object-as-bit-pattern | Encode small objects as single integers when all fields are bounded integers. `Point{x: 1, y: 2}` becomes one `uint64_t`. Removes the struct allocation and field loads. | Planned |
+| Value types by default | Borrowed from Swift, Go, C# structs. Small immutable-shaped objects become stack structs, not `Ref<T>`. No allocation, no refcount. | Planned |
+| Arrays of numbers stored flat | Store `number[]` as `std::vector<int32_t>` rather than boxed elements. Cache-friendly layout. | Planned |
+| Struct-of-arrays layout | Store hot fields of `User[]` in separate arrays when they are scanned often. Cache-friendly, vectorizable. | Planned |
+| Hidden-class elimination | Closed-world types become fixed structs, with no dynamic property lookup. No lookup cost. | Planned |
+| Perfect hashing for fixed keys | Objects with known keys become structs, not hash maps. Field access is one load. | Planned |
+| Dictionary of keys-as-enum | Borrowed from Zig comptime. Maps with literal-only keys become indexed arrays or structs. No hashing. | Planned |
+| Field reordering and packing | Sort struct fields by size and pack `bool`s together. Smaller objects, fewer cache misses. | Planned |
+| Field-cache-line packing | Reorder object fields by access frequency so hot fields share a cache line and cold fields are moved elsewhere. Hot-path object access goes from 2 cache lines to 1. | Planned |
+| Typed arrays as raw buffers | Map `Uint8Array` and `Float64Array` to contiguous memory with SIMD-friendly code. Fast numeric and binary work. | Planned |
+| Inline nested layout | Borrowed from Goose, Cap'n Proto. Store an array of strings or objects as one contiguous block, with small strings inline. Fewer cache misses and mallocs. | Planned |
+| Variable-size union layout | Borrowed from Goose. Each tagged-union value takes the size of its own variant. Less memory, denser arrays. | Planned |
+| Narrow in-region links | Borrowed from Goose, Cap'n Proto. Use 1-, 2- or 4-byte offsets between objects in the same region instead of 8-byte pointers. Smaller nodes, better cache use. | Planned |
+| Multiple data stacks | Borrowed from Goose. Assign growable arrays and strings to separate bump stacks, with at most one growing value on top of each. Growth never moves memory; no capacity checks. | Planned |
+| Stable element addresses | Borrowed from Goose. Arrays on bump stacks never move on growth, so cached element pointers stay valid. Removes re-lookups and reserve workarounds. | Planned |
+| Region inference | Borrowed from Goose, MLKit, Cyclone. Infer each allocation's lifetime (scope, caller, request, program) and allocate it in the matching bump region. Allocation is a pointer bump; free is one store. | Planned |
+| Tiered layout choice per allocation site | Borrowed from JVM tiered JIT, adapted ahead of time. Pick stack, region, in-place, copy or heap by a cost model using size and call counts. Best choice per site. | Planned |
+| Per-request arena | In servers, allocate everything for a request from one arena and free it at once. No per-object free. | Planned |
+| Bump allocator for startup data | Allocate program-lifetime data from a bump arena. Faster allocation, no free. | Planned |
+| Slab allocators per type | Allocate same-size objects from fixed pools. Less fragmentation, faster allocation. | Planned |
+| Object pooling | Reuse frequently created and destroyed objects. Skips `malloc` and `free`. | Planned |
+| Fast allocator default | Replace system `malloc` with mimalloc or snmalloc. Faster allocation, less contention. | Planned |
+| Thread-local allocation caches | Borrowed from tcmalloc, mimalloc. Per-thread free lists, no locks. Scales across threads. | Planned |
+| Size-class ref pool with OS return | `RefPoolAllocator` caches up to 2 MB per type per thread and never returns memory to the OS. Replace with size-class pools shared across types under a global byte budget, with idle decay and decommit (`madvise`/`VirtualFree`). | Planned |
+| Small-vector optimization | Keep usually-tiny arrays inline. No heap for small arrays. | Planned |
+| Flat containers | Use flat hash maps and small vectors instead of `std::unordered_map` and `std::vector`. Cache-friendly. | Planned |
+| Huge-page backing | Opt-in 2 MB pages (THP `madvise` on Linux, `MEM_LARGE_PAGES` on Windows) for large flat arrays, typed-array buffers and arena regions; fewer TLB misses on memory-bound loops. | Planned |
+| Allocation-free hot paths | Report allocations inside loops, then hoist or pool them. Predictable latency. | Planned |
+| Static initialization at compile time | Build module-level constants and tables in the compiler, not at startup. Zero startup cost. | Planned |
 
-| Optimization | Borrowed from | What CP3 does internally | Gain |
-| --- | --- | --- | --- |
-| Region inference | Goose, MLKit, Cyclone | Infer each allocation's lifetime (scope, caller, request, program) and allocate it in the matching bump region. | Allocation is a pointer bump; free is one store. |
-| Multiple data stacks | Goose | Assign growable arrays and strings to separate bump stacks, with at most one growing value on top of each. | Growth never moves memory; no capacity checks. |
-| Inline nested layout | Goose, Cap'n Proto | Store an array of strings or objects as one contiguous block, with small strings inline. | Fewer cache misses and mallocs. |
-| Variable-size union layout | Goose | Each tagged-union value takes the size of its own variant. | Less memory, denser arrays. |
-| Narrow in-region links | Goose, Cap'n Proto | Use 1-, 2- or 4-byte offsets between objects in the same region instead of 8-byte pointers. | Smaller nodes, better cache use. |
-| Stable element addresses | Goose | Arrays on bump stacks never move on growth, so cached element pointers stay valid. | Removes re-lookups and reserve workarounds. |
-| RC elision and pairing | Swift OSSA, Lobster | Remove retain/release pairs that cancel inside a function. | Fewer refcount operations. |
-| Deferred / batched release | Nim ORC, Go GC ideas | Collect releases and free them at a safe point, such as end of request. | Smoother latency, cheaper frees. |
-| Cycle detection only where possible | Nim ORC, Python | Run cycle analysis only for types that can form cycles, decided at compile time. | No cycle-collector cost for most types. |
-| Value types by default | Swift, Go, C# structs | Small immutable-shaped objects become stack structs, not `Ref<T>`. | No allocation, no refcount. |
-| Copy-on-write arrays and strings | Swift, PHP | Share the buffer on copy and copy only on first write. | Cheap passing and assignment. |
-| Unique-ownership fast path for COW | Swift | If the refcount is 1, mutate in place with no check. | Fast mutation of owned data. |
-| Rope or builder for string concatenation | Go builder, JVM StringBuilder | Turn `a + b + c` chains and loop appends into one builder with one allocation. | Removes quadratic copying. |
-| Dictionary of keys-as-enum | Zig comptime | Maps with literal-only keys become indexed arrays or structs. | No hashing. |
-| Auto-vectorization help | Mojo, ISPC | Emit loops in a shape clang can vectorize, with alignment and no-alias hints. | 4x to 16x on numeric loops. |
-| Zero-cost-when-unused exceptions | C++ Itanium ABI | Table-based unwinding only for functions that can throw. | No cost on the happy path. |
-| Thread-local allocation caches | tcmalloc, mimalloc | Per-thread free lists, no locks. | Scales across threads. |
-| Share-nothing thread handoff | Goose, Erlang, Go channels | Copy flat values between the loop and pool, no shared mutable state. | No locks, no data races. |
-| Tiered layout choice per allocation site | JVM tiered JIT, adapted ahead of time | Pick stack, region, in-place, copy or heap by a cost model using size and call counts. | Best choice per site. |
-| Specialization on constant arguments | Partial evaluation, LLVM IPSCCP | Clone functions for common constant arguments, such as a fixed format string. | Removes branches. |
-| Fast hash by key type | Swiss tables, Rust hashbrown | Integer keys use cheap hashes, short strings use fast hashes, small maps use linear search. | Faster maps. |
+#### Refcounting and ownership
 
-Rows already represented above are not repeated: in-place construction (return
-value optimization), compile-time ownership inference (ownership/move analysis),
-borrow inference (refcount elision on borrows), non-atomic RC by default,
-last-use destruction (last-use move), string views, symbol interning,
-shape-based objects, whole-program devirtualization, type-based alias hints,
-interval/range analysis, loop fusion, stackless async state machines, promise
-fusion, result-code error paths, slab/size-class allocators, escape-free closure
+| Optimization | Description | Status |
+| --- | --- | --- |
+| Ownership/move analysis | If a value has one owner, emit `std::move` and skip the refcount. Removes atomic increments, a major cost. | Planned |
+| Last-use move | At a variable's final use, emit `std::move`. Removes copies and refcount traffic. | Planned |
+| Non-atomic refcount | Use plain increments when the value is proven to stay on one thread. Removes atomic cost. | Planned |
+| Refcount elision on borrows | Pass an object to a non-storing function as `const T&`. No increment/decrement per call. | Planned |
+| Refcount-in-pointer | Store the refcount in the unused high bits of the 64-bit pointer instead of a separate atomic field. `retain` becomes `++(ptr >> 48)`. Removes the object header and the separate atomic increment. | Planned |
+| Slim refcount header | Replace the 16-byte `std::shared_ptr` control block (two atomic counters) with a single 8-byte count header for types the compiler proves never get a `weak` reference and never cross a thread; weak-capable types keep today's layout. Saves 8-16 bytes and one cache-line touch per object. | Planned |
+| RC elision and pairing | Borrowed from Swift OSSA, Lobster. Remove retain/release pairs that cancel inside a function. Fewer refcount operations. | Planned |
+| Deferred / batched release | Borrowed from Nim ORC, Go GC ideas. Collect releases and free them at a safe point, such as end of request. Smoother latency, cheaper frees. | Planned |
+| Cycle detection only where possible | Borrowed from Nim ORC, Python. Run cycle analysis only for types that can form cycles, decided at compile time. No cycle-collector cost for most types. | Planned |
+| Copy-on-write arrays and strings | Borrowed from Swift, PHP. Share the buffer on copy and copy only on first write. Cheap passing and assignment. | Planned |
+| Unique-ownership fast path for COW | Borrowed from Swift. If the refcount is 1, mutate in place with no check. Fast mutation of owned data. | Planned |
+
+#### Strings, collections, promises and runtime structures
+
+| Optimization | Description | Status |
+| --- | --- | --- |
+| Interned string literals | Share one copy of each literal; equality can become a pointer compare. Faster compares, less memory. | Planned |
+| Zero-copy string interning | Intern computed strings at compile time, not just literals. Runtime strings matching an interned string get a pointer to the interned copy. String allocation drops to near-zero for the common case. | Planned |
+| Rope or builder for string concatenation | Borrowed from Go builder, JVM StringBuilder. Turn `a + b + c` chains and loop appends into one builder with one allocation. Removes quadratic copying. | Planned |
+| Strings as views | Lower `slice`/`substring` to `string_view` when the source outlives the slice. Removes copies. | Planned |
+| Static runtime constant strings | Runtime-produced strings (`typeof` results, error class names, formatting fragments) allocate per call. Emit them as one static allocation per process. | Planned |
+| Map/filter/reduce fusion | Turn `a.map().filter().reduce()` into one loop with no temporary arrays. Removes intermediate allocations. | Planned |
+| Array pre-sizing | Reserve capacity when the final size is known, such as `map` or fixed pushes. No reallocation copies. | Planned |
+| Exact-fit array trim | Capacity slack - up to 2x from geometric growth and the whole remaining span from counted-push reserve - lives for the process lifetime. Reallocate long-lived arrays to exact fit once their growth loop ends or a final size becomes known. | Planned |
+| Single-allocation array object | A cp3 array is `Ref<std::vector<E>>`: control block, 24-byte vector header, then the buffer - two heap blocks before the first element. Fuse count, size, capacity and elements into one allocation so an N-element array is a single block. | Planned |
+| Lazy Map/Set reserve | Every `MapData` eagerly reserves 512 entries at construction (~4-16 KB per empty map, tuned for word-frequency). Start at 8-16 slots with 4x growth while small so the hot case reaches the same bucket count on its first inserts, and let the compiler hoist a reserve when the element count is provable. | Planned |
+| Map key de-duplication | `MapData` stores every key twice - in the dense hash table and in the `vector<optional<K>>` insertion order, with optional padding. Move to 4-byte slot indices or a stable-entry table so a string key is stored once; halves per-entry Map/Set memory. | Planned |
+| Closure-to-lambda inlining | Non-escaping callbacks become templated lambdas, not `std::function`. Inlined, no indirect call. | Planned |
+| Closure context consolidation | A closure capturing N reassigned variables allocates N separate `Cell<T>` boxes, each its own refcounted allocation. Consolidate one closure's cells into a single context object: N allocations and N refcount streams become 1, like a JS-engine context. | Planned |
+| Compact nullish handles | `MaybeRef<T>` is `std::optional<shared_ptr<T>>` (24 bytes). Collapse to a pointer-sized handle with one reserved encoding where cp3 semantics allow, shrinking every optional field, weak read and union slot by 16 bytes. | Planned |
+| Async without heap | If a promise never escapes, keep the state machine on the stack; fuse sequential awaits. Cheaper async. | Planned |
+| `Promise.all` without heap | Use an inline array for fixed-size `Promise.all([a, b, c])`. No allocation. | Planned |
+| Promise state compaction | Every promise boxes its state in a shared allocation and keeps the unhandled-rejection flag in a *separate* `make_shared<bool>`; each `then`/`catch`/`finally` link builds a `std::function<void()>` step. Fold the flag into `PromiseState` and replace the step factories with templated continuations: two heap allocations and one type erasure disappear per chain link. | Planned |
+| Runtime callback de-erasure | The async/parallel core stores callbacks as `std::function` in 32 places (event loop, promise steps, worker channels, emitter, combinators): each is a heap-allocated erased closure invoked indirectly. Move to templated functors or fixed-layout task structs with a small-buffer fast path, removing per-callback allocation and letting hot continuation calls inline. | Planned |
+| Pool task de-erasure | `ThreadPool::enqueue` takes a `std::function<void()>` (a heap-allocated closure) behind one global mutex + condvar. Move to trivially copyable work items on a lock-free queue (or TBB tasks) with per-worker wakeup, removing the per-chunk allocation and the lock convoy under high task rates. | Planned |
+| Flat worker message copy | Structured clone deep-copies per node through `makeRef`: O(nodes) refcounted heap allocations per `postMessage`. Clone into one arena block instead - `memcpy` POD subtrees, build refcounted objects only where the receiving side needs them - making message copy O(1) allocations. | Planned |
+| Zero-copy collection reads | `Map.get` returns `std::optional<V>` by value, copying a string or object per read. Add internal reference/out-parameter read paths - the fused-update `findRef` already proves the pattern - so hot `get` loops never copy the value. | Planned |
+| Lean throw box | `Thrown` type-erases every thrown value into a `shared_ptr<void>` with a lambda deleter (two heap blocks per throw) plus two function pointers (`core/error.hpp`). Since v0.2 only `Error` objects are throwable, lower the box directly to `Ref<Error>` - one allocation, no erasure - and keep the generic path only for the legacy boxed-string coercion. | Planned |
+| Lazy error stack capture | `Error` carries three `std::string` fields and builds the stack string eagerly in its constructor (two virtual `toString` calls). Capture `.stack` on first read and keep `name` as a per-class static string: per-error footprint drops from ~150 B to ~40 B and every throw skips a string build. | Planned |
+
+#### I/O, startup and binary footprint
+
+| Optimization | Description | Status |
+| --- | --- | --- |
+| Zero-copy parsing | Keep HTTP and JSON fields as views into the receive buffer. No string copies. | Planned |
+| Buffer reuse for I/O | Reuse read and write buffers per connection. No allocation per request. | Planned |
+| Lazy subsystem initialization | A console-only program pays event-loop, libuv-handle and pool setup at startup today. Initialize each subsystem (uv loop, thread pool, sodium, regex engine) on first use so a small program's RSS and startup approach a bare C++ `main`. | Planned |
+| Lazy hash seeding | The Map/Set bucket seed runs `sodium_init()` + `randombytes_buf()` at startup in every program that links collections (`src/runtime/src/core/bucket_hash.cpp`). Seed from OS entropy (`BCryptGenRandom`/`getrandom`) or defer to first Map/Set use, so small programs never pay the libsodium init - or link it only for the seed. | Planned |
+| Dead code removal | Remove unused functions, branches and fields across the whole project. Smaller, faster binary. | Planned |
+| Tree shaking across modules | Drop unused exports, classes and methods across the whole program. Smaller binary, better cache use. | Planned |
+| Identical code folding | Merge duplicate functions with `/OPT:ICF` or `--icf=all`. Smaller binary. | Planned |
+| Dead-module elimination | If a module is imported but none of its exports are used, remove the entire module's codegen including runtime TUs (libsodium, libuv, etc.). Binary size drops by the size of unused modules. | Planned |
+| Section GC and unwind stripping | Compile with `-ffunction-sections -fdata-sections`, link with `--gc-sections` - wired in `toolchain.cpp` for every non-debug build (hello-world exe: 1619 KiB -> 512 KiB, together with console-via-C-stdio and lazy timer statics). Remaining: strip unwind tables where the EH design allows. | Partial |
+| Compiler arena and string interning | cp3c itself: allocate AST/sema nodes from per-compile arenas and intern source strings as `string_view` into the loaded buffer; lower peak compiler RSS and allocation traffic on large module graphs. | Planned |
+
+Rows already represented in this section are not repeated in the backlog
+below: in-place construction (Clang's guaranteed elision and NRVO),
+compile-time ownership inference (ownership/move analysis), borrow inference
+(refcount elision on borrows), non-atomic RC by default, last-use destruction
+(last-use move), string views, symbol interning, shape-based objects,
+whole-program devirtualization, type-based alias hints, interval/range
+analysis, loop fusion, stackless async state machines, promise fusion,
+result-code error paths, slab/size-class allocators, escape-free closure
 inlining, profile-guided layout, perfect hashing for known string sets,
 small-collection inline storage, cache-line-aware layout, prefetch insertion,
 debug-only soundness checks, the per-function optimization report and the
 benchmark regression gate.
+
+### Candidate optimization backlog
+
+Everything below is non-memory work: codegen, dispatch, toolchain, networking
+and observability. Memory rows live in the section above.
+
+| Optimization | Description | Status |
+| --- | --- | --- |
+| Integer inference | TypeScript `number` is a double; if the range is provably small, emit `int32_t`. Faster math, vectorizable code. | Planned |
+| Bounds-check elimination | Prove that `for (i = 0; i < arr.length; i++)` needs no check inside the loop. Removes a branch per array access. | Planned |
+| Closed-world devirtualization | Since every class is visible, avoid virtual calls where only one implementation exists. Enables inlining. | Planned |
+| Emit `__restrict`, `const`, `noexcept` | TypeScript objects do not alias like raw pointers, so tell C++ the stronger aliasing and purity contracts. Lets Clang vectorize more. | Planned |
+| Compile-time string switch | Lower `switch` on literals to a length check plus a hash/perfect-hash jump. Removes chains of string compares. | Planned |
+| Monomorphization of generics | Emit one specialized copy per concrete type, with no boxing. Native speed for generic code. | Planned |
+| `for...of` to indexed loop | Lower array iterators to plain pointer loops. Vectorizable code. | Planned |
+| Purity analysis | Mark functions with no side effects, enabling caching, hoisting and reordering. Enables other passes. | Planned |
+| Exception-free fast path | Mark provably non-throwing functions `noexcept`; use result codes internally. Smaller, faster code. | Planned |
+| Cold-path marking | Add `[[unlikely]]` and `[[gnu::cold]]` to error and throw branches. Better branch layout. | Planned |
+| Tail-call and recursion to loop | Turn self-recursive tail calls into loops. No stack growth. | Planned |
+| Inline-caching removal | Remove runtime type checks where types are statically known. No dynamic dispatch. | Planned |
+| Async fusion | Sequential awaits on already-ready values skip the scheduler. Fewer context switches. | Planned |
+| Lookup-table generation | Replace pure computation over a small domain with a precomputed table. Constant-time math. | Planned |
+| Integer-overflow proofs | Prove a value cannot exceed 2^53, then use `int64` instead of `double`. Integer speed. | Planned |
+| SIMD intrinsics for known patterns | Use AVX2/NEON for `indexOf`, `includes`, `sum`, `fill` and `copy` on typed data. 4x to 16x on bulk operations. | Planned |
+| Fast JSON | Compile typed `JSON.parse<T>` and `JSON.stringify` into schema-specific code. Several times faster than generic JSON. | Planned |
+| Compile-time regex | Compile regex literals into a state machine at build time. No regex setup at runtime. | Planned |
+| Compile-time validation | Compile Zod-like schemas into direct field checks. No schema interpretation. | Planned |
+| Compile-time routing | Compile HTTP routes into a trie or perfect hash. Constant-time dispatch. | Planned |
+| Compile-time SQL checks and prepared statements | Parse and prepare literal SQL once, with typed result structs. Less runtime parsing. | Planned |
+| Batched syscalls | Use `writev`, `sendmmsg`, `io_uring` or IOCP batching where supported. Fewer kernel transitions. | Planned |
+| Pipelined DB queries | Use libpq pipeline mode for multiple queries per round trip. Much lower latency. | Planned |
+| Connection and statement caching | Cache prepared statements per connection automatically. Skips repeated planning. | Planned |
+| Compiler flags | Evaluate `-O3`, `-march` per target, `-fno-plt`, `-fvisibility=hidden` and `-fno-semantic-interposition`. Free speed. | Planned |
+| LTO and ThinLTO | Optimize across all object files. 5% to 15% typical gain. | Planned |
+| PGO and BOLT | Profile, then rebuild and relayout using real hot paths: instrumented PGO (`-fprofile-instr-generate`/`-fprofile-instr-use`, flags already wired in `toolchain.cpp`) and sample-based AutoFDO (`-fprofile-sample-use` from perf/ETW production profiles, no instrumented build needed), then BOLT relayout. 10% to 30% typical gain. | Planned |
+| Function multiversioning and runtime ISA dispatch | Release builds compile with `-march=native` (`toolchain.cpp`): fastest on the build machine, but the binary faults on older CPUs and cannot be distributed. Emit hot kernels (string ops, codecs, hashing, bulk loops) in several ISA variants - baseline, AVX2, AVX-512, NEON/SVE - behind one CPUID/HWCAPS-checked dispatch (IFUNC resolvers on ELF, a manual resolver table on Windows COFF), so a single shipped binary runs at native speed on every machine. | Planned |
+| Prefetch hints | Insert prefetch in list and tree traversals. Hides memory latency. | Planned |
+| False-sharing avoidance | Align per-thread data to cache lines. Better multithreaded scaling. | Planned |
+| Thread-local state | Use per-thread caches and counters, merged later. No locks on hot paths. | Planned |
+| Lock-free queues for the offload pool | Use MPSC ring buffers for completions. Lower pool overhead. | Planned |
+| Sanitized debug builds | Run ASan and UBSan in debug mode; strip them in release mode. Catches unsafe analysis bugs. | Planned |
+| Optimization report | `cp3 build --report` lists allocations, refcounts and bounds checks left in each function. Shows where to fix next. | Planned |
+| Benchmark regression gate | Fail CI when a benchmark gets slower. Keeps gains from eroding. | Planned |
+| Compile-time function memoization | Prove purity, then insert a result cache for any pure function called repeatedly with overlapping arguments. `fibonacci(n)` becomes O(n) instead of O(φⁿ). 100x on exponential-recursive functions. | Planned |
+| Method-table elimination | If a class is never subclassed (closed world), remove its method table entirely and emit direct calls. Removes the indirection on every method call. | Planned |
+| `__builtin_assume_aligned` | Tell the compiler a pointer is aligned to a known boundary, enabling SIMD vectorization. 2-4x on SIMD loops that Clang refuses to vectorize due to alignment uncertainty. | Planned |
+| `__int128` for 64-bit multiplication | Multiply two 64-bit numbers and get the full 128-bit result without a library call. Avoids a function call on every 64-bit multiply. | Planned |
+| `std::to_chars` / `std::from_chars` | Integer-to-string and string-to-integer without allocation, without locale, without `sprintf`. 5-10x faster than `std::to_string` for integer formatting. | Planned |
+| `_BitScanForward` / `__builtin_ctz` | Count trailing zeros in one CPU instruction. 10-100x on bit-twiddling code. | Planned |
+| `__builtin_unreachable` in error paths | Mark a code path as impossible when CP3 has *proved* it unreachable, enabling more optimizations. Removes error-path code from hot paths. | Planned |
+| `-ffast-math` (surgical) | Disable IEEE 754 compliance on specific functions, not globally. 2-10x on numeric kernels. | Planned |
+| `__builtin_panic` | Mark a compile-time-proved panic path so the compiler can eliminate it from hot paths. Improves I-cache usage. | Planned |
+| Auto-vectorization help | Borrowed from Mojo, ISPC. Emit loops in a shape clang can vectorize, with alignment and no-alias hints. 4x to 16x on numeric loops. | Planned |
+| Share-nothing thread handoff | Borrowed from Goose, Erlang, Go channels. Copy flat values between the loop and pool, no shared mutable state. No locks, no data races. | Planned |
+| Fast hash by key type | Borrowed from Swiss tables, Rust hashbrown. Integer keys use cheap hashes, short strings use fast hashes, small maps use linear search. Faster maps. | Planned |
+| Fast double formatting | `toString(double)` already uses the `std::to_chars` shortest round-trip path with an `snprintf` fallback (`runtime.cpp`). Verify the fallback never fires on shipped MinGW/Clang toolchains (a missing `to_chars<double>` would make `snprintf` the hot path), evaluate Ryu/Dragonbox if profiling still shows formatting hot, and add format-into-caller-buffer variants so `JSON.stringify`/console appends skip the per-call `std::string` allocation. ECMAScript Number::toString exactness (D9) stays bit-identical. | Planned |
+| Timer scheduling upgrade | The loop's timers are two vectors plus a head index. Replace with an intrusive 4-ary heap or a hierarchical timing wheel: O(1) insert/cancel for the common one-timer-per-connection case (timeouts, keepalives) on high-connection servers. | Planned |
+| Lock-free loop post path | Cross-thread posts to an event loop take a mutex over a `std::deque` and wake with one `uv_async_send` per post. Move to an MPSC lock-free queue with a pending-wakeup flag that coalesces redundant sends. | Planned |
+| Stdout write batching | `println` issues an `fwrite` plus an `fputc` per line. Combine into one buffered write per flush - and one `WriteFile` on Windows consoles, where the per-call cost dominates - keeping byte-identical output order. | Planned |
+| DNS result caching | Cache `getaddrinfo` results per hostname with TTL awareness and resolve off-loop, so repeated `fetch`/`lookup` calls to one host do not re-enter libuv's default 4-thread pool. | Planned |
+| Fetch keep-alive pool | `fetch` is one connection per request with `Connection: close` today and no redirect following. Add a per-host keep-alive connection pool with TLS session resumption (and evaluate safe pipelining), so repeat requests skip connect and handshake entirely. | Planned |
+| Windows accept scaling | On Windows the multi-loop server accepts on loop 0 and hands sockets via `addChildApp`. Evaluate IOCP-native shared-socket accept or per-loop binds to remove the single-acceptor bottleneck at high connection rates. | Planned |
+| Topology-aware thread placement | Detect CPU quota (cgroup, Job Object) and P/E-core topology, then size and pin event loops and pool threads to performance cores - avoiding the oversubscription thrash `hardware_concurrency` alone produces on asymmetric CPUs. | Planned |
+| Async fs offload | `std/fs` reads and writes run through blocking `std::ifstream` on the calling/loop thread. Move async fs onto the libuv pool (`uv_fs`) or Linux io_uring so file work never blocks an event loop, and size that pool with core count instead of the default 4. | Planned |
+| Builtins-based checked arithmetic | Native-integer overflow checks are hand-rolled bound comparisons (`checked.hpp`). Lower `+ - *` to `__builtin_{add,sub,mul}_overflow` (one `jo` branch per op), keep division-by-zero and `INT_MIN / -1` traps, and preformat the cold trap messages instead of concatenating strings at the throw site. | Planned |
+| SIMD buffer codecs | `std/buffer` hex and base64 encode/decode are scalar byte-at-a-time loops over `std::string` storage. Move to word-parallel or SIMD codecs (simdutf ships base64; SSSE3/AVX2 table lookups for hex) for 5-10x on bulk conversions, with the byte-exact RFC 4648 output unchanged. | Planned |
+| Emitter dispatch table | `EventEmitter` keeps listeners in a node-based `std::map<std::string, ...>`: every `emit` is a tree walk with string compares. Replace with a flat hash map, or a compile-time event-id-indexed array where the event set is statically known, so per-emit dispatch is one index load. | Planned |
+| Emit snapshot elision | Every `emit` copies the whole listener vector - one atomic refcount bump per listener per emit - to honor Node's clone-then-iterate rule (`emitter.hpp`). Iterate in place under a mutation-counter guard and fall back to the copy only when a listener adds/removes during the emit; removes the per-emit allocation and atomics from per-request server events. | Planned |
+| Parallel TU compilation | `cp3c build` compiles translation units in a serial loop (entry unit, each runtime TU, each extra module, each package impl). The units are independent; compile them on a `-j` worker pool so a full rebuild scales with cores. The incremental content-hash cache already minimizes which TUs compile at all. | Planned |
+| Route matcher preparation | The server dispatcher walks every route per request, re-splits each pattern on `/` during the match, copies each `Route` (handler refcount included) as it walks, and allocates a fresh params `Map` per parameterized match. Pre-split patterns at registration, index routes by method, hash-dispatch literal routes before the ordered wildcard/param walk, iterate without the per-route copy (registration-during-dispatch guard instead), and keep the params map lazy - the runtime half of the compile-time-routing row. | Planned |
+
+### Library potential audit (vendored but underused)
+
+Every vendored library was checked against how `src/` actually uses it. The
+rows below are configuration fixes, unwired code paths, and backend swaps;
+all are internal, and none changes a user-visible API.
+
+| Library | Current state (evidence) | Untapped potential | Status |
+| --- | --- | --- | --- |
+| oneTBB | Vendored (`vendor/third_party/oneTBB`) but never linked: `parallel.*` runs on a hand-rolled fixed `std::thread` pool (`src/runtime/src/parallel/parallel.cpp`) because the spec banned third-party libraries there ("spec names TBB; no third-party libraries are allowed here"). | Work-stealing scheduler that balances uneven chunk costs, `parallel_for`/`parallel_reduce`/`parallel_pipeline`, `task_group` for async fanout, `enumerable_thread_specific` accumulators, `tbb::info` topology detection, `scalable_allocator`. Lifting the ban is an internal decision; the `parallel.*` user surface does not move. | Planned |
+| simdjson | Vendored; zero references in `src/`. JSON parsing is hand-rolled, with fast_float for numbers. | 2-3 GB/s stage-1 parsing behind `JSON.parse`/`parseFile`, ondemand typed parsing matched to `JSON.parse<T>` record shapes, and UTF-8 validation folded into the parse instead of a separate pass. | Planned |
+| moodycamel | Vendored; zero references in `src/`. Worker-channel mailboxes (`cp3/parallel/worker_channel.hpp`) and the event loop's incoming queue are `std::deque` + `std::mutex`. | Lock-free MPSC/MPMC queues for channel mailboxes, loop post paths, parallel-pool work distribution and completions - an order of magnitude cheaper per operation at high message rates. | Planned |
+| PCRE2 | Used for RegExp, but `pcre2_jit_compile` is never called, and a fresh `pcre2_match_data` is created and freed on every match (`src/runtime/src/core/regex.cpp`). | JIT compilation (3-10x match throughput on typical patterns), match data cached per compiled engine, match-limit tuning, anchored-start optimizations. Pure internal fixes. | Planned |
+| libuv | Drives loops, TCP/UDP, fs events and DNS, but fs reads/writes bypass `uv_fs` (blocking `std::ifstream` in `src/std/fs/runtime.cpp`), `UV_THREADPOOL_SIZE` is never raised from the default 4, and UDP receive never batches. | uv_fs offload for async file work, threadpool sized to cores for DNS/fs-heavy servers, batched UDP receive paths, and a loop-configuration audit (signal masking, no busy polling). | Planned |
+| uWebSockets | Serves HTTP/WS on the shared loop, compiled with `-DUWS_NO_ZLIB` (`src/std/network/runtime/runtime.cpp`): permessage-deflate is disabled. | A deliberate decision either way: vendor zlib-ng and enable WS compression plus HTTP gzip middleware, or keep NO_ZLIB as an explicit binary-size choice. Also audit uWS backpressure/`maxPayload` defaults and SSL context reuse. | Planned |
+| simdutf | Used only by `std/text` (TextEncoder/TextDecoder). | UTF-8 validation on JSON/network/fs ingest paths, `charAt`/`codePointAt`/length walking in `std/string`, UTF-8 to UTF-16 for Windows console/API calls, validated concatenation. | Planned |
+| unordered_dense | Backs Map/Set values, but every map reserves 512 entries at construction and duplicates keys into an order vector. | Heterogeneous lookup (`is_transparent`) so `string_view` probes never build a temporary `std::string`, a tuned growth policy for the lazy-reserve change, and pairing with the Map key de-duplication row. | Planned |
+| fast_float | Used for number parsing in std/json, env and url. | The global `parseInt`/`parseFloat`/`Number(x)` conversions (`src/runtime/src/core/runtime.cpp`) are a hand-rolled scalar path; route them through fast_float with the ECMAScript grammar adaptations. | Planned |
+| xxhash | Vendored for bucket hashing. | XXH3 with a per-process secret for all internal hashing (package content hashes, compiler symbol interning, string dedup) and streaming XXH for the `std/hash` checksum family where it is faster than the current backend. | Planned |
+| openssl | TLS for std/network. | Audit: shard `SSL_CTX`/session caches per worker loop so multicore handshakes do not contend on one cache, TLS 1.3 resumption/0-RTT defaults, and confirm the vendored build enables the AES-NI/GCM assembly paths. | Planned |
+| libsodium | Crypto primitives plus the per-process hash seed. | Lazy `sodium_init` behind first crypto/hash use (part of lazy subsystem initialization); placement is otherwise correct per the hash placement rule. | Planned |
+
+New-vendor candidates (each must pay for itself in the benchmark gate before
+it is adopted): zlib-ng (WS/HTTP compression), Ryu or Dragonbox (double
+formatting), mimalloc or snmalloc (default allocator - see the fast-allocator
+row), liburing (Linux syscall batching - see the batched-syscalls row).
