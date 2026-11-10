@@ -408,9 +408,12 @@ namespace {
 bool thisFieldNameOut(const Expr* expr, std::string& out) {
     if (expr == nullptr || expr->kind != NodeKind::MemberExpr) return false;
     const auto& me = static_cast<const MemberExpr&>(*expr);
-    if (me.object == nullptr || me.object->kind != NodeKind::Identifier) return false;
-    const auto& base = static_cast<const Identifier&>(*me.object);
-    if (base.name != "this") return false;
+    if (me.object == nullptr) return false;
+    if (me.object->kind != NodeKind::ThisExpr &&
+        !(me.object->kind == NodeKind::Identifier &&
+          static_cast<const Identifier&>(*me.object).name == "this")) {
+        return false;
+    }
     out = me.property;
     return !out.empty();
 }
