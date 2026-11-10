@@ -6,8 +6,9 @@
 // Definitions live in src/cli/src/pkg/github.cpp (STYLE.md §3/§8: headers
 // declare, `.cpp` defines). Beta one supports public GitHub repository release
 // assets only; the system HTTP client (curl.exe on Windows, curl on POSIX) does
-// the transfer. CP3_GITHUB_API_URL overrides the API base for tests, and
-// CP3_GITHUB_TOKEN adds an Authorization header to API requests only.
+// the transfer. CP3_GITHUB_API_URL overrides the API base for tests. API
+// requests are authorized with the first of CP3_GITHUB_TOKEN, GH_TOKEN,
+// GITHUB_TOKEN, or the GitHub CLI's stored credential (`gh auth token`).
 // =============================================================================
 #pragma once
 

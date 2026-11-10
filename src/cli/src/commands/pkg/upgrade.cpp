@@ -167,10 +167,15 @@ int cmdUpgrade(const CliOptions& opt) {
     GithubRelease release;
     if (!fetchLatestGithubRelease(repo, release, err)) {
         std::fprintf(stderr,
-                     "cp3c: could not check for updates: %s "
-                     "(unauthenticated GitHub API is rate-limited; set "
-                     "CP3_GITHUB_TOKEN for a higher limit)\n",
+                     "cp3c: could not check for updates: %s\n",
                      err.c_str());
+        if (err.find("rate limit") != std::string::npos) {
+            std::fprintf(stderr,
+                         "cp3c: GitHub's unauthenticated API is limited to 60 "
+                         "requests/hour; run `gh auth login` to authenticate "
+                         "(cp3 reuses the GitHub CLI's credential), or set "
+                         "CP3_GITHUB_TOKEN\n");
+        }
         return kExitCompileError;
     }
     const std::string current = kVersion;

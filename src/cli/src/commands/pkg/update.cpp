@@ -118,6 +118,13 @@ int cmdUpdate(const CliOptions& opt) {
                          "cp3c: warning: could not check %s: %s; leaving it "
                          "alone\n",
                          entry.name.c_str(), err.c_str());
+            if (err.find("rate limit") != std::string::npos) {
+                std::fprintf(stderr,
+                             "cp3c: GitHub's unauthenticated API is limited "
+                             "to 60 requests/hour; run `gh auth login` to "
+                             "authenticate (cp3 reuses the GitHub CLI's "
+                             "credential), or set CP3_GITHUB_TOKEN\n");
+            }
             report.status = "skipped";
             report.to = report.from;
             reports.push_back(report);

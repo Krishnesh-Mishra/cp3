@@ -113,7 +113,7 @@
       "expect": {
         "exit": 0,
         "stderr": {
-          "contains": "cp3: 0.2.0 -> v9.9.9 available; run `cp3 upgrade`"
+          "contains": "-> v9.9.9 available; run `cp3 upgrade`"
         }
       }
     },

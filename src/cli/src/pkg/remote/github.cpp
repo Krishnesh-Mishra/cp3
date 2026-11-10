@@ -54,6 +54,55 @@ std::string tempJsonPath() {
         .string();
 }
 
+// The API requests authenticate with the first of: CP3_GITHUB_TOKEN,
+// GH_TOKEN, GITHUB_TOKEN, or the GitHub CLI's stored credential (asking `gh
+// auth token`; cp3 never reads gh's config files itself). The token is
+// validated strictly - a single line of token characters - so a failing
+// helper's error text can never be sent as a credential.
+bool looksLikeGithubToken(const std::string& text) {
+    if (text.size() < 10 || text.size() > 255) return false;
+    for (const char c : text) {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                        (c >= '0' && c <= '9') || c == '_' || c == '-' ||
+                        c == '.';
+        if (!ok) return false;
+    }
+    return true;
+}
+
+std::string trimEdgeSpace(std::string text) {
+    const auto trimEnd = [](std::string& s) {
+        while (!s.empty() &&
+               (s.back() == '\n' || s.back() == '\r' || s.back() == ' ' ||
+                s.back() == '\t')) {
+            s.pop_back();
+        }
+    };
+    trimEnd(text);
+    std::size_t begin = 0;
+    while (begin < text.size() &&
+           (text[begin] == ' ' || text[begin] == '\t' ||
+            text[begin] == '\n' || text[begin] == '\r')) {
+        ++begin;
+    }
+    return text.substr(begin);
+}
+
+std::string githubCredential() {
+    for (const char* name : {"CP3_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}) {
+        const char* raw = std::getenv(name);
+        if (raw == nullptr) continue;
+        const std::string token = trimEdgeSpace(raw);
+        if (!token.empty()) return token;
+    }
+    std::string captured;
+    if (runProcessCapture({"gh", "auth", "token"}, captured) == 0) {
+        const std::string token = trimEdgeSpace(captured);
+        if (looksLikeGithubToken(token)) return token;
+    }
+    return {};
+}
+
 bool findCurl(std::string& curl, std::string& err) {
     if (findExecutable("curl", curl)) return true;
     err =
@@ -164,9 +213,9 @@ bool downloadApiJson(const std::string& url, const std::string& dest,
     args.push_back(dest);
     appendHeader(args, "Accept: application/vnd.github+json");
     appendHeader(args, "User-Agent: cp3c");
-    const char* token = std::getenv("CP3_GITHUB_TOKEN");
-    if (token != nullptr && token[0] != '\0') {
-        appendHeader(args, std::string("Authorization: Bearer ") + token);
+    const std::string token = githubCredential();
+    if (!token.empty()) {
+        appendHeader(args, "Authorization: Bearer " + token);
     }
     return runCurl(args, url, false, err);
 }
