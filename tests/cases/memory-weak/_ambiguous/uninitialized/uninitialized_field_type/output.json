@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: is a class field declared without an initializer `undefined` at runtime, or default-constructed? Not specified."
-  }
-}
+﻿{"mode": "check", "error": {"code": "CP3709"}}

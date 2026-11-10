@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: When `_prelude.cp3` (strong) and `_prelude.weak.cp3` sit in the same folder, the spec fixes injection order (same, then strong, then weak) but does not pin the observable effect when both inject conflicting/different imports."
-  }
-}
+﻿{"mode": "run", "stdout": "stacked preludes\n", "exitCode": 0}

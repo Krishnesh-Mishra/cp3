@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: Is `export default function name(...)` a valid default-export form, or must the default be an expression/object (`export default { add }`) as the spec's examples show?"
-  }
-}
+﻿{"mode": "check"}

@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: how an unfilled array slot worth `null`/`undefined` is created (sparse->dense); `new Array(n)` / hole syntax is not specified"
-  }
-}
+﻿{"mode": "check"}

@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: the non-fatal cycle warning is pinned, but its exact wording/severity formatting is not."
-  }
-}
+﻿{"mode": "check", "error": {"code": "CP3401", "contains": "weak edge"}}

@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: does a `return` inside `finally` override the try/catch return (JS semantics)? Not stated."
-  }
-}
+﻿{"mode": "run", "stdout": "1\n", "exitCode": 0}

@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: Is `type X = ...` a real language keyword? It appears only in the STDLIB pseudo-declarations, never in the core language spec's syntax."
-  }
-}
+﻿{"mode": "check"}

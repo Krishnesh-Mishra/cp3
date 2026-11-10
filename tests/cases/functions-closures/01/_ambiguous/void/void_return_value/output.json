@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: May a `void`-returning function `return` a value? The spec does not state whether this is an error."
-  }
-}
+﻿{"mode": "check", "error": {"code": "CP3420"}}

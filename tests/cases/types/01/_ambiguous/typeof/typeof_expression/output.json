@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: Is typeof allowed on an arbitrary expression, or only on a variable as the spec's wording ('typeof on an ordinary single-type variable') implies?"
-  }
-}
+﻿{"mode": "run", "stdout": "number\n", "exitCode": 0}

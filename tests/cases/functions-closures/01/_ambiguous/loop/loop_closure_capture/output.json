@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: Does a closure capturing a `for (let i ...)` loop variable get a fresh binding per iteration (JS: 0,1,2) or one shared cell for the whole loop (3,3,3)? Spec says let is block-scoped like JS, but the closure-capture rule says any captured reassignable let is a single shared cell."
-  }
-}
+﻿{"mode": "run", "stdout": "", "exitCode": 0}

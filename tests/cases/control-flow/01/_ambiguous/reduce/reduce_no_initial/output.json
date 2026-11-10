@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: `reduce` with no initial accumulator value is not specified"
-  }
-}
+﻿{"mode": "run", "stdout": "6\n", "exitCode": 0}

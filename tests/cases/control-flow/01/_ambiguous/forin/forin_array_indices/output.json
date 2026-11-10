@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: `for...in` target set/index type: section 6 shows `for (let key in object)` over keys/indices while section 8 bans `for...in` on plain objects/class instances; whether array indices are numbers or strings is unspecified"
-  }
-}
+﻿{"mode": "run", "stdout": "0\n1\n2\n", "exitCode": 0}

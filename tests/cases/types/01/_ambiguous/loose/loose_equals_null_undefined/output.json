@@ -1,6 +1,1 @@
-{
-  "mode": "check",
-  "error": {
-    "contains": "AMBIGUOUS: Does loose == coerce null and undefined to equal (JS gives true), or does cp3's '==' only match when the stored variant alternative is the same (giving false)?"
-  }
-}
+﻿{"mode": "run", "stdout": "false\n", "exitCode": 0}
