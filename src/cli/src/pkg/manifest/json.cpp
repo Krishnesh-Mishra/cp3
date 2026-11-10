@@ -318,8 +318,21 @@ const JsonValue* JsonValue::arrayField(std::string_view key) const noexcept {
 }
 
 bool JsonValue::parse(std::string_view text, JsonValue& out, std::string& err) {
+    // Strip a leading UTF-8 BOM when present. Many editors and tools emit one,
+    // and package.json/.cp3pak manifests are commonly hand-touched; the parse
+    // should not fail at offset 0 on a file a text editor wrote. The offset
+    // bookkeeping stays in original bytes by starting the cursor after the
+    // BOM rather than shortening the buffer.
+    std::size_t bom = 0;
+    if (text.size() >= 3 &&
+        static_cast<unsigned char>(text[0]) == 0xEF &&
+        static_cast<unsigned char>(text[1]) == 0xBB &&
+        static_cast<unsigned char>(text[2]) == 0xBF) {
+        bom = 3;
+    }
     Parser parser;
     parser.text = text;
+    parser.pos = bom;
     JsonValue value;
     if (!parser.parseValue(value, 0)) {
         err = parser.err.empty() ? "invalid JSON" : parser.err;

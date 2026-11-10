@@ -484,11 +484,21 @@ Type Analyzer::inferAs(AsExpr& a) {
                                    operand.literalBaseType().isNumber());
     const bool targetIsNumeric = target.isNumber() || isNativeType(target);
     const bool numericPair = operandIsNumeric && targetIsNumeric;
-    if (!operandIsClass && !targetIsClass && !numericPair &&
+    // An empty array literal is coercible to any array/tuple target (the `[]`
+    // in `[] as string[]`). Only the literal shape is granted this: a value
+    // of unknown[] is not automatically an arbitrary T[].
+    const bool operandIsEmptyArrayLiteral =
+        a.expression && a.expression->kind == NodeKind::ArrayLiteral &&
+        static_cast<const ArrayLiteral&>(*a.expression).elements.empty();
+    const bool targetIsArrayOrTuple =
+        target.kind == TypeKind::Array || isTupleType(target);
+    const bool emptyArrayCast =
+        operandIsEmptyArrayLiteral && targetIsArrayOrTuple;
+    if (!operandIsClass && !targetIsClass && !numericPair && !emptyArrayCast &&
         !isAmbientType(operand) && !isAmbientType(target)) {
         report(diagcode::kTypeMismatch, a.span,
-               "type mismatch: '" + operand.name +
-                   "' cannot be asserted as '" + target.name +
+               "type mismatch: '" + pretty(operand) +
+                   "' cannot be asserted as '" + pretty(target) +
                    "' (unrelated types)");
     }
     return withType(a, target);
