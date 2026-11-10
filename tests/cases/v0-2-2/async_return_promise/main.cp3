@@ -1,0 +1,8 @@
+﻿import console from "std/console";
+class C { n: number; constructor() { this.n = 42; } }
+async function f(): Promise<C> {
+  const parts = Promise.withResolvers<C>();
+  parts.resolve(new C());
+  return parts.promise;
+}
+f().then((c: C) => { console.log(c.n); });

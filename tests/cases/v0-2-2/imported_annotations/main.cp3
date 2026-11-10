@@ -1,0 +1,12 @@
+﻿import console from "std/console";
+import { Map, Queue } from "std/collections";
+class C {
+  m: Map<string, number> | undefined;
+  q: Queue<number> | undefined;
+  constructor() {
+    this.m = undefined;
+    this.q = undefined;
+  }
+}
+const c = new C();
+console.log(typeof c.m, typeof c.q);

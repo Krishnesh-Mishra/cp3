@@ -1,0 +1,2 @@
+﻿const a = [] as string[];
+const b: string[] = a;

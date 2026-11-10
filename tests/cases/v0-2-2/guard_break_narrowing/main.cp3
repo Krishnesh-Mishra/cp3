@@ -1,0 +1,10 @@
+﻿import console from "std/console";
+function f(items: (string | undefined)[]): number {
+  let n = 0;
+  for (const it of items) {
+    if (it === undefined) break;
+    n = n + it.length;
+  }
+  return n;
+}
+console.log(f(["ab", "cde"]));

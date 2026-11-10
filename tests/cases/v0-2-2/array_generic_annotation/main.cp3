@@ -1,0 +1,4 @@
+﻿import console from "std/console";
+const a: Array<string> = ["x", "y"];
+const b: Array<number | null> = [1, null, 3];
+console.log(a.length, b.length);

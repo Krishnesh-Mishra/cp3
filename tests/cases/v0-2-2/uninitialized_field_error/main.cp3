@@ -1,0 +1,4 @@
+class C {
+  f: number;
+}
+const c = new C();

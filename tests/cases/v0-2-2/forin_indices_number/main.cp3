@@ -1,0 +1,4 @@
+import console from "std/console";
+for (const i in [10, 20, 30]) {
+  console.log(typeof i);
+}

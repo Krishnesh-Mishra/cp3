@@ -1,0 +1,11 @@
+import console from "std/console";
+class Box<T> {
+  v: T | undefined;
+  constructor() { this.v = undefined; }
+}
+const b = new Box();
+if (b.v === undefined) {
+  console.log("undef");
+} else {
+  console.log("set");
+}

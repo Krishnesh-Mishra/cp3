@@ -1,0 +1,12 @@
+﻿import console from "std/console";
+export interface Opts { url?: string }
+export type Pair<T, U> = { first: T; second: U };
+export class Box<T> {
+  v: T | undefined;
+  constructor() { this.v = undefined; }
+}
+function first(p: Pair<string, number>): string { return p.first; }
+const b: Box<number> = new Box<number>();
+const o: Opts = { url: "x" };
+console.log(first({ first: "a", second: 2 }));
+console.log(o.url === undefined ? "missing" : "present");
