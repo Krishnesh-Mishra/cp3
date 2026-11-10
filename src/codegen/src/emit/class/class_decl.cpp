@@ -261,6 +261,29 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
         }
         emitClassMember(cm, m, out, indent + 1, defs);
     }
+    // A static block of a non-generic class is run from a namespace-scope
+    // anchor emitted after the class closes (private access needs a member
+    // function). Emitted here, public regardless of the current section.
+    const bool blockAnchored = cm.typeParams.empty() && !cm.local &&
+                              std::any_of(cm.members.begin(), cm.members.end(),
+                                          [](const ClassMemberModel& m) {
+                                              return m.staticBlock != nullptr;
+                                          });
+    if (blockAnchored && current != 0) {
+        line(out, indent + 1, "public:");
+        current = 0;
+    }
+    if (blockAnchored) {
+        for (const ClassMemberModel& m : cm.members) {
+            if (m.staticBlock == nullptr) continue;
+            const StaticBlock& sb = *m.staticBlock;
+            const std::string name =
+                "cp3_static_block_" + std::to_string(sb.nodeId);
+            line(out, indent + 1, "static void " + name + "() {");
+            out += staticBlockBodyText(cm, sb, indent + 2);
+            line(out, indent + 1, "}");
+        }
+    }
     // The `cp3ToText()` pair makes a class instance formattable: its own
     // `toString` when it defines one, the JS default "[object Object]"
     // otherwise.
@@ -271,6 +294,25 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
     line(out, indent + 1, render);
     line(out, indent, "};");
     line(out, indent, "");
+    // Namespace-scope dynamic initialization is merged into the module
+    // initializer, which the linker keeps: the anchor runs the block before
+    // main, in class declaration order. (`--gc-sections` dropped the
+    // class-scope inline-static anchor's initializer entry on the MinGW/lld
+    // target.)
+    if (blockAnchored) {
+        for (const ClassMemberModel& m : cm.members) {
+            if (m.staticBlock == nullptr) continue;
+            const StaticBlock& sb = *m.staticBlock;
+            const std::string name =
+                "cp3_static_block_" + std::to_string(sb.nodeId);
+            line(out, indent, "namespace {");
+            line(out, indent + 1, "[[maybe_unused]] static bool " + name +
+                                      " = (::" + namesp_ + "::" + cm.structName +
+                                      "::" + name + "(), true);");
+            line(out, indent, "}  // namespace");
+        }
+        line(out, indent, "");
+    }
     if (cm.local && !cm.namespaceScope) return;
     // A generic class's formatter is a template over its own type parameters,
     // so a `Ref<Box<T>>` formats through the class's `toString` (spec §15).
@@ -290,6 +332,23 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
     }
 }
 
+std::string Generator::staticBlockBodyText(const ClassModel& cm,
+                                           const StaticBlock& sb,
+                                           int bodyIndent) {
+    const std::string savedReturn = currentReturn_;
+    currentReturn_ = "void";
+    ++nestingDepth_;
+    classStack_.push_back(&cm);
+    pushScope();
+    std::string body;
+    if (sb.body) stmt(*sb.body, body, bodyIndent);
+    popScope();
+    classStack_.pop_back();
+    --nestingDepth_;
+    currentReturn_ = savedReturn;
+    return body;
+}
+
 void Generator::emitClassMember(const ClassModel& cm,
                                 const ClassMemberModel& m, std::string& out,
                                 int indent, std::string* defs) {
@@ -297,21 +356,19 @@ void Generator::emitClassMember(const ClassModel& cm,
         const StaticBlock& sb = *m.staticBlock;
         const std::string name =
             "cp3_static_block_" + std::to_string(sb.nodeId);
+        // A non-generic class's block is emitted by emitClassStruct as a
+        // generated public static member function and run from a
+        // namespace-scope anchor: an inline class-scope static's
+        // initializer entry is dropped by the MinGW/lld GC pass, and the
+        // module initializer is not. Local classes keep the class-member
+        // anchor (they are emitted mid-function, where a namespace-scope
+        // anchor cannot live).
+        if (cm.typeParams.empty() && !cm.local) return;
         // `inline static` initializers are never odr-used by user code, so an
         // empty-body DCE build would drop the lambda and its side effects.
         // The attribute tells the linker to keep the section.
         line(out, indent, "inline __attribute__((used)) static bool " + name + " = []() {");
-        const std::string savedReturn = currentReturn_;
-        currentReturn_ = "void";
-        ++nestingDepth_;
-        classStack_.push_back(&cm);
-        pushScope();
-        std::string body;
-        if (sb.body) stmt(*sb.body, body, indent + 1);
-        popScope();
-        classStack_.pop_back();
-        --nestingDepth_;
-        currentReturn_ = savedReturn;
+        std::string body = staticBlockBodyText(cm, sb, indent + 1);
         out += body;
         line(out, indent + 1, "return true;");
         line(out, indent, "}();");

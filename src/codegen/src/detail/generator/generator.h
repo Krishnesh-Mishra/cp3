@@ -192,6 +192,11 @@ private:
                          std::string* defs);
     void emitClassMember(const ClassModel& cm, const ClassMemberModel& m,
                          std::string& out, int indent, std::string* defs);
+    // The statements of a `static { ... }` block, emitted as the body of a
+    // generated function (shared by the class-member anchor and the
+    // namespace-scope anchor used for non-generic classes).
+    std::string staticBlockBodyText(const ClassModel& cm, const StaticBlock& sb,
+                                    int bodyIndent);
     void emitClassMethodMember(const ClassModel& cm, const ClassMemberModel& m,
                                 std::string& out, int indent, std::string* defs);
     void emitClassAccessorMember(const ClassModel& cm,
