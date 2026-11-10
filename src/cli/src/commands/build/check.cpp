@@ -31,6 +31,8 @@
 #include "detail/toolchain/pipeline.hpp"
 #include "detail/core/util.hpp"
 #include "detail/core/worker_module.hpp"
+#include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/core/ast.hpp"
 
 namespace cp3::cli {
 
@@ -77,6 +79,20 @@ int cmdCheck(const CliOptions& opt) {
     if (entry != nullptr && entry->ast) {
         analyzeProgram(*entry->ast, sema, sink, effective.compile);
     }
+    // A `type: package` entry module with no exports fails only at pack time
+    // (the packer reports CP3604 for the missing contract after the fact).
+    // Surface it at check time so an author sees it on every save. The warning
+    // is emitted with the rest of the diagnostics below, through the same
+    // render path.
+    const bool isPackageProjectEntry =
+        entry != nullptr && entry->ast && isPackageProject(findProjectRoot(fs::path(opt.file)));
+    const bool packageEntryExports = [&]() {
+        if (!isPackageProjectEntry) return true;
+        for (const StmtPtr& s : entry->ast->body) {
+            if (s && s->kind == NodeKind::ExportDeclaration) return true;
+        }
+        return false;
+    }();
     if (opt.reportCycle) {
         // Cycle decision summary (automatic cycle handling, Stages 0-1):
         //   * cycleCapableClasses - classes that can reach themselves through
@@ -151,6 +167,16 @@ int cmdCheck(const CliOptions& opt) {
     }
 
     const RenderOptions ro = makeRenderOptions(effective, file->path);
+    if (isPackageProjectEntry && !packageEntryExports) {
+        Diagnostic d(diagcode::kPackageNoExports, Severity::Warning,
+                     entry->ast->span,
+                     "package entry module exports nothing: the package "
+                     "produces no public surface. Add an exported "
+                     "function/class/type or set 'type': 'application'.");
+        CollectingDiagnosticSink packageSink;
+        packageSink.report(std::move(d));
+        renderDiagnostics(packageSink.diagnostics(), ro, stderr);
+    }
     renderDiagnostics(sink.diagnostics(), ro, stderr);
     if (sink.hasErrors()) {
         return kExitCompileError;

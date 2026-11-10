@@ -21,16 +21,14 @@ using namespace detail;
 
 namespace {
 
-// `maybe <op> nullish` for a Shape::Maybe operand: strict `===` requires the
-// flavor to match, loose `==` treats both nullish flavors as equal (JS).
+// `maybe <op> nullish` for a Shape::Maybe operand. CP3 (v0.2.2): the empty
+// slot's flavor is part of the comparison -- `maybe == undefined` is true only
+// when the slot holds undefined, `maybe == null` only when it holds null. JS
+// coercion of the two flavors does not exist here.
 std::string maybeNullishCompare(const std::string& mb, Shape nullish,
                                 bool isEqual, bool isStrict) {
-    std::string cond;
-    if (isStrict) {
-        cond = mb + ((nullish == Shape::Null) ? ".isNull()" : ".isUndefined()");
-    } else {
-        cond = mb + ".isNullish()";
-    }
+    (void)isStrict;
+    const std::string cond = mb + ((nullish == Shape::Null) ? ".isNull()" : ".isUndefined()");
     return isEqual ? "(" + cond + ")" : "(! " + cond + ")";
 }
 
@@ -102,28 +100,25 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
     const bool lNullish = (L.shape == Shape::Null || L.shape == Shape::Undefined);
     const bool rNullish = (R.shape == Shape::Null || R.shape == Shape::Undefined);
 
-    // null == undefined is true (loose); === is false. Both are nullish.
+    // Two bare nullish literals (null/null, null/undefined, undefined/undefined):
+    // the JS rule coerces null == undefined to true; cp3 matches only the
+    // same flavor (spec 04 / v0.2.2).
     if (lNullish && rNullish) {
         const bool sameKind = (L.shape == R.shape);
-        if (isStrict) {
-            return sameKind ? (isEqual ? "true" : "false") : (isEqual ? "false" : "true");
-        }
-        return isEqual ? "true" : "false";
+        if (isEqual) return sameKind ? "true" : "false";
+        return sameKind ? "false" : "true";
     }
 
-    // optional <-> nullish: an optional only ever holds a value or nothing.
-    // Strict `===` only matches when the empty slot's flavor agrees.
+    // optional <-> nullish: an optional matches a nullish target only when the
+    // flavor stored in its empty slot agrees; otherwise it does not match the
+    // nullish term at all.
     if (L.shape == Shape::Optional && rNullish) {
-        if (isStrict && !optionalEmptyMatches(L.emptyKind, R.shape)) {
-            return isEqual ? "false" : "true";
-        }
-        return isEqual ? "(! " + lhs + ".has_value())" : "(" + lhs + ".has_value())";
+        const bool emptyOk = optionalEmptyMatches(L.emptyKind, R.shape);
+        return (emptyOk == isEqual) ? "(! " + lhs + ".has_value())" : "(" + lhs + ".has_value())";
     }
     if (R.shape == Shape::Optional && lNullish) {
-        if (isStrict && !optionalEmptyMatches(R.emptyKind, L.shape)) {
-            return isEqual ? "false" : "true";
-        }
-        return isEqual ? "(! " + rhs + ".has_value())" : "(" + rhs + ".has_value())";
+        const bool emptyOk = optionalEmptyMatches(R.emptyKind, L.shape);
+        return (emptyOk == isEqual) ? "(! " + rhs + ".has_value())" : "(" + rhs + ".has_value())";
     }
 
     // Maybe (three-way nullable) <-> nullish: the flavor is stored, so strict

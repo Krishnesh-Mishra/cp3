@@ -285,9 +285,14 @@ Type Analyzer::inferUserConstruct(Identifier& id, Binding& b, NewExpr& n) {
         return withType(n, Type::named(TypeKind::Class, id.name));
     }
     // D25: a generic class needs explicit type arguments at `new`
-    // (`new Box<number>()`); the count must match the declaration's.
-    if (!ci->typeParamNames.empty() &&
-        instArgs.size() != ci->typeParamNames.size()) {
+    // (`new Box<number>()`), but a class whose type parameters carry no
+    // default and receive no explicit argument defaults them to `undefined`
+    // instead of failing (the resolved ambiguity for `new Box()`). CP3418
+    // survives for excess arguments only.
+    while (instArgs.size() < ci->typeParamNames.size()) {
+        instArgs.push_back(Type::undefined());
+    }
+    if (instArgs.size() != ci->typeParamNames.size()) {
         report(diagcode::kInvalidTypeArgument, n.span,
                "generic class '" + id.name + "' expects " +
                    std::to_string(ci->typeParamNames.size()) +

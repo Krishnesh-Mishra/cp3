@@ -94,6 +94,14 @@ inline constexpr const char* kMissingDestructuringInit = "CP3507";
 inline constexpr const char* kContinueNonIterationLabel = "CP3508";
 // v0.2 Error model: `throw` only accepts Error/subclass handles.
 inline constexpr const char* kThrowNonError = "CP3509";
+// A `return` inside a `finally` block of a try statement:
+// cp3 ignores the value (CP3 semantics), unlike JS/TS where finally wins.
+inline constexpr const char* kFinallyReturnIgnored = "CP3510";
+// CP3511 - warning. A `type: package` entry module exports nothing.
+inline constexpr const char* kPackageNoExports = "CP3511";
+// CP3520 - warning. Comparing a nullish literal (`null`/`undefined`) with
+// loose `==`: cp3 matches only the same flavor; JS coerces them to equal.
+inline constexpr const char* kLooseEqualityNullish = "CP3520";
 
 // --- modules / imports --------------------------------------------------------
 inline constexpr const char* kModuleNotFound    = "CP3601";
@@ -119,6 +127,9 @@ inline constexpr const char* kGenericLocalMethod = "CP3707";
 // A computed class member name: only a literal names a member of a class
 // with a fixed member set.
 inline constexpr const char* kComputedMemberName = "CP3708";
+// A class field declared without an initializer must be assigned by some
+// constructor (or marked `!:`) so the class is constructible.
+inline constexpr const char* kUninitializedField = "CP3709";
 
 // --- banned JS patterns (sema) - language-spec 08 / 23 -----------------------
 inline constexpr const char* kDeleteBanned      = "CP3801";
