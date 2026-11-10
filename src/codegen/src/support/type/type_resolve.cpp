@@ -44,6 +44,14 @@ Type Generator::effectiveType(const Expr& e) const {
     }
     if (e.kind == NodeKind::Identifier) {
         const auto& id = static_cast<const Identifier&>(e);
+        // `sema_.typeOf` carries any narrowing sema applied to the binding
+        // (the binding env stack only records the declared type). Prefer the
+        // per-node narrowed type when it is known, fall back to the env.
+        if (const Type* t = sema_.typeOf(e.nodeId)) {
+            const bool ambient =
+                t->kind == TypeKind::Object && t->name == "$ambient";
+            if (!t->isUnknown() && !t->isError() && !ambient) return *t;
+        }
         if (auto b = lookup(id.name)) return b->type;
         if (id.name == "undefined") return Type::undefined();
         if (id.name == "null") return Type::nullType();

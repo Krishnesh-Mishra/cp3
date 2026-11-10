@@ -358,7 +358,21 @@ std::string Generator::emitBuiltinMember(const MemberExpr& m) {
             // D63: `.length` is the UTF-8 byte count; a double keeps the
             // generated expression numeric (the template `cp3_ts` overloads
             // would be ambiguous for size_t).
-            return "static_cast<double>((" + expr(*m.object) + ").size())";
+            std::string recv = expr(*m.object);
+            // The binding may be stored as `std::optional<std::string>` while
+            // sema narrowed its type to `string`; the narrowing only edits
+            // sema's view, not the C++ storage — unwrap the optional first.
+            if (const auto* id = m.object->kind == NodeKind::Identifier
+                    ? static_cast<const Identifier*>(m.object.get())
+                    : nullptr) {
+                if (const auto binding = lookup(id->name)) {
+                    const CppInfo bi = classify(binding->type);
+                    if (bi.shape == Shape::Optional || bi.shape == Shape::Maybe) {
+                        recv = "(" + recv + ").value()";
+                    }
+                }
+            }
+            return "static_cast<double>((" + recv + ").size())";
         }
     }
     if (std::string proc = emitProcessMember(m); !proc.empty()) return proc;
