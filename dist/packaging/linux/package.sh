@@ -168,6 +168,11 @@ copy_tree() {
 
 copy_tree "$ROOT/src/runtime/include" "$STAGE/include/runtime" "runtime header tree"
 copy_tree "$ROOT/src/common/include" "$STAGE/include/common" "common header tree"
+# The JS-compat typed-array ABI header is emitted by every generated prologue
+# (needsTypedArray_), so the installer places it under include/language/typed-arrays,
+# matching the `src/language/typed-arrays/include` -> `include/language/typed-arrays`
+# mapping resolveIncludeRoot() applies.
+copy_tree "$ROOT/src/language/typed-arrays/include" "$STAGE/include/language/typed-arrays" "typed-arrays header tree"
 
 for family in "$ROOT"/src/std/*; do
     [ -d "$family" ] || continue
@@ -420,7 +425,8 @@ else
     cat > "$smoke/main.cp3" <<'EOF'
 import console from "std/console";
 
-console.log("package smoke ok");
+const a = [1, 2, 3];
+console.log(`package smoke ${a.length}`);
 EOF
     output=""
     status=0
@@ -430,7 +436,7 @@ EOF
     else
         output=$(CP3_ROOT="$STAGE" "$STAGE/bin/cp3c" run "$smoke/main.cp3" 2>&1) || status=$?
     fi
-    if [ "$status" -ne 0 ] || ! printf '%s' "$output" | grep -q "package smoke ok"; then
+    if [ "$status" -ne 0 ] || ! printf '%s' "$output" | grep -q "package smoke 3"; then
         printf '%s\n' "$output" >&2
         fail "staged smoke build failed (exit $status)"
     fi

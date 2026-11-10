@@ -172,9 +172,12 @@ if (-not $NoRuntimeDlls) {
 
 # --- include: every header tree user programs need ---------------------------
 # Mapping: src\<x>\include -> include\<x> (x = runtime, common, std\<family>).
+# src\language\<x>\include -> include\language\<x> (the JS-compat typed-array ABI
+# header is emitted by every generated prologue; resolveIncludeRoot() maps it the same way).
 $headerTrees = @(
     @{ From = "src\runtime\include"; To = "runtime" },
-    @{ From = "src\common\include"; To = "common" }
+    @{ From = "src\common\include"; To = "common" },
+    @{ From = "src\language\typed-arrays\include"; To = "language\typed-arrays" }
 )
 $stdDir = Join-Path $RepoRoot "src\std"
 if (-not (Test-Path -LiteralPath $stdDir)) { Fail "missing '$stdDir'" }
@@ -442,10 +445,10 @@ if (-not $SkipSmoke -and -not $NoRun) {
     try {
         $env:CP3_ROOT = $stage
         Set-Content -LiteralPath (Join-Path $smokeDir "main.cp3") -Encoding ASCII `
-            -Value "import console from `"std/console`";`r`n`r`nconsole.log(`"package smoke ok`");"
+            -Value "import console from `"std/console`";`r`n`r`nconst a = [1, 2, 3];`r`nconsole.log(`"package smoke `" + String(a.length));"
         $output = ""
         $output = (& (Join-Path $stage "bin\cp3c.exe") run (Join-Path $smokeDir "main.cp3") 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0 -or $output -notmatch "package smoke ok") {
+        if ($LASTEXITCODE -ne 0 -or $output -notmatch "package smoke 3") {
             Fail ("staged smoke build failed (exit $LASTEXITCODE):`n" + $output)
         }
         Info "smoke: staged compiler built and ran a hello program"
