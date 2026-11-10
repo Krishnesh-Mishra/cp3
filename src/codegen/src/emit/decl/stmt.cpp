@@ -575,10 +575,21 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
         if (intOn() && !numberTyped(*r.argument)) intFail();
         // Always lower the returned expression so its own unsupported parts
         // report their own diagnostics instead of being silently dropped.
-        const std::string value =
+        std::string value =
             currentReturnTuple_ && r.argument->kind == NodeKind::ArrayLiteral
                 ? emitTupleLiteral(static_cast<const ArrayLiteral&>(*r.argument))
                 : expr(*r.argument);
+        // An async `return x` whose expression has a promise type adopts the
+        // promise's settlement, like `return await x` (JS thenables). The
+        // promise value itself cannot sit in the coroutine's state T, so the
+        // coroutine awaits it before settling.
+        if (inAsyncBody_) {
+            if (const Type* t = sema_.typeOf(r.argument->nodeId)) {
+                if (detail::isPromiseType(*t)) {
+                    value = "co_await " + value;
+                }
+            }
+        }
         if (currentReturn_ == "void") {
             // The enclosing signature is `void` either because the cp3
             // return type has no C++ spelling (already reported where the
