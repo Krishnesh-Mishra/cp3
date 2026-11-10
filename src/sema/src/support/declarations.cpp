@@ -339,7 +339,23 @@ void Analyzer::declareArrayPattern(ArrayPattern& ap, const Type& type,
         ++index;
     }
     if (ap.rest) {
-        Type elem = type.kind == TypeKind::Array ? elemOf(type) : Type::unknown();
+        Type elem = Type::unknown();
+        if (type.kind == TypeKind::Array) {
+            elem = elemOf(type);
+        } else if (sh && sh->tuple) {
+            // The tail of a tuple is an array of the remaining slot types:
+            // `let [a, ...rest] = t` types `rest` as `Array<...tail>` (an
+            // empty tail spells `number | undefined`, whose out-of-range
+            // read is `undefined`, matching the codegen desugar).
+            if (index < sh->tupleElems.size()) {
+                elem = sh->tupleElems[index];
+                for (std::size_t i = index + 1; i < sh->tupleElems.size(); ++i) {
+                    elem = unify(elem, sh->tupleElems[i]);
+                }
+            } else {
+                elem = Type::unionOf({Type::number(), Type::undefined()});
+            }
+        }
         declarePattern(ap.rest.get(), Type::array(elem), isConst, declNodeId);
     }
 }
