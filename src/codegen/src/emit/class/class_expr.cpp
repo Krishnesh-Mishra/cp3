@@ -447,9 +447,15 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
     // over the re-derived shape: `n.next` is `optional<Ref<Node>>` in C++
     // but the narrowed `Node` type means "read through the handle".
     // `declaredInfo` must reflect the declared storage shape, not the
-    // narrowed shape `effectiveType` returns: for a member receiver, look
-    // the field up on its base class model.
+    // narrowed shape `effectiveType` returns: for a plain identifier, look
+    // the binding up in the codegen env to recover the declared Type.
     CppInfo declaredInfo = classify(rt);
+    if (m.object && m.object->kind == NodeKind::Identifier) {
+        const auto* id = static_cast<const Identifier*>(m.object.get());
+        if (const auto binding = lookup(id->name)) {
+            declaredInfo = classify(binding->type);
+        }
+    }
     if (m.object && m.object->kind == NodeKind::MemberExpr) {
         const auto& rm = static_cast<const MemberExpr&>(*m.object);
         if (rm.object) {
