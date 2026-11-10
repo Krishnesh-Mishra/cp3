@@ -107,10 +107,12 @@ std::optional<Type> Analyzer::evalNativeBinary(BinaryOp op, const Type& ln,
         reportSuggestive(diagcode::kMixedTypeArithmetic, span,
                          "type mismatch: cannot mix signed '" + pretty(ln) +
                              "' with unsigned '" + pretty(rn) +
-                             "'; convert one side explicitly",
+                             "'; convert one side explicitly, e.g. parseTo(x, u64) "
+                             "to widen the signed side, or parseTo(x, i64) to "
+                             "narrow the unsigned side",
                          {"convert the signed side to the unsigned type with "
-                          "parseTo(x, <unsigned-target>), e.g. parseTo(x, u64), "
-                          "or the unsigned side to signed with parseTo(x, i64)"});
+                          "parseTo(x, u64), or the unsigned side to signed "
+                          "with parseTo(x, i64)"});
         return Type::error();
     }
     // Comparisons and equality consume numeric operands and produce boolean;
@@ -127,7 +129,8 @@ std::optional<Type> Analyzer::evalNativeBinary(BinaryOp op, const Type& ln,
             reportSuggestive(diagcode::kMixedTypeArithmetic, span,
                              "strictNumericCasts refuses to mix '" + pretty(ln) +
                                  "' and '" + pretty(rn) +
-                                 "'; convert one side explicitly",
+                                 "'; convert one side explicitly with "
+                                 "parseTo(x, <target>)",
                              {"convert one operand to the other's type with "
                               "parseTo(x, <target>), e.g. parseTo(x, u64)"});
             return Type::error();

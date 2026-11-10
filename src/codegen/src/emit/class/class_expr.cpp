@@ -278,11 +278,15 @@ std::string Generator::emitModelNew(const NewExpr& n) {
         }
         // A bare `new Box(...)` fills from the declared parameter defaults
         // (`<T = U>`), so the struct spelling is stable instead of rejected.
+        // Missing arguments with no declared default are spelled `undefined`
+        // (the v0.2.2 `new Box()` ≡ `new Box<undefined>()` rule).
         for (std::size_t i = instArgs.size(); i < cm->decl->typeParams.size();
              ++i) {
             const auto& tp = cm->decl->typeParams[i];
             if (tp && tp->defaultType) {
                 instArgs.push_back(modelTypeFromTypeNode(*tp->defaultType));
+            } else {
+                instArgs.push_back(Type::undefined());
             }
         }
     } else {

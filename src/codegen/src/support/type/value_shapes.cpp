@@ -429,6 +429,15 @@ void classifyNullishUnion(const Type& t, CppInfo& info) {
     for (const Type& part : t.parts) {
         if (!part.isNullish()) nonNullish.push_back(part);
     }
+    // A union of only nullish members (`T = undefined` instantiated into
+    // `T | undefined`): nothing is ever stored; spell it as Undefined.
+    if (nonNullish.empty()) {
+        info.shape = Shape::Undefined;
+        info.emptyKind = NullishKind::Undefined;
+        info.representable = true;
+        info.cpp = "cp3::runtime::Undefined";
+        return;
+    }
     if (nonNullish.size() != 1) return;
     const CppInfo inner = classify(nonNullish.front());
     if (!inner.representable) return;

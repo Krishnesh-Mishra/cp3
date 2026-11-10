@@ -46,6 +46,8 @@ void Analyzer::reportOrSuggest(const char* code, const SourceSpan& span,
                                const Type& r, std::string message) {
     std::vector<std::string> hints = mixedMathHints(be, l, r);
     if (!hints.empty()) {
+        message += "; ";
+        message += hints.front();
         reportSuggestive(code, span, std::move(message), std::move(hints));
         return;
     }
