@@ -17,4 +17,8 @@ namespace cp3 {
 // resolve, so an editor must not offer them.
 std::vector<std::string> stdModuleSpecifiers();
 
+// The named exports of one specifier, or an empty list when it names no std
+// module. Used by the editor for `import { | } from "<spec>"` completion.
+std::vector<std::string> stdModuleExportNames(const std::string& specifier);
+
 }  // namespace cp3

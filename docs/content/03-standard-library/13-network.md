@@ -12,6 +12,8 @@ import { fetch, WebSocket, WebSocketServer, createServer, lookup, tls, Headers, 
 
 Network APIs are asynchronous and depend on DNS, remote hosts, ports, and operating-system resources. Handle rejection and close resources when finished.
 
+Raw socket bindings (`createTcpServer`, `connectTcp`, `TcpSocket`, `TcpServer`, `createUdpSocket`, `UdpSocket`, `connectTls`, `createTlsServer`, `TlsSocket`, `TlsServer`) are exported since v0.2.1 - see [Raw sockets (TCP, UDP, TLS)](#raw-sockets-tcp-udp-tls) below.
+
 ## Fetch
 
 `fetch(url, init?)` sends an HTTP request and resolves to a response object. Both `http://` and `https://` URLs are supported; HTTPS uses the same TLS engine as `connectTls` / `createTlsServer`, with certificate verification on by default (see **TLS trust and certificates** below). The optional initialization object supports `method`, `headers` (`Map<string, string>`), `body`, and `timeout` in milliseconds.
@@ -102,7 +104,133 @@ Responses support chainable `status(code)` and `header(name, value)`, `cookie(na
 
 Use editor completion for the precise callback types in the compiler version you target. CP3's HTTP API is not a full Express or Node compatibility layer.
 
-## Timeouts, errors, and untrusted data
+## DNS (`lookup`)
+
+`import { lookup } from "std/network"` resolves a hostname to the **first** address it finds:
+
+```ts
+const address = await lookup("example.com");   // e.g. "93.184.216.34"
+```
+
+- Signature: `lookup(hostname: string): Promise<string>`. Takes exactly one argument; extra arguments are a compile-time error.
+- Resolution goes through libuv `getaddrinfo` (the same path `fetch` uses). The first result is returned; there is no `lookupAll`, no options object, and no callback form.
+- Rejects with an `Error` whose message names the hostname when resolution fails.
+- The namespace spellings `network.lookup(hostname)` and `dns.lookup(hostname)` (via the default import `import network from "std/network"` / `import dns from "std/network"`) lower to the same runtime, but the named import `import { lookup } from "std/network"` is the documented form.
+
+## Raw sockets (TCP, UDP, TLS)
+
+Available since v0.2.1. The `std/network` registry exports the names in this section; they lower onto the vendored native runtime (`src/std/network/tcp/`, `src/std/network/udp/`, `src/std/network/tls/`). The translation units are selected in the native link plan only when your source names one of these APIs, so programs that never import them stay small.
+
+### TCP — `createTcpServer` / `connectTcp` / `TcpSocket`
+
+Named import: `import { createTcpServer, connectTcp, TcpSocket, TcpServer } from "std/network"`.
+
+```ts
+import { createTcpServer, connectTcp } from "std/network";
+
+const server = createTcpServer({ threads: 4, maxConnections: 1000, idleTimeout: 30000, maxWriteBuffer: 65536 });
+server.on("connection", (socket) => {
+  socket.on("data", (chunk) => {              // chunk: string | Buffer (raw bytes, no framing)
+    if (!socket.write(chunk)) {               // false = queued bytes reached maxWriteBuffer
+      socket.on("drain", () => { /* resume writing */ });
+    }
+  });
+  socket.on("end", () => socket.end());       // peer sent EOF (FIN)
+  socket.on("error", (err) => console.log(err.message));
+  socket.pause();                             // stop "data" delivery ...
+  socket.resume();                            // ... and restart it
+});
+server.on("error", (err) => console.log(err.message));
+server.listen(8080, () => console.log("listening"));
+
+const client = connectTcp({ host: "127.0.0.1", port: 8080, timeout: 5000 });  // default 10000 ms
+client.on("connect", () => client.write("hello"));
+client.on("data", (chunk) => console.log(chunk));
+client.on("error", (err) => console.log(err.message));   // e.g. "ECONNREFUSED: ...", "ETIMEDOUT: ..."
+client.on("close", () => {});
+```
+
+**`createTcpServer(options?)`** — options (all optional; `number`s, integers):
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `threads` | `1` | Number of `SO_REUSEPORT` listener handles on the one shared loop. Does **not** create threads; every accepted socket runs on the same loop, so handlers are never concurrent. `1..64`; other values throw at construction. On Windows the fan-out collapses to one listener (the option is accepted, not an error). |
+| `maxConnections` | `0` (unlimited) | Cap on live accepted sockets. Over-cap accepts are closed immediately — no `"connection"` event, no error; the peer sees a close/reset. |
+| `idleTimeout` | `0` (disabled) | Milliseconds with no data in either direction before the socket is closed with an `ETIMEDOUT` error. Inactivity in both directions rearms the timer. |
+| `maxWriteBuffer` | `65536` | High-water mark in bytes for `write()` back-pressure. `0` = unbounded (`write()` always returns true, `"drain"` never fires). |
+
+**`TcpServer`**: `listen(port, callback?)` binds `0.0.0.0`; the host form binds an IPv4 literal — `listen(port, host, callback?)`. A bind failure (bad port, port in use, bad host) throws synchronously. Events: `"connection"` (a `TcpSocket`), `"listening"`, `"close"`, `"error"`. Also `close()` (closes listeners **and every live connection** immediately — there is no graceful drain), `listening()`, `addressPort()` (resolves `listen(0)`), `connectionCount()`. One handler per event; re-registering replaces.
+
+**`TcpSocket`** (either side of the connection): `new TcpSocket(host, port, timeout?)` starts a client connect exactly like `connectTcp`. Events: `"data"` (chunk as `string` or `Buffer`), `"end"` (peer FIN), `"close"`, `"drain"`, `"connect"`, `"error"` (an `Error` object — `name` is `"Error"`, the Node-style machine code is a **message prefix**, not a property: `err.message` like `"ECONNREFUSED: connect ECONNREFUSED ..."`, `"ETIMEDOUT: connect timeout after N ms"`, `"EPIPE: ..."`; CP3 `Error` has no `.code`). Methods: `write(string | Buffer) -> boolean` (Node-style back-pressure: bytes are always queued unless the socket is closed/ended — then it returns `false` without queueing — and `false` means "queued bytes reached `maxWriteBuffer`, wait for `\"drain\"`"), `end([data])` (queue `data` if any, flush, then half-close with a FIN — the socket stays readable until the peer's EOF), `close()` (destroy immediately, queued bytes discarded), `pause()` / `resume()`, `isPaused()`, `isClosed()`, `isConnected()`, `bufferedBytes()`. Addresses: `remoteAddress()` / `localAddress()` (`"ip:port"` text, `""` when not connected), `remotePort()` / `localPort()`. Writes before `"connect"` are queued and flushed on connect, like Node.
+
+**`connectTcp(options)`** — `connectTcp({ host, port, timeout?, idleTimeout?, maxWriteBuffer? })`, or the convenience `connectTcp(host, port, timeout?)`. **It is not a Promise**: the socket is returned immediately and outcomes arrive via `"connect"` / `"error"` / `"close"` (like Node's `net.createConnection`). `host` may be an IPv4 literal or a hostname (DNS via libuv, IPv4 only — IPv6 literals are rejected). `port` is required in practice; `0` is rejected. `timeout` defaults to `10000` ms; on expiry the socket emits `"error"` (`ETIMEDOUT`) then `"close"`. `timeout: 0` disables the connect timer (the OS TCP timeout applies).
+
+Deliberate limits of the planned surface: IPv4 only for bind and connect; `\"data\"` chunks are raw TCP segments (libuv read sizes, up to 64 KiB) with **no framing** — the app must frame itself (length prefix, delimiter, ...); no TLS and no UDP on this path; server `close()` discards live connections and unflushed bytes.
+
+### UDP — `createUdpSocket` / `UdpSocket`
+
+Named import: `import { createUdpSocket } from "std/network"`.
+
+```ts
+import { createUdpSocket } from "std/network";
+
+const socket = createUdpSocket("udp4");        // "udp4" | "udp6"
+socket.on("message", (msg, from) => {          // msg: Buffer, from: { address, port, family }
+  console.log("datagram from", from.address, from.port);
+});
+socket.bind(48244);                            // or socket.bind(port, "127.0.0.1")
+socket.send("ping", 48244, "127.0.0.1");       // string (UTF-8) or Buffer
+socket.close();
+```
+
+- `createUdpSocket(type)` — `type` must be `"udp4"` or `"udp6"`; anything else throws.
+- `socket.bind(port)` binds the wildcard address of the family (`0.0.0.0` / `::`); `bind(port, address)` binds a **numeric IP literal** (no hostnames — there is no DNS on the UDP path); `bind(port, callback)` runs the callback once the port is bound (`"listening"` fires too). Port `0` requests an ephemeral port. Failure (bad port, address in use, already bound) throws synchronously.
+- `socket.send(data, port, address)` sends one datagram to a numeric IP literal; the socket need not be bound first. Fire-and-forget: a **send-time** failure is reported via the `"error"` event, not thrown — but a bad port, unparseable address, or closed socket throws synchronously.
+- `"message"` fires with the datagram as an owning `Buffer` and a `from = { address, port, family }` struct (`family` is `"IPv4"` | `"IPv6"`; `port` is `u16`, widened to `number` in a `typescript` project).
+- Chunks larger than 64 KiB are truncated at the per-thread read buffer; there is no reassembly. One `thread_local` 64 KiB read buffer per thread receives every datagram (the delivered `Buffer` is the single copy).
+- One handler per event (re-registration replaces); all callbacks run on the runtime (libuv) thread — not safe to call from arbitrary OS threads; `address()` returns the bound `{ address, port, family }` and throws when not bound; `close()` is idempotent and fires `"close"` once.
+- Not supported: multicast / broadcast options, `setMulticastTTL`, dual-stack, `connect()` / `disconnect()`, packet-info. Depending on the family for `bind`/`send` address forms.
+
+### TLS over raw sockets — `connectTls` / `createTlsServer` / `TlsSocket`
+
+Named import: `import { connectTls, createTlsServer, TlsSocket } from "std/network"`. These ride the same vendored TLS engine (OpenSSL, memory-BIO) that `fetch("https://…")`, `wss://`, and `createServer({ tls })` already use in this version — but their own language bindings are **not** exported, unlike those server-side paths.
+
+```ts
+import { connectTls, createTlsServer } from "std/network";
+
+const server = createTlsServer({ cert: "cert.pem", key: "key.pem" }, (socket) => {
+  socket.on("data", (chunk) => socket.write(chunk));
+});
+server.listen(443, () => console.log("listening"));
+
+const socket = connectTls({ host: "example.com", port: 443 });   // or connectTls("example.com", 443)
+socket.on("secureConnect", () => socket.write("hello"));
+socket.on("error", (err) => console.log(err.message));           // "TLSError: [CERT_UNTRUSTED] ..."
+```
+
+**`connectTls(options | host, port?, options?)`** — returns the `TlsSocket` immediately (like `connectTcp`, not a Promise). Throws a `TLSError` synchronously for invalid options or an unavailable backend; handshake/verify failures are delivered on the socket's `"error"` event.
+
+**`createTlsServer(options?, handler?)`** — `handler(socket)` is the `"secureConnection"` listener (also reachable via `on("secureConnection", …)`). Configuration errors (missing/unreadable cert/key, `minProtocol` below TLSv1.2, `maxSendFragment` outside 256..65536, negative limits, server without `cert`/`key`) throw a `TLSError` synchronously; handshake failures arrive as socket `"error"` events.
+
+**`TlsOptions`** (Node-style names): `host`, `port` (default `443`), `servername` (SNI override; `""` = `host`), `ca` / `cert` / `key` / `keyPassphrase` (PEM file paths or inline PEM text), `rejectUnauthorized` (default `true`), `checkServerIdentity` (default `true`), `minProtocol` (default `"TLSv1.2"`; TLS1.0/1.1 floors are refused), `maxProtocol` (default `"TLSv1.3"`), `alpnProtocols`, `ciphers`, `maxSendFragment` (default `16384`), `handshakeTimeoutMs` (default `10000`; `0` = server default, never infinite), `maxHandshakesPerSecond` (default `50`, per-server token bucket), `maxConcurrentHandshakes` (default `128`), `allowHalfOpen`, `readable`, `writable`. Note: `createServer({ tls })` / `new WebSocketServer({ port, tls })` take **file paths only** — these sockets' inline-PEM freedom does not apply there.
+
+**`TlsSocket`** mirrors `TcpSocket` member for member — `write` / `end` / `close` / `destroy` / `pause` / `resume` / `setTimeout` / `setNoDelay` / `setKeepAlive`, `connect`, the events `"data"`, `"end"`, `"close"`, `"connect"`, `"error"`, `"timeout"`, and the properties `connecting` / `destroyed` / `readable` / `readableEnded` / `writable` / `writableEnded` / `remoteAddress` / `remotePort` / `localAddress` / `localPort` / `bytesRead` / `bytesWritten` — plus the TLS additions: event `"secureConnect"` (fires once the handshake completes; `"connect"` fires with it), `authorized()`, `encrypted()`, `alpnProtocol()`, `servername()`, `getProtocol()`, `getCipher()` → `{ name, version, standardName }`, `getPeerCertificate(raw?)` → `{ subject, issuer, serialNumber, fingerprint, notBefore, notAfter, pem? }`, `setMaxSendFragment(n)` / `getMaxSendFragment()`. Deliberate differences from `TcpSocket`: `write()` before `"secureConnect"` is **dropped** (Node buffers it) and emits `"error"` (`ERR_TLS_NOT_CONNECTED`) instead; `bytesRead()` counts **ciphertext** bytes, `bytesWritten()` plaintext — they are not on the same side of the engine.
+
+**`TlsServer`**: events `"secureConnection"` (a `TlsSocket`), `"error"`, `"close"`; `listen(port, callback?)` / `listen(port, host, callback?)` (IP literal host), `close(callback?)` (stop accepting, destroy in-flight handshakes; established sockets are the caller's job), `addressPort()`.
+
+**`TLSError`** — the `Error` object every TLS failure is delivered as: thrown from the factories, passed to `"error"` listeners. `name` is `"TLSError"`; the machine code travels in the message as `"[CODE] ..."`, e.g. `"[CERT_UNTRUSTED] ..."`. Codes: `CERT_UNTRUSTED`, `ERR_TLS_HANDSHAKE_TIMEOUT`, `ERR_TLS_HANDSHAKE_RATE_LIMITED`, `ERR_TLS_HANDSHAKE_FAILED`, `ERR_TLS_PROTOCOL_TOO_OLD`, `ERR_TLS_NO_PEER_CERTIFICATE`, `ERR_TLS_NOT_CONNECTED`, `ERR_TLS_SOCKET_DESTROYED`, `ERR_TLS_INVALID_OPTIONS`, `ERR_TLS_BACKEND_UNAVAILABLE` (the fail-closed stub backend — builds without the OpenSSL archives installed never silently downgrade to plaintext).
+
+Deliberate limits of the planned surface: one certificate/key per `TlsServer` (no per-SNI callback), no session resumption or tickets, no client-cert request, no OCSP stapling; `setMaxSendFragment` after the handshake is stored but only applied to the next connection; the rate limiter is per-server and in-process.
+
+### What to use today
+
+- HTTP(S) client — `fetch` (see **Fetch**); HTTPS is verified against the embedded CA bundle by default.
+- WebSocket client/server — `WebSocket` / `WebSocketServer`, including TLS servers (see the WebSocket sections).
+- HTTPS server — `createServer({ tls })` or reusable `tls({ ... })` options (see **TLS trust and certificates**), including `new WebSocketServer({ port, tls })`.
+- Hostname resolution — `lookup`.
+- Raw TCP/UDP/TLS sockets — **not available**; watch the import registry and the `src/std/network/{tcp,udp,tls}/` sources for the bindings to land.
+
+
 
 Treat network responses as external input. Check status codes, validate parsed JSON, and set a timeout when an operation must have a bounded duration. Network operations may fail because of DNS, connection, timeout, protocol, or remote-server errors. Catch errors at a layer that can retry safely or report context.
 

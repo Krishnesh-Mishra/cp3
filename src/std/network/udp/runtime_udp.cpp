@@ -96,7 +96,7 @@ void onUdpRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* /*buf*/,
     if (nread < 0) {
         // Transient recv errors (e.g. UV_EAGAIN) are not datagrams; drop
         // them silently, everything else surfaces as an "error" event.
-        if (nread == UV_EAGAIN || nread == UV_EWOULDBLOCK) return;
+        if (nread == UV_EAGAIN) return;
         impl->emitError(std::string("std/network: UDP receive error: ") + uv_strerror(static_cast<int>(nread)));
         return;
     }

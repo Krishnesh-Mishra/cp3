@@ -4,9 +4,10 @@
 // OWNERSHIP: the std/network family (src/std/network/**). Two shapes reach this file:
 //   * the namespace corner (`network.fetch(...)`, the std_check.cpp row) and
 //   * the documented named imports (`import { fetch, createServer, WebSocket,
-//     WebSocketServer } from "std/network"`), which are ambient bindings, so
-//     their call and construct sites are typed here (call_check.cpp and
-//     expr_check.cpp hook `tryInferNetworkCall` / `inferNetworkConstruct`).
+//     WebSocketServer, createTcpServer, connectTcp, ... } from "std/network"`),
+//     which are ambient bindings, so their call and construct sites are typed
+//     here (call_check.cpp and expr_check.cpp hook
+//     `tryInferNetworkCall` / `inferNetworkConstruct`).
 //
 // Marker objects carry a `$network:` name and one closed field table. The
 // Field rows below are the supported member set (docs 04 §network); the
@@ -69,6 +70,14 @@ const char* const kRoute = "$network:Route";
 const char* const kRouteChain = "$network:RouteChain";
 const char* const kwebserverApp = "$network:webserverApp";
 const char* const kHttpError = "$network:HttpError";
+// Raw-socket families (src/std/network/{tcp,udp,tls}): markers shared with
+// codegen.cpp, which emits the lowering and the #include rows.
+const char* const kTcpSocket = "$network:TcpSocket";
+const char* const kTcpServer = "$network:TcpServer";
+const char* const kUdpSocket = "$network:UdpSocket";
+const char* const kUdpRemoteInfo = "$network:UdpRemoteInfo";
+const char* const kTlsSocket = "$network:TlsSocket";
+const char* const kTlsServer = "$network:TlsServer";
 
 /// `Map<string, string>` (std/collections): the documented shape of the
 /// request/fetch headers, route params and query string.
@@ -447,6 +456,162 @@ std::vector<Field> webSocketServerFields() {
     };
 }
 
+// Raw-socket field rows (TCP / UDP / TLS). The port members are semantic
+// widths under the native type systems (std_integer.hpp); typescript keeps
+// `number`, exactly like the HTTP status/port rows.
+std::vector<Field> tcpSocketFields(TypeSystem ts) {
+    return {
+        Field{"on", Type::function({Type::string(), eventListener()}, Type::voidType()),
+              false},
+        Field{"write",
+              Type::function({Type::unionOf({Type::string(), bufferType()})},
+                             Type::boolean()),
+              false},
+        Field{"end",
+              withOptionalTail(Type::function(
+                  {Type::unionOf({Type::string(), bufferType()})},
+                  Type::voidType())),
+              false},
+        Field{"close", Type::function({}, Type::voidType()), false},
+        Field{"pause", Type::function({}, Type::voidType()), false},
+        Field{"resume", Type::function({}, Type::voidType()), false},
+        Field{"isPaused", Type::function({}, Type::boolean()), false},
+        Field{"isClosed", Type::function({}, Type::boolean()), false},
+        Field{"isConnected", Type::function({}, Type::boolean()), false},
+        Field{"bufferedBytes", Type::function({}, Type::number()), false},
+        Field{"remoteAddress", Type::function({}, Type::string()), false},
+        Field{"localAddress", Type::function({}, Type::string()), false},
+        Field{"remotePort",
+              Type::function({}, stdIntegerType(StdIntegerKind::Port, ts)), false},
+        Field{"localPort",
+              Type::function({}, stdIntegerType(StdIntegerKind::Port, ts)), false},
+    };
+}
+std::vector<Field> tcpServerFields(TypeSystem ts) {
+    return {
+        Field{"on", Type::function({Type::string(), eventListener()}, Type::voidType()),
+              false},
+        Field{"listen",
+              withOptionalTail2(Type::function(
+                  {stdIntegerType(StdIntegerKind::Port, ts),
+                   Type::unionOf({Type::string(), callbackOf(0)}),
+                   callbackOf(0)},
+                  Type::voidType())),
+              false},
+        Field{"close", Type::function({}, Type::voidType()), false},
+        Field{"listening", Type::function({}, Type::boolean()), false},
+        Field{"addressPort",
+              Type::function({}, stdIntegerType(StdIntegerKind::Port, ts)), false},
+        Field{"connectionCount", Type::function({}, Type::number()), false},
+    };
+}
+std::vector<Field> udpSocketFields(TypeSystem ts) {
+    return {
+        Field{"on", Type::function({Type::string(), eventListener()}, Type::voidType()),
+              false},
+        Field{"send",
+              Type::function({Type::unionOf({bufferType(), Type::string()}),
+                              stdIntegerType(StdIntegerKind::Port, ts),
+                              Type::string()},
+                             Type::voidType()),
+              false},
+        Field{"bind",
+              withOptionalTail2(Type::function(
+                  {stdIntegerType(StdIntegerKind::Port, ts),
+                   Type::unionOf({Type::string(), callbackOf(0)}),
+                   callbackOf(0)},
+                  Type::voidType())),
+              false},
+        Field{"close", Type::function({}, Type::voidType()), false},
+        Field{"bound", Type::function({}, Type::boolean()), false},
+        Field{"address", Type::function({}, networkValue(kUdpRemoteInfo)), false},
+    };
+}
+std::vector<Field> udpRemoteInfoFields(TypeSystem ts) {
+    return {
+        Field{"address", Type::string(), false},
+        Field{"port", stdIntegerType(StdIntegerKind::Port, ts), false},
+        Field{"family", Type::string(), false},
+    };
+}
+std::vector<Field> tlsSocketFields(TypeSystem ts) {
+    return {
+        Field{"on", Type::function({Type::string(), eventListener()}, Type::voidType()),
+              false},
+        Field{"write",
+              Type::function({Type::unionOf({Type::string(), bufferType()})},
+                             Type::boolean()),
+              false},
+        Field{"end",
+              withOptionalTail(Type::function(
+                  {Type::unionOf({Type::string(), bufferType()})},
+                  Type::voidType())),
+              false},
+        Field{"destroy",
+              withOptionalTail(Type::function({ambient()}, Type::voidType())), false},
+        Field{"close", Type::function({}, Type::voidType()), false},
+        Field{"pause", Type::function({}, Type::voidType()), false},
+        Field{"resume", Type::function({}, Type::voidType()), false},
+        Field{"setTimeout",
+              withOptionalTail(Type::function({Type::number(), callbackOf(0)},
+                                              Type::voidType())),
+              false},
+        Field{"setNoDelay", Type::function({Type::boolean()}, Type::voidType()), false},
+        Field{"setKeepAlive",
+              withOptionalTail(Type::function({Type::boolean(), Type::number()},
+                                              Type::voidType())),
+              false},
+        // TLS-only surface.
+        Field{"connecting", Type::function({}, Type::boolean()), false},
+        Field{"destroyed", Type::function({}, Type::boolean()), false},
+        Field{"readable", Type::function({}, Type::boolean()), false},
+        Field{"readableEnded", Type::function({}, Type::boolean()), false},
+        Field{"writable", Type::function({}, Type::boolean()), false},
+        Field{"writableEnded", Type::function({}, Type::boolean()), false},
+        Field{"connect",
+              withOptionalTail(Type::function(
+                  {stdIntegerType(StdIntegerKind::Port, ts), Type::string()},
+                  Type::voidType())),
+              false},
+        Field{"remoteAddress", Type::function({}, Type::string()), false},
+        Field{"localAddress", Type::function({}, Type::string()), false},
+        Field{"remotePort",
+              Type::function({}, stdIntegerType(StdIntegerKind::Port, ts)), false},
+        Field{"localPort",
+              Type::function({}, stdIntegerType(StdIntegerKind::Port, ts)), false},
+        Field{"bytesRead", Type::function({}, Type::number()), false},
+        Field{"bytesWritten", Type::function({}, Type::number()), false},
+        Field{"authorized", Type::function({}, Type::boolean()), false},
+        Field{"encrypted", Type::function({}, Type::boolean()), false},
+        Field{"alpnProtocol", Type::function({}, Type::string()), false},
+        Field{"servername", Type::function({}, Type::string()), false},
+        Field{"getProtocol", Type::function({}, Type::string()), false},
+        Field{"getCipher", Type::function({}, ambient()), false},
+        Field{"getPeerCertificate",
+              withOptionalTail(Type::function({Type::boolean()}, ambient())), false},
+        Field{"setMaxSendFragment", Type::function({Type::number()}, Type::voidType()),
+              false},
+        Field{"getMaxSendFragment", Type::function({}, Type::number()), false},
+    };
+}
+std::vector<Field> tlsServerFields(TypeSystem ts) {
+    return {
+        Field{"on", Type::function({Type::string(), eventListener()}, Type::voidType()),
+              false},
+        Field{"listen",
+              withOptionalTail2(Type::function(
+                  {stdIntegerType(StdIntegerKind::Port, ts),
+                   Type::unionOf({Type::string(), callbackOf(0)}),
+                   callbackOf(0)},
+                  Type::voidType())),
+              false},
+        Field{"close",
+              withOptionalTail(Type::function({callbackOf(0)}, Type::voidType())), false},
+        Field{"addressPort",
+              Type::function({}, stdIntegerType(StdIntegerKind::Port, ts)), false},
+    };
+}
+
 // Ledger L (appended) field rows.
 std::vector<Field> headersFields() {
     const Type fn2 = Type::function({Type::string(), Type::string()}, Type::voidType());
@@ -508,6 +673,12 @@ std::vector<Field> networkFieldsFor(const std::string& name, TypeSystem ts) {
     if (name == kHttpServer) return httpServerFields(ts);
     if (name == kWebSocket) return webSocketFields();
     if (name == kWebSocketServer) return webSocketServerFields();
+    if (name == kTcpSocket) return tcpSocketFields(ts);
+    if (name == kTcpServer) return tcpServerFields(ts);
+    if (name == kUdpSocket) return udpSocketFields(ts);
+    if (name == kUdpRemoteInfo) return udpRemoteInfoFields(ts);
+    if (name == kTlsSocket) return tlsSocketFields(ts);
+    if (name == kTlsServer) return tlsServerFields(ts);
     if (name == kHeaders) return headersFields();
     if (name == kFormData) return formDataFields();
     if (name == kAbortSignal) return abortSignalFields();
@@ -631,6 +802,65 @@ StdMemberDoc networkObjectMemberDoc(const std::string& objectTypeName,
     if (type == "AbortSignal") {
         if (member == "aborted") return {"aborted: boolean", "Whether the signal has aborted."};
         if (member == "timeout") return {"timeout(ms: number): AbortSignal", "Creates a signal that times out after `ms`; `fetch(url, { signal })` applies it as the request timeout."};
+    }
+    if (type == "TcpSocket") {
+        if (member == "on") return {"on(event: string, listener: (...args) => void): void", "Registers the handler for one event: `data` (string or Buffer chunks), `end`, `close`, `connect`, `drain`, `error`."};
+        if (member == "write") return {"write(data: string | Buffer): boolean", "Queues bytes to send; returns false when the internal write buffer is full. Safe to call before `connect`; the bytes flush once connected."};
+        if (member == "end") return {"end(data?: string | Buffer): void", "Queues `data` if given, flushes, then half-closes (FIN). The socket stays readable until the peer's EOF."};
+        if (member == "close") return {"close(): void", "Destroys the socket immediately; queued-but-unsent bytes are discarded. `close` fires after."};
+        if (member == "pause" || member == "resume") return {member + "(): void", "Stops / restarts `data` events."};
+        if (member == "isPaused") return {"isPaused(): boolean", "Whether the socket is paused."};
+        if (member == "isClosed") return {"isClosed(): boolean", "Whether the socket is closed."};
+        if (member == "isConnected") return {"isConnected(): boolean", "Whether the connection is up."};
+        if (member == "bufferedBytes") return {"bufferedBytes(): number", "Queued-but-not-yet-written bytes right now (the back-pressure meter)."};
+        if (member == "remoteAddress" || member == "localAddress") return {member + "(): string", "The `ip:port` text form (\"\" when not connected yet)."};
+        if (member == "remotePort" || member == "localPort") return {member + "(): Port", "The remote/local port (0 when not connected)."};
+    }
+    if (type == "TcpServer") {
+        if (member == "on") return {"on(event: string, listener: (socket?: TcpSocket, err?: unknown) => void): void", "Registers the handler for `connection` (accepted sockets), `listening`, `close` or `error`."};
+        if (member == "listen") return {"listen(port: Port, callback?: () => void): void", "Binds the port (0.0.0.0; `listen(port, host, callback)` binds an IPv4 literal). A bind failure throws synchronously."};
+        if (member == "close") return {"close(): void", "Stops accepting new connections and closes live connections."};
+        if (member == "listening") return {"listening(): boolean", "Whether the server is bound."};
+        if (member == "addressPort") return {"addressPort(): Port", "The bound port (the ephemeral port when `listen(0)`), 0 when not listening."};
+        if (member == "connectionCount") return {"connectionCount(): number", "Live accepted connections right now."};
+    }
+    if (type == "UdpSocket") {
+        if (member == "on") return {"on(event: string, listener: (...args) => void): void", "Registers the handler for `message` (Buffer, UdpRemoteInfo), `error`, `close` or `listening`."};
+        if (member == "send") return {"send(data: Buffer | string, port: Port, address: string): void", "Sends one datagram to a numeric address. Fire-and-forget; send failures arrive via the `error` event."};
+        if (member == "bind") return {"bind(port: Port, address?: string, callback?: () => void): void", "Binds the wildcard address of the family (or a literal address) and starts receiving. Port 0 requests an ephemeral port."};
+        if (member == "close") return {"close(): void", "Stops receiving and closes the socket."};
+        if (member == "bound") return {"bound(): boolean", "Whether the socket is bound and open."};
+        if (member == "address") return {"address(): UdpRemoteInfo", "The bound address (throws when not bound)."};
+    }
+    if (type == "UdpRemoteInfo") {
+        if (member == "address") return {"address: string", "The sender's IP address as text."};
+        if (member == "port") return {"port: Port", "The sender's port."};
+        if (member == "family") return {"family: string", "\"IPv4\" or \"IPv6\"."};
+    }
+    if (type == "TlsSocket") {
+        if (member == "on") return {"on(event: string, listener: (...args) => void): void", "Registers the handler for `data`, `end`, `close`, `connect`, `secureConnect`, `timeout`, `error`."};
+        if (member == "write") return {"write(data: string | Buffer): boolean", "Sends plaintext after the handshake; returns false before `secureConnect` or when destroyed."};
+        if (member == "end") return {"end(data?: string | Buffer): void", "Half-closes after flushing."};
+        if (member == "destroy") return {"destroy(error?: unknown): void", "Destroys the socket immediately."};
+        if (member == "close") return {"close(): void", "Closes the socket."};
+        if (member == "setTimeout") return {"setTimeout(ms: number, callback?: () => void): void", "Arms the idle timeout; `callback` fires on timeout."};
+        if (member == "setNoDelay") return {"setNoDelay(enabled: boolean): void", "Sets TCP_NODELAY."};
+        if (member == "setKeepAlive") return {"setKeepAlive(enabled: boolean, delayMs?: number): void", "Sets TCP keepalive."};
+        if (member == "connect") return {"connect(port: Port, host?: string): void", "Starts the connection manually (usually not needed; the connect is async from construction)."};
+        if (member == "authorized") return {"authorized(): boolean", "Whether the peer was verified AND the hostname check passed."};
+        if (member == "encrypted") return {"encrypted(): boolean", "Whether the handshake completed."};
+        if (member == "alpnProtocol") return {"alpnProtocol(): string", "The negotiated ALPN id (\"\" when none)."};
+        if (member == "servername") return {"servername(): string", "The SNI actually sent / selected."};
+        if (member == "getProtocol") return {"getProtocol(): string", "\"TLSv1.2\" | \"TLSv1.3\" | \"\"."};
+        if (member == "getCipher") return {"getCipher(): object", "The negotiated cipher (`name`, `version`, `standardName`)."};
+        if (member == "getPeerCertificate") return {"getPeerCertificate(raw?: boolean): object", "The peer's certificate: DN, serial, fingerprints and validity dates (or raw PEM)."};
+        if (member == "setMaxSendFragment" || member == "getMaxSendFragment") return {member + "(...): " + (member == "setMaxSendFragment" ? "void" : "number"), "Sets / reads the maximum send fragment (256..65536)."};
+    }
+    if (type == "TlsServer") {
+        if (member == "on") return {"on(event: string, listener: (socket?: TlsSocket, err?: unknown) => void): void", "Registers the handler for `secureConnection` (accepted sockets), `error` or `close`."};
+        if (member == "listen") return {"listen(port: Port, host?: string, callback?: () => void): void", "Binds the port (0.0.0.0 for the two-argument form; the host form binds an IPv4 literal)."};
+        if (member == "close") return {"close(callback?: () => void): void", "Stops accepting; the callback runs once the server is closed."};
+        if (member == "addressPort") return {"addressPort(): Port", "The bound port (0 when not listening)."};
     }
     if (type == "Request") {
         if (member == "url") return {"url: string", "The request URL."};
@@ -762,6 +992,39 @@ std::optional<Type> Analyzer::networkMember(const std::string& prop) {
     if (prop == "httpError") {
         return Type::function({Type::number(), Type::string()}, networkObjectType(kHttpError));
     }
+    // Raw-socket families (src/std/network/{tcp,udp,tls}).
+    if (prop == "createTcpServer") {
+        return withOptionalTail(Type::function({ambient()}, networkObjectType(kTcpServer)));
+    }
+    if (prop == "connectTcp") {
+        return withOptionalTail2(Type::function(
+            {ambient(), ambient(), ambient()}, networkObjectType(kTcpSocket)));
+    }
+    if (prop == "TcpSocket") {
+        return withOptionalTail(Type::function(
+            {Type::string(), Type::number(), Type::number()},
+            networkObjectType(kTcpSocket)));
+    }
+    if (prop == "TcpServer") {
+        return withOptionalTail(Type::function({ambient()}, networkObjectType(kTcpServer)));
+    }
+    if (prop == "createUdpSocket" || prop == "UdpSocket") {
+        return Type::function({Type::string()}, networkObjectType(kUdpSocket));
+    }
+    if (prop == "createTlsServer") {
+        return withOptionalTail2(Type::function({ambient(), ambient()},
+                                                networkObjectType(kTlsServer)));
+    }
+    if (prop == "connectTls") {
+        return withOptionalTail2(Type::function({ambient(), ambient(), ambient()},
+                                                networkObjectType(kTlsSocket)));
+    }
+    if (prop == "TlsSocket" || prop == "TlsServer") {
+        return withOptionalTail2(Type::function({ambient(), ambient()},
+                                                networkObjectType(prop == "TlsSocket"
+                                                                      ? kTlsSocket
+                                                                      : kTlsServer)));
+    }
     if (prop == "Headers") return Type::function({ambient()}, networkObjectType(kHeaders));
     if (prop == "Request") return Type::function({Type::string(), ambient()}, networkObjectType(kRequest));
     if (prop == "Response") return Type::function({ambient(), ambient()}, networkObjectType(kResponse));
@@ -816,6 +1079,84 @@ bool Analyzer::tryInferNetworkCall(CallExpr& call, const Identifier& id, Type& o
                    "{ cert, key, ca?, passphrase?, minProtocol? }");
         }
         out = networkObjectType(kTlsOptions);
+        return true;
+    }
+    // Raw-socket families (src/std/network/{tcp,udp,tls}). Options objects are
+    // ambient for sema (field names are checked at codegen, where the
+    // lowering validates them); arity is checked here.
+    if (id.name == "createTcpServer") {
+        inferArgs(call);
+        if (call.arguments.size() > 1) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "createTcpServer(options?) takes at most one argument");
+        }
+        out = networkObjectType(kTcpServer);
+        return true;
+    }
+    if (id.name == "TcpServer") {
+        inferArgs(call);
+        if (call.arguments.size() > 1) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "new TcpServer(options?) takes at most one argument");
+        }
+        out = networkObjectType(kTcpServer);
+        return true;
+    }
+    if (id.name == "TcpSocket") {
+        inferArgs(call);
+        if (call.arguments.size() < 2 || call.arguments.size() > 3) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "new TcpSocket(host, port, timeout?) takes two or three "
+                   "arguments");
+        }
+        out = networkObjectType(kTcpSocket);
+        return true;
+    }
+    if (id.name == "connectTcp") {
+        inferArgs(call);
+        if (call.arguments.size() < 1 || call.arguments.size() > 3 ||
+            !call.arguments.front()) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "connectTcp(options) or connectTcp(host, port, timeout?)");
+        }
+        out = networkObjectType(kTcpSocket);
+        return true;
+    }
+    if (id.name == "createUdpSocket" || id.name == "UdpSocket") {
+        inferArgs(call);
+        if (call.arguments.size() != 1 || !call.arguments.front()) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "createUdpSocket(type) takes exactly one argument "
+                   "(\"udp4\" or \"udp6\")");
+        }
+        out = networkObjectType(kUdpSocket);
+        return true;
+    }
+    if (id.name == "createTlsServer") {
+        inferArgs(call);
+        if (call.arguments.size() > 2) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "createTlsServer(options?, handler?) takes at most two "
+                   "arguments");
+        }
+        out = networkObjectType(kTlsServer);
+        return true;
+    }
+    if (id.name == "connectTls") {
+        inferArgs(call);
+        if (call.arguments.size() < 1 || call.arguments.size() > 3 ||
+            !call.arguments.front()) {
+            report(diagcode::kArityMismatch, anchorSpan(call.span),
+                   "connectTls(options) or connectTls(host, port?, extra?)");
+        }
+        out = networkObjectType(kTlsSocket);
+        return true;
+    }
+    if (id.name == "TlsSocket") {
+        // `new TlsSocket(tcpSocket, options)` adopts a TcpSocket's transport;
+        // the adoption is typed permissively (the values are ambient).
+        inferArgs(call);
+        out = networkObjectType(kTlsSocket);
         return true;
     }
     // Ledger L (appended): middleware factories + bare class constructions.
@@ -1114,6 +1455,32 @@ Type Analyzer::inferNetworkConstruct(const std::string& name, ExprList& args,
         if (name == "Response") return networkObjectType(kResponse);
         if (name == "FormData") return networkObjectType(kFormData);
         return networkObjectType(kAbortSignal);
+    }
+    if (name == "TcpSocket") {
+        for (auto& arg : args) { if (arg) inferExpr(*arg); }
+        if (args.size() < 2 || args.size() > 3) {
+            report(diagcode::kArityMismatch, anchorSpan(span),
+                   "new TcpSocket(host, port, timeout?) takes two or three "
+                   "arguments");
+        }
+        return networkObjectType(kTcpSocket);
+    }
+    if (name == "TcpServer") {
+        for (auto& arg : args) { if (arg) inferExpr(*arg); }
+        if (args.size() > 1) {
+            report(diagcode::kArityMismatch, anchorSpan(span),
+                   "new TcpServer(options?) takes at most one argument");
+        }
+        return networkObjectType(kTcpServer);
+    }
+    if (name == "UdpSocket") {
+        for (auto& arg : args) { if (arg) inferExpr(*arg); }
+        if (args.size() != 1) {
+            report(diagcode::kArityMismatch, anchorSpan(span),
+                   "new UdpSocket(type) takes exactly one argument "
+                   "(\"udp4\" or \"udp6\")");
+        }
+        return networkObjectType(kUdpSocket);
     }
     if (name != "WebSocket" && name != "WebSocketServer") return Type::unknown();
     for (auto& arg : args) {

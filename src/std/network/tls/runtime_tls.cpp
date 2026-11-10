@@ -386,6 +386,7 @@ std::shared_ptr<ITlsContext> createTlsContext(const TlsOptions& options, bool is
     const SSL_METHOD* method = isServer ? TLS_server_method() : TLS_client_method();
     ctx->ctx = SSL_CTX_new(method);
     if (!ctx->ctx) backendUnavailable();
+    if (!ctx->ctx) backendUnavailable();
     ctx->minProto = options.minProtocol;
     SSL_CTX_set_min_proto_version(ctx->ctx, TLS1_2_VERSION);   // the TLS1.2+ floor
     SSL_CTX_set_max_proto_version(ctx->ctx, TLS1_3_VERSION);
@@ -461,8 +462,10 @@ std::shared_ptr<ITlsEngine> createTlsEngine(const std::shared_ptr<ITlsContext>& 
         SSL_set_connect_state(engine->ssl);
         const std::string sni = options.servername.empty() ? options.host : options.servername;
         if (!sni.empty()) SSL_set_tlsext_host_name(engine->ssl, sni.c_str());  // SNI
-        if (options.checkServerIdentity && !options.host.empty())
-            SSL_set1_host(engine->ssl, options.host.c_str());                 // hostname check
+        // Hostname verification follows the SNI/identity target (like
+        // curl/Node's servername), not the raw TCP host.
+        if (options.checkServerIdentity && !sni.empty())
+            SSL_set1_host(engine->ssl, sni.c_str());                           // hostname check
         SSL_set_verify(engine->ssl, SSL_VERIFY_PEER, nullptr);
     }
     SSL_set_max_send_fragment(engine->ssl, static_cast<int>(options.maxSendFragment));
@@ -652,6 +655,8 @@ void TlsSocketImpl::stopIdleTimer() {
 }
 
 void TlsSocketImpl::emitData(const std::string& plaintext) {
+    std::fprintf(stderr, "[tls] emitData side=%s n=%zu\n",
+                 isServerSide ? "server" : "client", plaintext.size());
     if (destroyed || paused) return;
     const auto it = slots.find("data");
     if (it == slots.end()) return;
@@ -689,6 +694,7 @@ void TlsSocketImpl::destroy() {
 }
 
 void TlsSocketImpl::beginClose() {
+    std::fprintf(stderr, "[tls] beginClose (writeEnded=%d)\n", writeEnded ? 1 : 0);
     if (writeEnded) return;
     writeEnded = true;
     if (engine && secure) engine->shutdown();  // close_notify into the out-BIO
@@ -709,7 +715,10 @@ void TlsSocketImpl::flushCiphertext() {
             produced = 0;
         }
     }
-    if (writePending || ciphertextOut.empty()) return;  // hold until the current write finishes
+    if (writePending || ciphertextOut.empty()) {
+        std::fprintf(stderr, "[tls] flushCiphertext hold (pending=%d out=%zu)\n", writePending ? 1 : 0, ciphertextOut.size());
+        return;
+    }
     // uv_write borrows the buffer until the callback; hand the bytes to the loop.
     auto* payload = new WritePayload{shared_from_this(), std::move(ciphertextOut)};
     ciphertextOut.clear();
@@ -719,6 +728,7 @@ void TlsSocketImpl::flushCiphertext() {
     req->data = payload;
     uv_write(req, reinterpret_cast<uv_stream_t*>(&tcp), &uvbuf, 1,
              [](uv_write_t* req, int status) {
+                 std::fprintf(stderr, "[tls] uv_write done status=%d\n", status);
                  std::unique_ptr<WritePayload> payload(static_cast<WritePayload*>(req->data));
                  delete req;
                  if (status < 0) {
@@ -733,9 +743,13 @@ void TlsSocketImpl::flushCiphertext() {
 }
 
 void TlsSocketImpl::pumpWrite() {
-    if (!secure || plaintextOut.empty() || !engine) return;
+    if (!secure || plaintextOut.empty() || !engine) {
+        std::fprintf(stderr, "[tls] pumpWrite skip (secure=%d pending=%zu)\n", secure ? 1 : 0, plaintextOut.size());
+        return;
+    }
     const auto chunk = plaintextOut;
     plaintextOut.clear();
+    std::fprintf(stderr, "[tls] pumpWrite begin n=%zu\n", chunk.size());
     std::size_t off = 0;
     std::uint8_t buf[16384];
     while (off < chunk.size()) {
@@ -881,6 +895,8 @@ void TlsServerImpl::onAccept() {
                       }
                       if (nread == 0) return;
                       self->bytesIn += static_cast<double>(nread);
+                      std::fprintf(stderr, "[tls] on_read side=%s nread=%zd\n",
+                                   self->isServerSide ? "server" : "client", nread);
                       self->engine->feedCiphertext(reinterpret_cast<const std::uint8_t*>(buf->base),
                                                    static_cast<std::size_t>(nread));
                       self->pumpHandshake();
@@ -1024,7 +1040,6 @@ TlsServer::TlsServer(TlsOptions options) : impl_(std::make_shared<detail::TlsSer
     impl_->options = options;
     impl_->ctx = detail::createTlsContext(options, true);  // throws when the backend is unavailable
 }
-
 TlsServer::~TlsServer() { close(); }
 
 TlsServer::TlsServer(TlsServer&& other) noexcept : impl_(std::move(other.impl_)) {}
@@ -1037,12 +1052,15 @@ TlsServer& TlsServer::operator=(TlsServer&& other) noexcept {
 }
 
 void TlsServer::on(const std::string& event, std::function<void(TlsSocket&)> handler) const {
+    if (!impl_) return;
     impl_->connSlots[event] = std::move(handler);
 }
 void TlsServer::on(const std::string& event, std::function<void(Thrown)> handler) const {
+    if (!impl_) return;
     impl_->errSlots[event] = std::move(handler);
 }
 void TlsServer::on(const std::string& event, std::function<void()> handler) const {
+    if (!impl_) return;
     if (event == "close") impl_->closeSlots = std::move(handler);
 }
 
@@ -1051,6 +1069,7 @@ void TlsServer::listen(double port, std::function<void()> callback) const {
 }
 
 void TlsServer::listen(double port, const std::string& host, std::function<void()> callback) const {
+    if (!impl_) return;
     ensureLoop();
     auto* loop = reinterpret_cast<uv_loop_t*>(loopHandle());
     uv_tcp_init(loop, &impl_->listener);
@@ -1100,7 +1119,8 @@ void TlsServer::listen(double port, const std::string& host, std::function<void(
 }
 
 void TlsServer::close(std::function<void()> callback) const {
-    if (!impl_->listening) { if (callback) callback(); return; }
+    std::fprintf(stderr, "[tls] server close listeners (impl=%p listening=%d)\n", (void*)impl_.get(), impl_ ? impl_->listening ? 1 : 0 : -1);
+    if (!impl_ || !impl_->listening) { if (callback) callback(); return; }
     impl_->listening = false;
     impl_->closeCallback = std::move(callback);
     for (auto& socket : impl_->sockets) socket->destroy();  // in-flight handshakes die here
@@ -1120,7 +1140,7 @@ void TlsServer::close(std::function<void()> callback) const {
 }
 
 double TlsServer::addressPort() const {
-    if (!impl_->listening) return 0.0;
+    if (!impl_ || !impl_->listening) return 0.0;
     sockaddr_storage addr{};
     int len = sizeof(addr);
     if (uv_tcp_getsockname(&impl_->listener, reinterpret_cast<sockaddr*>(&addr), &len) != 0) return 0.0;

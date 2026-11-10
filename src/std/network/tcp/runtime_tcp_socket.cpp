@@ -355,7 +355,7 @@ void shutdownAfterFlush(const std::shared_ptr<TcpSocketImpl>& impl) {
     // (or close()). The request must stay alive until its callback, so it
     // is heap-allocated and freed there (the WsClient WriteRequest pattern).
     auto* req = new uv_shutdown_t{};
-    uv_shutdown(reinterpret_cast<uv_stream_t*>(&impl->tcp), req,
+    uv_shutdown(req, reinterpret_cast<uv_stream_t*>(&impl->tcp),
                 [](uv_shutdown_t* r, int /*status*/) { delete r; });
 }
 
@@ -462,7 +462,7 @@ void TcpSocket::pause() const {
     if (!impl_ || impl_->finished || impl_->paused) return;
     impl_->paused = true;
     if (impl_->reading && impl_->tcpReady) {
-        uv_read_pause(reinterpret_cast<uv_stream_t*>(&impl_->tcp));
+        uv_read_stop(reinterpret_cast<uv_stream_t*>(&impl_->tcp));
     }
 }
 

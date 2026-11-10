@@ -1,11 +1,5 @@
 {
-  "mode": "check",
-  "stdout": "",
-  "exitCode": 1,
-  "error": {
-    "code": "CP3304",
-    "line": 1,
-    "col": 1,
-    "contains": "module 'std/network' does not export 'createUdpSocket'"
-  }
+  "mode": "run",
+  "stdout": "ping\n",
+  "exitCode": 0
 }

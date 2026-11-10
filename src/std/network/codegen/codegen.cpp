@@ -80,8 +80,17 @@ constexpr const char* kRoute = "$network:Route";          // Router agent
 constexpr const char* kRouteChain = "$network:RouteChain";  // Routing agent
 constexpr const char* kwebserverApp = "$network:webserverApp";  // Routing agent
 constexpr const char* kHttpError = "$network:HttpError";  // Errors agent
+// Raw-socket families (src/std/network/{tcp,udp,tls}).
+constexpr const char* kTcpSocket = "$network:TcpSocket";
+constexpr const char* kTcpServer = "$network:TcpServer";
+constexpr const char* kUdpSocket = "$network:UdpSocket";
+constexpr const char* kUdpRemoteInfo = "$network:UdpRemoteInfo";
+constexpr const char* kTlsSocket = "$network:TlsSocket";
+constexpr const char* kTlsServer = "$network:TlsServer";
 
 constexpr const char* kRuntimeNs = "::cp3::runtime::network::";
+constexpr const char* kTcpNs = "::cp3::runtime::network::tcp::";
+constexpr const char* kTlsNs = "::cp3::runtime::network::tls::";
 
 /// The marker type a middleware's `next` parameter carries in the temporary
 /// handler scope below: the `$network:` prefix matches the sema markers, so a
@@ -189,7 +198,9 @@ bool Generator::isNetworkObject(const Expr* e) const {
         name == kHttpServer || name == kWebSocket || name == kWebSocketServer ||
         name == kHeaders || name == kRequest || name == kResponse ||
         name == kFormData || name == kAbortSignal || name == kRouter ||
-        name == kRoute || name == kRouteChain || name == kwebserverApp) {
+        name == kRoute || name == kRouteChain || name == kwebserverApp ||
+        name == kTcpSocket || name == kTcpServer || name == kUdpSocket ||
+        name == kUdpRemoteInfo || name == kTlsSocket || name == kTlsServer) {
         return true;
     }
     // `res.status(404).text(...)` / `res.header(...).send(...)`: the chainable
@@ -386,6 +397,213 @@ std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::strin
         return std::string(kRuntimeNs) + "dnsResolve(" +
                expr(*c.arguments.front()) + ")";
     }
+    if (name == "createTcpServer") {
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        std::string options = std::string(kTcpNs) + "TcpServerOptions{}";
+        if (!c.arguments.empty() && c.arguments.front() &&
+            c.arguments.front()->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*c.arguments.front());
+            std::string inner;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                if (key == "threads" || key == "maxConnections" ||
+                    key == "idleTimeout" || key == "maxWriteBuffer") {
+                    inner += "o." + key + " = " + expr(*p->value) + "; ";
+                } else {
+                    reportTypeError(*p->value,
+                        "type mismatch: unknown createTcpServer() option '" +
+                            key + "'");
+                }
+            }
+            options = "[&] { " + std::string(kTcpNs) + "TcpServerOptions o; " +
+                      inner + "return o; }()";
+        } else if (!c.arguments.empty() && c.arguments.front()) {
+            reportTypeError(*c.arguments.front(),
+                "type mismatch: createTcpServer() options must be an object"
+                " literal");
+        }
+        return std::string(kTcpNs) + "createTcpServer(" + options + ")";
+    }
+    if (name == "connectTcp") {
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        if (c.arguments.empty() || !c.arguments.front()) {
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "connectTcp(options) or connectTcp(host, port,"
+                               " timeout?) takes at least one argument");
+            return "0.0";
+        }
+        const Expr* first = c.arguments.front().get();
+        if (first->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*first);
+            std::string inner;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                if (key == "host") inner += "o.host = " + expr(*p->value) + "; ";
+                else if (key == "port") inner += "o.port = " + expr(*p->value) + "; ";
+                else if (key == "timeout") inner += "o.timeout = " + expr(*p->value) + "; ";
+                else if (key == "idleTimeout") inner += "o.idleTimeout = " + expr(*p->value) + "; ";
+                else if (key == "maxWriteBuffer") inner += "o.maxWriteBuffer = " + expr(*p->value) + "; ";
+                else {
+                    reportTypeError(*p->value,
+                        "type mismatch: unknown connectTcp() option '" + key +
+                            "'");
+                }
+            }
+            return std::string(kTcpNs) + "connectTcp([&] { " +
+                   std::string(kTcpNs) + "TcpConnectOptions o; " +
+                   inner + "return o; }())";
+        }
+        // connectTcp(host, port, timeout?) convenience spelling.
+        std::string args = expr(*first);
+        if (c.arguments.size() >= 2 && c.arguments[1]) args += ", " + expr(*c.arguments[1]);
+        if (c.arguments.size() >= 3 && c.arguments[2]) args += ", " + expr(*c.arguments[2]);
+        return std::string(kTcpNs) + "connectTcp(" + args + ")";
+    }
+    if (name == "createUdpSocket") {
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        if (c.arguments.empty() || !c.arguments.front()) {
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "createUdpSocket(type) takes one argument");
+            return "0.0";
+        }
+        return std::string(kRuntimeNs) + "createUdpSocket(" +
+               expr(*c.arguments.front()) + ")";
+    }
+    if (name == "createTlsServer") {
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        std::string options = std::string(kTlsNs) + "TlsOptions{}";
+        std::string handler = "std::function<void(::cp3::runtime::network::tls::TlsSocket&)>()";
+        if (c.arguments.empty() || !c.arguments.front()) {
+            return std::string(kTlsNs) + "createTlsServer(" + options + ")";
+        }
+        if (c.arguments.front()->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*c.arguments.front());
+            std::string inner;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                // PEM-path-or-text keys (file paths per the docs).
+                if (key == "host" || key == "port" || key == "servername" ||
+                    key == "ca" || key == "cert" || key == "key" ||
+                    key == "keyPassphrase" || key == "minProtocol" ||
+                    key == "maxProtocol" || key == "ciphers" ||
+                    key == "handshakeTimeoutMs" ||
+                    key == "maxHandshakesPerSecond" ||
+                    key == "maxConcurrentHandshakes" || key == "maxSendFragment") {
+                    inner += "o." + key + " = " + expr(*p->value) + "; ";
+                } else if (key == "rejectUnauthorized" || key == "checkServerIdentity" ||
+                           key == "allowHalfOpen" || key == "readable" ||
+                           key == "writable") {
+                    inner += "o." + key + " = " + expr(*p->value) + "; ";
+                } else if (key == "alpnProtocols") {
+                    inner += "o.alpnProtocols = " + expr(*p->value) + "; ";
+                } else {
+                    reportTypeError(*p->value,
+                        "type mismatch: unknown createTlsServer() option '" +
+                            key + "'");
+                }
+            }
+            options = "[&] { " + std::string(kTlsNs) + "TlsOptions o; " +
+                      inner + "return o; }()";
+        } else {
+            reportTypeError(*c.arguments.front(),
+                "type mismatch: createTlsServer() options must be an object"
+                " literal");
+        }
+        if (c.arguments.size() >= 2 && c.arguments[1]) {
+            // The secureConnection handler rides through unchanged; sema types
+            // it permissively and networkArgs packs the arrow with its typed
+            // context parameters.
+            handler = "std::function<void(::cp3::runtime::network::tls::TlsSocket&)>(" +
+                      expr(*c.arguments[1]) + ")";
+            return std::string(kTlsNs) + "createTlsServer(" + options + ", " +
+                   handler + ")";
+        }
+        return std::string(kTlsNs) + "createTlsServer(" + options + ")";
+    }
+    if (name == "connectTls") {
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        if (c.arguments.empty() || !c.arguments.front()) {
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "connectTls(options) or connectTls(host, port?,"
+                               " extra?) takes at least one argument");
+            return "0.0";
+        }
+        const Expr* first = c.arguments.front().get();
+        if (c.arguments.size() == 1 && first->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*first);
+            std::string inner;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                if (key == "host" || key == "port" || key == "servername" ||
+                    key == "ca" || key == "cert" || key == "key" ||
+                    key == "keyPassphrase" || key == "minProtocol" ||
+                    key == "maxProtocol" || key == "ciphers" ||
+                    key == "handshakeTimeoutMs" ||
+                    key == "rejectUnauthorized" || key == "checkServerIdentity" ||
+                    key == "allowHalfOpen" || key == "readable" ||
+                    key == "writable" || key == "alpnProtocols" ||
+                    key == "maxHandshakesPerSecond" ||
+                    key == "maxConcurrentHandshakes" || key == "maxSendFragment") {
+                    if (key == "alpnProtocols") {
+                        inner += "o.alpnProtocols = " + expr(*p->value) + "; ";
+                    } else {
+                        inner += "o." + key + " = " + expr(*p->value) + "; ";
+                    }
+                } else {
+                    reportTypeError(*p->value,
+                        "type mismatch: unknown connectTls() option '" + key +
+                            "'");
+                }
+            }
+            return std::string(kTlsNs) + "connectTls([&] { " +
+                   std::string(kTlsNs) + "TlsOptions o; " + inner +
+                   "return o; }())";
+        }
+        // connectTls(host, port?, extra?): host is a string; port is optional.
+        std::string args = expr(*first);
+        if (c.arguments.size() >= 2 && c.arguments[1]) args += ", " + expr(*c.arguments[1]);
+        if (c.arguments.size() >= 3 && c.arguments[2]) args += ", " + expr(*c.arguments[2]);
+        return std::string(kTlsNs) + "connectTls(" + args + ")";
+    }
+    if (name == "TcpSocket") {
+        // `new TcpSocket(host, port, timeout?)` (the class-shaped namespace
+        // member; sema types the call position as the same marker).
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        if (c.arguments.size() < 2 || c.arguments.size() > 3) {
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "new TcpSocket(host, port, timeout?) takes two or "
+                               "three arguments");
+            return "0.0";
+        }
+        std::string args;
+        for (std::size_t i = 0; i < c.arguments.size() && i < 3; ++i) {
+            if (!c.arguments[i]) continue;
+            if (!args.empty()) args += ", ";
+            args += expr(*c.arguments[i]);
+        }
+        return std::string(kTcpNs) + "TcpSocket(" + args + ")";
+    }
+    if (name == "UdpSocket") {
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        if (c.arguments.size() != 1 || !c.arguments.front()) {
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "new UdpSocket(type) takes exactly one argument");
+            return "0.0";
+        }
+        return std::string(kRuntimeNs) + "UdpSocket(" +
+               expr(*c.arguments.front()) + ")";
+    }
     if (name == "createServer") {
         needsNetwork_ = true;
         needsEventLoop_ = true;
@@ -526,11 +744,11 @@ std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::strin
             for (const auto& p : lit.properties) {
                 if (!p || !p->value) continue;
                 const std::string key = objectKey(*p);
-                if (key == "origin") inner += ".origin = " + expr(*p->value) + "; ";
-                else if (key == "methods") inner += ".methods = " + expr(*p->value) + "; ";
-                else if (key == "headers") inner += ".headers = " + expr(*p->value) + "; ";
-                else if (key == "credentials") inner += ".credentials = " + expr(*p->value) + "; ";
-                else if (key == "maxAge") inner += ".maxAge = " + expr(*p->value) + "; ";
+                if (key == "origin") inner += "o.origin = " + expr(*p->value) + "; ";
+                else if (key == "methods") inner += "o.methods = " + expr(*p->value) + "; ";
+                else if (key == "headers") inner += "o.headers = " + expr(*p->value) + "; ";
+                else if (key == "credentials") inner += "o.credentials = " + expr(*p->value) + "; ";
+                else if (key == "maxAge") inner += "o.maxAge = " + expr(*p->value) + "; ";
             }
             opts = "[&] { " + std::string(kRuntimeNs) + "CorsOptions o; " + inner + "return o; }()";
         } else if (!c.arguments.empty() && c.arguments.front()) {
@@ -570,14 +788,14 @@ std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::strin
                 const std::string key = objectKey(*p);
                 if (key == "limit") {
                     if (p->value->kind == NodeKind::StringLiteral) {
-                        inner += ".limitBytes = ::cp3::runtime::network::webserver::body_parse::parseLimitText(" + expr(*p->value) + "); ";
+                        inner += "o.limitBytes = ::cp3::runtime::network::webserver::body_parse::parseLimitText(" + expr(*p->value) + "); ";
                     } else {
-                        inner += ".limitBytes = " + expr(*p->value) + "; ";
+                        inner += "o.limitBytes = " + expr(*p->value) + "; ";
                     }
                 } else if (key == "strict" || key == "extended") {
-                    inner += "." + key + " = " + expr(*p->value) + "; ";
+                    inner += "o." + key + " = " + expr(*p->value) + "; ";
                 } else if (key == "type") {
-                    inner += ".type = " + expr(*p->value) + "; ";
+                    inner += "o.type = " + expr(*p->value) + "; ";
                 }
             }
         }
@@ -601,9 +819,9 @@ std::string Generator::emitNetworkIdentifier(const CallExpr& c, const std::strin
             for (const auto& p : lit.properties) {
                 if (!p || !p->value) continue;
                 const std::string key = objectKey(*p);
-                if (key == "caseSensitive") inner += ".caseSensitive = " + expr(*p->value) + "; ";
-                else if (key == "strict") inner += ".strict = " + expr(*p->value) + "; ";
-                else if (key == "mergeParams") inner += ".mergeParams = " + expr(*p->value) + "; ";
+                if (key == "caseSensitive") inner += "o.caseSensitive = " + expr(*p->value) + "; ";
+                else if (key == "strict") inner += "o.strict = " + expr(*p->value) + "; ";
+                else if (key == "mergeParams") inner += "o.mergeParams = " + expr(*p->value) + "; ";
             }
             options = "[&] { " + std::string(kRuntimeNs) + "webserver::RouterOptions o; " + inner + "return o; }()";
         }
@@ -678,7 +896,65 @@ std::string Generator::emitUnresolvedCall(const CallExpr& c, const std::string& 
 std::string Generator::emitNetworkNew(const NewExpr& n) {
     if (!n.callee || n.callee->kind != NodeKind::Identifier) return std::string();
     const std::string name = static_cast<const Identifier&>(*n.callee).name;
-    // Router agent [C8]: `new Router()` / `new Router(options?)`.
+    // Raw-socket families (src/std/network/{tcp,udp,tls}).
+    if (name == "TcpSocket") {
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        if (n.arguments.size() < 2 || n.arguments.size() > 3) {
+            reportCodegenError(n, diagcode::kArityMismatch,
+                               "new TcpSocket(host, port, timeout?) takes two or "
+                               "three arguments");
+            return "0.0";
+        }
+        std::string args;
+        for (std::size_t i = 0; i < n.arguments.size() && i < 3; ++i) {
+            if (!n.arguments[i]) continue;
+            if (!args.empty()) args += ", ";
+            args += expr(*n.arguments[i]);
+        }
+        return std::string(kTcpNs) + "TcpSocket(" + args + ")";
+    }
+    if (name == "TcpServer") {
+        // Same options lowering as `createTcpServer(...)`.
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        std::string options = std::string(kTcpNs) + "TcpServerOptions{}";
+        if (!n.arguments.empty() && n.arguments.front() &&
+            n.arguments.front()->kind == NodeKind::ObjectLiteral) {
+            const auto& lit = static_cast<const ObjectLiteral&>(*n.arguments.front());
+            std::string inner;
+            for (const auto& p : lit.properties) {
+                if (!p || !p->value) continue;
+                const std::string key = objectKey(*p);
+                if (key == "threads" || key == "maxConnections" ||
+                    key == "idleTimeout" || key == "maxWriteBuffer") {
+                    inner += "o." + key + " = " + expr(*p->value) + "; ";
+                } else {
+                    reportTypeError(*p->value,
+                        "type mismatch: unknown new TcpServer() option '" +
+                            key + "'");
+                }
+            }
+            options = "[&] { " + std::string(kTcpNs) + "TcpServerOptions o; " +
+                      inner + "return o; }()";
+        } else if (!n.arguments.empty() && n.arguments.front()) {
+            reportTypeError(*n.arguments.front(),
+                "type mismatch: new TcpServer() options must be an object"
+                " literal");
+        }
+        return std::string(kTcpNs) + "createTcpServer(" + options + ")";
+    }
+    if (name == "UdpSocket") {
+        needsNetwork_ = true;
+        needsEventLoop_ = true;
+        if (n.arguments.size() != 1 || !n.arguments.front()) {
+            reportCodegenError(n, diagcode::kArityMismatch,
+                               "new UdpSocket(type) takes exactly one argument");
+            return "0.0";
+        }
+        return std::string(kRuntimeNs) + "UdpSocket(" +
+               expr(*n.arguments.front()) + ")";
+    }
     if (name == "Router") {
         needsNetwork_ = true;
         std::string options = std::string(kRuntimeNs) + "webserver::RouterOptions{}";
@@ -689,9 +965,9 @@ std::string Generator::emitNetworkNew(const NewExpr& n) {
             for (const auto& p : lit.properties) {
                 if (!p || !p->value) continue;
                 const std::string key = objectKey(*p);
-                if (key == "caseSensitive") inner += ".caseSensitive = " + expr(*p->value) + "; ";
-                else if (key == "strict") inner += ".strict = " + expr(*p->value) + "; ";
-                else if (key == "mergeParams") inner += ".mergeParams = " + expr(*p->value) + "; ";
+                if (key == "caseSensitive") inner += "o.caseSensitive = " + expr(*p->value) + "; ";
+                else if (key == "strict") inner += "o.strict = " + expr(*p->value) + "; ";
+                else if (key == "mergeParams") inner += "o.mergeParams = " + expr(*p->value) + "; ";
             }
             options = "[&] { " + std::string(kRuntimeNs) + "webserver::RouterOptions o; " + inner + "return o; }()";
         } else if (!n.arguments.empty() && n.arguments.front()) {
@@ -798,6 +1074,16 @@ std::string Generator::emitNetworkCall(const CallExpr& c, const MemberExpr& m) {
     if (m.property == "fetch") return emitNetworkFetch(c, c.arguments);
     if (m.property == "lookup") return emitNetworkIdentifier(c, "lookup");
     if (m.property == "createServer") return emitNetworkIdentifier(c, "createServer");
+    if (m.property == "createTcpServer" || m.property == "TcpServer") {
+        return emitNetworkIdentifier(c, "createTcpServer");
+    }
+    if (m.property == "TcpSocket") return emitNetworkIdentifier(c, "TcpSocket");
+    if (m.property == "connectTcp") return emitNetworkIdentifier(c, "connectTcp");
+    if (m.property == "createUdpSocket" || m.property == "UdpSocket") {
+        return emitNetworkIdentifier(c, "createUdpSocket");
+    }
+    if (m.property == "createTlsServer") return emitNetworkIdentifier(c, "createTlsServer");
+    if (m.property == "connectTls") return emitNetworkIdentifier(c, "connectTls");
     // Body-parse + router agents: webserver.json() / webserver.Router() etc.
     if (m.property == "json" || m.property == "urlencoded" ||
         m.property == "text" || m.property == "raw" || m.property == "Router" ||

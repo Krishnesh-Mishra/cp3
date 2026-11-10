@@ -155,7 +155,15 @@ std::string Generator::sourceIncludes() const {
 
     if (needsText_) out += "#include \"cp3/std/text.hpp\"\n";
     if (needsReadline_) out += "#include \"cp3/std/readline.hpp\"\n";
-    if (needsNetwork_) out += "#include \"cp3/std/network.hpp\"\n";
+    if (needsNetwork_) {
+        out += "#include \"cp3/std/network.hpp\"\n";
+        // The raw-socket headers are declaration-only; their runtime TUs are
+        // selected per-marker in src/std/network/codegen/native.hpp, so a
+        // fetch-only program pays a parse of two headers, not a link.
+        out += "#include \"cp3/std/network/tcp.hpp\"\n";
+        out += "#include \"cp3/std/network/udp.hpp\"\n";
+        out += "#include \"cp3/std/network/tls.hpp\"\n";
+    }
     if (needswebserverSettings_) out += "#include \"cp3/std/network/webserver/settings.hpp\"\n";
     if (needsCollections_) {
         out += "#include \"cp3/std/collections.hpp\"\n";  // Map/Set (D44)

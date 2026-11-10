@@ -41,7 +41,7 @@ const StdModuleDef kStdModules[] = {
     {"std/path", true, {}},
     {"std/os", true, {}},
     {"std/crypto", true, {}},
-    {"std/network", true, {"fetch", "lookup", "WebSocket", "WebSocketServer", "createServer", "tls", "Headers", "Request", "Response", "FormData", "AbortSignal", "static", "cors", "bodyLimit", "Router", "webserver", "cookieParser"}},
+    {"std/network", true, {"fetch", "lookup", "WebSocket", "WebSocketServer", "createServer", "tls", "Headers", "Request", "Response", "FormData", "AbortSignal", "static", "cors", "bodyLimit", "Router", "webserver", "cookieParser", "createTcpServer", "connectTcp", "TcpServer", "TcpSocket", "createUdpSocket", "UdpSocket", "createTlsServer", "connectTls", "TlsServer", "TlsSocket"}},
     {"std/env", false, {"env"}},
     {"std/collections", false, {"Map", "Set", "LRUCache", "Queue", "Stack", "PriorityQueue", "RingBuffer", "BitSet", "MultiMap", "ConcurrentMap"}},
     {"std/buffer", false, {"Buffer"}},
@@ -111,6 +111,15 @@ std::vector<std::string> stdModuleSpecifiers() {
         specifiers.emplace_back(def.specifier);
     }
     return specifiers;
+}
+
+std::vector<std::string> stdModuleExportNames(const std::string& specifier) {
+    std::vector<std::string> names;
+    const modules::ExportSurface* surface = modules::stdModuleSurface(specifier);
+    if (surface != nullptr) {
+        names.assign(surface->named.begin(), surface->named.end());
+    }
+    return names;
 }
 
 }  // namespace cp3

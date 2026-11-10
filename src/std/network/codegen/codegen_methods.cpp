@@ -42,6 +42,12 @@ constexpr const char* kRequest = "$network:Request";
 constexpr const char* kResponse = "$network:Response";
 constexpr const char* kFormData = "$network:FormData";
 constexpr const char* kAbortSignal = "$network:AbortSignal";
+constexpr const char* kTcpSocket = "$network:TcpSocket";
+constexpr const char* kTcpServer = "$network:TcpServer";
+constexpr const char* kUdpSocket = "$network:UdpSocket";
+constexpr const char* kUdpRemoteInfo = "$network:UdpRemoteInfo";
+constexpr const char* kTlsSocket = "$network:TlsSocket";
+constexpr const char* kTlsServer = "$network:TlsServer";
 constexpr const char* kRouter = "$network:Router";        // Router agent
 constexpr const char* kRoute = "$network:Route";          // Router agent
 constexpr const char* kRouteChain = "$network:RouteChain";  // Routing agent
@@ -70,16 +76,33 @@ Type stringMapType() {
     return map;
 }
 
-/// The documented listener parameter types for one event name.
-std::vector<std::string> eventParams(const std::string& event) {
+/// The documented listener parameter types for one event name, given the
+/// receiver marker (the same event name means different parameters on a
+/// WebSocket server and a TCP/TLS server).
+std::vector<std::string> eventParams(const std::string& event,
+                                     const std::string& receiver = std::string()) {
+    if (receiver == kUdpSocket && event == "message") {
+        return {std::string("const ::cp3::runtime::buffer::Buffer&"),
+                std::string("::cp3::runtime::network::UdpRemoteInfo")};
+    }
     if (event == "message") return {std::string("std::string")};
+    if (event == "data") return {std::string("const std::string&")};
     if (event == "close") return {"double", "std::string"};
     if (event == "error") return {std::string(kThrownType)};
     if (event == "connection") {
+        if (receiver == kTlsServer) {
+            return {std::string("::cp3::runtime::network::tls::TlsSocket&")};
+        }
+        if (receiver == kTcpServer) {
+            return {std::string("::cp3::runtime::network::tcp::TcpSocket&")};
+        }
         return {std::string("::cp3::runtime::network::WebSocket&"),
                 std::string("::cp3::runtime::network::HttpRequest")};
     }
-    return {};  // "open" and anything unlisted: no parameters
+    if (event == "secureConnection" && receiver == kTlsServer) {
+        return {std::string("::cp3::runtime::network::tls::TlsSocket&")};
+    }
+    return {};  // "open"/"secureConnect"/"end"/"drain"/"listening"/"connect"/"timeout": none
 }
 
 /// The event name of a listener registration: the first argument's literal.
@@ -129,6 +152,25 @@ Type contextType(const std::string& cpp) {
         return Type::named(TypeKind::Object, kHttpError);
     }
     if (cpp == "double") return Type::number();
+    // Raw TCP/TLS sockets and the UDP remote-info record.
+    if (cpp == "::cp3::runtime::network::tcp::TcpSocket&" ||
+        cpp == "::cp3::runtime::network::tcp::TcpSocket" ||
+        cpp == "const ::cp3::runtime::network::tcp::TcpSocket&") {
+        return Type::named(TypeKind::Object, kTcpSocket);
+    }
+    if (cpp == "::cp3::runtime::network::tls::TlsSocket&" ||
+        cpp == "::cp3::runtime::network::tls::TlsSocket" ||
+        cpp == "const ::cp3::runtime::network::tls::TlsSocket&") {
+        return Type::named(TypeKind::Object, kTlsSocket);
+    }
+    if (cpp == "::cp3::runtime::network::UdpRemoteInfo" ||
+        cpp == "const ::cp3::runtime::network::UdpRemoteInfo&") {
+        return Type::named(TypeKind::Object, kUdpRemoteInfo);
+    }
+    if (cpp == "const ::cp3::runtime::buffer::Buffer&" ||
+        cpp == "::cp3::runtime::buffer::Buffer") {
+        return Type::named(TypeKind::Class, "Buffer");
+    }
     return Type::unknown();
 }
 
@@ -274,6 +316,18 @@ std::string Generator::emitNetworkMapFieldMember(const MemberExpr& m) {
 // Argument lowering
 // =============================================================================
 
+/// Does the arrow's `index`-th parameter carry a bare `Buffer` class
+/// annotation? Used to pick the Buffer overload of a `data` handler.
+bool arrowParamWantsBuffer(const ArrowFunction& arrow, std::size_t index) {
+    if (index >= arrow.params.size()) return false;
+    const Parameter* p = arrow.params[index].get();
+    if (!p || !p->type) return false;
+    if (p->type->kind == NodeKind::NamedType) {
+        return static_cast<const NamedType&>(*p->type).name == "Buffer";
+    }
+    return false;
+}
+
 /// Lowers one argument; an arrow function becomes a lambda with the parameter
 /// types the runtime callback expects for this call.
 std::string Generator::networkArg(const Type& receiver, const std::string& property,
@@ -320,7 +374,37 @@ std::string Generator::networkArg(const Type& receiver, const std::string& prope
             const std::string named = networkEventName(c);
             if (!named.empty()) event = named;
         }
-        context = eventParams(event);
+        context = eventParams(event, receiver.name);
+    } else if (receiver.name == kTcpSocket || receiver.name == kTlsSocket) {
+        // Raw TCP/TLS socket: the event name is the first literal argument.
+        std::string event = "data";
+        if (index > 0) {
+            const std::string named = networkEventName(c);
+            if (!named.empty()) event = named;
+        }
+        context = eventParams(event, receiver.name);
+        // `on("data", (chunk: Buffer) => ...)` picks the Buffer overload;
+        // everything else stays the lossless string arm.
+        if (event == "data" &&
+            arrowParamWantsBuffer(static_cast<const ArrowFunction&>(arg), 0)) {
+            context = {"const ::cp3::runtime::buffer::Buffer&"};
+        }
+    } else if (receiver.name == kTcpServer || receiver.name == kTlsServer) {
+        // Raw TCP/TLS server: "connection" (tcp) / "secureConnection" (tls).
+        std::string event = receiver.name == kTlsServer ? "secureConnection" : "connection";
+        if (index > 0) {
+            const std::string named = networkEventName(c);
+            if (!named.empty()) event = named;
+        }
+        context = eventParams(event, receiver.name);
+    } else if (receiver.name == kUdpSocket) {
+        // UDP socket: "message" (Buffer, UdpRemoteInfo), otherwise throwerless.
+        std::string event = "message";
+        if (index > 0) {
+            const std::string named = networkEventName(c);
+            if (!named.empty()) event = named;
+        }
+        context = eventParams(event, receiver.name);
     }
     const auto& arrow = static_cast<const ArrowFunction&>(arg);
     // Type the lambda's parameter names for the body emission only: sema keeps
@@ -1155,6 +1239,9 @@ std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
                 m.property == "url";
     } else if (name == kAbortSignal) {
         known = m.property == "aborted";
+    } else if (name == kUdpRemoteInfo) {
+        known = m.property == "address" || m.property == "port" ||
+                m.property == "family";
     }
     if (known) {
         needsNetwork_ = true;
@@ -1169,6 +1256,12 @@ std::string Generator::emitNetworkMemberRead(const MemberExpr& m) {
         }
         if (name == kResponse && m.property == "status" &&
             effectiveType(m).kind == TypeKind::Number) {
+            return "static_cast<double>(" + read + ")";
+        }
+        if (name == kUdpRemoteInfo && m.property == "port" &&
+            effectiveType(m).kind == TypeKind::Number) {
+            // The runtime holds the port as u16 (semantic width); a
+            // TypeScript project types the read as `number`.
             return "static_cast<double>(" + read + ")";
         }
         return read;

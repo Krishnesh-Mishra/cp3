@@ -88,8 +88,6 @@ void tcpServerAccept(uv_stream_t* listener, int /*status*/) {
     }
 }
 
-}  // namespace
-
 void TcpServerImpl::emitError(const std::string& code, const std::string& message) {
     if (onError) onError(makeTcpError(code, message));
 }
@@ -132,7 +130,7 @@ TcpServer::TcpServer(const TcpServerOptions& options)
         throw Thrown::make(
             "std/network: createTcpServer maxWriteBuffer must be a non-negative integer");
     }
-    detail::ensureLoop();
+    network::ensureLoop();
 }
 
 void TcpServer::on(const std::string& event, std::function<void()> handler) const {
