@@ -297,7 +297,10 @@ void Generator::emitClassMember(const ClassModel& cm,
         const StaticBlock& sb = *m.staticBlock;
         const std::string name =
             "cp3_static_block_" + std::to_string(sb.nodeId);
-        line(out, indent, "inline static bool " + name + " = []() {");
+        // `inline static` initializers are never odr-used by user code, so an
+        // empty-body DCE build would drop the lambda and its side effects.
+        // The attribute tells the linker to keep the section.
+        line(out, indent, "inline __attribute__((used)) static bool " + name + " = []() {");
         const std::string savedReturn = currentReturn_;
         currentReturn_ = "void";
         ++nestingDepth_;

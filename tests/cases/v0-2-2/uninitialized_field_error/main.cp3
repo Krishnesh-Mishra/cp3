@@ -1,4 +1,5 @@
 class C {
   f: number;
+  constructor() {}
 }
 const c = new C();

@@ -610,6 +610,13 @@ void noteStores(const Expr* expr, std::unordered_set<std::string>& out) {
 
 void Analyzer::checkDefiniteAssignment(const ClassDeclaration& c,
                                        const ClassInfo& ci) {
+    // Only classes with a constructor bear the "must assign bare fields"
+    // obligation: the field is initialized at construction time.  A bare
+    // `class Box<T> { value: T }` has no user-declared constructor and is
+    // initialized at the use site (`b.value = 5`), which is the normal
+    // structural-typing pattern the corpus relies on.  Without the gate the
+    // rule errors on every such fixture.
+    if (!ci.hasCtor) return;
     std::unordered_set<std::string> assigned;
     for (const ClassMemberPtr& mp : c.members) {
         if (!mp) continue;
