@@ -2,7 +2,7 @@
   "name": "cp3-vscode",
   "displayName": "cp3",
   "description": "cp3 language support for VS Code: syntax highlighting, comments/brackets, and live compiler diagnostics through the cp3c language server.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "cp3",
   "engines": {
     "vscode": "^1.91.0"

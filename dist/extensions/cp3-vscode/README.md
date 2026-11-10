@@ -128,7 +128,7 @@ the Command Palette.
 
 The extension ships with the cp3 toolchain. Pick whichever fits:
 
-1. **With the cp3 Windows MSI.** `cp3-0.2.0-windows-x64.msi` installs the
+1. **With the cp3 Windows MSI.** `cp3-0.2.1-windows-x64.msi` installs the
    toolchain and stages the bundled `.vsix`; run `cp3 editor-plugin` to install
    it into a detected editor.
 2. **From an existing cp3 install.**
@@ -141,7 +141,7 @@ The extension ships with the cp3 toolchain. Pick whichever fits:
    editor on another machine.
 3. **From this folder, by hand.**
    ```
-   code --install-extension dist/extensions/cp3-vscode/dist/cp3-vscode-0.2.0.vsix --force
+   code --install-extension dist/extensions/cp3-vscode/dist/cp3-vscode-0.2.1.vsix --force
    ```
 
 There is no marketplace publish in this round.
@@ -173,7 +173,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
 
 `scripts/package.ps1` installs dependencies if needed, builds the production
 bundle and runs `vsce package --no-dependencies` to produce
-`dist/cp3-vscode-0.2.0.vsix`. The bundle is self-contained: the
+`dist/cp3-vscode-0.2.1.vsix`. The bundle is self-contained: the
 `vscode-languageclient` dependency is bundled into `dist/extension.js`, which
 is why the packaging step passes `--no-dependencies` and the `.vscodeignore`
 keeps `node_modules` and the sources out of the `.vsix`.

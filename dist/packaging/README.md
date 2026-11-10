@@ -20,7 +20,7 @@ On Windows the MSI is the deliverable. `cp3/` is the staged tree used to build
 it, not a separate installer. The old zip/`install.ps1`/Inno artifacts are no
 longer produced.
 
-`version.txt` at the repository root is the single version source (`0.2.0`).
+`version.txt` at the repository root is the single version source (`0.2.1`).
 `vendor/tools/update-version.ps1` / `vendor/tools/update-version.sh` sync the compiler's
 `--version` string, CMake project version, runtime, VS Code extension metadata,
 packaging defaults, and current docs from it. `vendor/tools/build.ps1` and
