@@ -7,4 +7,5 @@ function f(items: (string | undefined)[]): number {
   }
   return n;
 }
-console.log(f(["ab", "cde"]));
+const strings: (string | undefined)[] = ["ab", "cde"];
+console.log(f(strings));
