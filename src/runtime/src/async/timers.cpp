@@ -34,8 +34,19 @@ struct IntervalState {
     std::function<void()> arm;
 };
 
-std::mutex intervalMutex;
-std::map<TimerHandle, std::shared_ptr<IntervalState>> intervals;
+// Lazy function-local statics, not namespace-scope objects: a namespace-scope
+// std::mutex/std::map forces a static initializer (and destructor registration)
+// into every program that links this TU, which keeps the winpthread and
+// Rb-tree machinery alive even when no interval ever runs. A program that never
+// calls setInterval must not pay for them at startup or in binary size.
+std::mutex& intervalMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+std::map<TimerHandle, std::shared_ptr<IntervalState>>& intervals() {
+    static std::map<TimerHandle, std::shared_ptr<IntervalState>> registry;
+    return registry;
+}
 TimerHandle nextInterval = 1;
 
 }  // namespace
@@ -71,9 +82,9 @@ TimerHandle setInterval(Task fn, double intervalMs) {
         });
     };
 
-    std::lock_guard<std::mutex> lock(intervalMutex);
+    std::lock_guard<std::mutex> lock(intervalMutex());
     const TimerHandle handle = nextInterval++;
-    intervals.emplace(handle, state);
+    intervals().emplace(handle, state);
     state->arm();
     return handle;
 }
@@ -81,13 +92,13 @@ TimerHandle setInterval(Task fn, double intervalMs) {
 void clearInterval(TimerHandle handle) {
     std::shared_ptr<IntervalState> state;
     {
-        std::lock_guard<std::mutex> lock(intervalMutex);
-        auto it = intervals.find(handle);
-        if (it == intervals.end()) {
+        std::lock_guard<std::mutex> lock(intervalMutex());
+        auto it = intervals().find(handle);
+        if (it == intervals().end()) {
             return;
         }
         state = it->second;
-        intervals.erase(it);
+        intervals().erase(it);
     }
     state->active = false;
     if (state->current != 0) {

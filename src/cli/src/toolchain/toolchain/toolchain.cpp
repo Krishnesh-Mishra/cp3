@@ -44,6 +44,13 @@ std::vector<std::string> optimizationFlags(
     if (optimizations.unrollLoops) flags.push_back("-funroll-loops");
     if (optimizations.noMathErrno) flags.push_back("-fno-math-errno");
     if (optimizations.noPlt) flags.push_back("-fno-plt");
+    // Dead-code elimination (binary footprint): one section per function and
+    // per global, so the linker's --gc-sections can drop everything not
+    // reachable from the entry point. LTO already deletes unreachable code
+    // inside cp3's own objects; this catches the rest - non-LTO inputs and
+    // code the LTO pipeline had to keep addressable.
+    flags.push_back("-ffunction-sections");
+    flags.push_back("-fdata-sections");
     if (!optimizations.pgoProfile.empty()) {
         flags.push_back("-fprofile-instr-use=" + optimizations.pgoProfile);
     }
@@ -145,6 +152,10 @@ std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
     for (const std::string& f : optimizationFlags(profile, optimizations)) {
         args.push_back(f);
     }
+    // Dead-code elimination: pair with -ffunction-sections/-fdata-sections on
+    // the compile side. ld.lld accepts --gc-sections for both COFF (Windows)
+    // and ELF (Linux). Debug builds keep every section for the debugger.
+    if (profile != BuildProfile::Debug) args.push_back("-Wl,--gc-sections");
 #if defined(_WIN32)
     if (usesMingwTarget(tc)) {
         std::error_code ec;

@@ -4,7 +4,7 @@
 // =============================================================================
 #include "cp3/std/console.hpp"
 
-#include <iostream>
+#include <cstdio>
 #include <string>
 #include <utility>
 #include <vector>
@@ -53,9 +53,17 @@ std::string quote(const std::string& value) {
     return out;
 }
 
-void writeLine(std::ostream& stream, const std::string& text) {
-    stream << text << '\n';
-    stream.flush();
+// C stdio, not std::cout/std::cerr, on purpose (same note as print/println in
+// core/runtime.cpp): including <iostream> gives every program that imports
+// std/console the ios_base::Init static initializer and the full locale facet
+// machinery it builds - hundreds of KB of linked code and pure startup cost for
+// a program that only prints. With the default sync_with_stdio(true), std::cout
+// lands in the same stdout buffer anyway, so these calls have identical
+// ordering semantics.
+void writeLine(std::FILE* stream, const std::string& text) {
+    std::fwrite(text.data(), 1, text.size(), stream);
+    std::fputc('\n', stream);
+    std::fflush(stream);
 }
 
 }  // namespace
@@ -114,14 +122,14 @@ std::string join(const std::vector<std::string>& parts) {
 
 void writeLineStdout(const std::string& text) {
     // Open console groups indent every stdout line by two spaces per level.
-    writeLine(std::cout, groupIndentText() + text);
+    writeLine(stdout, groupIndentText() + text);
 }
-void writeLineStderr(const std::string& text) { writeLine(std::cerr, text); }
+void writeLineStderr(const std::string& text) { writeLine(stderr, text); }
 
 void clear() {
     // ANSI clear-screen + cursor home (spec: console.clear()).
-    std::cout << "\x1b[2J\x1b[H";
-    std::cout.flush();
+    std::fputs("\x1b[2J\x1b[H", stdout);
+    std::fflush(stdout);
 }
 
 // D76: hide/show the process's own console window. Windows only, and a
