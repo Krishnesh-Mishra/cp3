@@ -226,6 +226,70 @@ std::string prettyFunction(const Type& t) {
     return out;
 }
 
+// =============================================================================
+// Mixed-arithmetic suggestion helper (CP3411): names the source text of the
+// offending operand and the conversion that restores a numeric expression.
+// =============================================================================
+static bool isArithmeticNumeric(const Type& t) {
+    if (isNumberish(t)) return true;
+    if (isNativeType(t)) return true;
+    if (t.isLiteral() && t.literalBase == TypeKind::Number) return true;
+    if (t.isUnion()) {
+        for (const Type& m : t.parts) {
+            if (m.isNullish()) continue;
+            if (!isArithmeticNumeric(m)) return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+std::string Analyzer::sourceSlice(const Expr* e) const {
+    if (!e || !e->span.file) return {};
+    return std::string(e->span.file->slice(e->span));
+}
+
+std::vector<std::string> Analyzer::mixedMathHints(const BinaryExpr* be,
+                                                  const Type& l, const Type& r) const {
+    std::vector<std::string> out;
+    const bool lN = isArithmeticNumeric(l);
+    const bool rN = isArithmeticNumeric(r);
+    const bool lS = isStringish(l);
+    const bool rS = isStringish(r);
+    const std::string lText = be && be->left ? sourceSlice(be->left.get()) : std::string{};
+    const std::string rText = be && be->right ? sourceSlice(be->right.get()) : std::string{};
+    const char* target = "number";
+    const Expr* offender = nullptr;
+
+    if (lN && !rN && !rS) {
+        offender = be && be->right ? be->right.get() : nullptr;
+        const Type& other = l;
+        if (isNativeType(other)) target = other.name.c_str();
+    } else if (rN && !lN && !lS) {
+        offender = be && be->left ? be->left.get() : nullptr;
+        const Type& other = r;
+        if (isNativeType(other)) target = other.name.c_str();
+    }
+    if (offender != nullptr) {
+        const std::string text = sourceSlice(offender);
+        if (!text.empty()) {
+            out.push_back("convert '" + text + "' with parseTo(" + text + ", " +
+                          target + ")");
+        } else {
+            out.push_back(std::string("convert the other operand with parseTo(x, ") +
+                          target + ")");
+        }
+        return out;
+    }
+    // No plainly-numeric anchor (string vs number, boolean vs string, ...): give
+    // the two source texts so the author can decide which side to change.
+    out.push_back("both operands differ in kind ('" +
+                  (lText.empty() ? std::string("<left>") : lText) + "' vs '" +
+                  (rText.empty() ? std::string("<right>") : rText) +
+                  "'); convert one side explicitly (e.g. parseTo('it.length', number))");
+    return out;
+}
+
 std::string typeKey(const Type& t) {
     std::string s = typeKindName(t.kind);
     s += '|';
@@ -672,6 +736,23 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
     // carrying its value type. A bare `Promise` is `Promise<unknown>`.
     if (nt.name == "Promise") {
         return promiseOf(hasArg ? firstArg : Type::unknown());
+    }
+    // `Array<T>` is the generic spelling of `T[]` (docs/standard-library §03
+    // accepts the `Array<number>(n)` value form; the type form is the same
+    // element rule). One type argument is required; `T[]` is the same type.
+    if (nt.name == "Array") {
+        if (!hasArg) {
+            report(diagcode::kInvalidTypeArgument, nt.span,
+                   "'Array' takes exactly one type argument; write "
+                   "'Array<T>' or 'T[]'");
+            return Type::array(Type::unknown());
+        }
+        if (args.size() > 1) {
+            report(diagcode::kInvalidTypeArgument, nt.span,
+                   "'Array' takes exactly one type argument; got " +
+                       std::to_string(args.size()));
+        }
+        return Type::array(firstArg);
     }
     // The nominal `Buffer` of std/buffer (docs/standard-library/04 §buffer):
     // the annotation resolves only while the `import { Buffer } from

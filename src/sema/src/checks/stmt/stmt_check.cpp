@@ -29,7 +29,15 @@ void Analyzer::checkStmts(StmtList& body) {
         if (s) hoistType(*s);
     }
     for (auto& s : body) {
-        if (s && s->kind == NodeKind::FunctionDeclaration) {
+        if (!s) continue;
+        if (s->kind == NodeKind::ExportDeclaration) {
+            auto& e = static_cast<ExportDeclaration&>(*s);
+            if (e.declaration && e.declaration->kind == NodeKind::FunctionDeclaration) {
+                hoistFunction(static_cast<FunctionDeclaration&>(*e.declaration));
+            }
+            continue;
+        }
+        if (s->kind == NodeKind::FunctionDeclaration) {
             hoistFunction(static_cast<FunctionDeclaration&>(*s));
         }
     }
@@ -401,7 +409,9 @@ void Analyzer::applyConditionNarrowings(
 static bool stmtExits(Stmt* s) {
     if (!s) return false;
     if (s->kind == NodeKind::ReturnStatement ||
-        s->kind == NodeKind::ThrowStatement) return true;
+        s->kind == NodeKind::ThrowStatement ||
+        s->kind == NodeKind::BreakStatement ||
+        s->kind == NodeKind::ContinueStatement) return true;
     if (s->kind == NodeKind::BlockStatement) {
         auto& b = static_cast<BlockStatement&>(*s);
         if (!b.body.empty() && b.body.back()) return stmtExits(b.body.back().get());
@@ -668,6 +678,13 @@ void Analyzer::analyzeReturn(ReturnStatement& stmt) {
         return;
     }
     FuncCtx& ctx = funcStack_.back();
+    if (hasArg && finallyDepth_ > 0) {
+        reportWarning(diagcode::kFinallyReturnIgnored, stmt.span,
+                      "in TS/JS, `return` inside `finally` overrides a pending "
+                      "return/catch completion; in cp3 the value is ignored -- "
+                      "the `finally` block runs on exit, then the pending "
+                      "completion proceeds");
+    }
     if (ctx.annotated) {
         if (ctx.ret.isVoid()) {
             if (hasArg) {
@@ -677,11 +694,19 @@ void Analyzer::analyzeReturn(ReturnStatement& stmt) {
         } else if (hasArg) {
             // A tuple return type takes its element types from the literal
             // positionally; the inferred array type cannot webserver that, so
-            // the tuple path checks the literal element by element.
-            if (isTupleType(ctx.ret) &&
+            // the tuple path checks the literal element by element. A plain
+            // Array return takes the literal the same way, which is what makes
+            // `return [];` legal in a `string[]`-returning function.
+            if ((isTupleType(ctx.ret) || ctx.ret.kind == TypeKind::Array) &&
                 stmt.argument->kind == NodeKind::ArrayLiteral) {
                 checkArrayLiteral(static_cast<ArrayLiteral&>(*stmt.argument),
                                   ctx.ret);
+            // An async function adopting a returned promise (spec §14 JS
+            // semantics): `return promise` in `async f(): Promise<T>` acts like
+            // `return await promise`; the value type is the promise's element.
+            } else if (isPromiseType(argType) &&
+                       wouldAccept(promiseValue(argType), ctx.ret, false)) {
+                // adopted, no diagnostic
             } else {
                 checkAssign(argType, ctx.ret, stmt.span, false);
             }
@@ -709,7 +734,11 @@ void Analyzer::analyzeTry(TryStatement& stmt) {
         if (stmt.handler->body) visitStmt(*stmt.handler->body);
         popScope();
     }
-    if (stmt.finallyBlock) visitStmt(*stmt.finallyBlock);
+    if (stmt.finallyBlock) {
+        ++finallyDepth_;
+        visitStmt(*stmt.finallyBlock);
+        --finallyDepth_;
+    }
 }
 
 // =============================================================================

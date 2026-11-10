@@ -110,6 +110,23 @@ void Analyzer::declareAmbient(const std::string& name, const SourceSpan& span,
     declareBinding(name, ambient(), span, BindingSpec{.declNodeId = nodeId});
 }
 
+// Imported names are bound at visit time, which is after the type
+// pre-passes (`hoistType` / `hoistFunction` / `resolveClasses`) run. An
+// imported class or interface must still be usable as an annotation in those
+// positions, so the type-carry half of `declareImported` is applied here,
+// before any pre-pass sees a statement. Value-side binding stays in
+// `declareImported`, which runs later, in source order.
+void Analyzer::preRegisterImportTypes() {
+    if (imports_ == nullptr) return;
+    for (const auto& [name, binding] : *imports_) {
+        if (name.empty() || !binding.isType) continue;
+        typeNames_.emplace(name,
+                           binding.type.isUnknown()
+                               ? Type::named(TypeKind::Class, name)
+                               : binding.type);
+    }
+}
+
 void Analyzer::declareImported(const std::string& name,
                                const ImportedBinding& binding,
                                const SourceSpan& span, std::uint32_t nodeId) {
@@ -314,6 +331,18 @@ void Analyzer::declareBuiltins() {
     for (const std::string& name : familyTypeNames()) {
         typeNames_.emplace(name, Type::named(TypeKind::Class, name));
     }
+    // The std generic classes are declared in the binding tables of their
+    // families (std/collections, std/network, std/text, ...), which sema cannot
+    // introspect; seed their nominal names here so annotation positions resolve
+    // them the same way the call sites already do.
+    static const char* const kStdFamilyClasses[] = {
+        "Map", "Set", "LRUCache", "MultiMap", "ConcurrentMap",
+        "Queue", "Stack", "PriorityQueue", "RingBuffer", "BitSet",
+        "TcpSocket", "URL", "Buffer", "TextEncoder", "TextDecoder",
+    };
+    for (const char* name : kStdFamilyClasses) {
+        typeNames_.emplace(name, Type::named(TypeKind::Class, name));
+    }
     // The `std/date` class name resolves as a type annotation too (`let d:
     // Date`), matching the family names above; the VALUE still requires
     // `import Date from "std/date";`, which is where the import hint points.
@@ -323,12 +352,32 @@ void Analyzer::declareBuiltins() {
     // a constructor value, the nominal class type is what `new` produces
     // (D74; the members are typed in member_check.cpp).
     typeNames_.emplace("EventEmitter", Type::named(TypeKind::Class, "EventEmitter"));
+    // The classes of the native/stdlib modules this program imports (std/*,
+    // `import native`) register as type annotations too -- the nominal class
+    // name is all a field annotation needs; member typing is checked when the
+    // members are used. Without this, `sock: TcpSocket | undefined` fails with
+    // CP3302 in annotation positions (D74 pattern).
+    for (const NativeBinding& binding : options_.nativeBindings) {
+        for (const NativeBoundClass& cls : binding.module.classes) {
+            if (cls.name.empty()) continue;
+            typeNames_.emplace(cls.name,
+                               Type::named(TypeKind::Class, cls.name));
+        }
+    }
 }
 
 // =============================================================================
 // Hoisting
 // =============================================================================
 void Analyzer::hoistType(Stmt& s) {
+    // `export <declaration>` is wrapped in ExportDeclaration (Declaration
+    // kind); the type machinery hangs off the *inner* declaration's nodeId,
+    // so unwrap and hoist that instead of ignoring the statement.
+    if (s.kind == NodeKind::ExportDeclaration) {
+        auto& e = static_cast<ExportDeclaration&>(s);
+        if (e.declaration) hoistType(*e.declaration);
+        return;
+    }
     switch (s.kind) {
         case NodeKind::InterfaceDeclaration: {
             registerInterface(static_cast<InterfaceDeclaration&>(s));

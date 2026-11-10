@@ -93,6 +93,20 @@ private:
     // that name a sub-expression whose column is part of the contract, such
     // as the `parseTo` callee in a literal-source fit check.
     void reportAt(const char* code, const SourceSpan& span, std::string message);
+    // A warning-level diagnostic: rendered as a squiggle but does not count
+    // against the compile gate (warningCount() != 0 does not fail a build).
+    void reportWarning(const char* code, const SourceSpan& span, std::string message);
+    // ----- suggestions for the arithmetic/width diagnostics --------------------
+    // `number` (or the native width of the other side) is what the mixed
+    // arithmetic rule actually wants; name the conversion with the source text
+    // the user sees so the fix is copy-pastable.
+    std::vector<std::string> mixedMathHints(const BinaryExpr* be,
+                                            const Type& l, const Type& r) const;
+    std::string sourceSlice(const Expr* e) const;
+    // CP3411-family diagnostic: suggestion when available, plain report otherwise.
+    void reportOrSuggest(const char* code, const SourceSpan& span,
+                         const BinaryExpr* be, const Type& l, const Type& r,
+                         std::string message);
     // Like report(), plus `help:` entries for the pretty renderer.
     void reportSuggestive(const char* code, const SourceSpan& span,
                           std::string message,
@@ -219,6 +233,9 @@ private:
                                   const ClassInfo& ci);
     void checkClassHierarchy(const ClassDeclaration& c, const ClassInfo& ci);
     void checkClassBodies(ClassDeclaration& c);
+    // Spec §15 (v0.2.2): a class field without an initializer must be assigned
+    // somewhere (or marked `!:`); otherwise the class may not be constructed.
+    void checkDefiniteAssignment(const ClassDeclaration& c, const ClassInfo& ci);
     void checkClassMemberBody(ClassMember& m);
     void analyzeMethodBody(MethodDeclaration& md);
     void analyzeCtorBody(ConstructorDeclaration& cd);
@@ -561,6 +578,7 @@ private:
     // --- native interop (checks/native_check.cpp) -----------------------------
     // The alias -> binding map, built before the statements are checked.
     void collectNativeAliases(const Program& program);
+    void preRegisterImportTypes();
     // The binding's enums join the enum table (`dm.Color.Red`).
     void registerNativeEnums(const NativeModule& module);
     // The binding a native alias names, or nullptr.
@@ -585,7 +603,7 @@ private:
     // `x instanceof C`, where C is a class name (not an expression value).
     Type inferInstanceof(BinaryExpr& be);
     Type evalBinary(BinaryOp op, const Type& l, const Type& r,
-                    const SourceSpan& span);
+                    const SourceSpan& span, const BinaryExpr* be = nullptr);
     // Native arithmetic/bitwise result; nullopt lets comparison/equality
     // decide (they always yield boolean).
     std::optional<Type> evalNativeBinary(BinaryOp op, const Type& ln,
@@ -759,6 +777,12 @@ private:
     std::vector<IndexRangeFact> indexRanges_;
     int loopDepth_ = 0;
     int switchDepth_ = 0;
+    // > 0 while the analyzer is inside the `finally {}` block of a try
+    // statement. `return` there yields no substantive value (the guard waits
+    // on the lambda-run finish, cp3-finally semantics), so the marker "return
+    // inside a finally" can emit a warning without confusing it with an
+    // ordinary return.
+    int finallyDepth_ = 0;
 };
 
 // --- std-namespace surface helpers (std_check.cpp) ---------------------------

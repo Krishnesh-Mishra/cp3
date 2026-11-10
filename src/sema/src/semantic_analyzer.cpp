@@ -36,6 +36,22 @@ SourceSpan Analyzer::anchorSpan(const SourceSpan& s) const {
     return SourceSpan{s.file, p, p};
 }
 
+void Analyzer::reportWarning(const char* code, const SourceSpan& span,
+                             std::string message) {
+    sink_.warning(code, anchorSpan(span), std::move(message));
+}
+
+void Analyzer::reportOrSuggest(const char* code, const SourceSpan& span,
+                               const BinaryExpr* be, const Type& l,
+                               const Type& r, std::string message) {
+    std::vector<std::string> hints = mixedMathHints(be, l, r);
+    if (!hints.empty()) {
+        reportSuggestive(code, span, std::move(message), std::move(hints));
+        return;
+    }
+    report(code, span, std::move(message));
+}
+
 void Analyzer::report(const char* code, const SourceSpan& span,
                       std::string message) {
     sink_.error(code, anchorSpan(span), std::move(message));
@@ -98,6 +114,7 @@ void Analyzer::run(Program& program) {
     // The native bindings this unit imports are known before the statements
     // are checked, so a call may appear before its import statement.
     collectNativeAliases(program);
+    preRegisterImportTypes();
     checkStmts(program.body);
     popScope();
     popScope();

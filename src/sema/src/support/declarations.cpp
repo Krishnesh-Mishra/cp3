@@ -564,6 +564,10 @@ void Analyzer::declareTypeAlias(TypeAliasDeclaration& t) {
     // scope; a type alias uses the same binding.
     TypeParamScope saved;
     enterClassTypeParams(t.typeParams, saved);
+    // Self-recursive aliases (`type Resp = string | number | Resp[];`) name
+    // the alias inside its own body, so register a placeholder before
+    // resolving it. The real type replaces the placeholder below.
+    typeNames_[t.name] = Type::unknown();
     typeNames_[t.name] = t.type ? resolveType(*t.type) : Type::unknown();
     leaveClassTypeParams(saved);
     if (params.empty()) {

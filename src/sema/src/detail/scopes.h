@@ -183,6 +183,7 @@ struct ClassMemberInfo {
     bool isOverride = false;
     bool hasInitializer = false;
     bool optional = false;
+    bool definiteAssignment = false;  // `x!: T` (src/language/13)
 };
 
 // A user class after resolution: its member table plus the `extends` parent.

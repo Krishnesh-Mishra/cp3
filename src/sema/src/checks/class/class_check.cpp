@@ -318,7 +318,19 @@ std::unordered_map<std::string, AutoWeakDecision> selectAutoWeak(
 // =============================================================================
 void Analyzer::resolveClasses(StmtList& body) {
     for (auto& s : body) {
-        if (!s || s->kind != NodeKind::ClassDeclaration) continue;
+        if (!s) continue;
+        if (s->kind == NodeKind::ExportDeclaration) {
+            // `export <class-or-interface>` wraps the declaration; resolve the
+            // inner classes the same way as their unexported siblings.
+            auto& e = static_cast<ExportDeclaration&>(*s);
+            if (e.declaration && e.declaration->kind == NodeKind::ClassDeclaration) {
+                auto& inner = static_cast<ClassDeclaration&>(*e.declaration);
+                if (!classResolved_.insert(inner.nodeId).second) continue;
+                resolveClass(inner);
+            }
+            continue;
+        }
+        if (s->kind != NodeKind::ClassDeclaration) continue;
         auto& c = static_cast<ClassDeclaration&>(*s);
         if (!classResolved_.insert(c.nodeId).second) continue;
         resolveClass(c);
@@ -385,6 +397,260 @@ Type Analyzer::substituteClassTypeParams(const Type& t, const ClassInfo& ci,
     return out;
 }
 
+namespace {
+
+// ---------------------------------------------------------------------------
+// Definite-assignment analysis (spec §15). A class field declared without an
+// initializer must be assigned in a constructor (or carry `!:`) or the class
+// cannot be constructed; fields captured by an uninitialized `this.field`
+// would read as zero-initialized storage instead.
+// ---------------------------------------------------------------------------
+bool thisFieldNameOut(const Expr* expr, std::string& out) {
+    if (expr == nullptr || expr->kind != NodeKind::MemberExpr) return false;
+    const auto& me = static_cast<const MemberExpr&>(*expr);
+    if (me.object == nullptr || me.object->kind != NodeKind::Identifier) return false;
+    const auto& base = static_cast<const Identifier&>(*me.object);
+    if (base.name != "this") return false;
+    out = me.property;
+    return !out.empty();
+}
+void noteStores(const Expr* expr, std::unordered_set<std::string>& out);
+void noteStores(const Stmt* stmt, std::unordered_set<std::string>& out) {
+    if (stmt == nullptr) return;
+    switch (stmt->kind) {
+        case NodeKind::expressionstatement: {
+            const auto& s = static_cast<const expressionstatement&>(*stmt);
+            noteStores(s.expression.get(), out);
+            return;
+        }
+        case NodeKind::VariableDeclaration: {
+            const auto& vd = static_cast<const VariableDeclaration&>(*stmt);
+            for (const VariableDeclaratorPtr& d : vd.declarations) {
+                if (!d) continue;
+                noteStores(d->init.get(), out);
+            }
+            return;
+        }
+        case NodeKind::BlockStatement: {
+            const auto& b = static_cast<const BlockStatement&>(*stmt);
+            for (const StmtPtr& child : b.body) noteStores(child.get(), out);
+            return;
+        }
+        case NodeKind::IfStatement: {
+            const auto& s = static_cast<const IfStatement&>(*stmt);
+            noteStores(s.condition.get(), out);
+            noteStores(s.thenBranch.get(), out);
+            noteStores(s.elseBranch.get(), out);
+            return;
+        }
+        case NodeKind::WhileStatement: {
+            const auto& s = static_cast<const WhileStatement&>(*stmt);
+            noteStores(s.condition.get(), out);
+            noteStores(s.body.get(), out);
+            return;
+        }
+        case NodeKind::DoWhileStatement: {
+            const auto& s = static_cast<const DoWhileStatement&>(*stmt);
+            noteStores(s.body.get(), out);
+            noteStores(s.condition.get(), out);
+            return;
+        }
+        case NodeKind::ForStatement: {
+            const auto& s = static_cast<const ForStatement&>(*stmt);
+            Node* init = s.init.get();
+            if (init != nullptr) {
+                if (init->kind == NodeKind::VariableDeclaration ||
+                    init->kind == NodeKind::BlockStatement) {
+                    noteStores(static_cast<const Stmt*>(init), out);
+                } else {
+                    noteStores(static_cast<const Expr*>(init), out);
+                }
+            }
+            noteStores(s.condition.get(), out);
+            noteStores(s.update.get(), out);
+            noteStores(s.body.get(), out);
+            return;
+        }
+        case NodeKind::ForOfStatement:
+        case NodeKind::ForInStatement: {
+            const auto& s = static_cast<const ForOfStatement&>(*stmt);
+            Node* left = s.left.get();
+            if (left == nullptr) return;
+            if (left->kind == NodeKind::VariableDeclaration ||
+                left->kind == NodeKind::BlockStatement) {
+                noteStores(static_cast<const Stmt*>(left), out);
+            } else {
+                noteStores(static_cast<const Expr*>(left), out);
+            }
+            noteStores(s.right.get(), out);
+            noteStores(s.body.get(), out);
+            return;
+        }
+        case NodeKind::ReturnStatement: {
+            const auto& s = static_cast<const ReturnStatement&>(*stmt);
+            noteStores(s.argument.get(), out);
+            return;
+        }
+        case NodeKind::ThrowStatement: {
+            const auto& s = static_cast<const ThrowStatement&>(*stmt);
+            noteStores(s.argument.get(), out);
+            return;
+        }
+        case NodeKind::TryStatement: {
+            const auto& s = static_cast<const TryStatement&>(*stmt);
+            noteStores(s.tryBlock.get(), out);
+            if (s.handler) noteStores(s.handler->body.get(), out);
+            noteStores(s.finallyBlock.get(), out);
+            return;
+        }
+        case NodeKind::SwitchStatement: {
+            const auto& s = static_cast<const SwitchStatement&>(*stmt);
+            noteStores(s.discriminant.get(), out);
+            for (const SwitchCasePtr& c : s.cases) {
+                if (!c) continue;
+                noteStores(c->test.get(), out);
+                for (const StmtPtr& body : c->statements) noteStores(body.get(), out);
+            }
+            return;
+        }
+        default:
+            return;
+    }
+}
+void noteStores(const Expr* expr, std::unordered_set<std::string>& out) {
+    if (expr == nullptr) return;
+    switch (expr->kind) {
+        case NodeKind::AssignmentExpr: {
+            const auto& a = static_cast<const AssignmentExpr&>(*expr);
+            std::string name;
+            if (thisFieldNameOut(a.target.get(), name)) out.insert(name);
+            noteStores(a.value.get(), out);
+            return;
+        }
+        case NodeKind::UpdateExpr: {
+            const auto& u = static_cast<const UpdateExpr&>(*expr);
+            std::string name;
+            if (thisFieldNameOut(u.operand.get(), name)) out.insert(name);
+            return;
+        }
+        case NodeKind::MemberExpr: {
+            const auto& m = static_cast<const MemberExpr&>(*expr);
+            noteStores(m.object.get(), out);
+            return;
+        }
+        case NodeKind::IndexExpr: {
+            const auto& i = static_cast<const IndexExpr&>(*expr);
+            noteStores(i.object.get(), out);
+            noteStores(i.index.get(), out);
+            return;
+        }
+        case NodeKind::CallExpr:
+        case NodeKind::NewExpr: {
+            const auto& c = static_cast<const CallExpr&>(*expr);
+            noteStores(c.callee.get(), out);
+            for (const ExprPtr& a : c.arguments) noteStores(a.get(), out);
+            return;
+        }
+        case NodeKind::ArrayLiteral: {
+            const auto& a = static_cast<const ArrayLiteral&>(*expr);
+            for (const ExprPtr& e : a.elements) noteStores(e.get(), out);
+            return;
+        }
+        case NodeKind::ObjectLiteral: {
+            const auto& o = static_cast<const ObjectLiteral&>(*expr);
+            for (const ObjectPropertyPtr& p : o.properties) {
+                if (!p) continue;
+                noteStores(p->value.get(), out);
+            }
+            return;
+        }
+        case NodeKind::ConditionalExpr: {
+            const auto& c = static_cast<const ConditionalExpr&>(*expr);
+            noteStores(c.condition.get(), out);
+            noteStores(c.whenTrue.get(), out);
+            noteStores(c.whenFalse.get(), out);
+            return;
+        }
+        case NodeKind::BinaryExpr: {
+            const auto& b = static_cast<const BinaryExpr&>(*expr);
+            noteStores(b.left.get(), out);
+            noteStores(b.right.get(), out);
+            return;
+        }
+        case NodeKind::UnaryExpr: {
+            const auto& u = static_cast<const UnaryExpr&>(*expr);
+            noteStores(u.operand.get(), out);
+            return;
+        }
+        case NodeKind::ArrowFunction: {
+            const auto& a = static_cast<const ArrowFunction&>(*expr);
+            Node* body = a.body.get();
+            if (body == nullptr) return;
+            if (body->kind == NodeKind::BlockStatement) {
+                noteStores(static_cast<const Stmt*>(body), out);
+            } else {
+                noteStores(static_cast<const Expr*>(body), out);
+            }
+            return;
+        }
+        case NodeKind::AsExpr: {
+            const auto& a = static_cast<const AsExpr&>(*expr);
+            noteStores(a.expression.get(), out);
+            return;
+        }
+        default:
+            return;
+    }
+}
+
+}  // namespace
+
+void Analyzer::checkDefiniteAssignment(const ClassDeclaration& c,
+                                       const ClassInfo& ci) {
+    std::unordered_set<std::string> assigned;
+    for (const ClassMemberPtr& mp : c.members) {
+        if (!mp) continue;
+        switch (mp->kind) {
+            case NodeKind::ConstructorDeclaration: {
+                const auto& cd = static_cast<const ConstructorDeclaration&>(*mp);
+                noteStores(cd.body.get(), assigned);
+                break;
+            }
+            case NodeKind::MethodDeclaration: {
+                const auto& md = static_cast<const MethodDeclaration&>(*mp);
+                noteStores(md.body.get(), assigned);
+                break;
+            }
+            case NodeKind::AccessorDeclaration: {
+                const auto& ad = static_cast<const AccessorDeclaration&>(*mp);
+                noteStores(ad.body.get(), assigned);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    for (const ClassMemberInfo& m : ci.members) {
+        if (m.isMethod) continue;
+        if (m.isStatic) continue;
+        if (m.hasInitializer || m.definiteAssignment || m.optional) continue;
+        if (m.type.isUnion()) {
+            bool nullishMember = false;
+            for (const Type& part : m.type.parts) {
+                if (part.isNullish()) nullishMember = true;
+            }
+            if (nullishMember) continue;
+        }
+        if (m.type.isUnknown() || m.type.isError()) continue;  // cascade suppression
+        if (assigned.count(m.name) != 0) continue;
+        report(diagcode::kUninitializedField, m.span,
+               "field '" + m.name +
+                   "' is declared without an initializer and is never assigned "
+                   "in a constructor; give it an initial value or mark it '!:' "
+                   "when initialization happens elsewhere");
+    }
+}
+
 void Analyzer::resolveClass(ClassDeclaration& c) {
     ClassInfo info;
     info.name = c.name;
@@ -401,6 +667,7 @@ void Analyzer::resolveClass(ClassDeclaration& c) {
     leaveClassTypeParams(saved);
     // The doc comments of the class and of its members (class_docs.cpp).
     publishClassDocs(c);
+    checkDefiniteAssignment(c, info);
     const std::string name = info.name;
     classes_[name] = std::move(info);
     // The class name is also a value (statics + `new`), declared in the
@@ -460,6 +727,7 @@ void Analyzer::collectClassProperty(PropertyDeclaration& p, ClassInfo& info) {
     mi.isOverride = p.isOverride;
     mi.hasInitializer = p.initializer != nullptr;
     mi.optional = p.optional;
+    mi.definiteAssignment = p.isDefiniteAssignment;
     if (p.type) {
         mi.type = resolveType(*p.type);
     } else if (p.initializer) {
