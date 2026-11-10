@@ -5,7 +5,7 @@ resolved in one pass (2026-11-10, v0.2.2). Each row carries the resolution; the
 case that pins it lives alongside it (`_pinned/` or a regular case). The harness
 (`tests/runner/run_tests.py`) no longer finds open questions here.
 
-**Total: 23 — 22 resolved, 1 open** (`control-flow/01/spread/spread_number_array_into_fixed_params`).
+**Total: 23 — all resolved.**
 
 | Case | Status | Resolution |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ case that pins it lives alongside it (`_pinned/` or a regular case). The harness
 | `control-flow/01/dense/dense_array_holes` | resolved | No holes; `new Array(n)` without a type argument is rejected with CP3401; `new Array<T>(n)` is the supported form (default-initialized with the default for `T`). |
 | `control-flow/01/forin/forin_array_indices` | resolved | Array indices in `for...in` are `number` (or the declared width, `i32`/`u64`, under a native `typeSystem`). |
 | `control-flow/01/reduce/reduce_no_initial` | resolved | Seed accumulator is the first array element (JS behavior); the result is typed accordingly. |
-| `control-flow/01/spread/spread_number_array_into_fixed_params` | open | Awaiting user decision (user: "ask again then you will ask remaining ones").  As of v0.2.1, `f(...xs)` into `f(number, number)` is accepted by the checker without a tuple-arity check. |
+| `control-flow/01/spread/spread_number_array_into_fixed_params` | resolved | Accepted as-is: `f(...xs)` into fixed-arity parameters needs no tuple type (matches TS); the spread is checked for arity at the call. |
 | `errors/01/finally/finally_return_overrides` | resolved | The plain behavior wins; `finally { return 2; }` does not override `try { return 1; }`. The CP3510 warning fires on `return` inside a `finally` block. |
 | `functions-closures/01/function/function_declaration_hoisting` | resolved | Function declarations hoist; document with `console.log(g()); function g(): number { return 7; }`. |
 | `functions-closures/01/loop/loop_closure_capture` | resolved | `for (let i...)` gives each closure a fresh per-iteration binding (0, 1, 2 — JS semantics). |
