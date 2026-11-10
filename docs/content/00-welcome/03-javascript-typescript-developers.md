@@ -255,6 +255,7 @@ Built-in types:
 | `null` | distinct null value |
 | `undefined` | absent-value sentinel |
 | `void` / `unknown` annotations | rejected (CP3420 / CP3421) — use `undefined` for no result, `object` for an untyped value |
+| `number` vs native `i32/u64/usize` | declared width wins in inference; mixing `number` with native ints (and mixing signed/unsigned) is rejected with CP3411, whose diagnostic names the operand and points at `parseTo(x, <target>)` — `parseTo('123', i32)` for a literal, `parseTo(x, i64)` or `parseTo(x, number)` for a value. `parseInt(x)` is typed `number` (never nullable) for JS parity; use `parseTo` when the native width matters |
 | `T[]` | growable typed array |
 | `Map<K,V>` / `Set<T>` | collections (from `std/collections`) |
 
