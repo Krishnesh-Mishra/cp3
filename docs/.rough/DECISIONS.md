@@ -27,7 +27,7 @@ matches and what `cp3c check`/`run`/`build` print. Human-pretty rendering (color
 source excerpts) is a later CLI layer that must not change the machine lines.
 
 ## D3 - Binary name is `cp3c`.
-`--version` prints `cp3c 0.2.1`. The specification's `cp3` is the future
+`--version` prints `cp3c 0.2.2`. The specification's `cp3` is the future
 end-user frontend name (a thin alias/wrapper), **not** the compiler binary. No
 rename in M1.
 

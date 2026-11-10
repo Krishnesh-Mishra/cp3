@@ -28,7 +28,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(cp3c
-    VERSION 0.2.1
+    VERSION 0.2.2
     DESCRIPTION "C+++ (.cp3) reference compiler (transpiles to C++20)"
     LANGUAGES CXX)
 

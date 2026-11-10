@@ -240,7 +240,7 @@ Options:
   --max-memory <MB|N%>  Cap codegen-phase memory (default: 70% of system RAM)
 ```
 
-`--version` prints `versionString()` (currently `cp3c 0.2.1`).
+`--version` prints `versionString()` (currently `cp3c 0.2.2`).
 `--help` prints the usage above. `cp3c` with no arguments prints usage and exits 0.
 
 ### Exit-code contract
