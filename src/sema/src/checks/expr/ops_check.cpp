@@ -203,12 +203,12 @@ Type Analyzer::inferBinary(BinaryExpr& be) {
     if (be.op == BinaryOp::Instanceof) return inferInstanceof(be);
     Type l = be.left ? inferExpr(*be.left) : Type::unknown();
     Type r = be.right ? inferExpr(*be.right) : Type::unknown();
-    Type t = evalBinary(be.op, l, r, be.span);
+    Type t = evalBinary(be.op, l, r, be.span, &be);
     return withType(be, t);
 }
 
 Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
-                          const SourceSpan& span) {
+                          const SourceSpan& span, const BinaryExpr* be) {
     const bool permissive = isPermissive(l) || isPermissive(r);
     // Native numeric operands (spec 03 / D65): C++ usual arithmetic
     // conversions. An integral literal that fits adopts the native type, so
@@ -232,10 +232,10 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
             if (permissive) return ambient();
             if (hasEnumNumberPair(enums_, ln, rn)) return Type::number();
             if (isStringish(l) && isStringish(r)) return Type::string();
-            report(diagcode::kMixedTypeArithmetic, span,
-                   "type mismatch: mixed-type arithmetic with '+' on '" +
-                       pretty(l) + "' and '" + pretty(r) +
-                       "' (only number+number or string+string is allowed)");
+            reportOrSuggest(diagcode::kMixedTypeArithmetic, span, be, l, r,
+                            "type mismatch: mixed-type arithmetic with '+' on '" +
+                                pretty(l) + "' and '" + pretty(r) +
+                                "' (only number+number or string+string is allowed)");
             return Type::error();
         case BinaryOp::Subtract:
         case BinaryOp::Multiply:
@@ -250,10 +250,10 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
         case BinaryOp::UnsignedShiftRight:
             if (permissive) return ambient();
             if (hasEnumNumberPair(enums_, ln, rn)) return Type::number();
-            report(diagcode::kMixedTypeArithmetic, span,
-                   "type mismatch: mixed-type arithmetic with '" +
-                       binaryText(op) + "' on '" + pretty(l) + "' and '" +
-                       pretty(r) + "' (both operands must be number)");
+            reportOrSuggest(diagcode::kMixedTypeArithmetic, span, be, l, r,
+                            "type mismatch: mixed-type arithmetic with '" +
+                                binaryText(op) + "' on '" + pretty(l) + "' and '" +
+                                pretty(r) + "' (both operands must be number)");
             return Type::error();
         case BinaryOp::LessThan:
         case BinaryOp::GreaterThan:
@@ -271,6 +271,24 @@ Type Analyzer::evalBinary(BinaryOp op, const Type& l, const Type& r,
         case BinaryOp::NotEqual:
         case BinaryOp::StrictEqual:
         case BinaryOp::StrictNotEqual:
+            // CP3520: comparing a nullish literal (`null`/`undefined`) loosely.
+            // In JS, `null == undefined` is true; in cp3 it is false (flavor
+            // must match). Call it out so the reader does not lean on JS semantics.
+            if (be && (be->op == BinaryOp::Equal || be->op == BinaryOp::NotEqual)) {
+                auto hasNullishLit = [](Expr* e) {
+                    return e && (e->kind == NodeKind::NullLiteral ||
+                                 e->kind == NodeKind::UndefinedLiteral);
+                };
+                const bool leftLit = hasNullishLit(be->left.get());
+                const bool rightLit = hasNullishLit(be->right.get());
+                if (leftLit || rightLit) {
+                    reportWarning(diagcode::kLooseEqualityNullish, be->span,
+                                  "comparing against a nullish literal (`null` "
+                                  "or `undefined`) with `==`: cp3 matches only the "
+                                  "same flavor (null == undefined is false; JS "
+                                  "coerces them); use === for a literal check");
+                }
+            }
             return Type::boolean();
         case BinaryOp::In:
             return Type::boolean();

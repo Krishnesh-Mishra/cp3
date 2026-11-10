@@ -104,10 +104,13 @@ std::optional<Type> Analyzer::evalNativeBinary(BinaryOp op, const Type& ln,
         return Type::error();
     }
     if (mixedSignedIntegers(ln, rn)) {
-        report(diagcode::kMixedTypeArithmetic, span,
-               "type mismatch: cannot mix signed '" + pretty(ln) +
-                   "' with unsigned '" + pretty(rn) +
-                   "'; convert one side explicitly");
+        reportSuggestive(diagcode::kMixedTypeArithmetic, span,
+                         "type mismatch: cannot mix signed '" + pretty(ln) +
+                             "' with unsigned '" + pretty(rn) +
+                             "'; convert one side explicitly",
+                         {"convert the signed side to the unsigned type with "
+                          "parseTo(x, <unsigned-target>), e.g. parseTo(x, u64), "
+                          "or the unsigned side to signed with parseTo(x, i64)"});
         return Type::error();
     }
     // Comparisons and equality consume numeric operands and produce boolean;
@@ -121,16 +124,20 @@ std::optional<Type> Analyzer::evalNativeBinary(BinaryOp op, const Type& ln,
     if (comparisonOp) return std::nullopt;
     if (isNativeType(ln) && isNativeType(rn)) {
         if (options_.strictNumericCasts && ln.name != rn.name) {
-            report(diagcode::kMixedTypeArithmetic, span,
-                   "strictNumericCasts refuses to mix '" + pretty(ln) +
-                       "' and '" + pretty(rn) +
-                       "'; convert one side explicitly");
+            reportSuggestive(diagcode::kMixedTypeArithmetic, span,
+                             "strictNumericCasts refuses to mix '" + pretty(ln) +
+                                 "' and '" + pretty(rn) +
+                                 "'; convert one side explicitly",
+                             {"convert one operand to the other's type with "
+                              "parseTo(x, <target>), e.g. parseTo(x, u64)"});
             return Type::error();
         }
         if (auto widened = nativeArithmeticResult(ln, rn)) return *widened;
-        report(diagcode::kMixedTypeArithmetic, span,
-               "type mismatch: unsupported native arithmetic on '" +
-                   pretty(ln) + "' and '" + pretty(rn) + "'");
+        reportSuggestive(diagcode::kMixedTypeArithmetic, span,
+                         "type mismatch: unsupported native arithmetic on '" +
+                             pretty(ln) + "' and '" + pretty(rn) + "'",
+                         {"convert both operands to number first",
+                          "or to a common native width with parseTo(x, i32)"});
         return Type::error();
     }
     if (!numericOperand(ln) || !numericOperand(rn)) return std::nullopt;
