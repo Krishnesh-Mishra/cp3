@@ -67,7 +67,17 @@ inline void appendUtf8(unsigned code, std::string& out) {
 // exactly one value plus trailing whitespace; anything else is a ParseError.
 class Parser {
 public:
-    explicit Parser(const std::string& text) : text_(text) {}
+    explicit Parser(const std::string& text) : text_(text) {
+        // Strip a leading UTF-8 BOM: hand-touched `package.json` files
+        // routinely ship one and the JSON spec forbids it as a content
+        // character; treat it as insignificant encoding instead.
+        if (text_.size() >= 3 &&
+            static_cast<unsigned char>(text_[0]) == 0xEF &&
+            static_cast<unsigned char>(text_[1]) == 0xBB &&
+            static_cast<unsigned char>(text_[2]) == 0xBF) {
+            pos_ = 3;
+        }
+    }
 
     Value parseDocument() {
         skipSpace();
