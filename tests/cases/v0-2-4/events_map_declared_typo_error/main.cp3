@@ -1,0 +1,3 @@
+interface Events { hello: (m: { id: number }) => undefined; }
+const bus = new EventEmitter<Events>();
+bus.on("helllo", m => {});

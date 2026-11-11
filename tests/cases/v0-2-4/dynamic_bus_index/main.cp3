@@ -17,4 +17,4 @@ bus.on(name, m => {
     console.log(m.text);
 });
 bus.emit(name, { id: 7, text: "dyn" });
-bus.emit("other-event", { id: 8, text: "lit" });
+bus.emit(name, { id: 8, text: "lit" });

@@ -1,0 +1,7 @@
+import console from "std/console";
+interface Msg { id: number; }
+interface Events { hello: (m: Msg) => undefined; bye: () => undefined; }
+const bus = new EventEmitter<Events>();
+console.log(bus.isValidEventName("hello"));
+console.log(bus.isValidEventName("bye"));
+console.log(bus.isValidEventName("nope"));

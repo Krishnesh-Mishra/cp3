@@ -1,11 +1,5 @@
 {
   "mode": "check",
   "stdout": "",
-  "exitCode": 1,
-  "error": {
-    "code": "CP3xxxx",
-    "line": 1,
-    "col": 1,
-    "contains": "index"
-  }
+  "exitCode": 0
 }

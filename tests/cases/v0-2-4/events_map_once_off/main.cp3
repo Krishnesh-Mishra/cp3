@@ -1,0 +1,8 @@
+import console from "std/console";
+interface Msg { id: number; }
+interface Events { hello: (m: Msg) => undefined; }
+const bus = new EventEmitter<Events>();
+const f = (m: Msg) => { console.log(m.id); };
+bus.once("hello", f);
+bus.emit("hello", { id: 4 });
+bus.emit("hello", { id: 5 });
