@@ -77,12 +77,15 @@ struct Field {
 };
 
 // A structural object/tuple shape. `open` shapes (ambient / computed / spread)
-// accept any property.
+// accept any property. `hasIndex` marks a TypeScript index signature: unknown
+// keys are typed by `indexType` (`{ [k: string]: T }`).
 struct Shape {
     std::vector<Field> fields;
     std::vector<Type> tupleElems;
     bool tuple = false;
     bool open = false;  // ambient / computed / spread: any property is allowed
+    Type indexType;
+    bool hasIndex = false;
 };
 
 // A resolved call signature (function declaration or arrow), used for arity and

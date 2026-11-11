@@ -275,6 +275,64 @@ ClassMemberPtr ParserImpl::parsePropertyMember(MemberModifiers& mods,
     return prop;
 }
 
+// Index signatures (spec §8, v0.2.4): `[name: string]: T` -- an open key set
+// with a single value type. Only `string` and `number` keys are accepted;
+// anything else reports and falls back to `string` (the grammar is pinned so a
+// misspelling flags instead of silently accepting a nonsense key).
+SignatureMemberPtr ParserImpl::parseIndexSignature(Token start,
+                                                   bool isReadonly) {
+    (void)advance();  // '['
+    std::string name;
+    if (isIdentLike(peek())) {
+        name = textOf(advance());
+    } else {
+        report(diagcode::kExpectedToken,
+               "expected a name in the index signature");
+        name = "x";
+    }
+    (void)expect(TokenKind::Colon, "expected ':' after the index signature name");
+    // The key type: exactly `string` or `number`.
+    auto key = std::make_unique<NamedType>(spanFrom(peek()));
+    if (isIdentLike(peek())) {
+        const std::string keyName = textOf(peek());
+        if (keyName == "string" || keyName == "number") {
+            key->name = keyName;
+        } else {
+            report(diagcode::kUnexpectedToken,
+                   "an index signature key must be 'string' or 'number'");
+            key->name = "string";
+        }
+        key->span = peek().span;
+        (void)advance();
+    } else {
+        report(diagcode::kExpectedToken,
+               "expected 'string' or 'number' as the index signature key");
+        key->name = "string";
+        key->span = peek().span;
+    }
+    if (check(TokenKind::RBracket)) {
+        (void)advance();
+    } else {
+        report(diagcode::kExpectedToken,
+               "expected ']' after the index signature key");
+        // Recover: skip to the closing bracket (TS recovery shape).
+        int depth = 0;
+        while (!atEnd()) {
+            Token t = advance();
+            if (t.kind == TokenKind::LBracket) ++depth;
+            else if (t.kind == TokenKind::RBracket && --depth == 0) break;
+        }
+    }
+    (void)expect(TokenKind::Colon, "expected ':' after the index signature");
+
+    auto index = std::make_unique<IndexSignature>(start.span);
+    index->name = std::move(name);
+    index->isReadonly = isReadonly;
+    index->keyType = std::move(key);
+    index->valueType = parseType();
+    return index;
+}
+
 SignatureMemberPtr ParserImpl::parseSignatureMember() {
     const Token start = peek();
     bool isReadonly = false;
@@ -283,18 +341,9 @@ SignatureMemberPtr ParserImpl::parseSignatureMember() {
         (void)advance();
     }
 
-    // Index signatures have no AST node and are banned (CP3803 / spec §8).
+    // Index signatures (spec 8, v0.2.4): `[name: string]: T` -- an open key set.
     if (check(TokenKind::LBracket)) {
-        report(diagcode::kUnexpectedToken,
-               "index signatures are not supported; use Map<K, V>");
-        int depth = 0;
-        while (!atEnd()) {
-            Token t = advance();
-            if (t.kind == TokenKind::LBracket) ++depth;
-            else if (t.kind == TokenKind::RBracket && --depth == 0) break;
-        }
-        if (match(TokenKind::Colon)) (void)parseType();  // skip the value type
-        return nullptr;
+        return parseIndexSignature(start, isReadonly);
     }
 
     bool hasFunction = false;

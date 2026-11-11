@@ -470,6 +470,8 @@ std::string Analyzer::importedName(const std::string& local) const {
 void Analyzer::registerInterface(InterfaceDeclaration& i) {
     std::vector<Field> fields;
     bool open = false;
+    Type indexType;
+    bool hasIndex = false;
     // A generic interface's own type parameters are in scope while its members
     // are resolved, so `value: T` resolves to a type parameter (D26).
     TypeParamScope saved;
@@ -481,6 +483,9 @@ void Analyzer::registerInterface(InterfaceDeclaration& i) {
                                  static_cast<PropertySignature&>(*m));
         } else if (m->kind == NodeKind::MethodSignature) {
             addMethodSignature(fields, open, static_cast<MethodSignature&>(*m));
+        } else if (m->kind == NodeKind::IndexSignature) {
+            addIndexSignature(fields, indexType, hasIndex,
+                              static_cast<IndexSignature&>(*m));
         }
     }
     leaveClassTypeParams(saved);
@@ -490,12 +495,15 @@ void Analyzer::registerInterface(InterfaceDeclaration& i) {
         GenericInterface generic;
         generic.fields = fields;
         generic.open = open;
+        generic.hasIndex = hasIndex;
+        generic.indexType = indexType;
         for (const auto& tp : i.typeParams) {
             if (tp) generic.typeParams.push_back(tp->name);
         }
         genericInterfaces_[i.name] = std::move(generic);
     }
-    typeNames_[i.name] = makeObjectType(std::move(fields), open, false, {});
+    typeNames_[i.name] = makeObjectType(std::move(fields), open, false, {},
+                                        std::move(indexType), hasIndex);
 }
 
 // =============================================================================

@@ -151,6 +151,7 @@ enum class ExportKind { Named, Default, Declaration, ReExportAll, ReExportNamed 
     X(StaticBlock)                \
     X(PropertySignature)          \
     X(MethodSignature)            \
+    X(IndexSignature)             \
     X(Parameter)                  \
     X(TypeParameter)              \
     /* --- types --- */            \
@@ -859,6 +860,17 @@ struct MethodSignature : SignatureMember {
     TypePtr returnType;
     explicit MethodSignature(SourceSpan s)
         : SignatureMember(NodeKind::MethodSignature, std::move(s)) {}
+};
+
+// Interface / object-type member: `[name: string]: T;`
+// TypeScript index signatures (v0.2.4): an open key set, typed by `valueType`.
+struct IndexSignature : SignatureMember {
+    std::string name;      // the binding name (`name` in `[name: string]`)
+    TypePtr keyType;       // `string` or `number` (parsed as NamedType)
+    TypePtr valueType;
+    bool isReadonly = false;
+    explicit IndexSignature(SourceSpan s)
+        : SignatureMember(NodeKind::IndexSignature, std::move(s)) {}
 };
 
 // =============================================================================

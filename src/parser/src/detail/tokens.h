@@ -161,6 +161,7 @@ private:
                                        bool computed = false);
     ClassMemberPtr parseStaticBlock(MemberModifiers& mods);
     SignatureMemberPtr parseSignatureMember();
+    SignatureMemberPtr parseIndexSignature(Token start, bool isReadonly);
     bool looksLikeAccessor() const;
     bool looksLikeConstructor() const;
     bool looksLikeReadonlyModifier() const;

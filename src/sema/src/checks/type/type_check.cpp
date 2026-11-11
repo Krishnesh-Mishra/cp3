@@ -320,7 +320,8 @@ Shape* Analyzer::shapeOf(const Type& t) {
 }
 
 Type Analyzer::makeObjectType(std::vector<Field> fields, bool open, bool tuple,
-                              std::vector<Type> tupleElems) {
+                              std::vector<Type> tupleElems, Type indexType,
+                              bool hasIndex) {
     if (open) {
         return ambient();
     }
@@ -341,6 +342,11 @@ Type Analyzer::makeObjectType(std::vector<Field> fields, bool open, bool tuple,
             label += typeKey(f.type);
             label += ',';
         }
+        if (hasIndex) {
+            label += "*:";
+            label += typeKey(indexType);
+            label += ',';
+        }
         label += '}';
     }
     if (shapes_.find(label) == shapes_.end()) {
@@ -348,6 +354,8 @@ Type Analyzer::makeObjectType(std::vector<Field> fields, bool open, bool tuple,
         s.fields = std::move(fields);
         s.tuple = tuple;
         s.tupleElems = tupleElems;  // copied: the type below keeps them too
+        s.hasIndex = hasIndex;
+        s.indexType = std::move(indexType);
         shapes_.emplace(label, std::move(s));
     }
     Type t(TypeKind::Object, label);
@@ -505,7 +513,13 @@ Type Analyzer::resolveGenericInterface(const std::string& name,
     for (Field& f : fields) {
         f.type = substituteTypeParams(f.type, generic.typeParams, args);
     }
-    return makeObjectType(std::move(fields), generic.open, false, {});
+    Type indexType;
+    if (generic.hasIndex) {
+        indexType = substituteTypeParams(generic.indexType, generic.typeParams,
+                                         args);
+    }
+    return makeObjectType(std::move(fields), generic.open, false, {},
+                          std::move(indexType), generic.hasIndex);
 }
 
 Type Analyzer::resolveNamedType(NamedType& nt) {
@@ -1155,6 +1169,8 @@ Type Analyzer::resolveFunctionType(FunctionType& ft) {
 Type Analyzer::resolveObjectType(ObjectType& ot) {
     std::vector<Field> fields;
     bool open = false;
+    Type indexType;
+    bool hasIndex = false;
     for (auto& m : ot.members) {
         if (!m) continue;
         if (m->kind == NodeKind::PropertySignature) {
@@ -1162,9 +1178,13 @@ Type Analyzer::resolveObjectType(ObjectType& ot) {
                                  static_cast<PropertySignature&>(*m));
         } else if (m->kind == NodeKind::MethodSignature) {
             addMethodSignature(fields, open, static_cast<MethodSignature&>(*m));
+        } else if (m->kind == NodeKind::IndexSignature) {
+            addIndexSignature(fields, indexType, hasIndex,
+                              static_cast<IndexSignature&>(*m));
         }
     }
-    return makeObjectType(std::move(fields), open, false, {});
+    return makeObjectType(std::move(fields), open, false, {},
+                          std::move(indexType), hasIndex);
 }
 
 Type Analyzer::resolveLiteralType(LiteralType& lt) {
@@ -1177,6 +1197,18 @@ Type Analyzer::resolveLiteralType(LiteralType& lt) {
             return Type::boolLiteral(lt.boolValue);
     }
     return Type::unknown();
+}
+
+void Analyzer::addIndexSignature(std::vector<Field>&, Type& indexType,
+                                 bool& hasIndex, IndexSignature& is) {
+    if (hasIndex) {
+        report(diagcode::kDuplicateDeclaration, is.span,
+               "at most one index signature per interface or object type");
+        return;
+    }
+    Type vt = is.valueType ? resolveType(*is.valueType) : Type::unknown();
+    indexType = std::move(vt);
+    hasIndex = true;
 }
 
 void Analyzer::addPropertySignature(std::vector<Field>& fields, bool& open,

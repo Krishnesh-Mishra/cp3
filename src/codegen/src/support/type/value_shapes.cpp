@@ -177,6 +177,10 @@ bool parseObjectLabel(const std::string& label, std::vector<ObjectField>& out) {
         const std::size_t colon = label.find(':', pos);
         if (colon == std::string::npos || colon >= end) return false;
         const std::string name = label.substr(pos, colon - pos);
+        // A trailing `*` marks the index signature entry (`*:typeKey`): the
+        // all-primitive value shape cannot spell it, so this shape is not a
+        // representable value at all.
+        if (name == "*") return false;
         // A trailing '?' marks an optional field: the value-shape path spells
         // only the all-present fields, so such a shape belongs to the object
         // model (which keeps the optional field as an `std::optional<T>`).

@@ -248,6 +248,8 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
             if (!sh) return ambient();
             if (sh->open || sh->tuple) return ambient();
             if (const Field* f = findField(sh, prop)) return f->type;
+            // An index signature names the value type of any unknown key.
+            if (sh->hasIndex) return sh->indexType;
             std::vector<std::string> candidates;
             candidates.reserve(sh->fields.size());
             for (const Field& field : sh->fields) candidates.push_back(field.name);
@@ -611,11 +613,14 @@ Type Analyzer::indexOfProbe(const Type& ot, IndexExpr& ix) {
 Type Analyzer::indexOfObject(const Type& ot, IndexExpr& ix) {
     if (isAmbientType(ot)) return ambient();
     Shape* sh = shapeOf(ot);
+    // An index signature: any key types to the index's value type.
+    if (sh && sh->hasIndex) return sh->indexType;
     if (sh && sh->open) return ambient();
     if (sh && sh->tuple) return tupleIndexAt(*sh, ix);
     report(diagcode::kIndexSignatureBanned, ix.span,
            "index access on a plain object is not supported; its keys are "
-           "fixed at compile time (use Map<K, V> for dynamic keys)");
+           "fixed at compile time (use Map<K, V>, or add an index "
+           "signature)");
     return Type::unknown();
 }
 

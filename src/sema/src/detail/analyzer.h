@@ -183,6 +183,8 @@ private:
     struct GenericInterface {
         std::vector<Field> fields;
         bool open = false;
+        bool hasIndex = false;
+        Type indexType;
         std::vector<std::string> typeParams;
     };
     // A type alias declares a compile-time name for a type (declarations.cpp).
@@ -268,7 +270,8 @@ private:
     // --- type resolution + shapes (type_check.cpp) ---------------------------
     Shape* shapeOf(const Type& t);
     Type makeObjectType(std::vector<Field> fields, bool open, bool tuple,
-                        std::vector<Type> tupleElems);
+                        std::vector<Type> tupleElems, Type indexType = Type{},
+                        bool hasIndex = false);
     // The source's shape minus the properties a pattern named: the type of a
     // rest object binding (TypeScript's Omit). `unknown` when the source has
     // no enumerable shape (an open shape, a class, a primitive).
@@ -288,6 +291,8 @@ private:
     Type resolveLiteralType(LiteralType& lt);
     void addPropertySignature(std::vector<Field>& fields, bool& open,
                               PropertySignature& ps);
+    void addIndexSignature(std::vector<Field>& fields, Type& indexType,
+                           bool& hasIndex, IndexSignature& is);
     void addMethodSignature(std::vector<Field>& fields, bool& open,
                             MethodSignature& ms);
     std::string keyName(Expr* key) const;
@@ -460,6 +465,15 @@ private:
     bool tryInferEnvCall(CallExpr& call, MemberExpr& m, Type& out);
     // Member-call inference chain (JSON, Promise, env, family, Buffer).
     bool tryInferMemberCall(CallExpr& call, MemberExpr& m, Type& out);
+    // Typed `EventEmitter<Events>` handler: argument checking and contextual
+    // typing against the Events map (v0.2.4). Returns true when the receiver
+    // is an EventEmitter with a map and the call was handled here.
+    bool tryInferEventEmitterCall(CallExpr& call, MemberExpr& m, Type& out);
+    // One event in the map: its listener signature (from the named member or
+    // the index signature). Type::unknown() when the event doesn't exist;
+    // void() when the map is the untyped empty map.
+    Type eventMapListenerFor(const Type& map, const std::string& event,
+                             const SourceSpan& span);
     void inferArgs(CallExpr& call);
     void sigFromFunctionType(const Type& ct, FuncSig& localSig);
     void inferArg(Expr* a);

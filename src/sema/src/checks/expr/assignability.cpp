@@ -130,9 +130,36 @@ bool Analyzer::objectAccepts(const Type& from, const Type& to, bool fresh) {
     if (toShape->open) return true;
     if (!fromShape) return false;
     if (fromShape->open) return true;
+    // The target has an index signature: any string key is accepted there, so
+    // excess-property checks for the source are unconstrained; every source
+    // field (and the source's own index signature) must accept the target's
+    // index value type. Members the target names explicitly keep the member
+    // rule (source members are looked up by name first).
+    if (toShape->hasIndex) {
+        for (const Field& ff : fromShape->fields) {
+            if (!wouldAccept(ff.type, toShape->indexType, false)) return false;
+        }
+        if (fromShape->hasIndex &&
+            !wouldAccept(fromShape->indexType, toShape->indexType, false)) {
+            return false;
+        }
+        for (const Field& tf : toShape->fields) {
+            const Field* ff = findField(fromShape, tf.name);
+            if (ff && !wouldAccept(ff->type, tf.type, false)) return false;
+        }
+        return true;
+    }
+    // The source has an index signature: required members of `to` may also be
+    // satisfied through the source's index value type.
     for (const Field& tf : toShape->fields) {
         const Field* ff = findField(fromShape, tf.name);
         if (!ff) {
+            if (fromShape->hasIndex) {
+                if (!wouldAccept(fromShape->indexType, tf.type, false)) {
+                    return false;
+                }
+                continue;
+            }
             if (tf.optional) continue;
             return false;
         }
@@ -140,12 +167,8 @@ bool Analyzer::objectAccepts(const Type& from, const Type& to, bool fresh) {
     }
     if (fresh) {
         for (const Field& ff : fromShape->fields) {
-            if (!findField(toShape, ff.name)) return false;
+            if (!findField(toShape, ff.name) && !toShape->hasIndex) return false;
         }
-    }
-    for (const Field& tf : toShape->fields) {
-        const Field* ff = findField(fromShape, tf.name);
-        if (ff && !wouldAccept(ff->type, tf.type, false)) return false;
     }
     return true;
 }
