@@ -1,0 +1,24 @@
+import console from "std/console";
+
+class Frame {
+    id: number;
+    next: Frame | undefined;
+    constructor(id: number, next: Frame | undefined) {
+        this.id = id;
+        this.next = next;
+    }
+}
+
+function parseFrame(f: Frame | undefined): Frame | undefined {
+    return f;
+}
+
+function walk(): undefined {
+    const frame = parseFrame(new Frame(1, new Frame(2, undefined)));
+    if (frame === undefined) return;
+    const frame2 = frame.next;
+    if (frame2 === undefined) return;
+    console.log(frame2.id);
+}
+
+walk();

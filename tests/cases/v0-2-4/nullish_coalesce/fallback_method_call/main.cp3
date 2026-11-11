@@ -1,0 +1,14 @@
+import console from "std/console";
+
+interface Msg {
+    id: number;
+    label: string | undefined;
+}
+
+class Box {
+    pick(): string | undefined { return undefined; }
+}
+
+const b = new Box();
+const v = b.pick() ?? "defaulted";
+console.log(v);
