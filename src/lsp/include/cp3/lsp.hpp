@@ -52,6 +52,18 @@ struct RawDiagnostic {
 using CheckFn = std::function<std::vector<RawDiagnostic>(const std::string& path,
                                                          const std::string& text)>;
 
+// A text edit produced alongside a completion item: the compiler runtime
+// fills it with the additional edits an LSP client applies when the item is
+// accepted (e.g. inserting `import console from "std/console";`). The range
+// is in compiler coordinates: 1-based line, 1-based BYTE column.
+struct AdditionalEdit {
+    std::uint32_t line = 1;
+    std::uint32_t column = 1;
+    std::uint32_t endLine = 1;
+    std::uint32_t endColumn = 1;
+    std::string newText;
+};
+
 // One completion candidate, transport-neutral.
 struct CompletionCandidate {
     std::string label;         // insert text and filter text
@@ -60,6 +72,7 @@ struct CompletionCandidate {
     std::string documentation; // Markdown documentation; may be empty
     std::string insertText;    // when non-empty and different from `label`
     int insertTextFormat = 1;  // 1 plain text, 2 snippet
+    std::vector<AdditionalEdit> additionalEdits; // auto-import inserts; may be empty
 };
 
 // A hover answer: the signature/type line and the documentation. The server

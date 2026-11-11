@@ -126,6 +126,8 @@ NETWORK_RESPONSE_MEMBER = (
 
 BROKEN_DOT = 'const x = 1.\n'
 BROKEN_STRING = 'const s = "abc\n'
+STDLIB_PARTIAL = 'consol\n'
+STDLIB_TYPE_PARTIAL = 'const x: Map = 1;\n'
 CONSOLE_EVENT_STRING = (
     'import console from "std/console";\n'
     'console.on("keyp", (key) => { console.log(key); });\n'
@@ -674,7 +676,7 @@ def check_language_diagnostics(report, session, shadow_uri, reserved_uri,
 def check_completion(report, session, member_uri, object_uri,
                      object_partial_uri, server_uri, request_uri, response_uri,
                      broken_dot_uri, broken_string_uri, spec_uri, local_uri,
-                     main_uri):
+                     main_uri, stdlib_partial_uri, stdlib_type_partial_uri):
     response = session.request("textDocument/completion", {
         "textDocument": {"uri": member_uri},
         "position": position(MEMBER, "const probeMath = Math.", 23),
@@ -860,6 +862,44 @@ def check_completion(report, session, member_uri, object_uri,
         found,
     )
 
+
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": stdlib_partial_uri},
+        "position": {"line": 0, "character": len("consol")},
+    })
+    items = completion_items(response)
+    found = labels(items)
+    console_entry = next((it for it in (items or []) if it.get("label") == "console"),
+                          None)
+    has_console_import_edit = (
+        console_entry is not None and
+        any("import console from \"std/console\"" in e.get("newText", "")
+            for e in console_entry.get("additionalTextEdits", []))
+    )
+    report.check(
+        "completion: bare stdlib 'console' carries an auto-import additionalTextEdits",
+        items is not None and "console" in found and has_console_import_edit,
+        items,
+    )
+
+    response = session.request("textDocument/completion", {
+        "textDocument": {"uri": stdlib_type_partial_uri},
+        "position": {"line": 0, "character": len("const x: ")},
+    })
+    items = completion_items(response)
+    found = labels(items)
+    map_entry = next((it for it in (items or []) if it.get("label") == "Map"),
+                      None)
+    has_map_import_edit = (
+        map_entry is not None and
+        any("import { Map } from \"std/collections/types\"" in e.get("newText", "")
+            for e in map_entry.get("additionalTextEdits", []))
+    )
+    report.check(
+        "completion: type position offers std/collections/types with auto-import edits",
+        items is not None and "Map" in found and has_map_import_edit,
+        items,
+    )
 
 def check_semantic_completion(report, session, event_uri, string_uri,
                               emitter_uri):
@@ -1556,6 +1596,11 @@ def main():
         "broken_dot": write_fixture(work, "intel_broken_dot.cp3", BROKEN_DOT),
         "broken_string": write_fixture(work, "intel_broken_string.cp3",
                                        BROKEN_STRING),
+        "stdlib_partial": write_fixture(work, "intel_stdlib_partial.cp3",
+                                        STDLIB_PARTIAL),
+        "stdlib_type_partial": write_fixture(work,
+                                             "intel_stdlib_type_partial.cp3",
+                                             STDLIB_TYPE_PARTIAL),
         "console_event_string": write_fixture(
             work, "intel_console_event_string.cp3", CONSOLE_EVENT_STRING),
         "emitter_string_argument": write_fixture(
@@ -1600,6 +1645,8 @@ def main():
                           ("network_response", NETWORK_RESPONSE_MEMBER),
                           ("import", IMPORT_MAIN), ("broken_dot", BROKEN_DOT),
                           ("broken_string", BROKEN_STRING), ("spec", IMPORT_SPEC),
+        ("stdlib_partial", STDLIB_PARTIAL),
+        ("stdlib_type_partial", STDLIB_TYPE_PARTIAL),
                           ("console_event_string", CONSOLE_EVENT_STRING),
                           ("emitter_string_argument", EMITTER_STRING_ARGUMENT),
                           ("emitter_member", EMITTER_MEMBER),
@@ -1633,7 +1680,8 @@ def main():
                          uris["network_server"], uris["network_request"],
                          uris["network_response"], uris["broken_dot"],
                          uris["broken_string"], uris["spec"], uris["local"],
-                         uris["main"])
+                         uris["main"], uris["stdlib_partial"],
+                         uris["stdlib_type_partial"])
         check_semantic_completion(report, session,
                                   uris["console_event_string"],
                                   uris["emitter_string_argument"],

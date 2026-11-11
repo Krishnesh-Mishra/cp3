@@ -87,6 +87,196 @@ void appendSnippet(std::vector<lsp::CompletionCandidate>& out,
     out.push_back(std::move(candidate));
 }
 
+struct StdImportSpec {
+    const char* label;        // the stdlib value the user is likely to type
+    const char* specifier;    // the `std/...` module that exports it
+    bool named;               // false = import it as default; true = `{ label }`
+    int kind;                 // CompletionItemKind (3 fn, 7 class, 6 const)
+    const char* detail;
+    const char* documentation;
+};
+
+// Curated stdlib surface the editor offers with `import` inserted on
+// accept. Order matches roughly how likely a typed prefix matches a fresh
+// file (console/process/collections first).
+const StdImportSpec kStdImportSpecs[] = {
+    {"console", "std/console", false, 6,
+     "the console global (std/console)",
+     "`console.log(...)`, `console.error(...)`, `console.info(...)` from std/console."},
+    {"process", "std/process", false, 6,
+     "the process global (std/process)",
+     "`process.argv`, `process.env`, `process.exit(n)` from std/process."},
+    {"JSON", "std/json", false, 6,
+     "the JSON global (std/json)",
+     "`JSON.stringify`, `JSON.parse` from std/json."},
+    {"Math", "std/math", false, 6,
+     "the Math global (std/math)",
+     "Constants like `Math.PI`, functions like `Math.floor`, from std/math."},
+    {"fs", "std/fs", false, 6,
+     "the fs module (std/fs)",
+     "`fs.readFile`, `fs.writeFile`, `fs.listFiles` from std/fs."},
+    {"io", "std/io", false, 6,
+     "the io module (std/io)",
+     "`io.readFileStream`, `io.println` from std/io."},
+    {"path", "std/path", false, 6,
+     "the path module (std/path)",
+     "Path query/normalization from std/path: `path.basename`, `path.join`, ..."},
+    {"os", "std/os", false, 6,
+     "the os module (std/os)",
+     "Operating-system information from std/os: `os.cpus()`, `os.homedir`, ..."},
+    {"crypto", "std/crypto", false, 6,
+     "the crypto module (std/crypto)",
+     "Cryptographic primitives from std/crypto."},
+    {"URL", "std/url", true, 7,
+     "the URL class (std/url)",
+     "`new URL(url)`, `URLSearchParams`, from std/url."},
+    {"URLSearchParams", "std/url", true, 7,
+     "the URLSearchParams class (std/url)",
+     "`new URLSearchParams(search)`."},
+    {"Map", "std/collections", true, 7,
+     "the Map class (std/collections)",
+     "`new Map<K, V>()`, `.get`, `.set`, `.size` from std/collections."},
+    {"Set", "std/collections", true, 7,
+     "the Set class (std/collections)",
+     "`new Set<T>()`, `.has`, `.add`, `.size` from std/collections."},
+    {"LRUCache", "std/collections", true, 7,
+     "the LRUCache class (std/collections)",
+     "`new LRUCache<K, V>(capacity)`, `.peek`, `.put`, from std/collections."},
+    {"Queue", "std/collections", true, 7,
+     "the Queue class (std/collections)",
+     "`new Queue<T>()`, `.push`, `.pop` from std/collections."},
+    {"Stack", "std/collections", true, 7,
+     "the Stack class (std/collections)",
+     "`new Stack<T>()`, `.push`, `.pop` from std/collections."},
+    {"Buffer", "std/buffer", true, 7,
+     "the Buffer class (std/buffer)",
+     "`Buffer.from(string)`, `Buffer.from(array)` from std/buffer."},
+    {"TextEncoder", "std/text", true, 7,
+     "the TextEncoder class (std/text)",
+     "`new TextEncoder()`, `.encode(text)` from std/text."},
+    {"TextDecoder", "std/text", true, 7,
+     "the TextDecoder class (std/text)",
+     "`new TextDecoder()`, `.decode(bytes)` from std/text."},
+};
+
+// True when the file imports the named specifier (any import form). The
+// user may have aliased the import (`import x from "std/console"`); the
+// completion still has no business adding a second line.
+bool stdModuleImported(const AnalyzedDocument& document, const char* specifier) {
+    for (const StmtPtr& statement : document.entry->ast->body) {
+        if (!statement || statement->kind != NodeKind::ImportDeclaration) continue;
+        const auto& imp = static_cast<const ImportDeclaration&>(*statement);
+        if (imp.source == specifier) return true;
+    }
+    return false;
+}
+
+// Stdlib types offered in type positions (e.g. after a `: ` annotation). Same
+// shape as the value-position list but distinct from `std/*` runtime exports:
+// editors should suggest the types module, not the runtime one.
+const struct StdTypeImportSpec {
+    const char* label;
+    const char* specifier;
+    const char* detail;
+    const char* documentation;
+} kStdTypeImportSpecs[] = {
+    {"URL", "std/url/types", "the URL class (std/url/types)",
+     "`URL` from std/url/types, used in annotations only."},
+    {"URLSearchParams", "std/url/types", "the URLSearchParams class (std/url/types)",
+     "`URLSearchParams` from std/url/types, used in annotations only."},
+    {"Date", "std/date/types", "the Date class (std/date/types)",
+     "`Date` from std/date/types, used in annotations only."},
+    {"Map", "std/collections/types", "the Map class (std/collections/types)",
+     "`Map<K, V>` from std/collections/types, used in annotations only."},
+    {"Set", "std/collections/types", "the Set class (std/collections/types)",
+     "`Set<T>` from std/collections/types, used in annotations only."},
+    {"LRUCache", "std/collections/types", "the LRUCache class (std/collections/types)",
+     "`LRUCache<K, V>` from std/collections/types, used in annotations only."},
+    {"MultiMap", "std/collections/types", "the MultiMap class (std/collections/types)",
+     "`MultiMap<K, V>` from std/collections/types, used in annotations only."},
+    {"ConcurrentMap", "std/collections/types", "the ConcurrentMap class (std/collections/types)",
+     "`ConcurrentMap<K, V>` from std/collections/types, used in annotations only."},
+    {"Queue", "std/collections/types", "the Queue class (std/collections/types)",
+     "`Queue<T>` from std/collections/types, used in annotations only."},
+    {"Stack", "std/collections/types", "the Stack class (std/collections/types)",
+     "`Stack<T>` from std/collections/types, used in annotations only."},
+    {"PriorityQueue", "std/collections/types", "the PriorityQueue class (std/collections/types)",
+     "`PriorityQueue<T>` from std/collections/types, used in annotations only."},
+    {"RingBuffer", "std/collections/types", "the RingBuffer class (std/collections/types)",
+     "`RingBuffer<T>` from std/collections/types, used in annotations only."},
+    {"BitSet", "std/collections/types", "the BitSet class (std/collections/types)",
+     "`BitSet` from std/collections/types, used in annotations only."},
+    {"Buffer", "std/buffer/types", "the Buffer class (std/buffer/types)",
+     "`Buffer` from std/buffer/types, used in annotations only."},
+    {"TextEncoder", "std/text/types", "the TextEncoder class (std/text/types)",
+     "`TextEncoder` from std/text/types, used in annotations only."},
+    {"TextDecoder", "std/text/types", "the TextDecoder class (std/text/types)",
+     "`TextDecoder` from std/text/types, used in annotations only."},
+    {"WebSocket", "std/network/types", "the WebSocket class (std/network/types)",
+     "`WebSocket` from std/network/types, used in annotations only."},
+    {"Router", "std/network/types", "the Router class (std/network/types)",
+     "`Router` from std/network/types, used in annotations only."},
+    {"TcpSocket", "std/network/types", "the TcpSocket class (std/network/types)",
+     "`TcpSocket` from std/network/types, used in annotations only."},
+    {"TcpServer", "std/network/types", "the TcpServer class (std/network/types)",
+     "`TcpServer` from std/network/types, used in annotations only."},
+    {"TlsSocket", "std/network/types", "the TlsSocket class (std/network/types)",
+     "`TlsSocket` from std/network/types, used in annotations only."},
+    {"TlsServer", "std/network/types", "the TlsServer class (std/network/types)",
+     "`TlsServer` from std/network/types, used in annotations only."},
+    {"UdpSocket", "std/network/types", "the UdpSocket class (std/network/types)",
+     "`UdpSocket` from std/network/types, used in annotations only."},
+};
+
+void appendStdlibTypeImports(const AnalyzedDocument& document,
+                             std::vector<lsp::CompletionCandidate>& out) {
+    for (const auto& spec : kStdTypeImportSpecs) {
+        if (stdModuleImported(document, spec.specifier)) continue;
+        if (hasLabel(out, spec.label)) continue;
+        lsp::CompletionCandidate candidate;
+        candidate.label = spec.label;
+        candidate.kind = 7;  // CompletionItemKind.Class
+        candidate.detail = spec.detail;
+        candidate.documentation = spec.documentation;
+        lsp::AdditionalEdit edit;
+        edit.line = 1;
+        edit.column = 1;
+        edit.endLine = 1;
+        edit.endColumn = 1;
+        edit.newText = std::string("import { ") + spec.label +
+                       " } from \"" + spec.specifier + "\";\n";
+        candidate.additionalEdits.push_back(std::move(edit));
+        out.push_back(std::move(candidate));
+    }
+}
+
+void appendStdlibImports(const AnalyzedDocument& document,
+                         std::vector<lsp::CompletionCandidate>& out) {
+    for (const StdImportSpec& spec : kStdImportSpecs) {
+        if (stdModuleImported(document, spec.specifier)) continue;
+        if (hasLabel(out, spec.label)) continue;
+        lsp::CompletionCandidate candidate;
+        candidate.label = spec.label;
+        candidate.kind = spec.kind;
+        candidate.detail = spec.detail;
+        candidate.documentation = spec.documentation;
+        lsp::AdditionalEdit edit;
+        edit.line = 1;
+        edit.column = 1;
+        edit.endLine = 1;
+        edit.endColumn = 1;
+        if (spec.named) {
+            edit.newText = std::string("import { ") + spec.label + " } from \"" +
+                           spec.specifier + "\";\n";
+        } else {
+            edit.newText = std::string("import ") + spec.label + " from \"" +
+                           spec.specifier + "\";\n";
+        }
+        candidate.additionalEdits.push_back(std::move(edit));
+        out.push_back(std::move(candidate));
+    }
+}
+
 void appendBuiltinValues(std::vector<lsp::CompletionCandidate>& out) {
     struct Builtin {
         const char* name;
@@ -724,7 +914,10 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
     std::vector<lsp::CompletionCandidate> candidates;
     const CompletionPosition position = context.position;
     const bool typesOnly = position == CompletionPosition::TypePosition;
-    if (typesOnly) appendPrimitiveTypes(candidates);
+    if (typesOnly) {
+        appendPrimitiveTypes(candidates);
+        appendStdlibTypeImports(document, candidates);
+    }
     // 1. The names in scope at the cursor: the local scope comes first.
     for (const lsp::CompletionCandidate& candidate :
          scopeCandidates(document, position, offset)) {
@@ -744,6 +937,10 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
          position == CompletionPosition::StatementStart ||
          position == CompletionPosition::Unknown)) {
         appendBuiltinValues(candidates);
+        // 5. Stdlib surface that the user reaches through an `import` - offered
+        // with an auto-import additional edit, so typing `console<tab>` writes
+        // `import console from "std/console";` into the file automatically.
+        appendStdlibImports(document, candidates);
     }
     // If the active argument has a resolved primitive parameter type, omit
     // names that the checker would reject there. Keep unknowns visible while

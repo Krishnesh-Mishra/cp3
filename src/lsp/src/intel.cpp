@@ -64,8 +64,19 @@ Json markdownDoc(const std::string& value) {
     return doc;
 }
 
+Json additionalEditJson(const std::string& text,
+                        const AdditionalEdit& edit) {
+    Json item = jsonObject();
+    item.set("range",
+             rangeJson(text, edit.line, edit.column,
+                       edit.endLine, edit.endColumn));
+    item.set("newText", jsonString(edit.newText));
+    return item;
+}
+
 Json completionItemJson(const CompletionCandidate& candidate,
-                        std::size_t priority) {
+                        std::size_t priority,
+                        const std::string& documentText) {
     Json item = jsonObject();
     item.set("label", jsonString(candidate.label));
     item.set("kind", jsonInt(candidate.kind));
@@ -83,6 +94,13 @@ Json completionItemJson(const CompletionCandidate& candidate,
     if (candidate.insertTextFormat == 2 && !candidate.insertText.empty()) {
         item.set("insertText", jsonString(candidate.insertText));
         item.set("insertTextFormat", jsonInt(2));
+    }
+    if (!candidate.additionalEdits.empty()) {
+        Json edits = jsonArray();
+        for (const AdditionalEdit& edit : candidate.additionalEdits) {
+            edits.push(additionalEditJson(documentText, edit));
+        }
+        item.set("additionalTextEdits", std::move(edits));
     }
     return item;
 }
@@ -160,7 +178,7 @@ Json completionResult(const DocumentView& document, std::uint32_t line,
         for (std::size_t i = 0; i < candidates.size(); ++i) {
             const CompletionCandidate& candidate = candidates[i];
             if (items.items.size() >= kMaxCompletionItems) break;
-            items.push(completionItemJson(candidate, i));
+            items.push(completionItemJson(candidate, i, *document.text));
         }
     }
     Json result = jsonObject();
