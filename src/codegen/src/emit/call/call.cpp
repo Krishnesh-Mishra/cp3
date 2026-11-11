@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "detail/expr/listener.h"
+#include "detail/generator/cpp_writer.h"
 #include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
 #include "cp3/diag/diagnostic_codes.hpp"
@@ -36,6 +37,57 @@ namespace {
 bool eventValueShape(Shape s) {
     return s == Shape::Number || s == Shape::String || s == Shape::Bool ||
            s == Shape::Undefined || s == Shape::Null;
+}
+
+// One parameter at `index` of a function-typed listener (the return slot is
+// the last part, so the payload type is the part at `index`). A trailing
+// array parameter is the rest indicator (`...args: any[]`): positions beyond
+// the prefix are checked against the element type.
+Type payloadTypeOfListener(const Type& fn, std::size_t index) {
+    if (fn.kind != TypeKind::Function) return Type::unknown();
+    const std::size_t count = fn.parts.size() > 0 ? fn.parts.size() - 1 : 0;
+    if (count == 0) return Type::unknown();
+    const bool rest = fn.parts[count - 1].kind == TypeKind::Array;
+    if (rest) {
+        if (index < count - 1) return fn.parts[index];
+        const Type& array = fn.parts[count - 1];
+        return !array.parts.empty() ? array.parts.front() : Type::unknown();
+    }
+    if (index >= count) return Type::unknown();
+    return fn.parts[index];
+}
+
+// The contextual payload type of one payload position on a typed bus, from
+// the Events map (a named member wins; a dynamic name falls back to the index
+// signature). Empty when the bus is untyped / the map shape is unknown.
+Type emitPayloadContext(const Type& recv, const Expr* nameArg, std::size_t index) {
+    if (!detail::isEventEmitterType(recv) || recv.parts.empty())
+        return Type::unknown();
+    const Type& map = recv.parts[0];
+    if (map.kind != TypeKind::Object) return Type::unknown();
+    const ObjectModel* om = objectModelOf(map);
+    if (om == nullptr || !om->isInterface) return Type::unknown();
+    const Type* fn = nullptr;
+    if (nameArg && nameArg->kind == NodeKind::StringLiteral) {
+        const auto& sl = static_cast<const StringLiteral&>(*nameArg);
+        if (const ObjectFieldModel* f = findObjectField(*om, sl.value)) {
+            fn = &f->type;
+        } else if (om->hasIndex) {
+            fn = &om->indexType;
+        }
+    } else if (om->hasIndex) {
+        fn = &om->indexType;
+    }
+    if (fn == nullptr) return Type::unknown();
+    return payloadTypeOfListener(*fn, index);
+}
+
+// The interface model for a payload type, or nullptr when the type is not an
+// interface object (interfaces travel boxed in their generated wrapper).
+const ObjectModel* ifacePayloadModel(const Type& t) {
+    if (t.kind != TypeKind::Object) return nullptr;
+    const ObjectModel* om = objectModelOf(t);
+    return (om != nullptr && om->isInterface) ? om : nullptr;
 }
 
 }  // namespace
@@ -271,6 +323,32 @@ std::string Generator::emitEventEmitterNew(const NewExpr& n) {
                            "arguments, got " +
                                std::to_string(n.arguments.size()));
     }
+    // v0.2.4 typed buses: the Events map's declared members and its index
+    // signature travel with the constructor, so the runtime can split events
+    // into the declared tier (their own listeners only) and the dynamic tier
+    // (onAny listeners) - and so `isValidEventName` means something. A map
+    // the codegen model cannot see (an inline object type literal, a generic
+    // map descriptor) compiles to the default bus, everything dynamic.
+    const Type recv = effectiveType(n);
+    const ObjectModel* om =
+        (detail::isEventEmitterType(recv) && !recv.parts.empty() &&
+         recv.parts[0].kind == TypeKind::Object)
+            ? objectModelOf(recv.parts[0])
+            : nullptr;
+    if (om != nullptr && om->isInterface) {
+        std::string keys;
+        for (const ObjectFieldModel& f : om->fields) {
+            if (!keys.empty()) keys += ", ";
+            keys += cppStringLiteral(f.name);
+        }
+        std::string out = "::cp3::runtime::makeRef<::cp3::runtime::EventEmitter>(";
+        out += "std::vector<std::string>{";
+        out += keys;
+        out += "}, ";
+        out += om->hasIndex ? "true" : "false";
+        out += ")";
+        return out;
+    }
     return "::cp3::runtime::makeRef<::cp3::runtime::EventEmitter>()";
 }
 
@@ -287,6 +365,43 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
                                             const MemberExpr& m) {
     needsEventEmitter_ = true;
     const std::string recv = "(" + expr(*m.object) + ")";
+    if (m.property == "onAny" || m.property == "offAny") {
+        // v0.2.4: the wildcard channel. `onAny` fires only for events outside
+        // the map's declared member set (the runtime carries the keys and
+        // routes emissions); a member-only map legal on nothing — report.
+        if (c.arguments.size() != 1 || !c.arguments[0] ||
+            c.arguments[0]->kind == NodeKind::SpreadElement) {
+            reportCodegenError(
+                c, diagcode::kArityMismatch,
+                "arity mismatch: EventEmitter." + m.property +
+                    " takes exactly 1 argument (the handler)");
+            return "0.0";
+        }
+        const Type rt0 = effectiveType(*m.object);
+        if (detail::isEventEmitterType(rt0) && !rt0.parts.empty() &&
+            rt0.parts[0].kind == TypeKind::Object) {
+            if (const ObjectModel* om = objectModelOf(rt0.parts[0]);
+                om != nullptr && om->isInterface && !om->hasIndex) {
+                reportTypeError(c, "type mismatch: `onAny` hears only "
+                                   "dynamic events; the Events map has no "
+                                   "index signature, so all its events are "
+                                   "named");
+                return "0.0";
+            }
+        }
+        return recv + "->" + m.property + "(" +
+               emitListenerValue(*c.arguments[0]) + ")";
+    }
+    if (m.property == "isValidEventName") {
+        if (c.arguments.size() != 1 || !c.arguments[0] ||
+            c.arguments[0]->kind == NodeKind::SpreadElement) {
+            reportCodegenError(c, diagcode::kArityMismatch,
+                               "arity mismatch: EventEmitter.isValidEventName "
+                               "takes exactly 1 argument (the event name)");
+            return "0.0";
+        }
+        return recv + "->isValidEventName(" + expr(*c.arguments[0]) + ")";
+    }
     if (m.property == "on" || m.property == "once" || m.property == "off") {
         if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1] ||
             c.arguments[0]->kind == NodeKind::SpreadElement ||
@@ -315,11 +430,27 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
             const Expr* arg = argPtr.get();
             if (arg && arg->kind == NodeKind::SpreadElement) hasSpread = true;
         }
+        const Type rt0 = effectiveType(*m.object);
+        const bool typed = rt0.kind == TypeKind::Class && !rt0.parts.empty() &&
+                           detail::isEventEmitterType(rt0);
+        const Expr* eventName =
+            (c.arguments.size() == 0 || !c.arguments.front())
+                ? nullptr
+                : c.arguments.front().get();
         // Push one direct payload argument onto a `cp3_vals` vector (or return
         // it inline for the small-payload fast path). A typed bus's object
         // payloads travel as handles; everything else must be a primitive
         // the erased `EventValue` carries.
-        const auto payloadOf = [&](const Expr& arg) -> std::string {
+        const auto payloadOf = [&](const Expr& arg, std::size_t index) -> std::string {
+            // The declared payload decides the box (v0.2.4 typed buses): an
+            // interface payload travels boxed in its generated wrapper so the
+            // listener can rebuild a wrapper value out of the erased handle.
+            const Type context = emitPayloadContext(rt0, eventName, index);
+            const ObjectModel* wm = ifacePayloadModel(context);
+            if (wm == nullptr) wm = ifacePayloadModel(effectiveType(arg));
+            if (wm != nullptr)
+                return "::cp3::runtime::EventValue(std::static_pointer_cast<void>(std::make_shared<" +
+                       wm->wrapper + ">(" + expr(arg) + ")))";
             const CppInfo ec = classify(effectiveType(arg));
             if (eventValueShape(ec.shape))
                 return "::cp3::runtime::EventValue(" + expr(arg) + ")";
@@ -343,10 +474,6 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
             return false;
         };
         if (hasSpread) {
-            const Type rt0 = effectiveType(*m.object);
-            const bool typed = rt0.kind == TypeKind::Class &&
-                               !rt0.parts.empty() &&
-                               detail::isEventEmitterType(rt0);
             std::string event;
             const Expr* head = c.arguments.front().get();
             if (head->kind == NodeKind::SpreadElement) {
@@ -401,26 +528,41 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
                                   "; for (const auto& cp3_e : *cp3_s) "
                                   "cp3_vals.push_back("
                                   "::cp3::runtime::EventValue(cp3_e)); }";
-                    } else {
+                        continue;
+                    }
+                    // An interface payload travels boxed in its wrapper
+                    // (the direct-argument rule above).
+                    const Type spreadCtx = emitPayloadContext(rt0, eventName, i - 1);
+                    const Type spreadElem = at.kind == TypeKind::Array && !at.parts.empty()
+                                                ? at.parts.front()
+                                                : Type::unknown();
+                    const ObjectModel* wm = ifacePayloadModel(spreadCtx);
+                    if (wm == nullptr) wm = ifacePayloadModel(spreadElem);
+                    if (wm != nullptr) {
                         values += " { const auto& cp3_s = " +
                                   expr(*spread.argument) +
                                   "; for (const auto& cp3_e : *cp3_s) "
                                   "cp3_vals.push_back("
                                   "::cp3::runtime::EventValue(std::"
-                                  "static_pointer_cast<void>(cp3_e))); }";
+                                  "static_pointer_cast<void>(std::make_shared<" +
+                                  wm->wrapper + ">(cp3_e)))); }";
+                        continue;
                     }
+                    values += " { const auto& cp3_s = " +
+                              expr(*spread.argument) +
+                              "; for (const auto& cp3_e : *cp3_s) "
+                              "cp3_vals.push_back("
+                              "::cp3::runtime::EventValue(std::"
+                              "static_pointer_cast<void>(cp3_e))); }";
                     continue;
                 }
-                values += " cp3_vals.push_back(" + payloadOf(*arg) + ");";
+                values += " cp3_vals.push_back(" + payloadOf(*arg, i - 1) + ");";
             }
             return "[&]{ " + values + " return " + recv + "->emit(" + event +
                    ", cp3_vals); }()";
         }
         // The direct arguments need the same check the spread path already
         // applies (and, on a typed bus, the less strict check used for it).
-        const Type rt0 = effectiveType(*m.object);
-        const bool typed = rt0.kind == TypeKind::Class && !rt0.parts.empty() &&
-                           detail::isEventEmitterType(rt0);
         for (std::size_t i = 1; i < c.arguments.size(); ++i) {
             const Expr* arg = c.arguments[i].get();
             if (!arg) continue;
@@ -429,7 +571,7 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
         std::string text = recv + "->emit(" + expr(*c.arguments.front());
         std::vector<std::string> values;
         for (std::size_t i = 1; i < c.arguments.size(); ++i) {
-            values.push_back(payloadOf(*c.arguments[i]));
+            values.push_back(payloadOf(*c.arguments[i], i - 1));
         }
         if (values.size() == 1) {
             text += ", " + values.front();
@@ -494,8 +636,18 @@ bool paramValue(const Type& paramType, std::size_t index, ParamValue& out) {
         return true;
     }
     // An object payload: the bus carries the handle directly (typed buses
-    // only); the listener holds it as the declared handle type.
+    // only); the listener holds it as the declared handle type. An interface
+    // travels boxed in its generated wrapper: dereference the cast handle and
+    // copy out a wrapper value (the declared parameter's spelling).
     if (ci.shape == Shape::ClassRef || ci.shape == Shape::Object) {
+        if (ci.shape == Shape::Object) {
+            if (const ObjectModel* om = objectModelOf(paramType);
+                om != nullptr && om->isInterface) {
+                out.typed = true;
+                out.arg = "*" + out.name + ".objectCast<" + om->wrapper + ">()";
+                return true;
+            }
+        }
         std::string inner = ci.cpp;
         const std::size_t lt = inner.find("<");
         if (lt != std::string::npos) {

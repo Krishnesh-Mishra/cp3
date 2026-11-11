@@ -575,10 +575,26 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
         if (intOn() && !numberTyped(*r.argument)) intFail();
         // Always lower the returned expression so its own unsupported parts
         // report their own diagnostics instead of being silently dropped.
-        std::string value =
-            currentReturnTuple_ && r.argument->kind == NodeKind::ArrayLiteral
-                ? emitTupleLiteral(static_cast<const ArrayLiteral&>(*r.argument))
-                : expr(*r.argument);
+        // Lower `this` to a shared Ref when the enclosing method returns the
+        // class itself and the class is on the reference ABI (Ref<T> IS a
+        // shared_ptr); the raw `this` does not bind to Ref<T>.
+        std::string value;
+        if (r.argument->kind == NodeKind::ThisExpr && !classStack_.empty() &&
+            !classStack_.back()->localRef) {
+            // Ref-ABI classes derive `enable_shared_from_this<Self>`, but a
+            // derived one may also see the base's `enable_shared_from_this`
+            // through inheritance. Disambiguate by naming the self type's
+            // instantiation scope explicitly with a downcast.
+            const ClassModel* cm = classStack_.back();
+            const std::string selfBase = cm->structName + templateUseOf(*cm);
+            value = "static_cast<std::enable_shared_from_this<" + selfBase +
+                   ">&>(*this).shared_from_this()";
+        } else {
+            value =
+                currentReturnTuple_ && r.argument->kind == NodeKind::ArrayLiteral
+                    ? emitTupleLiteral(static_cast<const ArrayLiteral&>(*r.argument))
+                    : expr(*r.argument);
+        }
         // An async `return x` whose expression has a promise type adopts the
         // promise's settlement, like `return await x` (JS thenables). The
         // promise value itself cannot sit in the coroutine's state T, so the

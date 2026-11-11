@@ -146,6 +146,13 @@ public:
 template <class T>
 using Ref = std::shared_ptr<T>;
 
+// Every Ref-ABI class derives from this one type (directly when it has no
+// user base, or transitively through it when it does). std::shared_ptr's
+// `shared_from_this` only lights up automatically when exactly one
+// enable_shared_from_this<> base is in the chain; this canonical base is
+// that one. LocalRef-based classes are unaffected (they never widen).
+class SharedBase : public std::enable_shared_from_this<SharedBase> {};
+
 // The canonical allocation for a reference-type object. Generated code emits
 // `makeRef<Obj>(args...)` for `{ ... }` / class instantiation.
 template <class T, class... Args>

@@ -46,6 +46,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -272,8 +273,37 @@ private:
 
 // The builtin event type (spec §14). Listeners fire in registration order;
 // `emit` with no listener is a quiet no-op.
+//
+// Typed buses (v0.2.4, `EventEmitter<Events>`) can be constructed with their
+// Events map's declared members and whether the map has an index signature.
+// The bus then splits events into two tiers:
+//
+//   * declared events (`login` in `Events { login() -> void }`) fire only
+//     their own listeners - a wildcard listener never sees them;
+//   * dynamic events (anything else, when the map has an index signature)
+//     fire their own listeners AND the wildcard (`onAny`) listeners.
+//
+// A default-constructed bus (no type argument, or an untyped map descriptor)
+// has no declared members, so every event is dynamic and wildcard listeners
+// fire for all of them.
 class EventEmitter {
 public:
+    EventEmitter() = default;
+
+    // Declared-member construction (the typed bus's lowering): `keys` is the
+    // member names of the Events map, `allowAnyEvent` mirrors the map's index
+    // signature. Pass an empty set and true for a fully dynamic map.
+    EventEmitter(std::vector<std::string> declaredEvents, bool allowAnyEvent)
+        : allowAny_(allowAnyEvent) {
+        for (std::string& key : declaredEvents) declared_.insert(std::move(key));
+    }
+
+    // True when `event` is a legal event on this bus: always for a map with an
+    // index signature (or a dynamic bus), else membership in the declared set.
+    bool isValidEventName(const std::string& event) const {
+        return allowAny_ || declared_.count(event) != 0;
+    }
+
     void on(const std::string& event, Listener listener) {
         entries(event).push_back(Entry{std::move(listener), false, nextId_++});
     }
@@ -293,6 +323,24 @@ public:
         for (std::size_t i = list.size(); i > 0; --i) {
             if (list[i - 1].listener.same(listener)) {
                 list.erase(list.begin() + static_cast<std::ptrdiff_t>(i - 1));
+                return;
+            }
+        }
+    }
+
+    // `onAny` (v0.2.4): the wildcard subscription for the dynamic tier. Fires
+    // only for events outside the bus's declared member set (i.e. when the
+    // Events map has an index signature and no matching member was chosen).
+    void onAny(Listener listener) {
+        onAny_.push_back(Entry{std::move(listener), false, nextId_++});
+    }
+
+    // `offAny` is the exact analogue of `off` for the wildcard list.
+    void offAny(const Listener& listener) {
+        for (std::size_t i = onAny_.size(); i > 0; --i) {
+            if (onAny_[i - 1].listener.same(listener)) {
+                onAny_.erase(onAny_.begin() +
+                             static_cast<std::ptrdiff_t>(i - 1));
                 return;
             }
         }
@@ -337,13 +385,30 @@ private:
     // still runs in it unless it was a `once` that already fired.
     void emitWith(const std::string& event, const EventValue* args,
                   std::size_t count) {
-        const auto it = listeners_.find(event);
-        if (it == listeners_.end()) return;
-        const std::vector<Entry> snapshot = it->second;
+        {
+            const auto it = listeners_.find(event);
+            if (it != listeners_.end()) {
+                const std::vector<Entry> snapshot = it->second;
+                for (const Entry& entry : snapshot) {
+                    if (!entry.listener.valid()) continue;
+                    if (entry.once) removeById(event, entry.id);
+                    entry.listener.invoke(args, count);
+                }
+            }
+        }
+        // The dynamic tier: only events outside the declared set, and only
+        // when the map allows dynamic names (the index signature). A declared
+        // event stays on its own tier and never reaches wildcard listeners.
+        if (!allowAny_ || declared_.count(event) != 0 || onAny_.empty()) return;
+        // `onAny` handlers see the event name first, then the emitted values.
+        std::vector<EventValue> withName;
+        withName.reserve(count + 1);
+        withName.push_back(EventValue(std::string(event)));
+        for (std::size_t i = 0; i < count; ++i) withName.push_back(args[i]);
+        const std::vector<Entry> snapshot = onAny_;
         for (const Entry& entry : snapshot) {
             if (!entry.listener.valid()) continue;
-            if (entry.once) removeById(event, entry.id);
-            entry.listener.invoke(args, count);
+            entry.listener.invoke(withName.data(), withName.size());
         }
     }
 
@@ -360,6 +425,9 @@ private:
     }
 
     std::map<std::string, std::vector<Entry>> listeners_;
+    std::vector<Entry> onAny_;              // the dynamic tier (wildcard)
+    std::set<std::string> declared_;        // known to be invalid events iff empty+!allowAny_
+    bool allowAny_ = true;                  // the map has an index signature (or is untyped)
     std::size_t nextId_ = 0;
 };
 
