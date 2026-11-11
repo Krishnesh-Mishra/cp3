@@ -314,6 +314,16 @@ void Analyzer::collectCondNarrowings(Expr& cond, bool condTrue,
         }
         return;
     }
+    // `if (!n)`: `!` flips truthiness, so a guard on an optional value narrows
+    // both branches. Equivalent to recursing on the operand with `condTrue`
+    // flipped.
+    if (cond.kind == NodeKind::UnaryExpr) {
+        auto& ue = static_cast<UnaryExpr&>(cond);
+        if (ue.op == UnaryOp::Not && ue.operand) {
+            collectCondNarrowings(*ue.operand, !condTrue, out);
+            return;
+        }
+    }
     // Truthiness: `if (n)` / `if (n.next)` narrows to non-null.
     if (cond.kind == NodeKind::Identifier ||
         cond.kind == NodeKind::MemberExpr) {
@@ -335,6 +345,22 @@ void Analyzer::collectCondNarrowings(Expr& cond, bool condTrue,
             out.push_back(cn);
         }
         return;
+    }
+    // `if (bus.isValidEventName(x))` — the checked identifier narrows to the
+    // union of the map's declared event keys in the true branch (v0.2.4).
+    if (cond.kind == NodeKind::CallExpr) {
+        if (const auto narrow = detectEventNameNarrowing(cond)) {
+            ConditionNarrowing cn;
+            cn.isMember = false;
+            cn.name = narrow->name;
+            cn.type = narrow->type;
+            cn.nullish = Type::string();
+            cn.negated = false;
+            // The false branch keeps the plain string.
+            if (!condTrue) cn.type = Type::string();
+            out.push_back(cn);
+            return;
+        }
     }
     std::string name;
     Type type;

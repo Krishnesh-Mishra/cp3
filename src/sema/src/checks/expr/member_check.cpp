@@ -195,8 +195,21 @@ Type Analyzer::eventEmitterMember(const std::string& prop,
     listener.parts.push_back(Type::unknown());
     listener.parts.push_back(Type::voidType());
     listener.name = kVariadicLabel;
-    if (prop == "on" || prop == "once" || prop == "off") {
+    if (prop == "on" || prop == "once" || prop == "off" ||
+        prop == "onAny" || prop == "offAny") {
+        if (prop == "onAny" || prop == "offAny") {
+            // `onAny(cb)` (v0.2.4): the wildcard handler for dynamic events;
+            // the name arrives first in cp3's lowering, followed by the
+            // emission's values (unknown at the type level).
+            return Type::function({listener}, Type::voidType());
+        }
         return Type::function({Type::string(), listener}, Type::voidType());
+    }
+    if (prop == "isValidEventName") {
+        // `bus.isValidEventName(name)` (v0.2.4): true when the name is a legal
+        // event on this bus (declared member, or any name when the map has an
+        // index signature).
+        return Type::function({Type::string()}, Type::boolean());
     }
     if (prop == "emit") {
         // `emit(event, ...args)`: at least `event`, any tail (only the first
@@ -207,7 +220,8 @@ Type Analyzer::eventEmitterMember(const std::string& prop,
         return f;
     }
     reportMemberMiss("EventEmitter", prop, span,
-                     {"on", "once", "off", "emit"});
+                     {"on", "once", "off", "emit", "onAny", "offAny",
+                      "isValidEventName"});
     return Type::unknown();
 }
 

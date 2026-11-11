@@ -1236,12 +1236,17 @@ void Analyzer::addMethodSignature(std::vector<Field>& fields, bool& open,
         open = true;
         return;
     }
+    // A member's own type parameters are in scope while its parameters and
+    // return type are resolved (v0.2.4, exported interfaces).
+    TypeParamScope savedTypes;
+    enterClassTypeParams(ms.typeParams, savedTypes);
     std::vector<Type> params;
     for (auto& p : ms.params) {
         if (!p) continue;
         resolveParamSig(*p, params);
     }
     Type ret = ms.returnType ? resolveType(*ms.returnType) : Type::unknown();
+    leaveClassTypeParams(savedTypes);
     fields.push_back(Field{name, Type::function(std::move(params), ret),
                            ms.optional});
 }
@@ -1280,6 +1285,67 @@ Type Analyzer::withoutMember(const Type& t, const Type& remove) {
     for (const Type& m : t.parts) {
         if (m == remove) continue;
         keep.push_back(m);
+    }
+    if (keep.empty()) return Type::unknown();
+    return Type::unionOf(std::move(keep));
+}
+
+// The kind of typeof answer a single member of a union (or a single
+// non-union) falls into.
+TypeKind typeofFamilyOf(const Type& t) {
+    if (t.kind == TypeKind::Number || t.kind == TypeKind::Native)
+        return TypeKind::Number;
+    if (t.kind == TypeKind::String) return TypeKind::String;
+    if (t.kind == TypeKind::Boolean) return TypeKind::Boolean;
+    if (t.kind == TypeKind::Undefined || t.kind == TypeKind::Void)
+        return TypeKind::Undefined;
+    if (t.kind == TypeKind::Null) return TypeKind::Null;
+    if (t.kind == TypeKind::Function) return TypeKind::Function;
+    if (t.kind == TypeKind::Literal) {
+        switch (t.literalBase) {
+            case TypeKind::String: return TypeKind::String;
+            case TypeKind::Number: return TypeKind::Number;
+            case TypeKind::Boolean: return TypeKind::Boolean;
+            default: break;
+        }
+        return TypeKind::String;
+    }
+    // Object-like: object, array, class, enum, function-ish shapes
+    // (function-shape references answer "object" unless narrowed to
+    // "function" by member selection).
+    if (t.kind == TypeKind::Object || t.kind == TypeKind::Array ||
+        t.kind == TypeKind::Class || t.kind == TypeKind::Enum)
+        return TypeKind::Object;
+    return TypeKind::Object;
+}
+
+bool memberMatchesTypeof(const Type& m, std::string_view kind) {
+    const TypeKind family = typeofFamilyOf(m);
+    if (kind == "number" || kind == "bigint")
+        return family == TypeKind::Number;
+    if (kind == "string") return family == TypeKind::String;
+    if (kind == "boolean") return family == TypeKind::Boolean;
+    if (kind == "undefined") return family == TypeKind::Undefined;
+    if (kind == "null" || kind == "object")
+        return family == TypeKind::Object || family == TypeKind::Null;
+    if (kind == "function") return m.kind == TypeKind::Function;
+    return false;
+}
+
+Type Analyzer::selectByTypeof(const Type& t, std::string_view kind,
+                              bool inverted) {
+    auto match = [&](const Type& m) {
+        const bool matches = memberMatchesTypeof(m, kind);
+        return inverted ? !matches : matches;
+    };
+    if (!t.isUnion() && !t.isNullable()) {
+        if (t.isNullish() || t.isError()) return t;
+        return match(t) ? t : Type::unknown();
+    }
+    std::vector<Type> keep;
+    for (const Type& m : t.parts) {
+        if (m.isNullish()) continue;
+        if (match(m)) keep.push_back(m);
     }
     if (keep.empty()) return Type::unknown();
     return Type::unionOf(std::move(keep));
