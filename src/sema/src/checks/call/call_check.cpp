@@ -86,6 +86,9 @@ Type Analyzer::inferCall(CallExpr& call) {
             checkParallelCall(call);
             auto& member = static_cast<MemberExpr&>(*call.callee);
             Type inferred;
+            if (tryInferEventEmitterCall(call, member, inferred)) {
+                return inferred;
+            }
             if (tryInferMemberCall(call, member, inferred)) {
                 return inferred;
             }

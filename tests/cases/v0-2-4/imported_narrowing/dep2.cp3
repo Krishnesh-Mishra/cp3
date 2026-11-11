@@ -1,6 +1,0 @@
-import { Frame } from "./dep.cp3";
-
-export function parseFrameAnon(s: string): Frame | undefined {
-  if (s.length === 0) return undefined;
-  return new Frame(s.length);
-}
