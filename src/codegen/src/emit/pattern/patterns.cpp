@@ -152,6 +152,30 @@ bool optionalShapeField(const std::vector<ObjectField>& fields,
 // materialized here the first time a pattern or literal names it.
 bool Generator::recordLayout(const Type& t, std::string& structName,
                              std::vector<std::string>& fieldNames) {
+    // v0.2.4: the `$settled` (`Promise.allSettled`) and `$withResolvers`
+    // (`Promise.withResolvers`) runtime records destructure like plain object
+    // records (`const { ok, value } = ...`). The runtime struct is the C++
+    // record; its members name the fields.
+    if (t.kind == TypeKind::Object) {
+        if (t.name == "$settled" || t.name == "$withResolvers") {
+            const Type value = t.parts.empty() ? Type::unknown() : t.parts.front();
+            const CppInfo vi = classify(value);
+            const std::string head =
+                t.name == "$settled" ? std::string("::cp3::runtime::Settled")
+                                     : std::string("::cp3::runtime::WithResolvers");
+            if (value.isVoid()) {
+                structName = head + "<void>";
+            } else if (vi.representable) {
+                structName = head + "<" + vi.cpp + ">";
+            } else {
+                return false;
+            }
+            fieldNames = (t.name == "$settled")
+                             ? std::vector<std::string>{"ok", "value", "reason"}
+                             : std::vector<std::string>{"promise", "resolve", "reject"};
+            return true;
+        }
+    }
     std::vector<ObjectField> shapeFields;
     if (objectShapeOf(t, structName, shapeFields)) {
         fieldNames.clear();
