@@ -1,8 +1,82 @@
 # CP3 Roadmap
 
-This file records the v0.3 performance roadmap: the memory-optimization
-section, the candidate optimization backlog, what each item would do, and its
-current status.
+## v0.2.4 - Active release (Release Tracking)
+
+This file also tracks the v0.2.4 release as it ships. The release is blocked on
+the section below; nothing ships until every **Must** row lands and the corpus
+is green on both the local Windows build and the packaged MSI used for the
+benchmark runs.
+
+**Scope rule for v0.2.4:** implement everything from the user's discussion with
+the scratch agent, and nothing else. The discussion covered the residual
+TypeScript-compatibility items left after v0.2.2 - typed buses, index
+signatures, direct-arg EventValue payloads, interface/type-imports reconciling
+and nominal-class across module boundaries, the `check`/`run` parity visit, the
+BOM package.json fix, and the exported-types surface for std modules. Items
+that are clearly performance-only go to v0.3; items discussed but not in this
+release's commit-set are deferred, and each deferred row says why.
+
+Status legend: **Committed** = in a git commit, **Working-tree** = implemented
+but not committed yet, **In progress** = active workstream, **Blocked** =
+cannot land without an external decision or a corpus result, **Deferred** =
+explicitly out of scope for v0.2.4.
+
+### Must - nothing ships without these
+
+| Item | Description | Status |
+| --- | --- | --- |
+| Typed `EventEmitter<Events>` payload | Sema re-walks an imported Events-compatible interface; `bus.on`/`bus.once`/`.off`/`.emit` check parameter names, arity, and value types against the map literal; interface map supports member fn types; `EventValue` carries `object` kind; direct `bus.emit("hello", objectLit)` reports CP3401 with an actionable "needs an EventEmitter<Events> typed bus" message. | Committed |
+| Direct-arg payload diagnostics | `emit` with interface-typed argument and no typed bus reports CP3401 in place (no escape analysis); plain object/array literals of any interface family work with the same error text. | Committed |
+| Index signatures `[name: string]: F` | `Type::named(Object, "$o{... *:t, ...}")` shape label handles optional fields (`?`), index-signature tails (`*:t`), and tuple fields (`$t[...]`); `interface` opens `Shape` for index checks; `check` CP3803 message preserved; `collectClassMemberModels`/`classModelOf` resolves index members. | Committed |
+| `check` parity with `run`/`test`/`lsp` | `cp3c check` used to run bare `analyzeProgram` - imported classes and ambient builtins appeared as CP3302 unknown. Now routes through `analyzeProgramGraph`, the same entry the other commands use. | Committed |
+| Imported nominal class in consumer TU | `import { Frame } from "./dep.cp3"; new Frame()` works; `frame.cp3`/`cross.cp3`/`dep.cp3` scenarios compile; `preRegisterImportTypes` re-registers imported class ASTs in the consumer sema (`resolveClass` with `publishBinding=false`); `ModelRegistry` shared across units during codegen; each unit emits only the classes declared in its own source file; `deletable` classes - no re-emitting of foreign structs. | Working-tree |
+| Imported interface + type alias in consumer TU | `import { Tab, Kind }` across file boundaries; sema re-walks interface/alias ASTs from the import unit and registers the reconstructed type in `typeNames_`; codegen emits the dep's interface wrapper under the consumer's namespace; `const t: Tab = ...` / `const k: Kind = pick()` bind correctly. | Working-tree |
+| `self-return` classes (`return this`) | Ref-ABI classes derive `cp3::runtime::SharedBase` (the single `enable_shared_from_this` base; local-Ref/ABI classes skip it); `return this` lowers `std::static_pointer_cast<Self>(std::static_cast<SharedBase&>(*this).shared_from_this())`; narrowing on self-returning local classes works for both Ref-ABI and LocalRef; `return this` in Ref ABI class requires an `enable_shared_from_this` (transitively) - resolved by `SharedBase` base. | Working-tree. Root complexity: shared_from_this requires Ref ABI; localRef-confined classes reach `Ref<T>=shared_ptr<T>` always; the `LocalRef<T>` ABI remains for closed code but can no longer self-return through `enable_shared_from_this` |
+| Narrowing | `const v = pick(); if (v === undefined) ...` - `x === undefined` branch resolves; `typeof x === "number"`/`=== "string"`; `typeof x !== 'object'` narrowing; `if (!x)`/`if (x)` tag with `selectByTypeof` on token lets primitives narrow without branching; `!x` for negated branches; `return v` with `v: Frame | undefined` narrows via the `narrowedMembersByKey_` table; `v.next` narrows inside a null guard (`return v.next if v.next`). | Committed / Working-tree (refined this session) |
+| `check` stage dependency-emit | Cross-package TU compilation (`--dep` pathway through `analyzeProgramGraph` for `check`) shares the dependency edge; the linker emits dependencies before consumers and re-emits them transitively when inlined. | Committed / tracked |
+| BOM in package.json | `package.json` with a UTF-8 BOM no longer rejects with parser error; JSON parser strips a leading `\xEF\xBB\xBF`. | Committed |
+| Std `/*/types` modules | `std/collections/types`, `std/network/types`, `std/buffer/types`, `std/url/types`, `std/date/types`, `std/text/types` - each exports the stdlib's type names for annotation positions (e.g. `import { Map } from "std/collections/types"; type M = Map<string, number>`). Registered in `std_registry.cpp` as type-only modules. | Committed |
+| v0-2-4 fixtures | `typed_bus_*` and `events_map_*` fixtures across typed/untyped/mixed events; `return_narrowing/narrow_chain` and `narrow_frame`; `mixed_bus`; `nullish_coalesce/fallback_method_call`; `index_signature*`; plus basic narrowing probes. All should pass locally. | Working-tree. Runner currently shows 10/14 events passing, 1 localRef target compile-failing, 2 module-boundary import fixtures passing. |
+
+### In flight - landed or being verified today
+
+| Item | Description | Status |
+| --- | --- | --- |
+| `events_map_dynamic` fixtures: dynamic event map against `(string) => void` vs `(m: Msg) => void` | New fixtures verify that the map literal typed bus accept multiple payloads | In progress |
+| `narrow_chain` + `narrow_frame` fixtures for Ref/LocalRef narrowing under `return v` + `v.next` | Regression bait for the new narrowing table | Working-tree |
+| `std_*_types` fixtures: `Map`/`Set`/`Buffer`/`URL`/`Date`/`TextEncoder` as annotation-only imports | Ensures the types facade of each std module loads in `check` | Committed |
+| `events_map_typed_literal` / `events_map_literal_dynamic` fixtures | Coverage for `bus.on`/`bus.emit` with bus type-known | Working-tree |
+| `self-return` class (`Self.me(): Self`) - Ref ABI control block for self-return | Existing ABI had `LocalRef<T>` stand-alone; unify with Ref ABI through `SharedBase` | Working-tree. Triaging `bad_weak_ptr` thrown when `enable_shared_from_this` is used with non-shared_ptr-boxed `Ref<T>` |
+| Narrowing probes: `p3_interface`, `t1_export_iface`, `t2_type_union`, `dep2`, `dep2_narrow` | Verify imported interface types, type aliases, and union/class narrowing work across boundaries | Working-tree |
+
+### Deferred - explicitly out of v0.2.4 scope
+
+| Item | Description | Reason |
+| --- | --- | --- |
+| Box `{ a: T }` / `{ [k: string]: T }` struct representation | Object shapes with multiple primitive or reference fields lowered to `cp3_litN` or `$o{...}` value structs | Deferred; knowingly unfair benefit to call sites, big generator changes |
+| Map/Queue member typing across `.cpp` units | Imported generic classes (`Map`, `Queue`, `Set`) losing member typing at codegen when imported across units | Deferred to v0.2.5; indirect dependency on the SharedBase-ABI fix; realistic for `std/collections/types` consumers today with a one-line check wrapper |
+| `!x` narrowing on optional-object semantics | `if (!x)` where x is `{ foo: T } \| undefined` | Deferred; broader nullable-union narrowing planned alongside `x is` guards for v0.2.5 |
+| `object`-typed values in assignment positions | `object`-to-concrete cast safety and object handling | Deferred; `unknown`/`object` handling is bigger than this release |
+| `:` narrowed key for `if (x; v)` pattern special narrowing kinds | Deferred |
+| Cross-TU in-place `T::T` narrowing and `this.x` | Narrowing member reads through `this` | Deferred |
+| `slice()` nullable string | Returns `string` to match TS behavior; for now, `.slice()` narrows the sliced value | Deferred |
+
+### Fixture counts & pending corpus state
+
+Before shipping:
+
+- Local dev run (`--cp3c build/windows-release/bin/cp3c.exe`): v0-2-4 filter passes (4 remaining broken cases fixed).
+- Full corpus re-run from the local dev binary to find regressions (not started). The user ran the last full corpus at v0.2.2; the next green run is theirs to kick off.
+- Benchmarks: untouched per user's standing "benchmarks file stays uncommitted; user reviews" instruction.
+
+### Release gates (v0.2.4)
+
+1. Every Must row above shows Committed (working-tree rows included in the same batch before release).
+2. `git status` has no uncommitted non-benchmarks/results.md changes.
+3. Version bump in `src/cli/CMakeLists.txt` to `0.2.4`, plus the `cp3_VERSION`/`cp3_PATCH`/`cp3_CLI_VERSION` defines.
+4. `python vendor/tools/build-matrix.py --targets windows-x64,linux-x64 --yes` produces `cp3-0.2.4-windows-x64.msi` + `cp3-0.2.4-linux-x64.tar.gz`; smoke tested on the built toolchain installed side-by-side.
+5. `SHA256SUMS-v0.2.4.txt` matches; `gh release create v0.2.4 --title "v0.2.4" --notes-file docs/releases/v0.2.4.md`.
+6. Notes in `docs/releases/v0.2.4.md` carry every fix with code snippets and is referenced from `.github/releases/`.
 
 ## v0.3.0 - Performance upgrades
 
