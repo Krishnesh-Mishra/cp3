@@ -76,8 +76,9 @@ int cmdCheck(const CliOptions& opt) {
     effective.compile.nativeBindings = graph->nativeBindings();
     SemaResult sema;
     CompilationUnit* entry = graph->entry();
+    std::unordered_map<std::uint32_t, SemaResult> unitSemas;
     if (entry != nullptr && entry->ast) {
-        analyzeProgram(*entry->ast, sema, sink, effective.compile);
+        analyzeProgramGraph(*graph, sema, unitSemas, sink, effective.compile);
     }
     // A `type: package` entry module with no exports fails only at pack time
     // (the packer reports CP3604 for the missing contract after the fact).
