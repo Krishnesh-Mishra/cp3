@@ -249,10 +249,51 @@ Type Analyzer::inferNew(NewExpr& n) {
         if (lookup(id.name, b) && isAmbientType(b.type) &&
             ctor == "EventEmitter") {
             setType(id, b.type);
-            if (!n.typeArgs.empty()) {
-                report(diagcode::kTypeArgsOnNonGeneric, n.span,
-                       "type arguments are not allowed here: EventEmitter is "
-                       "not a generic class");
+            // `new EventEmitter<Events>()`: an event map (v0.2.4). The map is
+            // an interface / object shape whose members (or its index
+            // signature) are listener function types. The bus carries it in
+            // `parts[0]` so the member calls and the payload lowering can
+            // check against it. A bad map fails the constructor, not the
+            // bus, so the error points at the map.
+            Type eventMap;
+            const bool typed = !n.typeArgs.empty();
+            if (typed) {
+                if (n.typeArgs.size() != 1) {
+                    report(diagcode::kTypeArgsOnNonGeneric, n.span,
+                           "EventEmitter takes at most one type argument");
+                    return withType(n, Type::error());
+                }
+                const Type map = resolveType(*n.typeArgs[0]);
+                eventMap = map;
+                const Shape* sh = map.kind == TypeKind::Object
+                                      ? shapeOf(map)
+                                      : nullptr;
+                if (sh == nullptr || !sh->hasIndex) {
+                    bool ok = false;
+                    if (sh != nullptr) {
+                        ok = true;
+                        for (const Field& field : sh->fields) {
+                            if (field.type.kind != TypeKind::Function) {
+                                report(diagcode::kTypeMismatch, n.span,
+                                       "the Events map's member '" + field.name +
+                                           "' is not a listener function type");
+                                ok = false;
+                            }
+                        }
+                    }
+                    if (!ok) {
+                        report(diagcode::kTypeMismatch, n.span,
+                               "an Events map is an interface or object shape "
+                               "whose members are listener function types "
+                               "(or an index signature of that kind)");
+                        return withType(n, Type::error());
+                    }
+                } else if (sh->indexType.kind != TypeKind::Function) {
+                    report(diagcode::kTypeMismatch, n.span,
+                           "the index signature of the Events map must be a "
+                           "listener function type");
+                    return withType(n, Type::error());
+                }
             }
             for (auto& a : n.arguments) {
                 if (a) inferExpr(*a);
@@ -265,7 +306,9 @@ Type Analyzer::inferNew(NewExpr& n) {
                        "arguments, got " +
                            std::to_string(n.arguments.size()));
             }
-            return withType(n, Type::named(TypeKind::Class, "EventEmitter"));
+            Type emitter = Type::named(TypeKind::Class, "EventEmitter");
+            if (typed) emitter.parts.push_back(std::move(eventMap));
+            return withType(n, std::move(emitter));
         }
         if (lookup(id.name, b) && isAmbientType(b.type) &&
             isFamilyCtorName(ctor)) {

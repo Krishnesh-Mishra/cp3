@@ -74,6 +74,12 @@ public:
     EventValue(std::string v) : kind_(Kind::String), text_(std::move(v)) {}
     EventValue(const char* v) : kind_(Kind::String), text_(v ? v : "") {}
     EventValue(Undefined) {}
+    // An object payload (cp3.Error, a class instance, a generated struct):
+    // kept BY HANDLE so listeners observe one live object, exactly like JS
+    // carries references. The erased carrier lets the bus stay homogenous;
+    // typed listeners unbox to the declared payload type.
+    EventValue(std::shared_ptr<void> object)
+        : kind_(Kind::Object), object_(std::move(object)) {}
 
     // The value's cp3 text (DECISIONS D9 formatting for numbers).
     std::string toString() const {
@@ -82,6 +88,7 @@ public:
             case Kind::Number: return cp3::runtime::toString(number_);
             case Kind::Bool: return cp3::runtime::toString(boolean_);
             case Kind::String: return text_;
+            case Kind::Object: return "[object]";
             default: return cp3::runtime::toString(undefined);
         }
     }
@@ -107,16 +114,32 @@ public:
             case Kind::Number: return number_ != 0.0 && number_ == number_;
             case Kind::Bool: return boolean_;
             case Kind::String: return !text_.empty();
+            case Kind::Object: return static_cast<bool>(object_);
             default: return false;
         }
     }
 
+    // The object handle when this value carries one, nullptr otherwise.
+    // (Listeners cast it to the declared payload type.)
+    const void* object() const { return object_.get(); }
+    const std::shared_ptr<void>& objectHandle() const { return object_; }
+    // The payload cast to the declared type: usable only at the typed
+    // listener boundary, where the emit site built the payload with
+    // exactly that type.
+    template <class T> std::shared_ptr<T> objectCast() const {
+        return std::static_pointer_cast<T>(object_);
+    }
+    double asNumber() const { return number_; }
+    bool asBool() const { return boolean_; }
+    const std::string& asString() const { return text_; }
+
 private:
-    enum class Kind { Undefined, Null, Number, Bool, String };
+    enum class Kind { Undefined, Null, Number, Bool, String, Object };
     Kind kind_ = Kind::Undefined;
     double number_ = 0.0;
     bool boolean_ = false;
     std::string text_;
+    std::shared_ptr<void> object_;
 
     // The numeric value of a string (ECMAScript `Number(string)`).
     static double stringToNumber(const std::string& text) {

@@ -315,7 +315,38 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
             const Expr* arg = argPtr.get();
             if (arg && arg->kind == NodeKind::SpreadElement) hasSpread = true;
         }
+        // Push one direct payload argument onto a `cp3_vals` vector (or return
+        // it inline for the small-payload fast path). A typed bus's object
+        // payloads travel as handles; everything else must be a primitive
+        // the erased `EventValue` carries.
+        const auto payloadOf = [&](const Expr& arg) -> std::string {
+            const CppInfo ec = classify(effectiveType(arg));
+            if (eventValueShape(ec.shape))
+                return "::cp3::runtime::EventValue(" + expr(arg) + ")";
+            return "::cp3::runtime::EventValue(std::static_pointer_cast<void>(" +
+                   expr(arg) + "))";
+        };
+        const auto checkPayload = [&](const Expr& arg, bool typed) -> bool {
+            const CppInfo ec = classify(effectiveType(arg));
+            const bool okPayload = eventValueShape(ec.shape) ||
+                                   (typed && ec.representable &&
+                                    (ec.shape == Shape::ClassRef ||
+                                     ec.shape == Shape::Object));
+            if (okPayload) return true;
+            reportTypeError(arg, typed ? "type mismatch: an emitted value is "
+                                        "not a well-formed payload for this "
+                                        "bus"
+                                      : "type mismatch: an emitted value must be a "
+                                        "primitive value (null, number, boolean, "
+                                        "string or undefined); an object payload "
+                                        "needs an EventEmitter<Events> typed bus");
+            return false;
+        };
         if (hasSpread) {
+            const Type rt0 = effectiveType(*m.object);
+            const bool typed = rt0.kind == TypeKind::Class &&
+                               !rt0.parts.empty() &&
+                               detail::isEventEmitterType(rt0);
             std::string event;
             const Expr* head = c.arguments.front().get();
             if (head->kind == NodeKind::SpreadElement) {
@@ -352,7 +383,10 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
                         at.kind == TypeKind::Array && !at.parts.empty()
                             ? classify(at.parts.front())
                             : CppInfo{};
-                    if (!ec.representable || !eventValueShape(ec.shape)) {
+                    if (!ec.representable ||
+                        !(eventValueShape(ec.shape) ||
+                          (typed && (ec.shape == Shape::ClassRef ||
+                                     ec.shape == Shape::Object)))) {
                         reportTypeError(
                             *arg,
                             "type mismatch: an emitted value must be a "
@@ -361,41 +395,41 @@ std::string Generator::emitEventEmitterCall(const CallExpr& c,
                             "EventEmitter<Events> typed bus");
                         return "0.0";
                     }
-                    values += " { const auto& cp3_s = " +
-                              expr(*spread.argument) +
-                              "; for (const auto& cp3_e : *cp3_s) "
-                              "cp3_vals.push_back("
-                              "::cp3::runtime::EventValue(cp3_e)); }";
+                    if (eventValueShape(ec.shape)) {
+                        values += " { const auto& cp3_s = " +
+                                  expr(*spread.argument) +
+                                  "; for (const auto& cp3_e : *cp3_s) "
+                                  "cp3_vals.push_back("
+                                  "::cp3::runtime::EventValue(cp3_e)); }";
+                    } else {
+                        values += " { const auto& cp3_s = " +
+                                  expr(*spread.argument) +
+                                  "; for (const auto& cp3_e : *cp3_s) "
+                                  "cp3_vals.push_back("
+                                  "::cp3::runtime::EventValue(std::"
+                                  "static_pointer_cast<void>(cp3_e))); }";
+                    }
                     continue;
                 }
-                values +=
-                    " cp3_vals.push_back(::cp3::runtime::EventValue(" +
-                    expr(*arg) + "));";
+                values += " cp3_vals.push_back(" + payloadOf(*arg) + ");";
             }
             return "[&]{ " + values + " return " + recv + "->emit(" + event +
                    ", cp3_vals); }()";
         }
         // The direct arguments need the same check the spread path already
-        // applies: an unemittable payload reports a diagnostic instead of a
-        // wall of \`no matching conversion to EventValue\`.
+        // applies (and, on a typed bus, the less strict check used for it).
+        const Type rt0 = effectiveType(*m.object);
+        const bool typed = rt0.kind == TypeKind::Class && !rt0.parts.empty() &&
+                           detail::isEventEmitterType(rt0);
         for (std::size_t i = 1; i < c.arguments.size(); ++i) {
             const Expr* arg = c.arguments[i].get();
             if (!arg) continue;
-            const CppInfo ec = classify(effectiveType(*arg));
-            if (!ec.representable || !eventValueShape(ec.shape)) {
-                reportTypeError(*arg,
-                                "type mismatch: an emitted value must be a "
-                                "primitive value (null, number, boolean, "
-                                "string or undefined); an object payload "
-                                "needs an EventEmitter<Events> typed bus");
-                return "0.0";
-            }
+            if (!checkPayload(*arg, typed)) return "0.0";
         }
         std::string text = recv + "->emit(" + expr(*c.arguments.front());
         std::vector<std::string> values;
         for (std::size_t i = 1; i < c.arguments.size(); ++i) {
-            values.push_back("::cp3::runtime::EventValue(" +
-                             expr(*c.arguments[i]) + ")");
+            values.push_back(payloadOf(*c.arguments[i]));
         }
         if (values.size() == 1) {
             text += ", " + values.front();
@@ -457,6 +491,19 @@ bool paramValue(const Type& paramType, std::size_t index, ParamValue& out) {
     if (ci.shape == Shape::Bool) {
         out.typed = true;
         out.arg = out.name + ".truthy()";
+        return true;
+    }
+    // An object payload: the bus carries the handle directly (typed buses
+    // only); the listener holds it as the declared handle type.
+    if (ci.shape == Shape::ClassRef || ci.shape == Shape::Object) {
+        std::string inner = ci.cpp;
+        const std::size_t lt = inner.find("<");
+        if (lt != std::string::npos) {
+            inner = inner.substr(lt + 1);
+            if (!inner.empty() && inner.back() == '>') inner.pop_back();
+        }
+        out.typed = true;
+        out.arg = out.name + ".objectCast<" + inner + ">()";
         return true;
     }
     return false;
