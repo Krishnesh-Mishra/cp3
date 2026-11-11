@@ -1,0 +1,17 @@
+import console from "std/console";
+
+interface Events {
+    hello: (m: { id: number; text: string }) => undefined;
+    login: (m: { userId: string }) => undefined;
+    logout: () => undefined;
+}
+
+const bus = new EventEmitter<Events>();
+
+bus.on("hello", m => console.log(m.text));
+bus.on("login", m => console.log(m.userId));
+bus.on("logout", () => console.log("Logged out"));
+
+bus.emit("hello", { id: 1, text: "x" });
+bus.emit("login", { userId: "123" });
+bus.emit("logout");

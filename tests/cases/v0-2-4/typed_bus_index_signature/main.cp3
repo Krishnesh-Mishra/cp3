@@ -1,0 +1,28 @@
+import console from "std/console";
+
+class Msg {
+    id: number;
+    text: string;
+    constructor(id: number, text: string) {
+        this.id = id;
+        this.text = text;
+    }
+}
+
+interface Events {
+    [name: string]: (m: Msg) => undefined;
+}
+
+const bus = new EventEmitter<Events>();
+const name = "hello" + String(1 + 1);
+
+bus.on(name, m => {
+    console.log(m.id);
+    console.log(m.text);
+});
+bus.emit(name, new Msg(7, "dyn"));
+bus.on("other-event", m => {
+    console.log(m.id);
+    console.log(m.text);
+});
+bus.emit("other-event", new Msg(8, "lit"));

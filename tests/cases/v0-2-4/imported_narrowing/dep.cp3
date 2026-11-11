@@ -1,0 +1,11 @@
+export class Frame {
+  id: number;
+  constructor(id: number) {
+    this.id = id;
+  }
+}
+
+export function parseFrame(s: string): Frame | undefined {
+  if (s.length === 0) return undefined;
+  return new Frame(s.length);
+}

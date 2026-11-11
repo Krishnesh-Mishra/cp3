@@ -1,0 +1,16 @@
+import console from "std/console";
+import { Frame, parseFrame } from "./dep.cp3";
+
+function read(): Frame | undefined {
+  const f = parseFrame("hi");
+  if (f === undefined) return undefined;
+  if (f.id > 0) {
+    return f;
+  }
+  return undefined;
+}
+
+const r = read();
+if (r !== undefined) {
+  console.log(r.id);
+}
