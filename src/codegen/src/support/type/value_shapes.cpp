@@ -396,6 +396,9 @@ void classifyValueUnion(const Type& t, CppInfo& info) {
     bool hasNumber = false;
     bool hasString = false;
     bool hasBool = false;
+    bool allStringLit = !t.parts.empty();
+    bool allNumberLit = !t.parts.empty();
+    bool allBoolLit = !t.parts.empty();
     for (const Type& part : t.parts) {
         if (part.isNullish()) return;
         const CppInfo member = classify(part);
@@ -405,7 +408,15 @@ void classifyValueUnion(const Type& t, CppInfo& info) {
             case Shape::Bool: hasBool = true; break;
             default: return;
         }
+        if (!part.isLiteral() || part.literalBase != TypeKind::String) allStringLit = false;
+        if (!part.isLiteral() || part.literalBase != TypeKind::Number) allNumberLit = false;
+        if (!part.isLiteral() || part.literalBase != TypeKind::Boolean) allBoolLit = false;
     }
+    // A union of all-literal members of one base family spells as the base
+    // family: `"a" | "b"` is a stable `std::string` value, `1 | 2` a `double`.
+    if (allStringLit) { info = classify(Type::string()); return; }
+    if (allNumberLit) { info = classify(Type::number()); return; }
+    if (allBoolLit) { info = classify(Type::boolean()); return; }
     const int distinct = static_cast<int>(hasNumber) +
                          static_cast<int>(hasString) +
                          static_cast<int>(hasBool);
