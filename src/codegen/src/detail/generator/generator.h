@@ -62,6 +62,16 @@
 
 namespace cp3 {
 
+// The narrowed receiver payload for a model-based member read/call: the
+// use-site (possibly narrowed) type, the receiver text with any optional
+// deref unwrap already applied, and the flags the read/call paths need.
+struct NarrowedModelReceiver {
+    Type rt;                    // use-site type
+    std::string recv;           // receiver text with any optional unwrap applied
+    bool unwrap = false;
+    bool nonOwningReceiver = false;
+};
+
 class Generator;
 
 // The regular-array method surface (src/language/arrays/codegen_methods.cpp): push/
@@ -181,12 +191,16 @@ private:
     void collectModels(const Program& program);
     void collectClassNames(const Stmt& s);
     void collectInterfaces(const Program& program);
+    void registerInterface(const InterfaceDeclaration& i);
     void collectBodyModels(const Stmt& s);
     void collectClassMemberModels(ClassModel& cm);
     void collectClassMethodModel(ClassModel& cm, const MethodDeclaration& md);
     void collectClassAccessorModel(ClassModel& cm, const ClassMember& mp);
     void emitTopLevelClass(const ClassDeclaration& c);
     void emitAllClasses();
+    // Whole-program builds share the class registry; a class declared in
+    // another unit's source file must not be (re-)emitted by this one.
+    bool classOwnedByThisUnit(const detail::ClassModel& cm) const;
     void emitLocalClass(const ClassDeclaration& c, std::string& out, int indent);
     void emitClassStruct(const ClassModel& cm, std::string& out, int indent,
                          std::string* defs);
@@ -233,6 +247,13 @@ private:
                               const SourceSpan& span);
     std::string emitErrorCall(const CallExpr& c, const ClassModel& cm);
     std::string emitModelMember(const MemberExpr& m);
+    // The narrowed receiver machinery for a model-based member read/call:
+    // computes the use-site type, the receiver text (occurrence of `(*(x))` or
+    // `((x).value())` for optional storage), and whether a deref unwrap is
+    // required. Returns nullopt when the declared shape is optional/nullable
+    // but the use site has no narrowing to lean on.
+    std::optional<NarrowedModelReceiver> narrowedModelReceiver(
+        const MemberExpr& m);
     std::string emitModelCall(const CallExpr& c, const MemberExpr& m);
     std::string emitModelAssign(const AssignmentExpr& a, const MemberExpr& m);
     std::string emitSuperMemberAssign(const AssignmentExpr& a,

@@ -45,13 +45,19 @@ std::string typeKeyOf(const Type& t) {
     return s;
 }
 
-std::string objectLabelOf(const std::vector<ObjectFieldModel>& fields) {
+std::string objectLabelOf(const std::vector<ObjectFieldModel>& fields,
+                          const Type* indexType) {
     std::string label = "$o{";
     for (const ObjectFieldModel& f : fields) {
         label += f.name;
         label += f.optional ? "?" : "";
         label += ':';
         label += typeKeyOf(f.type);
+        label += ',';
+    }
+    if (indexType != nullptr) {
+        label += "*:";
+        label += typeKeyOf(*indexType);
         label += ',';
     }
     label += '}';

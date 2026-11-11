@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // src/cli/src/commands/run.cpp - `cp3c build` / `cp3c run`.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdBuildOrRun.
@@ -365,6 +365,8 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
                       "generating native code...");
     CodegenOptions options;
     options.importedEnums = importedEnumsFor(*frontend.graph, *entry);
+    options.importedClasses = importedClassesFor(*frontend.graph, *entry);
+options.importedInterfaces = importedInterfacesFor(*frontend.graph, *entry);
     options.typeSystem = effective.compile.typeSystem;
     options.nativeBindings = effective.compile.nativeBindings;
     std::vector<GeneratedModule> workerModules;

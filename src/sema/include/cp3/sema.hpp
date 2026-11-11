@@ -40,6 +40,19 @@ struct ImportedBinding {
     bool hasRest = false;
     Type returnType;
     bool isAsync = false;
+    // For a class export: points at the defining declaration so the consumer
+    // TU can re-register its own copy of the class info (the imported TU
+    // runs its own sema, but the class table is not part of the sema
+    // result; this lets the consumer reconstruct it on demand).
+    const ClassDeclaration* classDecl = nullptr;
+    // For an interface export: points at the defining declaration so the
+    // consumer TU can re-register the interface's shape with the same
+    // label both sides agree on (v0.2.4 typed-bus map links).
+    const InterfaceDeclaration* interfaceDecl = nullptr;
+    // For a type-alias export: points at the defining declaration so the
+    // consumer TU can resolve the alias body instead of falling back to
+    // \\`unknown\\`.
+    const TypeAliasDeclaration* aliasDecl = nullptr;
 };
 
 using ImportedBindings = std::unordered_map<std::string, ImportedBinding>;

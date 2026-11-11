@@ -61,6 +61,17 @@ struct CodegenOptions {
     // re-emits the names it imported as its own `enum class`, and same-named
     // enums are structurally compatible at the channel boundary (D80).
     std::vector<const EnumDeclaration*> importedEnums;
+    // Top-level classes declared in the unit's local imports. Each unit
+    // re-emits the class names it imports inside its own namespace so the
+    // consumer's expression lowering can find them (type spelling, dll
+    // bytes, member access). Same-named classes in different namespaces are
+    // distinct types, so a consumer using one sees only the dep's or local
+    // struct, not a duplicate.
+    std::vector<const ClassDeclaration*> importedClasses;
+    // Top-level interfaces declared in the unit's local imports. Each unit
+    // re-emits the interface names it imports inside its own namespace so
+    // annotation positions get the dep's by-value wrapper struct.
+    std::vector<const InterfaceDeclaration*> importedInterfaces;
     // The project's plain type-name vocabulary (spec 03). Inline r_/c_/ts_
     // prefixes work in every project; this only affects bare `i64`-style
     // annotations in a rust/cpp project.

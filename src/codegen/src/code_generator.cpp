@@ -139,6 +139,7 @@ void Generator::decideModuleScope(const Program& program) {
 void Generator::runUnit(const Program& program, std::string& decls,
                         std::string& defs, std::string& mainBody,
                         std::string& globals) {
+    unitSourceFile_ = program.span.file;
     collectNumericConstants(program);
     for (const auto& stmtPtr : program.body) {
         if (!stmtPtr) continue;
@@ -186,7 +187,13 @@ void Generator::runUnit(const Program& program, std::string& decls,
     // The spec 15 object surface: rebuild the class/interface/object models
     // for this unit before anything is emitted, so a class used above its
     // declaration (and a function taking one) already has a C++ spelling.
-    detail::ModelRegistry::get().reset();
+    // In whole-program mode the model registry is shared across units (each
+    // class carries its own namespace); resetting here would erase classes
+    // imported from earlier units and break their lowering, so skip the
+    // reset when every unit is walked in the same program build.
+    if (!programMode_) {
+        detail::ModelRegistry::get().reset();
+    }
     detail::ModelRegistry::get().setNamespace(namesp_);
     collectModels(program);
     analyzeEscapeAllocations(program);

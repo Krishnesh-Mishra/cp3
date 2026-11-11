@@ -50,6 +50,11 @@ struct ObjectModel {
     std::string wrapper;      // interface wrapper spelling ("" when plain)
     std::string literalName;  // interface literal struct ("" when not usable)
     bool isInterface = false;
+    // The open index member (`[name: string]: T`) of an interface: its value
+    // type, so a typed EventEmitter whose Events map is this interface can
+    // resolve a dynamic event name's payload type (v0.2.4).
+    bool hasIndex = false;
+    Type indexType;
     // Every member has a C++ spelling and a callable thunk form: a member
     // without one keeps the whole shape out of M1 (`classify` treats it as
     // unknown), so the unit reports an unsupported-shape diagnostic instead of
@@ -216,7 +221,13 @@ bool objectModelUsed(const ObjectModel& om);
 std::string typeKeyOf(const Type& t);
 
 // sema's `$o{name:typeKey,...}` label for `fields`.
-std::string objectLabelOf(const std::vector<ObjectFieldModel>& fields);
+// The interface's shape label, identical to sema's `makeObjectType` label
+// (fields each `name[?]:key,` then `*:key,` for an index signature) so the
+// model registry keys line up across the two sides. Pass `indexType` (the
+// index signature's value type) for interfaces that declare one; `nullptr`
+// keeps the historical label byte-for-byte.
+std::string objectLabelOf(const std::vector<ObjectFieldModel>& fields,
+                          const Type* indexType = nullptr);
 
 // The property key of a member/signature (`x`, `"x"`, `0`); "" when computed.
 std::string keyNameOf(const Expr* key);

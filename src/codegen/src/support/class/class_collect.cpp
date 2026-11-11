@@ -1,6 +1,6 @@
-// =============================================================================
+﻿// =============================================================================
 // src/codegen/src/support/class_collect.cpp - Generator model collection for
-// the spec §15 object surface (STYLE.md §8).
+// the spec Â§15 object surface (STYLE.md Â§8).
 //
 // Builds the unit's ClassModel/ObjectModel registry (detail/class_model.h)
 // before the emit walk: `collectModels` registers the class names, the
@@ -29,6 +29,21 @@ void Generator::collectModels(const Program& program) {
     for (const auto& s : program.body) {
         if (s) collectClassNames(*s);
     }
+    // Imported (from another unit) top-level classes: register the same TU-scope
+    // model so emitModelMember / new / class-ref can find them. The TU of
+    // the owning module emits the struct itself; the consumer TU re-emits
+    // its own class under its own namespace. Same-named classes in
+    // different namespaces are distinct types at the C++ level, which
+    // matches cp3's per-unit ABI contract.
+    for (const ClassDeclaration* c : options_.importedClasses) {
+        if (c != nullptr) collectClassNames(*c);
+    }
+    // Imported interfaces: register the model in this TU too, so a type
+    // annotation like `Tab` has a wrapper here as well as in the owning
+    // module (each unit emits its own, layouts agree).
+    for (const InterfaceDeclaration* i : options_.importedInterfaces) {
+        if (i != nullptr) registerInterface(*i);
+    }
     collectInterfaces(program);
     for (ClassModel* cm : ModelRegistry::get().allClasses()) {
         collectClassMemberModels(*cm);
@@ -47,7 +62,11 @@ void Generator::collectModels(const Program& program) {
 // A class declared at the module root is top-level; anything the statement
 // nests (a block, a function body) is a local class.
 void Generator::collectClassNames(const Stmt& s) {
-    walkClassesForModels(s, s.kind != NodeKind::ClassDeclaration, sema_);
+    // Top-level statements of a unit live at namespace scope. Those that
+    // hold a class declaration register a namespace-scope struct; everything
+    // else has nothing to register. Nested walks (declarations inside a
+    // function / block / if-statement) receive `true` from callers below.
+    walkClassesForModels(s, /*local=*/false, sema_);
 }
 
 void Generator::collectInterfaces(const Program& program) {
@@ -59,53 +78,76 @@ void Generator::collectInterfaces(const Program& program) {
             s = ed.declaration.get();
         }
         if (s == nullptr || s->kind != NodeKind::InterfaceDeclaration) continue;
-        const auto& i = static_cast<const InterfaceDeclaration&>(*s);
-        if (!i.typeParams.empty()) {
-            // A generic interface (D26): the declaration is registered, and
-            // every use site instantiates it (support/type_map.cpp).
-            GenericInterfaceModel generic;
-            generic.decl = &i;
-            for (const auto& tp : i.typeParams) {
-                if (tp) generic.typeParams.push_back(tp->name);
-            }
-            ModelRegistry::get().addGenericInterface(i.name,
-                                                    std::move(generic));
-            continue;
-        }
-        std::vector<ObjectFieldModel> fields;
-        for (const auto& mp : i.members) {
-            if (!mp) continue;
-            ObjectFieldModel f;
-            if (mp->kind == NodeKind::PropertySignature) {
-                const auto& ps = static_cast<const PropertySignature&>(*mp);
-                f.name = keyNameOf(ps.key.get());
-                f.optional = ps.optional;
-                if (ps.type) f.type = modelTypeFromTypeNode(*ps.type);
-            } else if (mp->kind == NodeKind::MethodSignature) {
-                const auto& ms = static_cast<const MethodSignature&>(*mp);
-                f.name = keyNameOf(ms.key.get());
-                f.optional = ms.optional;
-                std::vector<Type> params;
-                for (const auto& p : ms.params) {
-                    if (!p) continue;
-                    params.push_back(p->type ? modelTypeFromTypeNode(*p->type)
-                                             : Type::unknown());
-                }
-                const Type ret = ms.returnType
-                                     ? modelTypeFromTypeNode(*ms.returnType)
-                                     : Type::unknown();
-                f.type = Type::function(std::move(params), ret);
-                f.isFunction = true;
-                f.isMethod = true;
-            } else {
-                continue;
-            }
-            if (!f.name.empty()) fields.push_back(std::move(f));
-        }
-        ModelRegistry::get().addInterface(i.name, objectLabelOf(fields), fields);
+        registerInterface(static_cast<const InterfaceDeclaration&>(*s));
     }
 }
 
+void Generator::registerInterface(const InterfaceDeclaration& i) {
+    if (!i.typeParams.empty()) {
+        // A generic interface (D26): the declaration is registered, and
+        // every use site instantiates it (support/type_map.cpp).
+        GenericInterfaceModel generic;
+        generic.decl = &i;
+        for (const auto& tp : i.typeParams) {
+            if (tp) generic.typeParams.push_back(tp->name);
+        }
+        ModelRegistry::get().addGenericInterface(i.name,
+                                                 std::move(generic));
+        return;
+    }
+    std::vector<ObjectFieldModel> fields;
+    bool hasIndex = false;
+    Type indexType;
+    for (const auto& mp : i.members) {
+        if (!mp) continue;
+        ObjectFieldModel f;
+        if (mp->kind == NodeKind::IndexSignature) {
+            // `[name: string]: T` (v0.2.4): the value type rides on the
+            // model so a typed EventEmitter's dynamic event name can
+            // resolve its payload type through the Events map.
+            const auto& is = static_cast<const IndexSignature&>(*mp);
+            indexType = is.valueType ? modelTypeFromTypeNode(*is.valueType)
+                                     : Type::unknown();
+            hasIndex = true;
+            continue;
+        }
+        if (mp->kind == NodeKind::PropertySignature) {
+            const auto& ps = static_cast<const PropertySignature&>(*mp);
+            f.name = keyNameOf(ps.key.get());
+            f.optional = ps.optional;
+            if (ps.type) f.type = modelTypeFromTypeNode(*ps.type);
+        } else if (mp->kind == NodeKind::MethodSignature) {
+            const auto& ms = static_cast<const MethodSignature&>(*mp);
+            f.name = keyNameOf(ms.key.get());
+            f.optional = ms.optional;
+            std::vector<Type> params;
+            for (const auto& p : ms.params) {
+                if (!p) continue;
+                params.push_back(p->type ? modelTypeFromTypeNode(*p->type)
+                                         : Type::unknown());
+            }
+            const Type ret = ms.returnType
+                                 ? modelTypeFromTypeNode(*ms.returnType)
+                                 : Type::unknown();
+            f.type = Type::function(std::move(params), ret);
+            f.isFunction = true;
+            f.isMethod = true;
+        } else {
+            continue;
+        }
+        if (!f.name.empty()) fields.push_back(std::move(f));
+    }
+    // Sema's shape label carries the index signature entry; the registry
+    // must key the model under the same label or lookups from the typed
+    // EventEmitter<Events> path miss it.
+    const std::string label =
+        objectLabelOf(fields, hasIndex ? &indexType : nullptr);
+    ObjectModel& om = ModelRegistry::get().addInterface(i.name, label, fields);
+    if (hasIndex) {
+        om.hasIndex = true;
+        om.indexType = std::move(indexType);
+    }
+}
 void Generator::collectBodyModels(const Stmt& s) { walkStmtModels(s, sema_, false); }
 
 void Generator::collectClassMemberModels(ClassModel& cm) {
@@ -210,7 +252,7 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
 
 // A method member: its name, modifiers, signature and (for a generic method)
 // its own type parameters - the method lowers to a C++ member function
-// template over them (spec §16).
+// template over them (spec Â§16).
 void Generator::collectClassMethodModel(ClassModel& cm,
                                         const MethodDeclaration& md) {
     const std::string name = keyNameOf(md.key.get());
@@ -292,3 +334,4 @@ void Generator::collectClassAccessorModel(ClassModel& cm, const ClassMember& mp)
 }
 
 }  // namespace cp3
+

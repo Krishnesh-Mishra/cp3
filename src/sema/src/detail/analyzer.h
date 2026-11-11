@@ -39,6 +39,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string_view>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -83,6 +84,14 @@ public:
     // Stage 1: cycle-capability analysis over class field types.
     void computeCycleCapable();
     std::unordered_set<std::string> cycleCapableClasses_;
+
+    // The narrowing entry for `if (bus.isValidEventName(x))`: the checked
+    // identifier narrows to the union of the map's declared event keys in the
+    // true branch (v0.2.4).
+    struct EventNameNarrowing {
+        std::string name;
+        Type type;
+    };
 
 private:
     // --- diagnostics ----------------------------------------------------------
@@ -209,7 +218,7 @@ private:
     // --- classes (class_check.cpp) -------------------------------------------
     // Resolve class declarations into member tables before the body pass.
     void resolveClasses(StmtList& body);
-    void resolveClass(ClassDeclaration& c);
+    void resolveClass(ClassDeclaration& c, bool publishBinding = true);
     void collectClassMembers(const ClassDeclaration& c, ClassInfo& info);
     void collectClassMember(ClassMember& m, ClassInfo& info);
     void collectClassProperty(PropertyDeclaration& p, ClassInfo& info);
@@ -305,6 +314,11 @@ private:
     void resolveParamSig(Parameter& p, std::vector<Type>& out);
     Type nullableIf(bool cond, const Type& t);
     Type withoutMember(const Type& t, const Type& remove);
+    // Filters a union (or nullable) to the members whose typeof answer is
+    // `kind`; when `inverted` is true keeps the members whose answer is NOT
+    // `kind`. A non-union is returned when it (individually) matches; the
+    // other side returns `Type::never` so the branch can be dropped.
+    Type selectByTypeof(const Type& t, std::string_view kind, bool inverted);
     // --- assignability (assignability.cpp) -----------------------------------
     bool wouldAccept(const Type& from, const Type& to, bool freshLiteral);
     bool objectAccepts(const Type& from, const Type& to, bool fresh);
@@ -474,6 +488,21 @@ private:
     // void() when the map is the untyped empty map.
     Type eventMapListenerFor(const Type& map, const std::string& event,
                              const SourceSpan& span);
+    // The proven literal values of an event-name expression: a string
+    // literal, a literal-typed binding, or an all-literal union.
+    std::optional<std::vector<std::string>> eventNameLiteralValues(Expr& first);
+    // Contextual function type for an `onAny` handler: the event name string
+    // followed by the index signature's parameter slots.
+    Type onAnyContextType(const Shape* mapShape);
+    // Narrowing entry for `if (bus.isValidEventName(x))`: the checked
+    // identifier narrows to the union of the map's declared event keys.
+    std::optional<EventNameNarrowing> detectEventNameNarrowing(
+        Expr& cond);
+    // The annotated parameters of a listener must agree with the map's
+    // listener signature; the handler may not exceed the map's arity.
+    void checkListenerAnnotations(const ArrowFunction& arrow,
+                                  const Type& fn,
+                                  const SourceSpan& span);
     void inferArgs(CallExpr& call);
     void sigFromFunctionType(const Type& ct, FuncSig& localSig);
     void inferArg(Expr* a);
@@ -669,8 +698,7 @@ private:
     // non-null type.
     bool detectNullNarrowing(Expr& cond, std::uint32_t& nodeId, Type& type,
                              bool& negated);
-    struct ConditionNarrowing {
-        bool isMember = false;
+    struct ConditionNarrowing {        bool isMember = false;
         std::string name;
         std::string memberKey;
         Type type;

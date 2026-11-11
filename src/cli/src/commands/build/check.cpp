@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // src/cli/src/commands/check.cpp - `cp3c check` (frontend + worker diagnostics).
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdCheck.
@@ -189,6 +189,8 @@ int cmdCheck(const CliOptions& opt) {
         moduleNameFor(entryPath, findProjectRoot(entryPath));
     CodegenOptions options;
     options.importedEnums = importedEnumsFor(*graph, *entry);
+    options.importedClasses = importedClassesFor(*graph, *entry);
+options.importedInterfaces = importedInterfacesFor(*graph, *entry);
     options.typeSystem = effective.compile.typeSystem;
     options.nativeBindings = effective.compile.nativeBindings;
 

@@ -138,6 +138,14 @@ void Generator::emitTopLevelClass(const ClassDeclaration& c) {
     (void)c;
 }
 
+// Whether this unit owns the declaration behind `cm`. In whole-program mode
+// the registry is shared; a class declared in another unit emits there, not
+// here (its constructor body was compiled against that unit's sema).
+bool Generator::classOwnedByThisUnit(const detail::ClassModel& cm) const {
+    if (unitSourceFile_ == nullptr || cm.decl == nullptr) return cm.decl != nullptr;
+    return cm.decl->span.file == unitSourceFile_;
+}
+
 void Generator::emitAllClasses() {
     ModelRegistry& reg = ModelRegistry::get();
     const std::vector<ClassModel*> all = reg.allClasses();
@@ -147,6 +155,7 @@ void Generator::emitAllClasses() {
     // namespace scope too (a C++ local class cannot be a template).
     for (ClassModel* cm : all) {
         if (cm->decl == nullptr) continue;
+        if (!classOwnedByThisUnit(*cm)) continue;
         if (cm->local && !cm->namespaceScope) continue;
         if (!cm->typeParams.empty()) {
             line(classFwdDecls_, 1, templateHead(*cm));
@@ -158,6 +167,7 @@ void Generator::emitAllClasses() {
     std::vector<ClassModel*> ordered;
     for (ClassModel* cm : all) {
         if (cm->decl == nullptr) continue;
+        if (!classOwnedByThisUnit(*cm)) continue;
         if (cm->local && !cm->namespaceScope) continue;
         ordered.push_back(cm);
     }
@@ -221,10 +231,36 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
         line(out, indent, templateHead(cm));
     }
     std::string head = "struct " + cm.structName;
+    // A class that runs on the reference ABI derives `SharedBase` (which is the
+    // common `enable_shared_from_this` base every such class can chain off),
+    // so a method returning `this` hands back a shared handle the caller
+    // already owns. Ref<T> IS std::shared_ptr<T>.
+    //
+    // Classes on the local (confinement-optimized) ABI do NOT derive
+    // `SharedBase`; they have no weak-ptr control block and so do not support
+    // `shared_from_this`.
+    const std::string selfBase = cm.structName + templateUseOf(cm);
+    std::string bases;
+    const ClassModel* baseClass = nullptr;
     if (!cm.baseName.empty()) {
-        const ClassModel* base = ModelRegistry::get().classByName(cm.baseName);
-        head += " : public " + (base != nullptr ? base->cpp : mapIdent(cm.baseName));
+        baseClass = ModelRegistry::get().classByName(cm.baseName);
+        bases += "public " + (baseClass != nullptr ? baseClass->cpp : mapIdent(cm.baseName));
     }
+    if (!cm.localRef) {
+        // Only add a direct `SharedBase` base for classes whose parent does
+        // not provide it transitively. The base provides `SharedBase`
+        // transitively only when it is a non-built-in Ref-ABI class defined
+        // in this unit. A builtin root (e.g. `Error`) does not derive
+        // SharedBase, so add it here. An imported class that is on the Ref
+        // ABI derives SharedBase itself; skip in that case.
+        const bool baseHasSharedBase =
+            baseClass != nullptr && !baseClass->builtin && !baseClass->localRef;
+        if (!baseHasSharedBase) {
+            if (!bases.empty()) bases += ", ";
+            bases += "public ::cp3::runtime::SharedBase";
+        }
+    }
+    if (!bases.empty()) head += " : " + bases;
     line(out, indent, head + " {");
     // A derived class with no constructor of its own has the base's
     // constructors: TypeScript's implicit `constructor(...args) {
@@ -749,6 +785,7 @@ std::string Generator::methodBodyText(const MethodDeclaration& md,
                                       const std::vector<std::string>& methodTypeParams) {
     const std::string savedReturn = currentReturn_;
     const std::optional<Type> savedReturnType = currentReturnType_;
+    const std::optional<Type> savedExpected = expected_;
     const bool savedInAsync = inAsyncBody_;
     if (md.isAsync) {
         // spec 14: `async m(): T` is a coroutine returning `Promise<T>`;
@@ -769,7 +806,20 @@ std::string Generator::methodBodyText(const MethodDeclaration& md,
         inAsyncBody_ = true;
     } else {
         currentReturn_ = methodReturnType(md, &cm, methodTypeParams);
+        // The return sites read currentReturnType_ to lower a nullish literal
+        // to `std::nullopt` (the plainBody rule); keep it in sync with the
+        // annotation, as plain bodies do.
+        currentReturnType_.reset();
+        if (md.returnType) {
+            if (auto t = typeOfNode(*md.returnType)) {
+                *t = untypedAsUnknown(*t);
+                rewriteTypeParams(*t, cm.typeParams);
+                rewriteTypeParams(*t, methodTypeParams);
+                currentReturnType_ = std::move(*t);
+            }
+        }
     }
+    expected_ = currentReturnType_;
     ++nestingDepth_;
     pushScope();
     classStack_.push_back(&cm);
@@ -817,6 +867,7 @@ std::string Generator::methodBodyText(const MethodDeclaration& md,
     --nestingDepth_;
     inAsyncBody_ = savedInAsync;
     currentReturnType_ = savedReturnType;
+    expected_ = savedExpected;
     currentReturn_ = savedReturn;
     return body;
 }

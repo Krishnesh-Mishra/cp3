@@ -1,10 +1,10 @@
-// =============================================================================
+﻿// =============================================================================
 // src/cli/src/pkg/install.cpp - local package install DEFINITIONS.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements detail/install.hpp.
 //
 // A `.cp3pak` is decompressed once into .cp3/packages/<name>/ as plain files
-// (CLI-README §4). A directory install compiles its TypeScript-ish source
+// (CLI-README Â§4). A directory install compiles its TypeScript-ish source
 // into the same shape a `.cp3pak` carries (package.json + generated
 // index.cp3 + pak/<module>.{cpp,hpp} + build.files) so consumers build
 // against the generated surface and the transpiled C++; when the directory
@@ -255,6 +255,8 @@ bool compilePackageEntry(const fs::path& source, const JsonValue& manifest,
     }
     CodegenOptions options;
     options.importedEnums = importedEnumsFor(*graph, *entry);
+    options.importedClasses = importedClassesFor(*graph, *entry);
+options.importedInterfaces = importedInterfacesFor(*graph, *entry);
     options.typeSystem = compile.typeSystem;
     options.nativeBindings = compile.nativeBindings;
     CollectingDiagnosticSink cgSink;
@@ -284,7 +286,7 @@ bool installFromDirectory(const fs::path& source, const fs::path& projectRoot,
     const std::string name = packageName(manifest, source);
     const std::string version = packageVersion(manifest);
     // A package that excluded its C++ source is only usable on a platform it
-    // ships a cached binary for (CLI-README §5.4).
+    // ships a cached binary for (CLI-README Â§5.4).
     PlatformCacheManifest cache;
     const bool hasCache = installedPlatformCache(source, cache);
     if (!checkPackageUsable(name, version, manifest, hasCache, err)) {
@@ -480,7 +482,7 @@ bool installArchivePackage(const fs::path& archive, const fs::path& projectRoot,
     const std::string name = *declared;
     const std::string version = packageVersion(manifest);
     // A package that excluded its C++ source is only usable on a platform it
-    // ships a cached binary for (CLI-README §5.4).
+    // ships a cached binary for (CLI-README Â§5.4).
     const bool hasCache =
         archiveHasPlatformCache(members, currentPlatform());
     if (!checkPackageUsable(name, version, manifest, hasCache, err)) {

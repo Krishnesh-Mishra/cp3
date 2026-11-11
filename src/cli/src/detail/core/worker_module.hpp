@@ -78,4 +78,23 @@ ResolvedWorkers resolveWorkerUnits(const std::vector<WorkerPathSite>& sites,
 std::vector<const EnumDeclaration*> importedEnumsFor(const ModuleGraph& graph,
                                                      const CompilationUnit& unit);
 
+// Every top-level class declared in a unit of `graph` other than `unit` (a
+// local import, including one reached through another import). The CLI hands
+// these to codegen as `CodegenOptions::importedClasses`: an imported class is
+// usable as a member-read and `new` target in consuming units, where the
+// local `collectModels` cannot see the declaration; codegen re-registers the
+// model so the C++ references line up
+// with the emitted struct of the owning unit, or duplicate it when the owner
+// does not need the class re-spelled.
+std::vector<const ClassDeclaration*> importedClassesFor(
+    const ModuleGraph& graph, const CompilationUnit& unit);
+
+// Every top-level interface declared in a unit of `graph` other than `unit`.
+// The CLI hands these to codegen as `CodegenOptions::importedInterfaces`: a
+// type annotation or JSON.parse target of an imported interface resolves the
+// wrapper by name in the consumer TU, and the model is emitted per-TU so the
+// interfaces link at the ABI (same layout on both sides).
+std::vector<const InterfaceDeclaration*> importedInterfacesFor(
+    const ModuleGraph& graph, const CompilationUnit& unit);
+
 }  // namespace cp3::cli

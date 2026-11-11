@@ -120,6 +120,30 @@ void Analyzer::preRegisterImportTypes() {
     if (imports_ == nullptr) return;
     for (const auto& [name, binding] : *imports_) {
         if (name.empty() || !binding.isType) continue;
+        if (binding.classDecl != nullptr) {
+            const std::uint32_t key = binding.classDecl->nodeId;
+            // The TU of the dep already registered this class under the same
+            // nodeId - don't re-walk the AST into a second registration.
+            if (!classResolved_.count(key)) {
+                classResolved_.insert(key);
+                resolveClass(*const_cast<ClassDeclaration*>(binding.classDecl),
+                             /*publishBinding=*/false);
+            }
+        }
+        if (binding.isType) {
+            // A re-exported interface / alias is usable in the consumer TU
+            // under its own name; resolve it here so annotation positions
+            // see a real type instead of `unknown`.
+            if (binding.interfaceDecl != nullptr) {
+                registerInterface(
+                    *const_cast<InterfaceDeclaration*>(binding.interfaceDecl));
+            } else if (binding.aliasDecl != nullptr) {
+                if (declaredTypes_.insert(binding.aliasDecl->nodeId).second) {
+                    declareTypeAlias(*const_cast<TypeAliasDeclaration*>(
+                        binding.aliasDecl));
+                }
+            }
+        }
         typeNames_.emplace(name,
                            binding.type.isUnknown()
                                ? Type::named(TypeKind::Class, name)
@@ -132,27 +156,29 @@ void Analyzer::declareImported(const std::string& name,
                                const SourceSpan& span, std::uint32_t nodeId) {
     if (name.empty()) return;
     if (binding.isType) {
-        // The imported declaration is usable in a type position. The nominal
-        // class spelling is enough for annotations; the full class table is
-        // still local to the defining unit (a later milestone shares it).
-        typeNames_[name] = binding.type.isUnknown()
-                               ? Type::named(TypeKind::Class, name)
-                               : binding.type;
+        // The imported declaration is usable in a type position. A class/enum
+        // carries the nominal Class type binding (already set at the dep
+        // boundary); an interface or alias was re-registered to a real
+        // Object/union type in preRegisterImportTypes - keep it.
+        if (!binding.interfaceDecl && !binding.aliasDecl) {
+            typeNames_[name] = binding.type.isUnknown()
+                                   ? Type::named(TypeKind::Class, name)
+                                   : binding.type;
+        }
     }
     if (!binding.isValue) {
         declareAmbient(name, span, nodeId);
         return;
     }
     if (!binding.isFunction) {
-        // A class/enum is both a type and a constructor-like value; keeping
-        // the value ambient preserves the existing `new` behavior without a
-        // shared class table.
-        if (binding.isType) {
-            declareAmbient(name, span, nodeId);
-        } else {
-            declareBinding(name, binding.type, span,
-                           BindingSpec{.declNodeId = nodeId});
-        }
+        // A class/enum is both a type and a constructor-like value. Register
+        // the declared nominal type as the binding's type so `new C()` and
+        // member reads/narrowing can see it. The TU of the owning module is
+        // where the class specifically lives in the final binary; the value
+        // binding here is still resolved per use site.
+        typeNames_[name] = binding.type;
+        declareBinding(name, binding.type, span,
+                       BindingSpec{.declNodeId = nodeId});
         return;
     }
 

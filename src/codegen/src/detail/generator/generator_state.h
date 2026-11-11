@@ -253,6 +253,12 @@ bool needsJsonFile_ = false;   // JSON parseFile/stringifyToFile -> cp3/std/json
     std::vector<std::string> nativeHeaders_;
     // Whole-program build: module-link export forms carry no C++ of their own.
     bool programMode_ = false;
+    // The source file this unit was compiled from, when the unit's AST is the
+    // one being generated. In whole-program mode the class registry is shared
+    // across units (deps emit first); `emitAllClasses` uses this to emit only
+    // the classes declared in THIS unit's file instead of re-emitting every
+    // imported class's struct into each unit.
+    const SourceFile* unitSourceFile_ = nullptr;
     // A package unit is a declaration surface: the implementation lives in the
     // package's shipped `pak/` C++ and is linked separately. Body-less
     // functions therefore stay declarations instead of becoming empty stubs.

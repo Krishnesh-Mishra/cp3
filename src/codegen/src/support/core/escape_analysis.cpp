@@ -458,10 +458,32 @@ void Generator::analyzeEscapeAllocations(const Program& program) {
     for (const StmtPtr& statement : program.body) {
         if (statement) localRefScan.walk(*statement);
     }
-    for (detail::ClassModel* model : detail::ModelRegistry::get().allClasses()) {
+    const auto models = detail::ModelRegistry::get().allClasses();
+    for (detail::ClassModel* model : models) {
         if (model) model->localRef = false;
     }
-    const auto models = detail::ModelRegistry::get().allClasses();
+    // A method declared to return the enclosing class can hand back `this`,
+    // which for a shared_ptr-managed instance is a `shared_ptr<Self>`
+    // (aliased Ref). That is impossible on the LocalRef ABI, which does not
+    // expose the control block to generated code; promote to the Ref ABI so
+    // the method can return shared ownership of its receiver.
+    for (detail::ClassModel* model : models) {
+        if (model == nullptr) continue;
+        for (const detail::ClassMemberModel& member : model->members) {
+            if (member.method == nullptr || member.method->returnType == nullptr) continue;
+            if (auto resolved = typeOfNode(*member.method->returnType)) {
+                for (const Type& part : resolved->parts.empty()
+                         ? std::vector<Type>{*resolved}
+                         : resolved->parts) {
+                    if (part.kind == TypeKind::Class && part.name == model->name) {
+                        model->localRef = false;
+                        break;
+                    }
+                }
+            }
+            if (!model->localRef) break;
+        }
+    }
     const bool hasAnyWeakField = std::any_of(
         models.begin(), models.end(), [](const detail::ClassModel* model) {
             return model && std::any_of(

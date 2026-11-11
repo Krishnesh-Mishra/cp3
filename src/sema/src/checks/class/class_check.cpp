@@ -661,7 +661,7 @@ void Analyzer::checkDefiniteAssignment(const ClassDeclaration& c,
     }
 }
 
-void Analyzer::resolveClass(ClassDeclaration& c) {
+void Analyzer::resolveClass(ClassDeclaration& c, bool publishBinding) {
     ClassInfo info;
     info.name = c.name;
     info.span = c.span;
@@ -681,10 +681,14 @@ void Analyzer::resolveClass(ClassDeclaration& c) {
     const std::string name = info.name;
     classes_[name] = std::move(info);
     // The class name is also a value (statics + `new`), declared in the
-    // resolve pass so a function above the class can use it.
-    typeNames_[name] = Type::named(TypeKind::Class, name);
-    declareBinding(name, typeNames_[name], c.span,
-                   BindingSpec{.declNodeId = c.nodeId});
+    // resolve pass so a function above the class can use it. For imported
+    // classes the binding is carried by the import resolution, so skip the
+    // duplicate declareBinding.
+    if (publishBinding) {
+        typeNames_[name] = Type::named(TypeKind::Class, name);
+        declareBinding(name, typeNames_[name], c.span,
+                       BindingSpec{.declNodeId = c.nodeId});
+    }
     checkAbstractConformance(c, classes_[name]);
 }
 

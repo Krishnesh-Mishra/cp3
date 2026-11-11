@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // src/cli/src/toolchain/worker_module.cpp - implements detail/worker_module.hpp.
 //
 // OWNERSHIP: cli module (src/cli/**). The worker-file linkage of spec 13 / D80:
@@ -179,6 +179,8 @@ bool WorkerResolver::generateUnit(const fs::path& resolved,
     options.workerModule = true;
     options.typeSystem = compile.typeSystem;
     options.importedEnums = importedEnumsFor(*graph, *unit);
+    options.importedClasses = importedClassesFor(*graph, *unit);
+options.importedInterfaces = importedInterfacesFor(*graph, *unit);
     options.nativeBindings = workerCompile.nativeBindings;
     GeneratedModule module =
         generateModule({*unit->ast, sema, moduleName, sink, lineDirectives, options});
@@ -216,6 +218,64 @@ std::vector<const EnumDeclaration*> importedEnumsFor(const ModuleGraph& graph,
             if (!stmtPtr) continue;
             const EnumDeclaration* e = topLevelEnum(*stmtPtr);
             if (e != nullptr && !e->name.empty()) out.push_back(e);
+        }
+    }
+    return out;
+}
+
+// The interface a top-level statement declares, including `export interface`.
+const InterfaceDeclaration* topLevelInterface(const Stmt& s) {
+    if (s.kind == NodeKind::InterfaceDeclaration) {
+        return &static_cast<const InterfaceDeclaration&>(s);
+    }
+    if (s.kind == NodeKind::ExportDeclaration) {
+        const auto& ed = static_cast<const ExportDeclaration&>(s);
+        if (ed.declaration &&
+            ed.declaration->kind == NodeKind::InterfaceDeclaration) {
+            return static_cast<const InterfaceDeclaration*>(ed.declaration.get());
+        }
+    }
+    return nullptr;
+}
+
+std::vector<const InterfaceDeclaration*> importedInterfacesFor(
+    const ModuleGraph& graph, const CompilationUnit& unit) {
+    std::vector<const InterfaceDeclaration*> out;
+    for (const CompilationUnit* other : graph.units()) {
+        if (other == nullptr || other == &unit || !other->ast) continue;
+        for (const auto& stmtPtr : other->ast->body) {
+            if (!stmtPtr) continue;
+            const InterfaceDeclaration* i = topLevelInterface(*stmtPtr);
+            if (i != nullptr && !i->name.empty()) out.push_back(i);
+        }
+    }
+    return out;
+}
+
+// The class a top-level statement declares, including `export class`.
+const ClassDeclaration* topLevelClass(const Stmt& s) {
+    if (s.kind == NodeKind::ClassDeclaration) {
+        return &static_cast<const ClassDeclaration&>(s);
+    }
+    if (s.kind == NodeKind::ExportDeclaration) {
+        const auto& ed = static_cast<const ExportDeclaration&>(s);
+        if (ed.declaration &&
+            ed.declaration->kind == NodeKind::ClassDeclaration) {
+            return static_cast<const ClassDeclaration*>(ed.declaration.get());
+        }
+    }
+    return nullptr;
+}
+
+std::vector<const ClassDeclaration*> importedClassesFor(
+    const ModuleGraph& graph, const CompilationUnit& unit) {
+    std::vector<const ClassDeclaration*> out;
+    for (const CompilationUnit* other : graph.units()) {
+        if (other == nullptr || other == &unit || !other->ast) continue;
+        for (const auto& stmtPtr : other->ast->body) {
+            if (!stmtPtr) continue;
+            const ClassDeclaration* c = topLevelClass(*stmtPtr);
+            if (c != nullptr && !c->name.empty()) out.push_back(c);
         }
     }
     return out;

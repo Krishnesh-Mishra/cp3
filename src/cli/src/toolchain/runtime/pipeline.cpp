@@ -159,6 +159,7 @@ void addDeclarationExports(const Stmt& decl, const SemaResult& sema,
             b.type = Type::named(TypeKind::Class, c.name);
             b.isValue = true;
             b.isType = true;
+            b.classDecl = &c;
             if (const SymbolInfo* si = symbolNamed(sema, c.name)) b.type = si->type;
             out.named[c.name] = std::move(b);
             return;
@@ -177,11 +178,17 @@ void addDeclarationExports(const Stmt& decl, const SemaResult& sema,
         case NodeKind::InterfaceDeclaration:
         case NodeKind::TypeAliasDeclaration: {
             const std::string name = declarationName(decl);
-            if (!name.empty()) {
-                out.named[name] =
-                    valueBinding(Type::unknown(), /*isType=*/true,
-                                 /*isValue=*/false);
+            if (name.empty()) return;
+            ImportedBinding b;
+            b.type = Type::unknown();
+            b.isValue = false;
+            b.isType = true;
+            if (decl.kind == NodeKind::InterfaceDeclaration) {
+                b.interfaceDecl = static_cast<const InterfaceDeclaration*>(&decl);
+            } else {
+                b.aliasDecl = static_cast<const TypeAliasDeclaration*>(&decl);
             }
+            out.named[name] = std::move(b);
             return;
         }
         case NodeKind::VariableDeclaration: {

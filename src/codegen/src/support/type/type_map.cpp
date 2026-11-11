@@ -188,7 +188,11 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn, TypeSystem typeSystem) 
             if (nt.name == "void") return Type::voidType();
             if (nt.name == "undefined") return Type::undefined();
             if (nt.name == "null") return Type::nullType();
-            if (nt.name == "unknown") return Type::unknown();
+            if (nt.name == "unknown" || nt.name == "never") return Type::unknown();
+            // `object` is the open value spelling (sema resolves it to the
+            // permissive $ambient object); the shape labels must agree.
+            if (nt.name == "object")
+                return Type::named(TypeKind::Object, "$ambient");
             // The project's own plain vocabulary (`i64`, `long long`, ...).
             // TypeScript names above keep working in every project.
             if (typeSystem != TypeSystem::TypeScript) {

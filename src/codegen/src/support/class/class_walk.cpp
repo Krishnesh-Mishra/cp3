@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // src/codegen/src/support/class_walk.cpp - model-registration walkers
 // (detail/class_walk.h).
 //
@@ -71,10 +71,8 @@ void walkStmtList(const std::vector<StmtPtr>& body, const SemaResult& sema,
     }
 }
 
-void walkBodyStmt(const StmtPtr& body, const SemaResult& sema) {
-    // A function / method / arrow body is always nested: a class declared in
-    // it is function-local.
-    if (body) walkStmtModels(*body, sema, true);
+void walkBodyStmt(const StmtPtr& body, bool local, const SemaResult& sema) {
+    if (body) walkStmtModels(*body, sema, local);
 }
 
 void walkClassesInBody(const StmtPtr& body, const SemaResult& sema) {
@@ -93,7 +91,7 @@ void walkFunctionModels(const ParamList& params, const TypePtr& returnType,
                         const StmtPtr& body, const SemaResult& sema) {
     walkParams(params, sema);
     if (returnType) (void)modelTypeFromTypeNode(*returnType);
-    walkBodyStmt(body, sema);
+    walkBodyStmt(body, true, sema);
 }
 
 // Every member of a class: field types + initializers, method/constructor
@@ -267,7 +265,7 @@ void walkForModels(const ForStatement& f, const SemaResult& sema) {
     }
     walkExprPtr(f.condition, sema);
     walkExprPtr(f.update, sema);
-    walkBodyStmt(f.body, sema);
+    walkBodyStmt(f.body, true, sema);
 }
 
 void walkSwitchModels(const SwitchStatement& sw, const SemaResult& sema) {
@@ -293,15 +291,15 @@ void walkVariableDeclModels(const VariableDeclaration& vd,
 // An `if`: the condition and both branches' bodies.
 void walkIfModels(const IfStatement& is, const SemaResult& sema) {
     walkExprPtr(is.condition, sema);
-    walkBodyStmt(is.thenBranch, sema);
-    walkBodyStmt(is.elseBranch, sema);
+    walkBodyStmt(is.thenBranch, true, sema);
+    walkBodyStmt(is.elseBranch, true, sema);
 }
 
 // A `try`: the three blocks, the handler body included.
 void walkTryModels(const TryStatement& ts, const SemaResult& sema) {
-    walkBodyStmt(ts.tryBlock, sema);
-    if (ts.handler) walkBodyStmt(ts.handler->body, sema);
-    walkBodyStmt(ts.finallyBlock, sema);
+    walkBodyStmt(ts.tryBlock, true, sema);
+    if (ts.handler) walkBodyStmt(ts.handler->body, true, sema);
+    walkBodyStmt(ts.finallyBlock, true, sema);
 }
 
 // An object literal: walk the property values, then register the shape.
@@ -333,12 +331,12 @@ void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local) {
         case NodeKind::WhileStatement: {
             const auto& ws = static_cast<const WhileStatement&>(s);
             walkExprPtr(ws.condition, sema);
-            walkBodyStmt(ws.body, sema);
+            walkBodyStmt(ws.body, true, sema);
             return;
         }
         case NodeKind::DoWhileStatement: {
             const auto& dw = static_cast<const DoWhileStatement&>(s);
-            walkBodyStmt(dw.body, sema);
+            walkBodyStmt(dw.body, true, sema);
             walkExprPtr(dw.condition, sema);
             return;
         }
@@ -348,13 +346,13 @@ void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local) {
         case NodeKind::ForOfStatement: {
             const auto& f = static_cast<const ForOfStatement&>(s);
             walkExprPtr(f.right, sema);
-            walkBodyStmt(f.body, sema);
+            walkBodyStmt(f.body, true, sema);
             return;
         }
         case NodeKind::ForInStatement: {
             const auto& f = static_cast<const ForInStatement&>(s);
             walkExprPtr(f.right, sema);
-            walkBodyStmt(f.body, sema);
+            walkBodyStmt(f.body, true, sema);
             return;
         }
         case NodeKind::ReturnStatement:
@@ -370,7 +368,7 @@ void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local) {
             walkSwitchModels(static_cast<const SwitchStatement&>(s), sema);
             return;
         case NodeKind::LabeledStatement:
-            walkBodyStmt(static_cast<const LabeledStatement&>(s).body, sema);
+            walkBodyStmt(static_cast<const LabeledStatement&>(s).body, true, sema);
             return;
         case NodeKind::FunctionDeclaration: {
             const auto& fd = static_cast<const FunctionDeclaration&>(s);
@@ -386,7 +384,7 @@ void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local) {
             return;
         case NodeKind::ExportDeclaration: {
             const auto& ed = static_cast<const ExportDeclaration&>(s);
-            walkBodyStmt(ed.declaration, sema);
+            walkBodyStmt(ed.declaration, local, sema);;
             walkExprPtr(ed.defaultExpr, sema);
             return;
         }

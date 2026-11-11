@@ -402,47 +402,10 @@ std::string Generator::emitModelNew(const NewExpr& n) {
 // interface field accessor call, or a detached class/interface method.
 // Weak-reference reads stay "" (the caller reports that narrowing is required
 // first).
-std::string Generator::emitModelMember(const MemberExpr& m) {
-    if (m.object == nullptr) return std::string();
-    // D22: `super.field` reads the base subobject.
-    if (m.object->kind == NodeKind::Identifier &&
-        static_cast<const Identifier&>(*m.object).name == "super" &&
-        !classStack_.empty()) {
-        const ClassModel* base =
-            ModelRegistry::get().classByName(classStack_.back()->baseName);
-        if (base == nullptr) return std::string();
-        if (const ClassMemberModel* get =
-                findClassAccessor(*base, m.property, true);
-            get != nullptr) {
-            return base->cpp + "::get_" + mapIdent(get->name) + "()";
-        }
-        const ClassMemberModel* mem =
-            findClassMemberChain(*base, m.property, nullptr);
-        if (mem == nullptr || mem->isMethod) return std::string();
-        return base->cpp + "::" + mapIdent(mem->name);
-    }
-    const bool viaClassName =
-        m.object->kind == NodeKind::Identifier &&
-        !hasValueBinding(static_cast<const Identifier&>(*m.object).name);
-    if (viaClassName) {
-        const std::string cname = static_cast<const Identifier&>(*m.object).name;
-        const ClassModel* cm = ModelRegistry::get().classByName(cname);
-        if (cm != nullptr) {
-            const ClassMemberModel* get =
-                findClassAccessor(*cm, m.property, true);
-            if (get != nullptr) {
-                if (!get->isStatic) return std::string();
-                return cm->cpp + "::get_" + mapIdent(get->name) + "()";
-            }
-            const ClassMemberModel* mem =
-                findClassMemberChain(*cm, m.property, nullptr);
-            if (mem != nullptr && mem->isStatic && !mem->isMethod) {
-                return cm->cpp + "::" + mapIdent(mem->name);
-            }
-            return std::string();
-        }
-    }
-    Type rt = m.object ? effectiveType(*m.object) : Type::unknown();
+std::optional<NarrowedModelReceiver> Generator::narrowedModelReceiver(
+    const MemberExpr& m) {
+    if (!m.object) return std::nullopt;
+    Type rt = effectiveType(*m.object);
     // The Narrowed type from sema (for `n.next` inside a null guard) wins
     // over the re-derived shape: `n.next` is `optional<Ref<Node>>` in C++
     // but the narrowed `Node` type means "read through the handle".
@@ -450,13 +413,14 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
     // narrowed shape `effectiveType` returns: for a plain identifier, look
     // the binding up in the codegen env to recover the declared Type.
     CppInfo declaredInfo = classify(rt);
-    if (m.object && m.object->kind == NodeKind::Identifier) {
+
+    if (m.object->kind == NodeKind::Identifier) {
         const auto* id = static_cast<const Identifier*>(m.object.get());
         if (const auto binding = lookup(id->name)) {
             declaredInfo = classify(binding->type);
         }
     }
-    if (m.object && m.object->kind == NodeKind::MemberExpr) {
+    if (m.object->kind == NodeKind::MemberExpr) {
         const auto& rm = static_cast<const MemberExpr&>(*m.object);
         if (rm.object) {
             const Type baseT = effectiveType(*rm.object);
@@ -500,7 +464,7 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
         }
     }
     if (ri.shape == Shape::Optional || ri.shape == Shape::Maybe) {
-        return std::string();  // a narrowed handle is needed first
+        return std::nullopt;  // a narrowed handle is needed first
     }
     std::string recv = expr(*m.object);
     bool nonOwningReceiver = false;
@@ -517,6 +481,56 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
         recv = declaredInfo.shape == Shape::Optional ? "(*(" + recv + "))"
                                                      : "(" + recv + ").value()";
     }
+    return NarrowedModelReceiver{std::move(rt), std::move(recv), unwrap,
+                                 nonOwningReceiver};
+}
+
+std::string Generator::emitModelMember(const MemberExpr& m) {
+    if (m.object == nullptr) return std::string();
+    // D22: `super.field` reads the base subobject.
+    if (m.object->kind == NodeKind::Identifier &&
+        static_cast<const Identifier&>(*m.object).name == "super" &&
+        !classStack_.empty()) {
+        const ClassModel* base =
+            ModelRegistry::get().classByName(classStack_.back()->baseName);
+        if (base == nullptr) return std::string();
+        if (const ClassMemberModel* get =
+                findClassAccessor(*base, m.property, true);
+            get != nullptr) {
+            return base->cpp + "::get_" + mapIdent(get->name) + "()";
+        }
+        const ClassMemberModel* mem =
+            findClassMemberChain(*base, m.property, nullptr);
+        if (mem == nullptr || mem->isMethod) return std::string();
+        return base->cpp + "::" + mapIdent(mem->name);
+    }
+    const bool viaClassName =
+        m.object->kind == NodeKind::Identifier &&
+        !hasValueBinding(static_cast<const Identifier&>(*m.object).name);
+    if (viaClassName) {
+        const std::string cname = static_cast<const Identifier&>(*m.object).name;
+        const ClassModel* cm = ModelRegistry::get().classByName(cname);
+        if (cm != nullptr) {
+            const ClassMemberModel* get =
+                findClassAccessor(*cm, m.property, true);
+            if (get != nullptr) {
+                if (!get->isStatic) return std::string();
+                return cm->cpp + "::get_" + mapIdent(get->name) + "()";
+            }
+            const ClassMemberModel* mem =
+                findClassMemberChain(*cm, m.property, nullptr);
+            if (mem != nullptr && mem->isStatic && !mem->isMethod) {
+                return cm->cpp + "::" + mapIdent(mem->name);
+            }
+            return std::string();
+        }
+    }
+    const auto narrowed = narrowedModelReceiver(m);
+    if (!narrowed) return std::string();  // an optional awaits its null guard
+    const Type rt = std::move(narrowed->rt);
+    const std::string& recv = narrowed->recv;
+    const bool nonOwningReceiver = narrowed->nonOwningReceiver;
+    const std::string instanceOp = nonOwningReceiver ? "." : "->";
     const Type base = stripNullish(rt);
     if (const ClassModel* cm = classModelOf(base)) {
         // D21: a property read through its getter.
@@ -594,23 +608,14 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
         return cm->cpp + "::" + mapIdent(mem->name) + "(" +
                modelCallArgs(c, *mem) + ")";
     }
-    const Type rt = effectiveType(*m.object);
-    const CppInfo ri = classify(rt);
-    if (ri.shape == Shape::Optional || ri.shape == Shape::Maybe) {
-        return std::string();
-    }
+    const auto narrowed = narrowedModelReceiver(m);
+    if (!narrowed) return std::string();
+    const Type rt = std::move(narrowed->rt);
+    const std::string& recv = narrowed->recv;
+    const bool nonOwningReceiver = narrowed->nonOwningReceiver;
+    const std::string instanceOp = nonOwningReceiver ? "." : "->";
     const Type base = stripNullish(rt);
     if (const ClassModel* cm = classModelOf(base)) {
-        bool nonOwningReceiver = false;
-        if (m.object->kind == NodeKind::Identifier) {
-            const auto& id = static_cast<const Identifier&>(*m.object);
-            const auto resolved = sema_.resolvedBindings.find(id.nodeId);
-            nonOwningReceiver = resolved != sema_.resolvedBindings.end() &&
-                nonOwningParamDecls_.count(resolved->second) != 0;
-        } else if (m.object->kind == NodeKind::IndexExpr) {
-            nonOwningReceiver = isStackValueArray(*m.object);
-        }
-        const std::string instanceOp = nonOwningReceiver ? "." : "->";
         const ClassMemberModel* mem =
             findClassMemberChain(*cm, m.property, nullptr);
         if (mem == nullptr || mem->isStatic) return std::string();
@@ -627,10 +632,10 @@ std::string Generator::emitModelCall(const CallExpr& c, const MemberExpr& m) {
             if (classify(memberType).shape != Shape::Function) {
                 return std::string();
             }
-            return "((" + expr(*m.object) + ")" + instanceOp + mapIdent(mem->name) +
+            return "((" + recv + ")" + instanceOp + mapIdent(mem->name) +
                    ")(" + joinStrings(emitPlainArgs(c), ", ") + ")";
         }
-        return "(" + expr(*m.object) + ")" + instanceOp + mapIdent(mem->name) + "(" +
+        return "(" + recv + ")" + instanceOp + mapIdent(mem->name) + "(" +
                modelCallArgs(c, *mem) + ")";
     }
     if (const ObjectModel* om = objectModelOf(base);
