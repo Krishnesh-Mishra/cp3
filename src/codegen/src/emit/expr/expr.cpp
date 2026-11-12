@@ -537,6 +537,24 @@ std::string Generator::emitIdentifier(const Identifier& id) {
     if (binding->cell) {
         return text + ".get()";
     }
+    // The branch narrowed this binding to a non-nullish view (`if (v ===
+    // undefined) ... else`); the declared storage may be `optional<T>` /
+    // `Maybe<T>` - read through the held value. Only primitives unwrap this
+    // way: object/Ref receivers are handled by the model-member paths.
+    if (const Type* t = sema_.typeOf(id.nodeId);
+        t && !t->isUnknown() && !t->isError() && !t->isNullish() &&
+        !t->isNullable() && !t->isUnion()) {
+        const CppInfo di = classify(binding->type);
+        const CppInfo ni = classify(*t);
+        const bool primitive =
+            isPrimitiveShape(ni.shape) || ni.shape == Shape::Enum;
+        if (primitive && di.shape == Shape::Optional) {
+            return "(*(" + text + "))";
+        }
+        if (primitive && di.shape == Shape::Maybe) {
+            return "((" + text + ").value())";
+        }
+    }
     return text;
 }
 
