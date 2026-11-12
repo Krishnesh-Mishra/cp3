@@ -151,6 +151,15 @@ bool parseTypeKey(const std::string& s, std::size_t& pos, Type& out) {
         out = Type::named(TypeKind::Object, std::move(name));
     } else if (kind == "enum") {
         out = Type::named(TypeKind::Enum, std::move(name));
+    } else if (kind == "function") {
+        // Parts are [params..., return] — the same ordering the shape label
+        // uses (`$o{double:function|…|function,}`). Value-returning functions
+        // lower to std::function; boxed listeners are still spelling-side
+        // `Listener` here — codegen classifies and picks the spelling.
+        if (parts.size() < 1) return false;
+        Type ret = std::move(parts.back());
+        parts.pop_back();
+        out = Type::function(std::move(parts), std::move(ret));
     } else if (kind == "class") {
         out = Type::named(TypeKind::Class, std::move(name));
         out.parts = std::move(parts);
@@ -201,6 +210,8 @@ bool parseObjectLabel(const std::string& label, std::vector<ObjectField>& out) {
             case Shape::Union:
             case Shape::Optional:
             case Shape::Maybe:
+            case Shape::Function:
+            case Shape::Listener:
                 break;
             default:
                 return false;
@@ -257,6 +268,9 @@ std::string fieldTextExpr(const ObjectField& f) {
             return "std::visit([](const auto& cp3_v) { return "
                    "::cp3::runtime::unions::textOf(cp3_v); }, " +
                    member + ")";
+        case Shape::Function:
+        case Shape::Listener:
+            return "std::string(\"fn\")";
         case Shape::Optional:
             return member + ".has_value() ? "
                    "::cp3::runtime::toString(*" + member +
@@ -326,7 +340,15 @@ std::string cloneSpecializationFor(const RegisteredShape& shape) {
     out += "        return " + shape.name + "{";
     for (std::size_t i = 0; i < shape.fields.size(); ++i) {
         if (i != 0) out += ", ";
-        out += "::cp3::runtime::clone(v." + mapIdent(shape.fields[i].name) + ")";
+        const ObjectField& f = shape.fields[i];
+        const CppInfo fci = classify(f.type);
+        if (fci.shape == Shape::Function || fci.shape == Shape::Listener) {
+            // A std::function is not cloned by the runtime cloner; pass it
+            // straight to the struct member (copy of the std::function).
+            out += "v." + mapIdent(f.name);
+            continue;
+        }
+        out += "::cp3::runtime::clone(v." + mapIdent(f.name) + ")";
     }
     out += "};\n";
     out += "    }\n";

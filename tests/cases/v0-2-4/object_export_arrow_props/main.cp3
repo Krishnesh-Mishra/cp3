@@ -1,0 +1,8 @@
+﻿import console from "std/console";
+import { utils } from "./dep.cp3";
+console.log(utils.double(21));
+console.log(utils.greeting);
+console.log(utils.count + 1);
+const { double, count } = utils;
+console.log(double(10));
+console.log(count + 100);
