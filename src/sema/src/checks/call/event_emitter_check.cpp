@@ -62,9 +62,12 @@ MapSignature mapSignatureOf(const Type& fn) {
 
 // The payload slot type of a value signature at parameter index `i`.
 Type mapSlotType(const Type& fn, std::size_t i) {
+    if (fn.kind != TypeKind::Function) return Type::unknown();
     const MapSignature sig = mapSignatureOf(fn);
+    // parts = { A, B, R } - R is the return slot, not a payload slot.
     if (!sig.rest) {
-        if (i >= fn.parts.size() - 1) return Type::unknown();
+        const std::size_t payloadCount = fn.parts.size() > 0 ? fn.parts.size() - 1 : 0;
+        if (i >= payloadCount) return Type::unknown();
         return fn.parts[i];
     }
     if (i < sig.prefix) return fn.parts[i];
