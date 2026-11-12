@@ -3,7 +3,7 @@
 Builds a single per-user MSI installer for the cp3 toolchain:
 
 ```text
-out\windows-x64\cp3-0.2.2-windows-x64.msi
+out\windows-x64\cp3-0.2.4-windows-x64.msi
 ```
 
 Double-click it, or install silently with `msiexec`. No administrator rights
@@ -121,16 +121,16 @@ tree.
 
 ```powershell
 # install for the current user, no UI
-msiexec /i .\cp3-0.2.2-windows-x64.msi /qn /norestart
+msiexec /i .\cp3-0.2.4-windows-x64.msi /qn /norestart
 
 # install into a custom directory
-msiexec /i .\cp3-0.2.2-windows-x64.msi /qn INSTALLDIR="D:\tools\cp3"
+msiexec /i .\cp3-0.2.4-windows-x64.msi /qn INSTALLDIR="D:\tools\cp3"
 
 # write a verbose log
-msiexec /i .\cp3-0.2.2-windows-x64.msi /qn /l*v install.log
+msiexec /i .\cp3-0.2.4-windows-x64.msi /qn /l*v install.log
 
 # uninstall (the MSI path identifies the product)
-msiexec /x .\cp3-0.2.2-windows-x64.msi /qn /norestart
+msiexec /x .\cp3-0.2.4-windows-x64.msi /qn /norestart
 ```
 
 `/qb` shows a basic progress UI; double-clicking the MSI uses the
@@ -180,7 +180,7 @@ one `include\` tree serves every case while runtime sources stay under
 
 ## End-user story
 
-1. Run `cp3-0.2.2-windows-x64.msi` (or `msiexec /i ... /qn`).
+1. Run `cp3-0.2.4-windows-x64.msi` (or `msiexec /i ... /qn`).
 2. Open a new terminal. `cp3` and `cp3c` are already on the user PATH.
 3. `cp3 doctor` reports the compiler, the Clang toolchain it will use,
    ccache, VS Code and the shipped trees.
@@ -216,7 +216,7 @@ kept at `build\scratch\packaging\msi\cp3-x64.wxs` for inspection.
 A full install/uninstall verification used by the packaging workstream:
 
 ```powershell
-$msi = "out\windows-x64\cp3-0.2.2-windows-x64.msi"
+$msi = "out\windows-x64\cp3-0.2.4-windows-x64.msi"
 msiexec /i $msi /qn /norestart /l*v install.log
 cp3 --version
 cp3 doctor

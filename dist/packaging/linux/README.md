@@ -6,7 +6,7 @@ Stages the Linux distribution and writes a per-user tarball:
 build/out/linux-x64/
   cp3/                                  relocatable install tree
   install.sh                            per-user installer (no root)
-  cp3-0.2.2-linux-x64.tar.gz
+  cp3-0.2.4-linux-x64.tar.gz
   SHA256SUMS.txt
 ```
 
@@ -61,7 +61,7 @@ The `bin/cp3` shim sets `CP3_ROOT` to the install root before forwarding to
 ## Install
 
 ```sh
-tar -xzf cp3-0.2.2-linux-x64.tar.gz
+tar -xzf cp3-0.2.4-linux-x64.tar.gz
 ./install.sh
 ```
 
