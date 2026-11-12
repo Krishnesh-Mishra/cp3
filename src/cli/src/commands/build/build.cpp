@@ -530,6 +530,49 @@ std::optional<NativeBuildFlags> applyNativePackages(
     NativeBuildFlags flags;
     std::vector<const NativePackage*> natives =
         selectNativePackages(importedStdModules);
+    // The `std/<mod>/types` facade modules lower their nominal classes onto
+    // the runtime spellings (`::cp3::runtime::url::URL`), so the generated
+    // text carries the family headers without the program importing the
+    // runtime module at all. Select the family rows by content (the regex/
+    // collections precedent) or a facade-only compile cannot find the
+    // header it was emitted.
+    if (programText.find("cp3/std/url.hpp") != std::string::npos) {
+        const std::vector<const NativePackage*> row =
+            selectNativePackages({"std/url"});
+        natives.insert(natives.end(), row.begin(), row.end());
+    }
+    if (programText.find("cp3/std/buffer.hpp") != std::string::npos) {
+        const std::vector<const NativePackage*> row =
+            selectNativePackages({"std/buffer"});
+        natives.insert(natives.end(), row.begin(), row.end());
+    }
+    if (programText.find("cp3/std/text.hpp") != std::string::npos) {
+        const std::vector<const NativePackage*> row =
+            selectNativePackages({"std/text"});
+        natives.insert(natives.end(), row.begin(), row.end());
+    }
+    if (programText.find("cp3/std/date.hpp") != std::string::npos) {
+        const std::vector<const NativePackage*> row =
+            selectNativePackages({"std/date"});
+        natives.insert(natives.end(), row.begin(), row.end());
+    }
+    if (programText.find("cp3/std/time.hpp") != std::string::npos) {
+        const std::vector<const NativePackage*> row =
+            selectNativePackages({"std/time"});
+        natives.insert(natives.end(), row.begin(), row.end());
+    }
+    if (programText.find("cp3/std/hash.hpp") != std::string::npos) {
+        const std::vector<const NativePackage*> row =
+            selectNativePackages({"std/hash"});
+        natives.insert(natives.end(), row.begin(), row.end());
+    }
+    if (programText.find("cp3/std/network.hpp") != std::string::npos) {
+        const std::vector<const NativePackage*> row =
+            selectNativePackages({"std/network"});
+        natives.insert(natives.end(), row.begin(), row.end());
+    }
+    std::sort(natives.begin(), natives.end());
+    natives.erase(std::unique(natives.begin(), natives.end()), natives.end());
     // Core-language backends (D48) join the same list; selected from the
     // generated module's content, not the import graph. The network
     // regex-routing TUs call `Regex::compile`/`exec` too; a regex-routed

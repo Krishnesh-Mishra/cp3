@@ -33,6 +33,22 @@ void Generator::applyUsageIncludes(const std::string& familyUse) {
     if (familyUse.find("::cp3::runtime::buffer::Buffer") != std::string::npos) {
         needsBuffer_ = true;
     }
+    // The std/*/types facade modules lower their nominal classes onto the
+    // runtime spellings without ever touching a runtime API, so the family
+    // headers must follow the same scan (no emitter ever sets these flags
+    // for an annotation-only program).
+    if (familyUse.find("::cp3::runtime::url::") != std::string::npos) {
+        needsUrl_ = true;
+    }
+    if (familyUse.find("::cp3::runtime::text::") != std::string::npos) {
+        needsText_ = true;
+    }
+    if (familyUse.find("::cp3::runtime::date::") != std::string::npos) {
+        needsDate_ = true;
+    }
+    if (familyUse.find("::cp3::runtime::time::") != std::string::npos) {
+        needsTime_ = true;
+    }
     // The builtin EventEmitter (D74): a module-scope binding or a signature can
     // name `Ref<EventEmitter>`/`Listener` without the emitter having been
     // lowered in this unit's own statements.
