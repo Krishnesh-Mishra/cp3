@@ -81,6 +81,13 @@ std::optional<CppInfo> tupleDeclaredInfo(const Type& t) {
     return info;
 }
 
+// Sema's permissive "not statically known" marker (`$ambient`), which the
+// `object` annotation resolves to. A declaration spelled `object` stores
+// whatever its initializer holds.
+bool isAmbientDeclared(const Type& t) {
+    return t.kind == TypeKind::Object && t.name == "$ambient";
+}
+
 }  // namespace
 
 namespace detail {
@@ -363,7 +370,19 @@ void ModuleVarEmitter::noInit(const detail::CppInfo& ci,
 void ModuleVarEmitter::reportType(const VariableDeclarator& d) {
     if (!d.type) return;
     auto dt = g.typeOfNode(*d.type);
-    if (!dt || classify(*dt).representable || dt->isUnknown() || dt->isError() ||
+    if (!dt) return;
+    if (isAmbientDeclared(*dt)) {
+        // `object` is the permissive "untyped value" spelling: the binding
+        // stores whatever the initializer holds (the storage falls back to
+        // the initializer's type below).
+        if (!d.init) {
+            g.reportUnsupported(d, diagcode::kTypeMismatch,
+                                "type mismatch: an 'object' binding needs an "
+                                "initializer");
+        }
+        return;
+    }
+    if (classify(*dt).representable || dt->isUnknown() || dt->isError() ||
         isChannelHandleType(*dt) || tupleDeclaredInfo(*dt)) {
         return;
     }

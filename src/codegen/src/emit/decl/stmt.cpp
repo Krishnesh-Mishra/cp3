@@ -54,6 +54,13 @@ std::optional<CppInfo> tupleDeclaredInfo(const Type& t) {
     return info;
 }
 
+// Sema's permissive "not statically known" marker (`$ambient`), which the
+// `object` annotation resolves to. A declaration spelled `object` stores
+// whatever its initializer holds.
+bool isAmbientDeclared(const Type& t) {
+    return t.kind == TypeKind::Object && t.name == "$ambient";
+}
+
 }  // namespace
 
 void Generator::stmt(const Stmt& s, std::string& out, int indent) {
@@ -490,8 +497,20 @@ std::string Generator::declaratorText(const VariableDeclarator& d, VarKind kind)
     if (d.type) {
         if (auto dt = typeOfNode(*d.type)) {
             tupleCi = tupleDeclaredInfo(*dt);
-            if (!tupleCi && !classify(*dt).representable && !dt->isUnknown() &&
-                !dt->isError() && !isChannelHandleType(*dt)) {
+            if (isAmbientDeclared(*dt)) {
+                // `object` is CP3's permissive "untyped value" spelling (the
+                // replacement for the retired `any`/`unknown`): the binding
+                // stores whatever the initializer holds, so the storage is
+                // the initializer's type (bindingCpp) rather than a spelling
+                // of `object` itself.
+                if (!d.init) {
+                    reportUnsupported(d, diagcode::kTypeMismatch,
+                                      "type mismatch: an 'object' binding needs "
+                                      "an initializer");
+                }
+            } else if (!tupleCi && !classify(*dt).representable &&
+                       !dt->isUnknown() && !dt->isError() &&
+                       !isChannelHandleType(*dt)) {
                 reportUnsupported(d, diagcode::kTypeMismatch,
                                   "type mismatch: this declared type has no "
                                   "C++ spelling");

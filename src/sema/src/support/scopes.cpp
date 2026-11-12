@@ -21,9 +21,11 @@ namespace cp3 {
 // =============================================================================
 // Scope stack + name tables
 // =============================================================================
-void Analyzer::pushScope() {
+void Analyzer::pushScope(bool restoreFlow) {
     scopes_.emplace_back();
     narrowedScopes_.push_back(narrowedMembersByKey_);
+    narrowedBindingScopes_.push_back(narrowedBindingsByKey_);
+    scopeRestoresFlow_.push_back(restoreFlow);
 }
 
 void Analyzer::popScope() {
@@ -32,6 +34,19 @@ void Analyzer::popScope() {
         narrowedMembersByKey_ = narrowedScopes_.back();
         narrowedScopes_.pop_back();
     }
+    // The identifier narrowings are flow state, not scope state. A block
+    // scope continues the same flow, so its narrowings stay; a branch scope
+    // (an `if` arm) or a temporary scope (the right operand of `??`) forks
+    // the flow, so the narrowings it established are undone when it closes.
+    // What survives past an `if` is re-established by the branch merge (see
+    // analyzeIf).
+    if (!narrowedBindingScopes_.empty()) {
+        if (!scopeRestoresFlow_.empty() && scopeRestoresFlow_.back()) {
+            narrowedBindingsByKey_ = narrowedBindingScopes_.back();
+        }
+        narrowedBindingScopes_.pop_back();
+    }
+    if (!scopeRestoresFlow_.empty()) scopeRestoresFlow_.pop_back();
 }
 
 bool Analyzer::lookup(const std::string& name, Binding& out) const {
@@ -39,6 +54,15 @@ bool Analyzer::lookup(const std::string& name, Binding& out) const {
         const auto found = it->find(name);
         if (found != it->end()) {
             out = found->second;
+            // A binding-scoped narrowing recorded at an inner scope position
+            // (e.g. `if (x === undefined) { x = 4; } return x + 1;`) survives
+            // scope restores; consult it over the declared binding's live
+            // view.
+            const auto narrowed = narrowedBindingsByKey_.find(out.declNodeId);
+            if (narrowed != narrowedBindingsByKey_.end() &&
+                !narrowed->second.isError()) {
+                out.type = narrowed->second;
+            }
             return true;
         }
     }
@@ -327,6 +351,9 @@ void Analyzer::overrideBinding(const std::string& name, const Type& type,
     b.isAmbient = isAmbientType(type);
     b.publish = false;
     b.span = span;
+    if (had && existing.declNodeId != 0) {
+        narrowedBindingsByKey_[existing.declNodeId] = type;
+    }
     scopes_.back()[name] = std::move(b);
 }
 

@@ -458,6 +458,8 @@ static bool stmtExits(Stmt* s) {
     return false;
 }
 
+
+
 void Analyzer::analyzeIf(IfStatement& stmt) {
     std::vector<ConditionNarrowing> thenNarrows, elseNarrows;
     if (stmt.condition) {
@@ -466,19 +468,96 @@ void Analyzer::analyzeIf(IfStatement& stmt) {
         collectCondNarrowings(*stmt.condition, true, thenNarrows);
         collectCondNarrowings(*stmt.condition, false, elseNarrows);
     }
-    pushScope();
+    // The view one arm concludes for each name the condition narrowed: the
+    // live binding type after the arm (an assignment inside the arm narrows
+    // it further), falling back to the condition's own branch type.
+    auto armView = [this](const std::vector<ConditionNarrowing>& narrows,
+                          bool live) {
+        std::unordered_map<std::string, Type> out;
+        for (const auto& cn : narrows) {
+            if (cn.isMember) continue;
+            if (live) {
+                Binding b;
+                if (lookup(cn.name, b)) {
+                    out[cn.name] = b.type;
+                    continue;
+                }
+            }
+            out[cn.name] = cn.type;
+        }
+        return out;
+    };
+    pushScope(/*restoreFlow*/ true);
     applyConditionNarrowings(thenNarrows, false);
     if (stmt.thenBranch) visitStmt(*stmt.thenBranch);
+    const auto thenView = armView(thenNarrows, /*live*/ true);
+    const bool thenExits =
+        stmt.thenBranch && stmtExits(stmt.thenBranch.get());
     popScope();
+    std::unordered_map<std::string, Type> elseView;
+    bool elseExits = false;
     if (stmt.elseBranch) {
-        pushScope();
+        pushScope(/*restoreFlow*/ true);
         applyConditionNarrowings(elseNarrows, false);
         visitStmt(*stmt.elseBranch);
+        elseView = armView(elseNarrows, /*live*/ true);
+        elseExits = stmtExits(stmt.elseBranch.get());
         popScope();
-    } else if (stmt.thenBranch && stmtExits(stmt.thenBranch.get())) {
-        // Early-exit pattern: `if (x === null) return; use(x)` - the code
-        // after the if sees the false-branch narrowing.
+    } else {
+        elseView = armView(elseNarrows, /*live*/ false);
+        // The fall-through after an `if` without an `else` sees the
+        // negated-condition narrowing (the view the else arm would have).
         applyConditionNarrowings(elseNarrows, false);
+    }
+    if (std::getenv("CP3_DEBUG_JOIN")) {
+        for (const auto& cn : thenNarrows) {
+            std::fprintf(stderr, "[then-narrow] name=%s member=%d kind=%d\n",
+                         cn.name.c_str(), cn.isMember ? 1 : 0,
+                         static_cast<int>(cn.type.kind));
+        }
+        for (const auto& cn : elseNarrows) {
+            std::fprintf(stderr, "[else-narrow] name=%s member=%d kind=%d\n",
+                         cn.name.c_str(), cn.isMember ? 1 : 0,
+                         static_cast<int>(cn.type.kind));
+        }
+    }
+    // Merge the two arms (the TypeScript control-flow join): the code after
+    // the `if` sees the union of what the arms concluded, so a guard
+    // followed by a use of the guarded value keeps type-checking
+    // (`if (b) { ... } else { ... }` then `b ? b.a : -1`). An arm that
+    // exits never reaches the merge point, so only the other arm's view
+    // survives there.
+    for (const auto& [name, thenType] : thenView) {
+        const auto it = elseView.find(name);
+        if (it == elseView.end()) continue;
+        Type merged;
+        if (thenExits && !elseExits) {
+            merged = it->second;
+        } else if (elseExits && !thenExits) {
+            merged = thenType;
+        } else {
+            merged = unify(thenType, it->second);
+        }
+        if (merged.isError()) continue;
+        overrideBinding(name, merged, SourceSpan{});
+    }
+    // A name only the else arm narrowed: the then path reaches the merge
+    // point with the declared view, so the merged view is the union of the
+    // two.
+    for (const auto& [name, elseType] : elseView) {
+        if (thenView.find(name) != thenView.end()) continue;
+        if (elseExits) continue;  // the else path does not reach the merge
+        if (thenExits) {
+            overrideBinding(name, elseType, SourceSpan{});
+            continue;
+        }
+        Binding b;
+        if (!lookup(name, b)) continue;
+        const Type declared =
+            b.declaredType.isUnknown() ? b.type : b.declaredType;
+        const Type merged = unify(declared, elseType);
+        if (merged.isError()) continue;
+        overrideBinding(name, merged, SourceSpan{});
     }
 }
 

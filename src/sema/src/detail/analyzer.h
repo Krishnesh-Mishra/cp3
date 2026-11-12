@@ -136,7 +136,11 @@ private:
     void checkBannedForIn(const Type& right, const SourceSpan& span);
 
     // --- scopes + hoisting (scopes.cpp) --------------------------------------
-    void pushScope();
+    // `restoreFlow` marks a scope that forks the flow (an `if` arm, the
+    // right operand of `??`): the identifier narrowings it established are
+    // undone when it closes. A block scope continues the same flow and keeps
+    // them.
+    void pushScope(bool restoreFlow = false);
     void popScope();
     bool lookup(const std::string& name, Binding& out) const;
     // Declares a binding in the current scope; reports CP3303 on a duplicate.
@@ -658,6 +662,8 @@ private:
     Type inferLogical(LogicalExpr& le);
     Type inferConditional(ConditionalExpr& ce);
     Type inferAssignment(AssignmentExpr& ae);
+    void narrowAssignmentView(Expr& ae, const Type& stored,
+                              const SourceSpan& span);
     Type compoundResult(AssignOp op, const Type& targetType, const Type& valType,
                         const SourceSpan& span);
     Type targetTypeOf(Expr& target);
@@ -799,6 +805,9 @@ private:
     std::unordered_map<std::uint32_t, Type> narrowedMembers_;
     std::vector<std::unordered_map<std::string, Type>> narrowedScopes_;
     std::unordered_map<std::string, Type> narrowedMembersByKey_;
+    std::vector<std::unordered_map<std::uint32_t, Type>> narrowedBindingScopes_;
+    std::vector<bool> scopeRestoresFlow_;
+    std::unordered_map<std::uint32_t, Type> narrowedBindingsByKey_;
     // The key from the last detectNullNarrowing call (base id + property).
     std::string memberKey_;
     struct FuncCtx {

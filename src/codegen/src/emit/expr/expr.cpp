@@ -453,9 +453,14 @@ std::string Generator::emitMemberRead(const MemberExpr& m) {
     }
     // A receiver that may be null needs `?.`: reading it unguarded is a
     // program error in a statically typed language. A receiver whose value
-    // shape has no spelling is a type error at the use site.
+    // shape has no spelling is a type error at the use site. A literal null
+    // receiver (an assignment like `n.next = null` narrows the slot to
+    // `null`) is the most precise instance of this class of error; report
+    // the same "may be null" text the error reporter already uses, so
+    // diagnostics keep that phrase for these cases too.
     const CppInfo recv = m.object ? info(*m.object) : CppInfo{};
-    if (recv.shape == Shape::Optional || recv.shape == Shape::Maybe) {
+    if (recv.shape == Shape::Optional || recv.shape == Shape::Maybe ||
+        recv.shape == Shape::Null) {
         reportTypeError(m, "the receiver of '" + m.property +
                              "' may be null; use '?.' to read it safely");
         return "0.0";

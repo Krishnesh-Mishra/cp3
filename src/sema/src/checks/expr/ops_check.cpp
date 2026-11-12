@@ -332,7 +332,7 @@ Type Analyzer::inferLogical(LogicalExpr& le) {
     if (le.left && le.right &&
         (le.op == LogicalOp::And || le.op == LogicalOp::Or ||
          le.op == LogicalOp::Nullish)) {
-        pushScope();
+        pushScope(/*restoreFlow*/ true);
         std::vector<ConditionNarrowing> narrows;
         // Right operand sees the left's true branch for &&, and its false
         // branch for || and ??.
@@ -378,13 +378,13 @@ Type Analyzer::inferConditional(ConditionalExpr& ce) {
         checkCondition(typeOfExpr(*ce.condition), ce.condition->span);
         collectCondNarrowings(*ce.condition, true, narrows);
     }
-    pushScope();
+    pushScope(/*restoreFlow*/ true);
     applyConditionNarrowings(narrows, false);
     Type a = ce.whenTrue ? inferExpr(*ce.whenTrue) : Type::unknown();
     popScope();
     std::vector<ConditionNarrowing> elseNarrows;
     if (ce.condition) collectCondNarrowings(*ce.condition, false, elseNarrows);
-    pushScope();
+    pushScope(/*restoreFlow*/ true);
     applyConditionNarrowings(elseNarrows, false);
     Type b = ce.whenFalse ? inferExpr(*ce.whenFalse) : Type::unknown();
     popScope();
@@ -415,16 +415,45 @@ Type Analyzer::inferAssignment(AssignmentExpr& ae) {
     } else if (ae.target->kind == NodeKind::MemberExpr) {
         narrowedMembersByKey_.erase(memberKeyFor(*ae.target));
     }
+    // Assignment narrows a binding for the remainder of this scope (the same
+    // rule as TypeScript assignment narrowing): after `v = 4` a plain read of
+    // `v` sees `number`, so `return v + 1` after the early-return branch
+    // joins without error. The use narrows the binding to whatever checked
+    // shape the assignment lands at.
+    checkAssignToTarget(*ae.target, valType, ae.span);
+    if (!valType.isError()) {
+        narrowAssignmentView(*ae.target, valType, ae.span);
+    }
     if (ae.op == AssignOp::Assign) {
-        checkAssignToTarget(*ae.target, valType, ae.span);
         return withType(ae, valType);
     }
     Type targetType = targetTypeOf(*ae.target);
     Type result = compoundResult(ae.op, targetType, valType, ae.span);
     if (!result.isError()) {
+        // Compound-assignment narrows to the compound result type.
+        narrowAssignmentView(*ae.target, result, ae.span);
         checkAssignToTarget(*ae.target, result, ae.span, /*constCheck*/ true);
     }
     return withType(ae, result);
+}
+
+// Assignment narrowing: the binding's recorded type lowers to whatever the
+// assignment leaves in it (widened through literals), never to an error
+// and never beyond what the declared binding accepts.
+void Analyzer::narrowAssignmentView(Expr& ae, const Type& stored,
+                                    const SourceSpan& span) {
+    if (ae.kind == NodeKind::Identifier) {
+        auto& id = static_cast<Identifier&>(ae);
+        const Type t = widen(stored);
+        if (t.isError()) return;
+        Binding b;
+        if (!lookup(id.name, b)) return;
+        overrideBinding(id.name, t, span);
+        return;
+    }
+    if (ae.kind == NodeKind::MemberExpr) {
+        narrowedMembersByKey_[memberKeyFor(ae)] = widen(stored);
+    }
 }
 
 Type Analyzer::compoundResult(AssignOp op, const Type& targetType,
