@@ -1,0 +1,8 @@
+﻿import console from "std/console";
+import { Map as M } from "std/collections";
+import { WebSocket as WS } from "std/network/types";
+import { TextEncoder as TE } from "std/text";
+function tag(ws: WS): string { return "ws"; }
+function size(m: M<string, number>): number { return m.size; }
+function enc(e: TE): string { return "enc"; }
+console.log("ok");
