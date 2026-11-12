@@ -55,9 +55,10 @@ const StdModuleDef kStdModules[] = {
     // Every std module also publishes its type names at "<module>/types", so
     // annotation positions can import them as types without pulling in the
     // runtime surface (`import { Connection } from "std/network/types"`).
-    // The type entries mirror their runtimes exactly.
+    // The type entries mirror their runtimes exactly. std/collections/types
+    // is deliberately absent: the collections family is TS-style ambient
+    // (like Map/Set in TypeScript), so the extra facade would be dead weight.
     {"std/network/types", true, {"WebSocket", "WebSocketServer", "Headers", "Request", "Response", "FormData", "AbortSignal", "Router", "TlsSocket", "TlsServer", "TcpSocket", "TcpServer", "UdpSocket"}},
-    {"std/collections/types", false, {"Map", "Set", "LRUCache", "MultiMap", "ConcurrentMap", "Queue", "Stack", "PriorityQueue", "RingBuffer", "BitSet"}},
     {"std/buffer/types", false, {"Buffer"}},
     {"std/url/types", true, {"URL", "URLSearchParams"}},
     {"std/date/types", true, {"Date"}},

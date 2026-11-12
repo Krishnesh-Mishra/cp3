@@ -127,7 +127,7 @@ NETWORK_RESPONSE_MEMBER = (
 BROKEN_DOT = 'const x = 1.\n'
 BROKEN_STRING = 'const s = "abc\n'
 STDLIB_PARTIAL = 'consol\n'
-STDLIB_TYPE_PARTIAL = 'const x: Map = 1;\n'
+STDLIB_TYPE_PARTIAL = 'const x: Buf = 1;\n'
 CONSOLE_EVENT_STRING = (
     'import console from "std/console";\n'
     'console.on("keyp", (key) => { console.log(key); });\n'
@@ -888,16 +888,16 @@ def check_completion(report, session, member_uri, object_uri,
     })
     items = completion_items(response)
     found = labels(items)
-    map_entry = next((it for it in (items or []) if it.get("label") == "Map"),
-                      None)
-    has_map_import_edit = (
-        map_entry is not None and
-        any("import { Map } from \"std/collections/types\"" in e.get("newText", "")
-            for e in map_entry.get("additionalTextEdits", []))
+    buffer_entry = next((it for it in (items or []) if it.get("label") == "Buffer"),
+                        None)
+    has_buffer_import_edit = (
+        buffer_entry is not None and
+        any("import { Buffer } from \"std/buffer/types\"" in e.get("newText", "")
+            for e in buffer_entry.get("additionalTextEdits", []))
     )
     report.check(
-        "completion: type position offers std/collections/types with auto-import edits",
-        items is not None and "Map" in found and has_map_import_edit,
+        "completion: type position offers std/buffer/types with auto-import edits",
+        items is not None and "Buffer" in found and has_buffer_import_edit,
         items,
     )
 

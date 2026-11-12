@@ -97,8 +97,8 @@ struct StdImportSpec {
 };
 
 // Curated stdlib surface the editor offers with `import` inserted on
-// accept. Order matches roughly how likely a typed prefix matches a fresh
-// file (console/process/collections first).
+// accept. The std/collections family is TS-style ambient and needs no import,
+// so it is not listed here (see appendBuiltinValues).
 const StdImportSpec kStdImportSpecs[] = {
     {"console", "std/console", false, 6,
      "the console global (std/console)",
@@ -133,21 +133,6 @@ const StdImportSpec kStdImportSpecs[] = {
     {"URLSearchParams", "std/url", true, 7,
      "the URLSearchParams class (std/url)",
      "`new URLSearchParams(search)`."},
-    {"Map", "std/collections", true, 7,
-     "the Map class (std/collections)",
-     "`new Map<K, V>()`, `.get`, `.set`, `.size` from std/collections."},
-    {"Set", "std/collections", true, 7,
-     "the Set class (std/collections)",
-     "`new Set<T>()`, `.has`, `.add`, `.size` from std/collections."},
-    {"LRUCache", "std/collections", true, 7,
-     "the LRUCache class (std/collections)",
-     "`new LRUCache<K, V>(capacity)`, `.peek`, `.put`, from std/collections."},
-    {"Queue", "std/collections", true, 7,
-     "the Queue class (std/collections)",
-     "`new Queue<T>()`, `.push`, `.pop` from std/collections."},
-    {"Stack", "std/collections", true, 7,
-     "the Stack class (std/collections)",
-     "`new Stack<T>()`, `.push`, `.pop` from std/collections."},
     {"Buffer", "std/buffer", true, 7,
      "the Buffer class (std/buffer)",
      "`Buffer.from(string)`, `Buffer.from(array)` from std/buffer."},
@@ -173,7 +158,8 @@ bool stdModuleImported(const AnalyzedDocument& document, const char* specifier) 
 
 // Stdlib types offered in type positions (e.g. after a `: ` annotation). Same
 // shape as the value-position list but distinct from `std/*` runtime exports:
-// editors should suggest the types module, not the runtime one.
+// editors should suggest the types module, not the runtime one. The
+// std/collections family is TS-style ambient and is not listed here.
 const struct StdTypeImportSpec {
     const char* label;
     const char* specifier;
@@ -186,26 +172,6 @@ const struct StdTypeImportSpec {
      "`URLSearchParams` from std/url/types, used in annotations only."},
     {"Date", "std/date/types", "the Date class (std/date/types)",
      "`Date` from std/date/types, used in annotations only."},
-    {"Map", "std/collections/types", "the Map class (std/collections/types)",
-     "`Map<K, V>` from std/collections/types, used in annotations only."},
-    {"Set", "std/collections/types", "the Set class (std/collections/types)",
-     "`Set<T>` from std/collections/types, used in annotations only."},
-    {"LRUCache", "std/collections/types", "the LRUCache class (std/collections/types)",
-     "`LRUCache<K, V>` from std/collections/types, used in annotations only."},
-    {"MultiMap", "std/collections/types", "the MultiMap class (std/collections/types)",
-     "`MultiMap<K, V>` from std/collections/types, used in annotations only."},
-    {"ConcurrentMap", "std/collections/types", "the ConcurrentMap class (std/collections/types)",
-     "`ConcurrentMap<K, V>` from std/collections/types, used in annotations only."},
-    {"Queue", "std/collections/types", "the Queue class (std/collections/types)",
-     "`Queue<T>` from std/collections/types, used in annotations only."},
-    {"Stack", "std/collections/types", "the Stack class (std/collections/types)",
-     "`Stack<T>` from std/collections/types, used in annotations only."},
-    {"PriorityQueue", "std/collections/types", "the PriorityQueue class (std/collections/types)",
-     "`PriorityQueue<T>` from std/collections/types, used in annotations only."},
-    {"RingBuffer", "std/collections/types", "the RingBuffer class (std/collections/types)",
-     "`RingBuffer<T>` from std/collections/types, used in annotations only."},
-    {"BitSet", "std/collections/types", "the BitSet class (std/collections/types)",
-     "`BitSet` from std/collections/types, used in annotations only."},
     {"Buffer", "std/buffer/types", "the Buffer class (std/buffer/types)",
      "`Buffer` from std/buffer/types, used in annotations only."},
     {"TextEncoder", "std/text/types", "the TextEncoder class (std/text/types)",
@@ -287,6 +253,28 @@ void appendBuiltinValues(std::vector<lsp::CompletionCandidate>& out) {
     static constexpr Builtin values[] = {
         {"Object", 7, "built-in global",
          "Provides object-related language operations such as `Object.keys(value)`."},
+        // The std/collections family, TS-style ambient (`new Map<string, number>()`
+        // with no import).
+        {"Map", 7, "built-in class, no import required",
+         "Creates a keyed collection with `.set`, `.get`, `.has`, `.delete`, `.size`."},
+        {"Set", 7, "built-in class, no import required",
+         "Creates a uniqueness collection with `.add`, `.has`, `.delete`, `.size`."},
+        {"LRUCache", 7, "built-in class, no import required",
+         "Creates a capacity-bounded cache with `.set`, `.get`, `.has`, `.size`."},
+        {"MultiMap", 7, "built-in class, no import required",
+         "A key-to-many-values map with `.add`, `.get`, `.has`, `.size`."},
+        {"ConcurrentMap", 7, "built-in class, no import required",
+         "A thread-safe keyed map with `.set`, `.get`, `.has`, `.delete`, `.size`."},
+        {"Queue", 7, "built-in class, no import required",
+         "Creates a FIFO collection with `.enqueue`, `.dequeue`, `.peek`, `.size`."},
+        {"Stack", 7, "built-in class, no import required",
+         "Creates a LIFO collection with `.push`, `.pop`, `.peek`, `.size`."},
+        {"PriorityQueue", 7, "built-in class, no import required",
+         "Creates a priority heap with `.push`, `.pop`, `.peek`."},
+        {"RingBuffer", 7, "built-in class, no import required",
+         "Creates a fixed-capacity ring with `.push`, `.pop`, `.size`, `.capacity`."},
+        {"BitSet", 7, "built-in class, no import required",
+         "Creates a bit set with `.set`, `.get`, `.count`, `.and`, `.or`, `.xor`."},
         {"String", 3, "String(value): string",
          "Converts a value to its CP3 string representation. With no argument, "
          "it returns `\"undefined\"`.\n\n```cp3\nconst label = String(value);\n```"},

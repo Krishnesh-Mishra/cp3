@@ -337,6 +337,14 @@ void Analyzer::declareBuiltins() {
         // `Date` as a global namespace/construct (stdlib §03): sema in
         // std/date, codegen emitDateNew/emitDateCall.
         "Date",
+        // The std/collections family as TS-style ambient constructors
+        // (`const m = new Map<string, number>();` with no import): nominal
+        // Class types carrying their type arguments, member typing name-keyed
+        // in std/collections/sema.cpp, codegen keyed on the same names. The
+        // explicit `import { Map } from "std/collections"` keeps working
+        // (shadowing, import compatibility).
+        "Map", "Set", "LRUCache", "MultiMap", "ConcurrentMap",
+        "Queue", "Stack", "PriorityQueue", "RingBuffer", "BitSet",
         // The JS-compat typed-array family (D69): ambient constructors, no
         // import required. The constructors themselves are checked in
         // src/language/typed-arrays/sema.cpp; codegen maps them to cp3/typed_array.hpp.
