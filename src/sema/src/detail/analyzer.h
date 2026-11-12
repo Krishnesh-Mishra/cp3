@@ -621,6 +621,7 @@ private:
     // --- native interop (checks/native_check.cpp) -----------------------------
     // The alias -> binding map, built before the statements are checked.
     void collectNativeAliases(const Program& program);
+    void registerStdImportTypes(const Program& program);
     void preRegisterImportTypes();
     // The binding's enums join the enum table (`dm.Color.Red`).
     void registerNativeEnums(const NativeModule& module);

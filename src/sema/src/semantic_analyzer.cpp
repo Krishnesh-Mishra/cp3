@@ -116,6 +116,7 @@ void Analyzer::run(Program& program) {
     // The native bindings this unit imports are known before the statements
     // are checked, so a call may appear before its import statement.
     collectNativeAliases(program);
+    registerStdImportTypes(program);
     preRegisterImportTypes();
     checkStmts(program.body);
     popScope();

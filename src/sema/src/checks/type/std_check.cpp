@@ -33,6 +33,79 @@
 
 namespace cp3 {
 
+namespace {
+
+// The nominal class the std/network family registers for each export, keyed
+// by the exported spelling. Everything else a std module publishes is a
+// class under its own name; the collections family is ambient (names with
+// Class models already).
+struct AnnotationNameEntry {
+    const char* imported;
+    const char* annotation;
+};
+
+constexpr AnnotationNameEntry kNetworkAnnotationNames[] = {
+    {"WebSocket", "$network:WebSocket"},
+    {"WebSocketServer", "$network:WebSocketServer"},
+    {"Router", "$network:Router"},
+    {"Headers", "$network:Headers"},
+    {"Request", "$network:Request"},
+    {"Response", "$network:Response"},
+    {"FormData", "$network:FormData"},
+    {"AbortSignal", "$network:AbortSignal"},
+    {"TcpSocket", "$network:TcpSocket"},
+    {"TcpServer", "$network:TcpServer"},
+    {"TlsSocket", "$network:TlsSocket"},
+    {"TlsServer", "$network:TlsServer"},
+    {"UdpSocket", "$network:UdpSocket"},
+};
+
+// Genuinely function/record exports: no nominal class to annotate against
+// (annotation spelling resolves to the binding or nothing).
+constexpr const char* kStdValueOnlyExports[] = {
+    "env", "fetch", "lookup", "static", "cors", "bodyLimit", "cookieParser",
+};
+
+const char* annotationNameFor(const std::string& imported) {
+    for (const auto& entry : kNetworkAnnotationNames) {
+        if (imported == entry.imported) return entry.annotation;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Std specifiers carry no AST the annotation passes could re-walk, so the
+// local spelling of every imported name registers a nominal Class type up
+// front - the same shape user-imported nominal classes get in
+// preRegisterImportTypes. This is what makes `import { WebSocket } from
+// "std/network"` and `import { Map as M } from "std/collections"` legal in
+// annotation positions.
+void Analyzer::registerStdImportTypes(const Program& program) {
+    for (const StmtPtr& stmt : program.body) {
+        if (!stmt || stmt->kind != NodeKind::ImportDeclaration) continue;
+        const auto& imp = static_cast<const ImportDeclaration&>(*stmt);
+        if (imp.source.rfind("std/", 0) != 0) continue;
+        for (const auto& sp : imp.specifiers) {
+            if (!sp || sp->imported.empty()) continue;
+            bool valueOnly = false;
+            for (const char* skip : kStdValueOnlyExports) {
+                if (sp->imported == skip) { valueOnly = true; break; }
+            }
+            if (valueOnly) continue;
+            const std::string local = sp->local.empty() ? sp->imported : sp->local;
+            const char* family = annotationNameFor(sp->imported);
+            const Type nominal = Type::named(TypeKind::Class,
+                                             family ? std::string(family)
+                                                    : sp->imported);
+            // The Class the annotation registers; the ambient binding at the
+            // import statement keeps it value-usable (both for the /types
+            // barrel and the runtime module).
+            typeNames_.emplace(local, nominal);
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Namespace dispatch
 // -----------------------------------------------------------------------------
