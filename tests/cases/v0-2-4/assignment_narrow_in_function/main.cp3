@@ -1,0 +1,9 @@
+import console from "std/console";
+const next = (n: number): number => {
+    let v: number | undefined = undefined;
+    if (v === undefined) {
+        v = n;
+    }
+    return v + 1;
+};
+console.log(next(41));

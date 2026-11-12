@@ -1,0 +1,10 @@
+import console from "std/console";
+const items: (string | undefined)[] = ["a", "bb", "ccc"];
+let total = 0;
+for (const it of items) {
+    if (it === undefined) {
+        break;
+    }
+    total = total + it.length;
+}
+console.log(total);

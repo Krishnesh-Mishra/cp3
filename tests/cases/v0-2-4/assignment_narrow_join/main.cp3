@@ -1,0 +1,8 @@
+import console from "std/console";
+let v: number | undefined = undefined;
+if (v === undefined) {
+    v = 4;
+} else {
+    v = v;
+}
+console.log(v + 1);
