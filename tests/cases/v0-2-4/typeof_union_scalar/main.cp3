@@ -1,0 +1,17 @@
+﻿import console from "std/console";
+function show(v: number | string): string {
+    if (typeof v === "string") {
+        return v.toUpperCase();
+    }
+    return String(v + 1);
+}
+function sum(v: number | string): number {
+    if (typeof v === "number") {
+        return v + 1;
+    }
+    return v.length;
+}
+console.log(show(3));
+console.log(show("hi"));
+console.log(sum(41));
+console.log(sum("hello"));
