@@ -1,0 +1,9 @@
+﻿import console from "std/console";
+import { utils } from "./dep.cp3";
+const stripped = { ...utils, extra: 1 };
+console.log(stripped.count);
+console.log(stripped.double(21));
+console.log(stripped.extra);
+const r = { ...utils };
+console.log(r.double(10));
+console.log(r.count);

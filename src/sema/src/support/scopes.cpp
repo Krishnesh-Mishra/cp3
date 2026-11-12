@@ -116,10 +116,120 @@ void Analyzer::declareAmbient(const std::string& name, const SourceSpan& span,
 // positions, so the type-carry half of `declareImported` is applied here,
 // before any pre-pass sees a statement. Value-side binding stays in
 // `declareImported`, which runs later, in source order.
+namespace {
+
+// One parsed `<kind>|<name>[<part>]*` shape-label component (see `typeKey`).
+// Returns false on malformed input (the shape then stays opaque and the
+// binding keeps its declared type). `typeparam` is preserved verbatim so a
+// generic shape still resolves through the instantiated path later.
+bool parseImportedTypeKey(const std::string& s, std::size_t& pos, Type& out) {
+    const auto kindEnd = s.find('|', pos);
+    if (kindEnd == std::string::npos) return false;
+    const std::string kind = s.substr(pos, kindEnd - pos);
+    pos = kindEnd + 1;
+    const auto nameEnd = s.find('|', pos);
+    if (nameEnd == std::string::npos) return false;
+    const std::string name = s.substr(pos, nameEnd - pos);
+    pos = nameEnd + 1;
+    std::vector<Type> parts;
+    while (pos < s.size() && s[pos] == '<') {
+        ++pos;
+        Type part;
+        if (!parseImportedTypeKey(s, pos, part)) return false;
+        if (pos >= s.size() || s[pos] != '>') return false;
+        ++pos;
+        parts.push_back(std::move(part));
+    }
+    if (kind == "number") out = Type::number();
+    else if (kind == "string") out = Type::string();
+    else if (kind == "boolean") out = Type::boolean();
+    else if (kind == "undefined") out = Type::undefined();
+    else if (kind == "null") out = Type::nullType();
+    else if (kind == "void") out = Type::voidType();
+    else if (kind == "unknown") out = Type::unknown();
+    else if (kind == "error") out = Type::error();
+    else if (kind == "array") {
+        if (parts.size() != 1) return false;
+        out = Type::array(std::move(parts[0]));
+    } else if (kind == "union") out = Type::unionOf(std::move(parts));
+    else if (kind == "nullable") {
+        if (parts.size() != 1) return false;
+        out = Type::nullable(std::move(parts[0]));
+    } else if (kind == "object") {
+        out = Type::named(TypeKind::Object, name);
+        out.parts = std::move(parts);
+    } else if (kind == "enum") {
+        out = Type::named(TypeKind::Enum, name);
+        out.parts = std::move(parts);
+    } else if (kind == "class") {
+        out = Type::named(TypeKind::Class, name);
+        out.parts = std::move(parts);
+    } else if (kind == "typeparam") {
+        out = Type::named(TypeKind::TypeParam, name);
+        out.parts = std::move(parts);
+    } else if (kind == "function") {
+        if (parts.empty()) return false;
+        Type ret = std::move(parts.back());
+        parts.pop_back();
+        out = Type::function(std::move(parts), std::move(ret));
+    } else if (kind == "native") {
+        out = Type::native(name);
+        out.parts = std::move(parts);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+// Parse a `$o{name:typeKey,...}` shape label into a Shape record. False keeps
+// the binding registered as an opaque handle (no member reads / spread).
+bool registerObjectShapeLabel(Shape& out, const std::string& label) {
+    if (label.size() < 4 || label.rfind("$o{", 0) != 0 || label.back() != '}') return false;
+    std::vector<Field> fields;
+    std::size_t pos = 3;
+    const std::size_t end = label.size() - 1;
+    while (pos < end) {
+        const std::size_t colon = label.find(':', pos);
+        if (colon == std::string::npos || colon >= end) return false;
+        Field f;
+        f.name = label.substr(pos, colon - pos);
+        if (f.name.empty()) return false;
+        if (f.name.back() == '?') { f.optional = true; f.name.pop_back(); }
+        pos = colon + 1;
+        if (!parseImportedTypeKey(label, pos, f.type)) return false;
+        if (pos >= label.size() || label[pos] != ',') return false;
+        ++pos;
+        fields.push_back(std::move(f));
+    }
+    out.fields = std::move(fields);
+    out.tuple = false;
+    out.tupleElems.clear();
+    out.hasIndex = false;
+    out.indexType = Type();
+    return true;
+}
+
+}  // namespace
+
+void Analyzer::registerImportedObjectShape(const std::string& label) {
+    if (label.size() < 4 || label.rfind("$o{", 0) != 0 || label.back() != '}') return;
+    if (shapes_.find(label) != shapes_.end()) return;
+    Shape shape;
+    if (!registerObjectShapeLabel(shape, label)) return;
+    shapes_.emplace(label, std::move(shape));
+}
+
 void Analyzer::preRegisterImportTypes() {
     if (imports_ == nullptr) return;
     for (const auto& [name, binding] : *imports_) {
-        if (name.empty() || !binding.isType) continue;
+        if (name.empty()) continue;
+        // An imported plain record (`$o{...}`) is usable in this TU exactly like
+        // a locally declared one - register the shape label so member access
+        // and spread see the fields.
+        if (binding.type.kind == TypeKind::Object && binding.type.name.rfind("$o{", 0) == 0) {
+            registerImportedObjectShape(binding.type.name);
+        }
+        if (!binding.isType) continue;
         if (binding.classDecl != nullptr) {
             const std::uint32_t key = binding.classDecl->nodeId;
             // The TU of the dep already registered this class under the same

@@ -623,6 +623,7 @@ private:
     void collectNativeAliases(const Program& program);
     void registerStdImportTypes(const Program& program);
     void preRegisterImportTypes();
+    void registerImportedObjectShape(const std::string& label);
     // The binding's enums join the enum table (`dm.Color.Red`).
     void registerNativeEnums(const NativeModule& module);
     // The binding a native alias names, or nullptr.
