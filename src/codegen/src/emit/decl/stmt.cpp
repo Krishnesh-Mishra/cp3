@@ -581,14 +581,12 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
         std::string value;
         if (r.argument->kind == NodeKind::ThisExpr && !classStack_.empty() &&
             !classStack_.back()->localRef) {
-            // Ref-ABI classes derive `enable_shared_from_this<Self>`, but a
-            // derived one may also see the base's `enable_shared_from_this`
-            // through inheritance. Disambiguate by naming the self type's
-            // instantiation scope explicitly with a downcast.
+            // Ref-ABI classes derive one canonical SharedBase; the self view is
+            // recovered by downcasting the shared handle.
             const ClassModel* cm = classStack_.back();
             const std::string selfBase = cm->structName + templateUseOf(*cm);
-            value = "static_cast<std::enable_shared_from_this<" + selfBase +
-                   ">&>(*this).shared_from_this()";
+            value = "std::static_pointer_cast<" + selfBase +
+                   ">(static_cast<::cp3::runtime::SharedBase&>(*this).shared_from_this())";
         } else {
             value =
                 currentReturnTuple_ && r.argument->kind == NodeKind::ArrayLiteral
