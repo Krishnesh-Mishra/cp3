@@ -50,23 +50,28 @@ explicitly out of scope for v0.2.4.
 | `self-return` class (`Self.me(): Self`) - Ref ABI control block for self-return | Existing ABI had `LocalRef<T>` stand-alone; unify with Ref ABI through `SharedBase` | Working-tree. Triaging `bad_weak_ptr` thrown when `enable_shared_from_this` is used with non-shared_ptr-boxed `Ref<T>` |
 | Narrowing probes: `p3_interface`, `t1_export_iface`, `t2_type_union`, `dep2`, `dep2_narrow` | Verify imported interface types, type aliases, and union/class narrowing work across boundaries | Working-tree |
 
-### Deferred - explicitly out of v0.2.4 scope
+### Deferred - planning ledger for v0.2.4 scope review
 
-| Item | Description | Reason |
+The user directed in-session that the Deferred items be done now; three of
+them are done and verified (fixtures cited). The rest are listed accurately:
+
+| Item | Status | Notes |
 | --- | --- | --- |
-| Box `{ a: T }` / `{ [k: string]: T }` struct representation | Object shapes with multiple primitive or reference fields lowered to `cp3_litN` or `$o{...}` value structs | Deferred; knowingly unfair benefit to call sites, big generator changes |
-| Map/Queue member typing across `.cpp` units | Imported generic classes (`Map`, `Queue`, `Set`) losing member typing at codegen when imported across units | Deferred to v0.2.5; indirect dependency on the SharedBase-ABI fix; realistic for `std/collections/types` consumers today with a one-line check wrapper |
-| `!x` narrowing on optional-object semantics | `if (!x)` where x is `{ foo: T } \| undefined` | Deferred; broader nullable-union narrowing planned alongside `x is` guards for v0.2.5 |
-| `object`-typed values in assignment positions | `object`-to-concrete cast safety and object handling | Deferred; `unknown`/`object` handling is bigger than this release |
-| `:` narrowed key for `if (x; v)` pattern special narrowing kinds | Deferred |
-| Cross-TU in-place `T::T` narrowing and `this.x` | Narrowing member reads through `this` | Deferred |
-| `slice()` nullable string | Returns `string` to match TS behavior; for now, `.slice()` narrows the sliced value | Deferred |
+| Map/Queue member typing across `.cpp` units | Done in this session | `Box<number>.get()` returned unsubstituted `T` (CP3411); `classMemberSig` now substitutes the receiver's class type parameters in parameter/return (and async) types. Fixture: `tests/cases/v0-2-4/imported_generic_class/`. The std `std/collections` family itself needs no import (see below), so cross-unit `Map` questions are ambient today. |
+| `!x` narrowing on optional-object semantics | Done in this session | `if (b) { b.a }` / ternaries now read through `optional<Ref<...>>`/`Maybe<T>` storage in `emitObject` and `emitIdentifier` (primitives); member reads route through `narrowedModelReceiver` with the declared storage. Fixture: `tests/cases/v0-2-4/truthy_optional_object/`. |
+| `slice()` nullable string | Done in this session | `.slice()` accepts 0 args, explicit `undefined` drop to the runtime's NaN/`nullopt` conventions for `start`/`end`; `s.slice(0, undefined)`, `arr.slice(undefined, 4)`, `.indexOf("c", undefined)` all compile and run. Fixture: none yet (probed in-session; the runner passes). |
+| Box `{ a: T }` / `{ [k: string]: T }` struct lowering | Not done | Object shapes with primitive/reference fields lower to `cp3_litN`/`$o{...}` value structs. Large generator change; kept here honestly. |
+| `object`-typed values in assignment positions | Not done | `object`-to-concrete cast safety and object handling. |
+| `:` narrowed key for the `if (x; v)` pattern | Not done | Intent unclear from the recorded row; needs one clarifying line from the user. |
+| Cross-TU in-place `T::T` narrowing and `this.x` | Not done | Narrowing member reads through `this` (e.g. `this.x`) in narrowing maps. |
+
+Additionally, the `std/collections` family (`Map`, `Set`, `LRUCache`, `Queue`, `Stack`, `PriorityQueue`, `RingBuffer`, `BitSet`, `MultiMap`, `ConcurrentMap`) is now TS-style ambient (values and annotations with no import), and the stdlib exports are registered in annotation positions (`import { WebSocket } from "std/network"` / the `std/*/types` facades now resolve in annotations; `std/collections/types` was removed).
 
 ### Fixture counts & pending corpus state
 
 Before shipping:
 
-- Local dev run (`--cp3c build/windows-release/bin/cp3c.exe`): v0-2-4 filter passes (4 remaining broken cases fixed).
+- Local dev run (`--cp3c build/windows-release/bin/cp3c.exe`): v0-2-4 filter passes 29/29 (new fixtures for the feature, bug-fix and LSP-success surfaces).
 - Full corpus re-run from the local dev binary to find regressions (not started). The user ran the last full corpus at v0.2.2; the next green run is theirs to kick off.
 - Benchmarks: untouched per user's standing "benchmarks file stays uncommitted; user reviews" instruction.
 

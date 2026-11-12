@@ -1,0 +1,4 @@
+﻿import console from "std/console";
+import { Frame } from "./frame.cp3";
+const f = new Frame();
+console.log(f.ping());

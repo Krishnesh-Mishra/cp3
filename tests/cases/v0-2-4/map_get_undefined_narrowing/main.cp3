@@ -1,0 +1,7 @@
+﻿import console from "std/console";
+const m = new Map<string, number>();
+m.set("a", 40);
+const v = m.get("a");
+if (v === undefined) { console.log("none"); } else { console.log(v + 1); }
+const w = m.get("b");
+if (w === undefined) { console.log("missing"); } else { console.log(w + 1); }

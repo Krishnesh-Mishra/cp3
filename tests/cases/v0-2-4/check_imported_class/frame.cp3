@@ -1,0 +1,4 @@
+﻿export class Frame {
+    id: number = 7;
+    ping(): string { return `pong ${this.id}`; }
+}

@@ -1,0 +1,6 @@
+﻿import console from "std/console";
+import JSON from "std/json";
+// A leading UTF-8 BOM (EF BF BB), as editors that save a manifest emit.
+const src = String.fromCharCode(239, 187, 191) + "{\"a\": 1}";
+const v = JSON.parse<{ a: number }>(src);
+console.log(v.a);
