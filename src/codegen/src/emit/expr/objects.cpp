@@ -175,6 +175,20 @@ std::string Generator::emitObject(const Expr& e) {
         // the optional its cp3 type names.
         return "std::optional<" + field + ">((" + receiver + ")->" + member + ")";
     }
+    // The declared storage may be an `optional<Ref<...>>` while the narrowed
+    // view is the bare object (an `if (b) ...` guard). Read through the held
+    // handle - the model-member paths spell it `(*(storage))->field`.
+    if (m.object && m.object->kind == NodeKind::Identifier) {
+        if (const auto binding = lookup(static_cast<const Identifier&>(*m.object).name)) {
+            const CppInfo di = classify(binding->type);
+            if (di.shape == Shape::Optional) {
+                return "(*(" + expr(*m.object) + "))->" + member;
+            }
+            if (di.shape == Shape::Maybe) {
+                return "((" + expr(*m.object) + ").value())->" + member;
+            }
+        }
+    }
     return "(" + receiver + ")->" + member;
 }
 
