@@ -326,6 +326,9 @@ struct RuntimeUnit {
 constexpr RuntimeUnit kRuntimeUnits[] = {
     {"runtime.cpp", ""},
     {"error.cpp", ""},
+    // The automatic cycle collector ships with every cycle-capable class:
+    // cp3/core/cycle.hpp is always in the preamble (the handles spell it).
+    {"cycle.cpp", "cp3/core/cycle.hpp"},
     {"eventloop.cpp",
      "cp3/async/|cp3/parallel/|runEventLoop|cp3/std/console.hpp|"
      "cp3/std/network.hpp|cp3/std/io.hpp|cp3/std/process.hpp|cp3/std/fs.hpp"},

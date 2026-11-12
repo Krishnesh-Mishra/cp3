@@ -1,6 +1,0 @@
-class A { b: B | undefined; }
-class B { a: A | undefined; }
-let x = new A();
-let y = new B();
-x.b = y;
-y.a = x;

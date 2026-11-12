@@ -121,6 +121,10 @@ void Analyzer::run(Program& program) {
     checkStmts(program.body);
     popScope();
     popScope();
+    // The whole-program reference graph behind the automatic cycle
+    // collector: it publishes the side tables and the component list
+    // (consumed by the step-4 diagnostic gate in computeCycleCapable).
+    computeCycleComponents();
     computeCycleCapable();
 }
 

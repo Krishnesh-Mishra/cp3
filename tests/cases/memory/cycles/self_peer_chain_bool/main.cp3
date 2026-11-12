@@ -1,0 +1,16 @@
+﻿import console from "std/console";
+class A { peer: A | undefined; }
+let a = new A();
+let b = new A();
+let c = new A();
+a.peer = b; b.peer = c; c.peer = a;
+let p1 = a.peer;
+if (p1 !== undefined) {
+    let p2 = p1.peer;
+    if (p2 !== undefined) {
+        let p3 = p2.peer;
+        if (p3 !== undefined) {
+            console.log(p3 === a);
+        }
+    }
+}

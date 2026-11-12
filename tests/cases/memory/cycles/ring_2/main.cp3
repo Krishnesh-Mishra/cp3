@@ -1,0 +1,13 @@
+import console from "std/console";
+class N {
+    value: number;
+    next: N | undefined;
+    constructor(v: number) {
+        this.value = v;
+    }
+}
+    let n0 = new N(0);
+    let n1 = new N(1);
+    n0.next = n1;
+    n1.next = n0;
+console.log("ok");

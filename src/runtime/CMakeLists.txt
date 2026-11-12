@@ -23,6 +23,7 @@ set(cp3_runtime_sources
     ../std/console/runtime_pump_read.cpp
     src/core/error.cpp
     src/core/regex.cpp
+    src/core/cycle.cpp
     src/async/eventloop.cpp
     src/async/uv_loop.cpp
     src/async/timers.cpp

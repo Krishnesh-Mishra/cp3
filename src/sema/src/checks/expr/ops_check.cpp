@@ -9,6 +9,7 @@
 #include "detail/analyzer.h"
 
 #include <cstddef>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -437,6 +438,36 @@ Type Analyzer::inferAssignment(AssignmentExpr& ae) {
     return withType(ae, result);
 }
 
+// True when an assignment target's member read is always volatile (a `weak`
+// field: every read is a weak lock, typed `T | undefined`), so flow narrowing
+// of the stored type does not apply to reads of that member.
+bool Analyzer::isWeakMemberTarget(const MemberExpr& m) const {
+    // Resolve the receiver's class name.
+    std::string className;
+    if (m.object && m.object->kind == NodeKind::Identifier) {
+        Binding b;
+        if (!lookup(static_cast<Identifier&>(*m.object).name, b)) return false;
+        if (b.type.kind != TypeKind::Class || b.type.name.empty()) return false;
+        className = b.type.name;
+    } else if (m.object && m.object->kind == NodeKind::ThisExpr) {
+        if (classStack_.empty()) return false;
+        className = classStack_.back();
+    } else {
+        return false;
+    }
+    // Find the member through the class hierarchy.
+    const ClassInfo* ci = findClass(className);
+    std::set<std::string> seen;
+    while (ci && seen.insert(ci->name).second) {
+        for (const ClassMemberInfo& mem : ci->members) {
+            if (mem.name == m.property) return mem.isWeak;
+        }
+        if (ci->baseName.empty()) break;
+        ci = findClass(ci->baseName);
+    }
+    return false;
+}
+
 // Assignment narrowing: the binding's recorded type lowers to whatever the
 // assignment leaves in it (widened through literals), never to an error
 // and never beyond what the declared binding accepts.
@@ -452,6 +483,10 @@ void Analyzer::narrowAssignmentView(Expr& ae, const Type& stored,
         return;
     }
     if (ae.kind == NodeKind::MemberExpr) {
+        auto& m = static_cast<MemberExpr&>(ae);
+        // A weak field's read is `T | undefined` for every read: assignment
+        // does not narrow subsequent reads (the lock may be expired).
+        if (isWeakMemberTarget(m)) return;
         narrowedMembersByKey_[memberKeyFor(ae)] = widen(stored);
     }
 }

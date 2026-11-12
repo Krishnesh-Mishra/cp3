@@ -21,6 +21,7 @@ set(cp3_sema_sources
     src/checks/class/class_check.cpp
     src/checks/class/class_docs.cpp
     src/checks/class/class_conform_check.cpp
+    src/checks/class/cycle_analysis.cpp
     src/checks/expr/expr_check.cpp
     src/checks/expr/member_check.cpp
     src/checks/call/call_check.cpp

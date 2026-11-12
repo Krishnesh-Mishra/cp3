@@ -1,0 +1,5 @@
+﻿{
+  "mode": "run",
+  "stdout": "mutual-cycle-ok\n",
+  "exitCode": 0
+}

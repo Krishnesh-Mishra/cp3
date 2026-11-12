@@ -117,6 +117,33 @@ struct SemaResult {
     // unions and closures included; unknown edges count as cycle-capable).
     std::vector<std::string> cycleCapableClasses;
 
+    // The whole-program reference graph behind the automatic cycle collector:
+    // the cycle-capable verdict per class, keyed by the class declaration's
+    // node id (the same id the symbol table uses). A class that is not in the
+    // table is acyclic: plain refcounting, zero collector cost.
+    std::unordered_map<std::uint32_t, bool> cycleCapable;
+
+    // The collector-eligible verdict per class: the cycle-capable classes
+    // whose every strong edge is a walkable handle to another eligible
+    // class. Only such a class can be reclaimed by the trial-deletion
+    // collector; the others keep the manual `weak` requirement.
+    std::unordered_map<std::uint32_t, bool> cycleEligible;
+    // The class names the collector can reclaim, sorted.
+    std::vector<std::string> collectorEligibleClasses;
+
+    // One entry per cycle-capable strongly connected component: the classes
+    // in it and the concrete field paths that form the cycle. Reported by
+    // `cp3 check --report`.
+    struct CycleComponentInfo {
+        std::vector<std::string> classes;  // sorted class names
+        std::vector<std::string> paths;    // the concrete field paths
+        bool hasOpaque = false;            // the component reaches the sink
+    };
+    std::vector<CycleComponentInfo> cycleComponents;
+
+    // The classes that are acyclic (zero collector cost), sorted.
+    std::vector<std::string> acyclicClasses;
+
     // Shared store/escape-site pass (automatic cycle handling): one string
     // per strong field whose type references a cycle-capable class, e.g.
     // "Node.next : Node | null (weak: no)". Consumed by `cp3 check --report`
@@ -175,6 +202,11 @@ struct SemaResult {
         docs.clear();
         constEnums.clear();
         cycleCapableClasses.clear();
+        cycleCapable.clear();
+        cycleEligible.clear();
+        collectorEligibleClasses.clear();
+        cycleComponents.clear();
+        acyclicClasses.clear();
         cycleEscapeSites.clear();
         cycleGroups.clear();
         cycleRegions.clear();

@@ -1,2 +1,0 @@
-class A { b: B | undefined; }
-class B { a: A | undefined; }

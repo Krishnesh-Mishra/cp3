@@ -197,8 +197,27 @@ const ObjectModel* objectModelOf(const Type& t) {
 }
 
 std::string classRefCpp(const ClassModel& cm) {
+    // A cycle-capable class uses the cycle-aware handle: its control block
+    // carries the trial-deletion bookkeeping.
+    if (kCycleCollectorCodegen && cm.cycleCollector) {
+        return "::cp3::runtime::CycleRef<" + cm.cpp + ">";
+    }
     return std::string("::cp3::runtime::") +
            (cm.localRef ? "LocalRef<" : "Ref<") + cm.cpp + ">";
+}
+
+// The factory that allocates a class instance. A cycle-capable class uses
+// the cycle-aware allocator: its control block carries the trial-deletion
+// bookkeeping.
+std::string classFactory(const ClassModel& cm) {
+    if (kCycleCollectorCodegen && cm.cycleCollector) return "makeCycleRef";
+    return cm.localRef ? "makeLocalTypedRef" : "makeTypedRef";
+}
+
+std::string weakRefCpp(const WeakPointee& target) {
+    return std::string("::cp3::runtime::") +
+           (target.cycleCollector ? "CycleWeakRef<" : "WeakRef<") + target.cpp +
+           ">";
 }
 
 void rewriteTypeParams(Type& t, const std::vector<std::string>& typeParams) {

@@ -1,0 +1,7 @@
+class A { other: B | undefined; }
+class B { other: C | undefined; }
+class C { other: A | undefined; extra: A[]; }
+let a = new A();
+let b = new B();
+let c = new C([]);
+a.other = b; b.other = c; c.other = a;

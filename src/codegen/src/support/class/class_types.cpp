@@ -65,7 +65,11 @@ CppInfo classifyClassValue(const Type& t) {
             spelled += ">";
             info.shape = Shape::ClassRef;
             info.representable = true;
-            info.cpp = "::cp3::runtime::Ref<" + spelled + ">";
+            info.cpp = "::cp3::runtime::" +
+                       (kCycleCollectorCodegen && cm->cycleCollector
+                            ? std::string("CycleRef<")
+                            : std::string("Ref<")) +
+                       spelled + ">";
             return info;
         }
         info.shape = Shape::ClassRef;

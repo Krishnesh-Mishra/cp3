@@ -1,0 +1,12 @@
+import console from "std/console";
+class A { tag = 1; next: B | undefined; }
+class B { tag = 2; next: A | undefined; }
+class G { tag = 3; next: H | undefined; }
+class H { tag = 4; next: G | undefined; }
+let a = new A();
+let b = new B();
+a.next = b; b.next = a;
+let g = new G();
+let h = new H();
+g.next = h; h.next = g;
+console.log(a.next.tag + g.next.tag);

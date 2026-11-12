@@ -146,9 +146,11 @@ std::string Generator::newSpreadText(const ClassModel& cm,
     const std::size_t fill = ptypes.size() > fixed ? ptypes.size() - fixed : 0;
     const std::size_t needed = required > fixed ? required - fixed : 0;
     // The dispatch: the constructor takes the elements the array holds.
-    const std::string handle = cm.localRef ? "LocalRef" : "Ref";
-    const std::string factory =
-        cm.localRef ? "makeLocalTypedRef" : "makeTypedRef";
+    const std::string handle =
+        (kCycleCollectorCodegen && cm.cycleCollector)
+            ? "CycleRef"
+            : (cm.localRef ? "LocalRef" : "Ref");
+    const std::string factory = classFactory(cm);
     std::string out = "([&]() -> ::cp3::runtime::" + handle + "<" + self + "> { "
                       "const auto& cp3_a = " + expr(*spread.argument) +
                       "; const std::size_t cp3_n = cp3_a->size();";
@@ -254,8 +256,7 @@ std::string Generator::classLiteralInit(const ClassModel& cm,
                         cm.name + "(...)`");
         return std::string();
     }
-    const std::string factory =
-        cm.localRef ? "makeLocalTypedRef" : "makeTypedRef";
+    const std::string factory = classFactory(cm);
     std::string out = "([&]{ auto cp3_v = ::cp3::runtime::" + factory + "<" +
                       cm.cpp + ">(" + std::to_string(cm.typeId) + "u);";
     for (const ClassMemberModel& m : cm.members) {

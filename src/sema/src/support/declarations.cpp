@@ -504,6 +504,10 @@ void Analyzer::registerInterface(InterfaceDeclaration& i) {
     }
     typeNames_[i.name] = makeObjectType(std::move(fields), open, false, {},
                                         std::move(indexType), hasIndex);
+    // The cycle analysis identifies an interface by its shape label (an
+    // interface is a structural type), so the label -> the interface name
+    // mapping is recorded here.
+    interfaceByLabel_[typeNames_[i.name].name].push_back(i.name);
 }
 
 // =============================================================================

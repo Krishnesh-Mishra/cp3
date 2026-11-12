@@ -1,0 +1,5 @@
+class A { other: B | undefined; extra: unknown; }
+class B { other: A | undefined; }
+let a = new A();
+let b = new B();
+a.other = b; b.other = a;

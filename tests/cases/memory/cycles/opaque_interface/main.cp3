@@ -1,0 +1,6 @@
+interface Holder { value: number; }
+class A { other: Holder | undefined; next: B | undefined; }
+class B { other: Holder | undefined; next: A | undefined; }
+let a = new A();
+let b = new B();
+a.next = b; b.next = a;

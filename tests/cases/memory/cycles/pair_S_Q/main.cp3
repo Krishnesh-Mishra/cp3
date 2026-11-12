@@ -1,0 +1,8 @@
+import console from "std/console";
+class S { next: Q | undefined; }
+class Q { next: S | undefined; }
+let xa = new S();
+let xb = new Q();
+xa.next = xb;
+xb.next = xa;
+console.log("ok");

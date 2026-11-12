@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "cp3/core/cycle.hpp"
+
 namespace cp3::runtime {
 
 EventLoop::EventLoop() = default;
@@ -263,6 +265,10 @@ bool EventLoop::runOnce() {
     if (drainMicrotasks() > 0) {
         didWork = true;
     }
+    // The automatic cycle collector is incremental and bounded: it runs at
+    // the macrotask safe point, after the microtask queue has drained, and
+    // keeps the suspects under a per-tick budget.
+    cp3::runtime::CycleCollector::current().collect();
     return didWork;
 }
 

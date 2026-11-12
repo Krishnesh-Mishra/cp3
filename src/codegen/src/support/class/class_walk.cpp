@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // src/codegen/src/support/class_walk.cpp - model-registration walkers
 // (detail/class_walk.h).
 //
@@ -27,13 +27,21 @@ namespace {
 void walkArrowModels(const ArrowFunction& a, const SemaResult& sema);
 
 // Registers one class declaration (generic classes become C++ templates).
-void addClassModel(const ClassDeclaration& c, bool local) {
+void addClassModel(const ClassDeclaration& c, bool local,
+                   const SemaResult& sema) {
     ModelRegistry& reg = ModelRegistry::get();
     ClassModel& cm = reg.addClass(c.name, local, &c);
     // The class may be reached by more than one walk (the statement walk and
     // the body walk): its type parameters are listed once.
     if (cm.typeParamsRecorded) return;
     cm.typeParamsRecorded = true;
+    // The cycle-capability verdict (sema publishes it per class declaration
+    // id): a cycle-capable class uses the cycle-aware handle and the
+    // collector's visitor.
+    // The class model carries the collector verdict so every spelling of a
+    // class handle follows one rule.
+    const auto it = sema.cycleEligible.find(c.nodeId);
+    cm.cycleCollector = it != sema.cycleEligible.end() && it->second;
     for (const auto& tp : c.typeParams) {
         if (tp) cm.typeParams.push_back(tp->name);
     }
@@ -132,7 +140,7 @@ void walkClassMembers(const std::vector<ClassMemberPtr>& members,
 // Registers one class (and everything its member bodies declare).
 void registerClassTree(const ClassDeclaration& c, bool local,
                        const SemaResult& sema) {
-    addClassModel(c, local);
+    addClassModel(c, local, sema);
     for (const auto& t : c.implementsTypes) {
         if (t) (void)modelTypeFromTypeNode(*t);
     }

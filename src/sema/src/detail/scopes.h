@@ -194,6 +194,10 @@ struct ClassInfo {
     std::string name;
     std::vector<std::string> typeParamNames;  // generic class parameters
     std::string baseName;         // `extends` parent ("" when none)
+    // The interfaces this class implements, by name (the `implements` list).
+    // The cycle analysis maps them to the implementing classes once every
+    // declaration of the unit is known.
+    std::vector<std::string> implementsNames;
     bool isAbstract = false;
     bool hasCtor = false;
     FuncSig ctorSig;

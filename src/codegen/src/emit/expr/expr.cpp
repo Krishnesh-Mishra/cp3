@@ -317,13 +317,13 @@ std::string Generator::emitWeakValue(const WeakExpr& w) {
     if (isNullishLiteral(*w.value)) {
         // An empty link: the target type can only come from the context (a
         // `T | null` binding or field).
-        std::string pointee;
+        detail::WeakPointee pointee;
         if (expected_) pointee = weakPointee(stripNullish(*expected_));
         if (pointee.empty()) {
             reportTypeError(w, "a weak link needs a target type");
             return "0.0";
         }
-        return "::cp3::runtime::WeakRef<" + pointee + ">(std::nullptr_t{})";
+        return weakRefCpp(pointee) + "(std::nullptr_t{})";
     }
     const Type value = effectiveType(*w.value);
     if (classify(value).shape != Shape::ClassRef) {

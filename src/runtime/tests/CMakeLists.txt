@@ -12,6 +12,7 @@ set(cp3_runtime_test_units
     promise_all_test
     promise_test
     worker_test
+    cycle_test
 )
 
 foreach(unit IN LISTS cp3_runtime_test_units)

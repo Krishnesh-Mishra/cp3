@@ -222,7 +222,7 @@ Two framing decisions recorded up front:
 | Slim refcount header | Replace the 16-byte `std::shared_ptr` control block (two atomic counters) with a single 8-byte count header for types the compiler proves never get a `weak` reference and never cross a thread; weak-capable types keep today's layout. Saves 8-16 bytes and one cache-line touch per object. | Planned |
 | RC elision and pairing | Borrowed from Swift OSSA, Lobster. Remove retain/release pairs that cancel inside a function. Fewer refcount operations. | Planned |
 | Deferred / batched release | Borrowed from Nim ORC, Go GC ideas. Collect releases and free them at a safe point, such as end of request. Smoother latency, cheaper frees. | Planned |
-| Cycle detection only where possible | Borrowed from Nim ORC, Python. Run cycle analysis only for types that can form cycles, decided at compile time. No cycle-collector cost for most types. | Planned |
+| Cycle detection only where possible | Borrowed from Nim ORC, Python. Run cycle analysis only for types that can form cycles, decided at compile time. No cycle-collector cost for most types. Shipped in v0.2.4: compile-time SCC classification + a collector-eligible fixpoint; eligible cycle islands are reclaimed by an event-loop-safe trial-deletion collector at safe points; CP3401 stays for everything else (fail closed). | Done (v0.2.4) |
 | Copy-on-write arrays and strings | Borrowed from Swift, PHP. Share the buffer on copy and copy only on first write. Cheap passing and assignment. | Planned |
 | Unique-ownership fast path for COW | Borrowed from Swift. If the refcount is 1, mutate in place with no check. Fast mutation of owned data. | Planned |
 

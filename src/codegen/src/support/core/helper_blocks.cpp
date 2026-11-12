@@ -253,6 +253,11 @@ inline auto cp3_ts(const ::cp3::runtime::Ref<T>& v) -> decltype(v->cp3ToText()) 
     return v->cp3ToText();
 }
 template <class T>
+inline auto cp3_ts(const ::cp3::runtime::CycleRef<T>& v)
+    -> decltype(v->cp3ToText()) {
+    return v->cp3ToText();
+}
+template <class T>
 inline auto cp3_ts(const ::cp3::runtime::LocalRef<T>& v) -> decltype(v->cp3ToText()) {
     return v->cp3ToText();
 }

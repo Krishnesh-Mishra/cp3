@@ -125,6 +125,9 @@ void appendProgramMain(std::string& out, const ProgramAssembly& assembly) {
     if (assembly.needs.eventLoop) {
         out += "    ::cp3::runtime::runEventLoop();\n";
     }
+    // Reclaim the remaining suspect islands
+    // (docs/design/cycle-collector.md).
+    out += "    ::cp3::runtime::CycleCollector::current().drain();\n";
     out += "    return 0;\n";
     out += "}\n";
 }
@@ -186,6 +189,8 @@ std::string programSource(const ProgramAssembly& assembly,
     out += "#include \"cp3/core/runtime.hpp\"\n";
     out += "#include \"cp3/core/error.hpp\"\n";
     out += "#include \"cp3/core/checked.hpp\"\n";
+    out += "#include \"cp3/core/value.hpp\"\n";
+    out += "#include \"cp3/core/cycle.hpp\"\n";
     if (n.bitwise) out += "#include \"cp3/core/bitwise.hpp\"\n";
     if (n.unionValue) out += "#include \"cp3/core/union.hpp\"\n";
     if (n.arith) out += "#include \"cp3/core/arith.hpp\"\n";

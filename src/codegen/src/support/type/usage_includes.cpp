@@ -62,10 +62,15 @@ void Generator::applyUsageIncludes(const std::string& familyUse) {
     if (familyUse.find("::cp3::runtime::unions::") != std::string::npos) needsUnion_ = true;
     if (familyUse.find("cp3_obj_") != std::string::npos) needsObject_ = true;
     // The spec 15 object surface: `Ref<T>` / `WeakRef<T>` come from
-    // cp3/core/value.hpp, which runtime.hpp does not drag in.
+    // cp3/core/value.hpp, which runtime.hpp does not drag in. The cycle
+    // collector headers ride along with them.
     if (familyUse.find("::cp3::runtime::Ref<") != std::string::npos ||
         familyUse.find("::cp3::runtime::WeakRef<") != std::string::npos ||
+        familyUse.find("::cp3::runtime::CycleRef<") != std::string::npos ||
+        familyUse.find("::cp3::runtime::CycleWeakRef<") != std::string::npos ||
         familyUse.find("makeRef") != std::string::npos ||
+        familyUse.find("makeCycleRef") != std::string::npos ||
+        familyUse.find("cp3_cycle_visit") != std::string::npos ||
         familyUse.find("std::shared_ptr<void>") != std::string::npos) {
         needsRef_ = true;
     }

@@ -1,0 +1,8 @@
+﻿import console from "std/console";
+class A { b: B | undefined; }
+class B { a: A | undefined; }
+const x = new A();
+const y = new B();
+x.b = y;
+y.a = x;
+console.log("mutual-cycle-ok");

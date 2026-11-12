@@ -60,6 +60,26 @@ Type untypedAsUnknown(Type t) {
     return t;
 }
 
+// One member of a cycle-capable class is a strong edge exactly when its type
+// is a direct class handle or an optional of one. Everything else (a number,
+// an array, a record) holds no cycle edge.
+bool isCycleClassType(const Type& t) {
+    if (t.kind == TypeKind::Class) return true;
+    if (t.kind == TypeKind::Nullable) {
+        return t.parts.size() == 1 && t.parts.front().kind == TypeKind::Class;
+    }
+    if (t.kind == TypeKind::Union) {
+        const Type* cls = nullptr;
+        for (const Type& part : t.parts) {
+            if (part.isNullish()) continue;
+            if (part.kind != TypeKind::Class) return false;
+            cls = &part;
+        }
+        return cls != nullptr;
+    }
+    return false;
+}
+
 // The length of a class's base chain: the emission order key (a base must be
 // complete before its derived struct).
 int classDepth(const ClassModel& cm) {    int depth = 0;
@@ -246,7 +266,15 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
         baseClass = ModelRegistry::get().classByName(cm.baseName);
         bases += "public " + (baseClass != nullptr ? baseClass->cpp : mapIdent(cm.baseName));
     }
-    if (!cm.localRef) {
+    // A cycle-capable class derives `CycleObject`: it carries the runtime type
+    // stamp and the visitor the collector walks. It cannot derive
+    // `SharedBase` as well: `shared_from_this` needs the std::shared_ptr
+    // control block, and a cycle-capable class uses the cycle-aware one.
+    const bool cycleCollector = kCycleCollectorCodegen && cm.cycleCollector;
+    if (cycleCollector) {
+        if (!bases.empty()) bases += ", ";
+        bases += "public ::cp3::runtime::CycleObject";
+    } else if (!cm.localRef) {
         // Only add a direct `SharedBase` base for classes whose parent does
         // not provide it transitively. The base provides `SharedBase`
         // transitively only when it is a non-built-in Ref-ABI class defined
@@ -271,8 +299,9 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
         cm.baseName.empty() ? nullptr
                             : ModelRegistry::get().classByName(cm.baseName);
     // The first non-builtin class in an inheritance chain owns the runtime type
-    // stamp. Every `new` site overwrites it with the concrete class id.
-    if (base == nullptr || base->builtin) {
+    // stamp. Every `new` site overwrites it with the concrete class id. A
+    // cycle-capable class inherits the stamp from `CycleObject`.
+    if (!cycleCollector && (base == nullptr || base->builtin)) {
         line(out, indent + 1,
              "unsigned int cp3_type_id = " + std::to_string(cm.typeId) + "u;");
     }
@@ -296,6 +325,28 @@ void Generator::emitClassStruct(const ClassModel& cm, std::string& out,
             current = want;
         }
         emitClassMember(cm, m, out, indent + 1, defs);
+    }
+    // The collector's visitor: the strong edges of this object, enumerated
+    // for the trial-deletion collector (docs/design/cycle-collector.md). A
+    // cycle-capable class overrides it; every other class keeps the
+    // inherited no-op, so its codegen is byte-identical to today's.
+    if (cycleCollector) {
+        line(out, indent + 1,
+             "void cp3_cycle_visit(::cp3::runtime::CycleCollector& c) override {");
+        for (const ClassMemberModel& m : cm.members) {
+            if (m.ctor != nullptr || m.isMethod) continue;
+            if (m.isWeak) continue;  // a weak link is not a strong edge
+            if (m.isStatic) continue;  // a static root keeps the island alive
+            if (!isCycleClassType(m.type)) continue;  // no class edge
+            const std::string field = "this->" + mapIdent(m.name);
+            const CppInfo ci = classify(m.type);
+            if (ci.shape == Shape::ClassRef) {
+                line(out, indent + 2, "c.visitEdge(" + field + ");");
+            } else if (ci.shape == Shape::Optional || ci.shape == Shape::Maybe) {
+                line(out, indent + 2, "if (" + field + ") c.visitEdge(*" + field + ");");
+            }
+        }
+        line(out, indent + 1, "}");
     }
     // A static block of a non-generic class is run from a namespace-scope
     // anchor emitted after the class closes (private access needs a member
@@ -536,7 +587,7 @@ std::string Generator::memberFieldText(const ClassMemberModel& m) {
     // manual `weak` field (WeakRef, weak-cost zero). Candidates and
     // rejected edges stay strong refs (report-only default).
     if (m.isWeak || memberIsAutoWeak(sema_, m)) {
-        const std::string pointee = weakPointee(fieldType);
+        const detail::WeakPointee pointee = weakPointee(fieldType);
         if (pointee.empty()) {
             if (fieldNode != nullptr) {
                 reportUnsupported(
@@ -546,7 +597,7 @@ std::string Generator::memberFieldText(const ClassMemberModel& m) {
             }
             return stat + "double " + name + "{}";
         }
-        return stat + "::cp3::runtime::WeakRef<" + pointee + "> " + name + "{}";
+        return stat + weakRefCpp(pointee) + " " + name + "{}";
     }
     CppInfo ci = classify(fieldType);
     // An explicit `unknown` field has no C++ spelling, but its initializer
@@ -920,14 +971,19 @@ std::string Generator::ctorBodyText(const ConstructorDeclaration& cd,
     return body;
 }
 
-std::string Generator::weakPointee(const Type& fieldType) {
+WeakPointee Generator::weakPointee(const Type& fieldType) {
     const CppInfo ci = classify(stripNullish(fieldType));
-    const std::string prefix = "::cp3::runtime::Ref<";
-    if (ci.shape != Shape::ClassRef ||
-        ci.cpp.compare(0, prefix.size(), prefix) != 0) {
-        return std::string();
+    static const char* const kPrefixes[] = {"::cp3::runtime::Ref<",
+                                            "::cp3::runtime::CycleRef<"};
+    if (ci.shape != Shape::ClassRef) return {};
+    for (std::size_t i = 0; i < std::size(kPrefixes); ++i) {
+        const std::size_t n = std::char_traits<char>::length(kPrefixes[i]);
+        if (ci.cpp.compare(0, n, kPrefixes[i]) != 0) continue;
+        // The target's handle decides the weak-link spelling: a
+        // collector-eligible target takes CycleWeakRef.
+        return WeakPointee{ci.cpp.substr(n, ci.cpp.size() - n - 1), i == 1};
     }
-    return ci.cpp.substr(prefix.size(), ci.cpp.size() - prefix.size() - 1);
+    return {};
 }
 
 

@@ -22,7 +22,7 @@ case that pins it lives alongside it (`_pinned/` or a regular case). The harness
 | `functions-closures/01/missing/missing_return_nonvoid` | resolved | CP3504: a function declared to return a value but falling off the end of its body is a compile error. |
 | `functions-closures/01/void/void_return_value` | resolved | CP3401: a function declared to return `undefined` given `return <value>` is a compile error. |
 | `generics/01/infer/infer_class_type_arg` | resolved | `new Box()` ≡ `new Box<undefined>()` when no argument list is provided and no default type parameter exists. |
-| `memory-weak/unbroken/unbroken_cycle_warning_text` | resolved | The `reference cycle ... has no weak edge` wording is accepted; weak references are injected by default in common cycle shapes, but no longer re-worded. |
+| `memory-weak/unbroken/unbroken_cycle_warning_text` | retired | The collector reclaims strong reference cycles for collector-eligible classes; CP3401 is only emitted for cycles the collector cannot reclaim (opaque/unsafe shapes). The pinned fixture is now `classes/03/weak/mutual_unbroken_cycle_reclaims` (run mode, exits 0). |
 | `memory-weak/uninitialized/uninitialized_field_type` | resolved | A class field declared without an initializer and without definite `!:` and never assigned along any path is a compile error CP3709. |
 | `modules/01/default/default_export_function_decl` | resolved | `export default function add(a, b) { return a + b; }` is legal; both expression and declaration forms are accepted at module top level. |
 | `modules/01/prelude/prelude_strong_weak_order` | resolved | `_prelude.cp3` (strong) and `_prelude.weak.cp3` both regularize-injected weak-precedence semantics: weak wins in conflict contexts. Order: same → strong → weak. |

@@ -1,0 +1,23 @@
+import console from "std/console";
+class N0 { next: N1 | undefined; }
+class N1 { next: N2 | undefined; }
+class N2 { next: N3 | undefined; }
+class N3 { next: N4 | undefined; }
+class N4 { next: N5 | undefined; }
+class N5 { next: N6 | undefined; }
+class N6 { weak next: N0 | undefined; }
+let n0 = new N0();
+let n1 = new N1();
+let n2 = new N2();
+let n3 = new N3();
+let n4 = new N4();
+let n5 = new N5();
+let n6 = new N6();
+n0.next = n1;
+n1.next = n2;
+n2.next = n3;
+n3.next = n4;
+n4.next = n5;
+n5.next = n6;
+n6.next = n0;
+console.log("ok");

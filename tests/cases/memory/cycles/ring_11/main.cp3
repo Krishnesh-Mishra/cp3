@@ -1,0 +1,31 @@
+import console from "std/console";
+class N {
+    value: number;
+    next: N | undefined;
+    constructor(v: number) {
+        this.value = v;
+    }
+}
+    let n0 = new N(0);
+    let n1 = new N(1);
+    let n2 = new N(2);
+    let n3 = new N(3);
+    let n4 = new N(4);
+    let n5 = new N(5);
+    let n6 = new N(6);
+    let n7 = new N(7);
+    let n8 = new N(8);
+    let n9 = new N(9);
+    let n10 = new N(10);
+    n0.next = n1;
+    n1.next = n2;
+    n2.next = n3;
+    n3.next = n4;
+    n4.next = n5;
+    n5.next = n6;
+    n6.next = n7;
+    n7.next = n8;
+    n8.next = n9;
+    n9.next = n10;
+    n10.next = n0;
+console.log("ok");

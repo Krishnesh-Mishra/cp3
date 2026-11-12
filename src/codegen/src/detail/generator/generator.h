@@ -236,7 +236,7 @@ private:
     // constructor whose body calls `super(...)`; "" when there is none.
     std::string ctorBaseInitText(const ConstructorDeclaration& cd,
                                  const ClassModel& cm);
-    std::string weakPointee(const Type& fieldType);
+    detail::WeakPointee weakPointee(const Type& fieldType);
 
     // --- model expressions + initializers (emit/class_expr.cpp) ---------------
     std::string emitModelNew(const NewExpr& n);
@@ -328,6 +328,11 @@ Type asyncValueType(const MethodDeclaration& md) const;
     bool hasValueBinding(const std::string& name) const;
     std::optional<Type> bindingType(const VariableDeclarator& d) const;
     std::optional<Type> resolvedBindingType(const VariableDeclarator& d) const;
+    // The storage shape of an unannotated `let x = a.b ...` initializer: the
+    // member's declared type (`Node | undefined`), not the engaged narrowed
+    // view sema records at the read. std::nullopt when the initializer is
+    // not a member read with nullable storage.
+    std::optional<Type> memberStorageShape(const VariableDeclarator& d) const;
     // An annotation -> Type, with enum-named Class parts rewritten to Enum.
     std::optional<Type> typeOfNode(const TypeNode& tn) const;
     void rewriteEnumTypes(Type& t) const;

@@ -1,0 +1,5 @@
+class A { others: B[]; }
+class B { owner: A | undefined; }
+let a = new A([]);
+let b = new B();
+a.others.push(b); b.owner = a;

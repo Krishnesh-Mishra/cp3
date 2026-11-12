@@ -604,8 +604,12 @@ void Generator::emitReturn(const ReturnStatement& r, std::string& out, int inden
             // recovered by downcasting the shared handle.
             const ClassModel* cm = classStack_.back();
             const std::string selfBase = cm->structName + templateUseOf(*cm);
+            if (cm->cycleCollector) {
+                value = "::cp3::runtime::cp3_cycle_self(*this)";
+            } else {
             value = "std::static_pointer_cast<" + selfBase +
                    ">(static_cast<::cp3::runtime::SharedBase&>(*this).shared_from_this())";
+            }
         } else {
             value =
                 currentReturnTuple_ && r.argument->kind == NodeKind::ArrayLiteral

@@ -43,6 +43,7 @@ std::string Generator::buildHeader(const std::string& decls,
     if (needsRef_) {
         // Classes / structural objects / interfaces (spec 15) name `Ref<T>`.
         out += "#include \"cp3/core/value.hpp\"\n";
+        out += "#include \"cp3/core/cycle.hpp\"\n";
     }
     if (needsTuple_) {
         // An enum-carrying object literal can surface in a forward declaration
@@ -120,6 +121,7 @@ std::string Generator::sourceIncludes() const {
     out += "#include \"cp3/core/error.hpp\"\n";
     out += "#include \"cp3/core/checked.hpp\"\n";  // explicit narrowing casts
     out += "#include \"cp3/core/value.hpp\"\n";  // Cell<T> (spec 10 closures)
+    out += "#include \"cp3/core/cycle.hpp\"\n";  // the cycle collector handles (spec 15)
     if (needsBitwise_) out += "#include \"cp3/core/bitwise.hpp\"\n";  // & | ^ ~ << >> >>>
     if (needsUnion_) out += "#include \"cp3/core/union.hpp\"\n";  // primitive unions
     if (needsArith_) {
@@ -263,6 +265,8 @@ void Generator::emitMain(std::string& out, const std::string& mainBody) const {
         // alive until every handle is terminated and the loop is idle.
         out += "    ::cp3::runtime::runEventLoop();\n";
     }
+    // Reclaim the remaining suspect islands (docs/design/cycle-collector.md).
+    out += "    ::cp3::runtime::CycleCollector::current().drain();\n";
     out += "    return 0;\n";
     out += "}\n";
 }

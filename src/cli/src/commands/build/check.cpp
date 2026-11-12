@@ -165,6 +165,30 @@ int cmdCheck(const CliOptions& opt) {
         std::fprintf(stderr,
                      "auto-weak preview: no change (deferred); break cycles "
                      "with an explicit weak edge\n");
+
+        // The collector's view (the whole-program reference graph): every
+        // cycle-capable strongly connected component with the concrete field
+        // path that forms the cycle, and every acyclic class as zero-cost.
+        std::fprintf(stderr, "cycle components (%d):\n",
+                     static_cast<int>(sema.cycleComponents.size()));
+        for (const auto& component : sema.cycleComponents) {
+            std::string names;
+            for (const std::string& c : component.classes) {
+                if (!names.empty()) names += ",";
+                names += c;
+            }
+            std::fprintf(stderr, "  cycle-capable: %s%s\n", names.c_str(),
+                         component.hasOpaque ? " (reaches an opaque carrier)"
+                                             : "");
+            for (const std::string& path : component.paths) {
+                std::fprintf(stderr, "    path: %s\n", path.c_str());
+            }
+        }
+        std::fprintf(stderr, "acyclic classes (zero collector cost) (%d):\n",
+                     static_cast<int>(sema.acyclicClasses.size()));
+        for (const std::string& c : sema.acyclicClasses) {
+            std::fprintf(stderr, "  zero-cost: %s\n", c.c_str());
+        }
     }
 
     const RenderOptions ro = makeRenderOptions(effective, file->path);

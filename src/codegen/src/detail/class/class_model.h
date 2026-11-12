@@ -32,6 +32,11 @@
 namespace cp3 {
 namespace detail {
 
+// A cycle-capable class uses the cycle-aware handle (`CycleRef<T>`) and the
+// collector's visitor. This is on by default for v0.2.4: strong reference
+// cycles are reclaimed automatically (docs/design/cycle-collector.md).
+constexpr bool kCycleCollectorCodegen = true;
+
 // One field of a structural object/interface model.
 struct ObjectFieldModel {
     std::string name;
@@ -126,6 +131,10 @@ struct ClassModel {
     // inheritance, interface, or export use. Such handles may use the local
     // non-atomic runtime representation.
     bool localRef = false;
+    // The class can hold a reference back to itself (the sema's
+    // cycle-capability verdict): it uses the cycle-aware handle and the
+    // collector's visitor.
+    bool cycleCollector = false;
     // The type parameters were already recorded (the class may be reached by
     // more than one walk, and the parameters must be listed once).
     bool typeParamsRecorded = false;
@@ -271,6 +280,18 @@ const ObjectModel* objectModelOf(const Type& t);
 
 // The `Ref<T>` spelling of a class.
 std::string classRefCpp(const ClassModel& cm);
+// The factory that allocates a class instance (`makeTypedRef` by default, the
+// cycle-aware `makeCycleRef` for a cycle-capable class).
+std::string classFactory(const ClassModel& cm);
+// The weak-link target type: the spelling and whether the target is handled
+// by the cycle collector.
+struct WeakPointee {
+    std::string cpp;
+    bool cycleCollector = false;
+    bool empty() const { return cpp.empty(); }
+};
+// The C++ spelling of the weak-link template for a target type.
+std::string weakRefCpp(const WeakPointee& target);
 
 // Rewrites every Class part named like one of `typeParams` to TypeKind::
 // TypeParam, recursing through parts (function signatures, arrays, ...).

@@ -100,9 +100,43 @@ std::optional<Type> Generator::bindingType(const VariableDeclarator& d) const {
     return std::nullopt;
 }
 
+// The storage shape an unannotated binding gets when its initializer is a
+// member read: the member's declared type (`Node | undefined`), not the
+// engaged view sema narrows the read to at this position. The storage is
+// what the initializer expression actually evaluates to, so the two must
+// agree; uses of the binding unwrap or re-narrow as usual.
+std::optional<Type> Generator::memberStorageShape(
+    const VariableDeclarator& d) const {
+    if (d.type || !d.init) return std::nullopt;
+    if (d.init->kind != NodeKind::MemberExpr) return std::nullopt;
+    const auto& m = static_cast<const MemberExpr&>(*d.init);
+    if (!m.object) return std::nullopt;
+    const Type baseT = effectiveType(*m.object);
+    const Type base = stripNullish(baseT);
+    if (const ClassModel* cm = classModelOf(base)) {
+        if (const ClassMemberModel* mem =
+                findClassMemberChain(*cm, m.property, nullptr)) {
+            if (mem->isMethod) return std::nullopt;
+            return mem->type;
+        }
+    }
+    if (const ObjectModel* om = objectModelOf(base);
+        om != nullptr && ModelRegistry::get().objectUsable(om->label) &&
+        objectModelUsed(*om)) {
+        if (const ObjectFieldModel* f = findObjectField(*om, m.property)) {
+            if (f->isMethod) return std::nullopt;
+            return f->type;
+        }
+    }
+    return std::nullopt;
+}
+
 // The binding's effective type: declared/annotated first, then inferred from
 // its initializer. This is what we both emit and register in the scope env.
 std::optional<Type> Generator::resolvedBindingType(const VariableDeclarator& d) const {
+    if (auto storage = memberStorageShape(d)) {
+        return storage;
+    }
     if (auto declared = bindingType(d)) {
         // `unknown` has no C++ spelling; a binding initialized with a concrete
         // value is stored as that value's representation (the declarator uses

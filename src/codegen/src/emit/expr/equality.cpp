@@ -87,7 +87,8 @@ std::string Generator::unionEqualityText(const BinaryExpr& b, const CppInfo& L,
     // instance): cp3 has no ToPrimitive for its object models, and D15 keeps a
     // type mismatch false - the same answer the fixed-type path gives
     // (`1 == { a: 1 }` is false there too). The operands are still evaluated.
-    return "(" + lhs + ", " + rhs + ", " + (isEqual ? "false" : "true") + ")";
+    return "((void)" + lhs + ", (void)" + rhs + ", " +
+           (isEqual ? "false" : "true") + ")";
 }
 
 std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
@@ -164,8 +165,10 @@ std::string Generator::emitEquality(const BinaryExpr& b, const CppInfo& L,
     }
 
     // Differing primitive kinds: D15 says loose `==` is false; `===` is false
-    // too. Preserve operand evaluation with the comma operator.
-    return "(" + lhs + ", " + rhs + ", " + (isEqual ? "false" : "true") + ")";
+    // too. Preserve operand evaluation (as `(void)`, so a simple operand does
+    // not trip -Wunused-value) with the comma operator.
+    return "((void)" + lhs + ", (void)" + rhs + ", " +
+           (isEqual ? "false" : "true") + ")";
 }
 
 }  // namespace cp3

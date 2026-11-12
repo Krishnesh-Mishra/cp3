@@ -10,6 +10,7 @@
 // and `new` live in class_conform_check.cpp (STYLE.md §8).
 // =============================================================================
 #include "detail/analyzer.h"
+#include "detail/cycle_analysis.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -700,7 +701,17 @@ void Analyzer::collectClassMembers(const ClassDeclaration& c, ClassInfo& info) {
         }
     }
     for (const TypePtr& t : c.implementsTypes) {
-        if (t) resolveType(*t);  // self-documenting only (spec §15)
+        if (!t) continue;
+        resolveType(*t);  // self-documenting only (spec §15)
+        // The cycle analysis needs the closed world of an interface-typed
+        // field: every class that implements the interface is a candidate
+        // holder. The interface name is recorded here (the interface may be
+        // declared later in the unit, so the label mapping is resolved in the
+        // post-pass).
+        if (t->kind == NodeKind::NamedType) {
+            info.implementsNames.push_back(
+                static_cast<const NamedType&>(*t).name);
+        }
     }
     for (const ClassMemberPtr& mp : c.members) {
         if (mp) collectClassMember(*mp, info);
@@ -1264,6 +1275,71 @@ Type Analyzer::userClassMember(const Type& cls, const std::string& prop,
 }
 
 // -----------------------------------------------------------------------------
+// The whole-program reference graph behind the automatic cycle collector.
+//
+// The Stage 1 analysis above answers "can this class reach itself?" with a
+// reachability walk. The collector needs more: the strongly connected
+// components of the whole reference graph, the concrete field path that
+// forms each cycle, and a verdict per class (cycle-capable vs. acyclic, i.e.
+// zero collector cost). That is the analysis in detail/cycle_analysis.h.
+//
+// This pass is report-only: it publishes the side table and the report
+// lines, and changes no ownership. The CP3401 cycle diagnostic keeps its
+// current verdict until the collector lands.
+// -----------------------------------------------------------------------------
+void Analyzer::computeCycleComponents() {
+    CycleAnalysisInput in;
+    // The interface implementers: a class that implements an interface is a
+    // candidate holder of an interface-typed field (the closed world). The
+    // interface is a structural type, so it is identified by its label.
+    std::unordered_map<std::string, std::vector<std::string>> implementers;
+    for (const auto& [name, info] : classes_) {
+        for (const std::string& iface : info.implementsNames) {
+            const auto it = typeNames_.find(iface);
+            if (it == typeNames_.end()) continue;
+            for (const std::string& labeled : interfacesForLabel(it->second.name)) {
+                implementers[labeled].push_back(name);
+            }
+        }
+    }
+    for (auto& [name, list] : implementers) {
+        (void)name;
+        std::sort(list.begin(), list.end());
+        list.erase(std::unique(list.begin(), list.end()), list.end());
+    }
+    for (const auto& [name, info] : classes_) {
+        in.classIds[name] = info.declNodeId;
+        if (!info.baseName.empty()) in.baseOf[name] = info.baseName;
+        for (const ClassMemberInfo& m : info.members) {
+            if (m.isMethod) continue;
+            CycleAnalysisInput::FieldEdge edge;
+            edge.owner = name;
+            edge.field = m.name;
+            edge.type = m.type;
+            edge.weak = m.isWeak;
+            edge.isStatic = m.isStatic;
+            in.fields.push_back(std::move(edge));
+        }
+    }
+    in.implementersOf = implementers;
+    in.interfaceByLabel = interfaceByLabel_;
+    const CycleAnalysis analysis = analyzeCycles(in);
+    out_.cycleCapable = analysis.cycleCapable;
+    out_.cycleEligible = analysis.cycleEligible;
+    out_.collectorEligibleClasses = analysis.collectorEligibleClasses;
+    out_.cycleComponents.clear();
+    for (const CycleComponent& component : analysis.components) {
+        if (!component.cycleCapable) continue;
+        SemaResult::CycleComponentInfo info;
+        info.classes = component.labels;
+        info.paths = component.paths;
+        info.hasOpaque = component.hasOpaque;
+        out_.cycleComponents.push_back(std::move(info));
+    }
+    out_.acyclicClasses = analysis.acyclicClasses;
+}
+
+// -----------------------------------------------------------------------------
 // Stage 1: cycle-capability analysis (automatic cycle handling).
 //
 // Builds the strong-edge class graph from field types (arrays, Map/Set
@@ -1453,6 +1529,21 @@ void Analyzer::computeCycleCapable() {
                 hasWeak = true;
         }
         if (hasWeak) continue;
+        // A collector-eligible SCC is reclaimed automatically at the loop
+        // safe points once it becomes unreachable (docs/design/cycle-collector.md):
+        // no manual `weak` edge is required, so no diagnostic is emitted.
+        // Partial eligibility keeps CP3401 (fail-closed).
+        bool allEligible = true;
+        for (const std::string& name : group) {
+            const ClassInfo* ci = findClass(name);
+            if (ci == nullptr) { allEligible = false; break; }
+            const auto it = out_.cycleEligible.find(ci->declNodeId);
+            if (it == out_.cycleEligible.end() || !it->second) {
+                allEligible = false;
+                break;
+            }
+        }
+        if (allEligible) continue;
         // Stage 2: a proven compiler-injected edge (gate on, P1-P7 met)
         // breaks the cycle with weak-cost zero, so CP3401 is suppressed.
         // A mere candidate keeps CP3401 (report-only default) and is named

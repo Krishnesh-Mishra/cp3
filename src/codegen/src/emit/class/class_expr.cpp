@@ -155,7 +155,7 @@ std::string Generator::storeText(const ClassMemberModel& m,
         // of a weak read (`Node | undefined`). An empty optional clears the
         // link; a present one stores its strong handle.
         const CppInfo vci = classify(effectiveType(*a.value));
-        const std::string pointee = weakPointee(memberType);
+        const detail::WeakPointee pointee = weakPointee(memberType);
         if ((vci.shape == Shape::Optional || vci.shape == Shape::Maybe) &&
             !pointee.empty()) {
             const bool maybe = vci.shape == Shape::Maybe;
@@ -163,8 +163,8 @@ std::string Generator::storeText(const ClassMemberModel& m,
             const std::string held = maybe ? "cp3_w.value()" : "(*cp3_w)";
             return "([&]{ const auto& cp3_w = (" + stored + "); return (" +
                    lvalue + " = cp3_w" + has +
-                   " ? ::cp3::runtime::WeakRef<" + pointee + ">(" + held +
-                   ") : ::cp3::runtime::WeakRef<" + pointee + ">()); }())";
+                   " ? " + weakRefCpp(pointee) + "(" + held +
+                   ") : " + weakRefCpp(pointee) + "()); }())";
         }
         return "(" + lvalue + " = " + stored + ")";
     }
@@ -389,8 +389,7 @@ std::string Generator::emitModelNew(const NewExpr& n) {
                 ec.representable && ec.shape != Shape::Void ? ec.cpp : "double");
         }
     }
-    const std::string factory =
-        cm->localRef ? "makeLocalTypedRef" : "makeTypedRef";
+    const std::string factory = classFactory(*cm);
     std::string out = "::cp3::runtime::" + factory + "<" + self + ">(" +
                       std::to_string(cm->typeId) + "u";
     if (!texts.empty()) out += ", " + joinStrings(texts, ", ");
@@ -565,9 +564,15 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
             findClassMemberChain(*cm, m.property, nullptr);
         if (mem == nullptr) return std::string();
         // A weak (manual or proven auto-weak) read is `T | undefined`:
-        // `readWeak` returns the optional strong handle (`MaybeRef<T>`),
-        // and narrowing decides the use.
+        // `readWeak` / `readCycleWeak` returns the optional strong handle
+        // (depending on the target's handle family), and narrowing decides
+        // the use.
         if (mem->isWeak || isAutoWeakField(sema_, *cm, mem->name)) {
+            const detail::WeakPointee pointee = weakPointee(mem->type);
+            if (pointee.cycleCollector) {
+                return "::cp3::runtime::readCycleWeak((" + recv + ")" + instanceOp +
+                       mapIdent(mem->name) + ")";
+            }
             return "::cp3::runtime::readWeak((" + recv + ")" + instanceOp +
                    mapIdent(mem->name) + ")";
         }

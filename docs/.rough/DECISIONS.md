@@ -1432,3 +1432,54 @@ the optional `import native async`.
    thread growth.
 3. Closing the fd while waiting rejects the promise with no hang or crash.
 4. Windows and Linux use the documented poller and wakeup mechanism.
+
+## D81 - Automatic reclamation of reference cycles (user directive, 2026-11, lead)
+
+CP3401 (`reference cycle ... has no weak edge`) stays the rule for a cycle
+the compiler cannot prove is safe to collect automatically, and it is retired
+for one only when it can. A cycle dies with the last strong reference to any
+member, exactly like an acyclic island, without a `weak` edge from the user.
+
+Design (docs/design/cycle-collector.md):
+
+- **Compile-time classification.** The sema builds the whole-program
+  strong-reference graph (class fields incl. inherited and statics, arrays,
+  containers, tuples, unions, collections, interface implementers and
+  closures at type level) and computes strongly connected components. A
+  class in a component of size > 1, with a self edge, or that reaches the
+  OPAQUE sink is cycle-capable; everything else is acyclic and costs
+  nothing.
+- **The collector-eligible fixpoint.** A cycle-capable class is eligible
+  only when every strong edge is a walkable handle (a direct class handle
+  or an optional of one) to another eligible class, and no edge is opaque.
+  The collector runs at the event-loop safe point (never inside a
+  macrotask, never on a background thread, single-threaded): a
+  Bacon-Rajan trial deletion over the suspects list with a 4096-node /
+  200-microsecond per-pass budget, resumable across passes, drained at
+  loop exit.
+- **CP3401 is retired per island, not per program.** A cycle-capable
+  component whose members are all collector-eligible compiles and runs.
+  Anything else keeps CP3401 (fail closed): an opaque edge, an interface or
+  record field shape the visitor cannot enumerate, a type parameter, an
+  ineligible member, or an unproven `auto-weak` candidate.
+- **`weak` stays supported** with the same semantics; it becomes an
+  optional optimization (deterministic earlier release), no longer a
+  requirement. Eligible islands keep `Ref<T>` ABI; classes on the
+  collector path use the `CycleRef<T>` handle with the trial bookkeeping
+  in the same control block.
+- **Numbers**: classes with no class-reference field are skipped
+  entirely; a class with reference fields that cannot form a cycle
+  (unordered, scalar-only shapes) stays plain refcounting.
+- Constraints honoured: no tracing, no stop-the-world, no background
+  thread, no atomic on the retain/release path, a per-pass budget, and
+  collection only at safe points.
+- ConcurrentMap is the one carve-out: a cycle-capable type whose values
+  flow into a ConcurrentMap keeps a compile-time error asking for a `weak`
+  edge (diagnostic pending).
+
+Known limits: the collector handles cycles among classes with walkable
+handle edges only; structural carriers (records, closures, type
+parameters, `object`/`unknown`, interfaces without a closed implementer
+world it can enumerate at the C++ level) keep the manual `weak`
+requirement. The `.cp3` export/import of a cycle-capable class keeps its
+eligibility analysis on the import graph the importing unit sees.

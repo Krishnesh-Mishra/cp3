@@ -1,0 +1,18 @@
+import console from "std/console";
+class A {
+    flag: boolean = true;
+    next: B | undefined;
+}
+class B {
+    flag: boolean = false;
+    next: C | undefined;
+}
+class C {
+    flag: boolean = true;
+    next: A | undefined;
+}
+let a = new A();
+let b = new B();
+let c = new C();
+a.next = b; b.next = c; c.next = a;
+console.log("ok");

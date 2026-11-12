@@ -83,6 +83,10 @@ public:
     void run(Program& program);
     // Stage 1: cycle-capability analysis over class field types.
     void computeCycleCapable();
+    // The whole-program reference graph behind the automatic cycle
+    // collector (detail/cycle_analysis.h): the strongly connected components
+    // and the cycle-capable verdict per class.
+    void computeCycleComponents();
     std::unordered_set<std::string> cycleCapableClasses_;
 
     // The narrowing entry for `if (bus.isValidEventName(x))`: the checked
@@ -662,6 +666,11 @@ private:
     Type inferLogical(LogicalExpr& le);
     Type inferConditional(ConditionalExpr& ce);
     Type inferAssignment(AssignmentExpr& ae);
+    // True when the target member is a `weak` field (or `this.weakField`): the
+    // read of a weak field is always `T | undefined` (the weak handle may be
+    // expired), so an assignment to the slot does not narrow the type of
+    // subsequent reads.
+    bool isWeakMemberTarget(const MemberExpr& m) const;
     void narrowAssignmentView(Expr& ae, const Type& stored,
                               const SourceSpan& span);
     Type compoundResult(AssignOp op, const Type& targetType, const Type& valType,
@@ -759,6 +768,17 @@ private:
     std::unordered_map<std::string, std::vector<std::string>> typeAliasParams_;
     // The generic interfaces of this unit, by name.
     std::unordered_map<std::string, GenericInterface> genericInterfaces_;
+    // The declared interfaces of this unit: the shape label of the interface
+    // type -> the interface names that label stands for. An interface is a
+    // structural type, so a field typed with it is identified by its label.
+    std::unordered_map<std::string, std::vector<std::string>> interfaceByLabel_;
+    // The interface names a structural shape label stands for: an interface
+    // is a structural type, so its label identifies it.
+    std::vector<std::string> interfacesForLabel(const std::string& label) const {
+        const auto it = interfaceByLabel_.find(label);
+        if (it == interfaceByLabel_.end()) return {};
+        return it->second;
+    }
     // The declared spelling of a named type-parameter constraint, keyed by the
     // constraint type's canonical key (registerTypeParams, scopes.cpp): lets a
     // constraint-violation diagnostic print `Shape` instead of `object`.

@@ -1,0 +1,5 @@
+import console from "std/console";
+class Z { value: number = 1; next: Z | undefined; }
+let xa = new Z();
+xa.next = xa;
+console.log("ok");

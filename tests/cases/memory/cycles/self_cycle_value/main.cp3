@@ -1,0 +1,17 @@
+﻿import console from "std/console";
+class Node {
+    value: number;
+    next: Node | undefined;
+    constructor(v: number) { this.value = v; }
+}
+let root = new Node(42);
+let one = new Node(43);
+let two = new Node(44);
+root.next = one; one.next = two; two.next = root;
+let a = two.next;
+if (a !== undefined) {
+    let b = a.next;
+    if (b !== undefined) {
+        console.log(b.value);
+    }
+}
