@@ -1,0 +1,6 @@
+﻿import console from "std/console";
+type Box = { a: number | undefined };
+const box: Box = { a: 4 };
+if (box.a === undefined) { console.log("none"); } else { console.log(box.a + 1); }
+const loose: Box = { a: undefined };
+if (loose.a === undefined) { console.log("missed"); } else { console.log(loose.a + 1); }

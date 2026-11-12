@@ -485,6 +485,26 @@ std::optional<NarrowedModelReceiver> Generator::narrowedModelReceiver(
                                  nonOwningReceiver};
 }
 
+std::string Generator::narrowedMemberStorageRead(const std::string& storageText,
+                                                 const Type& storageType,
+                                                 const Type& narrowedType) {
+    if (narrowedType.isUnknown() || narrowedType.isError() ||
+        narrowedType.isNullish() || narrowedType.isNullable() ||
+        narrowedType.isUnion()) {
+        return storageText;
+    }
+    const CppInfo si = classify(storageType);
+    const CppInfo ni = classify(narrowedType);
+    const bool primitive = isPrimitiveShape(ni.shape) || ni.shape == Shape::Enum;
+    if (!primitive) return storageText;
+    if (si.shape == Shape::Optional) return "((" + storageText + ").value())";
+    if (si.shape == Shape::Maybe) return "((" + storageText + ").value())";
+    if (si.shape == Shape::Union) {
+        return "std::get<" + ni.cpp + ">(" + storageText + ")";
+    }
+    return storageText;
+}
+
 std::string Generator::emitModelMember(const MemberExpr& m) {
     if (m.object == nullptr) return std::string();
     // D22: `super.field` reads the base subobject.
@@ -555,7 +575,11 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
         // D24: a static field is reachable through an instance too; it lives
         // on the class, not on the handle.
         if (mem->isStatic) return cm->cpp + "::" + mapIdent(mem->name);
-        return "(" + recv + ")" + instanceOp + mapIdent(mem->name);
+        std::string field = "(" + recv + ")" + instanceOp + mapIdent(mem->name);
+        if (const Type* narrowed = sema_.typeOf(m.nodeId)) {
+            field = narrowedMemberStorageRead(field, mem->type, *narrowed);
+        }
+        return field;
     }
     if (const ObjectModel* om = objectModelOf(base);
         om != nullptr && ModelRegistry::get().objectUsable(om->label) &&
@@ -567,7 +591,13 @@ std::string Generator::emitModelMember(const MemberExpr& m) {
             return "(" + recv + ")." + mapIdent(f->name) + "()";
         }
         if (f->isMethod) return std::string();
-        return "(" + recv + ")->" + mapIdent(f->name);
+        std::string field = "(" + recv + ")->" + mapIdent(f->name);
+        if (const Type* narrowed = sema_.typeOf(m.nodeId)) {
+            // The use site narrowed the field (member narrowing,
+            // `box.a === undefined`). Unwrap the narrowed primitive read.
+            field = narrowedMemberStorageRead(field, f->type, *narrowed);
+        }
+        return field;
     }
     return std::string();
 }

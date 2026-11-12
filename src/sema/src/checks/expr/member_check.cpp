@@ -25,13 +25,14 @@ namespace cp3 {
 // =============================================================================
 Type Analyzer::inferMember(MemberExpr& m) {
     // Control-flow narrowing for member expressions (`n.next` inside
-    // `if (n.next !== null)`): the narrowed (non-null) type wins.
-    if (m.object && m.object->kind == NodeKind::Identifier) {
-        const std::string key = static_cast<Identifier&>(*m.object).name +
-                                ":" + m.property;
-        if (const auto it = narrowedMembersByKey_.find(key);
-            it != narrowedMembersByKey_.end()) {
-            if (m.object) inferExpr(*m.object);
+    // `if (n.next !== null)`): the narrowed (non-null) type wins. The key
+    // shape matches applyConditionNarrowings/memberKeyFor - an identifier
+    // or `this` base, or a nested member chain (`x.y.z` -> `x:y.z`).
+    if (m.object) {
+        const std::string key = memberKeyFor(m);
+        const auto it = narrowedMembersByKey_.find(key);
+        if (it != narrowedMembersByKey_.end()) {
+            inferExpr(*m.object);
             return withType(m, it->second);
         }
     }

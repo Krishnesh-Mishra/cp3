@@ -414,8 +414,21 @@ void Analyzer::collectNullNarrowings(Expr& cond,
 std::string Analyzer::memberKeyFor(Expr& e) {
     if (e.kind != NodeKind::MemberExpr) return {};
     auto& mem = static_cast<MemberExpr&>(e);
-    if (!mem.object || mem.object->kind != NodeKind::Identifier) return {};
-    return static_cast<Identifier&>(*mem.object).name + ":" + mem.property;
+    if (!mem.object) return {};
+    if (mem.object->kind == NodeKind::Identifier) {
+        return static_cast<Identifier&>(*mem.object).name + ":" + mem.property;
+    }
+    if (mem.object->kind == NodeKind::ThisExpr) {
+        return "this:" + mem.property;
+    }
+    // A nested receiver (`a.b.c`): unwrap one level for a `this`-anchored
+    // or plain-identifier base (`this.a.b` -> `this:a.b`, `x.y.z` -> `x:y.z`).
+    if (mem.object->kind == NodeKind::MemberExpr) {
+        const std::string base = memberKeyFor(*mem.object);
+        if (base.empty()) return {};
+        return base + "." + mem.property;
+    }
+    return {};
 }
 
 void Analyzer::applyConditionNarrowings(
@@ -548,9 +561,8 @@ bool Analyzer::detectNullNarrowing(Expr& cond, std::uint32_t& /*memberId*/,
     // narrowing (different AST nodes, same path).
     auto& mem = static_cast<MemberExpr&>(*lhs);
     if (!mem.object) return false;
-    if (mem.object->kind != NodeKind::Identifier) return false;
-    const std::string key = static_cast<Identifier&>(*mem.object).name +
-                            ":" + mem.property;
+    const std::string key = memberKeyFor(*lhs);
+    if (key.empty()) return false;
     memberKey_ = key;
     Type t = typeOfExpr(*lhs);
     if (t.isNullable() && !t.parts.empty()) {

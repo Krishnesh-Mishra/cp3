@@ -160,7 +160,7 @@ std::string Generator::emitObject(const Expr& e) {
     std::string field;
     if (!fieldCppText(fields, m.property, field)) return std::string();
     (void)structName;  // the field spellings are all this read needs
-    const std::string receiver = expr(*m.object);
+    std::string receiver = expr(*m.object);
     const std::string member = mapIdent(m.property);
     if (optional) {
         // `o?.a` over `{...} | null`: the read produces only when the receiver
@@ -175,21 +175,28 @@ std::string Generator::emitObject(const Expr& e) {
         // the optional its cp3 type names.
         return "std::optional<" + field + ">((" + receiver + ")->" + member + ")";
     }
-    // The declared storage may be an `optional<Ref<...>>` while the narrowed
-    // view is the bare object (an `if (b) ...` guard). Read through the held
-    // handle - the model-member paths spell it `(*(storage))->field`.
     if (m.object && m.object->kind == NodeKind::Identifier) {
         if (const auto binding = lookup(static_cast<const Identifier&>(*m.object).name)) {
             const CppInfo di = classify(binding->type);
             if (di.shape == Shape::Optional) {
-                return "(*(" + expr(*m.object) + "))->" + member;
-            }
-            if (di.shape == Shape::Maybe) {
-                return "((" + expr(*m.object) + ").value())->" + member;
+                receiver = "(*(" + receiver + "))";
+            } else if (di.shape == Shape::Maybe) {
+                receiver = "(" + receiver + ").value()";
             }
         }
     }
-    return "(" + receiver + ")->" + member;
+    std::string readout = "(" + receiver + ")->" + member;
+    // The use-site narrowed type may also be a primitive while the field slot
+    // is optional/union; unwrap that the same way as the receiver above.
+    for (const ObjectField& f : fields) {
+        if (f.name == m.property) {
+            if (const Type* narrowed = sema_.typeOf(m.nodeId)) {
+                readout = narrowedMemberStorageRead(readout, f.type, *narrowed);
+            }
+            break;
+        }
+    }
+    return readout;
 }
 
 // A field write of a `$o{...}` value shape: `(<object>)->field = value`. Only

@@ -1,0 +1,10 @@
+﻿import console from "std/console";
+class Counter {
+    n: number | undefined;
+    get(): number {
+        if (this.n === undefined) { return 0; }
+        return this.n + 1;
+    }
+}
+const c = new Counter();
+console.log(c.get());

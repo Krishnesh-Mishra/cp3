@@ -254,6 +254,14 @@ private:
     // but the use site has no narrowing to lean on.
     std::optional<NarrowedModelReceiver> narrowedModelReceiver(
         const MemberExpr& m);
+    // A member read (`x.y`) whose use-site narrowed type is a primitive or
+    // enum shape while the storage type is nullable/union (`optional<T>`,
+    // `Maybe<T>`, or an all-distinct-member std::variant family): spell the
+    // through-value form instead of the raw slot. Falls back to the storage
+    // text unchanged for anything else.
+    std::string narrowedMemberStorageRead(const std::string& storageText,
+                                          const Type& storageType,
+                                          const Type& narrowedType);
     std::string emitModelCall(const CallExpr& c, const MemberExpr& m);
     std::string emitModelAssign(const AssignmentExpr& a, const MemberExpr& m);
     std::string emitSuperMemberAssign(const AssignmentExpr& a,

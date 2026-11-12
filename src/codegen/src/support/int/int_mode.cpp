@@ -82,7 +82,11 @@ void Generator::intFail() {
 
 bool Generator::intLocal(const std::string& name) const {
     const auto binding = lookup(name);
-    return binding && !binding->global && !binding->cell;
+    // The fast body can only hold plain `number` storage; anything else
+    // (optional/union/strings/etc.) must bail so the double body does the
+    // work - the narrowing pass rewrites the use site for the plain path.
+    return binding && !binding->global && !binding->cell &&
+           classify(binding->type).shape == Shape::Number;
 }
 
 bool Generator::numberTyped(const Expr& e) const {

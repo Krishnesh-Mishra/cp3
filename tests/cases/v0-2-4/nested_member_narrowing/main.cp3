@@ -1,0 +1,4 @@
+﻿import console from "std/console";
+type Inner = { a: number | undefined };
+const outer: { inner: Inner } = { inner: { a: 4 } };
+if (outer.inner.a === undefined) { console.log("no"); } else { console.log(outer.inner.a + 1); }
