@@ -48,7 +48,9 @@ bool plainElements(const ArrayLiteral& lit) {
 // cannot take a runtime array's elements.
 std::vector<std::string> Generator::emitPlainArgs(const CallExpr& c) {
     std::vector<std::string> args;
+    std::vector<bool> isUndefined;
     args.reserve(c.arguments.size());
+    isUndefined.reserve(c.arguments.size());
     for (const auto& argPtr : c.arguments) {
         const Expr* arg = argPtr.get();
         if (!arg) continue;
@@ -76,10 +78,27 @@ std::vector<std::string> Generator::emitPlainArgs(const CallExpr& c) {
             }
             for (const auto& elementPtr : lit.elements) {
                 args.push_back(expr(*elementPtr));
+                isUndefined.push_back(false);
             }
             continue;
         }
+        if (arg->kind == NodeKind::UndefinedLiteral) {
+            // JS: an explicit `undefined` for an optional numeric position is
+            // "the default applies". Trailing ones are dropped after this
+            // loop (the C++ callee has a default), inner ones pass NaN (the
+            // runtime's omitted-argument value). Spreads never reach here
+            // (the branch above handles them), so the index stays in step
+            // with the C++ argument list.
+            args.push_back("std::numeric_limits<double>::quiet_NaN()");
+            isUndefined.push_back(true);
+            continue;
+        }
         args.push_back(expr(*arg));
+        isUndefined.push_back(false);
+    }
+    while (!args.empty() && isUndefined.back()) {
+        args.pop_back();
+        isUndefined.pop_back();
     }
     return args;
 }

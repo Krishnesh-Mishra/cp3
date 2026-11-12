@@ -484,9 +484,32 @@ std::string detail::ArrayEmitter::methodCall(Generator& g, const CallExpr& c,
     if (prop == "slice") {
         std::string out =
             "::cp3::runtime::arraySlice<" + ec.cpp + ">(" + recvText;
+        // TS `slice(start?, end?)`: `undefined` for an optional position is
+        // "the default applies" (JS ToIntegerOrInfinity: NaN -> 0 for start,
+        // nullopt -> to the end). Trailing `undefined`s are dropped.
+        std::vector<const Expr*> args;
         for (const auto& a : c.arguments) {
-            out += ", ";
-            out += a ? g.expr(*a) : "0.0";
+            const Expr* e = a.get();
+            if (!e) { args.push_back(nullptr); continue; }
+            args.push_back(e);
+        }
+        while (!args.empty() && args.back() != nullptr &&
+               args.back()->kind == NodeKind::UndefinedLiteral) {
+            args.pop_back();
+        }
+        std::size_t undefinedAt = 0;
+        for (const Expr* e : args) {
+            if (!e) { out += ", 0.0"; continue; }
+            if (e->kind == NodeKind::UndefinedLiteral) {
+                // The first undefined slot is `start` (double: JS NaN -> 0),
+                // any later one is `end` (optional<double>: nullopt -> end).
+                out += undefinedAt == 0
+                           ? ", std::numeric_limits<double>::quiet_NaN()"
+                           : ", std::nullopt";
+                ++undefinedAt;
+                continue;
+            }
+            out += ", " + g.expr(*e);
         }
         return out + ")";
     }

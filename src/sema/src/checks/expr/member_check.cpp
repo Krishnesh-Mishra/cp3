@@ -500,6 +500,13 @@ Type Analyzer::stringMember(const std::string& prop) {
             Type::function({Type::string(), Type::number()}, Type::number()));
     }
     if (prop == "slice" || prop == "substring") {
+        // TS `slice(start?, end?)`: both parameters are optional. `substring`
+        // requires `start` (end stays optional). `undefined` for an optional
+        // tail means "the default" (NaN -> 0 / to the end in the runtime).
+        if (prop == "slice") {
+            return withOptionalTail2(
+                Type::function({Type::number(), Type::number()}, Type::string()));
+        }
         return withOptionalTail(
             Type::function({Type::number(), Type::number()}, Type::string()));
     }

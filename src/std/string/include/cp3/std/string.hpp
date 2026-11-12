@@ -672,7 +672,8 @@ inline std::string replaceAll(const std::string& s, const std::string& from,
 
 // JS `slice`: negatives count from the end; NaN (an omitted argument) means 0
 // for start and "to the end" for end.
-inline std::string slice(const std::string& s, double start,
+inline std::string slice(const std::string& s,
+                         double start = std::numeric_limits<double>::quiet_NaN(),
                          double end = std::numeric_limits<double>::quiet_NaN()) {
     const double length = static_cast<double>(s.size());
     const double begin = detail::normalizeIndex(start, length, 0.0);
