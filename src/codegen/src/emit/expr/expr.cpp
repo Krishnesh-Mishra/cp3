@@ -554,6 +554,12 @@ std::string Generator::emitIdentifier(const Identifier& id) {
         if (primitive && di.shape == Shape::Maybe) {
             return "((" + text + ").value())";
         }
+        // A mixed-family scalar union stored as std::variant<double,
+        // std::string[, bool]>: sema narrowed the use site to a single member,
+        // so spell that alternative with std::get<> (alternatives are unique).
+        if (primitive && di.shape == Shape::Union) {
+            return "std::get<" + ni.cpp + ">(" + text + ")";
+        }
     }
     return text;
 }
