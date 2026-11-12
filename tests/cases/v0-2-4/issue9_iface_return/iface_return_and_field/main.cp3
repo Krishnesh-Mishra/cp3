@@ -1,0 +1,6 @@
+import console from "std/console";
+import { maybeFoo } from "./dep2.cp3";
+const foo = maybeFoo(true);
+if (foo !== undefined) {
+    console.log(foo.id);
+}

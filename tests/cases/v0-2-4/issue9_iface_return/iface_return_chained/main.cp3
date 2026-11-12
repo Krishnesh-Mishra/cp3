@@ -1,0 +1,4 @@
+import console from "std/console";
+import { makeFoo } from "./dep.cp3";
+import { incFoo } from "./dep3.cp3";
+console.log(incFoo(makeFoo()).id);

@@ -1,0 +1,9 @@
+import console from "std/console";
+class Holder {
+    items: Map<string, string>;
+}
+const h = new Holder();
+h.items.set("k", "v");
+for (const [k, v] of h.items.entries()) {
+    console.log(`${k}:${v}`);
+}

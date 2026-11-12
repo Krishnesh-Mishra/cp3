@@ -1,0 +1,4 @@
+type U = 1 | 2;
+let u: U = 1;
+u = 2;
+console.log(u);

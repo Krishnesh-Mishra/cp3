@@ -1,0 +1,6 @@
+import console from "std/console";
+import { Buffer } from "std/buffer";
+const b = Buffer.from("hello");
+if (b instanceof Buffer) {
+    console.log(b.length);
+}

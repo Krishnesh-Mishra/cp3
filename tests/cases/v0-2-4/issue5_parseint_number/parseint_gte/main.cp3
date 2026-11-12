@@ -1,0 +1,4 @@
+import console from "std/console";
+if (parseInt("9") >= 9) {
+    console.log("yes");
+}

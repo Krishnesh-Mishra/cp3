@@ -1,0 +1,6 @@
+import console from "std/console";
+function pick(): { a: number } | undefined { return { a: 9 }; }
+const y = pick();
+if (typeof y === "object") {
+    console.log(y.a);
+}

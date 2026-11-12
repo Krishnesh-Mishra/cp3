@@ -1,0 +1,8 @@
+import console from "std/console";
+import { makeFoo } from "./dep.cp3";
+const foo = makeFoo();
+if (foo === undefined) {
+    console.log("undef");
+} else {
+    console.log(foo.id);
+}

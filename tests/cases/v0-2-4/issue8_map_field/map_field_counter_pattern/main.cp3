@@ -1,0 +1,9 @@
+import console from "std/console";
+class Holder {
+    items: Map<string, number>;
+}
+const h = new Holder();
+for (const k of ["a", "b", "a"]) {
+    h.items.set(k, (h.items.get(k) ?? 0) + 1);
+}
+console.log(h.items.get("a"));

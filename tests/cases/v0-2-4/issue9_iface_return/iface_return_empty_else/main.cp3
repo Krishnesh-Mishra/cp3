@@ -1,0 +1,7 @@
+import console from "std/console";
+import { maybeFoo } from "./dep2.cp3";
+if (maybeFoo(true) !== undefined) {
+    console.log("yes");
+} else {
+    console.log("no");
+}

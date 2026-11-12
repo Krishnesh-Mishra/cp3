@@ -1,0 +1,3 @@
+import process from "std/process";
+const result = await process.exec("cp3c", ["install", "./install_pkg"]);
+console.log(result.exitCode);

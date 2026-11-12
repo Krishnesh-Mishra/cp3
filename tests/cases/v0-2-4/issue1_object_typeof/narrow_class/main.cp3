@@ -1,0 +1,6 @@
+import console from "std/console";
+class Box { n: number; constructor(n: number) { this.n = n; } }
+const x: Box | undefined = new Box(5);
+if (typeof x === "object") {
+    console.log(x.n);
+}

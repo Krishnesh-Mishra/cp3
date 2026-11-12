@@ -1,0 +1,4 @@
+import console from "std/console";
+import dep from "./dep.cp3";
+const v = dep.utils();
+console.log(v === 1 ? "ok" : "bad");

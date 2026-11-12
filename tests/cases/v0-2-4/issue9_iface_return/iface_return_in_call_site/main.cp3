@@ -1,0 +1,3 @@
+import console from "std/console";
+import { makeFoo } from "./dep.cp3";
+console.log(`id:${makeFoo().id}`);

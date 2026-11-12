@@ -1,0 +1,5 @@
+type U = 1 | 2;
+const u: U = 2;
+if (u === 2) {
+    console.log("two");
+}

@@ -1,0 +1,7 @@
+import console from "std/console";
+class Holder {
+    items: Map<string, number>;
+}
+const h = new Holder();
+h.items.set("a", 7);
+console.log(h.items.get("a"));

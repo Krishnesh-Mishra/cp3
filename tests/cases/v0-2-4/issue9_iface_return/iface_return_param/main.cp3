@@ -1,0 +1,4 @@
+import console from "std/console";
+import { makeFoo } from "./dep.cp3";
+function useFoo(f: { id: number }): number { return f.id + 1; }
+console.log(useFoo(makeFoo()));

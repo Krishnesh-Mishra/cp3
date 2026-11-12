@@ -1,0 +1,3 @@
+type T = "a" | "b";
+const t: T = "a";
+console.log(t);

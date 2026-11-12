@@ -1,0 +1,4 @@
+import console from "std/console";
+import dep from "./dep.cp3";
+console.log(dep.utils());
+console.log(dep.utils());

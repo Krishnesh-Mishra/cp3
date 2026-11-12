@@ -1,0 +1,2 @@
+import { Foo } from "./dep.cp3";
+export function incFoo(f: Foo): Foo { return { id: f.id + 1 }; }

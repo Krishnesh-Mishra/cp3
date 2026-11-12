@@ -50,6 +50,30 @@ explicitly out of scope for v0.2.4.
 | `self-return` class (`Self.me(): Self`) - Ref ABI control block for self-return | Existing ABI had `LocalRef<T>` stand-alone; unify with Ref ABI through `SharedBase` | Working-tree. Triaging `bad_weak_ptr` thrown when `enable_shared_from_this` is used with non-shared_ptr-boxed `Ref<T>` |
 | Narrowing probes: `p3_interface`, `t1_export_iface`, `t2_type_union`, `dep2`, `dep2_narrow` | Verify imported interface types, type aliases, and union/class narrowing work across boundaries | Working-tree |
 
+## v0.2.4 - Known gaps found in post-release review
+
+Ten issues were found during post-release use of v0.2.4 (the release line
+already shipped as `0.2.4` and has been pulled back for exactly this fix).
+Each row becomes a homework item with a fixture set and a fix; the table is
+the source of truth until every row shows **Fixed**.
+
+| # | Claim | Accurate description | Fixture set | Status |
+| --- | --- | --- | --- | --- |
+| 1 | `typeof x === "object"` does not narrow | `typeof` narrowing is not implemented for object/record/class values; `if (typeof y === "object") { y.a }` still reports the null-receiver diagnostic. Only primitive narrowing (`"number"`/`"string"` on nullish scalar unions) is implemented today. | `tests/cases/v0-2-4/issue1_object_typeof/*` | Pending |
+| 2 | Literal union types do not lower as literal types | `type T = "a" \| "b"` works (string-family literals lower to `std::string` at assignability sites); **number** literal unions (`type U = 1 \| 2`) do not lower and remain `number \| number`, failing assignability; boolean literal unions unchanged. | `tests/cases/v0-2-4/issue2_literal_union/*` | Pending |
+| 3 | `export default` of an object literal unsupported | `export default { utils: () => 1 }` compiles locally but the consumer reports CP3304 ("the default export has no value cp3 can use"); the documented workaround is a named export. | `tests/cases/v0-2-4/issue3_default_export_object/*` | Pending |
+| 4 | `instanceof Buffer` | `Buffer` is not a class; `x instanceof Buffer` fails with `CP3401: the right operand of 'instanceof' must be a class name`. | `tests/cases/v0-2-4/issue4_instanceof_buffer/*` | Pending |
+| 5 | `parseInt` returns `number \| null \| undefined` | **Not accurate for this build** - `parseInt` returns plain `number` (`NaN` on garbage) and unguarded `parseInt(s) + 1` compiles and runs; verified against the release tree. Test to stay as a regression guard. | `tests/cases/v0-2-4/issue5_parseint_number/*` | Pending |
+| 6 | Pure client TCP programs still need `createTcpServer` | A pure-client TCP program fails at link with `undefined symbol: cp3::runtime::network::tcp::detail::tcpServerForget` (`runtime_tcp_socket.cpp` is linked for any TCP program, but `runtime_tcp_server.cpp` is only selected for server programs). | `tests/cases/v0-2-4/issue6_tcp_client_link/*` | Pending |
+| 7 | `cp3 install <dir>` crashes | **Not reproduced** against the current build: installs cleanly with a local package directory (`installed test-pkg 0.1.0 -> .cp3/packages/test-pkg`). Keep as a regression guard. | `tests/cases/v0-2-4/issue7_install_local_dir/*` | Pending |
+| 8 | Map as class field not guaranteed | Field storage works (`.get`/`.set`/`.size`/`m.keys()` are fine); only `.entries()` and direct iteration currently fail. `for-of` over Map iteration **and `.entries()` lowering** not yet implemented; `$mapEntry` is not a representable value type. | `tests/cases/v0-2-4/issue8_map_field/*` | Pending |
+| 9 | `T \| undefined` returns across module boundaries | Intra-module narrowing works (the narrowing fix landed); the **cross-module interface-typed return** case still fails at codegen (`cp3_iface_Foo` from the dep TU is a different C++ type than `cp3_iface_Foo` in the consumer TU - `no viable overloaded '='`). | `tests/cases/v0-2-4/issue9_iface_return/*` | Pending |
+| 10 | `typeof chunk === "string"` on an ambient socket chunk | The TCP `data` listener parameter is **ambient** at sema time (codegen knows it as `const std::string&`); `typeof chunk === "string"` does narrow it (the branch reads as `string`), but the ambientness is what makes narrowing reliant on that spelling instead of the nominal signature. | `tests/cases/v0-2-4/issue10_tcp_chunk_narrow/*` | Pending |
+
+Fixture directory layout: each `tests/cases/v0-2-4/issueN_<name>/` carries the
+.cp3 main and an `output.json` with the expected runtime result. A green
+`run_tests.py --filter issueN` per item means the item landed.
+
 ### Deferred - planning ledger for v0.2.4 scope review
 
 The user directed in-session that the Deferred items be done now; three of

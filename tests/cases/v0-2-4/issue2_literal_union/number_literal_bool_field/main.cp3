@@ -1,0 +1,4 @@
+type B = true | false;
+let b: B = true;
+b = false;
+console.log(b);

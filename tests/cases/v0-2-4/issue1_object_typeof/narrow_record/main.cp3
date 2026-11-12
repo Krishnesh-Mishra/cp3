@@ -1,0 +1,5 @@
+import console from "std/console";
+const y: { a: number } | undefined = { a: 7 };
+if (typeof y === "object") {
+    console.log(y.a);
+}

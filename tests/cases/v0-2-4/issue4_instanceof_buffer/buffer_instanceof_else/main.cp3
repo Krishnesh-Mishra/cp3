@@ -1,0 +1,8 @@
+import console from "std/console";
+import { Buffer } from "std/buffer";
+const b = Buffer.from("hi");
+if (b instanceof Buffer) {
+    console.log("buf");
+} else {
+    console.log("other");
+}

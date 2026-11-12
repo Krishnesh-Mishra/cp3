@@ -1,0 +1,21 @@
+import console from "std/console";
+import { createTcpServer, connectTcp } from "std/network";
+const server = createTcpServer();
+server.on("connection", (socket) => {
+  socket.on("data", (chunk) => {
+    function tag(s: string): string { return `tag:${s.length}`; }
+    if (typeof chunk === "string") {
+      socket.write(tag(chunk));
+    }
+  });
+});
+server.listen(48258);
+const client = connectTcp("127.0.0.1", 48258);
+client.on("connect", () => {
+  client.write("ping");
+});
+client.on("data", (chunk) => {
+  console.log(chunk);
+  client.close();
+  server.close();
+});

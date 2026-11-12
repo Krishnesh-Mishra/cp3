@@ -1,0 +1,4 @@
+import console from "std/console";
+import { Buffer } from "std/buffer";
+const b = Buffer.from("hi");
+console.log(b instanceof Buffer);

@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "echo:ping\n",
+  "exitCode": 0
+}

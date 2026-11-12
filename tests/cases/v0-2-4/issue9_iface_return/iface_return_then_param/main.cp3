@@ -1,0 +1,4 @@
+import console from "std/console";
+import { makeFoo } from "./dep.cp3";
+const foo = makeFoo();
+console.log(foo.id + 100);

@@ -1,0 +1,2 @@
+export interface Foo { id: number }
+export function makeFoo(): Foo { return { id: 7 }; }

@@ -1,0 +1,9 @@
+import console from "std/console";
+import { connectTcp } from "std/network";
+const client = connectTcp("127.0.0.1", 1);
+client.on("connect", () => {
+    console.log("connected");
+});
+client.on("error", () => {
+    console.log("refused");
+});

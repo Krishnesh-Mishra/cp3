@@ -1,0 +1,2 @@
+export interface Foo { id: number }
+export function maybeFoo(flag: boolean): Foo | undefined { return flag ? { id: 42 } : undefined; }

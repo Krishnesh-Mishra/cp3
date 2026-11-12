@@ -1,0 +1,4 @@
+import console from "std/console";
+if (parseInt("3") === 3) {
+    console.log("eq");
+}

@@ -1,0 +1,4 @@
+import console from "std/console";
+const y: { a: number } | undefined = { a: 6 };
+const r = typeof y === "object" ? y.a : -1;
+console.log(r);

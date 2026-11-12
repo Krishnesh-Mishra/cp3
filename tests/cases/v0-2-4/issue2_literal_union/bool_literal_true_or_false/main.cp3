@@ -1,0 +1,3 @@
+type B = true | false;
+const b: B = true;
+console.log(b);
