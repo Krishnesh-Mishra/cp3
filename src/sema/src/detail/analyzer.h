@@ -516,7 +516,7 @@ private:
     // The signature of the class method a member call names (the rest flag and
     // the optional parameters live in the class member table, not in the
     // function type the member read yields).
-    const FuncSig* classMemberSig(const MemberExpr& m);
+    const FuncSig* classMemberSig(const MemberExpr& m, FuncSig& scratch);
     // A type argument list on a non-generic callee is a type error
     // (generic_check.cpp).
     void checkTypeArgs(const FuncSig& sig, CallExpr& call);

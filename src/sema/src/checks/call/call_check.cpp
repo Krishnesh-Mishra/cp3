@@ -624,8 +624,11 @@ void Analyzer::sigFromFunctionType(const Type& ct, FuncSig& localSig) {
 // The signature of the class method a member call names: the class member
 // table keeps the rest parameter and the optional parameters, which the
 // function type the member read yields does not carry. Null when the
-// receiver is not a user class or the member is not a method.
-const FuncSig* Analyzer::classMemberSig(const MemberExpr& m) {
+// receiver is not a user class or the member is not a method. A generic
+// receiver substitution (`Box<number>.get()` -> `get(): number`) is written
+// into `scratch`; the parameter and return (and the async value) types all
+// peel the class's type parameters like a field read does.
+const FuncSig* Analyzer::classMemberSig(const MemberExpr& m, FuncSig& scratch) {
     if (!m.object) return nullptr;
     const Type rt = typeOfExpr(*m.object);
     if (rt.kind != TypeKind::Class) return nullptr;
@@ -633,7 +636,18 @@ const FuncSig* Analyzer::classMemberSig(const MemberExpr& m) {
     if (ci == nullptr) return nullptr;
     const ClassMemberInfo* member = findClassMember(*ci, m.property);
     if (member == nullptr || !member->isMethod) return nullptr;
-    return &member->sig;
+    if (ci->typeParamNames.empty() || rt.parts.empty()) return &member->sig;
+    scratch = member->sig;
+    for (Type& part : scratch.params) {
+        part = substituteClassTypeParams(part, *ci, rt.parts);
+    }
+    for (Type& param : scratch.typeParams) {
+        param = substituteClassTypeParams(param, *ci, rt.parts);
+    }
+    scratch.ret = substituteClassTypeParams(scratch.ret, *ci, rt.parts);
+    scratch.asyncValueRet =
+        substituteClassTypeParams(scratch.asyncValueRet, *ci, rt.parts);
+    return &scratch;
 }
 
 // The element type a spread argument carries, checked against the parameters
@@ -706,7 +720,8 @@ const FuncSig* Analyzer::callSig(const CallExpr& call, const Type& ct,
                                  FuncSig& localSig) {
     if (call.callee && call.callee->kind == NodeKind::MemberExpr) {
         const FuncSig* member =
-            classMemberSig(static_cast<const MemberExpr&>(*call.callee));
+            classMemberSig(static_cast<const MemberExpr&>(*call.callee),
+                           localSig);
         if (member != nullptr) return member;
     }
     sigFromFunctionType(ct, localSig);
