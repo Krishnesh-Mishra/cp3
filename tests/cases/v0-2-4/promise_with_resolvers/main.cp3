@@ -1,0 +1,5 @@
+﻿import console from "std/console";
+const { promise, resolve } = Promise.withResolvers<number>();
+resolve(42);
+const v = await promise;
+console.log(v);

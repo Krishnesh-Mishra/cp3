@@ -1,0 +1,9 @@
+﻿import console from "std/console";
+type Box = { a: number };
+function pick(n: number): Box | undefined {
+    if (n == 0) return undefined;
+    return { a: n };
+}
+const b = pick(4);
+if (b) { console.log(b.a + 1); } else { console.log("missing"); }
+console.log(b ? b.a : -1);

@@ -1,0 +1,4 @@
+﻿import console from "std/console";
+function takeString(s: string): string { return s.toUpperCase(); }
+function pick(): "hello" | "world" { return "hello"; }
+console.log(takeString(pick()));

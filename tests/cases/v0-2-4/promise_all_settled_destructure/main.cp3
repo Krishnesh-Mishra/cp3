@@ -1,0 +1,9 @@
+﻿import console from "std/console";
+async function main() {
+    const [r] = await Promise.allSettled([Promise.resolve(1)]);
+    const { ok, value, reason } = r;
+    console.log(ok);
+    console.log(value);
+    console.log(reason);
+}
+main();

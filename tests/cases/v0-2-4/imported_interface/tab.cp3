@@ -1,0 +1,2 @@
+﻿export interface Tab { id: number; label: string; }
+export type Kind = "a" | "b";

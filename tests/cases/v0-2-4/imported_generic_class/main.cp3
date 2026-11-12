@@ -1,0 +1,6 @@
+﻿import console from "std/console";
+import { Box, makeMap } from "./dep.cp3";
+const b = new Box<number>(41);
+console.log(b.get() + 1);
+const m = makeMap();
+console.log(m.get("a"));

@@ -1,0 +1,4 @@
+﻿import console from "std/console";
+const bus = new EventEmitter();
+bus.on("x", (v) => console.log(v));
+bus.emit("x", { id: 1 });

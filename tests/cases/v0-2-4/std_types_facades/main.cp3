@@ -1,0 +1,17 @@
+﻿import console from "std/console";
+import { URL, URLSearchParams } from "std/url/types";
+import { Buffer } from "std/buffer/types";
+import { TextEncoder } from "std/text/types";
+import { Date } from "std/date/types";
+import { WebSocket, WebSocketServer, Router } from "std/network/types";
+
+function host(u: URL): string { return u.hostname; }
+function params(p: URLSearchParams): number { return 0; }
+function size(b: Buffer): number { return b.length; }
+function tag(e: TextEncoder): string { return "enc"; }
+function year(d: Date): number { return 2026; }
+function ws(s: WebSocket): boolean { return true; }
+function wss(s: WebSocketServer): boolean { return true; }
+function rtr(r: Router): boolean { return true; }
+
+console.log("facades-ok");

@@ -1,0 +1,10 @@
+﻿import console from "std/console";
+interface Events {
+    [name: string]: (n: number) => undefined;
+}
+const bus = new EventEmitter<Events>();
+const seen: string[] = [];
+bus.onAny((name, n) => { seen.push(`${name}:${n}`); });
+bus.emit("a", 1);
+bus.emit("b", 2);
+console.log(seen.join(","));

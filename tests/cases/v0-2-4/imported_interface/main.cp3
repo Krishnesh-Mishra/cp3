@@ -1,0 +1,6 @@
+﻿import console from "std/console";
+import { Tab, Kind } from "./tab.cp3";
+const t: Tab = { id: 1, label: "dash" };
+const k: Kind = "a";
+console.log(t.label);
+console.log(k);
