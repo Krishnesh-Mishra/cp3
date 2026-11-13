@@ -76,6 +76,22 @@ Fixture directory layout: each `tests/cases/v0-2-4/issueN_<name>/` carries the
 .cp3 main and an `output.json` with the expected runtime result. A green
 `run_tests.py --filter issueN` per item means the item landed.
 
+### Known corpus failures at this rebuild (not regressions, not in scope)
+
+The post-release full-corpus run found 9 failures. Two were regressions in
+the #9 fix (interface wrappers referenced `$o{...}` structs nobody declared;
+typed_bus_interface/typed_bus_user_example) and are fixed (forward
+declarations + a scan of the wrapper text's dependencies before defining
+`$o` structs and wrappers; typed_bus 3/3 passes). The remaining seven fail
+identically on the staged v0.2.4 release binary (verified):
+
+| Failure | Status |
+| --- | --- |
+| `arrays-strings/01/array/ctor/{zero,fill/array_ctor_fill_number,fill/array_ctor_fill_string,new/array_ctor_new_spelling}/` | CP3401 "cannot infer the element type of Array(n)" - unannotated `Array(n).fill(x)` never flows `.fill`'s element type to the binding; language gap, not touched by v0.2.4 fixes |
+| `functions-closures/01/closure/reassign/closure_reassign_function_field/` | CP3401 "this value is not callable" - assigning an arrow to an interface field; language gap, pre-existing |
+| `operators/04/nullish/nullish_assign_null/` | `x ??= 5` prints `0` (expected `5`); pre-existing `??=` lowering defect, also present on the release binary |
+| `stdlib/02/network/tcp/tcp_echo_roundtrip/` | "linking failed (exit 1)" under parallel corpus load; the same program builds, links and runs deterministically with `--jobs 1` and standalone - intermittent LTO link contention, not a code defect |
+
 ### Deferred - planning ledger for v0.2.4 scope review
 
 The user directed in-session that the Deferred items be done now; three of
