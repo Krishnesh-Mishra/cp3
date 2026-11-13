@@ -1,9 +1,11 @@
 import console from "std/console";
+import { Map } from "std/collections";
 class Holder {
-    items: Map<string, number>;
+    items: Map<string, number> = new Map<string, number>();
 }
 const h = new Holder();
-for (const [k, v] of [["a", 1], ["b", 2]] as [string, number][]) {
-    h.items.set(k, v);
+h.items.set("a", 1);
+h.items.set("b", 2);
+for (const [k, v] of h.items.entries()) {
+    console.log(`${k}:${v}`);
 }
-console.log(h.items.get("b"));

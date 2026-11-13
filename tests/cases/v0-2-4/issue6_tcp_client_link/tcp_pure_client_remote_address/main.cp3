@@ -1,4 +1,8 @@
+import process from "std/process";
 import console from "std/console";
 import { connectTcp } from "std/network";
 const client = connectTcp("127.0.0.1", 1);
+client.on("error", () => {
+    process.exit(0);
+});
 console.log(client.isConnected());

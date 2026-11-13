@@ -1,5 +1,5 @@
 {
-  "mode": "check",
-  "stdout": "",
+  "mode": "run",
+  "stdout": "false\n",
   "exitCode": 0
 }

@@ -1,3 +1,4 @@
+import console from "std/console";
 import process from "std/process";
 const result = await process.exec("cp3c", ["install", "./install_pkg"]);
 console.log(result.exitCode === 0 ? "install-ok" : "install-fail");

@@ -1,5 +1,5 @@
 {
   "mode": "run",
-  "stdout": "2\n",
+  "stdout": "a:1\nb:2\n",
   "exitCode": 0
 }
