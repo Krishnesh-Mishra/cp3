@@ -27,6 +27,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <limits>
 #include <optional>
@@ -34,6 +35,8 @@
 #include <system_error>
 #include <thread>
 #include <vector>
+
+#include "detail/core/lane_b.hpp"
 
 #if defined(_WIN32)
 #  include <windows.h>
@@ -63,6 +66,7 @@ struct BuildState {
     const BuildOptimizations& optimizations;
     const NativeBuildFlags& nativeFlags;
     const std::string& headerFingerprint;  // of the current include roots
+    const std::string& pchFingerprint;  // of the unconditional base include roots
     const std::string& compilerKey;        // family, exact version, driver path
     bool force;
     std::vector<CacheEntry>& manifest;
@@ -485,6 +489,18 @@ const char* kPchPrefixSource = R"hpp(// cp3c dev-profile PCH prefix - the shared
 // stamp captures everything the PCH depends on: the toolchain key, the dev
 // profile, the include-tree fingerprint and the prefix content - any of them
 // changing rebuilds it.
+// Fingerprint of a set of compile flags, folded into the PCH stamp so a
+// PCH built for one native-backend configuration is never reused for another
+// (Lane B builds with none and the normal path rebuilds on mismatch).
+std::string compileFlagsFingerprint(const std::vector<std::string>& flags) {
+    std::string material;
+    for (const std::string& f : flags) {
+        material += f;
+        material += '\n';
+    }
+    return std::to_string(fnv1a64(material));
+}
+
 bool buildOrReusePch(BuildState& st, std::string& outPch) {
     if (st.opt.compile.profile != BuildProfile::Incremental) {
         return false;
@@ -498,7 +514,8 @@ bool buildOrReusePch(BuildState& st, std::string& outPch) {
     }
     const std::string prefixHash = std::to_string(fnv1a64(kPchPrefixSource));
     const std::string expected = st.compilerKey + "|" + st.profile + "|" +
-                                 st.headerFingerprint + "|" + prefixHash;
+                                 st.pchFingerprint + "|" + prefixHash + "|" +
+                                 compileFlagsFingerprint(st.nativeFlags.compile);
     std::string stamp;
     std::error_code ec;
     if (readTextFile(stampPath, stamp) && stamp == expected &&
@@ -532,6 +549,49 @@ bool buildOrReusePch(BuildState& st, std::string& outPch) {
     writeTextFile(stampPath, expected, nullptr);
     outPch = pchPath.string();
     return true;
+}
+
+// Lane B: builds (or verifies) the dev PCH off-thread with the exact same
+// inputs the serial path would use, plus the page-cache warm of the clang
+// driver. Lane B knows nothing about the program's native backends, so it
+// stamps its PCH with a fingerprint of the empty compile-flag set; the
+// serial path stamps with the real flags. When they match (a program whose
+// native backends add no -I/-D flags to the PCH's compile line - the
+// console-only case, e.g. the giant fixture), the serial path finds the
+// stamp valid and skips its PCH pass entirely. When they differ, the
+// serial path rebuilds once and is correct.
+void laneBBody(const CliOptions opt, const std::string entryString) {
+    try {
+        if (opt.compile.profile != BuildProfile::Incremental) return;
+        const Toolchain& tc = *&detectToolchain();
+        if (!tc.found()) return;
+        const fs::path entry(entryString);
+        const BuildLayout layout = makeBuildLayout(entry);
+        const std::string headerFingerprint =
+            headerFingerprintOf(layout.includeDirs);
+        const BuildOptimizations optimizations = buildOptimizationsFor(opt);
+        const std::string profile = buildProfileKey(opt, optimizations);
+        const std::string compilerKey = toolchainCacheKey(tc);
+        std::vector<CacheEntry> manifest;  // unused by the PCH step
+        std::vector<fs::path> objects;
+        NativeBuildFlags nativeFlags;  // Lane B knows no native backend
+        const std::string pchFingerprint = pchFingerprintOf();
+        BuildState st{opt, tc, layout, profile, optimizations, nativeFlags,
+                      headerFingerprint, pchFingerprint, compilerKey,
+                      /*force*/false,
+                      manifest, objects, false, false, false, {}};
+        if (std::string pch; buildOrReusePch(st, pch)) {
+            // Ready: the serial path finds the stamp valid and skips it.
+        }
+#if defined(_WIN32)
+        const std::string cmd = "\"" + tc.program + "\" --version > NUL 2>&1";
+#else
+        const std::string cmd = "\"" + tc.program + "\" --version > /dev/null 2>&1";
+#endif
+        std::system(cmd.c_str());
+    } catch (const std::exception&) {
+        // Lane B is best effort; the serial path redoes everything.
+    }
 }
 
 // Forward declaration - defined below with the link-stamp helpers.
@@ -1215,6 +1275,16 @@ bool applyRequestNativeBindings(const BuildRequest& request, BuildLayout& layout
 
 }  // namespace
 
+// Lane B entry points: the body lives inside the anonymous namespace
+// with the other PCH machinery; these wrap it for run.cpp.
+std::thread laneBStart(const CliOptions& opt, const std::string& entry) {
+    return std::thread(laneBBody, opt, entry);
+}
+
+void laneBJoin(std::thread& lane) {
+    if (lane.joinable()) lane.join();
+}
+
 int buildWithToolchain(const BuildRequest& request) {
     const CliOptions& opt = *request.opt;
     const fs::path& entry = *request.entry;
@@ -1330,8 +1400,10 @@ int buildWithToolchain(const BuildRequest& request) {
     const bool force = (opt.compile.profile == BuildProfile::Release);
 
     std::vector<fs::path> objects;
+    const std::string pchFingerprint = pchFingerprintOf();
     BuildState state{opt,          tc,           layout,       profile,
                      optimizations, *nativeFlags, headerFingerprint,
+                     pchFingerprint,
                      compilerKey,  force,        manifest,     objects,
                      /*anyCompiled=*/false, /*showProgress=*/false,
                      /*compileProgressShown=*/false, /*pchInclude=*/std::string{}};

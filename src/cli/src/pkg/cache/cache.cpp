@@ -12,6 +12,8 @@
 #include <sstream>
 #include <system_error>
 
+#include "detail/core/util.hpp"
+
 namespace cp3::cli {
 
 fs::path findProjectRoot(const fs::path& entryFile) {
@@ -108,6 +110,10 @@ void saveManifest(const fs::path& manifestPath,
             << e.obj << '\n';
     }
     writeTextFile(manifestPath, out.str(), nullptr);
+}
+
+std::string pchFingerprintOf() {
+    return headerFingerprintOf(compilerIncludeRoots());
 }
 
 std::string headerFingerprintOf(const std::vector<fs::path>& includeDirs) {

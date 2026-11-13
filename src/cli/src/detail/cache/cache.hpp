@@ -89,6 +89,15 @@ const char* profileNameOf(BuildProfile profile) noexcept;
 // and hashed in a deterministic order. Empty includeDirs fingerprint to "".
 std::string headerFingerprintOf(const std::vector<fs::path>& includeDirs);
 
+// Fingerprint of the unconditional base include roots only (the always-
+// available std families plus the runtime/common/language trees). The dev
+// PCH precompiles only the frozen core/async headers, so validating it
+// against these roots instead of the full per-program include tree lets
+// Lane B produce the same fingerprint without knowing the program's std
+// imports; std-family headers never enter the PCH anyway. The TU cache
+// keeps the full headerFingerprintOf.
+std::string pchFingerprintOf();
+
 // Reads the manifest. A file written before the fingerprint format (or a
 // corrupt one) yields no entries, which retires every object once.
 std::vector<CacheEntry> loadManifest(const fs::path& manifestPath);
