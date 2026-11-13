@@ -78,10 +78,6 @@ CATEGORIES: dict[str, str] = {
 
 TASK_OMIT_LANGUAGES = {
     "giant-repo-dev-reload": {
-        "cpp": "no multi-file C++ fixture authored for this graph yet",
-        "rust": "no multi-file Rust fixture authored for this graph yet",
-        "go": "no multi-file Go fixture authored for this graph yet",
-        "java": "no multi-file Java fixture authored for this graph yet",
         "goose": "goose entry not authored for this task yet",
     },
     "dev-reload": {

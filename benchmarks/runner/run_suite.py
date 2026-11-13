@@ -1179,18 +1179,20 @@ _DEV_RELOAD_SOURCE_REL = {
 }
 
 # Per-task overrides for the file the trial flips. giant-repo-dev-reload's
-# flip target is the deep leaf module (lib/base/b0) that carries the string,
-# so the edit exercises the whole import chain (cp3 rebuild, JS ESM parse,
-# Python import) instead of just the entry.
+# flip target is the deep leaf module (src/lib/base/b0) that carries the
+# string, so the edit exercises the whole import chain (cp3 rebuild, JS ESM
+# parse, Python import) instead of just the entry. The committed fixture is
+# src/-rooted: src/index (entry) with src/lib/{base,mid,app} beneath it; the
+# Rust fixture keeps the crate layout (src/{base,mid,app}).
 _DEV_RELOAD_SOURCE_REL_BY_TASK = {
     "giant-repo-dev-reload": {
-        "cp3": "lib/base/b0.cp3",
-        "cpp": "lib/base/b0.hpp",
-        "rust": "lib/base/b0.rs",
-        "go": "lib/base/b0.go",
-        "js": "lib/base/b0.mjs",
-        "python": "lib/base/b0.py",
-        "java": "lib/base/B0.java",
+        "cp3": "src/lib/base/b0.cp3",
+        "cpp": "src/lib/base/b0.hpp",
+        "rust": "src/base/b0.rs",
+        "go": "src/lib/base/b0.go",
+        "js": "src/lib/base/b0.mjs",
+        "python": "src/lib/base/b0.py",
+        "java": "src/lib/base/B0.java",
     },
 }
 
@@ -1201,12 +1203,12 @@ _DEV_RELOAD_SOURCE_REL_BY_TASK = {
 _DEV_RELOAD_ENTRY_REL_BY_TASK = {
     "giant-repo-dev-reload": {
         "cp3": "src/index.cp3",
-        "cpp": "main.cpp",
-        "rust": "main.rs",
-        "go": "main.go",
-        "js": "index.mjs",
-        "python": "index.py",
-        "java": "Main.java",
+        "cpp": "src/main.cpp",
+        "rust": "src/main.rs",
+        "go": "src/main.go",
+        "js": "src/index.mjs",
+        "python": "src/index.py",
+        "java": "src/Main.java",
     },
 }
 
@@ -1283,8 +1285,13 @@ def run_dev_reload_trial(language: str, task: str, reps: int,
                     return row
                 result = run_command([str(build_exe)])
             elif language == "go":
+                # The module root is the scratch copy (classic dev-reload is
+                # a lone main.go with no go.mod; giant-repo-dev-reload has
+                # go.mod there and imports its own src/lib/... packages, so
+                # module resolution must happen with the module root as cwd).
                 result = run_command(["go", "build", "-o",
-                                      str(build_exe), str(entry_path)])
+                                      str(build_exe), str(entry_path)],
+                                     cwd=scratch)
                 if result.returncode != 0:
                     row["note"] = f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
                     return row
