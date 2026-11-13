@@ -10,9 +10,11 @@
 // when it cannot produce a binary. Beta one has one candidate family: Clang.
 // =============================================================================
 #include "detail/toolchain/toolchain_select.hpp"
+#include "detail/toolchain/probe_cache.hpp"
 
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -33,6 +35,132 @@
 #include "detail/core/util.hpp"
 
 namespace cp3::cli {
+
+// ---------------------------------------------------------------------------
+// Probe cache (see detail/toolchain/probe_cache.hpp)
+// ---------------------------------------------------------------------------
+namespace {
+
+constexpr const char* kProbeCacheFile = "toolchain-probe-cache";
+
+fs::path probeCacheConfigDir() {
+    if (const char* override = std::getenv("CP3_CONFIG_DIR")) {
+        if (*override != '\0') return fs::path(override);
+    }
+#if defined(_WIN32)
+    if (const char* appdata = std::getenv("APPDATA")) {
+        if (*appdata != '\0') return fs::path(appdata) / "cp3";
+    }
+    if (const char* profile = std::getenv("USERPROFILE")) {
+        if (*profile != '\0') return fs::path(profile) / ".config" / "cp3";
+    }
+#else
+    if (const char* xdg = std::getenv("XDG_CONFIG_HOME")) {
+        if (*xdg != '\0') return fs::path(xdg) / "cp3";
+    }
+    if (const char* home = std::getenv("HOME")) {
+        if (*home != '\0') return fs::path(home) / ".config" / "cp3";
+    }
+#endif
+    std::error_code ec;
+    return fs::current_path(ec) / ".cp3-config";
+}
+
+std::string cacheField(const std::string& value) {
+    std::string out;
+    out.reserve(value.size());
+    for (const char c : value) {
+        out.push_back((c == '\t' || c == '\r' || c == '\n') ? ' ' : c);
+    }
+    return out;
+}
+
+// path + size + last-write-time identity of the compiler binary.
+struct ProbeBinaryIdentity {
+    bool valid = false;
+    std::uintmax_t size = 0;
+    long long mtime = 0;
+};
+
+ProbeBinaryIdentity probeBinaryIdentity(const std::string& program) {
+    ProbeBinaryIdentity id;
+    std::error_code ec;
+    const fs::path path(program);
+    id.size = fs::file_size(path, ec);
+    if (ec) return id;
+    const auto time = fs::last_write_time(path, ec);
+    if (ec) return id;
+    id.mtime = static_cast<long long>(time.time_since_epoch().count());
+    id.valid = true;
+    return id;
+}
+
+}  // namespace
+
+bool probeCacheLookup(const std::string& program, ProbeCacheEntry& out) {
+    const ProbeBinaryIdentity identity = probeBinaryIdentity(program);
+    if (!identity.valid) return false;
+    std::error_code ec;
+    std::ifstream in(probeCacheConfigDir() / kProbeCacheFile);
+    if (!in) return false;
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty() || line.front() == '#') continue;
+        const std::size_t tab1 = line.find('\t');
+        const std::size_t tab2 = tab1 == std::string::npos ? std::string::npos
+                                                           : line.find('\t', tab1 + 1);
+        const std::size_t tab3 = tab2 == std::string::npos ? std::string::npos
+                                                           : line.find('\t', tab2 + 1);
+        const std::size_t tab4 = tab3 == std::string::npos ? std::string::npos
+                                                           : line.find('\t', tab3 + 1);
+        if (tab4 == std::string::npos) continue;
+        const std::string path = line.substr(0, tab1);
+        if (path != program) continue;
+        std::uintmax_t size = 0;
+        long long mtime = 0;
+        try {
+            size = static_cast<std::uintmax_t>(
+                std::stoull(line.substr(tab1 + 1, tab2 - tab1 - 1)));
+            mtime = std::stoll(line.substr(tab2 + 1, tab3 - tab2 - 1));
+        } catch (const std::exception&) {
+            continue;
+        }
+        if (size != identity.size || mtime != identity.mtime) return false;
+        out.banner = line.substr(tab3 + 1, tab4 - tab3 - 1);
+        out.version = line.substr(tab4 + 1);
+        return !out.version.empty();
+    }
+    return false;
+}
+
+bool probeCacheStore(const std::string& program, const ProbeCacheEntry& entry) {
+    const ProbeBinaryIdentity identity = probeBinaryIdentity(program);
+    if (!identity.valid) return false;
+    const fs::path dir = probeCacheConfigDir();
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    if (ec) return false;
+    // Rewrite the file without this program's stale entry, capped at 64 lines.
+    std::vector<std::string> kept;
+    {
+        std::ifstream in(dir / kProbeCacheFile);
+        std::string line;
+        while (std::getline(in, line)) {
+            if (line.empty() || line.front() == '#') continue;
+            if (line.compare(0, program.size() + 1, program + "\t") == 0) continue;
+            kept.push_back(line);
+        }
+    }
+    if (kept.size() >= 64) kept.erase(kept.begin(), kept.begin() + (kept.size() - 63));
+    std::ofstream outFile(dir / kProbeCacheFile, std::ios::trunc);
+    if (!outFile) return false;
+    outFile << "# cp3 toolchain probe cache (v1) - see probe_cache.hpp\n";
+    for (const std::string& line : kept) outFile << line << '\n';
+    outFile << cacheField(program) << '\t' << identity.size << '\t' << identity.mtime
+            << '\t' << cacheField(entry.banner) << '\t' << cacheField(entry.version)
+            << '\n';
+    return static_cast<bool>(outFile);
+}
 
 namespace {
 
@@ -183,6 +311,19 @@ CandidateStatus probeToolchainProgram(const ToolchainCandidate& candidate,
         return status;
     }
     status.found = true;
+    // The validation result depends only on the compiler binary itself, so it
+    // is cached across processes (see probe_cache.hpp): a swapped, patched or
+    // rebuilt driver is detected by path + size + mtime and re-probed; every
+    // other read of the cache is a miss and the live probe runs as before.
+    if (validate) {
+        ProbeCacheEntry cached;
+        if (probeCacheLookup(program, cached)) {
+            status.banner = cached.banner;
+            status.version = cached.version;
+            status.usable = true;
+            return status;
+        }
+    }
     std::string versionOut;
     if (runProcessCapture({program, "--version"}, versionOut) < 0) {
         status.problem = "could not run " + program + " --version";
@@ -212,6 +353,12 @@ CandidateStatus probeToolchainProgram(const ToolchainCandidate& candidate,
     std::string reason;
     status.usable = validateProgram(status.program, reason);
     if (!status.usable) status.problem = reason;
+    if (status.usable) {
+        ProbeCacheEntry entry;
+        entry.banner = status.banner;
+        entry.version = status.version;
+        probeCacheStore(program, entry);
+    }
     return status;
 }
 

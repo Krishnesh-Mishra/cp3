@@ -169,6 +169,15 @@ std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
     // runtime (static glibc breaks getaddrinfo/NSS for std/network).
     args.push_back("-static");
     if (usesMingwTarget(tc)) args.push_back("-lwinpthread");
+#else
+    // Linux: default linker, unless Clang's ld.lld is beside it; then lld
+    // wins on typical-link-latency. Statically linked C++ runtimes stay a
+    // Windows thing (D61/Linux keeps the dynamic runtime).
+    {
+        std::error_code ec;
+        const fs::path lld = fs::path(tc.program).parent_path() / "ld.lld";
+        if (fs::is_regular_file(lld, ec)) args.push_back("-fuse-ld=lld");
+    }
 #endif
     // Native-backend libraries last: -L dirs then -l archives, after every
     // object, so static-archive resolution order is correct.

@@ -8,8 +8,10 @@
 // generated translation unit (detail/toolchain.hpp), with two deliberate
 // differences:
 //
-//   * the profile is the plain optimized one (-O2, no LTO), so the artifact
-//     links into a consumer build that does not link with LTO;
+//   * the optimization level is explicit -O2 (no LTO), chosen here and not
+//     inherited from BuildProfile::Incremental, whose own -O0 exists for the
+//     dev edit-compile-run loop; the artifact links into consumer builds that
+//     do not link with LTO, so it must not be an -O0/development object;
 //   * the entry's `main` is renamed while the unit is compiled, so the
 //     artifact is a library object. A package's transpiled source carries the
 //     entry point codegen emits for it; a consumer program has its own.
@@ -95,8 +97,13 @@ bool buildPlatformArtifact(const CacheBuildRequest& request,
     for (const std::string& define : request.defines) {
         step.extraFlags.push_back("-D" + define);
     }
+    // Explicit -O2 (no LTO/PGO/native) regardless of the dev profile's -O0:
+    // the artifact is built once, cached, and linked by every consumer,
+    // including release builds.
+    BuildOptimizations packageOptimizations;
+    packageOptimizations.optLevel = "2";
     const std::vector<std::string> args =
-        compileArgs(tc, BuildProfile::Incremental, step);
+        compileArgs(tc, BuildProfile::Incremental, step, packageOptimizations);
     if (request.verbose) {
         std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
     }

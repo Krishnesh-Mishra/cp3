@@ -10,6 +10,7 @@
 // is delegated to it. Beta one is Clang-only.
 // =============================================================================
 #include "detail/toolchain/toolchain_select.hpp"
+#include "detail/toolchain/probe_cache.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -185,9 +186,20 @@ std::vector<fs::path> candidatePrograms(const ToolchainCandidate& candidate) {
 }
 
 std::string versionBanner(const std::string& program) {
+    // Discovery probes the same driver on every command; reuse the probe
+    // cache (detail/toolchain/probe_cache.hpp) keyed by binary identity.
+    ProbeCacheEntry cached;
+    if (probeCacheLookup(program, cached) && !cached.banner.empty()) {
+        return cached.banner;
+    }
     std::string out;
     if (runProcessCapture({program, "--version"}, out) < 0) return {};
-    return firstLine(out);
+    const std::string banner = firstLine(out);
+    const std::string version = normalizeCompilerVersion(banner);
+    if (!version.empty()) {
+        probeCacheStore(program, ProbeCacheEntry{banner, version});
+    }
+    return banner;
 }
 
 bool isClangBanner(const std::string& banner) {

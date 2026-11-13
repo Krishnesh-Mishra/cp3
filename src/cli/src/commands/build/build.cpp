@@ -23,12 +23,16 @@
 // the program's `std/...` imports (applyNativePackages below).
 // =============================================================================
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <vector>
 
 #include "cp3/host/options.hpp"
@@ -62,13 +66,41 @@ struct BuildState {
     bool anyCompiled = false;
     bool showProgress = false;
     bool compileProgressShown = false;
+    // Incremental profile only: the ready-made precompiled header for the
+    // shared generated prologue (empty when the PCH is unavailable).
+    std::string pchInclude;
+};
+
+// One clang++ invocation resolved to a unit the build must produce or reuse.
+// The manifest-tied decisions all happen on the caller thread before the pool
+// starts, so clang processes fan out without touching shared state; the
+// manifest is updated on the caller thread afterwards, in job order.
+struct ObjectJob {
+    std::string sourceKey;    // manifest source key (the .cp3 path or the real .cpp)
+    fs::path cpp;             // .cpp to compile (generated or runtime/extras)
+    fs::path obj;             // .o output
+    std::vector<std::string> extraFlags;
+    // Phase A decides these single-threaded.
+    bool needsCompile = false;
+    std::string hash;
+    bool objReusable = false;
+    // Filled by the pool (or -2 when phase A fails before compiling).
+    int clangRc = -2;
 };
 
 // The release profile's default switches. `--no-*` turns one off without
 // leaving the release profile; `--opt-level` overrides the -O level.
+// The incremental (dev/run) profile is deliberately the compiler's cheapest
+// setting: -O0 -g0, no LTO/PGO/native-ISA/unroll - EA semantics unchanged,
+// only compile time. The CLI does not expose an optimization knob for dev
+// today; a dev that waits is a dev that the user does not use.
 BuildOptimizations buildOptimizationsFor(const CliOptions& opt) {
     BuildOptimizations out;
     if (opt.compile.profile == BuildProfile::Debug) return out;
+    if (opt.compile.profile == BuildProfile::Incremental) {
+        out.optLevel = "0";
+        return out;
+    }
     out.optLevel = opt.optLevel;
     if (opt.compile.profile == BuildProfile::Release) {
         out.lto = !opt.noLto;
@@ -222,113 +254,366 @@ CacheEntry* findEntry(std::vector<CacheEntry>& manifest, const std::string& obj)
     return nullptr;
 }
 
-// Regenerates one object file when needed. `sourceKey` is what the object
-// derives from (the .cp3 path for generated code, the .cpp for the runtime).
-// `extraFlags` adds per-TU flags (package implementations rename their entry
-// `main` so a library-like TU never collides with the program's own).
-bool compileTU(BuildState& st, const std::string& sourceKey, const fs::path& cpp,
-               const fs::path& obj,
-               const std::vector<std::string>* extraFlags = nullptr) {
+// Phase A (single-threaded): read, hash, decide up-to-date vs recompile.
+// A true return means the decision is made; job.needsCompile is set for each
+// TU that must be compiled. Side effects on cached TUs (manifest/objects)
+// happen here, not in the pool.
+bool inspectTU(BuildState& st, ObjectJob& job) {
     std::string content;
-    if (!readTextFile(cpp, content)) {
-        std::fprintf(stderr, "cp3c: cannot read '%s'\n", cpp.string().c_str());
+    if (!readTextFile(job.cpp, content)) {
+        std::fprintf(stderr, "cp3c: cannot read '%s'\n", job.cpp.string().c_str());
         return false;
     }
+    job.hash = std::to_string(fnv1a64(content));
     std::error_code ec;
-    const std::string hash = std::to_string(fnv1a64(content));
-    CacheEntry* existing = findEntry(st.manifest, obj.string());
+    CacheEntry* existing = findEntry(st.manifest, job.obj.string());
     // The object on disk must also match what this toolchain produces - the
     // .cp3 directory can be shared with a different OS's toolchain, whose
     // objects are not linkable here (see objectMatchesFamily).
-    const bool objReusable = fs::exists(obj, ec) &&
-                             objectMatchesFamily(obj, expectedObjFamily(st.tc));
+    const bool objReusable = fs::exists(job.obj, ec) &&
+                             objectMatchesFamily(job.obj, expectedObjFamily(st.tc));
+    job.objReusable = objReusable;
     // The entry also carries the include-tree fingerprint it was built under:
     // the manifest does not track which headers a TU includes, so an include
     // change retires every entry on its next build (detail/cache.hpp).
     const bool upToDate = !st.force && existing != nullptr &&
-                          existing->hash == hash &&
+                          existing->hash == job.hash &&
                           existing->profile == st.profile &&
                           existing->header == st.headerFingerprint &&
                           existing->compiler == st.compilerKey &&
                           objReusable;
     if (upToDate) {
-        existing->source = sourceKey;
-        st.objects.push_back(obj);
+        existing->source = job.sourceKey;
+        st.objects.push_back(job.obj);
+        job.clangRc = -1;  // reused
         return true;
     }
+    job.needsCompile = true;
+    return true;
+}
 
-    std::vector<std::string> flags = st.nativeFlags.compile;
-    if (extraFlags != nullptr) {
-        flags.insert(flags.end(), extraFlags->begin(), extraFlags->end());
+// True when any job needs a clang++ pass; used once by the caller to print the
+// progress line before the pool starts.
+bool anyTUNeedsCompile(const std::vector<ObjectJob>& jobs) {
+    for (const ObjectJob& job : jobs) {
+        if (job.needsCompile) return true;
     }
-    const CompileStep step{st.layout.includeDirs, cpp, obj, std::move(flags)};
+    return false;
+}
+
+// Worker body: build the args and spawn clang++ for one job. Safe to call from
+// as many threads as jobs remain; each call owns its job's writes only.
+void compileOneJob(BuildState& st, ObjectJob& job) {
+    std::vector<std::string> flags = st.nativeFlags.compile;
+    if (!job.extraFlags.empty()) {
+        flags.insert(flags.end(), job.extraFlags.begin(), job.extraFlags.end());
+    }
+    if (!st.pchInclude.empty()) {
+        flags.push_back("-include-pch");
+        flags.push_back(st.pchInclude);
+    }
+    const CompileStep step{st.layout.includeDirs, job.cpp, job.obj,
+                           std::move(flags)};
     const std::vector<std::string> args =
         compileArgs(st.tc, st.opt.compile.profile, step, st.optimizations);
+    if (st.opt.verbose) {
+        std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
+    }
+    job.clangRc = runProcess(args);
+    if (job.clangRc != 0) {
+        // Both clang and the C++ linker print clang's own diagnostic on
+        // stderr; no CP3-specific wrapper keeps the first error visible.
+        std::fprintf(stderr, "cp3c: C++ compilation failed (exit %d)\n",
+                     job.clangRc);
+    }
+}
+
+// Phase B: fan out the dirty TUs onto a pool bounded by cores (overridable
+// with CP3C_BUILD_PARALLEL). The pool drains even when a job fails so every
+// error is reported once; callers read clangRc per job afterwards.
+void compileDirtyJobs(BuildState& st, std::vector<ObjectJob>& jobs) {
+    std::size_t threads = std::thread::hardware_concurrency();
+    if (const char* env = std::getenv("CP3C_BUILD_PARALLEL")) {
+        try {
+            const std::size_t override = std::stoull(env);
+            if (override > 0) threads = override;
+        } catch (const std::exception&) {
+            std::fprintf(stderr, "cp3c: CP3C_BUILD_PARALLEL='%s' is not a number; using %zu threads\n",
+                         env, threads);
+        }
+    }
+    if (threads > 1) {
+        std::size_t dirty = 0;
+        for (const ObjectJob& job : jobs) if (job.needsCompile) ++dirty;
+        if (dirty == 0) return;
+        threads = std::min(threads, dirty);
+        std::atomic<std::size_t> next{0};
+        std::vector<std::thread> pool;
+        pool.reserve(threads);
+        auto worker = [&st, &jobs, &next]() {
+            for (;;) {
+                const std::size_t i = next.fetch_add(1);
+                if (i >= jobs.size()) break;
+                if (!jobs[i].needsCompile) continue;
+                compileOneJob(st, jobs[i]);
+            }
+        };
+        for (std::size_t i = 0; i < threads; ++i) pool.emplace_back(worker);
+        for (std::thread& t : pool) t.join();
+        return;
+    }
+    for (ObjectJob& job : jobs) {
+        if (job.needsCompile) compileOneJob(st, job);
+    }
+}
+
+// Phase C (single-threaded): manifest insert/update + objects registration.
+// Called once per job in build order, after the pool drains.
+bool finalizeTU(BuildState& st, ObjectJob& job) {
+    if (job.clangRc == -1) {
+        return true;  // cache reuse already registered
+    }
+    if (job.clangRc != 0) {
+        return false;
+    }
+    st.anyCompiled = true;
+    CacheEntry* existing = findEntry(st.manifest, job.obj.string());
+    if (existing == nullptr) {
+        st.manifest.push_back(CacheEntry{st.profile, job.sourceKey, job.hash,
+                                         st.headerFingerprint, st.compilerKey,
+                                         job.cpp.string(), job.obj.string()});
+    } else {
+        existing->profile = st.profile;
+        existing->source = job.sourceKey;
+        existing->hash = job.hash;
+        existing->header = st.headerFingerprint;
+        existing->compiler = st.compilerKey;
+        existing->cpp = job.cpp.string();
+    }
+    st.objects.push_back(job.obj);
+    return true;
+}
+
+// The up-to-date-decision + pool + finalize for one job list. A false return
+// means at least one TU failed; all TUs still compiled, so diagnostics are
+// complete before the caller aborts.
+bool compileJobList(BuildState& st, std::vector<ObjectJob>& jobs) {
+    bool inspectOk = true;
+    for (ObjectJob& job : jobs) {
+        if (!inspectTU(st, job)) inspectOk = false;
+    }
+    if (!inspectOk) return false;
+    if (!anyTUNeedsCompile(jobs)) return true;
     if (st.showProgress && !st.compileProgressShown) {
         reportRunProgress(true, false, "compiling native C++ sources...");
         st.compileProgressShown = true;
     }
+    compileDirtyJobs(st, jobs);
+    bool ok = true;
+    for (ObjectJob& job : jobs) {
+        if (!finalizeTU(st, job)) ok = false;
+    }
+    return ok;
+}
+
+// ---- Precompiled header for the shared generated prologue (dev profile) ---
+// Every generated TU re-parses the same standard C++ headers and the core
+// runtime support headers; clang spends most per-TU time there. A single PCH
+// per (toolchain, dev-profile, header fingerprint, prefix) covers all of them.
+// Local probe: one runtime TU went from ~740ms to ~280ms with this prefix.
+// Release is a single whole-program TU where a PCH does not pay, so this is
+// Incremental-only. If the PCH build fails the TUs compile without it - never
+// a hard error.
+// The prefix is the generated prologue plus the std-family headers that pull
+// in the heavy libstdc++ machinery (<chrono> alone costs ~1s of clang time).
+// cp3/async/promise.hpp is the async ABI every std module that uses promises
+// includes; it is under src/runtime/include, so the include-tree fingerprint
+// already invalidates the PCH when it changes.
+const char* kPchPrefixSource = R"hpp(// cp3c dev-profile PCH prefix - the shared prologue + heavy std headers.
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <functional>
+#include <initializer_list>
+#include <iomanip>
+#include <limits>
+#include <map>
+#include <memory>
+#include <numeric>
+#include <optional>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+#include "cp3/core/cycle.hpp"
+#include "cp3/core/checked.hpp"
+#include "cp3/core/error.hpp"
+#include "cp3/core/runtime.hpp"
+#include "cp3/core/value.hpp"
+#include "cp3/async/promise.hpp"
+)hpp";
+
+// Builds (or reuses) the PCH. Returns false when the profile is not the dev
+// profile or the PCH could not be produced; outPch is set on success. The
+// stamp captures everything the PCH depends on: the toolchain key, the dev
+// profile, the include-tree fingerprint and the prefix content - any of them
+// changing rebuilds it.
+bool buildOrReusePch(BuildState& st, std::string& outPch) {
+    if (st.opt.compile.profile != BuildProfile::Incremental) {
+        return false;
+    }
+    const fs::path prefixPath = st.layout.buildDir / "_cp3_pch_prefix.hpp";
+    const fs::path pchPath = st.layout.buildDir / "_cp3_pch.pch";
+    const fs::path stampPath = st.layout.buildDir / "_cp3_pch.stamp";
+    std::string current;
+    if (!readTextFile(prefixPath, current) || current != kPchPrefixSource) {
+        writeTextFile(prefixPath, kPchPrefixSource, nullptr);
+    }
+    const std::string prefixHash = std::to_string(fnv1a64(kPchPrefixSource));
+    const std::string expected = st.compilerKey + "|" + st.profile + "|" +
+                                 st.headerFingerprint + "|" + prefixHash;
+    std::string stamp;
+    std::error_code ec;
+    if (readTextFile(stampPath, stamp) && stamp == expected &&
+        fs::is_regular_file(pchPath, ec)) {
+        outPch = pchPath.string();
+        return true;
+    }
+    std::vector<std::string> args;
+    args.push_back(st.tc.program);
+    for (const std::string& flag : st.tc.targetFlags) args.push_back(flag);
+    args.push_back("-std=c++20");
+    for (const fs::path& inc : st.layout.includeDirs) {
+        args.push_back("-I" + inc.string());
+    }
+    // The defining preview: same macros the TUs see, or the PCH is not
+    // equivalent to the headers it replaces.
+    for (const std::string& f : st.nativeFlags.compile) args.push_back(f);
+    args.push_back("-x");
+    args.push_back("c++-header");
+    args.push_back(prefixPath.string());
+    args.push_back("-o");
+    args.push_back(pchPath.string());
     if (st.opt.verbose) {
         std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
     }
-    const int rc = runProcess(args);
-    if (rc != 0) {
-        std::fprintf(stderr, "cp3c: C++ compilation failed (exit %d)\n", rc);
+    if (runProcess(args) != 0) {
+        std::fprintf(stderr,
+                     "cp3c: PCH build failed; continuing without it\n");
         return false;
     }
-    st.anyCompiled = true;
-
-    if (existing == nullptr) {
-        st.manifest.push_back(CacheEntry{st.profile, sourceKey, hash,
-                                         st.headerFingerprint, st.compilerKey,
-                                         cpp.string(), obj.string()});
-    } else {
-        existing->profile = st.profile;
-        existing->source = sourceKey;
-        existing->hash = hash;
-        existing->header = st.headerFingerprint;
-        existing->compiler = st.compilerKey;
-        existing->cpp = cpp.string();
-    }
-    st.objects.push_back(obj);
+    writeTextFile(stampPath, expected, nullptr);
+    outPch = pchPath.string();
     return true;
 }
 
-// Compiles the generated module plus every runtime TU and persists the
-// manifest for the next (incremental) run.
-bool compileProgram(BuildState& st, const fs::path& cppPath, const fs::path& objPath,
-                    const std::string& entryKey) {
-    if (!compileTU(st, entryKey, cppPath, objPath)) return false;
+// Forward declaration - defined below with the link-stamp helpers.
+std::string fileStamp(const fs::path& path);
+
+// Builds the job list for the extra TU modules (spec 13), the entry TU, the
+// runtime TUs, and the package implementations. The manifest is NOT saved
+// here; compileAll saves it after every TU settles.
+bool buildJobs(BuildState& st, const BuildRequest& request,
+               const fs::path& cppPath, const fs::path& objPath,
+               const std::string& entryKey, std::vector<ObjectJob>& jobs) {
+    if (request.extraModules != nullptr) {
+        for (const BuildRequest::ExtraModule& extra : *request.extraModules) {
+            if (extra.module == nullptr) continue;
+            const fs::path cpp = st.layout.buildDir / (extra.moduleName + ".cpp");
+            const fs::path hpp = st.layout.buildDir / (extra.moduleName + ".hpp");
+            const fs::path obj = st.layout.buildDir / (extra.moduleName + ".o");
+            writeTextFile(cpp, extra.module->source, nullptr);
+            writeTextFile(hpp, extra.module->header, nullptr);
+            jobs.push_back(ObjectJob{extra.sourceKey, cpp, obj, {}, false, {},
+                                     false, -2});
+        }
+    }
+    // Entry TU first, then the runtime TUs the program actually needs.
+    jobs.push_back(ObjectJob{entryKey, cppPath, objPath, {}, false, {}, false, -2});
+    // D72: parent-qualify the object name - the std families bring TUs that
+    // share a stem with the core ones (src/std/crypto/runtime.cpp and
+    // src/runtime/src/core/runtime.cpp both stem to "runtime").
     for (const fs::path& rt : st.layout.runtimeSources) {
-        // D72: parent-qualify the object name - the std families bring TUs that
-        // share a stem with the core ones (src/std/crypto/runtime.cpp and
-        // src/runtime/src/core/runtime.cpp both stem to "runtime").
         const fs::path rtObj =
             st.layout.buildDir /
             ("_cp3_runtime_" + rt.parent_path().filename().string() + "_" +
              rt.stem().string() + ".o");
-        if (!compileTU(st, rt.string(), rt, rtObj)) return false;
+        jobs.push_back(ObjectJob{rt.string(), rt, rtObj, {}, false, {}, false, -2});
     }
-    saveManifest(st.layout.manifestPath, st.manifest);
+    // Packages: cached objects (if available) are linked directly and recorded
+    // in the manifest; source-only packages compile here.
+    if (request.packageImplementations != nullptr) {
+        for (const BuildRequest::PackageImplementation& impl :
+             *request.packageImplementations) {
+            const fs::path objKey = impl.object;
+            std::error_code ec;
+            if (impl.cached) {
+                if (!fs::is_regular_file(impl.object, ec)) {
+                    std::fprintf(stderr,
+                                 "cp3c: cached package artifact '%s' is missing; "
+                                 "reinstall the package\n",
+                                 impl.object.string().c_str());
+                    return false;
+                }
+                const std::string hash = fileStamp(impl.object);
+                CacheEntry* existing = findEntry(st.manifest, objKey.string());
+                if (existing == nullptr) {
+                    st.manifest.push_back(CacheEntry{st.profile,
+                                                     impl.sourceKey,
+                                                     hash,
+                                                     st.headerFingerprint,
+                                                     st.compilerKey,
+                                                     impl.object.string(),
+                                                     impl.object.string()});
+                } else {
+                    existing->profile = st.profile;
+                    existing->source = impl.sourceKey;
+                    existing->hash = hash;
+                    existing->header = st.headerFingerprint;
+                    existing->compiler = st.compilerKey;
+                    existing->cpp = impl.object.string();
+                }
+                st.objects.push_back(impl.object);
+                continue;
+            }
+            // A beta-one package was generated as an entry program, so its C++
+            // carries an `int main()`. The package is linked as a library;
+            // rename that symbol so it cannot collide with the consumer's main.
+            // The package initializer is not called (packages hold no top-level
+            // state in the beta-one surface).
+            const std::string stem = impl.source.stem().string();
+            const fs::path obj =
+                st.layout.buildDir /
+                ("pkg_" + std::to_string(fnv1a64(impl.sourceKey)) + "_" + stem +
+                 ".o");
+            std::vector<std::string> flags{
+                "-Dmain=cp3_pkg_main_" + std::to_string(fnv1a64(impl.sourceKey))};
+            jobs.push_back(ObjectJob{impl.sourceKey, impl.source, obj,
+                                     std::move(flags), false, {}, false, -2});
+        }
+    }
     return true;
 }
 
-// Compiles the extra generated TUs of the build (spec 13: the worker modules
-// the entry imports). Each is written beside the entry's generated files; their
-// headers are what the entry's source includes. Runs before compileProgram so
-// the worker objects are part of the same manifest save. Returns false after
-// reporting a failed compile.
-bool compileExtras(BuildState& st, const BuildRequest& request) {
-    if (request.extraModules == nullptr) return true;
-    for (const BuildRequest::ExtraModule& extra : *request.extraModules) {
-        if (extra.module == nullptr) continue;
-        const fs::path cpp = st.layout.buildDir / (extra.moduleName + ".cpp");
-        const fs::path hpp = st.layout.buildDir / (extra.moduleName + ".hpp");
-        const fs::path obj = st.layout.buildDir / (extra.moduleName + ".o");
-        writeTextFile(cpp, extra.module->source, nullptr);
-        writeTextFile(hpp, extra.module->header, nullptr);
-        if (!compileTU(st, extra.sourceKey, cpp, obj)) return false;
-    }
+// Runs the full compile pipeline: builds the job list, finishes the
+// up-to-date decisions, fans out clang++ across the pool, and only then
+// saves the manifest.
+bool compileAll(BuildState& st, const BuildRequest& request,
+                const fs::path& cppPath, const fs::path& objPath,
+                const std::string& entryKey) {
+    std::vector<ObjectJob> jobs;
+    if (!buildJobs(st, request, cppPath, objPath, entryKey, jobs))
+        return false;
+    if (!compileJobList(st, jobs)) return false;
+    saveManifest(st.layout.manifestPath, st.manifest);
     return true;
 }
 
@@ -380,63 +665,6 @@ std::string vendoredArchiveStamps(const std::vector<std::string>& linkFlags) {
         }
     }
     return stamp;
-}
-
-// Compiles the `pak/` C++ implementation of every installed package the
-// program imports, or records its cached object as a link input. The package
-// entry `index.cp3` is only a declaration surface; these objects are what its
-// exported functions resolve to at link time. Source object names are derived
-// from the stable source key so two packages with same-named files never
-// collide.
-bool compilePackageImplementations(BuildState& st,
-                                   const BuildRequest& request) {
-    if (request.packageImplementations == nullptr) return true;
-    for (const BuildRequest::PackageImplementation& impl :
-         *request.packageImplementations) {
-        if (impl.cached) {
-            std::error_code ec;
-            if (!fs::is_regular_file(impl.object, ec)) {
-                std::fprintf(stderr,
-                             "cp3c: cached package artifact '%s' is missing; "
-                             "reinstall the package\n",
-                             impl.object.string().c_str());
-                return false;
-            }
-            const std::string hash = fileStamp(impl.object);
-            CacheEntry* existing = findEntry(st.manifest, impl.object.string());
-            if (existing == nullptr) {
-                st.manifest.push_back(CacheEntry{
-                    st.profile, impl.sourceKey, hash, st.headerFingerprint,
-                    st.compilerKey, impl.object.string(), impl.object.string()});
-            } else {
-                existing->profile = st.profile;
-                existing->source = impl.sourceKey;
-                existing->hash = hash;
-                existing->header = st.headerFingerprint;
-                existing->compiler = st.compilerKey;
-                existing->cpp = impl.object.string();
-            }
-            st.objects.push_back(impl.object);
-            continue;
-        }
-        const std::string stem = impl.source.stem().string();
-        const fs::path obj =
-            st.layout.buildDir /
-            ("pkg_" + std::to_string(fnv1a64(impl.sourceKey)) + "_" + stem +
-             ".o");
-        // A beta-one package was generated as an entry program, so its C++
-        // carries an `int main()`. The package is linked as a library; rename
-        // that symbol so it cannot collide with the consumer's main. The
-        // package initializer is not called (packages hold no top-level state
-        // in the beta-one surface).
-        const std::vector<std::string> flags{
-            "-Dmain=cp3_pkg_main_" +
-            std::to_string(fnv1a64(impl.sourceKey))};
-        if (!compileTU(st, impl.sourceKey, impl.source, obj, &flags)) {
-            return false;
-        }
-    }
-    return true;
 }
 
 // The link step's input identity: every object's path and content hash plus
@@ -968,16 +1196,18 @@ int buildWithToolchain(const BuildRequest& request) {
     std::vector<fs::path> objects;
     BuildState state{opt,          tc,           layout,       profile,
                      optimizations, *nativeFlags, headerFingerprint,
-                     compilerKey,  force,        manifest,     objects};
+                     compilerKey,  force,        manifest,     objects,
+                     /*anyCompiled=*/false, /*showProgress=*/false,
+                     /*compileProgressShown=*/false, /*pchInclude=*/std::string{}};
     state.showProgress = request.execute && !opt.verbose && isTty(stderr);
 
-    if (!compileExtras(state, request)) {
-        return kExitCompileError;
+    // Dev profile only: the PCH must be built before the TUs fan out. Any
+    // include-tree or toolchain change is already covered by the stamp.
+    if (std::string pch; buildOrReusePch(state, pch)) {
+        state.pchInclude = std::move(pch);
     }
-    if (!compilePackageImplementations(state, request)) {
-        return kExitCompileError;
-    }
-    if (!compileProgram(state, cppPath, objPath, entry.string())) {
+
+    if (!compileAll(state, request, cppPath, objPath, entry.string())) {
         return kExitCompileError;
     }
     if (!linkProgram(state, layout.exePath)) {
