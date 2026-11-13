@@ -32,6 +32,7 @@ When a project manifest is present, commands can use its `main` entry. An explic
 | `cp3 check <file>` | Front-end validation: parsing, module resolution, semantic checks, and type analysis. |
 | `cp3 build [file]` | Generate native output and link an application, or package a project configured as a package. |
 | `cp3 run <file>` | Build if necessary, then execute the program and propagate its exit status. |
+| `cp3 warm [file]` | Build every artifact for the development loop (plural translation units, the shared PCH, the runtime translation units, and the executable) and cache them under `.cp3/`; the program is not run. Use before a long editing session so the first `cp3 run`/`cp3 dev` pass is fully warm. |
 | `cp3 dev [file]` | Watch a project and rerun its development check/build workflow; `--once` performs one pass. |
 | `cp3 fmt <file>` | Format CP3 source using the project formatter. |
 | `cp3 clean` | Remove `.cp3/build` and `.cp3/out`. |

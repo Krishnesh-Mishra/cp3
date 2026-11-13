@@ -44,6 +44,8 @@ void printUsage(std::FILE* out) {
         "Commands:\n"
         "  run <file.cp3>     Build then execute a program\n"
         "  build [file.cp3]   Transpile + link, or pack (\"type\": \"package\")\n"
+        "  warm [file.cp3]    Build everything (plural TUs, PCH, runtime TUs,\n"
+        "                      exe) and cache it; the program is not run\n"
         "  check <file.cp3>   Frontend only: parse + type-check (no C++ generation)\n"
         "  dev [file.cp3]     Watch, build and restart on save (--once for one run)\n"
         "  test [file.cp3...] Discover and run test files (packages included)\n"
@@ -126,6 +128,7 @@ bool isBuiltinCommand(const std::string& command) {
     return command == "run" || command == "build" || command == "check" ||
            command == "dev" || command == "test" || command == "fmt" ||
            command == "clean" || command == "init" || command == "exec" ||
+           command == "warm" ||
            command == "install" || command == "publish" ||
            command == "link" || command == "unlink" ||
            command == "recompile" || command == "editor-plugin" ||
@@ -174,7 +177,7 @@ std::string resolveFile(const std::string& command, bool filePreseeded,
                         const std::string& first, cp3::cli::CliOptions& opt) {
     const bool takesFile = (command == "run" || command == "build" ||
                             command == "check" || command == "dev" ||
-                            command == "fmt");
+                            command == "fmt" || command == "warm");
     if (filePreseeded) {
         opt.file = first;
         // Bare `cp3c foo.cp3 a b` passes the extras to the program.
@@ -282,9 +285,9 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
         return cp3::cli::cmdCheck(opt);
     }
 
-    if (command == "run" || command == "build") {
+    if (command == "run" || command == "build" || command == "warm") {
         if (opt.file.empty()) {
-            if (command == "build") {
+            if (command == "build" || command == "warm") {
                 opt.file = cp3::cli::defaultEntryFile();
             }
             if (opt.file.empty()) {
@@ -294,7 +297,16 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
                 return cp3::kExitUsageError;
             }
         }
-        return cp3::cli::cmdBuildOrRun(opt, command == "run", nullptr);
+        if (command == "warm") {
+            opt.compile.profile = cp3::BuildProfile::Incremental;
+        }
+        const int rc = cp3::cli::cmdBuildOrRun(opt, command == "run", nullptr);
+        if (command == "warm" && rc == cp3::kExitSuccess) {
+            std::fprintf(stderr,
+                         "cp3c: warm: artifacts built and cached under "
+                         ".cp3/; the program was not run\n");
+        }
+        return rc;
     }
 
     if (command == "dev") {
