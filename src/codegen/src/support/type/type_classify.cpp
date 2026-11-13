@@ -21,12 +21,24 @@ namespace cp3 {
 namespace detail {
 
 bool isTupleType(const Type& t) {
-    return t.kind == TypeKind::Object && t.name.rfind("$t", 0) == 0;
+    // `$mapEntry` (std/collections `entries()`) is the std::pair the runtime
+    // hands back - it destructures and indexes like a 2-tuple.
+    return t.kind == TypeKind::Object &&
+           (t.name.rfind("$t", 0) == 0 || t.name == "$mapEntry");
 }
 
 // The C++ spelling of a tuple's element list (`std::tuple<A, B>`), when every
 // element carries one; used for generic tuple signatures (emit/decl.cpp).
+// A `$mapEntry` spells as the `std::pair<K, V>` the runtime returns.
 bool tupleCpp(const Type& t, std::string& out) {
+    if (t.kind == TypeKind::Object && t.name == "$mapEntry") {
+        if (t.parts.size() != 2) return false;
+        const CppInfo key = classify(t.parts[0]);
+        const CppInfo value = classify(t.parts[1]);
+        if (!key.representable || !value.representable) return false;
+        out = "std::pair<" + key.cpp + ", " + value.cpp + ">";
+        return true;
+    }
     std::string cpp = "std::tuple<";
     for (std::size_t i = 0; i < t.parts.size(); ++i) {
         const CppInfo ec = classify(t.parts[i]);
@@ -240,6 +252,20 @@ CppInfo classify(const Type& raw) {
                 info.shape = Shape::Object;
                 info.representable = true;
                 info.cpp = "::cp3::runtime::WithResolvers<" + cpp + ">";
+                return info;
+            }
+            // A `$mapEntry` pair is the `std::pair<K, V>` the runtime's
+            // `Map<K, V>::entries()` hands back, for any representable K and
+            // V - Ref<Class> handles included, unlike the primitive-gated
+            // tuple arm below.
+            if (t.name == "$mapEntry" && t.parts.size() == 2) {
+                std::string cpp;
+                if (tupleCpp(t, cpp)) {
+                    info.type = t;
+                    info.shape = Shape::Object;
+                    info.representable = true;
+                    info.cpp = std::move(cpp);
+                }
                 return info;
             }
             // A tuple annotation (`$t[...]`) is a std::tuple value: unlike an

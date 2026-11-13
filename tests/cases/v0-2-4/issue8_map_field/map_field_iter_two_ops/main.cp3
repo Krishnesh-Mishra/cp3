@@ -6,4 +6,8 @@ class Holder {
 const h = new Holder();
 h.items.set("z", 9);
 h.items.set("y", 8);
-console.log(h.items.size + ":" + h.items.get("z"));
+console.log(h.items.size);
+const z = h.items.get("z");
+if (z !== undefined) {
+    console.log(z);
+}
