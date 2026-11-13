@@ -365,6 +365,8 @@ bool isErrorClassName(const std::string& name) {
     return kNames.count(name) != 0;
 }
 
+bool isBufferClassName(const std::string& name) { return name == "Buffer"; }
+
 bool isErrorClass(const Type& t) {
     return t.kind == TypeKind::Class && isErrorClassName(t.name);
 }

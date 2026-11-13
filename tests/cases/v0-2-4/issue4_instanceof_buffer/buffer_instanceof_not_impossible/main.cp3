@@ -1,4 +1,6 @@
 import console from "std/console";
 import { Buffer } from "std/buffer";
-const b = Buffer.from("hex", "hex");
-console.log(b instanceof Buffer);
+const b = Buffer.from("6b6579", "hex");
+if (b instanceof Buffer && b.length === 3) {
+    console.log(b.toString());
+}

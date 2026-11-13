@@ -1,4 +1,4 @@
 import console from "std/console";
 import { Buffer } from "std/buffer";
-const b = Buffer.from("hi", "hex");
+const b = Buffer.from("6869", "hex");
 console.log(b instanceof Buffer);

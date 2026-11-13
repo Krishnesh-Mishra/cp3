@@ -167,7 +167,8 @@ Type Analyzer::inferInstanceof(BinaryExpr& be) {
             : nullptr;
     const bool targetKnown =
         id != nullptr &&
-        (findClass(id->name) != nullptr || isErrorClassName(id->name));
+        (findClass(id->name) != nullptr || isErrorClassName(id->name) ||
+         isBufferClassName(id->name));
     if (!targetKnown) {
         report(diagcode::kTypeMismatch, be.right ? be.right->span : be.span,
                "the right operand of 'instanceof' must be a class name");

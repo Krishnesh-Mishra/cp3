@@ -157,6 +157,7 @@ public:
     // unit's own classes are collected, so a user subclass can resolve a base
     // and every `new Error(...)` gets a `Ref<Error>` spelling.
     void registerBuiltinErrorClasses();
+    void registerBuiltinBufferClass();
 
     void reset();
     void setNamespace(const std::string& ns);

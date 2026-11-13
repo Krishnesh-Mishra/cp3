@@ -437,6 +437,18 @@ void ModelRegistry::registerBuiltinErrorClasses() {
     }
 }
 
+// The nominal std/buffer class: an ambient reference type with no public
+// constructor (`Buffer.from`) and no members the model collects; codegen
+// lowers member access through the std/buffer family table. The entry
+// exists so `x instanceof Buffer` (D..) finds a builtin model.
+void ModelRegistry::registerBuiltinBufferClass() {
+    ClassModel& cm = addClass("Buffer", false, nullptr);
+    cm.builtin = true;
+    cm.membersCollected = true;
+    cm.structName = "Buffer";
+    cm.cpp = "::cp3::runtime::buffer::Buffer";
+}
+
 void ModelRegistry::setNamespace(const std::string& ns) { namesp_ = ns; }
 
 ClassModel& ModelRegistry::addClass(const std::string& name, bool local,

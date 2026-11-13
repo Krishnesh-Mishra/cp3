@@ -268,6 +268,9 @@ bool isEventEmitterType(const Type& t);
 // `cp3::Error` hierarchy. A user class may extend one, and only an Error
 // (or a subclass) may be thrown.
 bool isErrorClassName(const std::string& name);
+// The std/buffer class name as a right-hand operand of `instanceof` (the
+// nominal type is ambient; codegen registers a builtin model for it).
+bool isBufferClassName(const std::string& name);
 bool isErrorClass(const Type& t);
 
 // --- the JS-compat typed-array family (D69; src/language/typed-arrays/sema.cpp) ---

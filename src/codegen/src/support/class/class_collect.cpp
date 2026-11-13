@@ -26,6 +26,7 @@ using namespace detail;
 
 void Generator::collectModels(const Program& program) {
     ModelRegistry::get().registerBuiltinErrorClasses();
+    ModelRegistry::get().registerBuiltinBufferClass();
     for (const auto& s : program.body) {
         if (s) collectClassNames(*s);
     }
