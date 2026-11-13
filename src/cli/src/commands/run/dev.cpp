@@ -24,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <system_error>
 #include <thread>
 #include <unordered_map>
@@ -59,6 +60,7 @@
 #include "detail/core/commands.hpp"
 #include "detail/core/util.hpp"
 #include "detail/toolchain/pipeline.hpp"
+#include "detail/toolchain/incremental.hpp"
 
 namespace cp3::cli {
 namespace {
@@ -693,6 +695,105 @@ void initializeBaseline(DevSession& session) {
     session.lastStat = session.baselineStat;
 }
 
+// One watched file's content entry difference (used for the classifier).
+bool contentEntryDiffers(const ContentEntry& a, const ContentEntry& b) {
+    if (a.exists != b.exists) return true;
+    if (!a.exists) return false;
+    return a.hash != b.hash || a.size != b.size;
+}
+
+// v0.2.5 Phase 4 Slice 1: classify this edit as hot-patch material. A
+// single-file, single-unit body-only edit (interface unchanged since the
+// last build) is a swap candidate once the runtime safe point lands
+// (Slice 4); everything else takes the normal rebuild path. The build
+// itself is never altered by this diagnostic.
+void classifyEdit(const DevSession& session, const FrontendResult* frontend,
+                  const std::unordered_map<std::string, IncrementalUnitEntry>& baseline) {
+    const std::vector<ContentEntry>& contentBefore = session.baselineContent;
+    if (frontend == nullptr || !frontend->program ||
+        frontend->graph == nullptr) {
+        std::fprintf(stderr,
+                     "cp3c: patch classification: single-unit or unsupported "
+                     "build; not a swap candidate\n");
+        return;
+    }
+    const std::vector<ContentEntry> contentNow =
+        contentFingerprint(session.watched);
+    if (contentNow.size() != contentBefore.size()) {
+        std::fprintf(stderr,
+                     "cp3c: patch classification: watched set changed "
+                     "(%zu -> %zu files); full rebuild\n",
+                     contentBefore.size(), contentNow.size());
+        return;
+    }
+    std::vector<fs::path> changed;
+    for (std::size_t i = 0; i < contentNow.size(); ++i) {
+        if (contentEntryDiffers(contentNow[i], contentBefore[i])) {
+            changed.push_back(session.watched.files[i]);
+        }
+    }
+    if (changed.size() != 1) {
+        if (changed.empty()) {
+            std::fprintf(stderr,
+                         "cp3c: patch classification: no content change\n");
+        } else {
+            std::fprintf(stderr,
+                         "cp3c: patch classification: %zu files changed; "
+                         "full rebuild\n",
+                         changed.size());
+        }
+        return;
+    }
+    const fs::path target = changed[0];
+    const std::string targetNative = target.string();
+    std::string targetGenericSlash = target.generic_string();
+    std::replace(targetGenericSlash.begin(), targetGenericSlash.end(),
+                 '\\', '/');
+    const std::string targetGeneric = targetGenericSlash;
+    const std::string targetName = target.filename().string();
+    const CompilationUnit* unit = nullptr;
+    for (const CompilationUnit* u : frontend->graph->units()) {
+        if (u == nullptr || u->file == nullptr) continue;
+        const std::string& up = u->file->canonicalPath.empty()
+                                    ? u->file->path
+                                    : u->file->canonicalPath;
+        if (up.empty()) continue;
+        if (up == targetNative) { unit = u; break; }
+        std::string upGeneric = up;
+        std::replace(upGeneric.begin(), upGeneric.end(), '\\', '/');
+        if (upGeneric == targetGeneric) { unit = u; break; }
+        const std::size_t slash = upGeneric.find_last_of('/');
+        const std::string upName =
+            slash == std::string::npos ? upGeneric : upGeneric.substr(slash + 1);
+        if (upName == targetName) { unit = u; break; }
+    }
+    if (unit == nullptr) {
+        std::fprintf(stderr,
+                     "cp3c: patch classification: changed file outside the "
+                     "module graph; full rebuild\n");
+        return;
+    }
+    const auto ihOf = interfaceHashesForProgram(*frontend->graph,
+                                                frontend->sema,
+                                                frontend->unitSemas);
+    const auto ihIt = ihOf.find(unit->id);
+    const auto baseIt = baseline.find(incrementalUnitKey(*unit));
+    const bool bodyOnly = baseIt != baseline.end() && ihIt != ihOf.end() &&
+        !baseIt->second.interfaceHash.empty() &&
+        baseIt->second.interfaceHash == incrementalHex64(ihIt->second);
+    if (bodyOnly) {
+        std::fprintf(stderr,
+                     "cp3c: patch classification: body-only (interface "
+                     "stable); swap candidate: %s\n",
+                     unit->moduleName.c_str());
+    } else {
+        std::fprintf(stderr,
+                     "cp3c: patch classification: interface changed; "
+                     "full rebuild is the correct path: %s\n",
+                     unit->moduleName.c_str());
+    }
+}
+
 // Re-resolves the watched set from a fresh module graph load. Called after
 // every build: the graph may have changed (new imports, renamed preludes).
 void refreshWatchedSet(DevSession& session) {
@@ -762,11 +863,28 @@ void rebuild(DevSession& session, bool isInitial) {
     if (!isInitial) {
         std::fprintf(stderr, "cp3c: source changed; rebuilding...\n");
     }
+    // v0.2.5 Phase 4 Slice 1: snapshot the pre-build incremental cache;
+    // the content baseline is session.baselineContent, which still holds the
+    // pre-build state at this point in rebuild().
+    std::unordered_map<std::string, IncrementalUnitEntry> baselineCache;
+    if (!isInitial && session.opt.verbose) {
+        std::vector<IncrementalUnitEntry> entries;
+        if (incrementalCacheLoad(incrementalCachePathFor(session.file),
+                                 entries)) {
+            for (IncrementalUnitEntry& entry : entries) {
+                baselineCache.emplace(entry.unitKey, std::move(entry));
+            }
+        }
+    }
     CliOptions effective = session.opt;
     effective.internalDeferExeReplace = true;
-    const int rc = cmdBuildOrRun(effective, false);
+    std::unique_ptr<FrontendResult> frontend;
+    const int rc = cmdBuildOrRun(effective, false, &frontend);
     std::fprintf(stderr, "cp3c: build %s (exit %d)\n",
                  rc == kExitSuccess ? "ok" : "reported problems", rc);
+    if (!isInitial && session.opt.verbose && frontend) {
+        classifyEdit(session, frontend.get(), baselineCache);
+    }
 
     // Re-resolve the watched set: the graph just rebuilt from fresh sources,
     // so the file list (and its parent directories) may have changed.
@@ -865,7 +983,7 @@ int cmdDev(const CliOptions& opt) {
     if (opt.once) {
         CliOptions effective = opt;
         effective.internalDeferExeReplace = true;
-        const int rc = cmdBuildOrRun(effective, true);
+        const int rc = cmdBuildOrRun(effective, true, nullptr);
         std::fprintf(stderr, "cp3c: build %s (exit %d)\n",
                      rc == kExitSuccess ? "ok" : "reported problems", rc);
         return rc;

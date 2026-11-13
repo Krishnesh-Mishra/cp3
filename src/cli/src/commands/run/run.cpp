@@ -27,9 +27,11 @@
 #include "cp3/core/source.hpp"
 
 #include "detail/cache/cache.hpp"
+#include "detail/core/frontend_result.hpp"
 #include "detail/cache/package_cache.hpp"
 #include "detail/core/commands.hpp"
 #include "detail/core/diagnostics.hpp"
+#include "detail/core/lane_b.hpp"
 #include "detail/pkg/package_json.hpp"
 #include "detail/toolchain/incremental.hpp"
 #include "detail/toolchain/pipeline.hpp"
@@ -51,20 +53,6 @@ struct BuildContext {
     bool execute = false;                     // `cp3c run` was requested
 };
 
-// The load+sema half of the pipeline. exitCode is kExitSuccess when `graph`
-// carries an analyzed entry unit to hand to codegen. `program` selects the
-// whole-program codegen path (a resolved local import exists); in that mode
-// every emittable unit is checked and its SemaResult kept in `unitSemas` -
-// each unit's parser restarts nodeIds (D6), so the tables are per unit and
-// cannot be merged. `worker` is the resolved canonical worker import of spec
-// 13, if any; the worker unit lowers through its own TU, not this program.
-struct FrontendResult {
-    std::unique_ptr<ModuleGraph> graph;
-    SemaResult sema;
-    std::unordered_map<std::uint32_t, SemaResult> unitSemas;
-    bool program = false;
-    int exitCode = kExitSuccess;
-};
 
 #if defined(_WIN32)
 void setProcessEnv(const char* name, const char* value) { _putenv_s(name, value); }
@@ -95,11 +83,7 @@ bool pinIncrementalFragmentCache(const FrontendResult& frontend,
         if (debug) std::fprintf(stderr, "incremental: empty compiler key\n");
         return false;
     }
-    const fs::path projectRoot = findProjectRoot(entryPath);
-    const fs::path cacheDir = projectRoot / ".cp3" / "cache";
-    std::error_code ec;
-    fs::create_directories(cacheDir, ec);
-    const fs::path cachePath = cacheDir / kIncrementalCacheFile;
+    const fs::path cachePath = incrementalCachePathFor(entryPath);
     const auto ihOf = interfaceHashesForProgram(*frontend.graph, frontend.sema,
                                                 frontend.unitSemas);
     const int kept = prepareIncrementalReuse(cachePath, *frontend.graph,
@@ -404,7 +388,15 @@ int runOnPackageError(const std::string& entry) {
 
 }  // namespace
 
-int cmdBuildOrRun(const CliOptions& opt, bool execute) {
+// v0.2.5 Phase 4 Slice 1: the dev watcher passes `frontendOut` to receive
+// the moved-out frontend result for the post-build classification
+// diagnostic (a local edit is classified plain or interface-changing). The
+// build itself is not altered in any way; nullptr gets today's behavior.
+int cmdBuildOrRun(const CliOptions& opt, bool execute,
+                  std::unique_ptr<FrontendResult>* frontendOut) {
+    if (frontendOut != nullptr) {
+        *frontendOut = nullptr;
+    }
     SourceManager sm;
     SourceFile* file = nullptr;
     std::string err;
@@ -416,6 +408,11 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     const fs::path entryPath(opt.file);
     const fs::path projectRoot = findProjectRoot(entryPath);
     const std::string moduleName = moduleNameFor(entryPath, projectRoot);
+    // Lane B: everything independent of the user's program text - the
+    // toolchain (cached), the dev PCH and the clang driver image - builds
+    // in parallel with the frontend on a background thread. Joined before
+    // the per-TU stage needs the PCH.
+    std::thread laneB = detail::laneBStart(opt, entryPath.string());
     // `exec` builds one of a package's `bin` programs: the manifest is a
     // package, but this entry is a runnable application, not pack input.
     // `test` does the same for test files inside a package project.
@@ -530,6 +527,9 @@ options.importedInterfaces = importedInterfacesFor(*frontend.graph, *entry);
         return detail::packProject(input);
     }
 
+    // Lane B: wait for the background toolchain/PCH work (returns
+    // immediately when it already finished).
+    detail::laneBJoin(laneB);
     // Every resolved "std/..." specifier in the whole graph (any unit, not just
     // the entry) selects that module's native backend for this build (D68), and
     // so do the worker units' (they live in their own graphs, so the resolver
@@ -557,6 +557,11 @@ options.importedInterfaces = importedInterfacesFor(*frontend.graph, *entry);
     request.packageImplementations = &packageImplementations;
     request.sharedProgramHeader = std::move(programArtifacts.sharedProgramHeader);
     request.sharedProgramHeaderName = "cp3_program.hpp";
+    // v0.2.5 Phase 4 Slice 1: hand the frontend result to the dev watcher's
+    // post-build classification diagnostic. The build outcome is unchanged.
+    if (frontendOut != nullptr) {
+        *frontendOut = std::make_unique<FrontendResult>(std::move(frontend));
+    }
     request.execute = execute;
     reportRunProgress(execute, effective.verbose,
                       "preparing native build...");
@@ -634,7 +639,7 @@ int cmdTest(const CliOptions& opt) {
         one.file = file;
         one.positionals.clear();
         one.testMode = true;
-        const int rc = cmdBuildOrRun(one, true);
+        const int rc = cmdBuildOrRun(one, true, nullptr);
         if (rc == kExitSuccess) {
             ++passed;
         } else {

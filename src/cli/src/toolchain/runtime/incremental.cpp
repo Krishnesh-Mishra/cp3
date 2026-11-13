@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "detail/core/util.hpp"
+#include "detail/cache/cache.hpp"
 #include "detail/toolchain/interface_hash.hpp"
 #include "cp3/modules.hpp"
 #include "cp3/meta/module.hpp"
@@ -194,6 +195,18 @@ std::string unitShapeText(const CompilationUnit& unit) {
 }
 
 }  // namespace
+
+std::string incrementalHex64(std::uint64_t value) {
+    return hex64(value);
+}
+
+fs::path incrementalCachePathFor(const fs::path& entryFile) {
+    const fs::path projectRoot = findProjectRoot(entryFile);
+    const fs::path cacheDir = projectRoot / ".cp3" / "cache";
+    std::error_code ec;
+    fs::create_directories(cacheDir, ec);
+    return cacheDir / kIncrementalCacheFile;
+}
 
 std::string incrementalUnitKey(const CompilationUnit& unit) {
     // The logical module name is the graph's stable identity for a unit

@@ -294,7 +294,7 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
                 return cp3::kExitUsageError;
             }
         }
-        return cp3::cli::cmdBuildOrRun(opt, command == "run");
+        return cp3::cli::cmdBuildOrRun(opt, command == "run", nullptr);
     }
 
     if (command == "dev") {

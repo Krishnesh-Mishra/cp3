@@ -90,6 +90,11 @@ std::string ihFingerprintOf(
     const ModuleGraph& graph, const CompilationUnit& unit,
     const std::unordered_map<std::uint32_t, std::uint64_t>& ihOf);
 
+// fnv1a64 render of a value, matching the record format's hex fields.
+std::string incrementalHex64(std::uint64_t value);
+
+fs::path incrementalCachePathFor(const fs::path& entryFile);
+
 // Computes the reuse decision for every unit and PRUNES the cache to the
 // valid records (everything else is dropped). Entries whose shape/interface
 // fingerprints are missing (fresh records written by codegen, which has no

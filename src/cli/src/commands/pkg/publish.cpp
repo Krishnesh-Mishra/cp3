@@ -242,7 +242,7 @@ int runPublish(const CliOptions& opt, PublishArtifact& info) {
     buildOpt.outDir.clear();
     buildOpt.json = false;
     buildOpt.dryRun = false;
-    const int buildRc = cmdBuildOrRun(buildOpt, false);
+    const int buildRc = cmdBuildOrRun(buildOpt, false, nullptr);
     if (buildRc != kExitSuccess) return buildRc;
 
     std::string err;
