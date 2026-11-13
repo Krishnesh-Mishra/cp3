@@ -342,9 +342,10 @@ std::string unitModuleSource(const ProgramUnitText& unit) {
     return out;
 }
 
-// The small entry TU: the shared header, the entry namespace's using
-// declaration and the program's main (module initializers in compilation
-// order, then the entry body and the event-loop drain).
+// The small entry TU: the shared header, the entry namespace block (its
+// definitions), the using declaration and the program's main (module
+// initializers in compilation order, then the entry body and the event-loop
+// drain).
 std::string entryModuleSource(const ProgramAssembly& assembly,
                               const std::string& moduleName) {
     std::string out;
@@ -352,9 +353,44 @@ std::string entryModuleSource(const ProgramAssembly& assembly,
     out += "#include \"cp3_program.hpp\"\n\n";
     const ProgramUnitText* entry = entryOf(assembly);
     if (entry != nullptr) {
+        appendUnit(out, *entry, /*definitions=*/true);
         out += "using namespace " + entry->namesp + ";\n\n";
     }
     appendProgramMain(out, assembly);
+    return out;
+}
+
+// The unit TU name: the sourceKey (the unit's logical module name, e.g.
+// "lib/base/b0") mirrors the project layout under the build directory.
+// Segments are path-sanitized; anything unfit becomes '_' so the output is
+// always a relative path a command line can carry.
+std::string unitNameForPath(const std::string& sourceKey) {
+    std::vector<std::string> segments;
+    std::size_t start = 0;
+    while (start <= sourceKey.size()) {
+        const std::size_t end = sourceKey.find('/', start);
+        std::string seg = sourceKey.substr(start,
+                                           end == std::string::npos ? std::string::npos
+                                                                     : end - start);
+        std::string clean;
+        clean.reserve(seg.size());
+        for (const unsigned char c : seg) {
+            const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                            (c >= '0' && c <= '9') || c == '-' || c == '_';
+            clean.push_back(ok ? static_cast<char>(c) : '_');
+        }
+        if (clean == "..") clean = "__";
+        if (!clean.empty() && clean != ".") segments.push_back(clean);
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    if (segments.empty()) return "unit";
+    std::string out;
+    for (const std::string& seg : segments) {
+        out += seg;
+        out += '/';
+    }
+    out.pop_back();
     return out;
 }
 
@@ -363,11 +399,13 @@ GeneratedProgramModules assembleProgramModules(const ProgramAssembly& assembly,
     GeneratedProgramModules out;
     out.sharedHeader.source = sharedProgramHeader(assembly, moduleName);
     out.sharedHeader.header = programHeader(assembly, moduleName);
-    std::size_t index = 0;
     for (const ProgramUnitText& unit : assembly.units) {
-        if (unit.isPackage) continue;  // package units link their pak/ sources
+        // The entry unit's definitions belong in the entry TU itself (it
+        // carries the namespace block, the using directive and main());
+        // emitting a second TU for it would overwrite it.
+        if (unit.isEntry || unit.isPackage) continue;
         GeneratedProgramUnit u;
-        u.name = "cp3_unit_" + std::to_string(index++);
+        u.name = unitNameForPath(unit.sourceKey);
         u.sourceKey = unit.sourceKey;
         u.source = unitModuleSource(unit);
         out.units.push_back(std::move(u));

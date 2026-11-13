@@ -308,15 +308,15 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
     if (isConst) {
         if (isStaticInitExpr(*d.init)) {
             g.emitLineDirective(d, decls);
-            line(decls, 1, tl + cv + ci.cpp + " " + name + " = " +
-                              initText + ";");
+            line(decls, 1, "inline " + tl + cv + ci.cpp + " " + name +
+                              " = " + initText + ";");
         } else {
             // The initializer reads runtime state: evaluate it inside
             // `main` at its source position, after initArgv and the rest
             // of the runtime bootstrap. The binding keeps namespace scope
             // so functions can read it; language-level const-ness is
             // enforced by sema.
-            line(decls, 1, tl + ci.cpp + " " + name + "{};");
+            line(decls, 1, "inline " + tl + ci.cpp + " " + name + "{};");
             g.emitLineDirective(d, mainBody);
             line(mainBody, 1, g.moduleRef(rawName) + " = " + initText + ";");
             if (g.scaleMode_) {
@@ -326,7 +326,7 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
         g.declare(rawName, declared, /*cell=*/false, /*global=*/true);
         return;
     }
-    line(decls, 1, tl + ci.cpp + " " + name + "{};");
+    line(decls, 1, "inline " + tl + ci.cpp + " " + name + "{};");
     g.emitLineDirective(d, mainBody);
     line(mainBody, 1, g.moduleRef(rawName) + " = " + initText + ";");
     if (g.scaleMode_) {
@@ -356,9 +356,9 @@ void ModuleVarEmitter::noInit(const detail::CppInfo& ci,
                               const std::string& cv, std::string& decls) {
     const std::string tl = g.scaleMode_ ? "thread_local " : "";
     if (ci.representable && ci.shape != Shape::Void) {
-        line(decls, 1, tl + cv + ci.cpp + " " + name + "{};");
+        line(decls, 1, "inline " + tl + cv + ci.cpp + " " + name + "{};");
     } else {
-        line(decls, 1, tl + cv + "auto " + name +
+        line(decls, 1, "inline " + tl + cv + "auto " + name +
                           " = cp3::runtime::undefined;");
     }
 }

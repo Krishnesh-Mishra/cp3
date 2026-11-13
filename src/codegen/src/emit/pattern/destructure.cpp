@@ -441,7 +441,7 @@ void PatternEmitter::emitPatternFallback(const Node& p, std::string& out, int in
         if (globals != nullptr) {
             // A module-scope global: the declaration lives in `globals`, and
             // the binding site only assigns it.
-            line(*globals, 0, tl + "cp3::runtime::Undefined " +
+            line(*globals, 0, "inline " + tl + "cp3::runtime::Undefined " +
                                   mapIdent(name) + "{};");
             const std::string target =
                 globalsAreModuleScope ? g.moduleRef(name) : mapIdent(name);
@@ -470,7 +470,7 @@ void PatternEmitter::emitUndefinedBindings(const Node& pattern, std::string& out
         if (globals != nullptr) {
             // A module-scope global: the declaration lives in `globals`, and
             // the binding site only assigns it.
-            line(*globals, 0, tl + "cp3::runtime::Undefined " +
+            line(*globals, 0, "inline " + tl + "cp3::runtime::Undefined " +
                                   mapIdent(name) + "{};");
             const std::string target =
                 globalsAreModuleScope ? g.moduleRef(name) : mapIdent(name);
@@ -542,7 +542,7 @@ void PatternEmitter::bindPatternName(const Identifier& id, const Site& site,
         // binding site only assigns it (the name outlives the frame that
         // created it).
         const std::string tl = globalsThreadLocal ? "thread_local " : "";
-        line(*globals, 0, tl + spelling + " " + mapIdent(id.name) + "{};");
+        line(*globals, 0, "inline " + tl + spelling + " " + mapIdent(id.name) + "{};");
         const std::string target =
             globalsAreModuleScope ? g.moduleRef(id.name) : mapIdent(id.name);
         line(out, indent, target + " = " + site.access + ";");

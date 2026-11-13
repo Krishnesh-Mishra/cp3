@@ -213,8 +213,8 @@ void Generator::emitExport(const ExportDeclaration& ed, std::string& decls,
                     expected_ = ci.type;
                     const std::string initText = expr(*ed.defaultExpr);
                     expected_ = savedExpected;
-                    if (scaleMode_) line(decls, 1, "thread_local " + ci.cpp + " " + name + "{};");
-                    else line(decls, 1, ci.cpp + " " + name + "{};");
+                    if (scaleMode_) line(decls, 1, "inline thread_local " + ci.cpp + " " + name + "{};");
+                    else line(decls, 1, "inline " + ci.cpp + " " + name + "{};");
                     line(mainBody, 1, moduleRef(rawName) + " = " + initText + ";");
                     declare(rawName, std::optional<Type>(initType),
                             /*cell=*/false, /*global=*/true);
