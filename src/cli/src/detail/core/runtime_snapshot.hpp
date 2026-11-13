@@ -1,13 +1,16 @@
 // =============================================================================
-// src/cli/src/detail/core/runtime_snapshot.hpp - runtime source snapshot
+// src/cli/src/detail/core/runtime_snapshot.hpp - runtime source mirror
 // (DECLARATIONS).
 //
 // OWNERSHIP: cli module (src/cli/**). PRIVATE header.
 //
-// `cp3c build/run --show-runtime` writes a readable copy of the runtime
-// headers and the core runtime translation units this build selected. The
-// normal build keeps using the shipped include trees and sources; the snapshot
-// is an inspection aid, not a second build input.
+// `cp3c build/run --show-runtime` copies the runtime and stdlib source trees
+// into `<buildDir>/_runtime/` as a SHOW-ONLY inspection aid, laid out exactly
+// like the repository. The mirror is created only when it does not already
+// exist; an existing mirror is never re-copied, merged or rewritten, and the
+// build never compiles from it. A README.md placed in the mirror explains
+// that editing the files there changes nothing. `cp3c clean` removes the
+// mirror with the rest of .cp3/build.
 // =============================================================================
 #pragma once
 
@@ -17,10 +20,11 @@
 
 namespace cp3::cli {
 
-// Copies the runtime support used by `layout` into
-// `<buildDir>/core/cp3-runtime/`, mirroring the `cp3/` include tree without its
-// prefix. Returns the snapshot root, or an empty path after reporting a
-// failure. `verbose` also lists every copied file.
+// Materializes `<buildDir>/_runtime/` for `cp3c build/run --show-runtime`.
+// Creates the mirror (repository-relative layout) and its README.md when the
+// directory does not exist yet; otherwise returns the existing mirror without
+// touching it (the README.md is ensured in that case too). Returns an empty
+// path after reporting a failure. `verbose` lists every copied file.
 std::filesystem::path copyRuntimeSnapshot(const BuildLayout& layout,
                                           bool verbose);
 

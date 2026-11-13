@@ -8,7 +8,7 @@ Generated C++ is an important debugging artifact, but it is not CP3 source and n
 
 ## Preserve the right build output
 
-For application builds, pass `--show-runtime` or its `--show` alias to copy generated C++ and the runtime headers and translation units used by the build into `.cp3/build/core/cp3-runtime/`. Keep the exact output alongside the compiler version and build profile when reporting a code-generation issue.
+For application builds, pass `--show-runtime` or its `--show` alias to copy the runtime headers and translation units used by the build into `.cp3/build/_runtime/`, laid out exactly like the repository. The mirror is a show-only aid: it is created only when missing, never re-copied or rewritten by later builds, and the build never compiles from it — the runtime objects it links live in `.cp3/cache/_runtime/`. A `README.md` in the mirror states that editing those files changes nothing; delete it (or run `cp3c clean`) and pass `--show-runtime` again to regenerate it from the current sources. Keep the exact output alongside the compiler version and build profile when reporting a code-generation issue.
 
 The generated source may be split across module translation units and support files. Start with the module containing the source function, then follow included helpers and runtime calls. Do not search only one generated file and conclude that no helper exists elsewhere.
 

@@ -241,19 +241,19 @@
           ".cp3/out/index.exe": {
             "exists": true
           },
-          ".cp3/build/core/cp3-runtime/core/runtime.hpp": {
+          ".cp3/build/_runtime/src/runtime/include/cp3/core/runtime.hpp": {
             "exists": true
           },
-          ".cp3/build/core/cp3-runtime/core/runtime.cpp": {
+          ".cp3/build/_runtime/src/runtime/src/core/runtime.cpp": {
             "exists": true
           },
-          ".cp3/build/core/cp3-runtime/core/error.hpp": {
+          ".cp3/build/_runtime/src/runtime/include/cp3/core/error.hpp": {
             "exists": true
           },
-          ".cp3/build/core/cp3-runtime/typed_array.hpp": {
+          ".cp3/build/_runtime/src/language/typed-arrays/include/cp3/typed_array.hpp": {
             "exists": true
           },
-          ".cp3/build/core/cp3-runtime/README.txt": {
+          ".cp3/build/_runtime/README.md": {
             "exists": true
           }
         }

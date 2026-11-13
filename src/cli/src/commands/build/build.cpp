@@ -569,7 +569,10 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
             if (extra.module == nullptr) continue;
             const fs::path cpp = st.layout.buildDir / (extra.moduleName + ".cpp");
             const fs::path hpp = st.layout.buildDir / (extra.moduleName + ".hpp");
-            const fs::path obj = st.layout.buildDir / (extra.moduleName + ".o");
+            const fs::path obj = st.layout.cacheDir / (extra.moduleName + ".o");
+            std::error_code mkEc;
+            fs::create_directories(cpp.parent_path(), mkEc);
+            fs::create_directories(obj.parent_path(), mkEc);
             writeTextFile(cpp, extra.module->source, nullptr);
             if (!extra.module->header.empty()) {
                 writeTextFile(hpp, extra.module->header, nullptr);
@@ -591,18 +594,33 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
     entryJob.dependencyHash = unitFingerprint;
     entryJob.extraFlags = userInclude;
     jobs.push_back(std::move(entryJob));
-    // D72: parent-qualify the object name - the std families bring TUs that
-    // share a stem with the core ones (src/std/crypto/runtime.cpp and
-    // src/runtime/src/core/runtime.cpp both stem to "runtime").
+    // The runtime TUs compile from their real source location, so the
+    // object files mirror that location under cache/_runtime/: the object
+    // for <repo>/src/std/console/runtime.cpp is cache/_runtime/src/std/
+    // console/runtime.o. That gives every runtime TU a unique path without
+    // any mangling. Vendored runtime sources outside the repository root
+    // keep a parent-qualified flat name.
+    const fs::path runtimeRoot = repositoryRoot();
     for (const fs::path& rt : st.layout.runtimeSources) {
-        const fs::path rtObj =
-            st.layout.buildDir /
-            ("_cp3_runtime_" + rt.parent_path().filename().string() + "_" +
-             rt.stem().string() + ".o");
         ObjectJob rtJob;
         rtJob.sourceKey = rt.string();
         rtJob.cpp = rt;
-        rtJob.obj = rtObj;
+        std::error_code relEc;
+        fs::path rel;
+        if (!runtimeRoot.empty()) {
+            rel = fs::relative(rt, runtimeRoot, relEc);
+        }
+        if (!runtimeRoot.empty() && !relEc && !rel.empty() &&
+            rel.generic_string().find("..") != 0) {
+            fs::path objRel = rel;
+            objRel.replace_extension(".o");
+            rtJob.obj = st.layout.cacheDir / "_runtime" / objRel;
+        } else {
+            rtJob.obj = st.layout.cacheDir / "_runtime" /
+                        ("_cp3_runtime_" + rt.parent_path().filename().string() +
+                         "_" + rt.stem().string() + ".o");
+        }
+        fs::create_directories(rtJob.obj.parent_path(), relEc);
         jobs.push_back(std::move(rtJob));
     }
     // Packages: cached objects (if available) are linked directly and recorded
@@ -648,7 +666,7 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
             // state in the beta-one surface).
             const std::string stem = impl.source.stem().string();
             const fs::path obj =
-                st.layout.buildDir /
+                st.layout.cacheDir /
                 ("pkg_" + std::to_string(fnv1a64(impl.sourceKey)) + "_" + stem +
                  ".o");
             std::vector<std::string> flags{
@@ -772,7 +790,7 @@ std::string linkStampOf(const BuildState& st,
 bool linkProgram(BuildState& st, const fs::path& exePath) {
     std::error_code ec;
     const fs::path stampPath =
-        st.layout.buildDir / (exePath.filename().string() + ".link-stamp");
+        st.layout.cacheDir / (exePath.filename().string() + ".link-stamp");
     const LinkStep step{st.objects, exePath, st.nativeFlags.link};
     const std::vector<std::string> args =
         linkArgs(st.tc, st.opt.compile.profile, step, st.optimizations);
@@ -1208,8 +1226,10 @@ int buildWithToolchain(const BuildRequest& request) {
 
     if (opt.compile.profile == BuildProfile::Release) {
         fs::remove_all(layout.buildDir, ec);  // --release: clean whole-program
+        fs::remove_all(layout.cacheDir, ec);
     }
     fs::create_directories(layout.buildDir, ec);
+    fs::create_directories(layout.cacheDir, ec);
     fs::create_directories(layout.outDir, ec);  // D61: final artifact lives here
 
     const BuildOptimizations optimizations = buildOptimizationsFor(opt);
@@ -1226,7 +1246,10 @@ int buildWithToolchain(const BuildRequest& request) {
 
     const fs::path cppPath = layout.buildDir / fs::path(moduleName + ".cpp");
     const fs::path hppPath = layout.buildDir / fs::path(moduleName + ".hpp");
-    const fs::path objPath = layout.buildDir / fs::path(moduleName + ".o");
+    const fs::path objPath = layout.cacheDir / fs::path(moduleName + ".o");
+    std::error_code mkEc;
+    fs::create_directories(cppPath.parent_path(), mkEc);
+    fs::create_directories(objPath.parent_path(), mkEc);
     writeTextFile(cppPath, mod.source, nullptr);
     writeTextFile(hppPath, mod.header, nullptr);
 
@@ -1278,15 +1301,15 @@ int buildWithToolchain(const BuildRequest& request) {
 
     selectRuntimeSources(opt, layout, programText);
 
-    // --show-runtime: leave the generated C++ and the exact runtime support it
-    // calls in .cp3/build for inspection. The normal compile/link path below
-    // still uses the shipped headers and sources.
+    // --show-runtime: leave a readable copy of the runtime and stdlib
+    // sources in .cp3/build/_runtime/ for inspection. The mirror is
+    // show-only: the build never compiles from it, it is created only when
+    // missing, and an existing tree is left alone.
     if (opt.showRuntime) {
         const fs::path snapshot = copyRuntimeSnapshot(layout, opt.verbose);
         if (snapshot.empty()) return kExitCompileError;
-        std::fprintf(stderr, "cp3c: generated C++: %s\n",
-                     cppPath.string().c_str());
-        std::fprintf(stderr, "cp3c: runtime snapshot: %s\n",
+        std::fprintf(stderr, "cp3c: generated C++: %s\n", cppPath.string().c_str());
+        std::fprintf(stderr, "cp3c: runtime mirror: %s\n",
                      snapshot.string().c_str());
     }
 

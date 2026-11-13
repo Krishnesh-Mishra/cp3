@@ -34,15 +34,16 @@ BuildLayout makeBuildLayout(const fs::path& entryFile) {
     BuildLayout layout;
     layout.projectRoot = findProjectRoot(entryFile);
     layout.buildDir = layout.projectRoot / ".cp3" / "build";
+    layout.cacheDir = layout.projectRoot / ".cp3" / "cache";
     layout.outDir = layout.projectRoot / ".cp3" / "out";
-    layout.manifestPath = layout.buildDir / "build-manifest.txt";
+    layout.manifestPath = layout.cacheDir / "build-manifest.txt";
 #if defined(_WIN32)
     const std::string suffix = ".exe";
 #else
     const std::string suffix = "";
 #endif
-    // D61: .cp3/build/ holds intermediates only; the executable lives in
-    // .cp3/out/<entry-stem>.
+    // D61: .cp3/build/ holds generated C++ only, .cp3/cache/ holds the cached
+    // objects and manifest; the executable lives in .cp3/out/<entry-stem>.
     layout.exePath = layout.outDir / (entryFile.stem().string() + suffix);
     layout.includeDirs = compilerIncludeRoots();
     // runtimeSources is filled by the build driver from the generated program

@@ -138,6 +138,20 @@ std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
     return args;
 }
 
+// The object list in an argv is bounded by the platform's process-creation
+// command-line limit (_spawnv: 32767 on Windows). When the program is a large
+// module graph, hand the linker a response file (`@file`) instead; GNU ld,
+// lld and MSVC's link all read them.
+bool writeObjectsResponseFile(const std::vector<fs::path>& objects,
+                              const fs::path& path) {
+    std::string text;
+    for (const fs::path& obj : objects) {
+        text += obj.string();
+        text += '\n';
+    }
+    return writeTextFile(path, text, nullptr);
+}
+
 std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
                                   const LinkStep& step,
                                   const BuildOptimizations& optimizations) {
@@ -146,7 +160,20 @@ std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
     for (const std::string& flag : tc.targetFlags) args.push_back(flag);
     args.push_back("-o");
     args.push_back(step.exe.string());
-    for (const fs::path& obj : step.objects) args.push_back(obj.string());
+    // The command line is bounded by the platform's process-creation limit
+    // (_spawnv: 32767 characters on Windows); when the object list is long
+    // the linker reads it from a response file (`@file`) instead, which GNU
+    // ld, lld and link.exe all accept.
+    std::size_t total = args[1].size() + args[3].size() + step.exe.string().size();
+    for (const fs::path& obj : step.objects) total += obj.string().size() + 1;
+    const fs::path responseFile =
+        step.exe.parent_path().parent_path() / "cache" / "link-objects.rsp";
+    if (total > 30000 && !step.objects.empty() &&
+        writeObjectsResponseFile(step.objects, responseFile)) {
+        args.push_back("@" + responseFile.string());
+    } else {
+        for (const fs::path& obj : step.objects) args.push_back(obj.string());
+    }
     // LTO code generation happens at link time, so the same optimization
     // settings must be visible here, not only in the compile steps.
     for (const std::string& f : optimizationFlags(profile, optimizations)) {

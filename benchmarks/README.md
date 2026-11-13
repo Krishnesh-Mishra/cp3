@@ -280,8 +280,8 @@ recorded, and the next full refresh will show the blocker and tier format.
   `javac`/`java` (default JVM settings, no `-Xmx`); Node and Python run their
   scripts directly; `cp3c build --show-runtime` (default profile, no
   release/LTO flags) and the compiled binary is what runs. `--show-runtime`
-  only writes the generated C++ plus a runtime snapshot under
-  `.cp3/build/core/cp3-runtime/`; it does not change the measured executable.
+  only writes the generated C++ plus a show-only runtime mirror under
+  `.cp3/build/_runtime/` (created once, never re-copied); it does not change the measured executable.
   No debug builds anywhere, for any language.
 - On Windows, `rustc` normally targets `x86_64-pc-windows-msvc`. When no
   `link.exe` is visible (no MSVC linker/Windows SDK) but the official GNU

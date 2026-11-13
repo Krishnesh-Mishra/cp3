@@ -7,11 +7,18 @@
 // `.cpp` defines).
 //
 // Layout (docs/cli-tooling/01-compilation-pipeline.md, DECISIONS D61):
-//   <projectRoot>/.cp3/build/            persistent intermediate directory
-//     <module>.cpp / <module>.hpp        generated C++ (one pair per .cp3)
-//     <module>.o                         per-TU object file
-//     _cp3_runtime_<dir>_<tu>.o         compiled runtime support (one per TU, D72)
+//   <projectRoot>/.cp3/build/            generated C++ intermediates
+//     src/<module>.{cpp,hpp}             the entry TU's generated pair
+//     src/lib/.../<module>.{cpp,hpp}     one pair per checked unit,
+//                                       mirroring the source tree below it
+//     cp3_program.hpp                    the per-module shared header
+//     _cp3_pch.pch / .stamp / _prefix.hpp  the dev-profile precompiled header
+//   <projectRoot>/.cp3/cache/            cached build outputs
+//     src/<module>.o                     one object per TU, mirroring src/
+//     _runtime/_cp3_runtime_<dir>_<tu>.o  stock runtime objects (D72)
 //     build-manifest.txt                 change-detection state
+//     <exe>.link-stamp                   link fingerprint
+//   <projectRoot>/.cp3/out/              the linked executable
 //   <projectRoot>/.cp3/out/              final artifacts
 //     <entry><exe-suffix>                linked executable
 //
@@ -47,7 +54,8 @@ namespace cp3::cli {
 
 struct BuildLayout {
     fs::path projectRoot;
-    fs::path buildDir;    // intermediates only (generated C++, objects, manifest)
+    fs::path buildDir;    // generated C++ intermediates (mirrors src/)
+    fs::path cacheDir;    // cached objects + the manifest (mirrors src/)
     fs::path outDir;      // final artifacts (the linked executable)
     fs::path manifestPath;
     fs::path exePath;

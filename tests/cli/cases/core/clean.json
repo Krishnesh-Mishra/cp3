@@ -37,6 +37,7 @@
           "contains": [
             "nothing to remove",
             ".cp3/build",
+            ".cp3/cache",
             ".cp3/out"
           ]
         }
@@ -52,6 +53,7 @@
       "setup": {
         "files": {
           ".cp3/build/stale.o": "o\n",
+          ".cp3/cache/stale.o": "o\n",
           ".cp3/out/app.exe": "exe\n",
           ".cp3/packages/local-kit/package.json": "{}\n",
           ".cp3/lock.json": "{}\n",
@@ -64,6 +66,7 @@
           "contains": [
             "removed",
             ".cp3/build",
+            ".cp3/cache",
             ".cp3/out"
           ]
         },
@@ -80,6 +83,7 @@
         },
         "files_absent": [
           ".cp3/build",
+          ".cp3/cache",
           ".cp3/out"
         ]
       }
@@ -214,7 +218,9 @@
       "setup": {
         "files": {
           ".cp3/build/root.o": "root\n",
-          "src/.cp3/build/nested.o": "nested\n"
+          ".cp3/cache/root.o": "root\n",
+          "src/.cp3/build/nested.o": "nested\n",
+          "src/.cp3/cache/nested.o": "nested\n"
         }
       },
       "expect": {
@@ -222,10 +228,14 @@
         "files": {
           "../.cp3/build/root.o": {
             "exists": true
+          },
+          "../.cp3/cache/root.o": {
+            "exists": true
           }
         },
         "files_absent": [
-          ".cp3/build"
+          ".cp3/build",
+          ".cp3/cache"
         ]
       }
     },
@@ -239,6 +249,7 @@
       "setup": {
         "files": {
           ".cp3/build/stale.o": "o\n",
+          ".cp3/cache/stale.o": "o\n",
           ".cp3/native/demo/native.json": "{}\n"
         }
       },
@@ -250,7 +261,8 @@
           }
         },
         "files_absent": [
-          ".cp3/build"
+          ".cp3/build",
+          ".cp3/cache"
         ]
       }
     },
